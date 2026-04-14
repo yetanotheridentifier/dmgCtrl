@@ -12,8 +12,8 @@ export default defineConfig({
         name: 'dmgCtrl',
         short_name: 'dmgCtrl',
         description: 'Star Wars Unlimited game state tracker',
-        theme_color: '#1a1a2e',
-        background_color: '#1a1a2e',
+        theme_color: '#0a0e1a',
+        background_color: '#0a0e1a',
         display: 'standalone',
         icons: [
           {
@@ -30,4 +30,9 @@ export default defineConfig({
       }
     })
   ],
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
+  },
 })
