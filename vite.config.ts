@@ -3,13 +3,13 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
-  base: '/dgCtrl/',
+  base: '/dmgCtrl/',
   plugins: [
     react(),
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'damageControl',
+        name: 'dmgCtrl',
         short_name: 'dmgCtrl',
         description: 'Star Wars Unlimited game state tracker',
         theme_color: '#1a1a2e',
