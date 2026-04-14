@@ -1,46 +1,99 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SwuGameScreen from '../components/swuGameScreen'
+import { Base } from '../hooks/useBases'
+
+const mockBase: Base = {
+  set: 'SOR',
+  number: '026',
+  name: 'Catacombs of Cadera',
+  subtitle: 'Jedha',
+  hp: 30,
+  frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png',
+  epicAction: '',
+  aspects: ['Aggression'],
+  rarity: 'Common',
+}
+
+const mockBaseWithEpicAction: Base = {
+  set: 'SOR',
+  number: '022',
+  name: 'Energy Conversion Lab',
+  subtitle: 'Eadu',
+  hp: 25,
+  frontArt: 'https://cdn.swu-db.com/images/cards/SOR/022.png',
+  epicAction: 'Epic Action: Play a unit that costs 6 or less from your hand.',
+  aspects: ['Cunning'],
+  rarity: 'Rare',
+}
+
+const mockBaseNoImage: Base = {
+  set: 'LAW',
+  number: '021',
+  name: 'Coaxium Mine',
+  subtitle: 'Kessel',
+  hp: 27,
+  frontArt: 'https://cdn.swu-db.com/images/cards/LAW/021.png',
+  epicAction: 'Epic Action: Play a card from your hand, ignoring 1 of its aspect penalties.',
+  aspects: ['Vigilance'],
+  rarity: 'Common',
+}
 
 describe('SwuGameScreen', () => {
 
+  // --- Rendering ---
+
   it('Renders with counter at zero', () => {
-    render(<SwuGameScreen startingHealth={30} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
     expect(screen.getByText('0')).toBeInTheDocument()
   })
 
-  it('Displays the correct starting health in remaining', () => {
-    render(<SwuGameScreen startingHealth={30} onBack={vi.fn()} />)
+  it('Displays the correct remaining health at start', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
   })
 
   it('Displays correct remaining for non-default starting health', () => {
-    render(<SwuGameScreen startingHealth={25} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} />)
     expect(screen.getByText('Remaining: 25')).toBeInTheDocument()
   })
 
   it('Renders the back button', () => {
-    render(<SwuGameScreen startingHealth={30} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
     expect(screen.getByText('<')).toBeInTheDocument()
   })
 
   it('Renders a + button and a − button', () => {
-    render(<SwuGameScreen startingHealth={30} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
     expect(screen.getByText('+')).toBeInTheDocument()
     expect(screen.getByText('−')).toBeInTheDocument()
   })
 
+  it('Renders the card image with correct src', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
+    const img = screen.getByAltText(mockBase.name)
+    expect(img).toHaveAttribute('src', mockBase.frontArt)
+  })
+
+  it('Renders the card image with correct alt text', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
+    const img = screen.getByAltText(mockBase.name)
+    expect(img).toBeInTheDocument()
+  })
+
+  // --- Counter behaviour ---
+
   it('Increments the counter when + is clicked', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen startingHealth={30} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
     await user.click(screen.getByText('+'))
     expect(screen.getByText('1')).toBeInTheDocument()
   })
 
   it('Decrements the counter when − is clicked', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen startingHealth={30} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('−'))
@@ -49,7 +102,7 @@ describe('SwuGameScreen', () => {
 
   it('Does not decrement below zero', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen startingHealth={30} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
     await user.click(screen.getByText('−'))
     await user.click(screen.getByText('−'))
     expect(screen.getByText('0')).toBeInTheDocument()
@@ -57,7 +110,7 @@ describe('SwuGameScreen', () => {
 
   it('Decreases remaining health when counter increments', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen startingHealth={30} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
@@ -66,7 +119,7 @@ describe('SwuGameScreen', () => {
 
   it('Increases remaining health when counter decrements', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen startingHealth={30} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('−'))
@@ -75,18 +128,53 @@ describe('SwuGameScreen', () => {
 
   it('Remaining health does not exceed starting health', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen startingHealth={30} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
     await user.click(screen.getByText('−'))
     await user.click(screen.getByText('−'))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
   })
 
+  it('Remaining health uses base hp not a hardcoded value', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} />)
+    await user.click(screen.getByText('+'))
+    expect(screen.getByText('Remaining: 24')).toBeInTheDocument()
+  })
+
+  // --- Navigation ---
+
   it('Calls onBack when back button is clicked', async () => {
     const user = userEvent.setup()
     const onBack = vi.fn()
-    render(<SwuGameScreen startingHealth={30} onBack={onBack} />)
+    render(<SwuGameScreen base={mockBase} onBack={onBack} />)
     await user.click(screen.getByText('<'))
     expect(onBack).toHaveBeenCalledOnce()
+  })
+
+  // --- Image error fallback ---
+
+ it('Shows base name when image fails to load', () => {
+    render(<SwuGameScreen base={mockBaseNoImage} onBack={vi.fn()} />)
+    fireEvent.error(screen.getByAltText(mockBaseNoImage.name))
+    expect(screen.getByText('Coaxium Mine')).toBeInTheDocument()
+  })
+
+  it('Shows base subtitle when image fails to load', () => {
+    render(<SwuGameScreen base={mockBaseNoImage} onBack={vi.fn()} />)
+    fireEvent.error(screen.getByAltText(mockBaseNoImage.name))
+    expect(screen.getByText('Kessel')).toBeInTheDocument()
+  })
+
+  it('Shows epic action when image fails to load and epic action exists', () => {
+    render(<SwuGameScreen base={mockBaseNoImage} onBack={vi.fn()} />)
+    fireEvent.error(screen.getByAltText(mockBaseNoImage.name))
+    expect(screen.getByText(mockBaseNoImage.epicAction)).toBeInTheDocument()
+  })
+
+  it('Does not show fallback text when image loads successfully', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
+    fireEvent.load(screen.getByAltText(mockBase.name))
+    expect(screen.queryByText('Catacombs of Cadera')).not.toBeInTheDocument()
   })
 
 })

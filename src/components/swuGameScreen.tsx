@@ -1,22 +1,25 @@
 import { useState } from 'react'
+import { Base } from '../hooks/useBases'
 
-const starField = `radial-gradient(ellipse at 20% 50%, #0d1b2a 0%, #0a0e1a 60%, #000510 100%)`
+const CARD_NATURAL_WIDTH = 1560
+const CARD_NATURAL_HEIGHT = 1120
+const CARD_ASPECT_RATIO = CARD_NATURAL_WIDTH / CARD_NATURAL_HEIGHT
 
 interface Props {
-  startingHealth: number
+  base: Base
   onBack: () => void
 }
 
-function SwuGameScreen({ startingHealth, onBack }: Props) {
+function SwuGameScreen({ base, onBack }: Props) {
   const [count, setCount] = useState(0)
-
+  const [imageLoaded, setImageLoaded] = useState(false)
+  const [imageError, setImageError] = useState(false)
+  
   return (
     <div style={{
       width: '100vw',
       height: '100vh',
-      background: starField,
       display: 'flex',
-      flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
@@ -27,6 +30,7 @@ function SwuGameScreen({ startingHealth, onBack }: Props) {
       left: 0,
       right: 0,
       bottom: 0,
+      background: 'radial-gradient(ellipse at 20% 50%, #0d1b2a 0%, #0a0e1a 60%, #000510 100%)',
       paddingLeft: 'env(safe-area-inset-left)',
       paddingRight: 'env(safe-area-inset-right)',
       paddingTop: 'env(safe-area-inset-top)',
@@ -76,7 +80,7 @@ function SwuGameScreen({ startingHealth, onBack }: Props) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 2,
+          zIndex: 10,
           WebkitTapHighlightColor: 'transparent',
           boxShadow: '0 0 8px rgba(156, 163, 175, 0.2)',
         }}
@@ -84,116 +88,219 @@ function SwuGameScreen({ startingHealth, onBack }: Props) {
         &lt;
       </button>
 
-      {/* Main content - grouped as a single centered block */}
+      {/* Card container */}
       <div style={{
         position: 'relative',
+        aspectRatio: `${CARD_ASPECT_RATIO}`,
+        width: `min(100vw, calc(100vh * ${CARD_ASPECT_RATIO}))`,
+        maxWidth: '100%',
+        maxHeight: '100%',
+        flexShrink: 0,
+        borderRadius: '3.5%',
+        overflow: 'hidden',
         zIndex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: '70vw',
-        marginTop: '10vh',
       }}>
 
-        {/* Counter row */}
+        {/* Card image */}
+        <img
+          src={base.frontArt}
+          alt={base.name}
+          onLoad={() => setImageLoaded(true)}
+          onError={() => setImageError(true)}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            display: imageLoaded ? 'block' : 'none',
+          }}
+        />
+
+        {imageError && (
+          <>
+            {/* Base name — top of card */}
+            <div style={{
+              position: 'absolute',
+              top: '10%',
+              left: '8%',
+              right: '8%',
+              zIndex: 2,
+              display: 'flex',
+              justifyContent: 'center',
+            }}>
+              <p style={{
+                color: '#ffffff',
+                fontWeight: '300',
+                fontSize: 'clamp(1rem, 10vh, 1.8rem)',
+                margin: 0,
+                textAlign: 'center',
+                letterSpacing: '0.05em',
+              }}>
+                {base.name}
+              </p>
+            </div>
+
+            {/* Epic action — below counter, 25% of height */}
+            {base.epicAction && (
+              <div style={{
+                position: 'absolute',
+                top: '65%',
+                left: '8%',
+                right: '8%',
+                height: '25%',
+                zIndex: 2,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <p style={{
+                  color: '#ffffff',
+                  fontWeight: '300',
+                  fontSize: 'clamp(0.6rem, 4vh, 1.1rem)',
+                  margin: 0,
+                  textAlign: 'center',
+                  fontStyle: 'italic',
+                  lineHeight: 1.4,
+                }}>
+                  {base.epicAction}
+                </p>
+              </div>
+            )}
+
+            {/* Subtitle/location — bottom */}
+            <div style={{
+              position: 'absolute',
+              bottom: '5%',
+              left: '8%',
+              right: '8%',
+              zIndex: 2,
+              display: 'flex',
+              justifyContent: 'center',
+            }}>
+              <p style={{
+                color: '#a8a8b3',
+                fontWeight: '300',
+                fontSize: 'clamp(0.7rem, 2vh, 1.2rem)',
+                margin: 0,
+                textAlign: 'center',
+                letterSpacing: '0.05em',
+              }}>
+                {base.subtitle}
+              </p>
+            </div>
+          </>
+        )}
+
+        {/* Counter overlay — middle third of card */}
         <div style={{
-          width: '100%',
-          height: '33vh',
+          position: 'absolute',
+          top: '30%',
+          bottom: '36%',
+          left: '8%',
+          right: '8%',
           display: 'flex',
-          flexDirection: 'row',
+          flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center',
+          justifyContent: 'space-between',
+          zIndex: 2,
+          background: imageError
+            ? 'transparent'
+            : 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.35) 30%, rgba(0,0,0,0.35) 70%, transparent 100%)',
+          borderRadius: '8px',
         }}>
 
-          {/* Minus button */}
-          <button
-            onClick={() => setCount(c => Math.max(0, c - 1))}
-            style={{
-              width: '20vw',
-              height: '20vw',
-              maxHeight: '33vh',
-              background: 'transparent',
-              color: '#4fc3f7',
-              border: '2px solid #4fc3f7',
-              borderRadius: '12px',
-              fontSize: '3rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              WebkitTapHighlightColor: 'transparent',
-              boxShadow: '0 0 12px rgba(79, 195, 247, 0.3), inset 0 0 12px rgba(79, 195, 247, 0.05)',
-            }}
-          >
-            −
-          </button>
-
-          {/* Counter */}
+          {/* Remaining health */}
           <div style={{
-            width: '30vw',
-            height: '33vh',
+            width: '100%',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 'clamp(3rem, 12vw, 8rem)',
-            fontWeight: '300',
-            color: '#ffffff',
-            letterSpacing: '-0.02em',
-            flexShrink: 0,
-            textShadow: '0 0 30px rgba(79, 195, 247, 0.4)',
+            justifyContent: 'flex-end',
           }}>
-            {count}
+            <span style={{
+              fontSize: '6vmin',
+              fontWeight: '300',
+              color: '#ffffff',
+              letterSpacing: '0.05em',
+              textShadow: '0 2px 4px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,1), -1px -1px 0 rgba(0,0,0,1), 1px -1px 0 rgba(0,0,0,1), -1px 1px 0 rgba(0,0,0,1), 1px 1px 0 rgba(0,0,0,1)',
+            }}>
+              Remaining: {base.hp - count}
+            </span>
           </div>
 
-          {/* Plus button */}
-          <button
-            onClick={() => setCount(c => c + 1)}
-            style={{
-              width: '20vw',
-              height: '20vw',
-              maxHeight: '33vh',
-              background: 'transparent',
-              color: '#4fc3f7',
-              border: '2px solid #4fc3f7',
-              borderRadius: '12px',
-              fontSize: '3rem',
-              cursor: 'pointer',
+          {/* Buttons and counter row */}
+          <div style={{
+            width: '100%',
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}>
+
+            {/* Minus button */}
+            <button
+              onClick={() => setCount(c => Math.max(0, c - 1))}
+              style={{
+                width: '21vmin',
+                height: '21vmin',
+                background: 'rgba(0,0,0,0.45)',
+                color: '#4fc3f7',
+                border: '2px solid #4fc3f7',
+                borderRadius: '8px',
+                fontSize: '6vmin',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                WebkitTapHighlightColor: 'transparent',
+                boxShadow: '0 0 12px rgba(79, 195, 247, 0.3)',
+              }}
+            >
+              −
+            </button>
+
+            {/* Counter */}
+            <div style={{
+              flex: 1,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              flexShrink: 0,
-              WebkitTapHighlightColor: 'transparent',
-              boxShadow: '0 0 12px rgba(79, 195, 247, 0.3), inset 0 0 12px rgba(79, 195, 247, 0.05)',
-            }}
-          >
-            +
-          </button>
+              fontSize: '20vmin',
+              fontWeight: '300',
+              color: '#ffffff',
+              textShadow: '0 0 20px rgba(79, 195, 247, 0.4), 0 0 8px rgba(0,0,0,1)',
+            }}>
+              {count}
+            </div>
 
-        </div>
+            {/* Plus button */}
+            <button
+              onClick={() => setCount(c => c + 1)}
+              style={{
+                width: '21vmin',
+                height: '21vmin',
+                background: 'rgba(0,0,0,0.45)',
+                color: '#4fc3f7',
+                border: '2px solid #4fc3f7',
+                borderRadius: '8px',
+                fontSize: '6vmin',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                WebkitTapHighlightColor: 'transparent',
+                boxShadow: '0 0 12px rgba(79, 195, 247, 0.3)',
+              }}
+            >
+              +
+            </button>
 
-        {/* Remaining health - hugs the counter row */}
-        <div style={{
-          width: '100%',
-          display: 'flex',
-          justifyContent: 'flex-end',
-          marginTop: '5vh',
-          paddingRight: '1vw',
-        }}>
-          <span style={{
-            fontSize: 'clamp(1rem, 4.5vw, 3rem)',
-            fontWeight: '300',
-            color: '#ffffff',
-            letterSpacing: '0.05em',
-            opacity: 0.85,
-            textShadow: '0 0 12px rgba(255, 255, 255, 0.3)',
-          }}>
-            Remaining: {startingHealth - count}
-          </span>
+          </div>
+
         </div>
 
       </div>
+
     </div>
   )
 }
