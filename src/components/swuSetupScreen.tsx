@@ -11,28 +11,13 @@ interface Props {
 
 function SwuSetupScreen({ onConfirm }: Props) {
   const [input, setInput] = useState('')
-  const [error, setError] = useState('')
-
   const handleSubmit = () => {
-    if (input === '') {
-      onConfirm(DEFAULT_HEALTH)
-      return
-    }
-
-    const value = parseInt(input, 10)
-
-    if (!VALID_HEALTH_VALUES.includes(value)) {
-      setError(`Valid values: ${VALID_HEALTH_VALUES.join(', ')}`)
-      return
-    }
-
-    onConfirm(value)
+  if (input === '') {
+    onConfirm(DEFAULT_HEALTH)
+    return
   }
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') handleSubmit()
-  }
-
+  onConfirm(parseInt(input, 10))
+}
   return (
     <div style={{
       width: '100vw',
@@ -101,7 +86,7 @@ function SwuSetupScreen({ onConfirm }: Props) {
           Enter Base Health
         </h1>
 
-        {/* Input and button on same row */}
+        {/* Picker and button on same row */}
         <div style={{
           width: '100%',
           display: 'flex',
@@ -109,15 +94,9 @@ function SwuSetupScreen({ onConfirm }: Props) {
           alignItems: 'stretch',
           gap: '2vw',
         }}>
-          <input
-            type='number'
+          <select
             value={input}
-            onChange={e => {
-              setInput(e.target.value)
-              setError('')
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder='30'
+            onChange={e => setInput(e.target.value)}
             style={{
               flex: 1,
               padding: '1.5vh 2vw',
@@ -127,20 +106,33 @@ function SwuSetupScreen({ onConfirm }: Props) {
               background: 'transparent',
               border: '2px solid #4fc3f7',
               borderRadius: '12px',
-              color: '#ffffff',
+              color: input === '' ? '#6b7280' : '#ffffff',
               outline: 'none',
               boxSizing: 'border-box',
               boxShadow: '0 0 12px rgba(79, 195, 247, 0.3)',
               WebkitAppearance: 'none',
+              cursor: 'pointer',
             }}
-          />
+          >
+            <option value="" disabled style={{ color: '#6b7280', background: '#0a0e1a' }}>
+              Select base health
+            </option>
+            {VALID_HEALTH_VALUES.map(v => (
+              <option key={v} value={v} style={{ color: '#ffffff', background: '#0a0e1a' }}>
+                {v}
+              </option>
+            ))}
+          </select>
 
           <button
             onClick={handleSubmit}
             style={{
-              aspectRatio: '1 / 1',
               padding: '0',
-              width: 'auto',
+              width: '12vw',
+              height: '12vw',
+              minWidth: '44px',
+              minHeight: '44px',
+              flexShrink: 0,
               fontSize: 'clamp(1rem, 3vw, 1.8rem)',
               fontWeight: '300',
               background: 'transparent',
@@ -148,30 +140,16 @@ function SwuSetupScreen({ onConfirm }: Props) {
               border: '2px solid #ffffff',
               borderRadius: '12px',
               cursor: 'pointer',
-              boxShadow: '0 0 12px rgba(79, 195, 247, 0.3)',
+              boxShadow: '0 0 12px rgba(255, 255, 255, 0.2)',
               WebkitTapHighlightColor: 'transparent',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              minWidth: '6vw',
             }}
           >
             &gt;
           </button>
         </div>
-
-        {error && (
-          <p style={{
-            color: '#ff6b6b',
-            fontSize: 'clamp(0.8rem, 2.5vw, 1.2rem)',
-            margin: 0,
-            textAlign: 'center',
-            fontWeight: '300',
-          }}>
-            {error}
-          </p>
-        )}
-
       </div>
     </div>
   )

@@ -12,7 +12,7 @@ describe('SwuSetupScreen', () => {
 
   it('Input field is present', () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} />)
-    expect(screen.getByPlaceholderText('30')).toBeInTheDocument()
+    expect(screen.getByRole('combobox')).toBeInTheDocument()
   })
 
   it('The > button is present', () => {
@@ -20,10 +20,20 @@ describe('SwuSetupScreen', () => {
     expect(screen.getByText('>')).toBeInTheDocument()
   })
 
-  it('No error message shown on initial render', () => {
+  it('Select defaults to unselected state', () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} />)
-    expect(screen.queryByText(/Valid values/)).not.toBeInTheDocument()
-  })
+    const select = screen.getByRole('combobox') as HTMLSelectElement
+    expect(select.value).toBe('')
+})
+
+  it('Select contains all valid health options', () => {
+    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    const select = screen.getByRole('combobox')
+    const options = Array.from(select.querySelectorAll('option'))
+        .filter(o => !o.disabled)
+        .map(o => parseInt(o.value, 10))
+    expect(options).toEqual([20, 25, 26, 27, 28, 30, 33, 34, 35])
+})
 
   it('Submitting empty input calls onConfirm with 30', async () => {
     const user = userEvent.setup()
@@ -44,7 +54,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     const onConfirm = vi.fn()
     render(<SwuSetupScreen onConfirm={onConfirm} />)
-    await user.type(screen.getByPlaceholderText('30'), '20')
+    await user.selectOptions(screen.getByRole('combobox'), '20')
     await user.click(screen.getByText('>'))
     expect(onConfirm).toHaveBeenCalledWith(20)
   })
@@ -53,7 +63,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     const onConfirm = vi.fn()
     render(<SwuSetupScreen onConfirm={onConfirm} />)
-    await user.type(screen.getByPlaceholderText('30'), '28')
+    await user.selectOptions(screen.getByRole('combobox'), '28')
     await user.click(screen.getByText('>'))
     expect(onConfirm).toHaveBeenCalledWith(28)
   })
@@ -62,42 +72,9 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     const onConfirm = vi.fn()
     render(<SwuSetupScreen onConfirm={onConfirm} />)
-    await user.type(screen.getByPlaceholderText('30'), '35')
+    await user.selectOptions(screen.getByRole('combobox'), '35')
     await user.click(screen.getByText('>'))
     expect(onConfirm).toHaveBeenCalledWith(35)
-  })
-
-  it('Submitting an invalid number shows valid values error', async () => {
-    const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
-    await user.type(screen.getByPlaceholderText('30'), '21')
-    await user.click(screen.getByText('>'))
-    expect(screen.getByText(/Valid values/)).toBeInTheDocument()
-  })
-
-  it('Error message clears when input changes', async () => {
-    const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
-    await user.type(screen.getByPlaceholderText('30'), '21')
-    await user.click(screen.getByText('>'))
-    expect(screen.getByText(/Valid values/)).toBeInTheDocument()
-    await user.type(screen.getByPlaceholderText('30'), '0')
-    expect(screen.queryByText(/Valid values/)).not.toBeInTheDocument()
-  })
-
-  it('Pressing Enter with a valid value calls onConfirm', async () => {
-    const user = userEvent.setup()
-    const onConfirm = vi.fn()
-    render(<SwuSetupScreen onConfirm={onConfirm} />)
-    await user.type(screen.getByPlaceholderText('30'), '30{Enter}')
-    expect(onConfirm).toHaveBeenCalledWith(30)
-  })
-
-  it('Pressing Enter with an invalid value shows error', async () => {
-    const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
-    await user.type(screen.getByPlaceholderText('30'), '21{Enter}')
-    expect(screen.getByText(/Valid values/)).toBeInTheDocument()
   })
 
 })

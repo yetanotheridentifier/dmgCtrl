@@ -18,7 +18,7 @@ describe('App', () => {
   it('Navigates to game screen after valid health entry', async () => {
     const user = userEvent.setup()
     render(<App />)
-    await user.type(screen.getByPlaceholderText('30'), '30')
+    await user.selectOptions(screen.getByRole('combobox'), '30')
     await user.click(screen.getByText('>'))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
   })
@@ -26,6 +26,7 @@ describe('App', () => {
   it('Navigates to game screen with default health on empty submit', async () => {
     const user = userEvent.setup()
     render(<App />)
+    await user.selectOptions(screen.getByRole('combobox'), '30')
     await user.click(screen.getByText('>'))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
   })
@@ -33,7 +34,7 @@ describe('App', () => {
   it('Game screen reflects the entered starting health', async () => {
     const user = userEvent.setup()
     render(<App />)
-    await user.type(screen.getByPlaceholderText('30'), '25')
+    await user.selectOptions(screen.getByRole('combobox'), '25')
     await user.click(screen.getByText('>'))
     expect(screen.getByText('Remaining: 25')).toBeInTheDocument()
   })
