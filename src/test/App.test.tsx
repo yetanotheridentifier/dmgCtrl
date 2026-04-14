@@ -5,70 +5,51 @@ import App from '../App'
 
 describe('App', () => {
 
-  it('Renders with an initial counter value of zero', () => {
+  it('Renders the setup screen on load', () => {
     render(<App />)
-    expect(screen.getByText('0')).toBeInTheDocument()
+    expect(screen.getByText('Enter Base Health')).toBeInTheDocument()
   })
 
-  it('Renders a + button and a − button', () => {
+  it('Does not render the game screen on load', () => {
     render(<App />)
-    expect(screen.getByText('+')).toBeInTheDocument()
-    expect(screen.getByText('−')).toBeInTheDocument()
+    expect(screen.queryByText('Remaining:')).not.toBeInTheDocument()
   })
 
-  it('Increments the counter when + is clicked', async () => {
+  it('Navigates to game screen after valid health entry', async () => {
     const user = userEvent.setup()
     render(<App />)
-    await user.click(screen.getByText('+'))
-    expect(screen.getByText('1')).toBeInTheDocument()
-  })
-
-  it('Decrements the counter when − is clicked', async () => {
-    const user = userEvent.setup()
-    render(<App />)
-    await user.click(screen.getByText('+'))
-    await user.click(screen.getByText('+'))
-    await user.click(screen.getByText('−'))
-    expect(screen.getByText('1')).toBeInTheDocument()
-  })
-
-  it('Can not decrement below zero', async () => {
-    const user = userEvent.setup()
-    render(<App />)
-    await user.click(screen.getByText('−'))
-    await user.click(screen.getByText('−'))
-    expect(screen.getByText('0')).toBeInTheDocument()
-  })
-
-  it('Displays the correct remaining health at the start', () => {
-    render(<App />)
+    await user.type(screen.getByPlaceholderText('30'), '30')
+    await user.click(screen.getByText('>'))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
   })
 
-  it('Decreases remaining health when counter is incremented', async () => {
+  it('Navigates to game screen with default health on empty submit', async () => {
     const user = userEvent.setup()
     render(<App />)
-    await user.click(screen.getByText('+'))
-    await user.click(screen.getByText('+'))
-    await user.click(screen.getByText('+'))
-    expect(screen.getByText('Remaining: 27')).toBeInTheDocument()
-  })
-
-  it('Increases remaining health when counter is decremented', async () => {
-    const user = userEvent.setup()
-    render(<App />)
-    await user.click(screen.getByText('+'))
-    await user.click(screen.getByText('+'))
-    await user.click(screen.getByText('−'))
-    expect(screen.getByText('Remaining: 29')).toBeInTheDocument()
-  })
-
-  it('Remaining health does not exceed starting health', async () => {
-    const user = userEvent.setup()
-    render(<App />)
-    await user.click(screen.getByText('−'))
-    await user.click(screen.getByText('−'))
+    await user.click(screen.getByText('>'))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
+  })
+
+  it('Game screen reflects the entered starting health', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.type(screen.getByPlaceholderText('30'), '25')
+    await user.click(screen.getByText('>'))
+    expect(screen.getByText('Remaining: 25')).toBeInTheDocument()
+  })
+
+  it('Clicking back from game screen returns to setup screen', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByText('>'))
+    await user.click(screen.getByText('<'))
+    expect(screen.getByText('Enter Base Health')).toBeInTheDocument()
+  })
+
+  it('Setup screen does not show game screen elements', () => {
+    render(<App />)
+    expect(screen.queryByText('+')).not.toBeInTheDocument()
+    expect(screen.queryByText('−')).not.toBeInTheDocument()
   })
 
 })
