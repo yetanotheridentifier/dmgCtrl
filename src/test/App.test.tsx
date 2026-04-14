@@ -40,4 +40,35 @@ describe('App', () => {
     expect(screen.getByText('0')).toBeInTheDocument()
   })
 
+  it('Displays the correct remaining health at the start', () => {
+    render(<App />)
+    expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
+  })
+
+  it('Decreases remaining health when counter is incremented', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByText('+'))
+    expect(screen.getByText('Remaining: 27')).toBeInTheDocument()
+  })
+
+  it('Increases remaining health when counter is decremented', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByText('−'))
+    expect(screen.getByText('Remaining: 29')).toBeInTheDocument()
+  })
+
+  it('Remaining health does not exceed starting health', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByText('−'))
+    await user.click(screen.getByText('−'))
+    expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
+  })
+
 })

@@ -1,5 +1,7 @@
 import { useState } from 'react'
 
+const STARTING_HEALTH = 30
+
 const starField = `radial-gradient(ellipse at 20% 50%, #0d1b2a 0%, #0a0e1a 60%, #000510 100%)`
 
 function App() {
@@ -11,6 +13,7 @@ function App() {
       height: '100vh',
       background: starField,
       display: 'flex',
+      flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
@@ -25,11 +28,10 @@ function App() {
       paddingRight: 'env(safe-area-inset-right)',
       paddingTop: 'env(safe-area-inset-top)',
       paddingBottom: 'env(safe-area-inset-bottom)',
-      boxSizing: 'border-box'
+      boxSizing: 'border-box',
     }}>
 
-      {/* Subtle star dots via box shadow on a pseudo-element isn't possible inline,
-          so we use a nested absolutely positioned layer */}
+      {/* Star field layer */}
       <div style={{
         position: 'absolute',
         inset: 0,
@@ -56,79 +58,107 @@ function App() {
         position: 'relative',
         zIndex: 1,
         width: '70vw',
-        height: '33vh',
         display: 'flex',
-        flexDirection: 'row',
+        flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'center',
+        gap: '1.5vh',
       }}>
 
-        {/* Minus button */}
-        <button
-          onClick={() => setCount(c => Math.max(0, c - 1))}
-          style={{
-            width: '20vw',
-            height: '20vw',
-            maxHeight: '33vh',
-            background: 'transparent',
-            color: '#4fc3f7',
-            border: '2px solid #4fc3f7',
-            borderRadius: '12px',
-            fontSize: '3rem',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            WebkitTapHighlightColor: 'transparent',
-            boxShadow: '0 0 12px rgba(79, 195, 247, 0.3), inset 0 0 12px rgba(79, 195, 247, 0.05)',
-            transition: 'box-shadow 0.1s ease',
-          }}
-        >
-          −
-        </button>
-
-        {/* Counter */}
+        {/* Counter row */}
         <div style={{
-          width: '30vw',
+          width: '100%',
           height: '33vh',
           display: 'flex',
+          flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: 'clamp(3rem, 12vw, 8rem)',
-          fontWeight: '300',
-          color: '#ffffff',
-          letterSpacing: '-0.02em',
-          flexShrink: 0,
-          textShadow: '0 0 30px rgba(79, 195, 247, 0.4)',
         }}>
-          {count}
-        </div>
 
-        {/* Plus button */}
-        <button
-          onClick={() => setCount(c => c + 1)}
-          style={{
-            width: '20vw',
-            height: '20vw',
-            maxHeight: '33vh',
-            background: 'transparent',
-            color: '#4fc3f7',
-            border: '2px solid #4fc3f7',
-            borderRadius: '12px',
-            fontSize: '3rem',
-            cursor: 'pointer',
+          {/* Minus button */}
+          <button
+            onClick={() => setCount(c => Math.max(0, c - 1))}
+            style={{
+              width: '20vw',
+              height: '20vw',
+              maxHeight: '33vh',
+              background: 'transparent',
+              color: '#4fc3f7',
+              border: '2px solid #4fc3f7',
+              borderRadius: '12px',
+              fontSize: '3rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              WebkitTapHighlightColor: 'transparent',
+              boxShadow: '0 0 12px rgba(79, 195, 247, 0.3), inset 0 0 12px rgba(79, 195, 247, 0.05)',
+            }}
+          >
+            −
+          </button>
+
+          {/* Counter */}
+          <div style={{
+            width: '30vw',
+            height: '33vh',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            fontSize: 'clamp(3rem, 12vw, 8rem)',
+            fontWeight: '300',
+            color: '#ffffff',
+            letterSpacing: '-0.02em',
             flexShrink: 0,
-            WebkitTapHighlightColor: 'transparent',
-            boxShadow: '0 0 12px rgba(79, 195, 247, 0.3), inset 0 0 12px rgba(79, 195, 247, 0.05)',
-            transition: 'box-shadow 0.1s ease',
-          }}
-        >
-          +
-        </button>
+            textShadow: '0 0 30px rgba(79, 195, 247, 0.4)',
+          }}>
+            {count}
+          </div>
+
+          {/* Plus button */}
+          <button
+            onClick={() => setCount(c => c + 1)}
+            style={{
+              width: '20vw',
+              height: '20vw',
+              maxHeight: '33vh',
+              background: 'transparent',
+              color: '#4fc3f7',
+              border: '2px solid #4fc3f7',
+              borderRadius: '12px',
+              fontSize: '3rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              WebkitTapHighlightColor: 'transparent',
+              boxShadow: '0 0 12px rgba(79, 195, 247, 0.3), inset 0 0 12px rgba(79, 195, 247, 0.05)',
+            }}
+          >
+            +
+          </button>
+
+        </div>
+
+        {/* Remaining health row */}
+        <div style={{
+          width: '100%',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          paddingRight: '1vw',
+        }}>
+          <span style={{
+            fontSize: 'clamp(1rem, 4.5vw, 3rem)',
+            fontWeight: '300',
+            color: '#ffffff',
+            letterSpacing: '0.05em',
+            opacity: 0.85,
+            textShadow: '0 0 12px rgba(255, 255, 255, 0.3)'
+          }}>
+            Remaining: {STARTING_HEALTH - count}
+          </span>
+        </div>
 
       </div>
     </div>
