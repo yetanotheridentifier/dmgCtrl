@@ -8,9 +8,10 @@ const CARD_ASPECT_RATIO = CARD_NATURAL_WIDTH / CARD_NATURAL_HEIGHT
 interface Props {
   base: Base
   onBack: () => void
+  useHyperspace: boolean
 }
 
-function SwuGameScreen({ base, onBack }: Props) {
+function SwuGameScreen({ base, onBack, useHyperspace }: Props) {
   const [count, setCount] = useState(0)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
@@ -103,7 +104,7 @@ function SwuGameScreen({ base, onBack }: Props) {
 
         {/* Card image */}
         <img
-          src={base.frontArt}
+          src={useHyperspace && base.hyperspaceArt ? base.hyperspaceArt : base.frontArt}
           alt={base.name}
           onLoad={() => setImageLoaded(true)}
           onError={() => setImageError(true)}
