@@ -12,29 +12,40 @@ describe('SwuHelpScreen', () => {
     expect(screen.getByRole('heading', { name: /help/i })).toBeInTheDocument()
   })
 
+  it('Markdown h1 title is not duplicated in the scrollable content', () => {
+    render(<SwuHelpScreen onBack={vi.fn()} />)
+    // The JSX header provides the h1; the markdown h1 should be stripped before rendering
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+  })
+
+  it('Renders the About section heading', () => {
+    render(<SwuHelpScreen onBack={vi.fn()} />)
+    expect(screen.getByRole('heading', { level: 2, name: 'About' })).toBeInTheDocument()
+  })
+
   it('Renders the Getting Started section heading', () => {
     render(<SwuHelpScreen onBack={vi.fn()} />)
-    expect(screen.getByText('Getting Started')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Getting Started' })).toBeInTheDocument()
   })
 
   it('Renders the During a Game section heading', () => {
     render(<SwuHelpScreen onBack={vi.fn()} />)
-    expect(screen.getByText('During a Game')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'During a Game' })).toBeInTheDocument()
   })
 
   it('Renders the Hyperspace Variant section heading', () => {
     render(<SwuHelpScreen onBack={vi.fn()} />)
-    expect(screen.getByText('Hyperspace Variant')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Hyperspace Variant' })).toBeInTheDocument()
   })
 
   it('Renders the Formats and Base Selection section heading', () => {
     render(<SwuHelpScreen onBack={vi.fn()} />)
-    expect(screen.getByText('Formats and Base Selection')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Formats and Base Selection' })).toBeInTheDocument()
   })
 
   it('Renders the Troubleshooting section heading', () => {
     render(<SwuHelpScreen onBack={vi.fn()} />)
-    expect(screen.getByText('Troubleshooting')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Troubleshooting' })).toBeInTheDocument()
   })
 
   it('Renders a back button', () => {
