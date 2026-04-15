@@ -1,8 +1,8 @@
 # dmgCtrl: Help
 
-dmgCtrl is a damage tracker for Star Wars Unlimited. For the best experience, install it on your iPhone via Safari, tap the Share button, then **Add to Home Screen**.
+## About
 
----
+dmgCtrl is a damage tracker for Star Wars Unlimited. For the best experience, install it on your iPhone via Safari, tap the Share button, then **Add to Home Screen**.
 
 ## Getting Started
 
@@ -16,8 +16,6 @@ Each base option shows its name, subtitle, and HP. If only one option is availab
 
 Once you've chosen a base, a preview of the card art appears below. Tap **>** to start the game.
 
----
-
 ## During a Game
 
 The base card fills the screen, with the damage counter overlaid across the middle.
@@ -27,8 +25,6 @@ The base card fills the screen, with the damage counter overlaid across the midd
 - **Remaining** shows your starting HP minus damage taken so far
 
 To return to base selection, tap **<** in the top-left corner. This resets the damage counter to zero, ready for the next game.
-
----
 
 ## Hyperspace Variant
 
@@ -40,15 +36,11 @@ Some bases have a Hyperspace variant with alternate card art. When available, a 
 
 If the Hyperspace image can't be loaded, the app will fall back to the standard art and let you know. If neither image is available, the base name and epic action text are shown instead.
 
----
-
 ## Formats and Base Selection
 
 The Set and Aspect dropdowns help narrow down which base you're playing. Star Wars Unlimited has multiple sets, each containing bases with different aspects and HP values.
 
-Note: at the moment, all bases across all sets are shown regardless of format (Premier, Sealed, etc.). Format filtering — which would limit the list to bases legal in your chosen format — is planned for a future update.
-
----
+Note: at the moment, all bases across all sets are shown regardless of format (Premier, Sealed, etc.). Format filtering, which would limit the list to bases legal in your chosen format is planned for a future update.
 
 ## Troubleshooting
 
@@ -59,7 +51,7 @@ Check your connection and try refreshing the page. The app needs an internet con
 Tap **<** on the game screen to return to the setup screen and make a new selection.
 
 **Card art isn't loading**
-This can happen if the image server is temporarily unavailable. The app will show the base name and game text in place of the card art — all game functions still work normally.
+This can happen if the image server is temporarily unavailable. The app will show the base name and game text in place of the card art, all game functions still work normally.
 
 **Newly previewed bases not showing**
 Card data refreshes automatically every 24 hours. If a new base from spoiler season is not appearing, try again once published to https://starwarsunlimited.com/ and wait for the cache to refresh.

@@ -23,3 +23,60 @@ input[type=number]::-webkit-outer-spin-button {
 input[type=number] {
   -moz-appearance: textfield;
 }
+
+/* Help screen content — styled to match app aesthetic */
+.help-content {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+.help-content h2 {
+  color: #4fc3f7;
+  font-weight: 300;
+  font-size: clamp(1rem, 5vw, 1.3rem);
+  letter-spacing: 0.05em;
+  margin: 1.5em 0 0.75em 0;
+  padding-bottom: 0.4em;
+  border-bottom: 1px solid rgba(79, 195, 247, 0.3);
+}
+
+.help-content h2:first-of-type {
+  margin-top: 0;
+}
+
+.help-content p {
+  color: #d0d0d8;
+  font-weight: 300;
+  font-size: clamp(0.9rem, 4vw, 1.05rem);
+  line-height: 1.65;
+  margin: 0 0 0.6em 0;
+}
+
+.help-content ul,
+.help-content ol {
+  color: #d0d0d8;
+  font-weight: 300;
+  font-size: clamp(0.9rem, 4vw, 1.05rem);
+  line-height: 1.65;
+  margin: 0 0 0.6em 0;
+  padding-left: 1.4em;
+}
+
+.help-content li {
+  margin-bottom: 0.25em;
+}
+
+.help-content strong {
+  color: #ffffff;
+  font-weight: 400;
+}
+
+.help-content em {
+  color: #a8a8b3;
+  font-style: italic;
+}
+
+.help-content hr {
+  border: none;
+  border-top: 1px solid rgba(79, 195, 247, 0.12);
+  margin: 0.5em 0 1em 0;
+}
