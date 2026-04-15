@@ -129,29 +129,29 @@ describe('SwuSetupScreen', () => {
   // --- Rendering ---
 
   it('Renders the Select Base heading', () => {
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByText('Select Base')).toBeInTheDocument()
   })
 
   it('Shows loading state initially', () => {
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByText('Loading bases...')).toBeInTheDocument()
   })
 
   it('Shows three selectors after loading', async () => {
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
   })
 
   it('Renders Set and Aspect labels', async () => {
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     expect(screen.getByText('Set', { selector: 'label' })).toBeInTheDocument()
     expect(screen.getByText('Aspect', { selector: 'label' })).toBeInTheDocument()
   })
 
   it('Set selector contains all available sets', async () => {
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     const setSelect = screen.getAllByRole('combobox')[0]
     const options = Array.from(setSelect.querySelectorAll('option'))
@@ -164,19 +164,19 @@ describe('SwuSetupScreen', () => {
   })
 
   it('Aspect selector is disabled before set is selected', async () => {
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     expect(screen.getAllByRole('combobox')[1]).toBeDisabled()
   })
 
   it('Base selector is disabled before aspect is selected', async () => {
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     expect(screen.getAllByRole('combobox')[2]).toBeDisabled()
   })
 
   it('Submit button is disabled before base is selected', async () => {
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     expect(screen.getByText('>')).toBeDisabled()
   })
@@ -185,7 +185,7 @@ describe('SwuSetupScreen', () => {
 
   it('Aspect selector enables after set is selected', async () => {
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     expect(screen.getAllByRole('combobox')[1]).not.toBeDisabled()
@@ -193,7 +193,7 @@ describe('SwuSetupScreen', () => {
 
   it('Aspect selector shows correct aspects for selected set', async () => {
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     const aspectSelect = screen.getAllByRole('combobox')[1]
@@ -207,7 +207,7 @@ describe('SwuSetupScreen', () => {
 
   it('JTL aspect selector includes None for aspectless bases', async () => {
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'JTL')
     const aspectSelect = screen.getAllByRole('combobox')[1]
@@ -219,7 +219,7 @@ describe('SwuSetupScreen', () => {
 
   it('Auto-selects aspect when only one option available', async () => {
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'JTL')
     await waitFor(() => {
@@ -229,7 +229,7 @@ describe('SwuSetupScreen', () => {
 
   it('Auto-selects base when only one option available', async () => {
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'JTL')
     await waitFor(() => {
@@ -239,7 +239,7 @@ describe('SwuSetupScreen', () => {
 
   it('Base selector enables after aspect is selected', async () => {
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
@@ -248,7 +248,7 @@ describe('SwuSetupScreen', () => {
 
   it('Base selector shows only bases matching set and aspect', async () => {
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
@@ -262,7 +262,7 @@ describe('SwuSetupScreen', () => {
 
   it('Changing set resets aspect and base selections', async () => {
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
@@ -276,7 +276,7 @@ describe('SwuSetupScreen', () => {
 
   it('Changing aspect resets base selection', async () => {
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
@@ -292,7 +292,7 @@ describe('SwuSetupScreen', () => {
 
   it('Submit button enables after base is selected', async () => {
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
@@ -303,7 +303,7 @@ describe('SwuSetupScreen', () => {
   it('Calls onConfirm with correct base when submitted', async () => {
     const user = userEvent.setup()
     const onConfirm = vi.fn()
-    render(<SwuSetupScreen onConfirm={onConfirm} />)
+    render(<SwuSetupScreen onConfirm={onConfirm} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
@@ -321,7 +321,7 @@ describe('SwuSetupScreen', () => {
   it('Does not call onConfirm when no base selected', async () => {
     const user = userEvent.setup()
     const onConfirm = vi.fn()
-    render(<SwuSetupScreen onConfirm={onConfirm} />)
+    render(<SwuSetupScreen onConfirm={onConfirm} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.click(screen.getByText('>'))
     expect(onConfirm).not.toHaveBeenCalled()
@@ -330,7 +330,7 @@ describe('SwuSetupScreen', () => {
   it('Calls onConfirm with correct hp for non-default base', async () => {
     const user = userEvent.setup()
     const onConfirm = vi.fn()
-    render(<SwuSetupScreen onConfirm={onConfirm} />)
+    render(<SwuSetupScreen onConfirm={onConfirm} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Cunning')
@@ -342,7 +342,7 @@ describe('SwuSetupScreen', () => {
   it('Auto-selected base can be submitted without manual selection', async () => {
     const user = userEvent.setup()
     const onConfirm = vi.fn()
-    render(<SwuSetupScreen onConfirm={onConfirm} />)
+    render(<SwuSetupScreen onConfirm={onConfirm} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'JTL')
     await waitFor(() => expect(screen.getByText('>')).not.toBeDisabled())
@@ -358,7 +358,7 @@ describe('SwuSetupScreen', () => {
 
   it('Shows base preview image after base is selected', async () => {
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
@@ -367,7 +367,7 @@ describe('SwuSetupScreen', () => {
   })
 
   it('Does not show base preview before base is selected', async () => {
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
   })
@@ -375,14 +375,14 @@ describe('SwuSetupScreen', () => {
   // --- Hyperspace toggle ---
   
   it('Hyperspace toggle does not appear before a base is selected', async () => {
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     expect(screen.queryByLabelText('Hyperspace variant')).not.toBeInTheDocument()
   })
 
   it('Hyperspace toggle appears after selecting a base with a hyperspace variant', async () => {
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
@@ -392,7 +392,7 @@ describe('SwuSetupScreen', () => {
 
   it('Hyperspace toggle does not appear for a base without a hyperspace variant', async () => {
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Cunning')
@@ -402,7 +402,7 @@ describe('SwuSetupScreen', () => {
 
   it('Hyperspace toggle defaults to false when no localStorage preference exists', async () => {
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
@@ -422,7 +422,7 @@ describe('SwuSetupScreen', () => {
       clear: vi.fn(),
     })
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
@@ -440,7 +440,7 @@ describe('SwuSetupScreen', () => {
       clear: vi.fn(),
     })
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
@@ -451,7 +451,7 @@ describe('SwuSetupScreen', () => {
 
   it('Preview shows hyperspaceArt when toggle is on', async () => {
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
@@ -463,7 +463,7 @@ describe('SwuSetupScreen', () => {
 
   it('Preview shows frontArt when toggle is off', async () => {
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
@@ -474,7 +474,7 @@ describe('SwuSetupScreen', () => {
 
   it('Shows "Hyperspace variant not found" when hyperspace image fails but normal loads', async () => {
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
@@ -490,7 +490,7 @@ describe('SwuSetupScreen', () => {
 
   it('Shows "Only hyperspace image available" when normal fails but hyperspace loads', async () => {
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
@@ -504,7 +504,7 @@ describe('SwuSetupScreen', () => {
 
   it('Shows "No base images found" when normal image fails and no hyperspace exists', async () => {
     const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'LAW')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Vigilance')
