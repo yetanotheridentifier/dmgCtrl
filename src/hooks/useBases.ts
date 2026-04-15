@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 
 const PROXY_URL = 'https://swu-proxy.dmgctrl.workers.dev'
 const CACHE_KEY = 'swu_bases_cache'
-const CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours
+const CACHE_TTL = 24 * 60 * 60 * 1000
 
 export interface Base {
   set: string
@@ -11,6 +11,7 @@ export interface Base {
   subtitle: string
   hp: number
   frontArt: string
+  hyperspaceArt?: string
   epicAction: string
   aspects: string[]
   rarity: string
@@ -54,16 +55,40 @@ export function useBases() {
           }
         }
 
-        // Fetch fresh
-        const response = await fetch(
-          `${PROXY_URL}/cards/search?q=type:base`
-        )
-        if (!response.ok) throw new Error('Failed to fetch bases')
+        // Fetch normal and hyperspace bases in parallel
+        const [normalResponse, hyperspaceResponse] = await Promise.all([
+          fetch(`${PROXY_URL}/cards/search?q=type:base`),
+          fetch(`${PROXY_URL}/cards/search?q=type:base+variant:hyperspace`),
+        ])
 
-        const json = await response.json()
-        const normalisedBases = json.data
+        if (!normalResponse.ok) throw new Error('Failed to fetch bases')
+
+        const normalJson = await normalResponse.json()
+        const hyperspaceJson = hyperspaceResponse.ok
+          ? await hyperspaceResponse.json()
+          : { data: [] }
+
+        // Build a lookup map of hyperspace bases keyed by name+subtitle+set
+        const hyperspaceMap = new Map<string, string>()
+        for (const card of hyperspaceJson.data ?? []) {
+          if (card.VariantType === 'Hyperspace') {
+            const key = `${card.Name}|${card.Subtitle}|${card.Set}`
+            hyperspaceMap.set(key, card.FrontArt as string)
+          }
+        }
+
+        // Normalise normal bases and attach hyperspace art where available
+        const normalisedBases = normalJson.data
           .filter((card: Record<string, unknown>) => card.VariantType === 'Normal')
-          .map(normaliseBase)
+          .map((card: Record<string, unknown>): Base => {
+            const base = normaliseBase(card)
+            const key = `${base.name}|${base.subtitle}|${base.set}`
+            const hyperspaceArt = hyperspaceMap.get(key)
+            if (hyperspaceArt) {
+              base.hyperspaceArt = hyperspaceArt
+            }
+            return base
+          })
           .sort((a: Base, b: Base) =>
             a.name.localeCompare(b.name) || a.set.localeCompare(b.set)
           )

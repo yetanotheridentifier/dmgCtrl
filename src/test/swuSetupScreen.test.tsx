@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SwuSetupScreen from '../components/swuSetupScreen'
 import { Base } from '../hooks/useBases'
@@ -80,10 +80,34 @@ const mockApiResponse = {
 }
 
 beforeEach(() => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-    ok: true,
-    json: () => Promise.resolve(mockApiResponse),
+  const hyperspaceApiData = [
+    {
+      Set: 'SOR',
+      Number: '292',
+      Name: 'Catacombs of Cadera',
+      Subtitle: 'Jedha',
+      HP: '30',
+      FrontArt: 'https://cdn.swu-db.com/images/cards/SOR/292.png',
+      FrontText: '',
+      Aspects: ['Aggression'],
+      Rarity: 'Common',
+      VariantType: 'Hyperspace',
+    }
+  ]
+
+  vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+    if (url.includes('variant:hyperspace')) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ total_cards: 1, data: hyperspaceApiData }),
+      })
+    }
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve(mockApiResponse),
+    })
   }))
+
   vi.stubGlobal('localStorage', {
     getItem: vi.fn().mockReturnValue(null),
     setItem: vi.fn(),
@@ -286,7 +310,8 @@ describe('SwuSetupScreen', () => {
       number: '026',
       name: 'Catacombs of Cadera',
       hp: 30,
-    }))
+    }),
+  false)
   })
 
   it('Does not call onConfirm when no base selected', async () => {
@@ -307,7 +332,7 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Cunning')
     await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-022')
     await user.click(screen.getByText('>'))
-    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ hp: 25 }))
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ hp: 25 }), false)
   })
 
   it('Auto-selected base can be submitted without manual selection', async () => {
@@ -321,7 +346,8 @@ describe('SwuSetupScreen', () => {
     expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
       set: 'JTL',
       number: '030',
-    }))
+    }),
+  false)
   })
 
   // --- Base preview ---
@@ -334,30 +360,6 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
     await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
     expect(screen.getByAltText('Catacombs of Cadera')).toBeInTheDocument()
-  })
-
-  it('Shows fallback text when base image fails to load', async () => {
-    const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
-    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
-    await user.selectOptions(screen.getAllByRole('combobox')[0], 'LAW')
-    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Vigilance')
-    await user.selectOptions(screen.getAllByRole('combobox')[2], 'LAW-021')
-    const img = screen.getByAltText('Coaxium Mine')
-    img.dispatchEvent(new Event('error'))
-    await waitFor(() => expect(screen.getByText('Coaxium Mine — Kessel')).toBeInTheDocument())
-  })
-
-  it('Shows epic action in fallback when image fails', async () => {
-    const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} />)
-    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
-    await user.selectOptions(screen.getAllByRole('combobox')[0], 'LAW')
-    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Vigilance')
-    await user.selectOptions(screen.getAllByRole('combobox')[2], 'LAW-021')
-    const img = screen.getByAltText('Coaxium Mine')
-    img.dispatchEvent(new Event('error'))
-    await waitFor(() => expect(screen.getByText(mockBases[3].epicAction)).toBeInTheDocument())
   })
 
   it('Does not show base preview before base is selected', async () => {
@@ -496,23 +498,15 @@ describe('SwuSetupScreen', () => {
     })
   })
 
-  it('Shows "No base images found" when both images fail', async () => {
+  it('Shows "No base images found" when normal image fails and no hyperspace exists', async () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
-    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
-    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
-    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
-    await user.click(screen.getByLabelText('Hyperspace variant'))
-    const hyperspaceImg = screen.getByAltText('Catacombs of Cadera')
-    fireEvent.error(hyperspaceImg)
-    await waitFor(async () => {
-      const normalImg = screen.getByAltText('Catacombs of Cadera')
-      fireEvent.error(normalImg)
-    })
-    await waitFor(() => {
-      expect(screen.getByText('No base images found')).toBeInTheDocument()
-    })
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'LAW')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Vigilance')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'LAW-021')
+    fireEvent.error(screen.getByAltText('Coaxium Mine'))
+    await waitFor(() => expect(screen.getByText('No base images found')).toBeInTheDocument())
   })
 
 })

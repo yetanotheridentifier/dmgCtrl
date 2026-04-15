@@ -59,39 +59,39 @@ describe('SwuGameScreen', () => {
   // --- Rendering ---
 
   it('Renders with counter at zero', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} useHyperspace={false} />)
     expect(screen.getByText('0')).toBeInTheDocument()
   })
 
   it('Displays the correct remaining health at start', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} useHyperspace={false} />)
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
   })
 
   it('Displays correct remaining for non-default starting health', () => {
-    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} useHyperspace={false} />)
     expect(screen.getByText('Remaining: 25')).toBeInTheDocument()
   })
 
   it('Renders the back button', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} useHyperspace={false} />)
     expect(screen.getByText('<')).toBeInTheDocument()
   })
 
   it('Renders a + button and a − button', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} useHyperspace={false} />)
     expect(screen.getByText('+')).toBeInTheDocument()
     expect(screen.getByText('−')).toBeInTheDocument()
   })
 
   it('Renders the card image with correct src', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} useHyperspace={false} />)
     const img = screen.getByAltText(mockBase.name)
     expect(img).toHaveAttribute('src', mockBase.frontArt)
   })
 
   it('Renders the card image with correct alt text', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} useHyperspace={false} />)
     const img = screen.getByAltText(mockBase.name)
     expect(img).toBeInTheDocument()
   })
@@ -100,14 +100,14 @@ describe('SwuGameScreen', () => {
 
   it('Increments the counter when + is clicked', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} useHyperspace={false} />)
     await user.click(screen.getByText('+'))
     expect(screen.getByText('1')).toBeInTheDocument()
   })
 
   it('Decrements the counter when − is clicked', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} useHyperspace={false} />)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('−'))
@@ -116,7 +116,7 @@ describe('SwuGameScreen', () => {
 
   it('Does not decrement below zero', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} useHyperspace={false} />)
     await user.click(screen.getByText('−'))
     await user.click(screen.getByText('−'))
     expect(screen.getByText('0')).toBeInTheDocument()
@@ -124,7 +124,7 @@ describe('SwuGameScreen', () => {
 
   it('Decreases remaining health when counter increments', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} useHyperspace={false} />)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
@@ -133,7 +133,7 @@ describe('SwuGameScreen', () => {
 
   it('Increases remaining health when counter decrements', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} useHyperspace={false} />)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('−'))
@@ -142,7 +142,7 @@ describe('SwuGameScreen', () => {
 
   it('Remaining health does not exceed starting health', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} useHyperspace={false} />)
     await user.click(screen.getByText('−'))
     await user.click(screen.getByText('−'))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
@@ -150,7 +150,7 @@ describe('SwuGameScreen', () => {
 
   it('Remaining health uses base hp not a hardcoded value', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} useHyperspace={false} />)
     await user.click(screen.getByText('+'))
     expect(screen.getByText('Remaining: 24')).toBeInTheDocument()
   })
@@ -160,7 +160,7 @@ describe('SwuGameScreen', () => {
   it('Calls onBack when back button is clicked', async () => {
     const user = userEvent.setup()
     const onBack = vi.fn()
-    render(<SwuGameScreen base={mockBase} onBack={onBack} />)
+    render(<SwuGameScreen base={mockBase} onBack={onBack} useHyperspace={false} />)
     await user.click(screen.getByText('<'))
     expect(onBack).toHaveBeenCalledOnce()
   })
@@ -168,25 +168,25 @@ describe('SwuGameScreen', () => {
   // --- Image error fallback ---
 
  it('Shows base name when image fails to load', () => {
-    render(<SwuGameScreen base={mockBaseNoImage} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBaseNoImage} onBack={vi.fn()} useHyperspace={false} />)
     fireEvent.error(screen.getByAltText(mockBaseNoImage.name))
     expect(screen.getByText('Coaxium Mine')).toBeInTheDocument()
   })
 
   it('Shows base subtitle when image fails to load', () => {
-    render(<SwuGameScreen base={mockBaseNoImage} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBaseNoImage} onBack={vi.fn()} useHyperspace={false} />)
     fireEvent.error(screen.getByAltText(mockBaseNoImage.name))
     expect(screen.getByText('Kessel')).toBeInTheDocument()
   })
 
   it('Shows epic action when image fails to load and epic action exists', () => {
-    render(<SwuGameScreen base={mockBaseNoImage} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBaseNoImage} onBack={vi.fn()} useHyperspace={false} />)
     fireEvent.error(screen.getByAltText(mockBaseNoImage.name))
     expect(screen.getByText(mockBaseNoImage.epicAction)).toBeInTheDocument()
   })
 
   it('Does not show fallback text when image loads successfully', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} useHyperspace={false} />)
     fireEvent.load(screen.getByAltText(mockBase.name))
     expect(screen.queryByText('Catacombs of Cadera')).not.toBeInTheDocument()
   })
@@ -194,21 +194,18 @@ describe('SwuGameScreen', () => {
   // --- Hyperspace image ---
 
   it('Uses frontArt when useHyperspace is false', () => {
-    // @ts-ignore — useHyperspace prop not yet implemented
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} useHyperspace={false} />)
     const img = screen.getByAltText(mockBase.name)
     expect(img).toHaveAttribute('src', mockBase.frontArt)
   })
 
   it('Uses hyperspaceArt when useHyperspace is true and hyperspaceArt exists', () => {
-    // @ts-ignore — useHyperspace prop not yet implemented
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} useHyperspace={true} />)
     const img = screen.getByAltText(mockBase.name)
     expect(img).toHaveAttribute('src', mockBase.hyperspaceArt)
   })
 
   it('Falls back to frontArt when useHyperspace is true but hyperspaceArt is undefined', () => {
-    // @ts-ignore — useHyperspace prop not yet implemented
     render(<SwuGameScreen base={mockBaseNoHyperspace} onBack={vi.fn()} useHyperspace={true} />)
     const img = screen.getByAltText(mockBaseNoHyperspace.name)
     expect(img).toHaveAttribute('src', mockBaseNoHyperspace.frontArt)

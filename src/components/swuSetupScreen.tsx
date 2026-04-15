@@ -2,22 +2,104 @@ import { useState, useMemo, useEffect } from 'react'
 import { useBases, Base } from '../hooks/useBases'
 
 const starField = `radial-gradient(ellipse at 20% 50%, #0d1b2a 0%, #0a0e1a 60%, #000510 100%)`
-
 const ASPECT_ORDER = ['Aggression', 'Command', 'Cunning', 'Vigilance', 'None']
+const HYPERSPACE_PREF_KEY = 'pref_hyperspace'
 
 interface Props {
-  onConfirm: (base: Base) => void
+  onConfirm: (base: Base, useHyperspace: boolean) => void
 }
 
-function ImageFallbackText({ base }: { base: Base }) {
-  const [failed, setFailed] = useState(false)
+interface ImagePreviewProps {
+  base: Base
+  useHyperspace: boolean
+  onHyperspaceUnavailable: () => void
+  onNormalUnavailable: () => void
+}
 
-  if (!failed) {
+function ImagePreview({
+  base,
+  useHyperspace,
+  onHyperspaceUnavailable,
+  onNormalUnavailable,
+}: ImagePreviewProps) {
+  const [normalFailed, setNormalFailed] = useState(false)
+  const [hyperspaceFailed, setHyperspaceFailed] = useState(false)
+
+  // Reset failure state when base changes
+  useEffect(() => {
+    setNormalFailed(false)
+    setHyperspaceFailed(false)
+  }, [base.set, base.number])
+
+  const showHyperspace = useHyperspace && !!base.hyperspaceArt && !hyperspaceFailed
+  const showNormal = !showHyperspace && !normalFailed
+
+  if (normalFailed && hyperspaceFailed) {
+    return (
+      <p style={{
+        color: '#ff6b6b',
+        fontWeight: '300',
+        fontSize: 'clamp(0.7rem, 2.5vw, 1rem)',
+        margin: 0,
+        fontStyle: 'italic',
+      }}>
+        No base images found
+      </p>
+    )
+  }
+
+  if (normalFailed && !useHyperspace) {
+    // Normal failed, not trying hyperspace — check if hyperspace exists
+    if (base.hyperspaceArt) {
+      return (
+        <>
+          <img
+            src={base.hyperspaceArt}
+            alt={base.name}
+            onError={() => {
+              setHyperspaceFailed(true)
+            }}
+            style={{
+              width: '100%',
+              borderRadius: '12px',
+              border: '2px solid #4fc3f7',
+              boxShadow: '0 0 20px rgba(79, 195, 247, 0.3)',
+            }}
+          />
+          <p style={{
+            color: '#a8a8b3',
+            fontWeight: '300',
+            fontSize: 'clamp(0.7rem, 2.5vw, 1rem)',
+            margin: 0,
+            fontStyle: 'italic',
+          }}>
+            Only hyperspace image available
+          </p>
+        </>
+      )
+    }
+    return (
+      <p style={{
+        color: '#ff6b6b',
+        fontWeight: '300',
+        fontSize: 'clamp(0.7rem, 2.5vw, 1rem)',
+        margin: 0,
+        fontStyle: 'italic',
+      }}>
+        No base images found
+      </p>
+    )
+  }
+
+  if (showHyperspace) {
     return (
       <img
-        src={base.frontArt}
+        src={base.hyperspaceArt}
         alt={base.name}
-        onError={() => setFailed(true)}
+        onError={() => {
+          setHyperspaceFailed(true)
+          onHyperspaceUnavailable()
+        }}
         style={{
           width: '100%',
           borderRadius: '12px',
@@ -28,24 +110,20 @@ function ImageFallbackText({ base }: { base: Base }) {
     )
   }
 
-  return (
-    <div style={{
-      width: '100%',
-      padding: '2vh',
-      border: '2px solid #4fc3f7',
-      borderRadius: '12px',
-      boxSizing: 'border-box',
-      boxShadow: '0 0 20px rgba(79, 195, 247, 0.3)',
-    }}>
-      <p style={{
-        color: '#ffffff',
-        fontWeight: '300',
-        fontSize: 'clamp(0.9rem, 3vw, 1.2rem)',
-        margin: '0 0 0.5vh',
-      }}>
-        {base.name} — {base.subtitle}
-      </p>
-      {base.epicAction && (
+  if (hyperspaceFailed && useHyperspace) {
+    return (
+      <>
+        <img
+          src={base.frontArt}
+          alt={base.name}
+          onError={() => setNormalFailed(true)}
+          style={{
+            width: '100%',
+            borderRadius: '12px',
+            border: '2px solid #4fc3f7',
+            boxShadow: '0 0 20px rgba(79, 195, 247, 0.3)',
+          }}
+        />
         <p style={{
           color: '#a8a8b3',
           fontWeight: '300',
@@ -53,11 +131,32 @@ function ImageFallbackText({ base }: { base: Base }) {
           margin: 0,
           fontStyle: 'italic',
         }}>
-          {base.epicAction}
+          Hyperspace variant not found
         </p>
-      )}
-    </div>
-  )
+      </>
+    )
+  }
+
+  if (showNormal) {
+    return (
+      <img
+        src={base.frontArt}
+        alt={base.name}
+        onError={() => {
+          setNormalFailed(true)
+          onNormalUnavailable()
+        }}
+        style={{
+          width: '100%',
+          borderRadius: '12px',
+          border: '2px solid #4fc3f7',
+          boxShadow: '0 0 20px rgba(79, 195, 247, 0.3)',
+        }}
+      />
+    )
+  }
+
+  return null
 }
 
 function SwuSetupScreen({ onConfirm }: Props) {
@@ -65,6 +164,11 @@ function SwuSetupScreen({ onConfirm }: Props) {
   const [selectedSet, setSelectedSet] = useState('')
   const [selectedAspect, setSelectedAspect] = useState('')
   const [selectedKey, setSelectedKey] = useState('')
+  const [useHyperspace, setUseHyperspace] = useState<boolean>(() => {
+    return localStorage.getItem(HYPERSPACE_PREF_KEY) === 'true'
+  })
+  const [normalImageFailed, setNormalImageFailed] = useState(false)
+  const [hyperspaceImageFailed, setHyperspaceImageFailed] = useState(false)
 
   const availableSets = useMemo(() => {
     const sets = [...new Set(bases.map(b => b.set))].sort()
@@ -98,16 +202,11 @@ function SwuSetupScreen({ onConfirm }: Props) {
     b => `${b.set}-${b.number}` === selectedKey
   ) ?? null
 
-  const handleSetChange = (set: string) => {
-    setSelectedSet(set)
-    setSelectedAspect('')
-    setSelectedKey('')
-  }
-
-  const handleAspectChange = (aspect: string) => {
-    setSelectedAspect(aspect)
-    setSelectedKey('')
-  }
+  // Reset image failure state when base changes
+  useEffect(() => {
+    setNormalImageFailed(false)
+    setHyperspaceImageFailed(false)
+  }, [selectedKey])
 
   // Auto-select aspect when only one option available
   useEffect(() => {
@@ -124,10 +223,32 @@ function SwuSetupScreen({ onConfirm }: Props) {
     }
   }, [filteredBases])
 
+  const handleSetChange = (set: string) => {
+    setSelectedSet(set)
+    setSelectedAspect('')
+    setSelectedKey('')
+  }
+
+  const handleAspectChange = (aspect: string) => {
+    setSelectedAspect(aspect)
+    setSelectedKey('')
+  }
+
+  const handleHyperspaceToggle = (value: boolean) => {
+    setUseHyperspace(value)
+    localStorage.setItem(HYPERSPACE_PREF_KEY, String(value))
+  }
+
   const handleSubmit = () => {
     if (!selectedBase) return
-    onConfirm(selectedBase)
+    onConfirm(selectedBase, useHyperspace)
   }
+
+  const showHyperspaceToggle = !!(
+    selectedBase?.hyperspaceArt &&
+    !hyperspaceImageFailed &&
+    !normalImageFailed
+  )
 
   const selectStyle = (enabled: boolean, hasValue: boolean): React.CSSProperties => ({
     flex: 1,
@@ -237,7 +358,7 @@ function SwuSetupScreen({ onConfirm }: Props) {
 
         {!loading && !error && (
           <>
-            {/* Row 1: Set and Aspect with labels */}
+            {/* Row 1: Set and Aspect */}
             <div style={{
               width: '100%',
               display: 'flex',
@@ -245,8 +366,6 @@ function SwuSetupScreen({ onConfirm }: Props) {
               gap: '2vw',
               alignItems: 'flex-end',
             }}>
-
-              {/* Set — 1/3 width */}
               <div style={{
                 flex: 1,
                 display: 'flex',
@@ -257,7 +376,7 @@ function SwuSetupScreen({ onConfirm }: Props) {
                 <label style={{
                   color: '#a8a8b3',
                   fontWeight: '300',
-                  fontSize: 'clamp(0.7rem, 6vw, 0.9rem)',
+                  fontSize: 'clamp(0.7rem, 5vw, 0.9rem)',
                   letterSpacing: '0.08em',
                   whiteSpace: 'nowrap',
                   flexShrink: 0,
@@ -267,7 +386,7 @@ function SwuSetupScreen({ onConfirm }: Props) {
                 <select
                   value={selectedSet}
                   onChange={e => handleSetChange(e.target.value)}
-                  style={{...selectStyle(true, selectedSet !== ''), flex: 1}}
+                  style={selectStyle(true, selectedSet !== '')}
                 >
                   <option value="" disabled style={{ color: '#6b7280', background: '#0a0e1a' }}>
                     Set
@@ -280,7 +399,6 @@ function SwuSetupScreen({ onConfirm }: Props) {
                 </select>
               </div>
 
-              {/* Aspect — 2/3 width */}
               <div style={{
                 flex: 2,
                 display: 'flex',
@@ -291,7 +409,7 @@ function SwuSetupScreen({ onConfirm }: Props) {
                 <label style={{
                   color: '#a8a8b3',
                   fontWeight: '300',
-                  fontSize: 'clamp(0.7rem, 6vw, 0.9rem)',
+                  fontSize: 'clamp(0.7rem, 5vw, 0.9rem)',
                   letterSpacing: '0.08em',
                   whiteSpace: 'nowrap',
                   flexShrink: 0,
@@ -302,7 +420,7 @@ function SwuSetupScreen({ onConfirm }: Props) {
                   value={selectedAspect}
                   onChange={e => handleAspectChange(e.target.value)}
                   disabled={!selectedSet}
-                  style={{...selectStyle(!!selectedSet, selectedAspect !== ''), flex: 1}}
+                  style={selectStyle(!!selectedSet, selectedAspect !== '')}
                 >
                   <option value="" disabled style={{ color: '#6b7280', background: '#0a0e1a' }}>
                     Aspect
@@ -314,7 +432,6 @@ function SwuSetupScreen({ onConfirm }: Props) {
                   ))}
                 </select>
               </div>
-
             </div>
 
             {/* Row 2: Base and submit */}
@@ -376,8 +493,54 @@ function SwuSetupScreen({ onConfirm }: Props) {
 
             {/* Row 3: Base preview */}
             {selectedBase && (
-              <div style={{ width: '100%' }}>
-                <ImageFallbackText base={selectedBase} />
+              <div style={{
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1vh',
+              }}>
+                <ImagePreview
+                  base={selectedBase}
+                  useHyperspace={useHyperspace}
+                  onHyperspaceUnavailable={() => setHyperspaceImageFailed(true)}
+                  onNormalUnavailable={() => setNormalImageFailed(true)}
+                />
+
+                {/* Row 4: Hyperspace toggle */}
+                {showHyperspaceToggle && (
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: '2vw',
+                  }}>
+                    <input
+                      type="checkbox"
+                      id="hyperspace-toggle"
+                      checked={useHyperspace}
+                      onChange={e => handleHyperspaceToggle(e.target.checked)}
+                      style={{
+                        width: '24px',
+                        height: '24px',
+                        cursor: 'pointer',
+                        accentColor: '#4fc3f7',
+                        flexShrink: 0,
+                      }}
+                    />
+                    <label
+                      htmlFor="hyperspace-toggle"
+                      style={{
+                        color: '#ffffff',
+                        fontWeight: '300',
+                        fontSize: 'clamp(0.9rem, 3vw, 1.2rem)',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Hyperspace variant
+                    </label>
+                  </div>
+                )}
               </div>
             )}
           </>

@@ -48,13 +48,34 @@ const mockApiResponse = {
 }
 
 beforeEach(() => {
-  // Mock fetch to return our test bases
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-    ok: true,
-    json: () => Promise.resolve(mockApiResponse),
+  const hyperspaceApiData = [
+    {
+      Set: 'SOR',
+      Number: '292',
+      Name: 'Catacombs of Cadera',
+      Subtitle: 'Jedha',
+      HP: '30',
+      FrontArt: 'https://cdn.swu-db.com/images/cards/SOR/292.png',
+      FrontText: '',
+      Aspects: ['Aggression'],
+      Rarity: 'Common',
+      VariantType: 'Hyperspace',
+    }
+  ]
+
+  vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+    if (url.includes('variant:hyperspace')) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ total_cards: 1, data: hyperspaceApiData }),
+      })
+    }
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve(mockApiResponse),
+    })
   }))
 
-  // Mock localStorage
   vi.stubGlobal('localStorage', {
     getItem: vi.fn().mockReturnValue(null),
     setItem: vi.fn(),
