@@ -7,6 +7,7 @@ const HYPERSPACE_PREF_KEY = 'pref_hyperspace'
 
 interface Props {
   onConfirm: (base: Base, useHyperspace: boolean) => void
+  onHelp: () => void
 }
 
 interface ImagePreviewProps {
@@ -159,7 +160,7 @@ function ImagePreview({
   return null
 }
 
-function SwuSetupScreen({ onConfirm }: Props) {
+function SwuSetupScreen({ onConfirm, onHelp }: Props) {
   const { bases, loading, error } = useBases()
   const [selectedSet, setSelectedSet] = useState('')
   const [selectedAspect, setSelectedAspect] = useState('')
@@ -311,6 +312,34 @@ function SwuSetupScreen({ onConfirm }: Props) {
         pointerEvents: 'none',
         zIndex: 0,
       }} />
+
+      {/* Help button */}
+      <button
+        onClick={onHelp}
+        style={{
+          position: 'absolute',
+          top: 'calc(env(safe-area-inset-top) + 1vh)',
+          right: 'calc(env(safe-area-inset-right) + 1vw)',
+          width: '5vw',
+          height: '5vw',
+          minWidth: '36px',
+          minHeight: '36px',
+          background: 'transparent',
+          border: '2px solid #6b7280',
+          borderRadius: '8px',
+          color: '#9ca3af',
+          fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10,
+          WebkitTapHighlightColor: 'transparent',
+          boxShadow: '0 0 8px rgba(156, 163, 175, 0.2)',
+        }}
+      >
+        ?
+      </button>
 
       {/* Scrollable content */}
       <div style={{

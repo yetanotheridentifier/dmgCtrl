@@ -513,4 +513,21 @@ describe('SwuSetupScreen', () => {
     await waitFor(() => expect(screen.getByText('No base images found')).toBeInTheDocument())
   })
 
+  // --- Help button ---
+
+  it('Renders a help button', async () => {
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    expect(screen.getByText('?')).toBeInTheDocument()
+  })
+
+  it('Calls onHelp when help button is clicked', async () => {
+    const user = userEvent.setup()
+    const onHelp = vi.fn()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={onHelp} />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.click(screen.getByText('?'))
+    expect(onHelp).toHaveBeenCalledOnce()
+  })
+
 })

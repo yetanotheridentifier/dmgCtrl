@@ -211,4 +211,19 @@ describe('SwuGameScreen', () => {
     expect(img).toHaveAttribute('src', mockBaseNoHyperspace.frontArt)
   })
 
+  // --- Help button ---
+
+  it('Renders a help button', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.getByText('?')).toBeInTheDocument()
+  })
+
+  it('Calls onHelp when help button is clicked', async () => {
+    const user = userEvent.setup()
+    const onHelp = vi.fn()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={onHelp} useHyperspace={false} />)
+    await user.click(screen.getByText('?'))
+    expect(onHelp).toHaveBeenCalledOnce()
+  })
+
 })
