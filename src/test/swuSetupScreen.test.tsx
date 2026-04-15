@@ -12,6 +12,7 @@ const mockBases: Base[] = [
     subtitle: 'Jedha',
     hp: 30,
     frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png',
+    hyperspaceArt: 'https://cdn.swu-db.com/images/cards/SOR/292.png',
     epicAction: '',
     aspects: ['Aggression'],
     rarity: 'Common',
@@ -363,6 +364,155 @@ describe('SwuSetupScreen', () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  // --- Hyperspace toggle ---
+  
+  it('Hyperspace toggle does not appear before a base is selected', async () => {
+    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    expect(screen.queryByLabelText('Hyperspace variant')).not.toBeInTheDocument()
+  })
+
+  it('Hyperspace toggle appears after selecting a base with a hyperspace variant', async () => {
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    expect(screen.getByLabelText('Hyperspace variant')).toBeInTheDocument()
+  })
+
+  it('Hyperspace toggle does not appear for a base without a hyperspace variant', async () => {
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Cunning')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-022')
+    expect(screen.queryByLabelText('Hyperspace variant')).not.toBeInTheDocument()
+  })
+
+  it('Hyperspace toggle defaults to false when no localStorage preference exists', async () => {
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    const toggle = screen.getByLabelText('Hyperspace variant') as HTMLInputElement
+    expect(toggle.checked).toBe(false)
+  })
+
+  it('Hyperspace toggle defaults to true when localStorage preference is true', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn().mockImplementation((key: string) => {
+        if (key === 'pref_hyperspace') return 'true'
+        return null
+      }),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    const toggle = screen.getByLabelText('Hyperspace variant') as HTMLInputElement
+    expect(toggle.checked).toBe(true)
+  })
+
+  it('Toggling hyperspace saves preference to localStorage', async () => {
+    const setItemMock = vi.fn()
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn().mockReturnValue(null),
+      setItem: setItemMock,
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    await user.click(screen.getByLabelText('Hyperspace variant'))
+    expect(setItemMock).toHaveBeenCalledWith('pref_hyperspace', 'true')
+  })
+
+  it('Preview shows hyperspaceArt when toggle is on', async () => {
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    await user.click(screen.getByLabelText('Hyperspace variant'))
+    const img = screen.getByAltText('Catacombs of Cadera')
+    expect(img).toHaveAttribute('src', mockBases[0].hyperspaceArt)
+  })
+
+  it('Preview shows frontArt when toggle is off', async () => {
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    const img = screen.getByAltText('Catacombs of Cadera')
+    expect(img).toHaveAttribute('src', mockBases[0].frontArt)
+  })
+
+  it('Shows "Hyperspace variant not found" when hyperspace image fails but normal loads', async () => {
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    await user.click(screen.getByLabelText('Hyperspace variant'))
+    const img = screen.getByAltText('Catacombs of Cadera')
+    fireEvent.error(img)
+    await waitFor(() => {
+      expect(screen.getByText('Hyperspace variant not found')).toBeInTheDocument()
+      expect(screen.queryByLabelText('Hyperspace variant')).not.toBeInTheDocument()
+    })
+  })
+
+  it('Shows "Only hyperspace image available" when normal fails but hyperspace loads', async () => {
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    const img = screen.getByAltText('Catacombs of Cadera')
+    fireEvent.error(img)
+    await waitFor(() => {
+      expect(screen.getByText('Only hyperspace image available')).toBeInTheDocument()
+    })
+  })
+
+  it('Shows "No base images found" when both images fail', async () => {
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    await user.click(screen.getByLabelText('Hyperspace variant'))
+    const hyperspaceImg = screen.getByAltText('Catacombs of Cadera')
+    fireEvent.error(hyperspaceImg)
+    await waitFor(async () => {
+      const normalImg = screen.getByAltText('Catacombs of Cadera')
+      fireEvent.error(normalImg)
+    })
+    await waitFor(() => {
+      expect(screen.getByText('No base images found')).toBeInTheDocument()
+    })
   })
 
 })

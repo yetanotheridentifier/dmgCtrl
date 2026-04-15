@@ -12,6 +12,7 @@ const mockBases: Base[] = [
     subtitle: 'Jedha',
     hp: 30,
     frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png',
+    hyperspaceArt: 'https://cdn.swu-db.com/images/cards/SOR/292.png',
     epicAction: '',
     aspects: ['Aggression'],
     rarity: 'Common',
@@ -38,6 +39,7 @@ const mockApiResponse = {
     Subtitle: b.subtitle,
     HP: String(b.hp),
     FrontArt: b.frontArt,
+    HyperspaceArt: b.hyperspaceArt ?? null,
     FrontText: b.epicAction,
     Aspects: b.aspects,
     Rarity: b.rarity,
@@ -126,4 +128,25 @@ describe('App', () => {
     expect(screen.getByText('Select Base')).toBeInTheDocument()
   })
 
+  it('Passes hyperspace preference through to game screen', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn().mockImplementation((key: string) => {
+        if (key === 'pref_hyperspace') return 'true'
+        return null
+      }),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    await user.click(screen.getByText('>'))
+    const img = screen.getByAltText('Catacombs of Cadera')
+    expect(img).toHaveAttribute('src', 'https://cdn.swu-db.com/images/cards/SOR/292.png')
+  })
+    
 })

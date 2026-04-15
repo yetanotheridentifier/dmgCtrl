@@ -11,9 +11,23 @@ const mockBase: Base = {
   subtitle: 'Jedha',
   hp: 30,
   frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png',
+  hyperspaceArt: 'https://cdn.swu-db.com/images/cards/SOR/292.png',
   epicAction: '',
   aspects: ['Aggression'],
   rarity: 'Common',
+}
+
+const mockBaseNoHyperspace: Base = {
+  set: 'SOR',
+  number: '022',
+  name: 'Energy Conversion Lab',
+  subtitle: 'Eadu',
+  hp: 25,
+  frontArt: 'https://cdn.swu-db.com/images/cards/SOR/022.png',
+  hyperspaceArt: undefined,
+  epicAction: 'Epic Action: Play a unit that costs 6 or less.',
+  aspects: ['Cunning'],
+  rarity: 'Rare',
 }
 
 const mockBaseWithEpicAction: Base = {
@@ -175,6 +189,29 @@ describe('SwuGameScreen', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} />)
     fireEvent.load(screen.getByAltText(mockBase.name))
     expect(screen.queryByText('Catacombs of Cadera')).not.toBeInTheDocument()
+  })
+
+  // --- Hyperspace image ---
+
+  it('Uses frontArt when useHyperspace is false', () => {
+    // @ts-ignore — useHyperspace prop not yet implemented
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} useHyperspace={false} />)
+    const img = screen.getByAltText(mockBase.name)
+    expect(img).toHaveAttribute('src', mockBase.frontArt)
+  })
+
+  it('Uses hyperspaceArt when useHyperspace is true and hyperspaceArt exists', () => {
+    // @ts-ignore — useHyperspace prop not yet implemented
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} useHyperspace={true} />)
+    const img = screen.getByAltText(mockBase.name)
+    expect(img).toHaveAttribute('src', mockBase.hyperspaceArt)
+  })
+
+  it('Falls back to frontArt when useHyperspace is true but hyperspaceArt is undefined', () => {
+    // @ts-ignore — useHyperspace prop not yet implemented
+    render(<SwuGameScreen base={mockBaseNoHyperspace} onBack={vi.fn()} useHyperspace={true} />)
+    const img = screen.getByAltText(mockBaseNoHyperspace.name)
+    expect(img).toHaveAttribute('src', mockBaseNoHyperspace.frontArt)
   })
 
 })
