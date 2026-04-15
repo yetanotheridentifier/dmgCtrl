@@ -80,26 +80,30 @@ const mockApiResponse = {
 }
 
 beforeEach(() => {
-  const hyperspaceApiData = [
+  const swuApiCards = [
     {
-      Set: 'SOR',
-      Number: '292',
-      Name: 'Catacombs of Cadera',
-      Subtitle: 'Jedha',
-      HP: '30',
-      FrontArt: 'https://cdn.swu-db.com/images/cards/SOR/292.png',
-      FrontText: '',
-      Aspects: ['Aggression'],
-      Rarity: 'Common',
-      VariantType: 'Hyperspace',
-    }
+      uuid: 'uuid-catacombs-standard',
+      name: 'Catacombs of Cadera',
+      set_code: 'SOR',
+      variant_type: 'Standard',
+      variant_of_uuid: null,
+      front_image_url: 'https://cdn.starwarsunlimited.com/catacombs.png',
+    },
+    {
+      uuid: 'uuid-catacombs-hyperspace',
+      name: 'Catacombs of Cadera',
+      set_code: 'SOR',
+      variant_type: 'Hyperspace',
+      variant_of_uuid: 'uuid-catacombs-standard',
+      front_image_url: 'https://cdn.swu-db.com/images/cards/SOR/292.png',
+    },
   ]
 
   vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-    if (url.includes('variant:hyperspace')) {
+    if (url.includes('swuapi.com')) {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ total_cards: 1, data: hyperspaceApiData }),
+        json: () => Promise.resolve({ cards: swuApiCards }),
       })
     }
     return Promise.resolve({

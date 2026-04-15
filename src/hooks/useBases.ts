@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 
 const PROXY_URL = 'https://swu-proxy.dmgctrl.workers.dev'
+const SWUAPI_URL = 'https://api.swuapi.com'
 const CACHE_KEY = 'swu_bases_cache'
 const CACHE_TTL = 24 * 60 * 60 * 1000
 
@@ -36,6 +37,15 @@ function normaliseBase(raw: Record<string, unknown>): Base {
   }
 }
 
+interface SwuApiCard {
+  uuid: string
+  name: string
+  set_code: string
+  variant_type: string
+  variant_of_uuid: string | null
+  front_image_url: string
+}
+
 export function useBases() {
   const [bases, setBases] = useState<Base[]>([])
   const [loading, setLoading] = useState(true)
@@ -55,37 +65,51 @@ export function useBases() {
           }
         }
 
-        // Fetch normal and hyperspace bases in parallel
-        const [normalResponse, hyperspaceResponse] = await Promise.all([
+        // Fetch swu-db.com (card text, epic action, subtitle) and
+        // swuapi.com (hyperspace image URLs) in parallel
+        const [swuDbResponse, swuApiResponse] = await Promise.all([
           fetch(`${PROXY_URL}/cards/search?q=type:base`),
-          fetch(`${PROXY_URL}/cards/search?q=type:base+variant:hyperspace`),
+          fetch(`${SWUAPI_URL}/cards?type=Base&variant=all`),
         ])
 
-        if (!normalResponse.ok) throw new Error('Failed to fetch bases')
+        if (!swuDbResponse.ok) throw new Error('Failed to fetch bases')
 
-        const normalJson = await normalResponse.json()
-        const hyperspaceJson = hyperspaceResponse.ok
-          ? await hyperspaceResponse.json()
-          : { data: [] }
+        const swuDbJson = await swuDbResponse.json()
+        const swuApiJson = swuApiResponse.ok
+          ? await swuApiResponse.json()
+          : { cards: [] }
 
-        // Build a lookup map of hyperspace bases keyed by name+subtitle+set
-        const hyperspaceMap = new Map<string, string>()
-        for (const card of hyperspaceJson.data ?? []) {
-          if (card.VariantType === 'Hyperspace') {
-            const key = `${card.Name}|${card.Subtitle}|${card.Set}`
-            hyperspaceMap.set(key, card.FrontArt as string)
+        const swuApiCards: SwuApiCard[] = swuApiJson.cards ?? []
+
+        // Build uuid lookup for Standard cards: "name|set_code" → uuid
+        const standardUuidMap = new Map<string, string>()
+        for (const card of swuApiCards) {
+          if (card.variant_type === 'Standard') {
+            const key = `${card.name}|${card.set_code}`
+            standardUuidMap.set(key, card.uuid)
           }
         }
 
-        // Normalise normal bases and attach hyperspace art where available
-        const normalisedBases = normalJson.data
+        // Build hyperspace lookup: variant_of_uuid → front_image_url
+        const hyperspaceMap = new Map<string, string>()
+        for (const card of swuApiCards) {
+          if (card.variant_type === 'Hyperspace' && card.variant_of_uuid) {
+            hyperspaceMap.set(card.variant_of_uuid, card.front_image_url)
+          }
+        }
+
+        // Normalise swu-db.com bases and attach hyperspace art
+        const normalisedBases = swuDbJson.data
           .filter((card: Record<string, unknown>) => card.VariantType === 'Normal')
           .map((card: Record<string, unknown>): Base => {
             const base = normaliseBase(card)
-            const key = `${base.name}|${base.subtitle}|${base.set}`
-            const hyperspaceArt = hyperspaceMap.get(key)
-            if (hyperspaceArt) {
-              base.hyperspaceArt = hyperspaceArt
+            const lookupKey = `${base.name}|${base.set}`
+            const standardUuid = standardUuidMap.get(lookupKey)
+            if (standardUuid) {
+              const hyperspaceArt = hyperspaceMap.get(standardUuid)
+              if (hyperspaceArt) {
+                base.hyperspaceArt = hyperspaceArt
+              }
             }
             return base
           })

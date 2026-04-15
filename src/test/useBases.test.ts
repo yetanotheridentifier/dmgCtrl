@@ -34,31 +34,39 @@ const mockNormalBases = {
   ],
 }
 
-const mockHyperspaceBases = {
-  total_cards: 1,
-  data: [
-    {
-      Set: 'SOR',
-      Number: '289',
-      Name: 'Command Center',
-      Subtitle: 'Death Star',
-      Type: 'Base',
-      Aspects: ['Command'],
-      HP: '30',
-      FrontArt: 'https://cdn.swu-db.com/images/cards/SOR/289.png',
-      FrontText: '',
-      Rarity: 'Common',
-      VariantType: 'Hyperspace',
-    },
-  ],
-}
-
 beforeEach(() => {
+  const swuApiCards = [
+    {
+      uuid: 'uuid-command-center-standard',
+      name: 'Command Center',
+      set_code: 'SOR',
+      variant_type: 'Standard',
+      variant_of_uuid: null,
+      front_image_url: 'https://cdn.starwarsunlimited.com/command-center.png',
+    },
+    {
+      uuid: 'uuid-command-center-hyperspace',
+      name: 'Command Center',
+      set_code: 'SOR',
+      variant_type: 'Hyperspace',
+      variant_of_uuid: 'uuid-command-center-standard',
+      front_image_url: 'https://cdn.swu-db.com/images/cards/SOR/289.png',
+    },
+    {
+      uuid: 'uuid-catacombs-standard',
+      name: 'Catacombs of Cadera',
+      set_code: 'SOR',
+      variant_type: 'Standard',
+      variant_of_uuid: null,
+      front_image_url: 'https://cdn.starwarsunlimited.com/catacombs.png',
+    },
+  ]
+
   vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-    if (url.includes('variant:hyperspace') || url.includes('variant%3Ahyperspace')) {
+    if (url.includes('swuapi.com')) {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve(mockHyperspaceBases),
+        json: () => Promise.resolve({ cards: swuApiCards }),
       })
     }
     return Promise.resolve({
