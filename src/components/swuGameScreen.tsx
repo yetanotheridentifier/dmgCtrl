@@ -8,10 +8,11 @@ const CARD_ASPECT_RATIO = CARD_NATURAL_WIDTH / CARD_NATURAL_HEIGHT
 interface Props {
   base: Base
   onBack: () => void
+  onHelp: () => void
   useHyperspace: boolean
 }
 
-function SwuGameScreen({ base, onBack, useHyperspace }: Props) {
+function SwuGameScreen({ base, onBack, onHelp, useHyperspace }: Props) {
   const [count, setCount] = useState(0)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
@@ -87,6 +88,34 @@ function SwuGameScreen({ base, onBack, useHyperspace }: Props) {
         }}
       >
         &lt;
+      </button>
+
+      {/* Help button */}
+      <button
+        onClick={onHelp}
+        style={{
+          position: 'absolute',
+          top: 'calc(env(safe-area-inset-top) + 1vh)',
+          right: 'calc(env(safe-area-inset-right) + 1vw)',
+          width: '5vw',
+          height: '5vw',
+          minWidth: '36px',
+          minHeight: '36px',
+          background: 'transparent',
+          border: '2px solid #6b7280',
+          borderRadius: '8px',
+          color: '#9ca3af',
+          fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10,
+          WebkitTapHighlightColor: 'transparent',
+          boxShadow: '0 0 8px rgba(156, 163, 175, 0.2)',
+        }}
+      >
+        ?
       </button>
 
       {/* Card container */}

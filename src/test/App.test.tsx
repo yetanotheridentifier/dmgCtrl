@@ -153,6 +153,67 @@ describe('App', () => {
     expect(screen.getByText('Select Base')).toBeInTheDocument()
   })
 
+  // --- Help navigation ---
+
+  it('Help button is visible on setup screen', async () => {
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    expect(screen.getByText('?')).toBeInTheDocument()
+  })
+
+  it('Clicking help on setup screen shows the help screen', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.click(screen.getByText('?'))
+    expect(screen.getByText('Getting Started')).toBeInTheDocument()
+  })
+
+  it('Help button is visible on game screen', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    await user.click(screen.getByText('>'))
+    expect(screen.getByText('?')).toBeInTheDocument()
+  })
+
+  it('Clicking help on game screen shows the help screen', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    await user.click(screen.getByText('>'))
+    await user.click(screen.getByText('?'))
+    expect(screen.getByText('Getting Started')).toBeInTheDocument()
+  })
+
+  it('Clicking back from help returns to setup when help was opened from setup', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.click(screen.getByText('?'))
+    await user.click(screen.getByRole('button', { name: '<' }))
+    expect(screen.getByText('Select Base')).toBeInTheDocument()
+  })
+
+  it('Clicking back from help returns to game when help was opened from game', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    await user.click(screen.getByText('>'))
+    await user.click(screen.getByText('?'))
+    await user.click(screen.getByRole('button', { name: '<' }))
+    expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
+  })
+
   it('Passes hyperspace preference through to game screen', async () => {
     const user = userEvent.setup()
     vi.stubGlobal('localStorage', {
@@ -173,5 +234,5 @@ describe('App', () => {
     const img = screen.getByAltText('Catacombs of Cadera')
     expect(img).toHaveAttribute('src', 'https://cdn.swu-db.com/images/cards/SOR/292.png')
   })
-    
+
 })
