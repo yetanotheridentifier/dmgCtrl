@@ -90,7 +90,8 @@ export function useSwuSetup(onConfirm: (base: Base, useHyperspace: boolean) => v
 
   const handleSubmit = () => {
     if (!selectedBase) return
-    onConfirm(selectedBase, useHyperspace)
+    const effectiveHyperspace = useHyperspace || (normalImageFailed && !!selectedBase.hyperspaceArt)
+    onConfirm(selectedBase, effectiveHyperspace)
   }
 
   const handleNormalImageFailed = () => setNormalImageFailed(true)
