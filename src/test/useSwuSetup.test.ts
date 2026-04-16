@@ -349,4 +349,26 @@ describe('useSwuSetup', () => {
     expect(onConfirm).toHaveBeenCalledWith(baseA, true)
   })
 
+  it('handleSubmit passes useHyperspace: true when normal art failed but hyperspace art exists', () => {
+    const onConfirm = vi.fn()
+    const { result } = renderHook(() => useSwuSetup(onConfirm))
+    act(() => result.current.handleSetChange('SOR'))
+    act(() => result.current.handleAspectChange('Aggression'))
+    act(() => result.current.handleKeyChange('SOR-026'))
+    act(() => result.current.handleNormalImageFailed())
+    act(() => result.current.handleSubmit())
+    // useHyperspace preference is false, but normal art has failed — hyperspace must be used
+    expect(onConfirm).toHaveBeenCalledWith(baseA, true)
+  })
+
+  it('handleSubmit respects useHyperspace: false when normal art has not failed', () => {
+    const onConfirm = vi.fn()
+    const { result } = renderHook(() => useSwuSetup(onConfirm))
+    act(() => result.current.handleSetChange('SOR'))
+    act(() => result.current.handleAspectChange('Aggression'))
+    act(() => result.current.handleKeyChange('SOR-026'))
+    act(() => result.current.handleSubmit())
+    expect(onConfirm).toHaveBeenCalledWith(baseA, false)
+  })
+
 })
