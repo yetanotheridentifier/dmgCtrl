@@ -143,7 +143,18 @@ function SwuGameScreenView({
         borderRadius: '3.5%',
         overflow: 'hidden',
         zIndex: 1,
+        boxShadow: '0 0 20px rgba(79, 195, 247, 0.3)',
       }}>
+
+        {/* Border overlay — sits above card art to cover edge fringe */}
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 10,
+          border: '2px solid #4fc3f7',
+          borderRadius: 'inherit',
+          pointerEvents: 'none',
+        }} />
 
         {/* Card image */}
         <img
@@ -235,7 +246,18 @@ function SwuGameScreenView({
           </>
         )}
 
-        {/* Counter overlay — middle third of card */}
+        {/* Shading layer — full card coverage so gradient fades naturally at every edge */}
+        {!imageError && (
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 1,
+            background: 'radial-gradient(ellipse 44% 34% at 50% 53%, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.40) 35%, rgba(0,0,0,0.18) 65%, transparent 100%)',
+            pointerEvents: 'none',
+          }} />
+        )}
+
+        {/* Counter overlay — layout only, no background */}
         <div style={{
           position: 'absolute',
           top: '30%',
@@ -247,10 +269,6 @@ function SwuGameScreenView({
           alignItems: 'center',
           justifyContent: 'space-between',
           zIndex: 2,
-          background: imageError
-            ? 'transparent'
-            : 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.35) 30%, rgba(0,0,0,0.35) 70%, transparent 100%)',
-          borderRadius: '8px',
         }}>
 
           {/* Remaining health */}
