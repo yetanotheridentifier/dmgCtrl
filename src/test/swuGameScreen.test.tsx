@@ -1,8 +1,11 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SwuGameScreen from '../components/swuGameScreen'
 import { Base } from '../hooks/useBases'
+import { useOrientation } from '../hooks/useOrientation'
+
+vi.mock('../hooks/useOrientation')
 
 const mockBase: Base = {
   set: 'SOR',
@@ -55,6 +58,10 @@ const mockBaseNoImage: Base = {
 }
 
 describe('SwuGameScreen', () => {
+
+  beforeEach(() => {
+    vi.mocked(useOrientation).mockReturnValue({ isPortrait: false })
+  })
 
   // --- Rendering ---
 
@@ -224,6 +231,21 @@ describe('SwuGameScreen', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={onHelp} useHyperspace={false} />)
     await user.click(screen.getByText('?'))
     expect(onHelp).toHaveBeenCalledOnce()
+  })
+
+  // --- Portrait orientation ---
+
+  it('Shows rotate prompt when in portrait orientation', () => {
+    vi.mocked(useOrientation).mockReturnValue({ isPortrait: true })
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.getByText(/rotate/i)).toBeInTheDocument()
+  })
+
+  it('Does not show game controls when in portrait orientation', () => {
+    vi.mocked(useOrientation).mockReturnValue({ isPortrait: true })
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.queryByText('+')).not.toBeInTheDocument()
+    expect(screen.queryByText('−')).not.toBeInTheDocument()
   })
 
 })
