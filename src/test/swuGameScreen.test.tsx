@@ -248,4 +248,19 @@ describe('SwuGameScreen', () => {
     expect(screen.queryByText('−')).not.toBeInTheDocument()
   })
 
+  it('Shows a back button on the portrait rotation prompt', () => {
+    vi.mocked(useOrientation).mockReturnValue({ isPortrait: true })
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.getByRole('button', { name: '<' })).toBeInTheDocument()
+  })
+
+  it('Calls onBack when back button is clicked on the portrait rotation prompt', async () => {
+    const user = userEvent.setup()
+    const onBack = vi.fn()
+    vi.mocked(useOrientation).mockReturnValue({ isPortrait: true })
+    render(<SwuGameScreen base={mockBase} onBack={onBack} onHelp={vi.fn()} useHyperspace={false} />)
+    await user.click(screen.getByRole('button', { name: '<' }))
+    expect(onBack).toHaveBeenCalledOnce()
+  })
+
 })
