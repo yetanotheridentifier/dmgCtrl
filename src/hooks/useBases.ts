@@ -13,6 +13,7 @@ export interface Base {
   hp: number
   frontArt: string
   hyperspaceArt?: string
+  hyperspaceArtHiRes?: string
   epicAction: string
   aspects: string[]
   rarity: string
@@ -41,6 +42,7 @@ interface SwuApiCard {
   uuid: string
   name: string
   set_code: string
+  card_number: string | number
   variant_type: string
   variant_of_uuid: string | null
   front_image_url: string
@@ -90,11 +92,18 @@ export function useBases() {
           }
         }
 
-        // Build hyperspace lookup: variant_of_uuid → front_image_url
-        const hyperspaceMap = new Map<string, string>()
+        // Build hyperspace lookup: variant_of_uuid → { art, artFallback }
+        // art: high-res swu-db.com URL (may 403 for sets not yet indexed there)
+        // artFallback: swuapi.com URL (always valid, lower resolution)
+        const hyperspaceMap = new Map<string, { art: string; artFallback: string }>()
         for (const card of swuApiCards) {
           if (card.variant_type === 'Hyperspace' && card.variant_of_uuid) {
-            hyperspaceMap.set(card.variant_of_uuid, card.front_image_url)
+            const number = String(card.card_number).padStart(3, '0')
+            const swuDbUrl = `https://cdn.swu-db.com/images/cards/${card.set_code}/${number}.png`
+            hyperspaceMap.set(card.variant_of_uuid, {
+              art: swuDbUrl,
+              artFallback: card.front_image_url,
+            })
           }
         }
 
@@ -106,9 +115,10 @@ export function useBases() {
             const lookupKey = `${base.name}|${base.set}`
             const standardUuid = standardUuidMap.get(lookupKey)
             if (standardUuid) {
-              const hyperspaceArt = hyperspaceMap.get(standardUuid)
-              if (hyperspaceArt) {
-                base.hyperspaceArt = hyperspaceArt
+              const hyperspaceEntry = hyperspaceMap.get(standardUuid)
+              if (hyperspaceEntry) {
+                base.hyperspaceArt = hyperspaceEntry.artFallback
+                base.hyperspaceArtHiRes = hyperspaceEntry.art
               }
             }
             return base

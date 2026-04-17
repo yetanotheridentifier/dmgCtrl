@@ -48,9 +48,10 @@ beforeEach(() => {
       uuid: 'uuid-command-center-hyperspace',
       name: 'Command Center',
       set_code: 'SOR',
+      card_number: 289,
       variant_type: 'Hyperspace',
       variant_of_uuid: 'uuid-command-center-standard',
-      front_image_url: 'https://cdn.swu-db.com/images/cards/SOR/289.png',
+      front_image_url: 'https://cdn.starwarsunlimited.com/command-center-hyperspace.png',
     },
     {
       uuid: 'uuid-catacombs-standard',
@@ -112,7 +113,19 @@ describe('useBases', () => {
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2)
   })
 
-  it('Attaches hyperspaceArt to a base that has a matching hyperspace variant', async () => {
+  it('Attaches hyperspaceArtHiRes (swu-db.com URL) to a base that has a matching hyperspace variant', async () => {
+    const { result } = renderHook(() => useBases())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    const commandCenter = result.current.bases.find(
+      b => b.name === 'Command Center' && b.subtitle === 'Death Star'
+    )
+    expect(commandCenter).toBeDefined()
+    expect(commandCenter?.hyperspaceArtHiRes).toBe(
+      'https://cdn.swu-db.com/images/cards/SOR/289.png'
+    )
+  })
+
+  it('Attaches hyperspaceArt (swuapi.com URL) as reliable fallback to a base that has a matching hyperspace variant', async () => {
     const { result } = renderHook(() => useBases())
     await waitFor(() => expect(result.current.loading).toBe(false))
     const commandCenter = result.current.bases.find(
@@ -120,7 +133,7 @@ describe('useBases', () => {
     )
     expect(commandCenter).toBeDefined()
     expect(commandCenter?.hyperspaceArt).toBe(
-      'https://cdn.swu-db.com/images/cards/SOR/289.png'
+      'https://cdn.starwarsunlimited.com/command-center-hyperspace.png'
     )
   })
 
