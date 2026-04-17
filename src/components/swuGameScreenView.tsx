@@ -1,4 +1,5 @@
 import { Base } from '../hooks/useBases'
+import AppScreenLayout from './layout/AppScreenLayout'
 
 const CARD_NATURAL_WIDTH = 1560
 const CARD_NATURAL_HEIGHT = 1120
@@ -32,49 +33,19 @@ function SwuGameScreenView({
   onImageError,
 }: Props) {
   return (
-    <div style={{
-      width: '100vw',
-      height: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      overflow: 'hidden',
-      touchAction: 'none',
-      fontFamily: "'Segoe UI', system-ui, sans-serif",
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: 'radial-gradient(ellipse at 20% 50%, #0d1b2a 0%, #0a0e1a 60%, #000510 100%)',
-      paddingLeft: 'env(safe-area-inset-left)',
-      paddingRight: 'env(safe-area-inset-right)',
-      paddingTop: 'env(safe-area-inset-top)',
-      paddingBottom: 'env(safe-area-inset-bottom)',
-      boxSizing: 'border-box',
-    }}>
+    <AppScreenLayout>
 
-      {/* Star field layer */}
+      {/* Centring wrapper — card is the sole flex item, kept above star field */}
       <div style={{
         position: 'absolute',
         inset: 0,
-        backgroundImage: `
-          radial-gradient(1px 1px at 10% 20%, rgba(255,255,255,0.6) 0%, transparent 100%),
-          radial-gradient(1px 1px at 25% 75%, rgba(255,255,255,0.4) 0%, transparent 100%),
-          radial-gradient(1px 1px at 40% 35%, rgba(255,255,255,0.7) 0%, transparent 100%),
-          radial-gradient(1px 1px at 55% 60%, rgba(255,255,255,0.3) 0%, transparent 100%),
-          radial-gradient(1px 1px at 65% 15%, rgba(255,255,255,0.5) 0%, transparent 100%),
-          radial-gradient(1px 1px at 75% 85%, rgba(255,255,255,0.6) 0%, transparent 100%),
-          radial-gradient(1px 1px at 85% 40%, rgba(255,255,255,0.4) 0%, transparent 100%),
-          radial-gradient(1px 1px at 90% 70%, rgba(255,255,255,0.5) 0%, transparent 100%),
-          radial-gradient(1px 1px at 15% 90%, rgba(255,255,255,0.3) 0%, transparent 100%),
-          radial-gradient(1px 1px at 50% 10%, rgba(255,255,255,0.6) 0%, transparent 100%),
-          radial-gradient(2px 2px at 30% 50%, rgba(255,255,255,0.2) 0%, transparent 100%),
-          radial-gradient(2px 2px at 70% 30%, rgba(255,255,255,0.15) 0%, transparent 100%)
-        `,
-        pointerEvents: 'none',
-        zIndex: 0,
-      }} />
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        touchAction: 'none',
+        zIndex: 1,
+      }}>
 
       {/* Back button */}
       <button
@@ -363,7 +334,9 @@ function SwuGameScreenView({
 
       </div>
 
-    </div>
+      </div>
+
+    </AppScreenLayout>
   )
 }
 
