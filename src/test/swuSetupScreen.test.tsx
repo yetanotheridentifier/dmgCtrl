@@ -12,7 +12,8 @@ const mockBases: Base[] = [
     subtitle: 'Jedha',
     hp: 30,
     frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png',
-    hyperspaceArt: 'https://cdn.swu-db.com/images/cards/SOR/292.png',
+    hyperspaceArt: 'https://cdn.starwarsunlimited.com/catacombs-hyperspace.png',
+    hyperspaceArtHiRes: 'https://cdn.swu-db.com/images/cards/SOR/292.png',
     epicAction: '',
     aspects: ['Aggression'],
     rarity: 'Common',
@@ -93,9 +94,10 @@ beforeEach(() => {
       uuid: 'uuid-catacombs-hyperspace',
       name: 'Catacombs of Cadera',
       set_code: 'SOR',
+      card_number: 292,
       variant_type: 'Hyperspace',
       variant_of_uuid: 'uuid-catacombs-standard',
-      front_image_url: 'https://cdn.swu-db.com/images/cards/SOR/292.png',
+      front_image_url: 'https://cdn.starwarsunlimited.com/catacombs-hyperspace.png',
     },
   ]
 

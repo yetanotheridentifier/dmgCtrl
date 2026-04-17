@@ -12,7 +12,15 @@ interface Props {
 }
 
 function SwuGameScreen({ base, onBack, onHelp, useHyperspace }: Props) {
-  const { count, imageLoaded, imageError, increment, decrement, handleImageLoad, handleImageError } = useSwuGame()
+  const imageSrcs = useHyperspace
+    ? [
+        ...(base.hyperspaceArtHiRes ? [base.hyperspaceArtHiRes] : []),
+        ...(base.hyperspaceArt ? [base.hyperspaceArt] : []),
+        base.frontArt,
+      ]
+    : [base.frontArt]
+
+  const { count, imageLoaded, imageError, currentImageSrc, increment, decrement, handleImageLoad, handleImageError } = useSwuGame(imageSrcs)
   const { isPortrait } = useOrientation()
 
   if (isPortrait) {
@@ -75,7 +83,7 @@ function SwuGameScreen({ base, onBack, onHelp, useHyperspace }: Props) {
       base={base}
       onBack={onBack}
       onHelp={onHelp}
-      useHyperspace={useHyperspace}
+      imageSrc={currentImageSrc}
       count={count}
       imageLoaded={imageLoaded}
       imageError={imageError}

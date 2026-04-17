@@ -9,7 +9,7 @@ interface Props {
   base: Base
   onBack: () => void
   onHelp: () => void
-  useHyperspace: boolean
+  imageSrc: string
   count: number
   imageLoaded: boolean
   imageError: boolean
@@ -23,7 +23,7 @@ function SwuGameScreenView({
   base,
   onBack,
   onHelp,
-  useHyperspace,
+  imageSrc,
   count,
   imageLoaded,
   imageError,
@@ -129,7 +129,7 @@ function SwuGameScreenView({
 
         {/* Card image */}
         <img
-          src={useHyperspace && base.hyperspaceArt ? base.hyperspaceArt : base.frontArt}
+          src={imageSrc}
           alt={base.name}
           onLoad={onImageLoad}
           onError={onImageError}
