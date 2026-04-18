@@ -14,16 +14,35 @@ function ImagePreview({
   onHyperspaceUnavailable,
   onNormalUnavailable,
 }: ImagePreviewProps) {
+  const [normalHiResFailed, setNormalHiResFailed] = useState(false)
   const [normalFailed, setNormalFailed] = useState(false)
   const [hyperspaceFailed, setHyperspaceFailed] = useState(false)
 
   // Reset failure state when base changes
   useEffect(() => {
+    setNormalHiResFailed(false)
     setNormalFailed(false)
     setHyperspaceFailed(false)
   }, [base.set, base.number])
 
-  const showHyperspace = useHyperspace && !!base.hyperspaceArt && !hyperspaceFailed
+  const effectiveHyperspaceSrc = base.hyperspaceArtHiRes ?? base.hyperspaceArt
+  // Two-stage normal src: try hi-res CDN first, fall back to low-res within the
+  // same "normal" tier before declaring normal art unavailable.
+  const effectiveNormalSrc = (!normalHiResFailed && base.frontArt)
+    ? base.frontArt
+    : base.frontArtLowRes
+
+  const handleNormalError = () => {
+    if (!normalHiResFailed && base.frontArt && base.frontArtLowRes) {
+      // Hi-res CDN failed but low-res is available — try it silently
+      setNormalHiResFailed(true)
+    } else {
+      setNormalFailed(true)
+      onNormalUnavailable()
+    }
+  }
+
+  const showHyperspace = useHyperspace && !!effectiveHyperspaceSrc && !hyperspaceFailed
   const showNormal = !showHyperspace && !normalFailed
 
   if (normalFailed && hyperspaceFailed) {
@@ -42,11 +61,11 @@ function ImagePreview({
 
   if (normalFailed && !useHyperspace) {
     // Normal failed, not trying hyperspace — check if hyperspace exists
-    if (base.hyperspaceArt) {
+    if (effectiveHyperspaceSrc) {
       return (
         <>
           <img
-            src={base.hyperspaceArt}
+            src={effectiveHyperspaceSrc}
             alt={base.name}
             onError={() => {
               setHyperspaceFailed(true)
@@ -86,7 +105,7 @@ function ImagePreview({
   if (showHyperspace) {
     return (
       <img
-        src={base.hyperspaceArt}
+        src={effectiveHyperspaceSrc!}
         alt={base.name}
         onError={() => {
           setHyperspaceFailed(true)
@@ -106,9 +125,9 @@ function ImagePreview({
     return (
       <>
         <img
-          src={base.frontArt}
+          src={effectiveNormalSrc!}
           alt={base.name}
-          onError={() => setNormalFailed(true)}
+          onError={handleNormalError}
           style={{
             width: '100%',
             borderRadius: '12px',
@@ -132,12 +151,9 @@ function ImagePreview({
   if (showNormal) {
     return (
       <img
-        src={base.frontArt}
+        src={effectiveNormalSrc!}
         alt={base.name}
-        onError={() => {
-          setNormalFailed(true)
-          onNormalUnavailable()
-        }}
+        onError={handleNormalError}
         style={{
           width: '100%',
           borderRadius: '12px',

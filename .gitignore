@@ -25,3 +25,7 @@ dist-ssr
 
 # Cloudflare Worker (proxy) config files
 .dev.vars
+
+# Generated data snapshots (run scripts/inspect-base-data.mjs to regenerate)
+docs/base-data-snapshot.json
+docs/base-data-summary.json

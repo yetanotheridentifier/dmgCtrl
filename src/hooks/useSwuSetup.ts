@@ -90,7 +90,8 @@ export function useSwuSetup(onConfirm: (base: Base, useHyperspace: boolean) => v
 
   const handleSubmit = () => {
     if (!selectedBase) return
-    const effectiveHyperspace = useHyperspace || (normalImageFailed && !!selectedBase.hyperspaceArt)
+    const hasHyperspace = !!(selectedBase.hyperspaceArtHiRes || selectedBase.hyperspaceArt)
+    const effectiveHyperspace = useHyperspace || (normalImageFailed && hasHyperspace)
     onConfirm(selectedBase, effectiveHyperspace)
   }
 
@@ -98,7 +99,7 @@ export function useSwuSetup(onConfirm: (base: Base, useHyperspace: boolean) => v
   const handleHyperspaceImageFailed = () => setHyperspaceImageFailed(true)
 
   const showHyperspaceToggle = !!(
-    selectedBase?.hyperspaceArt &&
+    (selectedBase?.hyperspaceArtHiRes || selectedBase?.hyperspaceArt) &&
     !hyperspaceImageFailed &&
     !normalImageFailed
   )

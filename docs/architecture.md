@@ -188,13 +188,14 @@ The primary data hook. Fetches card data from two external APIs in parallel, mer
 ```typescript
 export interface Base {
   set: string
-  number: string        // zero-padded card number, e.g. '023'
+  number: string              // zero-padded card number, e.g. '023'
   name: string
   subtitle: string
   hp: number
-  frontArt: string      // standard card art URL (swu-db.com CDN)
-  hyperspaceArt?: string      // reliable hyperspace art (cdn.starwarsunlimited.com, 400×286)
-  hyperspaceArtHiRes?: string // hi-res hyperspace art (cdn.swu-db.com, 1560×1120, may 404)
+  frontArt: string | null     // standard art — swu-db.com CDN (1560×1120); null if not yet indexed
+  frontArtLowRes: string | null  // standard art — swuapi.com CDN (400×286); null for SOR/SHD/TWI
+  hyperspaceArtHiRes: string | null  // hi-res hyperspace art — swu-db.com CDN; null if unavailable
+  hyperspaceArt: string | null       // reliable hyperspace art — swuapi.com CDN; null for SOR/SHD/TWI
   epicAction: string
   aspects: string[]
   rarity: string
@@ -205,50 +206,73 @@ export interface Base {
 
 | API | URL | Purpose |
 |---|---|---|
-| swu-db proxy | `swu-proxy.dmgctrl.workers.dev` | Card text, aspects, HP, rarity, standard art URLs |
-| swuapi.com | `api.swuapi.com/cards?type=Base&variant=all` | Hyperspace variant metadata (card number, art URL) |
+| swu-db proxy | `swu-proxy.dmgctrl.workers.dev` | Card text, HP, aspects, rarity, standard art; source of truth for SOR/SHD/TWI |
+| swuapi.com | `api.swuapi.com/cards?type=Base&variant=all&limit=100` | Primary source for active-format bases; provides low-res art URLs and hyperspace metadata |
 
-The swu-db proxy only returns `VariantType: Normal` cards. This is the source of truth for the canonical base list.
+**swuapi.com pagination:** The API returns 100 cards per page with cursor-based pagination. `useBases` follows `pagination.next_cursor` until it is `null`, accumulating all pages before merging.
 
-swuapi.com returns all variants. Hyperspace cards are identified by `variant_type: 'Hyperspace'` and a non-null `variant_of_uuid` pointing to the standard card. They are **not** included as standalone entries in the returned `Base[]` — they are merged onto their parent base.
+**Source split by set:** swuapi.com no longer returns SOR, SHD, or TWI bases (those sets have rotated out of Premier format). Those sets are sourced exclusively from the swu-db proxy. Sets currently active in swuapi.com are treated as the primary source, with swu-db.com providing supplementary text and hi-res art.
+
+**Hyperspace cards:** Identified in swuapi.com by `variant_type: 'Hyperspace'` and a non-null `variant_of_uuid`. They are merged onto their parent `Standard` card and **not** included as standalone entries in the returned `Base[]`.
+
+### Static hyperspace map
+
+For sets no longer in swuapi.com (SOR, SHD, TWI), hyperspace card numbers are derived from a static offset: all three sets use a consistent `+266` offset from the standard card number. This was verified by probing `cdn.swu-db.com` — all URLs return HTTP 200 except TWI/020 (Sundari) and TWI/024 (Tipoca City) which return 403 (images not yet uploaded).
+
+The static map is embedded in `useBases.ts` and also duplicated in `scripts/inspect-base-data.mjs` for offline data inspection.
 
 ### Image URL resolution
 
-Card art comes from two CDNs with different characteristics:
+Card art is served from two CDNs with different characteristics:
 
 | CDN | Example URL | Resolution | Reliability |
 |---|---|---|---|
-| `cdn.swu-db.com` | `.../images/cards/SOR/023.png` | 1560×1120 | Only confirmed for some sets (e.g. SOR). Newer sets (e.g. LAW) may return a blocked response. |
+| `cdn.swu-db.com` | `.../images/cards/SOR/023.png` | 1560×1120 | Only indexed for sets confirmed by swu-db.com; newer sets may 403 |
 | `cdn.starwarsunlimited.com` | Returned directly by swuapi.com | 400×286 | Always reliable — URL is fetched from the API, not constructed |
 
-For hyperspace art, `useBases` constructs a swu-db.com URL from the card number (`/images/cards/{SET}/{NUMBER}.png`) and stores it as `hyperspaceArtHiRes`. The swuapi.com URL is stored as `hyperspaceArt`.
+The `Base` interface captures all four possible art sources: `frontArt`, `frontArtLowRes`, `hyperspaceArtHiRes`, `hyperspaceArt`. Any field may be `null` depending on the set's data availability.
 
 #### Game screen fallback chain
 
-When `useHyperspace` is true, `SwuGameScreen` builds an ordered list of image sources:
+`SwuGameScreen` builds an ordered `imageSrcs` array (filtering out `null` entries) and passes it to `useSwuGame`. On each `onError` the hook advances to the next URL; `imageError` only becomes `true` once all are exhausted.
 
+**Hyperspace preferred** (`useHyperspace = true`):
 ```
-[hyperspaceArtHiRes, hyperspaceArt, frontArt]
-  (1560×1120)         (400×286)      (standard)
+hyperspaceArtHiRes → hyperspaceArt → frontArt → frontArtLowRes → text
 ```
 
-`useSwuGame` tracks the current index. On `onError`, it advances to the next URL. Only once all URLs are exhausted does `imageError` become `true` (showing a text fallback).
+**Normal preferred** (`useHyperspace = false`):
+```
+frontArt → frontArtLowRes → hyperspaceArtHiRes → hyperspaceArt → text
+```
 
-This gives:
-- SOR bases: high-res hyperspace art (swu-db.com)
-- LAW bases and other newer sets: reliable low-res hyperspace art (swuapi.com)
-- Any base with no hyperspace variant: standard art
-- Any base with all images broken: text fallback
+The normal-preferred chain always falls back to hyperspace art rather than showing no image — a base image is always better than a text fallback.
 
 #### Setup screen art (ImagePreview)
 
-The setup screen image preview uses `base.hyperspaceArt` directly — no fallback chain. Because `hyperspaceArt` is always the reliable swuapi.com URL, this is safe without additional error handling.
+`imagePreview.tsx` derives effective src values at render time:
+
+- **Normal:** `base.frontArt ?? base.frontArtLowRes`
+- **Hyperspace:** `base.hyperspaceArtHiRes ?? base.hyperspaceArt`
+
+This ensures the highest-quality available URL is shown in each mode without an explicit fallback chain.
 
 ### Caching
 
-Fetched and merged data is written to localStorage under key `swu_bases_cache` with a timestamp. On subsequent loads, if the cache is less than 24 hours old, the fetch is skipped entirely and the cached `Base[]` is returned directly.
+Fetched and merged data is written to localStorage under key `swu_bases_cache` with a `lastChecked` timestamp. On subsequent loads, if the cache age is less than **7 days**, the fetch is skipped and the cached `Base[]` is returned directly.
+
+If the cache is stale and a fresh fetch fails (network error), the stale cached data is served rather than showing an error — the app remains usable offline or on poor connections. An error is only shown if there is no cache at all and the fetch fails.
 
 To force a fresh fetch during development: `localStorage.removeItem('swu_bases_cache')` in the browser console.
+
+### Data inspection script
+
+`scripts/inspect-base-data.mjs` is a standalone Node.js script that replicates the `useBases` merging logic and writes two files (gitignored):
+
+- `docs/base-data-snapshot.json` — full merged `Base[]` array
+- `docs/base-data-summary.json` — compact summary with art coverage stats per base
+
+Run with `node scripts/inspect-base-data.mjs` to inspect the live merged dataset without running the app.
 
 ---
 
@@ -289,7 +313,7 @@ The game screen is designed for **landscape orientation**. `useOrientation` dete
    - `filteredBases` — bases matching the selected set and aspect
 3. Auto-select effects: if only one value is available for a dropdown, it is selected automatically
 4. User selects a base → `selectedBase` is set
-5. On submit, `effectiveHyperspace` is computed: `useHyperspace || (normalImageFailed && !!selectedBase.hyperspaceArt)`. If the standard art has already failed on the setup screen, the game screen automatically uses hyperspace art.
+5. On submit, `effectiveHyperspace` is computed: `useHyperspace || (normalImageFailed && !!(selectedBase.hyperspaceArtHiRes || selectedBase.hyperspaceArt))`. If the standard art has already failed on the setup screen, the game screen automatically uses hyperspace art.
 
 ### Game screen
 
@@ -411,7 +435,7 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 
 - Minimal bundle size — no large dependencies
 - Fast startup — localStorage cache means data is available immediately on repeat visits
-- No unnecessary network requests — the 24-hour cache prevents redundant API calls
+- No unnecessary network requests — the 7-day cache prevents redundant API calls on repeat visits
 
 ### Avoiding unnecessary re-renders
 
@@ -456,10 +480,11 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | **Base** | A card type in Star Wars Unlimited representing a location that acts as the player's "health bar". Each base has an HP value (typically 25–35). |
 | **Epic Action** | A special ability on some base cards that can be triggered once per game. Displayed on the game screen for reference. |
 | **Hyperspace** | A premium variant of a card with alternate artwork. In this app, selecting "hyperspace" shows the alternate art version of the base. |
-| **Standard art** | The default card artwork, served from swu-db.com at 1560×1120 resolution. |
-| **hyperspaceArt** | The reliable hyperspace image URL, sourced from swuapi.com (`cdn.starwarsunlimited.com`). Resolution: 400×286. |
-| **hyperspaceArtHiRes** | A constructed high-resolution hyperspace image URL, sourced from swu-db.com (`cdn.swu-db.com`). Resolution: 1560×1120. May return a blocked response for sets not yet indexed by swu-db.com. |
-| **Fallback chain** | The ordered list of image URLs tried by `useSwuGame`: `[hyperspaceArtHiRes, hyperspaceArt, frontArt]`. The next URL is tried when the current one fails to load. |
+| **Standard art** | The default card artwork. `frontArt` is the swu-db.com hi-res version (1560×1120); `frontArtLowRes` is the swuapi.com version (400×286). |
+| **hyperspaceArt** | The reliable low-res hyperspace image URL from swuapi.com (`cdn.starwarsunlimited.com`, 400×286). `null` for SOR/SHD/TWI (no longer in swuapi.com). |
+| **hyperspaceArtHiRes** | A constructed hi-res hyperspace image URL from swu-db.com (`cdn.swu-db.com`, 1560×1120). Derived from card number for active sets, or from the static +266 offset map for SOR/SHD/TWI. May 403 for a small number of unindexed cards. |
+| **Static hyperspace map** | A hardcoded mapping of SOR, SHD, and TWI base card numbers to their hyperspace card numbers (offset +266). Used because those sets no longer appear in swuapi.com. |
+| **Fallback chain** | The ordered list of image URLs tried by `useSwuGame`. Hyperspace preferred: `[hyperspaceArtHiRes, hyperspaceArt, frontArt, frontArtLowRes]`. Normal preferred: `[frontArt, frontArtLowRes, hyperspaceArtHiRes, hyperspaceArt]`. The next URL is tried on `onError`; text fallback shown only when all are exhausted. |
 | **Container** | A React component that owns logic — calls hooks, computes derived state, and passes everything to a View component as props. |
 | **View** | A React component that only renders — receives all data and callbacks as props, contains no business logic. |
 | **AppScreenLayout** | The shared full-screen layout wrapper that provides background, safe area padding, and star field for every screen. |
