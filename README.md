@@ -1,66 +1,73 @@
 # dmgCtrl
 
-A progressive web app that tracks game state for Star Wars Unlimited.
+A mobile-first progressive web app for tracking game state in tabletop games, starting with Star Wars: Unlimited.
 
-## Tech stack
-- React + TypeScript
-- Vite
-- vite-plugin-pwa
+**Live app:** https://yetanotheridentifier.github.io/dmgCtrl/
 
-## Using the app
+---
 
-The app is hosted at [https://yetanotheridentifier.github.io/dmgCtrl/](https://yetanotheridentifier.github.io/dmgCtrl/)
+## Installing the app
 
-### Installing on iPhone
+### iPhone
 1. Open the link above in **Safari** (must be Safari, not Chrome or any other browser)
-2. Tap the **Share button** — the box with an arrow pointing upward at the bottom of the screen
+2. Tap the **Share** button — the box with an arrow pointing upward at the bottom of the screen
 3. Scroll down and tap **Add to Home Screen**
 4. Confirm the name and tap **Add**
 
 The app will appear on your home screen and open full screen without any browser chrome.
 
-### Installing on Android
+### Android
 1. Open the link above in **Chrome**
-2. Tap the three dot menu in the top right
+2. Tap the three-dot menu in the top right
 3. Tap **Add to Home Screen**
 4. Confirm and tap **Add**
 
-## Development
+---
+
+## Developer quickstart
 
 ### Prerequisites
-- Node.js (LTS version) — [nodejs.org](https://nodejs.org)
-- Git for Windows — [git-scm.com](https://git-scm.com/download/win)
+- Node.js (LTS) — [nodejs.org](https://nodejs.org)
+- Git — [git-scm.com](https://git-scm.com/download/win)
 - GitHub CLI — [cli.github.com](https://cli.github.com)
 
 ### Setup
-Clone the repository:
 ```bash
 gh repo clone yetanotheridentifier/dmgCtrl
 cd dmgCtrl
-```
-
-Install dependencies:
-```bash
 npm install --legacy-peer-deps
 ```
 
-Run locally:
+### Run locally
 ```bash
 npm run dev
 ```
 
 Open [http://localhost:5173/dmgCtrl/](http://localhost:5173/dmgCtrl/) in your browser.
 
-### Publishing changes
-All changes pushed to `main` are automatically deployed via GitHub Actions.
+### Test
+```bash
+npm test
+```
+
+### Deploy
+All changes pushed to `main` are automatically built and deployed via GitHub Actions. Deployment takes approximately one minute — progress is visible in the **Actions** tab of the repository.
 
 ```bash
-git add .
-git commit -m "description of your changes"
 git push
 ```
 
-Deployment takes approximately one minute. Progress can be monitored in the **Actions** tab of the GitHub repository. The app will be live at [https://yetanotheridentifier.github.io/dmgCtrl/](https://yetanotheridentifier.github.io/dmgCtrl/) once the action completes.
+---
+
+## Documentation
+
+| Document | Description |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | Tech stack, application structure, data layer, testing strategy, CI/CD |
+| [docs/project-overview.md](docs/project-overview.md) | Product vision, planned features, known issues, notes for AI assistants |
+| [docs/help.md](docs/help.md) | User guide (also served in-app via the ? button) |
+
+---
 
 ## Licence
 MIT

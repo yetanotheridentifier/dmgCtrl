@@ -1,4 +1,4 @@
-import helpHtml from '../help.md'
+import helpHtml from '../../docs/help.md'
 import AppScreenLayout from './layout/AppScreenLayout'
 
 // Strip the <h1> from the rendered HTML — the title is provided by the JSX header instead.
