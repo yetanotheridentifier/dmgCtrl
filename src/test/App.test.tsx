@@ -12,7 +12,8 @@ const mockBases: Base[] = [
     subtitle: 'Jedha',
     hp: 30,
     frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png',
-    hyperspaceArt: 'https://cdn.starwarsunlimited.com/catacombs-hyperspace.png',
+    frontArtLowRes: null,
+    hyperspaceArt: null,
     hyperspaceArtHiRes: 'https://cdn.swu-db.com/images/cards/SOR/292.png',
     epicAction: '',
     aspects: ['Aggression'],
@@ -25,13 +26,16 @@ const mockBases: Base[] = [
     subtitle: 'Eadu',
     hp: 25,
     frontArt: 'https://cdn.swu-db.com/images/cards/SOR/022.png',
+    frontArtLowRes: null,
+    hyperspaceArt: null,
+    hyperspaceArtHiRes: 'https://cdn.swu-db.com/images/cards/SOR/288.png',
     epicAction: 'Epic Action: Play a unit that costs 6 or less.',
     aspects: ['Cunning'],
     rarity: 'Rare',
   },
 ]
 
-const mockApiResponse = {
+const mockSwuDbResponse = {
   total_cards: 2,
   data: mockBases.map(b => ({
     Set: b.set,
@@ -40,45 +44,27 @@ const mockApiResponse = {
     Subtitle: b.subtitle,
     HP: String(b.hp),
     FrontArt: b.frontArt,
-    HyperspaceArt: b.hyperspaceArt ?? null,
     FrontText: b.epicAction,
     Aspects: b.aspects,
     Rarity: b.rarity,
+    Type: 'Base',
     VariantType: 'Normal',
   }))
 }
 
 beforeEach(() => {
-  const swuApiCards = [
-    {
-      uuid: 'uuid-catacombs-standard',
-      name: 'Catacombs of Cadera',
-      set_code: 'SOR',
-      variant_type: 'Standard',
-      variant_of_uuid: null,
-      front_image_url: 'https://cdn.starwarsunlimited.com/catacombs.png',
-    },
-    {
-      uuid: 'uuid-catacombs-hyperspace',
-      name: 'Catacombs of Cadera',
-      set_code: 'SOR',
-      card_number: 292,
-      variant_type: 'Hyperspace',
-      variant_of_uuid: 'uuid-catacombs-standard',
-      front_image_url: 'https://cdn.starwarsunlimited.com/catacombs-hyperspace.png',
-    },
-  ]
-
+  // swuapi.com no longer returns SOR bases (rotated out of Premier format),
+  // so we return an empty page — SOR bases come from swu-db.com only.
   vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
     if (url.includes('swuapi.com')) {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ cards: swuApiCards }),
+        json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }),
       })
     }
     return Promise.resolve({
       ok: true,
-      json: () => Promise.resolve(mockApiResponse),
+      json: () => Promise.resolve(mockSwuDbResponse),
     })
   }))
 

@@ -12,7 +12,8 @@ const mockBases: Base[] = [
     subtitle: 'Jedha',
     hp: 30,
     frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png',
-    hyperspaceArt: 'https://cdn.starwarsunlimited.com/catacombs-hyperspace.png',
+    frontArtLowRes: null,
+    hyperspaceArt: null,
     hyperspaceArtHiRes: 'https://cdn.swu-db.com/images/cards/SOR/292.png',
     epicAction: '',
     aspects: ['Aggression'],
@@ -25,6 +26,9 @@ const mockBases: Base[] = [
     subtitle: 'Eadu',
     hp: 25,
     frontArt: 'https://cdn.swu-db.com/images/cards/SOR/022.png',
+    frontArtLowRes: null,
+    hyperspaceArt: null,
+    hyperspaceArtHiRes: 'https://cdn.swu-db.com/images/cards/SOR/288.png',
     epicAction: 'Epic Action: Play a unit that costs 6 or less.',
     aspects: ['Cunning'],
     rarity: 'Rare',
@@ -36,6 +40,9 @@ const mockBases: Base[] = [
     subtitle: 'Naboo',
     hp: 30,
     frontArt: 'https://cdn.swu-db.com/images/cards/JTL/030.png',
+    frontArtLowRes: 'https://cdn.starwarsunlimited.com/jtl-lake-country.png',
+    hyperspaceArt: null,
+    hyperspaceArtHiRes: null,
     epicAction: '',
     aspects: [],
     rarity: 'Common',
@@ -47,6 +54,9 @@ const mockBases: Base[] = [
     subtitle: 'Kessel',
     hp: 27,
     frontArt: 'https://cdn.swu-db.com/images/cards/LAW/021.png',
+    frontArtLowRes: 'https://cdn.starwarsunlimited.com/coaxium-mine.png',
+    hyperspaceArt: null,
+    hyperspaceArtHiRes: null,
     epicAction: 'Epic Action: Play a card from your hand, ignoring 1 of its aspect penalties.',
     aspects: ['Vigilance'],
     rarity: 'Common',
@@ -58,13 +68,17 @@ const mockBases: Base[] = [
     subtitle: 'Hoth',
     hp: 20,
     frontArt: 'https://cdn.swu-db.com/images/cards/IBH/001.png',
+    frontArtLowRes: 'https://cdn.starwarsunlimited.com/ibh-echo-caverns.png',
+    hyperspaceArt: null,
+    hyperspaceArtHiRes: null,
     epicAction: '',
     aspects: ['Cunning'],
     rarity: 'Common',
   },
 ]
 
-const mockApiResponse = {
+// swu-db.com response shaped to match the mockBases above
+const mockSwuDbResponse = {
   total_cards: mockBases.length,
   data: mockBases.map(b => ({
     Set: b.set,
@@ -81,37 +95,19 @@ const mockApiResponse = {
 }
 
 beforeEach(() => {
-  const swuApiCards = [
-    {
-      uuid: 'uuid-catacombs-standard',
-      name: 'Catacombs of Cadera',
-      set_code: 'SOR',
-      variant_type: 'Standard',
-      variant_of_uuid: null,
-      front_image_url: 'https://cdn.starwarsunlimited.com/catacombs.png',
-    },
-    {
-      uuid: 'uuid-catacombs-hyperspace',
-      name: 'Catacombs of Cadera',
-      set_code: 'SOR',
-      card_number: 292,
-      variant_type: 'Hyperspace',
-      variant_of_uuid: 'uuid-catacombs-standard',
-      front_image_url: 'https://cdn.starwarsunlimited.com/catacombs-hyperspace.png',
-    },
-  ]
+  // swuapi.com no longer returns SOR/SHD/TWI bases (rotated out of Premier format).
+  // All bases in this test come from the swu-db.com proxy; hyperspace art for SOR
+  // is resolved via the static card-number offset map (+266) inside useBases.
+  const swuApiResponse = {
+    cards: [],
+    pagination: { limit: 100, next_cursor: null },
+  }
 
   vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
     if (url.includes('swuapi.com')) {
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ cards: swuApiCards }),
-      })
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(swuApiResponse) })
     }
-    return Promise.resolve({
-      ok: true,
-      json: () => Promise.resolve(mockApiResponse),
-    })
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) })
   }))
 
   vi.stubGlobal('localStorage', {
@@ -269,7 +265,6 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'LAW')
-    // LAW has only one aspect (Vigilance) and one base (LAW-021) so both auto-select
     await waitFor(() => {
       expect((screen.getAllByRole('combobox')[1] as HTMLSelectElement).value).toBe('Vigilance')
       expect((screen.getAllByRole('combobox')[2] as HTMLSelectElement).value).toBe('LAW-021')
@@ -284,7 +279,6 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
     await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Cunning')
-    // SOR Cunning only has one base so it auto-selects
     await waitFor(() => {
       expect((screen.getAllByRole('combobox')[2] as HTMLSelectElement).value).toBe('SOR-022')
     })
@@ -316,8 +310,7 @@ describe('SwuSetupScreen', () => {
       number: '026',
       name: 'Catacombs of Cadera',
       hp: 30,
-    }),
-  false)
+    }), false)
   })
 
   it('Does not call onConfirm when no base selected', async () => {
@@ -352,8 +345,7 @@ describe('SwuSetupScreen', () => {
     expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
       set: 'JTL',
       number: '030',
-    }),
-  false)
+    }), false)
   })
 
   // --- Base preview ---
@@ -375,7 +367,7 @@ describe('SwuSetupScreen', () => {
   })
 
   // --- Hyperspace toggle ---
-  
+
   it('Hyperspace toggle does not appear before a base is selected', async () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
@@ -396,9 +388,10 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
-    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
-    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Cunning')
-    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-022')
+    // LAW/Vigilance/LAW-021 (Coaxium Mine) has no hyperspace in our data
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'LAW')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Vigilance')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'LAW-021')
     expect(screen.queryByLabelText('Hyperspace variant')).not.toBeInTheDocument()
   })
 
@@ -460,7 +453,7 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
     await user.click(screen.getByLabelText('Hyperspace variant'))
     const img = screen.getByAltText('Catacombs of Cadera')
-    expect(img).toHaveAttribute('src', mockBases[0].hyperspaceArt)
+    expect(img).toHaveAttribute('src', mockBases[0].hyperspaceArtHiRes)
   })
 
   it('Preview shows frontArt when toggle is off', async () => {
@@ -482,8 +475,7 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
     await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
     await user.click(screen.getByLabelText('Hyperspace variant'))
-    const img = screen.getByAltText('Catacombs of Cadera')
-    fireEvent.error(img)
+    fireEvent.error(screen.getByAltText('Catacombs of Cadera'))
     await waitFor(() => {
       expect(screen.getByText('Hyperspace variant not found')).toBeInTheDocument()
       expect(screen.queryByLabelText('Hyperspace variant')).not.toBeInTheDocument()
@@ -497,8 +489,7 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
     await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
-    const img = screen.getByAltText('Catacombs of Cadera')
-    fireEvent.error(img)
+    fireEvent.error(screen.getByAltText('Catacombs of Cadera'))
     await waitFor(() => {
       expect(screen.getByText('Only hyperspace image available')).toBeInTheDocument()
     })
@@ -511,6 +502,9 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'LAW')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Vigilance')
     await user.selectOptions(screen.getAllByRole('combobox')[2], 'LAW-021')
+    // In this test, swuapi returns empty so LAW is processed via the swu-db-only
+    // path, giving frontArtLowRes=null. One error exhausts all normal art options.
+    // (In the real app, LAW has frontArtLowRes from swuapi so two errors are needed.)
     fireEvent.error(screen.getByAltText('Coaxium Mine'))
     await waitFor(() => expect(screen.getByText('No base images found')).toBeInTheDocument())
   })

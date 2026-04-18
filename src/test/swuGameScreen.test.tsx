@@ -7,6 +7,11 @@ import { useOrientation } from '../hooks/useOrientation'
 
 vi.mock('../hooks/useOrientation')
 
+// ---------------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------------
+
+// SOR base — hi-res normal + hi-res hyperspace; no low-res (SOR not in swuapi.com)
 const mockBase: Base = {
   set: 'SOR',
   number: '026',
@@ -14,6 +19,7 @@ const mockBase: Base = {
   subtitle: 'Jedha',
   hp: 30,
   frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png',
+  frontArtLowRes: null,
   hyperspaceArt: 'https://cdn.starwarsunlimited.com/catacombs-hyperspace.png',
   hyperspaceArtHiRes: 'https://cdn.swu-db.com/images/cards/SOR/292.png',
   epicAction: '',
@@ -21,6 +27,7 @@ const mockBase: Base = {
   rarity: 'Common',
 }
 
+// SOR base with no hyperspace variant
 const mockBaseNoHyperspace: Base = {
   set: 'SOR',
   number: '022',
@@ -28,7 +35,9 @@ const mockBaseNoHyperspace: Base = {
   subtitle: 'Eadu',
   hp: 25,
   frontArt: 'https://cdn.swu-db.com/images/cards/SOR/022.png',
-  hyperspaceArt: undefined,
+  frontArtLowRes: null,
+  hyperspaceArt: null,
+  hyperspaceArtHiRes: null,
   epicAction: 'Epic Action: Play a unit that costs 6 or less.',
   aspects: ['Cunning'],
   rarity: 'Rare',
@@ -41,35 +50,43 @@ const mockBaseWithEpicAction: Base = {
   subtitle: 'Eadu',
   hp: 25,
   frontArt: 'https://cdn.swu-db.com/images/cards/SOR/022.png',
+  frontArtLowRes: null,
+  hyperspaceArt: null,
+  hyperspaceArtHiRes: null,
   epicAction: 'Epic Action: Play a unit that costs 6 or less from your hand.',
   aspects: ['Cunning'],
   rarity: 'Rare',
 }
 
-const mockBaseNoImage: Base = {
+// Base whose only art is frontArt (null low-res, no hyperspace) — simulates a total art failure in one error
+const mockBaseNoLowRes: Base = {
+  set: 'SOR',
+  number: '021',
+  name: 'Dagobah Swamp',
+  subtitle: 'Dagobah',
+  hp: 30,
+  frontArt: 'https://cdn.swu-db.com/images/cards/SOR/021.png',
+  frontArtLowRes: null,
+  hyperspaceArt: null,
+  hyperspaceArtHiRes: null,
+  epicAction: '',
+  aspects: ['Vigilance'],
+  rarity: 'Common',
+}
+
+// LAW base with full coverage: hi-res + low-res normal, hi-res + low-res hyperspace
+const mockBaseFullCoverage: Base = {
   set: 'LAW',
   number: '021',
   name: 'Coaxium Mine',
   subtitle: 'Kessel',
   hp: 27,
   frontArt: 'https://cdn.swu-db.com/images/cards/LAW/021.png',
+  frontArtLowRes: 'https://cdn.starwarsunlimited.com/coaxium-mine.png',
+  hyperspaceArtHiRes: 'https://cdn.swu-db.com/images/cards/LAW/285.png',
+  hyperspaceArt: 'https://cdn.starwarsunlimited.com/coaxium-mine-hs.png',
   epicAction: 'Epic Action: Play a card from your hand, ignoring 1 of its aspect penalties.',
   aspects: ['Vigilance'],
-  rarity: 'Common',
-}
-
-
-const mockBaseWithHyperspaceHiRes: Base = {
-  set: 'SOR',
-  number: '026',
-  name: 'Catacombs of Cadera',
-  subtitle: 'Jedha',
-  hp: 30,
-  frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png',
-  hyperspaceArt: 'https://cdn.starwarsunlimited.com/catacombs-hyperspace.png',
-  hyperspaceArtHiRes: 'https://cdn.swu-db.com/images/cards/SOR/292.png',
-  epicAction: '',
-  aspects: ['Aggression'],
   rarity: 'Common',
 }
 
@@ -87,7 +104,7 @@ describe('SwuGameScreen', () => {
   })
 
   it('Displays the correct remaining health at start', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()}  onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
   })
 
@@ -97,7 +114,7 @@ describe('SwuGameScreen', () => {
   })
 
   it('Renders the back button', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()}  onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
     expect(screen.getByText('<')).toBeInTheDocument()
   })
 
@@ -115,8 +132,7 @@ describe('SwuGameScreen', () => {
 
   it('Renders the card image with correct alt text', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
-    const img = screen.getByAltText(mockBase.name)
-    expect(img).toBeInTheDocument()
+    expect(screen.getByAltText(mockBase.name)).toBeInTheDocument()
   })
 
   // --- Counter behaviour ---
@@ -188,24 +204,24 @@ describe('SwuGameScreen', () => {
     expect(onBack).toHaveBeenCalledOnce()
   })
 
-  // --- Image error fallback ---
+  // --- Image error fallback (text) ---
 
- it('Shows base name when image fails to load', () => {
-    render(<SwuGameScreen base={mockBaseNoImage} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
-    fireEvent.error(screen.getByAltText(mockBaseNoImage.name))
-    expect(screen.getByText('Coaxium Mine')).toBeInTheDocument()
+  it('Shows base name when all image URLs fail', () => {
+    render(<SwuGameScreen base={mockBaseNoLowRes} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    fireEvent.error(screen.getByAltText(mockBaseNoLowRes.name))
+    expect(screen.getByText('Dagobah Swamp')).toBeInTheDocument()
   })
 
-  it('Shows base subtitle when image fails to load', () => {
-    render(<SwuGameScreen base={mockBaseNoImage} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
-    fireEvent.error(screen.getByAltText(mockBaseNoImage.name))
-    expect(screen.getByText('Kessel')).toBeInTheDocument()
+  it('Shows base subtitle when all image URLs fail', () => {
+    render(<SwuGameScreen base={mockBaseNoLowRes} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    fireEvent.error(screen.getByAltText(mockBaseNoLowRes.name))
+    expect(screen.getByText('Dagobah')).toBeInTheDocument()
   })
 
-  it('Shows epic action when image fails to load and epic action exists', () => {
-    render(<SwuGameScreen base={mockBaseNoImage} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
-    fireEvent.error(screen.getByAltText(mockBaseNoImage.name))
-    expect(screen.getByText(mockBaseNoImage.epicAction)).toBeInTheDocument()
+  it('Shows epic action when all image URLs fail and epic action exists', () => {
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    fireEvent.error(screen.getByAltText(mockBaseWithEpicAction.name))
+    expect(screen.getByText(mockBaseWithEpicAction.epicAction)).toBeInTheDocument()
   })
 
   it('Does not show fallback text when image loads successfully', () => {
@@ -214,50 +230,89 @@ describe('SwuGameScreen', () => {
     expect(screen.queryByText('Catacombs of Cadera')).not.toBeInTheDocument()
   })
 
-  // --- Hyperspace image ---
+  // --- Normal-preferred fallback chain: frontArt → frontArtLowRes → hyperspaceArtHiRes → hyperspaceArt → text ---
 
-  it('Uses frontArt when useHyperspace is false', () => {
+  it('Uses frontArt as initial src when useHyperspace is false', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
-    const img = screen.getByAltText(mockBase.name)
-    expect(img).toHaveAttribute('src', mockBase.frontArt)
+    expect(screen.getByAltText(mockBase.name)).toHaveAttribute('src', mockBase.frontArt)
   })
+
+  it('Falls back to frontArtLowRes when frontArt fails (normal preferred)', () => {
+    render(<SwuGameScreen base={mockBaseFullCoverage} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
+    expect(screen.getByAltText(mockBaseFullCoverage.name)).toHaveAttribute('src', mockBaseFullCoverage.frontArtLowRes)
+  })
+
+  it('Falls back to hyperspaceArtHiRes when both normal art options fail (normal preferred)', () => {
+    render(<SwuGameScreen base={mockBaseFullCoverage} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
+    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
+    expect(screen.getByAltText(mockBaseFullCoverage.name)).toHaveAttribute('src', mockBaseFullCoverage.hyperspaceArtHiRes)
+  })
+
+  it('Falls back to hyperspaceArt when normal art and hyperspaceArtHiRes all fail (normal preferred)', () => {
+    render(<SwuGameScreen base={mockBaseFullCoverage} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
+    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
+    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
+    expect(screen.getByAltText(mockBaseFullCoverage.name)).toHaveAttribute('src', mockBaseFullCoverage.hyperspaceArt)
+  })
+
+  it('Shows text fallback when all four art URLs fail (normal preferred)', () => {
+    render(<SwuGameScreen base={mockBaseFullCoverage} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
+    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
+    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
+    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
+    expect(screen.getByText('Coaxium Mine')).toBeInTheDocument()
+  })
+
+  it('Shows text fallback after single error when base has only frontArt and no other URLs', () => {
+    render(<SwuGameScreen base={mockBaseNoLowRes} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    fireEvent.error(screen.getByAltText(mockBaseNoLowRes.name))
+    expect(screen.getByText('Dagobah Swamp')).toBeInTheDocument()
+  })
+
+  // --- Hyperspace-preferred fallback chain: hyperspaceArtHiRes → hyperspaceArt → frontArt → frontArtLowRes → text ---
 
   it('Uses hyperspaceArtHiRes as initial src when useHyperspace is true', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={true} />)
-    const img = screen.getByAltText(mockBase.name)
-    expect(img).toHaveAttribute('src', mockBase.hyperspaceArtHiRes)
+    expect(screen.getByAltText(mockBase.name)).toHaveAttribute('src', mockBase.hyperspaceArtHiRes)
   })
 
-  it('Falls back to frontArt when useHyperspace is true but hyperspaceArt is undefined', () => {
+  it('Falls back to hyperspaceArt when hyperspaceArtHiRes fails (hyperspace preferred)', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={true} />)
+    fireEvent.error(screen.getByAltText(mockBase.name))
+    expect(screen.getByAltText(mockBase.name)).toHaveAttribute('src', mockBase.hyperspaceArt)
+  })
+
+  it('Falls back to frontArt when both hyperspace URLs fail (hyperspace preferred)', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={true} />)
+    fireEvent.error(screen.getByAltText(mockBase.name))
+    fireEvent.error(screen.getByAltText(mockBase.name))
+    expect(screen.getByAltText(mockBase.name)).toHaveAttribute('src', mockBase.frontArt)
+  })
+
+  it('Falls back to frontArtLowRes when hyperspace and frontArt all fail (hyperspace preferred)', () => {
+    render(<SwuGameScreen base={mockBaseFullCoverage} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={true} />)
+    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
+    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
+    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
+    expect(screen.getByAltText(mockBaseFullCoverage.name)).toHaveAttribute('src', mockBaseFullCoverage.frontArtLowRes)
+  })
+
+  it('Shows text fallback when all four art URLs fail (hyperspace preferred)', () => {
+    render(<SwuGameScreen base={mockBaseFullCoverage} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={true} />)
+    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
+    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
+    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
+    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
+    expect(screen.getByText('Coaxium Mine')).toBeInTheDocument()
+  })
+
+  it('Uses frontArt when useHyperspace is true but both hyperspace fields are null', () => {
     render(<SwuGameScreen base={mockBaseNoHyperspace} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={true} />)
-    const img = screen.getByAltText(mockBaseNoHyperspace.name)
-    expect(img).toHaveAttribute('src', mockBaseNoHyperspace.frontArt)
-  })
-
-
-  // --- Hyperspace fallback chain ---
-
-  it('Falls back to hyperspaceArt when hyperspaceArtHiRes fails to load', () => {
-    render(<SwuGameScreen base={mockBaseWithHyperspaceHiRes} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={true} />)
-    fireEvent.error(screen.getByAltText(mockBaseWithHyperspaceHiRes.name))
-    const img = screen.getByAltText(mockBaseWithHyperspaceHiRes.name)
-    expect(img).toHaveAttribute('src', mockBaseWithHyperspaceHiRes.hyperspaceArt)
-  })
-
-  it('Shows frontArt when both hyperspace URLs fail', () => {
-    render(<SwuGameScreen base={mockBaseWithHyperspaceHiRes} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={true} />)
-    fireEvent.error(screen.getByAltText(mockBaseWithHyperspaceHiRes.name))
-    fireEvent.error(screen.getByAltText(mockBaseWithHyperspaceHiRes.name))
-    const img = screen.getByAltText(mockBaseWithHyperspaceHiRes.name)
-    expect(img).toHaveAttribute('src', mockBaseWithHyperspaceHiRes.frontArt)
-  })
-
-  it('Shows text fallback when all image URLs fail', () => {
-    render(<SwuGameScreen base={mockBaseWithHyperspaceHiRes} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={true} />)
-    fireEvent.error(screen.getByAltText(mockBaseWithHyperspaceHiRes.name))
-    fireEvent.error(screen.getByAltText(mockBaseWithHyperspaceHiRes.name))
-    fireEvent.error(screen.getByAltText(mockBaseWithHyperspaceHiRes.name))
-    expect(screen.getByText(mockBaseWithHyperspaceHiRes.name)).toBeInTheDocument()
+    expect(screen.getByAltText(mockBaseNoHyperspace.name)).toHaveAttribute('src', mockBaseNoHyperspace.frontArt)
   })
 
   // --- Help button ---

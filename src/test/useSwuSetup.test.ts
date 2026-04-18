@@ -12,7 +12,9 @@ const baseA: Base = {
   subtitle: 'Jedha',
   hp: 30,
   frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png',
-  hyperspaceArt: 'https://cdn.swu-db.com/images/cards/SOR/292.png',
+  frontArtLowRes: null,
+  hyperspaceArtHiRes: 'https://cdn.swu-db.com/images/cards/SOR/292.png',
+  hyperspaceArt: null,
   epicAction: '',
   aspects: ['Aggression'],
   rarity: 'Common',
@@ -25,6 +27,9 @@ const baseB: Base = {
   subtitle: 'Eadu',
   hp: 25,
   frontArt: 'https://cdn.swu-db.com/images/cards/SOR/022.png',
+  frontArtLowRes: null,
+  hyperspaceArtHiRes: 'https://cdn.swu-db.com/images/cards/SOR/288.png',
+  hyperspaceArt: null,
   epicAction: 'Epic Action: Play a unit that costs 6 or less.',
   aspects: ['Cunning'],
   rarity: 'Rare',
@@ -37,6 +42,9 @@ const baseC: Base = {
   subtitle: 'Coruscant',
   hp: 28,
   frontArt: 'https://cdn.swu-db.com/images/cards/TWI/001.png',
+  frontArtLowRes: null,
+  hyperspaceArtHiRes: null,
+  hyperspaceArt: null,
   epicAction: '',
   aspects: ['Aggression'],
   rarity: 'Common',
@@ -51,6 +59,9 @@ const baseD: Base = {
   subtitle: 'Lothal',
   hp: 30,
   frontArt: 'https://cdn.swu-db.com/images/cards/SOR/027.png',
+  frontArtLowRes: null,
+  hyperspaceArtHiRes: 'https://cdn.swu-db.com/images/cards/SOR/293.png',
+  hyperspaceArt: null,
   epicAction: '',
   aspects: ['Aggression'],
   rarity: 'Common',
@@ -63,6 +74,9 @@ const baseF: Base = {
   subtitle: 'Coruscant',
   hp: 30,
   frontArt: 'https://cdn.swu-db.com/images/cards/TWI/002.png',
+  frontArtLowRes: null,
+  hyperspaceArtHiRes: null,
+  hyperspaceArt: null,
   epicAction: '',
   aspects: ['Command'],
   rarity: 'Common',
@@ -279,9 +293,9 @@ describe('useSwuSetup', () => {
 
   it('showHyperspaceToggle is false when selected base has no hyperspaceArt', () => {
     const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleSetChange('SOR'))
-    act(() => result.current.handleAspectChange('Cunning'))
-    act(() => result.current.handleKeyChange('SOR-022'))
+    act(() => result.current.handleSetChange('TWI'))
+    act(() => result.current.handleAspectChange('Aggression'))
+    act(() => result.current.handleKeyChange('TWI-001'))
     expect(result.current.showHyperspaceToggle).toBe(false)
   })
 
