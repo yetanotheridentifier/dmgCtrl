@@ -1,15 +1,28 @@
 import { Base } from '../hooks/useBases'
 import { useSwuSetup, InitialSelection } from '../hooks/useSwuSetup'
+import { useBaseArt } from '../hooks/useBaseArt'
 import SwuSetupScreenView from './swuSetupScreenView'
 
 interface Props {
   onConfirm: (base: Base, useHyperspace: boolean) => void
   onHelp: () => void
   initialSelection?: InitialSelection | null
+  initialSelection?: InitialSelection | null
 }
 
 function SwuSetupScreen({ onConfirm, onHelp, initialSelection }: Props) {
   const setup = useSwuSetup(onConfirm, initialSelection)
+  const art = useBaseArt(setup.selectedBase, setup.useHyperspace)
+
+  const hasHyperspace = !!(
+    setup.selectedBase?.hyperspaceArtHiRes || setup.selectedBase?.hyperspaceArt
+  )
+  const showHyperspaceToggle = hasHyperspace && !art.normalFailed && !art.hyperspaceFailed
+
+  const handleSubmit = () => {
+    const effectiveHyperspace = setup.useHyperspace || art.normalFailed
+    setup.handleSubmit(effectiveHyperspace)
+  }
 
   return (
     <SwuSetupScreenView
@@ -23,15 +36,17 @@ function SwuSetupScreen({ onConfirm, onHelp, initialSelection }: Props) {
       selectedKey={setup.selectedKey}
       selectedBase={setup.selectedBase}
       useHyperspace={setup.useHyperspace}
-      showHyperspaceToggle={setup.showHyperspaceToggle}
+      showHyperspaceToggle={showHyperspaceToggle}
+      artSrc={art.src}
+      artIsHyperspace={art.isHyperspace}
+      artAllFailed={art.allFailed}
+      onArtError={art.onError}
       onSetChange={setup.handleSetChange}
       onAspectChange={setup.handleAspectChange}
       onKeyChange={setup.handleKeyChange}
       onHyperspaceToggle={setup.handleHyperspaceToggle}
-      onSubmit={setup.handleSubmit}
+      onSubmit={handleSubmit}
       onHelp={onHelp}
-      onNormalImageFailed={setup.handleNormalImageFailed}
-      onHyperspaceImageFailed={setup.handleHyperspaceImageFailed}
     />
   )
 }

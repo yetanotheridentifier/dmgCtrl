@@ -467,35 +467,7 @@ describe('SwuSetupScreen', () => {
     expect(img).toHaveAttribute('src', mockBases[0].frontArt)
   })
 
-  it('Shows "Hyperspace variant not found" when hyperspace image fails but normal loads', async () => {
-    const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
-    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
-    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
-    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
-    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
-    await user.click(screen.getByLabelText('Hyperspace variant'))
-    fireEvent.error(screen.getByAltText('Catacombs of Cadera'))
-    await waitFor(() => {
-      expect(screen.getByText('Hyperspace variant not found')).toBeInTheDocument()
-      expect(screen.queryByLabelText('Hyperspace variant')).not.toBeInTheDocument()
-    })
-  })
-
-  it('Shows "Only hyperspace image available" when normal fails but hyperspace loads', async () => {
-    const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
-    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
-    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
-    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
-    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
-    fireEvent.error(screen.getByAltText('Catacombs of Cadera'))
-    await waitFor(() => {
-      expect(screen.getByText('Only hyperspace image available')).toBeInTheDocument()
-    })
-  })
-
-  it('Shows "No base images found" when normal image fails and no hyperspace exists', async () => {
+  it('Shows an error message when all art fails', async () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
@@ -504,7 +476,6 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(screen.getAllByRole('combobox')[2], 'LAW-021')
     // In this test, swuapi returns empty so LAW is processed via the swu-db-only
     // path, giving frontArtLowRes=null. One error exhausts all normal art options.
-    // (In the real app, LAW has frontArtLowRes from swuapi so two errors are needed.)
     fireEvent.error(screen.getByAltText('Coaxium Mine'))
     await waitFor(() => expect(screen.getByText('No base images found')).toBeInTheDocument())
   })

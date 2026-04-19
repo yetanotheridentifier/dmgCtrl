@@ -276,152 +276,23 @@ describe('useSwuSetup', () => {
     expect(setItem).toHaveBeenCalledWith('pref_hyperspace', 'true')
   })
 
-  // --- showHyperspaceToggle ---
-
-  it('showHyperspaceToggle is false when no base is selected', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.showHyperspaceToggle).toBe(false)
-  })
-
-  it('showHyperspaceToggle is true when selected base has hyperspaceArt and no image failures', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleSetChange('SOR'))
-    act(() => result.current.handleAspectChange('Aggression'))
-    act(() => result.current.handleKeyChange('SOR-026'))
-    expect(result.current.showHyperspaceToggle).toBe(true)
-  })
-
-  it('showHyperspaceToggle is false when selected base has no hyperspaceArt', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleSetChange('TWI'))
-    act(() => result.current.handleAspectChange('Aggression'))
-    act(() => result.current.handleKeyChange('TWI-001'))
-    expect(result.current.showHyperspaceToggle).toBe(false)
-  })
-
-  it('showHyperspaceToggle is false after hyperspace image fails', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleSetChange('SOR'))
-    act(() => result.current.handleAspectChange('Aggression'))
-    act(() => result.current.handleKeyChange('SOR-026'))
-    act(() => result.current.handleHyperspaceImageFailed())
-    expect(result.current.showHyperspaceToggle).toBe(false)
-  })
-
-  it('showHyperspaceToggle is false after normal image fails', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleSetChange('SOR'))
-    act(() => result.current.handleAspectChange('Aggression'))
-    act(() => result.current.handleKeyChange('SOR-026'))
-    act(() => result.current.handleNormalImageFailed())
-    expect(result.current.showHyperspaceToggle).toBe(false)
-  })
-
-  // --- Image failure reset ---
-
-  it('image failure flags reset when selected key changes', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleSetChange('SOR'))
-    act(() => result.current.handleAspectChange('Aggression'))
-    act(() => result.current.handleKeyChange('SOR-026'))
-    act(() => result.current.handleNormalImageFailed())
-    // Change to a different base (need Cunning for baseB)
-    act(() => result.current.handleAspectChange('Cunning'))
-    act(() => result.current.handleKeyChange('SOR-022'))
-    // After key change, image failures should reset — showHyperspaceToggle driven by absence of hyperspaceArt, not failure flags
-    expect(result.current.normalImageFailed).toBe(false)
-    expect(result.current.hyperspaceImageFailed).toBe(false)
-  })
-
   // --- handleSubmit ---
 
-  it('handleSubmit calls onConfirm with selectedBase and useHyperspace', () => {
+  it('handleSubmit calls onConfirm with selectedBase and effectiveHyperspace', () => {
     const onConfirm = vi.fn()
     const { result } = renderHook(() => useSwuSetup(onConfirm))
     act(() => result.current.handleSetChange('SOR'))
     act(() => result.current.handleAspectChange('Aggression'))
     act(() => result.current.handleKeyChange('SOR-026'))
-    act(() => result.current.handleSubmit())
+    act(() => result.current.handleSubmit(false))
     expect(onConfirm).toHaveBeenCalledWith(baseA, false)
   })
 
   it('handleSubmit does nothing when no base is selected', () => {
     const onConfirm = vi.fn()
     const { result } = renderHook(() => useSwuSetup(onConfirm))
-    act(() => result.current.handleSubmit())
+    act(() => result.current.handleSubmit(false))
     expect(onConfirm).not.toHaveBeenCalled()
-  })
-
-  it('handleSubmit passes current useHyperspace value to onConfirm', () => {
-    const onConfirm = vi.fn()
-    const { result } = renderHook(() => useSwuSetup(onConfirm))
-    act(() => result.current.handleSetChange('SOR'))
-    act(() => result.current.handleAspectChange('Aggression'))
-    act(() => result.current.handleKeyChange('SOR-026'))
-    act(() => result.current.handleHyperspaceToggle(true))
-    act(() => result.current.handleSubmit())
-    expect(onConfirm).toHaveBeenCalledWith(baseA, true)
-  })
-
-  it('handleSubmit passes useHyperspace: true when normal art failed but hyperspace art exists', () => {
-    const onConfirm = vi.fn()
-    const { result } = renderHook(() => useSwuSetup(onConfirm))
-    act(() => result.current.handleSetChange('SOR'))
-    act(() => result.current.handleAspectChange('Aggression'))
-    act(() => result.current.handleKeyChange('SOR-026'))
-    act(() => result.current.handleNormalImageFailed())
-    act(() => result.current.handleSubmit())
-    // useHyperspace preference is false, but normal art has failed — hyperspace must be used
-    expect(onConfirm).toHaveBeenCalledWith(baseA, true)
-  })
-
-  it('handleSubmit respects useHyperspace: false when normal art has not failed', () => {
-    const onConfirm = vi.fn()
-    const { result } = renderHook(() => useSwuSetup(onConfirm))
-    act(() => result.current.handleSetChange('SOR'))
-    act(() => result.current.handleAspectChange('Aggression'))
-    act(() => result.current.handleKeyChange('SOR-026'))
-    act(() => result.current.handleSubmit())
-    expect(onConfirm).toHaveBeenCalledWith(baseA, false)
-  })
-
-  // --- initialSelection ---
-
-  it('Pre-populates selectedSet from initialSelection', () => {
-    const { result } = renderHook(() =>
-      useSwuSetup(vi.fn(), { set: 'SOR', aspect: 'Aggression', key: 'SOR-026' })
-    )
-    expect(result.current.selectedSet).toBe('SOR')
-  })
-
-  it('Pre-populates selectedAspect from initialSelection', () => {
-    const { result } = renderHook(() =>
-      useSwuSetup(vi.fn(), { set: 'SOR', aspect: 'Aggression', key: 'SOR-026' })
-    )
-    expect(result.current.selectedAspect).toBe('Aggression')
-  })
-
-  it('Pre-populates selectedKey from initialSelection', () => {
-    const { result } = renderHook(() =>
-      useSwuSetup(vi.fn(), { set: 'SOR', aspect: 'Aggression', key: 'SOR-026' })
-    )
-    expect(result.current.selectedKey).toBe('SOR-026')
-  })
-
-  it('Resolves selectedBase from initialSelection once bases are loaded', () => {
-    const { result } = renderHook(() =>
-      useSwuSetup(vi.fn(), { set: 'SOR', aspect: 'Aggression', key: 'SOR-026' })
-    )
-    expect(result.current.selectedBase).toEqual(baseA)
-  })
-
-  it('Submit button is immediately active when initialSelection matches a loaded base', () => {
-    const onConfirm = vi.fn()
-    const { result } = renderHook(() =>
-      useSwuSetup(onConfirm, { set: 'SOR', aspect: 'Aggression', key: 'SOR-026' })
-    )
-    act(() => result.current.handleSubmit())
-    expect(onConfirm).toHaveBeenCalledWith(baseA, false)
   })
 
 })

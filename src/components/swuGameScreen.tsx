@@ -1,5 +1,6 @@
 import { Base } from '../hooks/useBases'
 import { useSwuGame } from '../hooks/useSwuGame'
+import { useBaseArt } from '../hooks/useBaseArt'
 import { useOrientation } from '../hooks/useOrientation'
 import SwuGameScreenView from './swuGameScreenView'
 import AppScreenLayout from './layout/AppScreenLayout'
@@ -12,21 +13,8 @@ interface Props {
 }
 
 function SwuGameScreen({ base, onBack, onHelp, useHyperspace }: Props) {
-  const imageSrcs = useHyperspace
-    ? [
-        ...(base.hyperspaceArtHiRes ? [base.hyperspaceArtHiRes] : []),
-        ...(base.hyperspaceArt ? [base.hyperspaceArt] : []),
-        ...(base.frontArt ? [base.frontArt] : []),
-        ...(base.frontArtLowRes ? [base.frontArtLowRes] : []),
-      ]
-    : [
-        ...(base.frontArt ? [base.frontArt] : []),
-        ...(base.frontArtLowRes ? [base.frontArtLowRes] : []),
-        ...(base.hyperspaceArtHiRes ? [base.hyperspaceArtHiRes] : []),
-        ...(base.hyperspaceArt ? [base.hyperspaceArt] : []),
-      ]
-
-  const { count, imageLoaded, imageError, currentImageSrc, increment, decrement, handleImageLoad, handleImageError } = useSwuGame(imageSrcs)
+  const art = useBaseArt(base, useHyperspace)
+  const { count, increment, decrement } = useSwuGame()
   const { isPortrait } = useOrientation()
 
   if (isPortrait) {
@@ -89,14 +77,14 @@ function SwuGameScreen({ base, onBack, onHelp, useHyperspace }: Props) {
       base={base}
       onBack={onBack}
       onHelp={onHelp}
-      imageSrc={currentImageSrc}
+      imageSrc={art.src ?? ''}
       count={count}
-      imageLoaded={imageLoaded}
-      imageError={imageError}
+      imageLoaded={art.imageLoaded}
+      imageError={art.allFailed}
       onIncrement={increment}
       onDecrement={decrement}
-      onImageLoad={handleImageLoad}
-      onImageError={handleImageError}
+      onImageLoad={art.onLoad}
+      onImageError={art.onError}
     />
   )
 }
