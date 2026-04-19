@@ -16,7 +16,7 @@ function SwuSetupScreen({ onConfirm, onHelp, initialSelection }: Props) {
   const hasHyperspace = !!(
     setup.selectedBase?.hyperspaceArtHiRes || setup.selectedBase?.hyperspaceArt
   )
-  const showHyperspaceToggle = hasHyperspace && !art.normalFailed && !art.hyperspaceFailed
+  const showHyperspaceToggle = hasHyperspace && !art.normalFailed && !art.hyperspaceFailed && art.imageLoaded
 
   const handleSubmit = () => {
     const effectiveHyperspace = setup.useHyperspace || art.normalFailed
@@ -39,6 +39,8 @@ function SwuSetupScreen({ onConfirm, onHelp, initialSelection }: Props) {
       artSrc={art.src}
       artIsHyperspace={art.isHyperspace}
       artAllFailed={art.allFailed}
+      artImageLoaded={art.imageLoaded}
+      onArtLoad={art.onLoad}
       onArtError={art.onError}
       onSetChange={setup.handleSetChange}
       onAspectChange={setup.handleAspectChange}
