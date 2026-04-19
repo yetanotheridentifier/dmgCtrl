@@ -1,14 +1,15 @@
 import { Base } from '../hooks/useBases'
-import { useSwuSetup } from '../hooks/useSwuSetup'
+import { useSwuSetup, InitialSelection } from '../hooks/useSwuSetup'
 import SwuSetupScreenView from './swuSetupScreenView'
 
 interface Props {
   onConfirm: (base: Base, useHyperspace: boolean) => void
   onHelp: () => void
+  initialSelection?: InitialSelection | null
 }
 
-function SwuSetupScreen({ onConfirm, onHelp }: Props) {
-  const setup = useSwuSetup(onConfirm)
+function SwuSetupScreen({ onConfirm, onHelp, initialSelection }: Props) {
+  const setup = useSwuSetup(onConfirm, initialSelection)
 
   return (
     <SwuSetupScreenView

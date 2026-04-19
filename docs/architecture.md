@@ -156,8 +156,9 @@ State is owned at the appropriate level:
 | Current screen (`setup` / `game` / `help`) | `App` | Passed as callback props (`onStartGame`, `onBack`, `onHelp`) |
 | Previous screen (for help back-navigation) | `App` | Stored so the help screen knows where to return |
 | Selected base | `App` | Set on `onStartGame`, passed into `SwuGameScreen` |
+| Last setup selection (`set`, `aspect`, `key`) | `App` | Saved on `handleConfirm`; passed as `initialSelection` prop to `SwuSetupScreen` so dropdowns are pre-populated on back navigation |
 | Hyperspace preference | `App` / localStorage | Read at startup, toggled on setup screen, passed to game screen |
-| Filter state (set, aspect, card) | `useSwuSetup` | Local to setup screen |
+| Filter state (set, aspect, card) | `useSwuSetup` | Seeded from `initialSelection` on mount; local after that |
 | Damage counter | `useSwuGame` | Local to game screen |
 | Image load/error state | `useSwuGame` | Local to game screen |
 
@@ -166,8 +167,15 @@ State is owned at the appropriate level:
 1. User selects set, aspect, and base in setup screen dropdowns
 2. `useSwuSetup` manages the filter state and auto-selects when only one option remains
 3. User clicks `>` — `handleSubmit` in `useSwuSetup` calls `onStartGame(selectedBase, effectiveHyperspace)`
-4. `App` sets `screen = 'game'`, `selectedBase`, and `useHyperspace`
+4. `App` sets `screen = 'game'`, `selectedBase`, `useHyperspace`, and `lastSelection`
 5. `SwuGameScreen` receives `base` and `useHyperspace`, initialises `useSwuGame` with the correct image URL list
+
+### Example flow: Game → Back → Setup (retaining selection)
+
+1. User clicks `<` in the game screen — `handleBack` sets `screen = 'setup'`
+2. `SwuSetupScreen` re-mounts with `initialSelection` prop set to the `lastSelection` saved in step 4 above
+3. `useSwuSetup` seeds `selectedSet`, `selectedAspect`, and `selectedKey` from `initialSelection` via `useState` initialisers
+4. Dropdowns are immediately pre-populated; the submit button is active; user can start again without re-selecting
 
 ### Example flow: Damage tracking
 

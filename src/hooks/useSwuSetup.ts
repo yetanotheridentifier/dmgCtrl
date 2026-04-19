@@ -1,15 +1,24 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useBases, Base } from './useBases'
 
-const ASPECT_ORDER = ['Aggression', 'Command', 'Cunning', 'Vigilance', 'None']
+const ASPECT_ORDER = ['Vigilance', 'Command', 'Aggression', 'Cunning', 'None']
 const HYPERSPACE_PREF_KEY = 'pref_hyperspace'
 
-export function useSwuSetup(onConfirm: (base: Base, useHyperspace: boolean) => void) {
+export interface InitialSelection {
+  set: string
+  aspect: string
+  key: string
+}
+
+export function useSwuSetup(
+  onConfirm: (base: Base, useHyperspace: boolean) => void,
+  initialSelection?: InitialSelection | null,
+) {
   const { bases, loading, error } = useBases()
 
-  const [selectedSet, setSelectedSet] = useState('')
-  const [selectedAspect, setSelectedAspect] = useState('')
-  const [selectedKey, setSelectedKey] = useState('')
+  const [selectedSet, setSelectedSet] = useState(initialSelection?.set ?? '')
+  const [selectedAspect, setSelectedAspect] = useState(initialSelection?.aspect ?? '')
+  const [selectedKey, setSelectedKey] = useState(initialSelection?.key ?? '')
   const [useHyperspace, setUseHyperspace] = useState<boolean>(() => {
     return localStorage.getItem(HYPERSPACE_PREF_KEY) === 'true'
   })

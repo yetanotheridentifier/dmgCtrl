@@ -141,6 +141,69 @@ describe('App', () => {
     expect(screen.getByText('Select Base')).toBeInTheDocument()
   })
 
+  // --- Back navigation retains selection ---
+
+  it('Retains selected set after navigating back from game screen', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    await user.click(screen.getByText('>'))
+    await user.click(screen.getByText('<'))
+    expect((screen.getAllByRole('combobox')[0] as HTMLSelectElement).value).toBe('SOR')
+  })
+
+  it('Retains selected aspect after navigating back from game screen', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    await user.click(screen.getByText('>'))
+    await user.click(screen.getByText('<'))
+    expect((screen.getAllByRole('combobox')[1] as HTMLSelectElement).value).toBe('Aggression')
+  })
+
+  it('Retains selected base after navigating back from game screen', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    await user.click(screen.getByText('>'))
+    await user.click(screen.getByText('<'))
+    expect((screen.getAllByRole('combobox')[2] as HTMLSelectElement).value).toBe('SOR-026')
+  })
+
+  it('Submit button is immediately active after navigating back', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    await user.click(screen.getByText('>'))
+    await user.click(screen.getByText('<'))
+    expect(screen.getByText('>')).not.toBeDisabled()
+  })
+
+  it('Can start a new game immediately after navigating back without re-selecting', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
+    await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    await user.click(screen.getByText('>'))
+    await user.click(screen.getByText('<'))
+    await user.click(screen.getByText('>'))
+    expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
+  })
+
   // --- Help navigation ---
 
   it('Help button is visible on setup screen', async () => {

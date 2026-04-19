@@ -385,4 +385,43 @@ describe('useSwuSetup', () => {
     expect(onConfirm).toHaveBeenCalledWith(baseA, false)
   })
 
+  // --- initialSelection ---
+
+  it('Pre-populates selectedSet from initialSelection', () => {
+    const { result } = renderHook(() =>
+      useSwuSetup(vi.fn(), { set: 'SOR', aspect: 'Aggression', key: 'SOR-026' })
+    )
+    expect(result.current.selectedSet).toBe('SOR')
+  })
+
+  it('Pre-populates selectedAspect from initialSelection', () => {
+    const { result } = renderHook(() =>
+      useSwuSetup(vi.fn(), { set: 'SOR', aspect: 'Aggression', key: 'SOR-026' })
+    )
+    expect(result.current.selectedAspect).toBe('Aggression')
+  })
+
+  it('Pre-populates selectedKey from initialSelection', () => {
+    const { result } = renderHook(() =>
+      useSwuSetup(vi.fn(), { set: 'SOR', aspect: 'Aggression', key: 'SOR-026' })
+    )
+    expect(result.current.selectedKey).toBe('SOR-026')
+  })
+
+  it('Resolves selectedBase from initialSelection once bases are loaded', () => {
+    const { result } = renderHook(() =>
+      useSwuSetup(vi.fn(), { set: 'SOR', aspect: 'Aggression', key: 'SOR-026' })
+    )
+    expect(result.current.selectedBase).toEqual(baseA)
+  })
+
+  it('Submit button is immediately active when initialSelection matches a loaded base', () => {
+    const onConfirm = vi.fn()
+    const { result } = renderHook(() =>
+      useSwuSetup(onConfirm, { set: 'SOR', aspect: 'Aggression', key: 'SOR-026' })
+    )
+    act(() => result.current.handleSubmit())
+    expect(onConfirm).toHaveBeenCalledWith(baseA, false)
+  })
+
 })
