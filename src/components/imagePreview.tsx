@@ -5,7 +5,9 @@ interface ImagePreviewProps {
   src: string | null
   isHyperspace: boolean
   allFailed: boolean
+  imageLoaded: boolean
   useHyperspace: boolean
+  onLoad: () => void
   onError: () => void
 }
 
@@ -32,20 +34,20 @@ const errorStyle: React.CSSProperties = {
   fontStyle: 'italic',
 }
 
-function ImagePreview({ base, src, isHyperspace, allFailed, useHyperspace, onError }: ImagePreviewProps) {
+function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, useHyperspace, onLoad, onError }: ImagePreviewProps) {
   if (allFailed || !src) {
     return <p style={errorStyle}>No base images found</p>
   }
 
-  const message = (!useHyperspace && isHyperspace)
+  const message = imageLoaded && ((!useHyperspace && isHyperspace)
     ? 'Only hyperspace image available'
     : (useHyperspace && !isHyperspace)
       ? 'Hyperspace variant not found'
-      : null
+      : null)
 
   return (
     <>
-      <img src={src} alt={base.name} onError={onError} style={imgStyle} />
+      <img src={src} alt={base.name} onLoad={onLoad} onError={onError} style={imgStyle} />
       {message && <p style={messageStyle}>{message}</p>}
     </>
   )

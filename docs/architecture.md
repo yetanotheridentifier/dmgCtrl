@@ -253,7 +253,7 @@ frontArt → frontArtLowRes → hyperspaceArtHiRes → hyperspaceArt → text/er
 
 The normal-preferred chain always falls back to hyperspace art before giving up — a base image is always better than a text fallback.
 
-The setup screen uses `normalFailed` and `hyperspaceFailed` to show contextual messages ("Only hyperspace image available", "Hyperspace variant not found") and to hide the hyperspace toggle when either tier has been exhausted. The game screen uses `allFailed` to switch to the text fallback (base name, subtitle, epic action).
+The setup screen uses `normalFailed`, `hyperspaceFailed`, and `imageLoaded` to control the hyperspace toggle and contextual messages ("Only hyperspace image available", "Hyperspace variant not found"): both are suppressed until `imageLoaded` is true, preventing flicker during the loading window. The game screen uses `allFailed` to switch to the text fallback (base name, subtitle, epic action).
 
 ### Caching
 

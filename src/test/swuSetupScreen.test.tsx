@@ -381,6 +381,7 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
     await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    fireEvent.load(screen.getByAltText('Catacombs of Cadera'))
     expect(screen.getByLabelText('Hyperspace variant')).toBeInTheDocument()
   })
 
@@ -402,6 +403,7 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
     await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    fireEvent.load(screen.getByAltText('Catacombs of Cadera'))
     const toggle = screen.getByLabelText('Hyperspace variant') as HTMLInputElement
     expect(toggle.checked).toBe(false)
   })
@@ -422,6 +424,7 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
     await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    fireEvent.load(screen.getByAltText('Catacombs of Cadera'))
     const toggle = screen.getByLabelText('Hyperspace variant') as HTMLInputElement
     expect(toggle.checked).toBe(true)
   })
@@ -440,6 +443,7 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
     await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    fireEvent.load(screen.getByAltText('Catacombs of Cadera'))
     await user.click(screen.getByLabelText('Hyperspace variant'))
     expect(setItemMock).toHaveBeenCalledWith('pref_hyperspace', 'true')
   })
@@ -451,6 +455,7 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
     await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
     await user.selectOptions(screen.getAllByRole('combobox')[2], 'SOR-026')
+    fireEvent.load(screen.getByAltText('Catacombs of Cadera'))
     await user.click(screen.getByLabelText('Hyperspace variant'))
     const img = screen.getByAltText('Catacombs of Cadera')
     expect(img).toHaveAttribute('src', mockBases[0].hyperspaceArtHiRes)
