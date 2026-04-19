@@ -33,7 +33,7 @@ interface CacheEntry {
 // Each set uses a different offset — verified against cdn.swu-db.com:
 //   SOR: standard + 266  (019→285 … 030→296)
 //   SHD: standard + 278  (019→297 … 026→304)
-//   TWI: standard + 275  (019→294 … 027→302), then 028→517, 029→518, 030→519
+//   TWI: standard + 275  (019→294 … 027→303), then 029→518, 030→519
 // ---------------------------------------------------------------------------
 const STATIC_HYPERSPACE_SETS: Record<string, { number: string; name: string; hyperspaceNumber: string }[]> = {
   SOR: [
