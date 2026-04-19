@@ -59,11 +59,13 @@ The app is served at `/dmgCtrl/` and is designed to be added to an iOS home scre
 ```
 App
 ├── SwuSetupScreen        (container)
-│   ├── useSwuSetup       (hook — all setup logic)
+│   ├── useSwuSetup       (hook — filtering, auto-select, hyperspace preference)
+│   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
 │   └── SwuSetupScreenView (view — renders selects, image preview, start button)
-│       └── ImagePreview  (component — setup screen art display)
+│       └── ImagePreview  (pure view — renders art or error message from props)
 ├── SwuGameScreen         (container)
-│   ├── useSwuGame        (hook — counter and image fallback logic)
+│   ├── useSwuGame        (hook — damage counter)
+│   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
 │   └── SwuGameScreenView (view — renders counter, image, epic action)
 └── SwuHelpScreen         (standalone screen — renders help.md content)
 
@@ -102,7 +104,7 @@ src/
   components/
     layout/
       AppScreenLayout.tsx  Shared full-screen layout wrapper (background, safe area)
-    imagePreview.tsx        Setup screen card art preview with hyperspace toggle
+    imagePreview.tsx        Pure view — renders card art or error message from props
     swuGameScreen.tsx       Game screen container
     swuGameScreenView.tsx   Game screen view
     swuHelpScreen.tsx       Help screen (renders help.md)
@@ -110,10 +112,11 @@ src/
     swuSetupScreenView.tsx  Setup screen view
 
   hooks/
+    useBaseArt.ts           Ordered art fallback chain shared by setup and game screens
     useBases.ts             Fetches and caches the full list of Base cards
     useOrientation.ts       Detects portrait vs landscape via resize event
-    useSwuGame.ts           Game screen logic — counter and image fallback chain
-    useSwuSetup.ts          Setup screen logic — filtering, auto-select, preferences
+    useSwuGame.ts           Damage counter
+    useSwuSetup.ts          Setup screen logic — filtering, auto-select, hyperspace preference
 
   test/
     setup.ts                Vitest setup (jest-dom matchers)
@@ -122,9 +125,10 @@ src/
     swuGameScreen.test.tsx  Game screen container tests
     swuHelpScreen.test.tsx  Help screen tests
     swuSetupScreen.test.tsx Setup screen container tests
+    useBaseArt.test.ts      Art fallback chain hook tests
     useBases.test.ts        Data layer hook tests
     useOrientation.test.ts  Orientation hook tests
-    useSwuGame.test.ts      Game logic hook tests
+    useSwuGame.test.ts      Counter hook tests
     useSwuSetup.test.ts     Setup logic hook tests
 
   assets/
@@ -160,22 +164,15 @@ State is owned at the appropriate level:
 | Hyperspace preference | `App` / localStorage | Read at startup, toggled on setup screen, passed to game screen |
 | Filter state (set, aspect, card) | `useSwuSetup` | Seeded from `initialSelection` on mount; local after that |
 | Damage counter | `useSwuGame` | Local to game screen |
-| Image load/error state | `useSwuGame` | Local to game screen |
+| Art fallback index, image load state | `useBaseArt` | Local to whichever screen called it; reset when base changes |
 
 ### Example flow: Setup → Game
 
 1. User selects set, aspect, and base in setup screen dropdowns
 2. `useSwuSetup` manages the filter state and auto-selects when only one option remains
 3. User clicks `>` — `handleSubmit` in `useSwuSetup` calls `onStartGame(selectedBase, effectiveHyperspace)`
-4. `App` sets `screen = 'game'`, `selectedBase`, `useHyperspace`, and `lastSelection`
-5. `SwuGameScreen` receives `base` and `useHyperspace`, initialises `useSwuGame` with the correct image URL list
-
-### Example flow: Game → Back → Setup (retaining selection)
-
-1. User clicks `<` in the game screen — `handleBack` sets `screen = 'setup'`
-2. `SwuSetupScreen` re-mounts with `initialSelection` prop set to the `lastSelection` saved in step 4 above
-3. `useSwuSetup` seeds `selectedSet`, `selectedAspect`, and `selectedKey` from `initialSelection` via `useState` initialisers
-4. Dropdowns are immediately pre-populated; the submit button is active; user can start again without re-selecting
+4. `App` sets `screen = 'game'`, `selectedBase`, and `useHyperspace`
+5. `SwuGameScreen` receives `base` and `useHyperspace`, `useBaseArt` builds the ordered fallback chain and manages image state
 
 ### Example flow: Damage tracking
 
@@ -240,30 +237,23 @@ Card art is served from two CDNs with different characteristics:
 
 The `Base` interface captures all four possible art sources: `frontArt`, `frontArtLowRes`, `hyperspaceArtHiRes`, `hyperspaceArt`. Any field may be `null` depending on the set's data availability.
 
-#### Game screen fallback chain
+#### Art fallback chain (`useBaseArt`)
 
-`SwuGameScreen` builds an ordered `imageSrcs` array (filtering out `null` entries) and passes it to `useSwuGame`. On each `onError` the hook advances to the next URL; `imageError` only becomes `true` once all are exhausted.
+Both the setup screen and the game screen call `useBaseArt(base, useHyperspace)`, which builds an ordered URL list (filtering out `null` entries) and maintains a fallback index. On each `onError` the index advances; `allFailed` only becomes `true` once all URLs are exhausted. The hook also tracks `imageLoaded`, `normalFailed`, and `hyperspaceFailed` so callers can derive UI state without re-inspecting the base object.
 
 **Hyperspace preferred** (`useHyperspace = true`):
 ```
-hyperspaceArtHiRes → hyperspaceArt → frontArt → frontArtLowRes → text
+hyperspaceArtHiRes → hyperspaceArt → frontArt → frontArtLowRes → text/error
 ```
 
 **Normal preferred** (`useHyperspace = false`):
 ```
-frontArt → frontArtLowRes → hyperspaceArtHiRes → hyperspaceArt → text
+frontArt → frontArtLowRes → hyperspaceArtHiRes → hyperspaceArt → text/error
 ```
 
-The normal-preferred chain always falls back to hyperspace art rather than showing no image — a base image is always better than a text fallback.
+The normal-preferred chain always falls back to hyperspace art before giving up — a base image is always better than a text fallback.
 
-#### Setup screen art (ImagePreview)
-
-`imagePreview.tsx` derives effective src values at render time:
-
-- **Normal:** `base.frontArt ?? base.frontArtLowRes`
-- **Hyperspace:** `base.hyperspaceArtHiRes ?? base.hyperspaceArt`
-
-This ensures the highest-quality available URL is shown in each mode without an explicit fallback chain.
+The setup screen uses `normalFailed` and `hyperspaceFailed` to show contextual messages ("Only hyperspace image available", "Hyperspace variant not found") and to hide the hyperspace toggle when either tier has been exhausted. The game screen uses `allFailed` to switch to the text fallback (base name, subtitle, epic action).
 
 ### Caching
 
@@ -325,9 +315,9 @@ The game screen is designed for **landscape orientation**. `useOrientation` dete
 
 ### Game screen
 
-1. Container builds `imageSrcs` array based on `useHyperspace` flag and available art fields
-2. `useSwuGame(imageSrcs)` manages counter state and image fallback
-3. `currentImageSrc` is passed as a prop to the view (not recomputed in the view)
+1. `useBaseArt(base, useHyperspace)` manages the ordered fallback chain and image load state
+2. `useSwuGame()` manages the damage counter
+3. `art.src`, `art.imageLoaded`, `art.allFailed`, `art.onLoad`, `art.onError` are passed as props to the view
 4. View renders the counter, card image, and epic action text
 
 ### Adding a new feature
@@ -448,12 +438,12 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 ### Avoiding unnecessary re-renders
 
 - State is co-located with the component that needs it — no prop drilling through many layers
-- Derived values (e.g. `filteredBases`, `imageSrcs`) are computed inline in the container; `useMemo` can be added if profiling reveals a bottleneck
+- Derived values (e.g. `filteredBases`) are computed in hooks with `useMemo`; `useBaseArt` entries are memoised so the array only rebuilds when `base` or `useHyperspace` changes
 
 ### Image loading
 
 - Card art is lazy-loaded via the browser's default `<img>` behaviour
-- The fallback chain in `useSwuGame` means a broken image never leaves a blank gap — it advances to the next URL or shows text
+- The fallback chain in `useBaseArt` means a broken image never leaves a blank gap — it advances to the next URL or shows text
 - The setup screen image preview is displayed before game start, giving the browser time to cache the URL before the game screen renders it
 
 ---
@@ -492,7 +482,7 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | **hyperspaceArt** | The reliable low-res hyperspace image URL from swuapi.com (`cdn.starwarsunlimited.com`, 400×286). `null` for SOR/SHD/TWI (no longer in swuapi.com). |
 | **hyperspaceArtHiRes** | A constructed hi-res hyperspace image URL from swu-db.com (`cdn.swu-db.com`, 1560×1120). Derived from card number for active sets, or from the static +266 offset map for SOR/SHD/TWI. May 403 for a small number of unindexed cards. |
 | **Static hyperspace map** | A hardcoded mapping of SOR, SHD, and TWI base card numbers to their hyperspace card numbers (offset +266). Used because those sets no longer appear in swuapi.com. |
-| **Fallback chain** | The ordered list of image URLs tried by `useSwuGame`. Hyperspace preferred: `[hyperspaceArtHiRes, hyperspaceArt, frontArt, frontArtLowRes]`. Normal preferred: `[frontArt, frontArtLowRes, hyperspaceArtHiRes, hyperspaceArt]`. The next URL is tried on `onError`; text fallback shown only when all are exhausted. |
+| **Fallback chain** | The ordered list of image URLs managed by `useBaseArt`. Hyperspace preferred: `[hyperspaceArtHiRes, hyperspaceArt, frontArt, frontArtLowRes]`. Normal preferred: `[frontArt, frontArtLowRes, hyperspaceArtHiRes, hyperspaceArt]`. The next URL is tried on `onError`; text fallback shown only when all are exhausted. |
 | **Container** | A React component that owns logic — calls hooks, computes derived state, and passes everything to a View component as props. |
 | **View** | A React component that only renders — receives all data and callbacks as props, contains no business logic. |
 | **AppScreenLayout** | The shared full-screen layout wrapper that provides background, safe area padding, and star field for every screen. |
