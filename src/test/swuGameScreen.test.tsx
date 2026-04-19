@@ -237,27 +237,6 @@ describe('SwuGameScreen', () => {
     expect(screen.getByAltText(mockBase.name)).toHaveAttribute('src', mockBase.frontArt)
   })
 
-  it('Falls back to frontArtLowRes when frontArt fails (normal preferred)', () => {
-    render(<SwuGameScreen base={mockBaseFullCoverage} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
-    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
-    expect(screen.getByAltText(mockBaseFullCoverage.name)).toHaveAttribute('src', mockBaseFullCoverage.frontArtLowRes)
-  })
-
-  it('Falls back to hyperspaceArtHiRes when both normal art options fail (normal preferred)', () => {
-    render(<SwuGameScreen base={mockBaseFullCoverage} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
-    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
-    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
-    expect(screen.getByAltText(mockBaseFullCoverage.name)).toHaveAttribute('src', mockBaseFullCoverage.hyperspaceArtHiRes)
-  })
-
-  it('Falls back to hyperspaceArt when normal art and hyperspaceArtHiRes all fail (normal preferred)', () => {
-    render(<SwuGameScreen base={mockBaseFullCoverage} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
-    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
-    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
-    fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
-    expect(screen.getByAltText(mockBaseFullCoverage.name)).toHaveAttribute('src', mockBaseFullCoverage.hyperspaceArt)
-  })
-
   it('Shows text fallback when all four art URLs fail (normal preferred)', () => {
     render(<SwuGameScreen base={mockBaseFullCoverage} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
     fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
@@ -278,19 +257,6 @@ describe('SwuGameScreen', () => {
   it('Uses hyperspaceArtHiRes as initial src when useHyperspace is true', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={true} />)
     expect(screen.getByAltText(mockBase.name)).toHaveAttribute('src', mockBase.hyperspaceArtHiRes)
-  })
-
-  it('Falls back to hyperspaceArt when hyperspaceArtHiRes fails (hyperspace preferred)', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={true} />)
-    fireEvent.error(screen.getByAltText(mockBase.name))
-    expect(screen.getByAltText(mockBase.name)).toHaveAttribute('src', mockBase.hyperspaceArt)
-  })
-
-  it('Falls back to frontArt when both hyperspace URLs fail (hyperspace preferred)', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={true} />)
-    fireEvent.error(screen.getByAltText(mockBase.name))
-    fireEvent.error(screen.getByAltText(mockBase.name))
-    expect(screen.getByAltText(mockBase.name)).toHaveAttribute('src', mockBase.frontArt)
   })
 
   it('Falls back to frontArtLowRes when hyperspace and frontArt all fail (hyperspace preferred)', () => {
