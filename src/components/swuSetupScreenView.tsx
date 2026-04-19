@@ -14,14 +14,16 @@ interface Props {
   selectedBase: Base | null
   useHyperspace: boolean
   showHyperspaceToggle: boolean
+  artSrc: string | null
+  artIsHyperspace: boolean
+  artAllFailed: boolean
+  onArtError: () => void
   onSetChange: (set: string) => void
   onAspectChange: (aspect: string) => void
   onKeyChange: (key: string) => void
   onHyperspaceToggle: (value: boolean) => void
   onSubmit: () => void
   onHelp: () => void
-  onNormalImageFailed: () => void
-  onHyperspaceImageFailed: () => void
 }
 
 const selectStyle = (enabled: boolean, hasValue: boolean): React.CSSProperties => ({
@@ -54,14 +56,16 @@ function SwuSetupScreenView({
   selectedBase,
   useHyperspace,
   showHyperspaceToggle,
+  artSrc,
+  artIsHyperspace,
+  artAllFailed,
+  onArtError,
   onSetChange,
   onAspectChange,
   onKeyChange,
   onHyperspaceToggle,
   onSubmit,
   onHelp,
-  onNormalImageFailed,
-  onHyperspaceImageFailed,
 }: Props) {
   return (
     <AppScreenLayout>
@@ -283,9 +287,11 @@ function SwuSetupScreenView({
               }}>
                 <ImagePreview
                   base={selectedBase}
+                  src={artSrc}
+                  isHyperspace={artIsHyperspace}
+                  allFailed={artAllFailed}
                   useHyperspace={useHyperspace}
-                  onHyperspaceUnavailable={onHyperspaceImageFailed}
-                  onNormalUnavailable={onNormalImageFailed}
+                  onError={onArtError}
                 />
 
                 {/* Row 4: Hyperspace toggle */}

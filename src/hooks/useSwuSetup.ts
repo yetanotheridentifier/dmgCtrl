@@ -1,20 +1,27 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useBases, Base } from './useBases'
 
-const ASPECT_ORDER = ['Aggression', 'Command', 'Cunning', 'Vigilance', 'None']
+const ASPECT_ORDER = ['Vigilance', 'Command', 'Aggression', 'Cunning', 'None']
 const HYPERSPACE_PREF_KEY = 'pref_hyperspace'
 
-export function useSwuSetup(onConfirm: (base: Base, useHyperspace: boolean) => void) {
+export interface InitialSelection {
+  set: string
+  aspect: string
+  key: string
+}
+
+export function useSwuSetup(
+  onConfirm: (base: Base, useHyperspace: boolean) => void,
+  initialSelection?: InitialSelection | null,
+) {
   const { bases, loading, error } = useBases()
 
-  const [selectedSet, setSelectedSet] = useState('')
-  const [selectedAspect, setSelectedAspect] = useState('')
-  const [selectedKey, setSelectedKey] = useState('')
+  const [selectedSet, setSelectedSet] = useState(initialSelection?.set ?? '')
+  const [selectedAspect, setSelectedAspect] = useState(initialSelection?.aspect ?? '')
+  const [selectedKey, setSelectedKey] = useState(initialSelection?.key ?? '')
   const [useHyperspace, setUseHyperspace] = useState<boolean>(() => {
     return localStorage.getItem(HYPERSPACE_PREF_KEY) === 'true'
   })
-  const [normalImageFailed, setNormalImageFailed] = useState(false)
-  const [hyperspaceImageFailed, setHyperspaceImageFailed] = useState(false)
 
   const availableSets = useMemo(() => {
     return [...new Set(bases.map(b => b.set))].sort()
@@ -46,12 +53,6 @@ export function useSwuSetup(onConfirm: (base: Base, useHyperspace: boolean) => v
   const selectedBase = filteredBases.find(
     b => `${b.set}-${b.number}` === selectedKey
   ) ?? null
-
-  // Reset image failure state when base changes
-  useEffect(() => {
-    setNormalImageFailed(false)
-    setHyperspaceImageFailed(false)
-  }, [selectedKey])
 
   // Auto-select aspect when only one option available
   useEffect(() => {
@@ -88,21 +89,10 @@ export function useSwuSetup(onConfirm: (base: Base, useHyperspace: boolean) => v
     localStorage.setItem(HYPERSPACE_PREF_KEY, String(value))
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = (effectiveHyperspace: boolean) => {
     if (!selectedBase) return
-    const hasHyperspace = !!(selectedBase.hyperspaceArtHiRes || selectedBase.hyperspaceArt)
-    const effectiveHyperspace = useHyperspace || (normalImageFailed && hasHyperspace)
     onConfirm(selectedBase, effectiveHyperspace)
   }
-
-  const handleNormalImageFailed = () => setNormalImageFailed(true)
-  const handleHyperspaceImageFailed = () => setHyperspaceImageFailed(true)
-
-  const showHyperspaceToggle = !!(
-    (selectedBase?.hyperspaceArtHiRes || selectedBase?.hyperspaceArt) &&
-    !hyperspaceImageFailed &&
-    !normalImageFailed
-  )
 
   return {
     loading,
@@ -115,15 +105,10 @@ export function useSwuSetup(onConfirm: (base: Base, useHyperspace: boolean) => v
     availableSets,
     availableAspects,
     filteredBases,
-    normalImageFailed,
-    hyperspaceImageFailed,
-    showHyperspaceToggle,
     handleSetChange,
     handleAspectChange,
     handleKeyChange,
     handleHyperspaceToggle,
     handleSubmit,
-    handleNormalImageFailed,
-    handleHyperspaceImageFailed,
   }
 }

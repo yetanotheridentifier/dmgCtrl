@@ -70,7 +70,7 @@ const STATIC_HYPERSPACE_SETS: Record<string, { number: string; name: string; hyp
     { number: '025', name: 'Shadow Collective Camp',  hyperspaceNumber: '300' },
     { number: '026', name: 'KCM Mining Facility',     hyperspaceNumber: '301' },
     { number: '027', name: 'The Nest',                hyperspaceNumber: '302' },
-    { number: '028', name: 'Petranaki Arena',         hyperspaceNumber: '517' },
+    { number: '028', name: 'Petranaki Arena',         hyperspaceNumber: '303' },
     { number: '029', name: 'Level 1313',              hyperspaceNumber: '518' },
     { number: '030', name: 'Pyke Palace',             hyperspaceNumber: '519' },
   ],
