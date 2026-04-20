@@ -1,3 +1,5 @@
+const BACKGROUND = 'radial-gradient(ellipse at 20% 50%, #0d1b2a 0%, #0a0e1a 60%, #000510 100%)'
+
 const STAR_FIELD_IMAGE = `
   radial-gradient(1px 1px at 10% 20%, rgba(255,255,255,0.6) 0%, transparent 100%),
   radial-gradient(1px 1px at 25% 75%, rgba(255,255,255,0.4) 0%, transparent 100%),
@@ -20,6 +22,7 @@ interface Props {
 function AppScreenLayout({ children }: Props) {
   return (
     <div style={{ position: 'fixed', inset: 0 }}>
+      <div style={{ position: 'absolute', inset: 0, background: BACKGROUND }} />
       <div
         data-testid="star-field"
         style={{
