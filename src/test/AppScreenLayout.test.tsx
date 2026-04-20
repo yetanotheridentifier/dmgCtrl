@@ -39,4 +39,22 @@ describe('AppScreenLayout', () => {
     expect(screen.getByTestId('star-field')).toHaveStyle({ zIndex: '0' })
   })
 
+  it('Star field covers the full viewport including safe zones (inset: 0)', () => {
+    render(<AppScreenLayout><p>content</p></AppScreenLayout>)
+    expect(screen.getByTestId('star-field')).toHaveStyle({ position: 'absolute', inset: '0' })
+  })
+
+  // --- Content wrapper ---
+
+  it('Content wrapper has safe-area padding on all sides', () => {
+    render(<AppScreenLayout><p>content</p></AppScreenLayout>)
+    const wrapper = screen.getByTestId('content-wrapper')
+    expect(wrapper).toHaveStyle({
+      paddingTop: 'env(safe-area-inset-top)',
+      paddingBottom: 'env(safe-area-inset-bottom)',
+      paddingLeft: 'env(safe-area-inset-left)',
+      paddingRight: 'env(safe-area-inset-right)',
+    })
+  })
+
 })

@@ -21,24 +21,8 @@ interface Props {
 
 function AppScreenLayout({ children }: Props) {
   return (
-    <div style={{
-      width: '100vw',
-      height: '100vh',
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: BACKGROUND,
-      display: 'flex',
-      flexDirection: 'column',
-      fontFamily: "'Segoe UI', system-ui, sans-serif",
-      paddingLeft: 'env(safe-area-inset-left)',
-      paddingRight: 'env(safe-area-inset-right)',
-      paddingTop: 'env(safe-area-inset-top)',
-      paddingBottom: 'env(safe-area-inset-bottom)',
-      boxSizing: 'border-box',
-    }}>
+    <div style={{ position: 'fixed', inset: 0 }}>
+      <div style={{ position: 'absolute', inset: 0, background: BACKGROUND }} />
       <div
         data-testid="star-field"
         style={{
@@ -49,7 +33,21 @@ function AppScreenLayout({ children }: Props) {
           zIndex: 0,
         }}
       />
-      {children}
+      <div data-testid="content-wrapper" style={{
+        position: 'absolute',
+        inset: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        fontFamily: "'Segoe UI', system-ui, sans-serif",
+        paddingLeft: 'env(safe-area-inset-left)',
+        paddingRight: 'env(safe-area-inset-right)',
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+        boxSizing: 'border-box',
+        zIndex: 1,
+      }}>
+        {children}
+      </div>
     </div>
   )
 }
