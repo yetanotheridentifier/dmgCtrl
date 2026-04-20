@@ -6,7 +6,7 @@
 }
 
 html {
-  background: radial-gradient(ellipse at 20% 50%, #0d1b2a 0%, #0a0e1a 60%, #000510 100%);
+  background: #000510;
 }
 
 html, body {
@@ -18,7 +18,8 @@ html, body {
 }
 
 body {
-  background: transparent;
+  background-color: #000510;
+  background-image: radial-gradient(ellipse at 20% 50%, #0d1b2a 0%, #0a0e1a 60%, #000510 100%);
 }
 
 input[type=number]::-webkit-inner-spin-button,
