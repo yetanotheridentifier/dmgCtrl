@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useBaseArt } from '../hooks/useBaseArt'
+import { getRotationFromHyperspaceUrl } from '../constants/rotatedCards'
 import { Base } from '../hooks/useBases'
 
 // All four art URLs present
@@ -40,6 +41,16 @@ const otherBase: Base = {
   hyperspaceArtHiRes: 'https://cdn/SOR/288.png',
   hyperspaceArt: null,
   epicAction: '', aspects: ['Cunning'], rarity: 'Rare',
+}
+
+// Known rotated card: SOR Security Complex, hyperspaceNumber 285
+const rotatedBase: Base = {
+  set: 'SOR', number: '019', name: 'Security Complex', subtitle: 'Scarif', hp: 30,
+  frontArt: 'https://cdn.swu-db.com/images/cards/SOR/019.png',
+  frontArtLowRes: null,
+  hyperspaceArtHiRes: 'https://cdn.swu-db.com/images/cards/SOR/285.png',
+  hyperspaceArt: null,
+  epicAction: '', aspects: ['Vigilance'], rarity: 'Common',
 }
 
 describe('useBaseArt', () => {
@@ -257,6 +268,85 @@ describe('useBaseArt', () => {
     currentBase = otherBase
     rerender()
     expect(result.current.imageLoaded).toBe(false)
+  })
+
+  // --- Reset on useHyperspace change ---
+
+  it('resets to first URL when useHyperspace changes', () => {
+    let hs = false
+    const { result, rerender } = renderHook(() => useBaseArt(fullBase, hs))
+    act(() => result.current.onError())
+    expect(result.current.src).toBe(fullBase.frontArtLowRes)
+    hs = true
+    rerender()
+    expect(result.current.src).toBe(fullBase.hyperspaceArtHiRes)
+  })
+
+  it('resets imageLoaded when useHyperspace changes', () => {
+    let hs = false
+    const { result, rerender } = renderHook(() => useBaseArt(fullBase, hs))
+    act(() => result.current.onLoad())
+    expect(result.current.imageLoaded).toBe(true)
+    hs = true
+    rerender()
+    expect(result.current.imageLoaded).toBe(false)
+  })
+
+    // --- Rotation correction ---
+
+  it('rotationDeg is 0 for a non-rotated base', () => {
+    const { result } = renderHook(() => useBaseArt(hyperspaceBase, true))
+    expect(result.current.rotationDeg).toBe(0)
+  })
+
+  it('rotationDeg is 90 for a known rotated hyperspace hi-res image', () => {
+    const { result } = renderHook(() => useBaseArt(rotatedBase, true))
+    expect(result.current.rotationDeg).toBe(90)
+  })
+
+  it('rotationDeg is 0 when showing the normal art of a rotated base', () => {
+    const { result } = renderHook(() => useBaseArt(rotatedBase, false))
+    expect(result.current.rotationDeg).toBe(0)
+  })
+
+  it('rotationDeg is 0 when rotated base falls back to normal art after hyperspace fails', () => {
+    const { result } = renderHook(() => useBaseArt(rotatedBase, true))
+    act(() => result.current.onError())
+    expect(result.current.rotationDeg).toBe(0)
+  })
+
+  it('rotationDeg is 0 when base is null', () => {
+    const { result } = renderHook(() => useBaseArt(null, false))
+    expect(result.current.rotationDeg).toBe(0)
+  })
+
+})
+
+describe('getRotationFromHyperspaceUrl', () => {
+
+  it('returns 90 for a known rotated card URL', () => {
+    expect(getRotationFromHyperspaceUrl('https://cdn.swu-db.com/images/cards/SOR/285.png')).toBe(90)
+  })
+
+  it('returns 0 for a non-rotated card URL', () => {
+    expect(getRotationFromHyperspaceUrl('https://cdn.swu-db.com/images/cards/SOR/292.png')).toBe(0)
+  })
+
+  it('returns 0 for a non-cdn URL (swuapi fallback)', () => {
+    expect(getRotationFromHyperspaceUrl('https://swuapi.com/some-card.png')).toBe(0)
+  })
+
+  it('returns 90 for all five known rotated cards', () => {
+    const rotated = [
+      'https://cdn.swu-db.com/images/cards/SOR/285.png',
+      'https://cdn.swu-db.com/images/cards/TWI/294.png',
+      'https://cdn.swu-db.com/images/cards/TWI/297.png',
+      'https://cdn.swu-db.com/images/cards/TWI/301.png',
+      'https://cdn.swu-db.com/images/cards/TWI/303.png',
+    ]
+    for (const url of rotated) {
+      expect(getRotationFromHyperspaceUrl(url)).toBe(90)
+    }
   })
 
 })

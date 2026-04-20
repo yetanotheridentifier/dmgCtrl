@@ -10,6 +10,7 @@ interface Props {
   onBack: () => void
   onHelp: () => void
   imageSrc: string
+  imageRotationDeg: number
   count: number
   imageLoaded: boolean
   imageError: boolean
@@ -24,6 +25,7 @@ function SwuGameScreenView({
   onBack,
   onHelp,
   imageSrc,
+  imageRotationDeg,
   count,
   imageLoaded,
   imageError,
@@ -133,11 +135,21 @@ function SwuGameScreenView({
           alt={base.name}
           onLoad={onImageLoad}
           onError={onImageError}
-          style={{
+          style={imageRotationDeg ? {
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            width: `${100 * CARD_NATURAL_HEIGHT / CARD_NATURAL_WIDTH}%`,
+            height: `${100 * CARD_NATURAL_WIDTH / CARD_NATURAL_HEIGHT}%`,
+            objectFit: 'cover',
+            transform: `translate(-50%, -50%) rotate(${imageRotationDeg}deg)`,
+            display: imageLoaded ? 'block' : 'none',
+          } : {
             position: 'absolute',
             inset: 0,
             width: '100%',
             height: '100%',
+            objectFit: 'cover',
             display: imageLoaded ? 'block' : 'none',
           }}
         />

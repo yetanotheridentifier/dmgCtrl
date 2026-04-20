@@ -18,6 +18,7 @@ interface Props {
   artIsHyperspace: boolean
   artAllFailed: boolean
   artImageLoaded: boolean
+  artRotationDeg: number
   onArtLoad: () => void
   onArtError: () => void
   onSetChange: (set: string) => void
@@ -62,6 +63,7 @@ function SwuSetupScreenView({
   artIsHyperspace,
   artAllFailed,
   artImageLoaded,
+  artRotationDeg,
   onArtLoad,
   onArtError,
   onSetChange,
@@ -295,6 +297,7 @@ function SwuSetupScreenView({
                   isHyperspace={artIsHyperspace}
                   allFailed={artAllFailed}
                   imageLoaded={artImageLoaded}
+                  rotationDeg={artRotationDeg}
                   useHyperspace={useHyperspace}
                   onLoad={onArtLoad}
                   onError={onArtError}
