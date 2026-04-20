@@ -40,6 +40,7 @@ function SwuSetupScreen({ onConfirm, onHelp, initialSelection }: Props) {
       artIsHyperspace={art.isHyperspace}
       artAllFailed={art.allFailed}
       artImageLoaded={art.imageLoaded}
+      artRotationDeg={art.rotationDeg}
       onArtLoad={art.onLoad}
       onArtError={art.onError}
       onSetChange={setup.handleSetChange}

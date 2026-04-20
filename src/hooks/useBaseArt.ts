@@ -1,19 +1,25 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Base } from './useBases'
+import { getRotationFromHyperspaceUrl } from '../constants/rotatedCards'
 
 interface ArtEntry {
   url: string
   isHyperspace: boolean
+  rotationDeg: number
 }
 
 function buildEntries(base: Base, useHyperspace: boolean): ArtEntry[] {
   const normal: ArtEntry[] = [
-    ...(base.frontArt ? [{ url: base.frontArt, isHyperspace: false }] : []),
-    ...(base.frontArtLowRes ? [{ url: base.frontArtLowRes, isHyperspace: false }] : []),
+    ...(base.frontArt ? [{ url: base.frontArt, isHyperspace: false, rotationDeg: 0 }] : []),
+    ...(base.frontArtLowRes ? [{ url: base.frontArtLowRes, isHyperspace: false, rotationDeg: 0 }] : []),
   ]
   const hyper: ArtEntry[] = [
-    ...(base.hyperspaceArtHiRes ? [{ url: base.hyperspaceArtHiRes, isHyperspace: true }] : []),
-    ...(base.hyperspaceArt ? [{ url: base.hyperspaceArt, isHyperspace: true }] : []),
+    ...(base.hyperspaceArtHiRes ? [{
+      url: base.hyperspaceArtHiRes,
+      isHyperspace: true,
+      rotationDeg: getRotationFromHyperspaceUrl(base.hyperspaceArtHiRes),
+    }] : []),
+    ...(base.hyperspaceArt ? [{ url: base.hyperspaceArt, isHyperspace: true, rotationDeg: 0 }] : []),
   ]
   return useHyperspace ? [...hyper, ...normal] : [...normal, ...hyper]
 }
@@ -30,7 +36,7 @@ export function useBaseArt(base: Base | null, useHyperspace: boolean) {
   useEffect(() => {
     setIndex(0)
     setImageLoaded(false)
-  }, [base?.set, base?.number])
+  }, [base?.set, base?.number, useHyperspace])
 
   const current = entries[index] ?? null
   const tried = entries.slice(0, index)
@@ -40,6 +46,7 @@ export function useBaseArt(base: Base | null, useHyperspace: boolean) {
   return {
     src: current?.url ?? null,
     isHyperspace: current?.isHyperspace ?? false,
+    rotationDeg: current?.rotationDeg ?? 0,
     allFailed: entries.length === 0 || index >= entries.length,
     normalFailed: normalCount > 0 && tried.filter(e => !e.isHyperspace).length >= normalCount,
     hyperspaceFailed: hyperCount > 0 && tried.filter(e => e.isHyperspace).length >= hyperCount,

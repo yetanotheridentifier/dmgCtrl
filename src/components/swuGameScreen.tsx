@@ -78,6 +78,7 @@ function SwuGameScreen({ base, onBack, onHelp, useHyperspace }: Props) {
       onBack={onBack}
       onHelp={onHelp}
       imageSrc={art.src ?? ''}
+      imageRotationDeg={art.rotationDeg}
       count={count}
       imageLoaded={art.imageLoaded}
       imageError={art.allFailed}
