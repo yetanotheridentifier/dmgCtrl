@@ -6,7 +6,7 @@
 }
 
 html {
-  background: #000510;
+  background: radial-gradient(ellipse at 20% 50%, #0d1b2a 0%, #0a0e1a 60%, #000510 100%);
 }
 
 html, body {
