@@ -9,7 +9,7 @@ dmgCtrl is a damage tracker for Star Wars Unlimited. For the best experience, in
 Open the app and you'll see the **Select Base** screen. Use the three dropdowns to find your base:
 
 1. **Set**: choose the set your base is from
-2. **Aspect**: choose the base's aspect (Aggression, Command, Cunning, Vigilance, or None)
+2. **Aspect**: choose the base's aspect (Vigilance, Command, Aggression, Cunning, or None)
 3. **Base**: choose your specific base
 
 Each base option shows its name, subtitle, and HP. If only one option is available at any step, it is selected automatically.
@@ -42,6 +42,12 @@ The Set and Aspect dropdowns help narrow down which base you're playing. Star Wa
 
 Note: at the moment, all bases across all sets are shown regardless of format (Premier, Sealed, etc.). Format filtering, which would limit the list to bases legal in your chosen format is planned for a future update.
 
+## Rules
+
+The full Comprehensive Rules for Star Wars Unlimited are available on the official website:
+
+[starwarsunlimited.com/how-to-play](https://starwarsunlimited.com/how-to-play?chapter=rules)
+
 ## Troubleshooting
 
 **Base art isn't loading**
@@ -55,3 +61,7 @@ This can happen if the image server is temporarily unavailable. The app will sho
 
 **Newly previewed bases not showing**
 Card data refreshes automatically every 24 hours. If a new base from spoiler season is not appearing, try again once published to https://starwarsunlimited.com/ and wait for the cache to refresh.
+
+---
+
+*dmgCtrl is an unofficial fan site and is not produced by or endorsed by Fantasy Flight Games, Lucasfilm or Disney. The Star Wars Unlimited cards, logos and art used on the site are property of Disney and/or Fantasy Flight Games.*
