@@ -486,6 +486,44 @@ describe('SwuSetupScreen', () => {
     await waitFor(() => expect(screen.getByText('No base images found')).toBeInTheDocument())
   })
 
+  // --- Base option format ---
+
+  it('Base options show name and HP but not subtitle', async () => {
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Aggression')
+    const baseSelect = screen.getAllByRole('combobox')[2]
+    const option = Array.from(baseSelect.querySelectorAll('option')).find(o => o.value === 'SOR-026')
+    expect(option?.textContent).toBe('Catacombs of Cadera — 30HP')
+    expect(option?.textContent).not.toContain('Jedha')
+  })
+
+  // --- Portrait layout ---
+
+  it('Shows portrait layout with title and selectors in portrait orientation', async () => {
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(375)
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(812)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByText('dmgCtrl')).toBeInTheDocument()
+    expect(screen.getByText('Select Base')).toBeInTheDocument()
+  })
+
+  it('Portrait base options also exclude subtitle', async () => {
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(375)
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(812)
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(screen.getAllByRole('combobox')).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'SOR')
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'Cunning')
+    const baseSelect = screen.getAllByRole('combobox')[2]
+    const option = Array.from(baseSelect.querySelectorAll('option')).find(o => o.value === 'SOR-022')
+    expect(option?.textContent).toBe('Energy Conversion Lab — 25HP')
+    expect(option?.textContent).not.toContain('Eadu')
+  })
+
   // --- Help button ---
 
   it('Renders a help button', async () => {

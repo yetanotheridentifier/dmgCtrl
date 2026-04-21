@@ -12,7 +12,7 @@ Open the app and you'll see the **Select Base** screen. Use the three dropdowns 
 2. **Aspect**: choose the base's aspect (Vigilance, Command, Aggression, Cunning, or None)
 3. **Base**: choose your specific base
 
-Each base option shows its name, subtitle, and HP. If only one option is available at any step, it is selected automatically.
+Each base option shows its name and HP. If only one option is available at any step, it is selected automatically.
 
 Once you've chosen a base, a preview of the card art appears below. Tap **>** to start the game.
 
