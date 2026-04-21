@@ -24,8 +24,8 @@ function SwuGameScreen({ base, onBack, onHelp, useHyperspace }: Props) {
           onClick={onBack}
           style={{
             position: 'absolute',
-            top: 'calc(env(safe-area-inset-top) + 1vh)',
-            left: 'calc(env(safe-area-inset-left) + 1vw)',
+            top: 'calc(env(safe-area-inset-top) + 5vw)',
+            left: 'calc(env(safe-area-inset-left) + 5vw)',
             width: '5vw',
             height: '5vw',
             minWidth: '36px',
