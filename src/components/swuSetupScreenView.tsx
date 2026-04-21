@@ -1,6 +1,7 @@
 import { Base } from '../hooks/useBases'
 import AppScreenLayout from './layout/AppScreenLayout'
 import ImagePreview from './imagePreview'
+import { useOrientation } from '../hooks/useOrientation'
 
 interface Props {
   loading: boolean
@@ -29,10 +30,11 @@ interface Props {
   onHelp: () => void
 }
 
-const selectStyle = (enabled: boolean, hasValue: boolean): React.CSSProperties => ({
+const selectStyle = (enabled: boolean, hasValue: boolean, small = false): React.CSSProperties => ({
   flex: 1,
-  padding: '1.5vh 2vw',
-  fontSize: 'clamp(0.9rem, 3vw, 1.2rem)',
+  padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
+  fontSize: small ? 'clamp(0.75rem, 1.8vw, 0.9rem)' : 'clamp(0.9rem, 3vw, 1.2rem)',
+  ...(small && { height: 'max(44px, 8vh)' }),
   fontWeight: '300',
   background: 'transparent',
   border: '2px solid #4fc3f7',
@@ -73,6 +75,297 @@ function SwuSetupScreenView({
   onSubmit,
   onHelp,
 }: Props) {
+  const { isPortrait } = useOrientation()
+
+  const hyperspaceToggle = showHyperspaceToggle && (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: '2vw',
+    }}>
+      <input
+        type="checkbox"
+        id="hyperspace-toggle"
+        checked={useHyperspace}
+        onChange={e => onHyperspaceToggle(e.target.checked)}
+        style={{
+          width: '24px',
+          height: '24px',
+          cursor: 'pointer',
+          accentColor: '#4fc3f7',
+          flexShrink: 0,
+        }}
+      />
+      <label
+        htmlFor="hyperspace-toggle"
+        style={{
+          color: '#ffffff',
+          fontWeight: '300',
+          fontSize: 'clamp(0.9rem, 3vw, 1.2rem)',
+          cursor: 'pointer',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        Hyperspace variant
+      </label>
+    </div>
+  )
+
+  if (!isPortrait) {
+    return (
+      <AppScreenLayout>
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          padding: '3vw 4vw 3vw',
+        }}>
+
+          {/* Title row: full width, help button on the right */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexShrink: 0,
+          }}>
+            <h1 style={{
+              color: '#ffffff',
+              fontWeight: '200',
+              fontSize: 'clamp(1.2rem, 4vw, 1.8rem)',
+              letterSpacing: '0.15em',
+              margin: 0,
+            }}>
+              dmgCtrl
+            </h1>
+
+            <button
+              onClick={onHelp}
+              style={{
+                width: '5vh',
+                height: '5vh',
+                minWidth: '36px',
+                minHeight: '36px',
+                flexShrink: 0,
+                background: 'transparent',
+                border: '2px solid #6b7280',
+                borderRadius: '8px',
+                color: '#9ca3af',
+                fontSize: 'clamp(0.8rem, 2vh, 1.2rem)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                WebkitTapHighlightColor: 'transparent',
+                boxShadow: '0 0 8px rgba(156, 163, 175, 0.2)',
+              }}
+            >
+              ?
+            </button>
+          </div>
+
+          {/* Content row: selectors left, preview right-aligned below help button */}
+          <div style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'row',
+            minHeight: 0,
+            padding: '1.5vh 0 0',
+            gap: '3vw',
+          }}>
+
+            {/* Left: selectors */}
+            <div style={{
+              flex: '0 0 45%',
+              display: 'flex',
+              flexDirection: 'column',
+              overflowY: 'auto',
+              gap: '1.5vh',
+            }}>
+
+              <h2 style={{
+                color: '#4fc3f7',
+                fontWeight: '300',
+                fontSize: 'clamp(0.8rem, 3vw, 1rem)',
+                letterSpacing: '0.12em',
+                margin: 0,
+                textTransform: 'uppercase',
+              }}>
+                Select Base
+              </h2>
+
+              {loading && (
+                <p style={{
+                  color: '#4fc3f7',
+                  fontWeight: '300',
+                  fontSize: 'clamp(0.9rem, 2vw, 1.1rem)',
+                  margin: 0,
+                }}>
+                  Loading bases...
+                </p>
+              )}
+
+              {error && (
+                <p style={{
+                  color: '#ff6b6b',
+                  fontWeight: '300',
+                  fontSize: 'clamp(0.9rem, 2vw, 1.1rem)',
+                  margin: 0,
+                }}>
+                  {error}
+                </p>
+              )}
+
+              {!loading && !error && (
+                <>
+                  {/* Set + Aspect row */}
+                  <div style={{
+                    width: '100%',
+                    display: 'flex',
+                    flexDirection: 'row',
+                    gap: '2vw',
+                    alignItems: 'flex-end',
+                  }}>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
+                      <label style={{
+                        color: '#a8a8b3',
+                        fontWeight: '300',
+                        fontSize: 'clamp(0.7rem, 2vw, 0.9rem)',
+                        letterSpacing: '0.08em',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                      }}>
+                        Set
+                      </label>
+                      <select
+                        value={selectedSet}
+                        onChange={e => onSetChange(e.target.value)}
+                        style={selectStyle(true, selectedSet !== '', true)}
+                      >
+                        <option value="" disabled style={{ color: '#6b7280', background: '#0a0e1a' }}>Set</option>
+                        {availableSets.map(set => (
+                          <option key={set} value={set} style={{ color: '#ffffff', background: '#0a0e1a' }}>{set}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div style={{ flex: 2, display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
+                      <label style={{
+                        color: '#a8a8b3',
+                        fontWeight: '300',
+                        fontSize: 'clamp(0.7rem, 2vw, 0.9rem)',
+                        letterSpacing: '0.08em',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                      }}>
+                        Aspect
+                      </label>
+                      <select
+                        value={selectedAspect}
+                        onChange={e => onAspectChange(e.target.value)}
+                        disabled={!selectedSet}
+                        style={selectStyle(!!selectedSet, selectedAspect !== '', true)}
+                      >
+                        <option value="" disabled style={{ color: '#6b7280', background: '#0a0e1a' }}>Aspect</option>
+                        {availableAspects.map(aspect => (
+                          <option key={aspect} value={aspect} style={{ color: '#ffffff', background: '#0a0e1a' }}>{aspect}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Base + submit row */}
+                  <div style={{
+                    width: '100%',
+                    display: 'flex',
+                    flexDirection: 'row',
+                    alignItems: 'stretch',
+                    gap: '2vw',
+                  }}>
+                    <select
+                      value={selectedKey}
+                      onChange={e => onKeyChange(e.target.value)}
+                      disabled={!selectedAspect}
+                      style={selectStyle(!!selectedAspect, selectedKey !== '', true)}
+                    >
+                      <option value="" disabled style={{ color: '#6b7280', background: '#0a0e1a' }}>Base</option>
+                      {filteredBases.map(base => (
+                        <option
+                          key={`${base.set}-${base.number}`}
+                          value={`${base.set}-${base.number}`}
+                          style={{ color: '#ffffff', background: '#0a0e1a' }}
+                        >
+                          {base.name} — {base.hp}HP
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      onClick={onSubmit}
+                      disabled={!selectedBase}
+                      style={{
+                        width: '8vh',
+                        height: '8vh',
+                        minWidth: '44px',
+                        minHeight: '44px',
+                        flexShrink: 0,
+                        padding: '0',
+                        fontSize: 'clamp(1rem, 3vh, 1.8rem)',
+                        fontWeight: '300',
+                        background: 'transparent',
+                        color: '#ffffff',
+                        border: '2px solid #ffffff',
+                        borderRadius: '12px',
+                        cursor: !selectedBase ? 'not-allowed' : 'pointer',
+                        boxShadow: '0 0 12px rgba(255, 255, 255, 0.2)',
+                        WebkitTapHighlightColor: 'transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        opacity: !selectedBase ? 0.4 : 1,
+                      }}
+                    >
+                      &gt;
+                    </button>
+                  </div>
+
+                  {hyperspaceToggle}
+                </>
+              )}
+            </div>
+
+            {/* Right: preview, top-right aligned under the help button */}
+            <div style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'flex-end',
+            }}>
+              {selectedBase && (
+                <div style={{ width: '100%' }}>
+                  <ImagePreview
+                    base={selectedBase}
+                    src={artSrc}
+                    isHyperspace={artIsHyperspace}
+                    allFailed={artAllFailed}
+                    imageLoaded={artImageLoaded}
+                    rotationDeg={artRotationDeg}
+                    useHyperspace={useHyperspace}
+                    onLoad={onArtLoad}
+                    onError={onArtError}
+                  />
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+      </AppScreenLayout>
+    )
+  }
+
   return (
     <AppScreenLayout>
 
@@ -264,7 +557,7 @@ function SwuSetupScreenView({
                     value={`${base.set}-${base.number}`}
                     style={{ color: '#ffffff', background: '#0a0e1a' }}
                   >
-                    {base.name} — {base.subtitle} {base.hp}HP
+                    {base.name} — {base.hp}HP
                   </option>
                 ))}
               </select>
@@ -318,41 +611,7 @@ function SwuSetupScreenView({
                   onError={onArtError}
                 />
 
-                {/* Row 4: Hyperspace toggle */}
-                {showHyperspaceToggle && (
-                  <div style={{
-                    display: 'flex',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: '2vw',
-                  }}>
-                    <input
-                      type="checkbox"
-                      id="hyperspace-toggle"
-                      checked={useHyperspace}
-                      onChange={e => onHyperspaceToggle(e.target.checked)}
-                      style={{
-                        width: '24px',
-                        height: '24px',
-                        cursor: 'pointer',
-                        accentColor: '#4fc3f7',
-                        flexShrink: 0,
-                      }}
-                    />
-                    <label
-                      htmlFor="hyperspace-toggle"
-                      style={{
-                        color: '#ffffff',
-                        fontWeight: '300',
-                        fontSize: 'clamp(0.9rem, 3vw, 1.2rem)',
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      Hyperspace variant
-                    </label>
-                  </div>
-                )}
+                {hyperspaceToggle}
               </div>
             )}
           </>

@@ -298,7 +298,10 @@ Cons: no media query support in inline styles (workaround: derive breakpoint-bas
 
 ### Responsive layout
 
-The game screen is designed for **landscape orientation**. `useOrientation` detects portrait orientation and `SwuGameScreen` renders a rotation prompt if the device is in portrait mode.
+The app is designed for **landscape orientation**. `useOrientation` is used in two places:
+
+- **Setup screen** (`SwuSetupScreenView`) — renders a two-column layout in landscape (selectors left, card preview right) and a single-column scrollable layout in portrait.
+- **Game screen** (`SwuGameScreen`) — renders the full-screen card layout in landscape and a rotation prompt in portrait.
 
 ---
 
@@ -388,7 +391,7 @@ The app is hosted on **GitHub Pages** at `/dmgCtrl/`. The `base` config in `vite
 ### What triggers the pipeline
 
 - Push to `main` — runs all three jobs and deploys on success
-- PRs — no automatic CI is configured; tests should be run locally before merging
+- PRs targeting `main` — runs `test` and `build` jobs; deploy is skipped
 
 ---
 
@@ -466,10 +469,6 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 
 - **Theming system** — inline styles make theming cumbersome; a CSS custom property system or styled-components would enable light/dark mode and game-specific themes
 - **Animations** — damage counter and screen transitions could benefit from subtle animations
-
-### Testing
-
-- **PR-triggered CI** — currently tests only run on merge to `main`; adding a CI check on pull requests would catch regressions earlier
 
 ---
 
