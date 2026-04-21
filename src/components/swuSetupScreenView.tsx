@@ -76,34 +76,6 @@ function SwuSetupScreenView({
   return (
     <AppScreenLayout>
 
-      {/* Help button */}
-      <button
-        onClick={onHelp}
-        style={{
-          position: 'absolute',
-          top: 'calc(env(safe-area-inset-top) + 1vh)',
-          right: 'calc(env(safe-area-inset-right) + 1vw)',
-          width: '5vw',
-          height: '5vw',
-          minWidth: '36px',
-          minHeight: '36px',
-          background: 'transparent',
-          border: '2px solid #6b7280',
-          borderRadius: '8px',
-          color: '#9ca3af',
-          fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10,
-          WebkitTapHighlightColor: 'transparent',
-          boxShadow: '0 0 8px rgba(156, 163, 175, 0.2)',
-        }}
-      >
-        ?
-      </button>
-
       {/* Scrollable content */}
       <div style={{
         position: 'relative',
@@ -116,15 +88,47 @@ function SwuSetupScreenView({
         flex: 1,
       }}>
 
-        <h1 style={{
-          color: '#ffffff',
-          fontWeight: '200',
-          fontSize: 'clamp(1.8rem, 8vw, 3rem)',
-          letterSpacing: '0.15em',
-          margin: 0,
+        {/* Title row: app name + help button */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
         }}>
-          dmgCtrl
-        </h1>
+          <h1 style={{
+            color: '#ffffff',
+            fontWeight: '200',
+            fontSize: 'clamp(1.8rem, 8vw, 3rem)',
+            letterSpacing: '0.15em',
+            margin: 0,
+          }}>
+            dmgCtrl
+          </h1>
+
+          <button
+            onClick={onHelp}
+            style={{
+              width: '5vw',
+              height: '5vw',
+              minWidth: '36px',
+              minHeight: '36px',
+              flexShrink: 0,
+              background: 'transparent',
+              border: '2px solid #6b7280',
+              borderRadius: '8px',
+              color: '#9ca3af',
+              fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              WebkitTapHighlightColor: 'transparent',
+              boxShadow: '0 0 8px rgba(156, 163, 175, 0.2)',
+            }}
+          >
+            ?
+          </button>
+        </div>
 
         <h2 style={{
           color: '#4fc3f7',

@@ -54,8 +54,8 @@ function SwuGameScreenView({
         onClick={onBack}
         style={{
           position: 'absolute',
-          top: 'calc(env(safe-area-inset-top) + 1vh)',
-          left: 'calc(env(safe-area-inset-left) + 1vw)',
+          top: 'calc(env(safe-area-inset-top) + 2vw)',
+          left: 'calc(env(safe-area-inset-left) + 2vw)',
           width: '5vw',
           height: '5vw',
           minWidth: '36px',
@@ -82,8 +82,8 @@ function SwuGameScreenView({
         onClick={onHelp}
         style={{
           position: 'absolute',
-          top: 'calc(env(safe-area-inset-top) + 1vh)',
-          right: 'calc(env(safe-area-inset-right) + 1vw)',
+          top: 'calc(env(safe-area-inset-top) + 2vw)',
+          right: 'calc(env(safe-area-inset-right) + 2vw)',
           width: '5vw',
           height: '5vw',
           minWidth: '36px',
