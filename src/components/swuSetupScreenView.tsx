@@ -37,12 +37,12 @@ const selectStyle = (enabled: boolean, hasValue: boolean, small = false): React.
   ...(small && { height: 'max(44px, 8vh)' }),
   fontWeight: '300',
   background: 'transparent',
-  border: '2px solid #4fc3f7',
+  border: '2px solid var(--color-accent)',
   borderRadius: '12px',
-  color: hasValue ? '#ffffff' : '#6b7280',
+  color: hasValue ? 'var(--color-text-primary)' : 'var(--color-text-disabled)',
   outline: 'none',
   boxSizing: 'border-box',
-  boxShadow: '0 0 12px rgba(79, 195, 247, 0.3)',
+  boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
   WebkitAppearance: 'none',
   cursor: enabled ? 'pointer' : 'not-allowed',
   opacity: enabled ? 1 : 0.4,
@@ -93,16 +93,17 @@ function SwuSetupScreenView({
           width: '24px',
           height: '24px',
           cursor: 'pointer',
-          accentColor: '#4fc3f7',
+          accentColor: 'var(--color-accent)',
           flexShrink: 0,
         }}
       />
       <label
         htmlFor="hyperspace-toggle"
         style={{
-          color: '#ffffff',
+          color: 'var(--color-text-muted)',
           fontWeight: '300',
-          fontSize: 'clamp(0.9rem, 3vw, 1.2rem)',
+          fontSize: 'clamp(0.7rem, 3vw, 0.9rem)',
+          letterSpacing: '0.08em',
           cursor: 'pointer',
           whiteSpace: 'nowrap',
         }}
@@ -132,7 +133,7 @@ function SwuSetupScreenView({
             flexShrink: 0,
           }}>
             <h1 style={{
-              color: '#ffffff',
+              color: 'var(--color-text-primary)',
               fontWeight: '200',
               fontSize: 'clamp(1.2rem, 4vw, 1.8rem)',
               letterSpacing: '0.15em',
@@ -150,16 +151,16 @@ function SwuSetupScreenView({
                 minHeight: '36px',
                 flexShrink: 0,
                 background: 'transparent',
-                border: '2px solid #6b7280',
+                border: '2px solid var(--color-ui-border)',
                 borderRadius: '8px',
-                color: '#9ca3af',
+                color: 'var(--color-ui-border-muted)',
                 fontSize: 'clamp(0.8rem, 2vh, 1.2rem)',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 WebkitTapHighlightColor: 'transparent',
-                boxShadow: '0 0 8px rgba(156, 163, 175, 0.2)',
+                boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
               }}
             >
               ?
@@ -186,7 +187,7 @@ function SwuSetupScreenView({
             }}>
 
               <h2 style={{
-                color: '#4fc3f7',
+                color: 'var(--color-accent)',
                 fontWeight: '300',
                 fontSize: 'clamp(0.8rem, 3vw, 1rem)',
                 letterSpacing: '0.12em',
@@ -198,7 +199,7 @@ function SwuSetupScreenView({
 
               {loading && (
                 <p style={{
-                  color: '#4fc3f7',
+                  color: 'var(--color-accent)',
                   fontWeight: '300',
                   fontSize: 'clamp(0.9rem, 2vw, 1.1rem)',
                   margin: 0,
@@ -209,7 +210,7 @@ function SwuSetupScreenView({
 
               {error && (
                 <p style={{
-                  color: '#ff6b6b',
+                  color: 'var(--color-error)',
                   fontWeight: '300',
                   fontSize: 'clamp(0.9rem, 2vw, 1.1rem)',
                   margin: 0,
@@ -230,7 +231,7 @@ function SwuSetupScreenView({
                   }}>
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
                       <label style={{
-                        color: '#a8a8b3',
+                        color: 'var(--color-text-muted)',
                         fontWeight: '300',
                         fontSize: 'clamp(0.7rem, 2vw, 0.9rem)',
                         letterSpacing: '0.08em',
@@ -244,16 +245,16 @@ function SwuSetupScreenView({
                         onChange={e => onSetChange(e.target.value)}
                         style={selectStyle(true, selectedSet !== '', true)}
                       >
-                        <option value="" disabled style={{ color: '#6b7280', background: '#0a0e1a' }}>Set</option>
+                        <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>Set</option>
                         {availableSets.map(set => (
-                          <option key={set} value={set} style={{ color: '#ffffff', background: '#0a0e1a' }}>{set}</option>
+                          <option key={set} value={set} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>{set}</option>
                         ))}
                       </select>
                     </div>
 
                     <div style={{ flex: 2, display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
                       <label style={{
-                        color: '#a8a8b3',
+                        color: 'var(--color-text-muted)',
                         fontWeight: '300',
                         fontSize: 'clamp(0.7rem, 2vw, 0.9rem)',
                         letterSpacing: '0.08em',
@@ -268,9 +269,9 @@ function SwuSetupScreenView({
                         disabled={!selectedSet}
                         style={selectStyle(!!selectedSet, selectedAspect !== '', true)}
                       >
-                        <option value="" disabled style={{ color: '#6b7280', background: '#0a0e1a' }}>Aspect</option>
+                        <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>Aspect</option>
                         {availableAspects.map(aspect => (
-                          <option key={aspect} value={aspect} style={{ color: '#ffffff', background: '#0a0e1a' }}>{aspect}</option>
+                          <option key={aspect} value={aspect} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>{aspect}</option>
                         ))}
                       </select>
                     </div>
@@ -290,12 +291,12 @@ function SwuSetupScreenView({
                       disabled={!selectedAspect}
                       style={selectStyle(!!selectedAspect, selectedKey !== '', true)}
                     >
-                      <option value="" disabled style={{ color: '#6b7280', background: '#0a0e1a' }}>Base</option>
+                      <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>Base</option>
                       {filteredBases.map(base => (
                         <option
                           key={`${base.set}-${base.number}`}
                           value={`${base.set}-${base.number}`}
-                          style={{ color: '#ffffff', background: '#0a0e1a' }}
+                          style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}
                         >
                           {base.name} — {base.hp}HP
                         </option>
@@ -315,8 +316,8 @@ function SwuSetupScreenView({
                         fontSize: 'clamp(1rem, 3vh, 1.8rem)',
                         fontWeight: '300',
                         background: 'transparent',
-                        color: '#ffffff',
-                        border: '2px solid #ffffff',
+                        color: 'var(--color-text-primary)',
+                        border: '2px solid var(--color-text-primary)',
                         borderRadius: '12px',
                         cursor: !selectedBase ? 'not-allowed' : 'pointer',
                         boxShadow: '0 0 12px rgba(255, 255, 255, 0.2)',
@@ -389,7 +390,7 @@ function SwuSetupScreenView({
           justifyContent: 'space-between',
         }}>
           <h1 style={{
-            color: '#ffffff',
+            color: 'var(--color-text-primary)',
             fontWeight: '200',
             fontSize: 'clamp(1.8rem, 8vw, 3rem)',
             letterSpacing: '0.15em',
@@ -407,16 +408,16 @@ function SwuSetupScreenView({
               minHeight: '36px',
               flexShrink: 0,
               background: 'transparent',
-              border: '2px solid #6b7280',
+              border: '2px solid var(--color-ui-border)',
               borderRadius: '8px',
-              color: '#9ca3af',
+              color: 'var(--color-ui-border-muted)',
               fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               WebkitTapHighlightColor: 'transparent',
-              boxShadow: '0 0 8px rgba(156, 163, 175, 0.2)',
+              boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
             }}
           >
             ?
@@ -424,7 +425,7 @@ function SwuSetupScreenView({
         </div>
 
         <h2 style={{
-          color: '#4fc3f7',
+          color: 'var(--color-accent)',
           fontWeight: '300',
           fontSize: 'clamp(0.9rem, 4vw, 1.2rem)',
           letterSpacing: '0.12em',
@@ -436,7 +437,7 @@ function SwuSetupScreenView({
 
         {loading && (
           <p style={{
-            color: '#4fc3f7',
+            color: 'var(--color-accent)',
             fontWeight: '300',
             fontSize: 'clamp(0.9rem, 3vw, 1.2rem)',
             margin: 0,
@@ -447,7 +448,7 @@ function SwuSetupScreenView({
 
         {error && (
           <p style={{
-            color: '#ff6b6b',
+            color: 'var(--color-error)',
             fontWeight: '300',
             fontSize: 'clamp(0.9rem, 3vw, 1.2rem)',
             margin: 0,
@@ -474,7 +475,7 @@ function SwuSetupScreenView({
                 gap: '1vw',
               }}>
                 <label style={{
-                  color: '#a8a8b3',
+                  color: 'var(--color-text-muted)',
                   fontWeight: '300',
                   fontSize: 'clamp(0.7rem, 5vw, 0.9rem)',
                   letterSpacing: '0.08em',
@@ -488,11 +489,11 @@ function SwuSetupScreenView({
                   onChange={e => onSetChange(e.target.value)}
                   style={selectStyle(true, selectedSet !== '')}
                 >
-                  <option value="" disabled style={{ color: '#6b7280', background: '#0a0e1a' }}>
+                  <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>
                     Set
                   </option>
                   {availableSets.map(set => (
-                    <option key={set} value={set} style={{ color: '#ffffff', background: '#0a0e1a' }}>
+                    <option key={set} value={set} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>
                       {set}
                     </option>
                   ))}
@@ -507,7 +508,7 @@ function SwuSetupScreenView({
                 gap: '1vw',
               }}>
                 <label style={{
-                  color: '#a8a8b3',
+                  color: 'var(--color-text-muted)',
                   fontWeight: '300',
                   fontSize: 'clamp(0.7rem, 5vw, 0.9rem)',
                   letterSpacing: '0.08em',
@@ -522,11 +523,11 @@ function SwuSetupScreenView({
                   disabled={!selectedSet}
                   style={selectStyle(!!selectedSet, selectedAspect !== '')}
                 >
-                  <option value="" disabled style={{ color: '#6b7280', background: '#0a0e1a' }}>
+                  <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>
                     Aspect
                   </option>
                   {availableAspects.map(aspect => (
-                    <option key={aspect} value={aspect} style={{ color: '#ffffff', background: '#0a0e1a' }}>
+                    <option key={aspect} value={aspect} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>
                       {aspect}
                     </option>
                   ))}
@@ -548,14 +549,14 @@ function SwuSetupScreenView({
                 disabled={!selectedAspect}
                 style={selectStyle(!!selectedAspect, selectedKey !== '')}
               >
-                <option value="" disabled style={{ color: '#6b7280', background: '#0a0e1a' }}>
+                <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>
                   Base
                 </option>
                 {filteredBases.map(base => (
                   <option
                     key={`${base.set}-${base.number}`}
                     value={`${base.set}-${base.number}`}
-                    style={{ color: '#ffffff', background: '#0a0e1a' }}
+                    style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}
                   >
                     {base.name} — {base.hp}HP
                   </option>
@@ -575,8 +576,8 @@ function SwuSetupScreenView({
                   fontSize: 'clamp(1rem, 3vw, 1.8rem)',
                   fontWeight: '300',
                   background: 'transparent',
-                  color: '#ffffff',
-                  border: '2px solid #ffffff',
+                  color: 'var(--color-text-primary)',
+                  border: '2px solid var(--color-text-primary)',
                   borderRadius: '12px',
                   cursor: !selectedBase ? 'not-allowed' : 'pointer',
                   boxShadow: '0 0 12px rgba(255, 255, 255, 0.2)',

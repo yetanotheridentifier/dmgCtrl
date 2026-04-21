@@ -42,7 +42,7 @@ The app is served at `/dmgCtrl/` and is designed to be added to an iOS home scre
 | Language | TypeScript |
 | Build tool | Vite |
 | PWA | vite-plugin-pwa (Workbox) |
-| Styling | Inline styles (no CSS framework) |
+| Styling | Inline styles + CSS custom properties (no CSS framework) |
 | Data fetching | Custom React hooks (`useBases`) |
 | Testing | Vitest + React Testing Library |
 | CI/CD | GitHub Actions → GitHub Pages |
@@ -97,7 +97,7 @@ This pattern keeps views thin and ensures logic is tested via hook and container
 src/
   App.tsx                  Root component — screen routing and top-level state
   main.tsx                 Entry point
-  index.css                Minimal global reset
+  index.css                Global reset, CSS custom property palette, help screen styles
   markdown.d.ts            Type declaration for .md imports
   vite-env.d.ts            Vite environment types
 
@@ -222,7 +222,7 @@ export interface Base {
 
 ### Static hyperspace map
 
-For sets no longer in swuapi.com (SOR, SHD, TWI), hyperspace card numbers are derived from a static offset: all three sets use a consistent `+266` offset from the standard card number. This was verified by probing `cdn.swu-db.com` — all URLs return HTTP 200 except TWI/020 (Sundari) and TWI/024 (Tipoca City) which return 403 (images not yet uploaded).
+For sets no longer in swuapi.com (SOR, SHD, TWI), hyperspace card numbers are derived from a static offset: all three sets use an offset from the standard card number. This was verified by probing `cdn.swu-db.com`.
 
 The static map is embedded in `useBases.ts` and also duplicated in `scripts/inspect-base-data.mjs` for offline data inspection.
 
@@ -253,7 +253,7 @@ frontArt → frontArtLowRes → hyperspaceArtHiRes → hyperspaceArt → text/er
 
 The normal-preferred chain always falls back to hyperspace art before giving up — a base image is always better than a text fallback.
 
-Some hi-res hyperspace images on cdn.swu-db.com are stored rotated 90°. `useBaseArt` calls `getRotationFromHyperspaceUrl` for each hyperspace hi-res entry and includes the correction as `rotationDeg` in the returned state. When `rotationDeg` is non-zero, both views switch to a portrait layout box sized to the card’s inverse dimensions (`CARD_H/CARD_W` wide × `CARD_W/CARD_H` tall), centered with `translate(-50%,-50%) rotate(90deg)`, so the rotated visual output fills the landscape container without overflowing or changing aspect ratio. When `rotationDeg` is zero the image fills the container normally (`inset:0; width:100%; height:100%`). The lookup table in `src/constants/rotatedCards.ts` is the single place to add new entries as they are discovered.
+Some hi-res hyperspace images on cdn.swu-db.com are stored rotated 90°. `useBaseArt` calls `getRotationFromHyperspaceUrl` for each hyperspace hi-res entry and includes the correction as `rotationDeg` in the returned state. When `rotationDeg` is non-zero, both views switch to a portrait layout box sized to the card's inverse dimensions (`CARD_H/CARD_W` wide × `CARD_W/CARD_H` tall), centered with `translate(-50%,-50%) rotate(90deg)`, so the rotated visual output fills the landscape container without overflowing or changing aspect ratio. When `rotationDeg` is zero the image fills the container normally (`inset:0; width:100%; height:100%`). The lookup table in `src/constants/rotatedCards.ts` is the single place to add new entries as they are discovered.
 
 The setup screen uses `normalFailed`, `hyperspaceFailed`, and `imageLoaded` to control the hyperspace toggle and contextual messages ("Only hyperspace image available", "Hyperspace variant not found"): both are suppressed until `imageLoaded` is true, preventing flicker during the loading window. The game screen uses `allFailed` to switch to the text fallback (base name, subtitle, epic action).
 
@@ -290,9 +290,27 @@ This ensures visual consistency across screens without each screen needing to re
 
 ### Styling approach
 
-All styling is done with **inline styles** (React `style` prop). There is no CSS framework, no CSS Modules, and no styled-components. `index.css` contains only a minimal global reset.
+All styling is done with **inline styles** (React `style` prop). There is no CSS framework, no CSS Modules, and no styled-components. `index.css` contains a minimal global reset, the CSS custom property palette, and styles for the help screen's rendered HTML content.
 
-Pros: no class name conflicts, styling is co-located with component logic, easy to make props-driven style decisions.
+**CSS custom properties** are defined in `:root` in `index.css` and referenced in inline styles via `var()` syntax (e.g. `color: 'var(--color-accent)'`). This gives a single source of truth for the colour palette while keeping styling co-located with component logic.
+
+| Token | Value | Usage |
+|---|---|---|
+| `--color-accent` | `#4fc3f7` | Borders, headings, button highlights |
+| `--color-accent-rgb` | `79, 195, 247` | `rgba()` shadow values using the accent colour |
+| `--color-bg-dark` | `#000510` | Darkest background |
+| `--color-bg-mid` | `#0d1b2a` | Gradient midpoint |
+| `--color-bg-deep` | `#0a0e1a` | Primary background, select option backgrounds |
+| `--color-text-primary` | `#ffffff` | Headings, counter, button text |
+| `--color-text-body` | `#d0d0d8` | Help screen body text |
+| `--color-text-muted` | `#a8a8b3` | Subtitles, secondary labels |
+| `--color-text-disabled` | `#6b7280` | Disabled/placeholder states |
+| `--color-ui-border` | `#6b7280` | Back/help button borders |
+| `--color-ui-border-muted` | `#9ca3af` | Back/help button icon colour |
+| `--color-ui-border-muted-rgb` | `156, 163, 175` | `rgba()` shadow values using the UI border colour |
+| `--color-error` | `#ff6b6b` | Error messages, fallback states |
+
+Pros: no class name conflicts, styling is co-located with component logic, easy to make props-driven style decisions, palette changes are a one-line edit in `index.css`.
 
 Cons: no media query support in inline styles (workaround: derive breakpoint-based values in component logic), harder to override from outside.
 
@@ -372,7 +390,7 @@ bug/hyperspace-art-resolution improves resolution of hyperspace art
 
 ### Pipeline: `.github/workflows/deploy.yml`
 
-Triggered on push to `main`. Three sequential jobs:
+Triggered on push to `main` and on pull requests targeting `main`. Three sequential jobs:
 
 ```
 test → build → deploy
@@ -422,6 +440,8 @@ npm test          # run once
 npm run test:watch  # watch mode
 ```
 
+Always use `npm test`. The `npx vitest run` form has a cache glitch that causes spurious first-run failures.
+
 ### Coverage expectations
 
 - All hooks must have unit tests
@@ -467,7 +487,7 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 
 ### UI
 
-- **Theming system** — inline styles make theming cumbersome; a CSS custom property system or styled-components would enable light/dark mode and game-specific themes
+- **Theming system** — CSS custom properties are now in place; per-game themes (e.g. X-Wing aesthetic) could be implemented by swapping the `:root` values at runtime
 - **Animations** — damage counter and screen transitions could benefit from subtle animations
 
 ---
@@ -476,17 +496,18 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 
 | Term | Definition |
 |---|---|
-| **Base** | A card type in Star Wars Unlimited representing a location that acts as the player's "health bar". Each base has an HP value (typically 25–35). |
+| **Base** | A card type in Star Wars Unlimited representing a location that acts as the player's "health bar". Each base has an HP value (typically 24–35). |
 | **Epic Action** | A special ability on some base cards that can be triggered once per game. Displayed on the game screen for reference. |
 | **Hyperspace** | A premium variant of a card with alternate artwork. In this app, selecting "hyperspace" shows the alternate art version of the base. |
 | **Standard art** | The default card artwork. `frontArt` is the swu-db.com hi-res version (1560×1120); `frontArtLowRes` is the swuapi.com version (400×286). |
 | **hyperspaceArt** | The reliable low-res hyperspace image URL from swuapi.com (`cdn.starwarsunlimited.com`, 400×286). `null` for SOR/SHD/TWI (no longer in swuapi.com). |
-| **hyperspaceArtHiRes** | A constructed hi-res hyperspace image URL from swu-db.com (`cdn.swu-db.com`, 1560×1120). Derived from card number for active sets, or from the static +266 offset map for SOR/SHD/TWI. May 403 for a small number of unindexed cards. |
-| **Static hyperspace map** | A hardcoded mapping of SOR, SHD, and TWI base card numbers to their hyperspace card numbers (offset +266). Used because those sets no longer appear in swuapi.com. |
+| **hyperspaceArtHiRes** | A constructed hi-res hyperspace image URL from swu-db.com (`cdn.swu-db.com`, 1560×1120). Derived from card number for active sets, or from the static offset map for SOR/SHD/TWI. May 403 for a small number of unindexed cards. |
+| **Static hyperspace map** | A hardcoded mapping of SOR, SHD, and TWI base card numbers to their hyperspace card numbers (offset). Used because those sets no longer appear in swuapi.com. |
 | **Fallback chain** | The ordered list of image URLs managed by `useBaseArt`. Hyperspace preferred: `[hyperspaceArtHiRes, hyperspaceArt, frontArt, frontArtLowRes]`. Normal preferred: `[frontArt, frontArtLowRes, hyperspaceArtHiRes, hyperspaceArt]`. The next URL is tried on `onError`; text fallback shown only when all are exhausted. |
 | **Container** | A React component that owns logic — calls hooks, computes derived state, and passes everything to a View component as props. |
 | **View** | A React component that only renders — receives all data and callbacks as props, contains no business logic. |
 | **AppScreenLayout** | The shared full-screen layout wrapper that provides background, safe area padding, and star field for every screen. |
+| **CSS custom properties** | Variables defined in `:root` in `index.css` (e.g. `--color-accent`) and referenced in inline styles via `var()`. Single source of truth for the colour palette. |
 | **swu-db proxy** | A Cloudflare Worker at `swu-proxy.dmgctrl.workers.dev` that proxies requests to swu-db.com to avoid CORS issues. |
 | **PWA** | Progressive Web App — a web app that can be installed on a device and used offline. |
 | **SOR** | Spark of Rebellion — the first set of Star Wars Unlimited cards. |

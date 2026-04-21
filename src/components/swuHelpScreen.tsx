@@ -37,23 +37,23 @@ function SwuHelpScreen({ onBack }: Props) {
               minWidth: '36px',
               minHeight: '36px',
               background: 'transparent',
-              border: '2px solid #6b7280',
+              border: '2px solid var(--color-ui-border)',
               borderRadius: '8px',
-              color: '#9ca3af',
+              color: 'var(--color-ui-border-muted)',
               fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               WebkitTapHighlightColor: 'transparent',
-              boxShadow: '0 0 8px rgba(156, 163, 175, 0.2)',
+              boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
             }}
           >
             &lt;
           </button>
 
           <h1 style={{
-            color: '#ffffff',
+            color: 'var(--color-text-primary)',
             fontWeight: '200',
             fontSize: 'clamp(1.8rem, 8vw, 3rem)',
             letterSpacing: '0.15em',
@@ -65,7 +65,7 @@ function SwuHelpScreen({ onBack }: Props) {
         </div>
 
         <h2 style={{
-          color: '#4fc3f7',
+          color: 'var(--color-accent)',
           fontWeight: '300',
           fontSize: 'clamp(0.9rem, 5vw, 1.2rem)',
           letterSpacing: '0.12em',

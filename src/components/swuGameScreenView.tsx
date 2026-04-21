@@ -61,9 +61,9 @@ function SwuGameScreenView({
           minWidth: '36px',
           minHeight: '36px',
           background: 'transparent',
-          border: '2px solid #6b7280',
+          border: '2px solid var(--color-ui-border)',
           borderRadius: '8px',
-          color: '#9ca3af',
+          color: 'var(--color-ui-border-muted)',
           fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
           cursor: 'pointer',
           display: 'flex',
@@ -71,7 +71,7 @@ function SwuGameScreenView({
           justifyContent: 'center',
           zIndex: 10,
           WebkitTapHighlightColor: 'transparent',
-          boxShadow: '0 0 8px rgba(156, 163, 175, 0.2)',
+          boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
         }}
       >
         &lt;
@@ -89,9 +89,9 @@ function SwuGameScreenView({
           minWidth: '36px',
           minHeight: '36px',
           background: 'transparent',
-          border: '2px solid #6b7280',
+          border: '2px solid var(--color-ui-border)',
           borderRadius: '8px',
-          color: '#9ca3af',
+          color: 'var(--color-ui-border-muted)',
           fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
           cursor: 'pointer',
           display: 'flex',
@@ -99,7 +99,7 @@ function SwuGameScreenView({
           justifyContent: 'center',
           zIndex: 10,
           WebkitTapHighlightColor: 'transparent',
-          boxShadow: '0 0 8px rgba(156, 163, 175, 0.2)',
+          boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
         }}
       >
         ?
@@ -116,7 +116,7 @@ function SwuGameScreenView({
         borderRadius: '3.5%',
         overflow: 'hidden',
         zIndex: 1,
-        boxShadow: '0 0 20px rgba(79, 195, 247, 0.3)',
+        boxShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.3)',
       }}>
 
         {/* Border overlay — sits above card art to cover edge fringe */}
@@ -124,7 +124,7 @@ function SwuGameScreenView({
           position: 'absolute',
           inset: 0,
           zIndex: 10,
-          border: '2px solid #4fc3f7',
+          border: '2px solid var(--color-accent)',
           borderRadius: 'inherit',
           pointerEvents: 'none',
         }} />
@@ -167,7 +167,7 @@ function SwuGameScreenView({
               justifyContent: 'center',
             }}>
               <p style={{
-                color: '#ffffff',
+                color: 'var(--color-text-primary)',
                 fontWeight: '300',
                 fontSize: 'clamp(1rem, 10vh, 1.8rem)',
                 margin: 0,
@@ -192,7 +192,7 @@ function SwuGameScreenView({
                 justifyContent: 'center',
               }}>
                 <p style={{
-                  color: '#ffffff',
+                  color: 'var(--color-text-primary)',
                   fontWeight: '300',
                   fontSize: 'clamp(0.6rem, 4vh, 1.1rem)',
                   margin: 0,
@@ -216,7 +216,7 @@ function SwuGameScreenView({
               justifyContent: 'center',
             }}>
               <p style={{
-                color: '#a8a8b3',
+                color: 'var(--color-text-muted)',
                 fontWeight: '300',
                 fontSize: 'clamp(0.7rem, 2vh, 1.2rem)',
                 margin: 0,
@@ -263,7 +263,7 @@ function SwuGameScreenView({
             <span style={{
               fontSize: '6vmin',
               fontWeight: '300',
-              color: '#ffffff',
+              color: 'var(--color-text-primary)',
               letterSpacing: '0.05em',
               textShadow: '0 2px 4px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,1), -1px -1px 0 rgba(0,0,0,1), 1px -1px 0 rgba(0,0,0,1), -1px 1px 0 rgba(0,0,0,1), 1px 1px 0 rgba(0,0,0,1)',
             }}>
@@ -287,8 +287,8 @@ function SwuGameScreenView({
                 width: '21vmin',
                 height: '21vmin',
                 background: 'rgba(0,0,0,0.45)',
-                color: '#4fc3f7',
-                border: '2px solid #4fc3f7',
+                color: 'var(--color-accent)',
+                border: '2px solid var(--color-accent)',
                 borderRadius: '8px',
                 fontSize: '6vmin',
                 cursor: 'pointer',
@@ -297,7 +297,7 @@ function SwuGameScreenView({
                 justifyContent: 'center',
                 flexShrink: 0,
                 WebkitTapHighlightColor: 'transparent',
-                boxShadow: '0 0 12px rgba(79, 195, 247, 0.3)',
+                boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
               }}
             >
               −
@@ -311,8 +311,8 @@ function SwuGameScreenView({
               justifyContent: 'center',
               fontSize: '20vmin',
               fontWeight: '300',
-              color: '#ffffff',
-              textShadow: '0 0 20px rgba(79, 195, 247, 0.4), 0 0 8px rgba(0,0,0,1)',
+              color: 'var(--color-text-primary)',
+              textShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.4), 0 0 8px rgba(0,0,0,1)',
             }}>
               {count}
             </div>
@@ -324,8 +324,8 @@ function SwuGameScreenView({
                 width: '21vmin',
                 height: '21vmin',
                 background: 'rgba(0,0,0,0.45)',
-                color: '#4fc3f7',
-                border: '2px solid #4fc3f7',
+                color: 'var(--color-accent)',
+                border: '2px solid var(--color-accent)',
                 borderRadius: '8px',
                 fontSize: '6vmin',
                 cursor: 'pointer',
@@ -334,7 +334,7 @@ function SwuGameScreenView({
                 justifyContent: 'center',
                 flexShrink: 0,
                 WebkitTapHighlightColor: 'transparent',
-                boxShadow: '0 0 12px rgba(79, 195, 247, 0.3)',
+                boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
               }}
             >
               +

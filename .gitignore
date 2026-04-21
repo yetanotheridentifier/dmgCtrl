@@ -29,3 +29,6 @@ dist-ssr
 # Generated data snapshots (run scripts/inspect-base-data.mjs to regenerate)
 docs/base-data-snapshot.json
 docs/base-data-summary.json
+
+# AI assistant working instructions (personal workflow, not for contributors)
+CLAUDE.md

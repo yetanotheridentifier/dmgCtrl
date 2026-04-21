@@ -1,4 +1,18 @@
 :root {
+  --color-accent: #4fc3f7;
+  --color-accent-rgb: 79, 195, 247;
+  --color-bg-dark: #000510;
+  --color-bg-mid: #0d1b2a;
+  --color-bg-deep: #0a0e1a;
+  --color-text-primary: #ffffff;
+  --color-text-body: #d0d0d8;
+  --color-text-muted: #a8a8b3;
+  --color-text-disabled: #6b7280;
+  --color-ui-border: #6b7280;
+  --color-ui-border-muted: #9ca3af;
+  --color-ui-border-muted-rgb: 156, 163, 175;
+  --color-error: #ff6b6b;
+
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -7,7 +21,7 @@
 
 html {
   min-height: calc(100% + env(safe-area-inset-top));
-  background-color: #000510;
+  background-color: var(--color-bg-dark);
   background-attachment: fixed;
   background-image:
     radial-gradient(1px 1px at 10% 20%, rgba(255,255,255,0.6) 0%, transparent 100%),
@@ -22,7 +36,7 @@ html {
     radial-gradient(1px 1px at 50% 10%, rgba(255,255,255,0.6) 0%, transparent 100%),
     radial-gradient(2px 2px at 30% 50%, rgba(255,255,255,0.2) 0%, transparent 100%),
     radial-gradient(2px 2px at 70% 30%, rgba(255,255,255,0.15) 0%, transparent 100%),
-    radial-gradient(ellipse at 20% 50%, #0d1b2a 0%, #0a0e1a 60%, #000510 100%);
+    radial-gradient(ellipse at 20% 50%, var(--color-bg-mid) 0%, var(--color-bg-deep) 60%, var(--color-bg-dark) 100%);
 }
 
 html, body {
@@ -53,13 +67,13 @@ input[type=number] {
 }
 
 .help-content h2 {
-  color: #4fc3f7;
+  color: var(--color-accent);
   font-weight: 300;
   font-size: clamp(1rem, 5vw, 1.3rem);
   letter-spacing: 0.05em;
   margin: 1.5em 0 0.75em 0;
   padding-bottom: 0.4em;
-  border-bottom: 1px solid rgba(79, 195, 247, 0.3);
+  border-bottom: 1px solid rgba(var(--color-accent-rgb), 0.3);
 }
 
 .help-content h2:first-of-type {
@@ -67,7 +81,7 @@ input[type=number] {
 }
 
 .help-content p {
-  color: #d0d0d8;
+  color: var(--color-text-body);
   font-weight: 300;
   font-size: clamp(0.9rem, 4vw, 1.05rem);
   line-height: 1.65;
@@ -76,7 +90,7 @@ input[type=number] {
 
 .help-content ul,
 .help-content ol {
-  color: #d0d0d8;
+  color: var(--color-text-body);
   font-weight: 300;
   font-size: clamp(0.9rem, 4vw, 1.05rem);
   line-height: 1.65;
@@ -89,17 +103,30 @@ input[type=number] {
 }
 
 .help-content strong {
-  color: #ffffff;
+  color: var(--color-text-primary);
   font-weight: 400;
 }
 
 .help-content em {
-  color: #a8a8b3;
+  color: var(--color-text-muted);
   font-style: italic;
 }
 
 .help-content hr {
   border: none;
-  border-top: 1px solid rgba(79, 195, 247, 0.12);
+  border-top: 1px solid rgba(var(--color-accent-rgb), 0.12);
   margin: 0.5em 0 1em 0;
+}
+
+.help-content a:link,
+.help-content a:visited {
+  color: var(--color-accent);
+}
+
+.help-content a:hover {
+  color: var(--color-text-primary);
+}
+
+.help-content a:active {
+  color: #1976d2;
 }
