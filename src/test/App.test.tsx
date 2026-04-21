@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { Base } from '../hooks/useBases'
 
+vi.mock('../flags', () => ({ FEATURE_SWUDB_IMPORT: true }))
+
 const mockBases: Base[] = [
   {
     set: 'SOR',
