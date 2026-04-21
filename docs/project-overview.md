@@ -28,7 +28,6 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 
 ### Infrastructure
 - Settings screen (consolidate localStorage preferences)
-- CSS refactor to CSS custom properties for theming
 - Per-game theming (X-Wing aesthetic vs SWU aesthetic)
 - Deck lookup via swudb.com API (`/api/getDeckJson/{deckId}`)
 - Melee.gg integration (API exists, partially public)
@@ -52,5 +51,6 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 - Tests use `--legacy-peer-deps` in the GitHub Actions install step
 - `vmin` units are used for game screen sizing to work correctly across orientations
 - localStorage cache must be cleared (`localStorage.removeItem('swu_bases_cache')`) when testing data layer changes
+- Always use `npm test` to run tests — `npx vitest run` has a cache glitch causing spurious first-run failures
 - Run a filtered test summary in PowerShell: `npm test 2>&1 | Select-String "×|FAIL|Tests|Test Files"`
-- Run a single test file: `npx vitest run src/test/swuSetupScreen.test.tsx`
+- Run a single test file: `npm test -- src/test/swuSetupScreen.test.tsx`

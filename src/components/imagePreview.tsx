@@ -21,8 +21,8 @@ const wrapperStyle: React.CSSProperties = {
   position: 'relative',
   overflow: 'hidden',
   borderRadius: '12px',
-  border: '2px solid #4fc3f7',
-  boxShadow: '0 0 20px rgba(79, 195, 247, 0.3)',
+  border: '2px solid var(--color-accent)',
+  boxShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.3)',
 }
 
 const imgStyleNormal: React.CSSProperties = {
@@ -48,7 +48,7 @@ const imgStyleRotated: React.CSSProperties = {
 }
 
 const messageStyle: React.CSSProperties = {
-  color: '#a8a8b3',
+  color: 'var(--color-text-muted)',
   fontWeight: '300',
   fontSize: 'clamp(0.7rem, 2.5vw, 1rem)',
   margin: 0,
@@ -56,7 +56,7 @@ const messageStyle: React.CSSProperties = {
 }
 
 const errorStyle: React.CSSProperties = {
-  color: '#ff6b6b',
+  color: 'var(--color-error)',
   fontWeight: '300',
   fontSize: 'clamp(0.7rem, 2.5vw, 1rem)',
   margin: 0,
