@@ -126,8 +126,9 @@ describe('SwuSetupScreen', () => {
 
   // --- Rendering ---
 
-  it('Renders the Select Base heading', () => {
+  it('Renders the app title and Select Base section label', () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByText('dmgCtrl')).toBeInTheDocument()
     expect(screen.getByText('Select Base')).toBeInTheDocument()
   })
 

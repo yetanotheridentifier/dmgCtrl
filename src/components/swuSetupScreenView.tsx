@@ -118,13 +118,24 @@ function SwuSetupScreenView({
 
         <h1 style={{
           color: '#ffffff',
-          fontWeight: '300',
-          fontSize: 'clamp(1.2rem, 10vw, 2rem)',
-          letterSpacing: '0.1em',
+          fontWeight: '200',
+          fontSize: 'clamp(1.8rem, 8vw, 3rem)',
+          letterSpacing: '0.15em',
           margin: 0,
         }}>
-          Select Base
+          dmgCtrl
         </h1>
+
+        <h2 style={{
+          color: '#4fc3f7',
+          fontWeight: '300',
+          fontSize: 'clamp(0.9rem, 4vw, 1.2rem)',
+          letterSpacing: '0.12em',
+          margin: 0,
+          textTransform: 'uppercase',
+        }}>
+          Select Base
+        </h2>
 
         {loading && (
           <p style={{
