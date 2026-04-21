@@ -2,6 +2,7 @@ import { Base } from '../hooks/useBases'
 import AppScreenLayout from './layout/AppScreenLayout'
 import ImagePreview from './imagePreview'
 import { useOrientation } from '../hooks/useOrientation'
+import { SelectionMode } from './swuSetupScreen'
 
 interface Props {
   loading: boolean
@@ -28,7 +29,20 @@ interface Props {
   onHyperspaceToggle: (value: boolean) => void
   onSubmit: () => void
   onHelp: () => void
+  showModeSelector: boolean
+  selectionMode: SelectionMode
+  onModeChange: (mode: SelectionMode) => void
 }
+
+const labelStyle = (small = false): React.CSSProperties => ({
+  color: 'var(--color-accent)',
+  fontWeight: '300',
+  fontSize: small ? 'clamp(0.8rem, 3vw, 1rem)' : 'clamp(0.9rem, 4vw, 1.2rem)',
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase',
+  whiteSpace: 'nowrap',
+  flexShrink: 0,
+})
 
 const selectStyle = (enabled: boolean, hasValue: boolean, small = false): React.CSSProperties => ({
   flex: 1,
@@ -48,6 +62,27 @@ const selectStyle = (enabled: boolean, hasValue: boolean, small = false): React.
   opacity: enabled ? 1 : 0.4,
   width: '100%',
 })
+
+function ModeSelector({ selectionMode, onModeChange, small = false }: {
+  selectionMode: SelectionMode
+  onModeChange: (mode: SelectionMode) => void
+  small?: boolean
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
+      <label style={labelStyle(small)}>Base Input Mode:</label>
+      <select
+        value={selectionMode}
+        onChange={e => onModeChange(e.target.value as SelectionMode)}
+        data-testid="mode-select"
+        style={selectStyle(true, true, small)}
+      >
+        <option value="base-selector" style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>Base Selector</option>
+        <option value="swudb-import" style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>Import from SWUDB</option>
+      </select>
+    </div>
+  )
+}
 
 function SwuSetupScreenView({
   loading,
@@ -74,6 +109,9 @@ function SwuSetupScreenView({
   onHyperspaceToggle,
   onSubmit,
   onHelp,
+  showModeSelector,
+  selectionMode,
+  onModeChange,
 }: Props) {
   const { isPortrait } = useOrientation()
 
@@ -111,6 +149,144 @@ function SwuSetupScreenView({
         Hyperspace variant
       </label>
     </div>
+  )
+
+  const swudbPlaceholder = (
+    <div
+      data-testid="swudb-import-placeholder"
+      style={{
+        color: 'var(--color-text-muted)',
+        fontWeight: '300',
+        fontSize: 'clamp(0.85rem, 3vw, 1rem)',
+        letterSpacing: '0.04em',
+        lineHeight: 1.6,
+      }}
+    >
+      SWUDB import coming soon.
+    </div>
+  )
+
+  const baseSelectorContent = (small = false) => (
+    <>
+      {loading && (
+        <p style={{
+          color: 'var(--color-accent)',
+          fontWeight: '300',
+          fontSize: small ? 'clamp(0.9rem, 2vw, 1.1rem)' : 'clamp(0.9rem, 3vw, 1.2rem)',
+          margin: 0,
+        }}>
+          Loading bases...
+        </p>
+      )}
+
+      {error && (
+        <p style={{
+          color: 'var(--color-error)',
+          fontWeight: '300',
+          fontSize: small ? 'clamp(0.9rem, 2vw, 1.1rem)' : 'clamp(0.9rem, 3vw, 1.2rem)',
+          margin: 0,
+        }}>
+          {error}
+        </p>
+      )}
+
+      {!loading && !error && (
+        <>
+          {/* Set + Aspect row */}
+          <div style={{
+            width: '100%',
+            display: 'flex',
+            flexDirection: 'row',
+            gap: '2vw',
+            alignItems: 'flex-end',
+          }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
+              <label style={labelStyle(small)}>Set</label>
+              <select
+                value={selectedSet}
+                onChange={e => onSetChange(e.target.value)}
+                style={selectStyle(true, selectedSet !== '', small)}
+              >
+                <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>Set</option>
+                {availableSets.map(set => (
+                  <option key={set} value={set} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>{set}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ flex: 2, display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
+              <label style={labelStyle(small)}>Aspect</label>
+              <select
+                value={selectedAspect}
+                onChange={e => onAspectChange(e.target.value)}
+                disabled={!selectedSet}
+                style={selectStyle(!!selectedSet, selectedAspect !== '', small)}
+              >
+                <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>Aspect</option>
+                {availableAspects.map(aspect => (
+                  <option key={aspect} value={aspect} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>{aspect}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Base + submit row */}
+          <div style={{
+            width: '100%',
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'stretch',
+            gap: '2vw',
+          }}>
+            <select
+              value={selectedKey}
+              onChange={e => onKeyChange(e.target.value)}
+              disabled={!selectedAspect}
+              style={selectStyle(!!selectedAspect, selectedKey !== '', small)}
+            >
+              <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>Base</option>
+              {filteredBases.map(base => (
+                <option
+                  key={`${base.set}-${base.number}`}
+                  value={`${base.set}-${base.number}`}
+                  style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}
+                >
+                  {base.name} — {base.hp}HP
+                </option>
+              ))}
+            </select>
+
+            <button
+              onClick={onSubmit}
+              disabled={!selectedBase}
+              style={{
+                width: small ? '8vh' : '12vw',
+                height: small ? '8vh' : '12vw',
+                minWidth: '44px',
+                minHeight: '44px',
+                flexShrink: 0,
+                padding: '0',
+                fontSize: small ? 'clamp(1rem, 3vh, 1.8rem)' : 'clamp(1rem, 3vw, 1.8rem)',
+                fontWeight: '300',
+                background: 'transparent',
+                color: 'var(--color-text-primary)',
+                border: '2px solid var(--color-text-primary)',
+                borderRadius: '12px',
+                cursor: !selectedBase ? 'not-allowed' : 'pointer',
+                boxShadow: '0 0 12px rgba(255, 255, 255, 0.2)',
+                WebkitTapHighlightColor: 'transparent',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: !selectedBase ? 0.4 : 1,
+              }}
+            >
+              &gt;
+            </button>
+          </div>
+        </>
+      )}
+    </>
   )
 
   if (!isPortrait) {
@@ -167,7 +343,7 @@ function SwuSetupScreenView({
             </button>
           </div>
 
-          {/* Content row: selectors left, preview right-aligned below help button */}
+          {/* Content row: selectors left, preview right */}
           <div style={{
             flex: 1,
             display: 'flex',
@@ -177,7 +353,7 @@ function SwuSetupScreenView({
             gap: '3vw',
           }}>
 
-            {/* Left: selectors */}
+            {/* Left column: mode selector + base selectors */}
             <div style={{
               flex: '0 0 45%',
               display: 'flex',
@@ -185,166 +361,23 @@ function SwuSetupScreenView({
               overflowY: 'auto',
               gap: '1.5vh',
             }}>
-
-              <h2 style={{
-                color: 'var(--color-accent)',
-                fontWeight: '300',
-                fontSize: 'clamp(0.8rem, 3vw, 1rem)',
-                letterSpacing: '0.12em',
-                margin: 0,
-                textTransform: 'uppercase',
-              }}>
-                Select Base
-              </h2>
-
-              {loading && (
-                <p style={{
-                  color: 'var(--color-accent)',
-                  fontWeight: '300',
-                  fontSize: 'clamp(0.9rem, 2vw, 1.1rem)',
-                  margin: 0,
-                }}>
-                  Loading bases...
-                </p>
+              {showModeSelector && (
+                <ModeSelector selectionMode={selectionMode} onModeChange={onModeChange} small />
               )}
 
-              {error && (
-                <p style={{
-                  color: 'var(--color-error)',
-                  fontWeight: '300',
-                  fontSize: 'clamp(0.9rem, 2vw, 1.1rem)',
-                  margin: 0,
-                }}>
-                  {error}
-                </p>
-              )}
+              {selectionMode === 'swudb-import' ? swudbPlaceholder : baseSelectorContent(true)}
 
-              {!loading && !error && (
-                <>
-                  {/* Set + Aspect row */}
-                  <div style={{
-                    width: '100%',
-                    display: 'flex',
-                    flexDirection: 'row',
-                    gap: '2vw',
-                    alignItems: 'flex-end',
-                  }}>
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
-                      <label style={{
-                        color: 'var(--color-text-muted)',
-                        fontWeight: '300',
-                        fontSize: 'clamp(0.7rem, 2vw, 0.9rem)',
-                        letterSpacing: '0.08em',
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0,
-                      }}>
-                        Set
-                      </label>
-                      <select
-                        value={selectedSet}
-                        onChange={e => onSetChange(e.target.value)}
-                        style={selectStyle(true, selectedSet !== '', true)}
-                      >
-                        <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>Set</option>
-                        {availableSets.map(set => (
-                          <option key={set} value={set} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>{set}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div style={{ flex: 2, display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
-                      <label style={{
-                        color: 'var(--color-text-muted)',
-                        fontWeight: '300',
-                        fontSize: 'clamp(0.7rem, 2vw, 0.9rem)',
-                        letterSpacing: '0.08em',
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0,
-                      }}>
-                        Aspect
-                      </label>
-                      <select
-                        value={selectedAspect}
-                        onChange={e => onAspectChange(e.target.value)}
-                        disabled={!selectedSet}
-                        style={selectStyle(!!selectedSet, selectedAspect !== '', true)}
-                      >
-                        <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>Aspect</option>
-                        {availableAspects.map(aspect => (
-                          <option key={aspect} value={aspect} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>{aspect}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Base + submit row */}
-                  <div style={{
-                    width: '100%',
-                    display: 'flex',
-                    flexDirection: 'row',
-                    alignItems: 'stretch',
-                    gap: '2vw',
-                  }}>
-                    <select
-                      value={selectedKey}
-                      onChange={e => onKeyChange(e.target.value)}
-                      disabled={!selectedAspect}
-                      style={selectStyle(!!selectedAspect, selectedKey !== '', true)}
-                    >
-                      <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>Base</option>
-                      {filteredBases.map(base => (
-                        <option
-                          key={`${base.set}-${base.number}`}
-                          value={`${base.set}-${base.number}`}
-                          style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}
-                        >
-                          {base.name} — {base.hp}HP
-                        </option>
-                      ))}
-                    </select>
-
-                    <button
-                      onClick={onSubmit}
-                      disabled={!selectedBase}
-                      style={{
-                        width: '8vh',
-                        height: '8vh',
-                        minWidth: '44px',
-                        minHeight: '44px',
-                        flexShrink: 0,
-                        padding: '0',
-                        fontSize: 'clamp(1rem, 3vh, 1.8rem)',
-                        fontWeight: '300',
-                        background: 'transparent',
-                        color: 'var(--color-text-primary)',
-                        border: '2px solid var(--color-text-primary)',
-                        borderRadius: '12px',
-                        cursor: !selectedBase ? 'not-allowed' : 'pointer',
-                        boxShadow: '0 0 12px rgba(255, 255, 255, 0.2)',
-                        WebkitTapHighlightColor: 'transparent',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        opacity: !selectedBase ? 0.4 : 1,
-                      }}
-                    >
-                      &gt;
-                    </button>
-                  </div>
-
-                  {hyperspaceToggle}
-                </>
-              )}
+              {selectionMode === 'base-selector' && hyperspaceToggle}
             </div>
 
-            {/* Right: preview, top-right aligned under the help button */}
+            {/* Right column: preview */}
             <div style={{
               flex: 1,
               display: 'flex',
               alignItems: 'flex-start',
               justifyContent: 'flex-end',
             }}>
-              {selectedBase && (
+              {selectedBase && selectionMode === 'base-selector' && (
                 <div style={{ width: '100%' }}>
                   <ImagePreview
                     base={selectedBase}
@@ -424,175 +457,14 @@ function SwuSetupScreenView({
           </button>
         </div>
 
-        <h2 style={{
-          color: 'var(--color-accent)',
-          fontWeight: '300',
-          fontSize: 'clamp(0.9rem, 4vw, 1.2rem)',
-          letterSpacing: '0.12em',
-          margin: 0,
-          textTransform: 'uppercase',
-        }}>
-          Select Base
-        </h2>
-
-        {loading && (
-          <p style={{
-            color: 'var(--color-accent)',
-            fontWeight: '300',
-            fontSize: 'clamp(0.9rem, 3vw, 1.2rem)',
-            margin: 0,
-          }}>
-            Loading bases...
-          </p>
+        {showModeSelector && (
+          <ModeSelector selectionMode={selectionMode} onModeChange={onModeChange} />
         )}
 
-        {error && (
-          <p style={{
-            color: 'var(--color-error)',
-            fontWeight: '300',
-            fontSize: 'clamp(0.9rem, 3vw, 1.2rem)',
-            margin: 0,
-          }}>
-            {error}
-          </p>
-        )}
-
-        {!loading && !error && (
+        {selectionMode === 'swudb-import' ? swudbPlaceholder : (
           <>
-            {/* Row 1: Set and Aspect */}
-            <div style={{
-              width: '100%',
-              display: 'flex',
-              flexDirection: 'row',
-              gap: '2vw',
-              alignItems: 'flex-end',
-            }}>
-              <div style={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: '1vw',
-              }}>
-                <label style={{
-                  color: 'var(--color-text-muted)',
-                  fontWeight: '300',
-                  fontSize: 'clamp(0.7rem, 5vw, 0.9rem)',
-                  letterSpacing: '0.08em',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                }}>
-                  Set
-                </label>
-                <select
-                  value={selectedSet}
-                  onChange={e => onSetChange(e.target.value)}
-                  style={selectStyle(true, selectedSet !== '')}
-                >
-                  <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>
-                    Set
-                  </option>
-                  {availableSets.map(set => (
-                    <option key={set} value={set} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>
-                      {set}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            {baseSelectorContent(false)}
 
-              <div style={{
-                flex: 2,
-                display: 'flex',
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: '1vw',
-              }}>
-                <label style={{
-                  color: 'var(--color-text-muted)',
-                  fontWeight: '300',
-                  fontSize: 'clamp(0.7rem, 5vw, 0.9rem)',
-                  letterSpacing: '0.08em',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                }}>
-                  Aspect
-                </label>
-                <select
-                  value={selectedAspect}
-                  onChange={e => onAspectChange(e.target.value)}
-                  disabled={!selectedSet}
-                  style={selectStyle(!!selectedSet, selectedAspect !== '')}
-                >
-                  <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>
-                    Aspect
-                  </option>
-                  {availableAspects.map(aspect => (
-                    <option key={aspect} value={aspect} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>
-                      {aspect}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Row 2: Base and submit */}
-            <div style={{
-              width: '100%',
-              display: 'flex',
-              flexDirection: 'row',
-              alignItems: 'stretch',
-              gap: '2vw',
-            }}>
-              <select
-                value={selectedKey}
-                onChange={e => onKeyChange(e.target.value)}
-                disabled={!selectedAspect}
-                style={selectStyle(!!selectedAspect, selectedKey !== '')}
-              >
-                <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>
-                  Base
-                </option>
-                {filteredBases.map(base => (
-                  <option
-                    key={`${base.set}-${base.number}`}
-                    value={`${base.set}-${base.number}`}
-                    style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}
-                  >
-                    {base.name} — {base.hp}HP
-                  </option>
-                ))}
-              </select>
-
-              <button
-                onClick={onSubmit}
-                disabled={!selectedBase}
-                style={{
-                  width: '12vw',
-                  height: '12vw',
-                  minWidth: '44px',
-                  minHeight: '44px',
-                  flexShrink: 0,
-                  padding: '0',
-                  fontSize: 'clamp(1rem, 3vw, 1.8rem)',
-                  fontWeight: '300',
-                  background: 'transparent',
-                  color: 'var(--color-text-primary)',
-                  border: '2px solid var(--color-text-primary)',
-                  borderRadius: '12px',
-                  cursor: !selectedBase ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 0 12px rgba(255, 255, 255, 0.2)',
-                  WebkitTapHighlightColor: 'transparent',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  opacity: !selectedBase ? 0.4 : 1,
-                }}
-              >
-                &gt;
-              </button>
-            </div>
-
-            {/* Row 3: Base preview */}
             {selectedBase && (
               <div style={{
                 width: '100%',

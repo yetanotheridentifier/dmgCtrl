@@ -1,7 +1,11 @@
+import { useState } from 'react'
 import { Base } from '../hooks/useBases'
 import { useSwuSetup, InitialSelection } from '../hooks/useSwuSetup'
 import { useBaseArt } from '../hooks/useBaseArt'
 import SwuSetupScreenView from './swuSetupScreenView'
+import { FEATURE_SWUDB_IMPORT } from '../flags'
+
+export type SelectionMode = 'base-selector' | 'swudb-import'
 
 interface Props {
   onConfirm: (base: Base, useHyperspace: boolean) => void
@@ -12,6 +16,17 @@ interface Props {
 function SwuSetupScreen({ onConfirm, onHelp, initialSelection }: Props) {
   const setup = useSwuSetup(onConfirm, initialSelection)
   const art = useBaseArt(setup.selectedBase, setup.useHyperspace)
+
+  const [selectionMode, setSelectionMode] = useState<SelectionMode>(() => {
+    if (!FEATURE_SWUDB_IMPORT) return 'base-selector'
+    const saved = localStorage.getItem('pref_selection_mode')
+    return saved === 'swudb-import' ? 'swudb-import' : 'base-selector'
+  })
+
+  const handleModeChange = (mode: SelectionMode) => {
+    setSelectionMode(mode)
+    localStorage.setItem('pref_selection_mode', mode)
+  }
 
   const hasHyperspace = !!(
     setup.selectedBase?.hyperspaceArtHiRes || setup.selectedBase?.hyperspaceArt
@@ -49,6 +64,9 @@ function SwuSetupScreen({ onConfirm, onHelp, initialSelection }: Props) {
       onHyperspaceToggle={setup.handleHyperspaceToggle}
       onSubmit={handleSubmit}
       onHelp={onHelp}
+      showModeSelector={FEATURE_SWUDB_IMPORT}
+      selectionMode={selectionMode}
+      onModeChange={handleModeChange}
     />
   )
 }
