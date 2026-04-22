@@ -17,6 +17,7 @@ interface ImagePreviewProps {
 
 const wrapperStyle: React.CSSProperties = {
   width: '100%',
+  boxSizing: 'border-box',
   aspectRatio: `${CARD_W} / ${CARD_H}`,
   position: 'relative',
   overflow: 'hidden',
