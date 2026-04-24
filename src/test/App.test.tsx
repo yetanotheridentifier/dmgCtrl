@@ -135,7 +135,7 @@ describe('App', () => {
     render(<App />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
     await user.click(screen.getByText('>'))
-    expect(screen.getByText('Base Input Mode:')).toBeInTheDocument()
+    expect(screen.getByText('Input Mode:')).toBeInTheDocument()
     expect(screen.queryByText(/Remaining:/)).not.toBeInTheDocument()
   })
 
@@ -148,7 +148,7 @@ describe('App', () => {
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
     await user.click(screen.getByText('>'))
     await user.click(screen.getByText('<'))
-    expect(screen.getByText('Base Input Mode:')).toBeInTheDocument()
+    expect(screen.getByText('Input Mode:')).toBeInTheDocument()
   })
 
   // --- Back navigation retains selection ---
@@ -259,7 +259,7 @@ describe('App', () => {
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
     await user.click(screen.getByText('?'))
     await user.click(screen.getByRole('button', { name: '<' }))
-    expect(screen.getByText('Base Input Mode:')).toBeInTheDocument()
+    expect(screen.getByText('Input Mode:')).toBeInTheDocument()
   })
 
   it('Clicking back from help returns to game when help was opened from game', async () => {

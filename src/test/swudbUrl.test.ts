@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { normaliseSwudbUrl, isValidSwudbUrl } from '../utils/swudbUrl'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck } from '../utils/swudbUrl'
 
 describe('normaliseSwudbUrl', () => {
 
@@ -63,6 +63,49 @@ describe('isValidSwudbUrl', () => {
 
   it('returns false for plain text', () => {
     expect(isValidSwudbUrl('not a url')).toBe(false)
+  })
+
+})
+
+describe('fetchSwudbDeck', () => {
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('returns deckName and baseKey from a successful response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        deckName: 'Test Deck',
+        base: { defaultExpansionAbbreviation: 'JTL', defaultCardNumber: '031' },
+      }),
+    }))
+    const result = await fetchSwudbDeck('ILRtEGjuCQY')
+    expect(result).toEqual({ deckName: 'Test Deck', baseKey: 'JTL-031' })
+  })
+
+  it('calls the correct proxy URL', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        deckName: 'Test',
+        base: { defaultExpansionAbbreviation: 'JTL', defaultCardNumber: '031' },
+      }),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+    await fetchSwudbDeck('ILRtEGjuCQY')
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://swu-proxy.dmgctrl.workers.dev/swudb/deck/ILRtEGjuCQY'
+    )
+  })
+
+  it('throws Deck not accessible on non-200 response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }))
+    await expect(fetchSwudbDeck('tLSGgxCAjX')).rejects.toThrow('Deck not accessible')
+  })
+
+  it('throws Deck not accessible on network error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fetch failed')))
+    await expect(fetchSwudbDeck('ILRtEGjuCQY')).rejects.toThrow('Deck not accessible')
   })
 
 })

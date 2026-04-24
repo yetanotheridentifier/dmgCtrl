@@ -82,6 +82,21 @@ const baseF: Base = {
   rarity: 'Common',
 }
 
+const aspectlessBase: Base = {
+  set: 'JTL',
+  number: '031',
+  name: 'Lake Country',
+  subtitle: 'Naboo',
+  hp: 30,
+  frontArt: 'https://cdn.swu-db.com/images/cards/JTL/031.png',
+  frontArtLowRes: null,
+  hyperspaceArtHiRes: null,
+  hyperspaceArt: null,
+  epicAction: '',
+  aspects: [],
+  rarity: 'Common',
+}
+
 const mockBases = [baseA, baseB, baseC, baseD, baseF]
 
 beforeEach(() => {
@@ -293,6 +308,45 @@ describe('useSwuSetup', () => {
     const { result } = renderHook(() => useSwuSetup(onConfirm))
     act(() => result.current.handleSubmit(false))
     expect(onConfirm).not.toHaveBeenCalled()
+  })
+
+  // --- selectBaseByKey ---
+
+  it('selectBaseByKey returns true and resolves selectedBase when key matches', () => {
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => { result.current.selectBaseByKey('SOR-026') })
+    expect(result.current.selectedBase).toEqual(baseA)
+  })
+
+  it('selectBaseByKey returns true when base is found', () => {
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    let found = false
+    act(() => { found = result.current.selectBaseByKey('SOR-026') })
+    expect(found).toBe(true)
+  })
+
+  it('selectBaseByKey returns false and leaves selectedBase null when key not found', () => {
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    let found = true
+    act(() => { found = result.current.selectBaseByKey('NEW-001') })
+    expect(found).toBe(false)
+    expect(result.current.selectedBase).toBeNull()
+  })
+
+  it('selectBaseByKey sets selectedSet, selectedAspect and selectedKey', () => {
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => result.current.selectBaseByKey('SOR-026'))
+    expect(result.current.selectedSet).toBe('SOR')
+    expect(result.current.selectedAspect).toBe('Aggression')
+    expect(result.current.selectedKey).toBe('SOR-026')
+  })
+
+  it('selectBaseByKey uses None as aspect for an aspectless base', () => {
+    vi.mocked(useBases).mockReturnValue({ bases: [...mockBases, aspectlessBase], loading: false, error: null })
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => result.current.selectBaseByKey('JTL-031'))
+    expect(result.current.selectedAspect).toBe('None')
+    expect(result.current.selectedBase).toEqual(aspectlessBase)
   })
 
 })
