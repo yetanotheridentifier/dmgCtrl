@@ -5,8 +5,8 @@ export function useOrientation() {
 
   useEffect(() => {
     const handler = () => setIsPortrait(window.innerWidth < window.innerHeight)
-    window.addEventListener('resize', handler)
-    return () => window.removeEventListener('resize', handler)
+    window.addEventListener('orientationchange', handler)
+    return () => window.removeEventListener('orientationchange', handler)
   }, [])
 
   return { isPortrait }

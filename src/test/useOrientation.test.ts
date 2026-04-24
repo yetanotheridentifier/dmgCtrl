@@ -32,18 +32,18 @@ describe('useOrientation', () => {
 
   // --- Reactivity ---
 
-  it('updates to portrait when window resizes to portrait', () => {
+  it('updates to portrait when orientation changes to portrait', () => {
     const { result } = renderHook(() => useOrientation())
     expect(result.current.isPortrait).toBe(false)
     act(() => {
       Object.defineProperty(window, 'innerWidth',  { writable: true, configurable: true, value: 390 })
       Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: 844 })
-      window.dispatchEvent(new Event('resize'))
+      window.dispatchEvent(new Event('orientationchange'))
     })
     expect(result.current.isPortrait).toBe(true)
   })
 
-  it('updates to landscape when window resizes to landscape', () => {
+  it('updates to landscape when orientation changes to landscape', () => {
     Object.defineProperty(window, 'innerWidth',  { writable: true, configurable: true, value: 390 })
     Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: 844 })
     const { result } = renderHook(() => useOrientation())
@@ -51,7 +51,7 @@ describe('useOrientation', () => {
     act(() => {
       Object.defineProperty(window, 'innerWidth',  { writable: true, configurable: true, value: 844 })
       Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: 390 })
-      window.dispatchEvent(new Event('resize'))
+      window.dispatchEvent(new Event('orientationchange'))
     })
     expect(result.current.isPortrait).toBe(false)
   })

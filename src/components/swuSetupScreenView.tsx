@@ -72,7 +72,7 @@ const selectStyle = (enabled: boolean, hasValue: boolean, small = false): React.
 const inputStyle = (hasValue: boolean, small = false): React.CSSProperties => ({
   flex: 1,
   padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
-  fontSize: small ? 'clamp(0.75rem, 1.8vw, 0.9rem)' : 'clamp(0.9rem, 3vw, 1.2rem)',
+  fontSize: small ? 'clamp(1rem, 1.8vw, 1.2rem)' : 'clamp(1rem, 3vw, 1.2rem)',
   ...(small && { height: 'max(44px, 8vh)' }),
   fontWeight: '300',
   background: 'transparent',
