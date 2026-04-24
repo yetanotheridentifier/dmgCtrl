@@ -32,6 +32,12 @@ interface Props {
   showModeSelector: boolean
   selectionMode: SelectionMode
   onModeChange: (mode: SelectionMode) => void
+  swudbUrl: string
+  swudbError: string | null
+  swudbDeckName: string | null
+  onSwudbChange: (text: string) => void
+  onSwudbFocus: () => void
+  onSwudbLoad: () => void
 }
 
 const labelStyle = (small = false): React.CSSProperties => ({
@@ -63,6 +69,45 @@ const selectStyle = (enabled: boolean, hasValue: boolean, small = false): React.
   width: '100%',
 })
 
+const inputStyle = (hasValue: boolean, small = false): React.CSSProperties => ({
+  flex: 1,
+  padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
+  fontSize: small ? 'clamp(0.75rem, 1.8vw, 0.9rem)' : 'clamp(0.9rem, 3vw, 1.2rem)',
+  ...(small && { height: 'max(44px, 8vh)' }),
+  fontWeight: '300',
+  background: 'transparent',
+  border: '2px solid var(--color-accent)',
+  borderRadius: '12px',
+  color: hasValue ? 'var(--color-text-primary)' : 'var(--color-text-disabled)',
+  outline: 'none',
+  boxSizing: 'border-box',
+  boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
+  width: '100%',
+  minWidth: 0,
+})
+
+const submitButtonStyle = (enabled: boolean, small = false): React.CSSProperties => ({
+  width: small ? '8vh' : '12vw',
+  minWidth: '44px',
+  minHeight: '44px',
+  flexShrink: 0,
+  padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
+  fontSize: small ? 'clamp(1rem, 3vh, 1.8rem)' : 'clamp(1rem, 3vw, 1.8rem)',
+  fontWeight: '300',
+  background: 'transparent',
+  color: 'var(--color-text-primary)',
+  border: '2px solid var(--color-text-primary)',
+  borderRadius: '12px',
+  cursor: enabled ? 'pointer' : 'not-allowed',
+  boxShadow: '0 0 12px rgba(255, 255, 255, 0.2)',
+  WebkitTapHighlightColor: 'transparent',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  opacity: enabled ? 1 : 0.4,
+  boxSizing: 'border-box',
+})
+
 function ModeSelector({ selectionMode, onModeChange, small = false }: {
   selectionMode: SelectionMode
   onModeChange: (mode: SelectionMode) => void
@@ -78,7 +123,7 @@ function ModeSelector({ selectionMode, onModeChange, small = false }: {
         style={selectStyle(true, true, small)}
       >
         <option value="base-selector" style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>Base Selector</option>
-        <option value="swudb-import" style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>Import from SWUDB</option>
+        <option value="swudb-import" style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>SWUDB Import</option>
       </select>
     </div>
   )
@@ -112,6 +157,12 @@ function SwuSetupScreenView({
   showModeSelector,
   selectionMode,
   onModeChange,
+  swudbUrl,
+  swudbError,
+  swudbDeckName,
+  onSwudbChange,
+  onSwudbFocus,
+  onSwudbLoad,
 }: Props) {
   const { isPortrait } = useOrientation()
 
@@ -151,20 +202,114 @@ function SwuSetupScreenView({
     </div>
   )
 
-  const swudbPlaceholder = (
-    <div
-      data-testid="swudb-import-placeholder"
-      style={{
-        color: 'var(--color-text-muted)',
-        fontWeight: '300',
-        fontSize: 'clamp(0.85rem, 3vw, 1rem)',
-        letterSpacing: '0.04em',
-        lineHeight: 1.6,
-      }}
-    >
-      SWUDB import coming soon.
-    </div>
-  )
+  const loadButtonEnabled = swudbUrl !== '' && swudbError === null
+
+  const swudbImportContent = (small = false) => {
+    const btnWidth = small ? 'max(10vh, 3.5rem)' : 'max(12vw, 5rem)'
+    return (
+      <>
+        {/* Row 1: URL input + Load button */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'stretch',
+          gap: '2vw',
+        }}>
+          <input
+            type="text"
+            value={swudbUrl}
+            onChange={e => onSwudbChange(e.target.value)}
+            onFocus={onSwudbFocus}
+            placeholder="Paste SWUDB link"
+            style={inputStyle(swudbUrl !== '', small)}
+          />
+          <button
+            data-testid="swudb-load-button"
+            onClick={onSwudbLoad}
+            disabled={!loadButtonEnabled}
+            style={{
+              width: btnWidth,
+              minWidth: '44px',
+              flexShrink: 0,
+              padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
+              fontSize: small ? 'clamp(0.75rem, 1.8vw, 0.9rem)' : 'clamp(0.9rem, 3vw, 1.2rem)',
+              fontWeight: '300',
+              background: 'transparent',
+              color: 'var(--color-text-primary)',
+              border: '2px solid var(--color-text-primary)',
+              borderRadius: '12px',
+              cursor: loadButtonEnabled ? 'pointer' : 'not-allowed',
+              opacity: loadButtonEnabled ? 1 : 0.4,
+              boxSizing: 'border-box',
+              WebkitTapHighlightColor: 'transparent',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            Load
+          </button>
+        </div>
+
+        {/* Error message */}
+        {swudbError && (
+          <p style={{
+            color: 'var(--color-error)',
+            fontWeight: '300',
+            fontSize: small ? 'clamp(0.75rem, 1.8vw, 0.9rem)' : 'clamp(0.9rem, 3vw, 1.1rem)',
+            margin: 0,
+          }}>
+            {swudbError}
+          </p>
+        )}
+
+        {/* Row 2: deck name + > button (appears after successful load) */}
+        {swudbDeckName !== null && (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: '2vw',
+          }}>
+            <span style={{
+              flex: 1,
+              color: 'var(--color-text-primary)',
+              fontWeight: '300',
+              fontSize: small ? 'clamp(0.75rem, 1.8vw, 0.9rem)' : 'clamp(0.9rem, 3vw, 1.2rem)',
+            }}>
+              {swudbDeckName}
+            </span>
+            <button
+              onClick={onSubmit}
+              style={{
+                width: btnWidth,
+                minWidth: '44px',
+                minHeight: '44px',
+                flexShrink: 0,
+                padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
+                fontSize: small ? 'clamp(1rem, 3vh, 1.8rem)' : 'clamp(1rem, 3vw, 1.8rem)',
+                fontWeight: '300',
+                background: 'transparent',
+                color: 'var(--color-text-primary)',
+                border: '2px solid var(--color-text-primary)',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                boxShadow: '0 0 12px rgba(255, 255, 255, 0.2)',
+                WebkitTapHighlightColor: 'transparent',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: 1,
+                boxSizing: 'border-box',
+              }}
+            >
+              &gt;
+            </button>
+          </div>
+        )}
+      </>
+    )
+  }
 
   const baseSelectorContent = (small = false) => (
     <>
@@ -259,27 +404,7 @@ function SwuSetupScreenView({
             <button
               onClick={onSubmit}
               disabled={!selectedBase}
-              style={{
-                width: small ? '8vh' : '12vw',
-                height: small ? '8vh' : '12vw',
-                minWidth: '44px',
-                minHeight: '44px',
-                flexShrink: 0,
-                padding: '0',
-                fontSize: small ? 'clamp(1rem, 3vh, 1.8rem)' : 'clamp(1rem, 3vw, 1.8rem)',
-                fontWeight: '300',
-                background: 'transparent',
-                color: 'var(--color-text-primary)',
-                border: '2px solid var(--color-text-primary)',
-                borderRadius: '12px',
-                cursor: !selectedBase ? 'not-allowed' : 'pointer',
-                boxShadow: '0 0 12px rgba(255, 255, 255, 0.2)',
-                WebkitTapHighlightColor: 'transparent',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                opacity: !selectedBase ? 0.4 : 1,
-              }}
+              style={submitButtonStyle(!!selectedBase, small)}
             >
               &gt;
             </button>
@@ -300,7 +425,7 @@ function SwuSetupScreenView({
           padding: '3vw 4vw 3vw',
         }}>
 
-          {/* Title row: full width, help button on the right */}
+          {/* Title row */}
           <div style={{
             display: 'flex',
             flexDirection: 'row',
@@ -343,7 +468,7 @@ function SwuSetupScreenView({
             </button>
           </div>
 
-          {/* Content row: selectors left, preview right */}
+          {/* Content row */}
           <div style={{
             flex: 1,
             display: 'flex',
@@ -353,7 +478,7 @@ function SwuSetupScreenView({
             gap: '3vw',
           }}>
 
-            {/* Left column: mode selector + base selectors */}
+            {/* Left column */}
             <div style={{
               flex: '0 0 45%',
               display: 'flex',
@@ -365,7 +490,10 @@ function SwuSetupScreenView({
                 <ModeSelector selectionMode={selectionMode} onModeChange={onModeChange} small />
               )}
 
-              {selectionMode === 'swudb-import' ? swudbPlaceholder : baseSelectorContent(true)}
+              {selectionMode === 'swudb-import'
+                ? swudbImportContent(true)
+                : baseSelectorContent(true)
+              }
 
               {selectionMode === 'base-selector' && hyperspaceToggle}
             </div>
@@ -402,8 +530,6 @@ function SwuSetupScreenView({
 
   return (
     <AppScreenLayout>
-
-      {/* Scrollable content */}
       <div style={{
         position: 'relative',
         zIndex: 1,
@@ -415,7 +541,7 @@ function SwuSetupScreenView({
         flex: 1,
       }}>
 
-        {/* Title row: app name + help button */}
+        {/* Title row */}
         <div style={{
           display: 'flex',
           flexDirection: 'row',
@@ -461,7 +587,7 @@ function SwuSetupScreenView({
           <ModeSelector selectionMode={selectionMode} onModeChange={onModeChange} />
         )}
 
-        {selectionMode === 'swudb-import' ? swudbPlaceholder : (
+        {selectionMode === 'swudb-import' ? swudbImportContent(false) : (
           <>
             {baseSelectorContent(false)}
 

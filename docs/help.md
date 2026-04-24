@@ -6,7 +6,7 @@ dmgCtrl is a damage tracker for Star Wars Unlimited. For the best experience, in
 
 ## Getting Started
 
-Open the app and you'll see the **Select Base** screen. Use the three dropdowns to find your base:
+Open the app and you'll see the setup screen. Use the three dropdowns to find your base:
 
 1. **Set**: choose the set your base is from
 2. **Aspect**: choose the base's aspect (Vigilance, Command, Aggression, Cunning, or None)

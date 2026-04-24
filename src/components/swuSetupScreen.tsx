@@ -4,6 +4,7 @@ import { useSwuSetup, InitialSelection } from '../hooks/useSwuSetup'
 import { useBaseArt } from '../hooks/useBaseArt'
 import SwuSetupScreenView from './swuSetupScreenView'
 import { FEATURE_SWUDB_IMPORT } from '../flags'
+import { normaliseSwudbUrl, isValidSwudbUrl } from '../utils/swudbUrl'
 
 export type SelectionMode = 'base-selector' | 'swudb-import'
 
@@ -26,6 +27,26 @@ function SwuSetupScreen({ onConfirm, onHelp, initialSelection }: Props) {
   const handleModeChange = (mode: SelectionMode) => {
     setSelectionMode(mode)
     localStorage.setItem('pref_selection_mode', mode)
+  }
+
+  const [swudbUrl, setSwudbUrl] = useState('')
+  const [swudbError, setSwudbError] = useState<string | null>(null)
+  const [swudbDeckName, setSwudbDeckName] = useState<string | null>(null)
+
+  const handleSwudbChange = (text: string) => {
+    setSwudbUrl(text)
+    const valid = isValidSwudbUrl(normaliseSwudbUrl(text))
+    setSwudbError(valid ? null : 'Not a SWUDB deck')
+    setSwudbDeckName(null)
+  }
+
+  const handleSwudbFocus = () => {
+    setSwudbError(null)
+  }
+
+  const handleSwudbLoad = () => {
+    // stub — replaced with real API call in #74
+    setSwudbDeckName('[dmgCtrl test - Do Not Delete] Unlisted deck')
   }
 
   const hasHyperspace = !!(
@@ -67,6 +88,12 @@ function SwuSetupScreen({ onConfirm, onHelp, initialSelection }: Props) {
       showModeSelector={FEATURE_SWUDB_IMPORT}
       selectionMode={selectionMode}
       onModeChange={handleModeChange}
+      swudbUrl={swudbUrl}
+      swudbError={swudbError}
+      swudbDeckName={swudbDeckName}
+      onSwudbChange={handleSwudbChange}
+      onSwudbFocus={handleSwudbFocus}
+      onSwudbLoad={handleSwudbLoad}
     />
   )
 }
