@@ -567,7 +567,7 @@ describe('SwuSetupScreen', () => {
     const modeSelect = screen.getByTestId('mode-select') as HTMLSelectElement
     const options = Array.from(modeSelect.querySelectorAll('option')).map(o => o.textContent)
     expect(options).toContain('Base Selector')
-    expect(options).toContain('Import from SWUDB')
+    expect(options).toContain('SWUDB Import')
   })
 
   it('Mode selector defaults to Base Selector', async () => {
@@ -585,12 +585,12 @@ describe('SwuSetupScreen', () => {
     expect(getBaseSelectors()).toHaveLength(0)
   })
 
-  it('Switching to SWUDB mode shows the import placeholder', async () => {
+  it('Switching to SWUDB mode shows the URL input', async () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
     await user.selectOptions(screen.getByTestId('mode-select'), 'swudb-import')
-    expect(screen.getByTestId('swudb-import-placeholder')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Paste SWUDB link')).toBeInTheDocument()
   })
 
   it('Switching back to Base Selector restores the dropdowns', async () => {
@@ -628,8 +628,99 @@ describe('SwuSetupScreen', () => {
       clear: vi.fn(),
     })
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
-    await waitFor(() => expect(screen.getByTestId('swudb-import-placeholder')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByPlaceholderText('Paste SWUDB link')).toBeInTheDocument())
     expect(getBaseSelectors()).toHaveLength(0)
+  })
+
+  // --- SWUDB import UI ---
+
+  const switchToSwudbMode = async (user: ReturnType<typeof userEvent.setup>) => {
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('mode-select'), 'swudb-import')
+  }
+
+  const inputUrl = (input: HTMLElement, text: string) => {
+    fireEvent.change(input, { target: { value: text } })
+  }
+
+  it('Load button renders in SWUDB mode and is initially disabled', async () => {
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    expect(screen.getByTestId('swudb-load-button')).toBeDisabled()
+  })
+
+  it('Entering a valid URL enables the Load button', async () => {
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/AbCdEf123456')
+    expect(screen.getByTestId('swudb-load-button')).not.toBeDisabled()
+  })
+
+  it('Entering an invalid URL disables the Load button', async () => {
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://example.com/not-a-deck')
+    expect(screen.getByTestId('swudb-load-button')).toBeDisabled()
+  })
+
+  it('Entering an invalid URL shows Not a SWUDB deck error', async () => {
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://example.com/not-a-deck')
+    expect(screen.getByText('Not a SWUDB deck')).toBeInTheDocument()
+  })
+
+  it('Entering a valid edit URL auto-normalises and enables the Load button', async () => {
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/edit/AbCdEf123456')
+    expect(screen.getByTestId('swudb-load-button')).not.toBeDisabled()
+  })
+
+  it('Entering a valid edit URL shows no error', async () => {
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/edit/AbCdEf123456')
+    expect(screen.queryByText('Not a SWUDB deck')).not.toBeInTheDocument()
+  })
+
+  it('Clicking Load shows the deck name', async () => {
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    expect(screen.getByText('[dmgCtrl test - Do Not Delete] Unlisted deck')).toBeInTheDocument()
+  })
+
+  it('Clicking Load shows the submit button', async () => {
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    expect(screen.getByText('>')).toBeInTheDocument()
+  })
+
+  it('Changing the URL after a load clears the deck name and submit button', async () => {
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    expect(screen.getByText('[dmgCtrl test - Do Not Delete] Unlisted deck')).toBeInTheDocument()
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQYx')
+    expect(screen.queryByText('[dmgCtrl test - Do Not Delete] Unlisted deck')).not.toBeInTheDocument()
+    expect(screen.queryByText('>')).not.toBeInTheDocument()
+  })
+
+  it('Focusing the input after an error clears the error but keeps the text', async () => {
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    const input = screen.getByPlaceholderText('Paste SWUDB link')
+    inputUrl(input, 'not-valid')
+    expect(screen.getByText('Not a SWUDB deck')).toBeInTheDocument()
+    await user.click(input)
+    expect(screen.queryByText('Not a SWUDB deck')).not.toBeInTheDocument()
+    expect((input as HTMLInputElement).value).toBe('not-valid')
   })
 
 })

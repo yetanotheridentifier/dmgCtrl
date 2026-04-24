@@ -20,6 +20,11 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 - Best of 1 / Best of 3 selector
 - Game counter within a match
 
+### SWUDB import (#74)
+- The URL input field, validation, and two-row layout are complete (#73)
+- Next: wire up the actual API call to `swudb.com/api/getDeckJson/{deckId}` and populate `swudbDeckName`
+- Behind `FEATURE_SWUDB_IMPORT` flag — set `VITE_FEATURE_SWUDB_IMPORT=true` in `.env.local` to test locally
+
 ### Future games
 - X-Wing (requires round tracker)
 - Kill Team (requires round tracker)
@@ -29,7 +34,6 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 ### Infrastructure
 - Settings screen (consolidate localStorage preferences)
 - Per-game theming (X-Wing aesthetic vs SWU aesthetic)
-- Deck lookup via swudb.com API (`/api/getDeckJson/{deckId}`)
 - Melee.gg integration (API exists, partially public)
 
 ---
@@ -54,3 +58,5 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 - Always use `npm test` to run tests — `npx vitest run` has a cache glitch causing spurious first-run failures
 - Run a filtered test summary in PowerShell: `npm test 2>&1 | Select-String "×|FAIL|Tests|Test Files"`
 - Run a single test file: `npm test -- src/test/swuSetupScreen.test.tsx`
+- Feature flag: set `VITE_FEATURE_SWUDB_IMPORT=true` in `.env.local` to enable the SWUDB import mode selector on the setup screen. All test files that render `SwuSetupScreen` must mock the flags module: `vi.mock('../flags', () => ({ FEATURE_SWUDB_IMPORT: true }))`
+- SWUDB deck URL format: `https://swudb.com/deck/<id>` where `<id>` is alphanumeric, variable length. Edit links (`/deck/edit/<id>`) are normalised automatically. Validation regex: `/^https:\/\/swudb\.com\/deck\/[A-Za-z0-9]+$/`

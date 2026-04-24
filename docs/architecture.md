@@ -5,7 +5,7 @@
 **dmgCtrl** is a mobile-first progressive web app (PWA) designed to assist players of card games with game-state tracking. The current implementation targets **Star Wars Unlimited (SWU)**.
 
 Core functionality:
-- **Base selection** — filter and choose a base card by set, aspect, and card identity
+- **Base selection** — filter and choose a base card by set, aspect, and card identity; or import a deck from swudb.com
 - **Damage tracking** — increment and decrement a counter against the base's HP to track remaining health
 - **Hyperspace art** — optionally display the premium "hyperspace" variant of a base card
 - **Epic Action reminder** — display the base's special ability for reference during play
@@ -48,8 +48,6 @@ The app is served at `/dmgCtrl/` and is designed to be added to an iOS home scre
 | CI/CD | GitHub Actions → GitHub Pages |
 | Markdown | Custom Vite plugin (`marked`) — transforms `.md` to HTML string exports |
 
-**Why inline styles?** The app has a small, tightly controlled component set. Inline styles avoid class-name collisions and make component props-driven styling straightforward. A theming system is a future consideration.
-
 ---
 
 ## 4. Application Architecture
@@ -61,7 +59,7 @@ App
 ├── SwuSetupScreen        (container)
 │   ├── useSwuSetup       (hook — filtering, auto-select, hyperspace preference)
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
-│   └── SwuSetupScreenView (view — renders selects, image preview, start button)
+│   └── SwuSetupScreenView (view — renders mode selector, selects, image preview, start button)
 │       └── ImagePreview  (pure view — renders art or error message from props)
 ├── SwuGameScreen         (container)
 │   ├── useSwuGame        (hook — damage counter)
@@ -86,6 +84,7 @@ This pattern keeps views thin and ensures logic is tested via hook and container
 | Layer | Responsibility | Location |
 |---|---|---|
 | Logic | State, derived values, side effects | `src/hooks/` |
+| Utilities | Pure functions with no React dependency | `src/utils/` |
 | Layout | Full-screen container, background, safe area | `src/components/layout/` |
 | Presentation | Rendering from props | View components in `src/components/` |
 
@@ -96,6 +95,7 @@ This pattern keeps views thin and ensures logic is tested via hook and container
 ```
 src/
   App.tsx                  Root component — screen routing and top-level state
+  flags.ts                 Build-time feature flags (read from Vite env variables)
   main.tsx                 Entry point
   index.css                Global reset, CSS custom property palette, help screen styles
   markdown.d.ts            Type declaration for .md imports
@@ -118,6 +118,9 @@ src/
     useSwuGame.ts           Damage counter
     useSwuSetup.ts          Setup screen logic — filtering, auto-select, hyperspace preference
 
+  utils/
+    swudbUrl.ts             Pure URL utilities: normaliseSwudbUrl, isValidSwudbUrl
+
   test/
     setup.ts                Vitest setup (jest-dom matchers)
     App.test.tsx            End-to-end navigation and feature tests
@@ -125,6 +128,7 @@ src/
     swuGameScreen.test.tsx  Game screen container tests
     swuHelpScreen.test.tsx  Help screen tests
     swuSetupScreen.test.tsx Setup screen container tests
+    swudbUrl.test.ts        SWUDB URL utility tests
     useBaseArt.test.ts      Art fallback chain hook tests
     useBases.test.ts        Data layer hook tests
     useOrientation.test.ts  Orientation hook tests
@@ -165,6 +169,8 @@ State is owned at the appropriate level:
 | Filter state (set, aspect, card) | `useSwuSetup` | Seeded from `initialSelection` on mount; local after that |
 | Damage counter | `useSwuGame` | Local to game screen |
 | Art fallback index, image load state | `useBaseArt` | Local to whichever screen called it; reset when base changes |
+| Selection mode (`base-selector` / `swudb-import`) | `SwuSetupScreen` / localStorage | Persisted under `pref_selection_mode`; defaults to `base-selector` |
+| SWUDB URL input, validation error, loaded deck name | `SwuSetupScreen` | Local; `swudbDeckName` remains `null` until a successful API load (wired in #74) |
 
 ### Example flow: Setup → Game
 
@@ -336,6 +342,43 @@ The app is designed for **landscape orientation**. `useOrientation` is used in t
 4. User selects a base → `selectedBase` is set
 5. On submit, `effectiveHyperspace` is computed: `useHyperspace || (normalImageFailed && !!(selectedBase.hyperspaceArtHiRes || selectedBase.hyperspaceArt))`. If the standard art has already failed on the setup screen, the game screen automatically uses hyperspace art.
 
+### Base input mode selector and SWUDB import
+
+The setup screen supports two input modes, controlled by a `selectionMode` state (`'base-selector'` | `'swudb-import'`). The active mode is persisted to localStorage under `pref_selection_mode`.
+
+**Base Selector mode** is the default. The three cascading dropdowns (set → aspect → base) are shown.
+
+**Import from SWUDB mode** shows a URL input field and a two-row layout:
+- Row 1 (always visible): URL text input + Load button
+- Row 2 (visible only after a successful deck load): deck name + `>` submit button
+
+The Load and `>` buttons are stacked vertically and share the same width so they align.
+
+URL validation is handled by pure utility functions in `src/utils/swudbUrl.ts`:
+
+```typescript
+normaliseSwudbUrl(url)  // converts /deck/edit/<id> → /deck/<id>
+isValidSwudbUrl(url)    // tests against /^https:\/\/swudb\.com\/deck\/[A-Za-z0-9]+$/
+```
+
+SWUDB deck IDs are alphanumeric and variable length (observed range: 9–13 characters). The URL is validated on every change; edit URLs are normalised before validation so they pass. An error message appears below the URL field for invalid input; focusing the field clears the error.
+
+The SWUDB import mode is gated behind the `FEATURE_SWUDB_IMPORT` flag in `src/flags.ts`. The mode selector and import UI are only rendered when the flag is `true`. API integration (the actual deck load) is implemented in #74; the Load button is wired up as a stub in #73.
+
+### Feature flags
+
+Build-time feature flags live in `src/flags.ts`:
+
+```typescript
+export const FEATURE_SWUDB_IMPORT = import.meta.env.VITE_FEATURE_SWUDB_IMPORT === 'true'
+```
+
+Flags are read from Vite environment variables. Set `VITE_FEATURE_SWUDB_IMPORT=true` in `.env.local` to enable locally. `.env.local` is gitignored and not present in CI — all test files that render `SwuSetupScreen` must mock the flags module explicitly:
+
+```typescript
+vi.mock('../flags', () => ({ FEATURE_SWUDB_IMPORT: true }))
+```
+
 ### Game screen
 
 1. `useBaseArt(base, useHyperspace)` manages the ordered fallback chain and image load state
@@ -346,10 +389,10 @@ The app is designed for **landscape orientation**. `useOrientation` is used in t
 ### Adding a new feature
 
 When adding a new feature:
-1. Define the logic in a hook (`src/hooks/`)
+1. Define the logic in a hook (`src/hooks/`) or pure utility (`src/utils/`)
 2. Add the hook to the relevant container
 3. Pass derived state and handlers as props to the view
-4. Write hook tests first, then container/view tests
+4. Write hook/utility tests first, then container/view tests
 
 Avoid putting logic directly in view components. If a view needs to compute something non-trivial, move that computation to the container or a hook.
 
@@ -424,6 +467,7 @@ Tests verify behaviour, not implementation. Hook tests cover logic in isolation;
 | Type | Location | Tools |
 |---|---|---|
 | Hook unit tests | `src/test/use*.test.ts` | Vitest, `renderHook`, `act` |
+| Utility unit tests | `src/test/*.test.ts` | Vitest |
 | Component tests | `src/test/*.test.tsx` | Vitest, React Testing Library, `userEvent` |
 | End-to-end (within app) | `src/test/App.test.tsx` | Same |
 
@@ -431,6 +475,7 @@ Tests verify behaviour, not implementation. Hook tests cover logic in isolation;
 
 - External APIs are mocked with `vi.stubGlobal('fetch', ...)` — no real network calls in tests
 - localStorage is mocked with `vi.stubGlobal('localStorage', ...)` to test caching paths
+- Feature flags are mocked with `vi.mock('../flags', () => ({ ... }))` — `.env.local` is not present in CI
 - All mocks are torn down with `vi.unstubAllGlobals()` in `afterEach`
 
 ### Running tests
@@ -445,6 +490,7 @@ Always use `npm test`. The `npx vitest run` form has a cache glitch that causes 
 ### Coverage expectations
 
 - All hooks must have unit tests
+- All utility functions must have unit tests
 - All screens must have container/view tests covering primary interaction flows
 - New features must include tests before merging
 
@@ -512,3 +558,5 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | **PWA** | Progressive Web App — a web app that can be installed on a device and used offline. |
 | **SOR** | Spark of Rebellion — the first set of Star Wars Unlimited cards. |
 | **LAW** | Legends of the Alliance — a later set of Star Wars Unlimited cards. |
+| **SWUDB** | swudb.com — a third-party Star Wars Unlimited database site. Deck lists can be imported via a URL of the form `https://swudb.com/deck/<id>`. |
+| **Feature flag** | A build-time boolean in `src/flags.ts` read from a Vite env variable. Used to gate in-development features so they can be merged to `main` without being visible in production. |
