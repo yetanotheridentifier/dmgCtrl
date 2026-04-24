@@ -4,8 +4,6 @@ import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { Base } from '../hooks/useBases'
 
-vi.mock('../flags', () => ({ FEATURE_SWUDB_IMPORT: true }))
-
 const mockBases: Base[] = [
   {
     set: 'SOR',
@@ -54,8 +52,8 @@ const mockSwuDbResponse = {
   }))
 }
 
-// When the SWUDB feature flag is enabled, the mode selector adds a fourth combobox.
-// Slice past it to get the three base-selection dropdowns (set, aspect, base).
+// The mode selector is always present; filter it out to get the three
+// base-selection dropdowns (set, aspect, base).
 const getBaseSelectors = () => {
   const all = screen.getAllByRole('combobox')
   const modeSelect = screen.queryByTestId('mode-select')
@@ -135,7 +133,7 @@ describe('App', () => {
     render(<App />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
     await user.click(screen.getByText('>'))
-    expect(screen.getByText('Base Input Mode:')).toBeInTheDocument()
+    expect(screen.getByText('Input Mode:')).toBeInTheDocument()
     expect(screen.queryByText(/Remaining:/)).not.toBeInTheDocument()
   })
 
@@ -148,7 +146,7 @@ describe('App', () => {
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
     await user.click(screen.getByText('>'))
     await user.click(screen.getByText('<'))
-    expect(screen.getByText('Base Input Mode:')).toBeInTheDocument()
+    expect(screen.getByText('Input Mode:')).toBeInTheDocument()
   })
 
   // --- Back navigation retains selection ---
@@ -259,7 +257,7 @@ describe('App', () => {
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
     await user.click(screen.getByText('?'))
     await user.click(screen.getByRole('button', { name: '<' }))
-    expect(screen.getByText('Base Input Mode:')).toBeInTheDocument()
+    expect(screen.getByText('Input Mode:')).toBeInTheDocument()
   })
 
   it('Clicking back from help returns to game when help was opened from game', async () => {

@@ -4,8 +4,6 @@ import userEvent from '@testing-library/user-event'
 import SwuSetupScreen from '../components/swuSetupScreen'
 import { Base } from '../hooks/useBases'
 
-vi.mock('../flags', () => ({ FEATURE_SWUDB_IMPORT: true }))
-
 const mockBases: Base[] = [
   {
     set: 'SOR',
@@ -96,9 +94,17 @@ const mockSwuDbResponse = {
   }))
 }
 
-// Helper: the base selectors are the comboboxes after the mode selector dropdown.
-// With FEATURE_SWUDB_IMPORT enabled, getAllByRole('combobox') returns
-// [mode-select, set-select, aspect-select, base-select].
+// SWUDB deck response — base JTL-030 matches mockBases above
+const mockSwudbDeckSuccess = {
+  deckName: '[dmgCtrl test - Do Not Delete] Unlisted deck',
+  base: {
+    defaultExpansionAbbreviation: 'JTL',
+    defaultCardNumber: '030',
+  },
+}
+
+// Helper: the mode selector is the first combobox; slice past it to get
+// [set-select, aspect-select, base-select].
 const getBaseSelectors = () => screen.getAllByRole('combobox').slice(1)
 
 beforeEach(() => {
@@ -113,6 +119,9 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
     if (url.includes('swuapi.com')) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(swuApiResponse) })
+    }
+    if (url.includes('/swudb/deck/')) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwudbDeckSuccess) })
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) })
   }))
@@ -136,7 +145,7 @@ describe('SwuSetupScreen', () => {
   it('Renders the app title and mode selector', () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByText('dmgCtrl')).toBeInTheDocument()
-    expect(screen.getByText('Base Input Mode:')).toBeInTheDocument()
+    expect(screen.getByText('Input Mode:')).toBeInTheDocument()
   })
 
   it('Shows loading state initially', () => {
@@ -525,7 +534,7 @@ describe('SwuSetupScreen', () => {
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(812)
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByText('dmgCtrl')).toBeInTheDocument()
-    expect(screen.getByText('Base Input Mode:')).toBeInTheDocument()
+    expect(screen.getByText('Input Mode:')).toBeInTheDocument()
   })
 
   it('Portrait base options also exclude subtitle', async () => {
@@ -664,11 +673,11 @@ describe('SwuSetupScreen', () => {
     expect(screen.getByTestId('swudb-load-button')).toBeDisabled()
   })
 
-  it('Entering an invalid URL shows Not a SWUDB deck error', async () => {
+  it('Entering an invalid URL shows Invalid deck URL error', async () => {
     const user = userEvent.setup()
     await switchToSwudbMode(user)
     inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://example.com/not-a-deck')
-    expect(screen.getByText('Not a SWUDB deck')).toBeInTheDocument()
+    expect(screen.getByText('Invalid deck URL')).toBeInTheDocument()
   })
 
   it('Entering a valid edit URL auto-normalises and enables the Load button', async () => {
@@ -682,7 +691,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     await switchToSwudbMode(user)
     inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/edit/AbCdEf123456')
-    expect(screen.queryByText('Not a SWUDB deck')).not.toBeInTheDocument()
+    expect(screen.queryByText('Invalid deck URL')).not.toBeInTheDocument()
   })
 
   it('Clicking Load shows the deck name', async () => {
@@ -690,7 +699,7 @@ describe('SwuSetupScreen', () => {
     await switchToSwudbMode(user)
     inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
     await user.click(screen.getByTestId('swudb-load-button'))
-    expect(screen.getByText('[dmgCtrl test - Do Not Delete] Unlisted deck')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('[dmgCtrl test - Do Not Delete] Unlisted deck')).toBeInTheDocument())
   })
 
   it('Clicking Load shows the submit button', async () => {
@@ -698,7 +707,91 @@ describe('SwuSetupScreen', () => {
     await switchToSwudbMode(user)
     inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
     await user.click(screen.getByTestId('swudb-load-button'))
-    expect(screen.getByText('>')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('>')).toBeInTheDocument())
+  })
+
+  it('Load button shows ... while loading', async () => {
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = input.toString()
+      if (url.includes('/swudb/deck/')) return new Promise(() => {})
+      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
+    })
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    user.click(screen.getByTestId('swudb-load-button'))
+    await waitFor(() => expect(screen.getByTestId('swudb-load-button')).toHaveTextContent('...'))
+  })
+
+  it('Clicking Load on an inaccessible deck shows Deck not accessible', async () => {
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = input.toString()
+      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: false, status: 404 } as any)
+      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
+    })
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    await waitFor(() => expect(screen.getByText('Deck not accessible')).toBeInTheDocument())
+  })
+
+  it('Clicking Load shows Base not recognised when base is not in database', async () => {
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = input.toString()
+      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Future Deck', base: { defaultExpansionAbbreviation: 'NEW', defaultCardNumber: '001' } }) } as any)
+      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
+    })
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    await waitFor(() => expect(screen.getByText('Base not recognised')).toBeInTheDocument())
+  })
+
+  it('Deck name is still shown when base is not recognised', async () => {
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = input.toString()
+      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Future Deck', base: { defaultExpansionAbbreviation: 'NEW', defaultCardNumber: '001' } }) } as any)
+      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
+    })
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    await waitFor(() => expect(screen.getByText('Future Deck')).toBeInTheDocument())
+  })
+
+  it('Submit button is disabled when base is not recognised', async () => {
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = input.toString()
+      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Future Deck', base: { defaultExpansionAbbreviation: 'NEW', defaultCardNumber: '001' } }) } as any)
+      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
+    })
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    await waitFor(() => expect(screen.getByText('>')).toBeInTheDocument())
+    expect(screen.getByText('>')).toBeDisabled()
+  })
+
+  it('Clicking > after successful load calls onConfirm with the correct base', async () => {
+    const onConfirm = vi.fn()
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={onConfirm} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('mode-select'), 'swudb-import')
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    await waitFor(() => expect(screen.getByText('>')).not.toBeDisabled())
+    await user.click(screen.getByText('>'))
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ set: 'JTL', number: '030' }), false)
   })
 
   it('Changing the URL after a load clears the deck name and submit button', async () => {
@@ -706,7 +799,7 @@ describe('SwuSetupScreen', () => {
     await switchToSwudbMode(user)
     inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
     await user.click(screen.getByTestId('swudb-load-button'))
-    expect(screen.getByText('[dmgCtrl test - Do Not Delete] Unlisted deck')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('[dmgCtrl test - Do Not Delete] Unlisted deck')).toBeInTheDocument())
     inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQYx')
     expect(screen.queryByText('[dmgCtrl test - Do Not Delete] Unlisted deck')).not.toBeInTheDocument()
     expect(screen.queryByText('>')).not.toBeInTheDocument()
@@ -717,10 +810,45 @@ describe('SwuSetupScreen', () => {
     await switchToSwudbMode(user)
     const input = screen.getByPlaceholderText('Paste SWUDB link')
     inputUrl(input, 'not-valid')
-    expect(screen.getByText('Not a SWUDB deck')).toBeInTheDocument()
+    expect(screen.getByText('Invalid deck URL')).toBeInTheDocument()
     await user.click(input)
-    expect(screen.queryByText('Not a SWUDB deck')).not.toBeInTheDocument()
+    expect(screen.queryByText('Invalid deck URL')).not.toBeInTheDocument()
     expect((input as HTMLInputElement).value).toBe('not-valid')
+  })
+
+  // --- SWUDB import: preview and hyperspace ---
+
+  it('Shows base preview image in SWUDB import mode after successful load', async () => {
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    await waitFor(() => expect(screen.getByAltText('Lake Country')).toBeInTheDocument())
+  })
+
+  it('Shows hyperspace toggle in SWUDB import mode when base has hyperspace art', async () => {
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = input.toString()
+      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Test Deck', base: { defaultExpansionAbbreviation: 'SOR', defaultCardNumber: '026' } }) } as any)
+      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
+    })
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    await waitFor(() => expect(screen.getByAltText('Catacombs of Cadera')).toBeInTheDocument())
+    fireEvent.load(screen.getByAltText('Catacombs of Cadera'))
+    expect(screen.getByLabelText('Hyperspace variant')).toBeInTheDocument()
+  })
+
+  it('Does not show hyperspace toggle in SWUDB import mode for a base without hyperspace art', async () => {
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    await waitFor(() => expect(screen.getByAltText('Lake Country')).toBeInTheDocument())
+    expect(screen.queryByLabelText('Hyperspace variant')).not.toBeInTheDocument()
   })
 
 })

@@ -3,8 +3,7 @@ import { Base } from '../hooks/useBases'
 import { useSwuSetup, InitialSelection } from '../hooks/useSwuSetup'
 import { useBaseArt } from '../hooks/useBaseArt'
 import SwuSetupScreenView from './swuSetupScreenView'
-import { FEATURE_SWUDB_IMPORT } from '../flags'
-import { normaliseSwudbUrl, isValidSwudbUrl } from '../utils/swudbUrl'
+import { normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck } from '../utils/swudbUrl'
 
 export type SelectionMode = 'base-selector' | 'swudb-import'
 
@@ -19,7 +18,6 @@ function SwuSetupScreen({ onConfirm, onHelp, initialSelection }: Props) {
   const art = useBaseArt(setup.selectedBase, setup.useHyperspace)
 
   const [selectionMode, setSelectionMode] = useState<SelectionMode>(() => {
-    if (!FEATURE_SWUDB_IMPORT) return 'base-selector'
     const saved = localStorage.getItem('pref_selection_mode')
     return saved === 'swudb-import' ? 'swudb-import' : 'base-selector'
   })
@@ -32,11 +30,12 @@ function SwuSetupScreen({ onConfirm, onHelp, initialSelection }: Props) {
   const [swudbUrl, setSwudbUrl] = useState('')
   const [swudbError, setSwudbError] = useState<string | null>(null)
   const [swudbDeckName, setSwudbDeckName] = useState<string | null>(null)
+  const [swudbLoading, setSwudbLoading] = useState(false)
 
   const handleSwudbChange = (text: string) => {
     setSwudbUrl(text)
     const valid = isValidSwudbUrl(normaliseSwudbUrl(text))
-    setSwudbError(valid ? null : 'Not a SWUDB deck')
+    setSwudbError(valid ? null : 'Invalid deck URL')
     setSwudbDeckName(null)
   }
 
@@ -44,9 +43,28 @@ function SwuSetupScreen({ onConfirm, onHelp, initialSelection }: Props) {
     setSwudbError(null)
   }
 
-  const handleSwudbLoad = () => {
-    // stub — replaced with real API call in #74
-    setSwudbDeckName('[dmgCtrl test - Do Not Delete] Unlisted deck')
+  const handleSwudbLoad = async () => {
+    const normalised = normaliseSwudbUrl(swudbUrl)
+    if (!isValidSwudbUrl(normalised)) {
+      setSwudbError('Invalid deck URL')
+      return
+    }
+    const deckId = normalised.replace('https://swudb.com/deck/', '')
+    setSwudbLoading(true)
+    setSwudbError(null)
+    setSwudbDeckName(null)
+    try {
+      const { deckName, baseKey } = await fetchSwudbDeck(deckId)
+      setSwudbDeckName(deckName)
+      const found = setup.selectBaseByKey(baseKey)
+      if (!found) {
+        setSwudbError('Base not recognised')
+      }
+    } catch {
+      setSwudbError('Deck not accessible')
+    } finally {
+      setSwudbLoading(false)
+    }
   }
 
   const hasHyperspace = !!(
@@ -85,12 +103,12 @@ function SwuSetupScreen({ onConfirm, onHelp, initialSelection }: Props) {
       onHyperspaceToggle={setup.handleHyperspaceToggle}
       onSubmit={handleSubmit}
       onHelp={onHelp}
-      showModeSelector={FEATURE_SWUDB_IMPORT}
       selectionMode={selectionMode}
       onModeChange={handleModeChange}
       swudbUrl={swudbUrl}
       swudbError={swudbError}
       swudbDeckName={swudbDeckName}
+      swudbLoading={swudbLoading}
       onSwudbChange={handleSwudbChange}
       onSwudbFocus={handleSwudbFocus}
       onSwudbLoad={handleSwudbLoad}

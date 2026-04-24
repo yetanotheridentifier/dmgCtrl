@@ -29,12 +29,12 @@ interface Props {
   onHyperspaceToggle: (value: boolean) => void
   onSubmit: () => void
   onHelp: () => void
-  showModeSelector: boolean
   selectionMode: SelectionMode
   onModeChange: (mode: SelectionMode) => void
   swudbUrl: string
   swudbError: string | null
   swudbDeckName: string | null
+  swudbLoading: boolean
   onSwudbChange: (text: string) => void
   onSwudbFocus: () => void
   onSwudbLoad: () => void
@@ -115,7 +115,7 @@ function ModeSelector({ selectionMode, onModeChange, small = false }: {
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
-      <label style={labelStyle(small)}>Base Input Mode:</label>
+      <label style={labelStyle(small)}>Input Mode:</label>
       <select
         value={selectionMode}
         onChange={e => onModeChange(e.target.value as SelectionMode)}
@@ -154,12 +154,12 @@ function SwuSetupScreenView({
   onHyperspaceToggle,
   onSubmit,
   onHelp,
-  showModeSelector,
   selectionMode,
   onModeChange,
   swudbUrl,
   swudbError,
   swudbDeckName,
+  swudbLoading,
   onSwudbChange,
   onSwudbFocus,
   onSwudbLoad,
@@ -202,7 +202,22 @@ function SwuSetupScreenView({
     </div>
   )
 
-  const loadButtonEnabled = swudbUrl !== '' && swudbError === null
+  const loadButtonEnabled = swudbUrl !== '' && swudbError === null && !swudbLoading
+  const submitEnabled = !!selectedBase
+
+  const imagePreview = (selectedBase: Base) => (
+    <ImagePreview
+      base={selectedBase}
+      src={artSrc}
+      isHyperspace={artIsHyperspace}
+      allFailed={artAllFailed}
+      imageLoaded={artImageLoaded}
+      rotationDeg={artRotationDeg}
+      useHyperspace={useHyperspace}
+      onLoad={onArtLoad}
+      onError={onArtError}
+    />
+  )
 
   const swudbImportContent = (small = false) => {
     const btnWidth = small ? 'max(10vh, 3.5rem)' : 'max(12vw, 5rem)'
@@ -247,7 +262,7 @@ function SwuSetupScreenView({
               justifyContent: 'center',
             }}
           >
-            Load
+            {swudbLoading ? '...' : 'Load'}
           </button>
         </div>
 
@@ -263,7 +278,7 @@ function SwuSetupScreenView({
           </p>
         )}
 
-        {/* Row 2: deck name + > button (appears after successful load) */}
+        {/* Row 2: deck name + > button (appears after load attempt) */}
         {swudbDeckName !== null && (
           <div style={{
             display: 'flex',
@@ -281,6 +296,7 @@ function SwuSetupScreenView({
             </span>
             <button
               onClick={onSubmit}
+              disabled={!submitEnabled}
               style={{
                 width: btnWidth,
                 minWidth: '44px',
@@ -293,13 +309,13 @@ function SwuSetupScreenView({
                 color: 'var(--color-text-primary)',
                 border: '2px solid var(--color-text-primary)',
                 borderRadius: '12px',
-                cursor: 'pointer',
+                cursor: submitEnabled ? 'pointer' : 'not-allowed',
                 boxShadow: '0 0 12px rgba(255, 255, 255, 0.2)',
                 WebkitTapHighlightColor: 'transparent',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                opacity: 1,
+                opacity: submitEnabled ? 1 : 0.4,
                 boxSizing: 'border-box',
               }}
             >
@@ -487,16 +503,14 @@ function SwuSetupScreenView({
               gap: '1.5vh',
               padding: '14px',
             }}>
-              {showModeSelector && (
-                <ModeSelector selectionMode={selectionMode} onModeChange={onModeChange} small />
-              )}
+              <ModeSelector selectionMode={selectionMode} onModeChange={onModeChange} small />
 
               {selectionMode === 'swudb-import'
                 ? swudbImportContent(true)
                 : baseSelectorContent(true)
               }
 
-              {selectionMode === 'base-selector' && hyperspaceToggle}
+              {hyperspaceToggle}
             </div>
 
             {/* Right column: preview */}
@@ -506,19 +520,9 @@ function SwuSetupScreenView({
               alignItems: 'flex-start',
               justifyContent: 'flex-end',
             }}>
-              {selectedBase && selectionMode === 'base-selector' && (
+              {selectedBase && (
                 <div style={{ width: '100%' }}>
-                  <ImagePreview
-                    base={selectedBase}
-                    src={artSrc}
-                    isHyperspace={artIsHyperspace}
-                    allFailed={artAllFailed}
-                    imageLoaded={artImageLoaded}
-                    rotationDeg={artRotationDeg}
-                    useHyperspace={useHyperspace}
-                    onLoad={onArtLoad}
-                    onError={onArtError}
-                  />
+                  {imagePreview(selectedBase)}
                 </div>
               )}
             </div>
@@ -584,14 +588,11 @@ function SwuSetupScreenView({
           </button>
         </div>
 
-        {showModeSelector && (
-          <ModeSelector selectionMode={selectionMode} onModeChange={onModeChange} />
-        )}
+        <ModeSelector selectionMode={selectionMode} onModeChange={onModeChange} />
 
-        {selectionMode === 'swudb-import' ? swudbImportContent(false) : (
+        {selectionMode === 'swudb-import' ? (
           <>
-            {baseSelectorContent(false)}
-
+            {swudbImportContent(false)}
             {selectedBase && (
               <div style={{
                 width: '100%',
@@ -599,18 +600,22 @@ function SwuSetupScreenView({
                 flexDirection: 'column',
                 gap: '1vh',
               }}>
-                <ImagePreview
-                  base={selectedBase}
-                  src={artSrc}
-                  isHyperspace={artIsHyperspace}
-                  allFailed={artAllFailed}
-                  imageLoaded={artImageLoaded}
-                  rotationDeg={artRotationDeg}
-                  useHyperspace={useHyperspace}
-                  onLoad={onArtLoad}
-                  onError={onArtError}
-                />
-
+                {imagePreview(selectedBase)}
+                {hyperspaceToggle}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {baseSelectorContent(false)}
+            {selectedBase && (
+              <div style={{
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1vh',
+              }}>
+                {imagePreview(selectedBase)}
                 {hyperspaceToggle}
               </div>
             )}

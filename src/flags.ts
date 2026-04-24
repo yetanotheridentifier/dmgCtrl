@@ -1,1 +1,0 @@
-export const FEATURE_SWUDB_IMPORT = import.meta.env.VITE_FEATURE_SWUDB_IMPORT === 'true'

@@ -4,7 +4,7 @@ const PROXY_URL = 'https://swu-proxy.dmgctrl.workers.dev'
 const SWUAPI_URL = 'https://api.swuapi.com'
 const SWU_DB_CDN = 'https://cdn.swu-db.com/images/cards'
 const CACHE_KEY = 'swu_bases_cache'
-const CACHE_TTL = 7 * 24 * 60 * 60 * 1000
+const CACHE_TTL = 24 * 60 * 60 * 1000
 
 export interface Base {
   set: string

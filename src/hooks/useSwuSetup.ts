@@ -94,6 +94,16 @@ export function useSwuSetup(
     onConfirm(selectedBase, effectiveHyperspace)
   }
 
+  const selectBaseByKey = (key: string): boolean => {
+    const base = bases.find(b => `${b.set}-${b.number}` === key)
+    if (!base) return false
+    const aspect = base.aspects.length === 0 ? 'None' : base.aspects[0]
+    setSelectedSet(base.set)
+    setSelectedAspect(aspect)
+    setSelectedKey(key)
+    return true
+  }
+
   return {
     loading,
     error,
@@ -110,5 +120,6 @@ export function useSwuSetup(
     handleKeyChange,
     handleHyperspaceToggle,
     handleSubmit,
+    selectBaseByKey,
   }
 }

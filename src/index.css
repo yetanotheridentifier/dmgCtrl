@@ -80,6 +80,14 @@ input[type=number] {
   margin-top: 0;
 }
 
+.help-content h3 {
+  color: var(--color-accent);
+  font-weight: 300;
+  font-size: clamp(0.9rem, 4vw, 1.1rem);
+  letter-spacing: 0.05em;
+  margin: 1.2em 0 0.5em 0;
+}
+
 .help-content p {
   color: var(--color-text-body);
   font-weight: 300;
