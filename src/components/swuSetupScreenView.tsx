@@ -29,7 +29,6 @@ interface Props {
   onHyperspaceToggle: (value: boolean) => void
   onSubmit: () => void
   onHelp: () => void
-  showModeSelector: boolean
   selectionMode: SelectionMode
   onModeChange: (mode: SelectionMode) => void
   swudbUrl: string
@@ -155,7 +154,6 @@ function SwuSetupScreenView({
   onHyperspaceToggle,
   onSubmit,
   onHelp,
-  showModeSelector,
   selectionMode,
   onModeChange,
   swudbUrl,
@@ -505,9 +503,7 @@ function SwuSetupScreenView({
               gap: '1.5vh',
               padding: '14px',
             }}>
-              {showModeSelector && (
-                <ModeSelector selectionMode={selectionMode} onModeChange={onModeChange} small />
-              )}
+              <ModeSelector selectionMode={selectionMode} onModeChange={onModeChange} small />
 
               {selectionMode === 'swudb-import'
                 ? swudbImportContent(true)
@@ -592,9 +588,7 @@ function SwuSetupScreenView({
           </button>
         </div>
 
-        {showModeSelector && (
-          <ModeSelector selectionMode={selectionMode} onModeChange={onModeChange} />
-        )}
+        <ModeSelector selectionMode={selectionMode} onModeChange={onModeChange} />
 
         {selectionMode === 'swudb-import' ? (
           <>

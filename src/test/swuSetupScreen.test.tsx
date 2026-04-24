@@ -4,8 +4,6 @@ import userEvent from '@testing-library/user-event'
 import SwuSetupScreen from '../components/swuSetupScreen'
 import { Base } from '../hooks/useBases'
 
-vi.mock('../flags', () => ({ FEATURE_SWUDB_IMPORT: true }))
-
 const mockBases: Base[] = [
   {
     set: 'SOR',
@@ -105,9 +103,8 @@ const mockSwudbDeckSuccess = {
   },
 }
 
-// Helper: the base selectors are the comboboxes after the mode selector dropdown.
-// With FEATURE_SWUDB_IMPORT enabled, getAllByRole('combobox') returns
-// [mode-select, set-select, aspect-select, base-select].
+// Helper: the mode selector is the first combobox; slice past it to get
+// [set-select, aspect-select, base-select].
 const getBaseSelectors = () => screen.getAllByRole('combobox').slice(1)
 
 beforeEach(() => {

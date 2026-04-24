@@ -4,8 +4,6 @@ import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { Base } from '../hooks/useBases'
 
-vi.mock('../flags', () => ({ FEATURE_SWUDB_IMPORT: true }))
-
 const mockBases: Base[] = [
   {
     set: 'SOR',
@@ -54,8 +52,8 @@ const mockSwuDbResponse = {
   }))
 }
 
-// When the SWUDB feature flag is enabled, the mode selector adds a fourth combobox.
-// Slice past it to get the three base-selection dropdowns (set, aspect, base).
+// The mode selector is always present; filter it out to get the three
+// base-selection dropdowns (set, aspect, base).
 const getBaseSelectors = () => {
   const all = screen.getAllByRole('combobox')
   const modeSelect = screen.queryByTestId('mode-select')

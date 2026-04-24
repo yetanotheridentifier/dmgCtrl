@@ -95,7 +95,6 @@ This pattern keeps views thin and ensures logic is tested via hook and container
 ```
 src/
   App.tsx                  Root component — screen routing and top-level state
-  flags.ts                 Build-time feature flags (read from Vite env variables)
   main.tsx                 Entry point
   index.css                Global reset, CSS custom property palette, help screen styles
   markdown.d.ts            Type declaration for .md imports
@@ -114,12 +113,12 @@ src/
   hooks/
     useBaseArt.ts           Ordered art fallback chain shared by setup and game screens
     useBases.ts             Fetches and caches the full list of Base cards
-    useOrientation.ts       Detects portrait vs landscape via resize event
+    useOrientation.ts       Detects portrait vs landscape via orientationchange event
     useSwuGame.ts           Damage counter
     useSwuSetup.ts          Setup screen logic — filtering, auto-select, hyperspace preference
 
   utils/
-    swudbUrl.ts             Pure URL utilities: normaliseSwudbUrl, isValidSwudbUrl
+    swudbUrl.ts             SWUDB URL utilities: normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck
 
   test/
     setup.ts                Vitest setup (jest-dom matchers)
@@ -170,7 +169,7 @@ State is owned at the appropriate level:
 | Damage counter | `useSwuGame` | Local to game screen |
 | Art fallback index, image load state | `useBaseArt` | Local to whichever screen called it; reset when base changes |
 | Selection mode (`base-selector` / `swudb-import`) | `SwuSetupScreen` / localStorage | Persisted under `pref_selection_mode`; defaults to `base-selector` |
-| SWUDB URL input, validation error, loaded deck name | `SwuSetupScreen` | Local; `swudbDeckName` remains `null` until a successful API load (wired in #74) |
+| SWUDB URL input, validation error, deck name, loading state | `SwuSetupScreen` | Local; `swudbDeckName` remains `null` until a successful API load |
 
 ### Example flow: Setup → Game
 
@@ -265,7 +264,7 @@ The setup screen uses `normalFailed`, `hyperspaceFailed`, and `imageLoaded` to c
 
 ### Caching
 
-Fetched and merged data is written to localStorage under key `swu_bases_cache` with a `lastChecked` timestamp. On subsequent loads, if the cache age is less than **7 days**, the fetch is skipped and the cached `Base[]` is returned directly.
+Fetched and merged data is written to localStorage under key `swu_bases_cache` with a `lastChecked` timestamp. On subsequent loads, if the cache age is less than **24 hours**, the fetch is skipped and the cached `Base[]` is returned directly.
 
 If the cache is stale and a fresh fetch fails (network error), the stale cached data is served rather than showing an error — the app remains usable offline or on poor connections. An error is only shown if there is no cache at all and the fetch fails.
 
@@ -342,42 +341,36 @@ The app is designed for **landscape orientation**. `useOrientation` is used in t
 4. User selects a base → `selectedBase` is set
 5. On submit, `effectiveHyperspace` is computed: `useHyperspace || (normalImageFailed && !!(selectedBase.hyperspaceArtHiRes || selectedBase.hyperspaceArt))`. If the standard art has already failed on the setup screen, the game screen automatically uses hyperspace art.
 
-### Base input mode selector and SWUDB import
+### Input mode selector and SWUDB import
 
-The setup screen supports two input modes, controlled by a `selectionMode` state (`'base-selector'` | `'swudb-import'`). The active mode is persisted to localStorage under `pref_selection_mode`.
+The setup screen supports two input modes, controlled by a `selectionMode` state (`'base-selector'` | `'swudb-import'`). The active mode is persisted to localStorage under `pref_selection_mode`. The mode selector dropdown is always visible on the setup screen.
 
 **Base Selector mode** is the default. The three cascading dropdowns (set → aspect → base) are shown.
 
-**Import from SWUDB mode** shows a URL input field and a two-row layout:
+**SWUDB Import mode** shows a URL input field and a two-row layout:
 - Row 1 (always visible): URL text input + Load button
-- Row 2 (visible only after a successful deck load): deck name + `>` submit button
+- Row 2 (visible only after a load attempt): deck name + `>` submit button
 
 The Load and `>` buttons are stacked vertically and share the same width so they align.
+
+On a successful load, `selectBaseByKey` in `useSwuSetup` is called with the base key from the deck response. This sets `selectedSet`, `selectedAspect`, and `selectedKey` so that switching back to Base Selector mode shows the correct base pre-selected. The card art preview and hyperspace toggle appear below the import controls once a base is resolved, mirroring the Base Selector experience.
 
 URL validation is handled by pure utility functions in `src/utils/swudbUrl.ts`:
 
 ```typescript
-normaliseSwudbUrl(url)  // converts /deck/edit/<id> → /deck/<id>
-isValidSwudbUrl(url)    // tests against /^https:\/\/swudb\.com\/deck\/[A-Za-z0-9]+$/
+normaliseSwudbUrl(url)   // converts /deck/edit/<id> → /deck/<id>
+isValidSwudbUrl(url)     // tests against /^https:\/\/swudb\.com\/deck\/[A-Za-z0-9]+$/
+fetchSwudbDeck(deckId)   // fetches via the Cloudflare Worker proxy; returns { deckName, baseKey }
 ```
 
 SWUDB deck IDs are alphanumeric and variable length (observed range: 9–13 characters). The URL is validated on every change; edit URLs are normalised before validation so they pass. An error message appears below the URL field for invalid input; focusing the field clears the error.
 
-The SWUDB import mode is gated behind the `FEATURE_SWUDB_IMPORT` flag in `src/flags.ts`. The mode selector and import UI are only rendered when the flag is `true`. API integration (the actual deck load) is implemented in #74; the Load button is wired up as a stub in #73.
+The Load button is disabled while a fetch is in progress (shows `...`). Possible error states after clicking Load:
+- `'Invalid deck URL'` — URL failed validation (should not normally reach Load in this state)
+- `'Deck not accessible'` — non-200 response or network error
+- `'Base not recognised'` — deck loaded but the base key was not found in the local `Base[]`
 
-### Feature flags
-
-Build-time feature flags live in `src/flags.ts`:
-
-```typescript
-export const FEATURE_SWUDB_IMPORT = import.meta.env.VITE_FEATURE_SWUDB_IMPORT === 'true'
-```
-
-Flags are read from Vite environment variables. Set `VITE_FEATURE_SWUDB_IMPORT=true` in `.env.local` to enable locally. `.env.local` is gitignored and not present in CI — all test files that render `SwuSetupScreen` must mock the flags module explicitly:
-
-```typescript
-vi.mock('../flags', () => ({ FEATURE_SWUDB_IMPORT: true }))
-```
+When the base is not recognised, the deck name is still shown (so the user can see which deck was loaded) but the `>` button is disabled.
 
 ### Game screen
 
@@ -475,7 +468,6 @@ Tests verify behaviour, not implementation. Hook tests cover logic in isolation;
 
 - External APIs are mocked with `vi.stubGlobal('fetch', ...)` — no real network calls in tests
 - localStorage is mocked with `vi.stubGlobal('localStorage', ...)` to test caching paths
-- Feature flags are mocked with `vi.mock('../flags', () => ({ ... }))` — `.env.local` is not present in CI
 - All mocks are torn down with `vi.unstubAllGlobals()` in `afterEach`
 
 ### Running tests
@@ -504,7 +496,7 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 
 - Minimal bundle size — no large dependencies
 - Fast startup — localStorage cache means data is available immediately on repeat visits
-- No unnecessary network requests — the 7-day cache prevents redundant API calls on repeat visits
+- No unnecessary network requests — the 24-hour cache prevents redundant API calls on repeat visits
 
 ### Avoiding unnecessary re-renders
 
@@ -554,9 +546,8 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | **View** | A React component that only renders — receives all data and callbacks as props, contains no business logic. |
 | **AppScreenLayout** | The shared full-screen layout wrapper that provides background, safe area padding, and star field for every screen. |
 | **CSS custom properties** | Variables defined in `:root` in `index.css` (e.g. `--color-accent`) and referenced in inline styles via `var()`. Single source of truth for the colour palette. |
-| **swu-db proxy** | A Cloudflare Worker at `swu-proxy.dmgctrl.workers.dev` that proxies requests to swu-db.com to avoid CORS issues. |
+| **swu-db proxy** | A Cloudflare Worker at `swu-proxy.dmgctrl.workers.dev` that proxies requests to swu-db.com and swudb.com to avoid CORS issues. |
 | **PWA** | Progressive Web App — a web app that can be installed on a device and used offline. |
 | **SOR** | Spark of Rebellion — the first set of Star Wars Unlimited cards. |
 | **LAW** | Legends of the Alliance — a later set of Star Wars Unlimited cards. |
 | **SWUDB** | swudb.com — a third-party Star Wars Unlimited database site. Deck lists can be imported via a URL of the form `https://swudb.com/deck/<id>`. |
-| **Feature flag** | A build-time boolean in `src/flags.ts` read from a Vite env variable. Used to gate in-development features so they can be merged to `main` without being visible in production. |
