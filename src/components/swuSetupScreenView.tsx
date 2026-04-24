@@ -485,6 +485,7 @@ function SwuSetupScreenView({
               flexDirection: 'column',
               overflowY: 'auto',
               gap: '1.5vh',
+              padding: '14px',
             }}>
               {showModeSelector && (
                 <ModeSelector selectionMode={selectionMode} onModeChange={onModeChange} small />
