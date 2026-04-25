@@ -2,7 +2,7 @@ import { Base } from '../hooks/useBases'
 import { useSwuGame } from '../hooks/useSwuGame'
 import { useBaseArt } from '../hooks/useBaseArt'
 import { useOrientation } from '../hooks/useOrientation'
-import { FEATURE_EPIC_ACTION } from '../flags'
+import { FEATURE_EPIC_ACTION, FEATURE_FORCE_TOKEN } from '../flags'
 import SwuGameScreenView from './swuGameScreenView'
 import AppScreenLayout from './layout/AppScreenLayout'
 
@@ -15,8 +15,11 @@ interface Props {
 
 function SwuGameScreen({ base, onBack, onHelp, useHyperspace }: Props) {
   const art = useBaseArt(base, useHyperspace)
-  const { count, increment, decrement, epicActionUsed, toggleEpicAction } = useSwuGame()
+  const { count, increment, decrement, epicActionUsed, toggleEpicAction, forceActive, toggleForce, forceEnabled, enableForce } = useSwuGame()
   const { isPortrait } = useOrientation()
+
+  const isForceBase = /the force is with you/i.test(base.epicAction)
+  const effectiveForceEnabled = isForceBase || forceEnabled
 
   if (isPortrait) {
     return (
@@ -90,6 +93,11 @@ function SwuGameScreen({ base, onBack, onHelp, useHyperspace }: Props) {
       epicActionUsed={epicActionUsed}
       onEpicActionToggle={toggleEpicAction}
       showEpicAction={FEATURE_EPIC_ACTION && !!base.epicAction && !/force/i.test(base.epicAction)}
+      showForce={FEATURE_FORCE_TOKEN}
+      forceEnabled={effectiveForceEnabled}
+      forceActive={forceActive}
+      onForceEnable={enableForce}
+      onForceToggle={toggleForce}
     />
   )
 }

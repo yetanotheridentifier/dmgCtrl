@@ -41,13 +41,25 @@ The base card fills the screen, with the damage counter overlaid across the midd
 
 To return to base selection, tap **<** in the top-left corner. This resets the damage counter to zero, ready for the next game.
 
+### The Force
+
+A dimmed Force token icon sits just below the **<** button at all times. Most games won't need it — it's there for when a card or leader ability grants you the Force mid-game.
+
+- Tap the dimmed icon once to enable it — it turns blue, showing it's ready
+- Tap the blue icon to gain the Force — a blue **"The Force is With You"** overlay appears over the lower portion of the card, mirroring the physical Force token
+- Tap the overlay to dismiss it and restore the button, ready to gain the Force again
+
+When playing a **Legends of the Force** base whose ability creates a Force token, the icon starts **fully active** (no enable tap needed).
+
 ### Epic Action
 
-Some bases have a special **Epic Action** — a once-per-game ability. When your base has one, a ★ button appears below the **<** button in the top-left corner.
+Some bases have a special **Epic Action** — a once-per-game ability. When your base has one, a ★ button appears below the Force icon in the top-left corner.
 
 - The ★ button starts **highlighted in yellow**, showing the epic action is available
 - Tap ★ to mark it as used — the button dims and a gold token overlay appears over the lower portion of the card, covering the epic action text (mirroring the physical token used in the tabletop game)
 - Tap the token overlay or ★ again to undo the mark if needed
+
+If both the Force token and the epic action token are active at the same time, they sit side by side across the bottom of the card rather than overlapping.
 
 ## Hyperspace Variant
 

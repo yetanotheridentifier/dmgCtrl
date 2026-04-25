@@ -10,7 +10,6 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 ## Planned Features
 
 ### SWU game screen
-- Force token tracker (for Force-ability bases — ticket #4)
 - Round tracker
 
 ### Setup screen
@@ -26,7 +25,7 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 - Mordheim / Old World
 
 ### Infrastructure
-- Settings screen (consolidate localStorage preferences — ticket #5; will convert FEATURE_EPIC_ACTION flag to a user preference)
+- Settings screen (consolidate localStorage preferences — ticket #5; will convert FEATURE_EPIC_ACTION and FEATURE_FORCE_TOKEN flags to user preferences)
 - Per-game theming (X-Wing aesthetic vs SWU aesthetic)
 - Melee.gg integration (API exists, partially public)
 
@@ -54,5 +53,6 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 - Run a single test file: `npm test -- src/test/swuSetupScreen.test.tsx`
 - SWUDB deck URL format: `https://swudb.com/deck/<id>` where `<id>` is alphanumeric, variable length. Edit links (`/deck/edit/<id>`) are normalised automatically. Validation regex: `/^https:\/\/swudb\.com\/deck\/[A-Za-z0-9]+$/`
 - The Cloudflare Worker at `swu-proxy.dmgctrl.workers.dev` also proxies `swudb.com/api/deck/<id>` under the path `/swudb/deck/<id>` — this is how `fetchSwudbDeck` retrieves deck data
-- Feature flags live in `src/flags.ts`. Each flag defaults to `true` and can be disabled by setting the corresponding `VITE_FEATURE_*` env var to `'false'`. Current flags: `FEATURE_EPIC_ACTION`. Ticket #5 will convert these to user preferences on a settings screen.
-- Force bases (those whose `epicAction` text matches `/force/i`) are excluded from the epic action token UI and will be handled separately under ticket #4
+- Feature flags live in `src/flags.ts`. Each flag defaults to `true` and can be disabled by setting the corresponding `VITE_FEATURE_*` env var to `'false'`. Current flags: `FEATURE_EPIC_ACTION`, `FEATURE_FORCE_TOKEN`. Ticket #5 will convert these to user preferences on a settings screen.
+- The Force button is shown for **all bases** when `FEATURE_FORCE_TOKEN` is enabled. LOF Force bases (whose `epicAction` text matches `/the force is with you/i`) start in a ready/enabled state; all other bases start in a locked/dimmed state that requires one enable tap before the Force can be gained. This covers the case where a non-Force base gains the Force via a card or leader ability.
+- `public/force-token.png` is the Force token icon (512×512 PNG, converted from `force-token-white-padded.svg`); used on the Force button and as a watermark inside the Force token overlay
