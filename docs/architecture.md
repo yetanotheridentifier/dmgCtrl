@@ -8,7 +8,7 @@ Core functionality:
 - **Base selection** — filter and choose a base card by set, aspect, and card identity; or import a deck from swudb.com
 - **Damage tracking** — increment and decrement a counter against the base's HP to track remaining health
 - **Hyperspace art** — optionally display the premium "hyperspace" variant of a base card
-- **Epic Action reminder** — display the base's special ability for reference during play
+- **Epic Action tracking** — a ★ button marks the base's once-per-game ability as used; a gold token overlay appears over the card's epic action text area to indicate the spent state
 - **Offline capability** — PWA support means the app can be installed and used without a network connection
 
 The app is served at `/dmgCtrl/` and is designed to be added to an iOS home screen for a native-like experience.
@@ -62,9 +62,9 @@ App
 │   └── SwuSetupScreenView (view — renders mode selector, selects, image preview, start button)
 │       └── ImagePreview  (pure view — renders art or error message from props)
 ├── SwuGameScreen         (container)
-│   ├── useSwuGame        (hook — damage counter)
+│   ├── useSwuGame        (hook — damage counter, epic action used state)
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
-│   └── SwuGameScreenView (view — renders counter, image, epic action)
+│   └── SwuGameScreenView (view — renders counter, image, epic action token)
 └── SwuHelpScreen         (standalone screen — renders help.md content)
 
 Each screen is wrapped in AppScreenLayout (shared layout component)
@@ -85,6 +85,7 @@ This pattern keeps views thin and ensures logic is tested via hook and container
 |---|---|---|
 | Logic | State, derived values, side effects | `src/hooks/` |
 | Utilities | Pure functions with no React dependency | `src/utils/` |
+| Feature flags | Boolean gates for in-progress features | `src/flags.ts` |
 | Layout | Full-screen container, background, safe area | `src/components/layout/` |
 | Presentation | Rendering from props | View components in `src/components/` |
 
@@ -97,6 +98,7 @@ src/
   App.tsx                  Root component — screen routing and top-level state
   main.tsx                 Entry point
   index.css                Global reset, CSS custom property palette, help screen styles
+  flags.ts                 Feature flags (e.g. FEATURE_EPIC_ACTION)
   markdown.d.ts            Type declaration for .md imports
   vite-env.d.ts            Vite environment types
 
@@ -114,7 +116,7 @@ src/
     useBaseArt.ts           Ordered art fallback chain shared by setup and game screens
     useBases.ts             Fetches and caches the full list of Base cards
     useOrientation.ts       Detects portrait vs landscape via orientationchange event
-    useSwuGame.ts           Damage counter
+    useSwuGame.ts           Damage counter and epic action used state
     useSwuSetup.ts          Setup screen logic — filtering, auto-select, hyperspace preference
 
   utils/
@@ -166,7 +168,8 @@ State is owned at the appropriate level:
 | Last setup selection (`set`, `aspect`, `key`) | `App` | Saved on `handleConfirm`; passed as `initialSelection` prop to `SwuSetupScreen` so dropdowns are pre-populated on back navigation |
 | Hyperspace preference | `App` / localStorage | Read at startup, toggled on setup screen, passed to game screen |
 | Filter state (set, aspect, card) | `useSwuSetup` | Seeded from `initialSelection` on mount; local after that |
-| Damage counter | `useSwuGame` | Local to game screen |
+| Damage counter | `useSwuGame` | Local to game screen; reset on each navigation to the game screen |
+| Epic action used state | `useSwuGame` | Local to game screen; toggled by the ★ button; reset on each navigation to the game screen |
 | Art fallback index, image load state | `useBaseArt` | Local to whichever screen called it; reset when base changes |
 | Selection mode (`base-selector` / `swudb-import`) | `SwuSetupScreen` / localStorage | Persisted under `pref_selection_mode`; defaults to `base-selector` |
 | SWUDB URL input, validation error, deck name, loading state | `SwuSetupScreen` | Local; `swudbDeckName` remains `null` until a successful API load |
@@ -186,6 +189,15 @@ State is owned at the appropriate level:
 3. Container delegates to `useSwuGame` — `increment()` / `decrement()`
 4. `count` state updates; view re-renders showing new value
 5. `decrement` is clamped at 0 — HP cannot go negative
+
+### Example flow: Epic action
+
+1. Container computes `showEpicAction = FEATURE_EPIC_ACTION && !!base.epicAction && !/force/i.test(base.epicAction)`
+2. When `showEpicAction` is true, the view renders the ★ button below the `<` button
+3. User taps ★ — view calls `onEpicActionToggle` prop
+4. Container delegates to `useSwuGame` — `toggleEpicAction()` flips `epicActionUsed`
+5. View re-renders: ★ button dims to grey; a gold token overlay appears over the lower portion of the card
+6. Tapping the overlay or ★ again calls `onEpicActionToggle`, restoring the ready state
 
 ---
 
@@ -314,6 +326,8 @@ All styling is done with **inline styles** (React `style` prop). There is no CSS
 | `--color-ui-border-muted` | `#9ca3af` | Back/help button icon colour |
 | `--color-ui-border-muted-rgb` | `156, 163, 175` | `rgba()` shadow values using the UI border colour |
 | `--color-error` | `#ff6b6b` | Error messages, fallback states |
+| `--color-epic` | `#f5c518` | Epic action ★ button, token overlay border and glow |
+| `--color-epic-rgb` | `245, 197, 24` | `rgba()` shadow values using the epic colour |
 
 Pros: no class name conflicts, styling is co-located with component logic, easy to make props-driven style decisions, palette changes are a one-line edit in `index.css`.
 
@@ -375,9 +389,20 @@ When the base is not recognised, the deck name is still shown (so the user can s
 ### Game screen
 
 1. `useBaseArt(base, useHyperspace)` manages the ordered fallback chain and image load state
-2. `useSwuGame()` manages the damage counter
-3. `art.src`, `art.imageLoaded`, `art.allFailed`, `art.onLoad`, `art.onError` are passed as props to the view
-4. View renders the counter, card image, and epic action text
+2. `useSwuGame()` manages the damage counter and epic action used state
+3. The container computes `showEpicAction = FEATURE_EPIC_ACTION && !!base.epicAction && !/force/i.test(base.epicAction)`. This is `true` only when the feature flag is on and the base has an epic action whose text does not contain the word "Force" — Force abilities (which can be used multiple times) are excluded and handled separately under ticket #4.
+4. Props passed to the view include art state, counter callbacks, `epicActionUsed`, `onEpicActionToggle`, and `showEpicAction`
+5. View renders the counter, card image, and (when `showEpicAction`) a ★ button and gold token overlay
+
+### Feature flags
+
+Feature flags live in `src/flags.ts`. Each flag reads a `VITE_FEATURE_*` env var at build time and defaults to `true` if the var is absent or not set to `'false'`.
+
+```typescript
+export const FEATURE_EPIC_ACTION = import.meta.env.VITE_FEATURE_EPIC_ACTION !== 'false'
+```
+
+Test files mock the flags module with `vi.mock('../flags', () => ({ FEATURE_EPIC_ACTION: true }))` to test flag-gated behaviour in isolation. Ticket #5 (settings screen) will convert active flags to user preferences stored in localStorage.
 
 ### Adding a new feature
 
@@ -469,6 +494,7 @@ Tests verify behaviour, not implementation. Hook tests cover logic in isolation;
 - External APIs are mocked with `vi.stubGlobal('fetch', ...)` — no real network calls in tests
 - localStorage is mocked with `vi.stubGlobal('localStorage', ...)` to test caching paths
 - All mocks are torn down with `vi.unstubAllGlobals()` in `afterEach`
+- Feature flags are mocked with `vi.mock('../flags', () => ({ FEATURE_X: true }))` at the top of test files that exercise flag-gated behaviour
 
 ### Running tests
 
@@ -535,7 +561,9 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | Term | Definition |
 |---|---|
 | **Base** | A card type in Star Wars Unlimited representing a location that acts as the player's "health bar". Each base has an HP value (typically 24–35). |
-| **Epic Action** | A special ability on some base cards that can be triggered once per game. Displayed on the game screen for reference. |
+| **Epic Action** | A special ability on some base cards that can be triggered once per game. The game screen shows a ★ button when the base has an epic action; tapping it marks the ability as used and renders a gold token overlay over the card's epic action text area. Tapping the overlay or ★ again reverts the state. |
+| **Epic action token** | The in-app UI element (a translucent yellow rectangle with a gold border and white ✕) that overlays the lower portion of the base card when the epic action has been used, mirroring the physical token used in the tabletop game. |
+| **Force** | A recurring ability keyword on some base cards (e.g. "Force: Heal 1 damage from a unit.") that can be activated multiple times per game, unlike standard Epic Actions. Force bases are detected by a `/force/i` match on `base.epicAction` and excluded from the epic action token UI — their mechanic will be handled separately under ticket #4. |
 | **Hyperspace** | A premium variant of a card with alternate artwork. In this app, selecting "hyperspace" shows the alternate art version of the base. |
 | **Standard art** | The default card artwork. `frontArt` is the swu-db.com hi-res version (1560×1120); `frontArtLowRes` is the swuapi.com version (400×286). |
 | **hyperspaceArt** | The reliable low-res hyperspace image URL from swuapi.com (`cdn.starwarsunlimited.com`, 400×286). `null` for SOR/SHD/TWI (no longer in swuapi.com). |
@@ -546,6 +574,7 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | **View** | A React component that only renders — receives all data and callbacks as props, contains no business logic. |
 | **AppScreenLayout** | The shared full-screen layout wrapper that provides background, safe area padding, and star field for every screen. |
 | **CSS custom properties** | Variables defined in `:root` in `index.css` (e.g. `--color-accent`) and referenced in inline styles via `var()`. Single source of truth for the colour palette. |
+| **Feature flag** | A boolean constant in `src/flags.ts` that gates in-progress features. Defaults to `true`; can be overridden at build time via a `VITE_FEATURE_*` env var. |
 | **swu-db proxy** | A Cloudflare Worker at `swu-proxy.dmgctrl.workers.dev` that proxies requests to swu-db.com and swudb.com to avoid CORS issues. |
 | **PWA** | Progressive Web App — a web app that can be installed on a device and used offline. |
 | **SOR** | Spark of Rebellion — the first set of Star Wars Unlimited cards. |

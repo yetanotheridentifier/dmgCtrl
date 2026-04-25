@@ -2,6 +2,7 @@ import { Base } from '../hooks/useBases'
 import { useSwuGame } from '../hooks/useSwuGame'
 import { useBaseArt } from '../hooks/useBaseArt'
 import { useOrientation } from '../hooks/useOrientation'
+import { FEATURE_EPIC_ACTION } from '../flags'
 import SwuGameScreenView from './swuGameScreenView'
 import AppScreenLayout from './layout/AppScreenLayout'
 
@@ -14,7 +15,7 @@ interface Props {
 
 function SwuGameScreen({ base, onBack, onHelp, useHyperspace }: Props) {
   const art = useBaseArt(base, useHyperspace)
-  const { count, increment, decrement } = useSwuGame()
+  const { count, increment, decrement, epicActionUsed, toggleEpicAction } = useSwuGame()
   const { isPortrait } = useOrientation()
 
   if (isPortrait) {
@@ -86,6 +87,9 @@ function SwuGameScreen({ base, onBack, onHelp, useHyperspace }: Props) {
       onDecrement={decrement}
       onImageLoad={art.onLoad}
       onImageError={art.onError}
+      epicActionUsed={epicActionUsed}
+      onEpicActionToggle={toggleEpicAction}
+      showEpicAction={FEATURE_EPIC_ACTION && !!base.epicAction && !/force/i.test(base.epicAction)}
     />
   )
 }

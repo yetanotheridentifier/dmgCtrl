@@ -6,6 +6,7 @@ import { Base } from '../hooks/useBases'
 import { useOrientation } from '../hooks/useOrientation'
 
 vi.mock('../hooks/useOrientation')
+vi.mock('../flags', () => ({ FEATURE_EPIC_ACTION: true }))
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -71,6 +72,22 @@ const mockBaseNoLowRes: Base = {
   hyperspaceArtHiRes: null,
   epicAction: '',
   aspects: ['Vigilance'],
+  rarity: 'Common',
+}
+
+// Base with a Force ability — should NOT trigger the epic action mechanic
+const mockBaseForce: Base = {
+  set: 'SOR',
+  number: '025',
+  name: 'Jedha City',
+  subtitle: 'Jedha',
+  hp: 30,
+  frontArt: 'https://cdn.swu-db.com/images/cards/SOR/025.png',
+  frontArtLowRes: null,
+  hyperspaceArt: null,
+  hyperspaceArtHiRes: null,
+  epicAction: 'Force: Heal 1 damage from a unit.',
+  aspects: ['Cunning'],
   rarity: 'Common',
 }
 
@@ -324,6 +341,51 @@ describe('SwuGameScreen', () => {
     render(<SwuGameScreen base={mockBase} onBack={onBack} onHelp={vi.fn()} useHyperspace={false} />)
     await user.click(screen.getByRole('button', { name: '<' }))
     expect(onBack).toHaveBeenCalledOnce()
+  })
+
+  // --- Epic Action ---
+
+  it('Shows epic action button when base has an epic action', () => {
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.getByTestId('epic-action-btn')).toBeInTheDocument()
+  })
+
+  it('Does not show epic action button when base has no epic action', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.queryByTestId('epic-action-btn')).not.toBeInTheDocument()
+  })
+
+  it('Does not show epic action button for a Force base', () => {
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.queryByTestId('epic-action-btn')).not.toBeInTheDocument()
+  })
+
+  it('Epic action overlay is not visible by default', () => {
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.queryByTestId('epic-action-overlay')).not.toBeInTheDocument()
+  })
+
+  it('Clicking epic action button shows the used overlay', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    await user.click(screen.getByTestId('epic-action-btn'))
+    expect(screen.getByTestId('epic-action-overlay')).toBeInTheDocument()
+  })
+
+  it('Clicking epic action button again hides the overlay', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    await user.click(screen.getByTestId('epic-action-btn'))
+    await user.click(screen.getByTestId('epic-action-btn'))
+    expect(screen.queryByTestId('epic-action-overlay')).not.toBeInTheDocument()
+  })
+
+  it('Clicking the overlay also hides it', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    await user.click(screen.getByTestId('epic-action-btn'))
+    await user.click(screen.getByTestId('epic-action-overlay'))
+    expect(screen.queryByTestId('epic-action-overlay')).not.toBeInTheDocument()
   })
 
 })

@@ -41,6 +41,14 @@ The base card fills the screen, with the damage counter overlaid across the midd
 
 To return to base selection, tap **<** in the top-left corner. This resets the damage counter to zero, ready for the next game.
 
+### Epic Action
+
+Some bases have a special **Epic Action** — a once-per-game ability. When your base has one, a ★ button appears below the **<** button in the top-left corner.
+
+- The ★ button starts **highlighted in yellow**, showing the epic action is available
+- Tap ★ to mark it as used — the button dims and a gold token overlay appears over the lower portion of the card, covering the epic action text (mirroring the physical token used in the tabletop game)
+- Tap the token overlay or ★ again to undo the mark if needed
+
 ## Hyperspace Variant
 
 Some bases have a Hyperspace variant with alternate card art. When available, a toggle appears below the card preview on the setup screen.

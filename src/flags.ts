@@ -1,0 +1,1 @@
+export const FEATURE_EPIC_ACTION = import.meta.env.VITE_FEATURE_EPIC_ACTION !== 'false'
