@@ -40,4 +40,22 @@ describe('useSwuGame', () => {
     expect(result.current.count).toBe(0)
   })
 
+  it('epicActionUsed starts as false', () => {
+    const { result } = renderHook(() => useSwuGame())
+    expect(result.current.epicActionUsed).toBe(false)
+  })
+
+  it('toggleEpicAction sets epicActionUsed to true', () => {
+    const { result } = renderHook(() => useSwuGame())
+    act(() => result.current.toggleEpicAction())
+    expect(result.current.epicActionUsed).toBe(true)
+  })
+
+  it('toggleEpicAction called again sets epicActionUsed back to false', () => {
+    const { result } = renderHook(() => useSwuGame())
+    act(() => result.current.toggleEpicAction())
+    act(() => result.current.toggleEpicAction())
+    expect(result.current.epicActionUsed).toBe(false)
+  })
+
 })

@@ -18,6 +18,9 @@ interface Props {
   onDecrement: () => void
   onImageLoad: () => void
   onImageError: () => void
+  epicActionUsed: boolean
+  onEpicActionToggle: () => void
+  showEpicAction: boolean
 }
 
 function SwuGameScreenView({
@@ -33,6 +36,9 @@ function SwuGameScreenView({
   onDecrement,
   onImageLoad,
   onImageError,
+  epicActionUsed,
+  onEpicActionToggle,
+  showEpicAction,
 }: Props) {
   return (
     <AppScreenLayout>
@@ -76,6 +82,37 @@ function SwuGameScreenView({
       >
         &lt;
       </button>
+
+      {/* Epic action button — below back button, only shown when base has an epic action */}
+      {showEpicAction && (
+        <button
+          data-testid="epic-action-btn"
+          onClick={onEpicActionToggle}
+          style={{
+            position: 'absolute',
+            top: 'calc(env(safe-area-inset-top) + 9vw)',
+            left: 'calc(env(safe-area-inset-left) + 2vw)',
+            width: '5vw',
+            height: '5vw',
+            minWidth: '36px',
+            minHeight: '36px',
+            background: epicActionUsed ? 'transparent' : 'rgba(245,197,24,0.18)',
+            border: epicActionUsed ? '2px solid var(--color-ui-border)' : '2px solid var(--color-epic)',
+            borderRadius: '8px',
+            color: epicActionUsed ? 'var(--color-ui-border)' : 'var(--color-epic)',
+            fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10,
+            WebkitTapHighlightColor: 'transparent',
+            boxShadow: epicActionUsed ? 'none' : '0 0 12px rgba(245,197,24,0.5)',
+          }}
+        >
+          ★
+        </button>
+      )}
 
       {/* Help button */}
       <button
@@ -343,6 +380,37 @@ function SwuGameScreenView({
           </div>
 
         </div>
+
+        {/* Epic action used overlay — covers the card when the epic action has been activated */}
+        {epicActionUsed && showEpicAction && (
+          <div
+            data-testid="epic-action-overlay"
+            onClick={onEpicActionToggle}
+            style={{
+              position: 'absolute',
+              top: '68%',
+              left: '8%',
+              right: '8%',
+              height: '22%',
+              zIndex: 8,
+              background: 'rgba(245,197,24,0.7)',
+              border: '2px solid var(--color-epic)',
+              borderRadius: '8px',
+              boxShadow: '0 0 18px rgba(245,197,24,0.55), 0 4px 14px rgba(0,0,0,0.6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{
+              fontSize: '20vmin',
+              color: '#ffffff',
+              textShadow: '0 2px 10px rgba(0,0,0,0.9), 0 0 24px rgba(245,197,24,0.6)',
+              pointerEvents: 'none',
+            }}>✕</span>
+          </div>
+        )}
 
       </div>
 
