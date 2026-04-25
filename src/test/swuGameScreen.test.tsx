@@ -6,7 +6,7 @@ import { Base } from '../hooks/useBases'
 import { useOrientation } from '../hooks/useOrientation'
 
 vi.mock('../hooks/useOrientation')
-vi.mock('../flags', () => ({ FEATURE_EPIC_ACTION: true }))
+vi.mock('../flags', () => ({ FEATURE_EPIC_ACTION: true, FEATURE_FORCE_TOKEN: true }))
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -75,19 +75,19 @@ const mockBaseNoLowRes: Base = {
   rarity: 'Common',
 }
 
-// Base with a Force ability — should NOT trigger the epic action mechanic
+// LOF Force base — epicAction text matches the consistent phrase used by all Force bases
 const mockBaseForce: Base = {
-  set: 'SOR',
-  number: '025',
-  name: 'Jedha City',
-  subtitle: 'Jedha',
+  set: 'LOF',
+  number: '026',
+  name: 'Lothal Airfield',
+  subtitle: 'Lothal',
   hp: 30,
-  frontArt: 'https://cdn.swu-db.com/images/cards/SOR/025.png',
+  frontArt: 'https://cdn.swu-db.com/images/cards/LOF/026.png',
   frontArtLowRes: null,
   hyperspaceArt: null,
   hyperspaceArtHiRes: null,
-  epicAction: 'Force: Heal 1 damage from a unit.',
-  aspects: ['Cunning'],
+  epicAction: 'When a friendly Force unit attacks: The Force is with you (create your Force token).',
+  aspects: ['Vigilance'],
   rarity: 'Common',
 }
 
@@ -386,6 +386,97 @@ describe('SwuGameScreen', () => {
     await user.click(screen.getByTestId('epic-action-btn'))
     await user.click(screen.getByTestId('epic-action-overlay'))
     expect(screen.queryByTestId('epic-action-overlay')).not.toBeInTheDocument()
+  })
+
+  it('Non-Force base with epic action still shows epic action button alongside locked Force button', () => {
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.getByTestId('epic-action-btn')).toBeInTheDocument()
+    expect(screen.getByTestId('force-btn-locked')).toBeInTheDocument()
+  })
+
+  // --- Force — Force bases (always enabled) ---
+
+  it('Shows active Force button for a Force base without requiring an enable tap', () => {
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.getByTestId('force-btn')).toBeInTheDocument()
+  })
+
+  it('Does not show locked Force button for a Force base', () => {
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.queryByTestId('force-btn-locked')).not.toBeInTheDocument()
+  })
+
+  it('No Force token is visible initially on a Force base', () => {
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.queryByTestId('force-token')).not.toBeInTheDocument()
+  })
+
+  it('Clicking active Force button shows the Force token', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    await user.click(screen.getByTestId('force-btn'))
+    expect(screen.getByTestId('force-token')).toBeInTheDocument()
+  })
+
+  it('Active Force button is hidden when token is showing', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    await user.click(screen.getByTestId('force-btn'))
+    expect(screen.queryByTestId('force-btn')).not.toBeInTheDocument()
+  })
+
+  it('Clicking the Force token removes it and restores the active button', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    await user.click(screen.getByTestId('force-btn'))
+    await user.click(screen.getByTestId('force-token'))
+    expect(screen.queryByTestId('force-token')).not.toBeInTheDocument()
+    expect(screen.getByTestId('force-btn')).toBeInTheDocument()
+  })
+
+  // --- Force — non-Force bases (require enable tap first) ---
+
+  it('Shows a locked Force button for a non-Force base', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.getByTestId('force-btn-locked')).toBeInTheDocument()
+  })
+
+  it('Locked Force button is not the active Force button', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.queryByTestId('force-btn')).not.toBeInTheDocument()
+  })
+
+  it('Tapping locked Force button does not immediately show Force token overlay', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    await user.click(screen.getByTestId('force-btn-locked'))
+    expect(screen.queryByTestId('force-token')).not.toBeInTheDocument()
+  })
+
+  it('Tapping locked Force button enables Force and shows the active button', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    await user.click(screen.getByTestId('force-btn-locked'))
+    expect(screen.getByTestId('force-btn')).toBeInTheDocument()
+    expect(screen.queryByTestId('force-btn-locked')).not.toBeInTheDocument()
+  })
+
+  it('After enabling Force on a non-Force base, tapping active button shows the Force token', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    await user.click(screen.getByTestId('force-btn-locked'))
+    await user.click(screen.getByTestId('force-btn'))
+    expect(screen.getByTestId('force-token')).toBeInTheDocument()
+  })
+
+  it('After enabling Force on a non-Force base, token can be dismissed and Force button restores', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    await user.click(screen.getByTestId('force-btn-locked'))
+    await user.click(screen.getByTestId('force-btn'))
+    await user.click(screen.getByTestId('force-token'))
+    expect(screen.queryByTestId('force-token')).not.toBeInTheDocument()
+    expect(screen.getByTestId('force-btn')).toBeInTheDocument()
   })
 
 })

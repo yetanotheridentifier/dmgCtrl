@@ -40,6 +40,41 @@ describe('useSwuGame', () => {
     expect(result.current.count).toBe(0)
   })
 
+  it('forceActive starts as false', () => {
+    const { result } = renderHook(() => useSwuGame())
+    expect(result.current.forceActive).toBe(false)
+  })
+
+  it('toggleForce sets forceActive to true', () => {
+    const { result } = renderHook(() => useSwuGame())
+    act(() => result.current.toggleForce())
+    expect(result.current.forceActive).toBe(true)
+  })
+
+  it('toggleForce called again sets forceActive back to false', () => {
+    const { result } = renderHook(() => useSwuGame())
+    act(() => result.current.toggleForce())
+    act(() => result.current.toggleForce())
+    expect(result.current.forceActive).toBe(false)
+  })
+
+  it('forceEnabled starts as false', () => {
+    const { result } = renderHook(() => useSwuGame())
+    expect(result.current.forceEnabled).toBe(false)
+  })
+
+  it('enableForce sets forceEnabled to true', () => {
+    const { result } = renderHook(() => useSwuGame())
+    act(() => result.current.enableForce())
+    expect(result.current.forceEnabled).toBe(true)
+  })
+
+  it('enableForce does not affect forceActive', () => {
+    const { result } = renderHook(() => useSwuGame())
+    act(() => result.current.enableForce())
+    expect(result.current.forceActive).toBe(false)
+  })
+
   it('epicActionUsed starts as false', () => {
     const { result } = renderHook(() => useSwuGame())
     expect(result.current.epicActionUsed).toBe(false)

@@ -21,6 +21,11 @@ interface Props {
   epicActionUsed: boolean
   onEpicActionToggle: () => void
   showEpicAction: boolean
+  forceEnabled: boolean
+  forceActive: boolean
+  onForceEnable: () => void
+  onForceToggle: () => void
+  showForce: boolean
 }
 
 function SwuGameScreenView({
@@ -39,7 +44,14 @@ function SwuGameScreenView({
   epicActionUsed,
   onEpicActionToggle,
   showEpicAction,
+  forceEnabled,
+  forceActive,
+  onForceEnable,
+  onForceToggle,
+  showForce,
 }: Props) {
+  const bothOverlaysActive = epicActionUsed && showEpicAction && forceActive && showForce
+
   return (
     <AppScreenLayout>
 
@@ -83,14 +95,83 @@ function SwuGameScreenView({
         &lt;
       </button>
 
-      {/* Epic action button — below back button, only shown when base has an epic action */}
+      {/* Force button — slot 1 (9vw), always shown when showForce is true */}
+      {/* Locked state: dimmed, first tap enables Force for this base */}
+      {showForce && !forceEnabled && !forceActive && (
+        <button
+          data-testid="force-btn-locked"
+          onClick={onForceEnable}
+          style={{
+            position: 'absolute',
+            top: 'calc(env(safe-area-inset-top) + 9vw)',
+            left: 'calc(env(safe-area-inset-left) + 2vw)',
+            width: '5vw',
+            height: '5vw',
+            minWidth: '36px',
+            minHeight: '36px',
+            padding: 0,
+            background: 'transparent',
+            border: '2px solid var(--color-ui-border)',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10,
+            WebkitTapHighlightColor: 'transparent',
+            opacity: 0.4,
+          }}
+        >
+          <img
+            src="/dmgCtrl/force-token.png"
+            alt="Enable Force"
+            style={{ width: '70%', height: '70%', objectFit: 'contain' }}
+          />
+        </button>
+      )}
+
+      {/* Active state: full blue, tap to gain the Force */}
+      {showForce && forceEnabled && !forceActive && (
+        <button
+          data-testid="force-btn"
+          onClick={onForceToggle}
+          style={{
+            position: 'absolute',
+            top: 'calc(env(safe-area-inset-top) + 9vw)',
+            left: 'calc(env(safe-area-inset-left) + 2vw)',
+            width: '5vw',
+            height: '5vw',
+            minWidth: '36px',
+            minHeight: '36px',
+            padding: 0,
+            background: 'rgba(29,78,216,0.35)',
+            border: '2px solid rgba(147,197,253,0.6)',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10,
+            WebkitTapHighlightColor: 'transparent',
+            boxShadow: '0 0 12px rgba(29,78,216,0.3)',
+          }}
+        >
+          <img
+            src="/dmgCtrl/force-token.png"
+            alt="Gain the Force"
+            style={{ width: '70%', height: '70%', objectFit: 'contain', opacity: 0.9 }}
+          />
+        </button>
+      )}
+
+      {/* Epic action button — slot 2 (16vw), only shown when base has a non-Force epic action */}
       {showEpicAction && (
         <button
           data-testid="epic-action-btn"
           onClick={onEpicActionToggle}
           style={{
             position: 'absolute',
-            top: 'calc(env(safe-area-inset-top) + 9vw)',
+            top: 'calc(env(safe-area-inset-top) + 16vw)',
             left: 'calc(env(safe-area-inset-left) + 2vw)',
             width: '5vw',
             height: '5vw',
@@ -379,9 +460,10 @@ function SwuGameScreenView({
 
           </div>
 
+
         </div>
 
-        {/* Epic action used overlay — covers the card when the epic action has been activated */}
+        {/* Epic action used overlay — full width when alone, left half when both overlays active */}
         {epicActionUsed && showEpicAction && (
           <div
             data-testid="epic-action-overlay"
@@ -390,10 +472,10 @@ function SwuGameScreenView({
               position: 'absolute',
               top: '68%',
               left: '8%',
-              right: '8%',
+              right: bothOverlaysActive ? '51%' : '8%',
               height: '22%',
               zIndex: 8,
-              background: 'rgba(245,197,24,0.7)',
+              background: 'rgba(245,197,24,0.55)',
               border: '2px solid var(--color-epic)',
               borderRadius: '8px',
               boxShadow: '0 0 18px rgba(245,197,24,0.55), 0 4px 14px rgba(0,0,0,0.6)',
@@ -404,11 +486,61 @@ function SwuGameScreenView({
             }}
           >
             <span style={{
-              fontSize: '20vmin',
+              fontSize: bothOverlaysActive ? '10vmin' : '20vmin',
               color: '#ffffff',
               textShadow: '0 2px 10px rgba(0,0,0,0.9), 0 0 24px rgba(245,197,24,0.6)',
               pointerEvents: 'none',
             }}>✕</span>
+          </div>
+        )}
+
+        {/* Force token — full width when alone, right half when both overlays active */}
+        {forceActive && showForce && (
+          <div
+            data-testid="force-token"
+            onClick={onForceToggle}
+            style={{
+              position: 'absolute',
+              top: '68%',
+              left: bothOverlaysActive ? '51%' : '8%',
+              right: '8%',
+              height: '22%',
+              zIndex: 8,
+              background: 'rgba(29,78,216,0.82)',
+              border: '2px solid rgba(147,197,253,0.8)',
+              borderRadius: '8px',
+              boxShadow: '0 0 18px rgba(29,78,216,0.6), 0 4px 14px rgba(0,0,0,0.6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+            }}
+          >
+            {/* Translucent watermark symbol */}
+            <img
+              src="/dmgCtrl/force-token.png"
+              alt=""
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '80%',
+                height: '80%',
+                objectFit: 'contain',
+                opacity: 0.15,
+                pointerEvents: 'none',
+              }}
+            />
+            <span style={{
+              position: 'relative',
+              fontSize: bothOverlaysActive ? 'clamp(0.6rem, 3vmin, 1rem)' : 'clamp(1rem, 5vmin, 2rem)',
+              color: '#ffffff',
+              fontWeight: '300',
+              letterSpacing: '0.08em',
+              textShadow: '0 1px 8px rgba(0,0,0,0.8), 0 0 16px rgba(0,0,0,0.6)',
+              pointerEvents: 'none',
+            }}>The Force is With You</span>
           </div>
         )}
 
