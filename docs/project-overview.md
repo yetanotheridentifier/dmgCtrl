@@ -10,8 +10,7 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 ## Planned Features
 
 ### SWU game screen
-- Epic action tracker (boolean flag, with exceptions for multi-use bases)
-- Force token tracker (for specific bases)
+- Force token tracker (for Force-ability bases — ticket #4)
 - Round tracker
 
 ### Setup screen
@@ -27,7 +26,7 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 - Mordheim / Old World
 
 ### Infrastructure
-- Settings screen (consolidate localStorage preferences)
+- Settings screen (consolidate localStorage preferences — ticket #5; will convert FEATURE_EPIC_ACTION flag to a user preference)
 - Per-game theming (X-Wing aesthetic vs SWU aesthetic)
 - Melee.gg integration (API exists, partially public)
 
@@ -55,3 +54,5 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 - Run a single test file: `npm test -- src/test/swuSetupScreen.test.tsx`
 - SWUDB deck URL format: `https://swudb.com/deck/<id>` where `<id>` is alphanumeric, variable length. Edit links (`/deck/edit/<id>`) are normalised automatically. Validation regex: `/^https:\/\/swudb\.com\/deck\/[A-Za-z0-9]+$/`
 - The Cloudflare Worker at `swu-proxy.dmgctrl.workers.dev` also proxies `swudb.com/api/deck/<id>` under the path `/swudb/deck/<id>` — this is how `fetchSwudbDeck` retrieves deck data
+- Feature flags live in `src/flags.ts`. Each flag defaults to `true` and can be disabled by setting the corresponding `VITE_FEATURE_*` env var to `'false'`. Current flags: `FEATURE_EPIC_ACTION`. Ticket #5 will convert these to user preferences on a settings screen.
+- Force bases (those whose `epicAction` text matches `/force/i`) are excluded from the epic action token UI and will be handled separately under ticket #4
