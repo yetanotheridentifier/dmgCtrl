@@ -440,7 +440,7 @@ function SwuSetupScreenView({
           }}>
             <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
               <img
-                src={`${import.meta.env.BASE_URL}dmgctrl-icon-192-transparent.png`}
+                src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`}
                 alt="dmgCtrl"
                 style={{ height: 'clamp(1.2rem, 4vw, 1.8rem)', width: 'auto' }}
               />
@@ -551,7 +551,7 @@ function SwuSetupScreenView({
         }}>
           <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3vw' }}>
             <img
-              src={`${import.meta.env.BASE_URL}dmgctrl-icon-192-transparent.png`}
+              src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`}
               alt="dmgCtrl"
               style={{ height: 'clamp(1.8rem, 8vw, 3rem)', width: 'auto' }}
             />

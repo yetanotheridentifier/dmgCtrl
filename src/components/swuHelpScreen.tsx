@@ -54,7 +54,7 @@ function SwuHelpScreen({ onBack }: Props) {
           </button>
 
           <img
-            src={`${import.meta.env.BASE_URL}dmgctrl-icon-192-transparent.png`}
+            src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`}
             alt="dmgCtrl"
             style={{ height: 'clamp(1.8rem, 8vw, 3rem)', width: 'auto', flexShrink: 0 }}
           />

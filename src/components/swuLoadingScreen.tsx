@@ -35,7 +35,7 @@ function SwuLoadingScreen({ loading, onReady }: Props) {
         zIndex: 1,
       }}>
         <img
-          src={`${import.meta.env.BASE_URL}dmgctrl-icon-192-transparent.png`}
+          src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`}
           alt="dmgCtrl"
           style={{
             width: 'clamp(64px, 15vmin, 120px)',

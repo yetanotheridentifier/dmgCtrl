@@ -129,7 +129,7 @@ function SwuGameScreenView({
           }}
         >
           <img
-            src="/dmgCtrl/force-token.png"
+            src="/dmgCtrl/dmgCtrl-force-token.png"
             alt="Enable Force"
             style={{ width: '70%', height: '70%', objectFit: 'contain' }}
           />
@@ -163,7 +163,7 @@ function SwuGameScreenView({
           }}
         >
           <img
-            src="/dmgCtrl/force-token.png"
+            src="/dmgCtrl/dmgCtrl-force-token.png"
             alt="Gain the Force"
             style={{ width: '70%', height: '70%', objectFit: 'contain', opacity: 0.9 }}
           />
@@ -197,7 +197,7 @@ function SwuGameScreenView({
           }}
         >
           <img
-            src="/dmgCtrl/force-token.png"
+            src="/dmgCtrl/dmgCtrl-force-token.png"
             alt="Dismiss Force"
             style={{ width: '70%', height: '70%', objectFit: 'contain', opacity: 0.3 }}
           />
@@ -595,7 +595,7 @@ function SwuGameScreenView({
           >
             {/* Translucent watermark symbol */}
             <img
-              src="/dmgCtrl/force-token.png"
+              src="/dmgCtrl/dmgCtrl-force-token.png"
               alt=""
               style={{
                 position: 'absolute',

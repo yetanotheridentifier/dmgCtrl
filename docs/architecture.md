@@ -154,9 +154,10 @@ docs/
   project-overview.md       Product vision, planned features, known issues, AI assistant notes
 
 public/
-  dmgctrl-icon-192-transparent.svg  App icon (transparent background); used on loading screen and alongside screen titles
-  dmgctrl-icon-512-transparent.svg  App icon hi-res; available for PWA manifest use
-  force-token.png           Force token icon (512×512 PNG); used on Force button and as watermark in Force overlay
+  dmgCtrl-icon-transparent-192.png  App icon (transparent background); used on loading screen and alongside screen titles
+  dmgCtrl-icon-192.png              App icon 192×192 (opaque); used in PWA manifest and browser favicon
+  dmgCtrl-icon-512.png              App icon 512×512 (opaque); used in PWA manifest
+  dmgCtrl-force-token.png   Force token icon (512×512 PNG); used on Force button and as watermark in Force overlay
   ...                       PWA manifest, icons
 
 .github/
@@ -394,7 +395,7 @@ The app is designed for **landscape orientation**. `useOrientation` is used in t
 ### App startup and loading screen
 
 1. `App` mounts with `screen = 'loading'` and calls `useBases()` to get the `loading` boolean
-2. `SwuLoadingScreen` renders: displays the app icon (`dmgctrl-icon-192-transparent.svg`) and "LOADING" text; starts a **1-second minimum timer**
+2. `SwuLoadingScreen` renders: displays the app icon (`dmgCtrl-icon-transparent-192.png`) and "LOADING" text; starts a **1-second minimum timer**
 3. Two conditions must both be true before `onReady()` is called: `timerDone` (1 second has elapsed) and `dataReady` (the `loading` prop became `false`)
 4. `App` responds to `onReady` by setting `screen = 'setup'`
 
@@ -662,8 +663,8 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | **Epic Action** | A special ability on some base cards that can be triggered once per game. The game screen shows a ★ button (below the Force button slot) when the base has an epic action; tapping it marks the ability as used and renders a gold token overlay. Tapping the overlay or ★ again reverts the state. The ★ button is only shown when the base's `epicAction` text contains the phrase 'Epic Action' (case-insensitive). Passive-effect bases and Force trigger bases are therefore excluded. |
 | **Epic action token** | The in-app UI element (a translucent yellow rectangle with a gold border and white ✕) that overlays the lower portion of the base card when the epic action has been used, mirroring the physical token used in the tabletop game. When the Force token is also active, it occupies the left half of the overlay area. |
 | **Force** | A recurring ability on some LOF base cards, identified by the phrase "The Force is with you" in their `epicAction` text. Force bases start the game with the Force button already enabled. Any base can also gain the Force via card or leader abilities — the locked Force icon is available on all bases for this purpose. |
-| **Force token button** | The blue icon button (showing `force-token.png`) that appears in the first slot below `<` when `forceEnabled` is true. Tapping it sets `forceActive = true` and renders the Force token overlay. On non-Force bases, the slot first shows a locked/dimmed version; tapping the dimmed icon once enables it. |
-| **Force token overlay** | The in-app UI element (a royal-blue rectangle with a light-blue border and a "The Force is With You" label) that overlays the lower portion of the base card when `forceActive` is true. A translucent watermark of `force-token.png` appears behind the text. Tapping the overlay returns `forceActive` to `false`. When the epic action token is also active, it occupies the right half of the overlay area. |
+| **Force token button** | The blue icon button (showing `dmgCtrl-force-token.png`) that appears in the first slot below `<` when `forceEnabled` is true. Tapping it sets `forceActive = true` and renders the Force token overlay. On non-Force bases, the slot first shows a locked/dimmed version; tapping the dimmed icon once enables it. |
+| **Force token overlay** | The in-app UI element (a royal-blue rectangle with a light-blue border and a "The Force is With You" label) that overlays the lower portion of the base card when `forceActive` is true. A translucent watermark of `dmgCtrl-force-token.png` appears behind the text. Tapping the overlay returns `forceActive` to `false`. When the epic action token is also active, it occupies the right half of the overlay area. |
 | **Hyperspace** | A premium variant of a card with alternate artwork. In this app, selecting "hyperspace" shows the alternate art version of the base. |
 | **Loading screen** | The first screen shown on app start (`SwuLoadingScreen`). Displays the app icon and "LOADING" text. Has a **1-second minimum display time**: `onReady` is called only when both the data has loaded and the 1-second timer has elapsed. Automatically transitions to the setup screen. |
 | **Standard art** | The default card artwork. `frontArt` is the swu-db.com hi-res version (1560×1120); `frontArtLowRes` is the swuapi.com version (400×286). |
