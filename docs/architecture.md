@@ -532,7 +532,23 @@ The app is hosted on **GitHub Pages** at `/dmgCtrl/`. The `base` config in `vite
 
 ---
 
-## 12. Testing Strategy
+## 12. Analytics
+
+### Cloudflare Web Analytics
+
+A Cloudflare Web Analytics beacon is embedded in `index.html`. It fires on every page load (i.e. every app start) and provides:
+
+- App load counts over time
+- Unique visitor counts (privacy-preserving, no cookies, no consent banner required)
+- Countries, browsers, devices
+
+The beacon token (`aaed1e18376f4bdd9f56a0050acce291`) is a public identifier — it is not a secret and is safe to commit.
+
+Custom event tracking (game starts, base popularity) is not covered by the Cloudflare beacon, which only records page loads. That is handled separately by the Worker + InfluxDB pipeline (see issues #97, #98, #99).
+
+---
+
+## 13. Testing Strategy
 
 ### Philosophy
 
@@ -573,7 +589,7 @@ Always use `npm test`. The `npx vitest run` form has a cache glitch that causes 
 
 ---
 
-## 13. Performance Considerations
+## 14. Performance Considerations
 
 ### Mobile-first
 
@@ -596,7 +612,7 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 
 ---
 
-## 14. Future Improvements
+## 15. Future Improvements
 
 ### Architecture
 
@@ -615,7 +631,7 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 
 ---
 
-## 15. Glossary
+## 16. Glossary
 
 | Term | Definition |
 |---|---|
