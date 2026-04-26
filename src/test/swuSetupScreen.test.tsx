@@ -148,9 +148,9 @@ describe('SwuSetupScreen', () => {
     expect(screen.getByText('Input Mode:')).toBeInTheDocument()
   })
 
-  it('Shows loading state initially', () => {
+  it('Renders the app icon alongside the title', () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
-    expect(screen.getByText('Loading bases...')).toBeInTheDocument()
+    expect(screen.getByAltText('dmgCtrl')).toBeInTheDocument()
   })
 
   it('Shows three base selectors after loading', async () => {
@@ -380,7 +380,8 @@ describe('SwuSetupScreen', () => {
   it('Does not show base preview before base is selected', async () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    // Only the title icon is present; no base preview image
+    expect(screen.getAllByRole('img')).toHaveLength(1)
   })
 
   // --- Hyperspace toggle ---

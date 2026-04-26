@@ -329,17 +329,6 @@ function SwuSetupScreenView({
 
   const baseSelectorContent = (small = false) => (
     <>
-      {loading && (
-        <p style={{
-          color: 'var(--color-accent)',
-          fontWeight: '300',
-          fontSize: small ? 'clamp(0.9rem, 2vw, 1.1rem)' : 'clamp(0.9rem, 3vw, 1.2rem)',
-          margin: 0,
-        }}>
-          Loading bases...
-        </p>
-      )}
-
       {error && (
         <p style={{
           color: 'var(--color-error)',
@@ -449,15 +438,22 @@ function SwuSetupScreenView({
             justifyContent: 'space-between',
             flexShrink: 0,
           }}>
-            <h1 style={{
-              color: 'var(--color-text-primary)',
-              fontWeight: '200',
-              fontSize: 'clamp(1.2rem, 4vw, 1.8rem)',
-              letterSpacing: '0.15em',
-              margin: 0,
-            }}>
-              dmgCtrl
-            </h1>
+            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
+              <img
+                src={`${import.meta.env.BASE_URL}dmgctrl-icon-192-transparent.png`}
+                alt="dmgCtrl"
+                style={{ height: 'clamp(1.2rem, 4vw, 1.8rem)', width: 'auto' }}
+              />
+              <h1 style={{
+                color: 'var(--color-text-primary)',
+                fontWeight: '200',
+                fontSize: 'clamp(1.2rem, 4vw, 1.8rem)',
+                letterSpacing: '0.15em',
+                margin: 0,
+              }}>
+                dmgCtrl
+              </h1>
+            </div>
 
             <button
               onClick={onHelp}
@@ -553,15 +549,22 @@ function SwuSetupScreenView({
           alignItems: 'center',
           justifyContent: 'space-between',
         }}>
-          <h1 style={{
-            color: 'var(--color-text-primary)',
-            fontWeight: '200',
-            fontSize: 'clamp(1.8rem, 8vw, 3rem)',
-            letterSpacing: '0.15em',
-            margin: 0,
-          }}>
-            dmgCtrl
-          </h1>
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3vw' }}>
+            <img
+              src={`${import.meta.env.BASE_URL}dmgctrl-icon-192-transparent.png`}
+              alt="dmgCtrl"
+              style={{ height: 'clamp(1.8rem, 8vw, 3rem)', width: 'auto' }}
+            />
+            <h1 style={{
+              color: 'var(--color-text-primary)',
+              fontWeight: '200',
+              fontSize: 'clamp(1.8rem, 8vw, 3rem)',
+              letterSpacing: '0.15em',
+              margin: 0,
+            }}>
+              dmgCtrl
+            </h1>
+          </div>
 
           <button
             onClick={onHelp}

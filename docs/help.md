@@ -6,7 +6,9 @@ dmgCtrl is a damage tracker for Star Wars Unlimited. For the best experience, in
 
 ## Getting Started
 
-Open the app and you'll see the setup screen. Use the **Input Mode** selector to choose how you want to pick your base.
+Open the app and the loading screen appears for a moment while base data is fetched from the internet. Once ready, the **Setup** screen opens automatically.
+
+Use the **Input Mode** selector to choose how you want to pick your base.
 
 ### Base Selector
 
@@ -22,10 +24,10 @@ Once you've chosen a base, a preview of the card art appears below. Tap **>** to
 
 ### SWUDB Import
 
-If you have a deck on swudb.com, you can load your base directly from your deck list:
+If you have a unlisted or public deck link on swudb.com, you can load your base directly from the deck list:
 
 1. Tap **Input Mode** and select **SWUDB Import**
-2. Paste your SWUDB deck link (e.g. `https://swudb.com/deck/AbCdEfGhI`) — edit links are accepted too
+2. Paste your SWUDB deck link (e.g. `https://swudb.com/deck/AbCdEfGhI`). Edit links are autocorrected to view links
 3. Tap **Load** — the deck name and a **>** button appear below
 4. Tap **>** to start the game
 
@@ -86,7 +88,7 @@ The full Comprehensive Rules for Star Wars Unlimited are available on the offici
 ## Troubleshooting
 
 **Base art isn't loading:**
-Check your connection and try refreshing the page. The app needs an internet connection on first load to fetch card data. Once loaded, data is cached on your device for 24 hours.
+Check your connection and try restarting the app. The app needs an internet connection on first load to fetch card data. Once loaded, data is cached on your device for 24 hours.
 
 **The wrong base is showing:**
 Tap **<** on the game screen to return to the setup screen and make a new selection.
@@ -94,7 +96,7 @@ Tap **<** on the game screen to return to the setup screen and make a new select
 **Card art isn't loading:**
 This can happen if the image server is temporarily unavailable. The app will show the base name and game text in place of the card art, all game functions still work normally.
 
-**Newly previewed bases not showing:**
+**Newly previewed bases not selectable:**
 Card data refreshes automatically every 24 hours. If a new base from spoiler season is not appearing, try again once published to https://starwarsunlimited.com/ and wait for the cache to refresh.
 
 ---
