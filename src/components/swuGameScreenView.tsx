@@ -26,6 +26,9 @@ interface Props {
   onForceEnable: () => void
   onForceToggle: () => void
   showForce: boolean
+  isMysticMonastery: boolean
+  mysticUsesRemaining: number
+  onMysticAction: () => void
 }
 
 function SwuGameScreenView({
@@ -49,6 +52,9 @@ function SwuGameScreenView({
   onForceEnable,
   onForceToggle,
   showForce,
+  isMysticMonastery,
+  mysticUsesRemaining,
+  onMysticAction,
 }: Props) {
   const bothOverlaysActive = epicActionUsed && showEpicAction && forceActive && showForce
 
@@ -228,6 +234,43 @@ function SwuGameScreenView({
           ★
         </button>
       )}
+
+      {/* Mystic Monastery action button — slot 2 (16vw), always visible for LOF-022; disabled when Force active or uses exhausted */}
+      {isMysticMonastery && (() => {
+        const disabled = forceActive || mysticUsesRemaining === 0
+        return (
+          <button
+            data-testid="mystic-action-btn"
+            onClick={disabled ? undefined : onMysticAction}
+            disabled={disabled}
+            style={{
+              position: 'absolute',
+              top: 'calc(env(safe-area-inset-top) + 16vw)',
+              left: 'calc(env(safe-area-inset-left) + 2vw)',
+              width: '5vw',
+              height: '5vw',
+              minWidth: '36px',
+              minHeight: '36px',
+              padding: 0,
+              background: disabled ? 'rgba(80,80,80,0.25)' : 'rgba(29,78,216,0.55)',
+              border: disabled ? '2px solid rgba(180,180,180,0.3)' : '2px solid rgba(147,197,253,0.8)',
+              borderRadius: '8px',
+              color: disabled ? 'rgba(147,197,253,0.3)' : 'rgba(147,197,253,1)',
+              fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
+              fontWeight: '600',
+              cursor: disabled ? 'default' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 10,
+              WebkitTapHighlightColor: 'transparent',
+              boxShadow: disabled ? 'none' : '0 0 12px rgba(29,78,216,0.4)',
+            }}
+          >
+            {mysticUsesRemaining}
+          </button>
+        )
+      })()}
 
       {/* Help button */}
       <button

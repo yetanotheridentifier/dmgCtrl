@@ -217,7 +217,7 @@ State is owned at the appropriate level:
 
 ### Example flow: Epic action
 
-1. Container computes `showEpicAction = FEATURE_EPIC_ACTION && /epic action/i.test(base.epicAction)`
+1. Container computes `showEpicAction = FEATURE_EPIC_ACTION && /epic action/i.test(base.epicAction)` — excludes Mystic Monastery (whose text is "Action:", not "Epic Action:")
 2. When `showEpicAction` is true, the view renders the ★ button below the Force button slot
 3. User taps ★ — view calls `onEpicActionToggle` prop
 4. Container delegates to `useSwuGame` — `toggleEpicAction()` flips `epicActionUsed`
@@ -233,6 +233,7 @@ State is owned at the appropriate level:
 5. View re-renders: the full blue Force button (`force-btn`) is replaced by a greyed-out Force button (`force-btn-active`); a blue "The Force is With You" overlay appears over the lower portion of the card, with a translucent watermark of the Force token icon
 6. Tapping the overlay or the greyed Force button calls `onForceToggle`, returning `forceActive` to `false` and restoring the ready-state button — ready to gain the Force again
 7. Force bases (`isForceBase = true`) skip step 3 entirely: `effectiveForceEnabled` is `true` from mount, so the full blue button is shown immediately
+8. **Mystic Monastery (LOF-022)** is detected by `isMysticMonastery = base.set === 'LOF' && base.number === '022'`. It renders an additional action counter button (`mystic-action-btn`) in the epic action slot. Tapping it decrements `mysticUsesRemaining` (3 → 0) and sets `forceActive = true`. The regular Force button remains available at all times for gaining the Force through other in-game means. The Force button (`force-btn`) hides when `forceActive` is true (the greyed `force-btn-active` appears as usual). The counter button (`mystic-action-btn`) is always visible but rendered disabled (greyed, `disabled` attribute set) when `forceActive` is true or `mysticUsesRemaining` reaches 0 — it never disappears from the layout.
 
 ### Example flow: Both overlays active
 

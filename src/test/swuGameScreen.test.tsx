@@ -107,6 +107,22 @@ const mockBaseForce: Base = {
   rarity: 'Common',
 }
 
+// Mystic Monastery (LOF #022) — limited-use Force action base
+const mockBaseMysticMonastery: Base = {
+  set: 'LOF',
+  number: '022',
+  name: 'Mystic Monastery',
+  subtitle: 'Lothal',
+  hp: 30,
+  frontArt: 'https://cdn.swu-db.com/images/cards/LOF/022.png',
+  frontArtLowRes: null,
+  hyperspaceArt: null,
+  hyperspaceArtHiRes: null,
+  epicAction: 'Action: The Force is with you (create your Force token). Use this ability no more than 3 times each game.',
+  aspects: ['Vigilance'],
+  rarity: 'Common',
+}
+
 // LAW base with full coverage: hi-res + low-res normal, hi-res + low-res hyperspace
 const mockBaseFullCoverage: Base = {
   set: 'LAW',
@@ -522,6 +538,130 @@ describe('SwuGameScreen', () => {
     await user.click(screen.getByTestId('force-token'))
     expect(screen.queryByTestId('force-token')).not.toBeInTheDocument()
     expect(screen.getByTestId('force-btn')).toBeInTheDocument()
+  })
+
+
+  // --- Mystic Monastery ---
+
+  it('Shows action counter button for Mystic Monastery', () => {
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.getByTestId('mystic-action-btn')).toBeInTheDocument()
+  })
+
+  it('Does not show action counter button for a standard Force base', () => {
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.queryByTestId('mystic-action-btn')).not.toBeInTheDocument()
+  })
+
+  it('Does not show action counter button for a non-Force base', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.queryByTestId('mystic-action-btn')).not.toBeInTheDocument()
+  })
+
+  it('Shows Force button immediately for Mystic Monastery without requiring an enable tap', () => {
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.getByTestId('force-btn')).toBeInTheDocument()
+  })
+
+  it('Does not show locked Force button for Mystic Monastery', () => {
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.queryByTestId('force-btn-locked')).not.toBeInTheDocument()
+  })
+
+  it('Does not show epic action button for Mystic Monastery', () => {
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.queryByTestId('epic-action-btn')).not.toBeInTheDocument()
+  })
+
+  it('Action counter button initially shows 3 uses remaining', () => {
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.getByTestId('mystic-action-btn')).toHaveTextContent('3')
+  })
+
+  it('Action counter button is enabled initially', () => {
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.getByTestId('mystic-action-btn')).not.toBeDisabled()
+  })
+
+  it('Tapping action counter button shows the Force token overlay', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    await user.click(screen.getByTestId('mystic-action-btn'))
+    expect(screen.getByTestId('force-token')).toBeInTheDocument()
+  })
+
+  it('Action counter button is visible but disabled when Force token overlay is active', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    await user.click(screen.getByTestId('mystic-action-btn'))
+    expect(screen.getByTestId('mystic-action-btn')).toBeInTheDocument()
+    expect(screen.getByTestId('mystic-action-btn')).toBeDisabled()
+  })
+
+  it('Force button is hidden when Force token overlay is active', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    await user.click(screen.getByTestId('mystic-action-btn'))
+    expect(screen.queryByTestId('force-btn')).not.toBeInTheDocument()
+  })
+
+  it('Dismissing Force overlay restores both buttons when uses remain', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    await user.click(screen.getByTestId('mystic-action-btn'))
+    await user.click(screen.getByTestId('force-token'))
+    expect(screen.getByTestId('mystic-action-btn')).toBeInTheDocument()
+    expect(screen.getByTestId('mystic-action-btn')).not.toBeDisabled()
+    expect(screen.getByTestId('force-btn')).toBeInTheDocument()
+  })
+
+  it('Tapping action counter button decrements the use count', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    await user.click(screen.getByTestId('mystic-action-btn'))
+    await user.click(screen.getByTestId('force-token'))
+    expect(screen.getByTestId('mystic-action-btn')).toHaveTextContent('2')
+  })
+
+  it('Tapping Force button shows the Force token overlay without decrementing the use count', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    await user.click(screen.getByTestId('force-btn'))
+    await user.click(screen.getByTestId('force-token'))
+    expect(screen.getByTestId('mystic-action-btn')).toHaveTextContent('3')
+  })
+
+  it('Action counter button shows 0 and is disabled when all uses are exhausted', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    for (let i = 0; i < 3; i++) {
+      await user.click(screen.getByTestId('mystic-action-btn'))
+      await user.click(screen.getByTestId('force-token'))
+    }
+    expect(screen.getByTestId('mystic-action-btn')).toBeInTheDocument()
+    expect(screen.getByTestId('mystic-action-btn')).toHaveTextContent('0')
+    expect(screen.getByTestId('mystic-action-btn')).toBeDisabled()
+  })
+
+  it('Force button remains visible when all uses are exhausted and Force is absent', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    for (let i = 0; i < 3; i++) {
+      await user.click(screen.getByTestId('mystic-action-btn'))
+      await user.click(screen.getByTestId('force-token'))
+    }
+    expect(screen.getByTestId('force-btn')).toBeInTheDocument()
+  })
+
+  it('Force can still be gained via Force button after all action uses are exhausted', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    for (let i = 0; i < 3; i++) {
+      await user.click(screen.getByTestId('mystic-action-btn'))
+      await user.click(screen.getByTestId('force-token'))
+    }
+    await user.click(screen.getByTestId('force-btn'))
+    expect(screen.getByTestId('force-token')).toBeInTheDocument()
   })
 
 })

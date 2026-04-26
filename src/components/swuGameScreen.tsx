@@ -1,4 +1,5 @@
-﻿import { Base } from '../hooks/useBases'
+﻿import { useState } from 'react'
+import { Base } from '../hooks/useBases'
 import { useSwuGame } from '../hooks/useSwuGame'
 import { useBaseArt } from '../hooks/useBaseArt'
 import { useOrientation } from '../hooks/useOrientation'
@@ -18,8 +19,15 @@ function SwuGameScreen({ base, onBack, onHelp, useHyperspace }: Props) {
   const { count, increment, decrement, epicActionUsed, toggleEpicAction, forceActive, toggleForce, forceEnabled, enableForce } = useSwuGame(base.hp)
   const { isPortrait } = useOrientation()
 
+  const isMysticMonastery = base.set === 'LOF' && base.number === '022'
   const isForceBase = /the force is with you/i.test(base.epicAction)
   const effectiveForceEnabled = isForceBase || forceEnabled
+
+  const [mysticUsesRemaining, setMysticUsesRemaining] = useState(3)
+  const gainForceViaAction = () => {
+    setMysticUsesRemaining(n => n - 1)
+    toggleForce()
+  }
 
   if (isPortrait) {
     return (
@@ -98,6 +106,9 @@ function SwuGameScreen({ base, onBack, onHelp, useHyperspace }: Props) {
       forceActive={forceActive}
       onForceEnable={enableForce}
       onForceToggle={toggleForce}
+      isMysticMonastery={isMysticMonastery}
+      mysticUsesRemaining={mysticUsesRemaining}
+      onMysticAction={gainForceViaAction}
     />
   )
 }
