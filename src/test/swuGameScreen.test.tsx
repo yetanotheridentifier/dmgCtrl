@@ -6,7 +6,7 @@ import { Base } from '../hooks/useBases'
 import { useOrientation } from '../hooks/useOrientation'
 
 vi.mock('../hooks/useOrientation')
-vi.mock('../flags', () => ({ FEATURE_EPIC_ACTION: true, FEATURE_FORCE_TOKEN: true }))
+vi.mock('../flags', () => ({ FEATURE_EPIC_ACTION: true, FEATURE_FORCE_TOKEN: true, FEATURE_WAKE_LOCK: true }))
 
 // ---------------------------------------------------------------------------
 // Fixtures
