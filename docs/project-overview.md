@@ -27,6 +27,7 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 - Settings screen (consolidate localStorage preferences — ticket #5; will convert FEATURE_EPIC_ACTION and FEATURE_FORCE_TOKEN flags to user preferences)
 - Per-game theming (X-Wing aesthetic vs SWU aesthetic)
 - Melee.gg integration (API exists, partially public)
+- Analytics custom events: game starts and base popularity via Cloudflare Worker + InfluxDB (issues #97, #98, #99)
 
 ## Known Issues
 
@@ -54,3 +55,4 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 - App icon files: `public/dmgctrl-icon-192-transparent.svg` and `public/dmgctrl-icon-512-transparent.svg` — transparent SVG icons used on the loading screen and alongside titles on the setup and help screens
 - The app starts on a `SwuLoadingScreen` (screen type `'loading'`) which shows the app icon and "LOADING" text while `useBases()` resolves. The loading screen has a **1-second minimum display time** — even if data loads instantly, it stays visible for at least 1 second before calling `onReady`. `App.tsx` calls `useBases()` at the top level to drive this transition; `SwuSetupScreen` also calls `useBases()` internally (via `useSwuSetup`) for its own state, resulting in two fetches — both are fast in practice due to the 24-hour localStorage cache.
 - The setup screen title is **"dmgCtrl"**, displayed alongside the app icon. The help screen heading is **"Help"** alongside the app icon. The app name "dmgCtrl" is used as the `alt` text for the icon image across all screens.
+- Cloudflare Web Analytics beacon is embedded in `index.html` (token `aaed1e18376f4bdd9f56a0050acce291`). This is a public token — not a secret. It tracks page loads (app starts) only; game start events require the Worker + InfluxDB pipeline (issues #97–#99).
