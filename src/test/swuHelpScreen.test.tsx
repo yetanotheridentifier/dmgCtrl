@@ -48,6 +48,11 @@ describe('SwuHelpScreen', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Troubleshooting' })).toBeInTheDocument()
   })
 
+  it('Renders the app icon in the header', () => {
+    render(<SwuHelpScreen onBack={vi.fn()} />)
+    expect(screen.getByAltText('dmgCtrl')).toBeInTheDocument()
+  })
+
   it('Renders a back button', () => {
     render(<SwuHelpScreen onBack={vi.fn()} />)
     expect(screen.getByRole('button', { name: '<' })).toBeInTheDocument()

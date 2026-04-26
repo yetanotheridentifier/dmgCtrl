@@ -5,6 +5,7 @@
 **dmgCtrl** is a mobile-first progressive web app (PWA) designed to assist players of card games with game-state tracking. The current implementation targets **Star Wars Unlimited (SWU)**.
 
 Core functionality:
+- **Loading screen** — splash screen (icon + "LOADING") with a **2-second minimum display time** while base data is fetched; transitions automatically to the setup screen
 - **Base selection** — filter and choose a base card by set, aspect, and card identity; or import a deck from swudb.com
 - **Damage tracking** — increment and decrement a counter against the base's HP to track remaining health
 - **Hyperspace art** — optionally display the premium "hyperspace" variant of a base card
@@ -57,6 +58,7 @@ The app is served at `/dmgCtrl/` and is designed to be added to an iOS home scre
 
 ```
 App
+├── SwuLoadingScreen      (standalone screen — icon + LOADING text; 2-second minimum display time; auto-transitions when data is ready and timer has elapsed)
 ├── SwuSetupScreen        (container)
 │   ├── useSwuSetup       (hook — filtering, auto-select, hyperspace preference)
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
@@ -96,7 +98,7 @@ This pattern keeps views thin and ensures logic is tested via hook and container
 
 ```
 src/
-  App.tsx                  Root component — screen routing and top-level state
+  App.tsx                  Root component — screen routing and top-level state; calls useBases() to drive loading screen transition
   main.tsx                 Entry point
   index.css                Global reset, CSS custom property palette, help screen styles
   flags.ts                 Feature flags (FEATURE_EPIC_ACTION, FEATURE_FORCE_TOKEN)
@@ -109,9 +111,10 @@ src/
     imagePreview.tsx        Pure view — renders card art or error message from props
     swuGameScreen.tsx       Game screen container
     swuGameScreenView.tsx   Game screen view
-    swuHelpScreen.tsx       Help screen (renders help.md)
+    swuHelpScreen.tsx       Help screen (renders help.md; title row: back button + icon + "Help" h1)
+    swuLoadingScreen.tsx    Loading screen (icon + "LOADING" text; 2-second minimum display; calls onReady when both timer and data loading are done)
     swuSetupScreen.tsx      Setup screen container
-    swuSetupScreenView.tsx  Setup screen view
+    swuSetupScreenView.tsx  Setup screen view (title row: icon + "dmgCtrl" h1 + help button)
 
   hooks/
     useBaseArt.ts           Ordered art fallback chain shared by setup and game screens
@@ -129,6 +132,7 @@ src/
     AppScreenLayout.test.tsx Layout component tests
     swuGameScreen.test.tsx  Game screen container tests
     swuHelpScreen.test.tsx  Help screen tests
+    swuLoadingScreen.test.tsx Loading screen tests
     swuSetupScreen.test.tsx Setup screen container tests
     swudbUrl.test.ts        SWUDB URL utility tests
     useBaseArt.test.ts      Art fallback chain hook tests
@@ -146,6 +150,8 @@ docs/
   project-overview.md       Product vision, planned features, known issues, AI assistant notes
 
 public/
+  dmgctrl-icon-192-transparent.svg  App icon (transparent background); used on loading screen and alongside screen titles
+  dmgctrl-icon-512-transparent.svg  App icon hi-res; available for PWA manifest use
   force-token.png           Force token icon (512×512 PNG); used on Force button and as watermark in Force overlay
   ...                       PWA manifest, icons
 
@@ -164,8 +170,9 @@ State is owned at the appropriate level:
 
 | State | Owner | How it flows |
 |---|---|---|
-| Current screen (`setup` / `game` / `help`) | `App` | Passed as callback props (`onStartGame`, `onBack`, `onHelp`) |
+| Current screen (`loading` / `setup` / `game` / `help`) | `App` | Passed as callback props (`onReady`, `onStartGame`, `onBack`, `onHelp`) |
 | Previous screen (for help back-navigation) | `App` | Stored so the help screen knows where to return |
+| `useBases()` loading state (for loading screen) | `App` | `App` calls `useBases()` and passes `loading` prop to `SwuLoadingScreen`; `SwuLoadingScreen` calls `onReady` only when both the data is ready and the 2-second minimum timer has elapsed |
 | Selected base | `App` | Set on `onStartGame`, passed into `SwuGameScreen` |
 | Last setup selection (`set`, `aspect`, `key`) | `App` | Saved on `handleConfirm`; passed as `initialSelection` prop to `SwuSetupScreen` so dropdowns are pre-populated on back navigation |
 | Hyperspace preference | `App` / localStorage | Read at startup, toggled on setup screen, passed to game screen |
@@ -177,6 +184,20 @@ State is owned at the appropriate level:
 | Art fallback index, image load state | `useBaseArt` | Local to whichever screen called it; reset when base changes |
 | Selection mode (`base-selector` / `swudb-import`) | `SwuSetupScreen` / localStorage | Persisted under `pref_selection_mode`; defaults to `base-selector` |
 | SWUDB URL input, validation error, deck name, loading state | `SwuSetupScreen` | Local; `swudbDeckName` remains `null` until a successful API load |
+
+### Note on double useBases() call
+
+`App.tsx` calls `useBases()` to get the `loading` boolean for the loading screen transition. `SwuSetupScreen` also calls `useBases()` internally via `useSwuSetup`. This means two separate fetch calls occur on app start. In practice, both resolve immediately on repeat visits (24-hour localStorage cache), and the first fetch completes before the setup screen mounts, so the second is nearly instant. This is an acceptable trade-off to avoid refactoring `SwuSetupScreen`'s interface.
+
+### Example flow: App startup
+
+1. `App` mounts with `screen = 'loading'` and calls `useBases()` — initial `loading = true`
+2. `SwuLoadingScreen` renders: shows the app icon and "LOADING" text; starts a **2-second minimum timer** (`timerDone = false`)
+3. `dataReady` is set to `true` as soon as `loading` becomes `false` (may happen before the timer)
+4. `onReady()` is called only when **both** `timerDone` and `dataReady` are `true`
+5. `App` sets `screen = 'setup'`
+6. `SwuSetupScreen` mounts, calls `useBases()` — resolves from cache almost immediately
+7. User sees the dmgCtrl screen with selectors populated
 
 ### Example flow: Setup → Game
 
@@ -365,6 +386,13 @@ The app is designed for **landscape orientation**. `useOrientation` is used in t
 
 ## 9. Feature Architecture
 
+### App startup and loading screen
+
+1. `App` mounts with `screen = 'loading'` and calls `useBases()` to get the `loading` boolean
+2. `SwuLoadingScreen` renders: displays the app icon (`dmgctrl-icon-192-transparent.svg`) and "LOADING" text; starts a **2-second minimum timer**
+3. Two conditions must both be true before `onReady()` is called: `timerDone` (2 seconds have elapsed) and `dataReady` (the `loading` prop became `false`)
+4. `App` responds to `onReady` by setting `screen = 'setup'`
+
 ### Base selection flow
 
 1. `useBases` fetches and returns `Base[]` (cached after first load)
@@ -525,6 +553,7 @@ Tests verify behaviour, not implementation. Hook tests cover logic in isolation;
 - localStorage is mocked with `vi.stubGlobal('localStorage', ...)` to test caching paths
 - All mocks are torn down with `vi.unstubAllGlobals()` in `afterEach`
 - Feature flags are mocked with `vi.mock('../flags', () => ({ FEATURE_X: true }))` at the top of test files that exercise flag-gated behaviour
+- `App.test.tsx` mocks `useBases` at the module level (`vi.mock('../hooks/useBases', ...)`) so data is available synchronously; this allows the tests to focus on navigation logic rather than data loading. The 2-second loading screen timer is waited out with a `waitFor` timeout of 4 seconds.
 
 ### Running tests
 
@@ -597,6 +626,7 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | **Force token button** | The blue icon button (showing `force-token.png`) that appears in the first slot below `<` when `forceEnabled` is true. Tapping it sets `forceActive = true` and renders the Force token overlay. On non-Force bases, the slot first shows a locked/dimmed version; tapping the dimmed icon once enables it. |
 | **Force token overlay** | The in-app UI element (a royal-blue rectangle with a light-blue border and a "The Force is With You" label) that overlays the lower portion of the base card when `forceActive` is true. A translucent watermark of `force-token.png` appears behind the text. Tapping the overlay returns `forceActive` to `false`. When the epic action token is also active, it occupies the right half of the overlay area. |
 | **Hyperspace** | A premium variant of a card with alternate artwork. In this app, selecting "hyperspace" shows the alternate art version of the base. |
+| **Loading screen** | The first screen shown on app start (`SwuLoadingScreen`). Displays the app icon and "LOADING" text. Has a **2-second minimum display time**: `onReady` is called only when both the data has loaded and the 2-second timer has elapsed. Automatically transitions to the setup screen. |
 | **Standard art** | The default card artwork. `frontArt` is the swu-db.com hi-res version (1560×1120); `frontArtLowRes` is the swuapi.com version (400×286). |
 | **hyperspaceArt** | The reliable low-res hyperspace image URL from swuapi.com (`cdn.starwarsunlimited.com`, 400×286). `null` for SOR/SHD/TWI (no longer in swuapi.com). |
 | **hyperspaceArtHiRes** | A constructed hi-res hyperspace image URL from swu-db.com (`cdn.swu-db.com`, 1560×1120). Derived from card number for active sets, or from the static offset map for SOR/SHD/TWI. May 403 for a small number of unindexed cards. |

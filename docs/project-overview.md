@@ -3,9 +3,8 @@
 A Progressive Web App for tracking game state in tabletop games, starting with Star Wars: Unlimited (SWU). Built to run on iPhone in landscape mode, installed via Safari "Add to Home Screen". No App Store, no native build tools required.
 
 **Live app:** https://yetanotheridentifier.github.io/dmgCtrl/
-**GitHub repo:** https://github.com/yetanotheridentifier/dmgCtrl
 
----
+**GitHub repo:** https://github.com/yetanotheridentifier/dmgCtrl
 
 ## Planned Features
 
@@ -29,13 +28,9 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 - Per-game theming (X-Wing aesthetic vs SWU aesthetic)
 - Melee.gg integration (API exists, partially public)
 
----
-
 ## Known Issues
 
 - **Toggle styling** — Hyperspace variant toggle renders as a native checkbox rather than a toggle switch. CSS-only toggle implementation planned.
-
----
 
 ## Notes for AI Assistants
 
@@ -56,3 +51,6 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 - Feature flags live in `src/flags.ts`. Each flag defaults to `true` and can be disabled by setting the corresponding `VITE_FEATURE_*` env var to `'false'`. Current flags: `FEATURE_EPIC_ACTION`, `FEATURE_FORCE_TOKEN`. Ticket #5 will convert these to user preferences on a settings screen.
 - The Force button is shown for **all bases** when `FEATURE_FORCE_TOKEN` is enabled. LOF Force bases (whose `epicAction` text matches `/the force is with you/i`) start in a ready/enabled state; all other bases start in a locked/dimmed state that requires one enable tap before the Force can be gained. This covers the case where a non-Force base gains the Force via a card or leader ability.
 - `public/force-token.png` is the Force token icon (512×512 PNG, converted from `force-token-white-padded.svg`); used on the Force button and as a watermark inside the Force token overlay
+- App icon files: `public/dmgctrl-icon-192-transparent.svg` and `public/dmgctrl-icon-512-transparent.svg` — transparent SVG icons used on the loading screen and alongside titles on the setup and help screens
+- The app starts on a `SwuLoadingScreen` (screen type `'loading'`) which shows the app icon and "LOADING" text while `useBases()` resolves. The loading screen has a **2-second minimum display time** — even if data loads instantly, it stays visible for at least 2 seconds before calling `onReady`. `App.tsx` calls `useBases()` at the top level to drive this transition; `SwuSetupScreen` also calls `useBases()` internally (via `useSwuSetup`) for its own state, resulting in two fetches — both are fast in practice due to the 24-hour localStorage cache.
+- The setup screen title is **"dmgCtrl"**, displayed alongside the app icon. The help screen heading is **"Help"** alongside the app icon. The app name "dmgCtrl" is used as the `alt` text for the icon image across all screens.

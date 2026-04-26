@@ -21,12 +21,13 @@ function SwuHelpScreen({ onBack }: Props) {
         flexShrink: 0,
       }}>
 
-        {/* Title row: back button + app name */}
+        {/* Title row: back button + icon + heading */}
         <div style={{
           display: 'flex',
           flexDirection: 'row',
           alignItems: 'center',
           gap: '3vw',
+          paddingBottom: '2vh',
         }}>
           <button
             onClick={onBack}
@@ -52,6 +53,12 @@ function SwuHelpScreen({ onBack }: Props) {
             &lt;
           </button>
 
+          <img
+            src={`${import.meta.env.BASE_URL}dmgctrl-icon-192-transparent.png`}
+            alt="dmgCtrl"
+            style={{ height: 'clamp(1.8rem, 8vw, 3rem)', width: 'auto', flexShrink: 0 }}
+          />
+
           <h1 style={{
             color: 'var(--color-text-primary)',
             fontWeight: '200',
@@ -60,21 +67,9 @@ function SwuHelpScreen({ onBack }: Props) {
             margin: 0,
             lineHeight: 0.8,
           }}>
-            dmgCtrl
+            Help
           </h1>
         </div>
-
-        <h2 style={{
-          color: 'var(--color-accent)',
-          fontWeight: '300',
-          fontSize: 'clamp(0.9rem, 5vw, 1.2rem)',
-          letterSpacing: '0.12em',
-          margin: 0,
-          paddingBottom: '2vh',
-          textTransform: 'uppercase',
-        }}>
-          Help
-        </h2>
 
       </div>
 
