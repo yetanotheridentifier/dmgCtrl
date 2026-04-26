@@ -75,6 +75,22 @@ const mockBaseNoLowRes: Base = {
   rarity: 'Common',
 }
 
+// Base with a passive epicAction field — no "Epic Action" keyword, should NOT show epic action button
+const mockBasePassiveEffect: Base = {
+  set: 'SOR',
+  number: '027',
+  name: 'Echo Base',
+  subtitle: 'Hoth',
+  hp: 30,
+  frontArt: 'https://cdn.swu-db.com/images/cards/SOR/027.png',
+  frontArtLowRes: null,
+  hyperspaceArt: null,
+  hyperspaceArtHiRes: null,
+  epicAction: 'When a friendly unit enters play: Gain 1 shield.',
+  aspects: ['Vigilance'],
+  rarity: 'Common',
+}
+
 // LOF Force base — epicAction text matches the consistent phrase used by all Force bases
 const mockBaseForce: Base = {
   set: 'LOF',
@@ -360,6 +376,11 @@ describe('SwuGameScreen', () => {
     expect(screen.queryByTestId('epic-action-btn')).not.toBeInTheDocument()
   })
 
+  it('Does not show epic action button for a base with a passive epicAction field', () => {
+    render(<SwuGameScreen base={mockBasePassiveEffect} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    expect(screen.queryByTestId('epic-action-btn')).not.toBeInTheDocument()
+  })
+
   it('Epic action overlay is not visible by default', () => {
     render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
     expect(screen.queryByTestId('epic-action-overlay')).not.toBeInTheDocument()
@@ -423,6 +444,22 @@ describe('SwuGameScreen', () => {
     render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
     await user.click(screen.getByTestId('force-btn'))
     expect(screen.queryByTestId('force-btn')).not.toBeInTheDocument()
+  })
+
+  it('Greyed Force button is visible when Force token overlay is showing', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    await user.click(screen.getByTestId('force-btn'))
+    expect(screen.getByTestId('force-btn-active')).toBeInTheDocument()
+  })
+
+  it('Tapping greyed Force button dismisses the Force token overlay', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    await user.click(screen.getByTestId('force-btn'))
+    await user.click(screen.getByTestId('force-btn-active'))
+    expect(screen.queryByTestId('force-token')).not.toBeInTheDocument()
+    expect(screen.getByTestId('force-btn')).toBeInTheDocument()
   })
 
   it('Clicking the Force token removes it and restores the active button', async () => {

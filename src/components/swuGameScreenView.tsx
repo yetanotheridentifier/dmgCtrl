@@ -164,6 +164,40 @@ function SwuGameScreenView({
         </button>
       )}
 
+
+      {/* Overlay-active state: greyed, interactive — tap to dismiss the Force token overlay */}
+      {showForce && forceActive && (
+        <button
+          data-testid="force-btn-active"
+          onClick={onForceToggle}
+          style={{
+            position: 'absolute',
+            top: 'calc(env(safe-area-inset-top) + 9vw)',
+            left: 'calc(env(safe-area-inset-left) + 2vw)',
+            width: '5vw',
+            height: '5vw',
+            minWidth: '36px',
+            minHeight: '36px',
+            padding: 0,
+            background: 'rgba(80,80,80,0.25)',
+            border: '2px solid rgba(180,180,180,0.3)',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10,
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          <img
+            src="/dmgCtrl/force-token.png"
+            alt="Dismiss Force"
+            style={{ width: '70%', height: '70%', objectFit: 'contain', opacity: 0.3 }}
+          />
+        </button>
+      )}
+
       {/* Epic action button — slot 2 (16vw), only shown when base has a non-Force epic action */}
       {showEpicAction && (
         <button
