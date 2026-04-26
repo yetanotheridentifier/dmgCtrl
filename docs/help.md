@@ -49,9 +49,16 @@ A dimmed Force token icon sits just below the **<** button at all times. Most ga
 
 - Tap the dimmed icon once to enable it — it turns blue, showing it's ready
 - Tap the blue icon to gain the Force — a blue **"The Force is With You"** overlay appears over the lower portion of the card, mirroring the physical Force token
-- Tap the overlay to dismiss it and restore the button, ready to gain the Force again
+- Tap the overlay or the greyed Force icon to dismiss it and restore the button, ready to gain the Force again
 
 When playing a **Legends of the Force** base whose ability creates a Force token, the icon starts **fully active** (no enable tap needed).
+
+#### Mystic Monastery
+
+**Mystic Monastery** (LOF-022) can generate the Force up to three times per game as an action. A numbered button appears, which shows how many uses remain.
+- Tap the numbered button to gain the Force — the count decrements and the Force overlay appears
+- The numbered button greys out while the Force overlay is active; dismiss the overlay first before using it again
+- The regular Force icon is still available for gaining the Force by other means.
 
 ### Epic Action
 
