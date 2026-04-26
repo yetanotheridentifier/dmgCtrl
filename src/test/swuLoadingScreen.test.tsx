@@ -23,43 +23,43 @@ describe('SwuLoadingScreen', () => {
     expect(onReady).not.toHaveBeenCalled()
   })
 
-  it('Does not call onReady before 2 seconds even if data is ready', () => {
+  it('Does not call onReady before 1 second even if data is ready', () => {
     const onReady = vi.fn()
     render(<SwuLoadingScreen loading={false} onReady={onReady} />)
-    act(() => { vi.advanceTimersByTime(1999) })
+    act(() => { vi.advanceTimersByTime(999) })
     expect(onReady).not.toHaveBeenCalled()
   })
 
-  it('Calls onReady after 2 seconds when data is already ready', () => {
+  it('Calls onReady after 1 second when data is already ready', () => {
     const onReady = vi.fn()
     render(<SwuLoadingScreen loading={false} onReady={onReady} />)
-    act(() => { vi.advanceTimersByTime(2000) })
+    act(() => { vi.advanceTimersByTime(1000) })
     expect(onReady).toHaveBeenCalledOnce()
   })
 
-  it('Does not call onReady after 2 seconds if loading is still true', () => {
+  it('Does not call onReady after 1 second if loading is still true', () => {
     const onReady = vi.fn()
     render(<SwuLoadingScreen loading={true} onReady={onReady} />)
-    act(() => { vi.advanceTimersByTime(2000) })
+    act(() => { vi.advanceTimersByTime(1000) })
     expect(onReady).not.toHaveBeenCalled()
   })
 
-  it('Calls onReady when loading becomes false after 2 seconds have elapsed', () => {
+  it('Calls onReady when loading becomes false after 1 second has elapsed', () => {
     const onReady = vi.fn()
     const { rerender } = render(<SwuLoadingScreen loading={true} onReady={onReady} />)
-    act(() => { vi.advanceTimersByTime(2000) })
+    act(() => { vi.advanceTimersByTime(1000) })
     expect(onReady).not.toHaveBeenCalled()
     rerender(<SwuLoadingScreen loading={false} onReady={onReady} />)
     expect(onReady).toHaveBeenCalledOnce()
   })
 
-  it('Calls onReady when 2 seconds elapse after loading becomes false', () => {
+  it('Calls onReady when 1 second elapses after loading becomes false', () => {
     const onReady = vi.fn()
     const { rerender } = render(<SwuLoadingScreen loading={true} onReady={onReady} />)
-    act(() => { vi.advanceTimersByTime(1000) })
+    act(() => { vi.advanceTimersByTime(500) })
     rerender(<SwuLoadingScreen loading={false} onReady={onReady} />)
     expect(onReady).not.toHaveBeenCalled()
-    act(() => { vi.advanceTimersByTime(1000) })
+    act(() => { vi.advanceTimersByTime(500) })
     expect(onReady).toHaveBeenCalledOnce()
   })
 

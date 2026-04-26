@@ -5,7 +5,7 @@
 **dmgCtrl** is a mobile-first progressive web app (PWA) designed to assist players of card games with game-state tracking. The current implementation targets **Star Wars Unlimited (SWU)**.
 
 Core functionality:
-- **Loading screen** — splash screen (icon + "LOADING") with a **2-second minimum display time** while base data is fetched; transitions automatically to the setup screen
+- **Loading screen** — splash screen (icon + "LOADING") with a **1-second minimum display time** while base data is fetched; transitions automatically to the setup screen
 - **Base selection** — filter and choose a base card by set, aspect, and card identity; or import a deck from swudb.com
 - **Damage tracking** — increment and decrement a counter against the base's HP to track remaining health
 - **Hyperspace art** — optionally display the premium "hyperspace" variant of a base card
@@ -58,7 +58,7 @@ The app is served at `/dmgCtrl/` and is designed to be added to an iOS home scre
 
 ```
 App
-├── SwuLoadingScreen      (standalone screen — icon + LOADING text; 2-second minimum display time; auto-transitions when data is ready and timer has elapsed)
+├── SwuLoadingScreen      (standalone screen — icon + LOADING text; 1-second minimum display time; auto-transitions when data is ready and timer has elapsed)
 ├── SwuSetupScreen        (container)
 │   ├── useSwuSetup       (hook — filtering, auto-select, hyperspace preference)
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
@@ -112,7 +112,7 @@ src/
     swuGameScreen.tsx       Game screen container
     swuGameScreenView.tsx   Game screen view
     swuHelpScreen.tsx       Help screen (renders help.md; title row: back button + icon + "Help" h1)
-    swuLoadingScreen.tsx    Loading screen (icon + "LOADING" text; 2-second minimum display; calls onReady when both timer and data loading are done)
+    swuLoadingScreen.tsx    Loading screen (icon + "LOADING" text; 1-second minimum display; calls onReady when both timer and data loading are done)
     swuSetupScreen.tsx      Setup screen container
     swuSetupScreenView.tsx  Setup screen view (title row: icon + "dmgCtrl" h1 + help button)
 
@@ -172,7 +172,7 @@ State is owned at the appropriate level:
 |---|---|---|
 | Current screen (`loading` / `setup` / `game` / `help`) | `App` | Passed as callback props (`onReady`, `onStartGame`, `onBack`, `onHelp`) |
 | Previous screen (for help back-navigation) | `App` | Stored so the help screen knows where to return |
-| `useBases()` loading state (for loading screen) | `App` | `App` calls `useBases()` and passes `loading` prop to `SwuLoadingScreen`; `SwuLoadingScreen` calls `onReady` only when both the data is ready and the 2-second minimum timer has elapsed |
+| `useBases()` loading state (for loading screen) | `App` | `App` calls `useBases()` and passes `loading` prop to `SwuLoadingScreen`; `SwuLoadingScreen` calls `onReady` only when both the data is ready and the 1-second minimum timer has elapsed |
 | Selected base | `App` | Set on `onStartGame`, passed into `SwuGameScreen` |
 | Last setup selection (`set`, `aspect`, `key`) | `App` | Saved on `handleConfirm`; passed as `initialSelection` prop to `SwuSetupScreen` so dropdowns are pre-populated on back navigation |
 | Hyperspace preference | `App` / localStorage | Read at startup, toggled on setup screen, passed to game screen |
@@ -192,7 +192,7 @@ State is owned at the appropriate level:
 ### Example flow: App startup
 
 1. `App` mounts with `screen = 'loading'` and calls `useBases()` — initial `loading = true`
-2. `SwuLoadingScreen` renders: shows the app icon and "LOADING" text; starts a **2-second minimum timer** (`timerDone = false`)
+2. `SwuLoadingScreen` renders: shows the app icon and "LOADING" text; starts a **1-second minimum timer** (`timerDone = false`)
 3. `dataReady` is set to `true` as soon as `loading` becomes `false` (may happen before the timer)
 4. `onReady()` is called only when **both** `timerDone` and `dataReady` are `true`
 5. `App` sets `screen = 'setup'`
@@ -217,7 +217,7 @@ State is owned at the appropriate level:
 
 ### Example flow: Epic action
 
-1. Container computes `showEpicAction = FEATURE_EPIC_ACTION && !!base.epicAction && !/force/i.test(base.epicAction)`
+1. Container computes `showEpicAction = FEATURE_EPIC_ACTION && /epic action/i.test(base.epicAction)`
 2. When `showEpicAction` is true, the view renders the ★ button below the Force button slot
 3. User taps ★ — view calls `onEpicActionToggle` prop
 4. Container delegates to `useSwuGame` — `toggleEpicAction()` flips `epicActionUsed`
@@ -230,8 +230,8 @@ State is owned at the appropriate level:
 2. Container computes `isForceBase = /the force is with you/i.test(base.epicAction)` and `effectiveForceEnabled = isForceBase || forceEnabled`
 3. **Locked state** (`!effectiveForceEnabled`): view renders a dimmed Force icon button (`force-btn-locked`). User taps it → `onForceEnable` → `enableForce()` sets `forceEnabled = true` → `effectiveForceEnabled` becomes `true`
 4. **Ready state** (`effectiveForceEnabled && !forceActive`): view renders the full blue Force button (`force-btn`). User taps it → `onForceToggle` → `toggleForce()` sets `forceActive = true`
-5. View re-renders: Force button disappears; a blue "The Force is With You" overlay appears over the lower portion of the card, with a translucent watermark of the Force token icon
-6. Tapping the overlay calls `onForceToggle`, returning `forceActive` to `false` and restoring the ready-state button — ready to gain the Force again
+5. View re-renders: the full blue Force button (`force-btn`) is replaced by a greyed-out Force button (`force-btn-active`); a blue "The Force is With You" overlay appears over the lower portion of the card, with a translucent watermark of the Force token icon
+6. Tapping the overlay or the greyed Force button calls `onForceToggle`, returning `forceActive` to `false` and restoring the ready-state button — ready to gain the Force again
 7. Force bases (`isForceBase = true`) skip step 3 entirely: `effectiveForceEnabled` is `true` from mount, so the full blue button is shown immediately
 
 ### Example flow: Both overlays active
@@ -389,8 +389,8 @@ The app is designed for **landscape orientation**. `useOrientation` is used in t
 ### App startup and loading screen
 
 1. `App` mounts with `screen = 'loading'` and calls `useBases()` to get the `loading` boolean
-2. `SwuLoadingScreen` renders: displays the app icon (`dmgctrl-icon-192-transparent.svg`) and "LOADING" text; starts a **2-second minimum timer**
-3. Two conditions must both be true before `onReady()` is called: `timerDone` (2 seconds have elapsed) and `dataReady` (the `loading` prop became `false`)
+2. `SwuLoadingScreen` renders: displays the app icon (`dmgctrl-icon-192-transparent.svg`) and "LOADING" text; starts a **1-second minimum timer**
+3. Two conditions must both be true before `onReady()` is called: `timerDone` (1 second has elapsed) and `dataReady` (the `loading` prop became `false`)
 4. `App` responds to `onReady` by setting `screen = 'setup'`
 
 ### Base selection flow
@@ -440,12 +440,12 @@ When the base is not recognised, the deck name is still shown (so the user can s
 1. `useBaseArt(base, useHyperspace)` manages the ordered fallback chain and image load state
 2. `useSwuGame()` manages the damage counter, epic action, and Force token (enabled + active) state
 3. The container computes:
-   - `showEpicAction = FEATURE_EPIC_ACTION && !!base.epicAction && !/force/i.test(base.epicAction)`
+   - `showEpicAction = FEATURE_EPIC_ACTION && /epic action/i.test(base.epicAction)`
    - `showForce = FEATURE_FORCE_TOKEN` — always `true` when the flag is on; the Force button slot is shown for every base
    - `isForceBase = /the force is with you/i.test(base.epicAction)` — LOF bases whose ability explicitly creates a Force token
    - `effectiveForceEnabled = isForceBase || forceEnabled` — Force bases start enabled; others start locked until the user taps the dimmed icon
 4. Props passed to the view include art state, counter callbacks, `epicActionUsed`, `onEpicActionToggle`, `showEpicAction`, `forceEnabled` (= `effectiveForceEnabled`), `forceActive`, `onForceEnable`, `onForceToggle`, and `showForce`
-5. The left-side button column (top to bottom): `<` back → Force icon (locked or ready) → ★ epic action (when present)
+5. The left-side button column (top to bottom): `<` back → Force icon (locked, ready, or overlay-active/greyed) → ★ epic action (when present)
 6. View renders the card image, counter, and up to two overlays over the bottom portion of the card:
    - **Epic action token** (gold, ✕): when `epicActionUsed && showEpicAction`
    - **Force token** (blue, "The Force is With You"): when `forceActive && showForce`
@@ -553,7 +553,7 @@ Tests verify behaviour, not implementation. Hook tests cover logic in isolation;
 - localStorage is mocked with `vi.stubGlobal('localStorage', ...)` to test caching paths
 - All mocks are torn down with `vi.unstubAllGlobals()` in `afterEach`
 - Feature flags are mocked with `vi.mock('../flags', () => ({ FEATURE_X: true }))` at the top of test files that exercise flag-gated behaviour
-- `App.test.tsx` mocks `useBases` at the module level (`vi.mock('../hooks/useBases', ...)`) so data is available synchronously; this allows the tests to focus on navigation logic rather than data loading. The 2-second loading screen timer is waited out with a `waitFor` timeout of 4 seconds.
+- `App.test.tsx` mocks `useBases` at the module level (`vi.mock('../hooks/useBases', ...)`) so data is available synchronously; this allows the tests to focus on navigation logic rather than data loading. The 1-second loading screen timer is waited out with a `waitFor` timeout of 4 seconds.
 
 ### Running tests
 
@@ -620,13 +620,13 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | Term | Definition |
 |---|---|
 | **Base** | A card type in Star Wars Unlimited representing a location that acts as the player's "health bar". Each base has an HP value (typically 24–35). |
-| **Epic Action** | A special ability on some base cards that can be triggered once per game. The game screen shows a ★ button (below the Force button slot) when the base has an epic action; tapping it marks the ability as used and renders a gold token overlay. Tapping the overlay or ★ again reverts the state. Force bases are excluded from the ★ button. |
+| **Epic Action** | A special ability on some base cards that can be triggered once per game. The game screen shows a ★ button (below the Force button slot) when the base has an epic action; tapping it marks the ability as used and renders a gold token overlay. Tapping the overlay or ★ again reverts the state. The ★ button is only shown when the base's `epicAction` text contains the phrase 'Epic Action' (case-insensitive). Passive-effect bases and Force trigger bases are therefore excluded. |
 | **Epic action token** | The in-app UI element (a translucent yellow rectangle with a gold border and white ✕) that overlays the lower portion of the base card when the epic action has been used, mirroring the physical token used in the tabletop game. When the Force token is also active, it occupies the left half of the overlay area. |
 | **Force** | A recurring ability on some LOF base cards, identified by the phrase "The Force is with you" in their `epicAction` text. Force bases start the game with the Force button already enabled. Any base can also gain the Force via card or leader abilities — the locked Force icon is available on all bases for this purpose. |
 | **Force token button** | The blue icon button (showing `force-token.png`) that appears in the first slot below `<` when `forceEnabled` is true. Tapping it sets `forceActive = true` and renders the Force token overlay. On non-Force bases, the slot first shows a locked/dimmed version; tapping the dimmed icon once enables it. |
 | **Force token overlay** | The in-app UI element (a royal-blue rectangle with a light-blue border and a "The Force is With You" label) that overlays the lower portion of the base card when `forceActive` is true. A translucent watermark of `force-token.png` appears behind the text. Tapping the overlay returns `forceActive` to `false`. When the epic action token is also active, it occupies the right half of the overlay area. |
 | **Hyperspace** | A premium variant of a card with alternate artwork. In this app, selecting "hyperspace" shows the alternate art version of the base. |
-| **Loading screen** | The first screen shown on app start (`SwuLoadingScreen`). Displays the app icon and "LOADING" text. Has a **2-second minimum display time**: `onReady` is called only when both the data has loaded and the 2-second timer has elapsed. Automatically transitions to the setup screen. |
+| **Loading screen** | The first screen shown on app start (`SwuLoadingScreen`). Displays the app icon and "LOADING" text. Has a **1-second minimum display time**: `onReady` is called only when both the data has loaded and the 2-second timer has elapsed. Automatically transitions to the setup screen. |
 | **Standard art** | The default card artwork. `frontArt` is the swu-db.com hi-res version (1560×1120); `frontArtLowRes` is the swuapi.com version (400×286). |
 | **hyperspaceArt** | The reliable low-res hyperspace image URL from swuapi.com (`cdn.starwarsunlimited.com`, 400×286). `null` for SOR/SHD/TWI (no longer in swuapi.com). |
 | **hyperspaceArtHiRes** | A constructed hi-res hyperspace image URL from swu-db.com (`cdn.swu-db.com`, 1560×1120). Derived from card number for active sets, or from the static offset map for SOR/SHD/TWI. May 403 for a small number of unindexed cards. |

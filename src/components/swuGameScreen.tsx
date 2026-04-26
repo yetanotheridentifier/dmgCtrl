@@ -1,4 +1,4 @@
-import { Base } from '../hooks/useBases'
+﻿import { Base } from '../hooks/useBases'
 import { useSwuGame } from '../hooks/useSwuGame'
 import { useBaseArt } from '../hooks/useBaseArt'
 import { useOrientation } from '../hooks/useOrientation'
@@ -92,7 +92,7 @@ function SwuGameScreen({ base, onBack, onHelp, useHyperspace }: Props) {
       onImageError={art.onError}
       epicActionUsed={epicActionUsed}
       onEpicActionToggle={toggleEpicAction}
-      showEpicAction={FEATURE_EPIC_ACTION && !!base.epicAction && !/force/i.test(base.epicAction)}
+      showEpicAction={FEATURE_EPIC_ACTION && /epic action/i.test(base.epicAction)}
       showForce={FEATURE_FORCE_TOKEN}
       forceEnabled={effectiveForceEnabled}
       forceActive={forceActive}
