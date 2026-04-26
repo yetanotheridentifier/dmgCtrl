@@ -3,7 +3,8 @@ import { Base } from '../hooks/useBases'
 import { useSwuGame } from '../hooks/useSwuGame'
 import { useBaseArt } from '../hooks/useBaseArt'
 import { useOrientation } from '../hooks/useOrientation'
-import { FEATURE_EPIC_ACTION, FEATURE_FORCE_TOKEN } from '../flags'
+import { useWakeLock } from '../hooks/useWakeLock'
+import { FEATURE_EPIC_ACTION, FEATURE_FORCE_TOKEN, FEATURE_WAKE_LOCK } from '../flags'
 import SwuGameScreenView from './swuGameScreenView'
 import AppScreenLayout from './layout/AppScreenLayout'
 
@@ -18,6 +19,7 @@ function SwuGameScreen({ base, onBack, onHelp, useHyperspace }: Props) {
   const art = useBaseArt(base, useHyperspace)
   const { count, increment, decrement, epicActionUsed, toggleEpicAction, forceActive, toggleForce, forceEnabled, enableForce } = useSwuGame(base.hp)
   const { isPortrait } = useOrientation()
+  useWakeLock(FEATURE_WAKE_LOCK)
 
   const isMysticMonastery = base.set === 'LOF' && base.number === '022'
   const isForceBase = /the force is with you/i.test(base.epicAction)

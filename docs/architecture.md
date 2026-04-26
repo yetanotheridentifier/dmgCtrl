@@ -11,6 +11,7 @@ Core functionality:
 - **Hyperspace art** — optionally display the premium "hyperspace" variant of a base card
 - **Epic Action tracking** — a ★ button marks the base's once-per-game ability as used; a gold token overlay appears over the card's epic action text area to indicate the spent state
 - **Force token tracking** — a Force icon button is available on every base; on Force bases it is immediately active, on other bases a single enable tap unlocks it for games where the Force is gained via a card or leader ability
+- **Screen wake lock** — prevents the device screen from sleeping while on the game screen
 - **Offline capability** — PWA support means the app can be installed and used without a network connection
 
 The app is served at `/dmgCtrl/` and is designed to be added to an iOS home screen for a native-like experience.
@@ -67,6 +68,7 @@ App
 ├── SwuGameScreen         (container)
 │   ├── useSwuGame        (hook — damage counter, epic action, Force token enabled and active state)
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
+│   ├── useWakeLock       (hook — prevents screen sleep during gameplay via Screen Wake Lock API)
 │   └── SwuGameScreenView (view — renders counter, image, epic action token, Force token)
 └── SwuHelpScreen         (standalone screen — renders help.md content)
 
@@ -101,7 +103,7 @@ src/
   App.tsx                  Root component — screen routing and top-level state; calls useBases() to drive loading screen transition
   main.tsx                 Entry point
   index.css                Global reset, CSS custom property palette, help screen styles
-  flags.ts                 Feature flags (FEATURE_EPIC_ACTION, FEATURE_FORCE_TOKEN)
+  flags.ts                 Feature flags (FEATURE_EPIC_ACTION, FEATURE_FORCE_TOKEN, FEATURE_WAKE_LOCK)
   markdown.d.ts            Type declaration for .md imports
   vite-env.d.ts            Vite environment types
 
@@ -122,6 +124,7 @@ src/
     useOrientation.ts       Detects portrait vs landscape via orientationchange event
     useSwuGame.ts           Damage counter, epic action used state, Force token enabled and active state
     useSwuSetup.ts          Setup screen logic — filtering, auto-select, hyperspace preference
+    useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
   utils/
     swudbUrl.ts             SWUDB URL utilities: normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck
@@ -140,6 +143,7 @@ src/
     useOrientation.test.ts  Orientation hook tests
     useSwuGame.test.ts      Counter hook tests
     useSwuSetup.test.ts     Setup logic hook tests
+    useWakeLock.test.ts     Screen Wake Lock hook tests
 
   assets/
     ...                     Static assets (icons, splash screens)
@@ -439,18 +443,35 @@ When the base is not recognised, the deck name is still shown (so the user can s
 ### Game screen
 
 1. `useBaseArt(base, useHyperspace)` manages the ordered fallback chain and image load state
-2. `useSwuGame()` manages the damage counter, epic action, and Force token (enabled + active) state
-3. The container computes:
+2. `useSwuGame(base.hp)` manages the damage counter, epic action, and Force token (enabled + active) state
+3. `useWakeLock(FEATURE_WAKE_LOCK)` acquires a Screen Wake Lock on mount to prevent the screen sleeping during gameplay; the lock is automatically released when the component unmounts or the page becomes hidden, and reacquired when the page becomes visible again
+4. The container computes:
    - `showEpicAction = FEATURE_EPIC_ACTION && /epic action/i.test(base.epicAction)`
    - `showForce = FEATURE_FORCE_TOKEN` — always `true` when the flag is on; the Force button slot is shown for every base
    - `isForceBase = /the force is with you/i.test(base.epicAction)` — LOF bases whose ability explicitly creates a Force token
    - `effectiveForceEnabled = isForceBase || forceEnabled` — Force bases start enabled; others start locked until the user taps the dimmed icon
-4. Props passed to the view include art state, counter callbacks, `epicActionUsed`, `onEpicActionToggle`, `showEpicAction`, `forceEnabled` (= `effectiveForceEnabled`), `forceActive`, `onForceEnable`, `onForceToggle`, and `showForce`
-5. The left-side button column (top to bottom): `<` back → Force icon (locked, ready, or overlay-active/greyed) → ★ epic action (when present)
-6. View renders the card image, counter, and up to two overlays over the bottom portion of the card:
+5. Props passed to the view include art state, counter callbacks, `epicActionUsed`, `onEpicActionToggle`, `showEpicAction`, `forceEnabled` (= `effectiveForceEnabled`), `forceActive`, `onForceEnable`, `onForceToggle`, and `showForce`
+6. The left-side button column (top to bottom): `<` back → Force icon (locked, ready, or overlay-active/greyed) → ★ epic action (when present)
+7. View renders the card image, counter, and up to two overlays over the bottom portion of the card:
    - **Epic action token** (gold, ✕): when `epicActionUsed && showEpicAction`
    - **Force token** (blue, "The Force is With You"): when `forceActive && showForce`
    - When **both** are active, the view computes `bothOverlaysActive = true` and renders them side by side (epic action left, Force right), each at half width
+
+### Screen Wake Lock
+
+`useWakeLock(enabled)` wraps the [Screen Wake Lock API](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Wake_Lock_API):
+
+- Calls `navigator.wakeLock.request('screen')` on mount when `enabled` is true
+- Stores the `WakeLockSentinel` in a ref; calls `.release()` on unmount
+- Listens for `visibilitychange`: reacquires the lock when `document.visibilityState === 'visible'` (the OS releases the lock automatically when the app is backgrounded)
+- Silently swallows errors from `request()` (e.g. battery saver mode, permissions denied)
+- No-ops if `navigator.wakeLock` is absent (older browsers, non-installed iOS Safari)
+
+**Platform support:**
+- Android Chrome: supported since Chrome 84 (2020)
+- iOS Safari PWA: supported since iOS 16.4 (March 2023); only works when installed to home screen — not in a regular Safari tab
+
+The hook is controlled by `FEATURE_WAKE_LOCK` (defaults to `true`). The flag allows the feature to be disabled at build time if needed. Settings screen integration (ON/OFF per user preference) is deferred to ticket #5.
 
 ### Feature flags
 
@@ -459,9 +480,10 @@ Feature flags live in `src/flags.ts`. Each flag reads a `VITE_FEATURE_*` env var
 ```typescript
 export const FEATURE_EPIC_ACTION = import.meta.env.VITE_FEATURE_EPIC_ACTION !== 'false'
 export const FEATURE_FORCE_TOKEN = import.meta.env.VITE_FEATURE_FORCE_TOKEN !== 'false'
+export const FEATURE_WAKE_LOCK   = import.meta.env.VITE_FEATURE_WAKE_LOCK   !== 'false'
 ```
 
-Test files mock the flags module with `vi.mock('../flags', () => ({ FEATURE_EPIC_ACTION: true, FEATURE_FORCE_TOKEN: true }))` to test flag-gated behaviour in isolation. Ticket #5 (settings screen) will convert active flags to user preferences stored in localStorage.
+Test files mock the flags module with `vi.mock('../flags', () => ({ FEATURE_EPIC_ACTION: true, FEATURE_FORCE_TOKEN: true, FEATURE_WAKE_LOCK: true }))` to test flag-gated behaviour in isolation. Ticket #5 (settings screen) will convert active flags to user preferences stored in localStorage.
 
 ### Adding a new feature
 
@@ -643,7 +665,7 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | **Force token button** | The blue icon button (showing `force-token.png`) that appears in the first slot below `<` when `forceEnabled` is true. Tapping it sets `forceActive = true` and renders the Force token overlay. On non-Force bases, the slot first shows a locked/dimmed version; tapping the dimmed icon once enables it. |
 | **Force token overlay** | The in-app UI element (a royal-blue rectangle with a light-blue border and a "The Force is With You" label) that overlays the lower portion of the base card when `forceActive` is true. A translucent watermark of `force-token.png` appears behind the text. Tapping the overlay returns `forceActive` to `false`. When the epic action token is also active, it occupies the right half of the overlay area. |
 | **Hyperspace** | A premium variant of a card with alternate artwork. In this app, selecting "hyperspace" shows the alternate art version of the base. |
-| **Loading screen** | The first screen shown on app start (`SwuLoadingScreen`). Displays the app icon and "LOADING" text. Has a **1-second minimum display time**: `onReady` is called only when both the data has loaded and the 2-second timer has elapsed. Automatically transitions to the setup screen. |
+| **Loading screen** | The first screen shown on app start (`SwuLoadingScreen`). Displays the app icon and "LOADING" text. Has a **1-second minimum display time**: `onReady` is called only when both the data has loaded and the 1-second timer has elapsed. Automatically transitions to the setup screen. |
 | **Standard art** | The default card artwork. `frontArt` is the swu-db.com hi-res version (1560×1120); `frontArtLowRes` is the swuapi.com version (400×286). |
 | **hyperspaceArt** | The reliable low-res hyperspace image URL from swuapi.com (`cdn.starwarsunlimited.com`, 400×286). `null` for SOR/SHD/TWI (no longer in swuapi.com). |
 | **hyperspaceArtHiRes** | A constructed hi-res hyperspace image URL from swu-db.com (`cdn.swu-db.com`, 1560×1120). Derived from card number for active sets, or from the static offset map for SOR/SHD/TWI. May 403 for a small number of unindexed cards. |
@@ -654,6 +676,7 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | **AppScreenLayout** | The shared full-screen layout wrapper that provides background, safe area padding, and star field for every screen. |
 | **CSS custom properties** | Variables defined in `:root` in `index.css` (e.g. `--color-accent`) and referenced in inline styles via `var()`. Single source of truth for the colour palette. |
 | **Feature flag** | A boolean constant in `src/flags.ts` that gates in-progress features. Defaults to `true`; can be overridden at build time via a `VITE_FEATURE_*` env var. |
+| **Screen Wake Lock** | A browser API (`navigator.wakeLock.request('screen')`) that prevents the device screen from sleeping. Used by `useWakeLock` on the game screen. Supported on Android Chrome and iOS Safari PWA (iOS 16.4+). |
 | **swu-db proxy** | A Cloudflare Worker at `swu-proxy.dmgctrl.workers.dev` that proxies requests to swu-db.com and swudb.com to avoid CORS issues. |
 | **PWA** | Progressive Web App — a web app that can be installed on a device and used offline. |
 | **SOR** | Spark of Rebellion — the first set of Star Wars Unlimited cards. |
