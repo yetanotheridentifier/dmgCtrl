@@ -177,7 +177,7 @@ State is owned at the appropriate level:
 | Last setup selection (`set`, `aspect`, `key`) | `App` | Saved on `handleConfirm`; passed as `initialSelection` prop to `SwuSetupScreen` so dropdowns are pre-populated on back navigation |
 | Hyperspace preference | `App` / localStorage | Read at startup, toggled on setup screen, passed to game screen |
 | Filter state (set, aspect, card) | `useSwuSetup` | Seeded from `initialSelection` on mount; local after that |
-| Damage counter | `useSwuGame` | Local to game screen; reset on each navigation to the game screen |
+| Damage counter | `useSwuGame` | Local to game screen; clamped between 0 and `base.hp`; reset on each navigation to the game screen |
 | Epic action used state | `useSwuGame` | Local to game screen; toggled by the ★ button; reset on each navigation to the game screen |
 | Force token enabled state | `useSwuGame` | Local to game screen; set to `true` by the enable tap on non-Force bases; combined with `isForceBase` in the container to derive `effectiveForceEnabled`; reset on each navigation |
 | Force token active state | `useSwuGame` | Local to game screen; toggled by the Force button and overlay; reset on each navigation to the game screen |
@@ -213,7 +213,7 @@ State is owned at the appropriate level:
 2. View calls `onIncrement` / `onDecrement` prop (callbacks from container)
 3. Container delegates to `useSwuGame` — `increment()` / `decrement()`
 4. `count` state updates; view re-renders showing new value
-5. `decrement` is clamped at 0 — HP cannot go negative
+5. `increment` is clamped at `maxHp` and `decrement` is clamped at 0 — remaining HP stays in the range [0, base.hp]
 
 ### Example flow: Epic action
 

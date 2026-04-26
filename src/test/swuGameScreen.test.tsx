@@ -220,6 +220,14 @@ describe('SwuGameScreen', () => {
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
   })
 
+  it('Counter does not exceed base HP', () => {
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    const plusBtn = screen.getByText('+')
+    for (let i = 0; i < 30; i++) fireEvent.click(plusBtn)
+    expect(screen.getByText('25')).toBeInTheDocument()
+    expect(screen.getByText('Remaining: 0')).toBeInTheDocument()
+  })
+
   it('Remaining health uses base hp not a hardcoded value', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
