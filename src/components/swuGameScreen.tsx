@@ -15,7 +15,7 @@ interface Props {
 
 function SwuGameScreen({ base, onBack, onHelp, useHyperspace }: Props) {
   const art = useBaseArt(base, useHyperspace)
-  const { count, increment, decrement, epicActionUsed, toggleEpicAction, forceActive, toggleForce, forceEnabled, enableForce } = useSwuGame()
+  const { count, increment, decrement, epicActionUsed, toggleEpicAction, forceActive, toggleForce, forceEnabled, enableForce } = useSwuGame(base.hp)
   const { isPortrait } = useOrientation()
 
   const isForceBase = /the force is with you/i.test(base.epicAction)
