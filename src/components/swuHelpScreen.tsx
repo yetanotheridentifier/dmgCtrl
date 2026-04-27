@@ -11,6 +11,7 @@ interface Props {
 
 function SwuHelpScreen({ onBack }: Props) {
   const { isPortrait, vmin } = useOrientation()
+  const baseFontSize = `${Math.min(Math.max(14, Math.round(vmin * 0.04)), 18)}px`
 
   return (
     <AppScreenLayout>
@@ -81,6 +82,7 @@ function SwuHelpScreen({ onBack }: Props) {
         data-testid="help-content"
         className="help-content"
         style={{
+          fontSize: baseFontSize,
           overflowY: 'auto',
           flex: 1,
           padding: '2vh 5vw 5vw',
