@@ -142,7 +142,7 @@ const mockBaseFullCoverage: Base = {
 describe('SwuGameScreen', () => {
 
   beforeEach(() => {
-    vi.mocked(useOrientation).mockReturnValue({ isPortrait: false })
+    vi.mocked(useOrientation).mockReturnValue({ isPortrait: false, vmin: 0 })
   })
 
   // --- Rendering ---
@@ -356,20 +356,20 @@ describe('SwuGameScreen', () => {
   // --- Portrait orientation ---
 
   it('Shows rotate prompt when in portrait orientation', () => {
-    vi.mocked(useOrientation).mockReturnValue({ isPortrait: true })
+    vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
     expect(screen.getByText(/rotate/i)).toBeInTheDocument()
   })
 
   it('Does not show game controls when in portrait orientation', () => {
-    vi.mocked(useOrientation).mockReturnValue({ isPortrait: true })
+    vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
     expect(screen.queryByText('+')).not.toBeInTheDocument()
     expect(screen.queryByText('−')).not.toBeInTheDocument()
   })
 
   it('Shows a back button on the portrait rotation prompt', () => {
-    vi.mocked(useOrientation).mockReturnValue({ isPortrait: true })
+    vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
     expect(screen.getByRole('button', { name: '<' })).toBeInTheDocument()
   })
@@ -377,7 +377,7 @@ describe('SwuGameScreen', () => {
   it('Calls onBack when back button is clicked on the portrait rotation prompt', async () => {
     const user = userEvent.setup()
     const onBack = vi.fn()
-    vi.mocked(useOrientation).mockReturnValue({ isPortrait: true })
+    vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
     render(<SwuGameScreen base={mockBase} onBack={onBack} onHelp={vi.fn()} useHyperspace={false} />)
     await user.click(screen.getByRole('button', { name: '<' }))
     expect(onBack).toHaveBeenCalledOnce()

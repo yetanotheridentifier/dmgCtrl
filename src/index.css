@@ -151,13 +151,3 @@ input[type=number] {
   color: #1976d2;
 }
 
-  .help-content h3 {
-    font-size: clamp(0.9rem, 4vh, 1.1rem);
-  }
-
-  .help-content p,
-  .help-content ul,
-  .help-content ol {
-    font-size: clamp(0.9rem, 4vh, 1.05rem);
-  }
-}
