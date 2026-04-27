@@ -33,6 +33,26 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 
 - **Toggle styling** — Hyperspace variant toggle renders as a native checkbox rather than a toggle switch. CSS-only toggle implementation planned.
 
+## Development
+
+### Local dev server
+
+`npm run dev` — plain HTTP on localhost. Sufficient for visual and layout testing.
+
+`npm run dev:https` — HTTPS on the local network (requires mkcert; see setup below). Required for service worker, wake lock, install prompt, and OAuth redirect testing. The service worker is disabled in dev mode (`devOptions: { enabled: false }` in `vite.config.ts`) to prevent stale caching between reloads.
+
+### One-time HTTPS setup (mkcert)
+
+1. Install mkcert: `winget install FiloSottile.mkcert`
+2. Register the root CA with Windows: `mkcert -install`
+3. **iOS trust (once per device) — two separate steps, both required:**
+   - Find the CA file: `mkcert -CAROOT` gives the folder path; the file is `rootCA.pem`
+   - AirDrop or email `rootCA.pem` to the iPhone
+   - On iPhone: open the file from the Files app → iOS redirects to Settings → General → VPN & Device Management → install the profile
+   - **Then separately:** Settings → General → About → Certificate Trust Settings → enable full trust for the mkcert certificate. This second step is required — installing the profile alone is not enough and will result in a "not trusted" warning in Safari.
+
+After setup, `npm run dev:https` will print a local network URL (e.g. `https://192.168.x.x:5173/dmgCtrl/`). Open that URL in Safari on the device.
+
 ## Notes for AI Assistants
 
 - `npm install` requires `--legacy-peer-deps` due to Vite / vite-plugin-pwa version conflict
@@ -60,3 +80,4 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 - `useOrientation` uses `window.matchMedia('(orientation: portrait)')` change events for reliable iOS detection (not `orientationchange` or `resize`, which are unreliable in iOS standalone PWA mode). It returns `isPortrait` and `vmin` (`Math.min(screen.width, screen.height)` — the device's physical short dimension, stable across rotations; `window.innerWidth`/`innerHeight` can get stuck at landscape values on iOS).
 - **Do not use `system-ui` or `-apple-system` in CSS class font stacks** (e.g. in `index.css`). On iOS 17+, these trigger Dynamic Type which overrides explicit font sizes in landscape mode regardless of `-webkit-text-size-adjust`. Use `Helvetica, Arial, sans-serif` instead. Inline styles are unaffected.
 - `src/test/setup.ts` includes a global `matchMedia` mock that defaults to landscape. Tests that need portrait orientation should call `makeMatchMediaMock(true)` (imported from `./setup`).
+- HTTPS local dev: `npm run dev:https` serves over HTTPS on the local network using `vite-plugin-mkcert`. Requires mkcert installed and `mkcert -install` run once; iOS devices need the root CA manually trusted (see Development section above). The service worker is disabled in dev mode to prevent stale caching.
