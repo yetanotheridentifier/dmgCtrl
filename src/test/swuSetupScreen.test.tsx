@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { makeMatchMediaMock } from './setup'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SwuSetupScreen from '../components/swuSetupScreen'
@@ -531,16 +532,14 @@ describe('SwuSetupScreen', () => {
   // --- Portrait layout ---
 
   it('Shows portrait layout with title and selectors in portrait orientation', async () => {
-    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(375)
-    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(812)
+    makeMatchMediaMock(true)
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByText('dmgCtrl')).toBeInTheDocument()
     expect(screen.getByText('Input Mode:')).toBeInTheDocument()
   })
 
   it('Portrait base options also exclude subtitle', async () => {
-    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(375)
-    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(812)
+    makeMatchMediaMock(true)
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))

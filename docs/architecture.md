@@ -121,7 +121,7 @@ src/
   hooks/
     useBaseArt.ts           Ordered art fallback chain shared by setup and game screens
     useBases.ts             Fetches and caches the full list of Base cards
-    useOrientation.ts       Detects portrait vs landscape via orientationchange event
+    useOrientation.ts       Detects portrait vs landscape; returns isPortrait (via matchMedia change event) and vmin (Math.min(screen.width, screen.height) — stable across rotations)
     useSwuGame.ts           Damage counter, epic action used state, Force token enabled and active state
     useSwuSetup.ts          Setup screen logic — filtering, auto-select, hyperspace preference
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
@@ -130,7 +130,7 @@ src/
     swudbUrl.ts             SWUDB URL utilities: normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck
 
   test/
-    setup.ts                Vitest setup (jest-dom matchers)
+    setup.ts                Vitest setup — jest-dom matchers + global matchMedia mock (landscape default; tests needing portrait call makeMatchMediaMock(true))
     App.test.tsx            End-to-end navigation and feature tests
     AppScreenLayout.test.tsx Layout component tests
     swuGameScreen.test.tsx  Game screen container tests
@@ -383,10 +383,13 @@ Cons: no media query support in inline styles (workaround: derive breakpoint-bas
 
 ### Responsive layout
 
-The app is designed for **landscape orientation**. `useOrientation` is used in two places:
+The app is designed for **landscape orientation**. `useOrientation` is used in three places:
 
 - **Setup screen** (`SwuSetupScreenView`) — renders a two-column layout in landscape (selectors left, card preview right) and a single-column scrollable layout in portrait.
 - **Game screen** (`SwuGameScreen`) — renders the full-screen card layout in landscape and a rotation prompt in portrait.
+- **Help screen** (`SwuHelpScreen`) — uses `vmin` to compute JS-based font sizes for the title row; `isPortrait` is used as a React `key` to force DOM remount on rotation, flushing any cached computed styles.
+
+`useOrientation` uses `window.matchMedia('(orientation: portrait)')` change events (reliable on iOS standalone PWA, unlike `orientationchange`/`resize`). It returns `isPortrait` (boolean) and `vmin` (`Math.min(screen.width, screen.height)` — the device's physical short dimension, which is stable across orientation changes unlike `window.innerWidth`).
 
 ---
 
