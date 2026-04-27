@@ -3,10 +3,12 @@ import SwuLoadingScreen from './components/swuLoadingScreen'
 import SwuSetupScreen from './components/swuSetupScreen'
 import SwuGameScreen from './components/swuGameScreen'
 import SwuHelpScreen from './components/swuHelpScreen'
+import SwuSettingsScreen from './components/swuSettingsScreen'
 import { Base, useBases } from './hooks/useBases'
+import { FEATURE_USER_SETTINGS } from './flags'
 import { InitialSelection } from './hooks/useSwuSetup'
 
-type Screen = 'loading' | 'setup' | 'game' | 'help'
+type Screen = 'loading' | 'setup' | 'game' | 'help' | 'settings'
 
 function App() {
   const [screen, setScreen] = useState<Screen>('loading')
@@ -25,18 +27,21 @@ function App() {
     setScreen('game')
   }
 
-  const handleBack = () => {
-    setScreen('setup')
-  }
+  const handleBack = () => setScreen('setup')
 
   const handleHelp = () => {
     setPreviousScreen(screen)
     setScreen('help')
   }
 
-  const handleHelpBack = () => {
-    setScreen(previousScreen)
+  const handleHelpBack = () => setScreen(previousScreen)
+
+  const handleSettings = () => {
+    setPreviousScreen(screen)
+    setScreen('settings')
   }
+
+  const handleSettingsBack = () => setScreen(previousScreen)
 
   if (screen === 'loading') {
     return <SwuLoadingScreen loading={loading} onReady={handleReady} />
@@ -46,11 +51,30 @@ function App() {
     return <SwuHelpScreen onBack={handleHelpBack} />
   }
 
-  if (screen === 'setup') {
-    return <SwuSetupScreen onConfirm={handleConfirm} onHelp={handleHelp} initialSelection={lastSelection} />
+  if (screen === 'settings') {
+    return <SwuSettingsScreen onBack={handleSettingsBack} onHelp={handleHelp} />
   }
 
-  return <SwuGameScreen base={selectedBase!} onBack={handleBack} onHelp={handleHelp} useHyperspace={useHyperspace} />
+  if (screen === 'setup') {
+    return (
+      <SwuSetupScreen
+        onConfirm={handleConfirm}
+        onHelp={handleHelp}
+        onSettings={FEATURE_USER_SETTINGS ? handleSettings : undefined}
+        initialSelection={lastSelection}
+      />
+    )
+  }
+
+  return (
+    <SwuGameScreen
+      base={selectedBase!}
+      onBack={handleBack}
+      onHelp={handleHelp}
+      onSettings={FEATURE_USER_SETTINGS ? handleSettings : undefined}
+      useHyperspace={useHyperspace}
+    />
+  )
 }
 
 export default App

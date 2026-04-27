@@ -80,6 +80,21 @@ Some bases have a Hyperspace variant with alternate card art. When available, a 
 
 If the Hyperspace image can't be loaded, the app will fall back to the standard art and let you know. If neither image is available, the base name and epic action text are shown instead.
 
+## Settings
+
+Tap the **⚙** button (top-right of the setup screen or game screen) to open the Settings screen.
+
+Your preferences are saved automatically and persist between sessions.
+
+| Setting | Default | Description |
+|---|---|---|
+| **Use Hyperspace Art** | On | When enabled, the Hyperspace variant is used by default on the game screen for any base that has one. |
+| **Enable Force Token** | On | Shows the Force token button on the game screen. Turn off if you prefer not to track the Force. |
+| **Enable Epic Actions** | On | Shows the ★ Epic Action button on the game screen. Turn off if you prefer not to track epic actions. |
+| **Enable Screen Wake Lock** | On | Keeps the screen on during play. May affect battery life. |
+
+Tap **<** to return to the previous screen, or **?** for help.
+
 ## Formats and Base Selection
 
 The Set and Aspect dropdowns help narrow down which base you're playing. Star Wars Unlimited has multiple sets, each containing bases with different aspects and HP values.

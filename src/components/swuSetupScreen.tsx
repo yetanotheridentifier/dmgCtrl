@@ -3,6 +3,7 @@ import { Base } from '../hooks/useBases'
 import { useSwuSetup, InitialSelection } from '../hooks/useSwuSetup'
 import { useBaseArt } from '../hooks/useBaseArt'
 import SwuSetupScreenView from './swuSetupScreenView'
+import { FEATURE_USER_SETTINGS } from '../flags'
 import { normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck } from '../utils/swudbUrl'
 
 export type SelectionMode = 'base-selector' | 'swudb-import'
@@ -10,10 +11,11 @@ export type SelectionMode = 'base-selector' | 'swudb-import'
 interface Props {
   onConfirm: (base: Base, useHyperspace: boolean) => void
   onHelp: () => void
+  onSettings?: () => void
   initialSelection?: InitialSelection | null
 }
 
-function SwuSetupScreen({ onConfirm, onHelp, initialSelection }: Props) {
+function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Props) {
   const setup = useSwuSetup(onConfirm, initialSelection)
   const art = useBaseArt(setup.selectedBase, setup.useHyperspace)
 
@@ -103,6 +105,7 @@ function SwuSetupScreen({ onConfirm, onHelp, initialSelection }: Props) {
       onHyperspaceToggle={setup.handleHyperspaceToggle}
       onSubmit={handleSubmit}
       onHelp={onHelp}
+      onSettings={FEATURE_USER_SETTINGS ? onSettings : undefined}
       selectionMode={selectionMode}
       onModeChange={handleModeChange}
       swudbUrl={swudbUrl}

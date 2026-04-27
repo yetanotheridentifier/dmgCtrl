@@ -5,6 +5,11 @@ import userEvent from '@testing-library/user-event'
 import SwuSetupScreen from '../components/swuSetupScreen'
 import { Base } from '../hooks/useBases'
 
+const featureUserSettings = vi.hoisted(() => ({ value: false }))
+vi.mock('../flags', () => ({
+  get FEATURE_USER_SETTINGS() { return featureUserSettings.value },
+}))
+
 const mockBases: Base[] = [
   {
     set: 'SOR',
@@ -849,6 +854,31 @@ describe('SwuSetupScreen', () => {
     await user.click(screen.getByTestId('swudb-load-button'))
     await waitFor(() => expect(screen.getByAltText('Lake Country')).toBeInTheDocument())
     expect(screen.queryByLabelText('Hyperspace variant')).not.toBeInTheDocument()
+  })
+
+  // --- Settings button ---
+
+  it('Settings button is not visible when FEATURE_USER_SETTINGS is false', () => {
+    featureUserSettings.value = false
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: '⚙' })).not.toBeInTheDocument()
+  })
+
+  it('Settings button is visible when FEATURE_USER_SETTINGS is true', () => {
+    featureUserSettings.value = true
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} />)
+    expect(screen.getByRole('button', { name: '⚙' })).toBeInTheDocument()
+    featureUserSettings.value = false
+  })
+
+  it('Settings button calls onSettings when clicked', async () => {
+    featureUserSettings.value = true
+    const user = userEvent.setup()
+    const onSettings = vi.fn()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} onSettings={onSettings} />)
+    await user.click(screen.getByRole('button', { name: '⚙' }))
+    expect(onSettings).toHaveBeenCalledOnce()
+    featureUserSettings.value = false
   })
 
 })
