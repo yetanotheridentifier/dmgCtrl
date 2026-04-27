@@ -46,6 +46,21 @@ vi.mock('../flags', () => ({
   get FEATURE_USER_SETTINGS() { return featureUserSettings.value },
 }))
 
+const mockUserSettings = vi.hoisted(() => ({
+  useHyperspace: true,
+  enableForceToken: true,
+  enableEpicActions: true,
+  enableWakeLock: true,
+  setUseHyperspace: vi.fn(),
+  setEnableForceToken: vi.fn(),
+  setEnableEpicActions: vi.fn(),
+  setEnableWakeLock: vi.fn(),
+}))
+vi.mock('../hooks/useUserSettings', () => ({
+  useUserSettings: () => mockUserSettings,
+}))
+
+
 // The mode selector is always present; filter it out to get the three
 // base-selection dropdowns (set, aspect, base).
 const getBaseSelectors = () => {
@@ -283,6 +298,32 @@ describe('App', () => {
     const img = screen.getByAltText('Catacombs of Cadera')
     expect(img).toHaveAttribute('src', 'https://cdn.swu-db.com/images/cards/SOR/292.png')
   }, 10000)
+  it('Passes useHyperspace=true to game screen when user settings preference is true', async () => {
+    mockUserSettings.useHyperspace = true
+    const user = userEvent.setup()
+    render(<App />)
+    await waitForSetup()
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+    await user.click(screen.getByText('>'))
+    const img = screen.getByAltText('Catacombs of Cadera')
+    expect(img).toHaveAttribute('src', 'https://cdn.swu-db.com/images/cards/SOR/292.png')
+  }, 10000)
+
+  it('Passes useHyperspace=false to game screen when user settings preference is false', async () => {
+    mockUserSettings.useHyperspace = false
+    const user = userEvent.setup()
+    render(<App />)
+    await waitForSetup()
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+    await user.click(screen.getByText('>'))
+    const img = screen.getByAltText('Catacombs of Cadera')
+    expect(img).toHaveAttribute('src', 'https://cdn.swu-db.com/images/cards/SOR/026.png')
+  }, 10000)
+
 
   // --- Settings navigation ---
 

@@ -4,8 +4,25 @@ import userEvent from '@testing-library/user-event'
 import SwuGameScreen from '../components/swuGameScreen'
 import { Base } from '../hooks/useBases'
 import { useOrientation } from '../hooks/useOrientation'
+import { useWakeLock } from '../hooks/useWakeLock'
 
 vi.mock('../hooks/useOrientation')
+vi.mock('../hooks/useWakeLock', () => ({ useWakeLock: vi.fn() }))
+
+const mockUserSettings = vi.hoisted(() => ({
+  useHyperspace: true,
+  enableForceToken: true,
+  enableEpicActions: true,
+  enableWakeLock: true,
+  setUseHyperspace: vi.fn(),
+  setEnableForceToken: vi.fn(),
+  setEnableEpicActions: vi.fn(),
+  setEnableWakeLock: vi.fn(),
+}))
+vi.mock('../hooks/useUserSettings', () => ({
+  useUserSettings: () => mockUserSettings,
+}))
+
 const featureUserSettings = vi.hoisted(() => ({ value: false }))
 vi.mock('../flags', () => ({
   FEATURE_EPIC_ACTION: true,
@@ -149,6 +166,10 @@ describe('SwuGameScreen', () => {
 
   beforeEach(() => {
     vi.mocked(useOrientation).mockReturnValue({ isPortrait: false, vmin: 0 })
+    mockUserSettings.enableForceToken = true
+    mockUserSettings.enableEpicActions = true
+    mockUserSettings.enableWakeLock = true
+    mockUserSettings.useHyperspace = true
   })
 
   // --- Rendering ---
@@ -696,6 +717,48 @@ describe('SwuGameScreen', () => {
     await user.click(screen.getByRole('button', { name: '⚙' }))
     expect(onSettings).toHaveBeenCalledOnce()
     featureUserSettings.value = false
+  })
+
+
+  // --- User settings ---
+
+  it('Force button is hidden when enableForceToken is false', () => {
+    mockUserSettings.enableForceToken = false
+    render(<SwuGameScreen base={mockBase} useHyperspace={false} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('force-btn-locked')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('force-btn')).not.toBeInTheDocument()
+  })
+
+  it('Force button is shown for a Force base when enableForceToken is true', () => {
+    mockUserSettings.enableForceToken = true
+    render(<SwuGameScreen base={mockBaseForce} useHyperspace={false} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('force-btn')).toBeInTheDocument()
+  })
+
+  it('Epic action button is hidden when enableEpicActions is false', () => {
+    mockUserSettings.enableEpicActions = false
+    render(<SwuGameScreen base={mockBaseWithEpicAction} useHyperspace={false} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('epic-action-btn')).not.toBeInTheDocument()
+  })
+
+  it('Epic action button is still shown when Force token is disabled', () => {
+    mockUserSettings.enableForceToken = false
+    mockUserSettings.enableEpicActions = true
+    render(<SwuGameScreen base={mockBaseWithEpicAction} useHyperspace={false} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('force-btn-locked')).not.toBeInTheDocument()
+    expect(screen.getByTestId('epic-action-btn')).toBeInTheDocument()
+  })
+
+  it('Passes enableWakeLock=true to useWakeLock by default', () => {
+    mockUserSettings.enableWakeLock = true
+    render(<SwuGameScreen base={mockBase} useHyperspace={false} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(vi.mocked(useWakeLock)).toHaveBeenCalledWith(true)
+  })
+
+  it('Passes enableWakeLock=false to useWakeLock when setting is disabled', () => {
+    mockUserSettings.enableWakeLock = false
+    render(<SwuGameScreen base={mockBase} useHyperspace={false} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(vi.mocked(useWakeLock)).toHaveBeenCalledWith(false)
   })
 
 })

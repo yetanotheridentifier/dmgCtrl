@@ -10,6 +10,21 @@ vi.mock('../flags', () => ({
   get FEATURE_USER_SETTINGS() { return featureUserSettings.value },
 }))
 
+const mockUserSettings = vi.hoisted(() => ({
+  useHyperspace: true,
+  enableForceToken: true,
+  enableEpicActions: true,
+  enableWakeLock: true,
+  setUseHyperspace: vi.fn(),
+  setEnableForceToken: vi.fn(),
+  setEnableEpicActions: vi.fn(),
+  setEnableWakeLock: vi.fn(),
+}))
+vi.mock('../hooks/useUserSettings', () => ({
+  useUserSettings: () => mockUserSettings,
+}))
+
+
 const mockBases: Base[] = [
   {
     set: 'SOR',
@@ -390,136 +405,6 @@ describe('SwuSetupScreen', () => {
     expect(screen.getAllByRole('img')).toHaveLength(1)
   })
 
-  // --- Hyperspace toggle ---
-
-  it('Hyperspace toggle does not appear before a base is selected', async () => {
-    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
-    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    expect(screen.queryByLabelText('Hyperspace variant')).not.toBeInTheDocument()
-  })
-
-  it('Hyperspace toggle appears after selecting a base with a hyperspace variant', async () => {
-    const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
-    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    fireEvent.load(screen.getByAltText('Catacombs of Cadera'))
-    expect(screen.getByLabelText('Hyperspace variant')).toBeInTheDocument()
-  })
-
-  it('Hyperspace toggle does not appear for a base without a hyperspace variant', async () => {
-    const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
-    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    // LAW/Vigilance/LAW-021 (Coaxium Mine) has no hyperspace in our data
-    await user.selectOptions(getBaseSelectors()[0], 'LAW')
-    await user.selectOptions(getBaseSelectors()[1], 'Vigilance')
-    await user.selectOptions(getBaseSelectors()[2], 'LAW-021')
-    expect(screen.queryByLabelText('Hyperspace variant')).not.toBeInTheDocument()
-  })
-
-  it('Hyperspace toggle defaults to false when no localStorage preference exists', async () => {
-    const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
-    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    fireEvent.load(screen.getByAltText('Catacombs of Cadera'))
-    const toggle = screen.getByLabelText('Hyperspace variant') as HTMLInputElement
-    expect(toggle.checked).toBe(false)
-  })
-
-  it('Hyperspace toggle defaults to true when localStorage preference is true', async () => {
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn().mockImplementation((key: string) => {
-        if (key === 'pref_hyperspace') return 'true'
-        return null
-      }),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    })
-    const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
-    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    fireEvent.load(screen.getByAltText('Catacombs of Cadera'))
-    const toggle = screen.getByLabelText('Hyperspace variant') as HTMLInputElement
-    expect(toggle.checked).toBe(true)
-  })
-
-  it('Toggling hyperspace saves preference to localStorage', async () => {
-    const setItemMock = vi.fn()
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn().mockReturnValue(null),
-      setItem: setItemMock,
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    })
-    const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
-    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    fireEvent.load(screen.getByAltText('Catacombs of Cadera'))
-    await user.click(screen.getByLabelText('Hyperspace variant'))
-    expect(setItemMock).toHaveBeenCalledWith('pref_hyperspace', 'true')
-  })
-
-  it('Hyperspace toggle appears exactly once', async () => {
-    const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
-    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    fireEvent.load(screen.getByAltText('Catacombs of Cadera'))
-    expect(screen.getAllByLabelText('Hyperspace variant')).toHaveLength(1)
-  })
-
-  it('Preview shows hyperspaceArt when toggle is on', async () => {
-    const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
-    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    fireEvent.load(screen.getByAltText('Catacombs of Cadera'))
-    await user.click(screen.getByLabelText('Hyperspace variant'))
-    const img = screen.getByAltText('Catacombs of Cadera')
-    expect(img).toHaveAttribute('src', mockBases[0].hyperspaceArtHiRes)
-  })
-
-  it('Preview shows frontArt when toggle is off', async () => {
-    const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
-    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    const img = screen.getByAltText('Catacombs of Cadera')
-    expect(img).toHaveAttribute('src', mockBases[0].frontArt)
-  })
-
-  it('Shows an error message when all art fails', async () => {
-    const user = userEvent.setup()
-    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
-    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    await user.selectOptions(getBaseSelectors()[0], 'LAW')
-    await user.selectOptions(getBaseSelectors()[1], 'Vigilance')
-    await user.selectOptions(getBaseSelectors()[2], 'LAW-021')
-    // In this test, swuapi returns empty so LAW is processed via the swu-db-only
-    // path, giving frontArtLowRes=null. One error exhausts all normal art options.
-    fireEvent.error(screen.getByAltText('Coaxium Mine'))
-    await waitFor(() => expect(screen.getByText('No base images found')).toBeInTheDocument())
-  })
-
   // --- Base option format ---
 
   it('Base options show name and HP but not subtitle', async () => {
@@ -821,39 +706,43 @@ describe('SwuSetupScreen', () => {
     expect((input as HTMLInputElement).value).toBe('not-valid')
   })
 
-  // --- SWUDB import: preview and hyperspace ---
+  // --- Hyperspace (via settings) ---
 
-  it('Shows base preview image in SWUDB import mode after successful load', async () => {
+  it('Hyperspace toggle never appears on the setup screen', async () => {
     const user = userEvent.setup()
-    await switchToSwudbMode(user)
-    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
-    await user.click(screen.getByTestId('swudb-load-button'))
-    await waitFor(() => expect(screen.getByAltText('Lake Country')).toBeInTheDocument())
-  })
-
-  it('Shows hyperspace toggle in SWUDB import mode when base has hyperspace art', async () => {
-    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
-      const url = input.toString()
-      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Test Deck', base: { defaultExpansionAbbreviation: 'SOR', defaultCardNumber: '026' } }) } as any)
-      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
-    })
-    const user = userEvent.setup()
-    await switchToSwudbMode(user)
-    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
-    await user.click(screen.getByTestId('swudb-load-button'))
-    await waitFor(() => expect(screen.getByAltText('Catacombs of Cadera')).toBeInTheDocument())
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
     fireEvent.load(screen.getByAltText('Catacombs of Cadera'))
-    expect(screen.getByLabelText('Hyperspace variant')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Hyperspace variant')).not.toBeInTheDocument()
   })
 
-  it('Does not show hyperspace toggle in SWUDB import mode for a base without hyperspace art', async () => {
+  it('Calls onConfirm with useHyperspace=true when user settings preference is true', async () => {
+    mockUserSettings.useHyperspace = true
     const user = userEvent.setup()
-    await switchToSwudbMode(user)
-    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
-    await user.click(screen.getByTestId('swudb-load-button'))
-    await waitFor(() => expect(screen.getByAltText('Lake Country')).toBeInTheDocument())
-    expect(screen.queryByLabelText('Hyperspace variant')).not.toBeInTheDocument()
+    const onConfirm = vi.fn()
+    render(<SwuSetupScreen onConfirm={onConfirm} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+    await user.click(screen.getByText('>'))
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ set: 'SOR', number: '026' }), true)
+  })
+
+  it('Calls onConfirm with useHyperspace=false when user settings preference is false', async () => {
+    mockUserSettings.useHyperspace = false
+    const user = userEvent.setup()
+    const onConfirm = vi.fn()
+    render(<SwuSetupScreen onConfirm={onConfirm} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+    await user.click(screen.getByText('>'))
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ set: 'SOR', number: '026' }), false)
   })
 
   // --- Settings button ---
