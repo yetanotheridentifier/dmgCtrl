@@ -6,7 +6,13 @@ import { Base } from '../hooks/useBases'
 import { useOrientation } from '../hooks/useOrientation'
 
 vi.mock('../hooks/useOrientation')
-vi.mock('../flags', () => ({ FEATURE_EPIC_ACTION: true, FEATURE_FORCE_TOKEN: true, FEATURE_WAKE_LOCK: true }))
+const featureUserSettings = vi.hoisted(() => ({ value: false }))
+vi.mock('../flags', () => ({
+  FEATURE_EPIC_ACTION: true,
+  FEATURE_FORCE_TOKEN: true,
+  FEATURE_WAKE_LOCK: true,
+  get FEATURE_USER_SETTINGS() { return featureUserSettings.value },
+}))
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -662,6 +668,34 @@ describe('SwuGameScreen', () => {
     }
     await user.click(screen.getByTestId('force-btn'))
     expect(screen.getByTestId('force-token')).toBeInTheDocument()
+  })
+
+  // --- Settings button ---
+
+  it('Settings button is not visible when FEATURE_USER_SETTINGS is false', () => {
+    featureUserSettings.value = false
+    vi.mocked(useOrientation).mockReturnValue({ isPortrait: false, vmin: 0 })
+    render(<SwuGameScreen base={mockBase} useHyperspace={false} onBack={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: '⚙' })).not.toBeInTheDocument()
+  })
+
+  it('Settings button is visible when FEATURE_USER_SETTINGS is true', () => {
+    featureUserSettings.value = true
+    vi.mocked(useOrientation).mockReturnValue({ isPortrait: false, vmin: 0 })
+    render(<SwuGameScreen base={mockBase} useHyperspace={false} onBack={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} />)
+    expect(screen.getByRole('button', { name: '⚙' })).toBeInTheDocument()
+    featureUserSettings.value = false
+  })
+
+  it('Settings button calls onSettings when clicked', async () => {
+    featureUserSettings.value = true
+    const user = userEvent.setup()
+    vi.mocked(useOrientation).mockReturnValue({ isPortrait: false, vmin: 0 })
+    const onSettings = vi.fn()
+    render(<SwuGameScreen base={mockBase} useHyperspace={false} onBack={vi.fn()} onHelp={vi.fn()} onSettings={onSettings} />)
+    await user.click(screen.getByRole('button', { name: '⚙' }))
+    expect(onSettings).toHaveBeenCalledOnce()
+    featureUserSettings.value = false
   })
 
 })

@@ -12,6 +12,7 @@ Core functionality:
 - **Epic Action tracking** — a ★ button marks the base's once-per-game ability as used; a gold token overlay appears over the card's epic action text area to indicate the spent state
 - **Force token tracking** — a Force icon button is available on every base; on Force bases it is immediately active, on other bases a single enable tap unlocks it for games where the Force is gained via a card or leader ability
 - **Screen wake lock** — prevents the device screen from sleeping while on the game screen
+- **User settings** — persistent preferences (hyperspace art, force token, epic actions, wake lock) accessible via the ⚙ button on the setup and game screens
 - **Offline capability** — PWA support means the app can be installed and used without a network connection
 
 The app is served at `/dmgCtrl/` and is designed to be added to an iOS home screen for a native-like experience.
@@ -63,14 +64,17 @@ App
 ├── SwuSetupScreen        (container)
 │   ├── useSwuSetup       (hook — filtering, auto-select, hyperspace preference)
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
-│   └── SwuSetupScreenView (view — renders mode selector, selects, image preview, start button)
+│   └── SwuSetupScreenView (view — renders mode selector, selects, image preview, start button; ⚙ button opens settings)
 │       └── ImagePreview  (pure view — renders art or error message from props)
 ├── SwuGameScreen         (container)
 │   ├── useSwuGame        (hook — damage counter, epic action, Force token enabled and active state)
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
 │   ├── useWakeLock       (hook — prevents screen sleep during gameplay via Screen Wake Lock API)
-│   └── SwuGameScreenView (view — renders counter, image, epic action token, Force token)
-└── SwuHelpScreen         (standalone screen — renders help.md content)
+│   └── SwuGameScreenView (view — renders counter, image, epic action token, Force token; ⚙ button opens settings)
+├── SwuHelpScreen         (standalone screen — renders help.md content)
+└── SwuSettingsScreen     (container)
+    ├── useUserSettings   (hook — persistent user preferences)
+    └── SwuSettingsScreenView (view — toggle list with back and help buttons; calls useOrientation directly for font sizing)
 
 Each screen is wrapped in AppScreenLayout (shared layout component)
 ```
@@ -83,6 +87,8 @@ Every screen is split into two files:
 - **View** (e.g. `swuGameScreenView.tsx`) — receives props and renders. Contains no business logic. Easy to test in isolation.
 
 This pattern keeps views thin and ensures logic is tested via hook and container tests rather than integration tests that have to simulate complex UI interactions.
+
+The exception is `SwuSettingsScreenView`, which calls `useOrientation()` directly to handle iOS Dynamic Type font scaling — the same approach used by `SwuHelpScreen`.
 
 ### Separation of concerns
 
@@ -112,11 +118,13 @@ src/
       AppScreenLayout.tsx  Shared full-screen layout wrapper (background, safe area)
     imagePreview.tsx        Pure view — renders card art or error message from props
     swuGameScreen.tsx       Game screen container
-    swuGameScreenView.tsx   Game screen view
+    swuGameScreenView.tsx   Game screen view (⚙ button visible when FEATURE_USER_SETTINGS is enabled)
     swuHelpScreen.tsx       Help screen (renders help.md; title row: back button + icon + "Help" h1)
     swuLoadingScreen.tsx    Loading screen (icon + "LOADING" text; 1-second minimum display; calls onReady when both timer and data loading are done)
     swuSetupScreen.tsx      Setup screen container
-    swuSetupScreenView.tsx  Setup screen view (title row: icon + "dmgCtrl" h1 + help button)
+    swuSetupScreenView.tsx  Setup screen view (title row: icon + "dmgCtrl" h1 + ⚙ button + help button)
+    swuSettingsScreen.tsx   Settings screen container
+    swuSettingsScreenView.tsx Settings screen view (toggle list; calls useOrientation directly for iOS font sizing)
 
   hooks/
     useBaseArt.ts           Ordered art fallback chain shared by setup and game screens
@@ -124,7 +132,6 @@ src/
     useOrientation.ts       Detects portrait vs landscape; returns isPortrait (via matchMedia change event) and vmin (Math.min(screen.width, screen.height) — stable across rotations)
     useSwuGame.ts           Damage counter, epic action used state, Force token enabled and active state
     useSwuSetup.ts          Setup screen logic — filtering, auto-select, hyperspace preference
-    useUserSettings.ts      Persistent user preferences (useHyperspace, enableForceToken, enableEpicActions, enableWakeLock) backed by localStorage under key `user_settings`; all default to true
     useUserSettings.ts      Persistent user preferences (useHyperspace, enableForceToken, enableEpicActions, enableWakeLock) backed by localStorage under key `user_settings`; all default to true
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
@@ -139,13 +146,13 @@ src/
     swuHelpScreen.test.tsx  Help screen tests
     swuLoadingScreen.test.tsx Loading screen tests
     swuSetupScreen.test.tsx Setup screen container tests
+    swuSettingsScreen.test.tsx Settings screen container tests
     swudbUrl.test.ts        SWUDB URL utility tests
     useBaseArt.test.ts      Art fallback chain hook tests
     useBases.test.ts        Data layer hook tests
     useOrientation.test.ts  Orientation hook tests
     useSwuGame.test.ts      Counter hook tests
     useSwuSetup.test.ts     Setup logic hook tests
-    useUserSettings.test.ts User settings hook tests
     useUserSettings.test.ts User settings hook tests
     useWakeLock.test.ts     Screen Wake Lock hook tests
 
@@ -179,10 +186,10 @@ State is owned at the appropriate level:
 
 | State | Owner | How it flows |
 |---|---|---|
-| Current screen (`loading` / `setup` / `game` / `help`) | `App` | Passed as callback props (`onReady`, `onStartGame`, `onBack`, `onHelp`) |
-| Previous screen (for help back-navigation) | `App` | Stored so the help screen knows where to return |
+| Current screen (`loading` / `setup` / `game` / `help` / `settings`) | `App` | Passed as callback props (`onReady`, `onConfirm`, `onBack`, `onHelp`, `onSettings`) |
+| Previous screen (for help/settings back-navigation) | `App` | Stored so the help and settings screens know where to return |
 | `useBases()` loading state (for loading screen) | `App` | `App` calls `useBases()` and passes `loading` prop to `SwuLoadingScreen`; `SwuLoadingScreen` calls `onReady` only when both the data is ready and the 1-second minimum timer has elapsed |
-| Selected base | `App` | Set on `onStartGame`, passed into `SwuGameScreen` |
+| Selected base | `App` | Set on `onConfirm`, passed into `SwuGameScreen` |
 | Last setup selection (`set`, `aspect`, `key`) | `App` | Saved on `handleConfirm`; passed as `initialSelection` prop to `SwuSetupScreen` so dropdowns are pre-populated on back navigation |
 | Hyperspace preference | `App` / localStorage | Read at startup, toggled on setup screen, passed to game screen |
 | Filter state (set, aspect, card) | `useSwuSetup` | Seeded from `initialSelection` on mount; local after that |
@@ -191,7 +198,6 @@ State is owned at the appropriate level:
 | Force token enabled state | `useSwuGame` | Local to game screen; set to `true` by the enable tap on non-Force bases; combined with `isForceBase` in the container to derive `effectiveForceEnabled`; reset on each navigation |
 | Force token active state | `useSwuGame` | Local to game screen; toggled by the Force button and overlay; reset on each navigation to the game screen |
 | Art fallback index, image load state | `useBaseArt` | Local to whichever screen called it; reset when base changes |
-| User settings (hyperspace, force token, epic actions, wake lock) | `useUserSettings` / localStorage | Persisted under `user_settings` as JSON; all default to `true`; read by any screen that calls the hook |
 | User settings (hyperspace, force token, epic actions, wake lock) | `useUserSettings` / localStorage | Persisted under `user_settings` as JSON; all default to `true`; read by any screen that calls the hook |
 | Selection mode (`base-selector` / `swudb-import`) | `SwuSetupScreen` / localStorage | Persisted under `pref_selection_mode`; defaults to `base-selector` |
 | SWUDB URL input, validation error, deck name, loading state | `SwuSetupScreen` | Local; `swudbDeckName` remains `null` until a successful API load |
@@ -252,6 +258,14 @@ When `epicActionUsed && showEpicAction && forceActive && showForce` are all true
 - The epic action overlay occupies the **left half** of the card's bottom section
 - The Force token overlay occupies the **right half**
 - Both are independently tappable to dismiss
+
+### Example flow: Settings navigation
+
+1. User taps the ⚙ button on the setup or game screen
+2. `App` records `previousScreen` and sets `screen = 'settings'`
+3. `SwuSettingsScreen` renders — user adjusts preferences; each toggle writes immediately to localStorage via `useUserSettings`
+4. User taps `<` — `App` sets `screen = previousScreen`, returning to wherever they came from
+5. The updated preferences take effect next time the relevant screen mounts (e.g. game screen reads `enableForceToken` on start)
 
 ---
 
@@ -389,11 +403,12 @@ Cons: no media query support in inline styles (workaround: derive breakpoint-bas
 
 ### Responsive layout
 
-The app is designed for **landscape orientation**. `useOrientation` is used in three places:
+The app is designed for **landscape orientation**. `useOrientation` is used in four places:
 
 - **Setup screen** (`SwuSetupScreenView`) — renders a two-column layout in landscape (selectors left, card preview right) and a single-column scrollable layout in portrait.
 - **Game screen** (`SwuGameScreen`) — renders the full-screen card layout in landscape and a rotation prompt in portrait.
 - **Help screen** (`SwuHelpScreen`) — uses `vmin` to compute JS-based font sizes for the title row; `isPortrait` is used as a React `key` to force DOM remount on rotation, flushing any cached computed styles.
+- **Settings screen** (`SwuSettingsScreenView`) — uses `vmin` for JS-based font sizes; `isPortrait` as a React `key` for DOM remount on rotation; `fontFamily` set to `Helvetica, Arial, sans-serif` with `-webkit-text-size-adjust: 100%` to prevent iOS Dynamic Type scaling the toggle labels.
 
 `useOrientation` uses `window.matchMedia('(orientation: portrait)')` change events (reliable on iOS standalone PWA, unlike `orientationchange`/`resize`). It returns `isPortrait` (boolean) and `vmin` (`Math.min(screen.width, screen.height)` — the device's physical short dimension, which is stable across orientation changes unlike `window.innerWidth`).
 
@@ -460,12 +475,25 @@ When the base is not recognised, the deck name is still shown (so the user can s
    - `showForce = FEATURE_FORCE_TOKEN` — always `true` when the flag is on; the Force button slot is shown for every base
    - `isForceBase = /the force is with you/i.test(base.epicAction)` — LOF bases whose ability explicitly creates a Force token
    - `effectiveForceEnabled = isForceBase || forceEnabled` — Force bases start enabled; others start locked until the user taps the dimmed icon
-5. Props passed to the view include art state, counter callbacks, `epicActionUsed`, `onEpicActionToggle`, `showEpicAction`, `forceEnabled` (= `effectiveForceEnabled`), `forceActive`, `onForceEnable`, `onForceToggle`, and `showForce`
+5. Props passed to the view include art state, counter callbacks, `epicActionUsed`, `onEpicActionToggle`, `showEpicAction`, `forceEnabled` (= `effectiveForceEnabled`), `forceActive`, `onForceEnable`, `onForceToggle`, `showForce`, and `onSettings` (gated by `FEATURE_USER_SETTINGS`)
 6. The left-side button column (top to bottom): `<` back → Force icon (locked, ready, or overlay-active/greyed) → ★ epic action (when present)
-7. View renders the card image, counter, and up to two overlays over the bottom portion of the card:
+7. The right-side button column (top to bottom): `?` help → ⚙ settings (when `FEATURE_USER_SETTINGS` is enabled)
+8. View renders the card image, counter, and up to two overlays over the bottom portion of the card:
    - **Epic action token** (gold, ✕): when `epicActionUsed && showEpicAction`
    - **Force token** (blue, "The Force is With You"): when `forceActive && showForce`
    - When **both** are active, the view computes `bothOverlaysActive = true` and renders them side by side (epic action left, Force right), each at half width
+
+### Settings screen
+
+The settings screen is gated by `FEATURE_USER_SETTINGS` (defaults to `false`). When the flag is enabled:
+
+- A ⚙ button appears in the top-right area of the setup screen (alongside the `?` help button) and the game screen (below the `?` help button)
+- Tapping ⚙ navigates to `SwuSettingsScreen`, with `previousScreen` saved so the back button returns to the correct place
+- `SwuSettingsScreen` (container) calls `useUserSettings()` to read and write preferences
+- `SwuSettingsScreenView` (view) renders a header row (back `<`, icon, "Settings" h1, help `?`) and a scrollable toggle list
+- Each toggle writes immediately to localStorage via `useUserSettings` — there is no save/cancel step
+- The four toggles: **Use Hyperspace Art**, **Enable Force Token**, **Enable Epic Actions**, **Enable Screen Wake Lock**
+- `SwuSettingsScreenView` calls `useOrientation()` directly (not via props) and applies `fontFamily: 'Helvetica, Arial, sans-serif'` to prevent iOS Dynamic Type from overriding font sizes
 
 ### Screen Wake Lock
 
@@ -481,19 +509,36 @@ When the base is not recognised, the deck name is still shown (so the user can s
 - Android Chrome: supported since Chrome 84 (2020)
 - iOS Safari PWA: supported since iOS 16.4 (March 2023); only works when installed to home screen — not in a regular Safari tab
 
-The hook is controlled by `FEATURE_WAKE_LOCK` (defaults to `true`). The flag allows the feature to be disabled at build time if needed. Settings screen integration (ON/OFF per user preference) is deferred to ticket #5.
+The hook is controlled by `FEATURE_WAKE_LOCK` (defaults to `true`). Ticket #5 will expose this as a user preference on the settings screen.
 
 ### Feature flags
 
-Feature flags live in `src/flags.ts`. Each flag reads a `VITE_FEATURE_*` env var at build time and defaults to `true` if the var is absent or not set to `'false'`.
+Feature flags live in `src/flags.ts`. Each flag reads a `VITE_FEATURE_*` env var at build time.
 
+Most flags default to `true` if the var is absent or not `'false'`:
 ```typescript
 export const FEATURE_EPIC_ACTION = import.meta.env.VITE_FEATURE_EPIC_ACTION !== 'false'
 export const FEATURE_FORCE_TOKEN = import.meta.env.VITE_FEATURE_FORCE_TOKEN !== 'false'
 export const FEATURE_WAKE_LOCK   = import.meta.env.VITE_FEATURE_WAKE_LOCK   !== 'false'
 ```
 
-Test files mock the flags module with `vi.mock('../flags', () => ({ FEATURE_EPIC_ACTION: true, FEATURE_FORCE_TOKEN: true, FEATURE_WAKE_LOCK: true }))` to test flag-gated behaviour in isolation. Ticket #5 (settings screen) will convert active flags to user preferences stored in localStorage.
+`FEATURE_USER_SETTINGS` is **inverted** — it defaults to `false` and must be explicitly opted in during development. This keeps the in-progress settings screen hidden in production until the full feature is complete:
+```typescript
+export const FEATURE_USER_SETTINGS = import.meta.env.VITE_FEATURE_USER_SETTINGS === 'true'
+```
+
+Test files mock the flags module with `vi.mock('../flags', () => ({ ... }))`. Tests that need per-test flag control use `vi.hoisted` with a getter:
+```typescript
+const featureUserSettings = vi.hoisted(() => ({ value: false }))
+vi.mock('../flags', () => ({
+  FEATURE_EPIC_ACTION: true,
+  FEATURE_FORCE_TOKEN: true,
+  FEATURE_WAKE_LOCK: true,
+  get FEATURE_USER_SETTINGS() { return featureUserSettings.value },
+}))
+```
+
+Ticket #5 will convert `FEATURE_EPIC_ACTION`, `FEATURE_FORCE_TOKEN`, and `FEATURE_WAKE_LOCK` from build-time flags to runtime user preferences stored in `useUserSettings`.
 
 ### Adding a new feature
 
@@ -685,7 +730,7 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | **View** | A React component that only renders — receives all data and callbacks as props, contains no business logic. |
 | **AppScreenLayout** | The shared full-screen layout wrapper that provides background, safe area padding, and star field for every screen. |
 | **CSS custom properties** | Variables defined in `:root` in `index.css` (e.g. `--color-accent`) and referenced in inline styles via `var()`. Single source of truth for the colour palette. |
-| **Feature flag** | A boolean constant in `src/flags.ts` that gates in-progress features. Defaults to `true`; can be overridden at build time via a `VITE_FEATURE_*` env var. |
+| **Feature flag** | A boolean constant in `src/flags.ts` that gates in-progress features. Most default to `true`; `FEATURE_USER_SETTINGS` defaults to `false` (opt-in during development). |
 | **Screen Wake Lock** | A browser API (`navigator.wakeLock.request('screen')`) that prevents the device screen from sleeping. Used by `useWakeLock` on the game screen. Supported on Android Chrome and iOS Safari PWA (iOS 16.4+). |
 | **swu-db proxy** | A Cloudflare Worker at `swu-proxy.dmgctrl.workers.dev` that proxies requests to swu-db.com and swudb.com to avoid CORS issues. |
 | **PWA** | Progressive Web App — a web app that can be installed on a device and used offline. |

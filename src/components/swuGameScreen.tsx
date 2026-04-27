@@ -4,7 +4,7 @@ import { useSwuGame } from '../hooks/useSwuGame'
 import { useBaseArt } from '../hooks/useBaseArt'
 import { useOrientation } from '../hooks/useOrientation'
 import { useWakeLock } from '../hooks/useWakeLock'
-import { FEATURE_EPIC_ACTION, FEATURE_FORCE_TOKEN, FEATURE_WAKE_LOCK } from '../flags'
+import { FEATURE_EPIC_ACTION, FEATURE_FORCE_TOKEN, FEATURE_WAKE_LOCK, FEATURE_USER_SETTINGS } from '../flags'
 import SwuGameScreenView from './swuGameScreenView'
 import AppScreenLayout from './layout/AppScreenLayout'
 
@@ -12,10 +12,11 @@ interface Props {
   base: Base
   onBack: () => void
   onHelp: () => void
+  onSettings?: () => void
   useHyperspace: boolean
 }
 
-function SwuGameScreen({ base, onBack, onHelp, useHyperspace }: Props) {
+function SwuGameScreen({ base, onBack, onHelp, onSettings, useHyperspace }: Props) {
   const art = useBaseArt(base, useHyperspace)
   const { count, increment, decrement, epicActionUsed, toggleEpicAction, forceActive, toggleForce, forceEnabled, enableForce } = useSwuGame(base.hp)
   const { isPortrait } = useOrientation()
@@ -91,6 +92,7 @@ function SwuGameScreen({ base, onBack, onHelp, useHyperspace }: Props) {
       base={base}
       onBack={onBack}
       onHelp={onHelp}
+      onSettings={FEATURE_USER_SETTINGS ? onSettings : undefined}
       imageSrc={art.src ?? ''}
       imageRotationDeg={art.rotationDeg}
       count={count}

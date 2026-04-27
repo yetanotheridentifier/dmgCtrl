@@ -9,6 +9,7 @@ interface Props {
   base: Base
   onBack: () => void
   onHelp: () => void
+  onSettings?: () => void
   imageSrc: string
   imageRotationDeg: number
   count: number
@@ -35,6 +36,7 @@ function SwuGameScreenView({
   base,
   onBack,
   onHelp,
+  onSettings,
   imageSrc,
   imageRotationDeg,
   count,
@@ -299,6 +301,40 @@ function SwuGameScreenView({
       >
         ?
       </button>
+
+      {/* Settings button — below help, top-right */}
+      {onSettings && (
+        <button
+          onClick={onSettings}
+          aria-label="⚙"
+          style={{
+            position: 'absolute',
+            top: 'calc(env(safe-area-inset-top) + 9vw)',
+            right: 'calc(env(safe-area-inset-right) + 2vw)',
+            width: '5vw',
+            height: '5vw',
+            minWidth: '36px',
+            minHeight: '36px',
+            background: 'transparent',
+            border: '2px solid var(--color-ui-border)',
+            borderRadius: '8px',
+            color: 'var(--color-ui-border-muted)',
+            fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10,
+            WebkitTapHighlightColor: 'transparent',
+            boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
+          }}
+        >
+          <svg width="55%" height="55%" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+        </button>
+      )}
 
       {/* Card container */}
       <div style={{
