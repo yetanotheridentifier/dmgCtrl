@@ -71,7 +71,7 @@ input[type=number] {
 .help-content h2 {
   color: var(--color-accent);
   font-weight: 300;
-  font-size: clamp(1rem, 5vw, 1.3rem);
+  font-size: 1.15rem;
   letter-spacing: 0.05em;
   margin: 1.5em 0 0.75em 0;
   padding-bottom: 0.4em;
@@ -85,7 +85,7 @@ input[type=number] {
 .help-content h3 {
   color: var(--color-accent);
   font-weight: 300;
-  font-size: clamp(0.9rem, 4vw, 1.1rem);
+  font-size: 0.95rem;
   letter-spacing: 0.05em;
   margin: 1.2em 0 0.5em 0;
 }
@@ -93,7 +93,7 @@ input[type=number] {
 .help-content p {
   color: var(--color-text-body);
   font-weight: 300;
-  font-size: clamp(0.9rem, 4vw, 1.05rem);
+  font-size: 0.95rem;
   line-height: 1.65;
   margin: 0 0 0.6em 0;
 }
@@ -102,7 +102,7 @@ input[type=number] {
 .help-content ol {
   color: var(--color-text-body);
   font-weight: 300;
-  font-size: clamp(0.9rem, 4vw, 1.05rem);
+  font-size: 0.95rem;
   line-height: 1.65;
   margin: 0 0 0.6em 0;
   padding-left: 1.4em;
@@ -139,4 +139,20 @@ input[type=number] {
 
 .help-content a:active {
   color: #1976d2;
+}
+/* Help screen — force portrait-equivalent sizing in landscape */
+@media (orientation: landscape) {
+  .help-content h2 {
+    font-size: clamp(1rem, 5vh, 1.3rem);
+  }
+
+  .help-content h3 {
+    font-size: clamp(0.9rem, 4vh, 1.1rem);
+  }
+
+  .help-content p,
+  .help-content ul,
+  .help-content ol {
+    font-size: clamp(0.9rem, 4vh, 1.05rem);
+  }
 }

@@ -1,5 +1,6 @@
 import helpHtml from '../../docs/help.md'
 import AppScreenLayout from './layout/AppScreenLayout'
+import { useOrientation } from '../hooks/useOrientation'
 
 // Strip the <h1> from the rendered HTML — the title is provided by the JSX header instead.
 const contentHtml = helpHtml.replace(/^<h1[^>]*>[\s\S]*?<\/h1>\n?/, '')
@@ -9,11 +10,13 @@ interface Props {
 }
 
 function SwuHelpScreen({ onBack }: Props) {
+  const { isPortrait, vmin } = useOrientation()
+
   return (
     <AppScreenLayout>
 
       {/* Pinned header: title row + subtitle */}
-      <div style={{
+      <div key={isPortrait ? 'portrait' : 'landscape'} style={{
         padding: '5vw 5vw 0',
         display: 'flex',
         flexDirection: 'column',
@@ -41,7 +44,7 @@ function SwuHelpScreen({ onBack }: Props) {
               border: '2px solid var(--color-ui-border)',
               borderRadius: '8px',
               color: 'var(--color-ui-border-muted)',
-              fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
+              fontSize: `clamp(0.8rem, ${vmin * 0.02}px, 1.2rem)`,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -56,13 +59,13 @@ function SwuHelpScreen({ onBack }: Props) {
           <img
             src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`}
             alt="dmgCtrl"
-            style={{ height: 'clamp(1.8rem, 8vw, 3rem)', width: 'auto', flexShrink: 0 }}
+            style={{ height: `clamp(1.8rem, ${vmin * 0.08}px, 3rem)`, width: 'auto', flexShrink: 0 }}
           />
 
           <h1 style={{
             color: 'var(--color-text-primary)',
             fontWeight: '200',
-            fontSize: 'clamp(1.8rem, 8vw, 3rem)',
+            fontSize: `clamp(1.8rem, ${vmin * 0.08}px, 3rem)`,
             letterSpacing: '0.15em',
             margin: 0,
             lineHeight: 0.8,
