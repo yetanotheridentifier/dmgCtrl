@@ -492,7 +492,7 @@ function SwuSetupScreenView({
 
             {/* Left column */}
             <div style={{
-              flex: '0 0 45%',
+              flex: '0 0 55%',
               display: 'flex',
               flexDirection: 'column',
               overflowY: 'auto',
@@ -515,6 +515,7 @@ function SwuSetupScreenView({
               display: 'flex',
               alignItems: 'flex-start',
               justifyContent: 'flex-end',
+              paddingTop: '14px',
             }}>
               {selectedBase && (
                 <div style={{ width: '100%' }}>
