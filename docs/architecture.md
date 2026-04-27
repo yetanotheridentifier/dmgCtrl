@@ -103,7 +103,7 @@ src/
   App.tsx                  Root component — screen routing and top-level state; calls useBases() to drive loading screen transition
   main.tsx                 Entry point
   index.css                Global reset, CSS custom property palette, help screen styles
-  flags.ts                 Feature flags (FEATURE_EPIC_ACTION, FEATURE_FORCE_TOKEN, FEATURE_WAKE_LOCK)
+  flags.ts                 Feature flags (FEATURE_EPIC_ACTION, FEATURE_FORCE_TOKEN, FEATURE_WAKE_LOCK, FEATURE_USER_SETTINGS)
   markdown.d.ts            Type declaration for .md imports
   vite-env.d.ts            Vite environment types
 
@@ -124,6 +124,8 @@ src/
     useOrientation.ts       Detects portrait vs landscape; returns isPortrait (via matchMedia change event) and vmin (Math.min(screen.width, screen.height) — stable across rotations)
     useSwuGame.ts           Damage counter, epic action used state, Force token enabled and active state
     useSwuSetup.ts          Setup screen logic — filtering, auto-select, hyperspace preference
+    useUserSettings.ts      Persistent user preferences (useHyperspace, enableForceToken, enableEpicActions, enableWakeLock) backed by localStorage under key `user_settings`; all default to true
+    useUserSettings.ts      Persistent user preferences (useHyperspace, enableForceToken, enableEpicActions, enableWakeLock) backed by localStorage under key `user_settings`; all default to true
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
   utils/
@@ -143,6 +145,8 @@ src/
     useOrientation.test.ts  Orientation hook tests
     useSwuGame.test.ts      Counter hook tests
     useSwuSetup.test.ts     Setup logic hook tests
+    useUserSettings.test.ts User settings hook tests
+    useUserSettings.test.ts User settings hook tests
     useWakeLock.test.ts     Screen Wake Lock hook tests
 
   assets/
@@ -187,6 +191,8 @@ State is owned at the appropriate level:
 | Force token enabled state | `useSwuGame` | Local to game screen; set to `true` by the enable tap on non-Force bases; combined with `isForceBase` in the container to derive `effectiveForceEnabled`; reset on each navigation |
 | Force token active state | `useSwuGame` | Local to game screen; toggled by the Force button and overlay; reset on each navigation to the game screen |
 | Art fallback index, image load state | `useBaseArt` | Local to whichever screen called it; reset when base changes |
+| User settings (hyperspace, force token, epic actions, wake lock) | `useUserSettings` / localStorage | Persisted under `user_settings` as JSON; all default to `true`; read by any screen that calls the hook |
+| User settings (hyperspace, force token, epic actions, wake lock) | `useUserSettings` / localStorage | Persisted under `user_settings` as JSON; all default to `true`; read by any screen that calls the hook |
 | Selection mode (`base-selector` / `swudb-import`) | `SwuSetupScreen` / localStorage | Persisted under `pref_selection_mode`; defaults to `base-selector` |
 | SWUDB URL input, validation error, deck name, loading state | `SwuSetupScreen` | Local; `swudbDeckName` remains `null` until a successful API load |
 
