@@ -3,6 +3,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { marked } from 'marked'
+import mkcert from 'vite-plugin-mkcert'
 
 export default defineConfig({
   base: '/dmgCtrl/',
@@ -15,9 +16,11 @@ export default defineConfig({
         return `export default ${JSON.stringify(html)}`
       },
     },
+    mkcert(),
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      devOptions: { enabled: false },
       manifest: {
         name: 'dmgCtrl',
         short_name: 'dmgCtrl',
