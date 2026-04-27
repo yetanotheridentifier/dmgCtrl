@@ -56,6 +56,7 @@ After setup, `npm run dev:https` will print a local network URL (e.g. `https://1
 ## Notes for AI Assistants
 
 - `npm install` requires `--legacy-peer-deps` due to Vite / vite-plugin-pwa version conflict
+- **File edits:** prefer Node.js scripts for all source file edits (`.ts`, `.tsx`, `.css`, `package.json`, etc.) — Windows CRLF line endings cause the Edit tool to fail silently. For `.md` files use the Write tool (full rewrite). Never use PowerShell file-write cmdlets (corrupts non-ASCII characters).
 - The app is designed for **landscape iPhone** — portrait mode is functional but not the primary target
 - swu-db.com blocks direct browser requests (CORS) — all calls go via the Cloudflare Worker proxy at `https://swu-proxy.dmgctrl.workers.dev`
 - swuapi.com has CORS enabled and can be called directly from the browser
@@ -81,3 +82,5 @@ After setup, `npm run dev:https` will print a local network URL (e.g. `https://1
 - **Do not use `system-ui` or `-apple-system` in CSS class font stacks** (e.g. in `index.css`). On iOS 17+, these trigger Dynamic Type which overrides explicit font sizes in landscape mode regardless of `-webkit-text-size-adjust`. Use `Helvetica, Arial, sans-serif` instead. Inline styles are unaffected.
 - `src/test/setup.ts` includes a global `matchMedia` mock that defaults to landscape. Tests that need portrait orientation should call `makeMatchMediaMock(true)` (imported from `./setup`).
 - HTTPS local dev: `npm run dev:https` serves over HTTPS on the local network using `vite-plugin-mkcert`. Requires mkcert installed and `mkcert -install` run once; iOS devices need the root CA manually trusted (see Development section above). The service worker is disabled in dev mode to prevent stale caching.
+- `useUserSettings` hook persists user preferences to localStorage under key `user_settings` as JSON. All four preferences (`useHyperspace`, `enableForceToken`, `enableEpicActions`, `enableWakeLock`) default to `true`. The hook handles corrupt/missing storage gracefully by falling back to defaults for any missing key.
+- `FEATURE_USER_SETTINGS` defaults to `false` (inverted from the other flags which default to `true`). Set `VITE_FEATURE_USER_SETTINGS=true` locally to test the in-progress settings screen.
