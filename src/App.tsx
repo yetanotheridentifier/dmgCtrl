@@ -5,7 +5,6 @@ import SwuGameScreen from './components/swuGameScreen'
 import SwuHelpScreen from './components/swuHelpScreen'
 import SwuSettingsScreen from './components/swuSettingsScreen'
 import { Base, useBases } from './hooks/useBases'
-import { FEATURE_USER_SETTINGS } from './flags'
 import { InitialSelection } from './hooks/useSwuSetup'
 
 type Screen = 'loading' | 'setup' | 'game' | 'help' | 'settings'
@@ -14,15 +13,13 @@ function App() {
   const [screen, setScreen] = useState<Screen>('loading')
   const [previousScreen, setPreviousScreen] = useState<Screen>('setup')
   const [selectedBase, setSelectedBase] = useState<Base | null>(null)
-  const [useHyperspace, setUseHyperspace] = useState(false)
   const [lastSelection, setLastSelection] = useState<InitialSelection | null>(null)
   const { loading } = useBases()
 
   const handleReady = () => setScreen('setup')
 
-  const handleConfirm = (base: Base, hyperspace: boolean) => {
+  const handleConfirm = (base: Base) => {
     setSelectedBase(base)
-    setUseHyperspace(hyperspace)
     setLastSelection({ set: base.set, aspect: base.aspects[0] ?? 'None', key: `${base.set}-${base.number}` })
     setScreen('game')
   }
@@ -60,7 +57,7 @@ function App() {
       <SwuSetupScreen
         onConfirm={handleConfirm}
         onHelp={handleHelp}
-        onSettings={FEATURE_USER_SETTINGS ? handleSettings : undefined}
+        onSettings={handleSettings}
         initialSelection={lastSelection}
       />
     )
@@ -71,8 +68,7 @@ function App() {
       base={selectedBase!}
       onBack={handleBack}
       onHelp={handleHelp}
-      onSettings={FEATURE_USER_SETTINGS ? handleSettings : undefined}
-      useHyperspace={useHyperspace}
+      onSettings={handleSettings}
     />
   )
 }

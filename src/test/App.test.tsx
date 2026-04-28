@@ -38,13 +38,6 @@ vi.mock('../hooks/useBases', () => ({
   useBases: vi.fn().mockReturnValue({ bases: mockBases, loading: false, error: null }),
 }))
 
-const featureUserSettings = vi.hoisted(() => ({ value: false }))
-vi.mock('../flags', () => ({
-  FEATURE_EPIC_ACTION: true,
-  FEATURE_FORCE_TOKEN: true,
-  FEATURE_WAKE_LOCK: true,
-  get FEATURE_USER_SETTINGS() { return featureUserSettings.value },
-}))
 
 const mockUserSettings = vi.hoisted(() => ({
   useHyperspace: true,
@@ -278,26 +271,6 @@ describe('App', () => {
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
   }, 10000)
 
-  it('Passes hyperspace preference through to game screen', async () => {
-    const user = userEvent.setup()
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn().mockImplementation((key: string) => {
-        if (key === 'pref_hyperspace') return 'true'
-        return null
-      }),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    })
-    render(<App />)
-    await waitForSetup()
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
-    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByText('>'))
-    const img = screen.getByAltText('Catacombs of Cadera')
-    expect(img).toHaveAttribute('src', 'https://cdn.swu-db.com/images/cards/SOR/292.png')
-  }, 10000)
   it('Passes useHyperspace=true to game screen when user settings preference is true', async () => {
     mockUserSettings.useHyperspace = true
     const user = userEvent.setup()
@@ -327,44 +300,30 @@ describe('App', () => {
 
   // --- Settings navigation ---
 
-  it('Settings button is not visible when FEATURE_USER_SETTINGS is false', async () => {
-    featureUserSettings.value = false
-    render(<App />)
-    await waitForSetup()
-    expect(screen.queryByRole('button', { name: '⚙' })).not.toBeInTheDocument()
-  }, 10000)
-
-  it('Settings button is visible on setup screen when FEATURE_USER_SETTINGS is true', async () => {
-    featureUserSettings.value = true
+  it('Settings button is visible on setup screen', async () => {
     render(<App />)
     await waitForSetup()
     expect(screen.getByRole('button', { name: '⚙' })).toBeInTheDocument()
-    featureUserSettings.value = false
   }, 10000)
 
   it('Clicking settings on setup screen shows the settings screen', async () => {
-    featureUserSettings.value = true
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
     await user.click(screen.getByRole('button', { name: '⚙' }))
     expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument()
-    featureUserSettings.value = false
   }, 10000)
 
   it('Clicking back from settings returns to setup when settings was opened from setup', async () => {
-    featureUserSettings.value = true
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
     await user.click(screen.getByRole('button', { name: '⚙' }))
     await user.click(screen.getByRole('button', { name: '<' }))
     expect(screen.getByText('Input Mode:')).toBeInTheDocument()
-    featureUserSettings.value = false
   }, 10000)
 
-  it('Settings button is visible on game screen when FEATURE_USER_SETTINGS is true', async () => {
-    featureUserSettings.value = true
+  it('Settings button is visible on game screen', async () => {
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
@@ -373,11 +332,9 @@ describe('App', () => {
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
     await user.click(screen.getByText('>'))
     expect(screen.getByRole('button', { name: '⚙' })).toBeInTheDocument()
-    featureUserSettings.value = false
   }, 10000)
 
   it('Clicking settings on game screen shows the settings screen', async () => {
-    featureUserSettings.value = true
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
@@ -387,11 +344,9 @@ describe('App', () => {
     await user.click(screen.getByText('>'))
     await user.click(screen.getByRole('button', { name: '⚙' }))
     expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument()
-    featureUserSettings.value = false
   }, 10000)
 
   it('Clicking back from settings returns to game when settings was opened from game', async () => {
-    featureUserSettings.value = true
     const user = userEvent.setup()
     render(<App />)
     await waitForSetup()
@@ -402,7 +357,6 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '⚙' }))
     await user.click(screen.getByRole('button', { name: '<' }))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
-    featureUserSettings.value = false
   }, 10000)
 
 })

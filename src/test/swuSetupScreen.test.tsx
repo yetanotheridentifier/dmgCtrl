@@ -5,10 +5,6 @@ import userEvent from '@testing-library/user-event'
 import SwuSetupScreen from '../components/swuSetupScreen'
 import { Base } from '../hooks/useBases'
 
-const featureUserSettings = vi.hoisted(() => ({ value: false }))
-vi.mock('../flags', () => ({
-  get FEATURE_USER_SETTINGS() { return featureUserSettings.value },
-}))
 
 const mockUserSettings = vi.hoisted(() => ({
   useHyperspace: true,
@@ -137,6 +133,7 @@ beforeEach(() => {
     pagination: { limit: 100, next_cursor: null },
   }
 
+  mockUserSettings.useHyperspace = true
   vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
     if (url.includes('swuapi.com')) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(swuApiResponse) })
@@ -348,7 +345,7 @@ describe('SwuSetupScreen', () => {
       number: '026',
       name: 'Catacombs of Cadera',
       hp: 30,
-    }), false)
+    }))
   })
 
   it('Does not call onConfirm when no base selected', async () => {
@@ -369,7 +366,7 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(getBaseSelectors()[1], 'Cunning')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-022')
     await user.click(screen.getByText('>'))
-    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ hp: 25 }), false)
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ hp: 25 }))
   })
 
   it('Auto-selected base can be submitted without manual selection', async () => {
@@ -383,7 +380,7 @@ describe('SwuSetupScreen', () => {
     expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
       set: 'JTL',
       number: '030',
-    }), false)
+    }))
   })
 
   // --- Base preview ---
@@ -681,7 +678,7 @@ describe('SwuSetupScreen', () => {
     await user.click(screen.getByTestId('swudb-load-button'))
     await waitFor(() => expect(screen.getByText('>')).not.toBeDisabled())
     await user.click(screen.getByText('>'))
-    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ set: 'JTL', number: '030' }), false)
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ set: 'JTL', number: '030' }))
   })
 
   it('Changing the URL after a load clears the deck name and submit button', async () => {
@@ -719,55 +716,57 @@ describe('SwuSetupScreen', () => {
     expect(screen.queryByLabelText('Hyperspace variant')).not.toBeInTheDocument()
   })
 
-  it('Calls onConfirm with useHyperspace=true when user settings preference is true', async () => {
+  it('Preview shows hyperspace art URL when user settings useHyperspace is true', async () => {
     mockUserSettings.useHyperspace = true
     const user = userEvent.setup()
-    const onConfirm = vi.fn()
-    render(<SwuSetupScreen onConfirm={onConfirm} onHelp={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByText('>'))
-    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ set: 'SOR', number: '026' }), true)
+    expect(screen.getByAltText('Catacombs of Cadera')).toHaveAttribute('src', mockBases[0].hyperspaceArtHiRes)
   })
 
-  it('Calls onConfirm with useHyperspace=false when user settings preference is false', async () => {
+  it('Preview shows standard art URL when user settings useHyperspace is false', async () => {
     mockUserSettings.useHyperspace = false
     const user = userEvent.setup()
-    const onConfirm = vi.fn()
-    render(<SwuSetupScreen onConfirm={onConfirm} onHelp={vi.fn()} />)
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByText('>'))
-    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ set: 'SOR', number: '026' }), false)
+    expect(screen.getByAltText('Catacombs of Cadera')).toHaveAttribute('src', mockBases[0].frontArt)
+  })
+
+
+  // --- SWUDB import: base preview ---
+
+  it('Shows base preview image in SWUDB import mode after successful load', async () => {
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    await waitFor(() => expect(screen.getByAltText('Lake Country')).toBeInTheDocument())
   })
 
   // --- Settings button ---
 
-  it('Settings button is not visible when FEATURE_USER_SETTINGS is false', () => {
-    featureUserSettings.value = false
-    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} />)
+  it('Settings button is not visible when onSettings is not provided', () => {
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByRole('button', { name: '⚙' })).not.toBeInTheDocument()
   })
 
-  it('Settings button is visible when FEATURE_USER_SETTINGS is true', () => {
-    featureUserSettings.value = true
+  it('Settings button is visible when onSettings is provided', () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} />)
     expect(screen.getByRole('button', { name: '⚙' })).toBeInTheDocument()
-    featureUserSettings.value = false
   })
 
   it('Settings button calls onSettings when clicked', async () => {
-    featureUserSettings.value = true
     const user = userEvent.setup()
     const onSettings = vi.fn()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} onSettings={onSettings} />)
     await user.click(screen.getByRole('button', { name: '⚙' }))
     expect(onSettings).toHaveBeenCalledOnce()
-    featureUserSettings.value = false
   })
 
 })

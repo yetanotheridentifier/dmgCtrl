@@ -151,3 +151,43 @@ input[type=number] {
   color: #1976d2;
 }
 
+.help-content code {
+  font-family: 'SF Mono', Consolas, Menlo, monospace;
+  font-size: 0.88em;
+  color: var(--color-accent);
+  background: rgba(var(--color-accent-rgb), 0.08);
+  border: 1px solid rgba(var(--color-accent-rgb), 0.2);
+  border-radius: 4px;
+  padding: 0.15em 0.4em;
+}
+
+.help-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 1em 0;
+  font-size: 0.9em;
+}
+
+.help-content th {
+  color: var(--color-accent);
+  font-weight: 400;
+  background: rgba(var(--color-accent-rgb), 0.08);
+  border: 1px solid rgba(var(--color-accent-rgb), 0.25);
+  padding: 0.5em 0.75em;
+  text-align: left;
+  letter-spacing: 0.03em;
+}
+
+.help-content td {
+  color: var(--color-text-body);
+  font-weight: 300;
+  border: 1px solid rgba(var(--color-accent-rgb), 0.15);
+  padding: 0.5em 0.75em;
+  vertical-align: top;
+  line-height: 1.5;
+}
+
+.help-content tr:nth-child(even) td {
+  background: rgba(var(--color-accent-rgb), 0.04);
+}
+

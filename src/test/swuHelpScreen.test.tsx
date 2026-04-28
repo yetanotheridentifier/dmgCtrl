@@ -33,9 +33,9 @@ describe('SwuHelpScreen', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'During a Game' })).toBeInTheDocument()
   })
 
-  it('Renders the Hyperspace Variant section heading', () => {
+  it('Renders the Settings section heading', () => {
     render(<SwuHelpScreen onBack={vi.fn()} />)
-    expect(screen.getByRole('heading', { level: 2, name: 'Hyperspace Variant' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Settings' })).toBeInTheDocument()
   })
 
   it('Renders the Formats and Base Selection section heading', () => {
