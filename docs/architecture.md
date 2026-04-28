@@ -174,6 +174,10 @@ public/
 .github/
   workflows/
     deploy.yml              CI/CD pipeline
+
+scripts/
+  inspect-base-data.mjs     Replicates the useBases merging logic; writes docs/base-data-snapshot.json and docs/base-data-summary.json for offline data inspection
+  validate-bases.mjs        Playwright script — opens a headed Chromium window and iterates every base for semi-automated visual QA (see Section 7)
 ```
 
 ---
@@ -357,6 +361,29 @@ To force a fresh fetch during development: `localStorage.removeItem('swu_bases_c
 - `docs/base-data-summary.json` — compact summary with art coverage stats per base
 
 Run with `node scripts/inspect-base-data.mjs` to inspect the live merged dataset without running the app.
+
+### Base validation script
+
+`scripts/validate-bases.mjs` is a Playwright-driven browser automation script for semi-automated visual QA of every base's game screen rendering. It opens a visible Chromium window, iterates through every set / aspect / base combination, navigates to the game screen for each base, waits for the card image to load, pauses for visual inspection, then returns to the setup screen.
+
+Prerequisites:
+- Dev server must be running (`npm run dev`)
+- Playwright and the Chromium binary must be installed (one-time setup: `npm install --legacy-peer-deps && npx playwright install chromium`)
+
+Run with:
+```bash
+node scripts/validate-bases.mjs
+```
+
+The script reads set, aspect, and base options live from the DOM, so new bases added to the data source are picked up automatically. Progress is logged to the terminal:
+```
+[1] SOR / Aggression / Catacombs of Cadera
+[2] SOR / Cunning / Energy Conversion Lab
+...
+Validation complete — 42 bases checked.
+```
+
+Timing constants at the top of the script (`VISUAL_PAUSE_MS`, `BACK_PAUSE_MS`) can be adjusted if more or less inspection time is needed.
 
 ---
 

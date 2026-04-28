@@ -48,6 +48,30 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 
 After setup, `npm run dev:https` will print a local network URL (e.g. `https://192.168.x.x:5173/dmgCtrl/`). Open that URL in Safari on the device.
 
+### Base validation script
+
+`scripts/validate-bases.mjs` automates the visual QA process for all bases. It opens a visible Chromium window and iterates through every set / aspect / base, navigating to the game screen for each one. You watch while it runs; the script handles the navigation and timing.
+
+**One-time setup** (Playwright + Chromium browser binary):
+```bash
+npm install --legacy-peer-deps
+npx playwright install chromium
+```
+
+**Running the script:**
+1. Start the dev server: `npm run dev`
+2. In a separate terminal: `node scripts/validate-bases.mjs`
+
+The script logs each base as it goes:
+```
+[1] SOR / Aggression / Catacombs of Cadera
+[2] SOR / Cunning / Energy Conversion Lab
+...
+Validation complete — 42 bases checked.
+```
+
+Timing can be adjusted via `VISUAL_PAUSE_MS` and `BACK_PAUSE_MS` at the top of the script.
+
 ## Notes for AI Assistants
 
 - `npm install` requires `--legacy-peer-deps` due to Vite / vite-plugin-pwa version conflict
