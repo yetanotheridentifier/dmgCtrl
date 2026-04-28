@@ -2,6 +2,7 @@ import { Base } from '../hooks/useBases'
 import AppScreenLayout from './layout/AppScreenLayout'
 import ImagePreview from './imagePreview'
 import { useOrientation } from '../hooks/useOrientation'
+import { CogIcon, ForwardIcon, HelpIcon } from './icons'
 import { SelectionMode } from './swuSetupScreen'
 
 interface Props {
@@ -259,6 +260,7 @@ function SwuSetupScreenView({
             </span>
             <button
               onClick={onSubmit}
+              aria-label="Start game"
               disabled={!submitEnabled}
               style={{
                 width: btnWidth,
@@ -282,7 +284,7 @@ function SwuSetupScreenView({
                 boxSizing: 'border-box',
               }}
             >
-              &gt;
+              <ForwardIcon />
             </button>
           </div>
         )}
@@ -371,10 +373,11 @@ function SwuSetupScreenView({
 
             <button
               onClick={onSubmit}
+              aria-label="Start game"
               disabled={!selectedBase}
               style={submitButtonStyle(!!selectedBase, small)}
             >
-              &gt;
+              <ForwardIcon />
             </button>
           </div>
         </>
@@ -442,14 +445,12 @@ function SwuSetupScreenView({
                     boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
                   }}
                 >
-                  <svg width="55%" height="55%" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="3"/>
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                </svg>
+                  <CogIcon />
                 </button>
               )}
               <button
                 onClick={onHelp}
+                aria-label="Help"
                 style={{
                   width: '5vh',
                   height: '5vh',
@@ -469,7 +470,7 @@ function SwuSetupScreenView({
                   boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
                 }}
               >
-                ?
+                <HelpIcon />
               </button>
             </div>
           </div>
@@ -584,14 +585,12 @@ function SwuSetupScreenView({
                   boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
                 }}
               >
-                  <svg width="55%" height="55%" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="3"/>
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                </svg>
+                  <CogIcon />
                 </button>
             )}
             <button
               onClick={onHelp}
+              aria-label="Help"
               style={{
                 width: '5vw',
                 height: '5vw',
@@ -611,7 +610,7 @@ function SwuSetupScreenView({
                 boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
               }}
             >
-              ?
+              <HelpIcon />
             </button>
           </div>
         </div>

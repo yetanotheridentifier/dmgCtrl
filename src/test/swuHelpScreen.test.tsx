@@ -55,7 +55,7 @@ describe('SwuHelpScreen', () => {
 
   it('Renders a back button', () => {
     render(<SwuHelpScreen onBack={vi.fn()} />)
-    expect(screen.getByRole('button', { name: '<' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
   })
 
   // --- Scrolling ---
@@ -72,7 +72,7 @@ describe('SwuHelpScreen', () => {
     const user = userEvent.setup()
     const onBack = vi.fn()
     render(<SwuHelpScreen onBack={onBack} />)
-    await user.click(screen.getByRole('button', { name: '<' }))
+    await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(onBack).toHaveBeenCalledOnce()
   })
 

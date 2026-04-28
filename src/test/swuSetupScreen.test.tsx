@@ -211,7 +211,7 @@ describe('SwuSetupScreen', () => {
   it('Submit button is disabled before base is selected', async () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    expect(screen.getByText('>')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Start game' })).toBeDisabled()
   })
 
   // --- Cascading selection ---
@@ -328,7 +328,7 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    expect(screen.getByText('>')).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Start game' })).not.toBeDisabled()
   })
 
   it('Calls onConfirm with correct base when submitted', async () => {
@@ -339,7 +339,7 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
-    await user.click(screen.getByText('>'))
+    await user.click(screen.getByRole('button', { name: 'Start game' }))
     expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
       set: 'SOR',
       number: '026',
@@ -353,7 +353,7 @@ describe('SwuSetupScreen', () => {
     const onConfirm = vi.fn()
     render(<SwuSetupScreen onConfirm={onConfirm} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    await user.click(screen.getByText('>'))
+    await user.click(screen.getByRole('button', { name: 'Start game' }))
     expect(onConfirm).not.toHaveBeenCalled()
   })
 
@@ -365,7 +365,7 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Cunning')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-022')
-    await user.click(screen.getByText('>'))
+    await user.click(screen.getByRole('button', { name: 'Start game' }))
     expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ hp: 25 }))
   })
 
@@ -375,8 +375,8 @@ describe('SwuSetupScreen', () => {
     render(<SwuSetupScreen onConfirm={onConfirm} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
     await user.selectOptions(getBaseSelectors()[0], 'JTL')
-    await waitFor(() => expect(screen.getByText('>')).not.toBeDisabled())
-    await user.click(screen.getByText('>'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).not.toBeDisabled())
+    await user.click(screen.getByRole('button', { name: 'Start game' }))
     expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
       set: 'JTL',
       number: '030',
@@ -443,7 +443,7 @@ describe('SwuSetupScreen', () => {
   it('Renders a help button', async () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    expect(screen.getByText('?')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument()
   })
 
   it('Calls onHelp when help button is clicked', async () => {
@@ -451,7 +451,7 @@ describe('SwuSetupScreen', () => {
     const onHelp = vi.fn()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={onHelp} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    await user.click(screen.getByText('?'))
+    await user.click(screen.getByRole('button', { name: 'Help' }))
     expect(onHelp).toHaveBeenCalledOnce()
   })
 
@@ -594,7 +594,7 @@ describe('SwuSetupScreen', () => {
     await switchToSwudbMode(user)
     inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
     await user.click(screen.getByTestId('swudb-load-button'))
-    await waitFor(() => expect(screen.getByText('>')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).toBeInTheDocument())
   })
 
   it('Load button shows ... while loading', async () => {
@@ -664,8 +664,8 @@ describe('SwuSetupScreen', () => {
     await switchToSwudbMode(user)
     inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
     await user.click(screen.getByTestId('swudb-load-button'))
-    await waitFor(() => expect(screen.getByText('>')).toBeInTheDocument())
-    expect(screen.getByText('>')).toBeDisabled()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Start game' })).toBeDisabled()
   })
 
   it('Clicking > after successful load calls onConfirm with the correct base', async () => {
@@ -676,8 +676,8 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(screen.getByTestId('mode-select'), 'swudb-import')
     inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
     await user.click(screen.getByTestId('swudb-load-button'))
-    await waitFor(() => expect(screen.getByText('>')).not.toBeDisabled())
-    await user.click(screen.getByText('>'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).not.toBeDisabled())
+    await user.click(screen.getByRole('button', { name: 'Start game' }))
     expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ set: 'JTL', number: '030' }))
   })
 
@@ -689,7 +689,7 @@ describe('SwuSetupScreen', () => {
     await waitFor(() => expect(screen.getByText('[dmgCtrl test - Do Not Delete] Unlisted deck')).toBeInTheDocument())
     inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQYx')
     expect(screen.queryByText('[dmgCtrl test - Do Not Delete] Unlisted deck')).not.toBeInTheDocument()
-    expect(screen.queryByText('>')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Start game' })).not.toBeInTheDocument()
   })
 
   it('Focusing the input after an error clears the error but keeps the text', async () => {
