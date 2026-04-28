@@ -42,12 +42,12 @@ describe('SwuSettingsScreen', () => {
 
   it('renders a back button', () => {
     render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    expect(screen.getByRole('button', { name: '<' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
   })
 
   it('renders a help button', () => {
     render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    expect(screen.getByRole('button', { name: '?' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument()
   })
 
   it('does not render a settings button on the settings screen', () => {
@@ -111,7 +111,7 @@ describe('SwuSettingsScreen', () => {
     const user = userEvent.setup()
     const onBack = vi.fn()
     render(<SwuSettingsScreen onBack={onBack} onHelp={vi.fn()} />)
-    await user.click(screen.getByRole('button', { name: '<' }))
+    await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(onBack).toHaveBeenCalledOnce()
   })
 
@@ -119,7 +119,7 @@ describe('SwuSettingsScreen', () => {
     const user = userEvent.setup()
     const onHelp = vi.fn()
     render(<SwuSettingsScreen onBack={vi.fn()} onHelp={onHelp} />)
-    await user.click(screen.getByRole('button', { name: '?' }))
+    await user.click(screen.getByRole('button', { name: 'Help' }))
     expect(onHelp).toHaveBeenCalledOnce()
   })
 

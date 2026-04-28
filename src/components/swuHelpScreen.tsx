@@ -1,6 +1,7 @@
 import helpHtml from '../../docs/help.md'
 import AppScreenLayout from './layout/AppScreenLayout'
 import { useOrientation } from '../hooks/useOrientation'
+import { BackIcon } from './icons'
 
 // Strip the <h1> from the rendered HTML — the title is provided by the JSX header instead.
 const contentHtml = helpHtml.replace(/^<h1[^>]*>[\s\S]*?<\/h1>\n?/, '')
@@ -35,6 +36,7 @@ function SwuHelpScreen({ onBack }: Props) {
         }}>
           <button
             onClick={onBack}
+            aria-label="Back"
             style={{
               flexShrink: 0,
               width: '5vw',
@@ -54,7 +56,7 @@ function SwuHelpScreen({ onBack }: Props) {
               boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
             }}
           >
-            &lt;
+            <BackIcon />
           </button>
 
           <img

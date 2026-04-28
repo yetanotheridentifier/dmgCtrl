@@ -184,7 +184,7 @@ describe('SwuGameScreen', () => {
 
   it('Renders the back button', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
-    expect(screen.getByText('<')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
   })
 
   it('Renders a + button and a − button', () => {
@@ -277,7 +277,7 @@ describe('SwuGameScreen', () => {
     const user = userEvent.setup()
     const onBack = vi.fn()
     render(<SwuGameScreen base={mockBase} onBack={onBack} onHelp={vi.fn()} />)
-    await user.click(screen.getByText('<'))
+    await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(onBack).toHaveBeenCalledOnce()
   })
 
@@ -366,14 +366,14 @@ describe('SwuGameScreen', () => {
 
   it('Renders a help button', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
-    expect(screen.getByText('?')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument()
   })
 
   it('Calls onHelp when help button is clicked', async () => {
     const user = userEvent.setup()
     const onHelp = vi.fn()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={onHelp} />)
-    await user.click(screen.getByText('?'))
+    await user.click(screen.getByRole('button', { name: 'Help' }))
     expect(onHelp).toHaveBeenCalledOnce()
   })
 
@@ -395,7 +395,7 @@ describe('SwuGameScreen', () => {
   it('Shows a back button on the portrait rotation prompt', () => {
     vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
-    expect(screen.getByRole('button', { name: '<' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
   })
 
   it('Calls onBack when back button is clicked on the portrait rotation prompt', async () => {
@@ -403,7 +403,7 @@ describe('SwuGameScreen', () => {
     const onBack = vi.fn()
     vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
     render(<SwuGameScreen base={mockBase} onBack={onBack} onHelp={vi.fn()} />)
-    await user.click(screen.getByRole('button', { name: '<' }))
+    await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(onBack).toHaveBeenCalledOnce()
   })
 

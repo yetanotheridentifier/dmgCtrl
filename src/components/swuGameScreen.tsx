@@ -6,6 +6,7 @@ import { useOrientation } from '../hooks/useOrientation'
 import { useWakeLock } from '../hooks/useWakeLock'
 import { useUserSettings } from '../hooks/useUserSettings'
 import SwuGameScreenView from './swuGameScreenView'
+import { BackIcon } from './icons'
 import AppScreenLayout from './layout/AppScreenLayout'
 
 interface Props {
@@ -37,6 +38,7 @@ function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
       <AppScreenLayout>
         <button
           onClick={onBack}
+          aria-label="Back"
           style={{
             position: 'absolute',
             top: 'calc(env(safe-area-inset-top) + 5vw)',
@@ -59,7 +61,7 @@ function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
             boxShadow: '0 0 8px rgba(156, 163, 175, 0.2)',
           }}
         >
-          &lt;
+          <BackIcon />
         </button>
         <div style={{
           flex: 1,

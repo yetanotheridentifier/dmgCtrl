@@ -1,4 +1,5 @@
 import { useOrientation } from '../hooks/useOrientation'
+import { BackIcon, HelpIcon } from './icons'
 
 interface ToggleRowProps {
   id: string
@@ -153,8 +154,8 @@ function SwuSettingsScreenView({
         paddingBottom: '2vh',
         flexShrink: 0,
       }}>
-        <button onClick={onBack} style={buttonStyle(vmin)}>
-          &lt;
+        <button onClick={onBack} aria-label="Back" style={buttonStyle(vmin)}>
+          <BackIcon />
         </button>
 
         <img
@@ -175,8 +176,8 @@ function SwuSettingsScreenView({
           Settings
         </h1>
 
-        <button onClick={onHelp} style={buttonStyle(vmin)}>
-          ?
+        <button onClick={onHelp} aria-label="Help" style={buttonStyle(vmin)}>
+          <HelpIcon />
         </button>
       </div>
 

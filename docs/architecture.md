@@ -9,7 +9,7 @@ Core functionality:
 - **Base selection** — filter and choose a base card by set, aspect, and card identity; or import a deck from swudb.com
 - **Damage tracking** — increment and decrement a counter against the base's HP to track remaining health
 - **Hyperspace art** — optionally display the premium "hyperspace" variant of a base card
-- **Epic Action tracking** — a ★ button marks the base's once-per-game ability as used; a gold token overlay appears over the card's epic action text area to indicate the spent state
+- **Epic Action tracking** — an epic action button marks the base's once-per-game ability as used; a gold token overlay appears over the card's epic action text area to indicate the spent state
 - **Force token tracking** — a Force icon button is available on every base; on Force bases it is immediately active, on other bases a single enable tap unlocks it for games where the Force is gained via a card or leader ability
 - **Screen wake lock** — prevents the device screen from sleeping while on the game screen
 - **User settings** — persistent preferences (hyperspace art, force token, epic actions, wake lock) accessible via the ⚙ button on the setup and game screens
@@ -114,6 +114,7 @@ src/
   components/
     layout/
       AppScreenLayout.tsx  Shared full-screen layout wrapper (background, safe area)
+    icons.tsx               Reusable SVG icon components (BackIcon, ForwardIcon, HelpIcon, CogIcon)
     imagePreview.tsx        Pure view — renders card art or error message from props
     swuGameScreen.tsx       Game screen container
     swuGameScreenView.tsx   Game screen view (⚙ button always visible)
@@ -166,7 +167,8 @@ public/
   dmgCtrl-icon-transparent-192.png  App icon (transparent background); used on loading screen and alongside screen titles
   dmgCtrl-icon-192.png              App icon 192×192 (opaque); used in PWA manifest and browser favicon
   dmgCtrl-icon-512.png              App icon 512×512 (opaque); used in PWA manifest
-  dmgCtrl-force-token.png   Force token icon (512×512 PNG); used on Force button and as watermark in Force overlay
+  dmgCtrl-force-token.png           Force token icon (512×512 PNG); used on Force button and as watermark in Force overlay
+  dmgctrl-icon-192-white.svg        White starburst logo SVG (192×192); used on the epic action button and as watermark in the epic action overlay
   ...                       PWA manifest, icons
 
 .github/
@@ -191,7 +193,7 @@ State is owned at the appropriate level:
 | Last setup selection (`set`, `aspect`, `key`) | `App` | Saved on `handleConfirm`; passed as `initialSelection` prop to `SwuSetupScreen` so dropdowns are pre-populated on back navigation |
 | Filter state (set, aspect, card) | `useSwuSetup` | Seeded from `initialSelection` on mount; local after that |
 | Damage counter | `useSwuGame` | Local to game screen; clamped between 0 and `base.hp`; reset on each navigation to the game screen |
-| Epic action used state | `useSwuGame` | Local to game screen; toggled by the ★ button; reset on each navigation to the game screen |
+| Epic action used state | `useSwuGame` | Local to game screen; toggled by the epic action button; reset on each navigation to the game screen |
 | Force token enabled state | `useSwuGame` | Local to game screen; set to `true` by the enable tap on non-Force bases; combined with `isForceBase` in the container to derive `effectiveForceEnabled`; reset on each navigation |
 | Force token active state | `useSwuGame` | Local to game screen; toggled by the Force button and overlay; reset on each navigation to the game screen |
 | Art fallback index, image load state | `useBaseArt` | Local to whichever screen called it; reset when base changes |
@@ -217,7 +219,7 @@ State is owned at the appropriate level:
 
 1. User selects set, aspect, and base in setup screen dropdowns
 2. `useSwuSetup` manages the filter state and auto-selects when only one option remains
-3. User clicks `>` — `handleSubmit` in `useSwuSetup` calls `onConfirm(selectedBase)`
+3. User clicks the start game button (→) — `handleSubmit` in `useSwuSetup` calls `onConfirm(selectedBase)`
 4. `App` sets `screen = 'game'` and `selectedBase`
 5. `SwuGameScreen` receives `base`; calls `useUserSettings()` for `useHyperspace` and other preferences; `useBaseArt` builds the ordered fallback chain and manages image state
 
@@ -232,11 +234,11 @@ State is owned at the appropriate level:
 ### Example flow: Epic action
 
 1. Container reads `enableEpicActions` from `useUserSettings()` and computes `showEpicAction = enableEpicActions && /epic action/i.test(base.epicAction)` — excludes Mystic Monastery (whose text is "Action:", not "Epic Action:")
-2. When `showEpicAction` is true, the view renders the ★ button; its position in the left column adjusts based on whether `showForce` is also true
-3. User taps ★ — view calls `onEpicActionToggle` prop
+2. When `showEpicAction` is true, the view renders the epic action button; its position in the left column adjusts based on whether `showForce` is also true
+3. User taps the epic action button — view calls `onEpicActionToggle` prop
 4. Container delegates to `useSwuGame` — `toggleEpicAction()` flips `epicActionUsed`
-5. View re-renders: ★ button dims to grey; a gold token overlay appears over the lower portion of the card
-6. Tapping the overlay or ★ again calls `onEpicActionToggle`, restoring the ready state
+5. View re-renders: epic action button dims to grey; a gold token overlay appears over the lower portion of the card
+6. Tapping the overlay or the button again calls `onEpicActionToggle`, restoring the ready state
 
 ### Example flow: Force token
 
@@ -261,7 +263,7 @@ When `epicActionUsed && showEpicAction && forceActive && showForce` are all true
 1. User taps the ⚙ button on the setup or game screen
 2. `App` pushes the current screen onto `backStack` and sets `screen = 'settings'`
 3. `SwuSettingsScreen` renders — user adjusts preferences; each toggle writes immediately to localStorage via `useUserSettings`
-4. User taps `<` — `App` pops the top of `backStack` and sets `screen` to that value, returning to wherever they came from
+4. User taps the back button — `App` pops the top of `backStack` and sets `screen` to that value, returning to wherever they came from
 5. The updated preferences take effect next time the relevant screen mounts (e.g. game screen reads `enableForceToken` on start)
 
 ---
@@ -391,7 +393,7 @@ All styling is done with **inline styles** (React `style` prop). There is no CSS
 | `--color-ui-border-muted` | `#9ca3af` | Back/help button icon colour |
 | `--color-ui-border-muted-rgb` | `156, 163, 175` | `rgba()` shadow values using the UI border colour |
 | `--color-error` | `#ff6b6b` | Error messages, fallback states |
-| `--color-epic` | `#f5c518` | Epic action ★ button, token overlay border and glow |
+| `--color-epic` | `#f5c518` | Epic action button, token overlay border and glow |
 | `--color-epic-rgb` | `245, 197, 24` | `rgba()` shadow values using the epic colour |
 
 Pros: no class name conflicts, styling is co-located with component logic, easy to make props-driven style decisions, palette changes are a one-line edit in `index.css`.
@@ -439,9 +441,9 @@ The setup screen supports two input modes, controlled by a `selectionMode` state
 
 **SWUDB Import mode** shows a URL input field and a two-row layout:
 - Row 1 (always visible): URL text input + Load button
-- Row 2 (visible only after a load attempt): deck name + `>` submit button
+- Row 2 (visible only after a load attempt): deck name + start game button (→)
 
-The Load and `>` buttons are stacked vertically and share the same width so they align.
+The Load and start game buttons are stacked vertically and share the same width so they align.
 
 On a successful load, `selectBaseByKey` in `useSwuSetup` is called with the base key from the deck response. This sets `selectedSet`, `selectedAspect`, and `selectedKey` so that switching back to Base Selector mode shows the correct base pre-selected. The card art preview appears below the import controls once a base is resolved, mirroring the Base Selector experience.
 
@@ -460,7 +462,7 @@ The Load button is disabled while a fetch is in progress (shows `...`). Possible
 - `'Deck not accessible'` — non-200 response or network error
 - `'Base not recognised'` — deck loaded but the base key was not found in the local `Base[]`
 
-When the base is not recognised, the deck name is still shown (so the user can see which deck was loaded) but the `>` button is disabled.
+When the base is not recognised, the deck name is still shown (so the user can see which deck was loaded) but the start game button is disabled.
 
 ### Game screen
 
@@ -474,10 +476,10 @@ When the base is not recognised, the deck name is still shown (so the user can s
    - `isForceBase = /the force is with you/i.test(base.epicAction)` — LOF bases whose ability explicitly creates a Force token
    - `effectiveForceEnabled = isForceBase || forceEnabled` — Force bases start enabled; others start locked until the user taps the dimmed icon
 6. Props passed to the view include art state, counter callbacks, `epicActionUsed`, `onEpicActionToggle`, `showEpicAction`, `forceEnabled` (= `effectiveForceEnabled`), `forceActive`, `onForceEnable`, `onForceToggle`, `showForce`, and `onSettings`
-7. The left-side button column (top to bottom): `<` back → Force icon (locked, ready, or overlay-active/greyed) when `showForce` → ★ epic action when `showEpicAction`; when Force is hidden the ★ button moves up to fill the gap
-8. The right-side button column (top to bottom): `?` help → ⚙ settings
+7. The left-side button column (top to bottom): back → Force icon (locked, ready, or overlay-active/greyed) when `showForce` → epic action button when `showEpicAction`; when Force is hidden the epic action button moves up to fill the gap
+8. The right-side button column (top to bottom): help → ⚙ settings
 9. View renders the card image, counter, and up to two overlays over the bottom portion of the card:
-   - **Epic action token** (gold, ✕): when `epicActionUsed && showEpicAction`
+   - **Epic action token** (gold, "Epic Action Used" text and starburst watermark): when `epicActionUsed && showEpicAction`
    - **Force token** (blue, "The Force is With You"): when `forceActive && showForce`
    - When **both** are active, the view computes `bothOverlaysActive = true` and renders them side by side (epic action left, Force right), each at half width
 
@@ -487,7 +489,7 @@ The settings screen is accessible from both the setup and game screens via the �
 
 - Tapping ⚙ navigates to `SwuSettingsScreen`; the current screen is pushed onto `backStack` so the back button returns to the correct place
 - `SwuSettingsScreen` (container) calls `useUserSettings()` to read and write preferences
-- `SwuSettingsScreenView` (view) renders a header row (back `<`, icon, "Settings" h1, help `?`) and a scrollable toggle list
+- `SwuSettingsScreenView` (view) renders a header row (back button, icon, "Settings" h1, help button) and a scrollable toggle list
 - Each toggle writes immediately to localStorage via `useUserSettings` — there is no save/cancel step
 - The four toggles: **Use Hyperspace Art**, **Enable Force Token**, **Enable Epic Actions**, **Enable Screen Wake Lock**
 - `SwuSettingsScreenView` calls `useOrientation()` directly (not via props) and applies `fontFamily: 'Helvetica, Arial, sans-serif'` to prevent iOS Dynamic Type from overriding font sizes
@@ -680,10 +682,10 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | Term | Definition |
 |---|---|
 | **Base** | A card type in Star Wars Unlimited representing a location that acts as the player's "health bar". Each base has an HP value (typically 24–35). |
-| **Epic Action** | A special ability on some base cards that can be triggered once per game. The game screen shows a ★ button when the base has an epic action and `enableEpicActions` is true in user settings; tapping it marks the ability as used and renders a gold token overlay. Tapping the overlay or ★ again reverts the state. The ★ button is only shown when the base's `epicAction` text contains the phrase 'Epic Action' (case-insensitive). Passive-effect bases and Force trigger bases are therefore excluded. |
-| **Epic action token** | The in-app UI element (a translucent yellow rectangle with a gold border and white ✕) that overlays the lower portion of the base card when the epic action has been used, mirroring the physical token used in the tabletop game. When the Force token is also active, it occupies the left half of the overlay area. |
+| **Epic Action** | A special ability on some base cards that can be triggered once per game. The game screen shows an epic action button when the base has an epic action and `enableEpicActions` is true in user settings; tapping it marks the ability as used and renders a gold token overlay. Tapping the overlay or the button again reverts the state. The button is only shown when the base's `epicAction` text contains the phrase 'Epic Action' (case-insensitive). Passive-effect bases and Force trigger bases are therefore excluded. |
+| **Epic action token** | The in-app UI element (a translucent yellow rectangle with a gold border, "Epic Action Used" text, and a starburst watermark) that overlays the lower portion of the base card when the epic action has been used, mirroring the physical token used in the tabletop game. When the Force token is also active, it occupies the left half of the overlay area. |
 | **Force** | A recurring ability on some LOF base cards, identified by the phrase "The Force is with you" in their `epicAction` text. Force bases start the game with the Force button already enabled. Any base can also gain the Force via card or leader abilities — the locked Force icon is available on all bases for this purpose. |
-| **Force token button** | The blue icon button (showing `dmgCtrl-force-token.png`) that appears in the first slot below `<` when `forceEnabled` is true. Tapping it sets `forceActive = true` and renders the Force token overlay. On non-Force bases, the slot first shows a locked/dimmed version; tapping the dimmed icon once enables it. |
+| **Force token button** | The blue icon button (showing `dmgCtrl-force-token.png`) that appears in the first slot below the back button when `forceEnabled` is true. Tapping it sets `forceActive = true` and renders the Force token overlay. On non-Force bases, the slot first shows a locked/dimmed version; tapping the dimmed icon once enables it. |
 | **Force token overlay** | The in-app UI element (a royal-blue rectangle with a light-blue border and a "The Force is With You" label) that overlays the lower portion of the base card when `forceActive` is true. A translucent watermark of `dmgCtrl-force-token.png` appears behind the text. Tapping the overlay returns `forceActive` to `false`. When the epic action token is also active, it occupies the right half of the overlay area. |
 | **Hyperspace** | A premium variant of a card with alternate artwork. In this app, the `useHyperspace` setting (in `useUserSettings`) controls whether the Hyperspace variant is preferred on the game screen. |
 | **Loading screen** | The first screen shown on app start (`SwuLoadingScreen`). Displays the app icon and "LOADING" text. Has a **1-second minimum display time**: `onReady` is called only when both the data has loaded and the 1-second timer has elapsed. Automatically transitions to the setup screen. |

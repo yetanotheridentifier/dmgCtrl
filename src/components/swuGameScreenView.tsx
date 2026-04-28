@@ -1,5 +1,6 @@
 import { Base } from '../hooks/useBases'
 import AppScreenLayout from './layout/AppScreenLayout'
+import { BackIcon, CogIcon, HelpIcon } from './icons'
 
 const CARD_NATURAL_WIDTH = 1560
 const CARD_NATURAL_HEIGHT = 1120
@@ -78,6 +79,7 @@ function SwuGameScreenView({
       {/* Back button */}
       <button
         onClick={onBack}
+        aria-label="Back"
         style={{
           position: 'absolute',
           top: 'calc(env(safe-area-inset-top) + 2vw)',
@@ -100,7 +102,7 @@ function SwuGameScreenView({
           boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
         }}
       >
-        &lt;
+        <BackIcon />
       </button>
 
       {/* Force button — slot 1 (9vw), always shown when showForce is true */}
@@ -210,6 +212,7 @@ function SwuGameScreenView({
       {showEpicAction && (
         <button
           data-testid="epic-action-btn"
+          aria-label="Epic action"
           onClick={onEpicActionToggle}
           style={{
             position: 'absolute',
@@ -233,7 +236,7 @@ function SwuGameScreenView({
             boxShadow: epicActionUsed ? 'none' : '0 0 12px rgba(245,197,24,0.5)',
           }}
         >
-          ★
+          <img src={`${import.meta.env.BASE_URL}dmgctrl-icon-192-white.svg`} alt="" style={{ width: '70%', height: '70%', objectFit: 'contain', opacity: epicActionUsed ? 0.4 : 0.9 }} />
         </button>
       )}
 
@@ -269,7 +272,18 @@ function SwuGameScreenView({
               boxShadow: disabled ? 'none' : '0 0 12px rgba(29,78,216,0.4)',
             }}
           >
-            {mysticUsesRemaining}
+            <img
+              src="/dmgCtrl/dmgCtrl-force-token.png"
+              alt=""
+              style={{
+                position: 'absolute',
+                width: '70%',
+                height: '70%',
+                objectFit: 'contain',
+                opacity: disabled ? 0.1 : 0.2,
+              }}
+            />
+            <span style={{ position: 'relative' }}>{mysticUsesRemaining}</span>
           </button>
         )
       })()}
@@ -277,6 +291,7 @@ function SwuGameScreenView({
       {/* Help button */}
       <button
         onClick={onHelp}
+        aria-label="Help"
         style={{
           position: 'absolute',
           top: 'calc(env(safe-area-inset-top) + 2vw)',
@@ -299,7 +314,7 @@ function SwuGameScreenView({
           boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
         }}
       >
-        ?
+        <HelpIcon />
       </button>
 
       {/* Settings button — below help, top-right */}
@@ -329,10 +344,7 @@ function SwuGameScreenView({
             boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
           }}
         >
-          <svg width="55%" height="55%" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="3"/>
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                </svg>
+          <CogIcon />
         </button>
       )}
 
@@ -598,12 +610,30 @@ function SwuGameScreenView({
               cursor: 'pointer',
             }}
           >
+            <img
+              src={`${import.meta.env.BASE_URL}dmgctrl-icon-192-white.svg`}
+              alt=""
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '80%',
+                height: '80%',
+                objectFit: 'contain',
+                opacity: 0.15,
+                pointerEvents: 'none',
+              }}
+            />
             <span style={{
-              fontSize: bothOverlaysActive ? '10vmin' : '20vmin',
+              position: 'relative',
+              fontSize: bothOverlaysActive ? 'clamp(0.6rem, 3vmin, 1rem)' : 'clamp(1rem, 5vmin, 2rem)',
               color: '#ffffff',
-              textShadow: '0 2px 10px rgba(0,0,0,0.9), 0 0 24px rgba(245,197,24,0.6)',
+              fontWeight: '300',
+              letterSpacing: '0.08em',
+              textShadow: '0 1px 8px rgba(0,0,0,0.8), 0 0 16px rgba(0,0,0,0.6)',
               pointerEvents: 'none',
-            }}>✕</span>
+            }}>Epic Action Used</span>
           </div>
         )}
 
