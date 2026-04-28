@@ -320,6 +320,7 @@ function SwuSetupScreenView({
               <select
                 value={selectedSet}
                 onChange={e => onSetChange(e.target.value)}
+                data-testid="set-select"
                 style={selectStyle(true, selectedSet !== '', small)}
               >
                 <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>Set</option>
@@ -334,6 +335,7 @@ function SwuSetupScreenView({
               <select
                 value={selectedAspect}
                 onChange={e => onAspectChange(e.target.value)}
+                data-testid="aspect-select"
                 disabled={!selectedSet}
                 style={selectStyle(!!selectedSet, selectedAspect !== '', small)}
               >
@@ -356,6 +358,7 @@ function SwuSetupScreenView({
             <select
               value={selectedKey}
               onChange={e => onKeyChange(e.target.value)}
+              data-testid="base-select"
               disabled={!selectedAspect}
               style={selectStyle(!!selectedAspect, selectedKey !== '', small)}
             >

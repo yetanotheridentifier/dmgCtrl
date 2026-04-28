@@ -176,6 +176,21 @@ describe('SwuSetupScreen', () => {
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
   })
 
+  it('Set selector has data-testid set-select', async () => {
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(screen.getByTestId('set-select')).toBeInTheDocument())
+  })
+
+  it('Aspect selector has data-testid aspect-select', async () => {
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(screen.getByTestId('aspect-select')).toBeInTheDocument())
+  })
+
+  it('Base selector has data-testid base-select', async () => {
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(screen.getByTestId('base-select')).toBeInTheDocument())
+  })
+
   it('Renders Set and Aspect labels', async () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
