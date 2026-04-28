@@ -101,7 +101,7 @@ describe('App', () => {
   it('Setup screen does not show game screen elements on load', () => {
     render(<App />)
     expect(screen.queryByText('+')).not.toBeInTheDocument()
-    expect(screen.queryByText('−')).not.toBeInTheDocument()
+    expect(screen.queryByText('-')).not.toBeInTheDocument()
   })
 
   it('Navigates to game screen after selecting a base', async () => {
@@ -355,6 +355,32 @@ describe('App', () => {
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
     await user.click(screen.getByText('>'))
     await user.click(screen.getByRole('button', { name: '⚙' }))
+    await user.click(screen.getByRole('button', { name: '<' }))
+    expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
+  }, 10000)
+
+  it('Clicking back from settings returns to setup after settings -> help -> back', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitForSetup()
+    await user.click(screen.getByRole('button', { name: '⚙' }))
+    await user.click(screen.getByRole('button', { name: '?' }))
+    await user.click(screen.getByRole('button', { name: '<' }))
+    await user.click(screen.getByRole('button', { name: '<' }))
+    expect(screen.getByText('Input Mode:')).toBeInTheDocument()
+  }, 10000)
+
+  it('Clicking back from settings returns to game after settings -> help -> back', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitForSetup()
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+    await user.click(screen.getByText('>'))
+    await user.click(screen.getByRole('button', { name: '⚙' }))
+    await user.click(screen.getByRole('button', { name: '?' }))
+    await user.click(screen.getByRole('button', { name: '<' }))
     await user.click(screen.getByRole('button', { name: '<' }))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
   }, 10000)

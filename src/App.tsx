@@ -11,7 +11,7 @@ type Screen = 'loading' | 'setup' | 'game' | 'help' | 'settings'
 
 function App() {
   const [screen, setScreen] = useState<Screen>('loading')
-  const [previousScreen, setPreviousScreen] = useState<Screen>('setup')
+  const [backStack, setBackStack] = useState<Screen[]>([])
   const [selectedBase, setSelectedBase] = useState<Base | null>(null)
   const [lastSelection, setLastSelection] = useState<InitialSelection | null>(null)
   const { loading } = useBases()
@@ -27,29 +27,31 @@ function App() {
   const handleBack = () => setScreen('setup')
 
   const handleHelp = () => {
-    setPreviousScreen(screen)
+    setBackStack(prev => [...prev, screen])
     setScreen('help')
   }
 
-  const handleHelpBack = () => setScreen(previousScreen)
-
   const handleSettings = () => {
-    setPreviousScreen(screen)
+    setBackStack(prev => [...prev, screen])
     setScreen('settings')
   }
 
-  const handleSettingsBack = () => setScreen(previousScreen)
+  const handleOverlayBack = () => {
+    const target = backStack[backStack.length - 1] ?? 'setup'
+    setBackStack(prev => prev.slice(0, -1))
+    setScreen(target)
+  }
 
   if (screen === 'loading') {
     return <SwuLoadingScreen loading={loading} onReady={handleReady} />
   }
 
   if (screen === 'help') {
-    return <SwuHelpScreen onBack={handleHelpBack} />
+    return <SwuHelpScreen onBack={handleOverlayBack} />
   }
 
   if (screen === 'settings') {
-    return <SwuSettingsScreen onBack={handleSettingsBack} onHelp={handleHelp} />
+    return <SwuSettingsScreen onBack={handleOverlayBack} onHelp={handleHelp} />
   }
 
   if (screen === 'setup') {

@@ -185,7 +185,7 @@ State is owned at the appropriate level:
 | State | Owner | How it flows |
 |---|---|---|
 | Current screen (`loading` / `setup` / `game` / `help` / `settings`) | `App` | Passed as callback props (`onReady`, `onConfirm`, `onBack`, `onHelp`, `onSettings`) |
-| Previous screen (for help/settings back-navigation) | `App` | Stored so the help and settings screens know where to return |
+| Back stack (for help/settings back-navigation) | `App` | A `Screen[]` stack; pushed when navigating to help or settings, popped on back — supports any depth of overlay navigation |
 | `useBases()` loading state (for loading screen) | `App` | `App` calls `useBases()` and passes `loading` prop to `SwuLoadingScreen`; `SwuLoadingScreen` calls `onReady` only when both the data is ready and the 1-second minimum timer has elapsed |
 | Selected base | `App` | Set on `onConfirm`, passed into `SwuGameScreen` |
 | Last setup selection (`set`, `aspect`, `key`) | `App` | Saved on `handleConfirm`; passed as `initialSelection` prop to `SwuSetupScreen` so dropdowns are pre-populated on back navigation |
@@ -259,9 +259,9 @@ When `epicActionUsed && showEpicAction && forceActive && showForce` are all true
 ### Example flow: Settings navigation
 
 1. User taps the ⚙ button on the setup or game screen
-2. `App` records `previousScreen` and sets `screen = 'settings'`
+2. `App` pushes the current screen onto `backStack` and sets `screen = 'settings'`
 3. `SwuSettingsScreen` renders — user adjusts preferences; each toggle writes immediately to localStorage via `useUserSettings`
-4. User taps `<` — `App` sets `screen = previousScreen`, returning to wherever they came from
+4. User taps `<` — `App` pops the top of `backStack` and sets `screen` to that value, returning to wherever they came from
 5. The updated preferences take effect next time the relevant screen mounts (e.g. game screen reads `enableForceToken` on start)
 
 ---
@@ -485,7 +485,7 @@ When the base is not recognised, the deck name is still shown (so the user can s
 
 The settings screen is accessible from both the setup and game screens via the ⚙ button in the top-right area:
 
-- Tapping ⚙ navigates to `SwuSettingsScreen`, with `previousScreen` saved so the back button returns to the correct place
+- Tapping ⚙ navigates to `SwuSettingsScreen`; the current screen is pushed onto `backStack` so the back button returns to the correct place
 - `SwuSettingsScreen` (container) calls `useUserSettings()` to read and write preferences
 - `SwuSettingsScreenView` (view) renders a header row (back `<`, icon, "Settings" h1, help `?`) and a scrollable toggle list
 - Each toggle writes immediately to localStorage via `useUserSettings` — there is no save/cancel step
