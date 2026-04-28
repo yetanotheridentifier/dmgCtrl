@@ -7,6 +7,7 @@ interface UserSettings {
   enableForceToken: boolean
   enableEpicActions: boolean
   enableWakeLock: boolean
+  enableFavourites: boolean
 }
 
 const DEFAULTS: UserSettings = {
@@ -14,6 +15,7 @@ const DEFAULTS: UserSettings = {
   enableForceToken: true,
   enableEpicActions: true,
   enableWakeLock: true,
+  enableFavourites: false,
 }
 
 function load(): UserSettings {
@@ -26,6 +28,7 @@ function load(): UserSettings {
       enableForceToken: parsed.enableForceToken ?? DEFAULTS.enableForceToken,
       enableEpicActions: parsed.enableEpicActions ?? DEFAULTS.enableEpicActions,
       enableWakeLock: parsed.enableWakeLock ?? DEFAULTS.enableWakeLock,
+      enableFavourites: parsed.enableFavourites ?? DEFAULTS.enableFavourites,
     }
   } catch {
     return { ...DEFAULTS }
@@ -52,9 +55,11 @@ export function useUserSettings() {
     enableForceToken: settings.enableForceToken,
     enableEpicActions: settings.enableEpicActions,
     enableWakeLock: settings.enableWakeLock,
+    enableFavourites: settings.enableFavourites,
     setUseHyperspace: (v: boolean) => update({ useHyperspace: v }),
     setEnableForceToken: (v: boolean) => update({ enableForceToken: v }),
     setEnableEpicActions: (v: boolean) => update({ enableEpicActions: v }),
     setEnableWakeLock: (v: boolean) => update({ enableWakeLock: v }),
+    setEnableFavourites: (v: boolean) => update({ enableFavourites: v }),
   }
 }

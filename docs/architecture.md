@@ -128,10 +128,11 @@ src/
   hooks/
     useBaseArt.ts           Ordered art fallback chain shared by setup and game screens
     useBases.ts             Fetches and caches the full list of Base cards
+    useFavourites.ts        Favourites list — add/remove/clear operations with deduplication on key; sorted by set then card number ascending; persists FavouriteBase[] to localStorage under key `favourites`; UI gated by enableFavourites in useUserSettings (see tickets #123, #124)
     useOrientation.ts       Detects portrait vs landscape; returns isPortrait (via matchMedia change event) and vmin (Math.min(screen.width, screen.height) — stable across rotations)
     useSwuGame.ts           Damage counter, epic action used state, Force token enabled and active state
     useSwuSetup.ts          Setup screen logic — filtering and auto-select
-    useUserSettings.ts      Persistent user preferences (useHyperspace, enableForceToken, enableEpicActions, enableWakeLock) backed by localStorage under key `user_settings`; all default to true
+    useUserSettings.ts      Persistent user preferences (useHyperspace, enableForceToken, enableEpicActions, enableWakeLock, enableFavourites) backed by localStorage under key `user_settings`; useHyperspace/enableForceToken/enableEpicActions/enableWakeLock default to true; enableFavourites defaults to false
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
   utils/
@@ -149,6 +150,7 @@ src/
     swudbUrl.test.ts        SWUDB URL utility tests
     useBaseArt.test.ts      Art fallback chain hook tests
     useBases.test.ts        Data layer hook tests
+    useFavourites.test.ts   Favourites hook tests
     useOrientation.test.ts  Orientation hook tests
     useSwuGame.test.ts      Counter hook tests
     useSwuSetup.test.ts     Setup logic hook tests
@@ -201,7 +203,8 @@ State is owned at the appropriate level:
 | Force token enabled state | `useSwuGame` | Local to game screen; set to `true` by the enable tap on non-Force bases; combined with `isForceBase` in the container to derive `effectiveForceEnabled`; reset on each navigation |
 | Force token active state | `useSwuGame` | Local to game screen; toggled by the Force button and overlay; reset on each navigation to the game screen |
 | Art fallback index, image load state | `useBaseArt` | Local to whichever screen called it; reset when base changes |
-| User settings (hyperspace, force token, epic actions, wake lock) | `useUserSettings` / localStorage | Persisted under `user_settings` as JSON; all default to `true`; read by any screen that calls the hook |
+| User settings (hyperspace, force token, epic actions, wake lock, favourites enable) | `useUserSettings` / localStorage | Persisted under `user_settings` as JSON; useHyperspace/enableForceToken/enableEpicActions/enableWakeLock default to `true`; enableFavourites defaults to `false`; read by any screen that calls the hook |
+| Favourites list | `useFavourites` / localStorage | Persisted under `favourites` as JSON array of `FavouriteBase`; sorted by set then card number ascending; deduplicated on `key`; UI visibility gated by `enableFavourites` in `useUserSettings` (UI not yet wired — see tickets #123, #124) |
 | Selection mode (`base-selector` / `swudb-import`) | `SwuSetupScreen` / localStorage | Persisted under `pref_selection_mode`; defaults to `base-selector` |
 | SWUDB URL input, validation error, deck name, loading state | `SwuSetupScreen` | Local; `swudbDeckName` remains `null` until a successful API load |
 
@@ -384,6 +387,31 @@ Validation complete — 42 bases checked.
 ```
 
 Timing constants at the top of the script (`VISUAL_PAUSE_MS`, `BACK_PAUSE_MS`) can be adjusted if more or less inspection time is needed.
+
+### `useFavourites` hook
+
+Manages a persistent list of favourite bases for quick reselection.
+
+```typescript
+export interface FavouriteBase {
+  key: string       // `${set}-${number}`, e.g. "SHD-018"
+  set: string
+  name: string
+  hp: number
+  aspect: string
+  cardNumber: number
+}
+```
+
+**Persistence:** Stored as a `FavouriteBase[]` JSON array in localStorage under the key `favourites`. Falls back to an empty list if the key is absent or the stored value is corrupt.
+
+**Deduplication:** Adding an entry whose `key` already exists is a no-op.
+
+**Sort order:** The list is sorted on every mutation — set code ascending (alphabetical), then `cardNumber` ascending within a set.
+
+**API:** `{ favourites, addFavourite, removeFavourite, clearFavourites }`.
+
+**Feature flag:** `enableFavourites` in `useUserSettings` (default: `false`) gates UI visibility. The stored data is retained regardless of the toggle state — disabling and re-enabling restores the list intact. UI integration is added in tickets #123 (setup screen star toggle + Favourites mode) and #124 (settings screen management UI).
 
 ---
 
@@ -711,6 +739,7 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | **Base** | A card type in Star Wars Unlimited representing a location that acts as the player's "health bar". Each base has an HP value (typically 24–35). |
 | **Epic Action** | A special ability on some base cards that can be triggered once per game. The game screen shows an epic action button when the base has an epic action and `enableEpicActions` is true in user settings; tapping it marks the ability as used and renders a gold token overlay. Tapping the overlay or the button again reverts the state. The button is only shown when the base's `epicAction` text contains the phrase 'Epic Action' (case-insensitive). Passive-effect bases and Force trigger bases are therefore excluded. |
 | **Epic action token** | The in-app UI element (a translucent yellow rectangle with a gold border, "Epic Action Used" text, and a starburst watermark) that overlays the lower portion of the base card when the epic action has been used, mirroring the physical token used in the tabletop game. When the Force token is also active, it occupies the left half of the overlay area. |
+| **Favourites** | A user-curated list of bases for quick reselection. Managed by `useFavourites`; persisted to localStorage under `favourites`. Visibility gated by `enableFavourites` in `useUserSettings` (default: `false`). UI integration pending tickets #123 and #124. |
 | **Force** | A recurring ability on some LOF base cards, identified by the phrase "The Force is with you" in their `epicAction` text. Force bases start the game with the Force button already enabled. Any base can also gain the Force via card or leader abilities — the locked Force icon is available on all bases for this purpose. |
 | **Force token button** | The blue icon button (showing `dmgCtrl-force-token.png`) that appears in the first slot below the back button when `forceEnabled` is true. Tapping it sets `forceActive = true` and renders the Force token overlay. On non-Force bases, the slot first shows a locked/dimmed version; tapping the dimmed icon once enables it. |
 | **Force token overlay** | The in-app UI element (a royal-blue rectangle with a light-blue border and a "The Force is With You" label) that overlays the lower portion of the base card when `forceActive` is true. A translucent watermark of `dmgCtrl-force-token.png` appears behind the text. Tapping the overlay returns `forceActive` to `false`. When the epic action token is also active, it occupies the right half of the overlay area. |

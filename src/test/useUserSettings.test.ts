@@ -41,6 +41,11 @@ describe('useUserSettings', () => {
     expect(result.current.enableWakeLock).toBe(true)
   })
 
+  it('defaults enableFavourites to false when storage is empty', () => {
+    const { result } = renderHook(() => useUserSettings())
+    expect(result.current.enableFavourites).toBe(false)
+  })
+
   // --- Load from storage ---
 
   it('loads useHyperspace=false from stored JSON', () => {
@@ -75,6 +80,14 @@ describe('useUserSettings', () => {
     expect(result.current.enableWakeLock).toBe(false)
   })
 
+  it('loads enableFavourites=true from stored JSON', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) =>
+      key === STORAGE_KEY ? JSON.stringify({ useHyperspace: true, enableForceToken: true, enableEpicActions: true, enableWakeLock: true, enableFavourites: true }) : null
+    )
+    const { result } = renderHook(() => useUserSettings())
+    expect(result.current.enableFavourites).toBe(true)
+  })
+
   // --- Saving ---
 
   it('saves to localStorage when setUseHyperspace is called', () => {
@@ -105,6 +118,13 @@ describe('useUserSettings', () => {
     expect(saved.enableWakeLock).toBe(false)
   })
 
+  it('saves to localStorage when setEnableFavourites is called', () => {
+    const { result } = renderHook(() => useUserSettings())
+    act(() => result.current.setEnableFavourites(true))
+    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
+    expect(saved.enableFavourites).toBe(true)
+  })
+
   // --- Resilience ---
 
   it('falls back to all defaults when stored JSON is corrupt', () => {
@@ -127,6 +147,22 @@ describe('useUserSettings', () => {
     expect(result.current.enableForceToken).toBe(true)
     expect(result.current.enableEpicActions).toBe(true)
     expect(result.current.enableWakeLock).toBe(true)
+  })
+
+  it('falls back to false for enableFavourites when stored JSON is corrupt', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) =>
+      key === STORAGE_KEY ? 'not-valid-json{{{' : null
+    )
+    const { result } = renderHook(() => useUserSettings())
+    expect(result.current.enableFavourites).toBe(false)
+  })
+
+  it('falls back to false for enableFavourites when missing from stored JSON', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) =>
+      key === STORAGE_KEY ? JSON.stringify({ useHyperspace: false }) : null
+    )
+    const { result } = renderHook(() => useUserSettings())
+    expect(result.current.enableFavourites).toBe(false)
   })
 
 })
