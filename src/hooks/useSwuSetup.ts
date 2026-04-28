@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect } from 'react'
 import { useBases, Base } from './useBases'
 
 const ASPECT_ORDER = ['Vigilance', 'Command', 'Aggression', 'Cunning', 'None']
-const HYPERSPACE_PREF_KEY = 'pref_hyperspace'
 
 export interface InitialSelection {
   set: string
@@ -11,7 +10,7 @@ export interface InitialSelection {
 }
 
 export function useSwuSetup(
-  onConfirm: (base: Base, useHyperspace: boolean) => void,
+  onConfirm: (base: Base) => void,
   initialSelection?: InitialSelection | null,
 ) {
   const { bases, loading, error } = useBases()
@@ -19,9 +18,6 @@ export function useSwuSetup(
   const [selectedSet, setSelectedSet] = useState(initialSelection?.set ?? '')
   const [selectedAspect, setSelectedAspect] = useState(initialSelection?.aspect ?? '')
   const [selectedKey, setSelectedKey] = useState(initialSelection?.key ?? '')
-  const [useHyperspace, setUseHyperspace] = useState<boolean>(() => {
-    return localStorage.getItem(HYPERSPACE_PREF_KEY) === 'true'
-  })
 
   const availableSets = useMemo(() => {
     return [...new Set(bases.map(b => b.set))].sort()
@@ -84,14 +80,10 @@ export function useSwuSetup(
     setSelectedKey(key)
   }
 
-  const handleHyperspaceToggle = (value: boolean) => {
-    setUseHyperspace(value)
-    localStorage.setItem(HYPERSPACE_PREF_KEY, String(value))
-  }
 
-  const handleSubmit = (effectiveHyperspace: boolean) => {
+  const handleSubmit = () => {
     if (!selectedBase) return
-    onConfirm(selectedBase, effectiveHyperspace)
+    onConfirm(selectedBase)
   }
 
   const selectBaseByKey = (key: string): boolean => {
@@ -111,14 +103,12 @@ export function useSwuSetup(
     selectedAspect,
     selectedKey,
     selectedBase,
-    useHyperspace,
     availableSets,
     availableAspects,
     filteredBases,
     handleSetChange,
     handleAspectChange,
     handleKeyChange,
-    handleHyperspaceToggle,
     handleSubmit,
     selectBaseByKey,
   }

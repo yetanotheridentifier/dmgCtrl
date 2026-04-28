@@ -15,7 +15,6 @@ interface Props {
   selectedKey: string
   selectedBase: Base | null
   useHyperspace: boolean
-  showHyperspaceToggle: boolean
   artSrc: string | null
   artIsHyperspace: boolean
   artAllFailed: boolean
@@ -26,7 +25,6 @@ interface Props {
   onSetChange: (set: string) => void
   onAspectChange: (aspect: string) => void
   onKeyChange: (key: string) => void
-  onHyperspaceToggle: (value: boolean) => void
   onSubmit: () => void
   onHelp: () => void
   onSettings?: () => void
@@ -141,7 +139,6 @@ function SwuSetupScreenView({
   selectedKey,
   selectedBase,
   useHyperspace,
-  showHyperspaceToggle,
   artSrc,
   artIsHyperspace,
   artAllFailed,
@@ -152,7 +149,6 @@ function SwuSetupScreenView({
   onSetChange,
   onAspectChange,
   onKeyChange,
-  onHyperspaceToggle,
   onSubmit,
   onHelp,
   onSettings,
@@ -168,41 +164,6 @@ function SwuSetupScreenView({
 }: Props) {
   const { isPortrait } = useOrientation()
 
-  const hyperspaceToggle = showHyperspaceToggle && (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: '2vw',
-    }}>
-      <input
-        type="checkbox"
-        id="hyperspace-toggle"
-        checked={useHyperspace}
-        onChange={e => onHyperspaceToggle(e.target.checked)}
-        style={{
-          width: '24px',
-          height: '24px',
-          cursor: 'pointer',
-          accentColor: 'var(--color-accent)',
-          flexShrink: 0,
-        }}
-      />
-      <label
-        htmlFor="hyperspace-toggle"
-        style={{
-          color: 'var(--color-text-muted)',
-          fontWeight: '300',
-          fontSize: 'clamp(0.7rem, 3vw, 0.9rem)',
-          letterSpacing: '0.08em',
-          cursor: 'pointer',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        Hyperspace variant
-      </label>
-    </div>
-  )
 
   const loadButtonEnabled = swudbUrl !== '' && swudbError === null && !swudbLoading
   const submitEnabled = !!selectedBase
@@ -539,7 +500,6 @@ function SwuSetupScreenView({
                 : baseSelectorContent(true)
               }
 
-              {hyperspaceToggle}
             </div>
 
             {/* Right column: preview */}
@@ -669,7 +629,6 @@ function SwuSetupScreenView({
                 gap: '1vh',
               }}>
                 {imagePreview(selectedBase)}
-                {hyperspaceToggle}
               </div>
             )}
           </>
@@ -684,7 +643,6 @@ function SwuSetupScreenView({
                 gap: '1vh',
               }}>
                 {imagePreview(selectedBase)}
-                {hyperspaceToggle}
               </div>
             )}
           </>

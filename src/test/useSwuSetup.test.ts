@@ -137,22 +137,6 @@ describe('useSwuSetup', () => {
     expect(result.current.selectedBase).toBeNull()
   })
 
-  it('useHyperspace starts as false when localStorage has no value', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.useHyperspace).toBe(false)
-  })
-
-  it('useHyperspace starts as true when localStorage has true', () => {
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn().mockImplementation((key: string) => key === 'pref_hyperspace' ? 'true' : null),
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    })
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    expect(result.current.useHyperspace).toBe(true)
-  })
-
   // --- Pass-through from useBases ---
 
   it('exposes loading state from useBases', () => {
@@ -270,43 +254,24 @@ describe('useSwuSetup', () => {
     expect(result.current.selectedKey).toBe('SOR-026')
   })
 
-  // --- Hyperspace toggle ---
 
-  it('handleHyperspaceToggle updates useHyperspace', () => {
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleHyperspaceToggle(true))
-    expect(result.current.useHyperspace).toBe(true)
-  })
-
-  it('handleHyperspaceToggle persists to localStorage', () => {
-    const setItem = vi.fn()
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn().mockReturnValue(null),
-      setItem,
-      removeItem: vi.fn(),
-      clear: vi.fn(),
-    })
-    const { result } = renderHook(() => useSwuSetup(vi.fn()))
-    act(() => result.current.handleHyperspaceToggle(true))
-    expect(setItem).toHaveBeenCalledWith('pref_hyperspace', 'true')
-  })
 
   // --- handleSubmit ---
 
-  it('handleSubmit calls onConfirm with selectedBase and effectiveHyperspace', () => {
+  it('handleSubmit calls onConfirm with selectedBase', () => {
     const onConfirm = vi.fn()
     const { result } = renderHook(() => useSwuSetup(onConfirm))
     act(() => result.current.handleSetChange('SOR'))
     act(() => result.current.handleAspectChange('Aggression'))
     act(() => result.current.handleKeyChange('SOR-026'))
-    act(() => result.current.handleSubmit(false))
-    expect(onConfirm).toHaveBeenCalledWith(baseA, false)
+    act(() => result.current.handleSubmit())
+    expect(onConfirm).toHaveBeenCalledWith(baseA)
   })
 
   it('handleSubmit does nothing when no base is selected', () => {
     const onConfirm = vi.fn()
     const { result } = renderHook(() => useSwuSetup(onConfirm))
-    act(() => result.current.handleSubmit(false))
+    act(() => result.current.handleSubmit())
     expect(onConfirm).not.toHaveBeenCalled()
   })
 

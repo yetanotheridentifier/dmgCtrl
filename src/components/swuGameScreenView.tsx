@@ -206,14 +206,14 @@ function SwuGameScreenView({
         </button>
       )}
 
-      {/* Epic action button — slot 2 (16vw), only shown when base has a non-Force epic action */}
+      {/* Epic action button — slot 1 (9vw) when Force hidden, slot 2 (16vw) otherwise */}
       {showEpicAction && (
         <button
           data-testid="epic-action-btn"
           onClick={onEpicActionToggle}
           style={{
             position: 'absolute',
-            top: 'calc(env(safe-area-inset-top) + 16vw)',
+            top: `calc(env(safe-area-inset-top) + ${showForce ? 16 : 9}vw)`,
             left: 'calc(env(safe-area-inset-left) + 2vw)',
             width: '5vw',
             height: '5vw',
@@ -237,8 +237,8 @@ function SwuGameScreenView({
         </button>
       )}
 
-      {/* Mystic Monastery action button — slot 2 (16vw), always visible for LOF-022; disabled when Force active or uses exhausted */}
-      {isMysticMonastery && (() => {
+      {/* Mystic Monastery action button — slot 2 (16vw), only shown when showForce is true */}
+      {showForce && isMysticMonastery && (() => {
         const disabled = forceActive || mysticUsesRemaining === 0
         return (
           <button

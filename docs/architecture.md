@@ -62,7 +62,7 @@ The app is served at `/dmgCtrl/` and is designed to be added to an iOS home scre
 App
 ├── SwuLoadingScreen      (standalone screen — icon + LOADING text; 1-second minimum display time; auto-transitions when data is ready and timer has elapsed)
 ├── SwuSetupScreen        (container)
-│   ├── useSwuSetup       (hook — filtering, auto-select, hyperspace preference)
+│   ├── useSwuSetup       (hook — filtering, auto-select)
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
 │   └── SwuSetupScreenView (view — renders mode selector, selects, image preview, start button; ⚙ button opens settings)
 │       └── ImagePreview  (pure view — renders art or error message from props)
@@ -70,7 +70,7 @@ App
 │   ├── useSwuGame        (hook — damage counter, epic action, Force token enabled and active state)
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
 │   ├── useWakeLock       (hook — prevents screen sleep during gameplay via Screen Wake Lock API)
-│   └── SwuGameScreenView (view — renders counter, image, epic action token, Force token; ⚙ button opens settings)
+│   └── SwuGameScreenView (view — renders counter, image, epic action token, Force token; ⚙ button always visible)
 ├── SwuHelpScreen         (standalone screen — renders help.md content)
 └── SwuSettingsScreen     (container)
     ├── useUserSettings   (hook — persistent user preferences)
@@ -96,7 +96,6 @@ The exception is `SwuSettingsScreenView`, which calls `useOrientation()` directl
 |---|---|---|
 | Logic | State, derived values, side effects | `src/hooks/` |
 | Utilities | Pure functions with no React dependency | `src/utils/` |
-| Feature flags | Boolean gates for in-progress features | `src/flags.ts` |
 | Layout | Full-screen container, background, safe area | `src/components/layout/` |
 | Presentation | Rendering from props | View components in `src/components/` |
 
@@ -109,7 +108,6 @@ src/
   App.tsx                  Root component — screen routing and top-level state; calls useBases() to drive loading screen transition
   main.tsx                 Entry point
   index.css                Global reset, CSS custom property palette, help screen styles
-  flags.ts                 Feature flags (FEATURE_EPIC_ACTION, FEATURE_FORCE_TOKEN, FEATURE_WAKE_LOCK, FEATURE_USER_SETTINGS)
   markdown.d.ts            Type declaration for .md imports
   vite-env.d.ts            Vite environment types
 
@@ -118,7 +116,7 @@ src/
       AppScreenLayout.tsx  Shared full-screen layout wrapper (background, safe area)
     imagePreview.tsx        Pure view — renders card art or error message from props
     swuGameScreen.tsx       Game screen container
-    swuGameScreenView.tsx   Game screen view (⚙ button visible when FEATURE_USER_SETTINGS is enabled)
+    swuGameScreenView.tsx   Game screen view (⚙ button always visible)
     swuHelpScreen.tsx       Help screen (renders help.md; title row: back button + icon + "Help" h1)
     swuLoadingScreen.tsx    Loading screen (icon + "LOADING" text; 1-second minimum display; calls onReady when both timer and data loading are done)
     swuSetupScreen.tsx      Setup screen container
@@ -131,7 +129,7 @@ src/
     useBases.ts             Fetches and caches the full list of Base cards
     useOrientation.ts       Detects portrait vs landscape; returns isPortrait (via matchMedia change event) and vmin (Math.min(screen.width, screen.height) — stable across rotations)
     useSwuGame.ts           Damage counter, epic action used state, Force token enabled and active state
-    useSwuSetup.ts          Setup screen logic — filtering, auto-select, hyperspace preference
+    useSwuSetup.ts          Setup screen logic — filtering and auto-select
     useUserSettings.ts      Persistent user preferences (useHyperspace, enableForceToken, enableEpicActions, enableWakeLock) backed by localStorage under key `user_settings`; all default to true
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
@@ -162,7 +160,7 @@ src/
 docs/
   architecture.md           This document
   help.md                   User guide (imported as HTML string via custom Vite plugin)
-  project-overview.md       Product vision, planned features, known issues, AI assistant notes
+  project-overview.md       Product vision, planned features, AI assistant notes
 
 public/
   dmgCtrl-icon-transparent-192.png  App icon (transparent background); used on loading screen and alongside screen titles
@@ -191,7 +189,6 @@ State is owned at the appropriate level:
 | `useBases()` loading state (for loading screen) | `App` | `App` calls `useBases()` and passes `loading` prop to `SwuLoadingScreen`; `SwuLoadingScreen` calls `onReady` only when both the data is ready and the 1-second minimum timer has elapsed |
 | Selected base | `App` | Set on `onConfirm`, passed into `SwuGameScreen` |
 | Last setup selection (`set`, `aspect`, `key`) | `App` | Saved on `handleConfirm`; passed as `initialSelection` prop to `SwuSetupScreen` so dropdowns are pre-populated on back navigation |
-| Hyperspace preference | `App` / localStorage | Read at startup, toggled on setup screen, passed to game screen |
 | Filter state (set, aspect, card) | `useSwuSetup` | Seeded from `initialSelection` on mount; local after that |
 | Damage counter | `useSwuGame` | Local to game screen; clamped between 0 and `base.hp`; reset on each navigation to the game screen |
 | Epic action used state | `useSwuGame` | Local to game screen; toggled by the ★ button; reset on each navigation to the game screen |
@@ -220,9 +217,9 @@ State is owned at the appropriate level:
 
 1. User selects set, aspect, and base in setup screen dropdowns
 2. `useSwuSetup` manages the filter state and auto-selects when only one option remains
-3. User clicks `>` — `handleSubmit` in `useSwuSetup` calls `onStartGame(selectedBase, effectiveHyperspace)`
-4. `App` sets `screen = 'game'`, `selectedBase`, and `useHyperspace`
-5. `SwuGameScreen` receives `base` and `useHyperspace`, `useBaseArt` builds the ordered fallback chain and manages image state
+3. User clicks `>` — `handleSubmit` in `useSwuSetup` calls `onConfirm(selectedBase)`
+4. `App` sets `screen = 'game'` and `selectedBase`
+5. `SwuGameScreen` receives `base`; calls `useUserSettings()` for `useHyperspace` and other preferences; `useBaseArt` builds the ordered fallback chain and manages image state
 
 ### Example flow: Damage tracking
 
@@ -234,8 +231,8 @@ State is owned at the appropriate level:
 
 ### Example flow: Epic action
 
-1. Container computes `showEpicAction = FEATURE_EPIC_ACTION && /epic action/i.test(base.epicAction)` — excludes Mystic Monastery (whose text is "Action:", not "Epic Action:")
-2. When `showEpicAction` is true, the view renders the ★ button below the Force button slot
+1. Container reads `enableEpicActions` from `useUserSettings()` and computes `showEpicAction = enableEpicActions && /epic action/i.test(base.epicAction)` — excludes Mystic Monastery (whose text is "Action:", not "Epic Action:")
+2. When `showEpicAction` is true, the view renders the ★ button; its position in the left column adjusts based on whether `showForce` is also true
 3. User taps ★ — view calls `onEpicActionToggle` prop
 4. Container delegates to `useSwuGame` — `toggleEpicAction()` flips `epicActionUsed`
 5. View re-renders: ★ button dims to grey; a gold token overlay appears over the lower portion of the card
@@ -243,7 +240,7 @@ State is owned at the appropriate level:
 
 ### Example flow: Force token
 
-1. `showForce = FEATURE_FORCE_TOKEN` — the Force button slot is always rendered when the flag is on
+1. Container reads `enableForceToken` from `useUserSettings()` and sets `showForce = enableForceToken`; the Force button slot is rendered when `showForce` is true
 2. Container computes `isForceBase = /the force is with you/i.test(base.epicAction)` and `effectiveForceEnabled = isForceBase || forceEnabled`
 3. **Locked state** (`!effectiveForceEnabled`): view renders a dimmed Force icon button (`force-btn-locked`). User taps it → `onForceEnable` → `enableForce()` sets `forceEnabled = true` → `effectiveForceEnabled` becomes `true`
 4. **Ready state** (`effectiveForceEnabled && !forceActive`): view renders the full blue Force button (`force-btn`). User taps it → `onForceToggle` → `toggleForce()` sets `forceActive = true`
@@ -340,7 +337,7 @@ The normal-preferred chain always falls back to hyperspace art before giving up 
 
 Some hi-res hyperspace images on cdn.swu-db.com are stored rotated 90°. `useBaseArt` calls `getRotationFromHyperspaceUrl` for each hyperspace hi-res entry and includes the correction as `rotationDeg` in the returned state. When `rotationDeg` is non-zero, both views switch to a portrait layout box sized to the card's inverse dimensions (`CARD_H/CARD_W` wide × `CARD_W/CARD_H` tall), centered with `translate(-50%,-50%) rotate(90deg)`, so the rotated visual output fills the landscape container without overflowing or changing aspect ratio. When `rotationDeg` is zero the image fills the container normally (`inset:0; width:100%; height:100%`). The lookup table in `src/constants/rotatedCards.ts` is the single place to add new entries as they are discovered.
 
-The setup screen uses `normalFailed`, `hyperspaceFailed`, and `imageLoaded` to control the hyperspace toggle and contextual messages ("Only hyperspace image available", "Hyperspace variant not found"): both are suppressed until `imageLoaded` is true, preventing flicker during the loading window. The game screen uses `allFailed` to switch to the text fallback (base name, subtitle, epic action).
+The setup screen uses `normalFailed`, `hyperspaceFailed`, and `imageLoaded` to control contextual messages ("Only hyperspace image available", "Hyperspace variant not found"): both are suppressed until `imageLoaded` is true, preventing flicker during the loading window. The game screen uses `allFailed` to switch to the text fallback (base name, subtitle, epic action).
 
 ### Caching
 
@@ -432,7 +429,7 @@ The app is designed for **landscape orientation**. `useOrientation` is used in f
    - `filteredBases` — bases matching the selected set and aspect
 3. Auto-select effects: if only one value is available for a dropdown, it is selected automatically
 4. User selects a base → `selectedBase` is set
-5. On submit, `effectiveHyperspace` is computed: `useHyperspace || (normalImageFailed && !!(selectedBase.hyperspaceArtHiRes || selectedBase.hyperspaceArt))`. If the standard art has already failed on the setup screen, the game screen automatically uses hyperspace art.
+5. On submit, `onConfirm(selectedBase)` is called — the game screen reads `useHyperspace` from `useUserSettings` independently
 
 ### Input mode selector and SWUDB import
 
@@ -446,7 +443,7 @@ The setup screen supports two input modes, controlled by a `selectionMode` state
 
 The Load and `>` buttons are stacked vertically and share the same width so they align.
 
-On a successful load, `selectBaseByKey` in `useSwuSetup` is called with the base key from the deck response. This sets `selectedSet`, `selectedAspect`, and `selectedKey` so that switching back to Base Selector mode shows the correct base pre-selected. The card art preview and hyperspace toggle appear below the import controls once a base is resolved, mirroring the Base Selector experience.
+On a successful load, `selectBaseByKey` in `useSwuSetup` is called with the base key from the deck response. This sets `selectedSet`, `selectedAspect`, and `selectedKey` so that switching back to Base Selector mode shows the correct base pre-selected. The card art preview appears below the import controls once a base is resolved, mirroring the Base Selector experience.
 
 URL validation is handled by pure utility functions in `src/utils/swudbUrl.ts`:
 
@@ -467,27 +464,27 @@ When the base is not recognised, the deck name is still shown (so the user can s
 
 ### Game screen
 
-1. `useBaseArt(base, useHyperspace)` manages the ordered fallback chain and image load state
-2. `useSwuGame(base.hp)` manages the damage counter, epic action, and Force token (enabled + active) state
-3. `useWakeLock(FEATURE_WAKE_LOCK)` acquires a Screen Wake Lock on mount to prevent the screen sleeping during gameplay; the lock is automatically released when the component unmounts or the page becomes hidden, and reacquired when the page becomes visible again
-4. The container computes:
-   - `showEpicAction = FEATURE_EPIC_ACTION && /epic action/i.test(base.epicAction)`
-   - `showForce = FEATURE_FORCE_TOKEN` — always `true` when the flag is on; the Force button slot is shown for every base
+1. `useUserSettings()` provides `enableForceToken`, `enableEpicActions`, `enableWakeLock`, and `useHyperspace` — all user preferences for this screen
+2. `useBaseArt(base, useHyperspace)` manages the ordered fallback chain and image load state
+3. `useSwuGame(base.hp)` manages the damage counter, epic action, and Force token (enabled + active) state
+4. `useWakeLock(enableWakeLock)` acquires a Screen Wake Lock on mount to prevent the screen sleeping during gameplay; the lock is automatically released when the component unmounts or the page becomes hidden, and reacquired when the page becomes visible again
+5. The container computes:
+   - `showEpicAction = enableEpicActions && /epic action/i.test(base.epicAction)`
+   - `showForce = enableForceToken` — the Force button slot is shown for every base when enabled
    - `isForceBase = /the force is with you/i.test(base.epicAction)` — LOF bases whose ability explicitly creates a Force token
    - `effectiveForceEnabled = isForceBase || forceEnabled` — Force bases start enabled; others start locked until the user taps the dimmed icon
-5. Props passed to the view include art state, counter callbacks, `epicActionUsed`, `onEpicActionToggle`, `showEpicAction`, `forceEnabled` (= `effectiveForceEnabled`), `forceActive`, `onForceEnable`, `onForceToggle`, `showForce`, and `onSettings` (gated by `FEATURE_USER_SETTINGS`)
-6. The left-side button column (top to bottom): `<` back → Force icon (locked, ready, or overlay-active/greyed) → ★ epic action (when present)
-7. The right-side button column (top to bottom): `?` help → ⚙ settings (when `FEATURE_USER_SETTINGS` is enabled)
-8. View renders the card image, counter, and up to two overlays over the bottom portion of the card:
+6. Props passed to the view include art state, counter callbacks, `epicActionUsed`, `onEpicActionToggle`, `showEpicAction`, `forceEnabled` (= `effectiveForceEnabled`), `forceActive`, `onForceEnable`, `onForceToggle`, `showForce`, and `onSettings`
+7. The left-side button column (top to bottom): `<` back → Force icon (locked, ready, or overlay-active/greyed) when `showForce` → ★ epic action when `showEpicAction`; when Force is hidden the ★ button moves up to fill the gap
+8. The right-side button column (top to bottom): `?` help → ⚙ settings
+9. View renders the card image, counter, and up to two overlays over the bottom portion of the card:
    - **Epic action token** (gold, ✕): when `epicActionUsed && showEpicAction`
    - **Force token** (blue, "The Force is With You"): when `forceActive && showForce`
    - When **both** are active, the view computes `bothOverlaysActive = true` and renders them side by side (epic action left, Force right), each at half width
 
 ### Settings screen
 
-The settings screen is gated by `FEATURE_USER_SETTINGS` (defaults to `false`). When the flag is enabled:
+The settings screen is accessible from both the setup and game screens via the ⚙ button in the top-right area:
 
-- A ⚙ button appears in the top-right area of the setup screen (alongside the `?` help button) and the game screen (below the `?` help button)
 - Tapping ⚙ navigates to `SwuSettingsScreen`, with `previousScreen` saved so the back button returns to the correct place
 - `SwuSettingsScreen` (container) calls `useUserSettings()` to read and write preferences
 - `SwuSettingsScreenView` (view) renders a header row (back `<`, icon, "Settings" h1, help `?`) and a scrollable toggle list
@@ -508,37 +505,6 @@ The settings screen is gated by `FEATURE_USER_SETTINGS` (defaults to `false`). W
 **Platform support:**
 - Android Chrome: supported since Chrome 84 (2020)
 - iOS Safari PWA: supported since iOS 16.4 (March 2023); only works when installed to home screen — not in a regular Safari tab
-
-The hook is controlled by `FEATURE_WAKE_LOCK` (defaults to `true`). Ticket #5 will expose this as a user preference on the settings screen.
-
-### Feature flags
-
-Feature flags live in `src/flags.ts`. Each flag reads a `VITE_FEATURE_*` env var at build time.
-
-Most flags default to `true` if the var is absent or not `'false'`:
-```typescript
-export const FEATURE_EPIC_ACTION = import.meta.env.VITE_FEATURE_EPIC_ACTION !== 'false'
-export const FEATURE_FORCE_TOKEN = import.meta.env.VITE_FEATURE_FORCE_TOKEN !== 'false'
-export const FEATURE_WAKE_LOCK   = import.meta.env.VITE_FEATURE_WAKE_LOCK   !== 'false'
-```
-
-`FEATURE_USER_SETTINGS` is **inverted** — it defaults to `false` and must be explicitly opted in during development. This keeps the in-progress settings screen hidden in production until the full feature is complete:
-```typescript
-export const FEATURE_USER_SETTINGS = import.meta.env.VITE_FEATURE_USER_SETTINGS === 'true'
-```
-
-Test files mock the flags module with `vi.mock('../flags', () => ({ ... }))`. Tests that need per-test flag control use `vi.hoisted` with a getter:
-```typescript
-const featureUserSettings = vi.hoisted(() => ({ value: false }))
-vi.mock('../flags', () => ({
-  FEATURE_EPIC_ACTION: true,
-  FEATURE_FORCE_TOKEN: true,
-  FEATURE_WAKE_LOCK: true,
-  get FEATURE_USER_SETTINGS() { return featureUserSettings.value },
-}))
-```
-
-Ticket #5 will convert `FEATURE_EPIC_ACTION`, `FEATURE_FORCE_TOKEN`, and `FEATURE_WAKE_LOCK` from build-time flags to runtime user preferences stored in `useUserSettings`.
 
 ### Adding a new feature
 
@@ -646,7 +612,7 @@ Tests verify behaviour, not implementation. Hook tests cover logic in isolation;
 - External APIs are mocked with `vi.stubGlobal('fetch', ...)` — no real network calls in tests
 - localStorage is mocked with `vi.stubGlobal('localStorage', ...)` to test caching paths
 - All mocks are torn down with `vi.unstubAllGlobals()` in `afterEach`
-- Feature flags are mocked with `vi.mock('../flags', () => ({ FEATURE_X: true }))` at the top of test files that exercise flag-gated behaviour
+- `useUserSettings` is mocked with `vi.mock('../hooks/useUserSettings', ...)` in tests that exercise preference-gated behaviour; `vi.hoisted` is used for mock values that need per-test control
 - `App.test.tsx` mocks `useBases` at the module level (`vi.mock('../hooks/useBases', ...)`) so data is available synchronously; this allows the tests to focus on navigation logic rather than data loading. The 1-second loading screen timer is waited out with a `waitFor` timeout of 4 seconds.
 
 ### Running tests
@@ -714,12 +680,12 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | Term | Definition |
 |---|---|
 | **Base** | A card type in Star Wars Unlimited representing a location that acts as the player's "health bar". Each base has an HP value (typically 24–35). |
-| **Epic Action** | A special ability on some base cards that can be triggered once per game. The game screen shows a ★ button (below the Force button slot) when the base has an epic action; tapping it marks the ability as used and renders a gold token overlay. Tapping the overlay or ★ again reverts the state. The ★ button is only shown when the base's `epicAction` text contains the phrase 'Epic Action' (case-insensitive). Passive-effect bases and Force trigger bases are therefore excluded. |
+| **Epic Action** | A special ability on some base cards that can be triggered once per game. The game screen shows a ★ button when the base has an epic action and `enableEpicActions` is true in user settings; tapping it marks the ability as used and renders a gold token overlay. Tapping the overlay or ★ again reverts the state. The ★ button is only shown when the base's `epicAction` text contains the phrase 'Epic Action' (case-insensitive). Passive-effect bases and Force trigger bases are therefore excluded. |
 | **Epic action token** | The in-app UI element (a translucent yellow rectangle with a gold border and white ✕) that overlays the lower portion of the base card when the epic action has been used, mirroring the physical token used in the tabletop game. When the Force token is also active, it occupies the left half of the overlay area. |
 | **Force** | A recurring ability on some LOF base cards, identified by the phrase "The Force is with you" in their `epicAction` text. Force bases start the game with the Force button already enabled. Any base can also gain the Force via card or leader abilities — the locked Force icon is available on all bases for this purpose. |
 | **Force token button** | The blue icon button (showing `dmgCtrl-force-token.png`) that appears in the first slot below `<` when `forceEnabled` is true. Tapping it sets `forceActive = true` and renders the Force token overlay. On non-Force bases, the slot first shows a locked/dimmed version; tapping the dimmed icon once enables it. |
 | **Force token overlay** | The in-app UI element (a royal-blue rectangle with a light-blue border and a "The Force is With You" label) that overlays the lower portion of the base card when `forceActive` is true. A translucent watermark of `dmgCtrl-force-token.png` appears behind the text. Tapping the overlay returns `forceActive` to `false`. When the epic action token is also active, it occupies the right half of the overlay area. |
-| **Hyperspace** | A premium variant of a card with alternate artwork. In this app, selecting "hyperspace" shows the alternate art version of the base. |
+| **Hyperspace** | A premium variant of a card with alternate artwork. In this app, the `useHyperspace` setting (in `useUserSettings`) controls whether the Hyperspace variant is preferred on the game screen. |
 | **Loading screen** | The first screen shown on app start (`SwuLoadingScreen`). Displays the app icon and "LOADING" text. Has a **1-second minimum display time**: `onReady` is called only when both the data has loaded and the 1-second timer has elapsed. Automatically transitions to the setup screen. |
 | **Standard art** | The default card artwork. `frontArt` is the swu-db.com hi-res version (1560×1120); `frontArtLowRes` is the swuapi.com version (400×286). |
 | **hyperspaceArt** | The reliable low-res hyperspace image URL from swuapi.com (`cdn.starwarsunlimited.com`, 400×286). `null` for SOR/SHD/TWI (no longer in swuapi.com). |
@@ -730,8 +696,7 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | **View** | A React component that only renders — receives all data and callbacks as props, contains no business logic. |
 | **AppScreenLayout** | The shared full-screen layout wrapper that provides background, safe area padding, and star field for every screen. |
 | **CSS custom properties** | Variables defined in `:root` in `index.css` (e.g. `--color-accent`) and referenced in inline styles via `var()`. Single source of truth for the colour palette. |
-| **Feature flag** | A boolean constant in `src/flags.ts` that gates in-progress features. Most default to `true`; `FEATURE_USER_SETTINGS` defaults to `false` (opt-in during development). |
-| **Screen Wake Lock** | A browser API (`navigator.wakeLock.request('screen')`) that prevents the device screen from sleeping. Used by `useWakeLock` on the game screen. Supported on Android Chrome and iOS Safari PWA (iOS 16.4+). |
+| **Screen Wake Lock** | A browser API (`navigator.wakeLock.request('screen')`) that prevents the device screen from sleeping. Used by `useWakeLock` on the game screen when `enableWakeLock` is true in user settings. Supported on Android Chrome and iOS Safari PWA (iOS 16.4+). |
 | **swu-db proxy** | A Cloudflare Worker at `swu-proxy.dmgctrl.workers.dev` that proxies requests to swu-db.com and swudb.com to avoid CORS issues. |
 | **PWA** | Progressive Web App — a web app that can be installed on a device and used offline. |
 | **SOR** | Spark of Rebellion — the first set of Star Wars Unlimited cards. |

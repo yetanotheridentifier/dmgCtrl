@@ -3,21 +3,22 @@ import { Base } from '../hooks/useBases'
 import { useSwuSetup, InitialSelection } from '../hooks/useSwuSetup'
 import { useBaseArt } from '../hooks/useBaseArt'
 import SwuSetupScreenView from './swuSetupScreenView'
-import { FEATURE_USER_SETTINGS } from '../flags'
+import { useUserSettings } from '../hooks/useUserSettings'
 import { normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck } from '../utils/swudbUrl'
 
 export type SelectionMode = 'base-selector' | 'swudb-import'
 
 interface Props {
-  onConfirm: (base: Base, useHyperspace: boolean) => void
+  onConfirm: (base: Base) => void
   onHelp: () => void
   onSettings?: () => void
   initialSelection?: InitialSelection | null
 }
 
 function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Props) {
+  const { useHyperspace } = useUserSettings()
   const setup = useSwuSetup(onConfirm, initialSelection)
-  const art = useBaseArt(setup.selectedBase, setup.useHyperspace)
+  const art = useBaseArt(setup.selectedBase, useHyperspace)
 
   const [selectionMode, setSelectionMode] = useState<SelectionMode>(() => {
     const saved = localStorage.getItem('pref_selection_mode')
@@ -69,15 +70,8 @@ function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Pro
     }
   }
 
-  const hasHyperspace = !!(
-    setup.selectedBase?.hyperspaceArtHiRes || setup.selectedBase?.hyperspaceArt
-  )
-  const showHyperspaceToggle = hasHyperspace && !art.normalFailed && !art.hyperspaceFailed && art.imageLoaded
 
-  const handleSubmit = () => {
-    const effectiveHyperspace = setup.useHyperspace || art.normalFailed
-    setup.handleSubmit(effectiveHyperspace)
-  }
+  const handleSubmit = () => setup.handleSubmit()
 
   return (
     <SwuSetupScreenView
@@ -90,8 +84,7 @@ function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Pro
       selectedAspect={setup.selectedAspect}
       selectedKey={setup.selectedKey}
       selectedBase={setup.selectedBase}
-      useHyperspace={setup.useHyperspace}
-      showHyperspaceToggle={showHyperspaceToggle}
+      useHyperspace={useHyperspace}
       artSrc={art.src}
       artIsHyperspace={art.isHyperspace}
       artAllFailed={art.allFailed}
@@ -102,10 +95,9 @@ function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Pro
       onSetChange={setup.handleSetChange}
       onAspectChange={setup.handleAspectChange}
       onKeyChange={setup.handleKeyChange}
-      onHyperspaceToggle={setup.handleHyperspaceToggle}
       onSubmit={handleSubmit}
       onHelp={onHelp}
-      onSettings={FEATURE_USER_SETTINGS ? onSettings : undefined}
+      onSettings={onSettings}
       selectionMode={selectionMode}
       onModeChange={handleModeChange}
       swudbUrl={swudbUrl}

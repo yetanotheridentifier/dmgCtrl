@@ -4,15 +4,25 @@ import userEvent from '@testing-library/user-event'
 import SwuGameScreen from '../components/swuGameScreen'
 import { Base } from '../hooks/useBases'
 import { useOrientation } from '../hooks/useOrientation'
+import { useWakeLock } from '../hooks/useWakeLock'
 
 vi.mock('../hooks/useOrientation')
-const featureUserSettings = vi.hoisted(() => ({ value: false }))
-vi.mock('../flags', () => ({
-  FEATURE_EPIC_ACTION: true,
-  FEATURE_FORCE_TOKEN: true,
-  FEATURE_WAKE_LOCK: true,
-  get FEATURE_USER_SETTINGS() { return featureUserSettings.value },
+vi.mock('../hooks/useWakeLock', () => ({ useWakeLock: vi.fn() }))
+
+const mockUserSettings = vi.hoisted(() => ({
+  useHyperspace: true,
+  enableForceToken: true,
+  enableEpicActions: true,
+  enableWakeLock: true,
+  setUseHyperspace: vi.fn(),
+  setEnableForceToken: vi.fn(),
+  setEnableEpicActions: vi.fn(),
+  setEnableWakeLock: vi.fn(),
 }))
+vi.mock('../hooks/useUserSettings', () => ({
+  useUserSettings: () => mockUserSettings,
+}))
+
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -149,44 +159,48 @@ describe('SwuGameScreen', () => {
 
   beforeEach(() => {
     vi.mocked(useOrientation).mockReturnValue({ isPortrait: false, vmin: 0 })
+    mockUserSettings.enableForceToken = true
+    mockUserSettings.enableEpicActions = true
+    mockUserSettings.enableWakeLock = true
+    mockUserSettings.useHyperspace = false
   })
 
   // --- Rendering ---
 
   it('Renders with counter at zero', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByText('0')).toBeInTheDocument()
   })
 
   it('Displays the correct remaining health at start', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
   })
 
   it('Displays correct remaining for non-default starting health', () => {
-    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByText('Remaining: 25')).toBeInTheDocument()
   })
 
   it('Renders the back button', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByText('<')).toBeInTheDocument()
   })
 
   it('Renders a + button and a − button', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByText('+')).toBeInTheDocument()
     expect(screen.getByText('−')).toBeInTheDocument()
   })
 
   it('Renders the card image with correct src', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     const img = screen.getByAltText(mockBase.name)
     expect(img).toHaveAttribute('src', mockBase.frontArt)
   })
 
   it('Renders the card image with correct alt text', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByAltText(mockBase.name)).toBeInTheDocument()
   })
 
@@ -194,14 +208,14 @@ describe('SwuGameScreen', () => {
 
   it('Increments the counter when + is clicked', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByText('+'))
     expect(screen.getByText('1')).toBeInTheDocument()
   })
 
   it('Decrements the counter when − is clicked', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('−'))
@@ -210,7 +224,7 @@ describe('SwuGameScreen', () => {
 
   it('Does not decrement below zero', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByText('−'))
     await user.click(screen.getByText('−'))
     expect(screen.getByText('0')).toBeInTheDocument()
@@ -218,7 +232,7 @@ describe('SwuGameScreen', () => {
 
   it('Decreases remaining health when counter increments', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
@@ -227,7 +241,7 @@ describe('SwuGameScreen', () => {
 
   it('Increases remaining health when counter decrements', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('−'))
@@ -236,14 +250,14 @@ describe('SwuGameScreen', () => {
 
   it('Remaining health does not exceed starting health', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByText('−'))
     await user.click(screen.getByText('−'))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
   })
 
   it('Counter does not exceed base HP', () => {
-    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
     const plusBtn = screen.getByText('+')
     for (let i = 0; i < 30; i++) fireEvent.click(plusBtn)
     expect(screen.getByText('25')).toBeInTheDocument()
@@ -252,7 +266,7 @@ describe('SwuGameScreen', () => {
 
   it('Remaining health uses base hp not a hardcoded value', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByText('+'))
     expect(screen.getByText('Remaining: 24')).toBeInTheDocument()
   })
@@ -262,7 +276,7 @@ describe('SwuGameScreen', () => {
   it('Calls onBack when back button is clicked', async () => {
     const user = userEvent.setup()
     const onBack = vi.fn()
-    render(<SwuGameScreen base={mockBase} onBack={onBack} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={onBack} onHelp={vi.fn()} />)
     await user.click(screen.getByText('<'))
     expect(onBack).toHaveBeenCalledOnce()
   })
@@ -270,25 +284,25 @@ describe('SwuGameScreen', () => {
   // --- Image error fallback (text) ---
 
   it('Shows base name when all image URLs fail', () => {
-    render(<SwuGameScreen base={mockBaseNoLowRes} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseNoLowRes} onBack={vi.fn()} onHelp={vi.fn()} />)
     fireEvent.error(screen.getByAltText(mockBaseNoLowRes.name))
     expect(screen.getByText('Dagobah Swamp')).toBeInTheDocument()
   })
 
   it('Shows base subtitle when all image URLs fail', () => {
-    render(<SwuGameScreen base={mockBaseNoLowRes} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseNoLowRes} onBack={vi.fn()} onHelp={vi.fn()} />)
     fireEvent.error(screen.getByAltText(mockBaseNoLowRes.name))
     expect(screen.getByText('Dagobah')).toBeInTheDocument()
   })
 
   it('Shows epic action when all image URLs fail and epic action exists', () => {
-    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
     fireEvent.error(screen.getByAltText(mockBaseWithEpicAction.name))
     expect(screen.getByText(mockBaseWithEpicAction.epicAction)).toBeInTheDocument()
   })
 
   it('Does not show fallback text when image loads successfully', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     fireEvent.load(screen.getByAltText(mockBase.name))
     expect(screen.queryByText('Catacombs of Cadera')).not.toBeInTheDocument()
   })
@@ -296,12 +310,12 @@ describe('SwuGameScreen', () => {
   // --- Normal-preferred fallback chain: frontArt → frontArtLowRes → hyperspaceArtHiRes → hyperspaceArt → text ---
 
   it('Uses frontArt as initial src when useHyperspace is false', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByAltText(mockBase.name)).toHaveAttribute('src', mockBase.frontArt)
   })
 
   it('Shows text fallback when all four art URLs fail (normal preferred)', () => {
-    render(<SwuGameScreen base={mockBaseFullCoverage} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseFullCoverage} onBack={vi.fn()} onHelp={vi.fn()} />)
     fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
     fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
     fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
@@ -310,7 +324,7 @@ describe('SwuGameScreen', () => {
   })
 
   it('Shows text fallback after single error when base has only frontArt and no other URLs', () => {
-    render(<SwuGameScreen base={mockBaseNoLowRes} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseNoLowRes} onBack={vi.fn()} onHelp={vi.fn()} />)
     fireEvent.error(screen.getByAltText(mockBaseNoLowRes.name))
     expect(screen.getByText('Dagobah Swamp')).toBeInTheDocument()
   })
@@ -318,12 +332,14 @@ describe('SwuGameScreen', () => {
   // --- Hyperspace-preferred fallback chain: hyperspaceArtHiRes → hyperspaceArt → frontArt → frontArtLowRes → text ---
 
   it('Uses hyperspaceArtHiRes as initial src when useHyperspace is true', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={true} />)
+    mockUserSettings.useHyperspace = true
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByAltText(mockBase.name)).toHaveAttribute('src', mockBase.hyperspaceArtHiRes)
   })
 
   it('Falls back to frontArtLowRes when hyperspace and frontArt all fail (hyperspace preferred)', () => {
-    render(<SwuGameScreen base={mockBaseFullCoverage} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={true} />)
+    mockUserSettings.useHyperspace = true
+    render(<SwuGameScreen base={mockBaseFullCoverage} onBack={vi.fn()} onHelp={vi.fn()} />)
     fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
     fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
     fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
@@ -331,7 +347,8 @@ describe('SwuGameScreen', () => {
   })
 
   it('Shows text fallback when all four art URLs fail (hyperspace preferred)', () => {
-    render(<SwuGameScreen base={mockBaseFullCoverage} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={true} />)
+    mockUserSettings.useHyperspace = true
+    render(<SwuGameScreen base={mockBaseFullCoverage} onBack={vi.fn()} onHelp={vi.fn()} />)
     fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
     fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
     fireEvent.error(screen.getByAltText(mockBaseFullCoverage.name))
@@ -340,21 +357,22 @@ describe('SwuGameScreen', () => {
   })
 
   it('Uses frontArt when useHyperspace is true but both hyperspace fields are null', () => {
-    render(<SwuGameScreen base={mockBaseNoHyperspace} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={true} />)
+    mockUserSettings.useHyperspace = true
+    render(<SwuGameScreen base={mockBaseNoHyperspace} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByAltText(mockBaseNoHyperspace.name)).toHaveAttribute('src', mockBaseNoHyperspace.frontArt)
   })
 
   // --- Help button ---
 
   it('Renders a help button', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByText('?')).toBeInTheDocument()
   })
 
   it('Calls onHelp when help button is clicked', async () => {
     const user = userEvent.setup()
     const onHelp = vi.fn()
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={onHelp} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={onHelp} />)
     await user.click(screen.getByText('?'))
     expect(onHelp).toHaveBeenCalledOnce()
   })
@@ -363,20 +381,20 @@ describe('SwuGameScreen', () => {
 
   it('Shows rotate prompt when in portrait orientation', () => {
     vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByText(/rotate/i)).toBeInTheDocument()
   })
 
   it('Does not show game controls when in portrait orientation', () => {
     vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByText('+')).not.toBeInTheDocument()
     expect(screen.queryByText('−')).not.toBeInTheDocument()
   })
 
   it('Shows a back button on the portrait rotation prompt', () => {
     vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByRole('button', { name: '<' })).toBeInTheDocument()
   })
 
@@ -384,7 +402,7 @@ describe('SwuGameScreen', () => {
     const user = userEvent.setup()
     const onBack = vi.fn()
     vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
-    render(<SwuGameScreen base={mockBase} onBack={onBack} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={onBack} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('button', { name: '<' }))
     expect(onBack).toHaveBeenCalledOnce()
   })
@@ -392,40 +410,40 @@ describe('SwuGameScreen', () => {
   // --- Epic Action ---
 
   it('Shows epic action button when base has an epic action', () => {
-    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByTestId('epic-action-btn')).toBeInTheDocument()
   })
 
   it('Does not show epic action button when base has no epic action', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByTestId('epic-action-btn')).not.toBeInTheDocument()
   })
 
   it('Does not show epic action button for a Force base', () => {
-    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByTestId('epic-action-btn')).not.toBeInTheDocument()
   })
 
   it('Does not show epic action button for a base with a passive epicAction field', () => {
-    render(<SwuGameScreen base={mockBasePassiveEffect} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBasePassiveEffect} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByTestId('epic-action-btn')).not.toBeInTheDocument()
   })
 
   it('Epic action overlay is not visible by default', () => {
-    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByTestId('epic-action-overlay')).not.toBeInTheDocument()
   })
 
   it('Clicking epic action button shows the used overlay', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('epic-action-btn'))
     expect(screen.getByTestId('epic-action-overlay')).toBeInTheDocument()
   })
 
   it('Clicking epic action button again hides the overlay', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('epic-action-btn'))
     await user.click(screen.getByTestId('epic-action-btn'))
     expect(screen.queryByTestId('epic-action-overlay')).not.toBeInTheDocument()
@@ -433,14 +451,14 @@ describe('SwuGameScreen', () => {
 
   it('Clicking the overlay also hides it', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('epic-action-btn'))
     await user.click(screen.getByTestId('epic-action-overlay'))
     expect(screen.queryByTestId('epic-action-overlay')).not.toBeInTheDocument()
   })
 
   it('Non-Force base with epic action still shows epic action button alongside locked Force button', () => {
-    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByTestId('epic-action-btn')).toBeInTheDocument()
     expect(screen.getByTestId('force-btn-locked')).toBeInTheDocument()
   })
@@ -448,44 +466,44 @@ describe('SwuGameScreen', () => {
   // --- Force — Force bases (always enabled) ---
 
   it('Shows active Force button for a Force base without requiring an enable tap', () => {
-    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByTestId('force-btn')).toBeInTheDocument()
   })
 
   it('Does not show locked Force button for a Force base', () => {
-    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByTestId('force-btn-locked')).not.toBeInTheDocument()
   })
 
   it('No Force token is visible initially on a Force base', () => {
-    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByTestId('force-token')).not.toBeInTheDocument()
   })
 
   it('Clicking active Force button shows the Force token', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('force-btn'))
     expect(screen.getByTestId('force-token')).toBeInTheDocument()
   })
 
   it('Active Force button is hidden when token is showing', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('force-btn'))
     expect(screen.queryByTestId('force-btn')).not.toBeInTheDocument()
   })
 
   it('Greyed Force button is visible when Force token overlay is showing', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('force-btn'))
     expect(screen.getByTestId('force-btn-active')).toBeInTheDocument()
   })
 
   it('Tapping greyed Force button dismisses the Force token overlay', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('force-btn'))
     await user.click(screen.getByTestId('force-btn-active'))
     expect(screen.queryByTestId('force-token')).not.toBeInTheDocument()
@@ -494,7 +512,7 @@ describe('SwuGameScreen', () => {
 
   it('Clicking the Force token removes it and restores the active button', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('force-btn'))
     await user.click(screen.getByTestId('force-token'))
     expect(screen.queryByTestId('force-token')).not.toBeInTheDocument()
@@ -504,25 +522,25 @@ describe('SwuGameScreen', () => {
   // --- Force — non-Force bases (require enable tap first) ---
 
   it('Shows a locked Force button for a non-Force base', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByTestId('force-btn-locked')).toBeInTheDocument()
   })
 
   it('Locked Force button is not the active Force button', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByTestId('force-btn')).not.toBeInTheDocument()
   })
 
   it('Tapping locked Force button does not immediately show Force token overlay', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('force-btn-locked'))
     expect(screen.queryByTestId('force-token')).not.toBeInTheDocument()
   })
 
   it('Tapping locked Force button enables Force and shows the active button', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('force-btn-locked'))
     expect(screen.getByTestId('force-btn')).toBeInTheDocument()
     expect(screen.queryByTestId('force-btn-locked')).not.toBeInTheDocument()
@@ -530,7 +548,7 @@ describe('SwuGameScreen', () => {
 
   it('After enabling Force on a non-Force base, tapping active button shows the Force token', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('force-btn-locked'))
     await user.click(screen.getByTestId('force-btn'))
     expect(screen.getByTestId('force-token')).toBeInTheDocument()
@@ -538,7 +556,7 @@ describe('SwuGameScreen', () => {
 
   it('After enabling Force on a non-Force base, token can be dismissed and Force button restores', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('force-btn-locked'))
     await user.click(screen.getByTestId('force-btn'))
     await user.click(screen.getByTestId('force-token'))
@@ -550,55 +568,55 @@ describe('SwuGameScreen', () => {
   // --- Mystic Monastery ---
 
   it('Shows action counter button for Mystic Monastery', () => {
-    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByTestId('mystic-action-btn')).toBeInTheDocument()
   })
 
   it('Does not show action counter button for a standard Force base', () => {
-    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByTestId('mystic-action-btn')).not.toBeInTheDocument()
   })
 
   it('Does not show action counter button for a non-Force base', () => {
-    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByTestId('mystic-action-btn')).not.toBeInTheDocument()
   })
 
   it('Shows Force button immediately for Mystic Monastery without requiring an enable tap', () => {
-    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByTestId('force-btn')).toBeInTheDocument()
   })
 
   it('Does not show locked Force button for Mystic Monastery', () => {
-    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByTestId('force-btn-locked')).not.toBeInTheDocument()
   })
 
   it('Does not show epic action button for Mystic Monastery', () => {
-    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByTestId('epic-action-btn')).not.toBeInTheDocument()
   })
 
   it('Action counter button initially shows 3 uses remaining', () => {
-    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByTestId('mystic-action-btn')).toHaveTextContent('3')
   })
 
   it('Action counter button is enabled initially', () => {
-    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByTestId('mystic-action-btn')).not.toBeDisabled()
   })
 
   it('Tapping action counter button shows the Force token overlay', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('mystic-action-btn'))
     expect(screen.getByTestId('force-token')).toBeInTheDocument()
   })
 
   it('Action counter button is visible but disabled when Force token overlay is active', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('mystic-action-btn'))
     expect(screen.getByTestId('mystic-action-btn')).toBeInTheDocument()
     expect(screen.getByTestId('mystic-action-btn')).toBeDisabled()
@@ -606,14 +624,14 @@ describe('SwuGameScreen', () => {
 
   it('Force button is hidden when Force token overlay is active', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('mystic-action-btn'))
     expect(screen.queryByTestId('force-btn')).not.toBeInTheDocument()
   })
 
   it('Dismissing Force overlay restores both buttons when uses remain', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('mystic-action-btn'))
     await user.click(screen.getByTestId('force-token'))
     expect(screen.getByTestId('mystic-action-btn')).toBeInTheDocument()
@@ -623,7 +641,7 @@ describe('SwuGameScreen', () => {
 
   it('Tapping action counter button decrements the use count', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('mystic-action-btn'))
     await user.click(screen.getByTestId('force-token'))
     expect(screen.getByTestId('mystic-action-btn')).toHaveTextContent('2')
@@ -631,7 +649,7 @@ describe('SwuGameScreen', () => {
 
   it('Tapping Force button shows the Force token overlay without decrementing the use count', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('force-btn'))
     await user.click(screen.getByTestId('force-token'))
     expect(screen.getByTestId('mystic-action-btn')).toHaveTextContent('3')
@@ -639,7 +657,7 @@ describe('SwuGameScreen', () => {
 
   it('Action counter button shows 0 and is disabled when all uses are exhausted', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     for (let i = 0; i < 3; i++) {
       await user.click(screen.getByTestId('mystic-action-btn'))
       await user.click(screen.getByTestId('force-token'))
@@ -651,7 +669,7 @@ describe('SwuGameScreen', () => {
 
   it('Force button remains visible when all uses are exhausted and Force is absent', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     for (let i = 0; i < 3; i++) {
       await user.click(screen.getByTestId('mystic-action-btn'))
       await user.click(screen.getByTestId('force-token'))
@@ -661,7 +679,7 @@ describe('SwuGameScreen', () => {
 
   it('Force can still be gained via Force button after all action uses are exhausted', async () => {
     const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} useHyperspace={false} />)
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     for (let i = 0; i < 3; i++) {
       await user.click(screen.getByTestId('mystic-action-btn'))
       await user.click(screen.getByTestId('force-token'))
@@ -672,30 +690,85 @@ describe('SwuGameScreen', () => {
 
   // --- Settings button ---
 
-  it('Settings button is not visible when FEATURE_USER_SETTINGS is false', () => {
-    featureUserSettings.value = false
-    vi.mocked(useOrientation).mockReturnValue({ isPortrait: false, vmin: 0 })
-    render(<SwuGameScreen base={mockBase} useHyperspace={false} onBack={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} />)
+  it('Settings button is not visible when onSettings is not provided', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByRole('button', { name: '⚙' })).not.toBeInTheDocument()
   })
 
-  it('Settings button is visible when FEATURE_USER_SETTINGS is true', () => {
-    featureUserSettings.value = true
-    vi.mocked(useOrientation).mockReturnValue({ isPortrait: false, vmin: 0 })
-    render(<SwuGameScreen base={mockBase} useHyperspace={false} onBack={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} />)
+  it('Settings button is visible when onSettings is provided', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} />)
     expect(screen.getByRole('button', { name: '⚙' })).toBeInTheDocument()
-    featureUserSettings.value = false
   })
 
   it('Settings button calls onSettings when clicked', async () => {
-    featureUserSettings.value = true
     const user = userEvent.setup()
-    vi.mocked(useOrientation).mockReturnValue({ isPortrait: false, vmin: 0 })
     const onSettings = vi.fn()
-    render(<SwuGameScreen base={mockBase} useHyperspace={false} onBack={vi.fn()} onHelp={vi.fn()} onSettings={onSettings} />)
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} onSettings={onSettings} />)
     await user.click(screen.getByRole('button', { name: '⚙' }))
     expect(onSettings).toHaveBeenCalledOnce()
-    featureUserSettings.value = false
+  })
+
+
+  // --- User settings ---
+
+  it('Force button is hidden when enableForceToken is false', () => {
+    mockUserSettings.enableForceToken = false
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('force-btn-locked')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('force-btn')).not.toBeInTheDocument()
+  })
+
+  it('Force button is shown for a Force base when enableForceToken is true', () => {
+    mockUserSettings.enableForceToken = true
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('force-btn')).toBeInTheDocument()
+  })
+
+  it('Epic action button is hidden when enableEpicActions is false', () => {
+    mockUserSettings.enableEpicActions = false
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('epic-action-btn')).not.toBeInTheDocument()
+  })
+
+  it('Epic action button is still shown when Force token is disabled', () => {
+    mockUserSettings.enableForceToken = false
+    mockUserSettings.enableEpicActions = true
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('force-btn-locked')).not.toBeInTheDocument()
+    expect(screen.getByTestId('epic-action-btn')).toBeInTheDocument()
+  })
+
+  it('Passes enableWakeLock=true to useWakeLock by default', () => {
+    mockUserSettings.enableWakeLock = true
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(vi.mocked(useWakeLock)).toHaveBeenCalledWith(true)
+  })
+
+  it('Passes enableWakeLock=false to useWakeLock when setting is disabled', () => {
+    mockUserSettings.enableWakeLock = false
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(vi.mocked(useWakeLock)).toHaveBeenCalledWith(false)
+  })
+
+
+  it('Epic action button shifts to slot 1 position when Force is disabled', () => {
+    mockUserSettings.enableForceToken = false
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const btn = screen.getByTestId('epic-action-btn')
+    expect(btn).toHaveStyle({ top: 'calc(env(safe-area-inset-top) + 9vw)' })
+  })
+
+  it('Epic action button stays at slot 2 position when Force is enabled', () => {
+    mockUserSettings.enableForceToken = true
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const btn = screen.getByTestId('epic-action-btn')
+    expect(btn).toHaveStyle({ top: 'calc(env(safe-area-inset-top) + 16vw)' })
+  })
+
+  it('Mystic Monastery counter button is hidden when Force is disabled', () => {
+    mockUserSettings.enableForceToken = false
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('mystic-action-btn')).not.toBeInTheDocument()
   })
 
 })

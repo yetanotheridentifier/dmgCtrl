@@ -4,7 +4,7 @@ import { useSwuGame } from '../hooks/useSwuGame'
 import { useBaseArt } from '../hooks/useBaseArt'
 import { useOrientation } from '../hooks/useOrientation'
 import { useWakeLock } from '../hooks/useWakeLock'
-import { FEATURE_EPIC_ACTION, FEATURE_FORCE_TOKEN, FEATURE_WAKE_LOCK, FEATURE_USER_SETTINGS } from '../flags'
+import { useUserSettings } from '../hooks/useUserSettings'
 import SwuGameScreenView from './swuGameScreenView'
 import AppScreenLayout from './layout/AppScreenLayout'
 
@@ -13,14 +13,14 @@ interface Props {
   onBack: () => void
   onHelp: () => void
   onSettings?: () => void
-  useHyperspace: boolean
 }
 
-function SwuGameScreen({ base, onBack, onHelp, onSettings, useHyperspace }: Props) {
+function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
+  const { enableForceToken, enableEpicActions, enableWakeLock, useHyperspace } = useUserSettings()
   const art = useBaseArt(base, useHyperspace)
   const { count, increment, decrement, epicActionUsed, toggleEpicAction, forceActive, toggleForce, forceEnabled, enableForce } = useSwuGame(base.hp)
   const { isPortrait } = useOrientation()
-  useWakeLock(FEATURE_WAKE_LOCK)
+  useWakeLock(enableWakeLock)
 
   const isMysticMonastery = base.set === 'LOF' && base.number === '022'
   const isForceBase = /the force is with you/i.test(base.epicAction)
@@ -92,7 +92,7 @@ function SwuGameScreen({ base, onBack, onHelp, onSettings, useHyperspace }: Prop
       base={base}
       onBack={onBack}
       onHelp={onHelp}
-      onSettings={FEATURE_USER_SETTINGS ? onSettings : undefined}
+      onSettings={onSettings}
       imageSrc={art.src ?? ''}
       imageRotationDeg={art.rotationDeg}
       count={count}
@@ -104,8 +104,8 @@ function SwuGameScreen({ base, onBack, onHelp, onSettings, useHyperspace }: Prop
       onImageError={art.onError}
       epicActionUsed={epicActionUsed}
       onEpicActionToggle={toggleEpicAction}
-      showEpicAction={FEATURE_EPIC_ACTION && /epic action/i.test(base.epicAction)}
-      showForce={FEATURE_FORCE_TOKEN}
+      showEpicAction={enableEpicActions && /epic action/i.test(base.epicAction)}
+      showForce={enableForceToken}
       forceEnabled={effectiveForceEnabled}
       forceActive={forceActive}
       onForceEnable={enableForce}

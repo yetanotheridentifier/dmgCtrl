@@ -62,23 +62,13 @@ When playing a **Legends of the Force** base whose ability creates a Force token
 
 ### Epic Action
 
-Some bases have a special **Epic Action** — a once-per-game ability. When your base has one, a ★ button appears below the Force icon in the top-left corner.
+Some bases have a special **Epic Action** — a once-per-game ability. When your base has one, a ★ button appears in the top-left corner.
 
 - The ★ button starts **highlighted in yellow**, showing the epic action is available
 - Tap ★ to mark it as used — the button dims and a gold token overlay appears over the lower portion of the card, covering the epic action text (mirroring the physical token used in the tabletop game)
 - Tap the token overlay or ★ again to undo the mark if needed
 
 If both the Force token and the epic action token are active at the same time, they sit side by side across the bottom of the card rather than overlapping.
-
-## Hyperspace Variant
-
-Some bases have a Hyperspace variant with alternate card art. When available, a toggle appears below the card preview on the setup screen.
-
-- Enable the toggle to use Hyperspace art during the game
-- Disable it to use the standard art
-- Your preference is saved automatically between sessions
-
-If the Hyperspace image can't be loaded, the app will fall back to the standard art and let you know. If neither image is available, the base name and epic action text are shown instead.
 
 ## Settings
 
@@ -88,7 +78,7 @@ Your preferences are saved automatically and persist between sessions.
 
 | Setting | Default | Description |
 |---|---|---|
-| **Use Hyperspace Art** | On | When enabled, the Hyperspace variant is used by default on the game screen for any base that has one. |
+| **Use Hyperspace Art** | On | When enabled, the Hyperspace variant is used by default on the game screen for any base that has one. If the Hyperspace image can't be loaded, the app falls back to the standard art. |
 | **Enable Force Token** | On | Shows the Force token button on the game screen. Turn off if you prefer not to track the Force. |
 | **Enable Epic Actions** | On | Shows the ★ Epic Action button on the game screen. Turn off if you prefer not to track epic actions. |
 | **Enable Screen Wake Lock** | On | Keeps the screen on during play. May affect battery life. |
