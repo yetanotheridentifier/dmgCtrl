@@ -4,6 +4,7 @@ import ImagePreview from './imagePreview'
 import { useOrientation } from '../hooks/useOrientation'
 import { CogIcon, ForwardIcon, HelpIcon } from './icons'
 import { SelectionMode } from './swuSetupScreen'
+import type { FavouriteBase } from '../hooks/useFavourites'
 
 interface Props {
   loading: boolean
@@ -38,6 +39,11 @@ interface Props {
   onSwudbChange: (text: string) => void
   onSwudbFocus: () => void
   onSwudbLoad: () => void
+  enableFavourites: boolean
+  favourites: FavouriteBase[]
+  isFavourited: boolean
+  onFavouriteToggle: () => void
+  onFavouriteKeyChange: (key: string) => boolean
 }
 
 const labelStyle = (small = false): React.CSSProperties => ({
@@ -108,9 +114,30 @@ const submitButtonStyle = (enabled: boolean, small = false): React.CSSProperties
   boxSizing: 'border-box',
 })
 
-function ModeSelector({ selectionMode, onModeChange, small = false }: {
+const starButtonStyle = (small = false): React.CSSProperties => ({
+  width: small ? '8vh' : '12vw',
+  minWidth: '44px',
+  minHeight: '44px',
+  flexShrink: 0,
+  padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
+  fontSize: small ? 'clamp(1rem, 3vh, 1.8rem)' : 'clamp(1rem, 3vw, 1.8rem)',
+  fontWeight: '300',
+  background: 'transparent',
+  color: 'var(--color-accent)',
+  border: '2px solid var(--color-accent)',
+  borderRadius: '12px',
+  cursor: 'pointer',
+  WebkitTapHighlightColor: 'transparent',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  boxSizing: 'border-box',
+})
+
+function ModeSelector({ selectionMode, onModeChange, showFavourites = false, small = false }: {
   selectionMode: SelectionMode
   onModeChange: (mode: SelectionMode) => void
+  showFavourites?: boolean
   small?: boolean
 }) {
   return (
@@ -124,6 +151,9 @@ function ModeSelector({ selectionMode, onModeChange, small = false }: {
       >
         <option value="base-selector" style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>Base Selector</option>
         <option value="swudb-import" style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>SWUDB Import</option>
+        {showFavourites && (
+          <option value="favourites" style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>Favourites</option>
+        )}
       </select>
     </div>
   )
@@ -162,6 +192,11 @@ function SwuSetupScreenView({
   onSwudbChange,
   onSwudbFocus,
   onSwudbLoad,
+  enableFavourites,
+  favourites,
+  isFavourited,
+  onFavouriteToggle,
+  onFavouriteKeyChange,
 }: Props) {
   const { isPortrait } = useOrientation()
 
@@ -183,8 +218,23 @@ function SwuSetupScreenView({
     />
   )
 
+  const starToggle = (small = false) => (
+    <button
+      data-testid="favourite-toggle"
+      aria-pressed={isFavourited}
+      onClick={onFavouriteToggle}
+      aria-label={isFavourited ? 'Remove from favourites' : 'Add to favourites'}
+      style={starButtonStyle(small)}
+    >
+      {isFavourited ? '★' : '☆'}
+    </button>
+  )
+
   const swudbImportContent = (small = false) => {
-    const btnWidth = small ? 'max(10vh, 3.5rem)' : 'max(12vw, 5rem)'
+    // Load button is sized to match star + submit + gap between them
+    const btnWidth = small
+      ? 'calc(max(44px, 8vh) * 2 + 2vw)'
+      : 'calc(max(44px, 12vw) * 2 + 2vw)'
     return (
       <>
         {/* Row 1: URL input + Load button */}
@@ -242,7 +292,7 @@ function SwuSetupScreenView({
           </p>
         )}
 
-        {/* Row 2: deck name + > button (appears after load attempt) */}
+        {/* Row 2: deck name + star (optional) + > button */}
         {swudbDeckName !== null && (
           <div style={{
             display: 'flex',
@@ -258,31 +308,12 @@ function SwuSetupScreenView({
             }}>
               {swudbDeckName}
             </span>
+            {enableFavourites && selectedBase && starToggle(small)}
             <button
               onClick={onSubmit}
               aria-label="Start game"
               disabled={!submitEnabled}
-              style={{
-                width: btnWidth,
-                minWidth: '44px',
-                minHeight: '44px',
-                flexShrink: 0,
-                padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
-                fontSize: small ? 'clamp(1rem, 3vh, 1.8rem)' : 'clamp(1rem, 3vw, 1.8rem)',
-                fontWeight: '300',
-                background: 'transparent',
-                color: 'var(--color-text-primary)',
-                border: '2px solid var(--color-text-primary)',
-                borderRadius: '12px',
-                cursor: submitEnabled ? 'pointer' : 'not-allowed',
-                boxShadow: '0 0 12px rgba(255, 255, 255, 0.2)',
-                WebkitTapHighlightColor: 'transparent',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                opacity: submitEnabled ? 1 : 0.4,
-                boxSizing: 'border-box',
-              }}
+              style={submitButtonStyle(submitEnabled, small)}
             >
               <ForwardIcon />
             </button>
@@ -347,7 +378,7 @@ function SwuSetupScreenView({
             </div>
           </div>
 
-          {/* Base + submit row */}
+          {/* Base + star (optional) + submit row */}
           <div style={{
             width: '100%',
             display: 'flex',
@@ -369,10 +400,12 @@ function SwuSetupScreenView({
                   value={`${base.set}-${base.number}`}
                   style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}
                 >
-                  {base.name} — {base.hp}HP
+                  {base.name} ({base.hp})
                 </option>
               ))}
             </select>
+
+            {enableFavourites && selectedBase && starToggle(small)}
 
             <button
               onClick={onSubmit}
@@ -386,6 +419,44 @@ function SwuSetupScreenView({
         </>
       )}
     </>
+  )
+
+  const favouritesContent = (small = false) => (
+    <div style={{
+      width: '100%',
+      display: 'flex',
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      gap: '2vw',
+    }}>
+      <select
+        data-testid="favourites-select"
+        value={selectedKey}
+        onChange={e => onFavouriteKeyChange(e.target.value)}
+        style={selectStyle(true, selectedKey !== '', small)}
+      >
+        <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>Select a favourite</option>
+        {favourites.map(fav => (
+          <option
+            key={fav.key}
+            value={fav.key}
+            style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}
+          >
+            {`${fav.set}: ${fav.name} (${fav.hp})`}
+          </option>
+        ))}
+      </select>
+
+
+      <button
+        onClick={onSubmit}
+        aria-label="Start game"
+        disabled={!selectedBase}
+        style={submitButtonStyle(!!selectedBase, small)}
+      >
+        <ForwardIcon />
+      </button>
+    </div>
   )
 
   if (!isPortrait) {
@@ -497,9 +568,16 @@ function SwuSetupScreenView({
               gap: '1.5vh',
               padding: '14px',
             }}>
-              <ModeSelector selectionMode={selectionMode} onModeChange={onModeChange} small />
+              <ModeSelector
+                selectionMode={selectionMode}
+                onModeChange={onModeChange}
+                showFavourites={enableFavourites && favourites.length > 0}
+                small
+              />
 
-              {selectionMode === 'swudb-import'
+              {selectionMode === 'favourites'
+                ? favouritesContent(true)
+                : selectionMode === 'swudb-import'
                 ? swudbImportContent(true)
                 : baseSelectorContent(true)
               }
@@ -618,9 +696,27 @@ function SwuSetupScreenView({
           </div>
         </div>
 
-        <ModeSelector selectionMode={selectionMode} onModeChange={onModeChange} />
+        <ModeSelector
+          selectionMode={selectionMode}
+          onModeChange={onModeChange}
+          showFavourites={enableFavourites && favourites.length > 0}
+        />
 
-        {selectionMode === 'swudb-import' ? (
+        {selectionMode === 'favourites' ? (
+          <>
+            {favouritesContent(false)}
+            {selectedBase && (
+              <div style={{
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1vh',
+              }}>
+                {imagePreview(selectedBase)}
+              </div>
+            )}
+          </>
+        ) : selectionMode === 'swudb-import' ? (
           <>
             {swudbImportContent(false)}
             {selectedBase && (

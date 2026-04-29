@@ -33,6 +33,20 @@ If you have a unlisted or public deck link on swudb.com, you can load your base 
 
 If your deck can't be loaded, check that the link is correct and the deck is set to unlisted or public on swudb.com.
 
+### Favourites
+
+If **Enable Favourites** is turned on in Settings, you can save bases for quick reselection.
+
+**Saving a favourite:** once you have chosen a base, a star button (☆) appears in the same row as the base controls — next to the base dropdown in Base Selector mode, or next to the start button after loading a deck in SWUDB Import mode. Tap it to save the base as a favourite — the star fills (★). Tap the filled star again to remove it.
+
+**Using Favourites mode:**
+
+1. Tap **Input Mode** and select **Favourites**
+2. Choose a base from the dropdown — each option shows the set, name, and HP
+3. Tap <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M8.5 5L17 12L8.5 19Z"/></svg> to start the game
+
+The Favourites option only appears in Input Mode when **Enable Favourites** is on and you have at least one saved base. Your saved bases are kept even if you turn Enable Favourites off — they will be there when you turn it back on.
+
 ## During a Game
 
 The base card fills the screen, with the damage counter overlaid across the middle.
@@ -82,6 +96,7 @@ Your preferences are saved automatically and persist between sessions.
 | **Enable Force Token** | On | Shows the Force token button on the game screen. Turn off if you prefer not to track the Force. |
 | **Enable Epic Actions** | On | Shows the Epic Action button on the game screen. Turn off if you prefer not to track epic actions. |
 | **Enable Screen Wake Lock** | On | Keeps the screen on during play. May affect battery life. |
+| **Enable Favourites** | Off | Reveals a star button on the setup screen to save bases as favourites, and adds a Favourites input mode for quick reselection. Saved bases are kept even when this setting is off. |
 
 Tap <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M15.5 5L7 12L15.5 19Z"/></svg> to return to the previous screen, or <svg width="0.85em" height="0.85em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> for help.
 

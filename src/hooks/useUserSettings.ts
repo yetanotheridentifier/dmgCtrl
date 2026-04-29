@@ -15,7 +15,7 @@ const DEFAULTS: UserSettings = {
   enableForceToken: true,
   enableEpicActions: true,
   enableWakeLock: true,
-  enableFavourites: false,
+  enableFavourites: true,
 }
 
 function load(): UserSettings {

@@ -41,9 +41,9 @@ describe('useUserSettings', () => {
     expect(result.current.enableWakeLock).toBe(true)
   })
 
-  it('defaults enableFavourites to false when storage is empty', () => {
+  it('defaults enableFavourites to true when storage is empty', () => {
     const { result } = renderHook(() => useUserSettings())
-    expect(result.current.enableFavourites).toBe(false)
+    expect(result.current.enableFavourites).toBe(true)
   })
 
   // --- Load from storage ---
@@ -149,20 +149,20 @@ describe('useUserSettings', () => {
     expect(result.current.enableWakeLock).toBe(true)
   })
 
-  it('falls back to false for enableFavourites when stored JSON is corrupt', () => {
+  it('falls back to true for enableFavourites when stored JSON is corrupt', () => {
     vi.mocked(localStorage.getItem).mockImplementation((key: string) =>
       key === STORAGE_KEY ? 'not-valid-json{{{' : null
     )
     const { result } = renderHook(() => useUserSettings())
-    expect(result.current.enableFavourites).toBe(false)
+    expect(result.current.enableFavourites).toBe(true)
   })
 
-  it('falls back to false for enableFavourites when missing from stored JSON', () => {
+  it('falls back to true for enableFavourites when missing from stored JSON', () => {
     vi.mocked(localStorage.getItem).mockImplementation((key: string) =>
       key === STORAGE_KEY ? JSON.stringify({ useHyperspace: false }) : null
     )
     const { result } = renderHook(() => useUserSettings())
-    expect(result.current.enableFavourites).toBe(false)
+    expect(result.current.enableFavourites).toBe(true)
   })
 
 })

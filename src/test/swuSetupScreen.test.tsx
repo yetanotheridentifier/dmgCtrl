@@ -4,6 +4,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SwuSetupScreen from '../components/swuSetupScreen'
 import { Base } from '../hooks/useBases'
+import type { FavouriteBase } from '../hooks/useFavourites'
 
 
 const mockUserSettings = vi.hoisted(() => ({
@@ -11,13 +12,25 @@ const mockUserSettings = vi.hoisted(() => ({
   enableForceToken: true,
   enableEpicActions: true,
   enableWakeLock: true,
+  enableFavourites: false,
   setUseHyperspace: vi.fn(),
   setEnableForceToken: vi.fn(),
   setEnableEpicActions: vi.fn(),
   setEnableWakeLock: vi.fn(),
+  setEnableFavourites: vi.fn(),
 }))
 vi.mock('../hooks/useUserSettings', () => ({
   useUserSettings: () => mockUserSettings,
+}))
+
+const mockFavourites = vi.hoisted(() => ({
+  favourites: [] as FavouriteBase[],
+  addFavourite: vi.fn(),
+  removeFavourite: vi.fn(),
+  clearFavourites: vi.fn(),
+}))
+vi.mock('../hooks/useFavourites', () => ({
+  useFavourites: () => mockFavourites,
 }))
 
 
@@ -134,6 +147,10 @@ beforeEach(() => {
   }
 
   mockUserSettings.useHyperspace = true
+  mockUserSettings.enableFavourites = false
+  mockFavourites.favourites = []
+  mockFavourites.addFavourite.mockReset()
+  mockFavourites.removeFavourite.mockReset()
   vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
     if (url.includes('swuapi.com')) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(swuApiResponse) })
@@ -427,7 +444,7 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     const baseSelect = getBaseSelectors()[2]
     const option = Array.from(baseSelect.querySelectorAll('option')).find(o => o.value === 'SOR-026')
-    expect(option?.textContent).toBe('Catacombs of Cadera — 30HP')
+    expect(option?.textContent).toBe('Catacombs of Cadera (30)')
     expect(option?.textContent).not.toContain('Jedha')
   })
 
@@ -449,7 +466,7 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(getBaseSelectors()[1], 'Cunning')
     const baseSelect = getBaseSelectors()[2]
     const option = Array.from(baseSelect.querySelectorAll('option')).find(o => o.value === 'SOR-022')
-    expect(option?.textContent).toBe('Energy Conversion Lab — 25HP')
+    expect(option?.textContent).toBe('Energy Conversion Lab (25)')
     expect(option?.textContent).not.toContain('Eadu')
   })
 
@@ -782,6 +799,434 @@ describe('SwuSetupScreen', () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} onSettings={onSettings} />)
     await user.click(screen.getByRole('button', { name: '⚙' }))
     expect(onSettings).toHaveBeenCalledOnce()
+  })
+  // --- Favourites: star toggle ---
+
+  it('Star toggle not rendered when enableFavourites is false', async () => {
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+    expect(screen.queryByTestId('favourite-toggle')).not.toBeInTheDocument()
+  })
+
+  it('Star toggle not rendered when enableFavourites is true but no base is selected', async () => {
+    mockUserSettings.enableFavourites = true
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    expect(screen.queryByTestId('favourite-toggle')).not.toBeInTheDocument()
+  })
+
+  it('Star toggle renders when enableFavourites is true and a base is selected', async () => {
+    mockUserSettings.enableFavourites = true
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+    expect(screen.getByTestId('favourite-toggle')).toBeInTheDocument()
+  })
+
+  it('Star toggle shows aria-pressed false when base is not favourited', async () => {
+    mockUserSettings.enableFavourites = true
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+    expect(screen.getByTestId('favourite-toggle')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('Star toggle shows aria-pressed true when base is already in favourites', async () => {
+    mockUserSettings.enableFavourites = true
+    mockFavourites.favourites = [
+      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+    ]
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+    expect(screen.getByTestId('favourite-toggle')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('Tapping star on unfavourited base calls addFavourite with correct data', async () => {
+    mockUserSettings.enableFavourites = true
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+    await user.click(screen.getByTestId('favourite-toggle'))
+    expect(mockFavourites.addFavourite).toHaveBeenCalledWith({
+      key: 'SOR-026',
+      set: 'SOR',
+      name: 'Catacombs of Cadera',
+      hp: 30,
+      aspect: 'Aggression',
+      cardNumber: 26,
+    })
+  })
+
+  it('Tapping star on favourited base calls removeFavourite with the base key', async () => {
+    mockUserSettings.enableFavourites = true
+    mockFavourites.favourites = [
+      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+    ]
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+    await user.click(screen.getByTestId('favourite-toggle'))
+    expect(mockFavourites.removeFavourite).toHaveBeenCalledWith('SOR-026')
+  })
+
+  // --- Favourites: mode selector ---
+
+  it('Favourites option absent from mode selector when enableFavourites is false', async () => {
+    mockFavourites.favourites = [
+      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+    ]
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    const options = Array.from(screen.getByTestId('mode-select').querySelectorAll('option')).map(o => o.textContent)
+    expect(options).not.toContain('Favourites')
+  })
+
+  it('Favourites option absent from mode selector when enableFavourites is true but no favourites exist', async () => {
+    mockUserSettings.enableFavourites = true
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    const options = Array.from(screen.getByTestId('mode-select').querySelectorAll('option')).map(o => o.textContent)
+    expect(options).not.toContain('Favourites')
+  })
+
+  it('Favourites option appears in mode selector when enableFavourites is true and favourites exist', async () => {
+    mockUserSettings.enableFavourites = true
+    mockFavourites.favourites = [
+      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+    ]
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    const options = Array.from(screen.getByTestId('mode-select').querySelectorAll('option')).map(o => o.textContent)
+    expect(options).toContain('Favourites')
+  })
+
+  // --- Favourites: mode UI ---
+
+  it('Switching to Favourites mode shows the favourites dropdown and hides base dropdowns', async () => {
+    mockUserSettings.enableFavourites = true
+    mockFavourites.favourites = [
+      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+    ]
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('mode-select'), 'favourites')
+    expect(screen.getByTestId('favourites-select')).toBeInTheDocument()
+    expect(screen.queryByTestId('set-select')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('base-select')).not.toBeInTheDocument()
+  })
+
+  it('Favourites dropdown label shows set, name, and HP', async () => {
+    mockUserSettings.enableFavourites = true
+    mockFavourites.favourites = [
+      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+    ]
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('mode-select'), 'favourites')
+    const option = Array.from(screen.getByTestId('favourites-select').querySelectorAll('option'))
+      .find(o => o.value === 'SOR-026')
+    expect(option?.textContent).toBe('SOR: Catacombs of Cadera (30)')
+  })
+
+  it('Favourites dropdown label uses same format regardless of aspect', async () => {
+    mockUserSettings.enableFavourites = true
+    mockFavourites.favourites = [
+      { key: 'JTL-030', set: 'JTL', name: 'Lake Country', hp: 30, aspect: 'None', cardNumber: 30 },
+    ]
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('mode-select'), 'favourites')
+    const option = Array.from(screen.getByTestId('favourites-select').querySelectorAll('option'))
+      .find(o => o.value === 'JTL-030')
+    expect(option?.textContent).toBe('JTL: Lake Country (30)')
+  })
+
+  it('Selecting a favourite from the dropdown enables the start game button', async () => {
+    mockUserSettings.enableFavourites = true
+    mockFavourites.favourites = [
+      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+    ]
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('mode-select'), 'favourites')
+    await user.selectOptions(screen.getByTestId('favourites-select'), 'SOR-026')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).not.toBeDisabled())
+  })
+
+  it('Selecting a favourite from the dropdown shows the base preview image', async () => {
+    mockUserSettings.enableFavourites = true
+    mockFavourites.favourites = [
+      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+    ]
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('mode-select'), 'favourites')
+    await user.selectOptions(screen.getByTestId('favourites-select'), 'SOR-026')
+    await waitFor(() => expect(screen.getByAltText('Catacombs of Cadera')).toBeInTheDocument())
+  })
+
+  it('Navigating to Favourites mode clears selection when current base is not a favourite', async () => {
+    mockUserSettings.enableFavourites = true
+    mockFavourites.favourites = [
+      { key: 'SOR-022', set: 'SOR', name: 'Energy Conversion Lab', hp: 25, aspect: 'Cunning', cardNumber: 22 },
+    ]
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+    await user.selectOptions(screen.getByTestId('mode-select'), 'favourites')
+    expect((screen.getByTestId('favourites-select') as HTMLSelectElement).value).toBe('')
+    expect(screen.queryByAltText('Catacombs of Cadera')).not.toBeInTheDocument()
+  })
+
+  it('Navigating to Favourites mode keeps selection when current base is already a favourite', async () => {
+    mockUserSettings.enableFavourites = true
+    mockFavourites.favourites = [
+      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+    ]
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+    await user.selectOptions(screen.getByTestId('mode-select'), 'favourites')
+    expect((screen.getByTestId('favourites-select') as HTMLSelectElement).value).toBe('SOR-026')
+    await waitFor(() => expect(screen.getByAltText('Catacombs of Cadera')).toBeInTheDocument())
+  })
+
+    // --- Favourites: mode fallback ---
+
+  it('Falls back to base-selector when enableFavourites becomes false while in Favourites mode', async () => {
+    mockUserSettings.enableFavourites = true
+    mockFavourites.favourites = [
+      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+    ]
+    const user = userEvent.setup()
+    const { rerender } = render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('mode-select'), 'favourites')
+    mockUserSettings.enableFavourites = false
+    rerender(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => {
+      expect((screen.getByTestId('mode-select') as HTMLSelectElement).value).toBe('base-selector')
+    })
+  })
+
+  it('Falls back to base-selector when favourites list becomes empty while in Favourites mode', async () => {
+    mockUserSettings.enableFavourites = true
+    mockFavourites.favourites = [
+      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+    ]
+    const user = userEvent.setup()
+    const { rerender } = render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('mode-select'), 'favourites')
+    mockFavourites.favourites = []
+    rerender(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => {
+      expect((screen.getByTestId('mode-select') as HTMLSelectElement).value).toBe('base-selector')
+    })
+  })
+
+  // --- Favourites: mode persistence ---
+
+  it('Favourites mode is not restored from localStorage when enableFavourites is false', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn().mockImplementation((key: string) => {
+        if (key === 'pref_selection_mode') return 'favourites'
+        return null
+      }),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    expect((screen.getByTestId('mode-select') as HTMLSelectElement).value).toBe('base-selector')
+  })
+
+  it('Favourites mode is not restored from localStorage when favourites list is empty', async () => {
+    mockUserSettings.enableFavourites = true
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn().mockImplementation((key: string) => {
+        if (key === 'pref_selection_mode') return 'favourites'
+        return null
+      }),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    expect((screen.getByTestId('mode-select') as HTMLSelectElement).value).toBe('base-selector')
+  })
+
+
+  // --- Favourites: star toggle in SWUDB mode ---
+
+  it('Star toggle not rendered in SWUDB mode when enableFavourites is false', async () => {
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).toBeInTheDocument())
+    expect(screen.queryByTestId('favourite-toggle')).not.toBeInTheDocument()
+  })
+
+  it('Star toggle not rendered in SWUDB mode before a deck is loaded', async () => {
+    mockUserSettings.enableFavourites = true
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    expect(screen.queryByTestId('favourite-toggle')).not.toBeInTheDocument()
+  })
+
+  it('Star toggle renders in SWUDB mode when enableFavourites is true and a base is loaded', async () => {
+    mockUserSettings.enableFavourites = true
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    await waitFor(() => expect(screen.getByTestId('favourite-toggle')).toBeInTheDocument())
+  })
+
+  it('Star toggle shows aria-pressed false in SWUDB mode when base is not favourited', async () => {
+    mockUserSettings.enableFavourites = true
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    await waitFor(() => expect(screen.getByTestId('favourite-toggle')).toBeInTheDocument())
+    expect(screen.getByTestId('favourite-toggle')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('Star toggle shows aria-pressed true in SWUDB mode when base is already favourited', async () => {
+    mockUserSettings.enableFavourites = true
+    mockFavourites.favourites = [
+      { key: 'JTL-030', set: 'JTL', name: 'Lake Country', hp: 30, aspect: 'None', cardNumber: 30 },
+    ]
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    await waitFor(() => expect(screen.getByTestId('favourite-toggle')).toBeInTheDocument())
+    expect(screen.getByTestId('favourite-toggle')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('Tapping star in SWUDB mode on unfavourited base calls addFavourite with correct data', async () => {
+    mockUserSettings.enableFavourites = true
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    await waitFor(() => expect(screen.getByTestId('favourite-toggle')).toBeInTheDocument())
+    await user.click(screen.getByTestId('favourite-toggle'))
+    expect(mockFavourites.addFavourite).toHaveBeenCalledWith({
+      key: 'JTL-030',
+      set: 'JTL',
+      name: 'Lake Country',
+      hp: 30,
+      aspect: 'None',
+      cardNumber: 30,
+    })
+  })
+
+  it('Tapping star in SWUDB mode on favourited base calls removeFavourite', async () => {
+    mockUserSettings.enableFavourites = true
+    mockFavourites.favourites = [
+      { key: 'JTL-030', set: 'JTL', name: 'Lake Country', hp: 30, aspect: 'None', cardNumber: 30 },
+    ]
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    await waitFor(() => expect(screen.getByTestId('favourite-toggle')).toBeInTheDocument())
+    await user.click(screen.getByTestId('favourite-toggle'))
+    expect(mockFavourites.removeFavourite).toHaveBeenCalledWith('JTL-030')
+  })
+
+  // --- Mode transitions ---
+
+  it('Navigating to SWUDB import mode clears base selection and preview', async () => {
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+    expect(screen.getByAltText('Catacombs of Cadera')).toBeInTheDocument()
+    await user.selectOptions(screen.getByTestId('mode-select'), 'swudb-import')
+    expect(screen.queryByAltText('Catacombs of Cadera')).not.toBeInTheDocument()
+  })
+
+  it('SWUDB-loaded base is remembered when switching to Base Selector', async () => {
+    const user = userEvent.setup()
+    await switchToSwudbMode(user)
+    inputUrl(screen.getByPlaceholderText('Paste SWUDB link'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).not.toBeDisabled())
+    await user.selectOptions(screen.getByTestId('mode-select'), 'base-selector')
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    expect((getBaseSelectors()[2] as HTMLSelectElement).value).toBe('JTL-030')
+  })
+
+  it('Favourite-selected base is remembered when switching to Base Selector', async () => {
+    mockUserSettings.enableFavourites = true
+    mockFavourites.favourites = [
+      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+    ]
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('mode-select'), 'favourites')
+    await user.selectOptions(screen.getByTestId('favourites-select'), 'SOR-026')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).not.toBeDisabled())
+    await user.selectOptions(screen.getByTestId('mode-select'), 'base-selector')
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    expect((getBaseSelectors()[2] as HTMLSelectElement).value).toBe('SOR-026')
+  })
+
+    // --- Favourites: star toggle in Favourites mode ---
+
+  it('Star toggle never rendered in Favourites mode', async () => {
+    mockUserSettings.enableFavourites = true
+    mockFavourites.favourites = [
+      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+    ]
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('mode-select'), 'favourites')
+    await user.selectOptions(screen.getByTestId('favourites-select'), 'SOR-026')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).not.toBeDisabled())
+    expect(screen.queryByTestId('favourite-toggle')).not.toBeInTheDocument()
   })
 
 })
