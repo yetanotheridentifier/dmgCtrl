@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Base } from '../hooks/useBases'
 import { useSwuSetup, InitialSelection } from '../hooks/useSwuSetup'
 import { useBaseArt } from '../hooks/useBaseArt'
 import SwuSetupScreenView from './swuSetupScreenView'
 import { useUserSettings } from '../hooks/useUserSettings'
+import { useFavourites } from '../hooks/useFavourites'
 import { normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck } from '../utils/swudbUrl'
 
-export type SelectionMode = 'base-selector' | 'swudb-import'
+export type SelectionMode = 'base-selector' | 'swudb-import' | 'favourites'
 
 interface Props {
   onConfirm: (base: Base) => void
@@ -16,19 +17,35 @@ interface Props {
 }
 
 function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Props) {
-  const { useHyperspace } = useUserSettings()
+  const { useHyperspace, enableFavourites } = useUserSettings()
+  const { favourites, addFavourite, removeFavourite } = useFavourites()
   const setup = useSwuSetup(onConfirm, initialSelection)
   const art = useBaseArt(setup.selectedBase, useHyperspace)
 
   const [selectionMode, setSelectionMode] = useState<SelectionMode>(() => {
     const saved = localStorage.getItem('pref_selection_mode')
-    return saved === 'swudb-import' ? 'swudb-import' : 'base-selector'
+    if (saved === 'swudb-import') return 'swudb-import'
+    if (saved === 'favourites' && enableFavourites && favourites.length > 0) return 'favourites'
+    return 'base-selector'
   })
 
   const handleModeChange = (mode: SelectionMode) => {
+    if (mode === 'swudb-import') {
+      setup.handleSetChange('')
+      setSwudbDeckName(null)
+      setSwudbError(null)
+    } else if (mode === 'favourites' && (!setup.selectedKey || !favourites.some(f => f.key === setup.selectedKey))) {
+      setup.handleSetChange('')
+    }
     setSelectionMode(mode)
     localStorage.setItem('pref_selection_mode', mode)
   }
+
+  useEffect(() => {
+    if (selectionMode === 'favourites' && (!enableFavourites || favourites.length === 0)) {
+      setSelectionMode('base-selector')
+    }
+  }, [selectionMode, enableFavourites, favourites])
 
   const [swudbUrl, setSwudbUrl] = useState('')
   const [swudbError, setSwudbError] = useState<string | null>(null)
@@ -70,6 +87,29 @@ function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Pro
     }
   }
 
+  const selectedBaseKey = setup.selectedBase
+    ? `${setup.selectedBase.set}-${setup.selectedBase.number}`
+    : null
+  const isFavourited = selectedBaseKey
+    ? favourites.some(f => f.key === selectedBaseKey)
+    : false
+
+  const handleFavouriteToggle = () => {
+    if (!setup.selectedBase || !selectedBaseKey) return
+    if (isFavourited) {
+      removeFavourite(selectedBaseKey)
+    } else {
+      const aspect = setup.selectedBase.aspects.length === 0 ? 'None' : setup.selectedAspect
+      addFavourite({
+        key: selectedBaseKey,
+        set: setup.selectedBase.set,
+        name: setup.selectedBase.name,
+        hp: setup.selectedBase.hp,
+        aspect,
+        cardNumber: parseInt(setup.selectedBase.number, 10),
+      })
+    }
+  }
 
   const handleSubmit = () => setup.handleSubmit()
 
@@ -107,6 +147,11 @@ function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Pro
       onSwudbChange={handleSwudbChange}
       onSwudbFocus={handleSwudbFocus}
       onSwudbLoad={handleSwudbLoad}
+      enableFavourites={enableFavourites}
+      favourites={favourites}
+      isFavourited={isFavourited}
+      onFavouriteToggle={handleFavouriteToggle}
+      onFavouriteKeyChange={setup.selectBaseByKey}
     />
   )
 }

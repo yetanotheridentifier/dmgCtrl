@@ -12,7 +12,8 @@ Core functionality:
 - **Epic Action tracking** — an epic action button marks the base's once-per-game ability as used; a gold token overlay appears over the card's epic action text area to indicate the spent state
 - **Force token tracking** — a Force icon button is available on every base; on Force bases it is immediately active, on other bases a single enable tap unlocks it for games where the Force is gained via a card or leader ability
 - **Screen wake lock** — prevents the device screen from sleeping while on the game screen
-- **User settings** — persistent preferences (hyperspace art, force token, epic actions, wake lock) accessible via the ⚙ button on the setup and game screens
+- **User settings** — persistent preferences (hyperspace art, force token, epic actions, wake lock, favourites) accessible via the ⚙ button on the setup and game screens
+- **Favourites** — star toggle on the setup screen marks a base as a favourite; a dedicated Favourites input mode shows a sorted dropdown of saved bases for quick reselection; gated by the Enable Favourites setting (off by default)
 - **Offline capability** — PWA support means the app can be installed and used without a network connection
 
 The app is served at `/dmgCtrl/` and is designed to be added to an iOS home screen for a native-like experience.
@@ -64,6 +65,7 @@ App
 ├── SwuSetupScreen        (container)
 │   ├── useSwuSetup       (hook — filtering, auto-select)
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
+│   ├── useFavourites     (hook — favourites list, add/remove)
 │   └── SwuSetupScreenView (view — renders mode selector, selects, image preview, start button; ⚙ button opens settings)
 │       └── ImagePreview  (pure view — renders art or error message from props)
 ├── SwuGameScreen         (container)
@@ -128,7 +130,7 @@ src/
   hooks/
     useBaseArt.ts           Ordered art fallback chain shared by setup and game screens
     useBases.ts             Fetches and caches the full list of Base cards
-    useFavourites.ts        Favourites list — add/remove/clear operations with deduplication on key; sorted by set then card number ascending; persists FavouriteBase[] to localStorage under key `favourites`; UI gated by enableFavourites in useUserSettings (see tickets #123, #124)
+    useFavourites.ts        Favourites list — add/remove/clear operations with deduplication on key; sorted by set then card number ascending; persists FavouriteBase[] to localStorage under key `favourites`; UI gated by enableFavourites in useUserSettings (ticket #123 complete; ticket #124 pending)
     useOrientation.ts       Detects portrait vs landscape; returns isPortrait (via matchMedia change event) and vmin (Math.min(screen.width, screen.height) — stable across rotations)
     useSwuGame.ts           Damage counter, epic action used state, Force token enabled and active state
     useSwuSetup.ts          Setup screen logic — filtering and auto-select
@@ -204,8 +206,8 @@ State is owned at the appropriate level:
 | Force token active state | `useSwuGame` | Local to game screen; toggled by the Force button and overlay; reset on each navigation to the game screen |
 | Art fallback index, image load state | `useBaseArt` | Local to whichever screen called it; reset when base changes |
 | User settings (hyperspace, force token, epic actions, wake lock, favourites enable) | `useUserSettings` / localStorage | Persisted under `user_settings` as JSON; useHyperspace/enableForceToken/enableEpicActions/enableWakeLock default to `true`; enableFavourites defaults to `false`; read by any screen that calls the hook |
-| Favourites list | `useFavourites` / localStorage | Persisted under `favourites` as JSON array of `FavouriteBase`; sorted by set then card number ascending; deduplicated on `key`; UI visibility gated by `enableFavourites` in `useUserSettings` (UI not yet wired — see tickets #123, #124) |
-| Selection mode (`base-selector` / `swudb-import`) | `SwuSetupScreen` / localStorage | Persisted under `pref_selection_mode`; defaults to `base-selector` |
+| Favourites list | `useFavourites` / localStorage | Persisted under `favourites` as JSON array of `FavouriteBase`; sorted by set then card number ascending; deduplicated on `key`; UI visibility gated by `enableFavourites` in `useUserSettings` |
+| Selection mode (`base-selector` / `swudb-import` / `favourites`) | `SwuSetupScreen` / localStorage | Persisted under `pref_selection_mode`; defaults to `base-selector`; `'favourites'` is only restored on load if `enableFavourites` is true and the favourites list is non-empty; falls back to `'base-selector'` at runtime if either condition becomes false. On mode switch: entering `'swudb-import'` always clears the base selection and deck name; entering `'favourites'` clears the selection unless the current base is already in the favourites list; entering `'base-selector'` always preserves the current selection |
 | SWUDB URL input, validation error, deck name, loading state | `SwuSetupScreen` | Local; `swudbDeckName` remains `null` until a successful API load |
 
 ### Note on double useBases() call
@@ -371,7 +373,7 @@ Run with `node scripts/inspect-base-data.mjs` to inspect the live merged dataset
 
 Prerequisites:
 - Dev server must be running (`npm run dev`)
-- Playwright and the Chromium binary must be installed (one-time setup: `npm install --legacy-peer-deps && npx playwright install chromium`)
+- Playwright and the Chromium browser binary must be installed (one-time setup: `npm install --legacy-peer-deps && npx playwright install chromium`)
 
 Run with:
 ```bash
@@ -411,7 +413,7 @@ export interface FavouriteBase {
 
 **API:** `{ favourites, addFavourite, removeFavourite, clearFavourites }`.
 
-**Feature flag:** `enableFavourites` in `useUserSettings` (default: `false`) gates UI visibility. The stored data is retained regardless of the toggle state — disabling and re-enabling restores the list intact. UI integration is added in tickets #123 (setup screen star toggle + Favourites mode) and #124 (settings screen management UI).
+**Feature flag:** `enableFavourites` in `useUserSettings` (default: `false`) gates UI visibility. The stored data is retained regardless of the toggle state — disabling and re-enabling restores the list intact. Setup screen integration (star toggle + Favourites mode) was added in ticket #123. Settings screen management UI is planned for ticket #124.
 
 ---
 
@@ -488,11 +490,17 @@ The app is designed for **landscape orientation**. `useOrientation` is used in f
 4. User selects a base → `selectedBase` is set
 5. On submit, `onConfirm(selectedBase)` is called — the game screen reads `useHyperspace` from `useUserSettings` independently
 
-### Input mode selector and SWUDB import
+### Input mode selector
 
-The setup screen supports two input modes, controlled by a `selectionMode` state (`'base-selector'` | `'swudb-import'`). The active mode is persisted to localStorage under `pref_selection_mode`. The mode selector dropdown is always visible on the setup screen.
+The setup screen supports three input modes, controlled by a `selectionMode` state (`'base-selector'` | `'swudb-import'` | `'favourites'`). The active mode is persisted to localStorage under `pref_selection_mode`. The mode selector dropdown is always visible on the setup screen.
 
-**Base Selector mode** is the default. The three cascading dropdowns (set → aspect → base) are shown.
+**Base Selector mode** is the default. The three cascading dropdowns (set → aspect → base) are shown. Each base option is formatted as `${name} (${hp})` (e.g. `Catacombs of Cadera (30)`).
+
+When `enableFavourites` is true and a base is selected, a **star toggle** (☆/★) appears inline — in the same row as the base dropdown and start button. Tapping it:
+- Adds the current base to favourites (`addFavourite`) if not already saved, recording `set`, `name`, `hp`, `cardNumber` (`parseInt(base.number, 10)`), and the selected aspect (or `'None'` for bases with no aspects)
+- Removes it (`removeFavourite`) if already favourited
+
+`isFavourited` is a derived boolean in the container, computed by matching `` `${base.set}-${base.number}` `` against the `key` fields in the favourites list.
 
 **SWUDB Import mode** shows a URL input field and a two-row layout:
 - Row 1 (always visible): URL text input + Load button
@@ -500,7 +508,7 @@ The setup screen supports two input modes, controlled by a `selectionMode` state
 
 The Load and start game buttons are stacked vertically and share the same width so they align.
 
-On a successful load, `selectBaseByKey` in `useSwuSetup` is called with the base key from the deck response. This sets `selectedSet`, `selectedAspect`, and `selectedKey` so that switching back to Base Selector mode shows the correct base pre-selected. The card art preview appears below the import controls once a base is resolved, mirroring the Base Selector experience.
+On a successful load, `selectBaseByKey` in `useSwuSetup` is called with the base key from the deck response. This sets `selectedSet`, `selectedAspect`, and `selectedKey` so that switching back to Base Selector mode shows the correct base pre-selected. The card art preview appears below the import controls once a base is resolved, mirroring the Base Selector experience. When `enableFavourites` is true and a base has been resolved, a star toggle (☆/★) appears between the deck name and the start button, identical in behaviour to the one in Base Selector mode.
 
 URL validation is handled by pure utility functions in `src/utils/swudbUrl.ts`:
 
@@ -518,6 +526,12 @@ The Load button is disabled while a fetch is in progress (shows `...`). Possible
 - `'Base not recognised'` — deck loaded but the base key was not found in the local `Base[]`
 
 When the base is not recognised, the deck name is still shown (so the user can see which deck was loaded) but the start game button is disabled.
+
+**Favourites mode** is available when `enableFavourites` is `true` and the favourites list is non-empty. The Favourites option only appears in the mode selector dropdown when both conditions are met. The mode shows a single dropdown listing all saved favourites, sorted by set then card number. Each option is formatted as `${set}: ${name} (${hp})` (e.g. `SOR: Catacombs of Cadera (30)`). Selecting an entry calls `selectBaseByKey` to populate the setup state and enables the start game button. A card art preview appears once a base is selected, consistent with the other modes.
+
+**Mode transitions:** When switching to SWUDB Import mode, the current base selection and any loaded deck name are always cleared — the form starts fresh. When switching to Favourites mode, the selection is cleared unless the currently selected base is already in the favourites list (in which case it is pre-selected in the dropdown). Switching to Base Selector mode always preserves the current selection — a base resolved via SWUDB Import or chosen from Favourites will be pre-populated in the cascading dropdowns.
+
+If `enableFavourites` becomes `false` or the favourites list becomes empty while Favourites mode is active, a `useEffect` in the container resets `selectionMode` to `'base-selector'`. The `'favourites'` value is also rejected when restoring mode from localStorage if these conditions are not met on load.
 
 ### Game screen
 
@@ -670,6 +684,7 @@ Tests verify behaviour, not implementation. Hook tests cover logic in isolation;
 - localStorage is mocked with `vi.stubGlobal('localStorage', ...)` to test caching paths
 - All mocks are torn down with `vi.unstubAllGlobals()` in `afterEach`
 - `useUserSettings` is mocked with `vi.mock('../hooks/useUserSettings', ...)` in tests that exercise preference-gated behaviour; `vi.hoisted` is used for mock values that need per-test control
+- `useFavourites` is mocked with `vi.mock('../hooks/useFavourites', ...)` in setup screen tests; `vi.hoisted` provides per-test control over `favourites`, `addFavourite`, `removeFavourite`
 - `App.test.tsx` mocks `useBases` at the module level (`vi.mock('../hooks/useBases', ...)`) so data is available synchronously; this allows the tests to focus on navigation logic rather than data loading. The 1-second loading screen timer is waited out with a `waitFor` timeout of 4 seconds.
 
 ### Running tests
@@ -739,7 +754,7 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | **Base** | A card type in Star Wars Unlimited representing a location that acts as the player's "health bar". Each base has an HP value (typically 24–35). |
 | **Epic Action** | A special ability on some base cards that can be triggered once per game. The game screen shows an epic action button when the base has an epic action and `enableEpicActions` is true in user settings; tapping it marks the ability as used and renders a gold token overlay. Tapping the overlay or the button again reverts the state. The button is only shown when the base's `epicAction` text contains the phrase 'Epic Action' (case-insensitive). Passive-effect bases and Force trigger bases are therefore excluded. |
 | **Epic action token** | The in-app UI element (a translucent yellow rectangle with a gold border, "Epic Action Used" text, and a starburst watermark) that overlays the lower portion of the base card when the epic action has been used, mirroring the physical token used in the tabletop game. When the Force token is also active, it occupies the left half of the overlay area. |
-| **Favourites** | A user-curated list of bases for quick reselection. Managed by `useFavourites`; persisted to localStorage under `favourites`. Visibility gated by `enableFavourites` in `useUserSettings` (default: `false`). UI integration pending tickets #123 and #124. |
+| **Favourites** | A user-curated list of bases for quick reselection. Managed by `useFavourites`; persisted to localStorage under `favourites`. Visibility gated by `enableFavourites` in `useUserSettings` (default: `false`). Setup screen integration (star toggle + Favourites mode) added in ticket #123. Settings screen management UI planned for ticket #124. |
 | **Force** | A recurring ability on some LOF base cards, identified by the phrase "The Force is with you" in their `epicAction` text. Force bases start the game with the Force button already enabled. Any base can also gain the Force via card or leader abilities — the locked Force icon is available on all bases for this purpose. |
 | **Force token button** | The blue icon button (showing `dmgCtrl-force-token.png`) that appears in the first slot below the back button when `forceEnabled` is true. Tapping it sets `forceActive = true` and renders the Force token overlay. On non-Force bases, the slot first shows a locked/dimmed version; tapping the dimmed icon once enables it. |
 | **Force token overlay** | The in-app UI element (a royal-blue rectangle with a light-blue border and a "The Force is With You" label) that overlays the lower portion of the base card when `forceActive` is true. A translucent watermark of `dmgCtrl-force-token.png` appears behind the text. Tapping the overlay returns `forceActive` to `false`. When the epic action token is also active, it occupies the right half of the overlay area. |
