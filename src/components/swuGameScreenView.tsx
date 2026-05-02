@@ -716,7 +716,7 @@ function SwuGameScreenView({
           <div
             style={{
               position: 'fixed',
-              left: Math.max(8, dragIndicator.clientX + (isPlus ? -100 : 10)),
+              left: Math.max(8, dragIndicator.clientX + (isPlus ? -100 : 55)),
               top: Math.max(8, dragIndicator.clientY - 40),
               zIndex: 200,
               pointerEvents: 'none',
