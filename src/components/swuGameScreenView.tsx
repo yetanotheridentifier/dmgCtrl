@@ -709,36 +709,33 @@ function SwuGameScreenView({
 
       </div>
 
-      {/* Drag indicator — floats above the thumb while scrubbing */}
-      {dragIndicator && (
-        <div
-          style={{
-            position: 'fixed',
-            left: Math.max(8, dragIndicator.clientX - 44),
-            top: Math.max(8, dragIndicator.clientY - 88),
-            width: 88,
-            height: 60,
-            zIndex: 200,
-            background: 'rgba(10,14,26,0.95)',
-            border: '2px solid var(--color-accent)',
-            borderRadius: '12px',
-            boxShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.45), 0 4px 16px rgba(0,0,0,0.8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            pointerEvents: 'none',
-          }}
-        >
-          <span style={{
-            fontSize: 'clamp(1.4rem, 6vmin, 2.2rem)',
-            fontWeight: '300',
-            color: 'var(--color-accent)',
-            letterSpacing: '0.04em',
-          }}>
-            {dragIndicator.type === '+' ? '+' : '−'}{dragIndicator.value}
-          </span>
-        </div>
-      )}
+      {/* Drag indicator — offset toward screen centre */}
+      {dragIndicator && (() => {
+        const isPlus = dragIndicator.type === '+'
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              left: Math.max(8, dragIndicator.clientX + (isPlus ? -100 : 10)),
+              top: Math.max(8, dragIndicator.clientY - 40),
+              zIndex: 200,
+              pointerEvents: 'none',
+            }}
+          >
+            <span style={{
+              display: 'block',
+              lineHeight: 1,
+              fontSize: 'clamp(1.8rem, 9vmin, 2.8rem)',
+              fontWeight: '300',
+              color: 'var(--color-text-primary)',
+              textShadow: '0 0 24px rgba(var(--color-accent-rgb), 0.7), 0 0 12px rgba(0,0,0,1), -1px -1px 0 rgba(0,0,0,0.9), 1px -1px 0 rgba(0,0,0,0.9), -1px 1px 0 rgba(0,0,0,0.9), 1px 1px 0 rgba(0,0,0,0.9)',
+              letterSpacing: '0.04em',
+            }}>
+              {isPlus ? '+' : '−'}{dragIndicator.value}
+            </span>
+          </div>
+        )
+      })()}
 
     </AppScreenLayout>
   )

@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react'
 
 const DEAD_ZONE = 15
-const PX_PER_STEP = 24
+const PX_PER_STEP = 14
 const MAX_VALUE = 20
 
 export type DragIndicator = {

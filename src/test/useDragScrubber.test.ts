@@ -10,7 +10,7 @@ const pointerDown = (clientY: number) => ({
 const pointerMove = (clientY: number) => ({ clientY, clientX: 100 } as any)
 
 // Simulate pointerDown then pointerMove. startY=300, FAR_DRAG_END_Y=100 gives delta=200
-// which produces raw value 10 before any cap is applied (well above any realistic max in tests).
+// which produces raw value 15 before any cap is applied (well above any realistic max in tests).
 const FAR_DRAG_END_Y = 100
 
 function drag(result: any, type: '+' | '-', endY = FAR_DRAG_END_Y) {
