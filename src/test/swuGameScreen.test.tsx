@@ -771,4 +771,104 @@ describe('SwuGameScreen', () => {
     expect(screen.queryByTestId('mystic-action-btn')).not.toBeInTheDocument()
   })
 
+
+  // --- Drag scrubber ---
+  // Constants: DRAG_DEAD_ZONE=15px, DRAG_PX_PER_STEP=24px, min value=2 once crossed.
+  // delta = startY - currentY; dragging up gives positive delta.
+  // At clientY=261 from startY=300: delta=39 -> value = round((39-15)/24)+2 = 3
+
+  it('Dragging + button up past dead zone applies multiple increments on release', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const plusBtn = screen.getByText('+')
+    fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(plusBtn, { clientY: 261, pointerId: 1 })
+    fireEvent.pointerUp(plusBtn, { pointerId: 1 })
+    expect(screen.getByText('3')).toBeInTheDocument()
+  })
+
+  it('Dragging - button up past dead zone applies multiple decrements on release', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const plusBtn = screen.getByText('+')
+    for (let i = 0; i < 10; i++) fireEvent.click(plusBtn)
+    const minusBtn = screen.getByText('−')
+    fireEvent.pointerDown(minusBtn, { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(minusBtn, { clientY: 261, pointerId: 1 })
+    fireEvent.pointerUp(minusBtn, { pointerId: 1 })
+    expect(screen.getByText('7')).toBeInTheDocument()
+  })
+
+  it('Click immediately after a drag is suppressed', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const plusBtn = screen.getByText('+')
+    fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(plusBtn, { clientY: 261, pointerId: 1 })
+    fireEvent.pointerUp(plusBtn, { pointerId: 1 })
+    fireEvent.click(plusBtn)
+    expect(screen.getByText('3')).toBeInTheDocument()
+  })
+
+  it('Drag within dead zone does not suppress subsequent click', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const plusBtn = screen.getByText('+')
+    fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(plusBtn, { clientY: 290, pointerId: 1 })
+    fireEvent.pointerUp(plusBtn, { pointerId: 1 })
+    fireEvent.click(plusBtn)
+    expect(screen.getByText('1')).toBeInTheDocument()
+  })
+
+  it('pointerCancel during drag does not apply any change', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const plusBtn = screen.getByText('+')
+    fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(plusBtn, { clientY: 261, pointerId: 1 })
+    fireEvent.pointerCancel(plusBtn, { pointerId: 1 })
+    expect(screen.getByText('0')).toBeInTheDocument()
+  })
+
+  it('Click is not suppressed after pointerCancel', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const plusBtn = screen.getByText('+')
+    fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(plusBtn, { clientY: 261, pointerId: 1 })
+    fireEvent.pointerCancel(plusBtn, { pointerId: 1 })
+    fireEvent.click(plusBtn)
+    expect(screen.getByText('1')).toBeInTheDocument()
+  })
+
+  it('Drag indicator shows correct label while dragging past dead zone', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const plusBtn = screen.getByText('+')
+    fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(plusBtn, { clientY: 261, pointerId: 1 })
+    expect(screen.getByText('+3')).toBeInTheDocument()
+  })
+
+  it('Drag indicator is not shown when within dead zone', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const plusBtn = screen.getByText('+')
+    fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(plusBtn, { clientY: 290, pointerId: 1 })
+    expect(screen.queryByText('+2')).not.toBeInTheDocument()
+  })
+
+  it('Drag indicator disappears after pointerUp', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const plusBtn = screen.getByText('+')
+    fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(plusBtn, { clientY: 261, pointerId: 1 })
+    expect(screen.getByText('+3')).toBeInTheDocument()
+    fireEvent.pointerUp(plusBtn, { pointerId: 1 })
+    expect(screen.queryByText('+3')).not.toBeInTheDocument()
+  })
+
+  it('Drag indicator disappears after pointerCancel', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const plusBtn = screen.getByText('+')
+    fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(plusBtn, { clientY: 261, pointerId: 1 })
+    fireEvent.pointerCancel(plusBtn, { pointerId: 1 })
+    expect(screen.queryByText('+3')).not.toBeInTheDocument()
+  })
+
 })
