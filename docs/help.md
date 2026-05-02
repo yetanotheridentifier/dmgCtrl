@@ -96,7 +96,16 @@ Your preferences are saved automatically and persist between sessions.
 | **Enable Force Token** | On | Shows the Force token button on the game screen. Turn off if you prefer not to track the Force. |
 | **Enable Epic Actions** | On | Shows the Epic Action button on the game screen. Turn off if you prefer not to track epic actions. |
 | **Enable Screen Wake Lock** | On | Keeps the screen on during play. May affect battery life. |
-| **Enable Favourites** | Off | Reveals a star button on the setup screen to save bases as favourites, and adds a Favourites input mode for quick reselection. Saved bases are kept even when this setting is off. |
+| **Enable Favourites** | On | Reveals a star button on the setup screen to save bases as favourites, and adds a Favourites input mode for quick reselection. Saved bases are kept even when this setting is off. |
+
+### Managing saved favourites
+
+When **Enable Favourites** is on, your saved bases are listed below the toggle in the Settings screen.
+
+- Tap **Remove** next to a base to delete it from your favourites
+- Tap **Clear All** to remove all saved bases at once — tap **Confirm** to proceed, or **Cancel** to go back
+
+If no bases have been saved yet, "No favourites saved" is shown in this section.
 
 Tap <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M15.5 5L7 12L15.5 19Z"/></svg> to return to the previous screen, or <svg width="0.85em" height="0.85em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> for help.
 
