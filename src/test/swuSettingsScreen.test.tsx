@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SwuSettingsScreen from '../components/swuSettingsScreen'
 import type { FavouriteBase } from '../hooks/useFavourites'
@@ -29,6 +29,14 @@ vi.mock('../hooks/useFavourites', () => ({
   useFavourites: () => mockFavourites,
 }))
 
+const mockOrientation = vi.hoisted(() => ({
+  vmin: 375,
+  isPortrait: true,
+}))
+vi.mock('../hooks/useOrientation', () => ({
+  useOrientation: () => mockOrientation,
+}))
+
 vi.mock('../flags', () => ({ FEATURE_USER_SETTINGS: true }))
 
 const sampleFavourites: FavouriteBase[] = [
@@ -44,6 +52,7 @@ beforeEach(() => {
   mockUserSettings.enableWakeLock = true
   mockUserSettings.enableFavourites = true
   mockFavourites.favourites = []
+  mockOrientation.isPortrait = true
 })
 
 describe('SwuSettingsScreen', () => {
@@ -234,6 +243,26 @@ describe('SwuSettingsScreen', () => {
     await user.click(screen.getByRole('button', { name: /clear all/i }))
     await user.click(screen.getByRole('button', { name: /confirm/i }))
     expect(mockFavourites.clearFavourites).toHaveBeenCalledOnce()
+  })
+
+  // --- Layout ---
+
+  it('in landscape, general and favourites settings are in separate columns', () => {
+    mockOrientation.isPortrait = false
+    mockFavourites.favourites = sampleFavourites
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    const generalCol = screen.getByRole('group', { name: /general settings/i })
+    const favouritesCol = screen.getByRole('group', { name: /favourites settings/i })
+    expect(within(generalCol).getByRole('checkbox', { name: /use hyperspace art/i })).toBeInTheDocument()
+    expect(within(generalCol).queryByRole('checkbox', { name: /enable favourites/i })).not.toBeInTheDocument()
+    expect(within(favouritesCol).getByRole('checkbox', { name: /enable favourites/i })).toBeInTheDocument()
+    expect(within(favouritesCol).queryByRole('checkbox', { name: /use hyperspace art/i })).not.toBeInTheDocument()
+  })
+
+  it('in portrait, settings are not split into columns', () => {
+    mockOrientation.isPortrait = true
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByRole('group', { name: /general settings/i })).not.toBeInTheDocument()
   })
 
 })
