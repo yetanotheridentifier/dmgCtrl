@@ -18,6 +18,8 @@ const mockUserSettings = vi.hoisted(() => ({
   setEnableForceToken: vi.fn(),
   setEnableEpicActions: vi.fn(),
   setEnableWakeLock: vi.fn(),
+  enableLongPress: true,
+  setEnableLongPress: vi.fn(),
 }))
 vi.mock('../hooks/useUserSettings', () => ({
   useUserSettings: () => mockUserSettings,
@@ -163,6 +165,7 @@ describe('SwuGameScreen', () => {
     mockUserSettings.enableEpicActions = true
     mockUserSettings.enableWakeLock = true
     mockUserSettings.useHyperspace = false
+    mockUserSettings.enableLongPress = true
   })
 
   // --- Rendering ---
@@ -869,6 +872,57 @@ describe('SwuGameScreen', () => {
     fireEvent.pointerMove(plusBtn, { clientY: 261, pointerId: 1 })
     fireEvent.pointerCancel(plusBtn, { pointerId: 1 })
     expect(screen.queryByText('+3')).not.toBeInTheDocument()
+  })
+
+
+  // --- Long press adjustments (settings wiring + game-screen integration) ---
+
+  it('Scrubber does not activate when enableLongPress is false', () => {
+    mockUserSettings.enableLongPress = false
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const plusBtn = screen.getByText('+')
+    fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(plusBtn, { clientY: 100, pointerId: 1 })
+    expect(screen.queryByText(/^\+\d/)).not.toBeInTheDocument()
+  })
+
+  it('+ scrubber max is capped at remaining HP', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const plusBtn = screen.getByText('+')
+    for (let i = 0; i < 25; i++) fireEvent.click(plusBtn)
+    // count=25, remaining=5; delta=200 gives raw value 10, should cap at 5
+    fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(plusBtn, { clientY: 100, pointerId: 1 })
+    expect(screen.getByText('+5')).toBeInTheDocument()
+  })
+
+  it('- scrubber max is capped at current count', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const plusBtn = screen.getByText('+')
+    for (let i = 0; i < 3; i++) fireEvent.click(plusBtn)
+    // count=3; delta=200 gives raw value 10, should cap at 3
+    const minusBtn = screen.getByText('−')
+    fireEvent.pointerDown(minusBtn, { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(minusBtn, { clientY: 100, pointerId: 1 })
+    expect(screen.getByText('−3')).toBeInTheDocument()
+  })
+
+  it('+ scrubber does not activate when only 1 HP remains', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const plusBtn = screen.getByText('+')
+    for (let i = 0; i < 29; i++) fireEvent.click(plusBtn)
+    fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(plusBtn, { clientY: 100, pointerId: 1 })
+    expect(screen.queryByText(/^\+\d/)).not.toBeInTheDocument()
+  })
+
+  it('- scrubber does not activate when count is 1', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    fireEvent.click(screen.getByText('+'))
+    const minusBtn = screen.getByText('−')
+    fireEvent.pointerDown(minusBtn, { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(minusBtn, { clientY: 100, pointerId: 1 })
+    expect(screen.queryByText(/^−\d/)).not.toBeInTheDocument()
   })
 
 })
