@@ -13,7 +13,7 @@ Core functionality:
 - **Force token tracking** — a Force icon button is available on every base; on Force bases it is immediately active, on other bases a single enable tap unlocks it for games where the Force is gained via a card or leader ability
 - **Screen wake lock** — prevents the device screen from sleeping while on the game screen
 - **User settings** — persistent preferences (hyperspace art, force token, epic actions, wake lock, favourites) accessible via the ⚙ button on the setup and game screens
-- **Favourites** — star toggle on the setup screen marks a base as a favourite; a dedicated Favourites input mode shows a sorted dropdown of saved bases for quick reselection; gated by the Enable Favourites setting (off by default)
+- **Favourites** — star toggle on the setup screen marks a base as a favourite; a dedicated Favourites input mode shows a sorted dropdown of saved bases for quick reselection; saved bases can be managed in the Settings screen; gated by the Enable Favourites setting
 - **Offline capability** — PWA support means the app can be installed and used without a network connection
 
 The app is served at `/dmgCtrl/` and is designed to be added to an iOS home screen for a native-like experience.
@@ -130,11 +130,11 @@ src/
   hooks/
     useBaseArt.ts           Ordered art fallback chain shared by setup and game screens
     useBases.ts             Fetches and caches the full list of Base cards
-    useFavourites.ts        Favourites list — add/remove/clear operations with deduplication on key; sorted by set then card number ascending; persists FavouriteBase[] to localStorage under key `favourites`; UI gated by enableFavourites in useUserSettings (ticket #123 complete; ticket #124 pending)
+    useFavourites.ts        Favourites list — add/remove/clear operations with deduplication on key; sorted by set then card number ascending; persists FavouriteBase[] to localStorage under key `favourites`; UI gated by enableFavourites in useUserSettings (tickets #123, #124 complete)
     useOrientation.ts       Detects portrait vs landscape; returns isPortrait (via matchMedia change event) and vmin (Math.min(screen.width, screen.height) — stable across rotations)
     useSwuGame.ts           Damage counter, epic action used state, Force token enabled and active state
     useSwuSetup.ts          Setup screen logic — filtering and auto-select
-    useUserSettings.ts      Persistent user preferences (useHyperspace, enableForceToken, enableEpicActions, enableWakeLock, enableFavourites) backed by localStorage under key `user_settings`; useHyperspace/enableForceToken/enableEpicActions/enableWakeLock default to true; enableFavourites defaults to false
+    useUserSettings.ts      Persistent user preferences (useHyperspace, enableForceToken, enableEpicActions, enableWakeLock, enableFavourites) backed by localStorage under key `user_settings`; useHyperspace/enableForceToken/enableEpicActions/enableWakeLock default to true; enableFavourites defaults to true
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
   utils/
@@ -205,7 +205,7 @@ State is owned at the appropriate level:
 | Force token enabled state | `useSwuGame` | Local to game screen; set to `true` by the enable tap on non-Force bases; combined with `isForceBase` in the container to derive `effectiveForceEnabled`; reset on each navigation |
 | Force token active state | `useSwuGame` | Local to game screen; toggled by the Force button and overlay; reset on each navigation to the game screen |
 | Art fallback index, image load state | `useBaseArt` | Local to whichever screen called it; reset when base changes |
-| User settings (hyperspace, force token, epic actions, wake lock, favourites enable) | `useUserSettings` / localStorage | Persisted under `user_settings` as JSON; useHyperspace/enableForceToken/enableEpicActions/enableWakeLock default to `true`; enableFavourites defaults to `false`; read by any screen that calls the hook |
+| User settings (hyperspace, force token, epic actions, wake lock, favourites enable) | `useUserSettings` / localStorage | Persisted under `user_settings` as JSON; useHyperspace/enableForceToken/enableEpicActions/enableWakeLock default to `true`; enableFavourites defaults to `true`; read by any screen that calls the hook |
 | Favourites list | `useFavourites` / localStorage | Persisted under `favourites` as JSON array of `FavouriteBase`; sorted by set then card number ascending; deduplicated on `key`; UI visibility gated by `enableFavourites` in `useUserSettings` |
 | Selection mode (`base-selector` / `swudb-import` / `favourites`) | `SwuSetupScreen` / localStorage | Persisted under `pref_selection_mode`; defaults to `base-selector`; `'favourites'` is only restored on load if `enableFavourites` is true and the favourites list is non-empty; falls back to `'base-selector'` at runtime if either condition becomes false. On mode switch: entering `'swudb-import'` always clears the base selection and deck name; entering `'favourites'` clears the selection unless the current base is already in the favourites list; entering `'base-selector'` always preserves the current selection |
 | SWUDB URL input, validation error, deck name, loading state | `SwuSetupScreen` | Local; `swudbDeckName` remains `null` until a successful API load |
@@ -413,7 +413,7 @@ export interface FavouriteBase {
 
 **API:** `{ favourites, addFavourite, removeFavourite, clearFavourites }`.
 
-**Feature flag:** `enableFavourites` in `useUserSettings` (default: `false`) gates UI visibility. The stored data is retained regardless of the toggle state — disabling and re-enabling restores the list intact. Setup screen integration (star toggle + Favourites mode) was added in ticket #123. Settings screen management UI is planned for ticket #124.
+**Feature flag:** `enableFavourites` in `useUserSettings` (default: `true`) gates UI visibility. The stored data is retained regardless of the toggle state — disabling and re-enabling restores the list intact. Setup screen integration (star toggle + Favourites mode) was added in ticket #123. Settings screen management (remove individual, clear all) was added in ticket #124.
 
 ---
 
@@ -557,10 +557,12 @@ If `enableFavourites` becomes `false` or the favourites list becomes empty while
 The settings screen is accessible from both the setup and game screens via the ⚙ button in the top-right area:
 
 - Tapping ⚙ navigates to `SwuSettingsScreen`; the current screen is pushed onto `backStack` so the back button returns to the correct place
-- `SwuSettingsScreen` (container) calls `useUserSettings()` to read and write preferences
-- `SwuSettingsScreenView` (view) renders a header row (back button, icon, "Settings" h1, help button) and a scrollable toggle list
+- `SwuSettingsScreen` (container) calls `useUserSettings()` and `useFavourites()` to read and write preferences and manage the saved bases list
+- `SwuSettingsScreenView` (view) renders a header row (back button, icon, "Settings" h1, help button) and toggle list
 - Each toggle writes immediately to localStorage via `useUserSettings` — there is no save/cancel step
-- The four toggles: **Use Hyperspace Art**, **Enable Force Token**, **Enable Epic Actions**, **Enable Screen Wake Lock**
+- The five toggles: **Use Hyperspace Art**, **Enable Force Token**, **Enable Epic Actions**, **Enable Screen Wake Lock**, **Enable Favourites**
+- When **Enable Favourites** is on, a saved-bases list appears directly below the toggle (inset with a left accent border to show hierarchy): each entry shows `SET: Name — HPHp (Aspect)` with a Remove button; a Clear All button (with a two-step inline Confirm/Cancel) appears when the list is non-empty; "No favourites saved" is shown when the list is empty
+- **Landscape layout**: two `role="group"` columns — "General settings" (first four toggles) on the left, "Favourites settings" (Enable Favourites toggle + list) on the right; each column scrolls independently. Portrait: single scrollable column.
 - `SwuSettingsScreenView` calls `useOrientation()` directly (not via props) and applies `fontFamily: 'Helvetica, Arial, sans-serif'` to prevent iOS Dynamic Type from overriding font sizes
 
 ### Screen Wake Lock
@@ -754,7 +756,7 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | **Base** | A card type in Star Wars Unlimited representing a location that acts as the player's "health bar". Each base has an HP value (typically 24–35). |
 | **Epic Action** | A special ability on some base cards that can be triggered once per game. The game screen shows an epic action button when the base has an epic action and `enableEpicActions` is true in user settings; tapping it marks the ability as used and renders a gold token overlay. Tapping the overlay or the button again reverts the state. The button is only shown when the base's `epicAction` text contains the phrase 'Epic Action' (case-insensitive). Passive-effect bases and Force trigger bases are therefore excluded. |
 | **Epic action token** | The in-app UI element (a translucent yellow rectangle with a gold border, "Epic Action Used" text, and a starburst watermark) that overlays the lower portion of the base card when the epic action has been used, mirroring the physical token used in the tabletop game. When the Force token is also active, it occupies the left half of the overlay area. |
-| **Favourites** | A user-curated list of bases for quick reselection. Managed by `useFavourites`; persisted to localStorage under `favourites`. Visibility gated by `enableFavourites` in `useUserSettings` (default: `false`). Setup screen integration (star toggle + Favourites mode) added in ticket #123. Settings screen management UI planned for ticket #124. |
+| **Favourites** | A user-curated list of bases for quick reselection. Managed by `useFavourites`; persisted to localStorage under `favourites`. Visibility gated by `enableFavourites` in `useUserSettings` (default: `true`). Setup screen integration (star toggle + Favourites mode) added in ticket #123. Settings screen management UI (remove individual, clear all) added in ticket #124. |
 | **Force** | A recurring ability on some LOF base cards, identified by the phrase "The Force is with you" in their `epicAction` text. Force bases start the game with the Force button already enabled. Any base can also gain the Force via card or leader abilities — the locked Force icon is available on all bases for this purpose. |
 | **Force token button** | The blue icon button (showing `dmgCtrl-force-token.png`) that appears in the first slot below the back button when `forceEnabled` is true. Tapping it sets `forceActive = true` and renders the Force token overlay. On non-Force bases, the slot first shows a locked/dimmed version; tapping the dimmed icon once enables it. |
 | **Force token overlay** | The in-app UI element (a royal-blue rectangle with a light-blue border and a "The Force is With You" label) that overlays the lower portion of the base card when `forceActive` is true. A translucent watermark of `dmgCtrl-force-token.png` appears behind the text. Tapping the overlay returns `forceActive` to `false`. When the epic action token is also active, it occupies the right half of the overlay area. |
