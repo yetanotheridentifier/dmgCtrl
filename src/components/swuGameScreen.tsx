@@ -17,7 +17,7 @@ interface Props {
 }
 
 function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
-  const { enableForceToken, enableEpicActions, enableWakeLock, useHyperspace } = useUserSettings()
+  const { enableForceToken, enableEpicActions, enableWakeLock, useHyperspace, enableLongPress } = useUserSettings()
   const art = useBaseArt(base, useHyperspace)
   const { count, increment, decrement, epicActionUsed, toggleEpicAction, forceActive, toggleForce, forceEnabled, enableForce } = useSwuGame(base.hp)
   const { isPortrait } = useOrientation()
@@ -115,6 +115,7 @@ function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
       isMysticMonastery={isMysticMonastery}
       mysticUsesRemaining={mysticUsesRemaining}
       onMysticAction={gainForceViaAction}
+      enableLongPress={enableLongPress}
     />
   )
 }

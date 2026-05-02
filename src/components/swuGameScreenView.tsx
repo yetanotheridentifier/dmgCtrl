@@ -1,4 +1,5 @@
 import { Base } from '../hooks/useBases'
+import { useDragScrubber } from '../hooks/useDragScrubber'
 import AppScreenLayout from './layout/AppScreenLayout'
 import { BackIcon, CogIcon, HelpIcon } from './icons'
 
@@ -31,6 +32,7 @@ interface Props {
   isMysticMonastery: boolean
   mysticUsesRemaining: number
   onMysticAction: () => void
+  enableLongPress: boolean
 }
 
 function SwuGameScreenView({
@@ -58,8 +60,12 @@ function SwuGameScreenView({
   isMysticMonastery,
   mysticUsesRemaining,
   onMysticAction,
+  enableLongPress,
 }: Props) {
   const bothOverlaysActive = epicActionUsed && showEpicAction && forceActive && showForce
+
+  const { dragIndicator, handleClick, handlePointerDown, handlePointerMove, handlePointerUp, handlePointerCancel } =
+    useDragScrubber(onIncrement, onDecrement, base.hp - count, count, enableLongPress)
 
   return (
     <AppScreenLayout>
@@ -525,7 +531,11 @@ function SwuGameScreenView({
 
             {/* Minus button */}
             <button
-              onClick={onDecrement}
+              onClick={handleClick('-')}
+              onPointerDown={handlePointerDown('-')}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerCancel}
               style={{
                 width: '21vmin',
                 height: '21vmin',
@@ -541,6 +551,8 @@ function SwuGameScreenView({
                 flexShrink: 0,
                 WebkitTapHighlightColor: 'transparent',
                 boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
               }}
             >
               −
@@ -562,7 +574,11 @@ function SwuGameScreenView({
 
             {/* Plus button */}
             <button
-              onClick={onIncrement}
+              onClick={handleClick('+')}
+              onPointerDown={handlePointerDown('+')}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerCancel}
               style={{
                 width: '21vmin',
                 height: '21vmin',
@@ -578,6 +594,8 @@ function SwuGameScreenView({
                 flexShrink: 0,
                 WebkitTapHighlightColor: 'transparent',
                 boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
               }}
             >
               +
@@ -690,6 +708,34 @@ function SwuGameScreenView({
       </div>
 
       </div>
+
+      {/* Drag indicator — offset toward screen centre */}
+      {dragIndicator && (() => {
+        const isPlus = dragIndicator.type === '+'
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              left: Math.max(8, dragIndicator.clientX + (isPlus ? -100 : 10)),
+              top: Math.max(8, dragIndicator.clientY - 40),
+              zIndex: 200,
+              pointerEvents: 'none',
+            }}
+          >
+            <span style={{
+              display: 'block',
+              lineHeight: 1,
+              fontSize: 'clamp(1.8rem, 9vmin, 2.8rem)',
+              fontWeight: '300',
+              color: 'var(--color-text-primary)',
+              textShadow: '0 0 24px rgba(var(--color-accent-rgb), 0.7), 0 0 12px rgba(0,0,0,1), -1px -1px 0 rgba(0,0,0,0.9), 1px -1px 0 rgba(0,0,0,0.9), -1px 1px 0 rgba(0,0,0,0.9), 1px 1px 0 rgba(0,0,0,0.9)',
+              letterSpacing: '0.04em',
+            }}>
+              {isPlus ? '+' : '−'}{dragIndicator.value}
+            </span>
+          </div>
+        )
+      })()}
 
     </AppScreenLayout>
   )
