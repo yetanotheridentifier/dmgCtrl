@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { useOrientation } from '../hooks/useOrientation'
 import { BackIcon, HelpIcon } from './icons'
+import type { FavouriteBase } from '../hooks/useFavourites'
 
 interface ToggleRowProps {
   id: string
@@ -113,10 +115,15 @@ interface Props {
   enableForceToken: boolean
   enableEpicActions: boolean
   enableWakeLock: boolean
+  enableFavourites: boolean
+  favourites: FavouriteBase[]
   onUseHyperspaceChange: (v: boolean) => void
   onEnableForceTokenChange: (v: boolean) => void
   onEnableEpicActionsChange: (v: boolean) => void
   onEnableWakeLockChange: (v: boolean) => void
+  onEnableFavouritesChange: (v: boolean) => void
+  onRemoveFavourite: (key: string) => void
+  onClearFavourites: () => void
   onBack: () => void
   onHelp: () => void
 }
@@ -126,14 +133,21 @@ function SwuSettingsScreenView({
   enableForceToken,
   enableEpicActions,
   enableWakeLock,
+  enableFavourites,
+  favourites,
   onUseHyperspaceChange,
   onEnableForceTokenChange,
   onEnableEpicActionsChange,
   onEnableWakeLockChange,
+  onEnableFavouritesChange,
+  onRemoveFavourite,
+  onClearFavourites,
   onBack,
   onHelp,
 }: Props) {
   const { vmin, isPortrait } = useOrientation()
+  const [confirmingClear, setConfirmingClear] = useState(false)
+
   return (
     <div key={isPortrait ? 'portrait' : 'landscape'} style={{
       display: 'flex',
@@ -216,6 +230,121 @@ function SwuSettingsScreenView({
           onChange={onEnableWakeLockChange}
           vmin={vmin}
         />
+        <ToggleRow
+          id="toggle-favourites"
+          label="Enable Favourites"
+          checked={enableFavourites}
+          onChange={onEnableFavouritesChange}
+          vmin={vmin}
+        />
+
+        {enableFavourites && (
+          <div style={{
+            marginTop: '2vh',
+            paddingTop: '1vh',
+            borderTop: '1px solid rgba(107, 114, 128, 0.3)',
+          }}>
+            {favourites.length === 0 ? (
+              <div style={{
+                color: 'var(--color-text-muted)',
+                fontWeight: '300',
+                fontSize: `clamp(0.85rem, ${vmin * 0.032}px, 1rem)`,
+                padding: '1vh 0',
+              }}>
+                No favourites saved
+              </div>
+            ) : (
+              <>
+                {favourites.map(fav => (
+                  <div key={fav.key} style={{
+                    display: 'flex',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '2vw',
+                    padding: '1vh 0',
+                    borderBottom: '1px solid rgba(107, 114, 128, 0.15)',
+                  }}>
+                    <span style={{
+                      flex: 1,
+                      color: 'var(--color-text-primary)',
+                      fontWeight: '300',
+                      fontSize: `clamp(0.85rem, ${vmin * 0.032}px, 1rem)`,
+                    }}>
+                      {fav.set}: {fav.name} — {fav.hp}HP ({fav.aspect})
+                    </span>
+                    <button
+                      onClick={() => onRemoveFavourite(fav.key)}
+                      aria-label="Remove"
+                      style={{
+                        flexShrink: 0,
+                        padding: '0.4em 0.8em',
+                        background: 'transparent',
+                        border: '1px solid rgba(107, 114, 128, 0.5)',
+                        borderRadius: '6px',
+                        color: 'var(--color-text-muted)',
+                        fontSize: `clamp(0.75rem, ${vmin * 0.028}px, 0.9rem)`,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+
+                <div style={{ marginTop: '1.5vh', display: 'flex', gap: '1.5vw' }}>
+                  {!confirmingClear ? (
+                    <button
+                      onClick={() => setConfirmingClear(true)}
+                      style={{
+                        padding: '0.4em 0.8em',
+                        background: 'transparent',
+                        border: '1px solid rgba(107, 114, 128, 0.5)',
+                        borderRadius: '6px',
+                        color: 'var(--color-text-muted)',
+                        fontSize: `clamp(0.75rem, ${vmin * 0.028}px, 0.9rem)`,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Clear All
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => { onClearFavourites(); setConfirmingClear(false) }}
+                        style={{
+                          padding: '0.4em 0.8em',
+                          background: 'transparent',
+                          border: '1px solid var(--color-accent)',
+                          borderRadius: '6px',
+                          color: 'var(--color-accent)',
+                          fontSize: `clamp(0.75rem, ${vmin * 0.028}px, 0.9rem)`,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        onClick={() => setConfirmingClear(false)}
+                        style={{
+                          padding: '0.4em 0.8em',
+                          background: 'transparent',
+                          border: '1px solid rgba(107, 114, 128, 0.5)',
+                          borderRadius: '6px',
+                          color: 'var(--color-text-muted)',
+                          fontSize: `clamp(0.75rem, ${vmin * 0.028}px, 0.9rem)`,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
     </div>

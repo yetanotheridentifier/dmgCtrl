@@ -1,4 +1,5 @@
 import { useUserSettings } from '../hooks/useUserSettings'
+import { useFavourites } from '../hooks/useFavourites'
 import AppScreenLayout from './layout/AppScreenLayout'
 import SwuSettingsScreenView from './swuSettingsScreenView'
 
@@ -13,11 +14,15 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
     enableForceToken,
     enableEpicActions,
     enableWakeLock,
+    enableFavourites,
     setUseHyperspace,
     setEnableForceToken,
     setEnableEpicActions,
     setEnableWakeLock,
+    setEnableFavourites,
   } = useUserSettings()
+
+  const { favourites, removeFavourite, clearFavourites } = useFavourites()
 
   return (
     <AppScreenLayout>
@@ -26,10 +31,15 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
         enableForceToken={enableForceToken}
         enableEpicActions={enableEpicActions}
         enableWakeLock={enableWakeLock}
+        enableFavourites={enableFavourites}
+        favourites={favourites}
         onUseHyperspaceChange={setUseHyperspace}
         onEnableForceTokenChange={setEnableForceToken}
         onEnableEpicActionsChange={setEnableEpicActions}
         onEnableWakeLockChange={setEnableWakeLock}
+        onEnableFavouritesChange={setEnableFavourites}
+        onRemoveFavourite={removeFavourite}
+        onClearFavourites={clearFavourites}
         onBack={onBack}
         onHelp={onHelp}
       />
