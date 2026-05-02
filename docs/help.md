@@ -55,6 +55,16 @@ The base card fills the screen, with the damage counter overlaid across the midd
 - Tap **−** to remove 1 damage (won't go below zero)
 - **Remaining** shows your starting HP minus damage taken so far
 
+### Adding or removing multiple damage at once
+
+For larger hits or recovery, press and hold **+** or **−**, then drag upward:
+
+1. **Press and hold** the button — keep your finger down
+2. **Drag upward** — a number appears showing how many damage points will be applied
+3. **Release** — all the damage is applied at once
+
+The number increases by 1 for roughly every 14px of upward movement, starting from 2. It is capped at the remaining capacity: the `+` button won't exceed the base's remaining HP, and `−` won't go below zero.
+
 To return to base selection, tap <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M15.5 5L7 12L15.5 19Z"/></svg> in the top-left corner. This resets the damage counter to zero, ready for the next game.
 
 ### The Force

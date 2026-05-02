@@ -12,6 +12,7 @@ Core functionality:
 - **Epic Action tracking** — an epic action button marks the base's once-per-game ability as used; a gold token overlay appears over the card's epic action text area to indicate the spent state
 - **Force token tracking** — a Force icon button is available on every base; on Force bases it is immediately active, on other bases a single enable tap unlocks it for games where the Force is gained via a card or leader ability
 - **Screen wake lock** — prevents the device screen from sleeping while on the game screen
+- **Drag-to-scrub** — long-pressing and dragging upward on a `+` or `−` button increments or decrements by multiple damage points in one gesture; a floating number indicator shows the pending value; capped to remaining capacity (`+` is capped at remaining HP, `−` at current damage); gated by `enableLongPress` in user settings (on by default)
 - **User settings** — persistent preferences (hyperspace art, force token, epic actions, wake lock, favourites) accessible via the ⚙ button on the setup and game screens
 - **Favourites** — star toggle on the setup screen marks a base as a favourite; a dedicated Favourites input mode shows a sorted dropdown of saved bases for quick reselection; saved bases can be managed in the Settings screen; gated by the Enable Favourites setting
 - **Offline capability** — PWA support means the app can be installed and used without a network connection
@@ -72,11 +73,12 @@ App
 │   ├── useSwuGame        (hook — damage counter, epic action, Force token enabled and active state)
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
 │   ├── useWakeLock       (hook — prevents screen sleep during gameplay via Screen Wake Lock API)
-│   └── SwuGameScreenView (view — renders counter, image, epic action token, Force token; ⚙ button always visible)
+│   └── SwuGameScreenView (view — renders counter, image, epic action token, Force token; ⚙ button always visible; calls useDragScrubber directly for drag-to-scrub gesture state)
 ├── SwuHelpScreen         (standalone screen — renders help.md content)
 └── SwuSettingsScreen     (container)
     ├── useUserSettings   (hook — persistent user preferences)
-    └── SwuSettingsScreenView (view — toggle list with back and help buttons; calls useOrientation directly for font sizing)
+    ├── useFavourites     (hook — favourites list, remove/clear operations)
+    └── SwuSettingsScreenView (view — toggle list; landscape: two-column layout separating general and favourites settings; calls useOrientation directly for font sizing)
 
 Each screen is wrapped in AppScreenLayout (shared layout component)
 ```
@@ -129,12 +131,13 @@ src/
 
   hooks/
     useBaseArt.ts           Ordered art fallback chain shared by setup and game screens
+    useDragScrubber.ts      Drag-to-scrub gesture — tracks pointer events on `+`/`−` counter buttons; exposes `dragIndicator` (type, value, clientX, clientY) and pointer event handlers; 15px dead zone before scrub activates; 14px per step; caps drag value at `Math.min(max, 20)`; suppresses synthetic click after drag; disabled when `enableLongPress` is false or the reachable cap is < 2
     useBases.ts             Fetches and caches the full list of Base cards
     useFavourites.ts        Favourites list — add/remove/clear operations with deduplication on key; sorted by set then card number ascending; persists FavouriteBase[] to localStorage under key `favourites`; UI gated by enableFavourites in useUserSettings (tickets #123, #124 complete)
     useOrientation.ts       Detects portrait vs landscape; returns isPortrait (via matchMedia change event) and vmin (Math.min(screen.width, screen.height) — stable across rotations)
     useSwuGame.ts           Damage counter, epic action used state, Force token enabled and active state
     useSwuSetup.ts          Setup screen logic — filtering and auto-select
-    useUserSettings.ts      Persistent user preferences (useHyperspace, enableForceToken, enableEpicActions, enableWakeLock, enableFavourites) backed by localStorage under key `user_settings`; useHyperspace/enableForceToken/enableEpicActions/enableWakeLock default to true; enableFavourites defaults to true
+    useUserSettings.ts      Persistent user preferences (useHyperspace, enableForceToken, enableEpicActions, enableWakeLock, enableFavourites, enableLongPress) backed by localStorage under key `user_settings`; all six default to `true`
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
   utils/
@@ -150,6 +153,7 @@ src/
     swuSetupScreen.test.tsx Setup screen container tests
     swuSettingsScreen.test.tsx Settings screen container tests
     swudbUrl.test.ts        SWUDB URL utility tests
+    useDragScrubber.test.ts Drag-to-scrub hook tests
     useBaseArt.test.ts      Art fallback chain hook tests
     useBases.test.ts        Data layer hook tests
     useFavourites.test.ts   Favourites hook tests
@@ -205,7 +209,7 @@ State is owned at the appropriate level:
 | Force token enabled state | `useSwuGame` | Local to game screen; set to `true` by the enable tap on non-Force bases; combined with `isForceBase` in the container to derive `effectiveForceEnabled`; reset on each navigation |
 | Force token active state | `useSwuGame` | Local to game screen; toggled by the Force button and overlay; reset on each navigation to the game screen |
 | Art fallback index, image load state | `useBaseArt` | Local to whichever screen called it; reset when base changes |
-| User settings (hyperspace, force token, epic actions, wake lock, favourites enable) | `useUserSettings` / localStorage | Persisted under `user_settings` as JSON; useHyperspace/enableForceToken/enableEpicActions/enableWakeLock default to `true`; enableFavourites defaults to `true`; read by any screen that calls the hook |
+| User settings (hyperspace, force token, epic actions, wake lock, favourites, long press) | `useUserSettings` / localStorage | Persisted under `user_settings` as JSON; all six preferences (`useHyperspace`, `enableForceToken`, `enableEpicActions`, `enableWakeLock`, `enableFavourites`, `enableLongPress`) default to `true`; read by any screen that calls the hook |
 | Favourites list | `useFavourites` / localStorage | Persisted under `favourites` as JSON array of `FavouriteBase`; sorted by set then card number ascending; deduplicated on `key`; UI visibility gated by `enableFavourites` in `useUserSettings` |
 | Selection mode (`base-selector` / `swudb-import` / `favourites`) | `SwuSetupScreen` / localStorage | Persisted under `pref_selection_mode`; defaults to `base-selector`; `'favourites'` is only restored on load if `enableFavourites` is true and the favourites list is non-empty; falls back to `'base-selector'` at runtime if either condition becomes false. On mode switch: entering `'swudb-import'` always clears the base selection and deck name; entering `'favourites'` clears the selection unless the current base is already in the favourites list; entering `'base-selector'` always preserves the current selection |
 | SWUDB URL input, validation error, deck name, loading state | `SwuSetupScreen` | Local; `swudbDeckName` remains `null` until a successful API load |
@@ -239,6 +243,16 @@ State is owned at the appropriate level:
 3. Container delegates to `useSwuGame` — `increment()` / `decrement()`
 4. `count` state updates; view re-renders showing new value
 5. `increment` is clamped at `maxHp` and `decrement` is clamped at 0 — remaining HP stays in the range [0, base.hp]
+
+### Example flow: Drag-to-scrub
+
+1. User presses and holds `+` or `−` — `handlePointerDown` sets pointer capture on the button; `useDragScrubber` records start position
+2. User drags upward — `handlePointerMove` computes `delta = startY - clientY`; below 15px (dead zone) nothing happens
+3. Once delta exceeds 15px, `dragRef.current.active = true` and the indicator state is set: `{ type, value, clientX, clientY }`
+4. The view renders a fixed-position floating number (e.g. "+3") offset toward the centre of the screen from the touch point; value increments by 1 per 14px of upward travel, capped at `Math.min(max, 20)` where `max` is the remaining capacity for that direction
+5. User releases — `handlePointerUp` fires the increment/decrement callback `value` times; sets `dragApplied.current = true`
+6. The synthetic `click` event that follows a pointer-up is suppressed by `handleClick` checking `dragApplied.current` — prevents a double-count
+7. Indicator is cleared; `dragRef.current` reset to null
 
 ### Example flow: Epic action
 
@@ -535,7 +549,7 @@ If `enableFavourites` becomes `false` or the favourites list becomes empty while
 
 ### Game screen
 
-1. `useUserSettings()` provides `enableForceToken`, `enableEpicActions`, `enableWakeLock`, and `useHyperspace` — all user preferences for this screen
+1. `useUserSettings()` provides `enableForceToken`, `enableEpicActions`, `enableWakeLock`, `useHyperspace`, and `enableLongPress` — all user preferences for this screen
 2. `useBaseArt(base, useHyperspace)` manages the ordered fallback chain and image load state
 3. `useSwuGame(base.hp)` manages the damage counter, epic action, and Force token (enabled + active) state
 4. `useWakeLock(enableWakeLock)` acquires a Screen Wake Lock on mount to prevent the screen sleeping during gameplay; the lock is automatically released when the component unmounts or the page becomes hidden, and reacquired when the page becomes visible again
@@ -544,7 +558,7 @@ If `enableFavourites` becomes `false` or the favourites list becomes empty while
    - `showForce = enableForceToken` — the Force button slot is shown for every base when enabled
    - `isForceBase = /the force is with you/i.test(base.epicAction)` — LOF bases whose ability explicitly creates a Force token
    - `effectiveForceEnabled = isForceBase || forceEnabled` — Force bases start enabled; others start locked until the user taps the dimmed icon
-6. Props passed to the view include art state, counter callbacks, `epicActionUsed`, `onEpicActionToggle`, `showEpicAction`, `forceEnabled` (= `effectiveForceEnabled`), `forceActive`, `onForceEnable`, `onForceToggle`, `showForce`, and `onSettings`
+6. Props passed to the view include art state, counter callbacks, `epicActionUsed`, `onEpicActionToggle`, `showEpicAction`, `forceEnabled` (= `effectiveForceEnabled`), `forceActive`, `onForceEnable`, `onForceToggle`, `showForce`, `enableLongPress`, and `onSettings`; the view calls `useDragScrubber(onIncrement, onDecrement, base.hp - count, count, enableLongPress)` directly to manage drag gesture state
 7. The left-side button column (top to bottom): back → Force icon (locked, ready, or overlay-active/greyed) when `showForce` → epic action button when `showEpicAction`; when Force is hidden the epic action button moves up to fill the gap
 8. The right-side button column (top to bottom): help → ⚙ settings
 9. View renders the card image, counter, and up to two overlays over the bottom portion of the card:
