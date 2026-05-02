@@ -177,14 +177,16 @@ describe('SwuSetupScreen', () => {
 
   // --- Rendering ---
 
-  it('Renders the app title and mode selector', () => {
+  it('Renders the app title and mode selector', async () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
     expect(screen.getByText('dmgCtrl')).toBeInTheDocument()
     expect(screen.getByText('Input Mode:')).toBeInTheDocument()
   })
 
-  it('Renders the app icon alongside the title', () => {
+  it('Renders the app icon alongside the title', async () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
     expect(screen.getByAltText('dmgCtrl')).toBeInTheDocument()
   })
 

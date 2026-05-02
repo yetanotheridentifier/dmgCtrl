@@ -11,7 +11,13 @@ export type DragIndicator = {
   clientY: number
 }
 
-export function useDragScrubber(onIncrement: () => void, onDecrement: () => void) {
+export function useDragScrubber(
+  onIncrement: () => void,
+  onDecrement: () => void,
+  maxIncrement: number,
+  maxDecrement: number,
+  enabled = true,
+) {
   const dragRef = useRef<{ type: '+' | '-'; startY: number; value: number; active: boolean } | null>(null)
   const [indicator, setIndicator] = useState<DragIndicator | null>(null)
   const dragApplied = useRef(false)
@@ -22,6 +28,9 @@ export function useDragScrubber(onIncrement: () => void, onDecrement: () => void
   }
 
   const handlePointerDown = (type: '+' | '-') => (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!enabled) return
+    const max = type === '+' ? maxIncrement : maxDecrement
+    if (max < 2) return
     if (e.currentTarget.setPointerCapture) e.currentTarget.setPointerCapture(e.pointerId)
     dragRef.current = { type, startY: e.clientY, value: 1, active: false }
   }
@@ -36,7 +45,9 @@ export function useDragScrubber(onIncrement: () => void, onDecrement: () => void
       if (indicator !== null) setIndicator(null)
       return
     }
-    const value = Math.min(MAX_VALUE, Math.round((delta - DEAD_ZONE) / PX_PER_STEP) + 2)
+    const max = dr.type === '+' ? maxIncrement : maxDecrement
+    const cap = Math.min(max, MAX_VALUE)
+    const value = Math.min(cap, Math.round((delta - DEAD_ZONE) / PX_PER_STEP) + 2)
     dr.value = value
     dr.active = true
     setIndicator({ type: dr.type, value, clientX: e.clientX, clientY: e.clientY })
