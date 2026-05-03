@@ -13,7 +13,9 @@ Core functionality:
 - **Force token tracking** — a Force icon button is available on every base; on Force bases it is immediately active, on other bases a single enable tap unlocks it for games where the Force is gained via a card or leader ability
 - **Screen wake lock** — prevents the device screen from sleeping while on the game screen
 - **Drag-to-scrub** — long-pressing and dragging upward on a `+` or `−` button increments or decrements by multiple damage points in one gesture; a floating number indicator shows the pending value; capped to remaining capacity (`+` is capped at remaining HP, `−` at current damage); gated by `enableLongPress` in user settings (on by default)
-- **User settings** — persistent preferences (hyperspace art, force token, epic actions, wake lock, favourites) accessible via the ⚙ button on the setup and game screens
+- **Game action log** — a scrollable overlay panel listing all game events (damage, epic action, Force token, round changes); accessible via a log button in the bottom-right of the game screen; the most recent undoable entry shows an Undo button that restores the previous game state; gated by `enableActionLog` in user settings (on by default)
+- **Round tracker** — a button in the bottom-left corner of the game screen that increments the round counter and adds a round entry to the action log; starts at Round 1 on game start; only visible when the action log is enabled
+- **User settings** — persistent preferences (hyperspace art, force token, epic actions, wake lock, action log, favourites) accessible via the ⚙ button on the setup and game screens
 - **Favourites** — star toggle on the setup screen marks a base as a favourite; a dedicated Favourites input mode shows a sorted dropdown of saved bases for quick reselection; saved bases can be managed in the Settings screen; gated by the Enable Favourites setting
 - **Offline capability** — PWA support means the app can be installed and used without a network connection
 
@@ -73,6 +75,8 @@ App
 │   ├── useSwuGame        (hook — damage counter, epic action, Force token enabled and active state)
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
 │   ├── useWakeLock       (hook — prevents screen sleep during gameplay via Screen Wake Lock API)
+│   ├── useGameLog        (hook — ordered list of game log entries with add/undo/reset; each entry records event type, message, colour, and previous game state snapshot)
+│   ├── GameLogOverlay    (view — scrollable log panel; auto-scrolls to latest entry; undo button on last undoable entry)
 │   └── SwuGameScreenView (view — renders counter, image, epic action token, Force token; ⚙ button always visible; calls useDragScrubber directly for drag-to-scrub gesture state)
 ├── SwuHelpScreen         (standalone screen — renders help.md content)
 └── SwuSettingsScreen     (container)
@@ -118,8 +122,9 @@ src/
   components/
     layout/
       AppScreenLayout.tsx  Shared full-screen layout wrapper (background, safe area)
-    icons.tsx               Reusable SVG icon components (BackIcon, ForwardIcon, HelpIcon, CogIcon)
+    icons.tsx               Reusable SVG icon components (BackIcon, ForwardIcon, HelpIcon, CogIcon, LogIcon)
     imagePreview.tsx        Pure view — renders card art or error message from props
+    GameLogOverlay.tsx      Game screen action log overlay — scrollable entry list; auto-scrolls to bottom; undo button on last undoable entry; round entries styled with blue gradient
     swuGameScreen.tsx       Game screen container
     swuGameScreenView.tsx   Game screen view (⚙ button always visible)
     swuHelpScreen.tsx       Help screen (renders help.md; title row: back button + icon + "Help" h1)
@@ -134,10 +139,11 @@ src/
     useDragScrubber.ts      Drag-to-scrub gesture — tracks pointer events on `+`/`−` counter buttons; exposes `dragIndicator` (type, value, clientX, clientY) and pointer event handlers; 15px dead zone before scrub activates; 14px per step; caps drag value at `Math.min(max, 20)`; suppresses synthetic click after drag; disabled when `enableLongPress` is false or the reachable cap is < 2
     useBases.ts             Fetches and caches the full list of Base cards
     useFavourites.ts        Favourites list — add/remove/clear operations with deduplication on key; sorted by set then card number ascending; persists FavouriteBase[] to localStorage under key `favourites`; UI gated by enableFavourites in useUserSettings (tickets #123, #124 complete)
+    useGameLog.ts           Ordered action log — add/undo/reset; each `GameLogEntry` records id, type, message, colour, `prevState` (GameState snapshot), and optional `undoable` flag (defaults to true; set false to suppress the undo button)
     useOrientation.ts       Detects portrait vs landscape; returns isPortrait (via matchMedia change event) and vmin (Math.min(screen.width, screen.height) — stable across rotations)
     useSwuGame.ts           Damage counter, epic action used state, Force token enabled and active state
     useSwuSetup.ts          Setup screen logic — filtering and auto-select
-    useUserSettings.ts      Persistent user preferences (useHyperspace, enableForceToken, enableEpicActions, enableWakeLock, enableFavourites, enableLongPress) backed by localStorage under key `user_settings`; all six default to `true`
+    useUserSettings.ts      React Context — persistent user preferences (useHyperspace, enableForceToken, enableEpicActions, enableWakeLock, enableFavourites, enableLongPress, enableActionLog) backed by localStorage under key `user_settings`; all seven default to `true`; `UserSettingsProvider` wraps the app in `main.tsx`
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
   utils/
@@ -192,9 +198,11 @@ scripts/
 
 ## 6. State Management
 
-The app uses **local React state only** — no global state library, no context.
+The app uses **local React state** with one shared React Context for user settings — no global state library.
 
-State is owned at the appropriate level:
+**`UserSettingsProvider`** (from `useUserSettings.ts`) wraps the entire app in `main.tsx`, giving every screen access to the same settings instance. Changes made in the settings screen propagate immediately to the game screen without requiring a game restart.
+
+All other state is owned at the component level:
 
 | State | Owner | How it flows |
 |---|---|---|
@@ -208,8 +216,10 @@ State is owned at the appropriate level:
 | Epic action used state | `useSwuGame` | Local to game screen; toggled by the epic action button; reset on each navigation to the game screen |
 | Force token enabled state | `useSwuGame` | Local to game screen; set to `true` by the enable tap on non-Force bases; combined with `isForceBase` in the container to derive `effectiveForceEnabled`; reset on each navigation |
 | Force token active state | `useSwuGame` | Local to game screen; toggled by the Force button and overlay; reset on each navigation to the game screen |
+| Action log entries | `useGameLog` | Local to game screen; array of `GameLogEntry` records; initial Round 1 entry added on mount (not undoable) via a `useRef` guard; reset on game reset |
+| Epic overlay dismissed | `swuGameScreen` | Local `epicOverlayDismissed` boolean; controls overlay visibility independently of `game.epicActionUsed`; set to `false` when epic action is marked; set to `true` by tapping the overlay when action log is disabled |
 | Art fallback index, image load state | `useBaseArt` | Local to whichever screen called it; reset when base changes |
-| User settings (hyperspace, force token, epic actions, wake lock, favourites, long press) | `useUserSettings` / localStorage | Persisted under `user_settings` as JSON; all six preferences (`useHyperspace`, `enableForceToken`, `enableEpicActions`, `enableWakeLock`, `enableFavourites`, `enableLongPress`) default to `true`; read by any screen that calls the hook |
+| User settings (hyperspace, force token, epic actions, wake lock, action log, favourites, long press) | `useUserSettings` Context / localStorage | Persisted under `user_settings` as JSON; all seven preferences (`useHyperspace`, `enableForceToken`, `enableEpicActions`, `enableWakeLock`, `enableFavourites`, `enableLongPress`, `enableActionLog`) default to `true`; shared via React Context — updates propagate immediately to all mounted consumers |
 | Favourites list | `useFavourites` / localStorage | Persisted under `favourites` as JSON array of `FavouriteBase`; sorted by set then card number ascending; deduplicated on `key`; UI visibility gated by `enableFavourites` in `useUserSettings` |
 | Selection mode (`base-selector` / `swudb-import` / `favourites`) | `SwuSetupScreen` / localStorage | Persisted under `pref_selection_mode`; defaults to `base-selector`; `'favourites'` is only restored on load if `enableFavourites` is true and the favourites list is non-empty; falls back to `'base-selector'` at runtime if either condition becomes false. On mode switch: entering `'swudb-import'` always clears the base selection and deck name; entering `'favourites'` clears the selection unless the current base is already in the favourites list; entering `'base-selector'` always preserves the current selection |
 | SWUDB URL input, validation error, deck name, loading state | `SwuSetupScreen` | Local; `swudbDeckName` remains `null` until a successful API load |
@@ -258,10 +268,11 @@ State is owned at the appropriate level:
 
 1. Container reads `enableEpicActions` from `useUserSettings()` and computes `showEpicAction = enableEpicActions && /epic action/i.test(base.epicAction)` — excludes Mystic Monastery (whose text is "Action:", not "Epic Action:")
 2. When `showEpicAction` is true, the view renders the epic action button; its position in the left column adjusts based on whether `showForce` is also true
-3. User taps the epic action button — view calls `onEpicActionToggle` prop
-4. Container delegates to `useSwuGame` — `toggleEpicAction()` flips `epicActionUsed`
-5. View re-renders: epic action button dims to grey; a gold token overlay appears over the lower portion of the card
-6. Tapping the overlay or the button again calls `onEpicActionToggle`, restoring the ready state
+3. User taps the epic action button — view calls `onEpicActionMark` prop; the button becomes `disabled`
+4. Container calls `game.markEpicActionUsed()`, adds an epic log entry via `useGameLog`, and resets `epicOverlayDismissed` to `false`
+5. View derives `epicActionOverlayVisible = game.epicActionUsed && !epicOverlayDismissed` and re-renders: button is disabled; a gold token overlay appears over the lower portion of the card
+6. **When action log is enabled:** the overlay stays visible; undo is performed via the log's Undo button, which calls `undoLast()` to restore the previous game state
+7. **When action log is disabled:** the overlay has an `onClick` handler (`onEpicActionOverlayDismiss`); tapping it sets `epicOverlayDismissed = true`, hiding the overlay without reverting game state
 
 ### Example flow: Force token
 
@@ -287,7 +298,7 @@ When `epicActionUsed && showEpicAction && forceActive && showForce` are all true
 2. `App` pushes the current screen onto `backStack` and sets `screen = 'settings'`
 3. `SwuSettingsScreen` renders — user adjusts preferences; each toggle writes immediately to localStorage via `useUserSettings`
 4. User taps the back button — `App` pops the top of `backStack` and sets `screen` to that value, returning to wherever they came from
-5. The updated preferences take effect next time the relevant screen mounts (e.g. game screen reads `enableForceToken` on start)
+5. Because `useUserSettings` is a shared React Context, the updated preferences are reflected immediately in all mounted consumers — the game screen does not need to be restarted
 
 ---
 
@@ -552,19 +563,22 @@ If `enableFavourites` becomes `false` or the favourites list becomes empty while
 1. `useUserSettings()` provides `enableForceToken`, `enableEpicActions`, `enableWakeLock`, `useHyperspace`, and `enableLongPress` — all user preferences for this screen
 2. `useBaseArt(base, useHyperspace)` manages the ordered fallback chain and image load state
 3. `useSwuGame(base.hp)` manages the damage counter, epic action, and Force token (enabled + active) state
-4. `useWakeLock(enableWakeLock)` acquires a Screen Wake Lock on mount to prevent the screen sleeping during gameplay; the lock is automatically released when the component unmounts or the page becomes hidden, and reacquired when the page becomes visible again
-5. The container computes:
+4. `useGameLog()` manages the ordered action log; the container adds entries on counter changes, epic action mark, Force token toggle, and round increment; an initial Round 1 entry (not undoable) is added once on mount via a `logInitialized` useRef guard (prevents React StrictMode double-invocation)
+5. `useWakeLock(enableWakeLock)` acquires a Screen Wake Lock on mount to prevent the screen sleeping during gameplay; the lock is automatically released when the component unmounts or the page becomes hidden, and reacquired when the page becomes visible again
+6. The container computes:
    - `showEpicAction = enableEpicActions && /epic action/i.test(base.epicAction)`
    - `showForce = enableForceToken` — the Force button slot is shown for every base when enabled
    - `isForceBase = /the force is with you/i.test(base.epicAction)` — LOF bases whose ability explicitly creates a Force token
    - `effectiveForceEnabled = isForceBase || forceEnabled` — Force bases start enabled; others start locked until the user taps the dimmed icon
-6. Props passed to the view include art state, counter callbacks, `epicActionUsed`, `onEpicActionToggle`, `showEpicAction`, `forceEnabled` (= `effectiveForceEnabled`), `forceActive`, `onForceEnable`, `onForceToggle`, `showForce`, `enableLongPress`, and `onSettings`; the view calls `useDragScrubber(onIncrement, onDecrement, base.hp - count, count, enableLongPress)` directly to manage drag gesture state
-7. The left-side button column (top to bottom): back → Force icon (locked, ready, or overlay-active/greyed) when `showForce` → epic action button when `showEpicAction`; when Force is hidden the epic action button moves up to fill the gap
-8. The right-side button column (top to bottom): help → ⚙ settings
-9. View renders the card image, counter, and up to two overlays over the bottom portion of the card:
-   - **Epic action token** (gold, "Epic Action Used" text and starburst watermark): when `epicActionUsed && showEpicAction`
-   - **Force token** (blue, "The Force is With You"): when `forceActive && showForce`
-   - When **both** are active, the view computes `bothOverlaysActive = true` and renders them side by side (epic action left, Force right), each at half width
+   - `epicActionOverlayVisible = game.epicActionUsed && !epicOverlayDismissed` — separates overlay visibility from game state
+7. Key props passed to the view: art state, counter callbacks, `epicActionUsed`, `epicActionOverlayVisible`, `onEpicActionMark`, `onEpicActionOverlayDismiss` (only when action log is disabled), `showEpicAction`, force state, `enableActionLog`, `round`, `onRoundIncrement`, `showLog`, `onToggleLog`, `logEntries`, `onLogUndo`; the view calls `useDragScrubber` directly to manage drag gesture state
+8. The left-side button column (top to bottom): back → Force icon (locked, ready, or overlay-active/greyed) when `showForce` → epic action button when `showEpicAction`; when Force is hidden the epic action button moves up to fill the gap
+9. The right-side button column (top to bottom): help → ⚙ settings
+10. The bottom row (when action log is enabled): round counter button (bottom-left, blue gradient header) → log button (bottom-right, ☰ icon)
+11. View renders the card image, counter, and up to two overlays over the bottom portion of the card:
+    - **Epic action token** (gold, "Epic Action Used"): when `epicActionOverlayVisible && showEpicAction`
+    - **Force token** (blue, "The Force is With You"): when `forceActive && showForce`
+    - When **both** are active, `bothOverlaysActive = true` renders them side by side (epic action left, Force right), each at half width
 
 ### Settings screen
 
@@ -574,9 +588,9 @@ The settings screen is accessible from both the setup and game screens via the �
 - `SwuSettingsScreen` (container) calls `useUserSettings()` and `useFavourites()` to read and write preferences and manage the saved bases list
 - `SwuSettingsScreenView` (view) renders a header row (back button, icon, "Settings" h1, help button) and toggle list
 - Each toggle writes immediately to localStorage via `useUserSettings` — there is no save/cancel step
-- The five toggles: **Use Hyperspace Art**, **Enable Force Token**, **Enable Epic Actions**, **Enable Screen Wake Lock**, **Enable Favourites**
+- The six toggles: **Use Hyperspace Art**, **Enable Force Token**, **Enable Epic Actions**, **Enable Screen Wake Lock**, **Enable Action Log**, **Enable Favourites**
 - When **Enable Favourites** is on, a saved-bases list appears directly below the toggle (inset with a left accent border to show hierarchy): each entry shows `SET: Name — HPHp (Aspect)` with a Remove button; a Clear All button (with a two-step inline Confirm/Cancel) appears when the list is non-empty; "No favourites saved" is shown when the list is empty
-- **Landscape layout**: two `role="group"` columns — "General settings" (first four toggles) on the left, "Favourites settings" (Enable Favourites toggle + list) on the right; each column scrolls independently. Portrait: single scrollable column.
+- **Landscape layout**: two `role="group"` columns — "General settings" (first five toggles: Hyperspace Art, Force Token, Epic Actions, Wake Lock, Action Log) on the left, "Favourites settings" (Enable Favourites toggle + list) on the right; each column scrolls independently. Portrait: single scrollable column.
 - `SwuSettingsScreenView` calls `useOrientation()` directly (not via props) and applies `fontFamily: 'Helvetica, Arial, sans-serif'` to prevent iOS Dynamic Type from overriding font sizes
 
 ### Screen Wake Lock
@@ -748,7 +762,7 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 
 ### Architecture
 
-- **Global state** — if the app grows to more screens or games, consider React Context or a lightweight state manager (e.g. Zustand) to avoid prop drilling
+- **Global state** — React Context is now used for user settings; if the app grows further, a lightweight state manager (e.g. Zustand) may be worth adopting for broader shared state
 - **Multi-game support** — the `Base` type and `useBases` hook are SWU-specific; a game-agnostic data abstraction layer would be needed for additional games
 
 ### Data
@@ -768,12 +782,16 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | Term | Definition |
 |---|---|
 | **Base** | A card type in Star Wars Unlimited representing a location that acts as the player's "health bar". Each base has an HP value (typically 24–35). |
-| **Epic Action** | A special ability on some base cards that can be triggered once per game. The game screen shows an epic action button when the base has an epic action and `enableEpicActions` is true in user settings; tapping it marks the ability as used and renders a gold token overlay. Tapping the overlay or the button again reverts the state. The button is only shown when the base's `epicAction` text contains the phrase 'Epic Action' (case-insensitive). Passive-effect bases and Force trigger bases are therefore excluded. |
+| **Epic Action** | A special ability on some base cards that can be triggered once per game. The game screen shows an epic action button when the base has an epic action and `enableEpicActions` is true in user settings; tapping it marks the ability as used, adds a log entry, and renders a gold token overlay. The button is then disabled. When the action log is enabled, undo is performed via the log's Undo button. When the action log is disabled, tapping the overlay dismisses it visually without reverting game state. The button is only shown when the base's `epicAction` text contains the phrase 'Epic Action' (case-insensitive). Passive-effect bases and Force trigger bases are therefore excluded. |
 | **Epic action token** | The in-app UI element (a translucent yellow rectangle with a gold border, "Epic Action Used" text, and a starburst watermark) that overlays the lower portion of the base card when the epic action has been used, mirroring the physical token used in the tabletop game. When the Force token is also active, it occupies the left half of the overlay area. |
 | **Favourites** | A user-curated list of bases for quick reselection. Managed by `useFavourites`; persisted to localStorage under `favourites`. Visibility gated by `enableFavourites` in `useUserSettings` (default: `true`). Setup screen integration (star toggle + Favourites mode) added in ticket #123. Settings screen management UI (remove individual, clear all) added in ticket #124. |
 | **Force** | A recurring ability on some LOF base cards, identified by the phrase "The Force is with you" in their `epicAction` text. Force bases start the game with the Force button already enabled. Any base can also gain the Force via card or leader abilities — the locked Force icon is available on all bases for this purpose. |
 | **Force token button** | The blue icon button (showing `dmgCtrl-force-token.png`) that appears in the first slot below the back button when `forceEnabled` is true. Tapping it sets `forceActive = true` and renders the Force token overlay. On non-Force bases, the slot first shows a locked/dimmed version; tapping the dimmed icon once enables it. |
 | **Force token overlay** | The in-app UI element (a royal-blue rectangle with a light-blue border and a "The Force is With You" label) that overlays the lower portion of the base card when `forceActive` is true. A translucent watermark of `dmgCtrl-force-token.png` appears behind the text. Tapping the overlay returns `forceActive` to `false`. When the epic action token is also active, it occupies the right half of the overlay area. |
+| **Action log** | The scrollable game event log shown as an overlay on the game screen when `enableActionLog` is true. Rendered by `GameLogOverlay`. Managed by `useGameLog`. Each entry shows a coloured left strip, event message, and (for the last undoable entry) an Undo button. Round entries are styled with a blue gradient background. |
+| **Round tracker** | A round counter button in the bottom-left corner of the game screen. Increments the round number and adds a round entry to the action log on each tap. Starts at Round 1 on game start (initial entry is not undoable). Only visible when the action log is enabled. |
+| **GameLogEntry** | The record stored by `useGameLog` for each action. Fields: `id` (UUID), `type` (string tag for styling, e.g. `round`), `message`, `color` (left strip accent), `prevState` (GameState snapshot for undo), optional `undoable` (defaults to true; set false to suppress the Undo button). |
+| **UserSettingsProvider** | The React Context provider from `useUserSettings.ts`. Wraps the app in `main.tsx` so all screens share one settings instance. Updates propagate immediately to all mounted consumers. |
 | **Hyperspace** | A premium variant of a card with alternate artwork. In this app, the `useHyperspace` setting (in `useUserSettings`) controls whether the Hyperspace variant is preferred on the game screen. |
 | **Loading screen** | The first screen shown on app start (`SwuLoadingScreen`). Displays the app icon and "LOADING" text. Has a **1-second minimum display time**: `onReady` is called only when both the data has loaded and the 1-second timer has elapsed. Automatically transitions to the setup screen. |
 | **Standard art** | The default card artwork. `frontArt` is the swu-db.com hi-res version (1560×1120); `frontArtLowRes` is the swuapi.com version (400×286). |

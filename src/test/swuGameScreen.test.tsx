@@ -448,6 +448,15 @@ describe('SwuGameScreen', () => {
   })
 
 
+
+  it('Clicking epic action button when already used does not add another log entry', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('epic-action-btn'))
+    await user.click(screen.getByTestId('epic-action-btn'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getAllByText('Epic action used')).toHaveLength(1)
+  })
   it('Clicking the overlay dismisses it when action log is disabled', async () => {
     mockUserSettings.enableActionLog = false
     const user = userEvent.setup()

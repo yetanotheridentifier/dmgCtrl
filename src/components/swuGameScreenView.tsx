@@ -241,6 +241,7 @@ function SwuGameScreenView({
         <button
           data-testid="epic-action-btn"
           aria-label="Epic action"
+          disabled={epicActionUsed}
           onClick={onEpicActionMark}
           style={{
             position: 'absolute',
@@ -747,7 +748,7 @@ function SwuGameScreenView({
           minWidth: '36px',
           minHeight: '36px',
           padding: 0,
-          background: 'transparent',
+          background: 'linear-gradient(to bottom, rgba(59,130,246,0.25) 30%, transparent 65%)',
           border: '2px solid var(--color-ui-border)',
           borderRadius: '8px',
           color: 'var(--color-ui-border-muted)',
@@ -764,8 +765,6 @@ function SwuGameScreenView({
         }}
       >
         <span style={{
-          borderBottom: '1px solid var(--color-ui-border)',
-          background: 'rgba(59,130,246,0.2)',
           textAlign: 'center',
           fontSize: 'clamp(0.45rem, 1vw, 0.65rem)',
           fontWeight: '300',
