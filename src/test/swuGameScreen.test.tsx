@@ -1089,4 +1089,111 @@ describe('SwuGameScreen', () => {
     expect(screen.getByTestId('round-counter')).toHaveTextContent('1')
   })
 
+  // --- Log entry content ---
+
+  it('Single tap increment adds a Hit +1 entry to the log', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Hit +1')).toBeInTheDocument()
+  })
+
+  it('Single tap decrement adds a Heal −1 entry to the log', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByText('−'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Heal −1')).toBeInTheDocument()
+  })
+
+  it('Drag increment logs the full drag amount as a single entry', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const plusBtn = screen.getByText('+')
+    fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(plusBtn, { clientY: 272, pointerId: 1 })
+    fireEvent.pointerUp(plusBtn, { pointerId: 1 })
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Hit +3')).toBeInTheDocument()
+    expect(screen.queryByText('Hit +1')).not.toBeInTheDocument()
+  })
+
+  it('Drag decrement logs the full drag amount as a single entry', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const plusBtn = screen.getByText('+')
+    for (let i = 0; i < 5; i++) fireEvent.click(plusBtn)
+    const minusBtn = screen.getByText('−')
+    fireEvent.pointerDown(minusBtn, { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(minusBtn, { clientY: 272, pointerId: 1 })
+    fireEvent.pointerUp(minusBtn, { pointerId: 1 })
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Heal −3')).toBeInTheDocument()
+    expect(screen.queryByText('Heal −1')).not.toBeInTheDocument()
+  })
+
+  it('Epic action adds an entry to the log', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('epic-action-btn'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Epic action used')).toBeInTheDocument()
+  })
+
+  it('Force gain adds an entry to the log', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('force-btn'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Force gained')).toBeInTheDocument()
+  })
+
+  it('Force dismiss adds an entry to the log', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('force-btn'))
+    await user.click(screen.getByTestId('force-btn-active'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Force used')).toBeInTheDocument()
+  })
+
+  it('Monastery action adds an entry to the log', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('mystic-action-btn'))
+    await user.click(screen.getByTestId('force-token'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Force gained (monastery)')).toBeInTheDocument()
+  })
+
+  it('Round increment adds an entry to the log', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Round 2')).toBeInTheDocument()
+  })
+
+  it('Multiple actions appear as separate entries in the log', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByTestId('force-btn'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Hit +1')).toBeInTheDocument()
+    expect(screen.getByText('Force gained')).toBeInTheDocument()
+  })
+
+  it('After undo, the undone entry is no longer shown in the log', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Hit +1')).toBeInTheDocument()
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.queryByText('Hit +1')).not.toBeInTheDocument()
+  })
+
 })
