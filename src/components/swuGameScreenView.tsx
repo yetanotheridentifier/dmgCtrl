@@ -3,7 +3,7 @@ import type { GameLogEntry } from '../hooks/useGameLog'
 import { useDragScrubber } from '../hooks/useDragScrubber'
 import AppScreenLayout from './layout/AppScreenLayout'
 import GameLogOverlay from './GameLogOverlay'
-import { BackIcon, CogIcon, HelpIcon } from './icons'
+import { BackIcon, CogIcon, HelpIcon, LogIcon } from './icons'
 
 const CARD_NATURAL_WIDTH = 1560
 const CARD_NATURAL_HEIGHT = 1120
@@ -577,16 +577,19 @@ function SwuGameScreenView({
             </button>
 
             {/* Counter */}
-            <div style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '20vmin',
-              fontWeight: '300',
-              color: 'var(--color-text-primary)',
-              textShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.4), 0 0 8px rgba(0,0,0,1)',
-            }}>
+            <div
+              data-testid="game-counter"
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '20vmin',
+                fontWeight: '300',
+                color: 'var(--color-text-primary)',
+                textShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.4), 0 0 8px rgba(0,0,0,1)',
+              }}
+            >
               {count}
             </div>
 
@@ -726,35 +729,58 @@ function SwuGameScreenView({
       </div>
 
       {/* Round counter — bottom-left */}
-      <div
+      <button
         data-testid="round-counter"
         onClick={onRoundIncrement}
         style={{
           position: 'absolute',
           bottom: 'calc(env(safe-area-inset-bottom) + 2vw)',
           left: 'calc(env(safe-area-inset-left) + 2vw)',
+          width: '5vw',
+          height: '5vw',
           minWidth: '36px',
           minHeight: '36px',
-          padding: '0 1vw',
-          background: 'rgba(0,0,0,0.45)',
+          padding: 0,
+          background: 'transparent',
           border: '2px solid var(--color-ui-border)',
           borderRadius: '8px',
-          color: 'var(--color-text-primary)',
-          fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
+          color: 'var(--color-ui-border-muted)',
           cursor: 'pointer',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'stretch',
+          zIndex: 10,
+          WebkitTapHighlightColor: 'transparent',
+          overflow: 'hidden',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+          boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
+        }}
+      >
+        <span style={{
+          borderBottom: '1px solid var(--color-ui-border)',
+          textAlign: 'center',
+          fontSize: 'clamp(0.45rem, 1vw, 0.65rem)',
+          fontWeight: '300',
+          letterSpacing: '0.05em',
+          color: 'var(--color-ui-border-muted)',
+          lineHeight: 1.4,
+          padding: '0 2px',
+          flexShrink: 0,
+        }}>Round</span>
+        <span style={{
+          flex: 1,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 10,
-          WebkitTapHighlightColor: 'transparent',
-          userSelect: 'none',
-          WebkitUserSelect: 'none',
-        }}
-      >
-        R{round}
-      </div>
+          fontSize: 'clamp(0.7rem, 1.8vw, 1.1rem)',
+          fontWeight: '300',
+        }}>
+          {round}
+        </span>
+      </button>
 
-      {/* Log button — bottom-right, landscape only */}
+      {/* Log button — bottom-right, aligned with round counter */}
       {enableActionLog && (
         <button
           data-testid="log-btn"
@@ -763,23 +789,24 @@ function SwuGameScreenView({
             position: 'absolute',
             bottom: 'calc(env(safe-area-inset-bottom) + 2vw)',
             right: 'calc(env(safe-area-inset-right) + 2vw)',
+            width: '5vw',
+            height: '5vw',
             minWidth: '36px',
             minHeight: '36px',
-            padding: '0 1vw',
-            background: 'rgba(0,0,0,0.45)',
+            background: 'transparent',
             border: '2px solid var(--color-ui-border)',
             borderRadius: '8px',
             color: 'var(--color-ui-border-muted)',
-            fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 10,
             WebkitTapHighlightColor: 'transparent',
+            boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
           }}
         >
-          Log
+          <LogIcon />
         </button>
       )}
 

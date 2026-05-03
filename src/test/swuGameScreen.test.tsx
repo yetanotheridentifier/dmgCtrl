@@ -216,7 +216,7 @@ describe('SwuGameScreen', () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByText('+'))
-    expect(screen.getByText('1')).toBeInTheDocument()
+    expect(screen.getByTestId('game-counter')).toHaveTextContent('1')
   })
 
   it('Decrements the counter when − is clicked', async () => {
@@ -225,7 +225,7 @@ describe('SwuGameScreen', () => {
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('−'))
-    expect(screen.getByText('1')).toBeInTheDocument()
+    expect(screen.getByTestId('game-counter')).toHaveTextContent('1')
   })
 
   it('Does not decrement below zero', async () => {
@@ -820,7 +820,7 @@ describe('SwuGameScreen', () => {
     fireEvent.pointerMove(plusBtn, { clientY: 290, pointerId: 1 })
     fireEvent.pointerUp(plusBtn, { pointerId: 1 })
     fireEvent.click(plusBtn)
-    expect(screen.getByText('1')).toBeInTheDocument()
+    expect(screen.getByTestId('game-counter')).toHaveTextContent('1')
   })
 
   it('pointerCancel during drag does not apply any change', () => {
@@ -839,7 +839,7 @@ describe('SwuGameScreen', () => {
     fireEvent.pointerMove(plusBtn, { clientY: 272, pointerId: 1 })
     fireEvent.pointerCancel(plusBtn, { pointerId: 1 })
     fireEvent.click(plusBtn)
-    expect(screen.getByText('1')).toBeInTheDocument()
+    expect(screen.getByTestId('game-counter')).toHaveTextContent('1')
   })
 
   it('Drag indicator shows correct label while dragging past dead zone', () => {
@@ -1194,6 +1194,25 @@ describe('SwuGameScreen', () => {
     expect(screen.getByText('Hit +1')).toBeInTheDocument()
     await user.click(screen.getByTestId('log-undo-btn'))
     expect(screen.queryByText('Hit +1')).not.toBeInTheDocument()
+  })
+
+  // --- Round 1 initial entry ---
+
+  it('log starts with a Round 1 entry', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Round 1')).toBeInTheDocument()
+  })
+
+  it('undo button is not shown when Round 1 is the last entry', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByText('Round 1')).toBeInTheDocument()
+    expect(screen.queryByTestId('log-undo-btn')).not.toBeInTheDocument()
   })
 
 })

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import type { GameLogEntry } from '../hooks/useGameLog'
 
 interface Props {
@@ -6,15 +7,20 @@ interface Props {
 }
 
 function GameLogOverlay({ entries, onUndo }: Props) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+  }, [entries])
   return (
     <div
+      ref={scrollRef}
       data-testid="log-overlay"
       style={{
         position: 'absolute',
+        top: 'calc(env(safe-area-inset-top) + 9vw)',
         bottom: 'calc(env(safe-area-inset-bottom) + 9vw)',
         right: 'calc(env(safe-area-inset-right) + 2vw)',
-        width: 'clamp(200px, 28vw, 360px)',
-        maxHeight: '60vh',
+        width: 'clamp(120px, 18vw, 240px)',
         overflowY: 'auto',
         background: 'rgba(0,0,0,0.85)',
         border: '2px solid var(--color-ui-border)',
@@ -39,15 +45,20 @@ function GameLogOverlay({ entries, onUndo }: Props) {
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: '0.5rem',
-            padding: '0.2rem 0.25rem',
+            paddingTop: entry.type === 'round' && i > 0 ? '0.35rem' : '0.2rem',
+            paddingRight: '0.25rem',
+            paddingBottom: '0.2rem',
+            paddingLeft: '0.25rem',
+            borderTop: entry.type === 'round' && i > 0 ? '1px solid rgba(147,197,253,0.4)' : undefined,
+            marginTop: entry.type === 'round' && i > 0 ? '0.15rem' : undefined,
             borderRadius: '4px',
-            background: i === entries.length - 1 ? 'rgba(255,255,255,0.05)' : 'transparent',
+            background: entry.type === 'round' ? 'linear-gradient(to bottom, rgba(59,130,246,0.2) 0%, transparent 100%)' : i === entries.length - 1 ? 'rgba(255,255,255,0.08)' : 'transparent',
           }}
         >
           <span style={{ color: entry.color, fontSize: 'clamp(0.7rem, 1.5vw, 0.9rem)', flex: 1 }}>
             {entry.message}
           </span>
-          {i === entries.length - 1 && (
+          {i === entries.length - 1 && entry.undoable !== false && (
             <button
               data-testid="log-undo-btn"
               onClick={onUndo}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Base } from '../hooks/useBases'
 import { useSwuGame } from '../hooks/useSwuGame'
 import { useGameLog } from '../hooks/useGameLog'
@@ -82,6 +82,10 @@ function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
     log.reset()
     onBack()
   }
+
+  useEffect(() => {
+    log.add({ type: 'round', message: 'Round 1', color: '#ffffff', prevState: game.snapshot(), undoable: false })
+  }, [])
 
   if (isPortrait) {
     return (

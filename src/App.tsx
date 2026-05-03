@@ -14,6 +14,7 @@ function App() {
   const [backStack, setBackStack] = useState<Screen[]>([])
   const [selectedBase, setSelectedBase] = useState<Base | null>(null)
   const [lastSelection, setLastSelection] = useState<InitialSelection | null>(null)
+  const [isInGame, setIsInGame] = useState(false)
   const { loading } = useBases()
 
   const handleReady = () => setScreen('setup')
@@ -21,10 +22,14 @@ function App() {
   const handleConfirm = (base: Base) => {
     setSelectedBase(base)
     setLastSelection({ set: base.set, aspect: base.aspects[0] ?? 'None', key: `${base.set}-${base.number}` })
+    setIsInGame(true)
     setScreen('game')
   }
 
-  const handleBack = () => setScreen('setup')
+  const handleBack = () => {
+    setIsInGame(false)
+    setScreen('setup')
+  }
 
   const handleHelp = () => {
     setBackStack(prev => [...prev, screen])
@@ -46,14 +51,6 @@ function App() {
     return <SwuLoadingScreen loading={loading} onReady={handleReady} />
   }
 
-  if (screen === 'help') {
-    return <SwuHelpScreen onBack={handleOverlayBack} />
-  }
-
-  if (screen === 'settings') {
-    return <SwuSettingsScreen onBack={handleOverlayBack} onHelp={handleHelp} />
-  }
-
   if (screen === 'setup') {
     return (
       <SwuSetupScreen
@@ -65,13 +62,22 @@ function App() {
     )
   }
 
+  // Keep game screen mounted while navigating to help/settings so game state is preserved
   return (
-    <SwuGameScreen
-      base={selectedBase!}
-      onBack={handleBack}
-      onHelp={handleHelp}
-      onSettings={handleSettings}
-    />
+    <>
+      {isInGame && selectedBase && (
+        <div style={screen === 'game' ? undefined : { display: 'none' }}>
+          <SwuGameScreen
+            base={selectedBase}
+            onBack={handleBack}
+            onHelp={handleHelp}
+            onSettings={handleSettings}
+          />
+        </div>
+      )}
+      {screen === 'help' && <SwuHelpScreen onBack={handleOverlayBack} />}
+      {screen === 'settings' && <SwuSettingsScreen onBack={handleOverlayBack} onHelp={handleHelp} />}
+    </>
   )
 }
 

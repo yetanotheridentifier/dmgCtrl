@@ -9,6 +9,7 @@ export interface GameLogEntry {
   message: string
   color: string
   prevState: GameState
+  undoable?: boolean
 }
 
 export function useGameLog() {
