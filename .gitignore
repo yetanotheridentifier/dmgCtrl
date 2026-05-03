@@ -32,3 +32,6 @@ docs/base-data-summary.json
 
 # AI assistant working instructions (personal workflow, not for contributors)
 CLAUDE.md
+.claude
+# Temporary scratch files (local only)
+.scratch
