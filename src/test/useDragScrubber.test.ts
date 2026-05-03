@@ -1,20 +1,21 @@
+import React from 'react'
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useDragScrubber } from '../hooks/useDragScrubber'
 
 // Minimum viable mock events -- only the fields the hook reads
-const pointerDown = (clientY) => ({
+const pointerDown = (clientY: number) => ({
   clientY, clientX: 100, currentTarget: { setPointerCapture: vi.fn() },
 })
 
-const pointerMove = (clientY) => ({ clientY, clientX: 100 })
+const pointerMove = (clientY: number) => ({ clientY, clientX: 100 })
 
 // startY=300, FAR_DRAG_END_Y=100 gives delta=200, producing value well above any cap in tests.
 const FAR_DRAG_END_Y = 100
 
-function drag(result, type, endY = FAR_DRAG_END_Y) {
-  act(() => { result.current.handlePointerDown(type)(pointerDown(300)) })
-  act(() => { result.current.handlePointerMove(pointerMove(endY)) })
+function drag(result: { current: ReturnType<typeof useDragScrubber> }, type: '+' | '-', endY = FAR_DRAG_END_Y) {
+  act(() => { result.current.handlePointerDown(type)(pointerDown(300) as unknown as React.PointerEvent<HTMLButtonElement>) })
+  act(() => { result.current.handlePointerMove(pointerMove(endY) as unknown as React.PointerEvent<HTMLButtonElement>) })
 }
 
 describe('useDragScrubber -- dynamic upper bounds', () => {

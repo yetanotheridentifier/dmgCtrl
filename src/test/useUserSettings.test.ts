@@ -106,42 +106,42 @@ describe('useUserSettings', () => {
   it('saves to localStorage when setUseHyperspace is called', () => {
     const { result } = renderHook(() => useUserSettings())
     act(() => result.current.setUseHyperspace(false))
-    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)[1])
+    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
     expect(saved.useHyperspace).toBe(false)
   })
 
   it('saves to localStorage when setEnableForceToken is called', () => {
     const { result } = renderHook(() => useUserSettings())
     act(() => result.current.setEnableForceToken(false))
-    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)[1])
+    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
     expect(saved.enableForceToken).toBe(false)
   })
 
   it('saves to localStorage when setEnableEpicActions is called', () => {
     const { result } = renderHook(() => useUserSettings())
     act(() => result.current.setEnableEpicActions(false))
-    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)[1])
+    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
     expect(saved.enableEpicActions).toBe(false)
   })
 
   it('saves to localStorage when setEnableWakeLock is called', () => {
     const { result } = renderHook(() => useUserSettings())
     act(() => result.current.setEnableWakeLock(false))
-    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)[1])
+    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
     expect(saved.enableWakeLock).toBe(false)
   })
 
   it('saves to localStorage when setEnableFavourites is called', () => {
     const { result } = renderHook(() => useUserSettings())
     act(() => result.current.setEnableFavourites(true))
-    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)[1])
+    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
     expect(saved.enableFavourites).toBe(true)
   })
 
   it('saves to localStorage when setEnableActionLog is called', () => {
     const { result } = renderHook(() => useUserSettings())
     act(() => result.current.setEnableActionLog(false))
-    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)[1])
+    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
     expect(saved.enableActionLog).toBe(false)
   })
 
