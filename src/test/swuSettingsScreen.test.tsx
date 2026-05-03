@@ -15,6 +15,8 @@ const mockUserSettings = vi.hoisted(() => ({
   setEnableEpicActions: vi.fn(),
   setEnableWakeLock: vi.fn(),
   setEnableFavourites: vi.fn(),
+  enableActionLog: true,
+  setEnableActionLog: vi.fn(),
 }))
 vi.mock('../hooks/useUserSettings', () => ({
   useUserSettings: () => mockUserSettings,
@@ -51,6 +53,7 @@ beforeEach(() => {
   mockUserSettings.enableEpicActions = true
   mockUserSettings.enableWakeLock = true
   mockUserSettings.enableFavourites = true
+  mockUserSettings.enableActionLog = true
   mockFavourites.favourites = []
   mockOrientation.isPortrait = true
 })
@@ -132,6 +135,18 @@ describe('SwuSettingsScreen', () => {
     render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('checkbox', { name: /enable screen wake lock/i }))
     expect(mockUserSettings.setEnableWakeLock).toHaveBeenCalledWith(false)
+  })
+
+  it('renders Enable Action Log toggle in checked state', () => {
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByRole('checkbox', { name: /enable action log/i })).toBeChecked()
+  })
+
+  it('calls setEnableActionLog(false) when action log toggle is clicked', async () => {
+    const user = userEvent.setup()
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByRole('checkbox', { name: /enable action log/i }))
+    expect(mockUserSettings.setEnableActionLog).toHaveBeenCalledWith(false)
   })
 
   // --- Navigation ---
