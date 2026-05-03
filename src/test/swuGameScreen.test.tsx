@@ -20,6 +20,8 @@ const mockUserSettings = vi.hoisted(() => ({
   setEnableWakeLock: vi.fn(),
   enableLongPress: true,
   setEnableLongPress: vi.fn(),
+  enableActionLog: true,
+  setEnableActionLog: vi.fn(),
 }))
 vi.mock('../hooks/useUserSettings', () => ({
   useUserSettings: () => mockUserSettings,
@@ -166,6 +168,7 @@ describe('SwuGameScreen', () => {
     mockUserSettings.enableWakeLock = true
     mockUserSettings.useHyperspace = false
     mockUserSettings.enableLongPress = true
+    mockUserSettings.enableActionLog = true
   })
 
   // --- Rendering ---
@@ -1072,7 +1075,8 @@ describe('SwuGameScreen', () => {
     await user.click(screen.getByTestId('mystic-action-btn'))
     await user.click(screen.getByTestId('force-token'))
     await user.click(screen.getByTestId('log-btn'))
-    await user.click(screen.getByTestId('log-undo-btn'))
+    await user.click(screen.getByTestId('log-undo-btn')) // undo force dismiss
+    await user.click(screen.getByTestId('log-undo-btn')) // undo monastery action
     expect(screen.getByTestId('mystic-action-btn')).toHaveTextContent('3')
   })
 

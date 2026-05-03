@@ -1,6 +1,7 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import { Base } from '../hooks/useBases'
 import { useSwuGame } from '../hooks/useSwuGame'
+import { useGameLog } from '../hooks/useGameLog'
 import { useBaseArt } from '../hooks/useBaseArt'
 import { useOrientation } from '../hooks/useOrientation'
 import { useWakeLock } from '../hooks/useWakeLock'
@@ -17,27 +18,76 @@ interface Props {
 }
 
 function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
-  const { enableForceToken, enableEpicActions, enableWakeLock, useHyperspace, enableLongPress } = useUserSettings()
+  const { enableForceToken, enableEpicActions, enableWakeLock, useHyperspace, enableLongPress, enableActionLog } = useUserSettings()
   const art = useBaseArt(base, useHyperspace)
-  const { count, incrementBy, decrementBy, epicActionUsed, markEpicActionUsed, forceActive, toggleForce, forceEnabled, enableForce } = useSwuGame(base.hp)
+  const game = useSwuGame(base.hp)
+  const log = useGameLog()
   const { isPortrait } = useOrientation()
   useWakeLock(enableWakeLock)
+  const [showLog, setShowLog] = useState(false)
 
   const isMysticMonastery = base.set === 'LOF' && base.number === '022'
   const isForceBase = /the force is with you/i.test(base.epicAction)
-  const effectiveForceEnabled = isForceBase || forceEnabled
+  const effectiveForceEnabled = isForceBase || game.forceEnabled
 
-  const [mysticUsesRemaining, setMysticUsesRemaining] = useState(3)
-  const gainForceViaAction = () => {
-    setMysticUsesRemaining(n => n - 1)
-    toggleForce()
+  const handleIncrement = (n: number) => {
+    const prev = game.snapshot()
+    game.incrementBy(n)
+    log.add({ type: 'hit', message: `Hit +${n}`, color: '#ef4444', prevState: prev })
+  }
+
+  const handleDecrement = (n: number) => {
+    const prev = game.snapshot()
+    game.decrementBy(n)
+    log.add({ type: 'heal', message: `Heal −${n}`, color: '#22c55e', prevState: prev })
+  }
+
+  const handleForceGain = () => {
+    const prev = game.snapshot()
+    game.toggleForce()
+    log.add({ type: 'force-gain', message: 'Force gained', color: '#3b82f6', prevState: prev })
+  }
+
+  const handleForceDismiss = () => {
+    const prev = game.snapshot()
+    game.toggleForce()
+    log.add({ type: 'force-use', message: 'Force used', color: '#93c5fd', prevState: prev })
+  }
+
+  const handleEpicActionMark = () => {
+    const prev = game.snapshot()
+    game.markEpicActionUsed()
+    log.add({ type: 'epic', message: 'Epic action used', color: '#f5c518', prevState: prev })
+  }
+
+  const handleMonasteryAction = () => {
+    const prev = game.snapshot()
+    game.gainForceViaMonastery()
+    log.add({ type: 'monastery', message: 'Force gained (monastery)', color: '#3b82f6', prevState: prev })
+  }
+
+  const handleRoundIncrement = () => {
+    const prev = game.snapshot()
+    game.incrementRound()
+    log.add({ type: 'round', message: `Round ${prev.round + 1}`, color: '#ffffff', prevState: prev })
+  }
+
+  const handleUndo = () => {
+    const entry = log.undoLast()
+    if (entry) game.restoreState(entry.prevState)
+  }
+
+  const handleReset = () => {
+    game.reset()
+    log.reset()
+    onBack()
   }
 
   if (isPortrait) {
     return (
       <AppScreenLayout>
         <button
-          onClick={onBack}
+          onClick={handleReset}
           aria-label="Back"
           style={{
             position: 'absolute',
@@ -92,30 +142,38 @@ function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
   return (
     <SwuGameScreenView
       base={base}
-      onBack={onBack}
+      onBack={handleReset}
       onHelp={onHelp}
       onSettings={onSettings}
       imageSrc={art.src ?? ''}
       imageRotationDeg={art.rotationDeg}
-      count={count}
+      count={game.count}
       imageLoaded={art.imageLoaded}
       imageError={art.allFailed}
-      onIncrement={incrementBy}
-      onDecrement={decrementBy}
+      onIncrement={handleIncrement}
+      onDecrement={handleDecrement}
       onImageLoad={art.onLoad}
       onImageError={art.onError}
-      epicActionUsed={epicActionUsed}
-      onEpicActionToggle={markEpicActionUsed}
+      epicActionUsed={game.epicActionUsed}
+      onEpicActionMark={handleEpicActionMark}
       showEpicAction={enableEpicActions && /epic action/i.test(base.epicAction)}
       showForce={enableForceToken}
       forceEnabled={effectiveForceEnabled}
-      forceActive={forceActive}
-      onForceEnable={enableForce}
-      onForceToggle={toggleForce}
+      forceActive={game.forceActive}
+      onForceEnable={game.enableForce}
+      onForceGain={handleForceGain}
+      onForceDismiss={handleForceDismiss}
       isMysticMonastery={isMysticMonastery}
-      mysticUsesRemaining={mysticUsesRemaining}
-      onMysticAction={gainForceViaAction}
+      mysticUsesRemaining={game.mysticUsesRemaining}
+      onMysticAction={handleMonasteryAction}
       enableLongPress={enableLongPress}
+      round={game.round}
+      onRoundIncrement={handleRoundIncrement}
+      logEntries={log.entries}
+      onUndo={handleUndo}
+      enableActionLog={enableActionLog}
+      showLog={showLog}
+      onLogToggle={() => setShowLog(v => !v)}
     />
   )
 }

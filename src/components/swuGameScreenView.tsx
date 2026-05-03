@@ -1,4 +1,5 @@
 import { Base } from '../hooks/useBases'
+import type { GameLogEntry } from '../hooks/useGameLog'
 import { useDragScrubber } from '../hooks/useDragScrubber'
 import AppScreenLayout from './layout/AppScreenLayout'
 import { BackIcon, CogIcon, HelpIcon } from './icons'
@@ -22,17 +23,25 @@ interface Props {
   onImageLoad: () => void
   onImageError: () => void
   epicActionUsed: boolean
-  onEpicActionToggle: () => void
+  onEpicActionMark: () => void
   showEpicAction: boolean
   forceEnabled: boolean
   forceActive: boolean
   onForceEnable: () => void
-  onForceToggle: () => void
+  onForceGain: () => void
+  onForceDismiss: () => void
   showForce: boolean
   isMysticMonastery: boolean
   mysticUsesRemaining: number
   onMysticAction: () => void
   enableLongPress: boolean
+  round: number
+  onRoundIncrement: () => void
+  logEntries: GameLogEntry[]
+  onUndo: () => void
+  enableActionLog: boolean
+  showLog: boolean
+  onLogToggle: () => void
 }
 
 function SwuGameScreenView({
@@ -50,17 +59,25 @@ function SwuGameScreenView({
   onImageLoad,
   onImageError,
   epicActionUsed,
-  onEpicActionToggle,
+  onEpicActionMark,
   showEpicAction,
   forceEnabled,
   forceActive,
   onForceEnable,
-  onForceToggle,
+  onForceGain,
+  onForceDismiss,
   showForce,
   isMysticMonastery,
   mysticUsesRemaining,
   onMysticAction,
   enableLongPress,
+  round,
+  onRoundIncrement,
+  logEntries,
+  onUndo,
+  enableActionLog,
+  showLog,
+  onLogToggle,
 }: Props) {
   const bothOverlaysActive = epicActionUsed && showEpicAction && forceActive && showForce
 
@@ -150,7 +167,7 @@ function SwuGameScreenView({
       {showForce && forceEnabled && !forceActive && (
         <button
           data-testid="force-btn"
-          onClick={onForceToggle}
+          onClick={onForceGain}
           style={{
             position: 'absolute',
             top: 'calc(env(safe-area-inset-top) + 9vw)',
@@ -185,7 +202,7 @@ function SwuGameScreenView({
       {showForce && forceActive && (
         <button
           data-testid="force-btn-active"
-          onClick={onForceToggle}
+          onClick={onForceDismiss}
           style={{
             position: 'absolute',
             top: 'calc(env(safe-area-inset-top) + 9vw)',
@@ -219,7 +236,7 @@ function SwuGameScreenView({
         <button
           data-testid="epic-action-btn"
           aria-label="Epic action"
-          onClick={onEpicActionToggle}
+          onClick={onEpicActionMark}
           style={{
             position: 'absolute',
             top: `calc(env(safe-area-inset-top) + ${showForce ? 16 : 9}vw)`,
@@ -610,7 +627,6 @@ function SwuGameScreenView({
         {epicActionUsed && showEpicAction && (
           <div
             data-testid="epic-action-overlay"
-            onClick={onEpicActionToggle}
             style={{
               position: 'absolute',
               top: '68%',
@@ -625,7 +641,6 @@ function SwuGameScreenView({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              cursor: 'pointer',
             }}
           >
             <img
@@ -659,7 +674,7 @@ function SwuGameScreenView({
         {forceActive && showForce && (
           <div
             data-testid="force-token"
-            onClick={onForceToggle}
+            onClick={onForceDismiss}
             style={{
               position: 'absolute',
               top: '68%',
@@ -708,6 +723,130 @@ function SwuGameScreenView({
       </div>
 
       </div>
+
+      {/* Round counter — bottom-left */}
+      <div
+        data-testid="round-counter"
+        onClick={onRoundIncrement}
+        style={{
+          position: 'absolute',
+          bottom: 'calc(env(safe-area-inset-bottom) + 2vw)',
+          left: 'calc(env(safe-area-inset-left) + 2vw)',
+          minWidth: '36px',
+          minHeight: '36px',
+          padding: '0 1vw',
+          background: 'rgba(0,0,0,0.45)',
+          border: '2px solid var(--color-ui-border)',
+          borderRadius: '8px',
+          color: 'var(--color-text-primary)',
+          fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10,
+          WebkitTapHighlightColor: 'transparent',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+        }}
+      >
+        R{round}
+      </div>
+
+      {/* Log button — bottom-right, landscape only */}
+      {enableActionLog && (
+        <button
+          data-testid="log-btn"
+          onClick={onLogToggle}
+          style={{
+            position: 'absolute',
+            bottom: 'calc(env(safe-area-inset-bottom) + 2vw)',
+            right: 'calc(env(safe-area-inset-right) + 2vw)',
+            minWidth: '36px',
+            minHeight: '36px',
+            padding: '0 1vw',
+            background: 'rgba(0,0,0,0.45)',
+            border: '2px solid var(--color-ui-border)',
+            borderRadius: '8px',
+            color: 'var(--color-ui-border-muted)',
+            fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10,
+            WebkitTapHighlightColor: 'transparent',
+          }}
+        >
+          Log
+        </button>
+      )}
+
+      {/* Log overlay */}
+      {showLog && enableActionLog && (
+        <div
+          data-testid="log-overlay"
+          style={{
+            position: 'absolute',
+            bottom: 'calc(env(safe-area-inset-bottom) + 9vw)',
+            right: 'calc(env(safe-area-inset-right) + 2vw)',
+            width: 'clamp(200px, 28vw, 360px)',
+            maxHeight: '60vh',
+            overflowY: 'auto',
+            background: 'rgba(0,0,0,0.85)',
+            border: '2px solid var(--color-ui-border)',
+            borderRadius: '8px',
+            zIndex: 20,
+            padding: '0.5rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.25rem',
+          }}
+        >
+          {logEntries.length === 0 && (
+            <span style={{ color: 'var(--color-text-muted)', fontSize: 'clamp(0.7rem, 1.5vw, 0.9rem)', padding: '0.25rem' }}>
+              No actions yet
+            </span>
+          )}
+          {logEntries.map((entry, i) => (
+            <div
+              key={entry.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '0.5rem',
+                padding: '0.2rem 0.25rem',
+                borderRadius: '4px',
+                background: i === logEntries.length - 1 ? 'rgba(255,255,255,0.05)' : 'transparent',
+              }}
+            >
+              <span style={{ color: entry.color, fontSize: 'clamp(0.7rem, 1.5vw, 0.9rem)', flex: 1 }}>
+                {entry.message}
+              </span>
+              {i === logEntries.length - 1 && (
+                <button
+                  data-testid="log-undo-btn"
+                  onClick={onUndo}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid var(--color-ui-border)',
+                    borderRadius: '4px',
+                    color: 'var(--color-text-muted)',
+                    fontSize: 'clamp(0.6rem, 1.2vw, 0.8rem)',
+                    cursor: 'pointer',
+                    padding: '0.1rem 0.4rem',
+                    flexShrink: 0,
+                    WebkitTapHighlightColor: 'transparent',
+                  }}
+                >
+                  Undo
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Drag indicator — offset toward screen centre */}
       {dragIndicator && (() => {
