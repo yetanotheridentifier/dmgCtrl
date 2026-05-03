@@ -9,6 +9,7 @@ interface UserSettings {
   enableWakeLock: boolean
   enableFavourites: boolean
   enableLongPress: boolean
+  enableActionLog: boolean
 }
 
 const DEFAULTS: UserSettings = {
@@ -18,6 +19,7 @@ const DEFAULTS: UserSettings = {
   enableWakeLock: true,
   enableFavourites: true,
   enableLongPress: true,
+  enableActionLog: true,
 }
 
 function load(): UserSettings {
@@ -32,6 +34,7 @@ function load(): UserSettings {
       enableWakeLock: parsed.enableWakeLock ?? DEFAULTS.enableWakeLock,
       enableFavourites: parsed.enableFavourites ?? DEFAULTS.enableFavourites,
       enableLongPress: parsed.enableLongPress ?? DEFAULTS.enableLongPress,
+      enableActionLog: parsed.enableActionLog ?? DEFAULTS.enableActionLog,
     }
   } catch {
     return { ...DEFAULTS }
@@ -60,11 +63,13 @@ export function useUserSettings() {
     enableWakeLock: settings.enableWakeLock,
     enableFavourites: settings.enableFavourites,
     enableLongPress: settings.enableLongPress,
+    enableActionLog: settings.enableActionLog,
     setUseHyperspace: (v: boolean) => update({ useHyperspace: v }),
     setEnableForceToken: (v: boolean) => update({ enableForceToken: v }),
     setEnableEpicActions: (v: boolean) => update({ enableEpicActions: v }),
     setEnableWakeLock: (v: boolean) => update({ enableWakeLock: v }),
     setEnableFavourites: (v: boolean) => update({ enableFavourites: v }),
     setEnableLongPress: (v: boolean) => update({ enableLongPress: v }),
+    setEnableActionLog: (v: boolean) => update({ enableActionLog: v }),
   }
 }

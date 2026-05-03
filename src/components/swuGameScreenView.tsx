@@ -17,8 +17,8 @@ interface Props {
   count: number
   imageLoaded: boolean
   imageError: boolean
-  onIncrement: () => void
-  onDecrement: () => void
+  onIncrement: (n: number) => void
+  onDecrement: (n: number) => void
   onImageLoad: () => void
   onImageError: () => void
   epicActionUsed: boolean

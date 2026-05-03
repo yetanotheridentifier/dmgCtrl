@@ -19,7 +19,7 @@ interface Props {
 function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
   const { enableForceToken, enableEpicActions, enableWakeLock, useHyperspace, enableLongPress } = useUserSettings()
   const art = useBaseArt(base, useHyperspace)
-  const { count, increment, decrement, epicActionUsed, toggleEpicAction, forceActive, toggleForce, forceEnabled, enableForce } = useSwuGame(base.hp)
+  const { count, incrementBy, decrementBy, epicActionUsed, markEpicActionUsed, forceActive, toggleForce, forceEnabled, enableForce } = useSwuGame(base.hp)
   const { isPortrait } = useOrientation()
   useWakeLock(enableWakeLock)
 
@@ -100,12 +100,12 @@ function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
       count={count}
       imageLoaded={art.imageLoaded}
       imageError={art.allFailed}
-      onIncrement={increment}
-      onDecrement={decrement}
+      onIncrement={incrementBy}
+      onDecrement={decrementBy}
       onImageLoad={art.onLoad}
       onImageError={art.onError}
       epicActionUsed={epicActionUsed}
-      onEpicActionToggle={toggleEpicAction}
+      onEpicActionToggle={markEpicActionUsed}
       showEpicAction={enableEpicActions && /epic action/i.test(base.epicAction)}
       showForce={enableForceToken}
       forceEnabled={effectiveForceEnabled}
