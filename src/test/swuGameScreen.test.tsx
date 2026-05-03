@@ -925,4 +925,164 @@ describe('SwuGameScreen', () => {
     expect(screen.queryByText(/^−\d/)).not.toBeInTheDocument()
   })
 
+
+  // --- Action log setting ---
+
+  it('Log button is visible in landscape when enableActionLog is true', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('log-btn')).toBeInTheDocument()
+  })
+
+  it('Log button is not visible when enableActionLog is false', () => {
+    mockUserSettings.enableActionLog = false
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('log-btn')).not.toBeInTheDocument()
+  })
+
+  it('Log button is not visible in portrait orientation', () => {
+    vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('log-btn')).not.toBeInTheDocument()
+  })
+
+  // --- Log overlay ---
+
+  it('Log overlay is not visible by default', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('log-overlay')).not.toBeInTheDocument()
+  })
+
+  it('Clicking log button shows the log overlay', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByTestId('log-overlay')).toBeInTheDocument()
+  })
+
+  it('Clicking log button again hides the log overlay', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.queryByTestId('log-overlay')).not.toBeInTheDocument()
+  })
+
+  // --- Round counter ---
+
+  it('Round counter shows 1 initially', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('round-counter')).toHaveTextContent('1')
+  })
+
+  it('Clicking the round counter increments it', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
+    expect(screen.getByTestId('round-counter')).toHaveTextContent('2')
+  })
+
+  it('Round counter caps at 99', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const counter = screen.getByTestId('round-counter')
+    for (let i = 0; i < 100; i++) fireEvent.click(counter)
+    expect(counter).toHaveTextContent('99')
+  })
+
+  // --- Undo ---
+
+  it('Undo button is absent when the log is empty', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.queryByTestId('log-undo-btn')).not.toBeInTheDocument()
+  })
+
+  it('Undo after incrementing reverts the counter to 0', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByText('0')).toBeInTheDocument()
+  })
+
+  it('Undo after decrementing reverts the counter', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByText('−'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByText('2')).toBeInTheDocument()
+  })
+
+  it('Undo can be applied twice to step back through two actions', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByText('0')).toBeInTheDocument()
+  })
+
+  it('Undo after epic action used removes the overlay', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('epic-action-btn'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.queryByTestId('epic-action-overlay')).not.toBeInTheDocument()
+  })
+
+  it('Undo after force gain removes the force token', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('force-btn'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.queryByTestId('force-token')).not.toBeInTheDocument()
+  })
+
+  it('Undo after force dismiss restores the force token', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('force-btn'))
+    await user.click(screen.getByTestId('force-btn-active'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByTestId('force-token')).toBeInTheDocument()
+  })
+
+  it('Undo after force dismiss via token click restores the force token', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('force-btn'))
+    await user.click(screen.getByTestId('force-token'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByTestId('force-token')).toBeInTheDocument()
+  })
+
+  it('Undo after monastery action restores the use count', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('mystic-action-btn'))
+    await user.click(screen.getByTestId('force-token'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByTestId('mystic-action-btn')).toHaveTextContent('3')
+  })
+
+  it('Undo after round increment restores the round counter', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByTestId('round-counter')).toHaveTextContent('1')
+  })
+
 })
