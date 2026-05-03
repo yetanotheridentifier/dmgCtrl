@@ -65,6 +65,23 @@ For larger hits or recovery, press and hold **+** or **−**, then drag upward:
 
 The number increases by 1 for roughly every 14px of upward movement, starting from 2. It is capped at the remaining capacity: the `+` button won't exceed the base's remaining HP, and `−` won't go below zero.
 
+### Action Log
+
+When **Enable Action Log** is on in Settings, a log button appears in the bottom-right corner of the game screen.
+
+- Tap it to open the action log — a scrollable panel listing all game events
+- The most recent action shows an **Undo** button — tap it to revert to the state before that action
+- Round entries cannot be undone
+- Tap the log button again to close it
+
+### Round Tracker
+
+When **Enable Action Log** is on in Settings, a round counter button appears in the bottom-left corner.
+
+- Tap it to advance to the next round
+- The counter starts at Round 1 when a game begins
+- Round changes appear in the action log
+
 To return to base selection, tap <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M15.5 5L7 12L15.5 19Z"/></svg> in the top-left corner. This resets the damage counter to zero, ready for the next game.
 
 ### The Force
@@ -90,7 +107,8 @@ Some bases have a special **Epic Action** — a once-per-game ability. When your
 
 - The epic action button starts **highlighted in yellow**, showing the epic action is available
 - Tap it to mark it as used — the button dims and a gold token overlay appears over the lower portion of the card, covering the epic action text (mirroring the physical token used in the tabletop game)
-- Tap the token overlay or the button again to undo the mark if needed
+- When the **action log is enabled**, use the Undo button in the action log to revert the mark
+- When the **action log is disabled**, tap the overlay to dismiss it
 
 If both the Force token and the epic action token are active at the same time, they sit side by side across the bottom of the card rather than overlapping.
 
@@ -106,6 +124,7 @@ Your preferences are saved automatically and persist between sessions.
 | **Enable Force Token** | On | Shows the Force token button on the game screen. Turn off if you prefer not to track the Force. |
 | **Enable Epic Actions** | On | Shows the Epic Action button on the game screen. Turn off if you prefer not to track epic actions. |
 | **Enable Screen Wake Lock** | On | Keeps the screen on during play. May affect battery life. |
+| **Enable Action Log** | On | Shows a scrollable log of game actions with an Undo button for the most recent action. Also enables the round tracker button. |
 | **Enable Favourites** | On | Reveals a star button on the setup screen to save bases as favourites, and adds a Favourites input mode for quick reselection. Saved bases are kept even when this setting is off. |
 
 ### Managing saved favourites

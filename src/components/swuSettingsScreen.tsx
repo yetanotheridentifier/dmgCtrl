@@ -14,11 +14,13 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
     enableForceToken,
     enableEpicActions,
     enableWakeLock,
+    enableActionLog,
     enableFavourites,
     setUseHyperspace,
     setEnableForceToken,
     setEnableEpicActions,
     setEnableWakeLock,
+    setEnableActionLog,
     setEnableFavourites,
   } = useUserSettings()
 
@@ -37,6 +39,8 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
         onEnableForceTokenChange={setEnableForceToken}
         onEnableEpicActionsChange={setEnableEpicActions}
         onEnableWakeLockChange={setEnableWakeLock}
+        enableActionLog={enableActionLog}
+        onEnableActionLogChange={setEnableActionLog}
         onEnableFavouritesChange={setEnableFavourites}
         onRemoveFavourite={removeFavourite}
         onClearFavourites={clearFavourites}

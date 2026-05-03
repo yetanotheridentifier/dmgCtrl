@@ -12,8 +12,8 @@ export type DragIndicator = {
 }
 
 export function useDragScrubber(
-  onIncrement: () => void,
-  onDecrement: () => void,
+  onIncrement: (n: number) => void,
+  onDecrement: (n: number) => void,
   maxIncrement: number,
   maxDecrement: number,
   enabled = true,
@@ -58,7 +58,7 @@ export function useDragScrubber(
     if (dr?.active) {
       dragApplied.current = true
       const fn = dr.type === '+' ? onIncrement : onDecrement
-      for (let i = 0; i < dr.value; i++) fn()
+      fn(dr.value)
     }
     clearDrag()
   }
@@ -68,8 +68,8 @@ export function useDragScrubber(
       dragApplied.current = false
       return
     }
-    if (type === '+') onIncrement()
-    else onDecrement()
+    if (type === '+') onIncrement(1)
+    else onDecrement(1)
   }
 
   return {

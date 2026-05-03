@@ -124,12 +124,14 @@ interface Props {
   enableForceToken: boolean
   enableEpicActions: boolean
   enableWakeLock: boolean
+  enableActionLog: boolean
   enableFavourites: boolean
   favourites: FavouriteBase[]
   onUseHyperspaceChange: (v: boolean) => void
   onEnableForceTokenChange: (v: boolean) => void
   onEnableEpicActionsChange: (v: boolean) => void
   onEnableWakeLockChange: (v: boolean) => void
+  onEnableActionLogChange: (v: boolean) => void
   onEnableFavouritesChange: (v: boolean) => void
   onRemoveFavourite: (key: string) => void
   onClearFavourites: () => void
@@ -142,12 +144,14 @@ function SwuSettingsScreenView({
   enableForceToken,
   enableEpicActions,
   enableWakeLock,
+  enableActionLog,
   enableFavourites,
   favourites,
   onUseHyperspaceChange,
   onEnableForceTokenChange,
   onEnableEpicActionsChange,
   onEnableWakeLockChange,
+  onEnableActionLogChange,
   onEnableFavouritesChange,
   onRemoveFavourite,
   onClearFavourites,
@@ -186,6 +190,14 @@ function SwuSettingsScreenView({
         subtitle="Keeps the screen on during play. May affect battery life."
         checked={enableWakeLock}
         onChange={onEnableWakeLockChange}
+        vmin={vmin}
+      />
+      <ToggleRow
+        id="toggle-action-log"
+        label="Enable Action Log"
+        subtitle="Shows a scrollable log of game actions with undo support. Also enables the round tracker."
+        checked={enableActionLog}
+        onChange={onEnableActionLogChange}
         vmin={vmin}
       />
     </>
