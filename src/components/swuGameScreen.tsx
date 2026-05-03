@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Base } from '../hooks/useBases'
 import { useSwuGame } from '../hooks/useSwuGame'
 import { useGameLog } from '../hooks/useGameLog'
@@ -25,6 +25,7 @@ function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
   const { isPortrait } = useOrientation()
   useWakeLock(enableWakeLock)
   const [showLog, setShowLog] = useState(false)
+  const [epicOverlayDismissed, setEpicOverlayDismissed] = useState(false)
 
   const isMysticMonastery = base.set === 'LOF' && base.number === '022'
   const isForceBase = /the force is with you/i.test(base.epicAction)
@@ -58,6 +59,7 @@ function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
     const prev = game.snapshot()
     game.markEpicActionUsed()
     log.add({ type: 'epic', message: 'Epic action used', color: '#f5c518', prevState: prev })
+    setEpicOverlayDismissed(false)
   }
 
   const handleMonasteryAction = () => {
@@ -83,7 +85,10 @@ function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
     onBack()
   }
 
+  const logInitialized = useRef(false)
   useEffect(() => {
+    if (logInitialized.current) return
+    logInitialized.current = true
     log.add({ type: 'round', message: 'Round 1', color: '#ffffff', prevState: game.snapshot(), undoable: false })
   }, [])
 
@@ -159,6 +164,8 @@ function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
       onImageLoad={art.onLoad}
       onImageError={art.onError}
       epicActionUsed={game.epicActionUsed}
+      epicActionOverlayVisible={game.epicActionUsed && !epicOverlayDismissed}
+      onEpicActionOverlayDismiss={!enableActionLog ? () => setEpicOverlayDismissed(true) : undefined}
       onEpicActionMark={handleEpicActionMark}
       showEpicAction={enableEpicActions && /epic action/i.test(base.epicAction)}
       showForce={enableForceToken}

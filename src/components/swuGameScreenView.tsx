@@ -24,6 +24,8 @@ interface Props {
   onImageLoad: () => void
   onImageError: () => void
   epicActionUsed: boolean
+  epicActionOverlayVisible: boolean
+  onEpicActionOverlayDismiss?: () => void
   onEpicActionMark: () => void
   showEpicAction: boolean
   forceEnabled: boolean
@@ -60,6 +62,8 @@ function SwuGameScreenView({
   onImageLoad,
   onImageError,
   epicActionUsed,
+  epicActionOverlayVisible,
+  onEpicActionOverlayDismiss,
   onEpicActionMark,
   showEpicAction,
   forceEnabled,
@@ -80,7 +84,7 @@ function SwuGameScreenView({
   showLog,
   onLogToggle,
 }: Props) {
-  const bothOverlaysActive = epicActionUsed && showEpicAction && forceActive && showForce
+  const bothOverlaysActive = epicActionOverlayVisible && showEpicAction && forceActive && showForce
 
   const { dragIndicator, handleClick, handlePointerDown, handlePointerMove, handlePointerUp, handlePointerCancel } =
     useDragScrubber(onIncrement, onDecrement, base.hp - count, count, enableLongPress)
@@ -628,10 +632,12 @@ function SwuGameScreenView({
         </div>
 
         {/* Epic action used overlay — full width when alone, left half when both overlays active */}
-        {epicActionUsed && showEpicAction && (
+        {epicActionOverlayVisible && showEpicAction && (
           <div
             data-testid="epic-action-overlay"
+            onClick={onEpicActionOverlayDismiss}
             style={{
+              cursor: onEpicActionOverlayDismiss ? 'pointer' : 'default',
               position: 'absolute',
               top: '68%',
               left: '8%',
@@ -728,8 +734,8 @@ function SwuGameScreenView({
 
       </div>
 
-      {/* Round counter — bottom-left */}
-      <button
+      {/* Round counter — bottom-left, hidden when action log is disabled */}
+      {enableActionLog && <button
         data-testid="round-counter"
         onClick={onRoundIncrement}
         style={{
@@ -759,6 +765,7 @@ function SwuGameScreenView({
       >
         <span style={{
           borderBottom: '1px solid var(--color-ui-border)',
+          background: 'rgba(59,130,246,0.2)',
           textAlign: 'center',
           fontSize: 'clamp(0.45rem, 1vw, 0.65rem)',
           fontWeight: '300',
@@ -778,7 +785,7 @@ function SwuGameScreenView({
         }}>
           {round}
         </span>
-      </button>
+      </button>}
 
       {/* Log button — bottom-right, aligned with round counter */}
       {enableActionLog && (

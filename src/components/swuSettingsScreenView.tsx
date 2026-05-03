@@ -195,7 +195,7 @@ function SwuSettingsScreenView({
       <ToggleRow
         id="toggle-action-log"
         label="Enable Action Log"
-        subtitle="Shows a scrollable log of game actions with undo support."
+        subtitle="Shows a scrollable log of game actions with undo support. Also enables the round tracker."
         checked={enableActionLog}
         onChange={onEnableActionLogChange}
         vmin={vmin}

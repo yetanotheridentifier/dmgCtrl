@@ -447,15 +447,9 @@ describe('SwuGameScreen', () => {
     expect(screen.getByTestId('epic-action-overlay')).toBeInTheDocument()
   })
 
-  it('Clicking epic action button again hides the overlay', async () => {
-    const user = userEvent.setup()
-    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
-    await user.click(screen.getByTestId('epic-action-btn'))
-    await user.click(screen.getByTestId('epic-action-btn'))
-    expect(screen.queryByTestId('epic-action-overlay')).not.toBeInTheDocument()
-  })
 
-  it('Clicking the overlay also hides it', async () => {
+  it('Clicking the overlay dismisses it when action log is disabled', async () => {
+    mockUserSettings.enableActionLog = false
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('epic-action-btn'))
@@ -1166,6 +1160,12 @@ describe('SwuGameScreen', () => {
     await user.click(screen.getByTestId('force-token'))
     await user.click(screen.getByTestId('log-btn'))
     expect(screen.getByText('Force gained (monastery)')).toBeInTheDocument()
+  })
+
+  it('Round counter is not shown when action log is disabled', () => {
+    mockUserSettings.enableActionLog = false
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('round-counter')).not.toBeInTheDocument()
   })
 
   it('Round increment adds an entry to the log', async () => {
