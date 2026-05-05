@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useEffect } from 'react'
 import AppScreenLayout from './layout/AppScreenLayout'
 
 interface Props {
@@ -7,21 +7,9 @@ interface Props {
 }
 
 function SwuLoadingScreen({ loading, onReady }: Props) {
-  const [timerDone, setTimerDone] = useState(false)
-  const [dataReady, setDataReady] = useState(false)
-
   useEffect(() => {
-    const id = setTimeout(() => setTimerDone(true), 1000)
-    return () => clearTimeout(id)
-  }, [])
-
-  useEffect(() => {
-    if (!loading) setDataReady(true)
-  }, [loading])
-
-  useEffect(() => {
-    if (timerDone && dataReady) onReady()
-  }, [timerDone, dataReady, onReady])
+    if (!loading) onReady()
+  }, [loading, onReady])
 
   return (
     <AppScreenLayout>

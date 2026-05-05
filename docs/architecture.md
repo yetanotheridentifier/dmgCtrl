@@ -5,7 +5,7 @@
 **dmgCtrl** is a mobile-first progressive web app (PWA) designed to assist players of card games with game-state tracking. The current implementation targets **Star Wars Unlimited (SWU)**.
 
 Core functionality:
-- **Loading screen** — splash screen (icon + "LOADING") with a **1-second minimum display time** while base data is fetched; transitions automatically to the setup screen
+- **Loading screen** — splash screen (icon + "LOADING") while base data is fetched; transitions to the setup screen as soon as data is ready
 - **Base selection** — filter and choose a base card by set, aspect, and card identity; or import a deck from swudb.com
 - **Damage tracking** — increment and decrement a counter against the base's HP to track remaining health
 - **Hyperspace art** — optionally display the premium "hyperspace" variant of a base card
@@ -64,7 +64,7 @@ The app is served at `/dmgCtrl/` and is designed to be added to an iOS home scre
 
 ```
 App
-├── SwuLoadingScreen      (standalone screen — icon + LOADING text; 1-second minimum display time; auto-transitions when data is ready and timer has elapsed)
+├── SwuLoadingScreen      (standalone screen — icon + LOADING text; transitions as soon as data is ready)
 ├── SwuSetupScreen        (container)
 │   ├── useSwuSetup       (hook — filtering, auto-select)
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
@@ -128,7 +128,7 @@ src/
     swuGameScreen.tsx       Game screen container
     swuGameScreenView.tsx   Game screen view (⚙ button always visible)
     swuHelpScreen.tsx       Help screen (renders help.md; title row: back button + icon + "Help" h1)
-    swuLoadingScreen.tsx    Loading screen (icon + "LOADING" text; 1-second minimum display; calls onReady when both timer and data loading are done)
+    swuLoadingScreen.tsx    Loading screen (icon + "LOADING" text; calls onReady as soon as loading prop becomes false)
     swuSetupScreen.tsx      Setup screen container
     swuSetupScreenView.tsx  Setup screen view (title row: icon + "dmgCtrl" h1 + ⚙ button + help button)
     swuSettingsScreen.tsx   Settings screen container
@@ -209,7 +209,7 @@ All other state is owned at the component level:
 |---|---|---|
 | Current screen (`loading` / `setup` / `game` / `help` / `settings`) | `App` | Passed as callback props (`onReady`, `onConfirm`, `onBack`, `onHelp`, `onSettings`) |
 | Back stack (for help/settings back-navigation) | `App` | A `Screen[]` stack; pushed when navigating to help or settings, popped on back — supports any depth of overlay navigation |
-| `useBases()` loading state (for loading screen) | `App` | `App` calls `useBases()` and passes `loading` prop to `SwuLoadingScreen`; `SwuLoadingScreen` calls `onReady` only when both the data is ready and the 1-second minimum timer has elapsed |
+| `useBases()` loading state (for loading screen) | `App` | `App` calls `useBases()` and passes `loading` prop to `SwuLoadingScreen`; `SwuLoadingScreen` calls `onReady` as soon as the data is ready (`loading` becomes `false`) |
 | Selected base | `App` | Set on `onConfirm`, passed into `SwuGameScreen` |
 | Last setup selection (`set`, `aspect`, `key`) | `App` | Saved on `handleConfirm`; passed as `initialSelection` prop to `SwuSetupScreen` so dropdowns are pre-populated on back navigation |
 | Filter state (set, aspect, card) | `useSwuSetup` | Seeded from `initialSelection` on mount; local after that |
@@ -232,12 +232,11 @@ All other state is owned at the component level:
 ### Example flow: App startup
 
 1. `App` mounts with `screen = 'loading'` and calls `useBases()` — initial `loading = true`
-2. `SwuLoadingScreen` renders: shows the app icon and "LOADING" text; starts a **1-second minimum timer** (`timerDone = false`)
-3. `dataReady` is set to `true` as soon as `loading` becomes `false` (may happen before the timer)
-4. `onReady()` is called only when **both** `timerDone` and `dataReady` are `true`
-5. `App` sets `screen = 'setup'`
-6. `SwuSetupScreen` mounts, calls `useBases()` — resolves from cache almost immediately
-7. User sees the dmgCtrl screen with selectors populated
+2. `SwuLoadingScreen` renders: shows the app icon and "LOADING" text
+3. `onReady()` is called as soon as `loading` becomes `false`
+4. `App` sets `screen = 'setup'`
+5. `SwuSetupScreen` mounts, calls `useBases()` — resolves from cache almost immediately
+6. User sees the dmgCtrl screen with selectors populated
 
 ### Example flow: Setup → Game
 
@@ -527,8 +526,8 @@ The app is designed for **landscape orientation**. `useOrientation` is used in f
 ### App startup and loading screen
 
 1. `App` mounts with `screen = 'loading'` and calls `useBases()` to get the `loading` boolean
-2. `SwuLoadingScreen` renders: displays the app icon (`dmgCtrl-icon-transparent-192.png`) and "LOADING" text; starts a **1-second minimum timer**
-3. Two conditions must both be true before `onReady()` is called: `timerDone` (1 second has elapsed) and `dataReady` (the `loading` prop became `false`)
+2. `SwuLoadingScreen` renders: displays the app icon (`dmgCtrl-icon-transparent-192.png`) and "LOADING" text
+3. `onReady()` is called as soon as `loading` becomes `false`
 4. `App` responds to `onReady` by setting `screen = 'setup'`
 
 ### Base selection flow
@@ -742,7 +741,7 @@ Tests verify behaviour, not implementation. Hook tests cover logic in isolation;
 - All mocks are torn down with `vi.unstubAllGlobals()` in `afterEach`
 - `useUserSettings` is mocked with `vi.mock('../hooks/useUserSettings', ...)` in tests that exercise preference-gated behaviour; `vi.hoisted` is used for mock values that need per-test control
 - `useFavourites` is mocked with `vi.mock('../hooks/useFavourites', ...)` in setup screen tests; `vi.hoisted` provides per-test control over `favourites`, `addFavourite`, `removeFavourite`
-- `App.test.tsx` mocks `useBases` at the module level (`vi.mock('../hooks/useBases', ...)`) so data is available synchronously; this allows the tests to focus on navigation logic rather than data loading. The 1-second loading screen timer is waited out with a `waitFor` timeout of 4 seconds.
+- `App.test.tsx` mocks `useBases` at the module level (`vi.mock('../hooks/useBases', ...)`) so data is available synchronously; this allows the tests to focus on navigation logic rather than data loading. The loading screen transitions immediately when data is ready; `waitFor` with the default timeout handles any async React batching.
 
 ### Running tests
 
@@ -820,7 +819,7 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | **GameLogEntry** | The record stored by `useGameLog` for each action. Fields: `id` (UUID), `type` (string tag for styling, e.g. `round`), `message`, `color` (left strip accent), `prevState` (GameState snapshot for undo), optional `undoable` (defaults to true; set false to suppress the Undo button). |
 | **UserSettingsProvider** | The React Context provider from `useUserSettings.ts`. Wraps the app in `main.tsx` so all screens share one settings instance. Updates propagate immediately to all mounted consumers. |
 | **Hyperspace** | A premium variant of a card with alternate artwork. In this app, the `useHyperspace` setting (in `useUserSettings`) controls whether the Hyperspace variant is preferred on the game screen. |
-| **Loading screen** | The first screen shown on app start (`SwuLoadingScreen`). Displays the app icon and "LOADING" text. Has a **1-second minimum display time**: `onReady` is called only when both the data has loaded and the 1-second timer has elapsed. Automatically transitions to the setup screen. |
+| **Loading screen** | The first screen shown on app start (`SwuLoadingScreen`). Displays the app icon and "LOADING" text. Transitions to the setup screen as soon as `useBases()` resolves — there is no minimum display time. |
 | **Standard art** | The default card artwork. `frontArt` is the swu-db.com hi-res version (1560×1120); `frontArtLowRes` is the swuapi.com version (400×286). |
 | **hyperspaceArt** | The reliable low-res hyperspace image URL from swuapi.com (`cdn.starwarsunlimited.com`, 400×286). `null` for SOR/SHD/TWI (no longer in swuapi.com). |
 | **hyperspaceArtHiRes** | A constructed hi-res hyperspace image URL from swu-db.com (`cdn.swu-db.com`, 1560×1120). Derived from card number for active sets, or from the static offset map for SOR/SHD/TWI. May 403 for a small number of unindexed cards. |
