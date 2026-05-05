@@ -97,6 +97,51 @@ node scripts/validate-errors.mjs https://192.168.1.100:5173/dmgCtrl/
 
 Timing can be adjusted via `VISUAL_PAUSE_MS` at the top of the script.
 
+### Performance measurement script
+
+`scripts/measure-performance.mjs` measures three key timings across N iterations (default 5) and reports min / median / max:
+
+| Metric | What it measures |
+|---|---|
+| **Setup ready** | Navigation start → set selector enabled (covers loading screen + base data fetch) |
+| **Preview image** | First base selected → network idle (the #142 metric — low-res-first fallback chain) |
+| **Game image** | Start clicked → game screen network idle (the #152 metric — hi-res preload) |
+
+LCP is also captured per run (largest element painted before first interaction).
+
+**One-time setup** (Playwright + Chromium browser binary):
+```bash
+npm install --legacy-peer-deps
+npx playwright install chromium
+```
+
+**Running the script:**
+1. Start the dev server: `npm run dev`
+2. In a separate terminal: `node scripts/measure-performance.mjs`
+
+```
+node scripts/measure-performance.mjs                          # 5 iterations, warm cache
+node scripts/measure-performance.mjs http://... 10           # 10 iterations
+node scripts/measure-performance.mjs http://... 5 --cold     # clear cache before each run
+```
+
+Sample output:
+```
+[ 1/5]  setup    243 ms  lcp    312 ms  preview    890 ms  game   1245 ms  (SOR / Catacombs of Cadera)
+...
+
+──────────────────────────────────────────────────────────
+Metric                  min  median     max
+──────────────────────────────────────────────────────────
+Setup ready             232     243     251 ms
+LCP                     287     312     341 ms
+Preview image           756     823     912 ms
+Game image             1198    1245    1312 ms
+──────────────────────────────────────────────────────────
+```
+
+Use `--cold` to simulate a first-time user (clears `swu_bases_cache` before each run). Default is warm cache, which reflects the typical returning-user experience. The Chromium window must remain visible during measurement — LCP is not recorded for hidden pages.
+
 ## Notes for AI Assistants
 
 - `npm install` requires `--legacy-peer-deps` due to Vite / vite-plugin-pwa version conflict
