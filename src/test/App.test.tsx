@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
+import { useBases } from '../hooks/useBases'
 
 const mockBases = vi.hoisted(() => [
   {
@@ -75,22 +76,22 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-// Wait for the 2-second loading screen minimum, then assert setup screen is visible.
-// useBases is mocked so data is always ready; the only gate is the 2-second timer.
+// useBases is mocked so data is always ready; waitFor handles any async React batching.
 async function waitForSetup() {
-  await waitFor(() => expect(getBaseSelectors()).toHaveLength(3), { timeout: 4000 })
+  await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
 }
 
 describe('App', () => {
 
   it('Shows loading screen on initial load', () => {
+    vi.mocked(useBases).mockReturnValueOnce({ bases: [], loading: true, error: null })
     render(<App />)
     expect(screen.getByText('LOADING')).toBeInTheDocument()
   })
 
   it('Transitions to setup screen after loading', async () => {
     render(<App />)
-    await waitFor(() => expect(screen.getByText('dmgCtrl')).toBeInTheDocument(), { timeout: 4000 })
+    await waitFor(() => expect(screen.getByText('dmgCtrl')).toBeInTheDocument())
   })
 
   it('Does not render the game screen on load', () => {
@@ -113,7 +114,7 @@ describe('App', () => {
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
     await user.click(screen.getByRole('button', { name: 'Start game' }))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
-  }, 10000)
+  })
 
   it('Game screen reflects the selected base health', async () => {
     const user = userEvent.setup()
@@ -124,7 +125,7 @@ describe('App', () => {
     await user.selectOptions(getBaseSelectors()[2], 'SOR-022')
     await user.click(screen.getByRole('button', { name: 'Start game' }))
     expect(screen.getByText('Remaining: 25')).toBeInTheDocument()
-  }, 10000)
+  })
 
   it('Does not navigate to game screen if no base is selected', async () => {
     const user = userEvent.setup()
@@ -133,7 +134,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Start game' }))
     expect(screen.getByText('Input Mode:')).toBeInTheDocument()
     expect(screen.queryByText(/Remaining:/)).not.toBeInTheDocument()
-  }, 10000)
+  })
 
   it('Clicking back from game screen returns to setup screen', async () => {
     const user = userEvent.setup()
@@ -145,7 +146,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Start game' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByText('Input Mode:')).toBeInTheDocument()
-  }, 10000)
+  })
 
   // --- Back navigation retains selection ---
 
@@ -159,7 +160,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Start game' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect((getBaseSelectors()[0] as HTMLSelectElement).value).toBe('SOR')
-  }, 10000)
+  })
 
   it('Retains selected aspect after navigating back from game screen', async () => {
     const user = userEvent.setup()
@@ -171,7 +172,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Start game' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect((getBaseSelectors()[1] as HTMLSelectElement).value).toBe('Aggression')
-  }, 10000)
+  })
 
   it('Retains selected base after navigating back from game screen', async () => {
     const user = userEvent.setup()
@@ -183,7 +184,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Start game' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect((getBaseSelectors()[2] as HTMLSelectElement).value).toBe('SOR-026')
-  }, 10000)
+  })
 
   it('Submit button is immediately active after navigating back', async () => {
     const user = userEvent.setup()
@@ -195,7 +196,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Start game' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByRole('button', { name: 'Start game' })).not.toBeDisabled()
-  }, 10000)
+  })
 
   it('Can start a new game immediately after navigating back without re-selecting', async () => {
     const user = userEvent.setup()
@@ -208,7 +209,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Back' }))
     await user.click(screen.getByRole('button', { name: 'Start game' }))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
-  }, 10000)
+  })
 
   // --- Help navigation ---
 
@@ -216,7 +217,7 @@ describe('App', () => {
     render(<App />)
     await waitForSetup()
     expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument()
-  }, 10000)
+  })
 
   it('Clicking help on setup screen shows the help screen', async () => {
     const user = userEvent.setup()
@@ -224,7 +225,7 @@ describe('App', () => {
     await waitForSetup()
     await user.click(screen.getByRole('button', { name: 'Help' }))
     expect(screen.getByText('Getting Started')).toBeInTheDocument()
-  }, 10000)
+  })
 
   it('Help button is visible on game screen', async () => {
     const user = userEvent.setup()
@@ -235,7 +236,7 @@ describe('App', () => {
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
     await user.click(screen.getByRole('button', { name: 'Start game' }))
     expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument()
-  }, 10000)
+  })
 
   it('Clicking help on game screen shows the help screen', async () => {
     const user = userEvent.setup()
@@ -247,7 +248,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Start game' }))
     await user.click(screen.getByRole('button', { name: 'Help' }))
     expect(screen.getByText('Getting Started')).toBeInTheDocument()
-  }, 10000)
+  })
 
   it('Clicking back from help returns to setup when help was opened from setup', async () => {
     const user = userEvent.setup()
@@ -256,7 +257,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Help' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByText('Input Mode:')).toBeInTheDocument()
-  }, 10000)
+  })
 
   it('Clicking back from help returns to game when help was opened from game', async () => {
     const user = userEvent.setup()
@@ -269,7 +270,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Help' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
-  }, 10000)
+  })
 
   it('Passes useHyperspace=true to game screen when user settings preference is true', async () => {
     mockUserSettings.useHyperspace = true
@@ -282,7 +283,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Start game' }))
     const img = screen.getByAltText('Catacombs of Cadera')
     expect(img).toHaveAttribute('src', 'https://cdn.swu-db.com/images/cards/SOR/292.png')
-  }, 10000)
+  })
 
   it('Passes useHyperspace=false to game screen when user settings preference is false', async () => {
     mockUserSettings.useHyperspace = false
@@ -295,7 +296,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Start game' }))
     const img = screen.getByAltText('Catacombs of Cadera')
     expect(img).toHaveAttribute('src', 'https://cdn.swu-db.com/images/cards/SOR/026.png')
-  }, 10000)
+  })
 
 
   // --- Settings navigation ---
@@ -304,7 +305,7 @@ describe('App', () => {
     render(<App />)
     await waitForSetup()
     expect(screen.getByRole('button', { name: '⚙' })).toBeInTheDocument()
-  }, 10000)
+  })
 
   it('Clicking settings on setup screen shows the settings screen', async () => {
     const user = userEvent.setup()
@@ -312,7 +313,7 @@ describe('App', () => {
     await waitForSetup()
     await user.click(screen.getByRole('button', { name: '⚙' }))
     expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument()
-  }, 10000)
+  })
 
   it('Clicking back from settings returns to setup when settings was opened from setup', async () => {
     const user = userEvent.setup()
@@ -321,7 +322,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '⚙' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByText('Input Mode:')).toBeInTheDocument()
-  }, 10000)
+  })
 
   it('Settings button is visible on game screen', async () => {
     const user = userEvent.setup()
@@ -332,7 +333,7 @@ describe('App', () => {
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
     await user.click(screen.getByRole('button', { name: 'Start game' }))
     expect(screen.getByRole('button', { name: '⚙' })).toBeInTheDocument()
-  }, 10000)
+  })
 
   it('Clicking settings on game screen shows the settings screen', async () => {
     const user = userEvent.setup()
@@ -344,7 +345,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Start game' }))
     await user.click(screen.getByRole('button', { name: '⚙' }))
     expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument()
-  }, 10000)
+  })
 
   it('Clicking back from settings returns to game when settings was opened from game', async () => {
     const user = userEvent.setup()
@@ -357,7 +358,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '⚙' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
-  }, 10000)
+  })
 
   it('Clicking back from settings returns to setup after settings -> help -> back', async () => {
     const user = userEvent.setup()
@@ -368,7 +369,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Back' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByText('Input Mode:')).toBeInTheDocument()
-  }, 10000)
+  })
 
   it('Clicking back from settings returns to game after settings -> help -> back', async () => {
     const user = userEvent.setup()
@@ -383,6 +384,6 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Back' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
-  }, 10000)
+  })
 
 })
