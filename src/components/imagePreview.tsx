@@ -42,8 +42,8 @@ const imgStyleRotated: React.CSSProperties = {
   position: 'absolute',
   top: '50%',
   left: '50%',
-  width: `${100 * CARD_H / CARD_W}%`,   // layout portrait-width = container height
-  height: `${100 * CARD_W / CARD_H}%`,  // layout portrait-height = container width
+  width: `${100 * CARD_H / CARD_W}%`,
+  height: `${100 * CARD_W / CARD_H}%`,
   objectFit: 'cover',
   transform: 'translate(-50%, -50%) rotate(90deg)',
 }
@@ -51,22 +51,37 @@ const imgStyleRotated: React.CSSProperties = {
 const messageStyle: React.CSSProperties = {
   color: 'var(--color-text-muted)',
   fontWeight: '300',
-  fontSize: 'clamp(0.7rem, 2.5vw, 1rem)',
+  fontSize: 'clamp(0.6rem, 1.8vw, 0.75rem)',
   margin: 0,
-  fontStyle: 'italic',
+  textAlign: 'center',
+  textShadow: '0 1px 4px rgba(0,0,0,0.9)',
 }
 
 const errorStyle: React.CSSProperties = {
   color: 'var(--color-error)',
   fontWeight: '300',
-  fontSize: 'clamp(0.7rem, 2.5vw, 1rem)',
+  fontSize: 'clamp(0.6rem, 1.8vw, 0.75rem)',
   margin: 0,
-  fontStyle: 'italic',
+  textAlign: 'center',
+  textShadow: '0 1px 4px rgba(0,0,0,0.9)',
 }
 
 function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotationDeg, useHyperspace, onLoad, onError }: ImagePreviewProps) {
   if (allFailed || !src) {
-    return <p style={errorStyle}>No base images found</p>
+    return (
+      <div style={{
+        border: '2px solid var(--color-accent)',
+        borderRadius: '12px',
+        boxSizing: 'border-box',
+        boxShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.3)',
+        height: 'max(44px, 8vh)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        <p style={errorStyle}>No base images found</p>
+      </div>
+    )
   }
 
   const message = imageLoaded && ((!useHyperspace && isHyperspace)
@@ -75,9 +90,18 @@ function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotatio
       ? 'Hyperspace variant not found'
       : null)
 
+  const imageWrapperStyle: React.CSSProperties = {
+    ...wrapperStyle,
+    visibility: imageLoaded ? 'visible' : 'hidden',
+    ...(message ? {
+      borderBottomLeftRadius: 0,
+      borderBottomRightRadius: 0,
+    } : {}),
+  }
+
   return (
-    <>
-      <div style={{ ...wrapperStyle, visibility: imageLoaded ? 'visible' : 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <div style={imageWrapperStyle}>
         <img
           src={src}
           alt={base.name}
@@ -86,8 +110,19 @@ function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotatio
           style={rotationDeg ? imgStyleRotated : imgStyleNormal}
         />
       </div>
-      {message && <p style={messageStyle}>{message}</p>}
-    </>
+      {message && (
+        <div style={{
+          borderLeft: '2px solid var(--color-accent)',
+          borderRight: '2px solid var(--color-accent)',
+          borderBottom: '2px solid var(--color-accent)',
+          borderRadius: '0 0 12px 12px',
+          padding: '0.5vh 1.5vw 0.6vh',
+          boxShadow: '0 4px 12px rgba(var(--color-accent-rgb), 0.2)',
+        }}>
+          <p style={messageStyle}>{message}</p>
+        </div>
+      )}
+    </div>
   )
 }
 
