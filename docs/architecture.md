@@ -193,7 +193,7 @@ scripts/
   inspect-base-data.mjs     Replicates the useBases merging logic; writes docs/base-data-snapshot.json and docs/base-data-summary.json for offline data inspection
   validate-bases.mjs        Playwright script — opens a headed Chromium window and iterates every base for semi-automated visual QA (see Section 7)
   validate-errors.mjs       Playwright script — opens a headed Chromium window and steps through all five error/info message states for semi-automated visual QA (see Section 7)
-  measure-performance.mjs    Playwright script — measures setup ready time, LCP, preview image time, and game image time across N iterations; reports min/median/max (see Section 7)
+  measure-performance.mjs    Playwright script — measures setup ready time, LCP, preview image time, and game image time across three resolution tiers (low/normal/hi res) per iteration; reports min/median/max (see Section 7)
 ```
 
 ---

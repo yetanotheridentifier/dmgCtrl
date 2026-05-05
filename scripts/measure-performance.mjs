@@ -139,12 +139,21 @@ const imageVisibleFn = () => {
 }
 
 // Time from Start click to the card image becoming visible in the game screen.
+// Uses data-testid="game-card-image" (swuGameScreenView.tsx) to unambiguously
+// target the base art rather than any other img on the game screen.
 async function measureGameImageMs(page) {
   await page.waitForSelector(`${SEL.startGame}:not([disabled])`, { timeout: 5000 })
   const t = Date.now()
   await page.click(SEL.startGame)
   await page.waitForSelector(SEL.back, { timeout: 10000 })
-  await page.waitForFunction(imageVisibleFn, undefined, { timeout: IDLE_TIMEOUT }).catch(() => {})
+  await page.waitForFunction(
+    () => {
+      const img = document.querySelector('[data-testid="game-card-image"]')
+      return !!img && img.complete && img.naturalWidth > 0 && img.style.display === 'block'
+    },
+    undefined,
+    { timeout: IDLE_TIMEOUT },
+  ).catch(() => {})
   return Date.now() - t
 }
 

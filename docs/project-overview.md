@@ -99,13 +99,15 @@ Timing can be adjusted via `VISUAL_PAUSE_MS` at the top of the script.
 
 ### Performance measurement script
 
-`scripts/measure-performance.mjs` measures three key timings across N iterations (default 5) and reports min / median / max:
+`scripts/measure-performance.mjs` measures key timings across N iterations (default 5) and reports min / median / max:
 
 | Metric | What it measures |
 |---|---|
 | **Setup ready** | Navigation start → set selector enabled (covers loading screen + base data fetch) |
-| **Preview image** | First base selected → network idle (the #142 metric — low-res-first fallback chain) |
-| **Game image** | Start clicked → game screen network idle (the #152 metric — hi-res preload) |
+| **Preview image** | First base selected → card image visible in setup screen (the #142 metric — low-res-first fallback chain) |
+| **Game (low res)** | Start clicked → card image visible — TS26 base (`frontArtLowRes` only, no CDN art) |
+| **Game (normal res)** | Start clicked → card image visible — LAW-021 (`frontArt` from CDN) |
+| **Game (hi res)** | Start clicked → card image visible — SOR-019 with hyperspace on (`hyperspaceArtHiRes` / SOR-285) |
 
 LCP is also captured per run (largest element painted before first interaction).
 
@@ -125,19 +127,21 @@ node scripts/measure-performance.mjs http://... 10           # 10 iterations
 node scripts/measure-performance.mjs http://... 5 --cold     # clear cache before each run
 ```
 
-Sample output:
+Sample output (warm cache):
 ```
-[ 1/5]  setup    243 ms  lcp    312 ms  preview    890 ms  game   1245 ms  (SOR / Catacombs of Cadera)
+[ 1/5]  setup    88 ms  lcp    80 ms  preview    49 ms  game-low   137 ms  game-normal    47 ms  game-hi    43 ms    (SOR / Catacombs of Cadera)
 ...
 
-──────────────────────────────────────────────────────────
-Metric                  min  median     max
-──────────────────────────────────────────────────────────
-Setup ready             232     243     251 ms
-LCP                     287     312     341 ms
-Preview image           756     823     912 ms
-Game image             1198    1245    1312 ms
-──────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────
+Metric                     min  median     max
+────────────────────────────────────────────────────────────────
+Setup ready                 88 ms    93 ms   100 ms
+LCP                         80 ms    88 ms    92 ms
+Preview image               49 ms    50 ms   146 ms
+Game (low res)             137 ms   176 ms   384 ms
+Game (normal res)           47 ms    63 ms   134 ms
+Game (hi res)               43 ms    60 ms   111 ms
+────────────────────────────────────────────────────────────────
 ```
 
 Use `--cold` to simulate a first-time user (clears `swu_bases_cache` before each run). Default is warm cache, which reflects the typical returning-user experience. The Chromium window must remain visible during measurement — LCP is not recorded for hidden pages.
