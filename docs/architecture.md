@@ -135,7 +135,7 @@ src/
     swuSettingsScreenView.tsx Settings screen view (toggle list; calls useOrientation directly for iOS font sizing)
 
   hooks/
-    useBaseArt.ts           Ordered art fallback chain shared by setup and game screens; `preview` param (default `false`) puts low-res URLs first — setup screen passes `true`, game screen uses default
+    useBaseArt.ts           Ordered art fallback chain shared by setup and game screens; `preview` param (default `false`) puts low-res URLs first — setup screen passes `true`, game screen uses default. Exports `getFirstGameImageUrl(base, useHyperspace)` which returns the first URL from the game-mode chain, used by the setup screen to preload the game image while the user is still on the setup screen
     useDragScrubber.ts      Drag-to-scrub gesture — tracks pointer events on `+`/`−` counter buttons; exposes `dragIndicator` (type, value, clientX, clientY) and pointer event handlers; 15px dead zone before scrub activates; 14px per step; caps drag value at `Math.min(max, 20)`; suppresses synthetic click after drag; disabled when `enableLongPress` is false or the reachable cap is < 2
     useBases.ts             Fetches and caches the full list of Base cards
     useFavourites.ts        Favourites list — add/remove/clear operations with deduplication on key; sorted by set then card number ascending; persists FavouriteBase[] to localStorage under key `favourites`; UI gated by enableFavourites in useUserSettings (tickets #123, #124 complete)
@@ -385,6 +385,8 @@ frontArt → frontArtLowRes → hyperspaceArtHiRes → hyperspaceArt → text/er
 The normal-preferred chain always falls back to hyperspace art before giving up — a base image is always better than a text fallback.
 
 Some hi-res hyperspace images on cdn.swu-db.com are stored rotated 90°. `useBaseArt` calls `getRotationFromHyperspaceUrl` for each hyperspace hi-res entry and includes the correction as `rotationDeg` in the returned state. When `rotationDeg` is non-zero, both views switch to a portrait layout box sized to the card's inverse dimensions (`CARD_H/CARD_W` wide × `CARD_W/CARD_H` tall), centered with `translate(-50%,-50%) rotate(90deg)`, so the rotated visual output fills the landscape container without overflowing or changing aspect ratio. When `rotationDeg` is zero the image fills the container normally (`inset:0; width:100%; height:100%`). The lookup table in `src/constants/rotatedCards.ts` is the single place to add new entries as they are discovered.
+
+The setup screen also calls `getFirstGameImageUrl(base, useHyperspace)` in a `useEffect` to eagerly preload the game-mode image into the browser HTTP cache whenever the selected base changes. This means the image is typically already cached by the time the user clicks Start, eliminating the fetch delay on the game screen transition.
 
 The setup screen uses `normalFailed`, `hyperspaceFailed`, and `imageLoaded` to control contextual messages ("Only hyperspace image available", "Hyperspace variant not found"): both are suppressed until `imageLoaded` is true, preventing flicker during the loading window. The game screen uses `allFailed` to switch to the text fallback (base name, subtitle, epic action).
 
@@ -793,7 +795,7 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 
 - Card art is lazy-loaded via the browser's default `<img>` behaviour
 - The fallback chain in `useBaseArt` means a broken image never leaves a blank gap — it advances to the next URL or shows text
-- The setup screen image preview is displayed before game start, giving the browser time to cache the URL before the game screen renders it
+- When a base is selected on the setup screen, `getFirstGameImageUrl` is called in a `useEffect` that fires a `new Image()` prefetch for the game-mode URL. This warms the browser cache so the game screen image is typically instant on Start
 
 ---
 

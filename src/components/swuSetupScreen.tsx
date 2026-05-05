@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Base } from '../hooks/useBases'
 import { useSwuSetup, InitialSelection } from '../hooks/useSwuSetup'
-import { useBaseArt } from '../hooks/useBaseArt'
+import { useBaseArt, getFirstGameImageUrl } from '../hooks/useBaseArt'
 import SwuSetupScreenView from './swuSetupScreenView'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { useFavourites } from '../hooks/useFavourites'
@@ -21,6 +21,13 @@ function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Pro
   const { favourites, addFavourite, removeFavourite } = useFavourites()
   const setup = useSwuSetup(onConfirm, initialSelection)
   const art = useBaseArt(setup.selectedBase, useHyperspace, true)
+
+  useEffect(() => {
+    const url = getFirstGameImageUrl(setup.selectedBase, useHyperspace)
+    if (!url) return
+    const img = new Image()
+    img.src = url
+  }, [setup.selectedBase, useHyperspace])
 
   const [selectionMode, setSelectionMode] = useState<SelectionMode>(() => {
     const saved = localStorage.getItem('pref_selection_mode')

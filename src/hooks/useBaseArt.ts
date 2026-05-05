@@ -38,6 +38,11 @@ function buildEntries(base: Base, useHyperspace: boolean, preview: boolean): Art
   return useHyperspace ? [...hyper, ...normal] : [...normal, ...hyper]
 }
 
+export function getFirstGameImageUrl(base: Base | null, useHyperspace: boolean): string | null {
+  if (!base) return null
+  return buildEntries(base, useHyperspace, false)[0]?.url ?? null
+}
+
 export function useBaseArt(base: Base | null, useHyperspace: boolean, preview = false) {
   const [index, setIndex] = useState(0)
   const [imageLoaded, setImageLoaded] = useState(false)
