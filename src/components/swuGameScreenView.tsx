@@ -407,6 +407,7 @@ function SwuGameScreenView({
           alt={base.name}
           onLoad={onImageLoad}
           onError={onImageError}
+          data-testid="game-card-image"
           style={imageRotationDeg ? {
             position: 'absolute',
             top: '50%',
