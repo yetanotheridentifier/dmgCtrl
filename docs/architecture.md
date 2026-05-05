@@ -76,7 +76,7 @@ App
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
 │   ├── useWakeLock       (hook — prevents screen sleep during gameplay via Screen Wake Lock API)
 │   ├── useGameLog        (hook — ordered list of game log entries with add/undo/reset; each entry records event type, message, colour, and previous game state snapshot)
-│   ├── GameLogOverlay    (view — scrollable log panel; auto-scrolls to latest entry; undo button on last undoable entry)
+│   ├── GameLogOverlay    (view — scrollable log panel; auto-scrolls to latest entry; undo button on last undoable entry; round entries styled with blue gradient)
 │   └── SwuGameScreenView (view — renders counter, image, epic action token, Force token; ⚙ button always visible; calls useDragScrubber directly for drag-to-scrub gesture state)
 ├── SwuHelpScreen         (standalone screen — renders help.md content)
 └── SwuSettingsScreen     (container)
@@ -135,7 +135,7 @@ src/
     swuSettingsScreenView.tsx Settings screen view (toggle list; calls useOrientation directly for iOS font sizing)
 
   hooks/
-    useBaseArt.ts           Ordered art fallback chain shared by setup and game screens; `preview` param (default `false`) puts low-res URLs first — setup screen passes `true`, game screen uses default. Exports `getFirstGameImageUrl(base, useHyperspace)` which returns the first URL from the game-mode chain, used by the setup screen to preload the game image while the user is still on the setup screen
+    useBaseArt.ts           Ordered art fallback chain shared by setup and game screens. Exports `getFirstGameImageUrl(base, useHyperspace)` which returns the first URL from the fallback chain, used by the setup screen to preload the game image while the user is still on the setup screen
     useDragScrubber.ts      Drag-to-scrub gesture — tracks pointer events on `+`/`−` counter buttons; exposes `dragIndicator` (type, value, clientX, clientY) and pointer event handlers; 15px dead zone before scrub activates; 14px per step; caps drag value at `Math.min(max, 20)`; suppresses synthetic click after drag; disabled when `enableLongPress` is false or the reachable cap is < 2
     useBases.ts             Fetches and caches the full list of Base cards
     useFavourites.ts        Favourites list — add/remove/clear operations with deduplication on key; sorted by set then card number ascending; persists FavouriteBase[] to localStorage under key `favourites`; UI gated by enableFavourites in useUserSettings (tickets #123, #124 complete)
@@ -358,26 +358,14 @@ The `Base` interface captures all four possible art sources: `frontArt`, `frontA
 
 #### Art fallback chain (`useBaseArt`)
 
-Both the setup screen and the game screen call `useBaseArt(base, useHyperspace, preview)`, which builds an ordered URL list (filtering out `null` entries) and maintains a fallback index. On each `onError` the index advances; `allFailed` only becomes `true` once all URLs are exhausted. The hook also tracks `imageLoaded`, `normalFailed`, and `hyperspaceFailed` so callers can derive UI state without re-inspecting the base object.
+Both the setup screen and the game screen call `useBaseArt(base, useHyperspace)`, which builds an ordered URL list (filtering out `null` entries) and maintains a fallback index. On each `onError` the index advances; `allFailed` only becomes `true` once all URLs are exhausted. The hook also tracks `imageLoaded`, `normalFailed`, and `hyperspaceFailed` so callers can derive UI state without re-inspecting the base object.
 
-The `preview` flag (default `false`) reorders the within-group art priority to prefer low-res URLs first. The setup screen passes `preview = true` to minimise LCP; the game screen uses the default `false` to prefer hi-res.
-
-**Setup screen (preview = true) — hyperspace preferred:**
-```
-hyperspaceArt → hyperspaceArtHiRes → frontArtLowRes → frontArt → text/error
-```
-
-**Setup screen (preview = true) — normal preferred:**
-```
-frontArtLowRes → frontArt → hyperspaceArt → hyperspaceArtHiRes → text/error
-```
-
-**Game screen (preview = false) — hyperspace preferred:**
+**Hyperspace preferred:**
 ```
 hyperspaceArtHiRes → hyperspaceArt → frontArt → frontArtLowRes → text/error
 ```
 
-**Game screen (preview = false) — normal preferred:**
+**Normal preferred:**
 ```
 frontArt → frontArtLowRes → hyperspaceArtHiRes → hyperspaceArt → text/error
 ```
@@ -847,6 +835,3 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 | **Screen Wake Lock** | A browser API (`navigator.wakeLock.request('screen')`) that prevents the device screen from sleeping. Used by `useWakeLock` on the game screen when `enableWakeLock` is true in user settings. Supported on Android Chrome and iOS Safari PWA (iOS 16.4+). |
 | **swu-db proxy** | A Cloudflare Worker at `swu-proxy.dmgctrl.workers.dev` that proxies requests to swu-db.com and swudb.com to avoid CORS issues. |
 | **PWA** | Progressive Web App — a web app that can be installed on a device and used offline. |
-| **SOR** | Spark of Rebellion — the first set of Star Wars Unlimited cards. |
-| **LAW** | Legends of the Alliance — a later set of Star Wars Unlimited cards. |
-| **SWUDB** | swudb.com — a third-party Star Wars Unlimited database site. Deck lists can be imported via a URL of the form `https://swudb.com/deck/<id>`. |
