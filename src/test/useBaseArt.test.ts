@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import { useBaseArt } from '../hooks/useBaseArt'
+import { useBaseArt, getFirstGameImageUrl } from '../hooks/useBaseArt'
 import { getRotationFromHyperspaceUrl } from '../constants/rotatedCards'
 import { Base } from '../hooks/useBases'
 
@@ -408,6 +408,36 @@ describe('getRotationFromHyperspaceUrl', () => {
     for (const url of rotated) {
       expect(getRotationFromHyperspaceUrl(url)).toBe(90)
     }
+  })
+
+})
+
+describe('getFirstGameImageUrl', () => {
+
+  it('returns null when base is null', () => {
+    expect(getFirstGameImageUrl(null, false)).toBeNull()
+  })
+
+  it('returns frontArt when useHyperspace is false and frontArt exists', () => {
+    expect(getFirstGameImageUrl(fullBase, false)).toBe(fullBase.frontArt)
+  })
+
+  it('returns frontArtLowRes when useHyperspace is false and frontArt is null', () => {
+    const lowResOnly: Base = { ...sparseBase, frontArt: null, frontArtLowRes: 'https://swuapi/dagobah.png' }
+    expect(getFirstGameImageUrl(lowResOnly, false)).toBe('https://swuapi/dagobah.png')
+  })
+
+  it('returns hyperspaceArtHiRes when useHyperspace is true and hyperspaceArtHiRes exists', () => {
+    expect(getFirstGameImageUrl(fullBase, true)).toBe(fullBase.hyperspaceArtHiRes)
+  })
+
+  it('returns hyperspaceArt when useHyperspace is true and only hyperspaceArt exists', () => {
+    const hsArtOnly: Base = { ...fullBase, hyperspaceArtHiRes: null }
+    expect(getFirstGameImageUrl(hsArtOnly, true)).toBe(fullBase.hyperspaceArt)
+  })
+
+  it('returns frontArt when useHyperspace is true but no hyperspace URLs exist', () => {
+    expect(getFirstGameImageUrl(sparseBase, true)).toBe(sparseBase.frontArt)
   })
 
 })
