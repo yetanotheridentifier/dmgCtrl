@@ -135,7 +135,7 @@ src/
     swuSettingsScreenView.tsx Settings screen view (toggle list; calls useOrientation directly for iOS font sizing)
 
   hooks/
-    useBaseArt.ts           Ordered art fallback chain shared by setup and game screens
+    useBaseArt.ts           Ordered art fallback chain shared by setup and game screens; `preview` param (default `false`) puts low-res URLs first — setup screen passes `true`, game screen uses default
     useDragScrubber.ts      Drag-to-scrub gesture — tracks pointer events on `+`/`−` counter buttons; exposes `dragIndicator` (type, value, clientX, clientY) and pointer event handlers; 15px dead zone before scrub activates; 14px per step; caps drag value at `Math.min(max, 20)`; suppresses synthetic click after drag; disabled when `enableLongPress` is false or the reachable cap is < 2
     useBases.ts             Fetches and caches the full list of Base cards
     useFavourites.ts        Favourites list — add/remove/clear operations with deduplication on key; sorted by set then card number ascending; persists FavouriteBase[] to localStorage under key `favourites`; UI gated by enableFavourites in useUserSettings (tickets #123, #124 complete)
@@ -357,14 +357,26 @@ The `Base` interface captures all four possible art sources: `frontArt`, `frontA
 
 #### Art fallback chain (`useBaseArt`)
 
-Both the setup screen and the game screen call `useBaseArt(base, useHyperspace)`, which builds an ordered URL list (filtering out `null` entries) and maintains a fallback index. On each `onError` the index advances; `allFailed` only becomes `true` once all URLs are exhausted. The hook also tracks `imageLoaded`, `normalFailed`, and `hyperspaceFailed` so callers can derive UI state without re-inspecting the base object.
+Both the setup screen and the game screen call `useBaseArt(base, useHyperspace, preview)`, which builds an ordered URL list (filtering out `null` entries) and maintains a fallback index. On each `onError` the index advances; `allFailed` only becomes `true` once all URLs are exhausted. The hook also tracks `imageLoaded`, `normalFailed`, and `hyperspaceFailed` so callers can derive UI state without re-inspecting the base object.
 
-**Hyperspace preferred** (`useHyperspace = true`):
+The `preview` flag (default `false`) reorders the within-group art priority to prefer low-res URLs first. The setup screen passes `preview = true` to minimise LCP; the game screen uses the default `false` to prefer hi-res.
+
+**Setup screen (preview = true) — hyperspace preferred:**
+```
+hyperspaceArt → hyperspaceArtHiRes → frontArtLowRes → frontArt → text/error
+```
+
+**Setup screen (preview = true) — normal preferred:**
+```
+frontArtLowRes → frontArt → hyperspaceArt → hyperspaceArtHiRes → text/error
+```
+
+**Game screen (preview = false) — hyperspace preferred:**
 ```
 hyperspaceArtHiRes → hyperspaceArt → frontArt → frontArtLowRes → text/error
 ```
 
-**Normal preferred** (`useHyperspace = false`):
+**Game screen (preview = false) — normal preferred:**
 ```
 frontArt → frontArtLowRes → hyperspaceArtHiRes → hyperspaceArt → text/error
 ```

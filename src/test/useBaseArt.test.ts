@@ -181,6 +181,67 @@ describe('useBaseArt', () => {
     expect(result.current.allFailed).toBe(true)
   })
 
+  // --- Preview mode: normal preferred ---
+
+  it('src is frontArtLowRes initially in preview mode (normal preferred)', () => {
+    const { result } = renderHook(() => useBaseArt(fullBase, false, true))
+    expect(result.current.src).toBe(fullBase.frontArtLowRes)
+  })
+
+  it('advances to frontArt after one error in preview mode (normal preferred)', () => {
+    const { result } = renderHook(() => useBaseArt(fullBase, false, true))
+    act(() => result.current.onError())
+    expect(result.current.src).toBe(fullBase.frontArt)
+  })
+
+  it('advances to hyperspaceArt after two errors in preview mode (normal preferred)', () => {
+    const { result } = renderHook(() => useBaseArt(fullBase, false, true))
+    act(() => result.current.onError())
+    act(() => result.current.onError())
+    expect(result.current.src).toBe(fullBase.hyperspaceArt)
+  })
+
+  it('advances to hyperspaceArtHiRes after three errors in preview mode (normal preferred)', () => {
+    const { result } = renderHook(() => useBaseArt(fullBase, false, true))
+    act(() => result.current.onError())
+    act(() => result.current.onError())
+    act(() => result.current.onError())
+    expect(result.current.src).toBe(fullBase.hyperspaceArtHiRes)
+  })
+
+  it('src is frontArt initially in preview mode when no frontArtLowRes exists', () => {
+    const { result } = renderHook(() => useBaseArt(sparseBase, false, true))
+    expect(result.current.src).toBe(sparseBase.frontArt)
+  })
+
+  // --- Preview mode: hyperspace preferred ---
+
+  it('src is hyperspaceArt initially in preview mode (hyperspace preferred)', () => {
+    const { result } = renderHook(() => useBaseArt(fullBase, true, true))
+    expect(result.current.src).toBe(fullBase.hyperspaceArt)
+  })
+
+  it('advances to hyperspaceArtHiRes after one error in preview mode (hyperspace preferred)', () => {
+    const { result } = renderHook(() => useBaseArt(fullBase, true, true))
+    act(() => result.current.onError())
+    expect(result.current.src).toBe(fullBase.hyperspaceArtHiRes)
+  })
+
+  it('advances to frontArtLowRes after two errors in preview mode (hyperspace preferred)', () => {
+    const { result } = renderHook(() => useBaseArt(fullBase, true, true))
+    act(() => result.current.onError())
+    act(() => result.current.onError())
+    expect(result.current.src).toBe(fullBase.frontArtLowRes)
+  })
+
+  it('advances to frontArt after three errors in preview mode (hyperspace preferred)', () => {
+    const { result } = renderHook(() => useBaseArt(fullBase, true, true))
+    act(() => result.current.onError())
+    act(() => result.current.onError())
+    act(() => result.current.onError())
+    expect(result.current.src).toBe(fullBase.frontArt)
+  })
+
   // --- isHyperspace transitions ---
 
   it('isHyperspace becomes true when normal art exhausted and fallback shows hyperspace', () => {
