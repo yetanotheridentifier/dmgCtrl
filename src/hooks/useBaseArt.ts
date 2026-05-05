@@ -8,48 +8,34 @@ interface ArtEntry {
   rotationDeg: number
 }
 
-function buildEntries(base: Base, useHyperspace: boolean, preview: boolean): ArtEntry[] {
-  const normal: ArtEntry[] = preview
-    ? [
-        ...(base.frontArtLowRes ? [{ url: base.frontArtLowRes, isHyperspace: false, rotationDeg: 0 }] : []),
-        ...(base.frontArt ? [{ url: base.frontArt, isHyperspace: false, rotationDeg: 0 }] : []),
-      ]
-    : [
-        ...(base.frontArt ? [{ url: base.frontArt, isHyperspace: false, rotationDeg: 0 }] : []),
-        ...(base.frontArtLowRes ? [{ url: base.frontArtLowRes, isHyperspace: false, rotationDeg: 0 }] : []),
-      ]
-  const hyper: ArtEntry[] = preview
-    ? [
-        ...(base.hyperspaceArt ? [{ url: base.hyperspaceArt, isHyperspace: true, rotationDeg: 0 }] : []),
-        ...(base.hyperspaceArtHiRes ? [{
-          url: base.hyperspaceArtHiRes,
-          isHyperspace: true,
-          rotationDeg: getRotationFromHyperspaceUrl(base.hyperspaceArtHiRes),
-        }] : []),
-      ]
-    : [
-        ...(base.hyperspaceArtHiRes ? [{
-          url: base.hyperspaceArtHiRes,
-          isHyperspace: true,
-          rotationDeg: getRotationFromHyperspaceUrl(base.hyperspaceArtHiRes),
-        }] : []),
-        ...(base.hyperspaceArt ? [{ url: base.hyperspaceArt, isHyperspace: true, rotationDeg: 0 }] : []),
-      ]
+function buildEntries(base: Base, useHyperspace: boolean): ArtEntry[] {
+  const normal: ArtEntry[] = [
+    ...(base.frontArt ? [{ url: base.frontArt, isHyperspace: false, rotationDeg: 0 }] : []),
+    ...(base.frontArtLowRes ? [{ url: base.frontArtLowRes, isHyperspace: false, rotationDeg: 0 }] : []),
+  ]
+  const hyper: ArtEntry[] = [
+    ...(base.hyperspaceArtHiRes ? [{
+      url: base.hyperspaceArtHiRes,
+      isHyperspace: true,
+      rotationDeg: getRotationFromHyperspaceUrl(base.hyperspaceArtHiRes),
+    }] : []),
+    ...(base.hyperspaceArt ? [{ url: base.hyperspaceArt, isHyperspace: true, rotationDeg: 0 }] : []),
+  ]
   return useHyperspace ? [...hyper, ...normal] : [...normal, ...hyper]
 }
 
 export function getFirstGameImageUrl(base: Base | null, useHyperspace: boolean): string | null {
   if (!base) return null
-  return buildEntries(base, useHyperspace, false)[0]?.url ?? null
+  return buildEntries(base, useHyperspace)[0]?.url ?? null
 }
 
-export function useBaseArt(base: Base | null, useHyperspace: boolean, preview = false) {
+export function useBaseArt(base: Base | null, useHyperspace: boolean) {
   const [index, setIndex] = useState(0)
   const [imageLoaded, setImageLoaded] = useState(false)
 
   const entries = useMemo(
-    () => (base ? buildEntries(base, useHyperspace, preview) : []),
-    [base, useHyperspace, preview],
+    () => (base ? buildEntries(base, useHyperspace) : []),
+    [base, useHyperspace],
   )
 
   useEffect(() => {

@@ -104,7 +104,7 @@ Timing can be adjusted via `VISUAL_PAUSE_MS` at the top of the script.
 | Metric | What it measures |
 |---|---|
 | **Setup ready** | Navigation start → set selector enabled (covers loading screen + base data fetch) |
-| **Preview image** | First base selected → card image visible in setup screen (the #142 metric — low-res-first fallback chain) |
+| **Preview image** | First base selected → card image visible in setup screen |
 | **Game (low res)** | Start clicked → card image visible — TS26 base (`frontArtLowRes` only, no CDN art) |
 | **Game (normal res)** | Start clicked → card image visible — LAW-021 (`frontArt` from CDN) |
 | **Game (hi res)** | Start clicked → card image visible — SOR-019 with hyperspace on (`hyperspaceArtHiRes` / SOR-285) |

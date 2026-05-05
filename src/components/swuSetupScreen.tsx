@@ -20,7 +20,7 @@ function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Pro
   const { useHyperspace, enableFavourites } = useUserSettings()
   const { favourites, addFavourite, removeFavourite } = useFavourites()
   const setup = useSwuSetup(onConfirm, initialSelection)
-  const art = useBaseArt(setup.selectedBase, useHyperspace, true)
+  const art = useBaseArt(setup.selectedBase, useHyperspace)
 
   useEffect(() => {
     const url = getFirstGameImageUrl(setup.selectedBase, useHyperspace)
