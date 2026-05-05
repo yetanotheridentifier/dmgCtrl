@@ -1,10 +1,13 @@
 /**
  * Performance measurement script.
  *
- * Measures three timings across N iterations and reports min / median / max:
+ * Measures timings across N iterations and reports min / median / max:
  *   - Setup ready:    navigation start → set selector enabled
- *   - Preview image:  first base selected → preview network idle  (the #142 metric)
- *   - Game image:     Start clicked → game screen network idle    (the #152 metric)
+ *   - Preview image:  first base selected → card image visible in DOM  (the #142 metric)
+ *   - Game image (3 resolution tiers, each measured per iteration):
+ *       low res    — TS26 base      (frontArtLowRes only, no CDN art)
+ *       normal res — LAW-021        (frontArt from CDN)
+ *       hi res     — SOR-019        (hyperspaceArtHiRes / SOR-285, hyperspace enabled)
  *
  * LCP is also captured for each run (largest element painted before first
  * interaction — typically the preview image when a base is auto-selected, or
@@ -40,8 +43,19 @@ const DEV_URL    = positional[0] ?? 'http://127.0.0.1:5173/dmgCtrl/'
 const ITERATIONS = parseInt(positional[1] ?? '5', 10)
 const COLD       = flags.includes('--cold')
 
-// Per-phase network idle timeout (ms). Increase if on a slow connection.
+// Per-phase timeout (ms). Increase if on a slow connection.
 const IDLE_TIMEOUT = 10000
+
+// The three game-image scenarios measured on every iteration.
+// null aspect / baseKey → pick the first available option from the select.
+const GAME_SCENARIOS = [
+  // TS26 has no CDN frontArt — only frontArtLowRes is available.
+  { label: 'low res',    setCode: 'TS26', aspect: null,        baseKey: null,      hyperspace: false },
+  // LAW-021 (Coaxium Mine) has a normal-res CDN image (frontArt).
+  { label: 'normal res', setCode: 'LAW',  aspect: 'Vigilance', baseKey: 'LAW-021', hyperspace: false },
+  // SOR-019 (Security Complex) has a hi-res hyperspace image (SOR-285).
+  { label: 'hi res',     setCode: 'SOR',  aspect: 'Vigilance', baseKey: 'SOR-019', hyperspace: true  },
+]
 
 // ─── Selectors ────────────────────────────────────────────────────────────────
 
@@ -77,6 +91,61 @@ async function selectFirstBase(page) {
   await waitForOptions(page, SEL.baseSelect)
   const baseLabel = await pickFirst(SEL.baseSelect)
   return `${setLabel} / ${baseLabel}`
+}
+
+// Select a specific set + aspect + base. Pass null for aspect or baseKey to
+// fall back to the first available option in that select.
+async function selectBase(page, setCode, aspect, baseKey) {
+  await page.selectOption(SEL.setSelect, { value: setCode })
+  await waitForOptions(page, SEL.aspectSelect)
+  if (aspect) {
+    await page.selectOption(SEL.aspectSelect, { value: aspect })
+  } else {
+    const opt = page.locator(`${SEL.aspectSelect} option:not([disabled])`).first()
+    await page.selectOption(SEL.aspectSelect, { value: await opt.getAttribute('value') })
+  }
+  await waitForOptions(page, SEL.baseSelect)
+  if (baseKey) {
+    await page.selectOption(SEL.baseSelect, { value: baseKey })
+  } else {
+    const opt = page.locator(`${SEL.baseSelect} option:not([disabled])`).first()
+    await page.selectOption(SEL.baseSelect, { value: await opt.getAttribute('value') })
+  }
+}
+
+// Patch useHyperspace in localStorage. Requires a page.reload() to take effect
+// in React state (the app reads settings only on mount).
+async function setHyperspace(page, enabled) {
+  await page.evaluate(enabled => {
+    const KEY = 'user_settings'
+    const settings = JSON.parse(localStorage.getItem(KEY) ?? '{}')
+    settings.useHyperspace = enabled
+    localStorage.setItem(KEY, JSON.stringify(settings))
+  }, enabled)
+}
+
+// Returns true once any image on the page has finished loading and is visible.
+// Covers both components:
+//   imagePreview.tsx      — wrapper div has style.visibility = 'visible' on load
+//   swuGameScreenView.tsx — img element has style.display = 'block' on load
+const imageVisibleFn = () => {
+  for (const img of document.querySelectorAll('img')) {
+    if (!img.complete || !img.naturalWidth || !img.src) continue
+    const parent = img.parentElement
+    if (parent && parent.style.visibility === 'visible') return true
+    if (img.style.display && img.style.display !== 'none') return true
+  }
+  return false
+}
+
+// Time from Start click to the card image becoming visible in the game screen.
+async function measureGameImageMs(page) {
+  await page.waitForSelector(`${SEL.startGame}:not([disabled])`, { timeout: 5000 })
+  const t = Date.now()
+  await page.click(SEL.startGame)
+  await page.waitForSelector(SEL.back, { timeout: 10000 })
+  await page.waitForFunction(imageVisibleFn, undefined, { timeout: IDLE_TIMEOUT }).catch(() => {})
+  return Date.now() - t
 }
 
 function median(values) {
@@ -136,16 +205,17 @@ try {
 const results = []
 
 for (let i = 0; i < ITERATIONS; i++) {
-  // Clear base data cache if running cold (we're on the app origin, so
-  // localStorage is accessible before the next navigation).
   if (COLD) {
     await page.evaluate(() => localStorage.removeItem('swu_bases_cache'))
   }
 
+  // Ensure hyperspace is off for setup + preview timing (clean baseline).
+  await setHyperspace(page, false)
+
   // ── 1. Setup ready ────────────────────────────────────────────────────────
   // Timed from navigation start to the set selector becoming interactive.
   const t0 = Date.now()
-  await page.goto(DEV_URL, { waitUntil: 'domcontentloaded', timeout: 15000 })
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 15000 })
   await page.waitForSelector(`${SEL.setSelect}:not([disabled])`, { timeout: 15000 })
   const setupReadyMs = Date.now() - t0
 
@@ -156,32 +226,42 @@ for (let i = 0; i < ITERATIONS; i++) {
   )
 
   // ── 3. Preview image ──────────────────────────────────────────────────────
-  // Time from first selector interaction to network idle. Covers the low-res
+  // Time from first selector interaction to card image visible. Covers the low-res
   // image fetch that #142 put at the front of the fallback chain.
   const tPreview = Date.now()
   const selection = await selectFirstBase(page)
-  await page.waitForLoadState('networkidle', { timeout: IDLE_TIMEOUT }).catch(() => {})
+  // waitForLoadState('networkidle') only detects network requests — a cached image
+  // produces no traffic and fires immediately. Instead wait for imagePreview.tsx to
+  // set visibility:'visible' on the wrapper div, which only happens once imageLoaded
+  // becomes true (i.e. the img onLoad callback has fired).
+  await page.waitForFunction(imageVisibleFn, undefined, { timeout: IDLE_TIMEOUT }).catch(() => {})
   const previewMs = Date.now() - tPreview
 
-  // ── 4. Game image ─────────────────────────────────────────────────────────
-  // Time from Start click to game screen network idle. Covers the hi-res
-  // card image fetch that #152 will preload.
-  await page.waitForSelector(`${SEL.startGame}:not([disabled])`, { timeout: 5000 })
-  const tGame = Date.now()
-  await page.click(SEL.startGame)
-  await page.waitForSelector(SEL.back, { timeout: 10000 })
-  await page.waitForLoadState('networkidle', { timeout: IDLE_TIMEOUT }).catch(() => {})
-  const gameMs = Date.now() - tGame
+  // ── 4. Game image — three resolution tiers ────────────────────────────────
+  // Each scenario reloads with the correct hyperspace setting, selects its
+  // specific base, then times Start click → image visible.
+  const gameMsMap = {}
 
-  results.push({ setupReadyMs, lcp, previewMs, gameMs })
+  for (const scenario of GAME_SCENARIOS) {
+    await setHyperspace(page, scenario.hyperspace)
+    await page.reload({ waitUntil: 'domcontentloaded', timeout: 15000 })
+    await page.waitForSelector(`${SEL.setSelect}:not([disabled])`, { timeout: 15000 })
+    await selectBase(page, scenario.setCode, scenario.aspect, scenario.baseKey)
+    gameMsMap[scenario.label] = await measureGameImageMs(page)
+    await page.click(SEL.back)
+    await page.waitForSelector(`${SEL.setSelect}:not([disabled])`, { timeout: 10000 })
+  }
+
+  results.push({ setupReadyMs, lcp, previewMs, gameMsMap })
 
   const lcpStr = lcp !== null ? `${pad(lcp)} ms` : '  n/a ms'
+  const gameStr = GAME_SCENARIOS.map(s => `  game-${s.label.replace(' res', '')} ${pad(gameMsMap[s.label])} ms`).join('')
   console.log(
     `[${String(i + 1).padStart(2)}/${ITERATIONS}]` +
     `  setup ${pad(setupReadyMs)} ms` +
     `  lcp ${lcpStr}` +
     `  preview ${pad(previewMs)} ms` +
-    `  game ${pad(gameMs)} ms` +
+    gameStr +
     `    (${selection})`,
   )
 }
@@ -190,19 +270,18 @@ for (let i = 0; i < ITERATIONS; i++) {
 
 const setupVals   = results.map(r => r.setupReadyMs)
 const previewVals = results.map(r => r.previewMs)
-const gameVals    = results.map(r => r.gameMs)
 const lcpVals     = results.map(r => r.lcp).filter(v => v !== null)
 
-const divider = '─'.repeat(58)
+const divider = '─'.repeat(64)
 console.log(`\n${divider}`)
-console.log('Metric             '.padEnd(20) + '   min  median     max')
+console.log('Metric                 '.padEnd(24) + '   min  median     max')
 console.log(divider)
 
 function row(label, vals) {
   if (!vals.length) return
   const s = [...vals].sort((a, b) => a - b)
   console.log(
-    label.padEnd(20) +
+    label.padEnd(24) +
     `${pad(s[0])} ms` +
     `${pad(median(vals))} ms` +
     `${pad(s[s.length - 1])} ms`,
@@ -212,7 +291,9 @@ function row(label, vals) {
 row('Setup ready', setupVals)
 if (lcpVals.length) row('LCP', lcpVals)
 row('Preview image', previewVals)
-row('Game image', gameVals)
+for (const scenario of GAME_SCENARIOS) {
+  row(`Game (${scenario.label})`, results.map(r => r.gameMsMap[scenario.label]))
+}
 console.log(divider)
 
 await browser.close()
