@@ -192,6 +192,7 @@ public/
 scripts/
   inspect-base-data.mjs     Replicates the useBases merging logic; writes docs/base-data-snapshot.json and docs/base-data-summary.json for offline data inspection
   validate-bases.mjs        Playwright script — opens a headed Chromium window and iterates every base for semi-automated visual QA (see Section 7)
+  validate-errors.mjs       Playwright script — opens a headed Chromium window and steps through all five error/info message states for semi-automated visual QA (see Section 7)
 ```
 
 ---
@@ -415,6 +416,32 @@ Validation complete — 42 bases checked.
 
 Timing constants at the top of the script (`VISUAL_PAUSE_MS`, `BACK_PAUSE_MS`) can be adjusted if more or less inspection time is needed.
 
+### Error message validation script
+
+`scripts/validate-errors.mjs` is a Playwright-driven browser automation script for semi-automated visual QA of all five error and information message states. It opens a visible Chromium window and steps through each scenario in sequence, pausing 3 seconds for visual inspection before advancing. Settings modified during the run (e.g. `useHyperspace`) are restored to defaults at the end.
+
+**Scenarios:**
+1. SWUDB Import — "Invalid deck URL" (types an invalid URL)
+2. SWUDB Import — "Deck not accessible" (loads an unreachable deck URL via the proxy)
+3. Base Selector — "No base images found" (all PNG/WebP/JPEG requests blocked via `page.route`)
+4. Base Selector — "Hyperspace variant not found" (`useHyperspace` set to `true`, selects a base with no hyperspace art)
+5. Base Selector — "Only hyperspace image available" (`useHyperspace` set to `false`, blocks the base's standard art URLs so it falls back to hyperspace)
+
+Scenarios 4 and 5 query `swu_bases_cache` in localStorage via `page.evaluate` to find suitable bases automatically — no hardcoded base names are required.
+
+Prerequisites:
+- HTTPS dev server must be running (`npm run dev:https`)
+- Playwright and the Chromium browser binary must be installed (one-time setup: `npm install --legacy-peer-deps && npx playwright install chromium`)
+
+Run with:
+```bash
+node scripts/validate-errors.mjs
+# or, for device testing on the local network:
+node scripts/validate-errors.mjs https://192.168.1.100:5173/dmgCtrl/
+```
+
+Timing can be adjusted via `VISUAL_PAUSE_MS` at the top of the script.
+
 ### `useFavourites` hook
 
 Manages a persistent list of favourite bases for quick reselection.
@@ -543,7 +570,7 @@ isValidSwudbUrl(url)     // tests against /^https:\/\/swudb\.com\/deck\/[A-Za-z0
 fetchSwudbDeck(deckId)   // fetches via the Cloudflare Worker proxy; returns { deckName, baseKey }
 ```
 
-SWUDB deck IDs are alphanumeric and variable length (observed range: 9–13 characters). The URL is validated on every change; edit URLs are normalised before validation so they pass. An error message appears below the URL field for invalid input; focusing the field clears the error.
+SWUDB deck IDs are alphanumeric and variable length (observed range: 9–13 characters). The URL is validated on every change; edit URLs are normalised before validation so they pass. An error message appears below the URL field for invalid input, extending the field's border in a drop-down style; focusing the field clears the error.
 
 The Load button is disabled while a fetch is in progress (shows `...`). Possible error states after clicking Load:
 - `'Invalid deck URL'` — URL failed validation (should not normally reach Load in this state)

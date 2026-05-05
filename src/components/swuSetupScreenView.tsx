@@ -241,17 +241,52 @@ function SwuSetupScreenView({
         <div style={{
           display: 'flex',
           flexDirection: 'row',
-          alignItems: 'stretch',
+          alignItems: 'flex-start',
           gap: '2vw',
         }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           <input
             type="text"
             value={swudbUrl}
             onChange={e => onSwudbChange(e.target.value)}
             onFocus={onSwudbFocus}
             placeholder="Paste SWUDB link"
-            style={inputStyle(swudbUrl !== '', small)}
+            style={{
+              ...inputStyle(swudbUrl !== '', small),
+              flex: 'none',
+              ...(swudbError ? {
+                border: '2px solid var(--color-error)',
+                borderBottom: 'none',
+                borderBottomLeftRadius: 0,
+                borderBottomRightRadius: 0,
+                boxShadow: 'none',
+              } : {
+                borderBottomLeftRadius: '12px',
+                borderBottomRightRadius: '12px',
+              }),
+            }}
           />
+          {swudbError && (
+            <div style={{
+              borderLeft: '2px solid var(--color-error)',
+              borderRight: '2px solid var(--color-error)',
+              borderBottom: '2px solid var(--color-error)',
+              borderRadius: '0 0 12px 12px',
+              padding: small ? '0.4vh 1.5vw 0.5vh' : '0.5vh 2vw 0.7vh',
+            }}>
+              <p style={{
+                color: 'var(--color-error)',
+                fontWeight: '300',
+                fontSize: small ? 'clamp(0.55rem, 1.4vw, 0.7rem)' : 'clamp(0.6rem, 2vw, 0.8rem)',
+                margin: 0,
+                textAlign: 'center',
+                textShadow: '0 1px 4px rgba(0,0,0,0.9)',
+              }}>
+                {swudbError}
+              </p>
+            </div>
+          )}
+          </div>
           <button
             data-testid="swudb-load-button"
             onClick={onSwudbLoad}
@@ -274,23 +309,12 @@ function SwuSetupScreenView({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              ...(small ? { height: 'max(44px, 8vh)' } : {}),
             }}
           >
             {swudbLoading ? '...' : 'Load'}
           </button>
         </div>
-
-        {/* Error message */}
-        {swudbError && (
-          <p style={{
-            color: 'var(--color-error)',
-            fontWeight: '300',
-            fontSize: small ? 'clamp(0.75rem, 1.8vw, 0.9rem)' : 'clamp(0.9rem, 3vw, 1.1rem)',
-            margin: 0,
-          }}>
-            {swudbError}
-          </p>
-        )}
 
         {/* Row 2: deck name + star (optional) + > button */}
         {swudbDeckName !== null && (
@@ -329,8 +353,10 @@ function SwuSetupScreenView({
         <p style={{
           color: 'var(--color-error)',
           fontWeight: '300',
-          fontSize: small ? 'clamp(0.9rem, 2vw, 1.1rem)' : 'clamp(0.9rem, 3vw, 1.2rem)',
+          fontSize: small ? 'clamp(0.55rem, 1.4vw, 0.7rem)' : 'clamp(0.6rem, 2vw, 0.8rem)',
           margin: 0,
+          textAlign: 'center',
+          textShadow: '0 1px 4px rgba(0,0,0,0.9)',
         }}>
           {error}
         </p>

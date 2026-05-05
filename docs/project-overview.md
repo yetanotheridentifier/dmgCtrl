@@ -69,6 +69,34 @@ Validation complete — 42 bases checked.
 
 Timing can be adjusted via `VISUAL_PAUSE_MS` and `BACK_PAUSE_MS` at the top of the script.
 
+### Error message validation script
+
+`scripts/validate-errors.mjs` automates the visual QA process for all five error and information message states. It opens a visible Chromium window and steps through each scenario in sequence, pausing for visual inspection before advancing.
+
+**Scenarios covered:**
+1. SWUDB Import — "Invalid deck URL" (invalid URL typed)
+2. SWUDB Import — "Deck not accessible" (unreachable deck URL)
+3. Base Selector — "No base images found" (all images blocked via Playwright route interception)
+4. Base Selector — "Hyperspace variant not found" (useHyperspace on, base without hyperspace art)
+5. Base Selector — "Only hyperspace image available" (useHyperspace off, normal art blocked for a base that has hyperspace art)
+
+**One-time setup** (Playwright + Chromium browser binary):
+```bash
+npm install --legacy-peer-deps
+npx playwright install chromium
+```
+
+**Running the script:**
+1. Start the HTTPS dev server: `npm run dev:https`
+2. In a separate terminal: `node scripts/validate-errors.mjs`
+
+The script can also be pointed at a custom URL (e.g. the local network HTTPS address for device testing):
+```
+node scripts/validate-errors.mjs https://192.168.1.100:5173/dmgCtrl/
+```
+
+Timing can be adjusted via `VISUAL_PAUSE_MS` at the top of the script.
+
 ## Notes for AI Assistants
 
 - `npm install` requires `--legacy-peer-deps` due to Vite / vite-plugin-pwa version conflict
