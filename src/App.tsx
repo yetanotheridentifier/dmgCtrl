@@ -15,6 +15,7 @@ function App() {
   const [selectedBase, setSelectedBase] = useState<Base | null>(null)
   const [lastSelection, setLastSelection] = useState<InitialSelection | null>(null)
   const [isInGame, setIsInGame] = useState(false)
+  const [helpSource, setHelpSource] = useState<'setup' | 'game'>('setup')
   const { loading } = useBases()
 
   const handleReady = () => setScreen('setup')
@@ -32,6 +33,11 @@ function App() {
   }
 
   const handleHelp = () => {
+    const source: 'setup' | 'game' =
+      screen === 'game' ? 'game' :
+      screen === 'settings' && backStack[backStack.length - 1] === 'game' ? 'game' :
+      'setup'
+    setHelpSource(source)
     setBackStack(prev => [...prev, screen])
     setScreen('help')
   }
@@ -75,7 +81,7 @@ function App() {
           />
         </div>
       )}
-      {screen === 'help' && <SwuHelpScreen onBack={handleOverlayBack} />}
+      {screen === 'help' && <SwuHelpScreen onBack={handleOverlayBack} source={helpSource} />}
       {screen === 'settings' && <SwuSettingsScreen onBack={handleOverlayBack} onHelp={handleHelp} />}
     </>
   )

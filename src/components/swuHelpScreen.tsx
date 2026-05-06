@@ -1,16 +1,18 @@
-import helpHtml from '../../docs/help.md'
+import setupHelpHtml from '../../docs/swuSetupHelp.md'
+import gameHelpHtml from '../../docs/swuGameHelp.md'
 import AppScreenLayout from './layout/AppScreenLayout'
 import { useOrientation } from '../hooks/useOrientation'
 import { BackIcon } from './icons'
 
-// Strip the <h1> from the rendered HTML — the title is provided by the JSX header instead.
-const contentHtml = helpHtml.replace(/^<h1[^>]*>[\s\S]*?<\/h1>\n?/, '')
 
 interface Props {
   onBack: () => void
+  source?: 'setup' | 'game'
 }
 
-function SwuHelpScreen({ onBack }: Props) {
+function SwuHelpScreen({ onBack, source = 'setup' }: Props) {
+  const rawHtml = source === 'game' ? gameHelpHtml : setupHelpHtml
+  const contentHtml = rawHtml.replace(/^<h1[^>]*>[\s\S]*?<\/h1>\n?/, '')
   const { isPortrait, vmin } = useOrientation()
   const baseFontSize = `${Math.min(Math.max(14, Math.round(vmin * 0.04)), 18)}px`
 

@@ -1,115 +1,10 @@
-# dmgCtrl — Architecture
+# dmgCtrl — Architecture: Implementation Details
 
-## 1. Overview
-
-**dmgCtrl** is a mobile-first progressive web app (PWA) designed to assist players of card games with game-state tracking. The current implementation targets **Star Wars Unlimited (SWU)**.
-
-Core functionality:
-- **Loading screen** — splash screen (icon + "LOADING") while base data is fetched; transitions to the setup screen as soon as data is ready
-- **Base selection** — filter and choose a base card by set, aspect, and card identity; or import a deck from swudb.com
-- **Damage tracking** — increment and decrement a counter against the base's HP to track remaining health
-- **Hyperspace art** — optionally display the premium "hyperspace" variant of a base card
-- **Epic Action tracking** — an epic action button marks the base's once-per-game ability as used; a gold token overlay appears over the card's epic action text area to indicate the spent state
-- **Force token tracking** — a Force icon button is available on every base; on Force bases it is immediately active, on other bases a single enable tap unlocks it for games where the Force is gained via a card or leader ability
-- **Screen wake lock** — prevents the device screen from sleeping while on the game screen
-- **Drag-to-scrub** — long-pressing and dragging upward on a `+` or `−` button increments or decrements by multiple damage points in one gesture; a floating number indicator shows the pending value; capped to remaining capacity (`+` is capped at remaining HP, `−` at current damage); gated by `enableLongPress` in user settings (on by default)
-- **Game action log** — a scrollable overlay panel listing all game events (damage, epic action, Force token, round changes); accessible via a log button in the bottom-right of the game screen; the most recent undoable entry shows an Undo button that restores the previous game state; gated by `enableActionLog` in user settings (on by default)
-- **Round tracker** — a button in the bottom-left corner of the game screen that increments the round counter and adds a round entry to the action log; starts at Round 1 on game start; only visible when the action log is enabled
-- **User settings** — persistent preferences (hyperspace art, force token, epic actions, wake lock, action log, favourites) accessible via the ⚙ button on the setup and game screens
-- **Favourites** — star toggle on the setup screen marks a base as a favourite; a dedicated Favourites input mode shows a sorted dropdown of saved bases for quick reselection; saved bases can be managed in the Settings screen; gated by the Enable Favourites setting
-- **Offline capability** — PWA support means the app can be installed and used without a network connection
-
-The app is served at `/dmgCtrl/` and is designed to be added to an iOS home screen for a native-like experience.
+> **See also:** [Overview](architecture-overview.md) | [Process & Testing](architecture-process.md)
 
 ---
 
-## 2. Goals and Non-Goals
-
-### Goals
-
-- **Mobile-first** — designed for a phone held in landscape orientation during play
-- **Offline-ready** — PWA with service worker; usable without network after first load
-- **Simplicity** — minimal UI, minimal dependencies, no backend
-- **Fast startup** — data is cached in localStorage so repeat visits are instant
-- **Accurate art** — show high-resolution card art where available, with graceful degradation
-
-### Non-Goals
-
-- Not a full rules engine — does not enforce card rules, abilities, or legality
-- Not a deck builder or collection tracker
-- Not multi-player or networked — all state is local
-- Not multi-game at launch — architecture is intended to support future games, but the current data layer is SWU-specific
-
----
-
-## 3. Technology Stack
-
-| Concern | Technology |
-|---|---|
-| Framework | React 18 |
-| Language | TypeScript |
-| Build tool | Vite |
-| PWA | vite-plugin-pwa (Workbox) |
-| Styling | Inline styles + CSS custom properties (no CSS framework) |
-| Data fetching | Custom React hooks (`useBases`) |
-| Testing | Vitest + React Testing Library |
-| CI/CD | GitHub Actions → GitHub Pages |
-| Markdown | Custom Vite plugin (`marked`) — transforms `.md` to HTML string exports |
-
----
-
-## 4. Application Architecture
-
-### High-level structure
-
-```
-App
-├── SwuLoadingScreen      (standalone screen — icon + LOADING text; transitions as soon as data is ready)
-├── SwuSetupScreen        (container)
-│   ├── useSwuSetup       (hook — filtering, auto-select)
-│   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
-│   ├── useFavourites     (hook — favourites list, add/remove)
-│   └── SwuSetupScreenView (view — renders mode selector, selects, image preview, start button; ⚙ button opens settings)
-│       └── ImagePreview  (pure view — renders art or error message from props)
-├── SwuGameScreen         (container)
-│   ├── useSwuGame        (hook — damage counter, epic action, Force token enabled and active state)
-│   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
-│   ├── useWakeLock       (hook — prevents screen sleep during gameplay via Screen Wake Lock API)
-│   ├── useGameLog        (hook — ordered list of game log entries with add/undo/reset; each entry records event type, message, colour, and previous game state snapshot)
-│   ├── GameLogOverlay    (view — scrollable log panel; auto-scrolls to latest entry; undo button on last undoable entry; round entries styled with blue gradient)
-│   └── SwuGameScreenView (view — renders counter, image, epic action token, Force token; ⚙ button always visible; calls useDragScrubber directly for drag-to-scrub gesture state)
-├── SwuHelpScreen         (standalone screen — renders help.md content)
-└── SwuSettingsScreen     (container)
-    ├── useUserSettings   (hook — persistent user preferences)
-    ├── useFavourites     (hook — favourites list, remove/clear operations)
-    └── SwuSettingsScreenView (view — toggle list; landscape: two-column layout separating general and favourites settings; calls useOrientation directly for font sizing)
-
-Each screen is wrapped in AppScreenLayout (shared layout component)
-```
-
-### Container / View pattern
-
-Every screen is split into two files:
-
-- **Container** (e.g. `swuGameScreen.tsx`) — owns all logic. Calls hooks, computes derived state, defines event handlers, and passes everything down as props.
-- **View** (e.g. `swuGameScreenView.tsx`) — receives props and renders. Contains no business logic. Easy to test in isolation.
-
-This pattern keeps views thin and ensures logic is tested via hook and container tests rather than integration tests that have to simulate complex UI interactions.
-
-The exception is `SwuSettingsScreenView`, which calls `useOrientation()` directly to handle iOS Dynamic Type font scaling — the same approach used by `SwuHelpScreen`.
-
-### Separation of concerns
-
-| Layer | Responsibility | Location |
-|---|---|---|
-| Logic | State, derived values, side effects | `src/hooks/` |
-| Utilities | Pure functions with no React dependency | `src/utils/` |
-| Layout | Full-screen container, background, safe area | `src/components/layout/` |
-| Presentation | Rendering from props | View components in `src/components/` |
-
----
-
-## 5. Folder Structure
+## 1. Folder Structure
 
 ```
 src/
@@ -127,7 +22,7 @@ src/
     GameLogOverlay.tsx      Game screen action log overlay — scrollable entry list; auto-scrolls to bottom; undo button on last undoable entry; round entries styled with blue gradient
     swuGameScreen.tsx       Game screen container
     swuGameScreenView.tsx   Game screen view (⚙ button always visible)
-    swuHelpScreen.tsx       Help screen (renders help.md; title row: back button + icon + "Help" h1)
+    swuHelpScreen.tsx       Help screen (renders swuSetupHelp.md or swuGameHelp.md based on source prop; title row: back button + icon + "Help" h1)
     swuLoadingScreen.tsx    Loading screen (icon + "LOADING" text; calls onReady as soon as loading prop becomes false)
     swuSetupScreen.tsx      Setup screen container
     swuSetupScreenView.tsx  Setup screen view (title row: icon + "dmgCtrl" h1 + ⚙ button + help button)
@@ -173,9 +68,12 @@ src/
     ...                     Static assets (icons, splash screens)
 
 docs/
-  architecture.md           This document
-  help.md                   User guide (imported as HTML string via custom Vite plugin)
-  project-overview.md       Product vision, planned features, AI assistant notes
+  architecture-overview.md      System overview, goals, tech stack, component tree, glossary
+  architecture-implementation.md This document — folder structure, state, data layer, UI, feature details
+  architecture-process.md       Workflow, CI/CD, analytics, testing strategy, future improvements
+  swuSetupHelp.md               Setup screen user guide (imported as HTML string via custom Vite plugin)
+  swuGameHelp.md                Game screen user guide (imported as HTML string via custom Vite plugin)
+  project-overview.md           Product vision, planned features, AI assistant notes
 
 public/
   dmgCtrl-icon-transparent-192.png  App icon (transparent background); used on loading screen and alongside screen titles
@@ -191,14 +89,14 @@ public/
 
 scripts/
   inspect-base-data.mjs     Replicates the useBases merging logic; writes docs/base-data-snapshot.json and docs/base-data-summary.json for offline data inspection
-  validate-bases.mjs        Playwright script — opens a headed Chromium window and iterates every base for semi-automated visual QA (see Section 7)
-  validate-errors.mjs       Playwright script — opens a headed Chromium window and steps through all five error/info message states for semi-automated visual QA (see Section 7)
-  measure-performance.mjs    Playwright script — measures setup ready time, LCP, preview image time, and game image time across three resolution tiers (low/normal/hi res) per iteration; reports min/median/max (see Section 7)
+  validate-bases.mjs        Playwright script — opens a headed Chromium window and iterates every base for semi-automated visual QA (see architecture-process.md)
+  validate-errors.mjs       Playwright script — opens a headed Chromium window and steps through all five error/info message states for semi-automated visual QA (see architecture-process.md)
+  measure-performance.mjs    Playwright script — measures setup ready time, LCP, preview image time, and game image time across three resolution tiers (low/normal/hi res) per iteration; reports min/median/max (see project-overview.md)
 ```
 
 ---
 
-## 6. State Management
+## 2. State Management
 
 The app uses **local React state** with one shared React Context for user settings — no global state library.
 
@@ -303,7 +201,7 @@ When `epicActionUsed && showEpicAction && forceActive && showForce` are all true
 
 ---
 
-## 7. Data Layer
+## 3. Data Layer
 
 ### `useBases` hook
 
@@ -471,7 +369,7 @@ export interface FavouriteBase {
 
 ---
 
-## 8. UI & Layout System
+## 4. UI & Layout System
 
 ### AppScreenLayout
 
@@ -524,7 +422,7 @@ The app is designed for **landscape orientation**. `useOrientation` is used in f
 
 ---
 
-## 9. Feature Architecture
+## 5. Feature Architecture
 
 ### App startup and loading screen
 
@@ -648,123 +546,7 @@ Avoid putting logic directly in view components. If a view needs to compute some
 
 ---
 
-## 10. Workflow & Development Process
-
-### Branching strategy
-
-| Branch type | Naming convention | Purpose |
-|---|---|---|
-| Feature | `feature/<short-description>` | New functionality |
-| Bug fix | `bug/<short-description>` | Defect corrections |
-| Refactor | `refactor/<short-description>` | Code improvements without behaviour change |
-| Docs | `docs/<short-description>` | Documentation only |
-
-All development happens on short-lived branches. `main` is the stable, deployable branch.
-
-### PR workflow
-
-1. Branch from `main`
-2. Develop and commit on the feature branch
-3. Open a pull request targeting `main`
-4. All tests must pass (enforced by GitHub Actions)
-5. Merge when ready
-
-### Commit messages
-
-Commit messages follow the pattern `<branch-name> <description>`, e.g.:
-
-```
-bug/hyperspace-art-resolution improves resolution of hyperspace art
-```
-
----
-
-## 11. CI/CD
-
-### Pipeline: `.github/workflows/deploy.yml`
-
-Triggered on push to `main` and on pull requests targeting `main`. Three sequential jobs:
-
-```
-test → build → deploy
-```
-
-| Job | Steps |
-|---|---|
-| `test` | `npm ci` → `npm test` (Vitest) |
-| `build` | `npm ci` → `tsc` → `vite build` |
-| `deploy` | Upload `dist/` to GitHub Pages |
-
-### Deployment target
-
-The app is hosted on **GitHub Pages** at `/dmgCtrl/`. The `base` config in `vite.config.ts` is set to `/dmgCtrl/` to ensure all asset paths are correct.
-
-### What triggers the pipeline
-
-- Push to `main` — runs all three jobs and deploys on success
-- PRs targeting `main` — runs `test` and `build` jobs; deploy is skipped
-
----
-
-## 12. Analytics
-
-### Cloudflare Web Analytics
-
-A Cloudflare Web Analytics beacon is embedded in `index.html`. It fires on every page load (i.e. every app start) and provides:
-
-- App load counts over time
-- Unique visitor counts (privacy-preserving, no cookies, no consent banner required)
-- Countries, browsers, devices
-
-The beacon token (`aaed1e18376f4bdd9f56a0050acce291`) is a public identifier — it is not a secret and is safe to commit.
-
-Custom event tracking (game starts, base popularity) is not covered by the Cloudflare beacon, which only records page loads. That is handled separately by the Worker + InfluxDB pipeline (see issues #97, #98, #99).
-
----
-
-## 13. Testing Strategy
-
-### Philosophy
-
-Tests verify behaviour, not implementation. Hook tests cover logic in isolation; container/screen tests cover integration between hooks and views; `App.test.tsx` covers top-level navigation and feature flows.
-
-### Test types
-
-| Type | Location | Tools |
-|---|---|---|
-| Hook unit tests | `src/test/use*.test.ts` | Vitest, `renderHook`, `act` |
-| Utility unit tests | `src/test/*.test.ts` | Vitest |
-| Component tests | `src/test/*.test.tsx` | Vitest, React Testing Library, `userEvent` |
-| End-to-end (within app) | `src/test/App.test.tsx` | Same |
-
-### Mocking approach
-
-- External APIs are mocked with `vi.stubGlobal('fetch', ...)` — no real network calls in tests
-- localStorage is mocked with `vi.stubGlobal('localStorage', ...)` to test caching paths
-- All mocks are torn down with `vi.unstubAllGlobals()` in `afterEach`
-- `useUserSettings` is mocked with `vi.mock('../hooks/useUserSettings', ...)` in tests that exercise preference-gated behaviour; `vi.hoisted` is used for mock values that need per-test control
-- `useFavourites` is mocked with `vi.mock('../hooks/useFavourites', ...)` in setup screen tests; `vi.hoisted` provides per-test control over `favourites`, `addFavourite`, `removeFavourite`
-- `App.test.tsx` mocks `useBases` at the module level (`vi.mock('../hooks/useBases', ...)`) so data is available synchronously; this allows the tests to focus on navigation logic rather than data loading. The loading screen transitions immediately when data is ready; `waitFor` with the default timeout handles any async React batching.
-
-### Running tests
-
-```bash
-npm test          # run once
-npm run test:watch  # watch mode
-```
-
-Always use `npm test`. The `npx vitest run` form has a cache glitch that causes spurious first-run failures.
-
-### Coverage expectations
-
-- All hooks must have unit tests
-- All utility functions must have unit tests
-- All screens must have container/view tests covering primary interaction flows
-- New features must include tests before merging
-
----
-
-## 14. Performance Considerations
+## 6. Performance Considerations
 
 ### Mobile-first
 
@@ -784,54 +566,3 @@ The app targets mobile browsers and PWA installation. Key performance constraint
 - Card art is lazy-loaded via the browser's default `<img>` behaviour
 - The fallback chain in `useBaseArt` means a broken image never leaves a blank gap — it advances to the next URL or shows text
 - When a base is selected on the setup screen, `getFirstGameImageUrl` is called in a `useEffect` that fires a `new Image()` prefetch for the game-mode URL. This warms the browser cache so the game screen image is typically instant on Start
-
----
-
-## 15. Future Improvements
-
-### Architecture
-
-- **Global state** — React Context is now used for user settings; if the app grows further, a lightweight state manager (e.g. Zustand) may be worth adopting for broader shared state
-- **Multi-game support** — the `Base` type and `useBases` hook are SWU-specific; a game-agnostic data abstraction layer would be needed for additional games
-
-### Data
-
-- **Backend / sync** — currently all data is fetched from third-party APIs; a first-party backend could provide more reliable image hosting, faster response, and support for user-specific data (favourites, history)
-- **Art coverage** — swu-db.com CDN does not yet host hyperspace art for all sets; `hyperspaceArtHiRes` will become more reliable as their index grows
-
-### UI
-
-- **Theming system** — CSS custom properties are now in place; per-game themes (e.g. X-Wing aesthetic) could be implemented by swapping the `:root` values at runtime
-- **Animations** — damage counter and screen transitions could benefit from subtle animations
-
----
-
-## 16. Glossary
-
-| Term | Definition |
-|---|---|
-| **Base** | A card type in Star Wars Unlimited representing a location that acts as the player's "health bar". Each base has an HP value (typically 24–35). |
-| **Epic Action** | A special ability on some base cards that can be triggered once per game. The game screen shows an epic action button when the base has an epic action and `enableEpicActions` is true in user settings; tapping it marks the ability as used, adds a log entry, and renders a gold token overlay. The button is then disabled. When the action log is enabled, undo is performed via the log's Undo button. When the action log is disabled, tapping the overlay dismisses it visually without reverting game state. The button is only shown when the base's `epicAction` text contains the phrase 'Epic Action' (case-insensitive). Passive-effect bases and Force trigger bases are therefore excluded. |
-| **Epic action token** | The in-app UI element (a translucent yellow rectangle with a gold border, "Epic Action Used" text, and a starburst watermark) that overlays the lower portion of the base card when the epic action has been used, mirroring the physical token used in the tabletop game. When the Force token is also active, it occupies the left half of the overlay area. |
-| **Favourites** | A user-curated list of bases for quick reselection. Managed by `useFavourites`; persisted to localStorage under `favourites`. Visibility gated by `enableFavourites` in `useUserSettings` (default: `true`). Setup screen integration (star toggle + Favourites mode) added in ticket #123. Settings screen management UI (remove individual, clear all) added in ticket #124. |
-| **Force** | A recurring ability on some LOF base cards, identified by the phrase "The Force is with you" in their `epicAction` text. Force bases start the game with the Force button already enabled. Any base can also gain the Force via card or leader abilities — the locked Force icon is available on all bases for this purpose. |
-| **Force token button** | The blue icon button (showing `dmgCtrl-force-token.png`) that appears in the first slot below the back button when `forceEnabled` is true. Tapping it sets `forceActive = true` and renders the Force token overlay. On non-Force bases, the slot first shows a locked/dimmed version; tapping the dimmed icon once enables it. |
-| **Force token overlay** | The in-app UI element (a royal-blue rectangle with a light-blue border and a "The Force is With You" label) that overlays the lower portion of the base card when `forceActive` is true. A translucent watermark of `dmgCtrl-force-token.png` appears behind the text. Tapping the overlay returns `forceActive` to `false`. When the epic action token is also active, it occupies the right half of the overlay area. |
-| **Action log** | The scrollable game event log shown as an overlay on the game screen when `enableActionLog` is true. Rendered by `GameLogOverlay`. Managed by `useGameLog`. Each entry shows a coloured left strip, event message, and (for the last undoable entry) an Undo button. Round entries are styled with a blue gradient background. |
-| **Round tracker** | A round counter button in the bottom-left corner of the game screen. Increments the round number and adds a round entry to the action log on each tap. Starts at Round 1 on game start (initial entry is not undoable). Only visible when the action log is enabled. |
-| **GameLogEntry** | The record stored by `useGameLog` for each action. Fields: `id` (UUID), `type` (string tag for styling, e.g. `round`), `message`, `color` (left strip accent), `prevState` (GameState snapshot for undo), optional `undoable` (defaults to true; set false to suppress the Undo button). |
-| **UserSettingsProvider** | The React Context provider from `useUserSettings.ts`. Wraps the app in `main.tsx` so all screens share one settings instance. Updates propagate immediately to all mounted consumers. |
-| **Hyperspace** | A premium variant of a card with alternate artwork. In this app, the `useHyperspace` setting (in `useUserSettings`) controls whether the Hyperspace variant is preferred on the game screen. |
-| **Loading screen** | The first screen shown on app start (`SwuLoadingScreen`). Displays the app icon and "LOADING" text. Transitions to the setup screen as soon as `useBases()` resolves — there is no minimum display time. |
-| **Standard art** | The default card artwork. `frontArt` is the swu-db.com hi-res version (1560×1120); `frontArtLowRes` is the swuapi.com version (400×286). |
-| **hyperspaceArt** | The reliable low-res hyperspace image URL from swuapi.com (`cdn.starwarsunlimited.com`, 400×286). `null` for SOR/SHD/TWI (no longer in swuapi.com). |
-| **hyperspaceArtHiRes** | A constructed hi-res hyperspace image URL from swu-db.com (`cdn.swu-db.com`, 1560×1120). Derived from card number for active sets, or from the static offset map for SOR/SHD/TWI. May 403 for a small number of unindexed cards. |
-| **Static hyperspace map** | A hardcoded mapping of SOR, SHD, and TWI base card numbers to their hyperspace card numbers (offset). Used because those sets no longer appear in swuapi.com. |
-| **Fallback chain** | The ordered list of image URLs managed by `useBaseArt`. Hyperspace preferred: `[hyperspaceArtHiRes, hyperspaceArt, frontArt, frontArtLowRes]`. Normal preferred: `[frontArt, frontArtLowRes, hyperspaceArtHiRes, hyperspaceArt]`. The next URL is tried on `onError`; text fallback shown only when all are exhausted. |
-| **Container** | A React component that owns logic — calls hooks, computes derived state, and passes everything to a View component as props. |
-| **View** | A React component that only renders — receives all data and callbacks as props, contains no business logic. |
-| **AppScreenLayout** | The shared full-screen layout wrapper that provides background, safe area padding, and star field for every screen. |
-| **CSS custom properties** | Variables defined in `:root` in `index.css` (e.g. `--color-accent`) and referenced in inline styles via `var()`. Single source of truth for the colour palette. |
-| **Screen Wake Lock** | A browser API (`navigator.wakeLock.request('screen')`) that prevents the device screen from sleeping. Used by `useWakeLock` on the game screen when `enableWakeLock` is true in user settings. Supported on Android Chrome and iOS Safari PWA (iOS 16.4+). |
-| **swu-db proxy** | A Cloudflare Worker at `swu-proxy.dmgctrl.workers.dev` that proxies requests to swu-db.com and swudb.com to avoid CORS issues. |
-| **PWA** | Progressive Web App — a web app that can be installed on a device and used offline. |
