@@ -67,7 +67,8 @@ git push
 | [docs/architecture-implementation.md](docs/architecture-implementation.md) | Folder structure, state management, data layer, UI system, feature details, performance |
 | [docs/architecture-process.md](docs/architecture-process.md) | Workflow, CI/CD, analytics, testing strategy, future improvements |
 | [docs/project-overview.md](docs/project-overview.md) | Product vision, planned features, known issues, notes for AI assistants |
-| [docs/help.md](docs/help.md) | User guide (also served in-app via the ? button) |
+| [docs/swuSetupHelp.md](docs/swuSetupHelp.md) | Setup screen help (shown via the ? button on the setup screen) |
+| [docs/swuGameHelp.md](docs/swuGameHelp.md) | Game screen help (shown via the ? button on the game screen) |
 
 ---
 

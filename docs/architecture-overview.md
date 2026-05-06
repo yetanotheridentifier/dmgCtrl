@@ -82,7 +82,7 @@ App
 │   ├── useGameLog        (hook — ordered list of game log entries with add/undo/reset; each entry records event type, message, colour, and previous game state snapshot)
 │   ├── GameLogOverlay    (view — scrollable log panel; auto-scrolls to latest entry; undo button on last undoable entry; round entries styled with blue gradient)
 │   └── SwuGameScreenView (view — renders counter, image, epic action token, Force token; ⚙ button always visible; calls useDragScrubber directly for drag-to-scrub gesture state)
-├── SwuHelpScreen         (standalone screen — renders help.md content)
+├── SwuHelpScreen         (standalone screen — renders swuSetupHelp.md or swuGameHelp.md based on source prop)
 └── SwuSettingsScreen     (container)
     ├── useUserSettings   (hook — persistent user preferences)
     ├── useFavourites     (hook — favourites list, remove/clear operations)

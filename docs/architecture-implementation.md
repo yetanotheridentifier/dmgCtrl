@@ -22,7 +22,7 @@ src/
     GameLogOverlay.tsx      Game screen action log overlay — scrollable entry list; auto-scrolls to bottom; undo button on last undoable entry; round entries styled with blue gradient
     swuGameScreen.tsx       Game screen container
     swuGameScreenView.tsx   Game screen view (⚙ button always visible)
-    swuHelpScreen.tsx       Help screen (renders help.md; title row: back button + icon + "Help" h1)
+    swuHelpScreen.tsx       Help screen (renders swuSetupHelp.md or swuGameHelp.md based on source prop; title row: back button + icon + "Help" h1)
     swuLoadingScreen.tsx    Loading screen (icon + "LOADING" text; calls onReady as soon as loading prop becomes false)
     swuSetupScreen.tsx      Setup screen container
     swuSetupScreenView.tsx  Setup screen view (title row: icon + "dmgCtrl" h1 + ⚙ button + help button)
@@ -71,7 +71,8 @@ docs/
   architecture-overview.md      System overview, goals, tech stack, component tree, glossary
   architecture-implementation.md This document — folder structure, state, data layer, UI, feature details
   architecture-process.md       Workflow, CI/CD, analytics, testing strategy, future improvements
-  help.md                       User guide (imported as HTML string via custom Vite plugin)
+  swuSetupHelp.md               Setup screen user guide (imported as HTML string via custom Vite plugin)
+  swuGameHelp.md                Game screen user guide (imported as HTML string via custom Vite plugin)
   project-overview.md           Product vision, planned features, AI assistant notes
 
 public/

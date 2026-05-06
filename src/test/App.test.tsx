@@ -247,7 +247,8 @@ describe('App', () => {
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
     await user.click(screen.getByRole('button', { name: 'Start game' }))
     await user.click(screen.getByRole('button', { name: 'Help' }))
-    expect(screen.getByText('Getting Started')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'During a Game' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Getting Started' })).not.toBeInTheDocument()
   })
 
   it('Clicking back from help returns to setup when help was opened from setup', async () => {
