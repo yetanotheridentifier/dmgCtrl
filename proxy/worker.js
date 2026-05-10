@@ -1,6 +1,10 @@
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     const url = new URL(request.url)
+
+    if (url.pathname === '/analytics') {
+      return handleAnalytics(request, env)
+    }
 
     if (url.pathname.startsWith('/swudb/deck/')) {
       const deckId = url.pathname.slice('/swudb/deck/'.length)
@@ -33,4 +37,60 @@ export default {
       }
     })
   }
+}
+
+const ANALYTICS_ORIGIN = 'https://dmgctrl.app'
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': ANALYTICS_ORIGIN,
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+}
+
+async function handleAnalytics(request, env) {
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: CORS_HEADERS })
+  }
+
+  let body
+  try {
+    body = await request.json()
+  } catch {
+    return new Response('Bad Request', { status: 400, headers: CORS_HEADERS })
+  }
+
+  const writeUrl =
+    `${env.INFLUXDB_URL}/api/v2/write` +
+    `?org=${encodeURIComponent(env.INFLUXDB_ORG)}&bucket=dmgctrl&precision=s`
+
+  const influxResponse = await fetch(writeUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Token ${env.INFLUXDB_TOKEN}`,
+      'Content-Type': 'text/plain; charset=utf-8',
+    },
+    body: toLineProtocol(body.event, body.data),
+  })
+
+  if (!influxResponse.ok) {
+    return new Response('Upstream Error', { status: 500, headers: CORS_HEADERS })
+  }
+
+  return new Response(null, { status: 204, headers: CORS_HEADERS })
+}
+
+function toLineProtocol(event, data) {
+  const entries = Object.entries(data ?? {})
+  const fields = entries.length > 0
+    ? entries
+        .map(([key, value]) => {
+          if (typeof value === 'number' && Number.isInteger(value)) return `${key}=${value}i`
+          if (typeof value === 'number') return `${key}=${value}`
+          if (typeof value === 'boolean') return `${key}=${value}`
+          return `${key}="${String(value).replace(/"/g, '\\"')}"`
+        })
+        .join(',')
+    : 'count=1i'
+
+  return `events,event=${event} ${fields}`
 }
