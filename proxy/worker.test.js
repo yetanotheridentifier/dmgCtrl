@@ -1,0 +1,125 @@
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import { SELF } from 'cloudflare:test'
+
+const ALLOWED_ORIGIN = 'https://dmgctrl.app'
+
+afterEach(() => vi.unstubAllGlobals())
+
+// Response must be constructed inside the mock (within the request context),
+// not pre-built outside it — the Workers runtime ties I/O objects to a request.
+function stubFetch(makeResponse) {
+  const mock = vi.fn().mockImplementation(makeResponse)
+  vi.stubGlobal('fetch', mock)
+  return mock
+}
+
+describe('GET /swudb/deck/:id', () => {
+  it('proxies to swudb.com and returns JSON with CORS headers', async () => {
+    const mock = stubFetch(() =>
+      new Response(JSON.stringify({ id: 'abc123', name: 'Test Deck' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    )
+
+    const response = await SELF.fetch('https://worker.example/swudb/deck/abc123')
+    const data = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(data).toEqual({ id: 'abc123', name: 'Test Deck' })
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
+    expect(mock).toHaveBeenCalledWith(
+      expect.stringContaining('swudb.com/api/deck/abc123'),
+      expect.any(Object)
+    )
+  })
+})
+
+describe('GET passthrough', () => {
+  it('proxies to api.swu-db.com with correct path and CORS headers', async () => {
+    const mock = stubFetch(() =>
+      new Response(JSON.stringify({ results: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    )
+
+    const response = await SELF.fetch('https://worker.example/cards?q=test')
+    const data = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(data).toEqual({ results: [] })
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
+    expect(mock).toHaveBeenCalledWith(
+      expect.stringContaining('api.swu-db.com/cards?q=test')
+    )
+  })
+})
+
+describe('POST /analytics', () => {
+  it('returns 204 and writes to InfluxDB for a valid payload', async () => {
+    const mock = stubFetch(() => new Response(null, { status: 204 }))
+
+    const response = await SELF.fetch('https://worker.example/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: ALLOWED_ORIGIN },
+      body: JSON.stringify({ event: 'game_started', data: { players: 2 } }),
+    })
+
+    expect(response.status).toBe(204)
+    expect(mock).toHaveBeenCalledWith(
+      expect.stringContaining('influxdb'),
+      expect.any(Object)
+    )
+  })
+
+  it('writes event name as tag and data fields in InfluxDB line protocol', async () => {
+    let capturedBody = ''
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      capturedBody = init?.body ?? ''
+      return new Response(null, { status: 204 })
+    }))
+
+    await SELF.fetch('https://worker.example/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: ALLOWED_ORIGIN },
+      body: JSON.stringify({ event: 'game_started', data: { players: 2 } }),
+    })
+
+    expect(capturedBody).toContain('events,event=game_started')
+    expect(capturedBody).toContain('players=2i')
+  })
+
+  it('returns 400 for malformed JSON', async () => {
+    const response = await SELF.fetch('https://worker.example/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: ALLOWED_ORIGIN },
+      body: 'not valid json',
+    })
+
+    expect(response.status).toBe(400)
+  })
+
+  it('returns 500 when InfluxDB returns an error', async () => {
+    stubFetch(() => new Response('Internal Server Error', { status: 500 }))
+
+    const response = await SELF.fetch('https://worker.example/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: ALLOWED_ORIGIN },
+      body: JSON.stringify({ event: 'game_started', data: { players: 2 } }),
+    })
+
+    expect(response.status).toBe(500)
+  })
+
+  it('responds to OPTIONS preflight with correct CORS headers', async () => {
+    const response = await SELF.fetch('https://worker.example/analytics', {
+      method: 'OPTIONS',
+      headers: { Origin: ALLOWED_ORIGIN },
+    })
+
+    expect(response.status).toBe(204)
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe(ALLOWED_ORIGIN)
+    expect(response.headers.get('Access-Control-Allow-Methods')).toContain('POST')
+  })
+})

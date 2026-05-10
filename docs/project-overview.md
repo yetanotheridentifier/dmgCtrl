@@ -23,7 +23,7 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 ### Infrastructure
 - Per-game theming (X-Wing aesthetic vs SWU aesthetic)
 - Melee.gg integration (API exists, partially public)
-- Analytics custom events: game starts and base popularity via Cloudflare Worker + InfluxDB (issues #97, #98, #99)
+- Analytics custom events: game starts and base popularity via Cloudflare Worker + InfluxDB — Worker endpoint complete (#97); frontend hooks pending (#98, #99)
 
 ## Development
 
@@ -149,7 +149,6 @@ Use `--cold` to simulate a first-time user (clears `swu_bases_cache` before each
 ## Notes for AI Assistants
 
 - `npm install` requires `--legacy-peer-deps` due to Vite / vite-plugin-pwa version conflict
-- **File edits:** prefer Node.js scripts for all source file edits (`.ts`, `.tsx`, `.css`, `package.json`, etc.) — Windows CRLF line endings cause the Edit tool to fail silently. For `.md` files use the Write tool (full rewrite). Never use PowerShell file-write cmdlets (corrupts non-ASCII characters).
 - The app is designed for **landscape iPhone** — portrait mode is functional but not the primary target
 - swu-db.com blocks direct browser requests (CORS) — all calls go via the Cloudflare Worker proxy at `https://swu-proxy.dmgctrl.workers.dev`
 - swuapi.com has CORS enabled and can be called directly from the browser
@@ -159,7 +158,7 @@ Use `--cold` to simulate a first-time user (clears `swu_bases_cache` before each
 - `vmin` units are used for game screen sizing to work correctly across orientations
 - localStorage cache must be cleared (`localStorage.removeItem('swu_bases_cache')`) when testing data layer changes
 - Always use `npm test` to run tests — `npx vitest run` has a cache glitch causing spurious first-run failures
-- Run a filtered test summary in PowerShell: `npm test 2>&1 | Select-String "×|FAIL|Tests|Test Files"`
+- Run a filtered test summary: `npm test 2>&1 | grep -E "×|FAIL|Tests|Test Files"`
 - Run a single test file: `npm test -- src/test/swuSetupScreen.test.tsx`
 - SWUDB deck URL format: `https://swudb.com/deck/<id>` where `<id>` is alphanumeric, variable length. Edit links (`/deck/edit/<id>`) are normalised automatically. Validation regex: `/^https:\/\/swudb\.com\/deck\/[A-Za-z0-9]+$/`
 - The Cloudflare Worker at `swu-proxy.dmgctrl.workers.dev` also proxies `swudb.com/api/deck/<id>` under the path `/swudb/deck/<id>` — this is how `fetchSwudbDeck` retrieves deck data
