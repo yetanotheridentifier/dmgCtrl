@@ -74,7 +74,20 @@ A Cloudflare Web Analytics beacon is embedded in `index.html`. It fires on every
 
 The beacon token (`aaed1e18376f4bdd9f56a0050acce291`) is a public identifier — it is not a secret and is safe to commit.
 
-Custom event tracking (game starts, base popularity) is not covered by the Cloudflare beacon, which only records page loads. That is handled separately by the Worker + InfluxDB pipeline (see issues #97, #98, #99).
+Custom event tracking (game starts, base popularity) is not covered by the Cloudflare beacon, which only records page loads. This is handled by a `POST /analytics` endpoint on the Cloudflare Worker, which writes structured events to InfluxDB Cloud (free tier, `dmgctrl` bucket, 30-day retention).
+
+### Analytics Worker endpoint
+
+- **Endpoint:** `POST https://swu-proxy.dmgctrl.workers.dev/analytics`
+- **Payload:** `{ event: string, data: Record<string, unknown> }`
+- **Storage:** Writes to InfluxDB Cloud in line-protocol format — event name becomes a tag (`event=<name>`), payload fields become InfluxDB fields with type inference (integers get the `i` suffix, floats are bare, strings are quoted)
+- **Measurement:** `events`
+- **Auth:** InfluxDB write token stored as a Cloudflare Worker secret (`INFLUXDB_TOKEN`); org and URL stored as `INFLUXDB_ORG` and `INFLUXDB_URL`
+- **CORS:** Restricted to `https://dmgctrl.app` (not `*` like the card-data proxy routes)
+- **Responses:** 204 on success, 400 for malformed JSON, 500 on InfluxDB error
+- **Querying:** InfluxDB Cloud 3.x (Serverless); use SQL — e.g. `SELECT * FROM events WHERE time >= now() - interval '1 hour'`
+
+The frontend hooks to call this endpoint are implemented in issues #98 (game starts) and #99 (base popularity). The Worker endpoint itself is complete (#97).
 
 ---
 

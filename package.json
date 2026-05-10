@@ -10,7 +10,7 @@
     "build:github": "vite build --mode github",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run && npm --prefix proxy test",
     "test:watch": "vitest"
   },
   "dependencies": {
