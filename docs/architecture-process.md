@@ -87,15 +87,15 @@ Custom event tracking (game starts, base popularity) is not covered by the Cloud
 - **Responses:** 204 on success, 400 for malformed JSON, 500 on InfluxDB error
 - **Querying:** InfluxDB Cloud 3.x (Serverless); use SQL — camelCase column names must be double-quoted, e.g.:
   ```sql
-  SELECT time, event, "sessionId", "baseKey", "baseSet", hyperspace, "durationSeconds"
+  SELECT time, event, country, city, "sessionId", "baseKey", "baseSet", hyperspace, "durationSeconds"
   FROM events
-  WHERE time > now() - interval '24 hours'
-  ORDER BY time ASC
+  WHERE env = 'production'
+  ORDER BY time DESC
   ```
 
 ### Frontend analytics service (`src/services/analytics.ts`)
 
-Eighteen public functions fire events to the worker endpoint. All are fire-and-forget — they return `Promise<void>` so tests can await them, but callers use `void` (errors are silently discarded):
+Twenty-two public functions fire events to the worker endpoint. All are fire-and-forget — they return `Promise<void>` so tests can await them, but callers use `void` (errors are silently discarded):
 
 | Function | Event name | Payload fields |
 |---|---|---|
@@ -117,6 +117,10 @@ Eighteen public functions fire events to the worker endpoint. All are fire-and-f
 | `onSettingChanged(setting, value)` | `setting_changed` | `setting` (string), `value` (unknown — boolean for current settings, typed loosely to accommodate future multi-choice settings) |
 | `onDeckImportSuccess(baseKey, baseSet)` | `deck_import_success` | `baseKey`, `baseSet` |
 | `onDeckImportFailure(reason)` | `deck_import_failure` | `reason` (`'deck_not_accessible'` \| `'base_not_recognised'`) |
+| `onImageLoadFailed(baseKey, baseSet, url)` | `image_load_failed` | `baseKey`, `baseSet`, `url` (the URL that failed to load) |
+| `onBasesLoadFailed()` | `bases_load_failed` | _(none beyond auto fields)_ |
+| `onBasesLoadStale()` | `bases_load_stale` | _(none beyond auto fields)_ |
+| `onWakeLockFailed(reason)` | `wake_lock_failed` | `reason` (DOMException name, e.g. `'NotAllowedError'`, or `'unknown'` for non-DOM errors) |
 
 `onAppInstall` fires on the first launch of the app in standalone mode (i.e. launched from the home screen icon). It checks `window.matchMedia('(display-mode: standalone)').matches` (Android/Chrome) or `window.navigator.standalone === true` (iOS Safari), and only fires if a `pwa_install_tracked` flag is not yet set in localStorage. Once fired it sets the flag, so subsequent launches do not re-fire it. This approach is used instead of the `appinstalled` browser event because Safari does not support that event.
 
@@ -124,19 +128,26 @@ Eighteen public functions fire events to the worker endpoint. All are fire-and-f
 
 `sessionDurationSoFarSeconds` is `Math.floor((Date.now() - SESSION_START_TIME) / 1000)` where `SESSION_START_TIME` is a module-level constant set at load time.
 
-Every event automatically includes two fields appended by `sendEvent`:
+Every event automatically includes fields from two sources:
+
+**Appended by the frontend (`sendEvent`):**
 
 | Auto field | Value | Notes |
 |---|---|---|
 | `env` | `import.meta.env.MODE` | `'development'` in dev, `'production'` in builds. Filter with `WHERE env = 'production'` to exclude dev traffic. |
 | `sessionId` | 8-char alphanumeric string, e.g. `'a3f8kx2q'` | Generated once at module load (`Math.random().toString(36).slice(2, 10)`). Same across all events in a page session; resets on reload. Ephemeral — not stored in localStorage, no PII. Enables per-session grouping and session duration queries. |
 
+**Appended by the worker (from `request.cf`):**
+
+| Auto field | Value | Notes |
+|---|---|---|
+| `country` | Two-letter ISO country code, e.g. `'AU'` | Resolved from client IP by Cloudflare's edge. `'unknown'` in local dev where `request.cf` is not populated. |
+| `city` | City name, e.g. `'Sydney'` | Resolved from client IP by Cloudflare's edge. `'unknown'` in local dev. Approximate — based on IP geolocation. |
+
 The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be overridden via the `VITE_ANALYTICS_URL` environment variable (useful for local worker dev with `wrangler dev`).
 
-### Wiring in App.tsx
+### Wiring
 
-| Trigger | Call |
-|---|---|
 **App.tsx**
 
 | Trigger | Call |
@@ -178,13 +189,32 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 | Mystic Monastery action button tapped | `onForceGained(baseKey, baseSet)` |
 | Force token or greyed Force button dismissed | `onForceUsed(baseKey, baseSet)` |
 
+**useBaseArt (useBaseArt.ts)**
+
+| Trigger | Call |
+|---|---|
+| Image `onError` fires (URL fails to load) | `onImageLoadFailed(baseKey, baseSet, url)` |
+
+**useBases (useBases.ts)**
+
+| Trigger | Call |
+|---|---|
+| Fetch fails, stale cache served | `onBasesLoadStale()` |
+| Fetch fails, no cache (error screen shown) | `onBasesLoadFailed()` |
+
+**useWakeLock (useWakeLock.ts)**
+
+| Trigger | Call |
+|---|---|
+| `navigator.wakeLock.request()` rejects | `onWakeLockFailed(reason)` |
+
 `durationSeconds` is computed as `Math.round((Date.now() - gameStartTime) / 1000)` where `gameStartTime` is recorded at the start of `handleConfirm`. `handleBack` only fires `onGameEnd` when `selectedBase` is set (i.e. the back button was pressed from the game screen, not from help or settings).
 
 Install detection and resume detection are in separate `useEffect` calls. The install effect runs once on mount, checks standalone mode and the localStorage flag, and fires `onAppInstall` at most once per device. The visibility effect registers a `visibilitychange` listener with a `hasBeenHidden` local flag; the flag starts `false`, is set to `true` when `visibilityState === 'hidden'`, and `onAppResume` only fires when `visibilityState === 'visible'` and `hasBeenHidden` is already `true` — preventing a spurious event on first page load.
 
 **React StrictMode note:** In development mode, React intentionally mounts, unmounts, and remounts components to detect side-effect bugs. This causes `onAppStart` to fire twice per page load in dev (two `app_started` rows within milliseconds of each other). This is expected and only happens in development — production builds fire once.
 
-The Worker endpoint (#97) and frontend service (#98) are both complete. Base popularity events (#99) are pending.
+Base popularity events (#99) are pending.
 
 ---
 

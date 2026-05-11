@@ -24,6 +24,7 @@ vi.mock('../services/analytics', () => ({
   onEpicActionUsed: mockOnEpicActionUsed,
   onForceGained: mockOnForceGained,
   onForceUsed: mockOnForceUsed,
+  onImageLoadFailed: vi.fn().mockResolvedValue(undefined),
 }))
 
 const mockUserSettings = vi.hoisted(() => ({

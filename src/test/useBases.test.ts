@@ -2,6 +2,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { useBases } from '../hooks/useBases'
 
+const mockOnBasesLoadFailed = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnBasesLoadStale = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+
+vi.mock('../services/analytics', () => ({
+  onBasesLoadFailed: mockOnBasesLoadFailed,
+  onBasesLoadStale: mockOnBasesLoadStale,
+}))
+
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
@@ -95,6 +103,9 @@ const swuApiPage2 = {
 }
 
 beforeEach(() => {
+  mockOnBasesLoadFailed.mockClear()
+  mockOnBasesLoadStale.mockClear()
+
   vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
     if (url.includes('swuapi.com') && url.includes('cursor-page-2')) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(swuApiPage2) })
@@ -348,6 +359,46 @@ describe('useBases', () => {
     const { result } = renderHook(() => useBases())
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.error).not.toBeNull()
+  })
+
+})
+
+describe('useBases analytics', () => {
+
+  const staleData = {
+    lastChecked: Date.now() - (8 * 24 * 60 * 60 * 1000),
+    data: [{ set: 'SOR', number: '023', name: 'Command Center', subtitle: 'Death Star',
+      hp: 30, frontArt: 'https://cdn.swu-db.com/images/cards/SOR/023.png', frontArtLowRes: null,
+      hyperspaceArtHiRes: null, hyperspaceArt: null, epicAction: '', aspects: ['Command'], rarity: 'Common' }]
+  }
+
+  it('fires onBasesLoadFailed when fetch fails with no cache', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')))
+    const { result } = renderHook(() => useBases())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(mockOnBasesLoadFailed).toHaveBeenCalledOnce()
+    expect(mockOnBasesLoadStale).not.toHaveBeenCalled()
+  })
+
+  it('fires onBasesLoadStale when fetch fails but stale cache exists', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn().mockReturnValue(JSON.stringify(staleData)),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')))
+    const { result } = renderHook(() => useBases())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(mockOnBasesLoadStale).toHaveBeenCalledOnce()
+    expect(mockOnBasesLoadFailed).not.toHaveBeenCalled()
+  })
+
+  it('does not fire onBasesLoadFailed or onBasesLoadStale on successful fetch', async () => {
+    const { result } = renderHook(() => useBases())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(mockOnBasesLoadFailed).not.toHaveBeenCalled()
+    expect(mockOnBasesLoadStale).not.toHaveBeenCalled()
   })
 
 })

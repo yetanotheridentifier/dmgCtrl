@@ -2,11 +2,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useWakeLock } from '../hooks/useWakeLock'
 
+const mockOnWakeLockFailed = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+
+vi.mock('../services/analytics', () => ({
+  onWakeLockFailed: mockOnWakeLockFailed,
+}))
+
 const mockRelease = vi.fn().mockResolvedValue(undefined)
 const mockRequest = vi.fn().mockResolvedValue({ release: mockRelease })
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockOnWakeLockFailed.mockClear()
   Object.defineProperty(navigator, 'wakeLock', {
     value: { request: mockRequest },
     configurable: true,
@@ -93,6 +100,30 @@ describe('useWakeLock', () => {
     unmount()
     expect(mockRequest).toHaveBeenCalledWith('screen')
     expect(mockRelease).not.toHaveBeenCalled()
+  })
+
+  it('fires onWakeLockFailed with the DOMException name when wake lock request rejects', async () => {
+    mockRequest.mockRejectedValueOnce(new DOMException('Battery saver', 'NotAllowedError'))
+    renderHook(() => useWakeLock(true))
+    await act(async () => {})
+    expect(mockOnWakeLockFailed).toHaveBeenCalledWith('NotAllowedError')
+  })
+
+  it('does not fire onWakeLockFailed when wake lock succeeds', async () => {
+    renderHook(() => useWakeLock(true))
+    await act(async () => {})
+    expect(mockOnWakeLockFailed).not.toHaveBeenCalled()
+  })
+
+  it('does not fire onWakeLockFailed when wake lock API is unavailable', async () => {
+    Object.defineProperty(navigator, 'wakeLock', {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    })
+    renderHook(() => useWakeLock(true))
+    await act(async () => {})
+    expect(mockOnWakeLockFailed).not.toHaveBeenCalled()
   })
 
 })

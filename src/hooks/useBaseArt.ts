@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Base } from './useBases'
 import { getRotationFromHyperspaceUrl } from '../constants/rotatedCards'
+import { onImageLoadFailed } from '../services/analytics'
 
 interface ArtEntry {
   url: string
@@ -58,6 +59,7 @@ export function useBaseArt(base: Base | null, useHyperspace: boolean) {
     imageLoaded,
     onLoad: () => setImageLoaded(true),
     onError: () => {
+      if (base && current) void onImageLoadFailed(`${base.set}-${base.number}`, base.set, current.url)
       setImageLoaded(false)
       setIndex(i => i + 1)
     },
