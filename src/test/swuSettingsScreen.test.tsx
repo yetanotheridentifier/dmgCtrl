@@ -4,6 +4,15 @@ import userEvent from '@testing-library/user-event'
 import SwuSettingsScreen from '../components/swuSettingsScreen'
 import type { FavouriteBase } from '../hooks/useFavourites'
 
+const mockOnSettingChanged = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnFavouriteRemovedSettings = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnFavouritesCleared = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+vi.mock('../services/analytics', () => ({
+  onSettingChanged: mockOnSettingChanged,
+  onFavouriteRemoved: mockOnFavouriteRemovedSettings,
+  onFavouritesCleared: mockOnFavouritesCleared,
+}))
+
 const mockUserSettings = vi.hoisted(() => ({
   useHyperspace: true,
   enableForceToken: true,
@@ -274,10 +283,83 @@ describe('SwuSettingsScreen', () => {
     expect(within(favouritesCol).queryByRole('checkbox', { name: /use hyperspace art/i })).not.toBeInTheDocument()
   })
 
-  it('in portrait, settings are not split into columns', () => {
+  it('in portrait, settings are not split into columns', async () => {
     mockOrientation.isPortrait = true
     render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByRole('group', { name: /general settings/i })).not.toBeInTheDocument()
+  })
+
+})
+
+describe('SwuSettingsScreen analytics', () => {
+
+  beforeEach(() => {
+    mockOnSettingChanged.mockClear()
+    mockOnFavouriteRemovedSettings.mockClear()
+    mockOnFavouritesCleared.mockClear()
+  })
+
+  it('calls onSettingChanged with useHyperspace and new value when hyperspace toggle is clicked', async () => {
+    const user = userEvent.setup()
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByRole('checkbox', { name: /hyperspace/i }))
+    expect(mockOnSettingChanged).toHaveBeenCalledWith('useHyperspace', false)
+  })
+
+  it('calls onSettingChanged with enableForceToken and new value when force token toggle is clicked', async () => {
+    const user = userEvent.setup()
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByRole('checkbox', { name: /force token/i }))
+    expect(mockOnSettingChanged).toHaveBeenCalledWith('enableForceToken', false)
+  })
+
+  it('calls onSettingChanged with enableEpicActions and new value when epic actions toggle is clicked', async () => {
+    const user = userEvent.setup()
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByRole('checkbox', { name: /epic actions/i }))
+    expect(mockOnSettingChanged).toHaveBeenCalledWith('enableEpicActions', false)
+  })
+
+  it('calls onSettingChanged with enableWakeLock and new value when wake lock toggle is clicked', async () => {
+    const user = userEvent.setup()
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByRole('checkbox', { name: /wake lock/i }))
+    expect(mockOnSettingChanged).toHaveBeenCalledWith('enableWakeLock', false)
+  })
+
+  it('calls onSettingChanged with enableActionLog and new value when action log toggle is clicked', async () => {
+    const user = userEvent.setup()
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByRole('checkbox', { name: /action log/i }))
+    expect(mockOnSettingChanged).toHaveBeenCalledWith('enableActionLog', false)
+  })
+
+  it('calls onSettingChanged with enableFavourites and new value when favourites toggle is clicked', async () => {
+    const user = userEvent.setup()
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByRole('checkbox', { name: /favourites/i }))
+    expect(mockOnSettingChanged).toHaveBeenCalledWith('enableFavourites', false)
+  })
+
+  it('calls onFavouriteRemoved with baseKey and baseSet when Remove is clicked', async () => {
+    mockFavourites.favourites = [
+      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+    ]
+    const user = userEvent.setup()
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: /remove/i }))
+    expect(mockOnFavouriteRemovedSettings).toHaveBeenCalledWith('SOR-026', 'SOR')
+  })
+
+  it('calls onFavouritesCleared when Clear All is confirmed', async () => {
+    mockFavourites.favourites = [
+      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+    ]
+    const user = userEvent.setup()
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: /clear all/i }))
+    await user.click(screen.getByRole('button', { name: /confirm/i }))
+    expect(mockOnFavouritesCleared).toHaveBeenCalledOnce()
   })
 
 })

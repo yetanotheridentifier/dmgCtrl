@@ -7,6 +7,17 @@ import { Base } from '../hooks/useBases'
 import type { FavouriteBase } from '../hooks/useFavourites'
 
 
+const mockOnFavouriteAdded = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnFavouriteRemoved = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnDeckImportSuccess = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnDeckImportFailure = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+vi.mock('../services/analytics', () => ({
+  onFavouriteAdded: mockOnFavouriteAdded,
+  onFavouriteRemoved: mockOnFavouriteRemoved,
+  onDeckImportSuccess: mockOnDeckImportSuccess,
+  onDeckImportFailure: mockOnDeckImportFailure,
+}))
+
 const mockUserSettings = vi.hoisted(() => ({
   useHyperspace: true,
   enableForceToken: true,
@@ -151,6 +162,10 @@ beforeEach(() => {
   mockFavourites.favourites = []
   mockFavourites.addFavourite.mockReset()
   mockFavourites.removeFavourite.mockReset()
+  mockOnFavouriteAdded.mockClear()
+  mockOnFavouriteRemoved.mockClear()
+  mockOnDeckImportSuccess.mockClear()
+  mockOnDeckImportFailure.mockClear()
   vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
     if (url.includes('swuapi.com')) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(swuApiResponse) })
@@ -1229,6 +1244,88 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(screen.getByTestId('favourites-select'), 'SOR-026')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).not.toBeDisabled())
     expect(screen.queryByTestId('favourite-toggle')).not.toBeInTheDocument()
+  })
+
+})
+
+describe('SwuSetupScreen analytics', () => {
+
+  beforeEach(() => {
+    mockUserSettings.enableFavourites = true
+    mockOnFavouriteAdded.mockClear()
+    mockOnFavouriteRemoved.mockClear()
+    mockOnDeckImportSuccess.mockClear()
+    mockOnDeckImportFailure.mockClear()
+  })
+
+  it('calls onFavouriteAdded with baseKey and baseSet when star is tapped on an unfavourited base', async () => {
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+    await user.click(screen.getByTestId('favourite-toggle'))
+    expect(mockOnFavouriteAdded).toHaveBeenCalledWith('SOR-026', 'SOR')
+  })
+
+  it('calls onFavouriteRemoved with baseKey and baseSet when star is tapped on a favourited base', async () => {
+    mockFavourites.favourites = [
+      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+    ]
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+    await user.click(screen.getByTestId('favourite-toggle'))
+    expect(mockOnFavouriteRemoved).toHaveBeenCalledWith('SOR-026', 'SOR')
+  })
+
+  it('calls onDeckImportSuccess with baseKey and baseSet on a successful load', async () => {
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('mode-select'), 'swudb-import')
+    await user.type(screen.getByRole('textbox'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByRole('button', { name: 'Load' }))
+    await waitFor(() => expect(mockOnDeckImportSuccess).toHaveBeenCalledOnce())
+    expect(mockOnDeckImportSuccess).toHaveBeenCalledWith('JTL-030', 'JTL')
+  })
+
+  it('calls onDeckImportFailure with deck_not_accessible when the fetch fails', async () => {
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = input.toString()
+      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: false, status: 404 } as any)
+      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
+    })
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('mode-select'), 'swudb-import')
+    await user.type(screen.getByRole('textbox'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByRole('button', { name: 'Load' }))
+    await waitFor(() => expect(mockOnDeckImportFailure).toHaveBeenCalledOnce())
+    expect(mockOnDeckImportFailure).toHaveBeenCalledWith('deck_not_accessible')
+  })
+
+  it('calls onDeckImportFailure with base_not_recognised when the base is unknown', async () => {
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = input.toString()
+      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Test Deck', base: { defaultExpansionAbbreviation: 'XYZ', defaultCardNumber: '999' } }) } as any)
+      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
+    })
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('mode-select'), 'swudb-import')
+    await user.type(screen.getByRole('textbox'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByRole('button', { name: 'Load' }))
+    await waitFor(() => expect(mockOnDeckImportFailure).toHaveBeenCalledOnce())
+    expect(mockOnDeckImportFailure).toHaveBeenCalledWith('base_not_recognised')
   })
 
 })

@@ -65,3 +65,27 @@ export function onForceGained(baseKey: string, baseSet: string): Promise<void> {
 export function onForceUsed(baseKey: string, baseSet: string): Promise<void> {
   return sendEvent('force_used', { baseKey, baseSet })
 }
+
+export function onFavouriteAdded(baseKey: string, baseSet: string): Promise<void> {
+  return sendEvent('favourite_added', { baseKey, baseSet })
+}
+
+export function onFavouriteRemoved(baseKey: string, baseSet: string): Promise<void> {
+  return sendEvent('favourite_removed', { baseKey, baseSet })
+}
+
+export function onFavouritesCleared(): Promise<void> {
+  return sendEvent('favourites_cleared', {})
+}
+
+export function onSettingChanged(setting: string, value: unknown): Promise<void> {
+  return sendEvent('setting_changed', { setting, value })
+}
+
+export function onDeckImportSuccess(baseKey: string, baseSet: string): Promise<void> {
+  return sendEvent('deck_import_success', { baseKey, baseSet })
+}
+
+export function onDeckImportFailure(reason: string): Promise<void> {
+  return sendEvent('deck_import_failure', { reason })
+}

@@ -6,6 +6,7 @@ import SwuSetupScreenView from './swuSetupScreenView'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { useFavourites } from '../hooks/useFavourites'
 import { normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck } from '../utils/swudbUrl'
+import { onFavouriteAdded, onFavouriteRemoved, onDeckImportSuccess, onDeckImportFailure } from '../services/analytics'
 
 export type SelectionMode = 'base-selector' | 'swudb-import' | 'favourites'
 
@@ -86,9 +87,13 @@ function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Pro
       const found = setup.selectBaseByKey(baseKey)
       if (!found) {
         setSwudbError('Base not recognised')
+        void onDeckImportFailure('base_not_recognised')
+      } else {
+        void onDeckImportSuccess(baseKey, baseKey.split('-')[0])
       }
     } catch {
       setSwudbError('Deck not accessible')
+      void onDeckImportFailure('deck_not_accessible')
     } finally {
       setSwudbLoading(false)
     }
@@ -105,6 +110,7 @@ function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Pro
     if (!setup.selectedBase || !selectedBaseKey) return
     if (isFavourited) {
       removeFavourite(selectedBaseKey)
+      void onFavouriteRemoved(selectedBaseKey, setup.selectedBase.set)
     } else {
       const aspect = setup.selectedBase.aspects.length === 0 ? 'None' : setup.selectedAspect
       addFavourite({
@@ -115,6 +121,7 @@ function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Pro
         aspect,
         cardNumber: parseInt(setup.selectedBase.number, 10),
       })
+      void onFavouriteAdded(selectedBaseKey, setup.selectedBase.set)
     }
   }
 
