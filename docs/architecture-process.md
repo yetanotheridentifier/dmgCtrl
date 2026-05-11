@@ -95,13 +95,21 @@ Custom event tracking (game starts, base popularity) is not covered by the Cloud
 
 ### Frontend analytics service (`src/services/analytics.ts`)
 
-Three public functions fire events to the worker endpoint. All are fire-and-forget — they return `Promise<void>` so tests can await them, but callers use `void` (errors are silently discarded):
+Five public functions fire events to the worker endpoint. All are fire-and-forget — they return `Promise<void>` so tests can await them, but callers use `void` (errors are silently discarded):
 
 | Function | Event name | Payload fields |
 |---|---|---|
 | `onAppStart()` | `app_started` | `version` (from package.json) |
 | `onGameStart(baseKey, baseSet, hyperspace)` | `game_started` | `baseKey`, `baseSet`, `hyperspace` |
 | `onGameEnd(baseKey, baseSet, hyperspace, durationSeconds)` | `game_ended` | `baseKey`, `baseSet`, `hyperspace`, `durationSeconds` |
+| `onAppInstall()` | `app_installed` | _(none beyond auto fields)_ |
+| `onAppResume()` | `app_resumed` | `sessionDurationSoFarSeconds` |
+
+`onAppInstall` fires on the first launch of the app in standalone mode (i.e. launched from the home screen icon). It checks `window.matchMedia('(display-mode: standalone)').matches` (Android/Chrome) or `window.navigator.standalone === true` (iOS Safari), and only fires if a `pwa_install_tracked` flag is not yet set in localStorage. Once fired it sets the flag, so subsequent launches do not re-fire it. This approach is used instead of the `appinstalled` browser event because Safari does not support that event.
+
+`onAppResume` fires when `document.visibilityState` transitions from `hidden` back to `visible` — but only after the page has been hidden at least once, so it never fires on initial load.
+
+`sessionDurationSoFarSeconds` is `Math.floor((Date.now() - SESSION_START_TIME) / 1000)` where `SESSION_START_TIME` is a module-level constant set at load time.
 
 Every event automatically includes two fields appended by `sendEvent`:
 
@@ -117,10 +125,14 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 | Trigger | Call |
 |---|---|
 | App mount (`useEffect`) | `onAppStart()` |
+| App mount, standalone mode, `pwa_install_tracked` flag not set | `onAppInstall()` |
+| `visibilitychange` → hidden then visible | `onAppResume()` |
 | User starts a game (`handleConfirm`) | `onGameStart(baseKey, baseSet, useHyperspace)` |
 | User ends a game (`handleBack`) | `onGameEnd(baseKey, baseSet, useHyperspace, durationSeconds)` |
 
 `durationSeconds` is computed as `Math.round((Date.now() - gameStartTime) / 1000)` where `gameStartTime` is recorded at the start of `handleConfirm`. `handleBack` only fires `onGameEnd` when `selectedBase` is set (i.e. the back button was pressed from the game screen, not from help or settings).
+
+Install detection and resume detection are in separate `useEffect` calls. The install effect runs once on mount, checks standalone mode and the localStorage flag, and fires `onAppInstall` at most once per device. The visibility effect registers a `visibilitychange` listener with a `hasBeenHidden` local flag; the flag starts `false`, is set to `true` when `visibilityState === 'hidden'`, and `onAppResume` only fires when `visibilityState === 'visible'` and `hasBeenHidden` is already `true` — preventing a spurious event on first page load.
 
 **React StrictMode note:** In development mode, React intentionally mounts, unmounts, and remounts components to detect side-effect bugs. This causes `onAppStart` to fire twice per page load in dev (two `app_started` rows within milliseconds of each other). This is expected and only happens in development — production builds fire once.
 

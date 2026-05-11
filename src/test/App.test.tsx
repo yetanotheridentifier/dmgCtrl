@@ -7,10 +7,14 @@ import { useBases } from '../hooks/useBases'
 const mockOnAppStart = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnGameStart = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnGameEnd = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnAppInstall = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnAppResume = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 vi.mock('../services/analytics', () => ({
   onAppStart: mockOnAppStart,
   onGameStart: mockOnGameStart,
   onGameEnd: mockOnGameEnd,
+  onAppInstall: mockOnAppInstall,
+  onAppResume: mockOnAppResume,
 }))
 
 const mockBases = vi.hoisted(() => [
@@ -82,6 +86,8 @@ beforeEach(() => {
   mockOnAppStart.mockClear()
   mockOnGameStart.mockClear()
   mockOnGameEnd.mockClear()
+  mockOnAppInstall.mockClear()
+  mockOnAppResume.mockClear()
 })
 
 afterEach(() => {
@@ -440,6 +446,83 @@ describe('App analytics', () => {
     await user.click(screen.getByRole('button', { name: 'Help' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(mockOnGameEnd).not.toHaveBeenCalled()
+  })
+
+})
+
+describe('App lifecycle analytics', () => {
+
+  afterEach(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    Object.defineProperty(window.navigator, 'standalone', { value: undefined, configurable: true })
+  })
+
+  it('does not call onAppInstall when not in standalone mode', async () => {
+    render(<App />)
+    expect(mockOnAppInstall).not.toHaveBeenCalled()
+  })
+
+  it('calls onAppInstall on first launch in standalone mode (matchMedia)', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: (query: string) => ({
+        matches: query === '(display-mode: standalone)',
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }),
+    })
+    render(<App />)
+    await waitFor(() => expect(mockOnAppInstall).toHaveBeenCalledTimes(1))
+  })
+
+  it('calls onAppInstall on first launch via navigator.standalone (iOS)', async () => {
+    Object.defineProperty(window.navigator, 'standalone', { value: true, configurable: true })
+    render(<App />)
+    await waitFor(() => expect(mockOnAppInstall).toHaveBeenCalledTimes(1))
+  })
+
+  it('does not call onAppInstall if already tracked in localStorage', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn().mockImplementation((key: string) => key === 'pwa_install_tracked' ? '1' : null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: (query: string) => ({
+        matches: query === '(display-mode: standalone)',
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }),
+    })
+    render(<App />)
+    expect(mockOnAppInstall).not.toHaveBeenCalled()
+  })
+
+  it('does not call onAppResume on initial render', async () => {
+    render(<App />)
+    expect(mockOnAppResume).not.toHaveBeenCalled()
+  })
+
+  it('does not call onAppResume when page becomes visible without first being hidden', async () => {
+    render(<App />)
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(mockOnAppResume).not.toHaveBeenCalled()
+  })
+
+  it('calls onAppResume when page becomes visible after being hidden', async () => {
+    render(<App />)
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(mockOnAppResume).toHaveBeenCalledTimes(1)
   })
 
 })

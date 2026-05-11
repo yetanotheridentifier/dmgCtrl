@@ -1,6 +1,7 @@
 import { version as APP_VERSION } from '../../package.json'
 
 const SESSION_ID = Math.random().toString(36).slice(2, 10)
+const SESSION_START_TIME = Date.now()
 
 async function sendEvent(event: string, data: Record<string, unknown>): Promise<void> {
   const url = import.meta.env.VITE_ANALYTICS_URL ?? 'https://worker.dmgctrl.app/analytics'
@@ -26,4 +27,13 @@ export function onGameStart(baseKey: string, baseSet: string, hyperspace: boolea
 
 export function onGameEnd(baseKey: string, baseSet: string, hyperspace: boolean, durationSeconds: number): Promise<void> {
   return sendEvent('game_ended', { baseKey, baseSet, hyperspace, durationSeconds })
+}
+
+export function onAppInstall(): Promise<void> {
+  return sendEvent('app_installed', {})
+}
+
+export function onAppResume(): Promise<void> {
+  const sessionDurationSoFarSeconds = Math.floor((Date.now() - SESSION_START_TIME) / 1000)
+  return sendEvent('app_resumed', { sessionDurationSoFarSeconds })
 }
