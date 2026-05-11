@@ -2,6 +2,7 @@ import { useUserSettings } from '../hooks/useUserSettings'
 import { useFavourites } from '../hooks/useFavourites'
 import AppScreenLayout from './layout/AppScreenLayout'
 import SwuSettingsScreenView from './swuSettingsScreenView'
+import { onSettingChanged, onFavouriteRemoved, onFavouritesCleared } from '../services/analytics'
 
 interface Props {
   onBack: () => void
@@ -26,6 +27,22 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
 
   const { favourites, removeFavourite, clearFavourites } = useFavourites()
 
+  const handleSettingChange = <T,>(name: string, setter: (v: T) => void) => (v: T) => {
+    setter(v)
+    void onSettingChanged(name, v)
+  }
+
+  const handleRemoveFavourite = (key: string) => {
+    const fav = favourites.find(f => f.key === key)
+    removeFavourite(key)
+    if (fav) void onFavouriteRemoved(key, fav.set)
+  }
+
+  const handleClearFavourites = () => {
+    clearFavourites()
+    void onFavouritesCleared()
+  }
+
   return (
     <AppScreenLayout>
       <SwuSettingsScreenView
@@ -35,15 +52,15 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
         enableWakeLock={enableWakeLock}
         enableFavourites={enableFavourites}
         favourites={favourites}
-        onUseHyperspaceChange={setUseHyperspace}
-        onEnableForceTokenChange={setEnableForceToken}
-        onEnableEpicActionsChange={setEnableEpicActions}
-        onEnableWakeLockChange={setEnableWakeLock}
+        onUseHyperspaceChange={handleSettingChange('useHyperspace', setUseHyperspace)}
+        onEnableForceTokenChange={handleSettingChange('enableForceToken', setEnableForceToken)}
+        onEnableEpicActionsChange={handleSettingChange('enableEpicActions', setEnableEpicActions)}
+        onEnableWakeLockChange={handleSettingChange('enableWakeLock', setEnableWakeLock)}
         enableActionLog={enableActionLog}
-        onEnableActionLogChange={setEnableActionLog}
-        onEnableFavouritesChange={setEnableFavourites}
-        onRemoveFavourite={removeFavourite}
-        onClearFavourites={clearFavourites}
+        onEnableActionLogChange={handleSettingChange('enableActionLog', setEnableActionLog)}
+        onEnableFavouritesChange={handleSettingChange('enableFavourites', setEnableFavourites)}
+        onRemoveFavourite={handleRemoveFavourite}
+        onClearFavourites={handleClearFavourites}
         onBack={onBack}
         onHelp={onHelp}
       />

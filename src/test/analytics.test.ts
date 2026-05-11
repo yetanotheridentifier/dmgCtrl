@@ -3,6 +3,8 @@ import {
   onAppStart, onGameStart, onGameEnd, onAppInstall, onAppResume,
   onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed,
   onEpicActionUsed, onForceGained, onForceUsed,
+  onFavouriteAdded, onFavouriteRemoved, onFavouritesCleared,
+  onSettingChanged, onDeckImportSuccess, onDeckImportFailure,
 } from '../services/analytics'
 import { version as APP_VERSION } from '../../package.json'
 
@@ -304,5 +306,80 @@ describe('onForceUsed', () => {
     const { baseKey, baseSet } = getLastBody().data
     expect(baseKey).toBe('LOF-026')
     expect(baseSet).toBe('LOF')
+  })
+})
+
+describe('onFavouriteAdded', () => {
+  it('sends event name favourite_added', async () => {
+    await onFavouriteAdded('SOR-026', 'SOR')
+    expect(getLastBody().event).toBe('favourite_added')
+  })
+
+  it('includes baseKey and baseSet in payload', async () => {
+    await onFavouriteAdded('SOR-026', 'SOR')
+    const { baseKey, baseSet } = getLastBody().data
+    expect(baseKey).toBe('SOR-026')
+    expect(baseSet).toBe('SOR')
+  })
+})
+
+describe('onFavouriteRemoved', () => {
+  it('sends event name favourite_removed', async () => {
+    await onFavouriteRemoved('SOR-026', 'SOR')
+    expect(getLastBody().event).toBe('favourite_removed')
+  })
+
+  it('includes baseKey and baseSet in payload', async () => {
+    await onFavouriteRemoved('SOR-026', 'SOR')
+    const { baseKey, baseSet } = getLastBody().data
+    expect(baseKey).toBe('SOR-026')
+    expect(baseSet).toBe('SOR')
+  })
+})
+
+describe('onFavouritesCleared', () => {
+  it('sends event name favourites_cleared', async () => {
+    await onFavouritesCleared()
+    expect(getLastBody().event).toBe('favourites_cleared')
+  })
+})
+
+describe('onSettingChanged', () => {
+  it('sends event name setting_changed', async () => {
+    await onSettingChanged('useHyperspace', false)
+    expect(getLastBody().event).toBe('setting_changed')
+  })
+
+  it('includes setting name and value in payload', async () => {
+    await onSettingChanged('useHyperspace', false)
+    const { setting, value } = getLastBody().data
+    expect(setting).toBe('useHyperspace')
+    expect(value).toBe(false)
+  })
+})
+
+describe('onDeckImportSuccess', () => {
+  it('sends event name deck_import_success', async () => {
+    await onDeckImportSuccess('JTL-030', 'JTL')
+    expect(getLastBody().event).toBe('deck_import_success')
+  })
+
+  it('includes baseKey and baseSet in payload', async () => {
+    await onDeckImportSuccess('JTL-030', 'JTL')
+    const { baseKey, baseSet } = getLastBody().data
+    expect(baseKey).toBe('JTL-030')
+    expect(baseSet).toBe('JTL')
+  })
+})
+
+describe('onDeckImportFailure', () => {
+  it('sends event name deck_import_failure', async () => {
+    await onDeckImportFailure('deck_not_accessible')
+    expect(getLastBody().event).toBe('deck_import_failure')
+  })
+
+  it('includes reason in payload', async () => {
+    await onDeckImportFailure('deck_not_accessible')
+    expect(getLastBody().data.reason).toBe('deck_not_accessible')
   })
 })

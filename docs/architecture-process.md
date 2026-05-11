@@ -95,7 +95,7 @@ Custom event tracking (game starts, base popularity) is not covered by the Cloud
 
 ### Frontend analytics service (`src/services/analytics.ts`)
 
-Twelve public functions fire events to the worker endpoint. All are fire-and-forget — they return `Promise<void>` so tests can await them, but callers use `void` (errors are silently discarded):
+Eighteen public functions fire events to the worker endpoint. All are fire-and-forget — they return `Promise<void>` so tests can await them, but callers use `void` (errors are silently discarded):
 
 | Function | Event name | Payload fields |
 |---|---|---|
@@ -111,6 +111,12 @@ Twelve public functions fire events to the worker endpoint. All are fire-and-for
 | `onEpicActionUsed(baseKey, baseSet)` | `epic_action_used` | `baseKey`, `baseSet` |
 | `onForceGained(baseKey, baseSet)` | `force_gained` | `baseKey`, `baseSet` |
 | `onForceUsed(baseKey, baseSet)` | `force_used` | `baseKey`, `baseSet` |
+| `onFavouriteAdded(baseKey, baseSet)` | `favourite_added` | `baseKey`, `baseSet` |
+| `onFavouriteRemoved(baseKey, baseSet)` | `favourite_removed` | `baseKey`, `baseSet` |
+| `onFavouritesCleared()` | `favourites_cleared` | — |
+| `onSettingChanged(setting, value)` | `setting_changed` | `setting` (string), `value` (unknown — boolean for current settings, typed loosely to accommodate future multi-choice settings) |
+| `onDeckImportSuccess(baseKey, baseSet)` | `deck_import_success` | `baseKey`, `baseSet` |
+| `onDeckImportFailure(reason)` | `deck_import_failure` | `reason` (`'deck_not_accessible'` \| `'base_not_recognised'`) |
 
 `onAppInstall` fires on the first launch of the app in standalone mode (i.e. launched from the home screen icon). It checks `window.matchMedia('(display-mode: standalone)').matches` (Android/Chrome) or `window.navigator.standalone === true` (iOS Safari), and only fires if a `pwa_install_tracked` flag is not yet set in localStorage. Once fired it sets the flag, so subsequent launches do not re-fire it. This approach is used instead of the `appinstalled` browser event because Safari does not support that event.
 
@@ -140,6 +146,24 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 | `visibilitychange` → hidden then visible | `onAppResume()` |
 | User starts a game (`handleConfirm`) | `onGameStart(baseKey, baseSet, useHyperspace)` |
 | User ends a game (`handleBack`) | `onGameEnd(baseKey, baseSet, useHyperspace, durationSeconds)` |
+
+**SwuSetupScreen (swuSetupScreen.tsx)**
+
+| Trigger | Call |
+|---|---|
+| Star toggle tapped on an unfavourited base | `onFavouriteAdded(baseKey, baseSet)` |
+| Star toggle tapped on a favourited base | `onFavouriteRemoved(baseKey, baseSet)` |
+| SWUDB deck loads successfully | `onDeckImportSuccess(baseKey, baseSet)` |
+| SWUDB fetch fails or returns non-200 | `onDeckImportFailure('deck_not_accessible')` |
+| SWUDB deck loads but base key not in database | `onDeckImportFailure('base_not_recognised')` |
+
+**SwuSettingsScreen (swuSettingsScreen.tsx)**
+
+| Trigger | Call |
+|---|---|
+| Any settings toggle changed | `onSettingChanged(settingName, newValue)` |
+| Remove clicked on an individual favourite | `onFavouriteRemoved(baseKey, baseSet)` |
+| Clear All confirmed | `onFavouritesCleared()` |
 
 **SwuGameScreen (swuGameScreen.tsx)**
 
