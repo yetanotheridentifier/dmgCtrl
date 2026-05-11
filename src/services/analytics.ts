@@ -1,7 +1,7 @@
 import { version as APP_VERSION } from '../../package.json'
 
 async function sendEvent(event: string, data: Record<string, unknown>): Promise<void> {
-  const url = import.meta.env.VITE_ANALYTICS_URL ?? 'https://worker.dmgctrl.app/analytics'
+  const url = import.meta.env.VITE_ANALYTICS_URL ?? 'https://swu-proxy.dmgctrl.workers.dev/analytics'
   const env = import.meta.env.MODE
   try {
     await fetch(url, {

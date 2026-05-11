@@ -41,6 +41,9 @@ src/
     useUserSettings.ts      React Context — persistent user preferences (useHyperspace, enableForceToken, enableEpicActions, enableWakeLock, enableFavourites, enableLongPress, enableActionLog) backed by localStorage under key `user_settings`; all seven default to `true`; `UserSettingsProvider` wraps the app in `main.tsx`
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
+  services/
+    analytics.ts            Fire-and-forget analytics service — onAppStart, onGameStart, onGameEnd; posts JSON to the Cloudflare Worker analytics endpoint; all errors silently discarded; env field auto-appended to every event
+
   utils/
     swudbUrl.ts             SWUDB URL utilities: normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck
 
@@ -53,6 +56,7 @@ src/
     swuLoadingScreen.test.tsx Loading screen tests
     swuSetupScreen.test.tsx Setup screen container tests
     swuSettingsScreen.test.tsx Settings screen container tests
+    analytics.test.ts       Analytics service tests — payload shape, PII absence, env field, error handling
     swudbUrl.test.ts        SWUDB URL utility tests
     useDragScrubber.test.ts Drag-to-scrub hook tests
     useBaseArt.test.ts      Art fallback chain hook tests
@@ -109,6 +113,7 @@ All other state is owned at the component level:
 | Current screen (`loading` / `setup` / `game` / `help` / `settings`) | `App` | Passed as callback props (`onReady`, `onConfirm`, `onBack`, `onHelp`, `onSettings`) |
 | Back stack (for help/settings back-navigation) | `App` | A `Screen[]` stack; pushed when navigating to help or settings, popped on back — supports any depth of overlay navigation |
 | `useBases()` loading state (for loading screen) | `App` | `App` calls `useBases()` and passes `loading` prop to `SwuLoadingScreen`; `SwuLoadingScreen` calls `onReady` as soon as the data is ready (`loading` becomes `false`) |
+| Game start time | `App` (`useRef`) | Recorded at the start of `handleConfirm`; used by `handleBack` to compute `durationSeconds` for `onGameEnd` |
 | Selected base | `App` | Set on `onConfirm`, passed into `SwuGameScreen` |
 | Last setup selection (`set`, `aspect`, `key`) | `App` | Saved on `handleConfirm`; passed as `initialSelection` prop to `SwuSetupScreen` so dropdowns are pre-populated on back navigation |
 | Filter state (set, aspect, card) | `useSwuSetup` | Seeded from `initialSelection` on mount; local after that |

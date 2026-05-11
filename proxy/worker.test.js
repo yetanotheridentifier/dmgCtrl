@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { SELF } from 'cloudflare:test'
 
 const ALLOWED_ORIGIN = 'https://dmgctrl.app'
+const DEV_ORIGIN = 'https://dev.dmgctrl.app'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -121,5 +122,37 @@ describe('POST /analytics', () => {
     expect(response.status).toBe(204)
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe(ALLOWED_ORIGIN)
     expect(response.headers.get('Access-Control-Allow-Methods')).toContain('POST')
+  })
+
+  it('allows OPTIONS preflight from dev origin', async () => {
+    const response = await SELF.fetch('https://worker.example/analytics', {
+      method: 'OPTIONS',
+      headers: { Origin: DEV_ORIGIN },
+    })
+
+    expect(response.status).toBe(204)
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe(DEV_ORIGIN)
+  })
+
+  it('returns dev origin in CORS headers for POST from dev origin', async () => {
+    stubFetch(() => new Response(null, { status: 204 }))
+
+    const response = await SELF.fetch('https://worker.example/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: DEV_ORIGIN },
+      body: JSON.stringify({ event: 'game_started', data: { players: 2 } }),
+    })
+
+    expect(response.status).toBe(204)
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe(DEV_ORIGIN)
+  })
+
+  it('does not include CORS header for unknown origin', async () => {
+    const response = await SELF.fetch('https://worker.example/analytics', {
+      method: 'OPTIONS',
+      headers: { Origin: 'https://evil.example.com' },
+    })
+
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull()
   })
 })
