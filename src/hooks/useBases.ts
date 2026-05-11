@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-const PROXY_URL = 'https://swu-proxy.dmgctrl.workers.dev'
+const PROXY_URL = 'https://worker.dmgctrl.app'
 const SWUAPI_URL = 'https://api.swuapi.com'
 const SWU_DB_CDN = 'https://cdn.swu-db.com/images/cards'
 const CACHE_KEY = 'swu_bases_cache'

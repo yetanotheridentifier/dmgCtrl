@@ -1,3 +1,9 @@
 name = "swu-proxy"
 main = "worker.js"
 compatibility_date = "2024-01-01"
+workers_dev = false
+preview_urls = false
+
+routes = [
+  { pattern = "worker.dmgctrl.app", custom_domain = true }
+]

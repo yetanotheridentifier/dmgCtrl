@@ -233,8 +233,8 @@ export interface Base {
 
 | API | URL | Purpose |
 |---|---|---|
-| swu-db proxy | `swu-proxy.dmgctrl.workers.dev` | Card text, HP, aspects, rarity, standard art; source of truth for SOR/SHD/TWI |
-| Analytics endpoint | `swu-proxy.dmgctrl.workers.dev/analytics` | Accepts `POST` from the frontend; writes events to InfluxDB Cloud in line-protocol format |
+| swu-db proxy | `worker.dmgctrl.app` | Card text, HP, aspects, rarity, standard art; source of truth for SOR/SHD/TWI |
+| Analytics endpoint | `worker.dmgctrl.app/analytics` | Accepts `POST` from the frontend; writes events to InfluxDB Cloud in line-protocol format |
 | swuapi.com | `api.swuapi.com/cards?type=Base&variant=all&limit=100` | Primary source for active-format bases; provides low-res art URLs and hyperspace metadata |
 
 **swuapi.com pagination:** The API returns 100 cards per page with cursor-based pagination. `useBases` follows `pagination.next_cursor` until it is `null`, accumulating all pages before merging.

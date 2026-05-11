@@ -150,7 +150,7 @@ Use `--cold` to simulate a first-time user (clears `swu_bases_cache` before each
 
 - `npm install` requires `--legacy-peer-deps` due to Vite / vite-plugin-pwa version conflict
 - The app is designed for **landscape iPhone** — portrait mode is functional but not the primary target
-- swu-db.com blocks direct browser requests (CORS) — all calls go via the Cloudflare Worker proxy at `https://swu-proxy.dmgctrl.workers.dev`
+- swu-db.com blocks direct browser requests (CORS) — all calls go via the Cloudflare Worker proxy at `https://worker.dmgctrl.app`
 - swuapi.com has CORS enabled and can be called directly from the browser
 - Set codes: `SOR` (Spark of Rebellion), `SHD` (Shadows of the Galaxy), `TWI` (Twilight of the Republic), `JTL` (Jump to Lightspeed), `LOF` (Legends of the Force), `SEC` (Secrets of Power), `LAW` (A Lawless Time), `IBH` (Intro Battle: Hoth)
 - The owner's handle is `yetanotheridentifier` — replace in any URLs
@@ -161,7 +161,7 @@ Use `--cold` to simulate a first-time user (clears `swu_bases_cache` before each
 - Run a filtered test summary: `npm test 2>&1 | grep -E "×|FAIL|Tests|Test Files"`
 - Run a single test file: `npm test -- src/test/swuSetupScreen.test.tsx`
 - SWUDB deck URL format: `https://swudb.com/deck/<id>` where `<id>` is alphanumeric, variable length. Edit links (`/deck/edit/<id>`) are normalised automatically. Validation regex: `/^https:\/\/swudb\.com\/deck\/[A-Za-z0-9]+$/`
-- The Cloudflare Worker at `swu-proxy.dmgctrl.workers.dev` also proxies `swudb.com/api/deck/<id>` under the path `/swudb/deck/<id>` — this is how `fetchSwudbDeck` retrieves deck data
+- The Cloudflare Worker at `worker.dmgctrl.app` also proxies `swudb.com/api/deck/<id>` under the path `/swudb/deck/<id>` — this is how `fetchSwudbDeck` retrieves deck data
 - The Force button is shown for **all bases** when `enableForceToken` is true in user settings (default: on). LOF Force bases (whose `epicAction` text matches `/the force is with you/i`) start in a ready/enabled state; all other bases start in a locked/dimmed state that requires one enable tap before the Force can be gained. This covers the case where a non-Force base gains the Force via a card or leader ability.
 - `public/dmgCtrl-force-token.png` is the Force token icon (512×512 PNG); used on the Force button and as a watermark inside the Force token overlay
 - App icon file: `public/dmgCtrl-icon-transparent-192.png` — transparent PNG icon used on the loading screen and alongside titles on the setup and help screens

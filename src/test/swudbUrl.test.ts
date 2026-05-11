@@ -94,7 +94,7 @@ describe('fetchSwudbDeck', () => {
     vi.stubGlobal('fetch', mockFetch)
     await fetchSwudbDeck('ILRtEGjuCQY')
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://swu-proxy.dmgctrl.workers.dev/swudb/deck/ILRtEGjuCQY'
+      'https://worker.dmgctrl.app/swudb/deck/ILRtEGjuCQY'
     )
   })
 
