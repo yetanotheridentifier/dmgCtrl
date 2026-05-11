@@ -125,6 +125,25 @@ describe('onGameEnd', () => {
   })
 })
 
+describe('sessionId', () => {
+  it('includes sessionId in every event', async () => {
+    await onAppStart()
+    expect(getLastBody().data.sessionId).toBeDefined()
+    expect(typeof getLastBody().data.sessionId).toBe('string')
+    expect(getLastBody().data.sessionId.length).toBeGreaterThan(0)
+  })
+
+  it('uses the same sessionId across all events in a session', async () => {
+    await onAppStart()
+    const id = getLastBody().data.sessionId
+    expect(id).toBeDefined()
+    await onGameStart('SOR-026', 'SOR', false)
+    expect(getLastBody().data.sessionId).toBe(id)
+    await onGameEnd('SOR-026', 'SOR', false, 30)
+    expect(getLastBody().data.sessionId).toBe(id)
+  })
+})
+
 describe('error handling', () => {
   it('resolves without throwing when fetch rejects', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')))
