@@ -42,7 +42,7 @@ src/
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
   services/
-    analytics.ts            Fire-and-forget analytics service — onAppStart, onGameStart, onGameEnd, onAppInstall, onAppResume; posts JSON to the Cloudflare Worker analytics endpoint; all errors silently discarded; env and sessionId auto-appended to every event
+    analytics.ts            Fire-and-forget analytics service — onAppStart, onGameStart, onGameEnd, onAppInstall, onAppResume, onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed, onEpicActionUsed, onForceGained, onForceUsed; posts JSON to the Cloudflare Worker analytics endpoint; all errors silently discarded; env and sessionId auto-appended to every event
 
   utils/
     swudbUrl.ts             SWUDB URL utilities: normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck
@@ -56,7 +56,7 @@ src/
     swuLoadingScreen.test.tsx Loading screen tests
     swuSetupScreen.test.tsx Setup screen container tests
     swuSettingsScreen.test.tsx Settings screen container tests
-    analytics.test.ts       Analytics service tests — payload shape, PII absence, env field, sessionId consistency, lifecycle functions (onAppInstall, onAppResume), error handling
+    analytics.test.ts       Analytics service tests — payload shape, PII absence, env field, sessionId consistency, lifecycle functions (onAppInstall, onAppResume), in-game action functions, error handling
     swudbUrl.test.ts        SWUDB URL utility tests
     useDragScrubber.test.ts Drag-to-scrub hook tests
     useBaseArt.test.ts      Art fallback chain hook tests
