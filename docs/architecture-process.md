@@ -87,7 +87,7 @@ Custom event tracking (game starts, base popularity) is not covered by the Cloud
 - **Responses:** 204 on success, 400 for malformed JSON, 500 on InfluxDB error
 - **Querying:** InfluxDB Cloud 3.x (Serverless); use SQL — camelCase column names must be double-quoted, e.g.:
   ```sql
-  SELECT time, event, "baseKey", "baseSet", hyperspace, "durationSeconds"
+  SELECT time, event, "sessionId", "baseKey", "baseSet", hyperspace, "durationSeconds"
   FROM events
   WHERE time > now() - interval '24 hours'
   ORDER BY time ASC
@@ -103,7 +103,12 @@ Three public functions fire events to the worker endpoint. All are fire-and-forg
 | `onGameStart(baseKey, baseSet, hyperspace)` | `game_started` | `baseKey`, `baseSet`, `hyperspace` |
 | `onGameEnd(baseKey, baseSet, hyperspace, durationSeconds)` | `game_ended` | `baseKey`, `baseSet`, `hyperspace`, `durationSeconds` |
 
-Every event automatically includes an `env` field set to `import.meta.env.MODE` (`'development'` in dev, `'production'` in production builds). Use `WHERE env = 'production'` in InfluxDB queries to exclude dev traffic.
+Every event automatically includes two fields appended by `sendEvent`:
+
+| Auto field | Value | Notes |
+|---|---|---|
+| `env` | `import.meta.env.MODE` | `'development'` in dev, `'production'` in builds. Filter with `WHERE env = 'production'` to exclude dev traffic. |
+| `sessionId` | 8-char alphanumeric string, e.g. `'a3f8kx2q'` | Generated once at module load (`Math.random().toString(36).slice(2, 10)`). Same across all events in a page session; resets on reload. Ephemeral — not stored in localStorage, no PII. Enables per-session grouping and session duration queries. |
 
 The endpoint URL defaults to `https://swu-proxy.dmgctrl.workers.dev/analytics` and can be overridden via the `VITE_ANALYTICS_URL` environment variable (useful for local worker dev with `wrangler dev`).
 
