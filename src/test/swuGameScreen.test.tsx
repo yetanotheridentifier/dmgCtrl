@@ -9,6 +9,23 @@ import { useWakeLock } from '../hooks/useWakeLock'
 vi.mock('../hooks/useOrientation')
 vi.mock('../hooks/useWakeLock', () => ({ useWakeLock: vi.fn() }))
 
+const mockOnDamageDealt = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnDamageHealed = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnRoundIncremented = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnUndoUsed = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnEpicActionUsed = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnForceGained = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnForceUsed = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+vi.mock('../services/analytics', () => ({
+  onDamageDealt: mockOnDamageDealt,
+  onDamageHealed: mockOnDamageHealed,
+  onRoundIncremented: mockOnRoundIncremented,
+  onUndoUsed: mockOnUndoUsed,
+  onEpicActionUsed: mockOnEpicActionUsed,
+  onForceGained: mockOnForceGained,
+  onForceUsed: mockOnForceUsed,
+}))
+
 const mockUserSettings = vi.hoisted(() => ({
   useHyperspace: true,
   enableForceToken: true,
@@ -169,6 +186,13 @@ describe('SwuGameScreen', () => {
     mockUserSettings.useHyperspace = false
     mockUserSettings.enableLongPress = true
     mockUserSettings.enableActionLog = true
+    mockOnDamageDealt.mockClear()
+    mockOnDamageHealed.mockClear()
+    mockOnRoundIncremented.mockClear()
+    mockOnUndoUsed.mockClear()
+    mockOnEpicActionUsed.mockClear()
+    mockOnForceGained.mockClear()
+    mockOnForceUsed.mockClear()
   })
 
   // --- Rendering ---
@@ -1222,6 +1246,133 @@ describe('SwuGameScreen', () => {
     await user.click(screen.getByTestId('log-undo-btn'))
     expect(screen.getByText('Round 1')).toBeInTheDocument()
     expect(screen.queryByTestId('log-undo-btn')).not.toBeInTheDocument()
+  })
+
+})
+
+describe('SwuGameScreen analytics', () => {
+
+  beforeEach(() => {
+    vi.mocked(useOrientation).mockReturnValue({ isPortrait: false, vmin: 0 })
+    mockUserSettings.enableForceToken = true
+    mockUserSettings.enableEpicActions = true
+    mockUserSettings.enableActionLog = true
+    mockUserSettings.enableLongPress = true
+    mockUserSettings.useHyperspace = false
+    mockOnDamageDealt.mockClear()
+    mockOnDamageHealed.mockClear()
+    mockOnRoundIncremented.mockClear()
+    mockOnUndoUsed.mockClear()
+    mockOnEpicActionUsed.mockClear()
+    mockOnForceGained.mockClear()
+    mockOnForceUsed.mockClear()
+  })
+
+  it('calls onDamageDealt with baseKey, baseSet and amount 1 on single tap of +', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByText('+'))
+    expect(mockOnDamageDealt).toHaveBeenCalledWith('SOR-026', 'SOR', 1)
+  })
+
+  it('calls onDamageDealt with the drag scrub amount', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const plusBtn = screen.getByText('+')
+    fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(plusBtn, { clientY: 272, pointerId: 1 })
+    fireEvent.pointerUp(plusBtn, { pointerId: 1 })
+    expect(mockOnDamageDealt).toHaveBeenCalledWith('SOR-026', 'SOR', 3)
+  })
+
+  it('calls onDamageHealed with baseKey, baseSet and amount 1 on single tap of −', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByText('−'))
+    expect(mockOnDamageHealed).toHaveBeenCalledWith('SOR-026', 'SOR', 1)
+  })
+
+  it('calls onDamageHealed with the drag scrub amount', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const plusBtn = screen.getByText('+')
+    for (let i = 0; i < 5; i++) fireEvent.click(plusBtn)
+    const minusBtn = screen.getByText('−')
+    fireEvent.pointerDown(minusBtn, { clientY: 300, pointerId: 1 })
+    fireEvent.pointerMove(minusBtn, { clientY: 272, pointerId: 1 })
+    fireEvent.pointerUp(minusBtn, { pointerId: 1 })
+    expect(mockOnDamageHealed).toHaveBeenCalledWith('SOR-026', 'SOR', 3)
+  })
+
+  it('calls onRoundIncremented with baseKey, baseSet and new round number', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
+    expect(mockOnRoundIncremented).toHaveBeenCalledWith('SOR-026', 'SOR', 2)
+  })
+
+  it('calls onEpicActionUsed with baseKey and baseSet when epic action is tapped', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('epic-action-btn'))
+    expect(mockOnEpicActionUsed).toHaveBeenCalledWith('SOR-022', 'SOR')
+  })
+
+  it('does not call onEpicActionUsed a second time when epic action is already used', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('epic-action-btn'))
+    await user.click(screen.getByTestId('epic-action-btn'))
+    expect(mockOnEpicActionUsed).toHaveBeenCalledTimes(1)
+  })
+
+  it('calls onForceGained when Force button is tapped on a Force base', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('force-btn'))
+    expect(mockOnForceGained).toHaveBeenCalledWith('LOF-026', 'LOF')
+  })
+
+  it('calls onForceGained when Force button is tapped on a non-Force base after enabling', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('force-btn-locked'))
+    await user.click(screen.getByTestId('force-btn'))
+    expect(mockOnForceGained).toHaveBeenCalledWith('SOR-026', 'SOR')
+  })
+
+  it('calls onForceGained when monastery action is used', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('mystic-action-btn'))
+    expect(mockOnForceGained).toHaveBeenCalledWith('LOF-022', 'LOF')
+  })
+
+  it('calls onForceUsed when Force token is dismissed', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('force-btn'))
+    await user.click(screen.getByTestId('force-btn-active'))
+    expect(mockOnForceUsed).toHaveBeenCalledWith('LOF-026', 'LOF')
+  })
+
+  it('calls onUndoUsed with undoneAction hit when a hit is undone', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(mockOnUndoUsed).toHaveBeenCalledWith('SOR-026', 'SOR', 'hit')
+  })
+
+  it('calls onUndoUsed with undoneAction heal when a heal is undone', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByText('−'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(mockOnUndoUsed).toHaveBeenCalledWith('SOR-026', 'SOR', 'heal')
   })
 
 })

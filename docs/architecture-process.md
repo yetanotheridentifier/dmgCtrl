@@ -95,7 +95,7 @@ Custom event tracking (game starts, base popularity) is not covered by the Cloud
 
 ### Frontend analytics service (`src/services/analytics.ts`)
 
-Five public functions fire events to the worker endpoint. All are fire-and-forget — they return `Promise<void>` so tests can await them, but callers use `void` (errors are silently discarded):
+Twelve public functions fire events to the worker endpoint. All are fire-and-forget — they return `Promise<void>` so tests can await them, but callers use `void` (errors are silently discarded):
 
 | Function | Event name | Payload fields |
 |---|---|---|
@@ -104,6 +104,13 @@ Five public functions fire events to the worker endpoint. All are fire-and-forge
 | `onGameEnd(baseKey, baseSet, hyperspace, durationSeconds)` | `game_ended` | `baseKey`, `baseSet`, `hyperspace`, `durationSeconds` |
 | `onAppInstall()` | `app_installed` | _(none beyond auto fields)_ |
 | `onAppResume()` | `app_resumed` | `sessionDurationSoFarSeconds` |
+| `onDamageDealt(baseKey, baseSet, amount)` | `damage_dealt` | `baseKey`, `baseSet`, `amount` |
+| `onDamageHealed(baseKey, baseSet, amount)` | `damage_healed` | `baseKey`, `baseSet`, `amount` |
+| `onRoundIncremented(baseKey, baseSet, round)` | `round_incremented` | `baseKey`, `baseSet`, `round` (new round number) |
+| `onUndoUsed(baseKey, baseSet, undoneAction)` | `undo_used` | `baseKey`, `baseSet`, `undoneAction` (log entry type: `hit`, `heal`, `epic`, `force-gain`, `force-use`, `monastery`, `round`) |
+| `onEpicActionUsed(baseKey, baseSet)` | `epic_action_used` | `baseKey`, `baseSet` |
+| `onForceGained(baseKey, baseSet)` | `force_gained` | `baseKey`, `baseSet` |
+| `onForceUsed(baseKey, baseSet)` | `force_used` | `baseKey`, `baseSet` |
 
 `onAppInstall` fires on the first launch of the app in standalone mode (i.e. launched from the home screen icon). It checks `window.matchMedia('(display-mode: standalone)').matches` (Android/Chrome) or `window.navigator.standalone === true` (iOS Safari), and only fires if a `pwa_install_tracked` flag is not yet set in localStorage. Once fired it sets the flag, so subsequent launches do not re-fire it. This approach is used instead of the `appinstalled` browser event because Safari does not support that event.
 
@@ -124,11 +131,28 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 
 | Trigger | Call |
 |---|---|
+**App.tsx**
+
+| Trigger | Call |
+|---|---|
 | App mount (`useEffect`) | `onAppStart()` |
 | App mount, standalone mode, `pwa_install_tracked` flag not set | `onAppInstall()` |
 | `visibilitychange` → hidden then visible | `onAppResume()` |
 | User starts a game (`handleConfirm`) | `onGameStart(baseKey, baseSet, useHyperspace)` |
 | User ends a game (`handleBack`) | `onGameEnd(baseKey, baseSet, useHyperspace, durationSeconds)` |
+
+**SwuGameScreen (swuGameScreen.tsx)**
+
+| Trigger | Call |
+|---|---|
+| `+` tapped or drag-released | `onDamageDealt(baseKey, baseSet, amount)` |
+| `−` tapped or drag-released | `onDamageHealed(baseKey, baseSet, amount)` |
+| Round counter tapped | `onRoundIncremented(baseKey, baseSet, newRound)` |
+| Undo button pressed | `onUndoUsed(baseKey, baseSet, undoneAction)` |
+| Epic action button tapped | `onEpicActionUsed(baseKey, baseSet)` |
+| Force button tapped (Force or non-Force base) | `onForceGained(baseKey, baseSet)` |
+| Mystic Monastery action button tapped | `onForceGained(baseKey, baseSet)` |
+| Force token or greyed Force button dismissed | `onForceUsed(baseKey, baseSet)` |
 
 `durationSeconds` is computed as `Math.round((Date.now() - gameStartTime) / 1000)` where `gameStartTime` is recorded at the start of `handleConfirm`. `handleBack` only fires `onGameEnd` when `selectedBase` is set (i.e. the back button was pressed from the game screen, not from help or settings).
 

@@ -37,3 +37,31 @@ export function onAppResume(): Promise<void> {
   const sessionDurationSoFarSeconds = Math.floor((Date.now() - SESSION_START_TIME) / 1000)
   return sendEvent('app_resumed', { sessionDurationSoFarSeconds })
 }
+
+export function onDamageDealt(baseKey: string, baseSet: string, amount: number): Promise<void> {
+  return sendEvent('damage_dealt', { baseKey, baseSet, amount })
+}
+
+export function onDamageHealed(baseKey: string, baseSet: string, amount: number): Promise<void> {
+  return sendEvent('damage_healed', { baseKey, baseSet, amount })
+}
+
+export function onRoundIncremented(baseKey: string, baseSet: string, round: number): Promise<void> {
+  return sendEvent('round_incremented', { baseKey, baseSet, round })
+}
+
+export function onUndoUsed(baseKey: string, baseSet: string, undoneAction: string): Promise<void> {
+  return sendEvent('undo_used', { baseKey, baseSet, undoneAction })
+}
+
+export function onEpicActionUsed(baseKey: string, baseSet: string): Promise<void> {
+  return sendEvent('epic_action_used', { baseKey, baseSet })
+}
+
+export function onForceGained(baseKey: string, baseSet: string): Promise<void> {
+  return sendEvent('force_gained', { baseKey, baseSet })
+}
+
+export function onForceUsed(baseKey: string, baseSet: string): Promise<void> {
+  return sendEvent('force_used', { baseKey, baseSet })
+}

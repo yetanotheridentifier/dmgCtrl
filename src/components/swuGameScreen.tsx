@@ -9,6 +9,7 @@ import { useUserSettings } from '../hooks/useUserSettings'
 import SwuGameScreenView from './swuGameScreenView'
 import { BackIcon } from './icons'
 import AppScreenLayout from './layout/AppScreenLayout'
+import { onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed, onEpicActionUsed, onForceGained, onForceUsed } from '../services/analytics'
 
 interface Props {
   base: Base
@@ -27,6 +28,9 @@ function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
   const [showLog, setShowLog] = useState(false)
   const [epicOverlayDismissed, setEpicOverlayDismissed] = useState(false)
 
+  const baseKey = `${base.set}-${base.number}`
+  const baseSet = base.set
+
   const isMysticMonastery = base.set === 'LOF' && base.number === '022'
   const isForceBase = /the force is with you/i.test(base.epicAction)
   const effectiveForceEnabled = isForceBase || game.forceEnabled
@@ -35,24 +39,28 @@ function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
     const prev = game.snapshot()
     game.incrementBy(n)
     log.add({ type: 'hit', message: `Hit +${n}`, color: '#ef4444', prevState: prev })
+    void onDamageDealt(baseKey, baseSet, n)
   }
 
   const handleDecrement = (n: number) => {
     const prev = game.snapshot()
     game.decrementBy(n)
     log.add({ type: 'heal', message: `Heal −${n}`, color: '#22c55e', prevState: prev })
+    void onDamageHealed(baseKey, baseSet, n)
   }
 
   const handleForceGain = () => {
     const prev = game.snapshot()
     game.toggleForce()
     log.add({ type: 'force-gain', message: 'Force gained', color: '#3b82f6', prevState: prev })
+    void onForceGained(baseKey, baseSet)
   }
 
   const handleForceDismiss = () => {
     const prev = game.snapshot()
     game.toggleForce()
     log.add({ type: 'force-use', message: 'Force used', color: '#93c5fd', prevState: prev })
+    void onForceUsed(baseKey, baseSet)
   }
 
   const handleEpicActionMark = () => {
@@ -60,23 +68,29 @@ function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
     game.markEpicActionUsed()
     log.add({ type: 'epic', message: 'Epic action used', color: '#f5c518', prevState: prev })
     setEpicOverlayDismissed(false)
+    void onEpicActionUsed(baseKey, baseSet)
   }
 
   const handleMonasteryAction = () => {
     const prev = game.snapshot()
     game.gainForceViaMonastery()
     log.add({ type: 'monastery', message: 'Force gained (monastery)', color: '#3b82f6', prevState: prev })
+    void onForceGained(baseKey, baseSet)
   }
 
   const handleRoundIncrement = () => {
     const prev = game.snapshot()
     game.incrementRound()
     log.add({ type: 'round', message: `Round ${prev.round + 1}`, color: '#ffffff', prevState: prev })
+    void onRoundIncremented(baseKey, baseSet, prev.round + 1)
   }
 
   const handleUndo = () => {
     const entry = log.undoLast()
-    if (entry) game.restoreState(entry.prevState)
+    if (entry) {
+      game.restoreState(entry.prevState)
+      void onUndoUsed(baseKey, baseSet, entry.type)
+    }
   }
 
   const handleReset = () => {

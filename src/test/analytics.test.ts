@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { onAppStart, onGameStart, onGameEnd, onAppInstall, onAppResume } from '../services/analytics'
+import {
+  onAppStart, onGameStart, onGameEnd, onAppInstall, onAppResume,
+  onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed,
+  onEpicActionUsed, onForceGained, onForceUsed,
+} from '../services/analytics'
 import { version as APP_VERSION } from '../../package.json'
 
 const TEST_URL = 'https://test.example/analytics'
@@ -190,5 +194,115 @@ describe('error handling', () => {
   it('resolves without throwing when server returns an error status', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('Error', { status: 500 })))
     await expect(onAppStart()).resolves.toBeUndefined()
+  })
+})
+
+describe('onDamageDealt', () => {
+  it('sends event name damage_dealt', async () => {
+    await onDamageDealt('SOR-026', 'SOR', 5)
+    expect(getLastBody().event).toBe('damage_dealt')
+  })
+
+  it('includes baseKey, baseSet and amount in payload', async () => {
+    await onDamageDealt('SOR-026', 'SOR', 5)
+    const { baseKey, baseSet, amount } = getLastBody().data
+    expect(baseKey).toBe('SOR-026')
+    expect(baseSet).toBe('SOR')
+    expect(amount).toBe(5)
+  })
+
+  it('does not include user-identifiable fields', async () => {
+    await onDamageDealt('SOR-026', 'SOR', 5)
+    const keys = Object.keys(getLastBody().data ?? {})
+    for (const piiKey of ['userId', 'email', 'name', 'ip', 'user']) {
+      expect(keys).not.toContain(piiKey)
+    }
+  })
+})
+
+describe('onDamageHealed', () => {
+  it('sends event name damage_healed', async () => {
+    await onDamageHealed('SOR-026', 'SOR', 3)
+    expect(getLastBody().event).toBe('damage_healed')
+  })
+
+  it('includes baseKey, baseSet and amount in payload', async () => {
+    await onDamageHealed('SOR-026', 'SOR', 3)
+    const { baseKey, baseSet, amount } = getLastBody().data
+    expect(baseKey).toBe('SOR-026')
+    expect(baseSet).toBe('SOR')
+    expect(amount).toBe(3)
+  })
+})
+
+describe('onRoundIncremented', () => {
+  it('sends event name round_incremented', async () => {
+    await onRoundIncremented('SOR-026', 'SOR', 2)
+    expect(getLastBody().event).toBe('round_incremented')
+  })
+
+  it('includes baseKey, baseSet and round in payload', async () => {
+    await onRoundIncremented('SOR-026', 'SOR', 2)
+    const { baseKey, baseSet, round } = getLastBody().data
+    expect(baseKey).toBe('SOR-026')
+    expect(baseSet).toBe('SOR')
+    expect(round).toBe(2)
+  })
+})
+
+describe('onUndoUsed', () => {
+  it('sends event name undo_used', async () => {
+    await onUndoUsed('SOR-026', 'SOR', 'hit')
+    expect(getLastBody().event).toBe('undo_used')
+  })
+
+  it('includes baseKey, baseSet and undoneAction in payload', async () => {
+    await onUndoUsed('SOR-026', 'SOR', 'hit')
+    const { baseKey, baseSet, undoneAction } = getLastBody().data
+    expect(baseKey).toBe('SOR-026')
+    expect(baseSet).toBe('SOR')
+    expect(undoneAction).toBe('hit')
+  })
+})
+
+describe('onEpicActionUsed', () => {
+  it('sends event name epic_action_used', async () => {
+    await onEpicActionUsed('SOR-022', 'SOR')
+    expect(getLastBody().event).toBe('epic_action_used')
+  })
+
+  it('includes baseKey and baseSet in payload', async () => {
+    await onEpicActionUsed('SOR-022', 'SOR')
+    const { baseKey, baseSet } = getLastBody().data
+    expect(baseKey).toBe('SOR-022')
+    expect(baseSet).toBe('SOR')
+  })
+})
+
+describe('onForceGained', () => {
+  it('sends event name force_gained', async () => {
+    await onForceGained('LOF-026', 'LOF')
+    expect(getLastBody().event).toBe('force_gained')
+  })
+
+  it('includes baseKey and baseSet in payload', async () => {
+    await onForceGained('LOF-026', 'LOF')
+    const { baseKey, baseSet } = getLastBody().data
+    expect(baseKey).toBe('LOF-026')
+    expect(baseSet).toBe('LOF')
+  })
+})
+
+describe('onForceUsed', () => {
+  it('sends event name force_used', async () => {
+    await onForceUsed('LOF-026', 'LOF')
+    expect(getLastBody().event).toBe('force_used')
+  })
+
+  it('includes baseKey and baseSet in payload', async () => {
+    await onForceUsed('LOF-026', 'LOF')
+    const { baseKey, baseSet } = getLastBody().data
+    expect(baseKey).toBe('LOF-026')
+    expect(baseSet).toBe('LOF')
   })
 })
