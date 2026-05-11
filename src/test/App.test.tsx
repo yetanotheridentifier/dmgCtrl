@@ -4,6 +4,15 @@ import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { useBases } from '../hooks/useBases'
 
+const mockOnAppStart = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnGameStart = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnGameEnd = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+vi.mock('../services/analytics', () => ({
+  onAppStart: mockOnAppStart,
+  onGameStart: mockOnGameStart,
+  onGameEnd: mockOnGameEnd,
+}))
+
 const mockBases = vi.hoisted(() => [
   {
     set: 'SOR',
@@ -70,6 +79,9 @@ beforeEach(() => {
     removeItem: vi.fn(),
     clear: vi.fn(),
   })
+  mockOnAppStart.mockClear()
+  mockOnGameStart.mockClear()
+  mockOnGameEnd.mockClear()
 })
 
 afterEach(() => {
@@ -385,6 +397,49 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Back' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
+  })
+
+})
+
+describe('App analytics', () => {
+
+  it('calls onAppStart on mount', async () => {
+    render(<App />)
+    await waitFor(() => expect(mockOnAppStart).toHaveBeenCalledTimes(1))
+  })
+
+  it('calls onGameStart when a game is started', async () => {
+    mockUserSettings.useHyperspace = true
+    const user = userEvent.setup()
+    render(<App />)
+    await waitForSetup()
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    expect(mockOnGameStart).toHaveBeenCalledWith('SOR-026', 'SOR', true)
+  })
+
+  it('calls onGameEnd when the back button is pressed from the game screen', async () => {
+    mockUserSettings.useHyperspace = false
+    const user = userEvent.setup()
+    render(<App />)
+    await waitForSetup()
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(mockOnGameEnd).toHaveBeenCalledWith('SOR-026', 'SOR', false, expect.any(Number))
+  })
+
+  it('does not call onGameEnd when back is pressed from help screen', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitForSetup()
+    await user.click(screen.getByRole('button', { name: 'Help' }))
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(mockOnGameEnd).not.toHaveBeenCalled()
   })
 
 })
