@@ -39,24 +39,33 @@ export default {
   }
 }
 
-const ANALYTICS_ORIGIN = 'https://dmgctrl.app'
+const ALLOWED_ORIGINS = new Set([
+  'https://dmgctrl.app',
+  'https://dev.dmgctrl.app',
+])
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': ANALYTICS_ORIGIN,
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+function getCorsHeaders(origin) {
+  if (!ALLOWED_ORIGINS.has(origin)) return {}
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  }
 }
 
 async function handleAnalytics(request, env) {
+  const origin = request.headers.get('Origin') ?? ''
+  const corsHeaders = getCorsHeaders(origin)
+
   if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: CORS_HEADERS })
+    return new Response(null, { status: 204, headers: corsHeaders })
   }
 
   let body
   try {
     body = await request.json()
   } catch {
-    return new Response('Bad Request', { status: 400, headers: CORS_HEADERS })
+    return new Response('Bad Request', { status: 400, headers: corsHeaders })
   }
 
   const writeUrl =
@@ -73,10 +82,10 @@ async function handleAnalytics(request, env) {
   })
 
   if (!influxResponse.ok) {
-    return new Response('Upstream Error', { status: 500, headers: CORS_HEADERS })
+    return new Response('Upstream Error', { status: 500, headers: corsHeaders })
   }
 
-  return new Response(null, { status: 204, headers: CORS_HEADERS })
+  return new Response(null, { status: 204, headers: corsHeaders })
 }
 
 function toLineProtocol(event, data) {

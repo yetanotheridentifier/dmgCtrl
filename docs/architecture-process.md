@@ -83,11 +83,43 @@ Custom event tracking (game starts, base popularity) is not covered by the Cloud
 - **Storage:** Writes to InfluxDB Cloud in line-protocol format — event name becomes a tag (`event=<name>`), payload fields become InfluxDB fields with type inference (integers get the `i` suffix, floats are bare, strings are quoted)
 - **Measurement:** `events`
 - **Auth:** InfluxDB write token stored as a Cloudflare Worker secret (`INFLUXDB_TOKEN`); org and URL stored as `INFLUXDB_ORG` and `INFLUXDB_URL`
-- **CORS:** Restricted to `https://dmgctrl.app` (not `*` like the card-data proxy routes)
+- **CORS:** Restricted to an allowed-origins set (`https://dmgctrl.app`, `https://dev.dmgctrl.app`). The worker reads the `Origin` request header and echoes it in `Access-Control-Allow-Origin` only when it matches — unknown origins receive no CORS headers. This is intentionally stricter than the card-data proxy routes (which use `*`).
 - **Responses:** 204 on success, 400 for malformed JSON, 500 on InfluxDB error
-- **Querying:** InfluxDB Cloud 3.x (Serverless); use SQL — e.g. `SELECT * FROM events WHERE time >= now() - interval '1 hour'`
+- **Querying:** InfluxDB Cloud 3.x (Serverless); use SQL — camelCase column names must be double-quoted, e.g.:
+  ```sql
+  SELECT time, event, "baseKey", "baseSet", hyperspace, "durationSeconds"
+  FROM events
+  WHERE time > now() - interval '24 hours'
+  ORDER BY time ASC
+  ```
 
-The frontend hooks to call this endpoint are implemented in issues #98 (game starts) and #99 (base popularity). The Worker endpoint itself is complete (#97).
+### Frontend analytics service (`src/services/analytics.ts`)
+
+Three public functions fire events to the worker endpoint. All are fire-and-forget — they return `Promise<void>` so tests can await them, but callers use `void` (errors are silently discarded):
+
+| Function | Event name | Payload fields |
+|---|---|---|
+| `onAppStart()` | `app_started` | `version` (from package.json) |
+| `onGameStart(baseKey, baseSet, hyperspace)` | `game_started` | `baseKey`, `baseSet`, `hyperspace` |
+| `onGameEnd(baseKey, baseSet, hyperspace, durationSeconds)` | `game_ended` | `baseKey`, `baseSet`, `hyperspace`, `durationSeconds` |
+
+Every event automatically includes an `env` field set to `import.meta.env.MODE` (`'development'` in dev, `'production'` in production builds). Use `WHERE env = 'production'` in InfluxDB queries to exclude dev traffic.
+
+The endpoint URL defaults to `https://swu-proxy.dmgctrl.workers.dev/analytics` and can be overridden via the `VITE_ANALYTICS_URL` environment variable (useful for local worker dev with `wrangler dev`).
+
+### Wiring in App.tsx
+
+| Trigger | Call |
+|---|---|
+| App mount (`useEffect`) | `onAppStart()` |
+| User starts a game (`handleConfirm`) | `onGameStart(baseKey, baseSet, useHyperspace)` |
+| User ends a game (`handleBack`) | `onGameEnd(baseKey, baseSet, useHyperspace, durationSeconds)` |
+
+`durationSeconds` is computed as `Math.round((Date.now() - gameStartTime) / 1000)` where `gameStartTime` is recorded at the start of `handleConfirm`. `handleBack` only fires `onGameEnd` when `selectedBase` is set (i.e. the back button was pressed from the game screen, not from help or settings).
+
+**React StrictMode note:** In development mode, React intentionally mounts, unmounts, and remounts components to detect side-effect bugs. This causes `onAppStart` to fire twice per page load in dev (two `app_started` rows within milliseconds of each other). This is expected and only happens in development — production builds fire once.
+
+The Worker endpoint (#97) and frontend service (#98) are both complete. Base popularity events (#99) are pending.
 
 ---
 

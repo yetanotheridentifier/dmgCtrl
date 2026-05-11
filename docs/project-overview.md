@@ -23,7 +23,7 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 ### Infrastructure
 - Per-game theming (X-Wing aesthetic vs SWU aesthetic)
 - Melee.gg integration (API exists, partially public)
-- Analytics custom events: game starts and base popularity via Cloudflare Worker + InfluxDB — Worker endpoint complete (#97); frontend hooks pending (#98, #99)
+- Analytics custom events: game starts and base popularity via Cloudflare Worker + InfluxDB — Worker endpoint (#97) and frontend service (#98) complete; base popularity events pending (#99)
 
 ## Development
 

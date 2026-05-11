@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import SwuLoadingScreen from './components/swuLoadingScreen'
 import SwuSetupScreen from './components/swuSetupScreen'
 import SwuGameScreen from './components/swuGameScreen'
@@ -6,6 +6,8 @@ import SwuHelpScreen from './components/swuHelpScreen'
 import SwuSettingsScreen from './components/swuSettingsScreen'
 import { Base, useBases } from './hooks/useBases'
 import { InitialSelection } from './hooks/useSwuSetup'
+import { useUserSettings } from './hooks/useUserSettings'
+import { onAppStart, onGameStart, onGameEnd } from './services/analytics'
 
 type Screen = 'loading' | 'setup' | 'game' | 'help' | 'settings'
 
@@ -17,6 +19,10 @@ function App() {
   const [isInGame, setIsInGame] = useState(false)
   const [helpSource, setHelpSource] = useState<'setup' | 'game'>('setup')
   const { loading } = useBases()
+  const { useHyperspace } = useUserSettings()
+  const gameStartTime = useRef<number>(0)
+
+  useEffect(() => { void onAppStart() }, [])
 
   const handleReady = () => setScreen('setup')
 
@@ -25,9 +31,15 @@ function App() {
     setLastSelection({ set: base.set, aspect: base.aspects[0] ?? 'None', key: `${base.set}-${base.number}` })
     setIsInGame(true)
     setScreen('game')
+    gameStartTime.current = Date.now()
+    void onGameStart(`${base.set}-${base.number}`, base.set, useHyperspace)
   }
 
   const handleBack = () => {
+    if (selectedBase) {
+      const durationSeconds = Math.round((Date.now() - gameStartTime.current) / 1000)
+      void onGameEnd(`${selectedBase.set}-${selectedBase.number}`, selectedBase.set, useHyperspace, durationSeconds)
+    }
     setIsInGame(false)
     setScreen('setup')
   }
