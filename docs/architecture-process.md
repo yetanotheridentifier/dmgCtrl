@@ -78,7 +78,7 @@ Custom event tracking (game starts, base popularity) is not covered by the Cloud
 
 ### Analytics Worker endpoint
 
-- **Endpoint:** `POST https://swu-proxy.dmgctrl.workers.dev/analytics`
+- **Endpoint:** `POST https://worker.dmgctrl.app/analytics`
 - **Payload:** `{ event: string, data: Record<string, unknown> }`
 - **Storage:** Writes to InfluxDB Cloud in line-protocol format — event name becomes a tag (`event=<name>`), payload fields become InfluxDB fields with type inference (integers get the `i` suffix, floats are bare, strings are quoted)
 - **Measurement:** `events`
@@ -110,7 +110,7 @@ Every event automatically includes two fields appended by `sendEvent`:
 | `env` | `import.meta.env.MODE` | `'development'` in dev, `'production'` in builds. Filter with `WHERE env = 'production'` to exclude dev traffic. |
 | `sessionId` | 8-char alphanumeric string, e.g. `'a3f8kx2q'` | Generated once at module load (`Math.random().toString(36).slice(2, 10)`). Same across all events in a page session; resets on reload. Ephemeral — not stored in localStorage, no PII. Enables per-session grouping and session duration queries. |
 
-The endpoint URL defaults to `https://swu-proxy.dmgctrl.workers.dev/analytics` and can be overridden via the `VITE_ANALYTICS_URL` environment variable (useful for local worker dev with `wrangler dev`).
+The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be overridden via the `VITE_ANALYTICS_URL` environment variable (useful for local worker dev with `wrangler dev`).
 
 ### Wiring in App.tsx
 

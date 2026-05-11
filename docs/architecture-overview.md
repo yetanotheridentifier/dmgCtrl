@@ -59,7 +59,7 @@ The app is served at `/dmgCtrl/` and is designed to be added to an iOS home scre
 | Testing | Vitest + React Testing Library |
 | CI/CD | GitHub Actions → GitHub Pages |
 | Markdown | Custom Vite plugin (`marked`) — transforms `.md` to HTML string exports |
-| API proxy | Cloudflare Worker (`swu-proxy.dmgctrl.workers.dev`) — proxies card data and receives analytics events |
+| API proxy | Cloudflare Worker (`worker.dmgctrl.app`) — proxies card data and receives analytics events |
 | Analytics storage | InfluxDB Cloud free tier — time-series store for custom game events; queried via SQL |
 
 ---
@@ -142,5 +142,5 @@ The exception is `SwuSettingsScreenView`, which calls `useOrientation()` directl
 | **AppScreenLayout** | The shared full-screen layout wrapper that provides background, safe area padding, and star field for every screen. |
 | **CSS custom properties** | Variables defined in `:root` in `index.css` (e.g. `--color-accent`) and referenced in inline styles via `var()`. Single source of truth for the colour palette. |
 | **Screen Wake Lock** | A browser API (`navigator.wakeLock.request('screen')`) that prevents the device screen from sleeping. Used by `useWakeLock` on the game screen when `enableWakeLock` is true in user settings. Supported on Android Chrome and iOS Safari PWA (iOS 16.4+). |
-| **swu-db proxy** | A Cloudflare Worker at `swu-proxy.dmgctrl.workers.dev` that proxies requests to swu-db.com and swudb.com to avoid CORS issues, and exposes a `POST /analytics` endpoint that writes structured game events to InfluxDB Cloud in line-protocol format. Credentials are stored as Cloudflare Worker secrets. The card-data proxy routes use open CORS (`*`); the analytics endpoint restricts to an allowed-origins set (`https://dmgctrl.app`, `https://dev.dmgctrl.app`). |
+| **swu-db proxy** | A Cloudflare Worker at `worker.dmgctrl.app` that proxies requests to swu-db.com and swudb.com to avoid CORS issues, and exposes a `POST /analytics` endpoint that writes structured game events to InfluxDB Cloud in line-protocol format. Credentials are stored as Cloudflare Worker secrets. The card-data proxy routes use open CORS (`*`); the analytics endpoint restricts to an allowed-origins set (`https://dmgctrl.app`, `https://dev.dmgctrl.app`). |
 | **PWA** | Progressive Web App — a web app that can be installed on a device and used offline. |

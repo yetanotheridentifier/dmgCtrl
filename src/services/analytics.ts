@@ -3,7 +3,7 @@ import { version as APP_VERSION } from '../../package.json'
 const SESSION_ID = Math.random().toString(36).slice(2, 10)
 
 async function sendEvent(event: string, data: Record<string, unknown>): Promise<void> {
-  const url = import.meta.env.VITE_ANALYTICS_URL ?? 'https://swu-proxy.dmgctrl.workers.dev/analytics'
+  const url = import.meta.env.VITE_ANALYTICS_URL ?? 'https://worker.dmgctrl.app/analytics'
   const env = import.meta.env.MODE
   try {
     await fetch(url, {

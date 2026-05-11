@@ -11,7 +11,7 @@ export interface SwudbDeckResult {
 
 export async function fetchSwudbDeck(deckId: string): Promise<SwudbDeckResult> {
   try {
-    const response = await fetch(`https://swu-proxy.dmgctrl.workers.dev/swudb/deck/${deckId}`)
+    const response = await fetch(`https://worker.dmgctrl.app/swudb/deck/${deckId}`)
     if (!response.ok) throw new Error('Deck not accessible')
     const data = await response.json()
     return {
