@@ -7,7 +7,7 @@ import SwuSettingsScreen from './components/swuSettingsScreen'
 import { Base, useBases } from './hooks/useBases'
 import { InitialSelection } from './hooks/useSwuSetup'
 import { useUserSettings } from './hooks/useUserSettings'
-import { onAppStart, onGameStart, onGameEnd } from './services/analytics'
+import { onAppStart, onGameStart, onGameEnd, onAppInstall, onAppResume } from './services/analytics'
 
 type Screen = 'loading' | 'setup' | 'game' | 'help' | 'settings'
 
@@ -23,6 +23,31 @@ function App() {
   const gameStartTime = useRef<number>(0)
 
   useEffect(() => { void onAppStart() }, [])
+
+  useEffect(() => {
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+    if (isStandalone && !localStorage.getItem('pwa_install_tracked')) {
+      localStorage.setItem('pwa_install_tracked', '1')
+      void onAppInstall()
+    }
+  }, [])
+
+  useEffect(() => {
+    let hasBeenHidden = false
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hasBeenHidden = true
+      } else if (document.visibilityState === 'visible' && hasBeenHidden) {
+        void onAppResume()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [])
 
   const handleReady = () => setScreen('setup')
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { onAppStart, onGameStart, onGameEnd } from '../services/analytics'
+import { onAppStart, onGameStart, onGameEnd, onAppInstall, onAppResume } from '../services/analytics'
 import { version as APP_VERSION } from '../../package.json'
 
 const TEST_URL = 'https://test.example/analytics'
@@ -118,6 +118,43 @@ describe('onGameEnd', () => {
 
   it('does not include user-identifiable fields', async () => {
     await onGameEnd('SOR-026', 'SOR', false, 120)
+    const keys = Object.keys(getLastBody().data ?? {})
+    for (const piiKey of ['userId', 'email', 'name', 'ip', 'user']) {
+      expect(keys).not.toContain(piiKey)
+    }
+  })
+})
+
+describe('onAppInstall', () => {
+  it('sends event name app_installed', async () => {
+    await onAppInstall()
+    expect(getLastBody().event).toBe('app_installed')
+  })
+
+  it('does not include user-identifiable fields', async () => {
+    await onAppInstall()
+    const keys = Object.keys(getLastBody().data ?? {})
+    for (const piiKey of ['userId', 'email', 'name', 'ip', 'user']) {
+      expect(keys).not.toContain(piiKey)
+    }
+  })
+})
+
+describe('onAppResume', () => {
+  it('sends event name app_resumed', async () => {
+    await onAppResume()
+    expect(getLastBody().event).toBe('app_resumed')
+  })
+
+  it('includes sessionDurationSoFarSeconds as a non-negative number', async () => {
+    await onAppResume()
+    const { sessionDurationSoFarSeconds } = getLastBody().data
+    expect(typeof sessionDurationSoFarSeconds).toBe('number')
+    expect(sessionDurationSoFarSeconds).toBeGreaterThanOrEqual(0)
+  })
+
+  it('does not include user-identifiable fields', async () => {
+    await onAppResume()
     const keys = Object.keys(getLastBody().data ?? {})
     for (const piiKey of ['userId', 'email', 'name', 'ip', 'user']) {
       expect(keys).not.toContain(piiKey)
