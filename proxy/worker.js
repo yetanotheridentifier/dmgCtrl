@@ -68,6 +68,10 @@ async function handleAnalytics(request, env) {
     return new Response('Bad Request', { status: 400, headers: corsHeaders })
   }
 
+  const country = request.cf?.country ?? 'unknown'
+  const city = request.cf?.city ?? 'unknown'
+  const data = { ...body.data, country, city }
+
   const writeUrl =
     `${env.INFLUXDB_URL}/api/v2/write` +
     `?org=${encodeURIComponent(env.INFLUXDB_ORG)}&bucket=dmgctrl&precision=s`
@@ -78,7 +82,7 @@ async function handleAnalytics(request, env) {
       Authorization: `Token ${env.INFLUXDB_TOKEN}`,
       'Content-Type': 'text/plain; charset=utf-8',
     },
-    body: toLineProtocol(body.event, body.data),
+    body: toLineProtocol(body.event, data),
   })
 
   if (!influxResponse.ok) {

@@ -5,6 +5,7 @@ import {
   onEpicActionUsed, onForceGained, onForceUsed,
   onFavouriteAdded, onFavouriteRemoved, onFavouritesCleared,
   onSettingChanged, onDeckImportSuccess, onDeckImportFailure,
+  onImageLoadFailed, onBasesLoadFailed, onBasesLoadStale, onWakeLockFailed,
 } from '../services/analytics'
 import { version as APP_VERSION } from '../../package.json'
 
@@ -381,5 +382,46 @@ describe('onDeckImportFailure', () => {
   it('includes reason in payload', async () => {
     await onDeckImportFailure('deck_not_accessible')
     expect(getLastBody().data.reason).toBe('deck_not_accessible')
+  })
+})
+
+describe('onImageLoadFailed', () => {
+  it('sends event name image_load_failed', async () => {
+    await onImageLoadFailed('SOR-026', 'SOR', 'https://cdn.swu-db.com/images/cards/SOR/026.png')
+    expect(getLastBody().event).toBe('image_load_failed')
+  })
+
+  it('includes baseKey, baseSet, and url in payload', async () => {
+    await onImageLoadFailed('SOR-026', 'SOR', 'https://cdn.swu-db.com/images/cards/SOR/026.png')
+    const { baseKey, baseSet, url } = getLastBody().data
+    expect(baseKey).toBe('SOR-026')
+    expect(baseSet).toBe('SOR')
+    expect(url).toBe('https://cdn.swu-db.com/images/cards/SOR/026.png')
+  })
+})
+
+describe('onBasesLoadFailed', () => {
+  it('sends event name bases_load_failed', async () => {
+    await onBasesLoadFailed()
+    expect(getLastBody().event).toBe('bases_load_failed')
+  })
+})
+
+describe('onBasesLoadStale', () => {
+  it('sends event name bases_load_stale', async () => {
+    await onBasesLoadStale()
+    expect(getLastBody().event).toBe('bases_load_stale')
+  })
+})
+
+describe('onWakeLockFailed', () => {
+  it('sends event name wake_lock_failed', async () => {
+    await onWakeLockFailed('NotAllowedError')
+    expect(getLastBody().event).toBe('wake_lock_failed')
+  })
+
+  it('includes reason in payload', async () => {
+    await onWakeLockFailed('NotAllowedError')
+    expect(getLastBody().data.reason).toBe('NotAllowedError')
   })
 })

@@ -89,3 +89,19 @@ export function onDeckImportSuccess(baseKey: string, baseSet: string): Promise<v
 export function onDeckImportFailure(reason: string): Promise<void> {
   return sendEvent('deck_import_failure', { reason })
 }
+
+export function onImageLoadFailed(baseKey: string, baseSet: string, url: string): Promise<void> {
+  return sendEvent('image_load_failed', { baseKey, baseSet, url })
+}
+
+export function onBasesLoadFailed(): Promise<void> {
+  return sendEvent('bases_load_failed', {})
+}
+
+export function onBasesLoadStale(): Promise<void> {
+  return sendEvent('bases_load_stale', {})
+}
+
+export function onWakeLockFailed(reason: string): Promise<void> {
+  return sendEvent('wake_lock_failed', { reason })
+}

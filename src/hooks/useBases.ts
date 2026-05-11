@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { onBasesLoadFailed, onBasesLoadStale } from '../services/analytics'
 
 const PROXY_URL = 'https://worker.dmgctrl.app'
 const SWUAPI_URL = 'https://api.swuapi.com'
@@ -248,10 +249,11 @@ export function useBases() {
       } catch (err) {
         console.error(err)
         if (staleCache) {
-          // Serve stale data rather than an error when a cache exists
           setBases(staleCache)
+          void onBasesLoadStale()
         } else {
           setError('Could not load bases. Please check your connection.')
+          void onBasesLoadFailed()
         }
       } finally {
         setLoading(false)

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { onWakeLockFailed } from '../services/analytics'
 
 export function useWakeLock(enabled: boolean) {
   const lockRef = useRef<WakeLockSentinel | null>(null)
@@ -7,11 +8,12 @@ export function useWakeLock(enabled: boolean) {
     if (!enabled) return
 
     const acquire = async () => {
-      if (!('wakeLock' in navigator)) return
+      if (!('wakeLock' in navigator) || !navigator.wakeLock) return
       try {
         lockRef.current = await navigator.wakeLock.request('screen')
-      } catch {
-        // Silently fail — battery saver mode, permissions denied, etc.
+      } catch (err) {
+        const reason = err instanceof DOMException ? err.name : 'unknown'
+        void onWakeLockFailed(reason)
       }
     }
 

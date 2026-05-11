@@ -1,6 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useBaseArt, getFirstGameImageUrl } from '../hooks/useBaseArt'
+
+const mockOnImageLoadFailed = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+
+vi.mock('../services/analytics', () => ({
+  onImageLoadFailed: mockOnImageLoadFailed,
+}))
 import { getRotationFromHyperspaceUrl } from '../constants/rotatedCards'
 import { Base } from '../hooks/useBases'
 
@@ -378,6 +384,43 @@ describe('getFirstGameImageUrl', () => {
 
   it('returns frontArt when useHyperspace is true but no hyperspace URLs exist', () => {
     expect(getFirstGameImageUrl(sparseBase, true)).toBe(sparseBase.frontArt)
+  })
+
+})
+
+describe('useBaseArt analytics', () => {
+
+  beforeEach(() => {
+    mockOnImageLoadFailed.mockClear()
+  })
+
+  it('fires onImageLoadFailed with baseKey, baseSet, and the failed URL when onError is called', () => {
+    const { result } = renderHook(() => useBaseArt(fullBase, false))
+    act(() => result.current.onError())
+    expect(mockOnImageLoadFailed).toHaveBeenCalledWith(
+      `${fullBase.set}-${fullBase.number}`,
+      fullBase.set,
+      fullBase.frontArt,
+    )
+  })
+
+  it('fires onImageLoadFailed with the second URL when the second image errors', () => {
+    const { result } = renderHook(() => useBaseArt(fullBase, false))
+    act(() => result.current.onError())
+    act(() => result.current.onError())
+    expect(mockOnImageLoadFailed).toHaveBeenCalledTimes(2)
+    expect(mockOnImageLoadFailed).toHaveBeenNthCalledWith(
+      2,
+      `${fullBase.set}-${fullBase.number}`,
+      fullBase.set,
+      fullBase.frontArtLowRes,
+    )
+  })
+
+  it('does not fire onImageLoadFailed on onLoad', () => {
+    const { result } = renderHook(() => useBaseArt(fullBase, false))
+    act(() => result.current.onLoad())
+    expect(mockOnImageLoadFailed).not.toHaveBeenCalled()
   })
 
 })

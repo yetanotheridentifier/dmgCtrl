@@ -91,6 +91,41 @@ describe('POST /analytics', () => {
     expect(capturedBody).toContain('players=2i')
   })
 
+  it('includes country and city from request.cf in the line protocol', async () => {
+    let capturedBody = ''
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      capturedBody = init?.body ?? ''
+      return new Response(null, { status: 204 })
+    }))
+
+    await SELF.fetch('https://worker.example/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: ALLOWED_ORIGIN },
+      body: JSON.stringify({ event: 'game_started', data: {} }),
+      cf: { country: 'AU', city: 'Sydney' },
+    })
+
+    expect(capturedBody).toContain('country="AU"')
+    expect(capturedBody).toContain('city="Sydney"')
+  })
+
+  it('uses "unknown" for country and city when request.cf fields are absent', async () => {
+    let capturedBody = ''
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      capturedBody = init?.body ?? ''
+      return new Response(null, { status: 204 })
+    }))
+
+    await SELF.fetch('https://worker.example/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: ALLOWED_ORIGIN },
+      body: JSON.stringify({ event: 'game_started', data: {} }),
+    })
+
+    expect(capturedBody).toContain('country="unknown"')
+    expect(capturedBody).toContain('city="unknown"')
+  })
+
   it('returns 400 for malformed JSON', async () => {
     const response = await SELF.fetch('https://worker.example/analytics', {
       method: 'POST',
