@@ -60,6 +60,18 @@ The app is hosted on **GitHub Pages** at `/dmgCtrl/`. The `base` config in `vite
 - Push to `main` — runs all three jobs and deploys on success
 - PRs targeting `main` — runs `test` and `build` jobs; deploy is skipped
 
+### Pipeline: `.github/workflows/populate-base-aspects.yml`
+
+Triggered daily at midnight UTC and on manual `workflow_dispatch`. Runs `node scripts/populate-base-aspects.mjs` to refresh the `base_aspects` InfluxDB measurement (see below). This is necessary because InfluxDB Cloud free tier has a 30-day retention window — without periodic refresh, lookup records age out and the base popularity panel loses aspect colour coding.
+
+Credentials are stored as repository-level GitHub Actions secrets and variables:
+
+| Name | Type | Purpose |
+|---|---|---|
+| `INFLUXDB_TOKEN` | Secret | InfluxDB write token |
+| `INFLUXDB_URL` | Variable | InfluxDB Cloud instance URL |
+| `INFLUXDB_ORG` | Variable | InfluxDB organisation name |
+
 ---
 
 ## 3. Analytics
@@ -220,7 +232,7 @@ Install detection and resume detection are in separate `useEffect` calls. The in
 
 The dashboard is defined as JSON at `grafana/dmgctrl-dashboard.json` and can be imported directly into any Grafana instance. It requires an InfluxDB datasource configured against the `dmgctrl` bucket (InfluxDB 3.x / SQL query language).
 
-**Public URL:** https://yetanotheridentifier.grafana.net/public-dashboards/c4c7f89d994c4f73917cdfffb9b69d52
+**Public URL:** https://yetanotheridentifier.grafana.net/public-dashboards/18828e6c27af43318e6eb8baad0c1efb
 
 **Panels:**
 
@@ -228,15 +240,31 @@ The dashboard is defined as JSON at `grafana/dmgctrl-dashboard.json` and can be 
 |---|---|---|
 | Sessions over time | Time series | Distinct `sessionId` values per day |
 | Games over time | Time series | `game_ended` events with `durationSeconds > 60` per day |
-| Sessions by country | Geomap (choropleth) | Distinct sessions per country, country shading |
 | Sessions by city | Geomap (markers) | Sessions per city, plotted by Cloudflare edge PoP coordinates |
-| Base popularity | Bar chart | Top 25 bases by completed games |
-| Games per session distribution | Bar chart | How many games players complete per session |
-| App installs over time | Time series | `app_installed` events per day, split by `platform` |
+| Base popularity | Bar gauge | Top 25 bases by completed games; bars colour-coded by aspect (Aggression=red, Command=green, Vigilance=blue, Cunning=yellow, no aspect=grey); joined with the `base_aspects` lookup measurement |
+| Games per session distribution | Bar gauge | How many games players complete per session |
+| App installs over time | Time series | `app_installed` events per day, split by platform |
 | Installs by platform | Donut | Cumulative installs split by `ios` / `android` / `other` |
+| Errors per session | Bar gauge | % of sessions that encountered each error event type |
 | Feature adoption | Bar gauge | % of sessions using hyperspace, force token, epic action, undo |
 
-Feature adoption is measured via usage events (sessions containing at least one relevant event) rather than settings state — this reflects actual use rather than whether the feature was merely enabled.
+Feature adoption and errors per session are measured via usage events (sessions containing at least one relevant event) rather than settings state — this reflects actual use rather than whether the feature was merely enabled.
+
+### `base_aspects` InfluxDB measurement
+
+A separate InfluxDB measurement (`base_aspects`) stores a static `baseKey → aspect` lookup used by the base popularity panel to colour bars. It is populated by `scripts/populate-base-aspects.mjs`, which fetches base card data from swuapi.com (active sets) and the swu-db proxy (rotated sets) and writes one record per base using a fixed timestamp so re-runs overwrite rather than append.
+
+The daily GitHub Actions workflow (`.github/workflows/populate-base-aspects.yml`) keeps the records within the 30-day InfluxDB retention window. The Grafana query joins `events` against `base_aspects` using a derived-table subquery to select only the most recent run's records:
+
+```sql
+LEFT JOIN (
+  SELECT ba."baseKey", ba.aspect
+  FROM base_aspects ba
+  INNER JOIN (SELECT MAX(time) AS max_time FROM base_aspects) lr ON ba.time = lr.max_time
+) la ON e."baseKey" = la."baseKey"
+```
+
+Aspect colour is embedded directly in the SQL result (a `CASE` expression returning a hex string) and injected into each field's `fieldConfig` via the Grafana `rowsToFields` transformation's `color` mapping handler. This bypasses Grafana's field-override matcher, which does not reliably see post-transformation fields.
 
 All panels respect the Grafana time range picker and filter by `env = 'production'`. `country`, `city`, `latitude`, and `longitude` are populated by the Cloudflare Worker from `request.cf` and are absent or `'unknown'` for events received outside the production edge network (e.g. local dev). Coordinates reflect the Cloudflare edge PoP location, not the user's device — they are approximate but accurate enough for city-level mapping.
 
