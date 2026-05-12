@@ -42,7 +42,7 @@ src/
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
   services/
-    analytics.ts            Fire-and-forget analytics service (22 functions); posts JSON to the Cloudflare Worker analytics endpoint; all errors silently discarded; env and sessionId auto-appended to every event
+    analytics.ts            Fire-and-forget analytics service (22 functions); posts JSON to the Cloudflare Worker analytics endpoint; all errors silently discarded; env and sessionId auto-appended to every event; worker appends country and city from request.cf
 
   utils/
     swudbUrl.ts             SWUDB URL utilities: normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck

@@ -134,12 +134,17 @@ describe('onGameEnd', () => {
 
 describe('onAppInstall', () => {
   it('sends event name app_installed', async () => {
-    await onAppInstall()
+    await onAppInstall('ios')
     expect(getLastBody().event).toBe('app_installed')
   })
 
+  it('includes platform in payload', async () => {
+    await onAppInstall('android')
+    expect(getLastBody().data.platform).toBe('android')
+  })
+
   it('does not include user-identifiable fields', async () => {
-    await onAppInstall()
+    await onAppInstall('ios')
     const keys = Object.keys(getLastBody().data ?? {})
     for (const piiKey of ['userId', 'email', 'name', 'ip', 'user']) {
       expect(keys).not.toContain(piiKey)

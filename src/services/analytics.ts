@@ -29,8 +29,8 @@ export function onGameEnd(baseKey: string, baseSet: string, hyperspace: boolean,
   return sendEvent('game_ended', { baseKey, baseSet, hyperspace, durationSeconds })
 }
 
-export function onAppInstall(): Promise<void> {
-  return sendEvent('app_installed', {})
+export function onAppInstall(platform: string): Promise<void> {
+  return sendEvent('app_installed', { platform })
 }
 
 export function onAppResume(): Promise<void> {
