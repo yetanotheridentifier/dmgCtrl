@@ -26,6 +26,10 @@ dist-ssr
 # Cloudflare Worker (proxy) config files
 .dev.vars
 
+# Local environment files with secrets
+.env
+.env.*
+
 # Generated data snapshots (run scripts/inspect-base-data.mjs to regenerate)
 docs/base-data-snapshot.json
 docs/base-data-summary.json

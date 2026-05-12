@@ -1,354 +1,1180 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_INFLUXDB",
-      "label": "InfluxDB",
-      "description": "InfluxDB Cloud (dmgctrl bucket)",
-      "type": "datasource",
-      "pluginId": "influxdb",
-      "pluginName": "InfluxDB"
+  "apiVersion": "dashboard.grafana.app/v2",
+  "kind": "Dashboard",
+  "metadata": {
+    "name": "dmgctrl-analytics",
+    "namespace": "stacks-1634354",
+    "uid": "ab1c688e-d1e9-4953-bc7b-6bd341613e84",
+    "resourceVersion": "2054230996189970747",
+    "generation": 15,
+    "creationTimestamp": "2026-05-12T15:52:13Z",
+    "labels": {
+      "grafana.app/deprecatedInternalID": "586727161597952"
+    },
+    "annotations": {
+      "grafana.app/createdBy": "user:ffltnij3rez28a",
+      "grafana.app/folder": "",
+      "grafana.app/saved-from-ui": "Grafana Cloud",
+      "grafana.app/updatedBy": "user:ffltnij3rez28a",
+      "grafana.app/updatedTimestamp": "2026-05-12T16:03:29Z"
     }
-  ],
-  "__requires": [
-    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0" },
-    { "type": "datasource", "id": "influxdb", "name": "InfluxDB", "version": "1.0.0" },
-    { "type": "panel", "id": "timeseries", "name": "Time series", "version": "" },
-    { "type": "panel", "id": "geomap", "name": "Geomap", "version": "" },
-    { "type": "panel", "id": "barchart", "name": "Bar chart", "version": "" },
-    { "type": "panel", "id": "piechart", "name": "Pie chart", "version": "" },
-    { "type": "panel", "id": "bargauge", "name": "Bar gauge", "version": "" }
-  ],
-  "annotations": { "list": [] },
-  "description": "dmgCtrl analytics — sessions, games, installs, base popularity, feature adoption",
-  "editable": true,
-  "fiscalYearStartMonth": 0,
-  "graphTooltip": 1,
-  "id": null,
-  "links": [],
-  "refresh": "1h",
-  "schemaVersion": 38,
-  "tags": ["dmgctrl", "analytics"],
-  "time": { "from": "now-30d", "to": "now" },
-  "timepicker": {},
-  "timezone": "browser",
-  "title": "dmgCtrl Analytics",
-  "uid": "dmgctrl-analytics",
-  "version": 1,
-  "panels": [
-
-    {
-      "id": 1,
-      "title": "Sessions over time",
-      "description": "Distinct sessions (by sessionId) per day",
-      "type": "timeseries",
-      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
-      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
-          "rawQuery": true,
-          "rawSql": "SELECT DATE_TRUNC('day', time) AS day, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = 'production'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC",
-          "editorMode": "code",
-          "dataset": "iox",
-          "format": "table"
+  },
+  "spec": {
+    "annotations": [
+      {
+        "kind": "AnnotationQuery",
+        "spec": {
+          "query": {
+            "kind": "DataQuery",
+            "group": "grafana",
+            "version": "v0",
+            "datasource": {
+              "name": "-- Grafana --"
+            },
+            "spec": {}
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "builtIn": true
         }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": { "lineWidth": 2, "fillOpacity": 10 }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": { "mode": "single", "sort": "none" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
       }
-    },
-
-    {
-      "id": 2,
-      "title": "Games over time",
-      "description": "Completed games (game_ended, duration > 60s) per day",
-      "type": "timeseries",
-      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
-      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
-          "rawQuery": true,
-          "rawSql": "SELECT DATE_TRUNC('day', time) AS day, COUNT(*) AS games\nFROM events\nWHERE env = 'production'\n  AND event = 'game_ended'\n  AND \"durationSeconds\" > 60\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC",
-          "editorMode": "code",
-          "dataset": "iox",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": { "lineWidth": 2, "fillOpacity": 10 }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": { "mode": "single", "sort": "none" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
-      }
-    },
-
-    {
-      "id": 3,
-      "title": "Sessions by country",
-      "description": "Distinct sessions per country in the selected time range",
-      "type": "geomap",
-      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 10 },
-      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
-          "rawQuery": true,
-          "rawSql": "SELECT country, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = 'production'\n  AND country != 'unknown'\n  AND $__timeFilter(time)\nGROUP BY country\nORDER BY sessions DESC",
-          "editorMode": "code",
-          "dataset": "iox",
-          "format": "table"
-        }
-      ],
-      "options": {
-        "view": { "id": "zero", "lat": 20, "lon": 0, "zoom": 1.5 },
-        "controls": { "showZoom": true },
-        "layers": [
-          {
-            "type": "choropleth",
-            "config": {
-              "style": {
-                "color": { "field": "sessions", "fixed": "#4fc3f7" },
-                "fillOpacity": 0.7
+    ],
+    "cursorSync": "Crosshair",
+    "description": "dmgCtrl analytics — sessions, games, installs, base popularity, feature adoption",
+    "editable": true,
+    "elements": {
+      "panel-1": {
+        "kind": "Panel",
+        "spec": {
+          "id": 1,
+          "title": "Sessions over time",
+          "description": "Distinct sessions (by sessionId) per day",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "influxdb",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "afltq9th19d6ob"
+                      },
+                      "spec": {
+                        "dataset": "iox",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = 'production'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.1.0-25668120414",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
               },
-              "showLegend": true
-            },
-            "location": {
-              "mode": "lookup",
-              "gazetteer": "public/gazetteer/countries.json",
-              "lookupField": "country"
-            },
-            "name": "Sessions"
+              "fieldConfig": {
+                "defaults": {
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "continuous-YlBl"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-10": {
+        "kind": "Panel",
+        "spec": {
+          "id": 10,
+          "title": "Errors per session",
+          "description": "% of sessions in which each error was seen at least once",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "influxdb",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "afltq9th19d6ob"
+                      },
+                      "spec": {
+                        "dataset": "iox",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'deck_import_failure' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 3) AS \"Deck import failure\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'image_load_failed' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 3) AS \"Image load failed\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'bases_load_failed' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 3) AS \"Bases load failed\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'bases_load_stale' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 3) AS \"Bases load stale\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'wake_lock_failed' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 3) AS \"Wake lock failed\"\nFROM events\nWHERE env = 'production'\n  AND $__timeFilter(time)"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "bargauge",
+            "version": "13.1.0-25668120414",
+            "spec": {
+              "options": {
+                "displayMode": "basic",
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false
+                },
+                "maxVizHeight": 300,
+                "minVizHeight": 16,
+                "minVizWidth": 8,
+                "namePlacement": "auto",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showUnfilled": true,
+                "sizing": "auto",
+                "valueMode": "color"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "percent",
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "percentage",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 60,
+                        "color": "orange"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "continuous-YlBl"
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-2": {
+        "kind": "Panel",
+        "spec": {
+          "id": 2,
+          "title": "Games over time",
+          "description": "Completed games (game_ended, duration > 60s) per day",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "influxdb",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "afltq9th19d6ob"
+                      },
+                      "spec": {
+                        "dataset": "iox",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day, COUNT(*) AS games\nFROM events\nWHERE env = 'production'\n  AND event = 'game_ended'\n  AND \"durationSeconds\" > 60\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.1.0-25668120414",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "continuous-YlBl"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-4": {
+        "kind": "Panel",
+        "spec": {
+          "id": 4,
+          "title": "Sessions by city",
+          "description": "Sessions per city plotted by approximate location (Cloudflare edge PoP coordinates)",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "influxdb",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "afltq9th19d6ob"
+                      },
+                      "spec": {
+                        "dataset": "iox",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT country, city, AVG(latitude) AS latitude, AVG(longitude) AS longitude, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = 'production'\n  AND city != 'unknown'\n  AND latitude IS NOT NULL\n  AND $__timeFilter(time)\nGROUP BY country, city\nORDER BY sessions DESC\nLIMIT 100"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "geomap",
+            "version": "13.1.0-25668120414",
+            "spec": {
+              "options": {
+                "controls": {
+                  "mouseWheelZoom": true,
+                  "showAttribution": false,
+                  "showDebug": false,
+                  "showMeasure": false,
+                  "showScale": false,
+                  "showZoom": true
+                },
+                "layers": [
+                  {
+                    "config": {
+                      "showLegend": true,
+                      "style": {
+                        "color": {
+                          "fixed": "#5794F2"
+                        },
+                        "fillOpacity": 0.9,
+                        "size": {
+                          "field": "sessions",
+                          "fixed": 8,
+                          "max": 40,
+                          "min": 8
+                        }
+                      }
+                    },
+                    "location": {
+                      "latitude": "latitude",
+                      "longitude": "longitude",
+                      "mode": "coords"
+                    },
+                    "name": "Cities",
+                    "type": "markers"
+                  }
+                ],
+                "tooltip": {
+                  "mode": "details"
+                },
+                "view": {
+                  "allLayers": true,
+                  "dashboardVariable": false,
+                  "id": "fit",
+                  "lat": 0,
+                  "lon": 0,
+                  "noRepeat": false,
+                  "padding": 5,
+                  "zoom": 1
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "continuous-blues"
+                  },
+                  "custom": {
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-5": {
+        "kind": "Panel",
+        "spec": {
+          "id": 5,
+          "title": "Base popularity",
+          "description": "Games played per base (game_ended, duration > 60s), selected time range",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "influxdb",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "afltq9th19d6ob"
+                      },
+                      "spec": {
+                        "dataset": "iox",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT CONCAT(e.\"baseKey\", ' ', COALESCE(la.aspect, 'None')) AS label,\n  COUNT(*) AS games,\n  CASE COALESCE(la.aspect, 'None')\n    WHEN 'Aggression' THEN '#c4162a'\n    WHEN 'Command' THEN '#37872d'\n    WHEN 'Vigilance' THEN '#1e6fa8'\n    WHEN 'Cunning' THEN '#e0b400'\n    ELSE '#9e9e9e'\n  END AS color\nFROM events e\nLEFT JOIN (\n  SELECT ba.\"baseKey\", ba.aspect\n  FROM base_aspects ba\n  INNER JOIN (SELECT MAX(time) AS max_time FROM base_aspects) lr ON ba.time = lr.max_time\n) la ON e.\"baseKey\" = la.\"baseKey\"\nWHERE e.env = 'production'\n  AND e.event = 'game_ended'\n  AND e.\"durationSeconds\" > 60\n  AND $__timeFilter(e.time)\nGROUP BY e.\"baseKey\", COALESCE(la.aspect, 'None')\nORDER BY games DESC\nLIMIT 25"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [
+                {
+                  "kind": "Transformation",
+                  "group": "rowsToFields",
+                  "spec": {
+                    "options": {
+                      "nameField": "label",
+                      "valueField": "games",
+                      "mappings": [
+                        { "fieldName": "color", "handlerKey": "color" }
+                      ]
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "bargauge",
+            "version": "13.1.0-25668120414",
+            "spec": {
+              "options": {
+                "displayMode": "basic",
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false
+                },
+                "maxVizHeight": 300,
+                "minVizHeight": 16,
+                "minVizWidth": 8,
+                "namePlacement": "auto",
+                "orientation": "vertical",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showUnfilled": true,
+                "sizing": "auto",
+                "valueMode": "color"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "min": 0,
+                  "color": {
+                    "mode": "fixed",
+                    "fixedColor": "#9e9e9e"
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-6": {
+        "kind": "Panel",
+        "spec": {
+          "id": 6,
+          "title": "Games per session",
+          "description": "Distribution of qualifying games (duration > 60s) completed per session",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "influxdb",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "afltq9th19d6ob"
+                      },
+                      "spec": {
+                        "dataset": "iox",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT CAST(game_count AS VARCHAR) AS \"Games\", COUNT(*) AS sessions\nFROM (\n  SELECT COUNT(*) AS game_count\n  FROM events\n  WHERE env = 'production'\n    AND event = 'game_ended'\n    AND \"durationSeconds\" > 60\n    AND $__timeFilter(time)\n  GROUP BY \"sessionId\"\n) sub\nGROUP BY game_count\nORDER BY game_count"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [
+                {
+                  "kind": "Transformation",
+                  "group": "rowsToFields",
+                  "spec": {
+                    "options": {
+                      "nameField": "Games",
+                      "valueField": "sessions"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "bargauge",
+            "version": "13.1.0-25668120414",
+            "spec": {
+              "options": {
+                "displayMode": "basic",
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false
+                },
+                "maxVizHeight": 300,
+                "minVizHeight": 16,
+                "minVizWidth": 8,
+                "namePlacement": "auto",
+                "orientation": "vertical",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showUnfilled": true,
+                "sizing": "auto",
+                "valueMode": "text"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "percentage",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 60,
+                        "color": "orange"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "continuous-YlBl",
+                    "fixedColor": "blue"
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-7": {
+        "kind": "Panel",
+        "spec": {
+          "id": 7,
+          "title": "App installs over time",
+          "description": "app_installed events per day, split by platform",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "influxdb",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "afltq9th19d6ob"
+                      },
+                      "spec": {
+                        "dataset": "iox",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day,\n  COUNT(CASE WHEN platform = 'ios' THEN 1 END) AS \"iOS\",\n  COUNT(CASE WHEN platform = 'android' THEN 1 END) AS \"Android\"\nFROM events\nWHERE env = 'production'\n  AND event = 'app_installed'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "13.1.0-25668120414",
+            "spec": {
+              "options": {
+                "annotations": {
+                  "clustering": -1,
+                  "multiLane": false
+                },
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "continuous-YlBl",
+                    "fixedColor": "semi-dark-blue"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-8": {
+        "kind": "Panel",
+        "spec": {
+          "id": 8,
+          "title": "Installs by platform",
+          "description": "Cumulative install count split by platform, selected time range",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "influxdb",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "afltq9th19d6ob"
+                      },
+                      "spec": {
+                        "dataset": "iox",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT platform, COUNT(*) AS installs\nFROM events\nWHERE env = 'production'\n  AND event = 'app_installed'\n  AND $__timeFilter(time)\nGROUP BY platform\nORDER BY installs DESC"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [
+                {
+                  "kind": "Transformation",
+                  "group": "rowsToFields",
+                  "spec": {
+                    "options": {
+                      "nameField": "platform",
+                      "valueField": "installs"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "piechart",
+            "version": "13.1.0-25668120414",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "table",
+                  "placement": "right",
+                  "showLegend": true,
+                  "values": [
+                    "value"
+                  ]
+                },
+                "pieType": "donut",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "sort": "desc",
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "shades",
+                    "fixedColor": "semi-dark-blue"
+                  },
+                  "custom": {
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-9": {
+        "kind": "Panel",
+        "spec": {
+          "id": 9,
+          "title": "Feature adoption",
+          "description": "% of qualifying sessions using each feature at least once",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "influxdb",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "afltq9th19d6ob"
+                      },
+                      "spec": {
+                        "dataset": "iox",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 AND hyperspace = true THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Hyperspace\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'force_gained' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Force token\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'epic_action_used' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Epic action\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'undo_used' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Undo\"\nFROM events\nWHERE env = 'production' AND $__timeFilter(time)"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "bargauge",
+            "version": "13.1.0-25668120414",
+            "spec": {
+              "options": {
+                "displayMode": "gradient",
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false
+                },
+                "maxVizHeight": 300,
+                "minVizHeight": 16,
+                "minVizWidth": 8,
+                "namePlacement": "auto",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showUnfilled": true,
+                "sizing": "auto",
+                "valueMode": "color"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "percent",
+                  "min": 0,
+                  "max": 100,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "continuous-YlBl"
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      }
+    },
+    "layout": {
+      "kind": "GridLayout",
+      "spec": {
+        "items": [
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-1"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-2"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 0,
+              "y": 8,
+              "width": 24,
+              "height": 10,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-4"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 0,
+              "y": 18,
+              "width": 16,
+              "height": 10,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-5"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 16,
+              "y": 18,
+              "width": 8,
+              "height": 10,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-6"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 0,
+              "y": 28,
+              "width": 12,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-7"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 12,
+              "y": 28,
+              "width": 6,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-8"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 18,
+              "y": 28,
+              "width": 6,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-9"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 0,
+              "y": 36,
+              "width": 24,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-10"
+              }
+            }
           }
         ]
-      },
-      "fieldConfig": {
-        "defaults": { "color": { "mode": "continuous-blues" } },
-        "overrides": []
       }
     },
-
-    {
-      "id": 4,
-      "title": "Sessions by city",
-      "description": "Sessions per city plotted by approximate location (Cloudflare edge PoP coordinates)",
-      "type": "geomap",
-      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 10 },
-      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
-          "rawQuery": true,
-          "rawSql": "SELECT country, city, AVG(latitude) AS latitude, AVG(longitude) AS longitude, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = 'production'\n  AND city != 'unknown'\n  AND latitude IS NOT NULL\n  AND $__timeFilter(time)\nGROUP BY country, city\nORDER BY sessions DESC\nLIMIT 100",
-          "editorMode": "code",
-          "dataset": "iox",
-          "format": "table"
-        }
+    "links": [],
+    "liveNow": false,
+    "preload": false,
+    "tags": [
+      "dmgctrl",
+      "analytics"
+    ],
+    "timeSettings": {
+      "timezone": "browser",
+      "from": "now-30d",
+      "to": "now",
+      "autoRefresh": "1h",
+      "autoRefreshIntervals": [
+        "5s",
+        "10s",
+        "30s",
+        "1m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "1d"
       ],
-      "options": {
-        "view": { "id": "zero", "lat": 20, "lon": 0, "zoom": 1.5 },
-        "controls": { "showZoom": true },
-        "layers": [
-          {
-            "type": "markers",
-            "config": {
-              "style": {
-                "size": { "fixed": 5, "min": 5, "max": 25, "field": "sessions" },
-                "color": { "field": "sessions", "fixed": "#4fc3f7" },
-                "fillOpacity": 0.7
-              },
-              "showLegend": true
-            },
-            "location": {
-              "mode": "coords",
-              "latitude": "latitude",
-              "longitude": "longitude"
-            },
-            "name": "Cities"
-          }
-        ]
-      },
-      "fieldConfig": {
-        "defaults": { "color": { "mode": "continuous-blues" } },
-        "overrides": []
-      }
+      "hideTimepicker": false,
+      "fiscalYearStartMonth": 0
     },
-
-    {
-      "id": 5,
-      "title": "Base popularity",
-      "description": "Games played per base (game_ended, duration > 60s), selected time range",
-      "type": "barchart",
-      "gridPos": { "x": 0, "y": 18, "w": 16, "h": 10 },
-      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
-          "rawQuery": true,
-          "rawSql": "SELECT \"baseKey\", COUNT(*) AS games\nFROM events\nWHERE env = 'production'\n  AND event = 'game_ended'\n  AND \"durationSeconds\" > 60\n  AND $__timeFilter(time)\nGROUP BY \"baseKey\"\nORDER BY games DESC\nLIMIT 25",
-          "editorMode": "code",
-          "dataset": "iox",
-          "format": "table"
-        }
-      ],
-      "options": {
-        "xField": "baseKey",
-        "orientation": "horizontal",
-        "barWidth": 0.7,
-        "groupWidth": 0.7,
-        "legend": { "displayMode": "hidden" }
-      },
-      "fieldConfig": {
-        "defaults": { "color": { "mode": "palette-classic" } },
-        "overrides": []
-      }
-    },
-
-    {
-      "id": 6,
-      "title": "Games per session",
-      "description": "How many games players complete in a single session",
-      "type": "barchart",
-      "gridPos": { "x": 16, "y": 18, "w": 8, "h": 10 },
-      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
-          "rawQuery": true,
-          "rawSql": "SELECT game_count, COUNT(*) AS sessions\nFROM (\n  SELECT \"sessionId\", COUNT(*) AS game_count\n  FROM events\n  WHERE env = 'production'\n    AND event = 'game_ended'\n    AND \"durationSeconds\" > 60\n    AND $__timeFilter(time)\n  GROUP BY \"sessionId\"\n)\nGROUP BY game_count\nORDER BY game_count ASC",
-          "editorMode": "code",
-          "dataset": "iox",
-          "format": "table"
-        }
-      ],
-      "options": {
-        "xField": "game_count",
-        "orientation": "vertical",
-        "barWidth": 0.7,
-        "legend": { "displayMode": "hidden" }
-      },
-      "fieldConfig": {
-        "defaults": { "color": { "mode": "palette-classic" } },
-        "overrides": []
-      }
-    },
-
-    {
-      "id": 7,
-      "title": "App installs over time",
-      "description": "app_installed events per day, split by platform",
-      "type": "timeseries",
-      "gridPos": { "x": 0, "y": 28, "w": 12, "h": 8 },
-      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
-          "rawQuery": true,
-          "rawSql": "SELECT DATE_TRUNC('day', time) AS day, platform, COUNT(*) AS installs\nFROM events\nWHERE env = 'production'\n  AND event = 'app_installed'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time), platform\nORDER BY day ASC",
-          "editorMode": "code",
-          "dataset": "iox",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": { "lineWidth": 2, "fillOpacity": 10 }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": { "mode": "multi", "sort": "none" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
-      }
-    },
-
-    {
-      "id": 8,
-      "title": "Installs by platform",
-      "description": "Cumulative install count split by platform, selected time range",
-      "type": "piechart",
-      "gridPos": { "x": 12, "y": 28, "w": 6, "h": 8 },
-      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
-          "rawQuery": true,
-          "rawSql": "SELECT platform, COUNT(*) AS installs\nFROM events\nWHERE env = 'production'\n  AND event = 'app_installed'\n  AND $__timeFilter(time)\nGROUP BY platform\nORDER BY installs DESC",
-          "editorMode": "code",
-          "dataset": "iox",
-          "format": "table"
-        }
-      ],
-      "options": {
-        "pieType": "donut",
-        "legend": { "displayMode": "table", "placement": "right" }
-      },
-      "fieldConfig": {
-        "defaults": { "color": { "mode": "palette-classic" } },
-        "overrides": []
-      }
-    },
-
-    {
-      "id": 9,
-      "title": "Feature adoption",
-      "description": "% of qualifying sessions using each feature at least once",
-      "type": "bargauge",
-      "gridPos": { "x": 18, "y": 28, "w": 6, "h": 8 },
-      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
-          "rawQuery": true,
-          "rawSql": "SELECT\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 AND hyperspace = true THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Hyperspace\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'force_gained' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Force token\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'epic_action_used' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Epic action\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'undo_used' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Undo\"\nFROM events\nWHERE env = 'production' AND $__timeFilter(time)",
-          "editorMode": "code",
-          "dataset": "iox",
-          "format": "table"
-        }
-      ],
-      "options": {
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "showUnfilled": true,
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "max": 100,
-          "color": { "mode": "palette-classic" }
-        },
-        "overrides": []
-      }
-    }
-
-  ]
+    "title": "dmgCtrl Analytics",
+    "variables": []
+  }
 }
