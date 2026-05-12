@@ -143,6 +143,8 @@ Every event automatically includes fields from two sources:
 |---|---|---|
 | `country` | Two-letter ISO country code, e.g. `'AU'` | Resolved from client IP by Cloudflare's edge. `'unknown'` in local dev where `request.cf` is not populated. |
 | `city` | City name, e.g. `'Sydney'` | Resolved from client IP by Cloudflare's edge. `'unknown'` in local dev. Approximate — based on IP geolocation. |
+| `latitude` | Float, e.g. `-33.8688` | Cloudflare edge PoP latitude. Omitted entirely if `request.cf.latitude` is absent (local dev, some edge cases). |
+| `longitude` | Float, e.g. `151.2093` | Cloudflare edge PoP longitude. Omitted entirely if `request.cf.longitude` is absent. |
 
 The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be overridden via the `VITE_ANALYTICS_URL` environment variable (useful for local worker dev with `wrangler dev`).
 
@@ -218,7 +220,7 @@ Install detection and resume detection are in separate `useEffect` calls. The in
 
 The dashboard is defined as JSON at `grafana/dmgctrl-dashboard.json` and can be imported directly into any Grafana instance. It requires an InfluxDB datasource configured against the `dmgctrl` bucket (InfluxDB 3.x / SQL query language).
 
-**Public URL:** https://yetanotheridentifier.grafana.net/public-dashboards/efea52fe7eba4987833c07b69c90f9eb
+**Public URL:** https://yetanotheridentifier.grafana.net/public-dashboards/c4c7f89d994c4f73917cdfffb9b69d52
 
 **Panels:**
 
@@ -226,8 +228,8 @@ The dashboard is defined as JSON at `grafana/dmgctrl-dashboard.json` and can be 
 |---|---|---|
 | Sessions over time | Time series | Distinct `sessionId` values per day |
 | Games over time | Time series | `game_ended` events with `durationSeconds > 60` per day |
-| Sessions by country | Geomap | Distinct sessions per country |
-| Sessions by city | Table | Top 30 cities by session count |
+| Sessions by country | Geomap (choropleth) | Distinct sessions per country, country shading |
+| Sessions by city | Geomap (markers) | Sessions per city, plotted by Cloudflare edge PoP coordinates |
 | Base popularity | Bar chart | Top 25 bases by completed games |
 | Games per session distribution | Bar chart | How many games players complete per session |
 | App installs over time | Time series | `app_installed` events per day, split by `platform` |
@@ -236,7 +238,7 @@ The dashboard is defined as JSON at `grafana/dmgctrl-dashboard.json` and can be 
 
 Feature adoption is measured via usage events (sessions containing at least one relevant event) rather than settings state — this reflects actual use rather than whether the feature was merely enabled.
 
-All panels respect the Grafana time range picker and filter by `env = 'production'`. `country` and `city` fields are populated by the Cloudflare Worker from `request.cf` and are `'unknown'` for events received outside the production edge network (e.g. local dev).
+All panels respect the Grafana time range picker and filter by `env = 'production'`. `country`, `city`, `latitude`, and `longitude` are populated by the Cloudflare Worker from `request.cf` and are absent or `'unknown'` for events received outside the production edge network (e.g. local dev). Coordinates reflect the Cloudflare edge PoP location, not the user's device — they are approximate but accurate enough for city-level mapping.
 
 ---
 

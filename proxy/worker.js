@@ -70,7 +70,10 @@ async function handleAnalytics(request, env) {
 
   const country = request.cf?.country ?? 'unknown'
   const city = request.cf?.city ?? 'unknown'
-  const data = { ...body.data, country, city }
+  const lat = request.cf?.latitude != null ? parseFloat(request.cf.latitude) : null
+  const lon = request.cf?.longitude != null ? parseFloat(request.cf.longitude) : null
+  const geoCoords = lat !== null && lon !== null ? { latitude: lat, longitude: lon } : {}
+  const data = { ...body.data, country, city, ...geoCoords }
 
   const writeUrl =
     `${env.INFLUXDB_URL}/api/v2/write` +

@@ -109,6 +109,42 @@ describe('POST /analytics', () => {
     expect(capturedBody).toContain('city="Sydney"')
   })
 
+  it('includes latitude and longitude as floats when present in request.cf', async () => {
+    let capturedBody = ''
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      capturedBody = init?.body ?? ''
+      return new Response(null, { status: 204 })
+    }))
+
+    await SELF.fetch('https://worker.example/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: ALLOWED_ORIGIN },
+      body: JSON.stringify({ event: 'game_started', data: {} }),
+      cf: { country: 'AU', city: 'Sydney', latitude: '-33.8688', longitude: '151.2093' },
+    })
+
+    expect(capturedBody).toContain('latitude=-33.8688')
+    expect(capturedBody).toContain('longitude=151.2093')
+  })
+
+  it('omits latitude and longitude from line protocol when absent from request.cf', async () => {
+    let capturedBody = ''
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      capturedBody = init?.body ?? ''
+      return new Response(null, { status: 204 })
+    }))
+
+    await SELF.fetch('https://worker.example/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: ALLOWED_ORIGIN },
+      body: JSON.stringify({ event: 'game_started', data: {} }),
+      cf: { country: 'AU', city: 'Sydney' },
+    })
+
+    expect(capturedBody).not.toContain('latitude=')
+    expect(capturedBody).not.toContain('longitude=')
+  })
+
   it('uses "unknown" for country and city when request.cf fields are absent', async () => {
     let capturedBody = ''
     vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
