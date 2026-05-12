@@ -30,7 +30,9 @@ function App() {
       (window.navigator as Navigator & { standalone?: boolean }).standalone === true
     if (isStandalone && !localStorage.getItem('pwa_install_tracked')) {
       localStorage.setItem('pwa_install_tracked', '1')
-      void onAppInstall()
+      const navStandalone = (window.navigator as Navigator & { standalone?: boolean }).standalone
+      const platform = navStandalone === true ? 'ios' : /Android/.test(navigator.userAgent) ? 'android' : 'other'
+      void onAppInstall(platform)
     }
   }, [])
 

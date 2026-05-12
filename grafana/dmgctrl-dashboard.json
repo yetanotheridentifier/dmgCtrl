@@ -1,0 +1,330 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_INFLUXDB",
+      "label": "InfluxDB",
+      "description": "InfluxDB Cloud (dmgctrl bucket)",
+      "type": "datasource",
+      "pluginId": "influxdb",
+      "pluginName": "InfluxDB"
+    }
+  ],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0" },
+    { "type": "datasource", "id": "influxdb", "name": "InfluxDB", "version": "1.0.0" },
+    { "type": "panel", "id": "timeseries", "name": "Time series", "version": "" },
+    { "type": "panel", "id": "geomap", "name": "Geomap", "version": "" },
+    { "type": "panel", "id": "barchart", "name": "Bar chart", "version": "" },
+    { "type": "panel", "id": "table", "name": "Table", "version": "" },
+    { "type": "panel", "id": "piechart", "name": "Pie chart", "version": "" },
+    { "type": "panel", "id": "bargauge", "name": "Bar gauge", "version": "" }
+  ],
+  "annotations": { "list": [] },
+  "description": "dmgCtrl analytics — sessions, games, installs, base popularity, feature adoption",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "refresh": "1h",
+  "schemaVersion": 38,
+  "tags": ["dmgctrl", "analytics"],
+  "time": { "from": "now-30d", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "dmgCtrl Analytics",
+  "uid": "dmgctrl-analytics",
+  "version": 1,
+  "panels": [
+
+    {
+      "id": 1,
+      "title": "Sessions over time",
+      "description": "Distinct sessions (by sessionId) per day",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+          "rawQuery": true,
+          "rawSql": "SELECT DATE_TRUNC('day', time) AS day, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = 'production'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC",
+          "editorMode": "code",
+          "dataset": "iox",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "single", "sort": "none" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      }
+    },
+
+    {
+      "id": 2,
+      "title": "Games over time",
+      "description": "Completed games (game_ended, duration > 60s) per day",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+          "rawQuery": true,
+          "rawSql": "SELECT DATE_TRUNC('day', time) AS day, COUNT(*) AS games\nFROM events\nWHERE env = 'production'\n  AND event = 'game_ended'\n  AND \"durationSeconds\" > 60\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC",
+          "editorMode": "code",
+          "dataset": "iox",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "single", "sort": "none" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      }
+    },
+
+    {
+      "id": 3,
+      "title": "Sessions by country",
+      "description": "Distinct sessions per country in the selected time range",
+      "type": "geomap",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 10 },
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+          "rawQuery": true,
+          "rawSql": "SELECT country, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = 'production'\n  AND country != 'unknown'\n  AND $__timeFilter(time)\nGROUP BY country\nORDER BY sessions DESC",
+          "editorMode": "code",
+          "dataset": "iox",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "view": { "id": "zero", "lat": 20, "lon": 0, "zoom": 1.5 },
+        "controls": { "showZoom": true },
+        "layers": [
+          {
+            "type": "markers",
+            "config": {
+              "style": {
+                "size": { "fixed": 5, "min": 5, "max": 20, "field": "sessions" },
+                "color": { "field": "sessions", "fixed": "dark-blue" },
+                "fillOpacity": 0.7
+              },
+              "showLegend": true
+            },
+            "location": {
+              "mode": "lookup",
+              "gazetteer": "public/gazetteer/countries.json",
+              "lookupField": "country"
+            },
+            "name": "Sessions"
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 4,
+      "title": "Sessions by city",
+      "description": "Top cities by session count in the selected time range",
+      "type": "table",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 10 },
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+          "rawQuery": true,
+          "rawSql": "SELECT country, city, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = 'production'\n  AND city != 'unknown'\n  AND $__timeFilter(time)\nGROUP BY country, city\nORDER BY sessions DESC\nLIMIT 30",
+          "editorMode": "code",
+          "dataset": "iox",
+          "format": "table"
+        }
+      ],
+      "options": { "sortBy": [{ "displayName": "sessions", "desc": true }] },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto" } },
+        "overrides": []
+      }
+    },
+
+    {
+      "id": 5,
+      "title": "Base popularity",
+      "description": "Games played per base (game_ended, duration > 60s), selected time range",
+      "type": "barchart",
+      "gridPos": { "x": 0, "y": 18, "w": 16, "h": 10 },
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+          "rawQuery": true,
+          "rawSql": "SELECT \"baseKey\", COUNT(*) AS games\nFROM events\nWHERE env = 'production'\n  AND event = 'game_ended'\n  AND \"durationSeconds\" > 60\n  AND $__timeFilter(time)\nGROUP BY \"baseKey\"\nORDER BY games DESC\nLIMIT 25",
+          "editorMode": "code",
+          "dataset": "iox",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "xField": "baseKey",
+        "orientation": "horizontal",
+        "barWidth": 0.7,
+        "groupWidth": 0.7,
+        "legend": { "displayMode": "hidden" }
+      },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" } },
+        "overrides": []
+      }
+    },
+
+    {
+      "id": 6,
+      "title": "Games per session",
+      "description": "How many games players complete in a single session",
+      "type": "barchart",
+      "gridPos": { "x": 16, "y": 18, "w": 8, "h": 10 },
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+          "rawQuery": true,
+          "rawSql": "SELECT game_count, COUNT(*) AS sessions\nFROM (\n  SELECT \"sessionId\", COUNT(*) AS game_count\n  FROM events\n  WHERE env = 'production'\n    AND event = 'game_ended'\n    AND \"durationSeconds\" > 60\n    AND $__timeFilter(time)\n  GROUP BY \"sessionId\"\n)\nGROUP BY game_count\nORDER BY game_count ASC",
+          "editorMode": "code",
+          "dataset": "iox",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "xField": "game_count",
+        "orientation": "vertical",
+        "barWidth": 0.7,
+        "legend": { "displayMode": "hidden" }
+      },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" } },
+        "overrides": []
+      }
+    },
+
+    {
+      "id": 7,
+      "title": "App installs over time",
+      "description": "app_installed events per day, split by platform",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 28, "w": 12, "h": 8 },
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+          "rawQuery": true,
+          "rawSql": "SELECT DATE_TRUNC('day', time) AS day, platform, COUNT(*) AS installs\nFROM events\nWHERE env = 'production'\n  AND event = 'app_installed'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time), platform\nORDER BY day ASC",
+          "editorMode": "code",
+          "dataset": "iox",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "none" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      }
+    },
+
+    {
+      "id": 8,
+      "title": "Installs by platform",
+      "description": "Cumulative install count split by platform, selected time range",
+      "type": "piechart",
+      "gridPos": { "x": 12, "y": 28, "w": 6, "h": 8 },
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+          "rawQuery": true,
+          "rawSql": "SELECT platform, COUNT(*) AS installs\nFROM events\nWHERE env = 'production'\n  AND event = 'app_installed'\n  AND $__timeFilter(time)\nGROUP BY platform\nORDER BY installs DESC",
+          "editorMode": "code",
+          "dataset": "iox",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "pieType": "donut",
+        "legend": { "displayMode": "table", "placement": "right" }
+      },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" } },
+        "overrides": []
+      }
+    },
+
+    {
+      "id": 9,
+      "title": "Feature adoption",
+      "description": "% of qualifying sessions using each feature at least once",
+      "type": "bargauge",
+      "gridPos": { "x": 18, "y": 28, "w": 6, "h": 8 },
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+          "rawQuery": true,
+          "rawSql": "SELECT\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 AND hyperspace = true THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Hyperspace\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'force_gained' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Force token\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'epic_action_used' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Epic action\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'undo_used' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Undo\"\nFROM events\nWHERE env = 'production' AND $__timeFilter(time)",
+          "editorMode": "code",
+          "dataset": "iox",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      }
+    }
+
+  ]
+}

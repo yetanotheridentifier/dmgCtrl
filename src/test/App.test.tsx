@@ -483,6 +483,31 @@ describe('App lifecycle analytics', () => {
     await waitFor(() => expect(mockOnAppInstall).toHaveBeenCalledTimes(1))
   })
 
+  it('calls onAppInstall with "ios" platform when navigator.standalone is true', async () => {
+    Object.defineProperty(window.navigator, 'standalone', { value: true, configurable: true })
+    render(<App />)
+    await waitFor(() => expect(mockOnAppInstall).toHaveBeenCalledWith('ios'))
+  })
+
+  it('calls onAppInstall with "android" platform when userAgent contains Android', async () => {
+    Object.defineProperty(window.navigator, 'userAgent', {
+      value: 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36',
+      configurable: true,
+    })
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: (query: string) => ({
+        matches: query === '(display-mode: standalone)',
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }),
+    })
+    render(<App />)
+    await waitFor(() => expect(mockOnAppInstall).toHaveBeenCalledWith('android'))
+  })
+
   it('does not call onAppInstall if already tracked in localStorage', async () => {
     vi.stubGlobal('localStorage', {
       getItem: vi.fn().mockImplementation((key: string) => key === 'pwa_install_tracked' ? '1' : null),

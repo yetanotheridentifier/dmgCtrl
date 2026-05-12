@@ -102,7 +102,7 @@ Twenty-two public functions fire events to the worker endpoint. All are fire-and
 | `onAppStart()` | `app_started` | `version` (from package.json) |
 | `onGameStart(baseKey, baseSet, hyperspace)` | `game_started` | `baseKey`, `baseSet`, `hyperspace` |
 | `onGameEnd(baseKey, baseSet, hyperspace, durationSeconds)` | `game_ended` | `baseKey`, `baseSet`, `hyperspace`, `durationSeconds` |
-| `onAppInstall()` | `app_installed` | _(none beyond auto fields)_ |
+| `onAppInstall(platform)` | `app_installed` | `platform` (`'ios'` \| `'android'` \| `'other'`) |
 | `onAppResume()` | `app_resumed` | `sessionDurationSoFarSeconds` |
 | `onDamageDealt(baseKey, baseSet, amount)` | `damage_dealt` | `baseKey`, `baseSet`, `amount` |
 | `onDamageHealed(baseKey, baseSet, amount)` | `damage_healed` | `baseKey`, `baseSet`, `amount` |
@@ -122,7 +122,7 @@ Twenty-two public functions fire events to the worker endpoint. All are fire-and
 | `onBasesLoadStale()` | `bases_load_stale` | _(none beyond auto fields)_ |
 | `onWakeLockFailed(reason)` | `wake_lock_failed` | `reason` (DOMException name, e.g. `'NotAllowedError'`, or `'unknown'` for non-DOM errors) |
 
-`onAppInstall` fires on the first launch of the app in standalone mode (i.e. launched from the home screen icon). It checks `window.matchMedia('(display-mode: standalone)').matches` (Android/Chrome) or `window.navigator.standalone === true` (iOS Safari), and only fires if a `pwa_install_tracked` flag is not yet set in localStorage. Once fired it sets the flag, so subsequent launches do not re-fire it. This approach is used instead of the `appinstalled` browser event because Safari does not support that event.
+`onAppInstall` fires on the first launch of the app in standalone mode (i.e. launched from the home screen icon). It checks `window.matchMedia('(display-mode: standalone)').matches` (Android/Chrome) or `window.navigator.standalone === true` (iOS Safari), and only fires if a `pwa_install_tracked` flag is not yet set in localStorage. Once fired it sets the flag, so subsequent launches do not re-fire it. This approach is used instead of the `appinstalled` browser event because Safari does not support that event. Platform is detected as `'ios'` when `navigator.standalone === true` (exclusive to iOS Safari), `'android'` when the user agent contains `'Android'`, and `'other'` otherwise.
 
 `onAppResume` fires when `document.visibilityState` transitions from `hidden` back to `visible` — but only after the page has been hidden at least once, so it never fires on initial load.
 
@@ -214,7 +214,29 @@ Install detection and resume detection are in separate `useEffect` calls. The in
 
 **React StrictMode note:** In development mode, React intentionally mounts, unmounts, and remounts components to detect side-effect bugs. This causes `onAppStart` to fire twice per page load in dev (two `app_started` rows within milliseconds of each other). This is expected and only happens in development — production builds fire once.
 
-Base popularity events (#99) are pending.
+### Grafana dashboard
+
+The dashboard is defined as JSON at `grafana/dmgctrl-dashboard.json` and can be imported directly into any Grafana instance. It requires an InfluxDB datasource configured against the `dmgctrl` bucket (InfluxDB 3.x / SQL query language).
+
+**Public URL:** https://yetanotheridentifier.grafana.net/public-dashboards/efea52fe7eba4987833c07b69c90f9eb
+
+**Panels:**
+
+| Panel | Type | What it shows |
+|---|---|---|
+| Sessions over time | Time series | Distinct `sessionId` values per day |
+| Games over time | Time series | `game_ended` events with `durationSeconds > 60` per day |
+| Sessions by country | Geomap | Distinct sessions per country |
+| Sessions by city | Table | Top 30 cities by session count |
+| Base popularity | Bar chart | Top 25 bases by completed games |
+| Games per session distribution | Bar chart | How many games players complete per session |
+| App installs over time | Time series | `app_installed` events per day, split by `platform` |
+| Installs by platform | Donut | Cumulative installs split by `ios` / `android` / `other` |
+| Feature adoption | Bar gauge | % of sessions using hyperspace, force token, epic action, undo |
+
+Feature adoption is measured via usage events (sessions containing at least one relevant event) rather than settings state — this reflects actual use rather than whether the feature was merely enabled.
+
+All panels respect the Grafana time range picker and filter by `env = 'production'`. `country` and `city` fields are populated by the Cloudflare Worker from `request.cf` and are `'unknown'` for events received outside the production edge network (e.g. local dev).
 
 ---
 
