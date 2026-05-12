@@ -15,7 +15,6 @@
     { "type": "panel", "id": "timeseries", "name": "Time series", "version": "" },
     { "type": "panel", "id": "geomap", "name": "Geomap", "version": "" },
     { "type": "panel", "id": "barchart", "name": "Bar chart", "version": "" },
-    { "type": "panel", "id": "table", "name": "Table", "version": "" },
     { "type": "panel", "id": "piechart", "name": "Pie chart", "version": "" },
     { "type": "panel", "id": "bargauge", "name": "Bar gauge", "version": "" }
   ],
@@ -122,11 +121,10 @@
         "controls": { "showZoom": true },
         "layers": [
           {
-            "type": "markers",
+            "type": "choropleth",
             "config": {
               "style": {
-                "size": { "fixed": 5, "min": 5, "max": 20, "field": "sessions" },
-                "color": { "field": "sessions", "fixed": "dark-blue" },
+                "color": { "field": "sessions", "fixed": "#4fc3f7" },
                 "fillOpacity": 0.7
               },
               "showLegend": true
@@ -139,14 +137,18 @@
             "name": "Sessions"
           }
         ]
+      },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "continuous-blues" } },
+        "overrides": []
       }
     },
 
     {
       "id": 4,
       "title": "Sessions by city",
-      "description": "Top cities by session count in the selected time range",
-      "type": "table",
+      "description": "Sessions per city plotted by approximate location (Cloudflare edge PoP coordinates)",
+      "type": "geomap",
       "gridPos": { "x": 12, "y": 8, "w": 12, "h": 10 },
       "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
       "targets": [
@@ -154,15 +156,37 @@
           "refId": "A",
           "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
           "rawQuery": true,
-          "rawSql": "SELECT country, city, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = 'production'\n  AND city != 'unknown'\n  AND $__timeFilter(time)\nGROUP BY country, city\nORDER BY sessions DESC\nLIMIT 30",
+          "rawSql": "SELECT country, city, AVG(latitude) AS latitude, AVG(longitude) AS longitude, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = 'production'\n  AND city != 'unknown'\n  AND latitude IS NOT NULL\n  AND $__timeFilter(time)\nGROUP BY country, city\nORDER BY sessions DESC\nLIMIT 100",
           "editorMode": "code",
           "dataset": "iox",
           "format": "table"
         }
       ],
-      "options": { "sortBy": [{ "displayName": "sessions", "desc": true }] },
+      "options": {
+        "view": { "id": "zero", "lat": 20, "lon": 0, "zoom": 1.5 },
+        "controls": { "showZoom": true },
+        "layers": [
+          {
+            "type": "markers",
+            "config": {
+              "style": {
+                "size": { "fixed": 5, "min": 5, "max": 25, "field": "sessions" },
+                "color": { "field": "sessions", "fixed": "#4fc3f7" },
+                "fillOpacity": 0.7
+              },
+              "showLegend": true
+            },
+            "location": {
+              "mode": "coords",
+              "latitude": "latitude",
+              "longitude": "longitude"
+            },
+            "name": "Cities"
+          }
+        ]
+      },
       "fieldConfig": {
-        "defaults": { "custom": { "align": "auto" } },
+        "defaults": { "color": { "mode": "continuous-blues" } },
         "overrides": []
       }
     },
