@@ -26,6 +26,8 @@ const mockUserSettings = vi.hoisted(() => ({
   setEnableFavourites: vi.fn(),
   enableActionLog: true,
   setEnableActionLog: vi.fn(),
+  enableCompetitiveMode: false,
+  setEnableCompetitiveMode: vi.fn(),
 }))
 vi.mock('../hooks/useUserSettings', () => ({
   useUserSettings: () => mockUserSettings,
@@ -63,6 +65,7 @@ beforeEach(() => {
   mockUserSettings.enableWakeLock = true
   mockUserSettings.enableFavourites = true
   mockUserSettings.enableActionLog = true
+  mockUserSettings.enableCompetitiveMode = false
   mockFavourites.favourites = []
   mockOrientation.isPortrait = true
 })
@@ -156,6 +159,18 @@ describe('SwuSettingsScreen', () => {
     render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('checkbox', { name: /enable action log/i }))
     expect(mockUserSettings.setEnableActionLog).toHaveBeenCalledWith(false)
+  })
+
+  it('renders Enable Competitive Mode toggle in unchecked state', () => {
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByRole('checkbox', { name: /enable competitive mode/i })).not.toBeChecked()
+  })
+
+  it('calls setEnableCompetitiveMode(true) when competitive mode toggle is clicked', async () => {
+    const user = userEvent.setup()
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByRole('checkbox', { name: /enable competitive mode/i }))
+    expect(mockUserSettings.setEnableCompetitiveMode).toHaveBeenCalledWith(true)
   })
 
   // --- Navigation ---
@@ -339,6 +354,13 @@ describe('SwuSettingsScreen analytics', () => {
     render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('checkbox', { name: /favourites/i }))
     expect(mockOnSettingChanged).toHaveBeenCalledWith('enableFavourites', false)
+  })
+
+  it('calls onSettingChanged with enableCompetitiveMode and new value when competitive mode toggle is clicked', async () => {
+    const user = userEvent.setup()
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByRole('checkbox', { name: /competitive mode/i }))
+    expect(mockOnSettingChanged).toHaveBeenCalledWith('enableCompetitiveMode', true)
   })
 
   it('calls onFavouriteRemoved with baseKey and baseSet when Remove is clicked', async () => {

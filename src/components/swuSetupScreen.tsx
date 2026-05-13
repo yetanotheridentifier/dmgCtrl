@@ -8,18 +8,19 @@ import { useFavourites } from '../hooks/useFavourites'
 import { normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck } from '../utils/swudbUrl'
 import { onFavouriteAdded, onFavouriteRemoved, onDeckImportSuccess, onDeckImportFailure } from '../services/analytics'
 import { isBaseValidForFormat, isSetValidForFormat, formatValidationError } from '../utils/formatFilter'
+import { PlayMode } from '../utils/playMode'
 
 export type SelectionMode = 'base-selector' | 'swudb-import' | 'favourites'
 
 interface Props {
-  onConfirm: (base: Base) => void
+  onConfirm: (base: Base, playMode: PlayMode) => void
   onHelp: () => void
   onSettings?: () => void
   initialSelection?: InitialSelection | null
 }
 
 function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Props) {
-  const { useHyperspace, enableFavourites } = useUserSettings()
+  const { useHyperspace, enableFavourites, enableCompetitiveMode } = useUserSettings()
   const { favourites, addFavourite, removeFavourite } = useFavourites()
   const setup = useSwuSetup(onConfirm, initialSelection)
   const art = useBaseArt(setup.selectedBase, useHyperspace)
@@ -144,6 +145,9 @@ function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Pro
       error={setup.error}
       selectedFormat={setup.selectedFormat}
       onFormatChange={setup.handleFormatChange}
+      enableCompetitiveMode={enableCompetitiveMode}
+      selectedPlayMode={setup.selectedPlayMode}
+      onPlayModeChange={setup.handlePlayModeChange}
       availableSets={setup.validSets}
       availableAspects={setup.availableAspects}
       filteredBases={setup.filteredBases}

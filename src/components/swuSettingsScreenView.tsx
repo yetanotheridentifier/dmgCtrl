@@ -126,6 +126,7 @@ interface Props {
   enableWakeLock: boolean
   enableActionLog: boolean
   enableFavourites: boolean
+  enableCompetitiveMode: boolean
   favourites: FavouriteBase[]
   onUseHyperspaceChange: (v: boolean) => void
   onEnableForceTokenChange: (v: boolean) => void
@@ -133,6 +134,7 @@ interface Props {
   onEnableWakeLockChange: (v: boolean) => void
   onEnableActionLogChange: (v: boolean) => void
   onEnableFavouritesChange: (v: boolean) => void
+  onEnableCompetitiveModeChange: (v: boolean) => void
   onRemoveFavourite: (key: string) => void
   onClearFavourites: () => void
   onBack: () => void
@@ -146,6 +148,7 @@ function SwuSettingsScreenView({
   enableWakeLock,
   enableActionLog,
   enableFavourites,
+  enableCompetitiveMode,
   favourites,
   onUseHyperspaceChange,
   onEnableForceTokenChange,
@@ -153,6 +156,7 @@ function SwuSettingsScreenView({
   onEnableWakeLockChange,
   onEnableActionLogChange,
   onEnableFavouritesChange,
+  onEnableCompetitiveModeChange,
   onRemoveFavourite,
   onClearFavourites,
   onBack,
@@ -198,6 +202,14 @@ function SwuSettingsScreenView({
         subtitle="Shows a scrollable log of game actions with undo support. Also enables the round tracker."
         checked={enableActionLog}
         onChange={onEnableActionLogChange}
+        vmin={vmin}
+      />
+      <ToggleRow
+        id="toggle-competitive-mode"
+        label="Enable Competitive Mode"
+        subtitle="Adds a play mode selector (Casual / Best of 1 / Best of 3) to the setup screen. Beta feature."
+        checked={enableCompetitiveMode}
+        onChange={onEnableCompetitiveModeChange}
         vmin={vmin}
       />
     </>

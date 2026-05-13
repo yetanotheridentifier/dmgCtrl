@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useBases, Base } from './useBases'
 import { Format, getValidSets } from '../utils/formatFilter'
+import { PlayMode } from '../utils/playMode'
 
 const ASPECT_ORDER = ['Vigilance', 'Command', 'Aggression', 'Cunning', 'None']
 
@@ -11,7 +12,7 @@ export interface InitialSelection {
 }
 
 export function useSwuSetup(
-  onConfirm: (base: Base) => void,
+  onConfirm: (base: Base, playMode: PlayMode) => void,
   initialSelection?: InitialSelection | null,
 ) {
   const { bases, loading, error } = useBases()
@@ -22,9 +23,15 @@ export function useSwuSetup(
 
   const [selectedFormat, setSelectedFormat] = useState<Format>(() => {
     const saved = localStorage.getItem('pref_format')
-    if (saved === 'limited' || saved === 'eternal') return saved
+    if (saved === 'limited' || saved === 'eternal' || saved === 'twin-suns') return saved
     if (saved === 'sealed' || saved === 'draft' || saved === 'chaos') return 'limited'
     return 'premier'
+  })
+
+  const [selectedPlayMode, setSelectedPlayMode] = useState<PlayMode>(() => {
+    const saved = localStorage.getItem('pref_play_mode')
+    if (saved === 'bo1' || saved === 'bo3') return saved
+    return 'casual'
   })
 
   const availableSets = useMemo(() => {
@@ -77,6 +84,11 @@ export function useSwuSetup(
     }
   }, [filteredBases])
 
+  const handlePlayModeChange = (mode: PlayMode) => {
+    setSelectedPlayMode(mode)
+    localStorage.setItem('pref_play_mode', mode)
+  }
+
   const handleFormatChange = (format: Format) => {
     setSelectedFormat(format)
     localStorage.setItem('pref_format', format)
@@ -106,7 +118,7 @@ export function useSwuSetup(
 
   const handleSubmit = () => {
     if (!selectedBase) return
-    onConfirm(selectedBase)
+    onConfirm(selectedBase, selectedPlayMode)
   }
 
   const selectBaseByKey = (key: string): boolean => {
@@ -123,6 +135,7 @@ export function useSwuSetup(
     loading,
     error,
     selectedFormat,
+    selectedPlayMode,
     selectedSet,
     selectedAspect,
     selectedKey,
@@ -132,6 +145,7 @@ export function useSwuSetup(
     availableAspects,
     filteredBases,
     handleFormatChange,
+    handlePlayModeChange,
     handleSetChange,
     handleAspectChange,
     handleKeyChange,

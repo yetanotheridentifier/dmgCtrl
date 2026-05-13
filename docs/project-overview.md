@@ -8,9 +8,11 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 
 ## Planned Features
 
-### Setup screen
-- Best of 1 / Best of 3 selector
-- Game counter within a match
+### Competitive mode (in progress — beta flag in settings)
+- Score panel: game counter within a match (#188)
+- Win/loss recording (#189)
+- Timer (#190)
+- Analytics + ship (remove beta flag) (#6)
 
 ### Future games
 - X-Wing
@@ -170,7 +172,7 @@ Use `--cold` to simulate a first-time user (clears `swu_bases_cache` before each
 - `useOrientation` uses `window.matchMedia('(orientation: portrait)')` change events for reliable iOS detection (not `orientationchange` or `resize`, which are unreliable in iOS standalone PWA mode). It returns `isPortrait` and `vmin` (`Math.min(screen.width, screen.height)` — the device's physical short dimension, stable across rotations; `window.innerWidth`/`innerHeight` can get stuck at landscape values on iOS).
 - **Do not use `system-ui` or `-apple-system` in CSS class font stacks** (e.g. in `index.css`). On iOS 17+, these trigger Dynamic Type which overrides explicit font sizes in landscape mode regardless of `-webkit-text-size-adjust`. Use `Helvetica, Arial, sans-serif` instead. For inline styles, set `fontFamily: "'Segoe UI', Helvetica, Arial, sans-serif"` and `WebkitTextSizeAdjust: '100%'` on the container — this is the pattern used by both the help screen (via `.help-content` CSS class) and the settings screen (via inline style on the outer div).
 - `src/test/setup.ts` includes a global `matchMedia` mock that defaults to landscape. Tests that need portrait orientation should call `makeMatchMediaMock(true)` (imported from `./setup`). The settings screen tests mock `useOrientation` directly via `vi.mock('../hooks/useOrientation', ...)` with a `vi.hoisted` object to allow per-test orientation control.
-- `useUserSettings` is a **React Context** — `UserSettingsProvider` (from `src/hooks/useUserSettings.ts`) wraps the entire app in `main.tsx` so all screens share one settings instance. Changes in the settings screen propagate immediately to the game screen without requiring a restart. Preferences are persisted to localStorage under key `user_settings` as JSON. All seven preferences (`useHyperspace`, `enableForceToken`, `enableEpicActions`, `enableWakeLock`, `enableFavourites`, `enableLongPress`, `enableActionLog`) default to `true`. Handles corrupt/missing storage gracefully by falling back to defaults.
+- `useUserSettings` is a **React Context** — `UserSettingsProvider` (from `src/hooks/useUserSettings.ts`) wraps the entire app in `main.tsx` so all screens share one settings instance. Changes in the settings screen propagate immediately to the game screen without requiring a restart. Preferences are persisted to localStorage under key `user_settings` as JSON. Seven of eight preferences (`useHyperspace`, `enableForceToken`, `enableEpicActions`, `enableWakeLock`, `enableFavourites`, `enableLongPress`, `enableActionLog`) default to `true`. `enableCompetitiveMode` defaults to `false` (beta flag — will be removed in #6). Handles corrupt/missing storage gracefully by falling back to defaults.
 - `useGameLog` manages the game action log — an ordered array of `GameLogEntry` records. Fields: `id`, `type` (styling tag, e.g. `round`/`epic`/`force`/`damage`), `message`, `color` (left accent strip), `prevState` (full GameState snapshot for undo), optional `undoable` (omit or `true` to allow undo; `false` to suppress the Undo button — used for the initial Round 1 entry). API: `{ entries, add, undoLast, reset }`. Local to the game screen.
 - `GameLogOverlay` renders the scrollable log panel on the left side of the game screen. Auto-scrolls to the latest entry. Undo button on the last entry when `undoable !== false`. Round entries get a blue gradient background.
 - `App.tsx` keeps `SwuGameScreen` mounted during help/settings navigation via a `display: none` wrapper controlled by an `isInGame` flag. Game state (damage counter, log, round) is preserved while the user browses settings — no restart required.

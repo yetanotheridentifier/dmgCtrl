@@ -151,7 +151,7 @@ describe('App', () => {
     render(<App />)
     await waitForSetup()
     await user.click(screen.getByRole('button', { name: 'Start game' }))
-    expect(screen.getByText('Input Mode:')).toBeInTheDocument()
+    expect(screen.getByText('Source:')).toBeInTheDocument()
     expect(screen.queryByText(/Remaining:/)).not.toBeInTheDocument()
   })
 
@@ -164,7 +164,7 @@ describe('App', () => {
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
     await user.click(screen.getByRole('button', { name: 'Start game' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByText('Input Mode:')).toBeInTheDocument()
+    expect(screen.getByText('Source:')).toBeInTheDocument()
   })
 
   // --- Back navigation retains selection ---
@@ -276,7 +276,7 @@ describe('App', () => {
     await waitForSetup()
     await user.click(screen.getByRole('button', { name: 'Help' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByText('Input Mode:')).toBeInTheDocument()
+    expect(screen.getByText('Source:')).toBeInTheDocument()
   })
 
   it('Clicking back from help returns to game when help was opened from game', async () => {
@@ -341,7 +341,7 @@ describe('App', () => {
     await waitForSetup()
     await user.click(screen.getByRole('button', { name: '⚙' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByText('Input Mode:')).toBeInTheDocument()
+    expect(screen.getByText('Source:')).toBeInTheDocument()
   })
 
   it('Settings button is visible on game screen', async () => {
@@ -388,7 +388,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Help' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByText('Input Mode:')).toBeInTheDocument()
+    expect(screen.getByText('Source:')).toBeInTheDocument()
   })
 
   it('Clicking back from settings returns to game after settings -> help -> back', async () => {

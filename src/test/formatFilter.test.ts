@@ -38,6 +38,18 @@ describe('isSetValidForFormat — eternal', () => {
   })
 })
 
+describe('isSetValidForFormat — twin-suns', () => {
+  it('allows all sets', () => {
+    for (const set of ALL_SETS) {
+      expect(isSetValidForFormat(set, 'twin-suns')).toBe(true)
+    }
+  })
+
+  it('allows unknown sets (future-proofing)', () => {
+    expect(isSetValidForFormat('XYZ', 'twin-suns')).toBe(true)
+  })
+})
+
 describe('isSetValidForFormat — premier', () => {
   it('excludes rotated-out standard sets (SOR, SHD, TWI)', () => {
     expect(isSetValidForFormat('SOR', 'premier')).toBe(false)
@@ -94,6 +106,11 @@ describe('getValidSets', () => {
     expect(result).toEqual(ALL_SETS)
   })
 
+  it('twin-suns returns all sets unchanged', () => {
+    const result = getValidSets('twin-suns', ALL_SETS)
+    expect(result).toEqual(ALL_SETS)
+  })
+
   it('premier excludes SOR/SHD/TWI and TS26, keeps IBH', () => {
     const result = getValidSets('premier', ALL_SETS)
     expect(result).toContain('JTL')
@@ -125,6 +142,12 @@ describe('isBaseValidForFormat', () => {
     expect(isBaseValidForFormat('eternal', makeBase('TS26'))).toBe(true)
     expect(isBaseValidForFormat('eternal', makeBase('IBH'))).toBe(true)
     expect(isBaseValidForFormat('eternal', makeBase('SOR'))).toBe(true)
+  })
+
+  it('twin-suns allows any base', () => {
+    expect(isBaseValidForFormat('twin-suns', makeBase('TS26'))).toBe(true)
+    expect(isBaseValidForFormat('twin-suns', makeBase('IBH'))).toBe(true)
+    expect(isBaseValidForFormat('twin-suns', makeBase('SOR'))).toBe(true)
   })
 
   it('premier allows JTL base', () => {
@@ -168,6 +191,10 @@ describe('formatValidationError', () => {
   })
 
   it('includes set code for eternal', () => {
-    expect(formatValidationError('eternal', makeBase('SOR'))).toBe('Base not valid for Eternal / Twin Suns format (SOR)')
+    expect(formatValidationError('eternal', makeBase('SOR'))).toBe('Base not valid for Eternal format (SOR)')
+  })
+
+  it('includes set code for twin-suns', () => {
+    expect(formatValidationError('twin-suns', makeBase('SOR'))).toBe('Base not valid for Twin Suns format (SOR)')
   })
 })

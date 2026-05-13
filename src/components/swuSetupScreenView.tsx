@@ -6,12 +6,16 @@ import { CogIcon, ForwardIcon, HelpIcon } from './icons'
 import { SelectionMode } from './swuSetupScreen'
 import type { FavouriteBase } from '../hooks/useFavourites'
 import { Format, FORMATS, FORMAT_LABELS } from '../utils/formatFilter'
+import { PlayMode, PLAY_MODES, PLAY_MODE_LABELS } from '../utils/playMode'
 
 interface Props {
   loading: boolean
   error: string | null
   selectedFormat: Format
   onFormatChange: (format: Format) => void
+  enableCompetitiveMode: boolean
+  selectedPlayMode: PlayMode
+  onPlayModeChange: (mode: PlayMode) => void
   availableSets: string[]
   availableAspects: string[]
   filteredBases: Base[]
@@ -146,7 +150,7 @@ function ModeSelector({ selectionMode, onModeChange, showFavourites = false, sma
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
-      <label style={labelStyle(small)}>Input Mode:</label>
+      <label style={labelStyle(small)}>Source:</label>
       <select
         value={selectionMode}
         onChange={e => onModeChange(e.target.value as SelectionMode)}
@@ -187,11 +191,38 @@ function FormatSelector({ selectedFormat, onFormatChange, small = false }: {
   )
 }
 
+function PlayModeSelector({ selectedPlayMode, onPlayModeChange, small = false }: {
+  selectedPlayMode: PlayMode
+  onPlayModeChange: (mode: PlayMode) => void
+  small?: boolean
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
+      <label style={labelStyle(small)}>Match:</label>
+      <select
+        value={selectedPlayMode}
+        onChange={e => onPlayModeChange(e.target.value as PlayMode)}
+        data-testid="play-mode-select"
+        style={selectStyle(true, true, small)}
+      >
+        {PLAY_MODES.map(m => (
+          <option key={m} value={m} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>
+            {PLAY_MODE_LABELS[m]}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 function SwuSetupScreenView({
   loading,
   error,
   selectedFormat,
   onFormatChange,
+  enableCompetitiveMode,
+  selectedPlayMode,
+  onPlayModeChange,
   availableSets,
   availableAspects,
   filteredBases,
@@ -640,7 +671,16 @@ function SwuSetupScreenView({
               gap: '1.5vh',
               padding: '14px',
             }}>
-              <FormatSelector selectedFormat={selectedFormat} onFormatChange={onFormatChange} small />
+              <div style={{ display: 'flex', flexDirection: 'row', gap: '2vw' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <FormatSelector selectedFormat={selectedFormat} onFormatChange={onFormatChange} small />
+                </div>
+                {enableCompetitiveMode && (
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <PlayModeSelector selectedPlayMode={selectedPlayMode} onPlayModeChange={onPlayModeChange} small />
+                  </div>
+                )}
+              </div>
               <ModeSelector
                 selectionMode={selectionMode}
                 onModeChange={onModeChange}
@@ -769,7 +809,16 @@ function SwuSetupScreenView({
           </div>
         </div>
 
-        <FormatSelector selectedFormat={selectedFormat} onFormatChange={onFormatChange} />
+        <div style={{ display: 'flex', flexDirection: 'row', gap: '2vw' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <FormatSelector selectedFormat={selectedFormat} onFormatChange={onFormatChange} />
+          </div>
+          {enableCompetitiveMode && (
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <PlayModeSelector selectedPlayMode={selectedPlayMode} onPlayModeChange={onPlayModeChange} />
+            </div>
+          )}
+        </div>
         <ModeSelector
           selectionMode={selectionMode}
           onModeChange={onModeChange}
