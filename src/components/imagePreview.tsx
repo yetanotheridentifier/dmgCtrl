@@ -92,7 +92,7 @@ function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotatio
 
   const imageWrapperStyle: React.CSSProperties = {
     ...wrapperStyle,
-    visibility: imageLoaded ? 'visible' : 'hidden',
+    ...(imageLoaded ? {} : { opacity: 0, boxShadow: 'none', border: 'none' }),
     ...(message ? {
       borderBottomLeftRadius: 0,
       borderBottomRightRadius: 0,

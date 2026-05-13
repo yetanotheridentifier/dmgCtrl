@@ -3,18 +3,57 @@ import { version as APP_VERSION } from '../../package.json'
 const SESSION_ID = Math.random().toString(36).slice(2, 10)
 const SESSION_START_TIME = Date.now()
 
-async function sendEvent(event: string, data: Record<string, unknown>): Promise<void> {
-  const url = import.meta.env.VITE_ANALYTICS_URL ?? 'https://worker.dmgctrl.app/analytics'
-  const env = import.meta.env.MODE
+const QUEUE_KEY = 'analytics_queue'
+const QUEUE_MAX = 200
+
+interface QueuedEvent {
+  event_id: string
+  name: string
+  data: Record<string, unknown>
+  queued_at: string
+}
+
+export function enqueue(name: string, data: Record<string, unknown>): void {
   try {
-    await fetch(url, {
+    const raw = localStorage.getItem(QUEUE_KEY)
+    const queue: QueuedEvent[] = raw ? JSON.parse(raw) : []
+    queue.push({
+      event_id: crypto.randomUUID(),
+      name,
+      data,
+      queued_at: new Date().toISOString(),
+    })
+    if (queue.length > QUEUE_MAX) queue.splice(0, queue.length - QUEUE_MAX)
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(queue))
+  } catch {
+    // fail silently — never affect app functionality
+  }
+}
+
+export async function flush(): Promise<void> {
+  try {
+    const raw = localStorage.getItem(QUEUE_KEY)
+    if (!raw) return
+    const queue: QueuedEvent[] = JSON.parse(raw)
+    if (queue.length === 0) return
+    const base = import.meta.env.VITE_ANALYTICS_URL ?? 'https://worker.dmgctrl.app/analytics'
+    const response = await fetch(`${base}/batch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event, data: { ...data, env, sessionId: SESSION_ID } }),
+      body: JSON.stringify({ events: queue }),
     })
+    if (response.ok) localStorage.removeItem(QUEUE_KEY)
   } catch {
-    // fire-and-forget: errors are silently discarded
+    // offline or network error — preserve queue for next attempt
   }
+}
+
+window.addEventListener('online', () => { void flush() })
+
+async function sendEvent(event: string, data: Record<string, unknown>): Promise<void> {
+  const env = import.meta.env.MODE
+  enqueue(event, { ...data, env, sessionId: SESSION_ID })
+  await flush()
 }
 
 export function onAppStart(): Promise<void> {

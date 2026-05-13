@@ -728,49 +728,53 @@ function SwuSetupScreenView({
           showFavourites={enableFavourites && favourites.length > 0}
         />
 
-        {selectionMode === 'favourites' ? (
-          <>
-            {favouritesContent(false)}
-            {selectedBase && (
-              <div style={{
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '1vh',
-              }}>
-                {imagePreview(selectedBase)}
-              </div>
-            )}
-          </>
-        ) : selectionMode === 'swudb-import' ? (
-          <>
-            {swudbImportContent(false)}
-            {selectedBase && (
-              <div style={{
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '1vh',
-              }}>
-                {imagePreview(selectedBase)}
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            {baseSelectorContent(false)}
-            {selectedBase && (
-              <div style={{
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '1vh',
-              }}>
-                {imagePreview(selectedBase)}
-              </div>
-            )}
-          </>
-        )}
+        {/* key forces a full DOM remount on mode change, preventing iOS Safari from
+            retaining GPU compositing tiles from removed box-shadow elements */}
+        <div key={selectionMode} data-testid="mode-content" style={{ display: 'contents' }}>
+          {selectionMode === 'favourites' ? (
+            <>
+              {favouritesContent(false)}
+              {selectedBase && (
+                <div style={{
+                  width: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1vh',
+                }}>
+                  {imagePreview(selectedBase)}
+                </div>
+              )}
+            </>
+          ) : selectionMode === 'swudb-import' ? (
+            <>
+              {swudbImportContent(false)}
+              {selectedBase && (
+                <div style={{
+                  width: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1vh',
+                }}>
+                  {imagePreview(selectedBase)}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {baseSelectorContent(false)}
+              {selectedBase && (
+                <div style={{
+                  width: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1vh',
+                }}>
+                  {imagePreview(selectedBase)}
+                </div>
+              )}
+            </>
+          )}
+        </div>
 
       </div>
     </AppScreenLayout>
