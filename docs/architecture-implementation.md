@@ -42,7 +42,7 @@ src/
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
   services/
-    analytics.ts            Fire-and-forget analytics service (22 functions); posts JSON to the Cloudflare Worker analytics endpoint; all errors silently discarded; env and sessionId auto-appended to every event; worker appends country and city from request.cf
+    analytics.ts            Offline-queue analytics service (22 event functions + enqueue + flush); events written to localStorage queue first, then flushed via POST to /analytics/batch; queue preserved on network error and re-flushed on window.online; env and sessionId auto-appended to every event; worker appends country, city, and coordinates from request.cf
 
   utils/
     swudbUrl.ts             SWUDB URL utilities: normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck
@@ -56,7 +56,7 @@ src/
     swuLoadingScreen.test.tsx Loading screen tests
     swuSetupScreen.test.tsx Setup screen container tests
     swuSettingsScreen.test.tsx Settings screen container tests
-    analytics.test.ts       Analytics service tests — payload shape, PII absence, env field, sessionId consistency, all 22 event functions, error handling
+    analytics.test.ts       Analytics service tests — enqueue (write, shape, append, cap, silent failure), flush (batch POST, URL, clear on 200, preserve on 500, preserve on network error, no-op when empty), window.online trigger, payload shape, PII absence, env field, sessionId consistency, all 22 event functions
     swudbUrl.test.ts        SWUDB URL utility tests
     useDragScrubber.test.ts Drag-to-scrub hook tests
     useBaseArt.test.ts      Art fallback chain hook tests
@@ -236,7 +236,7 @@ export interface Base {
 | API | URL | Purpose |
 |---|---|---|
 | swu-db proxy | `worker.dmgctrl.app` | Card text, HP, aspects, rarity, standard art; source of truth for SOR/SHD/TWI |
-| Analytics endpoint | `worker.dmgctrl.app/analytics` | Accepts `POST` from the frontend; writes events to InfluxDB Cloud in line-protocol format |
+| Analytics endpoint | `worker.dmgctrl.app/analytics/batch` (primary), `/analytics` (backwards compat) | Accepts `POST` from the frontend; writes events to InfluxDB Cloud in line-protocol format; batch endpoint uses `queued_at` as the InfluxDB timestamp so offline events are attributed to when they occurred |
 | swuapi.com | `api.swuapi.com/cards?type=Base&variant=all&limit=100` | Primary source for active-format bases; provides low-res art URLs and hyperspace metadata |
 
 **swuapi.com pagination:** The API returns 100 cards per page with cursor-based pagination. `useBases` follows `pagination.next_cursor` until it is `null`, accumulating all pages before merging.
@@ -492,6 +492,8 @@ When the base is not recognised, the deck name is still shown (so the user can s
 **Mode transitions:** When switching to SWUDB Import mode, the current base selection and any loaded deck name are always cleared — the form starts fresh. When switching to Favourites mode, the selection is cleared unless the currently selected base is already in the favourites list (in which case it is pre-selected in the dropdown). Switching to Base Selector mode always preserves the current selection — a base resolved via SWUDB Import or chosen from Favourites will be pre-populated in the cascading dropdowns.
 
 If `enableFavourites` becomes `false` or the favourites list becomes empty while Favourites mode is active, a `useEffect` in the container resets `selectionMode` to `'base-selector'`. The `'favourites'` value is also rejected when restoring mode from localStorage if these conditions are not met on load.
+
+In the portrait layout, the mode content area is wrapped in `<div key={selectionMode} style={{ display: 'contents' }}>`. The `key` forces React to fully replace the DOM node (rather than reconcile in-place) when the mode changes. Without this, iOS Safari retains GPU compositing layer tiles from the removed box-shadow elements (the base/aspect dropdowns and start button), leaving a faint ghost line in the empty area below the controls when switching from Base Selector mode with no base selected. `display: contents` makes the wrapper layout-transparent so the Fragment children from `baseSelectorContent` continue to participate directly in the outer flex column's gap spacing.
 
 ### Game screen
 

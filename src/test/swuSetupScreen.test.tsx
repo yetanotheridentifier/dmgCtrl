@@ -451,6 +451,28 @@ describe('SwuSetupScreen', () => {
     expect(screen.getAllByRole('img')).toHaveLength(1)
   })
 
+  it('Card image wrapper strips border and shadow before load to prevent iOS Safari GPU compositing artifact', async () => {
+    makeMatchMediaMock(true)
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+
+    const img = screen.getByAltText('Catacombs of Cadera')
+    const wrapper = img.parentElement!
+
+    // Before load: opacity 0, boxShadow and border explicitly none
+    // (iOS Safari composites box-shadow on a separate GPU layer; opacity:0 alone does not suppress it)
+    expect(wrapper).toHaveStyle({ opacity: '0', boxShadow: 'none' })
+
+    // After load: full styles restored
+    fireEvent.load(img)
+    expect(wrapper).toHaveStyle({ opacity: '1' })
+    expect(wrapper).not.toHaveStyle({ boxShadow: 'none' })
+  })
+
   // --- Base option format ---
 
   it('Base options show name and HP but not subtitle', async () => {
@@ -520,6 +542,27 @@ describe('SwuSetupScreen', () => {
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
     const modeSelect = screen.getByTestId('mode-select') as HTMLSelectElement
     expect(modeSelect.value).toBe('base-selector')
+  })
+
+  it('Mode content wrapper remounts on mode change to prevent iOS Safari ghost shadow artifacts', async () => {
+    makeMatchMediaMock(true)
+    mockUserSettings.enableFavourites = true
+    mockFavourites.favourites = [
+      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+    ]
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+
+    const wrapperBefore = screen.getByTestId('mode-content')
+    await user.selectOptions(screen.getByTestId('mode-select'), 'favourites')
+    const wrapperAfter = screen.getByTestId('mode-content')
+
+    // The wrapper must be a different DOM node after mode change.
+    // Without key={selectionMode}, React reconciles the same div in-place and
+    // iOS Safari retains GPU compositing tiles from the removed box-shadow elements,
+    // leaving a ghost horizontal line in the empty space below the controls.
+    expect(wrapperAfter).not.toBe(wrapperBefore)
   })
 
   it('Switching to SWUDB mode hides the base dropdowns', async () => {

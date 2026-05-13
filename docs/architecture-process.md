@@ -86,28 +86,70 @@ A Cloudflare Web Analytics beacon is embedded in `index.html`. It fires on every
 
 The beacon token (`aaed1e18376f4bdd9f56a0050acce291`) is a public identifier — it is not a secret and is safe to commit.
 
-Custom event tracking (game starts, base popularity) is not covered by the Cloudflare beacon, which only records page loads. This is handled by a `POST /analytics` endpoint on the Cloudflare Worker, which writes structured events to InfluxDB Cloud (free tier, `dmgctrl` bucket, 30-day retention).
+Custom event tracking (game starts, base popularity) is not covered by the Cloudflare beacon, which only records page loads. This is handled by the frontend analytics service, which queues events in localStorage and flushes them to the Cloudflare Worker in batches. The worker writes them to InfluxDB Cloud (free tier, `dmgctrl` bucket, 30-day retention). Events captured while offline are preserved across app restarts and delivered when connectivity is restored.
 
-### Analytics Worker endpoint
+### Analytics Worker endpoints
 
-- **Endpoint:** `POST https://worker.dmgctrl.app/analytics`
+**`POST /analytics/batch`** — primary endpoint used by the app
+
+- **Payload:** `{ events: QueuedEvent[] }` where each event has `event_id`, `name`, `data`, `queued_at`
+- **Storage:** Writes all events to InfluxDB in a single line-protocol batch; `queued_at` is used as the InfluxDB record timestamp (so offline events are attributed to when they occurred, not when they were delivered) and is also stored as a field for visibility
+- **Response:** `{ received: number }` on success (HTTP 200), 400 for malformed JSON, 500 on InfluxDB error
+
+**`POST /analytics`** — retained for backwards compatibility
+
 - **Payload:** `{ event: string, data: Record<string, unknown> }`
-- **Storage:** Writes to InfluxDB Cloud in line-protocol format — event name becomes a tag (`event=<name>`), payload fields become InfluxDB fields with type inference (integers get the `i` suffix, floats are bare, strings are quoted)
-- **Measurement:** `events`
-- **Auth:** InfluxDB write token stored as a Cloudflare Worker secret (`INFLUXDB_TOKEN`); org and URL stored as `INFLUXDB_ORG` and `INFLUXDB_URL`
-- **CORS:** Restricted to an allowed-origins set (`https://dmgctrl.app`, `https://dev.dmgctrl.app`). The worker reads the `Origin` request header and echoes it in `Access-Control-Allow-Origin` only when it matches — unknown origins receive no CORS headers. This is intentionally stricter than the card-data proxy routes (which use `*`).
-- **Responses:** 204 on success, 400 for malformed JSON, 500 on InfluxDB error
-- **Querying:** InfluxDB Cloud 3.x (Serverless); use SQL — camelCase column names must be double-quoted, e.g.:
-  ```sql
-  SELECT time, event, country, city, "sessionId", "baseKey", "baseSet", hyperspace, "durationSeconds"
-  FROM events
-  WHERE env = 'production'
-  ORDER BY time DESC
-  ```
+- **Storage:** Writes a single event to InfluxDB; uses server receipt time as the timestamp
+- **Response:** 204 on success, 400 for malformed JSON, 500 on InfluxDB error
+
+Both endpoints share the same CORS policy: restricted to `https://dmgctrl.app` and `https://dev.dmgctrl.app`. Unknown origins receive no CORS headers.
+
+**Auth:** InfluxDB write token stored as a Cloudflare Worker secret (`INFLUXDB_TOKEN`); org and URL stored as `INFLUXDB_ORG` and `INFLUXDB_URL`.
+
+**Querying:** InfluxDB Cloud 3.x (Serverless); use SQL — camelCase column names must be double-quoted, e.g.:
+```sql
+SELECT time, event, "queued_at", country, city, "sessionId", "baseKey", "baseSet", hyperspace, "durationSeconds"
+FROM events
+WHERE env = 'production'
+ORDER BY time DESC
+```
+
+### Offline queue (`src/services/analytics.ts`)
+
+All events are written to a localStorage queue before any network attempt. A flush mechanism delivers queued events whenever connectivity is available.
+
+```
+Event occurs (online or offline)
+      ↓
+enqueue() — writes to localStorage analytics_queue
+      ↓
+flush() — POSTs queue to /analytics/batch
+      ↓
+If offline/error: queue preserved, app unaffected
+If 200: queue cleared
+      ↓
+On connectivity restored (window 'online' event or next app_start):
+flush() triggered automatically
+```
+
+**Queue format** (`localStorage` key: `analytics_queue`):
+
+```typescript
+interface QueuedEvent {
+  event_id: string                  // UUID, for deduplication
+  name: string                      // event name, e.g. 'game_started'
+  data: Record<string, unknown>     // payload including env and sessionId
+  queued_at: string                 // ISO 8601 timestamp of when the event occurred
+}
+```
+
+The queue is capped at 200 events; if the cap is reached, the oldest events are dropped. Queue writes fail silently — localStorage errors never affect app functionality. A full tournament day generates approximately 25–40 events (~60 KB at cap), well within localStorage's 5 MB limit.
+
+`flush()` is triggered automatically after every `enqueue()`, on the `window.online` event, and at app start (via `onAppStart()`). This covers all connectivity scenarios: events queued mid-session flush immediately when the device comes online; events queued in a previous offline session flush on next app start.
 
 ### Frontend analytics service (`src/services/analytics.ts`)
 
-Twenty-two public functions fire events to the worker endpoint. All are fire-and-forget — they return `Promise<void>` so tests can await them, but callers use `void` (errors are silently discarded):
+Twenty-two public functions enqueue events and trigger a flush. All are fire-and-forget — they return `Promise<void>` so tests can await them, but callers use `void` (errors are silently discarded):
 
 | Function | Event name | Payload fields |
 |---|---|---|
