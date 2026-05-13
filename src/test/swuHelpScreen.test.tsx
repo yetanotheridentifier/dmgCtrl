@@ -38,9 +38,9 @@ describe('SwuHelpScreen', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Settings' })).toBeInTheDocument()
   })
 
-  it('Renders the Formats and Base Selection section heading', () => {
+  it('Renders the Format section heading', () => {
     render(<SwuHelpScreen onBack={vi.fn()} source="setup" />)
-    expect(screen.getByRole('heading', { level: 2, name: 'Formats and Base Selection' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Format' })).toBeInTheDocument()
   })
 
   it('Renders the Troubleshooting section heading', () => {
