@@ -17,12 +17,14 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
     enableWakeLock,
     enableActionLog,
     enableFavourites,
+    enableCompetitiveMode,
     setUseHyperspace,
     setEnableForceToken,
     setEnableEpicActions,
     setEnableWakeLock,
     setEnableActionLog,
     setEnableFavourites,
+    setEnableCompetitiveMode,
   } = useUserSettings()
 
   const { favourites, removeFavourite, clearFavourites } = useFavourites()
@@ -59,6 +61,8 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
         enableActionLog={enableActionLog}
         onEnableActionLogChange={handleSettingChange('enableActionLog', setEnableActionLog)}
         onEnableFavouritesChange={handleSettingChange('enableFavourites', setEnableFavourites)}
+        enableCompetitiveMode={enableCompetitiveMode}
+        onEnableCompetitiveModeChange={handleSettingChange('enableCompetitiveMode', setEnableCompetitiveMode)}
         onRemoveFavourite={handleRemoveFavourite}
         onClearFavourites={handleClearFavourites}
         onBack={onBack}

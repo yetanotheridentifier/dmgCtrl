@@ -1,15 +1,16 @@
 import { SET_REGISTRY } from '../constants/setRegistry'
 import { Base } from '../hooks/useBases'
 
-export type Format = 'premier' | 'limited' | 'eternal'
+export type Format = 'premier' | 'limited' | 'eternal' | 'twin-suns'
 
 export const FORMAT_LABELS: Record<Format, string> = {
   premier: 'Premier',
   limited: 'Limited',
-  eternal: 'Eternal / Twin Suns',
+  eternal: 'Eternal',
+  'twin-suns': 'Twin Suns',
 }
 
-export const FORMATS: Format[] = ['premier', 'limited', 'eternal']
+export const FORMATS: Format[] = ['premier', 'limited', 'eternal', 'twin-suns']
 
 function getMostRecentRotations(count: number): Set<string> {
   const rotations = [...new Set(
@@ -24,7 +25,7 @@ export function isSetValidForFormat(setCode: string, format: Format): boolean {
   const info = SET_REGISTRY[setCode]
   if (!info) return true  // unknown sets: allow by default (forward-compatible)
 
-  if (format === 'eternal') return true
+  if (format === 'eternal' || format === 'twin-suns') return true
 
   if (format === 'premier') {
     if (info.type === 'premier-legal-special') return true

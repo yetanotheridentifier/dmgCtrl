@@ -8,6 +8,7 @@ import { Base, useBases } from './hooks/useBases'
 import { InitialSelection } from './hooks/useSwuSetup'
 import { useUserSettings } from './hooks/useUserSettings'
 import { onAppStart, onGameStart, onGameEnd, onAppInstall, onAppResume } from './services/analytics'
+import type { PlayMode } from './utils/playMode'
 
 type Screen = 'loading' | 'setup' | 'game' | 'help' | 'settings'
 
@@ -53,7 +54,7 @@ function App() {
 
   const handleReady = () => setScreen('setup')
 
-  const handleConfirm = (base: Base) => {
+  const handleConfirm = (base: Base, _playMode: PlayMode) => {
     setSelectedBase(base)
     setLastSelection({ set: base.set, aspect: base.aspects[0] ?? 'None', key: `${base.set}-${base.number}` })
     setIsInGame(true)

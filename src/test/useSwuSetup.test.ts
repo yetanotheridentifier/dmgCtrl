@@ -265,7 +265,7 @@ describe('useSwuSetup', () => {
     act(() => result.current.handleAspectChange('Aggression'))
     act(() => result.current.handleKeyChange('SOR-026'))
     act(() => result.current.handleSubmit())
-    expect(onConfirm).toHaveBeenCalledWith(baseA)
+    expect(onConfirm).toHaveBeenCalledWith(baseA, 'casual')
   })
 
   it('handleSubmit does nothing when no base is selected', () => {
@@ -321,7 +321,7 @@ describe('useSwuSetup', () => {
     expect(result.current.selectedFormat).toBe('premier')
   })
 
-  it('selectedFormat is restored from localStorage', () => {
+  it('selectedFormat is restored from localStorage (limited)', () => {
     vi.stubGlobal('localStorage', {
       getItem: vi.fn((key: string) => key === 'pref_format' ? 'limited' : null),
       setItem: vi.fn(),
@@ -330,6 +330,18 @@ describe('useSwuSetup', () => {
     })
     const { result } = renderHook(() => useSwuSetup(vi.fn()))
     expect(result.current.selectedFormat).toBe('limited')
+  })
+
+  it('selectedFormat is restored from localStorage (twin-suns)', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn((key: string) => key === 'pref_format' ? 'twin-suns' : null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.selectedFormat).toBe('twin-suns')
+    vi.unstubAllGlobals()
   })
 
   it('selectedFormat migrates sealed/draft/chaos from localStorage to limited', () => {
@@ -415,6 +427,79 @@ describe('useSwuSetup', () => {
     act(() => result.current.handleSetChange('JTL'))
     act(() => result.current.handleFormatChange('premier'))
     expect(result.current.selectedSet).toBe('JTL')
+  })
+
+})
+
+// ---------- play mode ----------
+
+describe('useSwuSetup — play mode', () => {
+
+  it('selectedPlayMode defaults to casual when storage is empty', () => {
+    vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null })
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.selectedPlayMode).toBe('casual')
+  })
+
+  it('selectedPlayMode loads bo1 from localStorage', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn((key: string) => key === 'pref_play_mode' ? 'bo1' : null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })
+    vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null })
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.selectedPlayMode).toBe('bo1')
+    vi.unstubAllGlobals()
+  })
+
+  it('selectedPlayMode loads bo3 from localStorage', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn((key: string) => key === 'pref_play_mode' ? 'bo3' : null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })
+    vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null })
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.selectedPlayMode).toBe('bo3')
+    vi.unstubAllGlobals()
+  })
+
+  it('selectedPlayMode falls back to casual for an unknown value in localStorage', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn((key: string) => key === 'pref_play_mode' ? 'tournament' : null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })
+    vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null })
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.selectedPlayMode).toBe('casual')
+    vi.unstubAllGlobals()
+  })
+
+  it('handlePlayModeChange updates selectedPlayMode', () => {
+    vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null })
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => result.current.handlePlayModeChange('bo3'))
+    expect(result.current.selectedPlayMode).toBe('bo3')
+  })
+
+  it('handlePlayModeChange persists to localStorage', () => {
+    const setItem = vi.fn()
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn().mockReturnValue(null),
+      setItem,
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })
+    vi.mocked(useBases).mockReturnValue({ bases: mockBases, loading: false, error: null })
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => result.current.handlePlayModeChange('bo1'))
+    expect(setItem).toHaveBeenCalledWith('pref_play_mode', 'bo1')
+    vi.unstubAllGlobals()
   })
 
 })

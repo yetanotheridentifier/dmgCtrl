@@ -8,7 +8,7 @@ dmgCtrl is a damage tracker for Star Wars Unlimited. For the best experience, in
 
 Open the app and the loading screen appears for a moment while base data is fetched from the internet. Once ready, the **Setup** screen opens automatically.
 
-Use the **Format** selector to choose your format, then use the **Input Mode** selector to choose how you want to pick your base.
+Use the **Format** selector to choose your format, then use the **Source** selector to choose how you want to pick your base.
 
 ### Base Selector
 
@@ -26,7 +26,7 @@ Once you've chosen a base, a preview of the card art appears below. Tap <svg wid
 
 If you have a unlisted or public deck link on swudb.com, you can load your base directly from the deck list:
 
-1. Tap **Input Mode** and select **SWUDB Import**
+1. Tap **Source** and select **SWUDB Import**
 2. Paste your SWUDB deck link (e.g. `https://swudb.com/deck/AbCdEfGhI`). Edit links are autocorrected to view links
 3. Tap **Load** — the deck name and a <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M8.5 5L17 12L8.5 19Z"/></svg> button appear below
 4. Tap <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M8.5 5L17 12L8.5 19Z"/></svg> to start the game
@@ -41,11 +41,11 @@ If **Enable Favourites** is turned on in Settings, you can save bases for quick 
 
 **Using Favourites mode:**
 
-1. Tap **Input Mode** and select **Favourites**
+1. Tap **Source** and select **Favourites**
 2. Choose a base from the dropdown — each option shows the set, name, and HP
 3. Tap <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M8.5 5L17 12L8.5 19Z"/></svg> to start the game
 
-The Favourites option only appears in Input Mode when **Enable Favourites** is on and you have at least one saved base. Your saved bases are kept even if you turn Enable Favourites off — they will be there when you turn it back on.
+The Favourites option only appears in Source when **Enable Favourites** is on and you have at least one saved base. Your saved bases are kept even if you turn Enable Favourites off — they will be there when you turn it back on.
 
 ## Settings
 
@@ -81,7 +81,8 @@ The **Format** selector filters which bases are available based on the format yo
 |---|---|
 | **Premier** | Sets in the current rotation, plus Infinite Bad Habits (IBH) which is always Premier-legal |
 | **Limited** | All standard sets (Sealed, Draft, and Chaos all use the same pool) |
-| **Eternal / Twin Suns** | All sets with no restrictions |
+| **Eternal** | All sets with no restrictions |
+| **Twin Suns** | All sets with no restrictions |
 
 Your format preference is saved and restored between sessions. If you load a deck via SWUDB Import and the base is not legal in the selected format, the start button is disabled and an error message is shown — switching to a valid format re-enables it without re-loading the deck.
 

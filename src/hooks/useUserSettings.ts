@@ -11,6 +11,7 @@ interface UserSettings {
   enableFavourites: boolean
   enableLongPress: boolean
   enableActionLog: boolean
+  enableCompetitiveMode: boolean
 }
 
 const DEFAULTS: UserSettings = {
@@ -21,6 +22,7 @@ const DEFAULTS: UserSettings = {
   enableFavourites: true,
   enableLongPress: true,
   enableActionLog: true,
+  enableCompetitiveMode: false,
 }
 
 function load(): UserSettings {
@@ -36,6 +38,7 @@ function load(): UserSettings {
       enableFavourites: parsed.enableFavourites ?? DEFAULTS.enableFavourites,
       enableLongPress: parsed.enableLongPress ?? DEFAULTS.enableLongPress,
       enableActionLog: parsed.enableActionLog ?? DEFAULTS.enableActionLog,
+      enableCompetitiveMode: parsed.enableCompetitiveMode ?? DEFAULTS.enableCompetitiveMode,
     }
   } catch {
     return { ...DEFAULTS }
@@ -54,6 +57,7 @@ type UserSettingsValue = UserSettings & {
   setEnableFavourites: (v: boolean) => void
   setEnableLongPress: (v: boolean) => void
   setEnableActionLog: (v: boolean) => void
+  setEnableCompetitiveMode: (v: boolean) => void
 }
 
 const UserSettingsContext = createContext<UserSettingsValue | null>(null)
@@ -77,6 +81,7 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     enableFavourites: settings.enableFavourites,
     enableLongPress: settings.enableLongPress,
     enableActionLog: settings.enableActionLog,
+    enableCompetitiveMode: settings.enableCompetitiveMode,
     setUseHyperspace: (v) => update({ useHyperspace: v }),
     setEnableForceToken: (v) => update({ enableForceToken: v }),
     setEnableEpicActions: (v) => update({ enableEpicActions: v }),
@@ -84,6 +89,7 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     setEnableFavourites: (v) => update({ enableFavourites: v }),
     setEnableLongPress: (v) => update({ enableLongPress: v }),
     setEnableActionLog: (v) => update({ enableActionLog: v }),
+    setEnableCompetitiveMode: (v) => update({ enableCompetitiveMode: v }),
   }
 
   return createElement(UserSettingsContext.Provider, { value }, children)

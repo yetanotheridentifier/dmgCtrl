@@ -29,6 +29,8 @@ const mockUserSettings = vi.hoisted(() => ({
   setEnableEpicActions: vi.fn(),
   setEnableWakeLock: vi.fn(),
   setEnableFavourites: vi.fn(),
+  enableCompetitiveMode: false,
+  setEnableCompetitiveMode: vi.fn(),
 }))
 vi.mock('../hooks/useUserSettings', () => ({
   useUserSettings: () => mockUserSettings,
@@ -159,6 +161,7 @@ beforeEach(() => {
 
   mockUserSettings.useHyperspace = true
   mockUserSettings.enableFavourites = false
+  mockUserSettings.enableCompetitiveMode = false
   mockFavourites.favourites = []
   mockFavourites.addFavourite.mockReset()
   mockFavourites.removeFavourite.mockReset()
@@ -196,7 +199,7 @@ describe('SwuSetupScreen', () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
     expect(screen.getByText('dmgCtrl')).toBeInTheDocument()
-    expect(screen.getByText('Input Mode:')).toBeInTheDocument()
+    expect(screen.getByText('Source:')).toBeInTheDocument()
   })
 
   it('Renders the app icon alongside the title', async () => {
@@ -400,7 +403,7 @@ describe('SwuSetupScreen', () => {
       number: '026',
       name: 'Catacombs of Cadera',
       hp: 30,
-    }))
+    }), 'casual')
   })
 
   it('Does not call onConfirm when no base selected', async () => {
@@ -422,7 +425,7 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(getBaseSelectors()[1], 'Cunning')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-022')
     await user.click(screen.getByRole('button', { name: 'Start game' }))
-    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ hp: 25 }))
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ hp: 25 }), 'casual')
   })
 
   it('Auto-selected base can be submitted without manual selection', async () => {
@@ -436,7 +439,7 @@ describe('SwuSetupScreen', () => {
     expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
       set: 'JTL',
       number: '030',
-    }))
+    }), 'casual')
   })
 
   // --- Base preview ---
@@ -503,7 +506,7 @@ describe('SwuSetupScreen', () => {
     makeMatchMediaMock(true)
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByText('dmgCtrl')).toBeInTheDocument()
-    expect(screen.getByText('Input Mode:')).toBeInTheDocument()
+    expect(screen.getByText('Source:')).toBeInTheDocument()
   })
 
   it('Portrait base options also exclude subtitle', async () => {
@@ -781,7 +784,7 @@ describe('SwuSetupScreen', () => {
     await user.click(screen.getByTestId('swudb-load-button'))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).not.toBeDisabled())
     await user.click(screen.getByRole('button', { name: 'Start game' }))
-    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ set: 'JTL', number: '030' }))
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ set: 'JTL', number: '030' }), 'casual')
   })
 
   it('Changing the URL after a load clears the deck name and submit button', async () => {
@@ -1314,6 +1317,54 @@ describe('SwuSetupScreen', () => {
 
 })
 
+describe('SwuSetupScreen — play mode selector', () => {
+
+  it('play mode selector is not rendered when enableCompetitiveMode is false', async () => {
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    expect(screen.queryByTestId('play-mode-select')).not.toBeInTheDocument()
+  })
+
+  it('play mode selector is rendered when enableCompetitiveMode is true', async () => {
+    mockUserSettings.enableCompetitiveMode = true
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(screen.getByTestId('play-mode-select')).toBeInTheDocument())
+  })
+
+  it('play mode selector has Casual, Bo1 and Bo3 options', async () => {
+    mockUserSettings.enableCompetitiveMode = true
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(screen.getByTestId('play-mode-select')).toBeInTheDocument())
+    const select = screen.getByTestId('play-mode-select') as HTMLSelectElement
+    const options = Array.from(select.options).map(o => o.value)
+    expect(options).toContain('casual')
+    expect(options).toContain('bo1')
+    expect(options).toContain('bo3')
+  })
+
+  it('play mode selector defaults to casual', async () => {
+    mockUserSettings.enableCompetitiveMode = true
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(screen.getByTestId('play-mode-select')).toBeInTheDocument())
+    expect((screen.getByTestId('play-mode-select') as HTMLSelectElement).value).toBe('casual')
+  })
+
+  it('onConfirm is called with the selected play mode', async () => {
+    mockUserSettings.enableCompetitiveMode = true
+    const user = userEvent.setup()
+    const onConfirm = vi.fn()
+    render(<SwuSetupScreen onConfirm={onConfirm} onHelp={vi.fn()} />)
+    await waitFor(() => expect(screen.getByTestId('play-mode-select')).toBeInTheDocument())
+    await user.selectOptions(screen.getByTestId('play-mode-select'), 'bo3')
+    await waitFor(() => expect(screen.getAllByRole('combobox').slice(3)).toHaveLength(3))
+    await user.selectOptions(screen.getAllByRole('combobox').slice(3)[0], 'JTL')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).not.toBeDisabled())
+    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ set: 'JTL' }), 'bo3')
+  })
+
+})
+
 describe('SwuSetupScreen analytics', () => {
 
   beforeEach(() => {
@@ -1410,13 +1461,14 @@ describe('SwuSetupScreen analytics', () => {
     expect((screen.getByTestId('format-select') as HTMLSelectElement).value).toBe('premier')
   })
 
-  it('Format selector has options for Premier, Limited, and Eternal/Twin Suns', async () => {
+  it('Format selector has options for Premier, Limited, Eternal, and Twin Suns', async () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
     const opts = Array.from(screen.getByTestId('format-select').querySelectorAll('option')).map(o => o.value)
     expect(opts).toContain('premier')
     expect(opts).toContain('limited')
     expect(opts).toContain('eternal')
+    expect(opts).toContain('twin-suns')
     expect(opts).not.toContain('sealed')
     expect(opts).not.toContain('draft')
     expect(opts).not.toContain('chaos')
