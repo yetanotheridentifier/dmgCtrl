@@ -144,9 +144,9 @@ const mockSwudbDeckSuccess = {
   },
 }
 
-// Helper: the mode selector is the first combobox; slice past it to get
+// Helper: the format selector and mode selector are the first two comboboxes; slice past them to get
 // [set-select, aspect-select, base-select].
-const getBaseSelectors = () => screen.getAllByRole('combobox').slice(1)
+const getBaseSelectors = () => screen.getAllByRole('combobox').slice(2)
 
 beforeEach(() => {
   // swuapi.com no longer returns SOR/SHD/TWI bases (rotated out of Premier format).
@@ -232,17 +232,17 @@ describe('SwuSetupScreen', () => {
     expect(screen.getByText('Aspect', { selector: 'label' })).toBeInTheDocument()
   })
 
-  it('Set selector contains all available sets', async () => {
+  it('Set selector contains Premier-valid sets by default', async () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
     const setSelect = getBaseSelectors()[0]
     const options = Array.from(setSelect.querySelectorAll('option'))
       .filter(o => !o.disabled)
       .map(o => o.value)
-    expect(options).toContain('SOR')
     expect(options).toContain('JTL')
     expect(options).toContain('LAW')
     expect(options).toContain('IBH')
+    expect(options).not.toContain('SOR')
   })
 
   it('Aspect selector is disabled before set is selected', async () => {
@@ -269,7 +269,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[0], 'LAW')
     expect(getBaseSelectors()[1]).not.toBeDisabled()
   })
 
@@ -277,6 +277,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     const aspectSelect = getBaseSelectors()[1]
     const options = Array.from(aspectSelect.querySelectorAll('option'))
@@ -323,8 +324,8 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    await user.selectOptions(getBaseSelectors()[0], 'SOR')
-    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[0], 'LAW')
+    await user.selectOptions(getBaseSelectors()[1], 'Vigilance')
     expect(getBaseSelectors()[2]).not.toBeDisabled()
   })
 
@@ -332,6 +333,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     const baseSelect = getBaseSelectors()[2]
@@ -346,6 +348,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[0], 'LAW')
@@ -359,6 +362,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
@@ -374,6 +378,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
@@ -385,6 +390,7 @@ describe('SwuSetupScreen', () => {
     const onConfirm = vi.fn()
     render(<SwuSetupScreen onConfirm={onConfirm} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
@@ -411,6 +417,7 @@ describe('SwuSetupScreen', () => {
     const onConfirm = vi.fn()
     render(<SwuSetupScreen onConfirm={onConfirm} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Cunning')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-022')
@@ -438,6 +445,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
@@ -456,6 +464,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
@@ -479,6 +488,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     const baseSelect = getBaseSelectors()[2]
@@ -501,6 +511,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Cunning')
     const baseSelect = getBaseSelectors()[2]
@@ -548,7 +559,7 @@ describe('SwuSetupScreen', () => {
     makeMatchMediaMock(true)
     mockUserSettings.enableFavourites = true
     mockFavourites.favourites = [
-      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+      { key: 'JTL-030', set: 'JTL', name: 'Lake Country', hp: 30, aspect: 'None', cardNumber: 30 },
     ]
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
@@ -801,6 +812,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
@@ -813,6 +825,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
@@ -824,6 +837,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
@@ -866,6 +880,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
@@ -884,6 +899,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
@@ -895,6 +911,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
@@ -909,6 +926,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
@@ -920,6 +938,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
@@ -942,6 +961,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
@@ -972,7 +992,7 @@ describe('SwuSetupScreen', () => {
   it('Favourites option appears in mode selector when enableFavourites is true and favourites exist', async () => {
     mockUserSettings.enableFavourites = true
     mockFavourites.favourites = [
-      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+      { key: 'JTL-030', set: 'JTL', name: 'Lake Country', hp: 30, aspect: 'None', cardNumber: 30 },
     ]
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
@@ -985,7 +1005,7 @@ describe('SwuSetupScreen', () => {
   it('Switching to Favourites mode shows the favourites dropdown and hides base dropdowns', async () => {
     mockUserSettings.enableFavourites = true
     mockFavourites.favourites = [
-      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+      { key: 'JTL-030', set: 'JTL', name: 'Lake Country', hp: 30, aspect: 'None', cardNumber: 30 },
     ]
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
@@ -999,15 +1019,15 @@ describe('SwuSetupScreen', () => {
   it('Favourites dropdown label shows set, name, and HP', async () => {
     mockUserSettings.enableFavourites = true
     mockFavourites.favourites = [
-      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+      { key: 'JTL-030', set: 'JTL', name: 'Lake Country', hp: 30, aspect: 'None', cardNumber: 30 },
     ]
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
     await user.selectOptions(screen.getByTestId('mode-select'), 'favourites')
     const option = Array.from(screen.getByTestId('favourites-select').querySelectorAll('option'))
-      .find(o => o.value === 'SOR-026')
-    expect(option?.textContent).toBe('SOR: Catacombs of Cadera (30)')
+      .find(o => o.value === 'JTL-030')
+    expect(option?.textContent).toBe('JTL: Lake Country (30)')
   })
 
   it('Favourites dropdown label uses same format regardless of aspect', async () => {
@@ -1027,27 +1047,27 @@ describe('SwuSetupScreen', () => {
   it('Selecting a favourite from the dropdown enables the start game button', async () => {
     mockUserSettings.enableFavourites = true
     mockFavourites.favourites = [
-      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+      { key: 'JTL-030', set: 'JTL', name: 'Lake Country', hp: 30, aspect: 'None', cardNumber: 30 },
     ]
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
     await user.selectOptions(screen.getByTestId('mode-select'), 'favourites')
-    await user.selectOptions(screen.getByTestId('favourites-select'), 'SOR-026')
+    await user.selectOptions(screen.getByTestId('favourites-select'), 'JTL-030')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).not.toBeDisabled())
   })
 
   it('Selecting a favourite from the dropdown shows the base preview image', async () => {
     mockUserSettings.enableFavourites = true
     mockFavourites.favourites = [
-      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+      { key: 'JTL-030', set: 'JTL', name: 'Lake Country', hp: 30, aspect: 'None', cardNumber: 30 },
     ]
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
     await user.selectOptions(screen.getByTestId('mode-select'), 'favourites')
-    await user.selectOptions(screen.getByTestId('favourites-select'), 'SOR-026')
-    await waitFor(() => expect(screen.getByAltText('Catacombs of Cadera')).toBeInTheDocument())
+    await user.selectOptions(screen.getByTestId('favourites-select'), 'JTL-030')
+    await waitFor(() => expect(screen.getByAltText('Lake Country')).toBeInTheDocument())
   })
 
   it('Navigating to Favourites mode clears selection when current base is not a favourite', async () => {
@@ -1058,6 +1078,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
@@ -1074,6 +1095,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
@@ -1087,7 +1109,7 @@ describe('SwuSetupScreen', () => {
   it('Falls back to base-selector when enableFavourites becomes false while in Favourites mode', async () => {
     mockUserSettings.enableFavourites = true
     mockFavourites.favourites = [
-      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+      { key: 'JTL-030', set: 'JTL', name: 'Lake Country', hp: 30, aspect: 'None', cardNumber: 30 },
     ]
     const user = userEvent.setup()
     const { rerender } = render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
@@ -1103,7 +1125,7 @@ describe('SwuSetupScreen', () => {
   it('Falls back to base-selector when favourites list becomes empty while in Favourites mode', async () => {
     mockUserSettings.enableFavourites = true
     mockFavourites.favourites = [
-      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+      { key: 'JTL-030', set: 'JTL', name: 'Lake Country', hp: 30, aspect: 'None', cardNumber: 30 },
     ]
     const user = userEvent.setup()
     const { rerender } = render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
@@ -1238,6 +1260,7 @@ describe('SwuSetupScreen', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
@@ -1260,17 +1283,17 @@ describe('SwuSetupScreen', () => {
   it('Favourite-selected base is remembered when switching to Base Selector', async () => {
     mockUserSettings.enableFavourites = true
     mockFavourites.favourites = [
-      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+      { key: 'JTL-030', set: 'JTL', name: 'Lake Country', hp: 30, aspect: 'None', cardNumber: 30 },
     ]
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
     await user.selectOptions(screen.getByTestId('mode-select'), 'favourites')
-    await user.selectOptions(screen.getByTestId('favourites-select'), 'SOR-026')
+    await user.selectOptions(screen.getByTestId('favourites-select'), 'JTL-030')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).not.toBeDisabled())
     await user.selectOptions(screen.getByTestId('mode-select'), 'base-selector')
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    expect((getBaseSelectors()[2] as HTMLSelectElement).value).toBe('SOR-026')
+    expect((getBaseSelectors()[2] as HTMLSelectElement).value).toBe('JTL-030')
   })
 
     // --- Favourites: star toggle in Favourites mode ---
@@ -1278,13 +1301,13 @@ describe('SwuSetupScreen', () => {
   it('Star toggle never rendered in Favourites mode', async () => {
     mockUserSettings.enableFavourites = true
     mockFavourites.favourites = [
-      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+      { key: 'JTL-030', set: 'JTL', name: 'Lake Country', hp: 30, aspect: 'None', cardNumber: 30 },
     ]
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
     await user.selectOptions(screen.getByTestId('mode-select'), 'favourites')
-    await user.selectOptions(screen.getByTestId('favourites-select'), 'SOR-026')
+    await user.selectOptions(screen.getByTestId('favourites-select'), 'JTL-030')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).not.toBeDisabled())
     expect(screen.queryByTestId('favourite-toggle')).not.toBeInTheDocument()
   })
@@ -1305,6 +1328,7 @@ describe('SwuSetupScreen analytics', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
@@ -1319,6 +1343,7 @@ describe('SwuSetupScreen analytics', () => {
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
     await user.selectOptions(getBaseSelectors()[0], 'SOR')
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
@@ -1369,6 +1394,180 @@ describe('SwuSetupScreen analytics', () => {
     await user.click(screen.getByRole('button', { name: 'Load' }))
     await waitFor(() => expect(mockOnDeckImportFailure).toHaveBeenCalledOnce())
     expect(mockOnDeckImportFailure).toHaveBeenCalledWith('base_not_recognised')
+  })
+
+  // --- Format selection ---
+
+  it('Format selector renders with testid format-select', async () => {
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    expect(screen.getByTestId('format-select')).toBeInTheDocument()
+  })
+
+  it('Format selector defaults to premier', async () => {
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    expect((screen.getByTestId('format-select') as HTMLSelectElement).value).toBe('premier')
+  })
+
+  it('Format selector has options for Premier, Limited, and Eternal/Twin Suns', async () => {
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    const opts = Array.from(screen.getByTestId('format-select').querySelectorAll('option')).map(o => o.value)
+    expect(opts).toContain('premier')
+    expect(opts).toContain('limited')
+    expect(opts).toContain('eternal')
+    expect(opts).not.toContain('sealed')
+    expect(opts).not.toContain('draft')
+    expect(opts).not.toContain('chaos')
+  })
+
+  it('Format preference is restored from localStorage', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn((key: string) => key === 'pref_format' ? 'limited' : null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    expect((screen.getByTestId('format-select') as HTMLSelectElement).value).toBe('limited')
+  })
+
+  it('Format preference is saved to localStorage when changed', async () => {
+    const setItem = vi.fn()
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn().mockReturnValue(null),
+      setItem,
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
+    expect(setItem).toHaveBeenCalledWith('pref_format', 'eternal')
+  })
+
+  it('Premier format excludes SOR from the set dropdown', async () => {
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    const opts = Array.from(screen.getByTestId('set-select').querySelectorAll('option')).map(o => o.value)
+    expect(opts).not.toContain('SOR')
+  })
+
+  it('Premier format includes JTL and LAW in the set dropdown', async () => {
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    const opts = Array.from(screen.getByTestId('set-select').querySelectorAll('option')).map(o => o.value)
+    expect(opts).toContain('JTL')
+    expect(opts).toContain('LAW')
+  })
+
+  it('Premier format includes IBH in the set dropdown', async () => {
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    const opts = Array.from(screen.getByTestId('set-select').querySelectorAll('option')).map(o => o.value)
+    expect(opts).toContain('IBH')
+  })
+
+  it('Switching to Eternal adds SOR to the set dropdown', async () => {
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
+    const opts = Array.from(screen.getByTestId('set-select').querySelectorAll('option')).map(o => o.value)
+    expect(opts).toContain('SOR')
+  })
+
+  it('Limited format includes SOR but excludes IBH from the set dropdown', async () => {
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'limited')
+    const opts = Array.from(screen.getByTestId('set-select').querySelectorAll('option')).map(o => o.value)
+    expect(opts).toContain('SOR')
+    expect(opts).not.toContain('IBH')
+  })
+
+  it('Switching format clears set selection when set is no longer valid', async () => {
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
+    await user.selectOptions(screen.getByTestId('set-select'), 'SOR')
+    expect((screen.getByTestId('set-select') as HTMLSelectElement).value).toBe('SOR')
+    await user.selectOptions(screen.getByTestId('format-select'), 'premier')
+    expect((screen.getByTestId('set-select') as HTMLSelectElement).value).toBe('')
+  })
+
+  // --- Format filtering: favourites ---
+
+  it('Favourites dropdown hides favourites from format-invalid sets', async () => {
+    mockUserSettings.enableFavourites = true
+    mockFavourites.favourites = [
+      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+      { key: 'JTL-030', set: 'JTL', name: 'Lake Country', hp: 30, aspect: 'None', cardNumber: 30 },
+    ]
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('mode-select'), 'favourites')
+    const opts = Array.from(screen.getByTestId('favourites-select').querySelectorAll('option')).map(o => o.value)
+    expect(opts).not.toContain('SOR-026')
+    expect(opts).toContain('JTL-030')
+  })
+
+  it('Switching to Eternal shows all favourites including out-of-rotation sets', async () => {
+    mockUserSettings.enableFavourites = true
+    mockFavourites.favourites = [
+      { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
+      { key: 'JTL-030', set: 'JTL', name: 'Lake Country', hp: 30, aspect: 'None', cardNumber: 30 },
+    ]
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
+    await user.selectOptions(screen.getByTestId('mode-select'), 'favourites')
+    const opts = Array.from(screen.getByTestId('favourites-select').querySelectorAll('option')).map(o => o.value)
+    expect(opts).toContain('SOR-026')
+    expect(opts).toContain('JTL-030')
+  })
+
+  // --- Format filtering: SWUDB import ---
+
+  it('SWUDB import shows format error and disables submit when loaded base is invalid for format', async () => {
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Test Deck', base: { defaultExpansionAbbreviation: 'SOR', defaultCardNumber: '026' } }) } as any)
+      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
+    }))
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('mode-select'), 'swudb-import')
+    await user.type(screen.getByRole('textbox'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    await waitFor(() => expect(screen.getByText('Base not valid for Premier format (SOR)')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Start game' })).toBeDisabled()
+  })
+
+  it('Switching to Eternal after loading a format-invalid deck enables the submit button', async () => {
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Test Deck', base: { defaultExpansionAbbreviation: 'SOR', defaultCardNumber: '026' } }) } as any)
+      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
+    }))
+    const user = userEvent.setup()
+    render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
+    await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(screen.getByTestId('mode-select'), 'swudb-import')
+    await user.type(screen.getByRole('textbox'), 'https://swudb.com/deck/ILRtEGjuCQY')
+    await user.click(screen.getByTestId('swudb-load-button'))
+    await waitFor(() => expect(screen.getByText('Base not valid for Premier format (SOR)')).toBeInTheDocument())
+    await user.selectOptions(screen.getByTestId('format-select'), 'eternal')
+    expect(screen.queryByText(/Base not valid for/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start game' })).not.toBeDisabled()
   })
 
 })

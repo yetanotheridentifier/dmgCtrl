@@ -9,8 +9,6 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 ## Planned Features
 
 ### Setup screen
-- Format selector (Premier, Sealed, Draft, Twin Suns, Eternal, Chaos)
-- Format drives which sets are legal for base selection
 - Best of 1 / Best of 3 selector
 - Game counter within a match
 

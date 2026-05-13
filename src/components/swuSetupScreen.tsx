@@ -7,6 +7,7 @@ import { useUserSettings } from '../hooks/useUserSettings'
 import { useFavourites } from '../hooks/useFavourites'
 import { normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck } from '../utils/swudbUrl'
 import { onFavouriteAdded, onFavouriteRemoved, onDeckImportSuccess, onDeckImportFailure } from '../services/analytics'
+import { isBaseValidForFormat, isSetValidForFormat, formatValidationError } from '../utils/formatFilter'
 
 export type SelectionMode = 'base-selector' | 'swudb-import' | 'favourites'
 
@@ -99,6 +100,16 @@ function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Pro
     }
   }
 
+  // Derived: format error for a loaded SWUDB deck — re-evaluated whenever format or base changes,
+  // so switching to a valid format immediately clears the error without re-fetching.
+  const swudbFormatError = swudbDeckName !== null && setup.selectedBase && !swudbError
+    ? isBaseValidForFormat(setup.selectedFormat, setup.selectedBase)
+      ? null
+      : formatValidationError(setup.selectedFormat, setup.selectedBase)
+    : null
+
+  const validFavourites = favourites.filter(f => isSetValidForFormat(f.set, setup.selectedFormat))
+
   const selectedBaseKey = setup.selectedBase
     ? `${setup.selectedBase.set}-${setup.selectedBase.number}`
     : null
@@ -131,7 +142,9 @@ function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Pro
     <SwuSetupScreenView
       loading={setup.loading}
       error={setup.error}
-      availableSets={setup.availableSets}
+      selectedFormat={setup.selectedFormat}
+      onFormatChange={setup.handleFormatChange}
+      availableSets={setup.validSets}
       availableAspects={setup.availableAspects}
       filteredBases={setup.filteredBases}
       selectedSet={setup.selectedSet}
@@ -156,13 +169,14 @@ function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Pro
       onModeChange={handleModeChange}
       swudbUrl={swudbUrl}
       swudbError={swudbError}
+      swudbFormatError={swudbFormatError}
       swudbDeckName={swudbDeckName}
       swudbLoading={swudbLoading}
       onSwudbChange={handleSwudbChange}
       onSwudbFocus={handleSwudbFocus}
       onSwudbLoad={handleSwudbLoad}
       enableFavourites={enableFavourites}
-      favourites={favourites}
+      favourites={validFavourites}
       isFavourited={isFavourited}
       onFavouriteToggle={handleFavouriteToggle}
       onFavouriteKeyChange={setup.selectBaseByKey}

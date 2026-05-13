@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useBases, Base } from './useBases'
+import { Format, getValidSets } from '../utils/formatFilter'
 
 const ASPECT_ORDER = ['Vigilance', 'Command', 'Aggression', 'Cunning', 'None']
 
@@ -19,9 +20,20 @@ export function useSwuSetup(
   const [selectedAspect, setSelectedAspect] = useState(initialSelection?.aspect ?? '')
   const [selectedKey, setSelectedKey] = useState(initialSelection?.key ?? '')
 
+  const [selectedFormat, setSelectedFormat] = useState<Format>(() => {
+    const saved = localStorage.getItem('pref_format')
+    if (saved === 'limited' || saved === 'eternal') return saved
+    if (saved === 'sealed' || saved === 'draft' || saved === 'chaos') return 'limited'
+    return 'premier'
+  })
+
   const availableSets = useMemo(() => {
     return [...new Set(bases.map(b => b.set))].sort()
   }, [bases])
+
+  const validSets = useMemo(() => {
+    return getValidSets(selectedFormat, availableSets)
+  }, [selectedFormat, availableSets])
 
   const availableAspects = useMemo(() => {
     if (!selectedSet) return []
@@ -65,6 +77,17 @@ export function useSwuSetup(
     }
   }, [filteredBases])
 
+  const handleFormatChange = (format: Format) => {
+    setSelectedFormat(format)
+    localStorage.setItem('pref_format', format)
+    // Clear selection if the current set is no longer valid for the new format
+    if (selectedSet && !getValidSets(format, availableSets).includes(selectedSet)) {
+      setSelectedSet('')
+      setSelectedAspect('')
+      setSelectedKey('')
+    }
+  }
+
   const handleSetChange = (set: string) => {
     setSelectedSet(set)
     setSelectedAspect('')
@@ -99,13 +122,16 @@ export function useSwuSetup(
   return {
     loading,
     error,
+    selectedFormat,
     selectedSet,
     selectedAspect,
     selectedKey,
     selectedBase,
     availableSets,
+    validSets,
     availableAspects,
     filteredBases,
+    handleFormatChange,
     handleSetChange,
     handleAspectChange,
     handleKeyChange,

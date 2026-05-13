@@ -8,7 +8,7 @@ dmgCtrl is a damage tracker for Star Wars Unlimited. For the best experience, in
 
 Open the app and the loading screen appears for a moment while base data is fetched from the internet. Once ready, the **Setup** screen opens automatically.
 
-Use the **Input Mode** selector to choose how you want to pick your base.
+Use the **Format** selector to choose your format, then use the **Input Mode** selector to choose how you want to pick your base.
 
 ### Base Selector
 
@@ -73,11 +73,17 @@ If no bases have been saved yet, "No favourites saved" is shown in this section.
 
 Tap <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M15.5 5L7 12L15.5 19Z"/></svg> to return to the previous screen, or <svg width="0.85em" height="0.85em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> for help.
 
-## Formats and Base Selection
+## Format
 
-The Set and Aspect dropdowns help narrow down which base you're playing. Star Wars Unlimited has multiple sets, each containing bases with different aspects and HP values.
+The **Format** selector filters which bases are available based on the format you're playing.
 
-Note: at the moment, all bases across all sets are shown regardless of format (Premier, Sealed, etc.). Format filtering, which would limit the list to bases legal in your chosen format is planned for a future update.
+| Format | Which bases are available |
+|---|---|
+| **Premier** | Sets in the current rotation, plus Infinite Bad Habits (IBH) which is always Premier-legal |
+| **Limited** | All standard sets (Sealed, Draft, and Chaos all use the same pool) |
+| **Eternal / Twin Suns** | All sets with no restrictions |
+
+Your format preference is saved and restored between sessions. If you load a deck via SWUDB Import and the base is not legal in the selected format, the start button is disabled and an error message is shown — switching to a valid format re-enables it without re-loading the deck.
 
 ## Rules
 

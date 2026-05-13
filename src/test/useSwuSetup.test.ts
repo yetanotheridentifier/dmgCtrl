@@ -314,4 +314,107 @@ describe('useSwuSetup', () => {
     expect(result.current.selectedBase).toEqual(aspectlessBase)
   })
 
+  // --- Format state ---
+
+  it('selectedFormat defaults to premier', () => {
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.selectedFormat).toBe('premier')
+  })
+
+  it('selectedFormat is restored from localStorage', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn((key: string) => key === 'pref_format' ? 'limited' : null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.selectedFormat).toBe('limited')
+  })
+
+  it('selectedFormat migrates sealed/draft/chaos from localStorage to limited', () => {
+    for (const oldValue of ['sealed', 'draft', 'chaos']) {
+      vi.stubGlobal('localStorage', {
+        getItem: vi.fn((key: string) => key === 'pref_format' ? oldValue : null),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+        clear: vi.fn(),
+      })
+      const { result } = renderHook(() => useSwuSetup(vi.fn()))
+      expect(result.current.selectedFormat).toBe('limited')
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('handleFormatChange updates selectedFormat', () => {
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => result.current.handleFormatChange('eternal'))
+    expect(result.current.selectedFormat).toBe('eternal')
+  })
+
+  it('handleFormatChange persists to localStorage', () => {
+    const setItem = vi.fn()
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn().mockReturnValue(null),
+      setItem,
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => result.current.handleFormatChange('limited'))
+    expect(setItem).toHaveBeenCalledWith('pref_format', 'limited')
+  })
+
+  // --- validSets filtered by format ---
+
+  it('validSets excludes out-of-rotation sets for premier', () => {
+    // mockBases contains SOR and TWI (both out of rotation) — neither should appear
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.validSets).not.toContain('SOR')
+    expect(result.current.validSets).not.toContain('TWI')
+  })
+
+  it('validSets includes JTL (Rotation A) for premier', () => {
+    vi.mocked(useBases).mockReturnValue({ bases: [...mockBases, aspectlessBase], loading: false, error: null })
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    expect(result.current.validSets).toContain('JTL')
+  })
+
+  it('validSets includes SOR for eternal', () => {
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => result.current.handleFormatChange('eternal'))
+    expect(result.current.validSets).toContain('SOR')
+  })
+
+  it('validSets includes SOR for limited', () => {
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => result.current.handleFormatChange('limited'))
+    expect(result.current.validSets).toContain('SOR')
+  })
+
+  // --- Format change clears selection when set becomes invalid ---
+
+  it('handleFormatChange clears set/aspect/key when selected set is no longer valid', () => {
+    // Start in eternal (SOR valid), select SOR, then switch to premier (SOR invalid)
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => result.current.handleFormatChange('eternal'))
+    act(() => result.current.handleSetChange('SOR'))
+    act(() => result.current.handleAspectChange('Aggression'))
+    act(() => result.current.handleKeyChange('SOR-026'))
+    act(() => result.current.handleFormatChange('premier'))
+    expect(result.current.selectedSet).toBe('')
+    expect(result.current.selectedAspect).toBe('')
+    expect(result.current.selectedKey).toBe('')
+  })
+
+  it('handleFormatChange keeps selection when selected set is still valid', () => {
+    // JTL is valid in both eternal and premier
+    vi.mocked(useBases).mockReturnValue({ bases: [...mockBases, aspectlessBase], loading: false, error: null })
+    const { result } = renderHook(() => useSwuSetup(vi.fn()))
+    act(() => result.current.handleFormatChange('eternal'))
+    act(() => result.current.handleSetChange('JTL'))
+    act(() => result.current.handleFormatChange('premier'))
+    expect(result.current.selectedSet).toBe('JTL')
+  })
+
 })
