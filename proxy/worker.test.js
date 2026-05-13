@@ -57,6 +57,138 @@ describe('GET passthrough', () => {
   })
 })
 
+describe('POST /analytics/batch', () => {
+  it('returns 200 with received count for a valid payload', async () => {
+    stubFetch(() => new Response(null, { status: 204 }))
+
+    const response = await SELF.fetch('https://worker.example/analytics/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: ALLOWED_ORIGIN },
+      body: JSON.stringify({
+        events: [
+          { event_id: 'uuid-1', name: 'game_started', data: { baseKey: 'SOR-026' }, queued_at: '2025-01-01T10:00:00.000Z' },
+          { event_id: 'uuid-2', name: 'game_ended', data: { baseKey: 'SOR-026' }, queued_at: '2025-01-01T10:30:00.000Z' },
+        ],
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.received).toBe(2)
+  })
+
+  it('writes each event to InfluxDB using queued_at as the timestamp and field', async () => {
+    const capturedBodies = []
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      capturedBodies.push(init?.body ?? '')
+      return new Response(null, { status: 204 })
+    }))
+
+    await SELF.fetch('https://worker.example/analytics/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: ALLOWED_ORIGIN },
+      body: JSON.stringify({
+        events: [
+          { event_id: 'uuid-1', name: 'game_started', data: { players: 2 }, queued_at: '2025-01-01T10:00:00.000Z' },
+        ],
+      }),
+    })
+
+    const lines = capturedBodies[0]
+    expect(lines).toContain('events,event=game_started')
+    expect(lines).toContain('players=2i')
+    expect(lines).toContain('queued_at="2025-01-01T10:00:00.000Z"')
+    expect(lines).toContain('1735725600')
+  })
+
+  it('writes all events in a single InfluxDB request', async () => {
+    const mock = stubFetch(() => new Response(null, { status: 204 }))
+
+    await SELF.fetch('https://worker.example/analytics/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: ALLOWED_ORIGIN },
+      body: JSON.stringify({
+        events: [
+          { event_id: 'uuid-1', name: 'game_started', data: {}, queued_at: '2025-01-01T10:00:00.000Z' },
+          { event_id: 'uuid-2', name: 'game_ended', data: {}, queued_at: '2025-01-01T10:30:00.000Z' },
+        ],
+      }),
+    })
+
+    expect(mock).toHaveBeenCalledOnce()
+    const [, init] = mock.mock.calls[0]
+    const lines = (init?.body ?? '').split('\n')
+    expect(lines).toHaveLength(2)
+  })
+
+  it('adds country and city from request.cf to every event', async () => {
+    let capturedBody = ''
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      capturedBody = init?.body ?? ''
+      return new Response(null, { status: 204 })
+    }))
+
+    await SELF.fetch('https://worker.example/analytics/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: ALLOWED_ORIGIN },
+      body: JSON.stringify({
+        events: [
+          { event_id: 'uuid-1', name: 'game_started', data: {}, queued_at: '2025-01-01T10:00:00.000Z' },
+        ],
+      }),
+      cf: { country: 'AU', city: 'Sydney' },
+    })
+
+    expect(capturedBody).toContain('country="AU"')
+    expect(capturedBody).toContain('city="Sydney"')
+  })
+
+  it('returns 400 for malformed JSON', async () => {
+    const response = await SELF.fetch('https://worker.example/analytics/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: ALLOWED_ORIGIN },
+      body: 'not valid json',
+    })
+
+    expect(response.status).toBe(400)
+  })
+
+  it('returns 500 when InfluxDB returns an error', async () => {
+    stubFetch(() => new Response('Internal Server Error', { status: 500 }))
+
+    const response = await SELF.fetch('https://worker.example/analytics/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: ALLOWED_ORIGIN },
+      body: JSON.stringify({
+        events: [
+          { event_id: 'uuid-1', name: 'game_started', data: {}, queued_at: '2025-01-01T10:00:00.000Z' },
+        ],
+      }),
+    })
+
+    expect(response.status).toBe(500)
+  })
+
+  it('responds to OPTIONS preflight with correct CORS headers', async () => {
+    const response = await SELF.fetch('https://worker.example/analytics/batch', {
+      method: 'OPTIONS',
+      headers: { Origin: ALLOWED_ORIGIN },
+    })
+
+    expect(response.status).toBe(204)
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe(ALLOWED_ORIGIN)
+  })
+
+  it('does not include CORS header for unknown origin', async () => {
+    const response = await SELF.fetch('https://worker.example/analytics/batch', {
+      method: 'OPTIONS',
+      headers: { Origin: 'https://evil.example.com' },
+    })
+
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull()
+  })
+})
+
 describe('POST /analytics', () => {
   it('returns 204 and writes to InfluxDB for a valid payload', async () => {
     const mock = stubFetch(() => new Response(null, { status: 204 }))

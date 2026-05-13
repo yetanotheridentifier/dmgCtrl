@@ -2,6 +2,10 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url)
 
+    if (url.pathname === '/analytics/batch') {
+      return handleAnalyticsBatch(request, env)
+    }
+
     if (url.pathname === '/analytics') {
       return handleAnalytics(request, env)
     }
@@ -53,6 +57,31 @@ function getCorsHeaders(origin) {
   }
 }
 
+function getCfGeo(request) {
+  const country = request.cf?.country ?? 'unknown'
+  const city = request.cf?.city ?? 'unknown'
+  const lat = request.cf?.latitude != null ? parseFloat(request.cf.latitude) : null
+  const lon = request.cf?.longitude != null ? parseFloat(request.cf.longitude) : null
+  const geoCoords = lat !== null && lon !== null ? { latitude: lat, longitude: lon } : {}
+  return { country, city, ...geoCoords }
+}
+
+function getInfluxWriteUrl(env) {
+  return `${env.INFLUXDB_URL}/api/v2/write?org=${encodeURIComponent(env.INFLUXDB_ORG)}&bucket=dmgctrl&precision=s`
+}
+
+async function writeToInflux(env, body) {
+  const res = await fetch(getInfluxWriteUrl(env), {
+    method: 'POST',
+    headers: {
+      Authorization: `Token ${env.INFLUXDB_TOKEN}`,
+      'Content-Type': 'text/plain; charset=utf-8',
+    },
+    body,
+  })
+  return res
+}
+
 async function handleAnalytics(request, env) {
   const origin = request.headers.get('Origin') ?? ''
   const corsHeaders = getCorsHeaders(origin)
@@ -68,25 +97,10 @@ async function handleAnalytics(request, env) {
     return new Response('Bad Request', { status: 400, headers: corsHeaders })
   }
 
-  const country = request.cf?.country ?? 'unknown'
-  const city = request.cf?.city ?? 'unknown'
-  const lat = request.cf?.latitude != null ? parseFloat(request.cf.latitude) : null
-  const lon = request.cf?.longitude != null ? parseFloat(request.cf.longitude) : null
-  const geoCoords = lat !== null && lon !== null ? { latitude: lat, longitude: lon } : {}
-  const data = { ...body.data, country, city, ...geoCoords }
+  const geo = getCfGeo(request)
+  const data = { ...body.data, ...geo }
 
-  const writeUrl =
-    `${env.INFLUXDB_URL}/api/v2/write` +
-    `?org=${encodeURIComponent(env.INFLUXDB_ORG)}&bucket=dmgctrl&precision=s`
-
-  const influxResponse = await fetch(writeUrl, {
-    method: 'POST',
-    headers: {
-      Authorization: `Token ${env.INFLUXDB_TOKEN}`,
-      'Content-Type': 'text/plain; charset=utf-8',
-    },
-    body: toLineProtocol(body.event, data),
-  })
+  const influxResponse = await writeToInflux(env, toLineProtocol(body.event, data))
 
   if (!influxResponse.ok) {
     return new Response('Upstream Error', { status: 500, headers: corsHeaders })
@@ -95,7 +109,49 @@ async function handleAnalytics(request, env) {
   return new Response(null, { status: 204, headers: corsHeaders })
 }
 
-function toLineProtocol(event, data) {
+async function handleAnalyticsBatch(request, env) {
+  const origin = request.headers.get('Origin') ?? ''
+  const corsHeaders = getCorsHeaders(origin)
+
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders })
+  }
+
+  let body
+  try {
+    body = await request.json()
+  } catch {
+    return new Response('Bad Request', { status: 400, headers: corsHeaders })
+  }
+
+  const { events } = body
+  if (!Array.isArray(events) || events.length === 0) {
+    return new Response(JSON.stringify({ received: 0 }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    })
+  }
+
+  const geo = getCfGeo(request)
+  const lines = events.map(event => {
+    const timestampSeconds = Math.floor(new Date(event.queued_at).getTime() / 1000)
+    const data = { ...event.data, queued_at: event.queued_at, ...geo }
+    return toLineProtocol(event.name, data, timestampSeconds)
+  })
+
+  const influxResponse = await writeToInflux(env, lines.join('\n'))
+
+  if (!influxResponse.ok) {
+    return new Response('Upstream Error', { status: 500, headers: corsHeaders })
+  }
+
+  return new Response(JSON.stringify({ received: events.length }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json', ...corsHeaders },
+  })
+}
+
+function toLineProtocol(event, data, timestampSeconds) {
   const entries = Object.entries(data ?? {})
   const fields = entries.length > 0
     ? entries
@@ -107,6 +163,6 @@ function toLineProtocol(event, data) {
         })
         .join(',')
     : 'count=1i'
-
-  return `events,event=${event} ${fields}`
+  const ts = timestampSeconds != null ? ` ${timestampSeconds}` : ''
+  return `events,event=${event} ${fields}${ts}`
 }
