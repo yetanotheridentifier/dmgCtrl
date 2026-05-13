@@ -25,7 +25,7 @@ try {
 } catch { /* no .env, rely on environment */ }
 
 const SWUAPI_URL = 'https://api.swuapi.com'
-const PROXY_URL = 'https://worker.dmgctrl.app'
+const SWU_DB_URL = 'https://api.swu-db.com'
 
 // ---------------------------------------------------------------------------
 // Pure functions (exported for testing)
@@ -91,8 +91,8 @@ async function fetchSwuApiCards() {
 }
 
 async function fetchSwuDbCards() {
-  const res = await fetch(`${PROXY_URL}/cards/search?q=type:base`)
-  if (!res.ok) throw new Error(`swu-db proxy fetch failed: ${res.status}`)
+  const res = await fetch(`${SWU_DB_URL}/cards/search?q=type:base`)
+  if (!res.ok) throw new Error(`swu-db fetch failed: ${res.status}`)
   const json = await res.json()
   return json.data.filter(c => c.VariantType === 'Normal')
 }
