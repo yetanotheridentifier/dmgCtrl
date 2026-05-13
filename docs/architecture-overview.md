@@ -20,7 +20,8 @@ Core functionality:
 - **Game action log** — a scrollable overlay panel listing all game events (damage, epic action, Force token, round changes); accessible via a log button in the bottom-right of the game screen; the most recent undoable entry shows an Undo button that restores the previous game state; gated by `enableActionLog` in user settings (on by default)
 - **Round tracker** — a button in the bottom-left corner of the game screen that increments the round counter and adds a round entry to the action log; starts at Round 1 on game start; only visible when the action log is enabled
 - **User settings** — persistent preferences (hyperspace art, force token, epic actions, wake lock, action log, favourites) accessible via the ⚙ button on the setup and game screens
-- **Favourites** — star toggle on the setup screen marks a base as a favourite; a dedicated Favourites input mode shows a sorted dropdown of saved bases for quick reselection; saved bases can be managed in the Settings screen; gated by the Enable Favourites setting
+- **Format selection** — a Format dropdown on the setup screen filters the available sets by format (Premier, Limited, Eternal / Twin Suns); selection is persisted across sessions; invalid bases in SWUDB Import mode show an error and disable the start button; changing format re-evaluates without re-fetching
+- **Favourites** — star toggle on the setup screen marks a base as a favourite; a dedicated Favourites input mode shows a sorted dropdown of saved bases for quick reselection; only bases valid for the current format are shown; saved bases can be managed in the Settings screen; gated by the Enable Favourites setting
 - **Offline capability** — PWA support means the app can be installed and used without a network connection
 
 The app is served at `/dmgCtrl/` and is designed to be added to an iOS home screen for a native-like experience.

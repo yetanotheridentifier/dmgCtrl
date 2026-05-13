@@ -68,17 +68,18 @@ vi.mock('../hooks/useUserSettings', () => ({
 }))
 
 
-// The mode selector is always present; filter it out to get the three
+// The format and mode selectors are always present; filter them out to get the three
 // base-selection dropdowns (set, aspect, base).
 const getBaseSelectors = () => {
   const all = screen.getAllByRole('combobox')
+  const formatSelect = screen.queryByTestId('format-select')
   const modeSelect = screen.queryByTestId('mode-select')
-  return modeSelect ? all.filter(el => el !== modeSelect) : all
+  return all.filter(el => el !== formatSelect && el !== modeSelect)
 }
 
 beforeEach(() => {
   vi.stubGlobal('localStorage', {
-    getItem: vi.fn().mockReturnValue(null),
+    getItem: vi.fn((key: string) => key === 'pref_format' ? 'eternal' : null),
     setItem: vi.fn(),
     removeItem: vi.fn(),
     clear: vi.fn(),

@@ -5,10 +5,13 @@ import { useOrientation } from '../hooks/useOrientation'
 import { CogIcon, ForwardIcon, HelpIcon } from './icons'
 import { SelectionMode } from './swuSetupScreen'
 import type { FavouriteBase } from '../hooks/useFavourites'
+import { Format, FORMATS, FORMAT_LABELS } from '../utils/formatFilter'
 
 interface Props {
   loading: boolean
   error: string | null
+  selectedFormat: Format
+  onFormatChange: (format: Format) => void
   availableSets: string[]
   availableAspects: string[]
   filteredBases: Base[]
@@ -34,6 +37,7 @@ interface Props {
   onModeChange: (mode: SelectionMode) => void
   swudbUrl: string
   swudbError: string | null
+  swudbFormatError: string | null
   swudbDeckName: string | null
   swudbLoading: boolean
   onSwudbChange: (text: string) => void
@@ -159,9 +163,35 @@ function ModeSelector({ selectionMode, onModeChange, showFavourites = false, sma
   )
 }
 
+function FormatSelector({ selectedFormat, onFormatChange, small = false }: {
+  selectedFormat: Format
+  onFormatChange: (format: Format) => void
+  small?: boolean
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
+      <label style={labelStyle(small)}>Format:</label>
+      <select
+        value={selectedFormat}
+        onChange={e => onFormatChange(e.target.value as Format)}
+        data-testid="format-select"
+        style={selectStyle(true, true, small)}
+      >
+        {FORMATS.map(f => (
+          <option key={f} value={f} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>
+            {FORMAT_LABELS[f]}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 function SwuSetupScreenView({
   loading,
   error,
+  selectedFormat,
+  onFormatChange,
   availableSets,
   availableAspects,
   filteredBases,
@@ -187,6 +217,7 @@ function SwuSetupScreenView({
   onModeChange,
   swudbUrl,
   swudbError,
+  swudbFormatError,
   swudbDeckName,
   swudbLoading,
   onSwudbChange,
@@ -203,6 +234,7 @@ function SwuSetupScreenView({
 
   const loadButtonEnabled = swudbUrl !== '' && swudbError === null && !swudbLoading
   const submitEnabled = !!selectedBase
+  const swudbSubmitEnabled = submitEnabled && swudbFormatError === null
 
   const imagePreview = (selectedBase: Base) => (
     <ImagePreview
@@ -318,30 +350,44 @@ function SwuSetupScreenView({
 
         {/* Row 2: deck name + star (optional) + > button */}
         {swudbDeckName !== null && (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: '2vw',
-          }}>
-            <span style={{
-              flex: 1,
-              color: 'var(--color-text-primary)',
-              fontWeight: '300',
-              fontSize: small ? 'clamp(0.75rem, 1.8vw, 0.9rem)' : 'clamp(0.9rem, 3vw, 1.2rem)',
+          <>
+            <div style={{
+              display: 'flex',
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: '2vw',
             }}>
-              {swudbDeckName}
-            </span>
-            {enableFavourites && selectedBase && starToggle(small)}
-            <button
-              onClick={onSubmit}
-              aria-label="Start game"
-              disabled={!submitEnabled}
-              style={submitButtonStyle(submitEnabled, small)}
-            >
-              <ForwardIcon />
-            </button>
-          </div>
+              <span style={{
+                flex: 1,
+                color: 'var(--color-text-primary)',
+                fontWeight: '300',
+                fontSize: small ? 'clamp(0.75rem, 1.8vw, 0.9rem)' : 'clamp(0.9rem, 3vw, 1.2rem)',
+              }}>
+                {swudbDeckName}
+              </span>
+              {enableFavourites && selectedBase && starToggle(small)}
+              <button
+                onClick={onSubmit}
+                aria-label="Start game"
+                disabled={!swudbSubmitEnabled}
+                style={submitButtonStyle(swudbSubmitEnabled, small)}
+              >
+                <ForwardIcon />
+              </button>
+            </div>
+            {swudbFormatError && (
+              <p style={{
+                color: 'var(--color-error)',
+                fontWeight: '300',
+                fontSize: small ? 'clamp(0.55rem, 1.4vw, 0.7rem)' : 'clamp(0.6rem, 2vw, 0.8rem)',
+                margin: 0,
+                textAlign: 'center',
+                textShadow: '0 1px 4px rgba(0,0,0,0.9)',
+              }}>
+                {swudbFormatError}
+              </p>
+            )}
+          </>
         )}
       </>
     )
@@ -594,6 +640,7 @@ function SwuSetupScreenView({
               gap: '1.5vh',
               padding: '14px',
             }}>
+              <FormatSelector selectedFormat={selectedFormat} onFormatChange={onFormatChange} small />
               <ModeSelector
                 selectionMode={selectionMode}
                 onModeChange={onModeChange}
@@ -722,6 +769,7 @@ function SwuSetupScreenView({
           </div>
         </div>
 
+        <FormatSelector selectedFormat={selectedFormat} onFormatChange={onFormatChange} />
         <ModeSelector
           selectionMode={selectionMode}
           onModeChange={onModeChange}
