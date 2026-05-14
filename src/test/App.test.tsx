@@ -132,6 +132,7 @@ describe('App', () => {
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
     await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await user.click(screen.getByText('Start'))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
   })
 
@@ -143,6 +144,7 @@ describe('App', () => {
     await user.selectOptions(getBaseSelectors()[1], 'Cunning')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-022')
     await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await user.click(screen.getByText('Start'))
     expect(screen.getByText('Remaining: 25')).toBeInTheDocument()
   })
 
@@ -227,6 +229,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Start game' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await user.click(screen.getByText('Start'))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
   })
 
@@ -287,6 +290,7 @@ describe('App', () => {
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
     await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await user.click(screen.getByText('Start'))
     await user.click(screen.getByRole('button', { name: 'Help' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
@@ -375,6 +379,7 @@ describe('App', () => {
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
     await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await user.click(screen.getByText('Start'))
     await user.click(screen.getByRole('button', { name: '⚙' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
@@ -399,6 +404,7 @@ describe('App', () => {
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
     await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await user.click(screen.getByText('Start'))
     await user.click(screen.getByRole('button', { name: '⚙' }))
     await user.click(screen.getByRole('button', { name: 'Help' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))

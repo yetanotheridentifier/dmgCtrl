@@ -196,20 +196,28 @@ describe('SwuGameScreen', () => {
     mockOnForceUsed.mockClear()
   })
 
+  const startGame = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByText('Start'))
+  }
+
   // --- Rendering ---
 
-  it('Renders with counter at zero', () => {
+  it('Shows Start on the game counter initially', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
-    expect(screen.getByText('0')).toBeInTheDocument()
+    expect(screen.getByTestId('game-counter')).toHaveTextContent('Start')
   })
 
-  it('Displays the correct remaining health at start', () => {
+  it('Displays the correct remaining health after starting', async () => {
+    const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
   })
 
-  it('Displays correct remaining for non-default starting health', () => {
+  it('Displays correct remaining for non-default starting health', async () => {
+    const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     expect(screen.getByText('Remaining: 25')).toBeInTheDocument()
   })
 
@@ -240,6 +248,7 @@ describe('SwuGameScreen', () => {
   it('Increments the counter when + is clicked', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     await user.click(screen.getByText('+'))
     expect(screen.getByTestId('game-counter')).toHaveTextContent('1')
   })
@@ -247,6 +256,7 @@ describe('SwuGameScreen', () => {
   it('Decrements the counter when − is clicked', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('−'))
@@ -256,14 +266,16 @@ describe('SwuGameScreen', () => {
   it('Does not decrement below zero', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     await user.click(screen.getByText('−'))
     await user.click(screen.getByText('−'))
-    expect(screen.getByText('0')).toBeInTheDocument()
+    expect(screen.getByTestId('game-counter')).toHaveTextContent('0')
   })
 
   it('Decreases remaining health when counter increments', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
@@ -273,6 +285,7 @@ describe('SwuGameScreen', () => {
   it('Increases remaining health when counter decrements', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('−'))
@@ -282,6 +295,7 @@ describe('SwuGameScreen', () => {
   it('Remaining health does not exceed starting health', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     await user.click(screen.getByText('−'))
     await user.click(screen.getByText('−'))
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
@@ -289,6 +303,7 @@ describe('SwuGameScreen', () => {
 
   it('Counter does not exceed base HP', () => {
     render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    fireEvent.click(screen.getByText('Start'))
     const plusBtn = screen.getByText('+')
     for (let i = 0; i < 30; i++) fireEvent.click(plusBtn)
     expect(screen.getByText('25')).toBeInTheDocument()
@@ -298,6 +313,7 @@ describe('SwuGameScreen', () => {
   it('Remaining health uses base hp not a hardcoded value', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     await user.click(screen.getByText('+'))
     expect(screen.getByText('Remaining: 24')).toBeInTheDocument()
   })
@@ -813,6 +829,7 @@ describe('SwuGameScreen', () => {
 
   it('Dragging + button up past dead zone applies multiple increments on release', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    fireEvent.click(screen.getByText('Start'))
     const plusBtn = screen.getByText('+')
     fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
     fireEvent.pointerMove(plusBtn, { clientY: 272, pointerId: 1 })
@@ -822,6 +839,7 @@ describe('SwuGameScreen', () => {
 
   it('Dragging - button up past dead zone applies multiple decrements on release', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    fireEvent.click(screen.getByText('Start'))
     const plusBtn = screen.getByText('+')
     for (let i = 0; i < 10; i++) fireEvent.click(plusBtn)
     const minusBtn = screen.getByText('−')
@@ -833,6 +851,7 @@ describe('SwuGameScreen', () => {
 
   it('Click immediately after a drag is suppressed', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    fireEvent.click(screen.getByText('Start'))
     const plusBtn = screen.getByText('+')
     fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
     fireEvent.pointerMove(plusBtn, { clientY: 272, pointerId: 1 })
@@ -843,6 +862,7 @@ describe('SwuGameScreen', () => {
 
   it('Drag within dead zone does not suppress subsequent click', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    fireEvent.click(screen.getByText('Start'))
     const plusBtn = screen.getByText('+')
     fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
     fireEvent.pointerMove(plusBtn, { clientY: 290, pointerId: 1 })
@@ -853,15 +873,17 @@ describe('SwuGameScreen', () => {
 
   it('pointerCancel during drag does not apply any change', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    fireEvent.click(screen.getByText('Start'))
     const plusBtn = screen.getByText('+')
     fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
     fireEvent.pointerMove(plusBtn, { clientY: 272, pointerId: 1 })
     fireEvent.pointerCancel(plusBtn, { pointerId: 1 })
-    expect(screen.getByText('0')).toBeInTheDocument()
+    expect(screen.getByTestId('game-counter')).toHaveTextContent('0')
   })
 
   it('Click is not suppressed after pointerCancel', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    fireEvent.click(screen.getByText('Start'))
     const plusBtn = screen.getByText('+')
     fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
     fireEvent.pointerMove(plusBtn, { clientY: 272, pointerId: 1 })
@@ -872,6 +894,7 @@ describe('SwuGameScreen', () => {
 
   it('Drag indicator shows correct label while dragging past dead zone', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    fireEvent.click(screen.getByText('Start'))
     const plusBtn = screen.getByText('+')
     fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
     fireEvent.pointerMove(plusBtn, { clientY: 272, pointerId: 1 })
@@ -880,6 +903,7 @@ describe('SwuGameScreen', () => {
 
   it('Drag indicator is not shown when within dead zone', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    fireEvent.click(screen.getByText('Start'))
     const plusBtn = screen.getByText('+')
     fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
     fireEvent.pointerMove(plusBtn, { clientY: 290, pointerId: 1 })
@@ -888,6 +912,7 @@ describe('SwuGameScreen', () => {
 
   it('Drag indicator disappears after pointerUp', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    fireEvent.click(screen.getByText('Start'))
     const plusBtn = screen.getByText('+')
     fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
     fireEvent.pointerMove(plusBtn, { clientY: 272, pointerId: 1 })
@@ -898,6 +923,7 @@ describe('SwuGameScreen', () => {
 
   it('Drag indicator disappears after pointerCancel', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    fireEvent.click(screen.getByText('Start'))
     const plusBtn = screen.getByText('+')
     fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
     fireEvent.pointerMove(plusBtn, { clientY: 272, pointerId: 1 })
@@ -911,6 +937,7 @@ describe('SwuGameScreen', () => {
   it('Scrubber does not activate when enableLongPress is false', () => {
     mockUserSettings.enableLongPress = false
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    fireEvent.click(screen.getByText('Start'))
     const plusBtn = screen.getByText('+')
     fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
     fireEvent.pointerMove(plusBtn, { clientY: 100, pointerId: 1 })
@@ -919,6 +946,7 @@ describe('SwuGameScreen', () => {
 
   it('+ scrubber max is capped at remaining HP', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    fireEvent.click(screen.getByText('Start'))
     const plusBtn = screen.getByText('+')
     for (let i = 0; i < 25; i++) fireEvent.click(plusBtn)
     // count=25, remaining=5; delta=200 gives raw value 10, should cap at 5
@@ -929,6 +957,7 @@ describe('SwuGameScreen', () => {
 
   it('- scrubber max is capped at current count', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    fireEvent.click(screen.getByText('Start'))
     const plusBtn = screen.getByText('+')
     for (let i = 0; i < 3; i++) fireEvent.click(plusBtn)
     // count=3; delta=200 gives raw value 10, should cap at 3
@@ -940,6 +969,7 @@ describe('SwuGameScreen', () => {
 
   it('+ scrubber does not activate when only 1 HP remains', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    fireEvent.click(screen.getByText('Start'))
     const plusBtn = screen.getByText('+')
     for (let i = 0; i < 29; i++) fireEvent.click(plusBtn)
     fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
@@ -949,6 +979,7 @@ describe('SwuGameScreen', () => {
 
   it('- scrubber does not activate when count is 1', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    fireEvent.click(screen.getByText('Start'))
     fireEvent.click(screen.getByText('+'))
     const minusBtn = screen.getByText('−')
     fireEvent.pointerDown(minusBtn, { clientY: 300, pointerId: 1 })
@@ -1000,16 +1031,16 @@ describe('SwuGameScreen', () => {
 
   // --- Round counter ---
 
-  it('Round counter shows 1 initially', () => {
+  it('Round counter shows 0 initially', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
-    expect(screen.getByTestId('round-counter')).toHaveTextContent('1')
+    expect(screen.getByTestId('round-counter')).toHaveTextContent('0')
   })
 
-  it('Clicking the round counter increments it', async () => {
+  it('Clicking the round counter when at 0 starts the game (round becomes 1)', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('round-counter'))
-    expect(screen.getByTestId('round-counter')).toHaveTextContent('2')
+    expect(screen.getByTestId('round-counter')).toHaveTextContent('1')
   })
 
   it('Round counter caps at 99', () => {
@@ -1031,15 +1062,17 @@ describe('SwuGameScreen', () => {
   it('Undo after incrementing reverts the counter to 0', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByTestId('log-btn'))
     await user.click(screen.getByTestId('log-undo-btn'))
-    expect(screen.getByText('0')).toBeInTheDocument()
+    expect(screen.getByTestId('game-counter')).toHaveTextContent('0')
   })
 
   it('Undo after decrementing reverts the counter', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('−'))
@@ -1051,12 +1084,13 @@ describe('SwuGameScreen', () => {
   it('Undo can be applied twice to step back through two actions', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
     await user.click(screen.getByTestId('log-btn'))
     await user.click(screen.getByTestId('log-undo-btn'))
     await user.click(screen.getByTestId('log-undo-btn'))
-    expect(screen.getByText('0')).toBeInTheDocument()
+    expect(screen.getByTestId('game-counter')).toHaveTextContent('0')
   })
 
   it('Undo after epic action used removes the overlay', async () => {
@@ -1111,7 +1145,8 @@ describe('SwuGameScreen', () => {
   it('Undo after round increment restores the round counter', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
-    await user.click(screen.getByTestId('round-counter'))
+    await user.click(screen.getByTestId('round-counter')) // start game → round 1 (non-undoable)
+    await user.click(screen.getByTestId('round-counter')) // round 2 (undoable)
     await user.click(screen.getByTestId('log-btn'))
     await user.click(screen.getByTestId('log-undo-btn'))
     expect(screen.getByTestId('round-counter')).toHaveTextContent('1')
@@ -1122,6 +1157,7 @@ describe('SwuGameScreen', () => {
   it('Single tap increment adds a Hit +1 entry to the log', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByTestId('log-btn'))
     expect(screen.getByText('Hit +1')).toBeInTheDocument()
@@ -1130,6 +1166,7 @@ describe('SwuGameScreen', () => {
   it('Single tap decrement adds a Heal −1 entry to the log', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('−'))
     await user.click(screen.getByTestId('log-btn'))
@@ -1139,6 +1176,7 @@ describe('SwuGameScreen', () => {
   it('Drag increment logs the full drag amount as a single entry', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     const plusBtn = screen.getByText('+')
     fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
     fireEvent.pointerMove(plusBtn, { clientY: 272, pointerId: 1 })
@@ -1151,6 +1189,7 @@ describe('SwuGameScreen', () => {
   it('Drag decrement logs the full drag amount as a single entry', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     const plusBtn = screen.getByText('+')
     for (let i = 0; i < 5; i++) fireEvent.click(plusBtn)
     const minusBtn = screen.getByText('−')
@@ -1205,7 +1244,8 @@ describe('SwuGameScreen', () => {
   it('Round increment adds an entry to the log', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
-    await user.click(screen.getByTestId('round-counter'))
+    await user.click(screen.getByTestId('round-counter')) // start game → Round 1
+    await user.click(screen.getByTestId('round-counter')) // → Round 2
     await user.click(screen.getByTestId('log-btn'))
     expect(screen.getByText('Round 2')).toBeInTheDocument()
   })
@@ -1213,6 +1253,7 @@ describe('SwuGameScreen', () => {
   it('Multiple actions appear as separate entries in the log', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByTestId('force-btn'))
     await user.click(screen.getByTestId('log-btn'))
@@ -1223,6 +1264,7 @@ describe('SwuGameScreen', () => {
   it('After undo, the undone entry is no longer shown in the log', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByTestId('log-btn'))
     expect(screen.getByText('Hit +1')).toBeInTheDocument()
@@ -1277,23 +1319,395 @@ describe('SwuGameScreen', () => {
     expect(screen.getAllByTestId('score-player-marker')).toHaveLength(2)
   })
 
-  // --- Round 1 initial entry ---
+  // --- Start phase / log initial state ---
 
-  it('log starts with a Round 1 entry', async () => {
+  it('log is empty on mount', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.queryByText('Round 1')).not.toBeInTheDocument()
+  })
+
+  it('Round 1 entry appears in log after starting the game', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     await user.click(screen.getByTestId('log-btn'))
     expect(screen.getByText('Round 1')).toBeInTheDocument()
   })
 
-  it('undo button is not shown when Round 1 is the last entry', async () => {
+  it('undo button is not shown when Round 1 is the only entry', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByTestId('log-btn'))
     await user.click(screen.getByTestId('log-undo-btn'))
     expect(screen.getByText('Round 1')).toBeInTheDocument()
     expect(screen.queryByTestId('log-undo-btn')).not.toBeInTheDocument()
+  })
+
+  // --- Start phase ---
+
+  it('Health remaining is not visible in start phase', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByText(/Remaining:/)).not.toBeInTheDocument()
+  })
+
+  it('Health remaining is visible after starting the game', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
+    expect(screen.getByText(/Remaining:/)).toBeInTheDocument()
+  })
+
+  it('+ button is disabled in start phase', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByText('+')).toBeDisabled()
+  })
+
+  it('− button is disabled in start phase', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByText('−')).toBeDisabled()
+  })
+
+  it('clicking the game counter in start phase starts the game', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('game-counter'))
+    expect(screen.getByTestId('round-counter')).toHaveTextContent('1')
+  })
+
+  it('clicking the game counter in start phase enables + and −', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('game-counter'))
+    expect(screen.getByText('+')).not.toBeDisabled()
+    expect(screen.getByText('−')).not.toBeDisabled()
+  })
+
+  it('clicking the round counter when at 0 adds non-undoable Round 1 entry to log', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Round 1')).toBeInTheDocument()
+    expect(screen.queryByTestId('log-undo-btn')).not.toBeInTheDocument()
+  })
+
+  it('counter shows 0 after starting the game', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
+    expect(screen.getByTestId('game-counter')).toHaveTextContent('0')
+  })
+
+  // --- Win / Loss confirmation ---
+
+  it('You label in score panel is a button in bo1', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    expect(screen.getByRole('button', { name: 'You' })).toBeInTheDocument()
+  })
+
+  it('Opp label in score panel is a button in bo1', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    expect(screen.getByRole('button', { name: 'Opp' })).toBeInTheDocument()
+  })
+
+  it('clicking You changes it to Confirm', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument()
+  })
+
+  it('clicking Opp changes it to Confirm', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByRole('button', { name: 'Opp' }))
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument()
+  })
+
+  it('clicking Confirm after You fills a player score marker', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    const playerMarkers = screen.getAllByTestId('score-player-marker')
+    expect(playerMarkers[0]).toHaveStyle({ background: 'linear-gradient(160deg, #4ade80 0%, #16a34a 100%)' })
+  })
+
+  it('clicking Confirm after Opp fills an opponent score marker', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByRole('button', { name: 'Opp' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    const oppMarkers = screen.getAllByTestId('score-opp-marker')
+    expect(oppMarkers[0]).toHaveStyle({ background: 'linear-gradient(160deg, #4ade80 0%, #16a34a 100%)' })
+  })
+
+  it('clicking Confirm after You resets the game to start phase', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    await startGame(user)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.getByTestId('game-counter')).toHaveTextContent('Start Game 2')
+  })
+
+  it('clicking elsewhere after clicking You dismisses Confirm', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByTestId('score-dismiss-overlay'))
+    expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'You' })).toBeInTheDocument()
+  })
+
+  it('clicking Confirm after You adds Game 1 Won to the log', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Game 1 Won')).toBeInTheDocument()
+  })
+
+  it('clicking Confirm after Opp adds Game 1 Lost to the log', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByRole('button', { name: 'Opp' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Game 1 Lost')).toBeInTheDocument()
+  })
+
+  it('clicking Confirm clears previous log entries', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await startGame(user)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.queryByText('Hit +1')).not.toBeInTheDocument()
+    expect(screen.queryByText('Round 1')).not.toBeInTheDocument()
+  })
+
+  // --- Undo game result ---
+
+  it('undo button appears on the game result entry', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByTestId('log-undo-btn')).toBeInTheDocument()
+  })
+
+  it('undo after game result reverts player score', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    const playerMarkers = screen.getAllByTestId('score-player-marker')
+    expect(playerMarkers[0]).toHaveStyle({ background: 'transparent' })
+  })
+
+  it('undo after game result restores previous log entries', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await startGame(user)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByText('Hit +1')).toBeInTheDocument()
+  })
+
+  it('undo after game result restores damage', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await startGame(user)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByTestId('game-counter')).toHaveTextContent('2')
+  })
+
+  // --- Between-game state (Bo3) ---
+
+  it('after a win in bo3 game resets to start phase', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    await startGame(user)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.getByTestId('game-counter')).toHaveTextContent('Start')
+  })
+
+  it('after a win in bo3 round counter resets to 0', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    await startGame(user)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.getByTestId('round-counter')).toHaveTextContent('0')
+  })
+
+  it('after a win in bo3 shows Game 1 Won label', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.getByTestId('game-result-label')).toHaveTextContent('Game 1 Won')
+  })
+
+  it('after a loss in bo3 shows Game 1 Lost label', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    await user.click(screen.getByRole('button', { name: 'Opp' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.getByTestId('game-result-label')).toHaveTextContent('Game 1 Lost')
+  })
+
+  it('after a win in bo3, counter shows Start Game 2', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.getByTestId('game-counter')).toHaveTextContent('Start Game 2')
+  })
+
+  it('clicking the counter in between-game state advances round to 1', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByTestId('game-counter'))
+    expect(screen.getByTestId('round-counter')).toHaveTextContent('1')
+  })
+
+  it('starting the next game removes the game result entry from the log', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByTestId('game-counter'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.queryByText('Game 1 Won')).not.toBeInTheDocument()
+  })
+
+  it('game result label is hidden after starting the next game', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByTestId('game-counter'))
+    expect(screen.queryByTestId('game-result-label')).not.toBeInTheDocument()
+  })
+
+  // --- Match over ---
+
+  it('game counter is hidden when match is over', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.queryByTestId('game-counter')).not.toBeInTheDocument()
+  })
+
+  it('round counter is hidden when match is over', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.queryByTestId('round-counter')).not.toBeInTheDocument()
+  })
+
+  it('shows Match Won after 2 wins in bo3', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByTestId('game-counter'))
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.getByTestId('match-result-label')).toHaveTextContent('Match Won')
+  })
+
+  it('shows Match Lost after 2 losses in bo3', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    await user.click(screen.getByRole('button', { name: 'Opp' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByTestId('game-counter'))
+    await user.click(screen.getByRole('button', { name: 'Opp' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.getByTestId('match-result-label')).toHaveTextContent('Match Lost')
+  })
+
+  it('shows Match Won after 1 win in bo1', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.getByTestId('match-result-label')).toHaveTextContent('Match Won')
+  })
+
+  it('shows Match Lost after 1 loss in bo1', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByRole('button', { name: 'Opp' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.getByTestId('match-result-label')).toHaveTextContent('Match Lost')
+  })
+
+  // --- Auto-loss at 0 HP ---
+
+  it('Opp auto-shows Confirm when base reaches 0 HP in bo1', async () => {
+    const user = userEvent.setup()
+    const lowHpBase = { ...mockBase, hp: 1 }
+    render(<SwuGameScreen base={lowHpBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await startGame(user)
+    await user.click(screen.getByText('+'))
+    expect(screen.queryByRole('button', { name: 'Opp' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'You' })).toBeInTheDocument()
+  })
+
+  it('does not auto-show Confirm in casual mode when base reaches 0 HP', async () => {
+    const user = userEvent.setup()
+    const lowHpBase = { ...mockBase, hp: 1 }
+    render(<SwuGameScreen base={lowHpBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
+    await user.click(screen.getByText('+'))
+    expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument()
+  })
+
+  it('You button is disabled after match is over', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.getByRole('button', { name: 'You' })).toBeDisabled()
+  })
+
+  it('Opp button is disabled after match is over', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByRole('button', { name: 'Opp' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.getByRole('button', { name: 'Opp' })).toBeDisabled()
   })
 
 })
@@ -1319,12 +1733,14 @@ describe('SwuGameScreen analytics', () => {
   it('calls onDamageDealt with baseKey, baseSet and amount 1 on single tap of +', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByText('Start'))
     await user.click(screen.getByText('+'))
     expect(mockOnDamageDealt).toHaveBeenCalledWith('SOR-026', 'SOR', 1)
   })
 
   it('calls onDamageDealt with the drag scrub amount', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    fireEvent.click(screen.getByText('Start'))
     const plusBtn = screen.getByText('+')
     fireEvent.pointerDown(plusBtn, { clientY: 300, pointerId: 1 })
     fireEvent.pointerMove(plusBtn, { clientY: 272, pointerId: 1 })
@@ -1335,6 +1751,7 @@ describe('SwuGameScreen analytics', () => {
   it('calls onDamageHealed with baseKey, baseSet and amount 1 on single tap of −', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByText('Start'))
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('−'))
     expect(mockOnDamageHealed).toHaveBeenCalledWith('SOR-026', 'SOR', 1)
@@ -1342,6 +1759,7 @@ describe('SwuGameScreen analytics', () => {
 
   it('calls onDamageHealed with the drag scrub amount', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    fireEvent.click(screen.getByText('Start'))
     const plusBtn = screen.getByText('+')
     for (let i = 0; i < 5; i++) fireEvent.click(plusBtn)
     const minusBtn = screen.getByText('−')
@@ -1354,7 +1772,8 @@ describe('SwuGameScreen analytics', () => {
   it('calls onRoundIncremented with baseKey, baseSet and new round number', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
-    await user.click(screen.getByTestId('round-counter'))
+    await user.click(screen.getByTestId('round-counter')) // start game → round 1
+    await user.click(screen.getByTestId('round-counter')) // → round 2
     expect(mockOnRoundIncremented).toHaveBeenCalledWith('SOR-026', 'SOR', 2)
   })
 
@@ -1406,6 +1825,7 @@ describe('SwuGameScreen analytics', () => {
   it('calls onUndoUsed with undoneAction hit when a hit is undone', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByText('Start'))
     await user.click(screen.getByText('+'))
     await user.click(screen.getByTestId('log-btn'))
     await user.click(screen.getByTestId('log-undo-btn'))
@@ -1415,6 +1835,7 @@ describe('SwuGameScreen analytics', () => {
   it('calls onUndoUsed with undoneAction heal when a heal is undone', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByText('Start'))
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('−'))

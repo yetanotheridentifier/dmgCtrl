@@ -8,6 +8,7 @@ interface UseMatchResult {
   incrementPlayerScore: () => void
   incrementOpponentScore: () => void
   resetMatch: () => void
+  restoreState: (state: { playerScore: number; opponentScore: number }) => void
 }
 
 export function useMatch(playMode: PlayMode): UseMatchResult {
@@ -20,6 +21,10 @@ export function useMatch(playMode: PlayMode): UseMatchResult {
   const incrementPlayerScore = () => setPlayerScore(s => Math.min(s + 1, maxScore))
   const incrementOpponentScore = () => setOpponentScore(s => Math.min(s + 1, maxScore))
   const resetMatch = () => { setPlayerScore(0); setOpponentScore(0) }
+  const restoreState = (state: { playerScore: number; opponentScore: number }) => {
+    setPlayerScore(state.playerScore)
+    setOpponentScore(state.opponentScore)
+  }
 
-  return { playerScore, opponentScore, matchOver, incrementPlayerScore, incrementOpponentScore, resetMatch }
+  return { playerScore, opponentScore, matchOver, incrementPlayerScore, incrementOpponentScore, resetMatch, restoreState }
 }

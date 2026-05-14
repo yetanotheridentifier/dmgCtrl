@@ -133,4 +133,34 @@ describe('useMatch', () => {
     })
   })
 
+  describe('restoreState', () => {
+    it('restores playerScore to the given value', () => {
+      const { result } = renderHook(() => useMatch('bo3'))
+      act(() => result.current.incrementPlayerScore())
+      act(() => result.current.restoreState({ playerScore: 0, opponentScore: 0 }))
+      expect(result.current.playerScore).toBe(0)
+    })
+
+    it('restores opponentScore to the given value', () => {
+      const { result } = renderHook(() => useMatch('bo3'))
+      act(() => result.current.incrementOpponentScore())
+      act(() => result.current.restoreState({ playerScore: 0, opponentScore: 0 }))
+      expect(result.current.opponentScore).toBe(0)
+    })
+
+    it('matchOver reflects restored scores — false when both are 0', () => {
+      const { result } = renderHook(() => useMatch('bo1'))
+      act(() => result.current.incrementPlayerScore())
+      expect(result.current.matchOver).toBe(true)
+      act(() => result.current.restoreState({ playerScore: 0, opponentScore: 0 }))
+      expect(result.current.matchOver).toBe(false)
+    })
+
+    it('matchOver reflects restored scores — true when scores indicate match over', () => {
+      const { result } = renderHook(() => useMatch('bo3'))
+      act(() => result.current.restoreState({ playerScore: 2, opponentScore: 0 }))
+      expect(result.current.matchOver).toBe(true)
+    })
+  })
+
 })

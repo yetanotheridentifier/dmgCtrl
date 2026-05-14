@@ -15,7 +15,7 @@ export function useSwuGame(maxHp: number) {
   const [forceActive, setForceActive] = useState(false)
   const [forceEnabled, setForceEnabled] = useState(false)
   const [mysticUsesRemaining, setMysticUsesRemaining] = useState(3)
-  const [round, setRound] = useState(1)
+  const [round, setRound] = useState(0)
 
   const increment = () => setCount(c => Math.min(maxHp, c + 1))
   const decrement = () => setCount(c => Math.max(0, c - 1))
@@ -54,7 +54,7 @@ export function useSwuGame(maxHp: number) {
     setForceActive(false)
     setForceEnabled(false)
     setMysticUsesRemaining(3)
-    setRound(1)
+    setRound(0)
   }
 
   return {

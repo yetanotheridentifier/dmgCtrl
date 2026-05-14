@@ -4,6 +4,8 @@
 
 The base card fills the screen, with the damage counter overlaid across the middle.
 
+**Starting a game:** the counter shows **Start** until you tap it (or tap the round tracker). Tapping Start advances the round to 1, enables the **+** and **−** buttons, and shows the Remaining HP display.
+
 - Tap **+** to add 1 damage
 - Tap **−** to remove 1 damage (won't go below zero)
 - **Remaining** shows your starting HP minus damage taken so far
@@ -31,9 +33,29 @@ When **Enable Action Log** is on in Settings, a log button appears in the bottom
 
 When **Enable Action Log** is on in Settings, a round counter button appears in the bottom-left corner.
 
-- Tap it to advance to the next round
-- The counter starts at Round 1 when a game begins
+- Tap it to start the game (when at 0) or advance to the next round
+- The counter starts at 0 and advances to Round 1 when you tap **Start** or the round tracker
 - Round changes appear in the action log
+
+### Competitive Mode (Best of 1 / Best of 3)
+
+When **Competitive Mode** is enabled in Settings and you select **Best of 1** or **Best of 3** on the setup screen, a score panel appears in the left column — **Opp** at the top and **You** at the bottom, with win marker circles between them.
+
+**Recording a result:**
+- Tap **You** to record a win, or **Opp** to record a loss — the button changes to **Confirm**
+- Tap **Confirm** to apply the result: the score advances, damage resets to 0, and a "Game N Won/Lost" entry is added to the log
+- Tap anywhere else to cancel without recording
+
+**If your base reaches 0 HP** in a competitive game, the loss confirmation is triggered automatically — tap **Confirm** to record it.
+
+**Between games (Best of 3):**
+- After a result is confirmed, the counter shows **Start Game N** — tap it to begin the next game
+- The "Game N Won/Lost" result is shown below the Start button for reference
+- Tap the **Undo** button on the game result log entry to reverse the result (restores score, damage, and the previous log entries); only available before you start the next game
+
+**Match over:**
+- After the match is decided, **Match Won** or **Match Lost** is shown on screen
+- The Start button and round tracker are hidden; the You/Opp buttons are disabled
 
 To return to base selection, tap <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M15.5 5L7 12L15.5 19Z"/></svg> in the top-left corner. This resets the damage counter to zero, ready for the next game.
 

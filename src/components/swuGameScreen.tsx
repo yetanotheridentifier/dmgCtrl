@@ -31,6 +31,22 @@ function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }
   useWakeLock(enableWakeLock)
   const [showLog, setShowLog] = useState(false)
   const [epicOverlayDismissed, setEpicOverlayDismissed] = useState(false)
+  const [pendingConfirm, setPendingConfirm] = useState<'win' | 'loss' | null>(null)
+  const [lastGameResult, setLastGameResult] = useState<'won' | 'lost' | null>(null)
+  const pendingConfirmRef = useRef(pendingConfirm)
+  useEffect(() => { pendingConfirmRef.current = pendingConfirm }, [pendingConfirm])
+
+  useEffect(() => {
+    if (
+      playMode !== 'casual' &&
+      game.round > 0 &&
+      game.count >= base.hp &&
+      !match.matchOver &&
+      pendingConfirmRef.current === null
+    ) {
+      setPendingConfirm('loss')
+    }
+  }, [game.count, base.hp, playMode, game.round, match.matchOver])
 
   const baseKey = `${base.set}-${base.number}`
   const baseSet = base.set
@@ -40,6 +56,7 @@ function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }
   const effectiveForceEnabled = isForceBase || game.forceEnabled
 
   const handleIncrement = (n: number) => {
+    if (game.round === 0) return
     const prev = game.snapshot()
     game.incrementBy(n)
     log.add({ type: 'hit', message: `Hit +${n}`, color: '#ef4444', prevState: prev })
@@ -47,6 +64,7 @@ function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }
   }
 
   const handleDecrement = (n: number) => {
+    if (game.round === 0) return
     const prev = game.snapshot()
     game.decrementBy(n)
     log.add({ type: 'heal', message: `Heal −${n}`, color: '#22c55e', prevState: prev })
@@ -89,10 +107,60 @@ function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }
     void onRoundIncremented(baseKey, baseSet, prev.round + 1)
   }
 
+  const handleStartGame = () => {
+    const prev = game.snapshot()
+    game.incrementRound()
+    log.reset()
+    log.add({ type: 'round', message: 'Round 1', color: '#ffffff', prevState: prev, undoable: false })
+    setLastGameResult(null)
+  }
+
+  const handleRoundButton = () => {
+    if (game.round === 0) {
+      handleStartGame()
+    } else {
+      handleRoundIncrement()
+    }
+  }
+
+  const handleConfirmResult = (outcome: 'win' | 'loss') => {
+    const gameNumber = match.playerScore + match.opponentScore + 1
+    const prevLogEntries = [...log.entries]
+    const prevMatchState = { playerScore: match.playerScore, opponentScore: match.opponentScore }
+    const prevGameState = game.snapshot()
+
+    if (outcome === 'win') {
+      match.incrementPlayerScore()
+    } else {
+      match.incrementOpponentScore()
+    }
+
+    game.reset()
+
+    log.clearAndAdd({
+      type: 'game-result',
+      message: `Game ${gameNumber} ${outcome === 'win' ? 'Won' : 'Lost'}`,
+      color: '#ffffff',
+      prevState: prevGameState,
+      prevLogEntries,
+      prevMatchState,
+      undoable: true,
+    })
+
+    setLastGameResult(outcome === 'win' ? 'won' : 'lost')
+    setPendingConfirm(null)
+  }
+
   const handleUndo = () => {
     const entry = log.undoLast()
     if (entry) {
       game.restoreState(entry.prevState)
+      if (entry.prevMatchState) {
+        match.restoreState(entry.prevMatchState)
+      }
+      if (entry.type === 'game-result') {
+        setLastGameResult(null)
+      }
       void onUndoUsed(baseKey, baseSet, entry.type)
     }
   }
@@ -102,13 +170,6 @@ function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }
     log.reset()
     onBack()
   }
-
-  const logInitialized = useRef(false)
-  useEffect(() => {
-    if (logInitialized.current) return
-    logInitialized.current = true
-    log.add({ type: 'round', message: 'Round 1', color: '#ffffff', prevState: game.snapshot(), undoable: false })
-  }, [])
 
   if (isPortrait) {
     return (
@@ -200,7 +261,8 @@ function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }
       onMysticAction={handleMonasteryAction}
       enableLongPress={enableLongPress}
       round={game.round}
-      onRoundIncrement={handleRoundIncrement}
+      onRoundIncrement={handleRoundButton}
+      onStartGame={handleStartGame}
       logEntries={log.entries}
       onUndo={handleUndo}
       enableActionLog={enableActionLog}
@@ -209,6 +271,13 @@ function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }
       playMode={playMode}
       playerScore={match.playerScore}
       opponentScore={match.opponentScore}
+      matchOver={match.matchOver}
+      pendingConfirm={pendingConfirm}
+      onWinPending={() => setPendingConfirm('win')}
+      onLossPending={() => setPendingConfirm('loss')}
+      onConfirmResult={() => handleConfirmResult(pendingConfirm!)}
+      onCancelConfirm={() => setPendingConfirm(null)}
+      lastGameResult={lastGameResult}
     />
   )
 }

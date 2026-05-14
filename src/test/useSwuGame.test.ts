@@ -156,15 +156,15 @@ describe('useSwuGame', () => {
 
   // --- Round tracker ---
 
-  it('round starts at 1', () => {
+  it('round starts at 0', () => {
     const { result } = renderHook(() => useSwuGame(30))
-    expect(result.current.round).toBe(1)
+    expect(result.current.round).toBe(0)
   })
 
   it('incrementRound increases round by 1', () => {
     const { result } = renderHook(() => useSwuGame(30))
     act(() => result.current.incrementRound())
-    expect(result.current.round).toBe(2)
+    expect(result.current.round).toBe(1)
   })
 
   it('incrementRound caps at 99', () => {
@@ -187,7 +187,7 @@ describe('useSwuGame', () => {
       forceActive: false,
       forceEnabled: false,
       mysticUsesRemaining: 3,
-      round: 1,
+      round: 0,
     })
   })
 
@@ -206,7 +206,7 @@ describe('useSwuGame', () => {
     expect(result.current.count).toBe(5)
     expect(result.current.epicActionUsed).toBe(true)
     expect(result.current.forceEnabled).toBe(true)
-    expect(result.current.round).toBe(2)
+    expect(result.current.round).toBe(1)
   })
 
   it('restoreState can set epicActionUsed back to false (undo)', () => {
@@ -236,7 +236,7 @@ describe('useSwuGame', () => {
     expect(result.current.forceActive).toBe(false)
     expect(result.current.forceEnabled).toBe(false)
     expect(result.current.mysticUsesRemaining).toBe(3)
-    expect(result.current.round).toBe(1)
+    expect(result.current.round).toBe(0)
   })
 
 })
