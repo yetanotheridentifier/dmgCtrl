@@ -39,7 +39,7 @@ When **Enable Action Log** is on in Settings, a round counter button appears in 
 
 ### Competitive Mode (Best of 1 / Best of 3)
 
-When **Competitive Mode** is enabled in Settings and you select **Best of 1** or **Best of 3** on the setup screen, a score panel appears in the left column — **Opp** at the top and **You** at the bottom, with win marker circles between them.
+When **Competitive Mode** is enabled in Settings and you select **Best of 1** or **Best of 3** on the setup screen, a score panel appears in the left column — **Opp** at the top, win marker circles, a **timer** in the middle, more marker circles, and **You** at the bottom.
 
 **Recording a result:**
 - Tap **You** to record a win, or **Opp** to record a loss — the button changes to **Confirm**
@@ -54,10 +54,33 @@ When **Competitive Mode** is enabled in Settings and you select **Best of 1** or
 - Tap the **Undo** button on the game result log entry to reverse the result (restores score, damage, and the previous log entries); only available before you start the next game
 
 **Match over:**
-- After the match is decided, **Match Won** or **Match Lost** is shown on screen
-- The Start button and round tracker are hidden; the You/Opp buttons are disabled
+- After the match is decided, **Match Won**, **Match Lost**, or **Match Drawn** is shown on screen
+- The Start button and round tracker are hidden; the You/Opp buttons and timer are disabled
 
 To return to base selection, tap <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M15.5 5L7 12L15.5 19Z"/></svg> in the top-left corner. This resets the damage counter to zero, ready for the next game.
+
+### Timer
+
+The timer in the score panel counts down from the configured match duration (default: 25 minutes for Best of 1, 55 minutes for Best of 3). It starts when you tap **Start** at the beginning of the first game and runs continuously until the match ends.
+
+**Timer states:**
+- **Before the first game:** the timer shows a **Draw** button — tap it to record an intentional draw (see below)
+- **During play:** the timer counts down; it turns red when less than one minute remains
+- **When time expires (0:00):** the timer shows a **Draw** button again
+
+**Recording a draw:**
+
+Draws can occur in two situations: an intentional draw agreed before the first game starts, or when time expires and neither player has a decisive lead. After time expires, complete the current round, then record the result using **You**, **Opp**, or **Draw**.
+
+- Tap **Draw** → the button changes to **Confirm**
+- Tap **Confirm** to record the draw — the match ends immediately; **Match Drawn** is shown if scores are level, or **Match Won/Lost** if one player has more game wins
+- Tap anywhere else to cancel without recording
+
+When time expires mid-game, **You** and **Opp** are still available — recording a win or loss at that point also closes the match.
+
+**Configuring the timer duration:**
+
+Go to ⚙ Settings → Enable Competitive Mode (must be on) to see the **Bo1 Timer** and **Bo3 Timer** steppers. Tap **+** or **−** to adjust in 5-minute increments (5–90 minutes).
 
 ### The Force
 

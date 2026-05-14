@@ -161,6 +161,129 @@ describe('useMatch', () => {
       act(() => result.current.restoreState({ playerScore: 2, opponentScore: 0 }))
       expect(result.current.matchOver).toBe(true)
     })
+
+    it('restoring matchDrawn true makes matchOver true', () => {
+      const { result } = renderHook(() => useMatch('bo3'))
+      act(() => result.current.restoreState({ playerScore: 0, opponentScore: 0, matchDrawn: true }))
+      expect(result.current.matchOver).toBe(true)
+    })
+
+    it('restoring matchClosedByTimer true makes matchOver true', () => {
+      const { result } = renderHook(() => useMatch('bo3'))
+      act(() => result.current.restoreState({ playerScore: 0, opponentScore: 0, matchClosedByTimer: true }))
+      expect(result.current.matchOver).toBe(true)
+    })
+
+    it('restoring matchDrawn false clears a prior recordDraw', () => {
+      const { result } = renderHook(() => useMatch('bo3'))
+      act(() => result.current.recordDraw())
+      expect(result.current.matchOver).toBe(true)
+      act(() => result.current.restoreState({ playerScore: 0, opponentScore: 0, matchDrawn: false }))
+      expect(result.current.matchOver).toBe(false)
+    })
+  })
+
+  describe('matchResult', () => {
+    it('matchResult is null initially', () => {
+      const { result } = renderHook(() => useMatch('bo1'))
+      expect(result.current.matchResult).toBeNull()
+    })
+
+    it('matchResult is won when playerScore reaches maxScore', () => {
+      const { result } = renderHook(() => useMatch('bo1'))
+      act(() => result.current.incrementPlayerScore())
+      expect(result.current.matchResult).toBe('won')
+    })
+
+    it('matchResult is lost when opponentScore reaches maxScore', () => {
+      const { result } = renderHook(() => useMatch('bo1'))
+      act(() => result.current.incrementOpponentScore())
+      expect(result.current.matchResult).toBe('lost')
+    })
+  })
+
+  describe('recordDraw', () => {
+    it('sets matchOver to true', () => {
+      const { result } = renderHook(() => useMatch('bo3'))
+      act(() => result.current.recordDraw())
+      expect(result.current.matchOver).toBe(true)
+    })
+
+    it('matchResult is drawn when scores are equal', () => {
+      const { result } = renderHook(() => useMatch('bo3'))
+      act(() => result.current.recordDraw())
+      expect(result.current.matchResult).toBe('drawn')
+    })
+
+    it('matchResult is won when playerScore is ahead', () => {
+      const { result } = renderHook(() => useMatch('bo3'))
+      act(() => result.current.incrementPlayerScore())
+      act(() => result.current.recordDraw())
+      expect(result.current.matchResult).toBe('won')
+    })
+
+    it('matchResult is lost when opponentScore is ahead', () => {
+      const { result } = renderHook(() => useMatch('bo3'))
+      act(() => result.current.incrementOpponentScore())
+      act(() => result.current.recordDraw())
+      expect(result.current.matchResult).toBe('lost')
+    })
+
+    it('resetMatch clears recordDraw — matchOver becomes false', () => {
+      const { result } = renderHook(() => useMatch('bo3'))
+      act(() => result.current.recordDraw())
+      act(() => result.current.resetMatch())
+      expect(result.current.matchOver).toBe(false)
+    })
+
+    it('resetMatch clears recordDraw — matchResult becomes null', () => {
+      const { result } = renderHook(() => useMatch('bo3'))
+      act(() => result.current.recordDraw())
+      act(() => result.current.resetMatch())
+      expect(result.current.matchResult).toBeNull()
+    })
+  })
+
+  describe('closeByTimer', () => {
+    it('sets matchOver to true', () => {
+      const { result } = renderHook(() => useMatch('bo3'))
+      act(() => result.current.closeByTimer())
+      expect(result.current.matchOver).toBe(true)
+    })
+
+    it('matchResult is drawn when scores are equal', () => {
+      const { result } = renderHook(() => useMatch('bo3'))
+      act(() => result.current.closeByTimer())
+      expect(result.current.matchResult).toBe('drawn')
+    })
+
+    it('matchResult is won when playerScore is ahead', () => {
+      const { result } = renderHook(() => useMatch('bo3'))
+      act(() => result.current.incrementPlayerScore())
+      act(() => result.current.closeByTimer())
+      expect(result.current.matchResult).toBe('won')
+    })
+
+    it('matchResult is lost when opponentScore is ahead', () => {
+      const { result } = renderHook(() => useMatch('bo3'))
+      act(() => result.current.incrementOpponentScore())
+      act(() => result.current.closeByTimer())
+      expect(result.current.matchResult).toBe('lost')
+    })
+
+    it('resetMatch clears closeByTimer — matchOver becomes false', () => {
+      const { result } = renderHook(() => useMatch('bo3'))
+      act(() => result.current.closeByTimer())
+      act(() => result.current.resetMatch())
+      expect(result.current.matchOver).toBe(false)
+    })
+
+    it('resetMatch clears closeByTimer — matchResult becomes null', () => {
+      const { result } = renderHook(() => useMatch('bo3'))
+      act(() => result.current.closeByTimer())
+      act(() => result.current.resetMatch())
+      expect(result.current.matchResult).toBeNull()
+    })
   })
 
 })

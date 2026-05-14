@@ -28,6 +28,10 @@ const mockUserSettings = vi.hoisted(() => ({
   setEnableActionLog: vi.fn(),
   enableCompetitiveMode: false,
   setEnableCompetitiveMode: vi.fn(),
+  bo1TimerMinutes: 25,
+  bo3TimerMinutes: 55,
+  setBo1TimerMinutes: vi.fn(),
+  setBo3TimerMinutes: vi.fn(),
 }))
 vi.mock('../hooks/useUserSettings', () => ({
   useUserSettings: () => mockUserSettings,
@@ -66,6 +70,8 @@ beforeEach(() => {
   mockUserSettings.enableFavourites = true
   mockUserSettings.enableActionLog = true
   mockUserSettings.enableCompetitiveMode = false
+  mockUserSettings.bo1TimerMinutes = 25
+  mockUserSettings.bo3TimerMinutes = 55
   mockFavourites.favourites = []
   mockOrientation.isPortrait = true
 })
@@ -171,6 +177,88 @@ describe('SwuSettingsScreen', () => {
     render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('checkbox', { name: /enable competitive mode/i }))
     expect(mockUserSettings.setEnableCompetitiveMode).toHaveBeenCalledWith(true)
+  })
+
+  // --- Timer duration steppers ---
+
+  it('Bo1 timer stepper is not shown when competitive mode is off', () => {
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('bo1-timer-stepper')).not.toBeInTheDocument()
+  })
+
+  it('Bo3 timer stepper is not shown when competitive mode is off', () => {
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('bo3-timer-stepper')).not.toBeInTheDocument()
+  })
+
+  it('Bo1 timer stepper is shown when competitive mode is on', () => {
+    mockUserSettings.enableCompetitiveMode = true
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('bo1-timer-stepper')).toBeInTheDocument()
+  })
+
+  it('Bo3 timer stepper is shown when competitive mode is on', () => {
+    mockUserSettings.enableCompetitiveMode = true
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('bo3-timer-stepper')).toBeInTheDocument()
+  })
+
+  it('Bo1 timer stepper shows the current value in minutes', () => {
+    mockUserSettings.enableCompetitiveMode = true
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('bo1-timer-stepper')).toHaveTextContent('25')
+  })
+
+  it('Bo3 timer stepper shows the current value in minutes', () => {
+    mockUserSettings.enableCompetitiveMode = true
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('bo3-timer-stepper')).toHaveTextContent('55')
+  })
+
+  it('clicking + on Bo1 timer calls setBo1TimerMinutes with value + 5', async () => {
+    mockUserSettings.enableCompetitiveMode = true
+    const user = userEvent.setup()
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(within(screen.getByTestId('bo1-timer-stepper')).getByRole('button', { name: '+' }))
+    expect(mockUserSettings.setBo1TimerMinutes).toHaveBeenCalledWith(30)
+  })
+
+  it('clicking − on Bo1 timer calls setBo1TimerMinutes with value − 5', async () => {
+    mockUserSettings.enableCompetitiveMode = true
+    const user = userEvent.setup()
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(within(screen.getByTestId('bo1-timer-stepper')).getByRole('button', { name: '−' }))
+    expect(mockUserSettings.setBo1TimerMinutes).toHaveBeenCalledWith(20)
+  })
+
+  it('clicking + on Bo3 timer calls setBo3TimerMinutes with value + 5', async () => {
+    mockUserSettings.enableCompetitiveMode = true
+    const user = userEvent.setup()
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(within(screen.getByTestId('bo3-timer-stepper')).getByRole('button', { name: '+' }))
+    expect(mockUserSettings.setBo3TimerMinutes).toHaveBeenCalledWith(60)
+  })
+
+  it('clicking − on Bo3 timer calls setBo3TimerMinutes with value − 5', async () => {
+    mockUserSettings.enableCompetitiveMode = true
+    const user = userEvent.setup()
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(within(screen.getByTestId('bo3-timer-stepper')).getByRole('button', { name: '−' }))
+    expect(mockUserSettings.setBo3TimerMinutes).toHaveBeenCalledWith(50)
+  })
+
+  it('+ on Bo1 timer is disabled at maximum (90)', async () => {
+    mockUserSettings.enableCompetitiveMode = true
+    mockUserSettings.bo1TimerMinutes = 90
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(within(screen.getByTestId('bo1-timer-stepper')).getByRole('button', { name: '+' })).toBeDisabled()
+  })
+
+  it('− on Bo1 timer is disabled at minimum (5)', async () => {
+    mockUserSettings.enableCompetitiveMode = true
+    mockUserSettings.bo1TimerMinutes = 5
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(within(screen.getByTestId('bo1-timer-stepper')).getByRole('button', { name: '−' })).toBeDisabled()
   })
 
   // --- Navigation ---
