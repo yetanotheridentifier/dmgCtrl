@@ -40,9 +40,24 @@ const mockUserSettings = vi.hoisted(() => ({
   setEnableLongPress: vi.fn(),
   enableActionLog: true,
   setEnableActionLog: vi.fn(),
+  bo1TimerMinutes: 25,
+  bo3TimerMinutes: 55,
 }))
 vi.mock('../hooks/useUserSettings', () => ({
   useUserSettings: () => mockUserSettings,
+}))
+
+const mockUseTimer = vi.hoisted(() =>
+  vi.fn().mockImplementation((duration: number) => ({
+    remaining: duration,
+    isRunning: false,
+    isExpired: false,
+    start: vi.fn(),
+    reset: vi.fn(),
+  }))
+)
+vi.mock('../hooks/useTimer', () => ({
+  useTimer: mockUseTimer,
 }))
 
 
@@ -187,6 +202,15 @@ describe('SwuGameScreen', () => {
     mockUserSettings.useHyperspace = false
     mockUserSettings.enableLongPress = true
     mockUserSettings.enableActionLog = true
+    mockUserSettings.bo1TimerMinutes = 25
+    mockUserSettings.bo3TimerMinutes = 55
+    mockUseTimer.mockImplementation((duration: number) => ({
+      remaining: duration,
+      isRunning: false,
+      isExpired: false,
+      start: vi.fn(),
+      reset: vi.fn(),
+    }))
     mockOnDamageDealt.mockClear()
     mockOnDamageHealed.mockClear()
     mockOnRoundIncremented.mockClear()
@@ -1317,6 +1341,160 @@ describe('SwuGameScreen', () => {
   it('bo3 shows 2 player markers', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
     expect(screen.getAllByTestId('score-player-marker')).toHaveLength(2)
+  })
+
+  // --- Timer ---
+
+  it('score panel shows a timer when playMode is bo1', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    expect(screen.getByTestId('score-timer')).toBeInTheDocument()
+  })
+
+  it('score panel shows a timer when playMode is bo3', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    expect(screen.getByTestId('score-timer')).toBeInTheDocument()
+  })
+
+  it('timer shows Draw initially for bo1 (before game starts)', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    expect(screen.getByTestId('score-timer')).toHaveTextContent('Draw')
+  })
+
+  it('timer shows Draw initially for bo3 (before game starts)', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    expect(screen.getByTestId('score-timer')).toHaveTextContent('Draw')
+  })
+
+  it('timer shows formatted time during game', async () => {
+    mockUseTimer.mockReturnValue({ remaining: 1440, isRunning: true, isExpired: false, start: vi.fn(), reset: vi.fn() })
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await startGame(user)
+    expect(screen.getByTestId('score-timer')).toHaveTextContent('24:00')
+  })
+
+  it('timer text is red when less than 60 seconds remain', async () => {
+    mockUseTimer.mockReturnValue({ remaining: 59, isRunning: true, isExpired: false, start: vi.fn(), reset: vi.fn() })
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await startGame(user)
+    expect(screen.getByTestId('score-timer')).toHaveStyle({ color: '#ef4444' })
+  })
+
+  it('timer is not shown when playMode is not provided', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('score-timer')).not.toBeInTheDocument()
+  })
+
+  it('tapping the timer before game starts shows Confirm on the timer button', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByTestId('score-timer'))
+    expect(screen.getByTestId('score-timer')).toHaveTextContent('Confirm')
+  })
+
+  it('tapping the timer during the game does not change the timer label', async () => {
+    mockUseTimer.mockReturnValue({ remaining: 1400, isRunning: true, isExpired: false, start: vi.fn(), reset: vi.fn() })
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await startGame(user)
+    await user.click(screen.getByTestId('score-timer'))
+    expect(screen.getByTestId('score-timer')).not.toHaveTextContent('Confirm')
+  })
+
+  it('dismiss overlay cancels the timer draw pending', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByTestId('score-timer'))
+    expect(screen.getByTestId('score-timer')).toHaveTextContent('Confirm')
+    await user.click(screen.getByTestId('score-dismiss-overlay'))
+    expect(screen.getByTestId('score-timer')).not.toHaveTextContent('Confirm')
+  })
+
+  it('tapping Confirm after timer draw (pre-game intentional draw) shows Match Drawn', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByTestId('score-timer'))
+    await user.click(screen.getByTestId('score-timer'))
+    expect(screen.getByTestId('match-result-label')).toHaveTextContent('Match Drawn')
+  })
+
+  it('timer shows Draw when expired', () => {
+    mockUseTimer.mockReturnValue({ remaining: 0, isRunning: false, isExpired: true, start: vi.fn(), reset: vi.fn() })
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    expect(screen.getByTestId('score-timer')).toHaveTextContent('Draw')
+  })
+
+  it('tapping the timer when expired shows Confirm', async () => {
+    mockUseTimer.mockReturnValue({ remaining: 0, isRunning: false, isExpired: true, start: vi.fn(), reset: vi.fn() })
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await startGame(user)
+    await user.click(screen.getByTestId('score-timer'))
+    expect(screen.getByTestId('score-timer')).toHaveTextContent('Confirm')
+  })
+
+  it('tapping Confirm after expired timer draw shows Match Drawn', async () => {
+    mockUseTimer.mockReturnValue({ remaining: 0, isRunning: false, isExpired: true, start: vi.fn(), reset: vi.fn() })
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await startGame(user)
+    await user.click(screen.getByTestId('score-timer'))
+    await user.click(screen.getByTestId('score-timer'))
+    expect(screen.getByTestId('match-result-label')).toHaveTextContent('Match Drawn')
+  })
+
+  it('in bo3 without timer expired, recording a win continues the match', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    await startGame(user)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.getByTestId('game-counter')).toHaveTextContent('Start Game 2')
+    expect(screen.queryByTestId('match-result-label')).not.toBeInTheDocument()
+  })
+
+  it('in bo3 between games, timer shows time not Draw', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    await startGame(user)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    // Between games: game counter shows "Start Game 2" but timer must not show Draw
+    expect(screen.getByTestId('game-counter')).toHaveTextContent('Start Game 2')
+    expect(screen.getByTestId('score-timer')).not.toHaveTextContent('Draw')
+    expect(screen.getByTestId('score-timer')).toHaveTextContent('55:00')
+  })
+
+  it('in bo3 with timer expired, recording a win closes the match', async () => {
+    mockUseTimer.mockReturnValue({ remaining: 0, isRunning: false, isExpired: true, start: vi.fn(), reset: vi.fn() })
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    await startGame(user)
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.getByTestId('match-result-label')).toHaveTextContent('Match Won')
+  })
+
+  it('in bo3 with timer expired, recording a loss closes the match', async () => {
+    mockUseTimer.mockReturnValue({ remaining: 0, isRunning: false, isExpired: true, start: vi.fn(), reset: vi.fn() })
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    await startGame(user)
+    await user.click(screen.getByRole('button', { name: 'Opp' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.getByTestId('match-result-label')).toHaveTextContent('Match Lost')
+  })
+
+  it('auto-loss at 0 HP with timer expired closes the match', async () => {
+    mockUseTimer.mockReturnValue({ remaining: 0, isRunning: false, isExpired: true, start: vi.fn(), reset: vi.fn() })
+    const lowHpBase = { ...mockBase, hp: 1 }
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={lowHpBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    await startGame(user)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.getByTestId('match-result-label')).toHaveTextContent('Match Lost')
   })
 
   // --- Start phase / log initial state ---

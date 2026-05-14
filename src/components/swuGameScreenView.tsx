@@ -10,6 +10,12 @@ const CARD_NATURAL_WIDTH = 1560
 const CARD_NATURAL_HEIGHT = 1120
 const CARD_ASPECT_RATIO = CARD_NATURAL_WIDTH / CARD_NATURAL_HEIGHT
 
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+}
+
 interface Props {
   base: Base
   onBack: () => void
@@ -51,12 +57,16 @@ interface Props {
   playerScore: number
   opponentScore: number
   matchOver: boolean
-  pendingConfirm: 'win' | 'loss' | null
+  matchDrawn: boolean
+  pendingConfirm: 'win' | 'loss' | 'draw' | null
   onWinPending: () => void
   onLossPending: () => void
+  onDrawPending: () => void
   onConfirmResult: () => void
   onCancelConfirm: () => void
-  lastGameResult: 'won' | 'lost' | null
+  lastGameResult: 'won' | 'lost' | 'drawn' | null
+  timerRemaining: number
+  timerInteractive: boolean
 }
 
 function SwuGameScreenView({
@@ -100,12 +110,16 @@ function SwuGameScreenView({
   playerScore,
   opponentScore,
   matchOver,
+  matchDrawn,
   pendingConfirm,
   onWinPending,
   onLossPending,
+  onDrawPending,
   onConfirmResult,
   onCancelConfirm,
   lastGameResult,
+  timerRemaining,
+  timerInteractive,
 }: Props) {
   const bothOverlaysActive = epicActionOverlayVisible && showEpicAction && forceActive && showForce
   const gameStarted = round > 0
@@ -866,6 +880,49 @@ function SwuGameScreenView({
               ))}
             </div>
 
+            {/* Timer / Draw button — between opp markers and player markers */}
+            {(() => {
+              const isButton = timerInteractive || pendingConfirm === 'draw'
+              const isWarning = !timerInteractive && pendingConfirm !== 'draw' && timerRemaining < 60
+              if (isButton) {
+                const isConfirm = pendingConfirm === 'draw'
+                return (
+                  <button
+                    data-testid="score-timer"
+                    onClick={isConfirm ? onConfirmResult : onDrawPending}
+                    style={{
+                      width: '100%',
+                      background: 'transparent',
+                      border: isConfirm ? '1px solid var(--color-accent)' : '1px solid #6b7280',
+                      borderRadius: '4px',
+                      padding: '0.1rem 0',
+                      cursor: 'pointer',
+                      fontSize: 'clamp(0.45rem, 1vw, 0.65rem)',
+                      fontWeight: '300',
+                      color: isConfirm ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                      letterSpacing: '0.05em',
+                      textAlign: 'center',
+                      WebkitTapHighlightColor: 'transparent',
+                    }}
+                  >{isConfirm ? 'Confirm' : 'Draw'}</button>
+                )
+              }
+              return (
+                <div
+                  data-testid="score-timer"
+                  style={{
+                    width: '100%',
+                    padding: '0.1rem 0',
+                    fontSize: 'clamp(0.5rem, 1.1vw, 0.7rem)',
+                    fontWeight: '300',
+                    color: isWarning ? '#ef4444' : 'var(--color-text-muted)',
+                    letterSpacing: '0.03em',
+                    textAlign: 'center',
+                  }}
+                >{formatTime(timerRemaining)}</div>
+              )
+            })()}
+
             <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3px' }}>
               {Array.from({ length: markerCount }, (_, i) => (
                 <div
@@ -943,7 +1000,7 @@ function SwuGameScreenView({
             zIndex: 11,
           }}
         >
-          {playerScore > opponentScore ? 'Match Won' : 'Match Lost'}
+          {matchDrawn ? 'Match Drawn' : playerScore > opponentScore ? 'Match Won' : 'Match Lost'}
         </div>
       )}
 

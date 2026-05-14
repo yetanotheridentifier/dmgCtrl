@@ -7,6 +7,7 @@ import { useOrientation } from '../hooks/useOrientation'
 import { useWakeLock } from '../hooks/useWakeLock'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { useMatch } from '../hooks/useMatch'
+import { useTimer } from '../hooks/useTimer'
 import SwuGameScreenView from './swuGameScreenView'
 import { BackIcon } from './icons'
 import AppScreenLayout from './layout/AppScreenLayout'
@@ -22,20 +23,25 @@ interface Props {
 }
 
 function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }: Props) {
-  const { enableForceToken, enableEpicActions, enableWakeLock, useHyperspace, enableLongPress, enableActionLog } = useUserSettings()
+  const { enableForceToken, enableEpicActions, enableWakeLock, useHyperspace, enableLongPress, enableActionLog, bo1TimerMinutes, bo3TimerMinutes } = useUserSettings()
   const match = useMatch(playMode)
   const art = useBaseArt(base, useHyperspace)
   const game = useSwuGame(base.hp)
   const log = useGameLog()
   const { isPortrait } = useOrientation()
   useWakeLock(enableWakeLock)
+
+  const timerDuration = (playMode === 'bo3' ? bo3TimerMinutes : bo1TimerMinutes) * 60
+  const timer = useTimer(timerDuration)
+
   const [showLog, setShowLog] = useState(false)
   const [epicOverlayDismissed, setEpicOverlayDismissed] = useState(false)
-  const [pendingConfirm, setPendingConfirm] = useState<'win' | 'loss' | null>(null)
-  const [lastGameResult, setLastGameResult] = useState<'won' | 'lost' | null>(null)
+  const [pendingConfirm, setPendingConfirm] = useState<'win' | 'loss' | 'draw' | null>(null)
+  const [lastGameResult, setLastGameResult] = useState<'won' | 'lost' | 'drawn' | null>(null)
   const pendingConfirmRef = useRef(pendingConfirm)
   useEffect(() => { pendingConfirmRef.current = pendingConfirm }, [pendingConfirm])
 
+  // Auto-trigger loss confirm when base reaches 0 HP in competitive play
   useEffect(() => {
     if (
       playMode !== 'casual' &&
@@ -54,6 +60,14 @@ function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }
   const isMysticMonastery = base.set === 'LOF' && base.number === '022'
   const isForceBase = /the force is with you/i.test(base.epicAction)
   const effectiveForceEnabled = isForceBase || game.forceEnabled
+
+  const gamesPlayed = match.playerScore + match.opponentScore
+  const isPreFirstGame = game.round === 0 && gamesPlayed === 0
+  const timerInteractive =
+    playMode !== 'casual' &&
+    !match.matchOver &&
+    pendingConfirm === null &&
+    (isPreFirstGame || timer.isExpired)
 
   const handleIncrement = (n: number) => {
     if (game.round === 0) return
@@ -110,6 +124,7 @@ function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }
   const handleStartGame = () => {
     const prev = game.snapshot()
     game.incrementRound()
+    timer.start()
     log.reset()
     log.add({ type: 'round', message: 'Round 1', color: '#ffffff', prevState: prev, undoable: false })
     setLastGameResult(null)
@@ -123,23 +138,36 @@ function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }
     }
   }
 
-  const handleConfirmResult = (outcome: 'win' | 'loss') => {
+  const handleConfirmResult = (outcome: 'win' | 'loss' | 'draw') => {
     const gameNumber = match.playerScore + match.opponentScore + 1
     const prevLogEntries = [...log.entries]
-    const prevMatchState = { playerScore: match.playerScore, opponentScore: match.opponentScore }
+    const prevMatchState = {
+      playerScore: match.playerScore,
+      opponentScore: match.opponentScore,
+      matchDrawn: false,
+      matchClosedByTimer: false,
+    }
     const prevGameState = game.snapshot()
 
     if (outcome === 'win') {
       match.incrementPlayerScore()
-    } else {
+      if (timer.isExpired) match.closeByTimer()
+    } else if (outcome === 'loss') {
       match.incrementOpponentScore()
+      if (timer.isExpired) match.closeByTimer()
+    } else {
+      match.recordDraw()
     }
 
     game.reset()
 
+    const message = outcome === 'draw'
+      ? 'Match Drawn'
+      : `Game ${gameNumber} ${outcome === 'win' ? 'Won' : 'Lost'}`
+
     log.clearAndAdd({
       type: 'game-result',
-      message: `Game ${gameNumber} ${outcome === 'win' ? 'Won' : 'Lost'}`,
+      message,
       color: '#ffffff',
       prevState: prevGameState,
       prevLogEntries,
@@ -147,7 +175,7 @@ function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }
       undoable: true,
     })
 
-    setLastGameResult(outcome === 'win' ? 'won' : 'lost')
+    setLastGameResult(outcome === 'win' ? 'won' : outcome === 'loss' ? 'lost' : 'drawn')
     setPendingConfirm(null)
   }
 
@@ -272,12 +300,16 @@ function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }
       playerScore={match.playerScore}
       opponentScore={match.opponentScore}
       matchOver={match.matchOver}
+      matchDrawn={match.matchResult === 'drawn'}
       pendingConfirm={pendingConfirm}
       onWinPending={() => setPendingConfirm('win')}
       onLossPending={() => setPendingConfirm('loss')}
+      onDrawPending={() => setPendingConfirm('draw')}
       onConfirmResult={() => handleConfirmResult(pendingConfirm!)}
       onCancelConfirm={() => setPendingConfirm(null)}
       lastGameResult={lastGameResult}
+      timerRemaining={timer.remaining}
+      timerInteractive={timerInteractive}
     />
   )
 }

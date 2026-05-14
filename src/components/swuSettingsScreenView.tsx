@@ -127,6 +127,8 @@ interface Props {
   enableActionLog: boolean
   enableFavourites: boolean
   enableCompetitiveMode: boolean
+  bo1TimerMinutes: number
+  bo3TimerMinutes: number
   favourites: FavouriteBase[]
   onUseHyperspaceChange: (v: boolean) => void
   onEnableForceTokenChange: (v: boolean) => void
@@ -135,6 +137,8 @@ interface Props {
   onEnableActionLogChange: (v: boolean) => void
   onEnableFavouritesChange: (v: boolean) => void
   onEnableCompetitiveModeChange: (v: boolean) => void
+  onBo1TimerChange: (v: number) => void
+  onBo3TimerChange: (v: number) => void
   onRemoveFavourite: (key: string) => void
   onClearFavourites: () => void
   onBack: () => void
@@ -149,6 +153,8 @@ function SwuSettingsScreenView({
   enableActionLog,
   enableFavourites,
   enableCompetitiveMode,
+  bo1TimerMinutes,
+  bo3TimerMinutes,
   favourites,
   onUseHyperspaceChange,
   onEnableForceTokenChange,
@@ -157,6 +163,8 @@ function SwuSettingsScreenView({
   onEnableActionLogChange,
   onEnableFavouritesChange,
   onEnableCompetitiveModeChange,
+  onBo1TimerChange,
+  onBo3TimerChange,
   onRemoveFavourite,
   onClearFavourites,
   onBack,
@@ -212,6 +220,79 @@ function SwuSettingsScreenView({
         onChange={onEnableCompetitiveModeChange}
         vmin={vmin}
       />
+      {enableCompetitiveMode && (() => {
+        const TIMER_MIN = 5
+        const TIMER_MAX = 90
+        const stepperStyle = {
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0.3em 0',
+          gap: '0.5em',
+        }
+        const btnStyle = (disabled: boolean) => ({
+          background: 'transparent',
+          border: `1px solid ${disabled ? 'var(--color-ui-border-muted)' : 'var(--color-ui-border)'}`,
+          borderRadius: '4px',
+          color: disabled ? 'var(--color-text-muted)' : '#ffffff',
+          cursor: disabled ? 'default' : 'pointer',
+          fontSize: '1em',
+          width: '2em',
+          height: '2em',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          WebkitTapHighlightColor: 'transparent',
+          opacity: disabled ? 0.4 : 1,
+        })
+        const valueStyle = {
+          flex: 1,
+          textAlign: 'center' as const,
+          fontSize: '0.95em',
+          color: 'var(--color-text-muted)',
+          letterSpacing: '0.03em',
+        }
+        return (
+          <div style={{ paddingLeft: '0.5em' }}>
+            <div style={{ ...stepperStyle, marginBottom: '0.25em' }}>
+              <span style={{ fontSize: '0.85em', color: 'var(--color-text-muted)', flex: 2 }}>Bo1 Timer</span>
+              <div data-testid="bo1-timer-stepper" style={{ display: 'flex', alignItems: 'center', gap: '0.4em' }}>
+                <button
+                  aria-label="−"
+                  disabled={bo1TimerMinutes <= TIMER_MIN}
+                  onClick={() => onBo1TimerChange(bo1TimerMinutes - 5)}
+                  style={btnStyle(bo1TimerMinutes <= TIMER_MIN)}
+                >−</button>
+                <span style={valueStyle}>{bo1TimerMinutes} min</span>
+                <button
+                  aria-label="+"
+                  disabled={bo1TimerMinutes >= TIMER_MAX}
+                  onClick={() => onBo1TimerChange(bo1TimerMinutes + 5)}
+                  style={btnStyle(bo1TimerMinutes >= TIMER_MAX)}
+                >+</button>
+              </div>
+            </div>
+            <div style={stepperStyle}>
+              <span style={{ fontSize: '0.85em', color: 'var(--color-text-muted)', flex: 2 }}>Bo3 Timer</span>
+              <div data-testid="bo3-timer-stepper" style={{ display: 'flex', alignItems: 'center', gap: '0.4em' }}>
+                <button
+                  aria-label="−"
+                  disabled={bo3TimerMinutes <= TIMER_MIN}
+                  onClick={() => onBo3TimerChange(bo3TimerMinutes - 5)}
+                  style={btnStyle(bo3TimerMinutes <= TIMER_MIN)}
+                >−</button>
+                <span style={valueStyle}>{bo3TimerMinutes} min</span>
+                <button
+                  aria-label="+"
+                  disabled={bo3TimerMinutes >= TIMER_MAX}
+                  onClick={() => onBo3TimerChange(bo3TimerMinutes + 5)}
+                  style={btnStyle(bo3TimerMinutes >= TIMER_MAX)}
+                >+</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </>
   )
 

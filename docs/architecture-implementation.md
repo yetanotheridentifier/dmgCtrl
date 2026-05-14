@@ -38,8 +38,9 @@ src/
     useOrientation.ts       Detects portrait vs landscape; returns isPortrait (via matchMedia change event) and vmin (Math.min(screen.width, screen.height) — stable across rotations)
     useSwuGame.ts           Damage counter, epic action used state, Force token enabled and active state
     useSwuSetup.ts          Setup screen logic — filtering, auto-select, format state, and play mode state; selectedFormat (persisted to pref_format), selectedPlayMode (persisted to pref_play_mode), validSets, handleFormatChange, handlePlayModeChange; clearing selection when the current set is not valid for the new format
-    useMatch.ts             Match score state — playerScore, opponentScore, matchOver (computed), incrementPlayerScore, incrementOpponentScore, resetMatch, restoreState; maxScore is 1 for bo1, 2 for bo3; scores are clamped at maxScore
-    useUserSettings.ts      React Context — persistent user preferences (useHyperspace, enableForceToken, enableEpicActions, enableWakeLock, enableFavourites, enableLongPress, enableActionLog, enableCompetitiveMode) backed by localStorage under key `user_settings`; all except enableCompetitiveMode default to `true`; enableCompetitiveMode defaults to `false`; `UserSettingsProvider` wraps the app in `main.tsx`
+    useMatch.ts             Match score state — playerScore, opponentScore, matchOver (computed), matchResult ('won'|'lost'|'drawn'|null, computed), incrementPlayerScore, incrementOpponentScore, recordDraw, closeByTimer, resetMatch, restoreState; maxScore is 1 for bo1, 2 for bo3; scores are clamped at maxScore; matchOver also true when matchDrawn or matchClosedByTimer flags are set; matchResult derived from final scores when match closes early
+    useTimer.ts             Countdown timer hook — remaining (seconds), isRunning, isExpired; start (idempotent — only starts once), reset; records wall-clock start time and computes remaining from elapsed time on each tick (not by counting interval ticks), so the display catches up correctly after the device screen is off; a visibilitychange listener forces an immediate recalculation when the page becomes visible again; start is called by the game screen container on first game start
+    useUserSettings.ts      React Context — persistent user preferences (useHyperspace, enableForceToken, enableEpicActions, enableWakeLock, enableFavourites, enableLongPress, enableActionLog, enableCompetitiveMode, bo1TimerMinutes, bo3TimerMinutes) backed by localStorage under key `user_settings`; all boolean preferences except enableCompetitiveMode default to `true`; enableCompetitiveMode defaults to `false`; bo1TimerMinutes defaults to 25, bo3TimerMinutes defaults to 55; `UserSettingsProvider` wraps the app in `main.tsx`
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
   services/
@@ -129,7 +130,7 @@ All other state is owned at the component level:
 | Last setup selection (`set`, `aspect`, `key`) | `App` | Saved on `handleConfirm`; passed as `initialSelection` prop to `SwuSetupScreen` so dropdowns are pre-populated on back navigation |
 | Selected format (`premier` / `limited` / `eternal` / `twin-suns`) | `useSwuSetup` / localStorage | Persisted under `pref_format`; defaults to `'premier'`; old values `'sealed'`/`'draft'`/`'chaos'` migrate to `'limited'` on first load; changing format clears the set/aspect/base selection if the current set is not valid for the new format; `'eternal'` and `'twin-suns'` have identical filtering behaviour (all sets valid) |
 | Selected play mode (`casual` / `bo1` / `bo3`) | `useSwuSetup` / localStorage | Persisted under `pref_play_mode`; defaults to `'casual'`; passed to the game screen via `onConfirm(base, playMode)`; only shown in the UI when `enableCompetitiveMode` is true |
-| Match scores (playerScore, opponentScore) | `useMatch` | Local to game screen; reset on each navigation to the game screen; matchOver is derived (true when either score reaches maxScore — 1 for bo1, 2 for bo3); `restoreState` is used by undo to reverse a confirmed game result |
+| Match scores (playerScore, opponentScore) | `useMatch` | Local to game screen; reset on each navigation to the game screen; `matchOver` is derived (true when either score reaches maxScore, or when `matchDrawn` / `matchClosedByTimer` flags are set); `matchResult` ('won'/'lost'/'drawn'/null) is derived from scores and close flags; `recordDraw()` closes the match without changing scores (intentional draw or timer-expire draw); `closeByTimer()` closes the match after a win/loss recorded at expiry; `restoreState` accepts all four fields for undo |
 | Filter state (set, aspect, card) | `useSwuSetup` | Seeded from `initialSelection` on mount; local after that |
 | Damage counter | `useSwuGame` | Local to game screen; clamped between 0 and `base.hp`; reset on each navigation to the game screen |
 | Epic action used state | `useSwuGame` | Local to game screen; toggled by the epic action button; reset on each navigation to the game screen |
@@ -543,7 +544,8 @@ In the portrait layout, the mode content area is wrapped in `<div key={selection
 3. `useSwuGame(base.hp)` manages the damage counter, epic action, and Force token (enabled + active) state
 4. `useGameLog()` manages the ordered action log; the container adds entries on counter changes, epic action mark, Force token toggle, and round increment; the log is empty on mount — a non-undoable Round 1 entry is added only when the user taps Start; `game-result` entries (added by `clearAndAdd`) replace the entire log and store `prevLogEntries` + `prevMatchState` for full undo
 5. `useWakeLock(enableWakeLock)` acquires a Screen Wake Lock on mount to prevent the screen sleeping during gameplay; the lock is automatically released when the component unmounts or the page becomes hidden, and reacquired when the page becomes visible again
-6. `useMatch(playMode)` tracks match scores — `playerScore`, `opponentScore`, and `matchOver` (derived); provides `incrementPlayerScore`, `incrementOpponentScore`, `resetMatch`, `restoreState`; active for bo1 and bo3 play modes
+6. `useMatch(playMode)` tracks match scores — `playerScore`, `opponentScore`, `matchOver` (derived), `matchResult` (derived); provides `incrementPlayerScore`, `incrementOpponentScore`, `recordDraw`, `closeByTimer`, `resetMatch`, `restoreState`; active for bo1 and bo3 play modes
+6a. `useTimer(durationSeconds)` manages the countdown timer — `remaining`, `isRunning`, `isExpired`; `start()` is idempotent (starts only once via an internal ref); called by the container on first game start; duration is `bo1TimerMinutes * 60` or `bo3TimerMinutes * 60` from user settings
 7. The container computes:
    - `showEpicAction = enableEpicActions && /epic action/i.test(base.epicAction)`
    - `showForce = enableForceToken` — the Force button slot is shown for every base when enabled
@@ -551,7 +553,7 @@ In the portrait layout, the mode content area is wrapped in `<div key={selection
    - `effectiveForceEnabled = isForceBase || forceEnabled` — Force bases start enabled; others start locked until the user taps the dimmed icon
    - `epicActionOverlayVisible = game.epicActionUsed && !epicOverlayDismissed` — separates overlay visibility from game state
    - The active Force button (`force-btn`) renders "Gain / Force" as two-row text behind the force icon image; an `onError` handler hides the image if it fails to load (e.g. offline), making the text visible as a fallback
-8. Key props passed to the view: art state, counter callbacks, `epicActionUsed`, `epicActionOverlayVisible`, `onEpicActionMark`, `onEpicActionOverlayDismiss` (only when action log is disabled), `showEpicAction`, force state, `enableActionLog`, `round`, `onRoundIncrement`, `onStartGame`, `showLog`, `onToggleLog`, `logEntries`, `onLogUndo`, `playMode`, `playerScore`, `opponentScore`, `matchOver`, `pendingConfirm`, `onWinPending`, `onLossPending`, `onConfirmResult`, `onCancelConfirm`, `lastGameResult`; the view calls `useDragScrubber` directly to manage drag gesture state
+8. Key props passed to the view: art state, counter callbacks, `epicActionUsed`, `epicActionOverlayVisible`, `onEpicActionMark`, `onEpicActionOverlayDismiss` (only when action log is disabled), `showEpicAction`, force state, `enableActionLog`, `round`, `onRoundIncrement`, `onStartGame`, `showLog`, `onToggleLog`, `logEntries`, `onLogUndo`, `playMode`, `playerScore`, `opponentScore`, `matchOver`, `matchDrawn`, `pendingConfirm`, `onWinPending`, `onLossPending`, `onDrawPending`, `onConfirmResult`, `onCancelConfirm`, `lastGameResult`, `timerRemaining`, `timerInteractive`; the view calls `useDragScrubber` directly to manage drag gesture state
 9. The left-side button column (top to bottom): back → Force icon (locked, ready, or overlay-active/greyed) when `showForce` → epic action button when `showEpicAction`; when Force is hidden the epic action button moves up to fill the gap; **score panel** (when `playMode !== 'casual'`) fills the space between the last top button and the round tracker
 10. The right-side button column (top to bottom): help → ⚙ settings
 11. The bottom row (when action log is enabled): round counter button (bottom-left, blue gradient header) → log button (bottom-right, ☰ icon)
@@ -567,25 +569,36 @@ Rendered in the left column of the game screen when `playMode !== 'casual'`. Pos
 Layout (top to bottom within the panel):
 - **Opp** button — tap to initiate a loss confirm; shows "Confirm" when `pendingConfirm === 'loss'`; red text and border in confirm state; disabled when `matchOver`
 - Opponent marker circles (1 for bo1, 2 for bo3); filled circles have a green gradient with a 3D highlight/shadow
+- **Timer / Draw button** — between the two sets of marker circles; full panel width; see below
 - Player marker circles (1 for bo1, 2 for bo3); same green gradient fill
 - **You** button — tap to initiate a win confirm; shows "Confirm" when `pendingConfirm === 'win'`; green text and border in confirm state; disabled when `matchOver`
 
-Both buttons are full-width within the 5vw panel column.
+All three buttons (Opp, timer/Draw, You) are full-width within the 5vw panel column.
 
 The panel's top offset is computed from the visible top-left buttons: `9vw` when only the back button is present; `16vw` when one additional button (Force or epic action) is visible; `23vw` when two additional buttons are both present. The panel always ends at `calc(env(safe-area-inset-bottom) + 9vw)`.
 
-**Win/loss confirmation flow:**
-1. User taps You or Opp → `pendingConfirm` is set (`'win'` or `'loss'`) in the container; a transparent full-screen dismiss overlay (zIndex 9) is added; the tapped button shows "Confirm" with a coloured border
-2. User taps Confirm → `handleConfirmResult` records the game number, snapshots the log and match state, increments the appropriate score, calls `game.reset()`, and calls `log.clearAndAdd` with a `game-result` entry storing `prevLogEntries` and `prevMatchState`; `lastGameResult` is set and `pendingConfirm` is cleared
+**Timer display and interactivity:**
+- `timerInteractive` is true when `playMode !== 'casual'` and `!matchOver` and `pendingConfirm === null` and (`isPreFirstGame` OR `timer.isExpired`); `isPreFirstGame = game.round === 0 && gamesPlayed === 0` — between Bo3 games (`round === 0` after a reset, but games have been played) the timer is not interactive and shows the running time
+- When `timerInteractive` OR `pendingConfirm === 'draw'`: rendered as a `<button>` — shows "Draw" (grey, `--color-text-muted`) when interactive, "Confirm" (accent blue, `--color-accent`) when `pendingConfirm === 'draw'`
+- When not interactive: rendered as a plain `<div>` (no border) showing `MM:SS`; text turns red when `remaining < 60`
+- The timer starts (once) when `handleStartGame` calls `timer.start()`; `useTimer` is idempotent — subsequent calls to `start()` have no effect
+
+**Win/loss/draw confirmation flow:**
+1. User taps You, Opp, or Draw → `pendingConfirm` is set (`'win'`, `'loss'`, or `'draw'`) in the container; a transparent full-screen dismiss overlay (zIndex 9) is added; the tapped button shows "Confirm"
+2. User taps Confirm → `handleConfirmResult(outcome)` runs:
+   - `'win'`: `match.incrementPlayerScore()`; if `timer.isExpired` also calls `match.closeByTimer()`
+   - `'loss'`: `match.incrementOpponentScore()`; if `timer.isExpired` also calls `match.closeByTimer()`
+   - `'draw'`: `match.recordDraw()` (closes match without changing scores)
+   - In all cases: `game.reset()`, `log.clearAndAdd` with a `game-result` entry, `lastGameResult` set, `pendingConfirm` cleared
 3. User taps elsewhere → dismiss overlay calls `onCancelConfirm`; `pendingConfirm` returns to null
 
-**Auto-loss at 0 HP:** a `useEffect` in the container watches `game.count`. When count ≥ `base.hp`, `playMode !== 'casual'`, `game.round > 0`, `!match.matchOver`, and `pendingConfirmRef.current === null`, it sets `pendingConfirm` to `'loss'`. The ref pattern (synced via a separate effect) prevents re-triggering when the user dismisses the confirm without healing.
+**Auto-loss at 0 HP:** a `useEffect` in the container watches `game.count`. When count ≥ `base.hp`, `playMode !== 'casual'`, `game.round > 0`, `!match.matchOver`, and `pendingConfirmRef.current === null`, it sets `pendingConfirm` to `'loss'`. This also fires when the timer is expired — the confirmed loss then calls `closeByTimer()` to close the match. The ref pattern (synced via a separate effect) prevents re-triggering when the user dismisses the confirm without healing.
 
 **Between-game display (Bo3):** when `lastGameResult !== null && !matchOver`, the game counter shows "Start Game N" and a "Game N Won/Lost" sub-label below it. Tapping the counter calls `onStartGame`.
 
-**Match-over display:** when `matchOver`, the game counter and round tracker are hidden; "Match Won" or "Match Lost" is displayed in the centre of the screen.
+**Match-over display:** when `matchOver`, the game counter and round tracker are hidden. The match result label shows "Match Won", "Match Lost", or "Match Drawn" based on `matchDrawn` (passed as `match.matchResult === 'drawn'`) and the final score comparison.
 
-**Undo:** the `game-result` log entry has `undoable: true`. Calling `undoLast()` detects the `prevLogEntries` field and restores the full previous log (via `setEntries(last.prevLogEntries)`). The container also calls `match.restoreState(entry.prevMatchState)` and clears `lastGameResult`.
+**Undo:** the `game-result` log entry has `undoable: true`. Calling `undoLast()` detects the `prevLogEntries` field and restores the full previous log (via `setEntries(last.prevLogEntries)`). The container also calls `match.restoreState(entry.prevMatchState)` — which includes `matchDrawn` and `matchClosedByTimer` flags — and clears `lastGameResult`.
 
 ### Settings screen
 

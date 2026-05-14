@@ -18,6 +18,8 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
     enableActionLog,
     enableFavourites,
     enableCompetitiveMode,
+    bo1TimerMinutes,
+    bo3TimerMinutes,
     setUseHyperspace,
     setEnableForceToken,
     setEnableEpicActions,
@@ -25,6 +27,8 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
     setEnableActionLog,
     setEnableFavourites,
     setEnableCompetitiveMode,
+    setBo1TimerMinutes,
+    setBo3TimerMinutes,
   } = useUserSettings()
 
   const { favourites, removeFavourite, clearFavourites } = useFavourites()
@@ -63,6 +67,10 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
         onEnableFavouritesChange={handleSettingChange('enableFavourites', setEnableFavourites)}
         enableCompetitiveMode={enableCompetitiveMode}
         onEnableCompetitiveModeChange={handleSettingChange('enableCompetitiveMode', setEnableCompetitiveMode)}
+        bo1TimerMinutes={bo1TimerMinutes}
+        bo3TimerMinutes={bo3TimerMinutes}
+        onBo1TimerChange={setBo1TimerMinutes}
+        onBo3TimerChange={setBo3TimerMinutes}
         onRemoveFavourite={handleRemoveFavourite}
         onClearFavourites={handleClearFavourites}
         onBack={onBack}

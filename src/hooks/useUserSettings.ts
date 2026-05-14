@@ -12,6 +12,8 @@ interface UserSettings {
   enableLongPress: boolean
   enableActionLog: boolean
   enableCompetitiveMode: boolean
+  bo1TimerMinutes: number
+  bo3TimerMinutes: number
 }
 
 const DEFAULTS: UserSettings = {
@@ -23,6 +25,8 @@ const DEFAULTS: UserSettings = {
   enableLongPress: true,
   enableActionLog: true,
   enableCompetitiveMode: false,
+  bo1TimerMinutes: 25,
+  bo3TimerMinutes: 55,
 }
 
 function load(): UserSettings {
@@ -39,6 +43,8 @@ function load(): UserSettings {
       enableLongPress: parsed.enableLongPress ?? DEFAULTS.enableLongPress,
       enableActionLog: parsed.enableActionLog ?? DEFAULTS.enableActionLog,
       enableCompetitiveMode: parsed.enableCompetitiveMode ?? DEFAULTS.enableCompetitiveMode,
+      bo1TimerMinutes: parsed.bo1TimerMinutes ?? DEFAULTS.bo1TimerMinutes,
+      bo3TimerMinutes: parsed.bo3TimerMinutes ?? DEFAULTS.bo3TimerMinutes,
     }
   } catch {
     return { ...DEFAULTS }
@@ -58,6 +64,8 @@ type UserSettingsValue = UserSettings & {
   setEnableLongPress: (v: boolean) => void
   setEnableActionLog: (v: boolean) => void
   setEnableCompetitiveMode: (v: boolean) => void
+  setBo1TimerMinutes: (v: number) => void
+  setBo3TimerMinutes: (v: number) => void
 }
 
 const UserSettingsContext = createContext<UserSettingsValue | null>(null)
@@ -82,6 +90,8 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     enableLongPress: settings.enableLongPress,
     enableActionLog: settings.enableActionLog,
     enableCompetitiveMode: settings.enableCompetitiveMode,
+    bo1TimerMinutes: settings.bo1TimerMinutes,
+    bo3TimerMinutes: settings.bo3TimerMinutes,
     setUseHyperspace: (v) => update({ useHyperspace: v }),
     setEnableForceToken: (v) => update({ enableForceToken: v }),
     setEnableEpicActions: (v) => update({ enableEpicActions: v }),
@@ -90,6 +100,8 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     setEnableLongPress: (v) => update({ enableLongPress: v }),
     setEnableActionLog: (v) => update({ enableActionLog: v }),
     setEnableCompetitiveMode: (v) => update({ enableCompetitiveMode: v }),
+    setBo1TimerMinutes: (v) => update({ bo1TimerMinutes: v }),
+    setBo3TimerMinutes: (v) => update({ bo3TimerMinutes: v }),
   }
 
   return createElement(UserSettingsContext.Provider, { value }, children)
