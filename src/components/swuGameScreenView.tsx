@@ -41,6 +41,7 @@ interface Props {
   enableLongPress: boolean
   round: number
   onRoundIncrement: () => void
+  onStartGame: () => void
   logEntries: GameLogEntry[]
   onUndo: () => void
   enableActionLog: boolean
@@ -49,6 +50,13 @@ interface Props {
   playMode: PlayMode
   playerScore: number
   opponentScore: number
+  matchOver: boolean
+  pendingConfirm: 'win' | 'loss' | null
+  onWinPending: () => void
+  onLossPending: () => void
+  onConfirmResult: () => void
+  onCancelConfirm: () => void
+  lastGameResult: 'won' | 'lost' | null
 }
 
 function SwuGameScreenView({
@@ -82,6 +90,7 @@ function SwuGameScreenView({
   enableLongPress,
   round,
   onRoundIncrement,
+  onStartGame,
   logEntries,
   onUndo,
   enableActionLog,
@@ -90,11 +99,19 @@ function SwuGameScreenView({
   playMode,
   playerScore,
   opponentScore,
+  matchOver,
+  pendingConfirm,
+  onWinPending,
+  onLossPending,
+  onConfirmResult,
+  onCancelConfirm,
+  lastGameResult,
 }: Props) {
   const bothOverlaysActive = epicActionOverlayVisible && showEpicAction && forceActive && showForce
+  const gameStarted = round > 0
 
   const { dragIndicator, handleClick, handlePointerDown, handlePointerMove, handlePointerUp, handlePointerCancel } =
-    useDragScrubber(onIncrement, onDecrement, base.hp - count, count, enableLongPress)
+    useDragScrubber(onIncrement, onDecrement, base.hp - count, count, enableLongPress && gameStarted)
 
   return (
     <AppScreenLayout>
@@ -545,26 +562,28 @@ function SwuGameScreenView({
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'space-between',
+          justifyContent: gameStarted ? 'space-between' : 'center',
           zIndex: 2,
         }}>
 
-          {/* Remaining health */}
-          <div style={{
-            width: '100%',
-            display: 'flex',
-            justifyContent: 'flex-end',
-          }}>
-            <span style={{
-              fontSize: '6vmin',
-              fontWeight: '300',
-              color: 'var(--color-text-primary)',
-              letterSpacing: '0.05em',
-              textShadow: '0 2px 4px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,1), -1px -1px 0 rgba(0,0,0,1), 1px -1px 0 rgba(0,0,0,1), -1px 1px 0 rgba(0,0,0,1), 1px 1px 0 rgba(0,0,0,1)',
+          {/* Remaining health — only shown while game is in progress */}
+          {gameStarted && (
+            <div style={{
+              width: '100%',
+              display: 'flex',
+              justifyContent: 'flex-end',
             }}>
-              Remaining: {base.hp - count}
-            </span>
-          </div>
+              <span style={{
+                fontSize: '6vmin',
+                fontWeight: '300',
+                color: 'var(--color-text-primary)',
+                letterSpacing: '0.05em',
+                textShadow: '0 2px 4px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,1), -1px -1px 0 rgba(0,0,0,1), 1px -1px 0 rgba(0,0,0,1), -1px 1px 0 rgba(0,0,0,1), 1px 1px 0 rgba(0,0,0,1)',
+              }}>
+                Remaining: {base.hp - count}
+              </span>
+            </div>
+          )}
 
           {/* Buttons and counter row */}
           <div style={{
@@ -582,44 +601,68 @@ function SwuGameScreenView({
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerCancel}
+              disabled={!gameStarted}
               style={{
                 width: '21vmin',
                 height: '21vmin',
                 background: 'rgba(0,0,0,0.45)',
-                color: 'var(--color-accent)',
-                border: '2px solid var(--color-accent)',
+                color: gameStarted ? 'var(--color-accent)' : 'var(--color-ui-border)',
+                border: `2px solid ${gameStarted ? 'var(--color-accent)' : 'var(--color-ui-border)'}`,
                 borderRadius: '8px',
                 fontSize: '6vmin',
-                cursor: 'pointer',
+                cursor: gameStarted ? 'pointer' : 'default',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
                 WebkitTapHighlightColor: 'transparent',
-                boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
+                boxShadow: gameStarted ? '0 0 12px rgba(var(--color-accent-rgb), 0.3)' : 'none',
                 userSelect: 'none',
                 WebkitUserSelect: 'none',
+                opacity: gameStarted ? 1 : 0.4,
               }}
             >
               −
             </button>
 
-            {/* Counter */}
-            <div
-              data-testid="game-counter"
-              style={{
-                flex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '20vmin',
-                fontWeight: '300',
-                color: 'var(--color-text-primary)',
-                textShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.4), 0 0 8px rgba(0,0,0,1)',
-              }}
-            >
-              {count}
-            </div>
+            {/* Counter — hidden when match is over; shows Start/Start Game X before game begins, damage count after */}
+            {!matchOver && (
+              <div
+                data-testid="game-counter"
+                onClick={gameStarted ? undefined : onStartGame}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: gameStarted ? '20vmin' : '8vmin',
+                  fontWeight: '300',
+                  color: 'var(--color-text-primary)',
+                  textShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.4), 0 0 8px rgba(0,0,0,1)',
+                  cursor: gameStarted ? 'default' : 'pointer',
+                  letterSpacing: gameStarted ? undefined : '0.05em',
+                }}
+              >
+                {gameStarted ? count : (lastGameResult !== null && !matchOver) ? `Start Game ${playerScore + opponentScore + 1}` : 'Start'}
+                {!gameStarted && lastGameResult !== null && !matchOver && (
+                  <div
+                    data-testid="game-result-label"
+                    style={{
+                      fontSize: 'clamp(0.7rem, 2.5vmin, 1.2rem)',
+                      fontWeight: '300',
+                      color: '#ffffff',
+                      letterSpacing: '0.08em',
+                      marginTop: '1vmin',
+                      pointerEvents: 'none',
+                      textShadow: '0 1px 8px rgba(0,0,0,0.8)',
+                    }}
+                  >
+                    {`Game ${playerScore + opponentScore} ${lastGameResult === 'won' ? 'Won' : 'Lost'}`}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Plus button */}
             <button
@@ -628,23 +671,25 @@ function SwuGameScreenView({
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerCancel}
+              disabled={!gameStarted}
               style={{
                 width: '21vmin',
                 height: '21vmin',
                 background: 'rgba(0,0,0,0.45)',
-                color: 'var(--color-accent)',
-                border: '2px solid var(--color-accent)',
+                color: gameStarted ? 'var(--color-accent)' : 'var(--color-ui-border)',
+                border: `2px solid ${gameStarted ? 'var(--color-accent)' : 'var(--color-ui-border)'}`,
                 borderRadius: '8px',
                 fontSize: '6vmin',
-                cursor: 'pointer',
+                cursor: gameStarted ? 'pointer' : 'default',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
                 WebkitTapHighlightColor: 'transparent',
-                boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
+                boxShadow: gameStarted ? '0 0 12px rgba(var(--color-accent-rgb), 0.3)' : 'none',
                 userSelect: 'none',
                 WebkitUserSelect: 'none',
+                opacity: gameStarted ? 1 : 0.4,
               }}
             >
               +
@@ -780,12 +825,25 @@ function SwuGameScreenView({
               padding: '4px 0',
             }}
           >
-            <span style={{
-              fontSize: 'clamp(0.45rem, 1vw, 0.65rem)',
-              fontWeight: '300',
-              color: 'var(--color-ui-border-muted)',
-              letterSpacing: '0.05em',
-            }}>Opp</span>
+            <button
+              onClick={matchOver ? undefined : pendingConfirm === 'loss' ? onConfirmResult : onLossPending}
+              disabled={matchOver}
+              style={{
+                width: '100%',
+                background: 'transparent',
+                border: `1px solid ${pendingConfirm === 'loss' ? '#ef4444' : 'var(--color-ui-border)'}`,
+                borderRadius: '4px',
+                padding: '0.1rem 0',
+                cursor: matchOver ? 'default' : 'pointer',
+                fontSize: 'clamp(0.45rem, 1vw, 0.65rem)',
+                fontWeight: '300',
+                color: pendingConfirm === 'loss' ? '#ef4444' : 'var(--color-text-muted)',
+                letterSpacing: '0.05em',
+                textAlign: 'center',
+                WebkitTapHighlightColor: 'transparent',
+                opacity: matchOver ? 0.4 : 1,
+              }}
+            >{pendingConfirm === 'loss' ? 'Confirm' : 'Opp'}</button>
 
             <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3px' }}>
               {Array.from({ length: markerCount }, (_, i) => (
@@ -796,8 +854,13 @@ function SwuGameScreenView({
                     width: 'clamp(8px, 1.4vw, 12px)',
                     height: 'clamp(8px, 1.4vw, 12px)',
                     borderRadius: '50%',
-                    border: '1.5px solid var(--color-ui-border-muted)',
-                    background: i < opponentScore ? 'var(--color-ui-border-muted)' : 'transparent',
+                    border: i < opponentScore ? '1.5px solid #15803d' : '1.5px solid var(--color-ui-border-muted)',
+                    background: i < opponentScore
+                      ? 'linear-gradient(160deg, #4ade80 0%, #16a34a 100%)'
+                      : 'transparent',
+                    boxShadow: i < opponentScore
+                      ? 'inset 0 1px 0 rgba(255,255,255,0.35), 0 2px 4px rgba(0,0,0,0.5)'
+                      : 'none',
                   }}
                 />
               ))}
@@ -812,25 +875,80 @@ function SwuGameScreenView({
                     width: 'clamp(8px, 1.4vw, 12px)',
                     height: 'clamp(8px, 1.4vw, 12px)',
                     borderRadius: '50%',
-                    border: '1.5px solid var(--color-ui-border-muted)',
-                    background: i < playerScore ? 'var(--color-ui-border-muted)' : 'transparent',
+                    border: i < playerScore ? '1.5px solid #15803d' : '1.5px solid var(--color-ui-border-muted)',
+                    background: i < playerScore
+                      ? 'linear-gradient(160deg, #4ade80 0%, #16a34a 100%)'
+                      : 'transparent',
+                    boxShadow: i < playerScore
+                      ? 'inset 0 1px 0 rgba(255,255,255,0.35), 0 2px 4px rgba(0,0,0,0.5)'
+                      : 'none',
                   }}
                 />
               ))}
             </div>
 
-            <span style={{
-              fontSize: 'clamp(0.45rem, 1vw, 0.65rem)',
-              fontWeight: '300',
-              color: 'var(--color-ui-border-muted)',
-              letterSpacing: '0.05em',
-            }}>You</span>
+            <button
+              onClick={matchOver ? undefined : pendingConfirm === 'win' ? onConfirmResult : onWinPending}
+              disabled={matchOver}
+              style={{
+                width: '100%',
+                background: 'transparent',
+                border: `1px solid ${pendingConfirm === 'win' ? '#22c55e' : 'var(--color-ui-border)'}`,
+                borderRadius: '4px',
+                padding: '0.1rem 0',
+                cursor: matchOver ? 'default' : 'pointer',
+                fontSize: 'clamp(0.45rem, 1vw, 0.65rem)',
+                fontWeight: '300',
+                color: pendingConfirm === 'win' ? '#22c55e' : 'var(--color-text-muted)',
+                letterSpacing: '0.05em',
+                textAlign: 'center',
+                WebkitTapHighlightColor: 'transparent',
+                opacity: matchOver ? 0.4 : 1,
+              }}
+            >{pendingConfirm === 'win' ? 'Confirm' : 'You'}</button>
           </div>
         )
       })()}
 
-      {/* Round counter — bottom-left, hidden when action log is disabled */}
-      {enableActionLog && <button
+      {/* Dismiss overlay — clears pending confirm when tapping elsewhere */}
+      {pendingConfirm !== null && (
+        <div
+          data-testid="score-dismiss-overlay"
+          onClick={onCancelConfirm}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 9,
+            background: 'transparent',
+          }}
+        />
+      )}
+
+
+      {/* Match-over display */}
+      {matchOver && (
+        <div
+          data-testid="match-result-label"
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            fontSize: 'clamp(1rem, 4vmin, 2rem)',
+            fontWeight: '300',
+            color: '#ffffff',
+            letterSpacing: '0.08em',
+            textShadow: '0 1px 8px rgba(0,0,0,0.8)',
+            pointerEvents: 'none',
+            zIndex: 11,
+          }}
+        >
+          {playerScore > opponentScore ? 'Match Won' : 'Match Lost'}
+        </div>
+      )}
+
+      {/* Round counter — bottom-left, hidden when action log is disabled or match is over */}
+      {enableActionLog && !matchOver && <button
         data-testid="round-counter"
         onClick={onRoundIncrement}
         style={{
