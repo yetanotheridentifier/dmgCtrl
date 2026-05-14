@@ -38,6 +38,7 @@ src/
     useOrientation.ts       Detects portrait vs landscape; returns isPortrait (via matchMedia change event) and vmin (Math.min(screen.width, screen.height) — stable across rotations)
     useSwuGame.ts           Damage counter, epic action used state, Force token enabled and active state
     useSwuSetup.ts          Setup screen logic — filtering, auto-select, format state, and play mode state; selectedFormat (persisted to pref_format), selectedPlayMode (persisted to pref_play_mode), validSets, handleFormatChange, handlePlayModeChange; clearing selection when the current set is not valid for the new format
+    useMatch.ts             Match score state — playerScore, opponentScore, matchOver (computed), incrementPlayerScore, incrementOpponentScore, resetMatch; maxScore is 1 for bo1, 2 for bo3; scores are clamped at maxScore
     useUserSettings.ts      React Context — persistent user preferences (useHyperspace, enableForceToken, enableEpicActions, enableWakeLock, enableFavourites, enableLongPress, enableActionLog, enableCompetitiveMode) backed by localStorage under key `user_settings`; all except enableCompetitiveMode default to `true`; enableCompetitiveMode defaults to `false`; `UserSettingsProvider` wraps the app in `main.tsx`
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
@@ -72,6 +73,7 @@ src/
     useOrientation.test.ts  Orientation hook tests
     useSwuGame.test.ts      Counter hook tests
     useSwuSetup.test.ts     Setup logic hook tests
+    useMatch.test.ts        Match score hook tests
     useUserSettings.test.ts User settings hook tests
     useWakeLock.test.ts     Screen Wake Lock hook tests
 
@@ -127,6 +129,7 @@ All other state is owned at the component level:
 | Last setup selection (`set`, `aspect`, `key`) | `App` | Saved on `handleConfirm`; passed as `initialSelection` prop to `SwuSetupScreen` so dropdowns are pre-populated on back navigation |
 | Selected format (`premier` / `limited` / `eternal` / `twin-suns`) | `useSwuSetup` / localStorage | Persisted under `pref_format`; defaults to `'premier'`; old values `'sealed'`/`'draft'`/`'chaos'` migrate to `'limited'` on first load; changing format clears the set/aspect/base selection if the current set is not valid for the new format; `'eternal'` and `'twin-suns'` have identical filtering behaviour (all sets valid) |
 | Selected play mode (`casual` / `bo1` / `bo3`) | `useSwuSetup` / localStorage | Persisted under `pref_play_mode`; defaults to `'casual'`; passed to the game screen via `onConfirm(base, playMode)`; only shown in the UI when `enableCompetitiveMode` is true |
+| Match scores (playerScore, opponentScore) | `useMatch` | Local to game screen; reset on each navigation to the game screen; matchOver is derived (true when either score reaches maxScore — 1 for bo1, 2 for bo3) |
 | Filter state (set, aspect, card) | `useSwuSetup` | Seeded from `initialSelection` on mount; local after that |
 | Damage counter | `useSwuGame` | Local to game screen; clamped between 0 and `base.hp`; reset on each navigation to the game screen |
 | Epic action used state | `useSwuGame` | Local to game screen; toggled by the epic action button; reset on each navigation to the game screen |
@@ -484,7 +487,7 @@ Format state lives in `useSwuSetup`. When the format changes, `validSets` is rec
 
 ### Play mode selector (competitive mode)
 
-When `enableCompetitiveMode` is `true` in user settings, a **Match** dropdown appears on the setup screen on the same row as the Format selector. Three options are available: Casual, Best of 1, Best of 3. The selection is persisted to localStorage under `pref_play_mode` and defaults to `'casual'`. The selected play mode is passed to `App` via `onConfirm(base, playMode)`. The `App.tsx` `handleConfirm` receives the value but does not yet use it — wiring to game state is tracked in subsequent tickets (#188–#190).
+When `enableCompetitiveMode` is `true` in user settings, a **Match** dropdown appears on the setup screen on the same row as the Format selector. Three options are available: Casual, Best of 1, Best of 3. The selection is persisted to localStorage under `pref_play_mode` and defaults to `'casual'`. The selected play mode is passed to `App` via `onConfirm(base, playMode)`, stored as `selectedPlayMode` in `App` state, and forwarded to `SwuGameScreen` as a `playMode` prop.
 
 `enableCompetitiveMode` defaults to `false` and is toggled in the Settings screen. It is a beta flag intended to be removed in ticket #6 when the feature ships fully.
 
@@ -540,20 +543,36 @@ In the portrait layout, the mode content area is wrapped in `<div key={selection
 3. `useSwuGame(base.hp)` manages the damage counter, epic action, and Force token (enabled + active) state
 4. `useGameLog()` manages the ordered action log; the container adds entries on counter changes, epic action mark, Force token toggle, and round increment; an initial Round 1 entry (not undoable) is added once on mount via a `logInitialized` useRef guard (prevents React StrictMode double-invocation)
 5. `useWakeLock(enableWakeLock)` acquires a Screen Wake Lock on mount to prevent the screen sleeping during gameplay; the lock is automatically released when the component unmounts or the page becomes hidden, and reacquired when the page becomes visible again
-6. The container computes:
+6. `useMatch(playMode)` tracks match scores — `playerScore`, `opponentScore`, and `matchOver` (derived); provides `incrementPlayerScore`, `incrementOpponentScore`, `resetMatch`; active for bo1 and bo3 play modes
+7. The container computes:
    - `showEpicAction = enableEpicActions && /epic action/i.test(base.epicAction)`
    - `showForce = enableForceToken` — the Force button slot is shown for every base when enabled
    - `isForceBase = /the force is with you/i.test(base.epicAction)` — LOF bases whose ability explicitly creates a Force token
    - `effectiveForceEnabled = isForceBase || forceEnabled` — Force bases start enabled; others start locked until the user taps the dimmed icon
    - `epicActionOverlayVisible = game.epicActionUsed && !epicOverlayDismissed` — separates overlay visibility from game state
-7. Key props passed to the view: art state, counter callbacks, `epicActionUsed`, `epicActionOverlayVisible`, `onEpicActionMark`, `onEpicActionOverlayDismiss` (only when action log is disabled), `showEpicAction`, force state, `enableActionLog`, `round`, `onRoundIncrement`, `showLog`, `onToggleLog`, `logEntries`, `onLogUndo`; the view calls `useDragScrubber` directly to manage drag gesture state
-8. The left-side button column (top to bottom): back → Force icon (locked, ready, or overlay-active/greyed) when `showForce` → epic action button when `showEpicAction`; when Force is hidden the epic action button moves up to fill the gap
-9. The right-side button column (top to bottom): help → ⚙ settings
-10. The bottom row (when action log is enabled): round counter button (bottom-left, blue gradient header) → log button (bottom-right, ☰ icon)
-11. View renders the card image, counter, and up to two overlays over the bottom portion of the card:
+   - The active Force button (`force-btn`) renders "Gain / Force" as two-row text behind the force icon image; an `onError` handler hides the image if it fails to load (e.g. offline), making the text visible as a fallback
+8. Key props passed to the view: art state, counter callbacks, `epicActionUsed`, `epicActionOverlayVisible`, `onEpicActionMark`, `onEpicActionOverlayDismiss` (only when action log is disabled), `showEpicAction`, force state, `enableActionLog`, `round`, `onRoundIncrement`, `showLog`, `onToggleLog`, `logEntries`, `onLogUndo`, `playMode`, `playerScore`, `opponentScore`; the view calls `useDragScrubber` directly to manage drag gesture state
+9. The left-side button column (top to bottom): back → Force icon (locked, ready, or overlay-active/greyed) when `showForce` → epic action button when `showEpicAction`; when Force is hidden the epic action button moves up to fill the gap; **score panel** (when `playMode !== 'casual'`) fills the space between the last top button and the round tracker
+10. The right-side button column (top to bottom): help → ⚙ settings
+11. The bottom row (when action log is enabled): round counter button (bottom-left, blue gradient header) → log button (bottom-right, ☰ icon)
+12. View renders the card image, counter, and up to two overlays over the bottom portion of the card:
     - **Epic action token** (gold, "Epic Action Used"): when `epicActionOverlayVisible && showEpicAction`
     - **Force token** (blue, "The Force is With You"): when `forceActive && showForce`
     - When **both** are active, `bothOverlaysActive = true` renders them side by side (epic action left, Force right), each at half width
+
+### Score panel
+
+Rendered in the left column of the game screen when `playMode !== 'casual'`. Positioned absolutely between the last top-left button and the round tracker, expanding to fill the available space. Hidden entirely when `playMode` is `'casual'` (which is always the case when competitive mode is off, since the match selector defaults to Casual).
+
+Layout (top to bottom within the panel):
+- "Opp" label
+- Opponent marker circles (1 for bo1, 2 for bo3); filled circles indicate wins
+- Player marker circles (1 for bo1, 2 for bo3); filled circles indicate wins
+- "You" label
+
+The panel's top offset is computed from the visible top-left buttons: `9vw` when only the back button is present; `16vw` when one additional button (Force or epic action) is visible; `23vw` when two additional buttons are both present. The panel always ends at `calc(env(safe-area-inset-bottom) + 9vw)` to maintain a 2vw gap above the round tracker.
+
+Mutation functions (`incrementPlayerScore`, `incrementOpponentScore`, `resetMatch`) are exposed by `useMatch` but not yet connected to UI buttons in this ticket — those are tracked in #189.
 
 ### Settings screen
 

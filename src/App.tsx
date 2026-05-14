@@ -16,6 +16,7 @@ function App() {
   const [screen, setScreen] = useState<Screen>('loading')
   const [backStack, setBackStack] = useState<Screen[]>([])
   const [selectedBase, setSelectedBase] = useState<Base | null>(null)
+  const [selectedPlayMode, setSelectedPlayMode] = useState<PlayMode>('casual')
   const [lastSelection, setLastSelection] = useState<InitialSelection | null>(null)
   const [isInGame, setIsInGame] = useState(false)
   const [helpSource, setHelpSource] = useState<'setup' | 'game'>('setup')
@@ -54,8 +55,9 @@ function App() {
 
   const handleReady = () => setScreen('setup')
 
-  const handleConfirm = (base: Base, _playMode: PlayMode) => {
+  const handleConfirm = (base: Base, playMode: PlayMode) => {
     setSelectedBase(base)
+    setSelectedPlayMode(playMode)
     setLastSelection({ set: base.set, aspect: base.aspects[0] ?? 'None', key: `${base.set}-${base.number}` })
     setIsInGame(true)
     setScreen('game')
@@ -115,6 +117,7 @@ function App() {
         <div style={screen === 'game' ? undefined : { display: 'none' }}>
           <SwuGameScreen
             base={selectedBase}
+            playMode={selectedPlayMode}
             onBack={handleBack}
             onHelp={handleHelp}
             onSettings={handleSettings}
