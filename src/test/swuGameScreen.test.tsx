@@ -1230,6 +1230,53 @@ describe('SwuGameScreen', () => {
     expect(screen.queryByText('Hit +1')).not.toBeInTheDocument()
   })
 
+  // --- Score panel ---
+
+  it('score panel is not shown when playMode is not provided', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('score-panel')).not.toBeInTheDocument()
+  })
+
+  it('score panel is shown when playMode is bo1', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    expect(screen.getByTestId('score-panel')).toBeInTheDocument()
+  })
+
+  it('score panel is shown when playMode is bo3', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    expect(screen.getByTestId('score-panel')).toBeInTheDocument()
+  })
+
+  it('score panel shows Opp label', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    expect(screen.getByText('Opp')).toBeInTheDocument()
+  })
+
+  it('score panel shows You label', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    expect(screen.getByText('You')).toBeInTheDocument()
+  })
+
+  it('bo1 shows 1 opponent marker', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    expect(screen.getAllByTestId('score-opp-marker')).toHaveLength(1)
+  })
+
+  it('bo1 shows 1 player marker', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    expect(screen.getAllByTestId('score-player-marker')).toHaveLength(1)
+  })
+
+  it('bo3 shows 2 opponent markers', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    expect(screen.getAllByTestId('score-opp-marker')).toHaveLength(2)
+  })
+
+  it('bo3 shows 2 player markers', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
+    expect(screen.getAllByTestId('score-player-marker')).toHaveLength(2)
+  })
+
   // --- Round 1 initial entry ---
 
   it('log starts with a Round 1 entry', async () => {

@@ -1,5 +1,6 @@
 import { Base } from '../hooks/useBases'
 import type { GameLogEntry } from '../hooks/useGameLog'
+import type { PlayMode } from '../utils/playMode'
 import { useDragScrubber } from '../hooks/useDragScrubber'
 import AppScreenLayout from './layout/AppScreenLayout'
 import GameLogOverlay from './GameLogOverlay'
@@ -45,6 +46,9 @@ interface Props {
   enableActionLog: boolean
   showLog: boolean
   onLogToggle: () => void
+  playMode: PlayMode
+  playerScore: number
+  opponentScore: number
 }
 
 function SwuGameScreenView({
@@ -83,6 +87,9 @@ function SwuGameScreenView({
   enableActionLog,
   showLog,
   onLogToggle,
+  playMode,
+  playerScore,
+  opponentScore,
 }: Props) {
   const bothOverlaysActive = epicActionOverlayVisible && showEpicAction && forceActive && showForce
 
@@ -194,10 +201,25 @@ function SwuGameScreenView({
             boxShadow: '0 0 12px rgba(29,78,216,0.3)',
           }}
         >
+          <span style={{
+            position: 'absolute',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            fontSize: 'clamp(0.35rem, 0.75vw, 0.5rem)',
+            lineHeight: 1.2,
+            color: 'rgba(147,197,253,0.7)',
+            letterSpacing: '0.04em',
+            pointerEvents: 'none',
+          }}>
+            <span>Gain</span>
+            <span>Force</span>
+          </span>
           <img
             src={`${import.meta.env.BASE_URL}dmgCtrl-force-token.png`}
             alt="Gain the Force"
-            style={{ width: '70%', height: '70%', objectFit: 'contain', opacity: 0.9 }}
+            onError={(e) => { e.currentTarget.style.display = 'none' }}
+            style={{ width: '70%', height: '70%', objectFit: 'contain', opacity: 0.9, position: 'relative', zIndex: 1 }}
           />
         </button>
       )}
@@ -735,6 +757,77 @@ function SwuGameScreenView({
       </div>
 
       </div>
+
+      {/* Score panel — left column, between top buttons and round tracker */}
+      {playMode !== 'casual' && (() => {
+        const markerCount = playMode === 'bo3' ? 2 : 1
+        const topVw = (showForce && (showEpicAction || isMysticMonastery)) ? 23 : (showForce || showEpicAction) ? 16 : 9
+        return (
+          <div
+            data-testid="score-panel"
+            style={{
+              position: 'absolute',
+              top: `calc(env(safe-area-inset-top) + ${topVw}vw)`,
+              bottom: `calc(env(safe-area-inset-bottom) + 9vw)`,
+              left: 'calc(env(safe-area-inset-left) + 2vw)',
+              width: '5vw',
+              minWidth: '36px',
+              zIndex: 10,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '4px 0',
+            }}
+          >
+            <span style={{
+              fontSize: 'clamp(0.45rem, 1vw, 0.65rem)',
+              fontWeight: '300',
+              color: 'var(--color-ui-border-muted)',
+              letterSpacing: '0.05em',
+            }}>Opp</span>
+
+            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3px' }}>
+              {Array.from({ length: markerCount }, (_, i) => (
+                <div
+                  key={i}
+                  data-testid="score-opp-marker"
+                  style={{
+                    width: 'clamp(8px, 1.4vw, 12px)',
+                    height: 'clamp(8px, 1.4vw, 12px)',
+                    borderRadius: '50%',
+                    border: '1.5px solid var(--color-ui-border-muted)',
+                    background: i < opponentScore ? 'var(--color-ui-border-muted)' : 'transparent',
+                  }}
+                />
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3px' }}>
+              {Array.from({ length: markerCount }, (_, i) => (
+                <div
+                  key={i}
+                  data-testid="score-player-marker"
+                  style={{
+                    width: 'clamp(8px, 1.4vw, 12px)',
+                    height: 'clamp(8px, 1.4vw, 12px)',
+                    borderRadius: '50%',
+                    border: '1.5px solid var(--color-ui-border-muted)',
+                    background: i < playerScore ? 'var(--color-ui-border-muted)' : 'transparent',
+                  }}
+                />
+              ))}
+            </div>
+
+            <span style={{
+              fontSize: 'clamp(0.45rem, 1vw, 0.65rem)',
+              fontWeight: '300',
+              color: 'var(--color-ui-border-muted)',
+              letterSpacing: '0.05em',
+            }}>You</span>
+          </div>
+        )
+      })()}
 
       {/* Round counter — bottom-left, hidden when action log is disabled */}
       {enableActionLog && <button

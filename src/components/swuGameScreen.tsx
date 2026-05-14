@@ -6,20 +6,24 @@ import { useBaseArt } from '../hooks/useBaseArt'
 import { useOrientation } from '../hooks/useOrientation'
 import { useWakeLock } from '../hooks/useWakeLock'
 import { useUserSettings } from '../hooks/useUserSettings'
+import { useMatch } from '../hooks/useMatch'
 import SwuGameScreenView from './swuGameScreenView'
 import { BackIcon } from './icons'
 import AppScreenLayout from './layout/AppScreenLayout'
 import { onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed, onEpicActionUsed, onForceGained, onForceUsed } from '../services/analytics'
+import type { PlayMode } from '../utils/playMode'
 
 interface Props {
   base: Base
+  playMode?: PlayMode
   onBack: () => void
   onHelp: () => void
   onSettings?: () => void
 }
 
-function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
+function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }: Props) {
   const { enableForceToken, enableEpicActions, enableWakeLock, useHyperspace, enableLongPress, enableActionLog } = useUserSettings()
+  const match = useMatch(playMode)
   const art = useBaseArt(base, useHyperspace)
   const game = useSwuGame(base.hp)
   const log = useGameLog()
@@ -162,6 +166,9 @@ function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
     )
   }
 
+  const showForce = enableForceToken
+  const showEpicAction = enableEpicActions && /epic action/i.test(base.epicAction)
+
   return (
     <SwuGameScreenView
       base={base}
@@ -181,8 +188,8 @@ function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
       epicActionOverlayVisible={game.epicActionUsed && !epicOverlayDismissed}
       onEpicActionOverlayDismiss={!enableActionLog ? () => setEpicOverlayDismissed(true) : undefined}
       onEpicActionMark={handleEpicActionMark}
-      showEpicAction={enableEpicActions && /epic action/i.test(base.epicAction)}
-      showForce={enableForceToken}
+      showEpicAction={showEpicAction}
+      showForce={showForce}
       forceEnabled={effectiveForceEnabled}
       forceActive={game.forceActive}
       onForceEnable={game.enableForce}
@@ -199,6 +206,9 @@ function SwuGameScreen({ base, onBack, onHelp, onSettings }: Props) {
       enableActionLog={enableActionLog}
       showLog={showLog}
       onLogToggle={() => setShowLog(v => !v)}
+      playMode={playMode}
+      playerScore={match.playerScore}
+      opponentScore={match.opponentScore}
     />
   )
 }
