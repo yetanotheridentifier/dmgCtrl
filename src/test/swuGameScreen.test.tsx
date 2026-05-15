@@ -29,11 +29,11 @@ vi.mock('../services/analytics', () => ({
 
 const mockUserSettings = vi.hoisted(() => ({
   useHyperspace: true,
-  enableForceToken: true,
+  forceTokenDisplay: 'lof-only' as 'always-on' | 'lof-only' | 'always-off',
   enableEpicActions: true,
   enableWakeLock: true,
   setUseHyperspace: vi.fn(),
-  setEnableForceToken: vi.fn(),
+  setForceTokenDisplay: vi.fn(),
   setEnableEpicActions: vi.fn(),
   setEnableWakeLock: vi.fn(),
   enableLongPress: true,
@@ -196,7 +196,7 @@ describe('SwuGameScreen', () => {
 
   beforeEach(() => {
     vi.mocked(useOrientation).mockReturnValue({ isPortrait: false, vmin: 0 })
-    mockUserSettings.enableForceToken = true
+    mockUserSettings.forceTokenDisplay = 'lof-only'
     mockUserSettings.enableEpicActions = true
     mockUserSettings.enableWakeLock = true
     mockUserSettings.useHyperspace = false
@@ -531,7 +531,8 @@ describe('SwuGameScreen', () => {
     expect(screen.queryByTestId('epic-action-overlay')).not.toBeInTheDocument()
   })
 
-  it('Non-Force base with epic action still shows epic action button alongside locked Force button', () => {
+  it('Non-Force base with epic action still shows epic action button alongside locked Force button when always-on', () => {
+    mockUserSettings.forceTokenDisplay = 'always-on'
     render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByTestId('epic-action-btn')).toBeInTheDocument()
     expect(screen.getByTestId('force-btn-locked')).toBeInTheDocument()
@@ -593,19 +594,28 @@ describe('SwuGameScreen', () => {
     expect(screen.getByTestId('force-btn')).toBeInTheDocument()
   })
 
-  // --- Force — non-Force bases (require enable tap first) ---
+  // --- Force — non-Force bases (require enable tap first, only when always-on) ---
 
-  it('Shows a locked Force button for a non-Force base', () => {
+  it('Shows a locked Force button for a non-Force base when always-on', () => {
+    mockUserSettings.forceTokenDisplay = 'always-on'
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByTestId('force-btn-locked')).toBeInTheDocument()
   })
 
   it('Locked Force button is not the active Force button', () => {
+    mockUserSettings.forceTokenDisplay = 'always-on'
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByTestId('force-btn')).not.toBeInTheDocument()
   })
 
+  it('No force button shown for a non-Force base with lof-only (default)', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('force-btn-locked')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('force-btn')).not.toBeInTheDocument()
+  })
+
   it('Tapping locked Force button does not immediately show Force token overlay', async () => {
+    mockUserSettings.forceTokenDisplay = 'always-on'
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('force-btn-locked'))
@@ -613,6 +623,7 @@ describe('SwuGameScreen', () => {
   })
 
   it('Tapping locked Force button enables Force and shows the active button', async () => {
+    mockUserSettings.forceTokenDisplay = 'always-on'
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('force-btn-locked'))
@@ -621,6 +632,7 @@ describe('SwuGameScreen', () => {
   })
 
   it('After enabling Force on a non-Force base, tapping active button shows the Force token', async () => {
+    mockUserSettings.forceTokenDisplay = 'always-on'
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('force-btn-locked'))
@@ -629,6 +641,7 @@ describe('SwuGameScreen', () => {
   })
 
   it('After enabling Force on a non-Force base, token can be dismissed and Force button restores', async () => {
+    mockUserSettings.forceTokenDisplay = 'always-on'
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('force-btn-locked'))
@@ -656,14 +669,23 @@ describe('SwuGameScreen', () => {
     expect(screen.queryByTestId('mystic-action-btn')).not.toBeInTheDocument()
   })
 
-  it('Shows Force button immediately for Mystic Monastery without requiring an enable tap', () => {
+  it('With lof-only, does not show Force button for Mystic Monastery (uses counter instead)', () => {
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
-    expect(screen.getByTestId('force-btn')).toBeInTheDocument()
+    expect(screen.queryByTestId('force-btn')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('force-btn-locked')).not.toBeInTheDocument()
   })
 
-  it('Does not show locked Force button for Mystic Monastery', () => {
+  it('With always-on, shows active Force button immediately for Mystic Monastery', () => {
+    mockUserSettings.forceTokenDisplay = 'always-on'
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('force-btn')).toBeInTheDocument()
     expect(screen.queryByTestId('force-btn-locked')).not.toBeInTheDocument()
+  })
+
+  it('With always-off, hides mystic counter for Mystic Monastery', () => {
+    mockUserSettings.forceTokenDisplay = 'always-off'
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('mystic-action-btn')).not.toBeInTheDocument()
   })
 
   it('Does not show epic action button for Mystic Monastery', () => {
@@ -704,6 +726,7 @@ describe('SwuGameScreen', () => {
   })
 
   it('Dismissing Force overlay restores both buttons when uses remain', async () => {
+    mockUserSettings.forceTokenDisplay = 'always-on'
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('mystic-action-btn'))
@@ -722,6 +745,7 @@ describe('SwuGameScreen', () => {
   })
 
   it('Tapping Force button shows the Force token overlay without decrementing the use count', async () => {
+    mockUserSettings.forceTokenDisplay = 'always-on'
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('force-btn'))
@@ -742,6 +766,7 @@ describe('SwuGameScreen', () => {
   })
 
   it('Force button remains visible when all uses are exhausted and Force is absent', async () => {
+    mockUserSettings.forceTokenDisplay = 'always-on'
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     for (let i = 0; i < 3; i++) {
@@ -752,6 +777,7 @@ describe('SwuGameScreen', () => {
   })
 
   it('Force can still be gained via Force button after all action uses are exhausted', async () => {
+    mockUserSettings.forceTokenDisplay = 'always-on'
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     for (let i = 0; i < 3; i++) {
@@ -785,17 +811,22 @@ describe('SwuGameScreen', () => {
 
   // --- User settings ---
 
-  it('Force button is hidden when enableForceToken is false', () => {
-    mockUserSettings.enableForceToken = false
+  it('Force button is hidden for all bases when forceTokenDisplay is always-off', () => {
+    mockUserSettings.forceTokenDisplay = 'always-off'
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByTestId('force-btn-locked')).not.toBeInTheDocument()
     expect(screen.queryByTestId('force-btn')).not.toBeInTheDocument()
   })
 
-  it('Force button is shown for a Force base when enableForceToken is true', () => {
-    mockUserSettings.enableForceToken = true
+  it('Force button is shown for a Force base with lof-only (default)', () => {
     render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByTestId('force-btn')).toBeInTheDocument()
+  })
+
+  it('Force button is shown for a non-Force base with always-on', () => {
+    mockUserSettings.forceTokenDisplay = 'always-on'
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('force-btn-locked')).toBeInTheDocument()
   })
 
   it('Epic action button is hidden when enableEpicActions is false', () => {
@@ -804,8 +835,8 @@ describe('SwuGameScreen', () => {
     expect(screen.queryByTestId('epic-action-btn')).not.toBeInTheDocument()
   })
 
-  it('Epic action button is still shown when Force token is disabled', () => {
-    mockUserSettings.enableForceToken = false
+  it('Epic action button is still shown when forceTokenDisplay is always-off', () => {
+    mockUserSettings.forceTokenDisplay = 'always-off'
     mockUserSettings.enableEpicActions = true
     render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByTestId('force-btn-locked')).not.toBeInTheDocument()
@@ -824,23 +855,22 @@ describe('SwuGameScreen', () => {
     expect(vi.mocked(useWakeLock)).toHaveBeenCalledWith(false)
   })
 
-
-  it('Epic action button shifts to slot 1 position when Force is disabled', () => {
-    mockUserSettings.enableForceToken = false
+  it('Epic action button shifts to slot 1 position when Force is hidden (always-off)', () => {
+    mockUserSettings.forceTokenDisplay = 'always-off'
     render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
     const btn = screen.getByTestId('epic-action-btn')
     expect(btn).toHaveStyle({ top: 'calc(env(safe-area-inset-top) + 9vw)' })
   })
 
-  it('Epic action button stays at slot 2 position when Force is enabled', () => {
-    mockUserSettings.enableForceToken = true
+  it('Epic action button stays at slot 2 position when Force is shown (always-on)', () => {
+    mockUserSettings.forceTokenDisplay = 'always-on'
     render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
     const btn = screen.getByTestId('epic-action-btn')
     expect(btn).toHaveStyle({ top: 'calc(env(safe-area-inset-top) + 16vw)' })
   })
 
-  it('Mystic Monastery counter button is hidden when Force is disabled', () => {
-    mockUserSettings.enableForceToken = false
+  it('Mystic Monastery counter button is hidden when forceTokenDisplay is always-off', () => {
+    mockUserSettings.forceTokenDisplay = 'always-off'
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByTestId('mystic-action-btn')).not.toBeInTheDocument()
   })
@@ -1894,7 +1924,7 @@ describe('SwuGameScreen analytics', () => {
 
   beforeEach(() => {
     vi.mocked(useOrientation).mockReturnValue({ isPortrait: false, vmin: 0 })
-    mockUserSettings.enableForceToken = true
+    mockUserSettings.forceTokenDisplay = 'lof-only'
     mockUserSettings.enableEpicActions = true
     mockUserSettings.enableActionLog = true
     mockUserSettings.enableLongPress = true
@@ -1978,6 +2008,7 @@ describe('SwuGameScreen analytics', () => {
   })
 
   it('calls onForceGained when Force button is tapped on a non-Force base after enabling', async () => {
+    mockUserSettings.forceTokenDisplay = 'always-on'
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('force-btn-locked'))

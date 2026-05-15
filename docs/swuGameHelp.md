@@ -22,7 +22,7 @@ The number increases by 1 for roughly every 14px of upward movement, starting fr
 
 ### Action Log
 
-When **Enable Action Log** is on in Settings, a log button appears in the bottom-right corner of the game screen.
+When **Enable Action Log** is on in Settings, a log button appears in the bottom-left corner of the game screen.
 
 - Tap it to open the action log — a scrollable panel listing all game events
 - The most recent action shows an **Undo** button — tap it to revert to the state before that action
@@ -31,7 +31,7 @@ When **Enable Action Log** is on in Settings, a log button appears in the bottom
 
 ### Round Tracker
 
-When **Enable Action Log** is on in Settings, a round counter button appears in the bottom-left corner.
+When **Enable Action Log** is on in Settings, a round counter button appears in the bottom-right corner.
 
 - Tap it to start the game (when at 0) or advance to the next round
 - The counter starts at 0 and advances to Round 1 when you tap **Start** or the round tracker
@@ -39,7 +39,7 @@ When **Enable Action Log** is on in Settings, a round counter button appears in 
 
 ### Competitive Mode (Best of 1 / Best of 3)
 
-When **Competitive Mode** is enabled in Settings and you select **Best of 1** or **Best of 3** on the setup screen, a score panel appears in the left column — **Opp** at the top, win marker circles, a **timer** in the middle, more marker circles, and **You** at the bottom.
+When **Competitive Mode** is enabled in Settings and you select **Best of 1** or **Best of 3** on the setup screen, a score panel appears in the right column — **Opp** at the top, win marker circles, a **timer** in the middle, more marker circles, and **You** at the bottom.
 
 **Recording a result:**
 - Tap **You** to record a win, or **Opp** to record a loss — the button changes to **Confirm**
@@ -84,20 +84,18 @@ Go to ⚙ Settings → Enable Competitive Mode (must be on) to see the **Bo1 Tim
 
 ### The Force
 
-A dimmed Force token icon sits just below the <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M15.5 5L7 12L15.5 19Z"/></svg> button at all times. Most games won't need it — it's there for when a card or leader ability grants you the Force mid-game.
+The Force token button appears based on your **Force Token Display** setting (default: LOF bases only).
 
-- Tap the dimmed icon once to enable it — it turns blue, showing it's ready
-- Tap the blue icon to gain the Force — a blue **"The Force is With You"** overlay appears over the lower portion of the card, mirroring the physical Force token
-- Tap the overlay or the greyed Force icon to dismiss it and restore the button, ready to gain the Force again
-
-When playing a **Legends of the Force** base whose ability creates a Force token, the icon starts **fully active** (no enable tap needed).
+- On **Legends of the Force** bases whose ability creates a Force token, the button starts **fully blue and ready** — tap it to gain the Force
+- On **other bases** (when **Always on** is selected), a dimmed Force icon appears — tap it once to enable it, then tap again to gain the Force
+- Tap the blue **"The Force is With You"** overlay or the greyed Force icon to dismiss it and restore the button, ready to gain the Force again
 
 #### Mystic Monastery
 
 **Mystic Monastery** (LOF-022) can generate the Force up to three times per game as an action. A numbered button appears, which shows how many uses remain.
 - Tap the numbered button to gain the Force — the count decrements and the Force overlay appears
 - The numbered button greys out while the Force overlay is active; dismiss the overlay first before using it again
-- The regular Force icon is still available for gaining the Force by other means.
+- With **Always on**, a regular Force icon also appears for gaining the Force by other means
 
 ### Epic Action
 
@@ -119,7 +117,7 @@ Your preferences are saved automatically and persist between sessions.
 | Setting | Default | Description |
 |---|---|---|
 | **Use Hyperspace Art** | On | When enabled, the Hyperspace variant is used by default on the game screen for any base that has one. If the Hyperspace image can't be loaded, the app falls back to the standard art. |
-| **Enable Force Token** | On | Shows the Force token button on the game screen. Turn off if you prefer not to track the Force. |
+| **Force Token Display** | LOF bases only | Controls when the Force token button is shown. **Always on** shows it for every base. **LOF bases only** shows it automatically for Legends of the Force bases (and hides it for others unless the Force is granted mid-game via a card). **Always off** hides the Force button entirely. |
 | **Enable Epic Actions** | On | Shows the Epic Action button on the game screen. Turn off if you prefer not to track epic actions. |
 | **Enable Screen Wake Lock** | On | Keeps the screen on during play. May affect battery life. |
 | **Enable Action Log** | On | Shows a scrollable log of game actions with an Undo button for the most recent action. Also enables the round tracker button. |

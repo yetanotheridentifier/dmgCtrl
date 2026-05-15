@@ -23,7 +23,7 @@ interface Props {
 }
 
 function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }: Props) {
-  const { enableForceToken, enableEpicActions, enableWakeLock, useHyperspace, enableLongPress, enableActionLog, bo1TimerMinutes, bo3TimerMinutes } = useUserSettings()
+  const { forceTokenDisplay, enableEpicActions, enableWakeLock, useHyperspace, enableLongPress, enableActionLog, bo1TimerMinutes, bo3TimerMinutes } = useUserSettings()
   const match = useMatch(playMode)
   const art = useBaseArt(base, useHyperspace)
   const game = useSwuGame(base.hp)
@@ -255,7 +255,9 @@ function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }
     )
   }
 
-  const showForce = enableForceToken
+  const showForce = forceTokenDisplay !== 'always-off' &&
+    (forceTokenDisplay === 'always-on' || (isForceBase && !isMysticMonastery))
+  const showMysticMonastery = isMysticMonastery && forceTokenDisplay !== 'always-off'
   const showEpicAction = enableEpicActions && /epic action/i.test(base.epicAction)
 
   return (
@@ -284,7 +286,7 @@ function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }
       onForceEnable={game.enableForce}
       onForceGain={handleForceGain}
       onForceDismiss={handleForceDismiss}
-      isMysticMonastery={isMysticMonastery}
+      showMysticMonastery={showMysticMonastery}
       mysticUsesRemaining={game.mysticUsesRemaining}
       onMysticAction={handleMonasteryAction}
       enableLongPress={enableLongPress}

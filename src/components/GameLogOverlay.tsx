@@ -17,9 +17,9 @@ function GameLogOverlay({ entries, onUndo }: Props) {
       data-testid="log-overlay"
       style={{
         position: 'absolute',
-        top: 'calc(env(safe-area-inset-top) + 9vw)',
-        bottom: 'calc(env(safe-area-inset-bottom) + 9vw)',
-        right: 'calc(env(safe-area-inset-right) + 2vw)',
+        top: 'calc(env(safe-area-inset-top) + 2vw)',
+        bottom: 'calc(env(safe-area-inset-bottom) + 2vw)',
+        left: 'calc(env(safe-area-inset-left) + 8vw)',
         width: 'clamp(120px, 18vw, 240px)',
         overflowY: 'auto',
         background: 'rgba(0,0,0,0.85)',

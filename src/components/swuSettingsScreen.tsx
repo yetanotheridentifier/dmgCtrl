@@ -12,7 +12,7 @@ interface Props {
 function SwuSettingsScreen({ onBack, onHelp }: Props) {
   const {
     useHyperspace,
-    enableForceToken,
+    forceTokenDisplay,
     enableEpicActions,
     enableWakeLock,
     enableActionLog,
@@ -21,7 +21,7 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
     bo1TimerMinutes,
     bo3TimerMinutes,
     setUseHyperspace,
-    setEnableForceToken,
+    setForceTokenDisplay,
     setEnableEpicActions,
     setEnableWakeLock,
     setEnableActionLog,
@@ -53,13 +53,13 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
     <AppScreenLayout>
       <SwuSettingsScreenView
         useHyperspace={useHyperspace}
-        enableForceToken={enableForceToken}
+        forceTokenDisplay={forceTokenDisplay}
         enableEpicActions={enableEpicActions}
         enableWakeLock={enableWakeLock}
         enableFavourites={enableFavourites}
         favourites={favourites}
         onUseHyperspaceChange={handleSettingChange('useHyperspace', setUseHyperspace)}
-        onEnableForceTokenChange={handleSettingChange('enableForceToken', setEnableForceToken)}
+        onForceTokenDisplayChange={handleSettingChange('forceTokenDisplay', setForceTokenDisplay)}
         onEnableEpicActionsChange={handleSettingChange('enableEpicActions', setEnableEpicActions)}
         onEnableWakeLockChange={handleSettingChange('enableWakeLock', setEnableWakeLock)}
         enableActionLog={enableActionLog}

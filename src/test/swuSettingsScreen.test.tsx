@@ -15,12 +15,12 @@ vi.mock('../services/analytics', () => ({
 
 const mockUserSettings = vi.hoisted(() => ({
   useHyperspace: true,
-  enableForceToken: true,
+  forceTokenDisplay: 'lof-only' as 'always-on' | 'lof-only' | 'always-off',
   enableEpicActions: true,
   enableWakeLock: true,
   enableFavourites: true,
   setUseHyperspace: vi.fn(),
-  setEnableForceToken: vi.fn(),
+  setForceTokenDisplay: vi.fn(),
   setEnableEpicActions: vi.fn(),
   setEnableWakeLock: vi.fn(),
   setEnableFavourites: vi.fn(),
@@ -64,7 +64,7 @@ const sampleFavourites: FavouriteBase[] = [
 beforeEach(() => {
   vi.clearAllMocks()
   mockUserSettings.useHyperspace = true
-  mockUserSettings.enableForceToken = true
+  mockUserSettings.forceTokenDisplay = 'lof-only'
   mockUserSettings.enableEpicActions = true
   mockUserSettings.enableWakeLock = true
   mockUserSettings.enableFavourites = true
@@ -112,9 +112,10 @@ describe('SwuSettingsScreen', () => {
     expect(screen.getByRole('checkbox', { name: /use hyperspace art/i })).toBeChecked()
   })
 
-  it('renders Enable Force Token toggle in checked state', () => {
+  it('renders Force Token Display dropdown with lof-only selected by default', () => {
     render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    expect(screen.getByRole('checkbox', { name: /enable force token/i })).toBeChecked()
+    const select = screen.getByRole('combobox', { name: /force token/i })
+    expect(select).toHaveValue('lof-only')
   })
 
   it('renders Enable Epic Actions toggle in checked state', () => {
@@ -134,11 +135,11 @@ describe('SwuSettingsScreen', () => {
     expect(mockUserSettings.setUseHyperspace).toHaveBeenCalledWith(false)
   })
 
-  it('calls setEnableForceToken(false) when force token toggle is clicked', async () => {
+  it('calls setForceTokenDisplay when force token dropdown is changed', async () => {
     const user = userEvent.setup()
     render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    await user.click(screen.getByRole('checkbox', { name: /enable force token/i }))
-    expect(mockUserSettings.setEnableForceToken).toHaveBeenCalledWith(false)
+    await user.selectOptions(screen.getByRole('combobox', { name: /force token/i }), 'always-off')
+    expect(mockUserSettings.setForceTokenDisplay).toHaveBeenCalledWith('always-off')
   })
 
   it('calls setEnableEpicActions(false) when epic actions toggle is clicked', async () => {
@@ -409,11 +410,11 @@ describe('SwuSettingsScreen analytics', () => {
     expect(mockOnSettingChanged).toHaveBeenCalledWith('useHyperspace', false)
   })
 
-  it('calls onSettingChanged with enableForceToken and new value when force token toggle is clicked', async () => {
+  it('calls onSettingChanged with forceTokenDisplay and new value when force token dropdown is changed', async () => {
     const user = userEvent.setup()
     render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    await user.click(screen.getByRole('checkbox', { name: /force token/i }))
-    expect(mockOnSettingChanged).toHaveBeenCalledWith('enableForceToken', false)
+    await user.selectOptions(screen.getByRole('combobox', { name: /force token/i }), 'always-off')
+    expect(mockOnSettingChanged).toHaveBeenCalledWith('forceTokenDisplay', 'always-off')
   })
 
   it('calls onSettingChanged with enableEpicActions and new value when epic actions toggle is clicked', async () => {

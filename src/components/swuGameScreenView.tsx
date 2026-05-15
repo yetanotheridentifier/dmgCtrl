@@ -41,7 +41,7 @@ interface Props {
   onForceGain: () => void
   onForceDismiss: () => void
   showForce: boolean
-  isMysticMonastery: boolean
+  showMysticMonastery: boolean
   mysticUsesRemaining: number
   onMysticAction: () => void
   enableLongPress: boolean
@@ -94,7 +94,7 @@ function SwuGameScreenView({
   onForceGain,
   onForceDismiss,
   showForce,
-  isMysticMonastery,
+  showMysticMonastery,
   mysticUsesRemaining,
   onMysticAction,
   enableLongPress,
@@ -322,8 +322,8 @@ function SwuGameScreenView({
         </button>
       )}
 
-      {/* Mystic Monastery action button — slot 2 (16vw), only shown when showForce is true */}
-      {showForce && isMysticMonastery && (() => {
+      {/* Mystic Monastery action button — slot 1 (9vw) without Force, slot 2 (16vw) with Force */}
+      {showMysticMonastery && (() => {
         const disabled = forceActive || mysticUsesRemaining === 0
         return (
           <button
@@ -332,7 +332,7 @@ function SwuGameScreenView({
             disabled={disabled}
             style={{
               position: 'absolute',
-              top: 'calc(env(safe-area-inset-top) + 16vw)',
+              top: `calc(env(safe-area-inset-top) + ${showForce ? 16 : 9}vw)`,
               left: 'calc(env(safe-area-inset-left) + 2vw)',
               width: '5vw',
               height: '5vw',
@@ -764,7 +764,7 @@ function SwuGameScreenView({
         )}
 
         {/* Force token — full width when alone, right half when both overlays active */}
-        {forceActive && showForce && (
+        {forceActive && (showForce || showMysticMonastery) && (
           <div
             data-testid="force-token"
             onClick={onForceDismiss}
@@ -817,18 +817,17 @@ function SwuGameScreenView({
 
       </div>
 
-      {/* Score panel — left column, between top buttons and round tracker */}
+      {/* Score panel — right column, fixed 16vw from top, between settings button and round tracker */}
       {playMode !== 'casual' && (() => {
         const markerCount = playMode === 'bo3' ? 2 : 1
-        const topVw = (showForce && (showEpicAction || isMysticMonastery)) ? 23 : (showForce || showEpicAction) ? 16 : 9
         return (
           <div
             data-testid="score-panel"
             style={{
               position: 'absolute',
-              top: `calc(env(safe-area-inset-top) + ${topVw}vw)`,
+              top: `calc(env(safe-area-inset-top) + 16vw)`,
               bottom: `calc(env(safe-area-inset-bottom) + 9vw)`,
-              left: 'calc(env(safe-area-inset-left) + 2vw)',
+              right: 'calc(env(safe-area-inset-right) + 2vw)',
               width: '5vw',
               minWidth: '36px',
               zIndex: 10,
@@ -847,9 +846,9 @@ function SwuGameScreenView({
                 background: 'transparent',
                 border: `1px solid ${pendingConfirm === 'loss' ? '#ef4444' : 'var(--color-ui-border)'}`,
                 borderRadius: '4px',
-                padding: '0.1rem 0',
+                padding: '0.3rem 0',
                 cursor: matchOver ? 'default' : 'pointer',
-                fontSize: 'clamp(0.45rem, 1vw, 0.65rem)',
+                fontSize: 'clamp(0.5rem, 1.1vw, 0.75rem)',
                 fontWeight: '300',
                 color: pendingConfirm === 'loss' ? '#ef4444' : 'var(--color-text-muted)',
                 letterSpacing: '0.05em',
@@ -895,9 +894,9 @@ function SwuGameScreenView({
                       background: 'transparent',
                       border: isConfirm ? '1px solid var(--color-accent)' : '1px solid #6b7280',
                       borderRadius: '4px',
-                      padding: '0.1rem 0',
+                      padding: '0.3rem 0',
                       cursor: 'pointer',
-                      fontSize: 'clamp(0.45rem, 1vw, 0.65rem)',
+                      fontSize: 'clamp(0.5rem, 1.1vw, 0.75rem)',
                       fontWeight: '300',
                       color: isConfirm ? 'var(--color-accent)' : 'var(--color-text-muted)',
                       letterSpacing: '0.05em',
@@ -952,9 +951,9 @@ function SwuGameScreenView({
                 background: 'transparent',
                 border: `1px solid ${pendingConfirm === 'win' ? '#22c55e' : 'var(--color-ui-border)'}`,
                 borderRadius: '4px',
-                padding: '0.1rem 0',
+                padding: '0.3rem 0',
                 cursor: matchOver ? 'default' : 'pointer',
-                fontSize: 'clamp(0.45rem, 1vw, 0.65rem)',
+                fontSize: 'clamp(0.5rem, 1.1vw, 0.75rem)',
                 fontWeight: '300',
                 color: pendingConfirm === 'win' ? '#22c55e' : 'var(--color-text-muted)',
                 letterSpacing: '0.05em',
@@ -1004,14 +1003,14 @@ function SwuGameScreenView({
         </div>
       )}
 
-      {/* Round counter — bottom-left, hidden when action log is disabled or match is over */}
+      {/* Round counter — bottom-right, hidden when action log is disabled or match is over */}
       {enableActionLog && !matchOver && <button
         data-testid="round-counter"
         onClick={onRoundIncrement}
         style={{
           position: 'absolute',
           bottom: 'calc(env(safe-area-inset-bottom) + 2vw)',
-          left: 'calc(env(safe-area-inset-left) + 2vw)',
+          right: 'calc(env(safe-area-inset-right) + 2vw)',
           width: '5vw',
           height: '5vw',
           minWidth: '36px',
@@ -1055,7 +1054,7 @@ function SwuGameScreenView({
         </span>
       </button>}
 
-      {/* Log button — bottom-right, aligned with round counter */}
+      {/* Log button — bottom-left, aligned with round counter */}
       {enableActionLog && (
         <button
           data-testid="log-btn"
@@ -1063,7 +1062,7 @@ function SwuGameScreenView({
           style={{
             position: 'absolute',
             bottom: 'calc(env(safe-area-inset-bottom) + 2vw)',
-            right: 'calc(env(safe-area-inset-right) + 2vw)',
+            left: 'calc(env(safe-area-inset-left) + 2vw)',
             width: '5vw',
             height: '5vw',
             minWidth: '36px',

@@ -119,9 +119,11 @@ const smallButtonStyle: React.CSSProperties = {
   cursor: 'pointer',
 }
 
+type ForceTokenDisplay = 'always-on' | 'lof-only' | 'always-off'
+
 interface Props {
   useHyperspace: boolean
-  enableForceToken: boolean
+  forceTokenDisplay: ForceTokenDisplay
   enableEpicActions: boolean
   enableWakeLock: boolean
   enableActionLog: boolean
@@ -131,7 +133,7 @@ interface Props {
   bo3TimerMinutes: number
   favourites: FavouriteBase[]
   onUseHyperspaceChange: (v: boolean) => void
-  onEnableForceTokenChange: (v: boolean) => void
+  onForceTokenDisplayChange: (v: ForceTokenDisplay) => void
   onEnableEpicActionsChange: (v: boolean) => void
   onEnableWakeLockChange: (v: boolean) => void
   onEnableActionLogChange: (v: boolean) => void
@@ -147,7 +149,7 @@ interface Props {
 
 function SwuSettingsScreenView({
   useHyperspace,
-  enableForceToken,
+  forceTokenDisplay,
   enableEpicActions,
   enableWakeLock,
   enableActionLog,
@@ -157,7 +159,7 @@ function SwuSettingsScreenView({
   bo3TimerMinutes,
   favourites,
   onUseHyperspaceChange,
-  onEnableForceTokenChange,
+  onForceTokenDisplayChange,
   onEnableEpicActionsChange,
   onEnableWakeLockChange,
   onEnableActionLogChange,
@@ -182,13 +184,52 @@ function SwuSettingsScreenView({
         onChange={onUseHyperspaceChange}
         vmin={vmin}
       />
-      <ToggleRow
-        id="toggle-force-token"
-        label="Enable Force Token"
-        checked={enableForceToken}
-        onChange={onEnableForceTokenChange}
-        vmin={vmin}
-      />
+      <div style={{
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '2vw',
+        padding: '1.5vh 0',
+        borderBottom: '1px solid rgba(107, 114, 128, 0.3)',
+      }}>
+        <label
+          htmlFor="select-force-token"
+          style={{
+            flex: 1,
+            color: 'var(--color-text-primary)',
+            fontWeight: '300',
+            fontSize: `clamp(0.9rem, ${vmin * 0.035}px, 1.1rem)`,
+            letterSpacing: '0.03em',
+            cursor: 'pointer',
+          }}
+        >
+          Force Token Display
+        </label>
+        <select
+          id="select-force-token"
+          aria-label="Force Token Display"
+          value={forceTokenDisplay}
+          onChange={e => onForceTokenDisplayChange(e.target.value as ForceTokenDisplay)}
+          style={{
+            background: 'transparent',
+            border: '2px solid var(--color-accent)',
+            borderRadius: '12px',
+            color: 'var(--color-text-primary)',
+            fontSize: `clamp(0.8rem, ${vmin * 0.03}px, 1rem)`,
+            padding: '0.3em 0.6em',
+            cursor: 'pointer',
+            flexShrink: 0,
+            outline: 'none',
+            boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
+            WebkitAppearance: 'none',
+          }}
+        >
+          <option value="always-on">Always on</option>
+          <option value="lof-only">LOF bases only</option>
+          <option value="always-off">Always off</option>
+        </select>
+      </div>
       <ToggleRow
         id="toggle-epic-actions"
         label="Enable Epic Actions"

@@ -40,7 +40,7 @@ src/
     useSwuSetup.ts          Setup screen logic — filtering, auto-select, format state, and play mode state; selectedFormat (persisted to pref_format), selectedPlayMode (persisted to pref_play_mode), validSets, handleFormatChange, handlePlayModeChange; clearing selection when the current set is not valid for the new format
     useMatch.ts             Match score state — playerScore, opponentScore, matchOver (computed), matchResult ('won'|'lost'|'drawn'|null, computed), incrementPlayerScore, incrementOpponentScore, recordDraw, closeByTimer, resetMatch, restoreState; maxScore is 1 for bo1, 2 for bo3; scores are clamped at maxScore; matchOver also true when matchDrawn or matchClosedByTimer flags are set; matchResult derived from final scores when match closes early
     useTimer.ts             Countdown timer hook — remaining (seconds), isRunning, isExpired; start (idempotent — only starts once), reset; records wall-clock start time and computes remaining from elapsed time on each tick (not by counting interval ticks), so the display catches up correctly after the device screen is off; a visibilitychange listener forces an immediate recalculation when the page becomes visible again; start is called by the game screen container on first game start
-    useUserSettings.ts      React Context — persistent user preferences (useHyperspace, enableForceToken, enableEpicActions, enableWakeLock, enableFavourites, enableLongPress, enableActionLog, enableCompetitiveMode, bo1TimerMinutes, bo3TimerMinutes) backed by localStorage under key `user_settings`; all boolean preferences except enableCompetitiveMode default to `true`; enableCompetitiveMode defaults to `false`; bo1TimerMinutes defaults to 25, bo3TimerMinutes defaults to 55; `UserSettingsProvider` wraps the app in `main.tsx`
+    useUserSettings.ts      React Context — persistent user preferences (useHyperspace, forceTokenDisplay, enableEpicActions, enableWakeLock, enableFavourites, enableLongPress, enableActionLog, enableCompetitiveMode, bo1TimerMinutes, bo3TimerMinutes) backed by localStorage under key `user_settings`; forceTokenDisplay is a 3-way value ('always-on' | 'lof-only' | 'always-off'), defaulting to 'lof-only'; all other boolean preferences except enableCompetitiveMode default to `true`; enableCompetitiveMode defaults to `false`; bo1TimerMinutes defaults to 25, bo3TimerMinutes defaults to 55; migrates old enableForceToken boolean (false → 'always-off', true/missing → 'lof-only'); `UserSettingsProvider` wraps the app in `main.tsx`
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
   services/
@@ -139,7 +139,7 @@ All other state is owned at the component level:
 | Action log entries | `useGameLog` | Local to game screen; array of `GameLogEntry` records; empty on mount; Round 1 entry (not undoable) added when the user taps Start; `game-result` entries store `prevLogEntries` and `prevMatchState` for full undo; reset when the next game starts |
 | Epic overlay dismissed | `swuGameScreen` | Local `epicOverlayDismissed` boolean; controls overlay visibility independently of `game.epicActionUsed`; set to `false` when epic action is marked; set to `true` by tapping the overlay when action log is disabled |
 | Art fallback index, image load state | `useBaseArt` | Local to whichever screen called it; reset when base changes |
-| User settings (hyperspace, force token, epic actions, wake lock, action log, favourites, long press, competitive mode) | `useUserSettings` Context / localStorage | Persisted under `user_settings` as JSON; seven of eight preferences (`useHyperspace`, `enableForceToken`, `enableEpicActions`, `enableWakeLock`, `enableFavourites`, `enableLongPress`, `enableActionLog`) default to `true`; `enableCompetitiveMode` defaults to `false` (beta flag); shared via React Context — updates propagate immediately to all mounted consumers |
+| User settings (hyperspace, force token display, epic actions, wake lock, action log, favourites, long press, competitive mode) | `useUserSettings` Context / localStorage | Persisted under `user_settings` as JSON; `forceTokenDisplay` is a 3-way value ('always-on' \| 'lof-only' \| 'always-off'), default 'lof-only'; all other boolean preferences except `enableCompetitiveMode` default to `true`; `enableCompetitiveMode` defaults to `false` (beta flag); migrates old `enableForceToken` boolean; shared via React Context — updates propagate immediately to all mounted consumers |
 | Favourites list | `useFavourites` / localStorage | Persisted under `favourites` as JSON array of `FavouriteBase`; sorted by set then card number ascending; deduplicated on `key`; UI visibility gated by `enableFavourites` in `useUserSettings` |
 | Selection mode (`base-selector` / `swudb-import` / `favourites`) | `SwuSetupScreen` / localStorage | Persisted under `pref_selection_mode`; defaults to `base-selector`; `'favourites'` is only restored on load if `enableFavourites` is true and the favourites list is non-empty; falls back to `'base-selector'` at runtime if either condition becomes false. On mode switch: entering `'swudb-import'` always clears the base selection and deck name; entering `'favourites'` clears the selection unless the current base is already in the favourites list; entering `'base-selector'` always preserves the current selection |
 | SWUDB URL input, validation error, deck name, loading state | `SwuSetupScreen` | Local; `swudbDeckName` remains `null` until a successful API load |
@@ -195,18 +195,22 @@ All other state is owned at the component level:
 
 ### Example flow: Force token
 
-1. Container reads `enableForceToken` from `useUserSettings()` and sets `showForce = enableForceToken`; the Force button slot is rendered when `showForce` is true
-2. Container computes `isForceBase = /the force is with you/i.test(base.epicAction)` and `effectiveForceEnabled = isForceBase || forceEnabled`
-3. **Locked state** (`!effectiveForceEnabled`): view renders a dimmed Force icon button (`force-btn-locked`). User taps it → `onForceEnable` → `enableForce()` sets `forceEnabled = true` → `effectiveForceEnabled` becomes `true`
-4. **Ready state** (`effectiveForceEnabled && !forceActive`): view renders the full blue Force button (`force-btn`). User taps it → `onForceToggle` → `toggleForce()` sets `forceActive = true`
-5. View re-renders: the full blue Force button (`force-btn`) is replaced by a greyed-out Force button (`force-btn-active`); a blue "The Force is With You" overlay appears over the lower portion of the card, with a translucent watermark of the Force token icon
-6. Tapping the overlay or the greyed Force button calls `onForceToggle`, returning `forceActive` to `false` and restoring the ready-state button — ready to gain the Force again
-7. Force bases (`isForceBase = true`) skip step 3 entirely: `effectiveForceEnabled` is `true` from mount, so the full blue button is shown immediately
-8. **Mystic Monastery (LOF-022)** is detected by `isMysticMonastery = base.set === 'LOF' && base.number === '022'`. It renders an additional action counter button (`mystic-action-btn`) in the epic action slot. Tapping it decrements `mysticUsesRemaining` (3 → 0) and sets `forceActive = true`. The regular Force button remains available at all times for gaining the Force through other in-game means. The Force button (`force-btn`) hides when `forceActive` is true (the greyed `force-btn-active` appears as usual). The counter button (`mystic-action-btn`) is always visible but rendered disabled (greyed, `disabled` attribute set) when `forceActive` is true or `mysticUsesRemaining` reaches 0 — it never disappears from the layout.
+1. Container reads `forceTokenDisplay` from `useUserSettings()` — one of `'always-on' | 'lof-only' | 'always-off'`; derives:
+   - `isForceBase = /the force is with you/i.test(base.epicAction)` — LOF Force bases including Mystic Monastery
+   - `isMysticMonastery = base.set === 'LOF' && base.number === '022'`
+   - `showForce = forceTokenDisplay !== 'always-off' && (forceTokenDisplay === 'always-on' || (isForceBase && !isMysticMonastery))`
+   - `showMysticMonastery = isMysticMonastery && forceTokenDisplay !== 'always-off'`
+   - `effectiveForceEnabled = isForceBase || forceEnabled`
+2. **Locked state** (`showForce && !effectiveForceEnabled`): view renders a dimmed Force icon button (`force-btn-locked`). User taps it → `onForceEnable` → `enableForce()` sets `forceEnabled = true` → `effectiveForceEnabled` becomes `true`
+3. **Ready state** (`showForce && effectiveForceEnabled && !forceActive`): view renders the full blue Force button (`force-btn`). User taps it → `onForceGain` → `toggleForce()` sets `forceActive = true`
+4. View re-renders: the full blue Force button (`force-btn`) is replaced by a greyed-out Force button (`force-btn-active`); a blue "The Force is With You" overlay appears over the lower portion of the card
+5. Tapping the overlay or the greyed Force button calls `onForceDismiss`, returning `forceActive` to `false` and restoring the ready-state button
+6. Force bases skip step 2 entirely: `effectiveForceEnabled` is `true` from mount, so the full blue button is shown immediately
+7. **Mystic Monastery (LOF-022)**: when `showMysticMonastery` is true, renders an action counter button (`mystic-action-btn`) at slot 1 (9vw from top) when `showForce` is false, slot 2 (16vw) when `showForce` is also true. Tapping it calls `gainForceViaMonastery()` which decrements `mysticUsesRemaining` (3 → 0) and sets `forceActive = true`. The Force token overlay renders when `forceActive && (showForce || showMysticMonastery)`. The counter is always visible but disabled when `forceActive` or `mysticUsesRemaining === 0`.
 
 ### Example flow: Both overlays active
 
-When `epicActionUsed && showEpicAction && forceActive && showForce` are all true simultaneously (a non-Force base with an epic action that has also gained the Force), the view computes `bothOverlaysActive = true`. In this state:
+When `epicActionUsed && showEpicAction && forceActive && showForce` are all true simultaneously, the view computes `bothOverlaysActive = true`. In this state:
 - The epic action overlay occupies the **left half** of the card's bottom section
 - The Force token overlay occupies the **right half**
 - Both are independently tappable to dismiss
@@ -539,7 +543,7 @@ In the portrait layout, the mode content area is wrapped in `<div key={selection
 
 ### Game screen
 
-1. `useUserSettings()` provides `enableForceToken`, `enableEpicActions`, `enableWakeLock`, `useHyperspace`, and `enableLongPress` — all user preferences for this screen
+1. `useUserSettings()` provides `forceTokenDisplay`, `enableEpicActions`, `enableWakeLock`, `useHyperspace`, and `enableLongPress` — all user preferences for this screen
 2. `useBaseArt(base, useHyperspace)` manages the ordered fallback chain and image load state
 3. `useSwuGame(base.hp)` manages the damage counter, epic action, and Force token (enabled + active) state
 4. `useGameLog()` manages the ordered action log; the container adds entries on counter changes, epic action mark, Force token toggle, and round increment; the log is empty on mount — a non-undoable Round 1 entry is added only when the user taps Start; `game-result` entries (added by `clearAndAdd`) replace the entire log and store `prevLogEntries` + `prevMatchState` for full undo
@@ -548,23 +552,22 @@ In the portrait layout, the mode content area is wrapped in `<div key={selection
 6a. `useTimer(durationSeconds)` manages the countdown timer — `remaining`, `isRunning`, `isExpired`; `start()` is idempotent (starts only once via an internal ref); called by the container on first game start; duration is `bo1TimerMinutes * 60` or `bo3TimerMinutes * 60` from user settings
 7. The container computes:
    - `showEpicAction = enableEpicActions && /epic action/i.test(base.epicAction)`
-   - `showForce = enableForceToken` — the Force button slot is shown for every base when enabled
-   - `isForceBase = /the force is with you/i.test(base.epicAction)` — LOF bases whose ability explicitly creates a Force token
+   - `showForce` and `showMysticMonastery` from `forceTokenDisplay`, `isForceBase`, and `isMysticMonastery` (see Force token flow above)
    - `effectiveForceEnabled = isForceBase || forceEnabled` — Force bases start enabled; others start locked until the user taps the dimmed icon
    - `epicActionOverlayVisible = game.epicActionUsed && !epicOverlayDismissed` — separates overlay visibility from game state
    - The active Force button (`force-btn`) renders "Gain / Force" as two-row text behind the force icon image; an `onError` handler hides the image if it fails to load (e.g. offline), making the text visible as a fallback
-8. Key props passed to the view: art state, counter callbacks, `epicActionUsed`, `epicActionOverlayVisible`, `onEpicActionMark`, `onEpicActionOverlayDismiss` (only when action log is disabled), `showEpicAction`, force state, `enableActionLog`, `round`, `onRoundIncrement`, `onStartGame`, `showLog`, `onToggleLog`, `logEntries`, `onLogUndo`, `playMode`, `playerScore`, `opponentScore`, `matchOver`, `matchDrawn`, `pendingConfirm`, `onWinPending`, `onLossPending`, `onDrawPending`, `onConfirmResult`, `onCancelConfirm`, `lastGameResult`, `timerRemaining`, `timerInteractive`; the view calls `useDragScrubber` directly to manage drag gesture state
-9. The left-side button column (top to bottom): back → Force icon (locked, ready, or overlay-active/greyed) when `showForce` → epic action button when `showEpicAction`; when Force is hidden the epic action button moves up to fill the gap; **score panel** (when `playMode !== 'casual'`) fills the space between the last top button and the round tracker
-10. The right-side button column (top to bottom): help → ⚙ settings
-11. The bottom row (when action log is enabled): round counter button (bottom-left, blue gradient header) → log button (bottom-right, ☰ icon)
+8. Key props passed to the view: art state, counter callbacks, `epicActionUsed`, `epicActionOverlayVisible`, `onEpicActionMark`, `onEpicActionOverlayDismiss` (only when action log is disabled), `showEpicAction`, force state, `showMysticMonastery`, `enableActionLog`, `round`, `onRoundIncrement`, `onStartGame`, `showLog`, `onToggleLog`, `logEntries`, `onLogUndo`, `playMode`, `playerScore`, `opponentScore`, `matchOver`, `matchDrawn`, `pendingConfirm`, `onWinPending`, `onLossPending`, `onDrawPending`, `onConfirmResult`, `onCancelConfirm`, `lastGameResult`, `timerRemaining`, `timerInteractive`; the view calls `useDragScrubber` directly to manage drag gesture state
+9. The left-side button column (top to bottom): back → Force icon (locked, ready, or overlay-active/greyed) when `showForce` → Mystic Monastery counter when `showMysticMonastery` → epic action button when `showEpicAction`; each non-Force button shifts up when the Force button is hidden
+10. The right-side button column (top to bottom): help → ⚙ settings → **score panel** (when `playMode !== 'casual'`) from 16vw downward
+11. The bottom row (when action log is enabled): log button (bottom-left, ☰ icon) → round counter button (bottom-right, blue gradient header)
 12. View renders the card image, counter, and up to two overlays over the bottom portion of the card:
     - **Epic action token** (gold, "Epic Action Used"): when `epicActionOverlayVisible && showEpicAction`
-    - **Force token** (blue, "The Force is With You"): when `forceActive && showForce`
+    - **Force token** (blue, "The Force is With You"): when `forceActive && (showForce || showMysticMonastery)`
     - When **both** are active, `bothOverlaysActive = true` renders them side by side (epic action left, Force right), each at half width
 
 ### Score panel
 
-Rendered in the left column of the game screen when `playMode !== 'casual'`. Positioned absolutely between the last top-left button and the round tracker, expanding to fill the available space. Hidden entirely when `playMode` is `'casual'`.
+Rendered in the **right column** of the game screen when `playMode !== 'casual'`. Positioned absolutely from a fixed `16vw` top offset (below the settings button at 9vw) downward to `calc(env(safe-area-inset-bottom) + 9vw)` (above the round tracker). Hidden entirely when `playMode` is `'casual'`.
 
 Layout (top to bottom within the panel):
 - **Opp** button — tap to initiate a loss confirm; shows "Confirm" when `pendingConfirm === 'loss'`; red text and border in confirm state; disabled when `matchOver`
@@ -574,8 +577,6 @@ Layout (top to bottom within the panel):
 - **You** button — tap to initiate a win confirm; shows "Confirm" when `pendingConfirm === 'win'`; green text and border in confirm state; disabled when `matchOver`
 
 All three buttons (Opp, timer/Draw, You) are full-width within the 5vw panel column.
-
-The panel's top offset is computed from the visible top-left buttons: `9vw` when only the back button is present; `16vw` when one additional button (Force or epic action) is visible; `23vw` when two additional buttons are both present. The panel always ends at `calc(env(safe-area-inset-bottom) + 9vw)`.
 
 **Timer display and interactivity:**
 - `timerInteractive` is true when `playMode !== 'casual'` and `!matchOver` and `pendingConfirm === null` and (`isPreFirstGame` OR `timer.isExpired`); `isPreFirstGame = game.round === 0 && gamesPlayed === 0` — between Bo3 games (`round === 0` after a reset, but games have been played) the timer is not interactive and shows the running time

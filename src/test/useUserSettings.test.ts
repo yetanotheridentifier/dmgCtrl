@@ -26,9 +26,9 @@ describe('useUserSettings', () => {
     expect(result.current.useHyperspace).toBe(true)
   })
 
-  it('defaults enableForceToken to true when storage is empty', () => {
+  it('defaults forceTokenDisplay to lof-only when storage is empty', () => {
     const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableForceToken).toBe(true)
+    expect(result.current.forceTokenDisplay).toBe('lof-only')
   })
 
   it('defaults enableEpicActions to true when storage is empty', () => {
@@ -61,12 +61,44 @@ describe('useUserSettings', () => {
     expect(result.current.useHyperspace).toBe(false)
   })
 
-  it('loads enableForceToken=false from stored JSON', () => {
+  it('loads forceTokenDisplay=always-on from stored JSON', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key) =>
+      key === STORAGE_KEY ? JSON.stringify({ forceTokenDisplay: 'always-on' }) : null
+    )
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    expect(result.current.forceTokenDisplay).toBe('always-on')
+  })
+
+  it('loads forceTokenDisplay=always-off from stored JSON', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key) =>
+      key === STORAGE_KEY ? JSON.stringify({ forceTokenDisplay: 'always-off' }) : null
+    )
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    expect(result.current.forceTokenDisplay).toBe('always-off')
+  })
+
+  it('migrates stored enableForceToken:false to always-off', () => {
     vi.mocked(localStorage.getItem).mockImplementation((key) =>
       key === STORAGE_KEY ? JSON.stringify({ enableForceToken: false }) : null
     )
     const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableForceToken).toBe(false)
+    expect(result.current.forceTokenDisplay).toBe('always-off')
+  })
+
+  it('migrates stored enableForceToken:true to lof-only (new default)', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key) =>
+      key === STORAGE_KEY ? JSON.stringify({ enableForceToken: true }) : null
+    )
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    expect(result.current.forceTokenDisplay).toBe('lof-only')
+  })
+
+  it('falls back to lof-only for an invalid forceTokenDisplay value', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key) =>
+      key === STORAGE_KEY ? JSON.stringify({ forceTokenDisplay: 'bad-value' }) : null
+    )
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    expect(result.current.forceTokenDisplay).toBe('lof-only')
   })
 
   it('loads enableEpicActions=false from stored JSON', () => {
@@ -110,11 +142,11 @@ describe('useUserSettings', () => {
     expect(saved.useHyperspace).toBe(false)
   })
 
-  it('saves to localStorage when setEnableForceToken is called', () => {
+  it('saves to localStorage when setForceTokenDisplay is called', () => {
     const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    act(() => result.current.setEnableForceToken(false))
+    act(() => result.current.setForceTokenDisplay('always-off'))
     const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
-    expect(saved.enableForceToken).toBe(false)
+    expect(saved.forceTokenDisplay).toBe('always-off')
   })
 
   it('saves to localStorage when setEnableEpicActions is called', () => {
@@ -153,18 +185,18 @@ describe('useUserSettings', () => {
     )
     const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
     expect(result.current.useHyperspace).toBe(true)
-    expect(result.current.enableForceToken).toBe(true)
+    expect(result.current.forceTokenDisplay).toBe('lof-only')
     expect(result.current.enableEpicActions).toBe(true)
     expect(result.current.enableWakeLock).toBe(true)
   })
 
-  it('falls back to true for a missing key in otherwise valid stored JSON', () => {
+  it('falls back to defaults for a missing key in otherwise valid stored JSON', () => {
     vi.mocked(localStorage.getItem).mockImplementation((key) =>
       key === STORAGE_KEY ? JSON.stringify({ useHyperspace: false }) : null
     )
     const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
     expect(result.current.useHyperspace).toBe(false)
-    expect(result.current.enableForceToken).toBe(true)
+    expect(result.current.forceTokenDisplay).toBe('lof-only')
     expect(result.current.enableEpicActions).toBe(true)
     expect(result.current.enableWakeLock).toBe(true)
   })
