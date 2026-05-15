@@ -8,7 +8,7 @@ dmgCtrl is a damage tracker for Star Wars Unlimited. For the best experience, in
 
 Open the app and the loading screen appears for a moment while base data is fetched from the internet. Once ready, the **Setup** screen opens automatically.
 
-Use the **Format** selector to choose your format, then use the **Source** selector to choose how you want to pick your base.
+Use the **Format** selector to choose your game format (which filters the available bases), then use the **Source** selector to choose how you want to pick your base.
 
 ### Base Selector
 
@@ -56,11 +56,15 @@ Your preferences are saved automatically and persist between sessions.
 | Setting | Default | Description |
 |---|---|---|
 | **Use Hyperspace Art** | On | When enabled, the Hyperspace variant is used by default on the game screen for any base that has one. If the Hyperspace image can't be loaded, the app falls back to the standard art. |
-| **Enable Force Token** | On | Shows the Force token button on the game screen. Turn off if you prefer not to track the Force. |
+| **Force Token Display** | LOF bases only | Controls when the Force token button is shown: **Always on** shows it for every base; **LOF bases only** shows it only for Force-relevant bases in the Legends of the Force set; **Always off** hides it entirely. |
 | **Enable Epic Actions** | On | Shows the Epic Action button on the game screen. Turn off if you prefer not to track epic actions. |
 | **Enable Screen Wake Lock** | On | Keeps the screen on during play. May affect battery life. |
 | **Enable Action Log** | On | Shows a scrollable log of game actions with an Undo button for the most recent action. Also enables the round tracker button. |
 | **Enable Favourites** | On | Reveals a star button on the setup screen to save bases as favourites, and adds a Favourites input mode for quick reselection. Saved bases are kept even when this setting is off. |
+| **Enable Long Press** | On | Allows long-pressing or dragging the +/− buttons to apply larger damage or healing values quickly. Turn off if accidental large hits are a problem. |
+| **Enable Competitive Mode** | Off | Adds a **Match** selector to the setup screen for tracking Best of 1 or Best of 3 matches with a score panel and match timer. See [Competitive Play](#competitive-play) below. |
+| **Bo1 Timer** | 25 min | Match timer duration for Best of 1 games. Adjustable in 5-minute steps (5–90 min). Shown only when Enable Competitive Mode is on. |
+| **Bo3 Timer** | 55 min | Match timer duration for Best of 3 games. Adjustable in 5-minute steps (5–90 min). Shown only when Enable Competitive Mode is on. |
 
 ### Managing saved favourites
 
@@ -85,6 +89,18 @@ The **Format** selector filters which bases are available based on the format yo
 | **Twin Suns** | All sets with no restrictions |
 
 Your format preference is saved and restored between sessions. If you load a deck via SWUDB Import and the base is not legal in the selected format, the start button is disabled and an error message is shown — switching to a valid format re-enables it without re-loading the deck.
+
+## Competitive Play
+
+When **Enable Competitive Mode** is turned on in Settings, a **Match** selector appears on the setup screen alongside the Format selector.
+
+| Option | Description |
+|---|---|
+| **Casual** | No score tracking. Standard play with no timer or result recording. |
+| **Best of 1** | Single-game match. Records a win, loss, or draw. Includes a match timer (default 25 min). |
+| **Best of 3** | First to 2 game wins. Records each game result and tracks the overall match score. Includes a match timer (default 55 min). |
+
+Once a match mode is selected and the game starts, the score panel appears on the right side of the game screen showing your score (You) and your opponent's score (Opp), plus the match timer. See the game help for full details on how scoring and the timer work.
 
 ## Rules
 
