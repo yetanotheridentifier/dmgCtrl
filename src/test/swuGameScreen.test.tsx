@@ -16,6 +16,7 @@ const mockOnUndoUsed = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnEpicActionUsed = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnForceGained = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnForceUsed = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnMatchCompleted = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 vi.mock('../services/analytics', () => ({
   onDamageDealt: mockOnDamageDealt,
   onDamageHealed: mockOnDamageHealed,
@@ -24,6 +25,7 @@ vi.mock('../services/analytics', () => ({
   onEpicActionUsed: mockOnEpicActionUsed,
   onForceGained: mockOnForceGained,
   onForceUsed: mockOnForceUsed,
+  onMatchCompleted: mockOnMatchCompleted,
   onImageLoadFailed: vi.fn().mockResolvedValue(undefined),
 }))
 
@@ -1936,6 +1938,7 @@ describe('SwuGameScreen analytics', () => {
     mockOnEpicActionUsed.mockClear()
     mockOnForceGained.mockClear()
     mockOnForceUsed.mockClear()
+    mockOnMatchCompleted.mockClear()
   })
 
   it('calls onDamageDealt with baseKey, baseSet and amount 1 on single tap of +', async () => {
@@ -2051,6 +2054,48 @@ describe('SwuGameScreen analytics', () => {
     await user.click(screen.getByTestId('log-btn'))
     await user.click(screen.getByTestId('log-undo-btn'))
     expect(mockOnUndoUsed).toHaveBeenCalledWith('SOR-026', 'SOR', 'heal')
+  })
+
+  it('calls onMatchCompleted with playMode, matchResult, playerScore, opponentScore when bo1 match is won', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByText('Start'))
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(mockOnMatchCompleted).toHaveBeenCalledWith('bo1', 'won', 1, 0)
+  })
+
+  it('calls onMatchCompleted with matchResult lost when bo1 match is lost', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByText('Start'))
+    await user.click(screen.getByRole('button', { name: 'Opp' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(mockOnMatchCompleted).toHaveBeenCalledWith('bo1', 'lost', 0, 1)
+  })
+
+  it('calls onMatchCompleted with matchResult drawn when a draw is recorded', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByTestId('score-timer'))
+    await user.click(screen.getByTestId('score-timer'))
+    expect(mockOnMatchCompleted).toHaveBeenCalledWith('bo1', 'drawn', 0, 0)
+  })
+
+  it('calls onMatchCompleted only once even when the component re-renders', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await user.click(screen.getByText('Start'))
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(mockOnMatchCompleted).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not call onMatchCompleted in casual play mode', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByText('Start'))
+    expect(mockOnMatchCompleted).not.toHaveBeenCalled()
   })
 
 })

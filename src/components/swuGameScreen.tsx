@@ -11,7 +11,7 @@ import { useTimer } from '../hooks/useTimer'
 import SwuGameScreenView from './swuGameScreenView'
 import { BackIcon } from './icons'
 import AppScreenLayout from './layout/AppScreenLayout'
-import { onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed, onEpicActionUsed, onForceGained, onForceUsed } from '../services/analytics'
+import { onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed, onEpicActionUsed, onForceGained, onForceUsed, onMatchCompleted } from '../services/analytics'
 import type { PlayMode } from '../utils/playMode'
 
 interface Props {
@@ -40,6 +40,13 @@ function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }
   const [lastGameResult, setLastGameResult] = useState<'won' | 'lost' | 'drawn' | null>(null)
   const pendingConfirmRef = useRef(pendingConfirm)
   useEffect(() => { pendingConfirmRef.current = pendingConfirm }, [pendingConfirm])
+
+  useEffect(() => {
+    if (match.matchOver && playMode !== 'casual' && match.matchResult) {
+      void onMatchCompleted(playMode, match.matchResult, match.playerScore, match.opponentScore)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [match.matchOver])
 
   // Auto-trigger loss confirm when base reaches 0 HP in competitive play
   useEffect(() => {

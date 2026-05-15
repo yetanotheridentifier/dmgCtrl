@@ -44,7 +44,7 @@ src/
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
   services/
-    analytics.ts            Offline-queue analytics service (22 event functions + enqueue + flush); events written to localStorage queue first, then flushed via POST to /analytics/batch; queue preserved on network error and re-flushed on window.online; env and sessionId auto-appended to every event; worker appends country, city, and coordinates from request.cf
+    analytics.ts            Offline-queue analytics service (23 event functions + enqueue + flush); events written to localStorage queue first, then flushed via POST to /analytics/batch; queue preserved on network error and re-flushed on window.online; env and sessionId auto-appended to every event; worker appends country, city, and coordinates from request.cf
 
   constants/
     setRegistry.ts          Static set registry — maps every known set code to { rotation, type }; authoritative source for format filtering; unknown sets default to allowed (forward-compatible)
@@ -64,7 +64,7 @@ src/
     swuLoadingScreen.test.tsx Loading screen tests
     swuSetupScreen.test.tsx Setup screen container tests
     swuSettingsScreen.test.tsx Settings screen container tests
-    analytics.test.ts       Analytics service tests — enqueue (write, shape, append, cap, silent failure), flush (batch POST, URL, clear on 200, preserve on 500, preserve on network error, no-op when empty), window.online trigger, payload shape, PII absence, env field, sessionId consistency, all 22 event functions
+    analytics.test.ts       Analytics service tests — enqueue (write, shape, append, cap, silent failure), flush (batch POST, URL, clear on 200, preserve on 500, preserve on network error, no-op when empty), window.online trigger, payload shape, PII absence, env field, sessionId consistency, all 23 event functions
     formatFilter.test.ts    Format filtering utility tests (isSetValidForFormat, getValidSets, isBaseValidForFormat, formatValidationError — all formats and set types)
     swudbUrl.test.ts        SWUDB URL utility tests
     useDragScrubber.test.ts Drag-to-scrub hook tests
@@ -139,7 +139,7 @@ All other state is owned at the component level:
 | Action log entries | `useGameLog` | Local to game screen; array of `GameLogEntry` records; empty on mount; Round 1 entry (not undoable) added when the user taps Start; `game-result` entries store `prevLogEntries` and `prevMatchState` for full undo; reset when the next game starts |
 | Epic overlay dismissed | `swuGameScreen` | Local `epicOverlayDismissed` boolean; controls overlay visibility independently of `game.epicActionUsed`; set to `false` when epic action is marked; set to `true` by tapping the overlay when action log is disabled |
 | Art fallback index, image load state | `useBaseArt` | Local to whichever screen called it; reset when base changes |
-| User settings (hyperspace, force token display, epic actions, wake lock, action log, favourites, long press, competitive mode) | `useUserSettings` Context / localStorage | Persisted under `user_settings` as JSON; `forceTokenDisplay` is a 3-way value ('always-on' \| 'lof-only' \| 'always-off'), default 'lof-only'; all other boolean preferences except `enableCompetitiveMode` default to `true`; `enableCompetitiveMode` defaults to `false` (beta flag); migrates old `enableForceToken` boolean; shared via React Context — updates propagate immediately to all mounted consumers |
+| User settings (hyperspace, force token display, epic actions, wake lock, action log, favourites, long press, competitive mode) | `useUserSettings` Context / localStorage | Persisted under `user_settings` as JSON; `forceTokenDisplay` is a 3-way value ('always-on' \| 'lof-only' \| 'always-off'), default 'lof-only'; all other boolean preferences except `enableCompetitiveMode` default to `true`; `enableCompetitiveMode` defaults to `false`; migrates old `enableForceToken` boolean; shared via React Context — updates propagate immediately to all mounted consumers |
 | Favourites list | `useFavourites` / localStorage | Persisted under `favourites` as JSON array of `FavouriteBase`; sorted by set then card number ascending; deduplicated on `key`; UI visibility gated by `enableFavourites` in `useUserSettings` |
 | Selection mode (`base-selector` / `swudb-import` / `favourites`) | `SwuSetupScreen` / localStorage | Persisted under `pref_selection_mode`; defaults to `base-selector`; `'favourites'` is only restored on load if `enableFavourites` is true and the favourites list is non-empty; falls back to `'base-selector'` at runtime if either condition becomes false. On mode switch: entering `'swudb-import'` always clears the base selection and deck name; entering `'favourites'` clears the selection unless the current base is already in the favourites list; entering `'base-selector'` always preserves the current selection |
 | SWUDB URL input, validation error, deck name, loading state | `SwuSetupScreen` | Local; `swudbDeckName` remains `null` until a successful API load |
@@ -494,7 +494,7 @@ Format state lives in `useSwuSetup`. When the format changes, `validSets` is rec
 
 When `enableCompetitiveMode` is `true` in user settings, a **Match** dropdown appears on the setup screen on the same row as the Format selector. Three options are available: Casual, Best of 1, Best of 3. The selection is persisted to localStorage under `pref_play_mode` and defaults to `'casual'`. The selected play mode is passed to `App` via `onConfirm(base, playMode)`, stored as `selectedPlayMode` in `App` state, and forwarded to `SwuGameScreen` as a `playMode` prop.
 
-`enableCompetitiveMode` defaults to `false` and is toggled in the Settings screen. It is a beta flag intended to be removed in ticket #6 when the feature ships fully.
+`enableCompetitiveMode` defaults to `false` and is toggled in the Settings screen.
 
 ### Source selector
 

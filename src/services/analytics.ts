@@ -60,12 +60,16 @@ export function onAppStart(): Promise<void> {
   return sendEvent('app_started', { version: APP_VERSION })
 }
 
-export function onGameStart(baseKey: string, baseSet: string, hyperspace: boolean): Promise<void> {
-  return sendEvent('game_started', { baseKey, baseSet, hyperspace })
+export function onGameStart(baseKey: string, baseSet: string, hyperspace: boolean, playMode: string): Promise<void> {
+  return sendEvent('game_started', { baseKey, baseSet, hyperspace, playMode })
 }
 
-export function onGameEnd(baseKey: string, baseSet: string, hyperspace: boolean, durationSeconds: number): Promise<void> {
-  return sendEvent('game_ended', { baseKey, baseSet, hyperspace, durationSeconds })
+export function onGameEnd(baseKey: string, baseSet: string, hyperspace: boolean, durationSeconds: number, playMode: string): Promise<void> {
+  return sendEvent('game_ended', { baseKey, baseSet, hyperspace, durationSeconds, playMode })
+}
+
+export function onMatchCompleted(playMode: string, matchResult: string, playerScore: number, opponentScore: number): Promise<void> {
+  return sendEvent('match_completed', { playMode, matchResult, playerScore, opponentScore })
 }
 
 export function onAppInstall(platform: string): Promise<void> {

@@ -62,13 +62,13 @@ function App() {
     setIsInGame(true)
     setScreen('game')
     gameStartTime.current = Date.now()
-    void onGameStart(`${base.set}-${base.number}`, base.set, useHyperspace)
+    void onGameStart(`${base.set}-${base.number}`, base.set, useHyperspace, playMode)
   }
 
   const handleBack = () => {
     if (selectedBase) {
       const durationSeconds = Math.round((Date.now() - gameStartTime.current) / 1000)
-      void onGameEnd(`${selectedBase.set}-${selectedBase.number}`, selectedBase.set, useHyperspace, durationSeconds)
+      void onGameEnd(`${selectedBase.set}-${selectedBase.number}`, selectedBase.set, useHyperspace, durationSeconds, selectedPlayMode)
     }
     setIsInGame(false)
     setScreen('setup')

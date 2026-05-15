@@ -149,13 +149,14 @@ The queue is capped at 200 events; if the cap is reached, the oldest events are 
 
 ### Frontend analytics service (`src/services/analytics.ts`)
 
-Twenty-two public functions enqueue events and trigger a flush. All are fire-and-forget — they return `Promise<void>` so tests can await them, but callers use `void` (errors are silently discarded):
+Twenty-three public functions enqueue events and trigger a flush. All are fire-and-forget — they return `Promise<void>` so tests can await them, but callers use `void` (errors are silently discarded):
 
 | Function | Event name | Payload fields |
 |---|---|---|
 | `onAppStart()` | `app_started` | `version` (from package.json) |
-| `onGameStart(baseKey, baseSet, hyperspace)` | `game_started` | `baseKey`, `baseSet`, `hyperspace` |
-| `onGameEnd(baseKey, baseSet, hyperspace, durationSeconds)` | `game_ended` | `baseKey`, `baseSet`, `hyperspace`, `durationSeconds` |
+| `onGameStart(baseKey, baseSet, hyperspace, playMode)` | `game_started` | `baseKey`, `baseSet`, `hyperspace`, `playMode` (`'casual'` \| `'bo1'` \| `'bo3'`) |
+| `onGameEnd(baseKey, baseSet, hyperspace, durationSeconds, playMode)` | `game_ended` | `baseKey`, `baseSet`, `hyperspace`, `durationSeconds`, `playMode` |
+| `onMatchCompleted(playMode, matchResult, playerScore, opponentScore)` | `match_completed` | `playMode`, `matchResult` (`'won'` \| `'lost'` \| `'drawn'`), `playerScore`, `opponentScore` |
 | `onAppInstall(platform)` | `app_installed` | `platform` (`'ios'` \| `'android'` \| `'other'`) |
 | `onAppResume()` | `app_resumed` | `sessionDurationSoFarSeconds` |
 | `onDamageDealt(baseKey, baseSet, amount)` | `damage_dealt` | `baseKey`, `baseSet`, `amount` |
@@ -289,6 +290,9 @@ The dashboard is defined as JSON at `grafana/dmgctrl-dashboard.json` and can be 
 | Installs by platform | Donut | Cumulative installs split by `ios` / `android` / `other` |
 | Errors per session | Bar gauge | % of sessions that encountered each error event type |
 | Feature adoption | Bar gauge | % of sessions using hyperspace, force token, epic action, undo |
+| Sessions by play mode | Donut | `game_started` events split by `playMode` (`casual` / `bo1` / `bo3`) |
+| Bo1 match results | Bar gauge | Count of `match_completed` outcomes for Bo1 matches (`won` / `lost` / `drawn`) |
+| Bo3 match results | Bar gauge | Count of `match_completed` outcomes for Bo3 matches (`won` / `lost` / `drawn`) |
 
 Feature adoption and errors per session are measured via usage events (sessions containing at least one relevant event) rather than settings state — this reflects actual use rather than whether the feature was merely enabled.
 

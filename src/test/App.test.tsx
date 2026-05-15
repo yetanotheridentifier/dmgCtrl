@@ -430,7 +430,7 @@ describe('App analytics', () => {
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
     await user.click(screen.getByRole('button', { name: 'Start game' }))
-    expect(mockOnGameStart).toHaveBeenCalledWith('SOR-026', 'SOR', true)
+    expect(mockOnGameStart).toHaveBeenCalledWith('SOR-026', 'SOR', true, 'casual')
   })
 
   it('calls onGameEnd when the back button is pressed from the game screen', async () => {
@@ -443,7 +443,7 @@ describe('App analytics', () => {
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
     await user.click(screen.getByRole('button', { name: 'Start game' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(mockOnGameEnd).toHaveBeenCalledWith('SOR-026', 'SOR', false, expect.any(Number))
+    expect(mockOnGameEnd).toHaveBeenCalledWith('SOR-026', 'SOR', false, expect.any(Number), 'casual')
   })
 
   it('does not call onGameEnd when back is pressed from help screen', async () => {
