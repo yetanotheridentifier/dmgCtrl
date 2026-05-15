@@ -3,9 +3,11 @@ import type { ReactNode } from 'react'
 
 const STORAGE_KEY = 'user_settings'
 
+type ForceTokenDisplay = 'always-on' | 'lof-only' | 'always-off'
+
 interface UserSettings {
   useHyperspace: boolean
-  enableForceToken: boolean
+  forceTokenDisplay: ForceTokenDisplay
   enableEpicActions: boolean
   enableWakeLock: boolean
   enableFavourites: boolean
@@ -16,9 +18,11 @@ interface UserSettings {
   bo3TimerMinutes: number
 }
 
+const VALID_FORCE_TOKEN_DISPLAY: ForceTokenDisplay[] = ['always-on', 'lof-only', 'always-off']
+
 const DEFAULTS: UserSettings = {
   useHyperspace: true,
-  enableForceToken: true,
+  forceTokenDisplay: 'lof-only',
   enableEpicActions: true,
   enableWakeLock: true,
   enableFavourites: true,
@@ -29,22 +33,34 @@ const DEFAULTS: UserSettings = {
   bo3TimerMinutes: 55,
 }
 
+function migrateForceTokenDisplay(parsed: Record<string, unknown>): ForceTokenDisplay {
+  if ('forceTokenDisplay' in parsed) {
+    const v = parsed.forceTokenDisplay
+    if (VALID_FORCE_TOKEN_DISPLAY.includes(v as ForceTokenDisplay)) return v as ForceTokenDisplay
+    return DEFAULTS.forceTokenDisplay
+  }
+  if ('enableForceToken' in parsed) {
+    return parsed.enableForceToken === false ? 'always-off' : 'lof-only'
+  }
+  return DEFAULTS.forceTokenDisplay
+}
+
 function load(): UserSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return { ...DEFAULTS }
-    const parsed = JSON.parse(raw)
+    const parsed = JSON.parse(raw) as Record<string, unknown>
     return {
-      useHyperspace: parsed.useHyperspace ?? DEFAULTS.useHyperspace,
-      enableForceToken: parsed.enableForceToken ?? DEFAULTS.enableForceToken,
-      enableEpicActions: parsed.enableEpicActions ?? DEFAULTS.enableEpicActions,
-      enableWakeLock: parsed.enableWakeLock ?? DEFAULTS.enableWakeLock,
-      enableFavourites: parsed.enableFavourites ?? DEFAULTS.enableFavourites,
-      enableLongPress: parsed.enableLongPress ?? DEFAULTS.enableLongPress,
-      enableActionLog: parsed.enableActionLog ?? DEFAULTS.enableActionLog,
-      enableCompetitiveMode: parsed.enableCompetitiveMode ?? DEFAULTS.enableCompetitiveMode,
-      bo1TimerMinutes: parsed.bo1TimerMinutes ?? DEFAULTS.bo1TimerMinutes,
-      bo3TimerMinutes: parsed.bo3TimerMinutes ?? DEFAULTS.bo3TimerMinutes,
+      useHyperspace: (parsed.useHyperspace as boolean) ?? DEFAULTS.useHyperspace,
+      forceTokenDisplay: migrateForceTokenDisplay(parsed),
+      enableEpicActions: (parsed.enableEpicActions as boolean) ?? DEFAULTS.enableEpicActions,
+      enableWakeLock: (parsed.enableWakeLock as boolean) ?? DEFAULTS.enableWakeLock,
+      enableFavourites: (parsed.enableFavourites as boolean) ?? DEFAULTS.enableFavourites,
+      enableLongPress: (parsed.enableLongPress as boolean) ?? DEFAULTS.enableLongPress,
+      enableActionLog: (parsed.enableActionLog as boolean) ?? DEFAULTS.enableActionLog,
+      enableCompetitiveMode: (parsed.enableCompetitiveMode as boolean) ?? DEFAULTS.enableCompetitiveMode,
+      bo1TimerMinutes: (parsed.bo1TimerMinutes as number) ?? DEFAULTS.bo1TimerMinutes,
+      bo3TimerMinutes: (parsed.bo3TimerMinutes as number) ?? DEFAULTS.bo3TimerMinutes,
     }
   } catch {
     return { ...DEFAULTS }
@@ -57,7 +73,7 @@ function save(settings: UserSettings): void {
 
 type UserSettingsValue = UserSettings & {
   setUseHyperspace: (v: boolean) => void
-  setEnableForceToken: (v: boolean) => void
+  setForceTokenDisplay: (v: ForceTokenDisplay) => void
   setEnableEpicActions: (v: boolean) => void
   setEnableWakeLock: (v: boolean) => void
   setEnableFavourites: (v: boolean) => void
@@ -83,7 +99,7 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
 
   const value: UserSettingsValue = {
     useHyperspace: settings.useHyperspace,
-    enableForceToken: settings.enableForceToken,
+    forceTokenDisplay: settings.forceTokenDisplay,
     enableEpicActions: settings.enableEpicActions,
     enableWakeLock: settings.enableWakeLock,
     enableFavourites: settings.enableFavourites,
@@ -93,7 +109,7 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     bo1TimerMinutes: settings.bo1TimerMinutes,
     bo3TimerMinutes: settings.bo3TimerMinutes,
     setUseHyperspace: (v) => update({ useHyperspace: v }),
-    setEnableForceToken: (v) => update({ enableForceToken: v }),
+    setForceTokenDisplay: (v) => update({ forceTokenDisplay: v }),
     setEnableEpicActions: (v) => update({ enableEpicActions: v }),
     setEnableWakeLock: (v) => update({ enableWakeLock: v }),
     setEnableFavourites: (v) => update({ enableFavourites: v }),
