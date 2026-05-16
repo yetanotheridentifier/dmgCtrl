@@ -21,7 +21,7 @@ interface Props {
   onBack: () => void
   onHelp: () => void
   onSettings?: () => void
-  imageSrc: string
+  imageSrc: string | null
   imageRotationDeg: number
   count: number
   imageLoaded: boolean
@@ -456,7 +456,7 @@ function SwuGameScreenView({
 
         {/* Card image */}
         <img
-          src={imageSrc}
+          src={imageSrc ?? undefined}
           alt={base.name}
           onLoad={onImageLoad}
           onError={onImageError}

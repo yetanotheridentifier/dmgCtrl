@@ -104,8 +104,8 @@ describe('useGameLog', () => {
     let removed: GameLogEntry | null = null
     act(() => { removed = result.current.undoLast() })
     expect(removed).not.toBeNull()
-    expect(removed.type).toBe('heal')
-    expect(removed.message).toBe('Heal: -1 (2 → 1)')
+    expect(removed!.type).toBe('heal')
+    expect(removed!.message).toBe('Heal: -1 (2 → 1)')
   })
 
   it('undoLast returns null when entries is empty', () => {
