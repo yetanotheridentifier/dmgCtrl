@@ -72,6 +72,7 @@ export function useSwuSetup(
   // Auto-select aspect when only one option available
   useEffect(() => {
     if (availableAspects.length === 1) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedAspect(availableAspects[0])
       setSelectedKey('')
     }
@@ -80,6 +81,7 @@ export function useSwuSetup(
   // Auto-select base when only one option available
   useEffect(() => {
     if (filteredBases.length === 1) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedKey(`${filteredBases[0].set}-${filteredBases[0].number}`)
     }
   }, [filteredBases])

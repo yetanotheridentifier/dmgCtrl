@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useGameLog } from '../hooks/useGameLog'
+import type { GameLogEntry } from '../hooks/useGameLog'
 
 const mockState = {
   damage: 0,
@@ -100,7 +101,7 @@ describe('useGameLog', () => {
       result.current.add(entry1)
       result.current.add(entry2)
     })
-    let removed: any = null
+    let removed: GameLogEntry | null = null
     act(() => { removed = result.current.undoLast() })
     expect(removed).not.toBeNull()
     expect(removed.type).toBe('heal')
@@ -109,7 +110,7 @@ describe('useGameLog', () => {
 
   it('undoLast returns null when entries is empty', () => {
     const { result } = renderHook(() => useGameLog())
-    let removed: any = 'sentinel'
+    let removed: GameLogEntry | null = null
     act(() => { removed = result.current.undoLast() })
     expect(removed).toBeNull()
   })

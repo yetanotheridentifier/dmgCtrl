@@ -707,8 +707,8 @@ describe('SwuSetupScreen', () => {
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = input.toString()
       if (url.includes('/swudb/deck/')) return new Promise(() => {})
-      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
+      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as unknown as Response)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as unknown as Response)
     })
     const user = userEvent.setup()
     await switchToSwudbMode(user)
@@ -720,9 +720,9 @@ describe('SwuSetupScreen', () => {
   it('Clicking Load on an inaccessible deck shows Deck not accessible', async () => {
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = input.toString()
-      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: false, status: 404 } as any)
-      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
+      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: false, status: 404 } as unknown as Response)
+      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as unknown as Response)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as unknown as Response)
     })
     const user = userEvent.setup()
     await switchToSwudbMode(user)
@@ -734,9 +734,9 @@ describe('SwuSetupScreen', () => {
   it('Clicking Load shows Base not recognised when base is not in database', async () => {
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = input.toString()
-      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Future Deck', base: { defaultExpansionAbbreviation: 'NEW', defaultCardNumber: '001' } }) } as any)
-      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
+      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Future Deck', base: { defaultExpansionAbbreviation: 'NEW', defaultCardNumber: '001' } }) } as unknown as Response)
+      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as unknown as Response)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as unknown as Response)
     })
     const user = userEvent.setup()
     await switchToSwudbMode(user)
@@ -748,9 +748,9 @@ describe('SwuSetupScreen', () => {
   it('Deck name is still shown when base is not recognised', async () => {
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = input.toString()
-      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Future Deck', base: { defaultExpansionAbbreviation: 'NEW', defaultCardNumber: '001' } }) } as any)
-      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
+      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Future Deck', base: { defaultExpansionAbbreviation: 'NEW', defaultCardNumber: '001' } }) } as unknown as Response)
+      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as unknown as Response)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as unknown as Response)
     })
     const user = userEvent.setup()
     await switchToSwudbMode(user)
@@ -762,9 +762,9 @@ describe('SwuSetupScreen', () => {
   it('Submit button is disabled when base is not recognised', async () => {
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = input.toString()
-      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Future Deck', base: { defaultExpansionAbbreviation: 'NEW', defaultCardNumber: '001' } }) } as any)
-      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
+      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Future Deck', base: { defaultExpansionAbbreviation: 'NEW', defaultCardNumber: '001' } }) } as unknown as Response)
+      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as unknown as Response)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as unknown as Response)
     })
     const user = userEvent.setup()
     await switchToSwudbMode(user)
@@ -1416,9 +1416,9 @@ describe('SwuSetupScreen analytics', () => {
   it('calls onDeckImportFailure with deck_not_accessible when the fetch fails', async () => {
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = input.toString()
-      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: false, status: 404 } as any)
-      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
+      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: false, status: 404 } as unknown as Response)
+      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as unknown as Response)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as unknown as Response)
     })
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
@@ -1433,9 +1433,9 @@ describe('SwuSetupScreen analytics', () => {
   it('calls onDeckImportFailure with base_not_recognised when the base is unknown', async () => {
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = input.toString()
-      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Test Deck', base: { defaultExpansionAbbreviation: 'XYZ', defaultCardNumber: '999' } }) } as any)
-      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
+      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Test Deck', base: { defaultExpansionAbbreviation: 'XYZ', defaultCardNumber: '999' } }) } as unknown as Response)
+      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as unknown as Response)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as unknown as Response)
     })
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
@@ -1590,9 +1590,9 @@ describe('SwuSetupScreen analytics', () => {
 
   it('SWUDB import shows format error and disables submit when loaded base is invalid for format', async () => {
     vi.stubGlobal('fetch', vi.fn((url: string) => {
-      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Test Deck', base: { defaultExpansionAbbreviation: 'SOR', defaultCardNumber: '026' } }) } as any)
-      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
+      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Test Deck', base: { defaultExpansionAbbreviation: 'SOR', defaultCardNumber: '026' } }) } as unknown as Response)
+      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as unknown as Response)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as unknown as Response)
     }))
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
@@ -1606,9 +1606,9 @@ describe('SwuSetupScreen analytics', () => {
 
   it('Switching to Eternal after loading a format-invalid deck enables the submit button', async () => {
     vi.stubGlobal('fetch', vi.fn((url: string) => {
-      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Test Deck', base: { defaultExpansionAbbreviation: 'SOR', defaultCardNumber: '026' } }) } as any)
-      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as any)
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as any)
+      if (url.includes('/swudb/deck/')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deckName: 'Test Deck', base: { defaultExpansionAbbreviation: 'SOR', defaultCardNumber: '026' } }) } as unknown as Response)
+      if (url.includes('swuapi.com')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ cards: [], pagination: { limit: 100, next_cursor: null } }) } as unknown as Response)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSwuDbResponse) } as unknown as Response)
     }))
     const user = userEvent.setup()
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)

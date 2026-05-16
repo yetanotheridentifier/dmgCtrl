@@ -20,6 +20,6 @@ export async function fetchSwudbDeck(deckId: string): Promise<SwudbDeckResult> {
     }
   } catch (e) {
     if (e instanceof Error && e.message === 'Deck not accessible') throw e
-    throw new Error('Deck not accessible')
+    throw new Error('Deck not accessible', { cause: e })
   }
 }
