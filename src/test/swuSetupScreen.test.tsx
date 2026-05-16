@@ -505,7 +505,7 @@ describe('SwuSetupScreen', () => {
   it('Shows portrait layout with title and selectors in portrait orientation', async () => {
     makeMatchMediaMock(true)
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
-    expect(screen.getByText('dmgCtrl')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('dmgCtrl')).toBeInTheDocument())
     expect(screen.getByText('Source:')).toBeInTheDocument()
   })
 
