@@ -84,7 +84,7 @@ A Cloudflare Web Analytics beacon is embedded in `index.html`. It fires on every
 - Unique visitor counts (privacy-preserving, no cookies, no consent banner required)
 - Countries, browsers, devices
 
-The beacon token (`aaed1e18376f4bdd9f56a0050acce291`) is a public identifier — it is not a secret and is safe to commit.
+The beacon token (`019fc29a88ac474bab2170fe6a1f8424`, registered for `dmgctrl.app`) is a public identifier — it is not a secret and is safe to commit.
 
 Custom event tracking (game starts, base popularity) is not covered by the Cloudflare beacon, which only records page loads. This is handled by the frontend analytics service, which queues events in localStorage and flushes them to the Cloudflare Worker in batches. The worker writes them to InfluxDB Cloud (free tier, `dmgctrl` bucket, 30-day retention). Events captured while offline are preserved across app restarts and delivered when connectivity is restored.
 
