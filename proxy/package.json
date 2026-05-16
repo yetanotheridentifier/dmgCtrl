@@ -5,7 +5,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.16.3",
-    "vitest": "^4.1.4"
+    "@cloudflare/vitest-pool-workers": "^0.16.6",
+    "vitest": "^4.1.6"
   }
 }

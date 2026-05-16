@@ -246,8 +246,7 @@ export function useBases() {
         localStorage.setItem(CACHE_KEY, JSON.stringify(entry))
 
         setBases(mergedBases)
-      } catch (err) {
-        console.error(err)
+      } catch {
         if (staleCache) {
           setBases(staleCache)
           void onBasesLoadStale()

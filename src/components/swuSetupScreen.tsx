@@ -53,6 +53,7 @@ function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Pro
 
   useEffect(() => {
     if (selectionMode === 'favourites' && (!enableFavourites || favourites.length === 0)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectionMode('base-selector')
     }
   }, [selectionMode, enableFavourites, favourites])

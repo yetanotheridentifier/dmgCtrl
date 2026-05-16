@@ -52,7 +52,7 @@ The app is served at `/dmgCtrl/` and is designed to be added to an iOS home scre
 
 | Concern | Technology |
 |---|---|
-| Framework | React 18 |
+| Framework | React 19 |
 | Language | TypeScript |
 | Build tool | Vite |
 | PWA | vite-plugin-pwa (Workbox) |

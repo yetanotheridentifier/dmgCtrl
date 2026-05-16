@@ -40,6 +40,7 @@ export function useBaseArt(base: Base | null, useHyperspace: boolean) {
   )
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIndex(0)
     setImageLoaded(false)
   }, [base?.set, base?.number, useHyperspace])
