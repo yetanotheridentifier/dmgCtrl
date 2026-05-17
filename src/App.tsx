@@ -8,7 +8,7 @@ import { Base, useBases } from './hooks/useBases'
 import { InitialSelection } from './hooks/useSwuSetup'
 import { useUserSettings } from './hooks/useUserSettings'
 import { onAppStart, onGameStart, onGameEnd, onAppInstall, onAppResume } from './services/analytics'
-import type { PlayMode } from './utils/playMode'
+import type { PlayMode, SetupMode } from './utils/playMode'
 
 type Screen = 'loading' | 'setup' | 'game' | 'help' | 'settings'
 
@@ -55,14 +55,18 @@ function App() {
 
   const handleReady = () => setScreen('setup')
 
-  const handleConfirm = (base: Base, playMode: PlayMode) => {
+  const handleConfirm = (base: Base, mode: SetupMode) => {
+    if (mode === 'tournament') {
+      // Tournament screen wired in #205
+      return
+    }
     setSelectedBase(base)
-    setSelectedPlayMode(playMode)
+    setSelectedPlayMode('casual')
     setLastSelection({ set: base.set, aspect: base.aspects[0] ?? 'None', key: `${base.set}-${base.number}` })
     setIsInGame(true)
     setScreen('game')
     gameStartTime.current = Date.now()
-    void onGameStart(`${base.set}-${base.number}`, base.set, useHyperspace, playMode)
+    void onGameStart(`${base.set}-${base.number}`, base.set, useHyperspace, 'casual')
   }
 
   const handleBack = () => {

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useBases, Base } from './useBases'
 import { Format, getValidSets } from '../utils/formatFilter'
-import { PlayMode } from '../utils/playMode'
+import { SetupMode } from '../utils/playMode'
 
 const ASPECT_ORDER = ['Vigilance', 'Command', 'Aggression', 'Cunning', 'None']
 
@@ -12,7 +12,7 @@ export interface InitialSelection {
 }
 
 export function useSwuSetup(
-  onConfirm: (base: Base, playMode: PlayMode) => void,
+  onConfirm: (base: Base, mode: SetupMode) => void,
   initialSelection?: InitialSelection | null,
 ) {
   const { bases, loading, error } = useBases()
@@ -28,9 +28,10 @@ export function useSwuSetup(
     return 'premier'
   })
 
-  const [selectedPlayMode, setSelectedPlayMode] = useState<PlayMode>(() => {
+  const [selectedMode, setSelectedMode] = useState<SetupMode>(() => {
     const saved = localStorage.getItem('pref_play_mode')
-    if (saved === 'bo1' || saved === 'bo3') return saved
+    if (saved === 'tournament') return 'tournament'
+    if (saved === 'bo1' || saved === 'bo3') return 'tournament'
     return 'casual'
   })
 
@@ -86,8 +87,8 @@ export function useSwuSetup(
     }
   }, [filteredBases])
 
-  const handlePlayModeChange = (mode: PlayMode) => {
-    setSelectedPlayMode(mode)
+  const handleModeChange = (mode: SetupMode) => {
+    setSelectedMode(mode)
     localStorage.setItem('pref_play_mode', mode)
   }
 
@@ -120,7 +121,7 @@ export function useSwuSetup(
 
   const handleSubmit = () => {
     if (!selectedBase) return
-    onConfirm(selectedBase, selectedPlayMode)
+    onConfirm(selectedBase, selectedMode)
   }
 
   const selectBaseByKey = (key: string): boolean => {
@@ -137,7 +138,7 @@ export function useSwuSetup(
     loading,
     error,
     selectedFormat,
-    selectedPlayMode,
+    selectedMode,
     selectedSet,
     selectedAspect,
     selectedKey,
@@ -147,7 +148,7 @@ export function useSwuSetup(
     availableAspects,
     filteredBases,
     handleFormatChange,
-    handlePlayModeChange,
+    handleModeChange,
     handleSetChange,
     handleAspectChange,
     handleKeyChange,

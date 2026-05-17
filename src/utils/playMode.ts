@@ -7,3 +7,12 @@ export const PLAY_MODE_LABELS: Record<PlayMode, string> = {
 }
 
 export const PLAY_MODES: PlayMode[] = ['casual', 'bo1', 'bo3']
+
+export type SetupMode = 'casual' | 'tournament'
+
+export const SETUP_MODE_LABELS: Record<SetupMode, string> = {
+  casual: 'Casual',
+  tournament: 'Tournament',
+}
+
+export const SETUP_MODES: SetupMode[] = ['casual', 'tournament']
