@@ -79,15 +79,21 @@ export function useTournament() {
   }
 
   const startMatch = () => {
-    if (!tournament || matchInProgress) return
-    const round: TournamentRound = {
-      roundNumber: tournament.rounds.length + 1,
-      playerScore: 0,
-      opponentScore: 0,
-      result: null,
-      submitted: false,
-    }
-    update(setTournament, { ...tournament, rounds: [...tournament.rounds, round] })
+    setTournament(prev => {
+      if (!prev) return prev
+      const isInProgress = prev.rounds.length > 0 && prev.rounds[prev.rounds.length - 1].result === null
+      if (isInProgress) return prev
+      const round: TournamentRound = {
+        roundNumber: prev.rounds.length + 1,
+        playerScore: 0,
+        opponentScore: 0,
+        result: null,
+        submitted: false,
+      }
+      const next = { ...prev, rounds: [...prev.rounds, round] }
+      persist(next)
+      return next
+    })
   }
 
   const completeMatch = (result: 'won' | 'lost' | 'drawn', playerScore: number, opponentScore: number) => {

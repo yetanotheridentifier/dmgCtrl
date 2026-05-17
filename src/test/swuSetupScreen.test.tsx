@@ -403,7 +403,7 @@ describe('SwuSetupScreen', () => {
       number: '026',
       name: 'Catacombs of Cadera',
       hp: 30,
-    }), 'casual')
+    }), 'casual', 'eternal')
   })
 
   it('Does not call onConfirm when no base selected', async () => {
@@ -425,7 +425,7 @@ describe('SwuSetupScreen', () => {
     await user.selectOptions(getBaseSelectors()[1], 'Cunning')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-022')
     await user.click(screen.getByRole('button', { name: 'Start game' }))
-    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ hp: 25 }), 'casual')
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ hp: 25 }), 'casual', 'eternal')
   })
 
   it('Auto-selected base can be submitted without manual selection', async () => {
@@ -439,7 +439,7 @@ describe('SwuSetupScreen', () => {
     expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
       set: 'JTL',
       number: '030',
-    }), 'casual')
+    }), 'casual', 'premier')
   })
 
   // --- Base preview ---
@@ -784,7 +784,7 @@ describe('SwuSetupScreen', () => {
     await user.click(screen.getByTestId('swudb-load-button'))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).not.toBeDisabled())
     await user.click(screen.getByRole('button', { name: 'Start game' }))
-    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ set: 'JTL', number: '030' }), 'casual')
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ set: 'JTL', number: '030' }), 'casual', 'premier')
   })
 
   it('Changing the URL after a load clears the deck name and submit button', async () => {
@@ -1359,7 +1359,7 @@ describe('SwuSetupScreen — play mode selector', () => {
     await user.selectOptions(screen.getAllByRole('combobox').slice(3)[0], 'JTL')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).not.toBeDisabled())
     await user.click(screen.getByRole('button', { name: 'Start game' }))
-    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ set: 'JTL' }), 'tournament')
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ set: 'JTL' }), 'tournament', 'premier')
   })
 
 })

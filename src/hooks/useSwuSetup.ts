@@ -12,7 +12,7 @@ export interface InitialSelection {
 }
 
 export function useSwuSetup(
-  onConfirm: (base: Base, mode: SetupMode) => void,
+  onConfirm: (base: Base, mode: SetupMode, format: Format) => void,
   initialSelection?: InitialSelection | null,
 ) {
   const { bases, loading, error } = useBases()
@@ -121,7 +121,7 @@ export function useSwuSetup(
 
   const handleSubmit = () => {
     if (!selectedBase) return
-    onConfirm(selectedBase, selectedMode)
+    onConfirm(selectedBase, selectedMode, selectedFormat)
   }
 
   const selectBaseByKey = (key: string): boolean => {

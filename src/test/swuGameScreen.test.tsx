@@ -2098,4 +2098,34 @@ describe('SwuGameScreen analytics', () => {
     expect(mockOnMatchCompleted).not.toHaveBeenCalled()
   })
 
+  // --- onMatchComplete prop ---
+
+  it('calls onMatchComplete prop when bo1 match is won', async () => {
+    const onMatchComplete = vi.fn()
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" onMatchComplete={onMatchComplete} />)
+    await user.click(screen.getByText('Start'))
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(onMatchComplete).toHaveBeenCalledWith('won', 1, 0)
+  })
+
+  it('calls onMatchComplete prop with correct scores when bo1 match is lost', async () => {
+    const onMatchComplete = vi.fn()
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" onMatchComplete={onMatchComplete} />)
+    await user.click(screen.getByText('Start'))
+    await user.click(screen.getByRole('button', { name: 'Opp' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(onMatchComplete).toHaveBeenCalledWith('lost', 0, 1)
+  })
+
+  it('does not call onMatchComplete prop in casual play mode', async () => {
+    const onMatchComplete = vi.fn()
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} onMatchComplete={onMatchComplete} />)
+    await user.click(screen.getByText('Start'))
+    expect(onMatchComplete).not.toHaveBeenCalled()
+  })
+
 })

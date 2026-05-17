@@ -148,6 +148,17 @@ describe('useTournament', () => {
   // --- startMatch ---
 
   describe('startMatch', () => {
+    it('works correctly when called in the same batch as startTournament', () => {
+      const { result } = renderHook(() => useTournament())
+      // Simulates the container calling both in one event handler (stale-closure scenario)
+      act(() => {
+        result.current.startTournament(mockBase, 'premier', '192916', 'bo3', 5)
+        result.current.startMatch()
+      })
+      expect(result.current.tournament?.rounds).toHaveLength(1)
+      expect(result.current.matchInProgress).toBe(true)
+    })
+
     it('adds a round entry with result null', () => {
       const { result } = renderHook(() => useTournament())
       setupTournament(result)

@@ -2,27 +2,42 @@ import { useState, useEffect, useRef } from 'react'
 import SwuLoadingScreen from './components/swuLoadingScreen'
 import SwuSetupScreen from './components/swuSetupScreen'
 import SwuGameScreen from './components/swuGameScreen'
+import SwuTournamentScreen from './components/swuTournamentScreen'
 import SwuHelpScreen from './components/swuHelpScreen'
 import SwuSettingsScreen from './components/swuSettingsScreen'
 import { Base, useBases } from './hooks/useBases'
 import { InitialSelection } from './hooks/useSwuSetup'
+import { useTournament } from './hooks/useTournament'
 import { useUserSettings } from './hooks/useUserSettings'
 import { onAppStart, onGameStart, onGameEnd, onAppInstall, onAppResume } from './services/analytics'
 import type { PlayMode, SetupMode } from './utils/playMode'
+import type { Format } from './utils/formatFilter'
 
-type Screen = 'loading' | 'setup' | 'game' | 'help' | 'settings'
+type Screen = 'loading' | 'setup' | 'game' | 'tournament' | 'help' | 'settings'
 
 function App() {
   const [screen, setScreen] = useState<Screen>('loading')
   const [backStack, setBackStack] = useState<Screen[]>([])
   const [selectedBase, setSelectedBase] = useState<Base | null>(null)
   const [selectedPlayMode, setSelectedPlayMode] = useState<PlayMode>('casual')
+  const [selectedFormat, setSelectedFormat] = useState<Format>('premier')
   const [lastSelection, setLastSelection] = useState<InitialSelection | null>(null)
   const [isInGame, setIsInGame] = useState(false)
   const [helpSource, setHelpSource] = useState<'setup' | 'game'>('setup')
   const { loading } = useBases()
   const { useHyperspace } = useUserSettings()
   const gameStartTime = useRef<number>(0)
+  const {
+    tournament,
+    matchInProgress,
+    isComplete,
+    totals,
+    startTournament,
+    startMatch,
+    completeMatch,
+    dropTournament,
+    setTournamentId,
+  } = useTournament()
 
   useEffect(() => { void onAppStart() }, [])
 
@@ -53,11 +68,19 @@ function App() {
     }
   }, [])
 
-  const handleReady = () => setScreen('setup')
+  const handleReady = () => {
+    if (tournament !== null) {
+      setScreen('tournament')
+    } else {
+      setScreen('setup')
+    }
+  }
 
-  const handleConfirm = (base: Base, mode: SetupMode) => {
+  const handleConfirm = (base: Base, mode: SetupMode, format: Format) => {
     if (mode === 'tournament') {
-      // Tournament screen wired in #205
+      setSelectedBase(base)
+      setSelectedFormat(format)
+      setScreen('tournament')
       return
     }
     setSelectedBase(base)
@@ -69,11 +92,33 @@ function App() {
     void onGameStart(`${base.set}-${base.number}`, base.set, useHyperspace, 'casual')
   }
 
+  const handleGoToGame = (playMode: 'bo1' | 'bo3') => {
+    setSelectedPlayMode(playMode)
+    setIsInGame(true)
+    setScreen('game')
+    gameStartTime.current = Date.now()
+  }
+
+  const handleMatchComplete = (result: 'won' | 'lost' | 'drawn', playerScore: number, opponentScore: number) => {
+    completeMatch(result, playerScore, opponentScore)
+    setIsInGame(false)
+    setScreen('tournament')
+  }
+
   const handleBack = () => {
+    if (tournament !== null) {
+      setScreen('tournament')
+      return
+    }
     if (selectedBase) {
       const durationSeconds = Math.round((Date.now() - gameStartTime.current) / 1000)
       void onGameEnd(`${selectedBase.set}-${selectedBase.number}`, selectedBase.set, useHyperspace, durationSeconds, selectedPlayMode)
     }
+    setIsInGame(false)
+    setScreen('setup')
+  }
+
+  const handleTournamentDrop = () => {
     setIsInGame(false)
     setScreen('setup')
   }
@@ -114,7 +159,31 @@ function App() {
     )
   }
 
-  // Keep game screen mounted while navigating to help/settings so game state is preserved
+  if (screen === 'tournament') {
+    const tournamentBase = tournament?.base ?? selectedBase
+    if (!tournamentBase) return null
+    return (
+      <SwuTournamentScreen
+        base={tournamentBase}
+        format={selectedFormat}
+        tournament={tournament}
+        matchInProgress={matchInProgress}
+        isComplete={isComplete}
+        totals={totals}
+        startTournament={startTournament}
+        startMatch={startMatch}
+        dropTournament={dropTournament}
+        setTournamentId={setTournamentId}
+        onGoToGame={handleGoToGame}
+        onDrop={handleTournamentDrop}
+        onBack={() => setScreen('setup')}
+        onHelp={handleHelp}
+        onSettings={handleSettings}
+      />
+    )
+  }
+
+  // Keep game screen mounted while navigating to help/settings/tournament so game state is preserved
   return (
     <>
       {isInGame && selectedBase && (
@@ -125,6 +194,7 @@ function App() {
             onBack={handleBack}
             onHelp={handleHelp}
             onSettings={handleSettings}
+            onMatchComplete={handleMatchComplete}
           />
         </div>
       )}
