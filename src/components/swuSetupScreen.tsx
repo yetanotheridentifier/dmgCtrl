@@ -9,11 +9,12 @@ import { normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck } from '../utils/swu
 import { onFavouriteAdded, onFavouriteRemoved, onDeckImportSuccess, onDeckImportFailure } from '../services/analytics'
 import { isBaseValidForFormat, isSetValidForFormat, formatValidationError } from '../utils/formatFilter'
 import { SetupMode } from '../utils/playMode'
+import type { Format } from '../utils/formatFilter'
 
 export type SelectionMode = 'base-selector' | 'swudb-import' | 'favourites'
 
 interface Props {
-  onConfirm: (base: Base, mode: SetupMode) => void
+  onConfirm: (base: Base, mode: SetupMode, format: Format) => void
   onHelp: () => void
   onSettings?: () => void
   initialSelection?: InitialSelection | null

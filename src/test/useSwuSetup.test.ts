@@ -265,7 +265,7 @@ describe('useSwuSetup', () => {
     act(() => result.current.handleAspectChange('Aggression'))
     act(() => result.current.handleKeyChange('SOR-026'))
     act(() => result.current.handleSubmit())
-    expect(onConfirm).toHaveBeenCalledWith(baseA, 'casual')
+    expect(onConfirm).toHaveBeenCalledWith(baseA, 'casual', 'premier')
   })
 
   it('handleSubmit does nothing when no base is selected', () => {
@@ -524,7 +524,7 @@ describe('useSwuSetup — setup mode', () => {
     act(() => result.current.handleAspectChange('Aggression'))
     act(() => result.current.handleKeyChange('SOR-026'))
     act(() => result.current.handleSubmit())
-    expect(onConfirm).toHaveBeenCalledWith(baseA, 'tournament')
+    expect(onConfirm).toHaveBeenCalledWith(baseA, 'tournament', 'premier')
   })
 
 })

@@ -20,9 +20,10 @@ interface Props {
   onBack: () => void
   onHelp: () => void
   onSettings?: () => void
+  onMatchComplete?: (result: 'won' | 'lost' | 'drawn', playerScore: number, opponentScore: number) => void
 }
 
-function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }: Props) {
+function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings, onMatchComplete }: Props) {
   const { forceTokenDisplay, enableEpicActions, enableWakeLock, useHyperspace, enableLongPress, enableActionLog, bo1TimerMinutes, bo3TimerMinutes } = useUserSettings()
   const match = useMatch(playMode)
   const art = useBaseArt(base, useHyperspace)
@@ -44,6 +45,7 @@ function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings }
   useEffect(() => {
     if (match.matchOver && playMode !== 'casual' && match.matchResult) {
       void onMatchCompleted(playMode, match.matchResult, match.playerScore, match.opponentScore)
+      onMatchComplete?.(match.matchResult, match.playerScore, match.opponentScore)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [match.matchOver])

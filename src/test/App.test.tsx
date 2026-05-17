@@ -4,6 +4,22 @@ import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { useBases } from '../hooks/useBases'
 
+const mockUseTournament = vi.hoisted(() => ({
+  tournament: null as null | object,
+  matchInProgress: false,
+  isComplete: false,
+  totals: { won: 0, lost: 0, drawn: 0 },
+  startTournament: vi.fn(),
+  startMatch: vi.fn(),
+  completeMatch: vi.fn(),
+  submitRound: vi.fn(),
+  dropTournament: vi.fn(),
+  setTournamentId: vi.fn(),
+}))
+vi.mock('../hooks/useTournament', () => ({
+  useTournament: () => mockUseTournament,
+}))
+
 const mockOnAppStart = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnGameStart = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnGameEnd = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
@@ -58,6 +74,8 @@ const mockUserSettings = vi.hoisted(() => ({
   enableForceToken: true,
   enableEpicActions: true,
   enableWakeLock: true,
+  enableCompetitiveMode: false,
+  enableFavourites: false,
   setUseHyperspace: vi.fn(),
   setEnableForceToken: vi.fn(),
   setEnableEpicActions: vi.fn(),
@@ -89,6 +107,14 @@ beforeEach(() => {
   mockOnGameEnd.mockClear()
   mockOnAppInstall.mockClear()
   mockOnAppResume.mockClear()
+  mockUseTournament.tournament = null
+  mockUseTournament.matchInProgress = false
+  mockUseTournament.isComplete = false
+  mockUseTournament.startTournament.mockReset()
+  mockUseTournament.startMatch.mockReset()
+  mockUseTournament.completeMatch.mockReset()
+  mockUseTournament.dropTournament.mockReset()
+  mockUserSettings.enableCompetitiveMode = false
 })
 
 afterEach(() => {
@@ -555,6 +581,58 @@ describe('App lifecycle analytics', () => {
     Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
     document.dispatchEvent(new Event('visibilitychange'))
     expect(mockOnAppResume).toHaveBeenCalledTimes(1)
+  })
+
+})
+
+// ---------------------------------------------------------------------------
+// Tournament navigation
+// ---------------------------------------------------------------------------
+
+describe('App tournament navigation', () => {
+
+  const getTournamentBaseSelectors = () => {
+    const all = screen.getAllByRole('combobox')
+    const formatSelect = screen.queryByTestId('format-select')
+    const modeSelect = screen.queryByTestId('mode-select')
+    const playModeSelect = screen.queryByTestId('play-mode-select')
+    return all.filter(el => el !== formatSelect && el !== modeSelect && el !== playModeSelect)
+  }
+
+  async function waitForSetupWithTournament() {
+    await waitFor(() => expect(screen.queryByTestId('play-mode-select')).toBeInTheDocument())
+  }
+
+  beforeEach(() => {
+    mockUserSettings.enableCompetitiveMode = true
+  })
+
+  it('navigates to tournament screen when tournament mode is confirmed', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitForSetupWithTournament()
+    await user.selectOptions(screen.getByTestId('play-mode-select'), 'tournament')
+    await waitFor(() => expect(getTournamentBaseSelectors()).toHaveLength(3))
+    await user.selectOptions(getTournamentBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getTournamentBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getTournamentBaseSelectors()[2], 'SOR-026')
+    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    expect(screen.getByRole('button', { name: 'Start Match 1' })).toBeInTheDocument()
+  })
+
+  it('shows tournament screen (not setup) when a tournament is already active on load', async () => {
+    mockUseTournament.tournament = {
+      base: { set: 'SOR', number: '026', name: 'Catacombs of Cadera', subtitle: 'Jedha', hp: 30,
+        frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png', frontArtLowRes: null,
+        hyperspaceArt: null, hyperspaceArtHiRes: null, epicAction: '', aspects: ['Aggression'], rarity: 'Common' },
+      format: 'premier',
+      tournamentId: '',
+      playMode: 'bo3',
+      totalRounds: 5,
+      rounds: [],
+    }
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start Match 1' })).toBeInTheDocument())
   })
 
 })

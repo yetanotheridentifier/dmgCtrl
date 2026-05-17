@@ -1,0 +1,329 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import SwuTournamentScreen from '../components/swuTournamentScreen'
+import type { Base } from '../hooks/useBases'
+import type { TournamentState } from '../hooks/useTournament'
+import type { Format } from '../utils/formatFilter'
+import { useOrientation } from '../hooks/useOrientation'
+
+vi.mock('../hooks/useOrientation')
+
+
+const mockBase: Base = {
+  set: 'SOR',
+  number: '026',
+  name: 'Catacombs of Cadera',
+  subtitle: 'Jedha',
+  hp: 30,
+  frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png',
+  frontArtLowRes: null,
+  hyperspaceArtHiRes: null,
+  hyperspaceArt: null,
+  epicAction: '',
+  aspects: ['Aggression'],
+  rarity: 'Common',
+}
+
+const noTournament: TournamentState | null = null
+
+const activeTournamentNoRounds: TournamentState = {
+  base: mockBase,
+  format: 'premier' as Format,
+  tournamentId: '192916',
+  playMode: 'bo3',
+  totalRounds: 5,
+  rounds: [],
+}
+
+const matchInProgressTournament: TournamentState = {
+  ...activeTournamentNoRounds,
+  rounds: [
+    { roundNumber: 1, playerScore: 0, opponentScore: 0, result: null, submitted: false },
+  ],
+}
+
+const oneRoundCompleteTournament: TournamentState = {
+  ...activeTournamentNoRounds,
+  rounds: [
+    { roundNumber: 1, playerScore: 2, opponentScore: 0, result: 'won', submitted: false },
+  ],
+}
+
+const completeTournament: TournamentState = {
+  ...activeTournamentNoRounds,
+  totalRounds: 1,
+  rounds: [
+    { roundNumber: 1, playerScore: 2, opponentScore: 0, result: 'won', submitted: false },
+  ],
+}
+
+function makeProps(overrides: Partial<Parameters<typeof SwuTournamentScreen>[0]> = {}) {
+  return {
+    base: mockBase,
+    format: 'premier' as Format,
+    tournament: noTournament,
+    matchInProgress: false,
+    isComplete: false,
+    totals: { won: 0, lost: 0, drawn: 0 },
+    startTournament: vi.fn(),
+    startMatch: vi.fn(),
+    dropTournament: vi.fn(),
+    setTournamentId: vi.fn(),
+    onGoToGame: vi.fn(),
+    onDrop: vi.fn(),
+    onBack: vi.fn(),
+    onHelp: vi.fn(),
+    ...overrides,
+  }
+}
+
+beforeEach(() => {
+  vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
+})
+
+describe('SwuTournamentScreen', () => {
+
+  // --- Rendering ---
+
+  it('shows a tournament ID input', () => {
+    render(<SwuTournamentScreen {...makeProps()} />)
+    expect(screen.getByTestId('tournament-id-input')).toBeInTheDocument()
+  })
+
+  it('shows a match mode selector', () => {
+    render(<SwuTournamentScreen {...makeProps()} />)
+    expect(screen.getByTestId('tournament-play-mode')).toBeInTheDocument()
+  })
+
+  it('shows a total rounds input', () => {
+    render(<SwuTournamentScreen {...makeProps()} />)
+    expect(screen.getByTestId('tournament-total-rounds')).toBeInTheDocument()
+  })
+
+  // --- Action button label by state ---
+
+  it('shows "Start Match 1" when no tournament has started', () => {
+    render(<SwuTournamentScreen {...makeProps({ tournament: noTournament })} />)
+    expect(screen.getByRole('button', { name: 'Start Match 1' })).toBeInTheDocument()
+  })
+
+  it('shows "Return to Match 1" when match is in progress', () => {
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: matchInProgressTournament,
+      matchInProgress: true,
+    })} />)
+    expect(screen.getByRole('button', { name: 'Return to Match 1' })).toBeInTheDocument()
+  })
+
+  it('shows "Start Match 2" when one match is complete', () => {
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: oneRoundCompleteTournament,
+      matchInProgress: false,
+    })} />)
+    expect(screen.getByRole('button', { name: 'Start Match 2' })).toBeInTheDocument()
+  })
+
+  it('action button is hidden when tournament is complete', () => {
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: completeTournament,
+      isComplete: true,
+    })} />)
+    expect(screen.queryByRole('button', { name: /^(Start|Return) Match/ })).toBeNull()
+  })
+
+  // --- Action button callbacks ---
+
+  it('"Start Match 1" calls startTournament with local config values then startMatch then onGoToGame', async () => {
+    const user = userEvent.setup()
+    const startTournament = vi.fn()
+    const startMatch = vi.fn()
+    const onGoToGame = vi.fn()
+    render(<SwuTournamentScreen {...makeProps({ startTournament, startMatch, onGoToGame })} />)
+    await user.click(screen.getByRole('button', { name: 'Start Match 1' }))
+    expect(startTournament).toHaveBeenCalledTimes(1)
+    expect(startTournament).toHaveBeenCalledWith(
+      mockBase,
+      'premier',
+      expect.any(String),
+      expect.stringMatching(/^bo[13]$/),
+      expect.any(Number),
+    )
+    expect(startMatch).toHaveBeenCalledTimes(1)
+    expect(onGoToGame).toHaveBeenCalledTimes(1)
+  })
+
+  it('"Return to Match N" calls onGoToGame without calling startMatch', async () => {
+    const user = userEvent.setup()
+    const startMatch = vi.fn()
+    const onGoToGame = vi.fn()
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: matchInProgressTournament,
+      matchInProgress: true,
+      startMatch,
+      onGoToGame,
+    })} />)
+    await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+    expect(onGoToGame).toHaveBeenCalledTimes(1)
+    expect(startMatch).not.toHaveBeenCalled()
+  })
+
+  it('"Start Match 2" calls startMatch then onGoToGame', async () => {
+    const user = userEvent.setup()
+    const startMatch = vi.fn()
+    const onGoToGame = vi.fn()
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: oneRoundCompleteTournament,
+      matchInProgress: false,
+      startMatch,
+      onGoToGame,
+    })} />)
+    await user.click(screen.getByRole('button', { name: 'Start Match 2' }))
+    expect(startMatch).toHaveBeenCalledTimes(1)
+    expect(onGoToGame).toHaveBeenCalledTimes(1)
+  })
+
+  // --- Config inputs: locked after tournament starts ---
+
+  it('play mode selector is enabled before tournament starts', () => {
+    render(<SwuTournamentScreen {...makeProps({ tournament: noTournament })} />)
+    expect(screen.getByTestId('tournament-play-mode')).not.toBeDisabled()
+  })
+
+  it('play mode selector is disabled once tournament has started', () => {
+    render(<SwuTournamentScreen {...makeProps({ tournament: activeTournamentNoRounds })} />)
+    expect(screen.getByTestId('tournament-play-mode')).toBeDisabled()
+  })
+
+  it('total rounds input is enabled before tournament starts', () => {
+    render(<SwuTournamentScreen {...makeProps({ tournament: noTournament })} />)
+    expect(screen.getByTestId('tournament-total-rounds')).not.toBeDisabled()
+  })
+
+  it('total rounds input is disabled once tournament has started', () => {
+    render(<SwuTournamentScreen {...makeProps({ tournament: activeTournamentNoRounds })} />)
+    expect(screen.getByTestId('tournament-total-rounds')).toBeDisabled()
+  })
+
+  // --- Tournament ID: editable before start, read-only after ---
+
+  it('tournament ID input is editable before tournament starts', () => {
+    render(<SwuTournamentScreen {...makeProps({ tournament: noTournament })} />)
+    expect(screen.getByTestId('tournament-id-input')).not.toBeDisabled()
+    expect(screen.getByTestId('tournament-id-input')).not.toHaveAttribute('readOnly')
+  })
+
+  it('tournament ID input is read-only after tournament has started', () => {
+    render(<SwuTournamentScreen {...makeProps({ tournament: activeTournamentNoRounds })} />)
+    expect(screen.getByTestId('tournament-id-input')).toHaveAttribute('readOnly')
+  })
+
+  // --- Drop/End button ---
+
+  it('Drop/End button is disabled before tournament starts', () => {
+    render(<SwuTournamentScreen {...makeProps({ tournament: noTournament })} />)
+    expect(screen.getByTestId('drop-end-button')).toBeDisabled()
+  })
+
+  it('Drop/End button shows "Drop" when tournament started but not complete', () => {
+    render(<SwuTournamentScreen {...makeProps({ tournament: activeTournamentNoRounds })} />)
+    expect(screen.getByTestId('drop-end-button')).toHaveTextContent('Drop')
+  })
+
+  it('Drop/End button shows "End Tournament" when tournament is complete', () => {
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: completeTournament,
+      isComplete: true,
+    })} />)
+    expect(screen.getByTestId('drop-end-button')).toHaveTextContent('End Tournament')
+  })
+
+  it('first click on Drop button shows confirmation state', async () => {
+    const user = userEvent.setup()
+    render(<SwuTournamentScreen {...makeProps({ tournament: activeTournamentNoRounds })} />)
+    await user.click(screen.getByTestId('drop-end-button'))
+    expect(screen.getByTestId('drop-end-button')).toHaveTextContent('Confirm')
+  })
+
+  it('second click on Drop button calls dropTournament and onDrop', async () => {
+    const user = userEvent.setup()
+    const dropTournament = vi.fn()
+    const onDrop = vi.fn()
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: activeTournamentNoRounds,
+      dropTournament,
+      onDrop,
+    })} />)
+    await user.click(screen.getByTestId('drop-end-button'))
+    await user.click(screen.getByTestId('drop-end-button'))
+    expect(dropTournament).toHaveBeenCalledTimes(1)
+    expect(onDrop).toHaveBeenCalledTimes(1)
+  })
+
+  it('clicking elsewhere after first Drop click cancels confirmation', async () => {
+    const user = userEvent.setup()
+    const dropTournament = vi.fn()
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: activeTournamentNoRounds,
+      dropTournament,
+    })} />)
+    await user.click(screen.getByTestId('drop-end-button'))
+    expect(screen.getByTestId('drop-end-button')).toHaveTextContent('Confirm')
+    await user.click(screen.getByRole('button', { name: 'Help' }))
+    expect(screen.getByTestId('drop-end-button')).toHaveTextContent('Drop')
+    expect(dropTournament).not.toHaveBeenCalled()
+  })
+
+  it('"End Tournament" calls dropTournament and onDrop on single click', async () => {
+    const user = userEvent.setup()
+    const dropTournament = vi.fn()
+    const onDrop = vi.fn()
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: completeTournament,
+      isComplete: true,
+      dropTournament,
+      onDrop,
+    })} />)
+    await user.click(screen.getByTestId('drop-end-button'))
+    expect(dropTournament).toHaveBeenCalledTimes(1)
+    expect(onDrop).toHaveBeenCalledTimes(1)
+  })
+
+  // --- Back navigation ---
+
+  it('shows Back button when no tournament has started', () => {
+    render(<SwuTournamentScreen {...makeProps({ tournament: noTournament })} />)
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
+  })
+
+  it('Back button calls onBack when no tournament has started', async () => {
+    const user = userEvent.setup()
+    const onBack = vi.fn()
+    render(<SwuTournamentScreen {...makeProps({ tournament: noTournament, onBack })} />)
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(onBack).toHaveBeenCalledTimes(1)
+  })
+
+  it('Back button is not shown when tournament has started', () => {
+    render(<SwuTournamentScreen {...makeProps({ tournament: activeTournamentNoRounds })} />)
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull()
+  })
+
+  // --- Placeholder button (#206) ---
+
+  it('Find Next Match button is disabled', () => {
+    render(<SwuTournamentScreen {...makeProps({ tournament: activeTournamentNoRounds })} />)
+    expect(screen.getByRole('button', { name: 'Find Next Match' })).toBeDisabled()
+  })
+
+  // --- Round totals ---
+
+  it('shows win/loss/draw totals', () => {
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: oneRoundCompleteTournament,
+      totals: { won: 1, lost: 0, drawn: 0 },
+    })} />)
+    expect(screen.getByText(/1.*0.*0/)).toBeInTheDocument()
+  })
+
+})
