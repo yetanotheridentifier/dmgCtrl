@@ -1331,15 +1331,14 @@ describe('SwuSetupScreen — play mode selector', () => {
     await waitFor(() => expect(screen.getByTestId('play-mode-select')).toBeInTheDocument())
   })
 
-  it('play mode selector has Casual, Bo1 and Bo3 options', async () => {
+  it('play mode selector has Casual and Tournament options', async () => {
     mockUserSettings.enableCompetitiveMode = true
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getByTestId('play-mode-select')).toBeInTheDocument())
     const select = screen.getByTestId('play-mode-select') as HTMLSelectElement
     const options = Array.from(select.options).map(o => o.value)
     expect(options).toContain('casual')
-    expect(options).toContain('bo1')
-    expect(options).toContain('bo3')
+    expect(options).toContain('tournament')
   })
 
   it('play mode selector defaults to casual', async () => {
@@ -1349,18 +1348,18 @@ describe('SwuSetupScreen — play mode selector', () => {
     expect((screen.getByTestId('play-mode-select') as HTMLSelectElement).value).toBe('casual')
   })
 
-  it('onConfirm is called with the selected play mode', async () => {
+  it('onConfirm is called with tournament mode when tournament is selected', async () => {
     mockUserSettings.enableCompetitiveMode = true
     const user = userEvent.setup()
     const onConfirm = vi.fn()
     render(<SwuSetupScreen onConfirm={onConfirm} onHelp={vi.fn()} />)
     await waitFor(() => expect(screen.getByTestId('play-mode-select')).toBeInTheDocument())
-    await user.selectOptions(screen.getByTestId('play-mode-select'), 'bo3')
+    await user.selectOptions(screen.getByTestId('play-mode-select'), 'tournament')
     await waitFor(() => expect(screen.getAllByRole('combobox').slice(3)).toHaveLength(3))
     await user.selectOptions(screen.getAllByRole('combobox').slice(3)[0], 'JTL')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start game' })).not.toBeDisabled())
     await user.click(screen.getByRole('button', { name: 'Start game' }))
-    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ set: 'JTL' }), 'bo3')
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ set: 'JTL' }), 'tournament')
   })
 
 })

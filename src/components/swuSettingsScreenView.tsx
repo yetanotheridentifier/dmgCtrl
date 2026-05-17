@@ -256,7 +256,7 @@ function SwuSettingsScreenView({
       <ToggleRow
         id="toggle-competitive-mode"
         label="Enable Competitive Mode"
-        subtitle="Adds a play mode selector (Casual / Best of 1 / Best of 3) to the setup screen."
+        subtitle="Beta feature. Adds a tournament mode selector to the setup screen."
         checked={enableCompetitiveMode}
         onChange={onEnableCompetitiveModeChange}
         vmin={vmin}
