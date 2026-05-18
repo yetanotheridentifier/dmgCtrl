@@ -35,7 +35,7 @@ const inputStyle = (hasValue: boolean, readOnly = false, small = false): React.C
   flex: 1,
   padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
   fontSize: small ? 'clamp(1rem, 1.8vw, 1.2rem)' : 'clamp(1rem, 3vw, 1.2rem)',
-  ...(small && { height: 'max(44px, 8vh)' }),
+  height: 'max(44px, 8vmin)',
   fontWeight: '300',
   background: 'transparent',
   border: '2px solid var(--color-accent)',
@@ -53,7 +53,7 @@ const selectStyle = (enabled: boolean, small = false): React.CSSProperties => ({
   flex: 1,
   padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
   fontSize: small ? 'clamp(0.75rem, 1.8vw, 0.9rem)' : 'clamp(0.9rem, 3vw, 1.2rem)',
-  ...(small && { height: 'max(44px, 8vh)' }),
+  height: 'max(44px, 8vmin)',
   fontWeight: '300',
   background: 'transparent',
   border: '2px solid var(--color-accent)',
@@ -285,7 +285,7 @@ export default function SwuTournamentScreenView({
         value={totalRoundsValue}
         disabled={configLocked}
         onChange={e => onLocalTotalRoundsChange(Number(e.target.value))}
-        style={{ ...selectStyle(!configLocked, small), flex: 1 }}
+        style={{ ...selectStyle(!configLocked, small), flex: 'none', width: 'max(44px, 8vmin)', textAlign: 'center', textAlignLast: 'center' }}
       >
         {Array.from({ length: 15 }, (_, i) => i + 2).map(n => (
           <option key={n} value={n} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>{n}</option>
