@@ -29,7 +29,7 @@ src/
     swuSettingsScreen.tsx   Settings screen container
     swuSettingsScreenView.tsx Settings screen view (toggle list; calls useOrientation directly for iOS font sizing)
     swuTournamentScreen.tsx  Tournament screen container — local config state, action/drop handlers, delegates to view
-    swuTournamentScreenView.tsx Tournament screen view — config inputs, round table, W/L/D totals, cancel overlay; portrait and landscape CSS Grid layouts
+    swuTournamentScreenView.tsx Tournament screen view — config inputs (tournament ID, play mode selector, total rounds `<select>` 2–16), round table, W/L/D totals, cancel overlay; portrait and landscape CSS Grid layouts
 
   hooks/
     useBaseArt.ts           Ordered art fallback chain shared by setup and game screens. Exports `getFirstGameImageUrl(base, useHyperspace)` which returns the first URL from the fallback chain, used by the setup screen to preload the game image while the user is still on the setup screen
@@ -137,11 +137,11 @@ All other state is owned at the component level:
 | Selected play mode (`casual` / `bo1` / `bo3`) | `useSwuSetup` / localStorage | Persisted under `pref_play_mode`; defaults to `'casual'`; passed to the game screen via `onConfirm(base, playMode)`; only shown in the UI when `enableCompetitiveMode` is true |
 | Match scores (playerScore, opponentScore) | `useMatch` | Local to game screen; reset on each navigation to the game screen; `matchOver` is derived (true when either score reaches maxScore, or when `matchDrawn` / `matchClosedByTimer` flags are set); `matchResult` ('won'/'lost'/'drawn'/null) is derived from scores and close flags; `recordDraw()` closes the match without changing scores (intentional draw or timer-expire draw); `closeByTimer()` closes the match after a win/loss recorded at expiry; `restoreState` accepts all four fields for undo |
 | Filter state (set, aspect, card) | `useSwuSetup` | Seeded from `initialSelection` on mount; local after that |
-| Damage counter | `useSwuGame` | Local to game screen; clamped between 0 and `base.hp`; reset on each navigation to the game screen |
-| Epic action used state | `useSwuGame` | Local to game screen; toggled by the epic action button; reset on each navigation to the game screen |
-| Force token enabled state | `useSwuGame` | Local to game screen; set to `true` by the enable tap on non-Force bases; combined with `isForceBase` in the container to derive `effectiveForceEnabled`; reset on each navigation |
-| Force token active state | `useSwuGame` | Local to game screen; toggled by the Force button and overlay; reset on each navigation to the game screen |
-| Action log entries | `useGameLog` | Local to game screen; array of `GameLogEntry` records; empty on mount; Round 1 entry (not undoable) added when the user taps Start; `game-result` entries store `prevLogEntries` and `prevMatchState` for full undo; reset when the next game starts |
+| Damage counter | `useSwuGame` | Local to game screen; clamped between 0 and `base.hp`; reset when the Back button is pressed in casual/bo1/bo3 play; **preserved** when navigating to the tournament screen (the game screen stays mounted via `display: none` and `isInTournament` skips the `game.reset()` call) |
+| Epic action used state | `useSwuGame` | Local to game screen; toggled by the epic action button; reset on each casual/bo1/bo3 back-navigation; preserved across tournament ↔ game navigation |
+| Force token enabled state | `useSwuGame` | Local to game screen; set to `true` by the enable tap on non-Force bases; combined with `isForceBase` in the container to derive `effectiveForceEnabled`; reset on casual back-navigation; preserved in tournament mode |
+| Force token active state | `useSwuGame` | Local to game screen; toggled by the Force button and overlay; reset on casual back-navigation; preserved in tournament mode |
+| Action log entries | `useGameLog` | Local to game screen; array of `GameLogEntry` records; empty on mount; Round 1 entry (not undoable) added when the user taps Start; `game-result` entries store `prevLogEntries` and `prevMatchState` for full undo; reset on casual back-navigation; preserved in tournament mode |
 | Epic overlay dismissed | `swuGameScreen` | Local `epicOverlayDismissed` boolean; controls overlay visibility independently of `game.epicActionUsed`; set to `false` when epic action is marked; set to `true` by tapping the overlay when action log is disabled |
 | Art fallback index, image load state | `useBaseArt` | Local to whichever screen called it; reset when base changes |
 | User settings (hyperspace, force token display, epic actions, wake lock, action log, favourites, long press, competitive mode) | `useUserSettings` Context / localStorage | Persisted under `user_settings` as JSON; `forceTokenDisplay` is a 3-way value ('always-on' \| 'lof-only' \| 'always-off'), default 'lof-only'; all other boolean preferences except `enableCompetitiveMode` default to `true`; `enableCompetitiveMode` defaults to `false`; migrates old `enableForceToken` boolean; shared via React Context — updates propagate immediately to all mounted consumers |

@@ -205,6 +205,13 @@ describe('SwuTournamentScreen', () => {
     expect(screen.getByTestId('tournament-total-rounds')).toBeDisabled()
   })
 
+  it('total rounds selector has options from 2 to 16', () => {
+    render(<SwuTournamentScreen {...makeProps()} />)
+    const el = screen.getByTestId('tournament-total-rounds')
+    const values = Array.from(el.querySelectorAll('option')).map(o => Number((o as HTMLOptionElement).value))
+    expect(values).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
+  })
+
   // --- Tournament ID: editable before start, read-only after ---
 
   it('tournament ID input is editable before tournament starts', () => {
