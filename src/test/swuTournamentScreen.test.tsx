@@ -66,6 +66,7 @@ function makeProps(overrides: Partial<Parameters<typeof SwuTournamentScreen>[0]>
     matchInProgress: false,
     isComplete: false,
     totals: { won: 0, lost: 0, drawn: 0 },
+    points: 0,
     startTournament: vi.fn(),
     startMatch: vi.fn(),
     dropTournament: vi.fn(),
@@ -331,6 +332,28 @@ describe('SwuTournamentScreen', () => {
       totals: { won: 1, lost: 0, drawn: 0 },
     })} />)
     expect(screen.getByText(/1.*0.*0/)).toBeInTheDocument()
+  })
+
+  it('shows points in the record row', () => {
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: oneRoundCompleteTournament,
+      totals: { won: 1, lost: 0, drawn: 0 },
+      points: 3,
+    })} />)
+    expect(screen.getByText(/3pts/)).toBeInTheDocument()
+  })
+
+  it('shows 0pts when no rounds are complete', () => {
+    render(<SwuTournamentScreen {...makeProps({ points: 0 })} />)
+    expect(screen.getByText(/0pts/)).toBeInTheDocument()
+  })
+
+  it('shows correct points for mixed results', () => {
+    render(<SwuTournamentScreen {...makeProps({
+      totals: { won: 2, lost: 1, drawn: 1 },
+      points: 7,
+    })} />)
+    expect(screen.getByText(/7pts/)).toBeInTheDocument()
   })
 
 })

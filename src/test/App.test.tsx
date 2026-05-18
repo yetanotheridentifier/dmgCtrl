@@ -9,6 +9,7 @@ const mockUseTournament = vi.hoisted(() => ({
   matchInProgress: false,
   isComplete: false,
   totals: { won: 0, lost: 0, drawn: 0 },
+  points: 0,
   startTournament: vi.fn(),
   startMatch: vi.fn(),
   completeMatch: vi.fn(),

@@ -479,6 +479,61 @@ describe('useTournament', () => {
     })
   })
 
+  // --- points ---
+
+  describe('points', () => {
+    it('returns 0 with no completed rounds', () => {
+      const { result } = renderHook(() => useTournament())
+      setupTournament(result)
+      expect(result.current.points).toBe(0)
+    })
+
+    it('awards 3 points for a win', () => {
+      const { result } = renderHook(() => useTournament())
+      setupTournament(result)
+      act(() => result.current.startMatch())
+      act(() => result.current.completeMatch('won', 2, 0))
+      expect(result.current.points).toBe(3)
+    })
+
+    it('awards 1 point for a draw', () => {
+      const { result } = renderHook(() => useTournament())
+      setupTournament(result)
+      act(() => result.current.startMatch())
+      act(() => result.current.completeMatch('drawn', 1, 1))
+      expect(result.current.points).toBe(1)
+    })
+
+    it('awards 0 points for a loss', () => {
+      const { result } = renderHook(() => useTournament())
+      setupTournament(result)
+      act(() => result.current.startMatch())
+      act(() => result.current.completeMatch('lost', 0, 2))
+      expect(result.current.points).toBe(0)
+    })
+
+    it('accumulates points across rounds', () => {
+      const { result } = renderHook(() => useTournament())
+      setupTournament(result)
+      act(() => result.current.startMatch())
+      act(() => result.current.completeMatch('won', 2, 0))   // +3
+      act(() => result.current.startMatch())
+      act(() => result.current.completeMatch('won', 2, 1))   // +3
+      act(() => result.current.startMatch())
+      act(() => result.current.completeMatch('drawn', 1, 1)) // +1
+      act(() => result.current.startMatch())
+      act(() => result.current.completeMatch('lost', 0, 2))  // +0
+      expect(result.current.points).toBe(7)
+    })
+
+    it('excludes in-progress rounds from points', () => {
+      const { result } = renderHook(() => useTournament())
+      setupTournament(result)
+      act(() => result.current.startMatch())
+      expect(result.current.points).toBe(0)
+    })
+  })
+
   // --- localStorage persistence ---
 
   describe('localStorage persistence', () => {

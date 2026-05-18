@@ -67,6 +67,8 @@ export function useTournament() {
     { won: 0, lost: 0, drawn: 0 },
   )
 
+  const points = totals.won * 3 + totals.drawn
+
   const startTournament = (
     base: Base,
     format: Format,
@@ -129,6 +131,7 @@ export function useTournament() {
     matchInProgress,
     isComplete,
     totals,
+    points,
     startTournament,
     startMatch,
     completeMatch,

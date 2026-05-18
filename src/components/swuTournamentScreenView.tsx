@@ -138,6 +138,7 @@ interface Props {
   matchInProgress: boolean
   isComplete: boolean
   totals: { won: number; lost: number; drawn: number }
+  points: number
   localTournamentId: string
   localPlayMode: 'bo1' | 'bo3'
   localTotalRounds: number
@@ -172,6 +173,7 @@ export default function SwuTournamentScreenView({
   matchInProgress,
   isComplete,
   totals,
+  points,
   localTournamentId,
   localPlayMode,
   localTotalRounds,
@@ -312,7 +314,7 @@ export default function SwuTournamentScreenView({
       color: 'var(--color-text-primary)',
       flexShrink: 0,
     }}>
-      {totals.won}–{totals.lost}–{totals.drawn}
+      {totals.won}–{totals.lost}–{totals.drawn} · {points}pts
     </div>
   )
 
