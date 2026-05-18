@@ -17,13 +17,14 @@ import type { PlayMode } from '../utils/playMode'
 interface Props {
   base: Base
   playMode?: PlayMode
+  isInTournament?: boolean
   onBack: () => void
   onHelp: () => void
   onSettings?: () => void
   onMatchComplete?: (result: 'won' | 'lost' | 'drawn', playerScore: number, opponentScore: number) => void
 }
 
-function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings, onMatchComplete }: Props) {
+function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBack, onHelp, onSettings, onMatchComplete }: Props) {
   const { forceTokenDisplay, enableEpicActions, enableWakeLock, useHyperspace, enableLongPress, enableActionLog, bo1TimerMinutes, bo3TimerMinutes } = useUserSettings()
   const match = useMatch(playMode)
   const art = useBaseArt(base, useHyperspace)
@@ -203,8 +204,10 @@ function SwuGameScreen({ base, playMode = 'casual', onBack, onHelp, onSettings, 
   }
 
   const handleReset = () => {
-    game.reset()
-    log.reset()
+    if (!isInTournament) {
+      game.reset()
+      log.reset()
+    }
     onBack()
   }
 

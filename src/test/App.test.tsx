@@ -31,6 +31,15 @@ vi.mock('../services/analytics', () => ({
   onGameEnd: mockOnGameEnd,
   onAppInstall: mockOnAppInstall,
   onAppResume: mockOnAppResume,
+  onDamageDealt: vi.fn(),
+  onDamageHealed: vi.fn(),
+  onRoundIncremented: vi.fn(),
+  onUndoUsed: vi.fn(),
+  onEpicActionUsed: vi.fn(),
+  onForceGained: vi.fn(),
+  onForceUsed: vi.fn(),
+  onMatchCompleted: vi.fn(),
+  onImageLoadFailed: vi.fn(),
 }))
 
 const mockBases = vi.hoisted(() => [
@@ -633,6 +642,41 @@ describe('App tournament navigation', () => {
     }
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start Match 1' })).toBeInTheDocument())
+  })
+
+  it('game screen state is preserved when navigating game → tournament → game mid-match', async () => {
+    const user = userEvent.setup()
+    mockUseTournament.tournament = {
+      base: { set: 'SOR', number: '026', name: 'Catacombs of Cadera', subtitle: 'Jedha', hp: 30,
+        frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png', frontArtLowRes: null,
+        hyperspaceArt: null, hyperspaceArtHiRes: null, epicAction: '', aspects: ['Aggression'], rarity: 'Common' },
+      format: 'premier',
+      tournamentId: 'test123',
+      playMode: 'bo3',
+      totalRounds: 5,
+      rounds: [{ roundNumber: 1, playerScore: 0, opponentScore: 0, result: null, submitted: false }],
+    }
+    mockUseTournament.matchInProgress = true
+    render(<App />)
+
+    // Tournament screen loads; navigate to game
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to Match 1' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+
+    // Game screen loads; start game and increment damage
+    await waitFor(() => expect(screen.getByText('Start')).toBeInTheDocument())
+    await user.click(screen.getByText('Start'))
+    await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('0'))
+    await user.click(screen.getByText('+'))
+    await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('1'))
+
+    // Navigate back to tournament
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to Match 1' })).toBeInTheDocument())
+
+    // Return to game — damage must still be 1
+    await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+    await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('1'))
   })
 
 })

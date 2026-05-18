@@ -159,44 +159,44 @@ function App() {
     )
   }
 
-  if (screen === 'tournament') {
-    const tournamentBase = tournament?.base ?? selectedBase
-    if (!tournamentBase) return null
-    return (
-      <SwuTournamentScreen
-        base={tournamentBase}
-        format={selectedFormat}
-        tournament={tournament}
-        matchInProgress={matchInProgress}
-        isComplete={isComplete}
-        totals={totals}
-        startTournament={startTournament}
-        startMatch={startMatch}
-        dropTournament={dropTournament}
-        setTournamentId={setTournamentId}
-        onGoToGame={handleGoToGame}
-        onDrop={handleTournamentDrop}
-        onBack={() => setScreen('setup')}
-        onHelp={handleHelp}
-        onSettings={handleSettings}
-      />
-    )
-  }
+  // Keep game screen mounted while navigating to help/settings/tournament so game state is preserved.
+  // Use tournament.base as fallback when selectedBase is null (e.g. app resumed into an active tournament).
+  const gameBase = selectedBase ?? tournament?.base ?? null
+  const tournamentBase = tournament?.base ?? selectedBase ?? null
 
-  // Keep game screen mounted while navigating to help/settings/tournament so game state is preserved
   return (
     <>
-      {isInGame && selectedBase && (
+      {isInGame && gameBase && (
         <div style={screen === 'game' ? undefined : { display: 'none' }}>
           <SwuGameScreen
-            base={selectedBase}
+            base={gameBase}
             playMode={selectedPlayMode}
+            isInTournament={tournament !== null}
             onBack={handleBack}
             onHelp={handleHelp}
             onSettings={handleSettings}
             onMatchComplete={handleMatchComplete}
           />
         </div>
+      )}
+      {screen === 'tournament' && tournamentBase && (
+        <SwuTournamentScreen
+          base={tournamentBase}
+          format={selectedFormat}
+          tournament={tournament}
+          matchInProgress={matchInProgress}
+          isComplete={isComplete}
+          totals={totals}
+          startTournament={startTournament}
+          startMatch={startMatch}
+          dropTournament={dropTournament}
+          setTournamentId={setTournamentId}
+          onGoToGame={handleGoToGame}
+          onDrop={handleTournamentDrop}
+          onBack={() => setScreen('setup')}
+          onHelp={handleHelp}
+          onSettings={handleSettings}
+        />
       )}
       {screen === 'help' && <SwuHelpScreen onBack={handleOverlayBack} source={helpSource} />}
       {screen === 'settings' && <SwuSettingsScreen onBack={handleOverlayBack} onHelp={handleHelp} />}

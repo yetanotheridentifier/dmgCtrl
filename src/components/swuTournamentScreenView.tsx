@@ -280,16 +280,17 @@ export default function SwuTournamentScreenView({
         <option value="bo3" style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>Best of 3</option>
       </select>
       <label style={labelStyle(small)}>Rounds</label>
-      <input
+      <select
         data-testid="tournament-total-rounds"
-        type="number"
-        min={1}
-        max={15}
         value={totalRoundsValue}
         disabled={configLocked}
         onChange={e => onLocalTotalRoundsChange(Number(e.target.value))}
-        style={{ ...inputStyle(true, false, small), flex: 1, opacity: configLocked ? 0.4 : 1, cursor: configLocked ? 'not-allowed' : 'text' }}
-      />
+        style={{ ...selectStyle(!configLocked, small), flex: 1 }}
+      >
+        {Array.from({ length: 15 }, (_, i) => i + 2).map(n => (
+          <option key={n} value={n} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>{n}</option>
+        ))}
+      </select>
     </div>
   )
 
