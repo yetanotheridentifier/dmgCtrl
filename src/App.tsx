@@ -32,6 +32,7 @@ function App() {
     matchInProgress,
     isComplete,
     totals,
+    points,
     startTournament,
     startMatch,
     completeMatch,
@@ -187,6 +188,7 @@ function App() {
           matchInProgress={matchInProgress}
           isComplete={isComplete}
           totals={totals}
+          points={points}
           startTournament={startTournament}
           startMatch={startMatch}
           dropTournament={dropTournament}

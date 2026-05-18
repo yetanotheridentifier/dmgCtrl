@@ -11,6 +11,7 @@ interface Props {
   matchInProgress: boolean
   isComplete: boolean
   totals: { won: number; lost: number; drawn: number }
+  points: number
   startTournament: (base: Base, format: Format, tournamentId: string, playMode: 'bo1' | 'bo3', totalRounds: number) => void
   startMatch: () => void
   dropTournament: () => void
@@ -29,6 +30,7 @@ export default function SwuTournamentScreen({
   matchInProgress,
   isComplete,
   totals,
+  points,
   startTournament,
   startMatch,
   dropTournament,
@@ -79,6 +81,7 @@ export default function SwuTournamentScreen({
       matchInProgress={matchInProgress}
       isComplete={isComplete}
       totals={totals}
+      points={points}
       localTournamentId={localTournamentId}
       localPlayMode={localPlayMode}
       localTotalRounds={localTotalRounds}
