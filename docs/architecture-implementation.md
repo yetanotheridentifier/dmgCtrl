@@ -18,7 +18,7 @@ src/
     layout/
       AppScreenLayout.tsx  Shared full-screen layout wrapper (background, safe area)
     icons.tsx               Reusable SVG icon components (BackIcon, ForwardIcon, HelpIcon, CogIcon, LogIcon)
-    imagePreview.tsx        Pure view — renders card art or error message from props
+    imagePreview.tsx        Pure view — renders card art or error message from props; fill='width' (default) constrains by width with aspect-ratio height; fill='height' constrains by height with aspect-ratio width, right-aligned via marginLeft:auto; uses useLayoutEffect to check img.complete on mount so cached images show immediately without waiting for a load event that the browser may not re-fire
     GameLogOverlay.tsx      Game screen action log overlay — scrollable entry list; auto-scrolls to bottom; undo button on last undoable entry; round entries styled with blue gradient
     swuGameScreen.tsx       Game screen container
     swuGameScreenView.tsx   Game screen view (⚙ button always visible)
@@ -28,11 +28,11 @@ src/
     swuSetupScreenView.tsx  Setup screen view (title row: icon + "dmgCtrl" h1 + ⚙ button + help button)
     swuSettingsScreen.tsx   Settings screen container
     swuSettingsScreenView.tsx Settings screen view (toggle list; calls useOrientation directly for iOS font sizing)
-    swuTournamentScreen.tsx  Tournament screen container — local config state, action/drop handlers, delegates to view
-    swuTournamentScreenView.tsx Tournament screen view — config inputs (tournament ID, play mode selector, total rounds `<select>` 2–16), round table, W/L/D totals, cancel overlay; portrait and landscape CSS Grid layouts
+    swuTournamentScreen.tsx  Tournament screen container — local config state, action/drop handlers; calls useBaseArt + useUserSettings to derive art props; delegates to view
+    swuTournamentScreenView.tsx Tournament screen view — config inputs (tournament ID, play mode selector, total rounds `<select>` 2–16), base art preview (ImagePreview), round table, W/L/D totals, cancel overlay; portrait: single column with ImagePreview fill='width' between config and record row; landscape: two flex columns (left: config rows + ImagePreview fill='height'; right: record + buttons + rounds table)
 
   hooks/
-    useBaseArt.ts           Ordered art fallback chain shared by setup and game screens. Exports `getFirstGameImageUrl(base, useHyperspace)` which returns the first URL from the fallback chain, used by the setup screen to preload the game image while the user is still on the setup screen
+    useBaseArt.ts           Ordered art fallback chain shared by setup, game, and tournament screens. Exports `getFirstGameImageUrl(base, useHyperspace)` which returns the first URL from the fallback chain, used by the setup screen to preload the game image while the user is still on the setup screen
     useDragScrubber.ts      Drag-to-scrub gesture — tracks pointer events on `+`/`−` counter buttons; exposes `dragIndicator` (type, value, clientX, clientY) and pointer event handlers; 15px dead zone before scrub activates; 14px per step; caps drag value at `Math.min(max, 20)`; suppresses synthetic click after drag; disabled when `enableLongPress` is false or the reachable cap is < 2
     useBases.ts             Fetches and caches the full list of Base cards
     useFavourites.ts        Favourites list — add/remove/clear operations with deduplication on key; sorted by set then card number ascending; persists FavouriteBase[] to localStorage under key `favourites`; UI gated by enableFavourites in useUserSettings
@@ -67,7 +67,7 @@ src/
     swuLoadingScreen.test.tsx Loading screen tests
     swuSetupScreen.test.tsx Setup screen container tests
     swuSettingsScreen.test.tsx Settings screen container tests
-    swuTournamentScreen.test.tsx Tournament screen container tests (36 tests — rendering, action button labels, callbacks, config locking, drop confirm flow, back navigation)
+    swuTournamentScreen.test.tsx Tournament screen container tests (38 tests — rendering, action button labels, callbacks, config locking, drop confirm flow, back navigation, base art image rendering)
     analytics.test.ts       Analytics service tests — enqueue (write, shape, append, cap, silent failure), flush (batch POST, URL, clear on 200, preserve on 500, preserve on network error, no-op when empty), window.online trigger, payload shape, PII absence, env field, sessionId consistency, all 23 event functions
     formatFilter.test.ts    Format filtering utility tests (isSetValidForFormat, getValidSets, isBaseValidForFormat, formatValidationError — all formats and set types)
     swudbUrl.test.ts        SWUDB URL utility tests
@@ -450,7 +450,7 @@ The app is designed for **landscape orientation**. `useOrientation` is used in f
 - **Game screen** (`SwuGameScreen`) — renders the full-screen card layout in landscape and a rotation prompt in portrait.
 - **Help screen** (`SwuHelpScreen`) — uses `vmin` to compute JS-based font sizes for the title row; `isPortrait` is used as a React `key` to force DOM remount on rotation, flushing any cached computed styles.
 - **Settings screen** (`SwuSettingsScreenView`) — uses `vmin` for JS-based font sizes; `isPortrait` as a React `key` for DOM remount on rotation; `fontFamily` set to `Helvetica, Arial, sans-serif` with `-webkit-text-size-adjust: 100%` to prevent iOS Dynamic Type scaling the toggle labels.
-- **Tournament screen** (`SwuTournamentScreenView`) — portrait: single-column layout (config → W/L/D totals → action buttons → round table); landscape: CSS Grid two-column layout aligning config inputs and action buttons in shared rows across both columns.
+- **Tournament screen** (`SwuTournamentScreenView`) — portrait: single-column layout (config → base art preview → W/L/D totals → action buttons → round table); landscape: two flex columns (left: config rows + card preview filling remaining height; right: W/L/D totals + action buttons + scrollable round table).
 
 `useOrientation` uses `window.matchMedia('(orientation: portrait)')` change events (reliable on iOS standalone PWA, unlike `orientationchange`/`resize`). It returns `isPortrait` (boolean) and `vmin` (`Math.min(screen.width, screen.height)` — the device's physical short dimension, which is stable across orientation changes unlike `window.innerWidth`).
 
@@ -474,7 +474,7 @@ The app is designed for **landscape orientation**. `useOrientation` is used in f
    - `filteredBases` — bases matching the selected set and aspect
 3. Auto-select effects: if only one value is available for a dropdown, it is selected automatically
 4. User selects a base → `selectedBase` is set
-5. On submit, `onConfirm(selectedBase, playMode)` is called — the game screen reads `useHyperspace` from `useUserSettings` independently; `playMode` will be wired to competitive scoring in a later ticket
+5. On submit, `onConfirm(selectedBase, playMode)` is called — the game screen reads `useHyperspace` from `useUserSettings` independently; `playMode` is passed to the game screen and drives the score panel and timer display
 
 ### Format selection
 
@@ -637,7 +637,8 @@ The tournament screen (`SwuTournamentScreen` / `SwuTournamentScreenView`) allows
    - Tournament complete: button hidden
 5. Clicking the action button calls `startTournament` (first match only), then `startMatch` (if not already in progress), then `onGoToGame(playMode)` to navigate to the game screen
 6. **Drop button** has a two-step confirmation to prevent accidental drops: first click shows "Confirm"; second click calls `dropTournament` and `onDrop`; clicking elsewhere cancels. When `isComplete`, a single click ends the tournament immediately (no confirmation). A `position: fixed, zIndex: 100` cancel overlay inside `AppScreenLayout`'s stacking context intercepts outside clicks; the drop button itself is at `zIndex: 101` to remain clickable above the overlay.
-7. **Landscape layout** uses CSS Grid (`gridTemplateColumns: '45% 1fr', gridTemplateRows: 'auto auto 1fr'`) to align config inputs and match controls in independent rows across both columns — the W/L/D totals row aligns with the ID/Drop row, and the Match/Rounds row aligns with the action buttons row
+7. **Art preview:** `useBaseArt(base, useHyperspace)` runs in the container; `useHyperspace` comes from `useUserSettings()`. All art props are forwarded to the view, which renders `ImagePreview` with `fill='width'` in portrait (full-width, height derived from 1560/1120 aspect ratio) and `fill='height'` in landscape (height fills remaining space in the left column, width derived from aspect ratio, right-aligned via `marginLeft: auto`)
+8. **Landscape layout** uses two flex columns rather than CSS Grid — left column (45%) contains the ID/Drop row, Match/Rounds row, then a `flex: 1, minHeight: 0` card preview container with `paddingBottom: 2vw` so the shadow is not clipped; right column (`flex: 1`) contains the W/L/D record row, action buttons, and a scrollable rounds table
 8. **App routing:** `App.tsx` restores the `'tournament'` screen on load if `tournament !== null` (persisted state implies an active tournament); the game screen navigates back to `'tournament'` after a round is complete, passing the result via `useTournament.completeMatch`
 
 ### Screen Wake Lock

@@ -9,17 +9,17 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 ## Planned Features
 
 ### Competitive mode ✓
-- Score panel: game counter within a match (#188) ✓
-- Win/loss recording: start phase, You/Opp confirm buttons, auto-loss at 0 HP, between-game display, match-over display, undo (#189) ✓
-- Timer (#190) ✓
-- Analytics + ship (#6) ✓
+- Score panel: game counter within a match ✓
+- Win/loss recording: start phase, You/Opp confirm buttons, auto-loss at 0 HP, between-game display, match-over display, undo ✓
+- Timer ✓
+- Analytics + ship ✓
 
 ### Tournament mode (in progress)
-- Tournament screen: round tracking, W/L/D totals, config inputs, drop/end flow (#205) ✓
-- Tournament points (Win=3, Draw=1, Loss=0) (#208)
+- Tournament screen: round tracking, W/L/D totals, config inputs, drop/end flow ✓
+- Tournament points (Win=3, Draw=1, Loss=0) ✓
+- Base preview on tournament screen ✓
 - Tournament help screen (#209)
-- Base preview on tournament screen — needs CDN image dimension investigation (#210)
-- melee.gg deep links and Player ID settings (#206, depends on #205)
+- melee.gg deep links and Player ID settings (#206)
 
 ### Future games
 - X-Wing

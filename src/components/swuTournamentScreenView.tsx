@@ -1,7 +1,9 @@
+import type { Base } from '../hooks/useBases'
 import type { TournamentState } from '../hooks/useTournament'
 import { BackIcon, CogIcon, HelpIcon } from './icons'
 import AppScreenLayout from './layout/AppScreenLayout'
 import { useOrientation } from '../hooks/useOrientation'
+import ImagePreview from './imagePreview'
 
 type ActionButtonLabel =
   | `Start Match ${number}`
@@ -134,6 +136,7 @@ const iconButtonStyle = (small = false): React.CSSProperties => ({
 })
 
 interface Props {
+  base: Base
   tournament: TournamentState | null
   matchInProgress: boolean
   isComplete: boolean
@@ -152,6 +155,14 @@ interface Props {
   onBack: () => void
   onHelp: () => void
   onSettings?: () => void
+  useHyperspace: boolean
+  artSrc: string | null
+  artIsHyperspace: boolean
+  artAllFailed: boolean
+  artImageLoaded: boolean
+  artRotationDeg: number
+  onArtLoad: () => void
+  onArtError: () => void
 }
 
 function resultLabel(result: 'won' | 'lost' | 'drawn' | null): string {
@@ -169,6 +180,7 @@ function resultColor(result: 'won' | 'lost' | 'drawn' | null): string {
 }
 
 export default function SwuTournamentScreenView({
+  base,
   tournament,
   matchInProgress,
   isComplete,
@@ -187,6 +199,14 @@ export default function SwuTournamentScreenView({
   onBack,
   onHelp,
   onSettings,
+  useHyperspace,
+  artSrc,
+  artIsHyperspace,
+  artAllFailed,
+  artImageLoaded,
+  artRotationDeg,
+  onArtLoad,
+  onArtError,
 }: Props) {
   const { isPortrait } = useOrientation()
   const isStarted = tournament !== null
@@ -375,9 +395,22 @@ export default function SwuTournamentScreenView({
     ? <div style={{ position: 'fixed', inset: 0, zIndex: 100 }} onClick={onDropCancel} />
     : null
 
-  // --- Landscape layout ---
-  // CSS Grid: 2 cols × 3 rows so left/right rows share the same grid row height,
-  // giving automatic vertical alignment between config rows and score/button rows.
+  const artPreview = (fill: 'width' | 'height') => (
+    <ImagePreview
+      base={base}
+      src={artSrc}
+      isHyperspace={artIsHyperspace}
+      allFailed={artAllFailed}
+      imageLoaded={artImageLoaded}
+      rotationDeg={artRotationDeg}
+      useHyperspace={useHyperspace}
+      fill={fill}
+      onLoad={onArtLoad}
+      onError={onArtError}
+    />
+  )
+
+  // --- Landscape layout: two flex columns ---
   if (!isPortrait) {
     return (
       <AppScreenLayout>
@@ -394,29 +427,27 @@ export default function SwuTournamentScreenView({
           <div style={{
             flex: 1,
             display: 'flex',
-            flexDirection: 'column',
+            flexDirection: 'row',
             minHeight: 0,
-            gap: '1.5vh',
+            gap: '3vw',
             paddingTop: '1.5vh',
           }}>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '45% 1fr',
-              gridTemplateRows: 'auto auto',
-              columnGap: '3vw',
-              rowGap: '1.5vh',
-            }}>
-              {/* Row 1: ID + Drop  |  W–L–D score */}
+            {/* Left column: config rows + card preview */}
+            <div style={{ width: '45%', display: 'flex', flexDirection: 'column', gap: '1.5vh' }}>
               {idAndDropRow(true)}
-              {recordRow(true)}
-
-              {/* Row 2: Match + Rounds  |  Action buttons */}
               {modeRoundsRow(true)}
-              {actionButtons(true)}
+              <div style={{ flex: 1, minHeight: 0, paddingBottom: '2vw' }}>
+                {artPreview('height')}
+              </div>
             </div>
 
-            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-              {roundsTable(true)}
+            {/* Right column: record + actions + rounds table */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1.5vh', minHeight: 0 }}>
+              {recordRow(true)}
+              {actionButtons(true)}
+              <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                {roundsTable(true)}
+              </div>
             </div>
           </div>
         </div>
@@ -438,6 +469,7 @@ export default function SwuTournamentScreenView({
         {cancelOverlay}
         {titleRow(false)}
         {configSection(false)}
+        {artPreview('width')}
         {recordRow(false)}
         {actionButtons(false)}
         {roundsTable(false)}
