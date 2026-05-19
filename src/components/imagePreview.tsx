@@ -1,3 +1,4 @@
+import { useRef, useLayoutEffect } from 'react'
 import { Base } from '../hooks/useBases'
 
 const CARD_W = 1560
@@ -11,11 +12,12 @@ interface ImagePreviewProps {
   imageLoaded: boolean
   rotationDeg: number
   useHyperspace: boolean
+  fill?: 'width' | 'height'
   onLoad: () => void
   onError: () => void
 }
 
-const wrapperStyle: React.CSSProperties = {
+const wrapperStyleWidth: React.CSSProperties = {
   width: '100%',
   boxSizing: 'border-box',
   aspectRatio: `${CARD_W} / ${CARD_H}`,
@@ -24,6 +26,19 @@ const wrapperStyle: React.CSSProperties = {
   borderRadius: '12px',
   border: '2px solid var(--color-accent)',
   boxShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.3)',
+}
+
+const wrapperStyleHeight: React.CSSProperties = {
+  height: '100%',
+  maxWidth: '100%',
+  boxSizing: 'border-box',
+  aspectRatio: `${CARD_W} / ${CARD_H}`,
+  position: 'relative',
+  overflow: 'hidden',
+  borderRadius: '12px',
+  border: '2px solid var(--color-accent)',
+  boxShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.3)',
+  marginLeft: 'auto',
 }
 
 const imgStyleNormal: React.CSSProperties = {
@@ -66,7 +81,16 @@ const errorStyle: React.CSSProperties = {
   textShadow: '0 1px 4px rgba(0,0,0,0.9)',
 }
 
-function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotationDeg, useHyperspace, onLoad, onError }: ImagePreviewProps) {
+function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotationDeg, useHyperspace, fill = 'width', onLoad, onError }: ImagePreviewProps) {
+  const imgRef = useRef<HTMLImageElement>(null)
+
+  // Browsers don't re-fire the load event for cached images, so React's onLoad
+  // handler can miss it if the image was already in cache when this component mounts.
+  // Check img.complete synchronously after commit and call onLoad ourselves if so.
+  useLayoutEffect(() => {
+    if (imgRef.current?.complete) onLoad()
+  }, [src])
+
   if (allFailed || !src) {
     return (
       <div style={{
@@ -90,8 +114,10 @@ function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotatio
       ? 'Hyperspace variant not found'
       : null)
 
+  const baseWrapperStyle = fill === 'height' ? wrapperStyleHeight : wrapperStyleWidth
+
   const imageWrapperStyle: React.CSSProperties = {
-    ...wrapperStyle,
+    ...baseWrapperStyle,
     ...(imageLoaded ? {} : { opacity: 0, boxShadow: 'none', border: 'none' }),
     ...(message ? {
       borderBottomLeftRadius: 0,
@@ -100,9 +126,10 @@ function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotatio
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', ...(fill === 'height' ? { height: '100%', alignItems: 'flex-end' } : {}) }}>
       <div style={imageWrapperStyle}>
         <img
+          ref={imgRef}
           src={src}
           alt={base.name}
           onLoad={onLoad}

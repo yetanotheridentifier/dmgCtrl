@@ -2,6 +2,8 @@ import { useState } from 'react'
 import type { Base } from '../hooks/useBases'
 import type { TournamentState } from '../hooks/useTournament'
 import type { Format } from '../utils/formatFilter'
+import { useBaseArt } from '../hooks/useBaseArt'
+import { useUserSettings } from '../hooks/useUserSettings'
 import SwuTournamentScreenView from './swuTournamentScreenView'
 
 interface Props {
@@ -40,6 +42,9 @@ export default function SwuTournamentScreen({
   onHelp,
   onSettings,
 }: Props) {
+  const { useHyperspace } = useUserSettings()
+  const art = useBaseArt(base, useHyperspace)
+
   const [localTournamentId, setLocalTournamentId] = useState('')
   const [localPlayMode, setLocalPlayMode] = useState<'bo1' | 'bo3'>('bo3')
   const [localTotalRounds, setLocalTotalRounds] = useState(5)
@@ -77,6 +82,7 @@ export default function SwuTournamentScreen({
 
   return (
     <SwuTournamentScreenView
+      base={base}
       tournament={tournament}
       matchInProgress={matchInProgress}
       isComplete={isComplete}
@@ -95,6 +101,14 @@ export default function SwuTournamentScreen({
       onBack={onBack}
       onHelp={onHelp}
       onSettings={onSettings}
+      useHyperspace={useHyperspace}
+      artSrc={art.src}
+      artIsHyperspace={art.isHyperspace}
+      artAllFailed={art.allFailed}
+      artImageLoaded={art.imageLoaded}
+      artRotationDeg={art.rotationDeg}
+      onArtLoad={art.onLoad}
+      onArtError={art.onError}
     />
   )
 }

@@ -9,6 +9,14 @@ import { useOrientation } from '../hooks/useOrientation'
 
 vi.mock('../hooks/useOrientation')
 
+vi.mock('../hooks/useUserSettings', () => ({
+  useUserSettings: () => ({ useHyperspace: false }),
+}))
+
+vi.mock('../services/analytics', () => ({
+  onImageLoadFailed: vi.fn().mockResolvedValue(undefined),
+}))
+
 
 const mockBase: Base = {
   set: 'SOR',
@@ -317,7 +325,7 @@ describe('SwuTournamentScreen', () => {
     expect(screen.queryByRole('button', { name: 'Back' })).toBeNull()
   })
 
-  // --- Placeholder button (#206) ---
+  // --- Placeholder button ---
 
   it('Find Next Match button is disabled', () => {
     render(<SwuTournamentScreen {...makeProps({ tournament: activeTournamentNoRounds })} />)
@@ -354,6 +362,18 @@ describe('SwuTournamentScreen', () => {
       points: 7,
     })} />)
     expect(screen.getByText(/7pts/)).toBeInTheDocument()
+  })
+
+  // --- Base art preview ---
+
+  it('renders a base card image', () => {
+    render(<SwuTournamentScreen {...makeProps()} />)
+    expect(screen.getByRole('img', { name: mockBase.name })).toBeInTheDocument()
+  })
+
+  it('base card image src matches the base frontArt', () => {
+    render(<SwuTournamentScreen {...makeProps()} />)
+    expect(screen.getByRole('img', { name: mockBase.name })).toHaveAttribute('src', mockBase.frontArt)
   })
 
 })
