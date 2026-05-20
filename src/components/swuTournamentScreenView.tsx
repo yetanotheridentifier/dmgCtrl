@@ -1,5 +1,6 @@
 import type { Base } from '../hooks/useBases'
 import type { TournamentState } from '../hooks/useTournament'
+
 import { BackIcon, CogIcon, HelpIcon } from './icons'
 import AppScreenLayout from './layout/AppScreenLayout'
 import { useOrientation } from '../hooks/useOrientation'
@@ -55,7 +56,7 @@ const selectStyle = (enabled: boolean, small = false): React.CSSProperties => ({
   flex: 1,
   padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
   fontSize: small ? 'clamp(0.75rem, 1.8vw, 0.9rem)' : 'clamp(0.9rem, 3vw, 1.2rem)',
-  height: 'max(44px, 8vmin)',
+  minHeight: 'max(44px, 8vmin)',
   fontWeight: '300',
   background: 'transparent',
   border: '2px solid var(--color-accent)',
@@ -136,7 +137,7 @@ const iconButtonStyle = (small = false): React.CSSProperties => ({
 })
 
 interface Props {
-  base: Base
+  displayBase: Base
   tournament: TournamentState | null
   matchInProgress: boolean
   isComplete: boolean
@@ -163,6 +164,15 @@ interface Props {
   artRotationDeg: number
   onArtLoad: () => void
   onArtError: () => void
+  canChangeBase: boolean
+  changingBase: boolean
+  availableAspects: string[]
+  candidateAspect: string | null
+  availableBasesForAspect: Base[]
+  onChangeBaseClick: () => void
+  onAspectChange: (aspect: string) => void
+  onBaseSelect: (baseKey: string) => void
+  onChangeBaseCancel: () => void
 }
 
 function resultLabel(result: 'won' | 'lost' | 'drawn' | null): string {
@@ -180,7 +190,7 @@ function resultColor(result: 'won' | 'lost' | 'drawn' | null): string {
 }
 
 export default function SwuTournamentScreenView({
-  base,
+  displayBase,
   tournament,
   matchInProgress,
   isComplete,
@@ -207,6 +217,15 @@ export default function SwuTournamentScreenView({
   artRotationDeg,
   onArtLoad,
   onArtError,
+  canChangeBase,
+  changingBase,
+  availableAspects,
+  candidateAspect,
+  availableBasesForAspect,
+  onChangeBaseClick,
+  onAspectChange,
+  onBaseSelect,
+  onChangeBaseCancel,
 }: Props) {
   const { isPortrait } = useOrientation()
   const isStarted = tournament !== null
@@ -395,20 +414,84 @@ export default function SwuTournamentScreenView({
     ? <div style={{ position: 'fixed', inset: 0, zIndex: 100 }} onClick={onDropCancel} />
     : null
 
-  const artPreview = (fill: 'width' | 'height') => (
-    <ImagePreview
-      base={base}
-      src={artSrc}
-      isHyperspace={artIsHyperspace}
-      allFailed={artAllFailed}
-      imageLoaded={artImageLoaded}
-      rotationDeg={artRotationDeg}
-      useHyperspace={useHyperspace}
-      fill={fill}
-      onLoad={onArtLoad}
-      onError={onArtError}
-    />
-  )
+  const artPreview = (fill: 'width' | 'height') => {
+    const small = fill === 'height'
+    if (changingBase) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: small ? '1vh' : '1.5vh' }}>
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
+            <label style={labelStyle(small)}>Aspect</label>
+            <select
+              data-testid="change-base-aspect"
+              value={candidateAspect ?? ''}
+              onChange={e => onAspectChange(e.target.value)}
+              style={{ ...selectStyle(true, small), color: candidateAspect ? 'var(--color-text-primary)' : 'var(--color-text-disabled)' }}
+            >
+              <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>Aspect</option>
+              {availableAspects.map(a => (
+                <option key={a} value={a} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>{a}</option>
+              ))}
+            </select>
+            <button onClick={onChangeBaseCancel} style={{ ...primaryButtonStyle(true, small), width: 'auto', flexShrink: 0 }}>Cancel</button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
+            <label style={labelStyle(small)}>Base</label>
+            <select
+              data-testid="change-base-base"
+              value=""
+              onChange={e => onBaseSelect(e.target.value)}
+              style={{ ...selectStyle(true, small), color: 'var(--color-text-disabled)' }}
+            >
+              <option value="" disabled style={{ color: 'var(--color-text-disabled)', background: 'var(--color-bg-deep)' }}>Base</option>
+              {availableBasesForAspect.map(b => (
+                <option key={`${b.set}-${b.number}`} value={`${b.set}-${b.number}`} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )
+    }
+    return (
+      <ImagePreview
+        base={displayBase}
+        src={artSrc}
+        isHyperspace={artIsHyperspace}
+        allFailed={artAllFailed}
+        imageLoaded={artImageLoaded}
+        rotationDeg={artRotationDeg}
+        useHyperspace={useHyperspace}
+        fill={fill}
+        onLoad={onArtLoad}
+        onError={onArtError}
+        overlay={canChangeBase ? (
+          <button
+            data-testid="change-base-overlay"
+            onClick={onChangeBaseClick}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(0,0,0,0.5)',
+              border: 'none',
+              color: 'var(--color-text-primary)',
+              fontSize: small ? 'clamp(0.8rem, 3vw, 1rem)' : 'clamp(0.9rem, 4vw, 1.2rem)',
+              fontWeight: '300',
+              letterSpacing: '0.12em',
+              cursor: 'pointer',
+              WebkitTapHighlightColor: 'transparent',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              textShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.4), 0 0 8px rgba(0,0,0,1)',
+            }}
+          >
+            Change Base
+          </button>
+        ) : undefined}
+      />
+    )
+  }
 
   // --- Landscape layout: two flex columns ---
   if (!isPortrait) {

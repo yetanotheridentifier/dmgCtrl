@@ -13,6 +13,27 @@ vi.mock('../hooks/useUserSettings', () => ({
   useUserSettings: () => ({ useHyperspace: false }),
 }))
 
+vi.mock('../hooks/useBases', () => ({
+  useBases: () => ({
+    bases: [
+      {
+        set: 'SOR', number: '026', name: 'Catacombs of Cadera', subtitle: 'Jedha',
+        hp: 30, frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png',
+        frontArtLowRes: null, hyperspaceArtHiRes: null, hyperspaceArt: null,
+        epicAction: '', aspects: ['Aggression'], rarity: 'Common',
+      },
+      {
+        set: 'SOR', number: '022', name: 'Energy Conversion Lab', subtitle: 'Eadu',
+        hp: 25, frontArt: 'https://cdn.swu-db.com/images/cards/SOR/022.png',
+        frontArtLowRes: null, hyperspaceArtHiRes: null, hyperspaceArt: null,
+        epicAction: 'Epic Action: Play a unit that costs 6 or less.', aspects: ['Cunning'], rarity: 'Rare',
+      },
+    ],
+    loading: false,
+    error: null,
+  }),
+}))
+
 const mockOnTournamentStarted = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnTournamentDropped = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnTournamentEnded = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
@@ -38,6 +59,21 @@ const mockBase: Base = {
   epicAction: '',
   aspects: ['Aggression'],
   rarity: 'Common',
+}
+
+const mockAlternativeBase: Base = {
+  set: 'SOR',
+  number: '022',
+  name: 'Energy Conversion Lab',
+  subtitle: 'Eadu',
+  hp: 25,
+  frontArt: 'https://cdn.swu-db.com/images/cards/SOR/022.png',
+  frontArtLowRes: null,
+  hyperspaceArtHiRes: null,
+  hyperspaceArt: null,
+  epicAction: 'Epic Action: Play a unit that costs 6 or less.',
+  aspects: ['Cunning'],
+  rarity: 'Rare',
 }
 
 const noTournament: TournamentState | null = null
@@ -73,6 +109,29 @@ const completeTournament: TournamentState = {
   ],
 }
 
+const limitedBo3OneRoundComplete: TournamentState = {
+  base: mockBase,
+  format: 'limited' as Format,
+  tournamentId: '192916',
+  playMode: 'bo3',
+  totalRounds: 3,
+  rounds: [
+    { roundNumber: 1, playerScore: 2, opponentScore: 0, result: 'won', submitted: false },
+  ],
+}
+
+// Match 1 is active with 1 game already played — "between games" state where Change Base is available
+const limitedBo3GameTwoOfMatch: TournamentState = {
+  base: mockBase,
+  format: 'limited' as Format,
+  tournamentId: '192916',
+  playMode: 'bo3',
+  totalRounds: 3,
+  rounds: [
+    { roundNumber: 1, playerScore: 1, opponentScore: 0, result: null, submitted: false },
+  ],
+}
+
 function makeProps(overrides: Partial<Parameters<typeof SwuTournamentScreen>[0]> = {}) {
   return {
     base: mockBase,
@@ -82,6 +141,7 @@ function makeProps(overrides: Partial<Parameters<typeof SwuTournamentScreen>[0]>
     isComplete: false,
     totals: { won: 0, lost: 0, drawn: 0 },
     points: 0,
+    hasPlayedGameInCurrentMatch: false,
     startTournament: vi.fn(),
     startMatch: vi.fn(),
     dropTournament: vi.fn(),
@@ -411,6 +471,143 @@ describe('SwuTournamentScreen', () => {
     await user.click(screen.getByTestId('drop-end-button'))
     await user.click(screen.getByTestId('drop-end-button'))
     expect(mockOnTournamentDropped).toHaveBeenCalledWith(0, 'premier', 'bo3')
+  })
+
+  // --- Change base ---
+
+  it('shows Change Base overlay between games within an ongoing match (limited, bo3)', () => {
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: limitedBo3GameTwoOfMatch,
+      matchInProgress: true,
+      hasPlayedGameInCurrentMatch: true,
+    })} />)
+    expect(screen.getByTestId('change-base-overlay')).toBeInTheDocument()
+  })
+
+  it('does not show Change Base overlay in premier format', () => {
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: { ...limitedBo3GameTwoOfMatch, format: 'premier' },
+      matchInProgress: true,
+      hasPlayedGameInCurrentMatch: true,
+    })} />)
+    expect(screen.queryByTestId('change-base-overlay')).toBeNull()
+  })
+
+  it('does not show Change Base overlay in bo1 mode', () => {
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: { ...limitedBo3GameTwoOfMatch, playMode: 'bo1' },
+      matchInProgress: true,
+      hasPlayedGameInCurrentMatch: true,
+    })} />)
+    expect(screen.queryByTestId('change-base-overlay')).toBeNull()
+  })
+
+  it('does not show Change Base overlay before any games played in current match', () => {
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: limitedBo3GameTwoOfMatch,
+      matchInProgress: true,
+      hasPlayedGameInCurrentMatch: false,
+    })} />)
+    expect(screen.queryByTestId('change-base-overlay')).toBeNull()
+  })
+
+  it('does not show Change Base overlay when no match is in progress (between matches)', () => {
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: limitedBo3OneRoundComplete,
+      matchInProgress: false,
+      hasPlayedGameInCurrentMatch: false,
+    })} />)
+    expect(screen.queryByTestId('change-base-overlay')).toBeNull()
+  })
+
+  it('does not show Change Base overlay when tournament is complete', () => {
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: { ...limitedBo3GameTwoOfMatch, totalRounds: 1 },
+      isComplete: true,
+      matchInProgress: true,
+      hasPlayedGameInCurrentMatch: true,
+    })} />)
+    expect(screen.queryByTestId('change-base-overlay')).toBeNull()
+  })
+
+  it('tapping Change Base overlay shows aspect and base selectors', async () => {
+    const user = userEvent.setup()
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: limitedBo3GameTwoOfMatch,
+      matchInProgress: true,
+      hasPlayedGameInCurrentMatch: true,
+    })} />)
+    await user.click(screen.getByTestId('change-base-overlay'))
+    expect(screen.getByTestId('change-base-aspect')).toBeInTheDocument()
+    expect(screen.getByTestId('change-base-base')).toBeInTheDocument()
+  })
+
+  it('Cancel hides selectors and returns to card art without changing base', async () => {
+    const user = userEvent.setup()
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: limitedBo3GameTwoOfMatch,
+      matchInProgress: true,
+      hasPlayedGameInCurrentMatch: true,
+    })} />)
+    await user.click(screen.getByTestId('change-base-overlay'))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByTestId('change-base-aspect')).toBeNull()
+    expect(screen.getByRole('img', { name: mockBase.name })).toBeInTheDocument()
+  })
+
+  it('selecting a base hides selectors and updates art preview', async () => {
+    const user = userEvent.setup()
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: limitedBo3GameTwoOfMatch,
+      matchInProgress: true,
+      hasPlayedGameInCurrentMatch: true,
+    })} />)
+    await user.click(screen.getByTestId('change-base-overlay'))
+    await user.selectOptions(screen.getByTestId('change-base-aspect'), 'Cunning')
+    await user.selectOptions(screen.getByTestId('change-base-base'), 'SOR-022')
+    expect(screen.queryByTestId('change-base-aspect')).toBeNull()
+    expect(screen.getByRole('img', { name: mockAlternativeBase.name })).toBeInTheDocument()
+  })
+
+  it('action button passes candidate base to onGoToGame when continuing within a match', async () => {
+    const user = userEvent.setup()
+    const onGoToGame = vi.fn()
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: limitedBo3GameTwoOfMatch,
+      matchInProgress: true,
+      hasPlayedGameInCurrentMatch: true,
+      onGoToGame,
+    })} />)
+    await user.click(screen.getByTestId('change-base-overlay'))
+    await user.selectOptions(screen.getByTestId('change-base-aspect'), 'Cunning')
+    await user.selectOptions(screen.getByTestId('change-base-base'), 'SOR-022')
+    await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+    expect(onGoToGame).toHaveBeenCalledWith('bo3', mockAlternativeBase)
+  })
+
+  it('action button calls onGoToGame without newBase when no candidate selected mid-match', async () => {
+    const user = userEvent.setup()
+    const onGoToGame = vi.fn()
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: limitedBo3GameTwoOfMatch,
+      matchInProgress: true,
+      hasPlayedGameInCurrentMatch: true,
+      onGoToGame,
+    })} />)
+    await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+    expect(onGoToGame).toHaveBeenCalledWith('bo3')
+  })
+
+  it('action button passes registered base to onGoToGame when starting a new match', async () => {
+    const user = userEvent.setup()
+    const onGoToGame = vi.fn()
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: limitedBo3OneRoundComplete,
+      matchInProgress: false,
+      onGoToGame,
+    })} />)
+    await user.click(screen.getByRole('button', { name: 'Start Match 2' }))
+    expect(onGoToGame).toHaveBeenCalledWith('bo3', mockBase)
   })
 
   it('fires onTournamentEnded with tournament summary when End Tournament is clicked', async () => {

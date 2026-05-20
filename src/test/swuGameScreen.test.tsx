@@ -507,9 +507,22 @@ describe('SwuGameScreen', () => {
     expect(screen.queryByTestId('epic-action-overlay')).not.toBeInTheDocument()
   })
 
+  it('Epic action button is disabled before game starts', () => {
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('epic-action-btn')).toBeDisabled()
+  })
+
+  it('Epic action button is enabled after game starts', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
+    expect(screen.getByTestId('epic-action-btn')).not.toBeDisabled()
+  })
+
   it('Clicking epic action button shows the used overlay', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('epic-action-btn'))
     expect(screen.getByTestId('epic-action-overlay')).toBeInTheDocument()
   })
@@ -519,6 +532,7 @@ describe('SwuGameScreen', () => {
   it('Clicking epic action button when already used does not add another log entry', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('epic-action-btn'))
     await user.click(screen.getByTestId('epic-action-btn'))
     await user.click(screen.getByTestId('log-btn'))
@@ -557,9 +571,22 @@ describe('SwuGameScreen', () => {
     expect(screen.queryByTestId('force-token')).not.toBeInTheDocument()
   })
 
+  it('Force button (gain force) is disabled before game starts', () => {
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('force-btn')).toBeDisabled()
+  })
+
+  it('Force button (gain force) is enabled after game starts', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
+    expect(screen.getByTestId('force-btn')).not.toBeDisabled()
+  })
+
   it('Clicking active Force button shows the Force token', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('force-btn'))
     expect(screen.getByTestId('force-token')).toBeInTheDocument()
   })
@@ -567,6 +594,7 @@ describe('SwuGameScreen', () => {
   it('Active Force button is hidden when token is showing', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('force-btn'))
     expect(screen.queryByTestId('force-btn')).not.toBeInTheDocument()
   })
@@ -574,6 +602,7 @@ describe('SwuGameScreen', () => {
   it('Greyed Force button is visible when Force token overlay is showing', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('force-btn'))
     expect(screen.getByTestId('force-btn-active')).toBeInTheDocument()
   })
@@ -581,6 +610,7 @@ describe('SwuGameScreen', () => {
   it('Tapping greyed Force button dismisses the Force token overlay', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('force-btn'))
     await user.click(screen.getByTestId('force-btn-active'))
     expect(screen.queryByTestId('force-token')).not.toBeInTheDocument()
@@ -590,6 +620,7 @@ describe('SwuGameScreen', () => {
   it('Clicking the Force token removes it and restores the active button', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('force-btn'))
     await user.click(screen.getByTestId('force-token'))
     expect(screen.queryByTestId('force-token')).not.toBeInTheDocument()
@@ -637,6 +668,7 @@ describe('SwuGameScreen', () => {
     mockUserSettings.forceTokenDisplay = 'always-on'
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('force-btn-locked'))
     await user.click(screen.getByTestId('force-btn'))
     expect(screen.getByTestId('force-token')).toBeInTheDocument()
@@ -646,6 +678,7 @@ describe('SwuGameScreen', () => {
     mockUserSettings.forceTokenDisplay = 'always-on'
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('force-btn-locked'))
     await user.click(screen.getByTestId('force-btn'))
     await user.click(screen.getByTestId('force-token'))
@@ -700,14 +733,22 @@ describe('SwuGameScreen', () => {
     expect(screen.getByTestId('mystic-action-btn')).toHaveTextContent('3')
   })
 
-  it('Action counter button is enabled initially', () => {
+  it('Action counter button is disabled before game starts', () => {
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('mystic-action-btn')).toBeDisabled()
+  })
+
+  it('Action counter button is enabled after game starts', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     expect(screen.getByTestId('mystic-action-btn')).not.toBeDisabled()
   })
 
   it('Tapping action counter button shows the Force token overlay', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('mystic-action-btn'))
     expect(screen.getByTestId('force-token')).toBeInTheDocument()
   })
@@ -715,6 +756,7 @@ describe('SwuGameScreen', () => {
   it('Action counter button is visible but disabled when Force token overlay is active', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('mystic-action-btn'))
     expect(screen.getByTestId('mystic-action-btn')).toBeInTheDocument()
     expect(screen.getByTestId('mystic-action-btn')).toBeDisabled()
@@ -723,6 +765,7 @@ describe('SwuGameScreen', () => {
   it('Force button is hidden when Force token overlay is active', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('mystic-action-btn'))
     expect(screen.queryByTestId('force-btn')).not.toBeInTheDocument()
   })
@@ -731,6 +774,7 @@ describe('SwuGameScreen', () => {
     mockUserSettings.forceTokenDisplay = 'always-on'
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('mystic-action-btn'))
     await user.click(screen.getByTestId('force-token'))
     expect(screen.getByTestId('mystic-action-btn')).toBeInTheDocument()
@@ -741,6 +785,7 @@ describe('SwuGameScreen', () => {
   it('Tapping action counter button decrements the use count', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('mystic-action-btn'))
     await user.click(screen.getByTestId('force-token'))
     expect(screen.getByTestId('mystic-action-btn')).toHaveTextContent('2')
@@ -750,6 +795,7 @@ describe('SwuGameScreen', () => {
     mockUserSettings.forceTokenDisplay = 'always-on'
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('force-btn'))
     await user.click(screen.getByTestId('force-token'))
     expect(screen.getByTestId('mystic-action-btn')).toHaveTextContent('3')
@@ -758,6 +804,7 @@ describe('SwuGameScreen', () => {
   it('Action counter button shows 0 and is disabled when all uses are exhausted', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     for (let i = 0; i < 3; i++) {
       await user.click(screen.getByTestId('mystic-action-btn'))
       await user.click(screen.getByTestId('force-token'))
@@ -771,6 +818,7 @@ describe('SwuGameScreen', () => {
     mockUserSettings.forceTokenDisplay = 'always-on'
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     for (let i = 0; i < 3; i++) {
       await user.click(screen.getByTestId('mystic-action-btn'))
       await user.click(screen.getByTestId('force-token'))
@@ -782,6 +830,7 @@ describe('SwuGameScreen', () => {
     mockUserSettings.forceTokenDisplay = 'always-on'
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     for (let i = 0; i < 3; i++) {
       await user.click(screen.getByTestId('mystic-action-btn'))
       await user.click(screen.getByTestId('force-token'))
@@ -1152,6 +1201,7 @@ describe('SwuGameScreen', () => {
   it('Undo after epic action used removes the overlay', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('epic-action-btn'))
     await user.click(screen.getByTestId('log-btn'))
     await user.click(screen.getByTestId('log-undo-btn'))
@@ -1161,6 +1211,7 @@ describe('SwuGameScreen', () => {
   it('Undo after force gain removes the force token', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('force-btn'))
     await user.click(screen.getByTestId('log-btn'))
     await user.click(screen.getByTestId('log-undo-btn'))
@@ -1170,6 +1221,7 @@ describe('SwuGameScreen', () => {
   it('Undo after force dismiss restores the force token', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('force-btn'))
     await user.click(screen.getByTestId('force-btn-active'))
     await user.click(screen.getByTestId('log-btn'))
@@ -1180,6 +1232,7 @@ describe('SwuGameScreen', () => {
   it('Undo after force dismiss via token click restores the force token', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('force-btn'))
     await user.click(screen.getByTestId('force-token'))
     await user.click(screen.getByTestId('log-btn'))
@@ -1190,6 +1243,7 @@ describe('SwuGameScreen', () => {
   it('Undo after monastery action restores the use count', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('mystic-action-btn'))
     await user.click(screen.getByTestId('force-token'))
     await user.click(screen.getByTestId('log-btn'))
@@ -1260,6 +1314,7 @@ describe('SwuGameScreen', () => {
   it('Epic action adds an entry to the log', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('epic-action-btn'))
     await user.click(screen.getByTestId('log-btn'))
     expect(screen.getByText('Epic action used')).toBeInTheDocument()
@@ -1268,6 +1323,7 @@ describe('SwuGameScreen', () => {
   it('Force gain adds an entry to the log', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('force-btn'))
     await user.click(screen.getByTestId('log-btn'))
     expect(screen.getByText('Force gained')).toBeInTheDocument()
@@ -1276,6 +1332,7 @@ describe('SwuGameScreen', () => {
   it('Force dismiss adds an entry to the log', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('force-btn'))
     await user.click(screen.getByTestId('force-btn-active'))
     await user.click(screen.getByTestId('log-btn'))
@@ -1285,6 +1342,7 @@ describe('SwuGameScreen', () => {
   it('Monastery action adds an entry to the log', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('mystic-action-btn'))
     await user.click(screen.getByTestId('force-token'))
     await user.click(screen.getByTestId('log-btn'))
@@ -1991,6 +2049,7 @@ describe('SwuGameScreen analytics', () => {
   it('calls onEpicActionUsed with baseKey and baseSet when epic action is tapped', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('epic-action-btn'))
     expect(mockOnEpicActionUsed).toHaveBeenCalledWith('SOR-022', 'SOR')
   })
@@ -1998,6 +2057,7 @@ describe('SwuGameScreen analytics', () => {
   it('does not call onEpicActionUsed a second time when epic action is already used', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseWithEpicAction} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('epic-action-btn'))
     await user.click(screen.getByTestId('epic-action-btn'))
     expect(mockOnEpicActionUsed).toHaveBeenCalledTimes(1)
@@ -2006,6 +2066,7 @@ describe('SwuGameScreen analytics', () => {
   it('calls onForceGained when Force button is tapped on a Force base', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('force-btn'))
     expect(mockOnForceGained).toHaveBeenCalledWith('LOF-026', 'LOF')
   })
@@ -2014,6 +2075,7 @@ describe('SwuGameScreen analytics', () => {
     mockUserSettings.forceTokenDisplay = 'always-on'
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('force-btn-locked'))
     await user.click(screen.getByTestId('force-btn'))
     expect(mockOnForceGained).toHaveBeenCalledWith('SOR-026', 'SOR')
@@ -2022,6 +2084,7 @@ describe('SwuGameScreen analytics', () => {
   it('calls onForceGained when monastery action is used', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseMysticMonastery} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('mystic-action-btn'))
     expect(mockOnForceGained).toHaveBeenCalledWith('LOF-022', 'LOF')
   })
@@ -2029,6 +2092,7 @@ describe('SwuGameScreen analytics', () => {
   it('calls onForceUsed when Force token is dismissed', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBaseForce} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('force-btn'))
     await user.click(screen.getByTestId('force-btn-active'))
     expect(mockOnForceUsed).toHaveBeenCalledWith('LOF-026', 'LOF')

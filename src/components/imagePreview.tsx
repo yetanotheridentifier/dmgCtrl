@@ -5,6 +5,7 @@ const CARD_W = 1560
 const CARD_H = 1120
 
 interface ImagePreviewProps {
+  overlay?: React.ReactNode
   base: Base
   src: string | null
   isHyperspace: boolean
@@ -28,17 +29,17 @@ const wrapperStyleWidth: React.CSSProperties = {
   boxShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.3)',
 }
 
-const wrapperStyleHeight: React.CSSProperties = {
-  height: '100%',
-  maxWidth: '100%',
+// In fill='height' mode the outer container owns height/aspectRatio/marginLeft so that both
+// the image wrapper and any message below it share the same computed width automatically.
+const wrapperStyleHeightInner: React.CSSProperties = {
+  flex: '1 1 0',
+  minHeight: 0,
   boxSizing: 'border-box',
-  aspectRatio: `${CARD_W} / ${CARD_H}`,
   position: 'relative',
   overflow: 'hidden',
   borderRadius: '12px',
   border: '2px solid var(--color-accent)',
   boxShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.3)',
-  marginLeft: 'auto',
 }
 
 const imgStyleNormal: React.CSSProperties = {
@@ -81,7 +82,7 @@ const errorStyle: React.CSSProperties = {
   textShadow: '0 1px 4px rgba(0,0,0,0.9)',
 }
 
-function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotationDeg, useHyperspace, fill = 'width', onLoad, onError }: ImagePreviewProps) {
+function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotationDeg, useHyperspace, fill = 'width', onLoad, onError, overlay }: ImagePreviewProps) {
   const imgRef = useRef<HTMLImageElement>(null)
 
   // Browsers don't re-fire the load event for cached images, so React's onLoad
@@ -114,7 +115,7 @@ function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotatio
       ? 'Hyperspace variant not found'
       : null)
 
-  const baseWrapperStyle = fill === 'height' ? wrapperStyleHeight : wrapperStyleWidth
+  const baseWrapperStyle = fill === 'height' ? wrapperStyleHeightInner : wrapperStyleWidth
 
   const imageWrapperStyle: React.CSSProperties = {
     ...baseWrapperStyle,
@@ -126,7 +127,7 @@ function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotatio
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', ...(fill === 'height' ? { height: '100%', alignItems: 'flex-end' } : {}) }}>
+    <div style={{ display: 'flex', flexDirection: 'column', ...(fill === 'height' ? { height: '100%', maxWidth: '100%', aspectRatio: `${CARD_W} / ${CARD_H}`, marginLeft: 'auto' } : {}) }}>
       <div style={imageWrapperStyle}>
         <img
           ref={imgRef}
@@ -136,6 +137,7 @@ function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotatio
           onError={onError}
           style={rotationDeg ? imgStyleRotated : imgStyleNormal}
         />
+        {overlay}
       </div>
       {message && (
         <div style={{

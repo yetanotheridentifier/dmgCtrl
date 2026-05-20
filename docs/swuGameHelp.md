@@ -86,22 +86,25 @@ Go to <svg width="3.5%" height="3.5%" viewBox="0 0 24 24" fill="none" stroke="cu
 
 The Force token button appears based on your **Force Token Display** setting (default: LOF bases only).
 
-- On **Legends of the Force** bases whose ability creates a Force token, the button starts **fully blue and ready** — tap it to gain the Force
+- On **Legends of the Force** bases whose ability creates a Force token, the button starts **fully blue and ready** — tap it to gain the Force (available once the game has started)
 - On **other bases** (when **Always on** is selected), a dimmed Force icon appears — tap it once to enable it, then tap again to gain the Force
 - Tap the blue **"The Force is With You"** overlay or the greyed Force icon to dismiss it and restore the button, ready to gain the Force again
+
+The gain-Force button is disabled until the game has started (i.e. the round counter has been tapped at least once). The enable tap on non-Force bases is not gated and can be done at any time.
 
 #### Mystic Monastery
 
 **Mystic Monastery** (LOF-022) can generate the Force up to three times per game as an action. A numbered button appears, which shows how many uses remain.
 - Tap the numbered button to gain the Force — the count decrements and the Force overlay appears
-- The numbered button greys out while the Force overlay is active; dismiss the overlay first before using it again
+- The numbered button is disabled until the game has started, and greys out while the Force overlay is active; dismiss the overlay first before using it again
 - With **Always on**, a regular Force icon also appears for gaining the Force by other means
 
 ### Epic Action
 
 Some bases have a special **Epic Action** — a once-per-game ability. When your base has one, an epic action button appears in the top-left corner.
 
-- The epic action button starts **highlighted in yellow**, showing the epic action is available
+- The epic action button is disabled until the game has started (round counter tapped at least once)
+- Once the game has started, the button is **highlighted in yellow**, showing the epic action is available
 - Tap it to mark it as used — the button dims and a gold token overlay appears over the lower portion of the card, covering the epic action text (mirroring the physical token used in the tabletop game)
 - When the **action log is enabled**, use the Undo button in the action log to revert the mark
 - When the **action log is disabled**, tap the overlay to dismiss it

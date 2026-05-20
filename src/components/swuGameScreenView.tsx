@@ -211,6 +211,7 @@ function SwuGameScreenView({
         <button
           data-testid="force-btn"
           onClick={onForceGain}
+          disabled={!gameStarted && enableActionLog}
           style={{
             position: 'absolute',
             top: 'calc(env(safe-area-inset-top) + 9vw)',
@@ -294,7 +295,7 @@ function SwuGameScreenView({
         <button
           data-testid="epic-action-btn"
           aria-label="Epic action"
-          disabled={epicActionUsed}
+          disabled={epicActionUsed || (!gameStarted && enableActionLog)}
           onClick={onEpicActionMark}
           style={{
             position: 'absolute',
@@ -324,7 +325,7 @@ function SwuGameScreenView({
 
       {/* Mystic Monastery action button — slot 1 (9vw) without Force, slot 2 (16vw) with Force */}
       {showMysticMonastery && (() => {
-        const disabled = forceActive || mysticUsesRemaining === 0
+        const disabled = forceActive || mysticUsesRemaining === 0 || (!gameStarted && enableActionLog)
         return (
           <button
             data-testid="mystic-action-btn"

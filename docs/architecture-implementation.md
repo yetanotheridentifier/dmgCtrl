@@ -28,8 +28,8 @@ src/
     swuSetupScreenView.tsx  Setup screen view (title row: icon + "dmgCtrl" h1 + ⚙ button + help button)
     swuSettingsScreen.tsx   Settings screen container
     swuSettingsScreenView.tsx Settings screen view (toggle list; calls useOrientation directly for iOS font sizing)
-    swuTournamentScreen.tsx  Tournament screen container — local config state, action/drop handlers; calls useBaseArt + useUserSettings to derive art props; fires onTournamentStarted on first match click, onTournamentDropped / onTournamentEnded on confirmed drop; delegates to view
-    swuTournamentScreenView.tsx Tournament screen view — config inputs (tournament ID, play mode selector, total rounds `<select>` 2–16), base art preview (ImagePreview), round table, W/L/D totals, cancel overlay; portrait: single column with ImagePreview fill='width' between config and record row; landscape: two flex columns (left: config rows + ImagePreview fill='height'; right: record + buttons + rounds table)
+    swuTournamentScreen.tsx  Tournament screen container — local config state, action/drop handlers; calls useBases to provide options for the change-base selector; calls useBaseArt(candidateBase ?? base, useHyperspace) so art previews the candidate while the selector is active; canChangeBase (limited + bo3 + ≥1 completed round + not in progress + not complete) gates the change-base overlay; changingBase / candidateAspect / candidateBase local state manage the change-base flow; passes candidateBase to onGoToGame when selected, omits it otherwise (App falls back to tournamentCurrentBase for the game screen); fires onTournamentStarted on first match click, onTournamentDropped / onTournamentEnded on confirmed drop; delegates to view
+    swuTournamentScreenView.tsx Tournament screen view — config inputs (tournament ID, play mode selector, total rounds `<select>` 2–16), base art preview (ImagePreview via displayBase prop so alt text reflects candidateBase or base), round table, W/L/D totals, cancel overlay; change-base overlay (data-testid='change-base-overlay') renders over the art when canChangeBase && !changingBase; tapping it replaces the image with aspect + base <select> dropdowns and a Cancel button; selecting a base dismisses the selectors and restores the art; portrait: single column with artPreview fill='width' between config and record row; landscape: two flex columns (left: config rows + artPreview fill='height'; right: record + buttons + rounds table)
 
   hooks/
     useBaseArt.ts           Ordered art fallback chain shared by setup, game, and tournament screens. Exports `getFirstGameImageUrl(base, useHyperspace)` which returns the first URL from the fallback chain, used by the setup screen to preload the game image while the user is still on the setup screen
@@ -67,7 +67,7 @@ src/
     swuLoadingScreen.test.tsx Loading screen tests
     swuSetupScreen.test.tsx Setup screen container tests
     swuSettingsScreen.test.tsx Settings screen container tests
-    swuTournamentScreen.test.tsx Tournament screen container tests (42 tests — rendering, action button labels, callbacks, config locking, drop confirm flow, back navigation, base art image rendering, tournament analytics)
+    swuTournamentScreen.test.tsx Tournament screen container tests (49 tests — rendering, action button labels, callbacks, config locking, drop confirm flow, back navigation, base art image rendering, tournament analytics, change-base overlay gating, selectors, cancel, base selection, action button with and without candidate)
     analytics.test.ts       Analytics service tests — enqueue (write, shape, append, cap, silent failure), flush (batch POST, URL, clear on 200, preserve on 500, preserve on network error, no-op when empty), window.online trigger, payload shape, PII absence, env field, sessionId consistency, all 27 event functions
     formatFilter.test.ts    Format filtering utility tests (isSetValidForFormat, getValidSets, isBaseValidForFormat, formatValidationError — all formats and set types)
     swudbUrl.test.ts        SWUDB URL utility tests
@@ -151,6 +151,8 @@ All other state is owned at the component level:
 | Tournament state (`TournamentState` | null) | `useTournament` / localStorage | Persisted under `tournament_state`; survives app close so the user can return between rounds; `null` when no tournament is active; reset by `dropTournament` |
 | Tournament local config (tournamentId, playMode, totalRounds) | `SwuTournamentScreen` | Local `useState`; locked (UI disabled) once `startTournament` is called |
 | Tournament drop confirm pending | `SwuTournamentScreen` | Local boolean; `showDropConfirm`; set true on first drop-click, confirmed on second click, cancelled by clicking elsewhere |
+| Change-base candidate state (changingBase, candidateAspect, candidateBase) | `SwuTournamentScreen` | Local state; `changingBase` shows selectors; `candidateAspect` filters the base list; `candidateBase` is passed to `onGoToGame` and drives the art preview via `useBaseArt(candidateBase ?? base, ...)` |
+| Tournament current base | `App` | `tournamentCurrentBase` — set to `newBase` in `handleGoToGame` when a candidate was selected; used as first priority in `gameBase` (`tournamentCurrentBase ?? selectedBase ?? tournament?.base`), providing sticky base behaviour between rounds; reset to `null` on `handleTournamentDrop` |
 
 ### Note on double useBases() call
 
@@ -195,7 +197,8 @@ All other state is owned at the component level:
 
 1. Container reads `enableEpicActions` from `useUserSettings()` and computes `showEpicAction = enableEpicActions && /epic action/i.test(base.epicAction)` — excludes Mystic Monastery (whose text is "Action:", not "Epic Action:")
 2. When `showEpicAction` is true, the view renders the epic action button; its position in the left column adjusts based on whether `showForce` is also true
-3. User taps the epic action button — view calls `onEpicActionMark` prop; the button becomes `disabled`
+3. The button is `disabled` until `gameStarted` (`round > 0`) when `enableActionLog` is true; when the action log is off there is no round counter so the gate does not apply
+4. User taps the epic action button — view calls `onEpicActionMark` prop; the button becomes `disabled`
 4. Container calls `game.markEpicActionUsed()`, adds an epic log entry via `useGameLog`, and resets `epicOverlayDismissed` to `false`
 5. View derives `epicActionOverlayVisible = game.epicActionUsed && !epicOverlayDismissed` and re-renders: button is disabled; a gold token overlay appears over the lower portion of the card
 6. **When action log is enabled:** the overlay stays visible; undo is performed via the log's Undo button, which calls `undoLast()` to restore the previous game state
@@ -210,11 +213,11 @@ All other state is owned at the component level:
    - `showMysticMonastery = isMysticMonastery && forceTokenDisplay !== 'always-off'`
    - `effectiveForceEnabled = isForceBase || forceEnabled`
 2. **Locked state** (`showForce && !effectiveForceEnabled`): view renders a dimmed Force icon button (`force-btn-locked`). User taps it → `onForceEnable` → `enableForce()` sets `forceEnabled = true` → `effectiveForceEnabled` becomes `true`
-3. **Ready state** (`showForce && effectiveForceEnabled && !forceActive`): view renders the full blue Force button (`force-btn`). User taps it → `onForceGain` → `toggleForce()` sets `forceActive = true`
+3. **Ready state** (`showForce && effectiveForceEnabled && !forceActive`): view renders the full blue Force button (`force-btn`). The button is `disabled` until `gameStarted` (`round > 0`) when `enableActionLog` is true. User taps it → `onForceGain` → `toggleForce()` sets `forceActive = true`
 4. View re-renders: the full blue Force button (`force-btn`) is replaced by a greyed-out Force button (`force-btn-active`); a blue "The Force is With You" overlay appears over the lower portion of the card
 5. Tapping the overlay or the greyed Force button calls `onForceDismiss`, returning `forceActive` to `false` and restoring the ready-state button
-6. Force bases skip step 2 entirely: `effectiveForceEnabled` is `true` from mount, so the full blue button is shown immediately
-7. **Mystic Monastery (LOF-022)**: when `showMysticMonastery` is true, renders an action counter button (`mystic-action-btn`) at slot 1 (9vw from top) when `showForce` is false, slot 2 (16vw) when `showForce` is also true. Tapping it calls `gainForceViaMonastery()` which decrements `mysticUsesRemaining` (3 → 0) and sets `forceActive = true`. The Force token overlay renders when `forceActive && (showForce || showMysticMonastery)`. The counter is always visible but disabled when `forceActive` or `mysticUsesRemaining === 0`.
+6. Force bases skip step 2 entirely: `effectiveForceEnabled` is `true` from mount, so the full blue button is shown immediately (but still gated on game start)
+7. **Mystic Monastery (LOF-022)**: when `showMysticMonastery` is true, renders an action counter button (`mystic-action-btn`) at slot 1 (9vw from top) when `showForce` is false, slot 2 (16vw) when `showForce` is also true. Tapping it calls `gainForceViaMonastery()` which decrements `mysticUsesRemaining` (3 → 0) and sets `forceActive = true`. The Force token overlay renders when `forceActive && (showForce || showMysticMonastery)`. The counter is disabled when `forceActive`, `mysticUsesRemaining === 0`, or `!gameStarted && enableActionLog`.
 
 ### Example flow: Both overlays active
 
@@ -637,9 +640,10 @@ The tournament screen (`SwuTournamentScreen` / `SwuTournamentScreenView`) allows
    - Tournament complete: button hidden
 5. Clicking the action button calls `startTournament` (first match only), then `startMatch` (if not already in progress), then `onGoToGame(playMode)` to navigate to the game screen
 6. **Drop button** has a two-step confirmation to prevent accidental drops: first click shows "Confirm"; second click calls `dropTournament` and `onDrop`; clicking elsewhere cancels. When `isComplete`, a single click ends the tournament immediately (no confirmation). A `position: fixed, zIndex: 100` cancel overlay inside `AppScreenLayout`'s stacking context intercepts outside clicks; the drop button itself is at `zIndex: 101` to remain clickable above the overlay.
-7. **Art preview:** `useBaseArt(base, useHyperspace)` runs in the container; `useHyperspace` comes from `useUserSettings()`. All art props are forwarded to the view, which renders `ImagePreview` with `fill='width'` in portrait (full-width, height derived from 1560/1120 aspect ratio) and `fill='height'` in landscape (height fills remaining space in the left column, width derived from aspect ratio, right-aligned via `marginLeft: auto`)
-8. **Landscape layout** uses two flex columns rather than CSS Grid — left column (45%) contains the ID/Drop row, Match/Rounds row, then a `flex: 1, minHeight: 0` card preview container with `paddingBottom: 2vw` so the shadow is not clipped; right column (`flex: 1`) contains the W/L/D record row, action buttons, and a scrollable rounds table
-8. **App routing:** `App.tsx` restores the `'tournament'` screen on load if `tournament !== null` (persisted state implies an active tournament); the game screen navigates back to `'tournament'` after a round is complete, passing the result via `useTournament.completeMatch`
+7. **Art preview:** `useBaseArt(candidateBase ?? base, useHyperspace)` runs in the container; all art props and `displayBase` (`candidateBase ?? base`) are forwarded to the view, which renders `ImagePreview` with `fill='width'` in portrait and `fill='height'` in landscape. When a candidate base is active, the preview immediately reflects it.
+8. **Change base (Limited Bo3 only):** when `canChangeBase` is true (limited format, bo3 mode, ≥1 completed round, not in progress, not complete), a semi-transparent "Change Base" overlay button (`data-testid='change-base-overlay'`) is rendered over the card art. Tapping it sets `changingBase = true`, replacing the image with an aspect `<select>` and a base `<select>` (filtered by selected aspect). Selecting a base sets `candidateBase`, closes the selectors (`changingBase = false`), and the art updates to the new base. Cancel hides the selectors without changing `candidateBase`. On "Start Match N", the container calls `onGoToGame(playMode, candidateBase)` if a candidate was selected — App sets `tournamentCurrentBase` and navigates with the new base. If no candidate is selected, `onGoToGame(playMode)` is called without a second argument and App uses `tournamentCurrentBase` (set in the previous round) as the fallback, providing sticky base behaviour without re-selection.
+9. **Landscape layout** uses two flex columns rather than CSS Grid — left column (45%) contains the ID/Drop row, Match/Rounds row, then a `flex: 1, minHeight: 0` card preview container with `paddingBottom: 2vw` so the shadow is not clipped; right column (`flex: 1`) contains the W/L/D record row, action buttons, and a scrollable rounds table
+10. **App routing:** `App.tsx` restores the `'tournament'` screen on load if `tournament !== null` (persisted state implies an active tournament); the game screen navigates back to `'tournament'` after a round is complete, passing the result via `useTournament.completeMatch`
 
 ### Screen Wake Lock
 

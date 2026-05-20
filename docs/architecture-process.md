@@ -218,7 +218,7 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 | `visibilitychange` → hidden then visible | `onAppResume()` |
 | User starts a casual game (`handleConfirm`) | `onGameStart(baseKey, baseSet, useHyperspace, 'casual')` |
 | User ends a casual game (`handleBack`) | `onGameEnd(baseKey, baseSet, useHyperspace, durationSeconds, 'casual')` |
-| User enters a tournament game (`handleGoToGame`) | `onGameStart(baseKey, baseSet, useHyperspace, playMode)` |
+| User enters a tournament game (`handleGoToGame`) | `onGameStart(baseKey, baseSet, useHyperspace, playMode)` — `baseKey` uses `newBase` when passed (change-base), otherwise `tournamentCurrentBase ?? selectedBase ?? tournament?.base` |
 | User backs out of a tournament game (`handleBack`) | `onGameEnd(baseKey, baseSet, useHyperspace, durationSeconds, playMode)` |
 | A tournament match is confirmed complete (`handleMatchComplete`) | `onGameEnd(...)` then `onTournamentRoundCompleted(roundNumber, result, playerScore, opponentScore, format, playMode)` |
 
@@ -280,7 +280,7 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 |---|---|
 | `navigator.wakeLock.request()` rejects | `onWakeLockFailed(reason)` |
 
-`durationSeconds` is computed as `Math.round((Date.now() - gameStartTime) / 1000)` where `gameStartTime` is recorded when a game starts (`handleConfirm` for casual, `handleGoToGame` for tournament rounds). `handleBack` fires `onGameEnd` on both paths: for casual/competitive games when `selectedBase` is set, and for tournament games using `selectedBase ?? tournament.base` as the base fallback. `handleBack` does not fire for help or settings back-navigation.
+`durationSeconds` is computed as `Math.round((Date.now() - gameStartTime) / 1000)` where `gameStartTime` is recorded when a game starts (`handleConfirm` for casual, `handleGoToGame` for tournament rounds). `handleBack` fires `onGameEnd` on both paths: for casual/competitive games when `selectedBase` is set, and for tournament games using `selectedBase ?? tournament.base` as the base fallback. `handleBack` does not fire for help or settings back-navigation. `gameBase` in App uses `tournamentCurrentBase ?? selectedBase ?? tournament?.base` so the game screen always gets the correct base after a change-base selection.
 
 Install detection and resume detection are in separate `useEffect` calls. The install effect runs once on mount, checks standalone mode and the localStorage flag, and fires `onAppInstall` at most once per device. The visibility effect registers a `visibilitychange` listener with a `hasBeenHidden` local flag; the flag starts `false`, is set to `true` when `visibilityState === 'hidden'`, and `onAppResume` only fires when `visibilityState === 'visible'` and `hasBeenHidden` is already `true` — preventing a spurious event on first page load.
 
