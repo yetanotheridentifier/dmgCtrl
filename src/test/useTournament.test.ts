@@ -38,7 +38,7 @@ function setupTournament(
   overrides: { totalRounds?: number; playMode?: 'bo1' | 'bo3' } = {},
 ) {
   act(() => result.current.startTournament(
-    mockBase, 'premier', '192916', overrides.playMode ?? 'bo3', overrides.totalRounds ?? 5,
+    mockBase, 'premier', overrides.playMode ?? 'bo3', overrides.totalRounds ?? 5,
   ))
 }
 
@@ -96,12 +96,6 @@ describe('useTournament', () => {
       expect(result.current.tournament?.format).toBe('premier')
     })
 
-    it('sets tournament with correct tournamentId', () => {
-      const { result } = renderHook(() => useTournament())
-      setupTournament(result)
-      expect(result.current.tournament?.tournamentId).toBe('192916')
-    })
-
     it('sets tournament with correct playMode', () => {
       const { result } = renderHook(() => useTournament())
       setupTournament(result)
@@ -138,9 +132,8 @@ describe('useTournament', () => {
       setupTournament(result)
       act(() => result.current.startMatch())
       act(() => result.current.completeMatch('won', 2, 0))
-      act(() => result.current.startTournament(altBase, 'limited', '999', 'bo1', 3))
+      act(() => result.current.startTournament(altBase, 'limited', 'bo1', 3))
       expect(result.current.tournament?.rounds).toHaveLength(0)
-      expect(result.current.tournament?.tournamentId).toBe('999')
       expect(result.current.tournament?.base).toEqual(altBase)
     })
   })
@@ -152,7 +145,7 @@ describe('useTournament', () => {
       const { result } = renderHook(() => useTournament())
       // Simulates the container calling both in one event handler (stale-closure scenario)
       act(() => {
-        result.current.startTournament(mockBase, 'premier', '192916', 'bo3', 5)
+        result.current.startTournament(mockBase, 'premier', 'bo3', 5)
         result.current.startMatch()
       })
       expect(result.current.tournament?.rounds).toHaveLength(1)
@@ -349,38 +342,6 @@ describe('useTournament', () => {
     })
   })
 
-  // --- setTournamentId ---
-
-  describe('setTournamentId', () => {
-    it('updates the tournamentId', () => {
-      const { result } = renderHook(() => useTournament())
-      setupTournament(result)
-      act(() => result.current.setTournamentId('99999'))
-      expect(result.current.tournament?.tournamentId).toBe('99999')
-    })
-
-    it('persists the updated tournamentId to localStorage', () => {
-      const setItem = vi.fn()
-      vi.stubGlobal('localStorage', {
-        getItem: vi.fn().mockReturnValue(null),
-        setItem,
-        removeItem: vi.fn(),
-        clear: vi.fn(),
-      })
-      const { result } = renderHook(() => useTournament())
-      setupTournament(result)
-      setItem.mockClear()
-      act(() => result.current.setTournamentId('99999'))
-      expect(setItem).toHaveBeenCalledWith('tournament_state', expect.any(String))
-    })
-
-    it('does nothing when no tournament is active', () => {
-      const { result } = renderHook(() => useTournament())
-      act(() => result.current.setTournamentId('99999'))
-      expect(result.current.tournament).toBeNull()
-    })
-  })
-
   // --- isComplete ---
 
   describe('isComplete', () => {
@@ -541,7 +502,6 @@ describe('useTournament', () => {
       const saved = {
         base: mockBase,
         format: 'premier',
-        tournamentId: '192916',
         playMode: 'bo3',
         totalRounds: 5,
         rounds: [{ roundNumber: 1, playerScore: 2, opponentScore: 0, result: 'won', submitted: true }],
@@ -553,7 +513,7 @@ describe('useTournament', () => {
         clear: vi.fn(),
       })
       const { result } = renderHook(() => useTournament())
-      expect(result.current.tournament?.tournamentId).toBe('192916')
+      expect(result.current.tournament?.playMode).toBe('bo3')
       expect(result.current.tournament?.rounds).toHaveLength(1)
     })
 
@@ -561,7 +521,6 @@ describe('useTournament', () => {
       const saved = {
         base: mockBase,
         format: 'premier',
-        tournamentId: '192916',
         playMode: 'bo3',
         totalRounds: 5,
         rounds: [{ roundNumber: 1, playerScore: 2, opponentScore: 0, result: 'won', submitted: true }],
@@ -580,7 +539,6 @@ describe('useTournament', () => {
       const saved = {
         base: mockBase,
         format: 'premier',
-        tournamentId: '192916',
         playMode: 'bo3',
         totalRounds: 5,
         rounds: [{ roundNumber: 1, playerScore: 0, opponentScore: 0, result: null, submitted: false }],

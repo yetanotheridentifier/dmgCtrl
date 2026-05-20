@@ -32,6 +32,8 @@ const mockUserSettings = vi.hoisted(() => ({
   bo3TimerMinutes: 55,
   setBo1TimerMinutes: vi.fn(),
   setBo3TimerMinutes: vi.fn(),
+  meleePlayerGuid: '',
+  setMeleePlayerGuid: vi.fn(),
 }))
 vi.mock('../hooks/useUserSettings', () => ({
   useUserSettings: () => mockUserSettings,
@@ -72,6 +74,7 @@ beforeEach(() => {
   mockUserSettings.enableCompetitiveMode = false
   mockUserSettings.bo1TimerMinutes = 25
   mockUserSettings.bo3TimerMinutes = 55
+  mockUserSettings.meleePlayerGuid = ''
   mockFavourites.favourites = []
   mockOrientation.isPortrait = true
 })
@@ -260,6 +263,34 @@ describe('SwuSettingsScreen', () => {
     mockUserSettings.bo1TimerMinutes = 5
     render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(within(screen.getByTestId('bo1-timer-stepper')).getByRole('button', { name: '−' })).toBeDisabled()
+  })
+
+  // --- Melee Player ID ---
+
+  it('renders Melee Player ID input when competitive mode is on', () => {
+    mockUserSettings.enableCompetitiveMode = true
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByRole('textbox', { name: /melee.*player.*id/i })).toBeInTheDocument()
+  })
+
+  it('does not render Melee Player ID input when competitive mode is off', () => {
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByRole('textbox', { name: /melee.*player.*id/i })).not.toBeInTheDocument()
+  })
+
+  it('Melee Player ID input reflects the current stored value', () => {
+    mockUserSettings.enableCompetitiveMode = true
+    mockUserSettings.meleePlayerGuid = 'abc-123'
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByRole('textbox', { name: /melee.*player.*id/i })).toHaveValue('abc-123')
+  })
+
+  it('Changing Melee Player ID input calls setMeleePlayerGuid', async () => {
+    mockUserSettings.enableCompetitiveMode = true
+    const user = userEvent.setup()
+    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.type(screen.getByRole('textbox', { name: /melee.*player.*id/i }), 'x')
+    expect(mockUserSettings.setMeleePlayerGuid).toHaveBeenCalled()
   })
 
   // --- Navigation ---

@@ -9,8 +9,13 @@ import { useOrientation } from '../hooks/useOrientation'
 
 vi.mock('../hooks/useOrientation')
 
+const mockUserSettings = vi.hoisted(() => ({
+  useHyperspace: false,
+  meleePlayerGuid: '',
+}))
+
 vi.mock('../hooks/useUserSettings', () => ({
-  useUserSettings: () => ({ useHyperspace: false }),
+  useUserSettings: () => mockUserSettings,
 }))
 
 vi.mock('../hooks/useBases', () => ({
@@ -81,7 +86,6 @@ const noTournament: TournamentState | null = null
 const activeTournamentNoRounds: TournamentState = {
   base: mockBase,
   format: 'premier' as Format,
-  tournamentId: '192916',
   playMode: 'bo3',
   totalRounds: 5,
   rounds: [],
@@ -112,7 +116,6 @@ const completeTournament: TournamentState = {
 const limitedBo3OneRoundComplete: TournamentState = {
   base: mockBase,
   format: 'limited' as Format,
-  tournamentId: '192916',
   playMode: 'bo3',
   totalRounds: 3,
   rounds: [
@@ -124,7 +127,6 @@ const limitedBo3OneRoundComplete: TournamentState = {
 const limitedBo3GameTwoOfMatch: TournamentState = {
   base: mockBase,
   format: 'limited' as Format,
-  tournamentId: '192916',
   playMode: 'bo3',
   totalRounds: 3,
   rounds: [
@@ -145,7 +147,6 @@ function makeProps(overrides: Partial<Parameters<typeof SwuTournamentScreen>[0]>
     startTournament: vi.fn(),
     startMatch: vi.fn(),
     dropTournament: vi.fn(),
-    setTournamentId: vi.fn(),
     onGoToGame: vi.fn(),
     onDrop: vi.fn(),
     onBack: vi.fn(),
@@ -156,6 +157,7 @@ function makeProps(overrides: Partial<Parameters<typeof SwuTournamentScreen>[0]>
 
 beforeEach(() => {
   vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
+  mockUserSettings.meleePlayerGuid = ''
   mockOnTournamentStarted.mockClear()
   mockOnTournamentDropped.mockClear()
   mockOnTournamentEnded.mockClear()
@@ -164,11 +166,6 @@ beforeEach(() => {
 describe('SwuTournamentScreen', () => {
 
   // --- Rendering ---
-
-  it('shows a tournament ID input', () => {
-    render(<SwuTournamentScreen {...makeProps()} />)
-    expect(screen.getByTestId('tournament-id-input')).toBeInTheDocument()
-  })
 
   it('shows a match mode selector', () => {
     render(<SwuTournamentScreen {...makeProps()} />)
@@ -224,7 +221,6 @@ describe('SwuTournamentScreen', () => {
     expect(startTournament).toHaveBeenCalledWith(
       mockBase,
       'premier',
-      expect.any(String),
       expect.stringMatching(/^bo[13]$/),
       expect.any(Number),
     )
@@ -289,19 +285,6 @@ describe('SwuTournamentScreen', () => {
     const el = screen.getByTestId('tournament-total-rounds')
     const values = Array.from(el.querySelectorAll('option')).map(o => Number((o as HTMLOptionElement).value))
     expect(values).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
-  })
-
-  // --- Tournament ID: editable before start, read-only after ---
-
-  it('tournament ID input is editable before tournament starts', () => {
-    render(<SwuTournamentScreen {...makeProps({ tournament: noTournament })} />)
-    expect(screen.getByTestId('tournament-id-input')).not.toBeDisabled()
-    expect(screen.getByTestId('tournament-id-input')).not.toHaveAttribute('readOnly')
-  })
-
-  it('tournament ID input is read-only after tournament has started', () => {
-    render(<SwuTournamentScreen {...makeProps({ tournament: activeTournamentNoRounds })} />)
-    expect(screen.getByTestId('tournament-id-input')).toHaveAttribute('readOnly')
   })
 
   // --- Drop/End button ---
@@ -395,11 +378,47 @@ describe('SwuTournamentScreen', () => {
     expect(screen.queryByRole('button', { name: 'Back' })).toBeNull()
   })
 
-  // --- Placeholder button ---
+  // --- Melee button ---
 
-  it('Find Next Match button is disabled', () => {
+  it('Shows "Enter Player ID" when GUID is not set', () => {
     render(<SwuTournamentScreen {...makeProps({ tournament: activeTournamentNoRounds })} />)
-    expect(screen.getByRole('button', { name: 'Find Next Match' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Enter Player ID' })).toBeInTheDocument()
+  })
+
+  it('Clicking "Enter Player ID" calls onSettings', async () => {
+    const user = userEvent.setup()
+    const onSettings = vi.fn()
+    render(<SwuTournamentScreen {...makeProps({ tournament: activeTournamentNoRounds, onSettings })} />)
+    await user.click(screen.getByRole('button', { name: 'Enter Player ID' }))
+    expect(onSettings).toHaveBeenCalledOnce()
+  })
+
+  it('Shows "Player Portal" when GUID is set', () => {
+    mockUserSettings.meleePlayerGuid = 'test-guid'
+    render(<SwuTournamentScreen {...makeProps({ tournament: activeTournamentNoRounds })} />)
+    expect(screen.getByRole('button', { name: 'Player Portal' })).toBeInTheDocument()
+  })
+
+  it('Player Portal button is enabled', () => {
+    mockUserSettings.meleePlayerGuid = 'test-guid'
+    render(<SwuTournamentScreen {...makeProps({ tournament: activeTournamentNoRounds })} />)
+    expect(screen.getByRole('button', { name: 'Player Portal' })).not.toBeDisabled()
+  })
+
+  it('Clicking Player Portal opens the melee.gg player portal URL', async () => {
+    mockUserSettings.meleePlayerGuid = 'test-guid'
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null as unknown as Window)
+    const user = userEvent.setup()
+    render(<SwuTournamentScreen {...makeProps({ tournament: activeTournamentNoRounds })} />)
+    await user.click(screen.getByRole('button', { name: 'Player Portal' }))
+    expect(openSpy).toHaveBeenCalledWith('https://melee.gg/Player/Portal/test-guid', '_blank')
+    openSpy.mockRestore()
+  })
+
+  it('Melee button is shown when match is in progress', () => {
+    mockUserSettings.meleePlayerGuid = 'test-guid'
+    render(<SwuTournamentScreen {...makeProps({ tournament: matchInProgressTournament, matchInProgress: true })} />)
+    expect(screen.getByRole('button', { name: 'Player Portal' })).toBeInTheDocument()
   })
 
   // --- Round totals ---

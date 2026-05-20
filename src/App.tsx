@@ -39,7 +39,6 @@ function App() {
     startMatch,
     completeMatch,
     dropTournament,
-    setTournamentId,
   } = useTournament()
 
   useEffect(() => { void onAppStart() }, [])
@@ -219,7 +218,6 @@ function App() {
           startTournament={startTournament}
           startMatch={startMatch}
           dropTournament={dropTournament}
-          setTournamentId={setTournamentId}
           onGoToGame={handleGoToGame}
           onDrop={handleTournamentDrop}
           onBack={() => setScreen('setup')}

@@ -34,24 +34,6 @@ const labelStyle = (small = false): React.CSSProperties => ({
   flexShrink: 0,
 })
 
-const inputStyle = (hasValue: boolean, readOnly = false, small = false): React.CSSProperties => ({
-  flex: 1,
-  padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
-  fontSize: small ? 'clamp(1rem, 1.8vw, 1.2rem)' : 'clamp(1rem, 3vw, 1.2rem)',
-  height: 'max(44px, 8vmin)',
-  fontWeight: '300',
-  background: 'transparent',
-  border: '2px solid var(--color-accent)',
-  borderRadius: '12px',
-  color: hasValue ? 'var(--color-text-primary)' : 'var(--color-text-disabled)',
-  outline: 'none',
-  boxSizing: 'border-box',
-  boxShadow: readOnly ? 'none' : '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
-  opacity: readOnly ? 0.6 : 1,
-  width: '100%',
-  minWidth: 0,
-})
-
 const selectStyle = (enabled: boolean, small = false): React.CSSProperties => ({
   flex: 1,
   padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
@@ -143,10 +125,8 @@ interface Props {
   isComplete: boolean
   totals: { won: number; lost: number; drawn: number }
   points: number
-  localTournamentId: string
   localPlayMode: 'bo1' | 'bo3'
   localTotalRounds: number
-  onLocalTournamentIdChange: (id: string) => void
   onLocalPlayModeChange: (mode: 'bo1' | 'bo3') => void
   onLocalTotalRoundsChange: (rounds: number) => void
   showDropConfirm: boolean
@@ -173,6 +153,8 @@ interface Props {
   onAspectChange: (aspect: string) => void
   onBaseSelect: (baseKey: string) => void
   onChangeBaseCancel: () => void
+  meleeButtonState: 'enter-player-id' | 'player-portal'
+  onMeleeButtonClick: () => void
 }
 
 function resultLabel(result: 'won' | 'lost' | 'drawn' | null): string {
@@ -196,10 +178,8 @@ export default function SwuTournamentScreenView({
   isComplete,
   totals,
   points,
-  localTournamentId,
   localPlayMode,
   localTotalRounds,
-  onLocalTournamentIdChange,
   onLocalPlayModeChange,
   onLocalTotalRoundsChange,
   showDropConfirm,
@@ -226,12 +206,13 @@ export default function SwuTournamentScreenView({
   onAspectChange,
   onBaseSelect,
   onChangeBaseCancel,
+  meleeButtonState,
+  onMeleeButtonClick,
 }: Props) {
   const { isPortrait } = useOrientation()
   const isStarted = tournament !== null
   const configLocked = isStarted
 
-  const tournamentIdValue = isStarted ? tournament.tournamentId : localTournamentId
   const playModeValue = isStarted ? tournament.playMode : localPlayMode
   const totalRoundsValue = isStarted ? tournament.totalRounds : localTotalRounds
 
@@ -283,30 +264,6 @@ export default function SwuTournamentScreenView({
     </div>
   )
 
-  const idAndDropRow = (small = false) => (
-    <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
-      <label style={labelStyle(small)}>ID</label>
-      <input
-        data-testid="tournament-id-input"
-        type="text"
-        value={tournamentIdValue}
-        readOnly={isStarted}
-        onChange={e => onLocalTournamentIdChange(e.target.value)}
-        placeholder="Tournament ID"
-        style={inputStyle(tournamentIdValue !== '', isStarted, small)}
-      />
-      <button
-        data-testid="drop-end-button"
-        disabled={!isStarted}
-        onClick={onDropClick}
-        onBlur={showDropConfirm ? onDropCancel : undefined}
-        style={{ ...dropEndButtonStyle(isStarted, showDropConfirm, small), position: 'relative', zIndex: 101 }}
-      >
-        {dropEndLabel}
-      </button>
-    </div>
-  )
-
   const modeRoundsRow = (small = false) => (
     <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
       <label style={labelStyle(small)}>Match</label>
@@ -335,13 +292,6 @@ export default function SwuTournamentScreenView({
     </div>
   )
 
-  const configSection = (small = false) => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: small ? '1vh' : '1.5vh' }}>
-      {idAndDropRow(small)}
-      {modeRoundsRow(small)}
-    </div>
-  )
-
   const recordRow = (small = false) => (
     <div style={{
       display: 'flex',
@@ -357,16 +307,43 @@ export default function SwuTournamentScreenView({
     </div>
   )
 
-  const actionButtons = (small = false) => (
-    <div style={{ display: 'flex', flexDirection: 'row', gap: small ? '1vw' : '2vw', flexShrink: 0 }}>
-      <button disabled style={{ ...primaryButtonStyle(false, small), flex: 1 }}>Find Next Match</button>
-      {!isComplete && actionLabel && (
-        <button onClick={onActionButton} style={{ ...primaryButtonStyle(true, small), flex: 1 }}>
-          {actionLabel}
+  const meleeButtonLabel = meleeButtonState === 'player-portal' ? 'Player Portal' : 'Enter Player ID'
+
+  const actionButtons = (small = false) => {
+    const btnFontSize = small ? 'clamp(0.7rem, 1.5vw, 0.85rem)' : 'clamp(0.75rem, 2.5vw, 0.95rem)'
+    const mainBtnStyle: React.CSSProperties = {
+      ...primaryButtonStyle(true, small),
+      flex: 1,
+      fontSize: btnFontSize,
+      padding: small ? '1.2vh 1.5vw' : '2vh 1.5vw',
+    }
+    return (
+      <div style={{ display: 'flex', flexDirection: 'row', gap: small ? '1vw' : '2vw', flexShrink: 0 }}>
+        <button onClick={onMeleeButtonClick} style={mainBtnStyle}>
+          {meleeButtonLabel}
         </button>
-      )}
-    </div>
-  )
+        {!isComplete && actionLabel && (
+          <button onClick={onActionButton} style={mainBtnStyle}>
+            {actionLabel}
+          </button>
+        )}
+        <button
+          data-testid="drop-end-button"
+          disabled={!isStarted}
+          onClick={onDropClick}
+          onBlur={showDropConfirm ? onDropCancel : undefined}
+          style={{
+            ...dropEndButtonStyle(isStarted, showDropConfirm, small),
+            fontSize: btnFontSize,
+            position: 'relative',
+            zIndex: 101,
+          }}
+        >
+          {dropEndLabel}
+        </button>
+      </div>
+    )
+  }
 
   const roundsTable = (small = false) => {
     if (!tournament || tournament.rounds.length === 0) return null
@@ -515,9 +492,8 @@ export default function SwuTournamentScreenView({
             gap: '3vw',
             paddingTop: '1.5vh',
           }}>
-            {/* Left column: config rows + card preview */}
+            {/* Left column: config row + card preview */}
             <div style={{ width: '45%', display: 'flex', flexDirection: 'column', gap: '1.5vh' }}>
-              {idAndDropRow(true)}
               {modeRoundsRow(true)}
               <div style={{ flex: 1, minHeight: 0, paddingBottom: '2vw' }}>
                 {artPreview('height')}
@@ -551,7 +527,7 @@ export default function SwuTournamentScreenView({
       }}>
         {cancelOverlay}
         {titleRow(false)}
-        {configSection(false)}
+        {modeRoundsRow(false)}
         {artPreview('width')}
         {recordRow(false)}
         {actionButtons(false)}

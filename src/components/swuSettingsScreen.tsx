@@ -20,6 +20,7 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
     enableCompetitiveMode,
     bo1TimerMinutes,
     bo3TimerMinutes,
+    meleePlayerGuid,
     setUseHyperspace,
     setForceTokenDisplay,
     setEnableEpicActions,
@@ -29,6 +30,7 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
     setEnableCompetitiveMode,
     setBo1TimerMinutes,
     setBo3TimerMinutes,
+    setMeleePlayerGuid,
   } = useUserSettings()
 
   const { favourites, removeFavourite, clearFavourites } = useFavourites()
@@ -69,8 +71,10 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
         onEnableCompetitiveModeChange={handleSettingChange('enableCompetitiveMode', setEnableCompetitiveMode)}
         bo1TimerMinutes={bo1TimerMinutes}
         bo3TimerMinutes={bo3TimerMinutes}
+        meleePlayerGuid={meleePlayerGuid}
         onBo1TimerChange={setBo1TimerMinutes}
         onBo3TimerChange={setBo3TimerMinutes}
+        onMeleePlayerGuidChange={setMeleePlayerGuid}
         onRemoveFavourite={handleRemoveFavourite}
         onClearFavourites={handleClearFavourites}
         onBack={onBack}
