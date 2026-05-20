@@ -23,6 +23,8 @@ function App() {
   const [selectedFormat, setSelectedFormat] = useState<Format>('premier')
   const [lastSelection, setLastSelection] = useState<InitialSelection | null>(null)
   const [isInGame, setIsInGame] = useState(false)
+  const [tournamentCurrentBase, setTournamentCurrentBase] = useState<Base | null>(null)
+  const [hasPlayedGameInCurrentMatch, setHasPlayedGameInCurrentMatch] = useState(false)
   const [helpSource, setHelpSource] = useState<'setup' | 'game'>('setup')
   const { loading } = useBases()
   const { useHyperspace } = useUserSettings()
@@ -93,12 +95,16 @@ function App() {
     void onGameStart(`${base.set}-${base.number}`, base.set, useHyperspace, 'casual')
   }
 
-  const handleGoToGame = (playMode: 'bo1' | 'bo3') => {
+  const handleGoToGame = (playMode: 'bo1' | 'bo3', newBase?: Base) => {
+    if (newBase) setTournamentCurrentBase(newBase)
+    const base = newBase ?? tournamentCurrentBase ?? selectedBase ?? tournament?.base
+    // matchInProgress is false when starting game 1 of any match (React state not yet updated
+    // from startMatch() in the same handler); true when continuing mid-match for game 2/3.
+    if (!matchInProgress) setHasPlayedGameInCurrentMatch(false)
     setSelectedPlayMode(playMode)
     setIsInGame(true)
     setScreen('game')
     gameStartTime.current = Date.now()
-    const base = selectedBase ?? tournament?.base
     if (base) {
       void onGameStart(`${base.set}-${base.number}`, base.set, useHyperspace, playMode)
     }
@@ -113,6 +119,7 @@ function App() {
     const roundNumber = (tournament?.rounds.length ?? 0)
     void onTournamentRoundCompleted(roundNumber, result, playerScore, opponentScore, tournament?.format ?? '', selectedPlayMode)
     completeMatch(result, playerScore, opponentScore)
+    setHasPlayedGameInCurrentMatch(false)
     setIsInGame(false)
     setScreen('tournament')
   }
@@ -124,6 +131,7 @@ function App() {
         const durationSeconds = Math.round((Date.now() - gameStartTime.current) / 1000)
         void onGameEnd(`${base.set}-${base.number}`, base.set, useHyperspace, durationSeconds, selectedPlayMode)
       }
+      if (matchInProgress) setHasPlayedGameInCurrentMatch(true)
       setScreen('tournament')
       return
     }
@@ -136,6 +144,8 @@ function App() {
   }
 
   const handleTournamentDrop = () => {
+    setTournamentCurrentBase(null)
+    setHasPlayedGameInCurrentMatch(false)
     setIsInGame(false)
     setScreen('setup')
   }
@@ -178,7 +188,7 @@ function App() {
 
   // Keep game screen mounted while navigating to help/settings/tournament so game state is preserved.
   // Use tournament.base as fallback when selectedBase is null (e.g. app resumed into an active tournament).
-  const gameBase = selectedBase ?? tournament?.base ?? null
+  const gameBase = tournamentCurrentBase ?? selectedBase ?? tournament?.base ?? null
   const tournamentBase = tournament?.base ?? selectedBase ?? null
 
   return (
@@ -205,6 +215,7 @@ function App() {
           isComplete={isComplete}
           totals={totals}
           points={points}
+          hasPlayedGameInCurrentMatch={hasPlayedGameInCurrentMatch}
           startTournament={startTournament}
           startMatch={startMatch}
           dropTournament={dropTournament}

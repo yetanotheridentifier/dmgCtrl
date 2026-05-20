@@ -712,6 +712,35 @@ describe('App tournament navigation', () => {
     expect(mockOnGameStart).toHaveBeenCalledWith('SOR-026', 'SOR', false, 'bo3')
   })
 
+  it('uses the new base for the game when player changes base in limited bo3', async () => {
+    mockUserSettings.useHyperspace = false
+    const user = userEvent.setup()
+    mockUseTournament.tournament = {
+      base: { set: 'SOR', number: '026', name: 'Catacombs of Cadera', subtitle: 'Jedha', hp: 30,
+        frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png', frontArtLowRes: null,
+        hyperspaceArt: null, hyperspaceArtHiRes: null, epicAction: '', aspects: ['Aggression'], rarity: 'Common' },
+      format: 'limited',
+      tournamentId: '',
+      playMode: 'bo3',
+      totalRounds: 3,
+      rounds: [{ roundNumber: 1, playerScore: 0, opponentScore: 0, result: null, submitted: false }],
+    }
+    mockUseTournament.matchInProgress = true
+    render(<App />)
+    // Simulate game 1: go to game screen then press Back to establish hasPlayedGameInCurrentMatch
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to Match 1' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    // Now on tournament screen with hasPlayedGameInCurrentMatch=true — change base overlay shows
+    await waitFor(() => expect(screen.getByTestId('change-base-overlay')).toBeInTheDocument())
+    await user.click(screen.getByTestId('change-base-overlay'))
+    await user.selectOptions(screen.getByTestId('change-base-aspect'), 'Cunning')
+    await user.selectOptions(screen.getByTestId('change-base-base'), 'SOR-022')
+    await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+    expect(mockOnGameStart).toHaveBeenLastCalledWith('SOR-022', 'SOR', false, 'bo3')
+  })
+
   it('fires onGameEnd when pressing Back from a tournament game', async () => {
     const user = userEvent.setup()
     mockUseTournament.tournament = {
