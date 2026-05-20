@@ -13,8 +13,15 @@ vi.mock('../hooks/useUserSettings', () => ({
   useUserSettings: () => ({ useHyperspace: false }),
 }))
 
+const mockOnTournamentStarted = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnTournamentDropped = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnTournamentEnded = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+
 vi.mock('../services/analytics', () => ({
   onImageLoadFailed: vi.fn().mockResolvedValue(undefined),
+  onTournamentStarted: mockOnTournamentStarted,
+  onTournamentDropped: mockOnTournamentDropped,
+  onTournamentEnded: mockOnTournamentEnded,
 }))
 
 
@@ -89,6 +96,9 @@ function makeProps(overrides: Partial<Parameters<typeof SwuTournamentScreen>[0]>
 
 beforeEach(() => {
   vi.mocked(useOrientation).mockReturnValue({ isPortrait: true, vmin: 0 })
+  mockOnTournamentStarted.mockClear()
+  mockOnTournamentDropped.mockClear()
+  mockOnTournamentEnded.mockClear()
 })
 
 describe('SwuTournamentScreen', () => {
@@ -374,6 +384,45 @@ describe('SwuTournamentScreen', () => {
   it('base card image src matches the base frontArt', () => {
     render(<SwuTournamentScreen {...makeProps()} />)
     expect(screen.getByRole('img', { name: mockBase.name })).toHaveAttribute('src', mockBase.frontArt)
+  })
+
+  // --- Tournament analytics ---
+
+  it('fires onTournamentStarted when clicking Start Match 1', async () => {
+    const user = userEvent.setup()
+    render(<SwuTournamentScreen {...makeProps({ tournament: noTournament })} />)
+    await user.click(screen.getByRole('button', { name: 'Start Match 1' }))
+    expect(mockOnTournamentStarted).toHaveBeenCalledWith('premier', 'bo3', 5)
+  })
+
+  it('does not fire onTournamentStarted when returning to an existing match', async () => {
+    const user = userEvent.setup()
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: matchInProgressTournament,
+      matchInProgress: true,
+    })} />)
+    await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+    expect(mockOnTournamentStarted).not.toHaveBeenCalled()
+  })
+
+  it('fires onTournamentDropped with rounds completed when drop is confirmed', async () => {
+    const user = userEvent.setup()
+    render(<SwuTournamentScreen {...makeProps({ tournament: activeTournamentNoRounds })} />)
+    await user.click(screen.getByTestId('drop-end-button'))
+    await user.click(screen.getByTestId('drop-end-button'))
+    expect(mockOnTournamentDropped).toHaveBeenCalledWith(0, 'premier', 'bo3')
+  })
+
+  it('fires onTournamentEnded with tournament summary when End Tournament is clicked', async () => {
+    const user = userEvent.setup()
+    render(<SwuTournamentScreen {...makeProps({
+      tournament: completeTournament,
+      isComplete: true,
+      totals: { won: 1, lost: 0, drawn: 0 },
+      points: 3,
+    })} />)
+    await user.click(screen.getByTestId('drop-end-button'))
+    expect(mockOnTournamentEnded).toHaveBeenCalledWith(1, 1, 0, 0, 3, 'premier', 'bo3')
   })
 
 })

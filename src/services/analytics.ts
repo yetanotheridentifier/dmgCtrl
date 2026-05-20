@@ -148,3 +148,19 @@ export function onBasesLoadStale(): Promise<void> {
 export function onWakeLockFailed(reason: string): Promise<void> {
   return sendEvent('wake_lock_failed', { reason })
 }
+
+export function onTournamentStarted(format: string, playMode: string, totalRounds: number): Promise<void> {
+  return sendEvent('tournament_started', { format, playMode, totalRounds })
+}
+
+export function onTournamentRoundCompleted(roundNumber: number, result: string, playerScore: number, opponentScore: number, format: string, playMode: string): Promise<void> {
+  return sendEvent('tournament_round_completed', { roundNumber, result, playerScore, opponentScore, format, playMode })
+}
+
+export function onTournamentDropped(roundsCompleted: number, format: string, playMode: string): Promise<void> {
+  return sendEvent('tournament_dropped', { roundsCompleted, format, playMode })
+}
+
+export function onTournamentEnded(totalRounds: number, won: number, lost: number, drawn: number, points: number, format: string, playMode: string): Promise<void> {
+  return sendEvent('tournament_ended', { totalRounds, won, lost, drawn, points, format, playMode })
+}

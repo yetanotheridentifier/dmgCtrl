@@ -149,7 +149,7 @@ The queue is capped at 200 events; if the cap is reached, the oldest events are 
 
 ### Frontend analytics service (`src/services/analytics.ts`)
 
-Twenty-three public functions enqueue events and trigger a flush. All are fire-and-forget — they return `Promise<void>` so tests can await them, but callers use `void` (errors are silently discarded):
+Twenty-seven public functions enqueue events and trigger a flush. All are fire-and-forget — they return `Promise<void>` so tests can await them, but callers use `void` (errors are silently discarded):
 
 | Function | Event name | Payload fields |
 |---|---|---|
@@ -176,6 +176,10 @@ Twenty-three public functions enqueue events and trigger a flush. All are fire-a
 | `onBasesLoadFailed()` | `bases_load_failed` | _(none beyond auto fields)_ |
 | `onBasesLoadStale()` | `bases_load_stale` | _(none beyond auto fields)_ |
 | `onWakeLockFailed(reason)` | `wake_lock_failed` | `reason` (DOMException name, e.g. `'NotAllowedError'`, or `'unknown'` for non-DOM errors) |
+| `onTournamentStarted(format, playMode, totalRounds)` | `tournament_started` | `format`, `playMode` (`'bo1'` \| `'bo3'`), `totalRounds` |
+| `onTournamentRoundCompleted(roundNumber, result, playerScore, opponentScore, format, playMode)` | `tournament_round_completed` | `roundNumber`, `result` (`'won'` \| `'lost'` \| `'drawn'`), `playerScore`, `opponentScore`, `format`, `playMode` |
+| `onTournamentDropped(roundsCompleted, format, playMode)` | `tournament_dropped` | `roundsCompleted`, `format`, `playMode` |
+| `onTournamentEnded(totalRounds, won, lost, drawn, points, format, playMode)` | `tournament_ended` | `totalRounds`, `won`, `lost`, `drawn`, `points`, `format`, `playMode` |
 
 `onAppInstall` fires on the first launch of the app in standalone mode (i.e. launched from the home screen icon). It checks `window.matchMedia('(display-mode: standalone)').matches` (Android/Chrome) or `window.navigator.standalone === true` (iOS Safari), and only fires if a `pwa_install_tracked` flag is not yet set in localStorage. Once fired it sets the flag, so subsequent launches do not re-fire it. This approach is used instead of the `appinstalled` browser event because Safari does not support that event. Platform is detected as `'ios'` when `navigator.standalone === true` (exclusive to iOS Safari), `'android'` when the user agent contains `'Android'`, and `'other'` otherwise.
 
@@ -212,8 +216,11 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 | App mount (`useEffect`) | `onAppStart()` |
 | App mount, standalone mode, `pwa_install_tracked` flag not set | `onAppInstall()` |
 | `visibilitychange` → hidden then visible | `onAppResume()` |
-| User starts a game (`handleConfirm`) | `onGameStart(baseKey, baseSet, useHyperspace)` |
-| User ends a game (`handleBack`) | `onGameEnd(baseKey, baseSet, useHyperspace, durationSeconds)` |
+| User starts a casual game (`handleConfirm`) | `onGameStart(baseKey, baseSet, useHyperspace, 'casual')` |
+| User ends a casual game (`handleBack`) | `onGameEnd(baseKey, baseSet, useHyperspace, durationSeconds, 'casual')` |
+| User enters a tournament game (`handleGoToGame`) | `onGameStart(baseKey, baseSet, useHyperspace, playMode)` |
+| User backs out of a tournament game (`handleBack`) | `onGameEnd(baseKey, baseSet, useHyperspace, durationSeconds, playMode)` |
+| A tournament match is confirmed complete (`handleMatchComplete`) | `onGameEnd(...)` then `onTournamentRoundCompleted(roundNumber, result, playerScore, opponentScore, format, playMode)` |
 
 **SwuSetupScreen (swuSetupScreen.tsx)**
 
@@ -224,6 +231,14 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 | SWUDB deck loads successfully | `onDeckImportSuccess(baseKey, baseSet)` |
 | SWUDB fetch fails or returns non-200 | `onDeckImportFailure('deck_not_accessible')` |
 | SWUDB deck loads but base key not in database | `onDeckImportFailure('base_not_recognised')` |
+
+**SwuTournamentScreen (swuTournamentScreen.tsx)**
+
+| Trigger | Call |
+|---|---|
+| First match started (`handleActionButton` when `!tournament`) | `onTournamentStarted(format, playMode, totalRounds)` |
+| Drop confirmed mid-tournament (`handleDropClick`, second click) | `onTournamentDropped(roundsCompleted, format, playMode)` |
+| End Tournament clicked (`handleDropClick` when `isComplete`) | `onTournamentEnded(totalRounds, won, lost, drawn, points, format, playMode)` |
 
 **SwuSettingsScreen (swuSettingsScreen.tsx)**
 
@@ -265,7 +280,7 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 |---|---|
 | `navigator.wakeLock.request()` rejects | `onWakeLockFailed(reason)` |
 
-`durationSeconds` is computed as `Math.round((Date.now() - gameStartTime) / 1000)` where `gameStartTime` is recorded at the start of `handleConfirm`. `handleBack` only fires `onGameEnd` when `selectedBase` is set (i.e. the back button was pressed from the game screen, not from help or settings).
+`durationSeconds` is computed as `Math.round((Date.now() - gameStartTime) / 1000)` where `gameStartTime` is recorded when a game starts (`handleConfirm` for casual, `handleGoToGame` for tournament rounds). `handleBack` fires `onGameEnd` on both paths: for casual/competitive games when `selectedBase` is set, and for tournament games using `selectedBase ?? tournament.base` as the base fallback. `handleBack` does not fire for help or settings back-navigation.
 
 Install detection and resume detection are in separate `useEffect` calls. The install effect runs once on mount, checks standalone mode and the localStorage flag, and fires `onAppInstall` at most once per device. The visibility effect registers a `visibilitychange` listener with a `hasBeenHidden` local flag; the flag starts `false`, is set to `true` when `visibilityState === 'hidden'`, and `onAppResume` only fires when `visibilityState === 'visible'` and `hasBeenHidden` is already `true` — preventing a spurious event on first page load.
 
@@ -293,6 +308,9 @@ The dashboard is defined as JSON at `grafana/dmgctrl-dashboard.json` and can be 
 | Sessions by play mode | Donut | `game_started` events split by `playMode` (`casual` / `bo1` / `bo3`) |
 | Bo1 match results | Bar gauge | Count of `match_completed` outcomes for Bo1 matches (`won` / `lost` / `drawn`) |
 | Bo3 match results | Bar gauge | Count of `match_completed` outcomes for Bo3 matches (`won` / `lost` / `drawn`) |
+| Tournament usage over time | Time series | `tournament_started` events per day |
+| Tournament round outcomes | Bar gauge | Count of `tournament_round_completed` results (`won` / `lost` / `drawn`) |
+| Tournament completion vs drop | Donut | `tournament_ended` vs `tournament_dropped` event counts |
 
 Feature adoption and errors per session are measured via usage events (sessions containing at least one relevant event) rather than settings state — this reflects actual use rather than whether the feature was merely enabled.
 
