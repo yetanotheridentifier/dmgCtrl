@@ -7,6 +7,7 @@ import {
   onFavouriteAdded, onFavouriteRemoved, onFavouritesCleared,
   onSettingChanged, onDeckImportSuccess, onDeckImportFailure,
   onImageLoadFailed, onBasesLoadFailed, onBasesLoadStale, onWakeLockFailed,
+  onTournamentStarted, onTournamentRoundCompleted, onTournamentDropped, onTournamentEnded,
 } from '../services/analytics'
 import { version as APP_VERSION } from '../../package.json'
 
@@ -642,5 +643,169 @@ describe('onWakeLockFailed', () => {
   it('includes reason in payload', async () => {
     await onWakeLockFailed('NotAllowedError')
     expect(getLastBody().data.reason).toBe('NotAllowedError')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// onTournamentStarted
+// ---------------------------------------------------------------------------
+
+describe('onTournamentStarted', () => {
+  it('sends event name tournament_started', async () => {
+    await onTournamentStarted('premier', 'bo3', 5)
+    expect(getLastBody().name).toBe('tournament_started')
+  })
+
+  it('includes format in payload', async () => {
+    await onTournamentStarted('premier', 'bo3', 5)
+    expect(getLastBody().data.format).toBe('premier')
+  })
+
+  it('includes playMode in payload', async () => {
+    await onTournamentStarted('premier', 'bo1', 5)
+    expect(getLastBody().data.playMode).toBe('bo1')
+  })
+
+  it('includes totalRounds in payload', async () => {
+    await onTournamentStarted('premier', 'bo3', 7)
+    expect(getLastBody().data.totalRounds).toBe(7)
+  })
+
+  it('does not include user-identifiable fields', async () => {
+    await onTournamentStarted('premier', 'bo3', 5)
+    const keys = Object.keys(getLastBody().data ?? {})
+    for (const piiKey of ['userId', 'email', 'name', 'ip', 'user']) {
+      expect(keys).not.toContain(piiKey)
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// onTournamentRoundCompleted
+// ---------------------------------------------------------------------------
+
+describe('onTournamentRoundCompleted', () => {
+  it('sends event name tournament_round_completed', async () => {
+    await onTournamentRoundCompleted(1, 'won', 2, 0, 'premier', 'bo3')
+    expect(getLastBody().name).toBe('tournament_round_completed')
+  })
+
+  it('includes roundNumber in payload', async () => {
+    await onTournamentRoundCompleted(2, 'lost', 0, 2, 'premier', 'bo3')
+    expect(getLastBody().data.roundNumber).toBe(2)
+  })
+
+  it('includes result in payload', async () => {
+    await onTournamentRoundCompleted(1, 'drawn', 1, 1, 'premier', 'bo3')
+    expect(getLastBody().data.result).toBe('drawn')
+  })
+
+  it('includes playerScore in payload', async () => {
+    await onTournamentRoundCompleted(1, 'won', 2, 0, 'premier', 'bo3')
+    expect(getLastBody().data.playerScore).toBe(2)
+  })
+
+  it('includes opponentScore in payload', async () => {
+    await onTournamentRoundCompleted(1, 'won', 2, 0, 'premier', 'bo3')
+    expect(getLastBody().data.opponentScore).toBe(0)
+  })
+
+  it('includes format in payload', async () => {
+    await onTournamentRoundCompleted(1, 'won', 2, 0, 'premier', 'bo3')
+    expect(getLastBody().data.format).toBe('premier')
+  })
+
+  it('includes playMode in payload', async () => {
+    await onTournamentRoundCompleted(1, 'won', 2, 0, 'premier', 'bo3')
+    expect(getLastBody().data.playMode).toBe('bo3')
+  })
+
+  it('does not include user-identifiable fields', async () => {
+    await onTournamentRoundCompleted(1, 'won', 2, 0, 'premier', 'bo3')
+    const keys = Object.keys(getLastBody().data ?? {})
+    for (const piiKey of ['userId', 'email', 'name', 'ip', 'user']) {
+      expect(keys).not.toContain(piiKey)
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// onTournamentDropped
+// ---------------------------------------------------------------------------
+
+describe('onTournamentDropped', () => {
+  it('sends event name tournament_dropped', async () => {
+    await onTournamentDropped(2, 'premier', 'bo3')
+    expect(getLastBody().name).toBe('tournament_dropped')
+  })
+
+  it('includes roundsCompleted in payload', async () => {
+    await onTournamentDropped(2, 'premier', 'bo3')
+    expect(getLastBody().data.roundsCompleted).toBe(2)
+  })
+
+  it('includes format in payload', async () => {
+    await onTournamentDropped(2, 'premier', 'bo3')
+    expect(getLastBody().data.format).toBe('premier')
+  })
+
+  it('includes playMode in payload', async () => {
+    await onTournamentDropped(2, 'premier', 'bo1')
+    expect(getLastBody().data.playMode).toBe('bo1')
+  })
+
+  it('does not include user-identifiable fields', async () => {
+    await onTournamentDropped(2, 'premier', 'bo3')
+    const keys = Object.keys(getLastBody().data ?? {})
+    for (const piiKey of ['userId', 'email', 'name', 'ip', 'user']) {
+      expect(keys).not.toContain(piiKey)
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// onTournamentEnded
+// ---------------------------------------------------------------------------
+
+describe('onTournamentEnded', () => {
+  it('sends event name tournament_ended', async () => {
+    await onTournamentEnded(5, 3, 1, 1, 10, 'premier', 'bo3')
+    expect(getLastBody().name).toBe('tournament_ended')
+  })
+
+  it('includes totalRounds in payload', async () => {
+    await onTournamentEnded(5, 3, 1, 1, 10, 'premier', 'bo3')
+    expect(getLastBody().data.totalRounds).toBe(5)
+  })
+
+  it('includes won, lost, drawn in payload', async () => {
+    await onTournamentEnded(5, 3, 1, 1, 10, 'premier', 'bo3')
+    const { won, lost, drawn } = getLastBody().data
+    expect(won).toBe(3)
+    expect(lost).toBe(1)
+    expect(drawn).toBe(1)
+  })
+
+  it('includes points in payload', async () => {
+    await onTournamentEnded(5, 3, 1, 1, 10, 'premier', 'bo3')
+    expect(getLastBody().data.points).toBe(10)
+  })
+
+  it('includes format in payload', async () => {
+    await onTournamentEnded(5, 3, 1, 1, 10, 'premier', 'bo3')
+    expect(getLastBody().data.format).toBe('premier')
+  })
+
+  it('includes playMode in payload', async () => {
+    await onTournamentEnded(5, 3, 1, 1, 10, 'premier', 'bo3')
+    expect(getLastBody().data.playMode).toBe('bo3')
+  })
+
+  it('does not include user-identifiable fields', async () => {
+    await onTournamentEnded(5, 3, 1, 1, 10, 'premier', 'bo3')
+    const keys = Object.keys(getLastBody().data ?? {})
+    for (const piiKey of ['userId', 'email', 'name', 'ip', 'user']) {
+      expect(keys).not.toContain(piiKey)
+    }
   })
 })

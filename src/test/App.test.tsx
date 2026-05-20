@@ -26,12 +26,20 @@ const mockOnGameStart = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnGameEnd = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnAppInstall = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnAppResume = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnTournamentStarted = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnTournamentRoundCompleted = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnTournamentDropped = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnTournamentEnded = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 vi.mock('../services/analytics', () => ({
   onAppStart: mockOnAppStart,
   onGameStart: mockOnGameStart,
   onGameEnd: mockOnGameEnd,
   onAppInstall: mockOnAppInstall,
   onAppResume: mockOnAppResume,
+  onTournamentStarted: mockOnTournamentStarted,
+  onTournamentRoundCompleted: mockOnTournamentRoundCompleted,
+  onTournamentDropped: mockOnTournamentDropped,
+  onTournamentEnded: mockOnTournamentEnded,
   onDamageDealt: vi.fn(),
   onDamageHealed: vi.fn(),
   onRoundIncremented: vi.fn(),
@@ -117,6 +125,10 @@ beforeEach(() => {
   mockOnGameEnd.mockClear()
   mockOnAppInstall.mockClear()
   mockOnAppResume.mockClear()
+  mockOnTournamentStarted.mockClear()
+  mockOnTournamentRoundCompleted.mockClear()
+  mockOnTournamentDropped.mockClear()
+  mockOnTournamentEnded.mockClear()
   mockUseTournament.tournament = null
   mockUseTournament.matchInProgress = false
   mockUseTournament.isComplete = false
@@ -678,6 +690,48 @@ describe('App tournament navigation', () => {
     // Return to game — damage must still be 1
     await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
     await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('1'))
+  })
+
+  it('fires onGameStart when navigating to game from tournament', async () => {
+    mockUserSettings.useHyperspace = false
+    const user = userEvent.setup()
+    mockUseTournament.tournament = {
+      base: { set: 'SOR', number: '026', name: 'Catacombs of Cadera', subtitle: 'Jedha', hp: 30,
+        frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png', frontArtLowRes: null,
+        hyperspaceArt: null, hyperspaceArtHiRes: null, epicAction: '', aspects: ['Aggression'], rarity: 'Common' },
+      format: 'premier',
+      tournamentId: '',
+      playMode: 'bo3',
+      totalRounds: 5,
+      rounds: [{ roundNumber: 1, playerScore: 0, opponentScore: 0, result: null, submitted: false }],
+    }
+    mockUseTournament.matchInProgress = true
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to Match 1' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+    expect(mockOnGameStart).toHaveBeenCalledWith('SOR-026', 'SOR', false, 'bo3')
+  })
+
+  it('fires onGameEnd when pressing Back from a tournament game', async () => {
+    const user = userEvent.setup()
+    mockUseTournament.tournament = {
+      base: { set: 'SOR', number: '026', name: 'Catacombs of Cadera', subtitle: 'Jedha', hp: 30,
+        frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png', frontArtLowRes: null,
+        hyperspaceArt: null, hyperspaceArtHiRes: null, epicAction: '', aspects: ['Aggression'], rarity: 'Common' },
+      format: 'premier',
+      tournamentId: '',
+      playMode: 'bo3',
+      totalRounds: 5,
+      rounds: [{ roundNumber: 1, playerScore: 0, opponentScore: 0, result: null, submitted: false }],
+    }
+    mockUseTournament.matchInProgress = true
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to Match 1' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() => expect(mockOnGameEnd).toHaveBeenCalled())
+    expect(mockOnGameEnd).toHaveBeenCalledWith('SOR-026', 'SOR', expect.any(Boolean), expect.any(Number), 'bo3')
   })
 
 })

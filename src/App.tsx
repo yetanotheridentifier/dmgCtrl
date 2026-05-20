@@ -9,7 +9,7 @@ import { Base, useBases } from './hooks/useBases'
 import { InitialSelection } from './hooks/useSwuSetup'
 import { useTournament } from './hooks/useTournament'
 import { useUserSettings } from './hooks/useUserSettings'
-import { onAppStart, onGameStart, onGameEnd, onAppInstall, onAppResume } from './services/analytics'
+import { onAppStart, onGameStart, onGameEnd, onAppInstall, onAppResume, onTournamentRoundCompleted } from './services/analytics'
 import type { PlayMode, SetupMode } from './utils/playMode'
 import type { Format } from './utils/formatFilter'
 
@@ -98,9 +98,20 @@ function App() {
     setIsInGame(true)
     setScreen('game')
     gameStartTime.current = Date.now()
+    const base = selectedBase ?? tournament?.base
+    if (base) {
+      void onGameStart(`${base.set}-${base.number}`, base.set, useHyperspace, playMode)
+    }
   }
 
   const handleMatchComplete = (result: 'won' | 'lost' | 'drawn', playerScore: number, opponentScore: number) => {
+    const base = selectedBase ?? tournament?.base
+    if (base) {
+      const durationSeconds = Math.round((Date.now() - gameStartTime.current) / 1000)
+      void onGameEnd(`${base.set}-${base.number}`, base.set, useHyperspace, durationSeconds, selectedPlayMode)
+    }
+    const roundNumber = (tournament?.rounds.length ?? 0)
+    void onTournamentRoundCompleted(roundNumber, result, playerScore, opponentScore, tournament?.format ?? '', selectedPlayMode)
     completeMatch(result, playerScore, opponentScore)
     setIsInGame(false)
     setScreen('tournament')
@@ -108,6 +119,11 @@ function App() {
 
   const handleBack = () => {
     if (tournament !== null) {
+      const base = selectedBase ?? tournament.base
+      if (base) {
+        const durationSeconds = Math.round((Date.now() - gameStartTime.current) / 1000)
+        void onGameEnd(`${base.set}-${base.number}`, base.set, useHyperspace, durationSeconds, selectedPlayMode)
+      }
       setScreen('tournament')
       return
     }

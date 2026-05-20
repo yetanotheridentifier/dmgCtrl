@@ -4,6 +4,7 @@ import type { TournamentState } from '../hooks/useTournament'
 import type { Format } from '../utils/formatFilter'
 import { useBaseArt } from '../hooks/useBaseArt'
 import { useUserSettings } from '../hooks/useUserSettings'
+import { onTournamentStarted, onTournamentDropped, onTournamentEnded } from '../services/analytics'
 import SwuTournamentScreenView from './swuTournamentScreenView'
 
 interface Props {
@@ -53,6 +54,7 @@ export default function SwuTournamentScreen({
   const handleActionButton = () => {
     setShowDropConfirm(false)
     if (!tournament) {
+      void onTournamentStarted(format, localPlayMode, localTotalRounds)
       startTournament(base, format, localTournamentId, localPlayMode, localTotalRounds)
       startMatch()
       onGoToGame(localPlayMode)
@@ -66,6 +68,13 @@ export default function SwuTournamentScreen({
 
   const handleDropClick = () => {
     if (isComplete) {
+      void onTournamentEnded(
+        tournament!.totalRounds,
+        totals.won, totals.lost, totals.drawn,
+        points,
+        tournament!.format,
+        tournament!.playMode,
+      )
       dropTournament()
       onDrop()
       return
@@ -74,6 +83,8 @@ export default function SwuTournamentScreen({
       setShowDropConfirm(true)
       return
     }
+    const roundsCompleted = tournament?.rounds.filter(r => r.result !== null).length ?? 0
+    void onTournamentDropped(roundsCompleted, tournament!.format, tournament!.playMode)
     dropTournament()
     onDrop()
   }

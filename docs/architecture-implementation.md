@@ -28,7 +28,7 @@ src/
     swuSetupScreenView.tsx  Setup screen view (title row: icon + "dmgCtrl" h1 + ⚙ button + help button)
     swuSettingsScreen.tsx   Settings screen container
     swuSettingsScreenView.tsx Settings screen view (toggle list; calls useOrientation directly for iOS font sizing)
-    swuTournamentScreen.tsx  Tournament screen container — local config state, action/drop handlers; calls useBaseArt + useUserSettings to derive art props; delegates to view
+    swuTournamentScreen.tsx  Tournament screen container — local config state, action/drop handlers; calls useBaseArt + useUserSettings to derive art props; fires onTournamentStarted on first match click, onTournamentDropped / onTournamentEnded on confirmed drop; delegates to view
     swuTournamentScreenView.tsx Tournament screen view — config inputs (tournament ID, play mode selector, total rounds `<select>` 2–16), base art preview (ImagePreview), round table, W/L/D totals, cancel overlay; portrait: single column with ImagePreview fill='width' between config and record row; landscape: two flex columns (left: config rows + ImagePreview fill='height'; right: record + buttons + rounds table)
 
   hooks/
@@ -47,7 +47,7 @@ src/
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
   services/
-    analytics.ts            Offline-queue analytics service (23 event functions + enqueue + flush); events written to localStorage queue first, then flushed via POST to /analytics/batch; queue preserved on network error and re-flushed on window.online; env and sessionId auto-appended to every event; worker appends country, city, and coordinates from request.cf
+    analytics.ts            Offline-queue analytics service (27 event functions + enqueue + flush); events written to localStorage queue first, then flushed via POST to /analytics/batch; queue preserved on network error and re-flushed on window.online; env and sessionId auto-appended to every event; worker appends country, city, and coordinates from request.cf; tournament events: onTournamentStarted (fires on first match click), onTournamentRoundCompleted (fires from App.tsx handleMatchComplete), onTournamentDropped, onTournamentEnded (both fire from SwuTournamentScreen container)
 
   constants/
     setRegistry.ts          Static set registry — maps every known set code to { rotation, type }; authoritative source for format filtering; unknown sets default to allowed (forward-compatible)
@@ -67,8 +67,8 @@ src/
     swuLoadingScreen.test.tsx Loading screen tests
     swuSetupScreen.test.tsx Setup screen container tests
     swuSettingsScreen.test.tsx Settings screen container tests
-    swuTournamentScreen.test.tsx Tournament screen container tests (38 tests — rendering, action button labels, callbacks, config locking, drop confirm flow, back navigation, base art image rendering)
-    analytics.test.ts       Analytics service tests — enqueue (write, shape, append, cap, silent failure), flush (batch POST, URL, clear on 200, preserve on 500, preserve on network error, no-op when empty), window.online trigger, payload shape, PII absence, env field, sessionId consistency, all 23 event functions
+    swuTournamentScreen.test.tsx Tournament screen container tests (42 tests — rendering, action button labels, callbacks, config locking, drop confirm flow, back navigation, base art image rendering, tournament analytics)
+    analytics.test.ts       Analytics service tests — enqueue (write, shape, append, cap, silent failure), flush (batch POST, URL, clear on 200, preserve on 500, preserve on network error, no-op when empty), window.online trigger, payload shape, PII absence, env field, sessionId consistency, all 27 event functions
     formatFilter.test.ts    Format filtering utility tests (isSetValidForFormat, getValidSets, isBaseValidForFormat, formatValidationError — all formats and set types)
     swudbUrl.test.ts        SWUDB URL utility tests
     useDragScrubber.test.ts Drag-to-scrub hook tests
