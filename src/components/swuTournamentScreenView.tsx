@@ -56,7 +56,7 @@ const selectStyle = (enabled: boolean, small = false): React.CSSProperties => ({
   flex: 1,
   padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
   fontSize: small ? 'clamp(0.75rem, 1.8vw, 0.9rem)' : 'clamp(0.9rem, 3vw, 1.2rem)',
-  height: 'max(44px, 8vmin)',
+  minHeight: 'max(44px, 8vmin)',
   fontWeight: '300',
   background: 'transparent',
   border: '2px solid var(--color-accent)',

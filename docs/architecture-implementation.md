@@ -197,7 +197,8 @@ All other state is owned at the component level:
 
 1. Container reads `enableEpicActions` from `useUserSettings()` and computes `showEpicAction = enableEpicActions && /epic action/i.test(base.epicAction)` — excludes Mystic Monastery (whose text is "Action:", not "Epic Action:")
 2. When `showEpicAction` is true, the view renders the epic action button; its position in the left column adjusts based on whether `showForce` is also true
-3. User taps the epic action button — view calls `onEpicActionMark` prop; the button becomes `disabled`
+3. The button is `disabled` until `gameStarted` (`round > 0`) when `enableActionLog` is true; when the action log is off there is no round counter so the gate does not apply
+4. User taps the epic action button — view calls `onEpicActionMark` prop; the button becomes `disabled`
 4. Container calls `game.markEpicActionUsed()`, adds an epic log entry via `useGameLog`, and resets `epicOverlayDismissed` to `false`
 5. View derives `epicActionOverlayVisible = game.epicActionUsed && !epicOverlayDismissed` and re-renders: button is disabled; a gold token overlay appears over the lower portion of the card
 6. **When action log is enabled:** the overlay stays visible; undo is performed via the log's Undo button, which calls `undoLast()` to restore the previous game state
@@ -212,11 +213,11 @@ All other state is owned at the component level:
    - `showMysticMonastery = isMysticMonastery && forceTokenDisplay !== 'always-off'`
    - `effectiveForceEnabled = isForceBase || forceEnabled`
 2. **Locked state** (`showForce && !effectiveForceEnabled`): view renders a dimmed Force icon button (`force-btn-locked`). User taps it → `onForceEnable` → `enableForce()` sets `forceEnabled = true` → `effectiveForceEnabled` becomes `true`
-3. **Ready state** (`showForce && effectiveForceEnabled && !forceActive`): view renders the full blue Force button (`force-btn`). User taps it → `onForceGain` → `toggleForce()` sets `forceActive = true`
+3. **Ready state** (`showForce && effectiveForceEnabled && !forceActive`): view renders the full blue Force button (`force-btn`). The button is `disabled` until `gameStarted` (`round > 0`) when `enableActionLog` is true. User taps it → `onForceGain` → `toggleForce()` sets `forceActive = true`
 4. View re-renders: the full blue Force button (`force-btn`) is replaced by a greyed-out Force button (`force-btn-active`); a blue "The Force is With You" overlay appears over the lower portion of the card
 5. Tapping the overlay or the greyed Force button calls `onForceDismiss`, returning `forceActive` to `false` and restoring the ready-state button
-6. Force bases skip step 2 entirely: `effectiveForceEnabled` is `true` from mount, so the full blue button is shown immediately
-7. **Mystic Monastery (LOF-022)**: when `showMysticMonastery` is true, renders an action counter button (`mystic-action-btn`) at slot 1 (9vw from top) when `showForce` is false, slot 2 (16vw) when `showForce` is also true. Tapping it calls `gainForceViaMonastery()` which decrements `mysticUsesRemaining` (3 → 0) and sets `forceActive = true`. The Force token overlay renders when `forceActive && (showForce || showMysticMonastery)`. The counter is always visible but disabled when `forceActive` or `mysticUsesRemaining === 0`.
+6. Force bases skip step 2 entirely: `effectiveForceEnabled` is `true` from mount, so the full blue button is shown immediately (but still gated on game start)
+7. **Mystic Monastery (LOF-022)**: when `showMysticMonastery` is true, renders an action counter button (`mystic-action-btn`) at slot 1 (9vw from top) when `showForce` is false, slot 2 (16vw) when `showForce` is also true. Tapping it calls `gainForceViaMonastery()` which decrements `mysticUsesRemaining` (3 → 0) and sets `forceActive = true`. The Force token overlay renders when `forceActive && (showForce || showMysticMonastery)`. The counter is disabled when `forceActive`, `mysticUsesRemaining === 0`, or `!gameStarted && enableActionLog`.
 
 ### Example flow: Both overlays active
 
