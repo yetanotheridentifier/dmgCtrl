@@ -6,6 +6,7 @@ import type { Format } from '../utils/formatFilter'
 import { useBaseArt } from '../hooks/useBaseArt'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { onTournamentStarted, onTournamentDropped, onTournamentEnded } from '../services/analytics'
+import { playerPortalUrl } from '../utils/meleeUrl'
 import SwuTournamentScreenView from './swuTournamentScreenView'
 
 interface Props {
@@ -17,10 +18,9 @@ interface Props {
   totals: { won: number; lost: number; drawn: number }
   points: number
   hasPlayedGameInCurrentMatch: boolean
-  startTournament: (base: Base, format: Format, tournamentId: string, playMode: 'bo1' | 'bo3', totalRounds: number) => void
+  startTournament: (base: Base, format: Format, playMode: 'bo1' | 'bo3', totalRounds: number) => void
   startMatch: () => void
   dropTournament: () => void
-  setTournamentId: (id: string) => void
   onGoToGame: (playMode: 'bo1' | 'bo3', newBase?: Base) => void
   onDrop: () => void
   onBack: () => void
@@ -46,10 +46,9 @@ export default function SwuTournamentScreen({
   onHelp,
   onSettings,
 }: Props) {
-  const { useHyperspace } = useUserSettings()
+  const { useHyperspace, meleePlayerGuid } = useUserSettings()
   const { bases } = useBases()
 
-  const [localTournamentId, setLocalTournamentId] = useState('')
   const [localPlayMode, setLocalPlayMode] = useState<'bo1' | 'bo3'>('bo3')
   const [localTotalRounds, setLocalTotalRounds] = useState(5)
   const [showDropConfirm, setShowDropConfirm] = useState(false)
@@ -75,12 +74,23 @@ export default function SwuTournamentScreen({
   const displayBase = candidateBase ?? base
   const art = useBaseArt(displayBase, useHyperspace)
 
+  type MeleeButtonState = 'enter-player-id' | 'player-portal'
+  const meleeButtonState: MeleeButtonState = meleePlayerGuid ? 'player-portal' : 'enter-player-id'
+
+  const handleMeleeButtonClick = () => {
+    if (meleeButtonState === 'player-portal') {
+      window.open(playerPortalUrl(meleePlayerGuid), '_blank')
+    } else {
+      onSettings?.()
+    }
+  }
+
   const handleActionButton = () => {
     setShowDropConfirm(false)
     if (!tournament) {
       // Starting a new tournament — game 1 always uses the registered base
       void onTournamentStarted(format, localPlayMode, localTotalRounds)
-      startTournament(base, format, localTournamentId, localPlayMode, localTotalRounds)
+      startTournament(base, format, localPlayMode, localTotalRounds)
       startMatch()
       onGoToGame(localPlayMode, base)
       return
@@ -146,10 +156,8 @@ export default function SwuTournamentScreen({
       isComplete={isComplete}
       totals={totals}
       points={points}
-      localTournamentId={localTournamentId}
       localPlayMode={localPlayMode}
       localTotalRounds={localTotalRounds}
-      onLocalTournamentIdChange={setLocalTournamentId}
       onLocalPlayModeChange={setLocalPlayMode}
       onLocalTotalRoundsChange={setLocalTotalRounds}
       showDropConfirm={showDropConfirm}
@@ -176,6 +184,8 @@ export default function SwuTournamentScreen({
       onAspectChange={handleAspectChange}
       onBaseSelect={handleBaseSelect}
       onChangeBaseCancel={handleChangeBaseCancel}
+      meleeButtonState={meleeButtonState}
+      onMeleeButtonClick={handleMeleeButtonClick}
     />
   )
 }

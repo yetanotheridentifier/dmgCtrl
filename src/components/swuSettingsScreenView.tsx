@@ -131,6 +131,7 @@ interface Props {
   enableCompetitiveMode: boolean
   bo1TimerMinutes: number
   bo3TimerMinutes: number
+  meleePlayerGuid: string
   favourites: FavouriteBase[]
   onUseHyperspaceChange: (v: boolean) => void
   onForceTokenDisplayChange: (v: ForceTokenDisplay) => void
@@ -141,6 +142,7 @@ interface Props {
   onEnableCompetitiveModeChange: (v: boolean) => void
   onBo1TimerChange: (v: number) => void
   onBo3TimerChange: (v: number) => void
+  onMeleePlayerGuidChange: (v: string) => void
   onRemoveFavourite: (key: string) => void
   onClearFavourites: () => void
   onBack: () => void
@@ -157,6 +159,7 @@ function SwuSettingsScreenView({
   enableCompetitiveMode,
   bo1TimerMinutes,
   bo3TimerMinutes,
+  meleePlayerGuid,
   favourites,
   onUseHyperspaceChange,
   onForceTokenDisplayChange,
@@ -167,6 +170,7 @@ function SwuSettingsScreenView({
   onEnableCompetitiveModeChange,
   onBo1TimerChange,
   onBo3TimerChange,
+  onMeleePlayerGuidChange,
   onRemoveFavourite,
   onClearFavourites,
   onBack,
@@ -330,6 +334,50 @@ function SwuSettingsScreenView({
                   style={btnStyle(bo3TimerMinutes >= TIMER_MAX)}
                 >+</button>
               </div>
+            </div>
+            <div style={{
+              display: 'flex',
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '2vw',
+              padding: '1.5vh 0 0.5vh',
+              marginTop: '0.5vh',
+            }}>
+              <label
+                htmlFor="input-melee-player-id"
+                style={{
+                  flex: 1,
+                  color: 'var(--color-text-primary)',
+                  fontWeight: '300',
+                  fontSize: `clamp(0.9rem, ${vmin * 0.035}px, 1.1rem)`,
+                  letterSpacing: '0.03em',
+                  cursor: 'pointer',
+                }}
+              >
+                Melee Player ID
+              </label>
+              <input
+                id="input-melee-player-id"
+                type="text"
+                aria-label="Melee Player ID"
+                value={meleePlayerGuid}
+                onChange={e => onMeleePlayerGuidChange(e.target.value)}
+                placeholder="Enter Player ID"
+                style={{
+                  background: 'transparent',
+                  border: '2px solid var(--color-accent)',
+                  borderRadius: '12px',
+                  color: 'var(--color-text-primary)',
+                  fontWeight: '300',
+                  fontSize: `clamp(0.8rem, ${vmin * 0.03}px, 1rem)`,
+                  padding: '0.3em 0.6em',
+                  outline: 'none',
+                  flexShrink: 0,
+                  width: '45%',
+                  boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
+                }}
+              />
             </div>
           </div>
         )

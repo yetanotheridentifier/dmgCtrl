@@ -16,6 +16,7 @@ interface UserSettings {
   enableCompetitiveMode: boolean
   bo1TimerMinutes: number
   bo3TimerMinutes: number
+  meleePlayerGuid: string
 }
 
 const VALID_FORCE_TOKEN_DISPLAY: ForceTokenDisplay[] = ['always-on', 'lof-only', 'always-off']
@@ -31,6 +32,7 @@ const DEFAULTS: UserSettings = {
   enableCompetitiveMode: false,
   bo1TimerMinutes: 25,
   bo3TimerMinutes: 55,
+  meleePlayerGuid: '',
 }
 
 function migrateForceTokenDisplay(parsed: Record<string, unknown>): ForceTokenDisplay {
@@ -61,6 +63,7 @@ function load(): UserSettings {
       enableCompetitiveMode: (parsed.enableCompetitiveMode as boolean) ?? DEFAULTS.enableCompetitiveMode,
       bo1TimerMinutes: (parsed.bo1TimerMinutes as number) ?? DEFAULTS.bo1TimerMinutes,
       bo3TimerMinutes: (parsed.bo3TimerMinutes as number) ?? DEFAULTS.bo3TimerMinutes,
+      meleePlayerGuid: (parsed.meleePlayerGuid as string) ?? DEFAULTS.meleePlayerGuid,
     }
   } catch {
     return { ...DEFAULTS }
@@ -82,6 +85,7 @@ type UserSettingsValue = UserSettings & {
   setEnableCompetitiveMode: (v: boolean) => void
   setBo1TimerMinutes: (v: number) => void
   setBo3TimerMinutes: (v: number) => void
+  setMeleePlayerGuid: (v: string) => void
 }
 
 const UserSettingsContext = createContext<UserSettingsValue | null>(null)
@@ -108,6 +112,7 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     enableCompetitiveMode: settings.enableCompetitiveMode,
     bo1TimerMinutes: settings.bo1TimerMinutes,
     bo3TimerMinutes: settings.bo3TimerMinutes,
+    meleePlayerGuid: settings.meleePlayerGuid,
     setUseHyperspace: (v) => update({ useHyperspace: v }),
     setForceTokenDisplay: (v) => update({ forceTokenDisplay: v }),
     setEnableEpicActions: (v) => update({ enableEpicActions: v }),
@@ -118,6 +123,7 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     setEnableCompetitiveMode: (v) => update({ enableCompetitiveMode: v }),
     setBo1TimerMinutes: (v) => update({ bo1TimerMinutes: v }),
     setBo3TimerMinutes: (v) => update({ bo3TimerMinutes: v }),
+    setMeleePlayerGuid: (v) => update({ meleePlayerGuid: v }),
   }
 
   return createElement(UserSettingsContext.Provider, { value }, children)

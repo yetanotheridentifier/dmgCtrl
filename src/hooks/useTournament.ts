@@ -16,7 +16,6 @@ export interface TournamentRound {
 export interface TournamentState {
   base: Base
   format: Format
-  tournamentId: string
   playMode: 'bo1' | 'bo3'
   totalRounds: number
   rounds: TournamentRound[]
@@ -72,11 +71,10 @@ export function useTournament() {
   const startTournament = (
     base: Base,
     format: Format,
-    tournamentId: string,
     playMode: 'bo1' | 'bo3',
     totalRounds: number,
   ) => {
-    const next: TournamentState = { base, format, tournamentId, playMode, totalRounds, rounds: [] }
+    const next: TournamentState = { base, format, playMode, totalRounds, rounds: [] }
     update(setTournament, next)
   }
 
@@ -121,11 +119,6 @@ export function useTournament() {
     setTournament(null)
   }
 
-  const setTournamentId = (id: string) => {
-    if (!tournament) return
-    update(setTournament, { ...tournament, tournamentId: id })
-  }
-
   return {
     tournament,
     matchInProgress,
@@ -137,6 +130,5 @@ export function useTournament() {
     completeMatch,
     submitRound,
     dropTournament,
-    setTournamentId,
   }
 }
