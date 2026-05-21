@@ -3,8 +3,10 @@ import { Base } from '../hooks/useBases'
 import { useSwuSetup, InitialSelection } from '../hooks/useSwuSetup'
 import { useBaseArt, getFirstGameImageUrl } from '../hooks/useBaseArt'
 import SwuSetupScreenView from './swuSetupScreenView'
+import SwuInstallBanner from './swuInstallBanner'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { useFavourites } from '../hooks/useFavourites'
+import { useInstallPrompt } from '../hooks/useInstallPrompt'
 import { normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck } from '../utils/swudbUrl'
 import { onFavouriteAdded, onFavouriteRemoved, onDeckImportSuccess, onDeckImportFailure } from '../services/analytics'
 import { isBaseValidForFormat, isSetValidForFormat, formatValidationError } from '../utils/formatFilter'
@@ -25,6 +27,7 @@ function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Pro
   const { favourites, addFavourite, removeFavourite } = useFavourites()
   const setup = useSwuSetup(onConfirm, initialSelection)
   const art = useBaseArt(setup.selectedBase, useHyperspace)
+  const { showBanner, platform, onInstall, onDismiss } = useInstallPrompt()
 
   useEffect(() => {
     const url = getFirstGameImageUrl(setup.selectedBase, useHyperspace)
@@ -142,6 +145,7 @@ function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Pro
   const handleSubmit = () => setup.handleSubmit()
 
   return (
+    <>
     <SwuSetupScreenView
       loading={setup.loading}
       error={setup.error}
@@ -187,6 +191,10 @@ function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Pro
       onFavouriteToggle={handleFavouriteToggle}
       onFavouriteKeyChange={setup.selectBaseByKey}
     />
+    {showBanner && platform && (
+      <SwuInstallBanner platform={platform} onInstall={onInstall} onDismiss={onDismiss} />
+    )}
+    </>
   )
 }
 

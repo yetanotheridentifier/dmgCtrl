@@ -29,7 +29,7 @@ const DEFAULTS: UserSettings = {
   enableFavourites: true,
   enableLongPress: true,
   enableActionLog: true,
-  enableCompetitiveMode: false,
+  enableCompetitiveMode: true,
   bo1TimerMinutes: 25,
   bo3TimerMinutes: 55,
   meleePlayerGuid: '',

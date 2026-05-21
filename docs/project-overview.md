@@ -21,6 +21,7 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 - Tournament help screen (#209) ✓
 - melee.gg Player Portal button and Player ID setting (#206) ✓
 - Change base gating: overlay only shown after a game is completed, not when backing out before game 1 ✓
+- Install banner on setup screen for non-standalone users (#220) ✓
 
 ### Future games
 - X-Wing
