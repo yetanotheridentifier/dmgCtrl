@@ -98,5 +98,19 @@ describe('SwuHelpScreen', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'During a Game' })).toBeInTheDocument()
   })
 
+  it('source="tournament" renders the Tournament section heading', () => {
+    render(<SwuHelpScreen onBack={vi.fn()} source="tournament" />)
+    expect(screen.getByRole('heading', { level: 2, name: 'Tournament Mode' })).toBeInTheDocument()
+  })
+
+  it('source="tournament" does not render the Getting Started section', () => {
+    render(<SwuHelpScreen onBack={vi.fn()} source="tournament" />)
+    expect(screen.queryByRole('heading', { level: 2, name: 'Getting Started' })).not.toBeInTheDocument()
+  })
+
+  it('source="tournament" does not render the During a Game section', () => {
+    render(<SwuHelpScreen onBack={vi.fn()} source="tournament" />)
+    expect(screen.queryByRole('heading', { level: 2, name: 'During a Game' })).not.toBeInTheDocument()
+  })
 
 })

@@ -344,6 +344,36 @@ describe('App', () => {
     expect(screen.getByText('Remaining: 30')).toBeInTheDocument()
   })
 
+  it('Clicking help on tournament screen shows tournament help content', async () => {
+    mockUseTournament.tournament = {
+      base: { set: 'SOR', number: '026', name: 'Catacombs of Cadera', subtitle: 'Jedha', hp: 30,
+        frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png', frontArtLowRes: null,
+        hyperspaceArt: null, hyperspaceArtHiRes: null, epicAction: '', aspects: ['Aggression'], rarity: 'Common' },
+      format: 'premier', playMode: 'bo3', totalRounds: 5, rounds: [],
+    }
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Help' }))
+    expect(screen.getByRole('heading', { level: 2, name: 'Tournament Mode' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Getting Started' })).not.toBeInTheDocument()
+  })
+
+  it('Clicking back from tournament help returns to tournament screen', async () => {
+    mockUseTournament.tournament = {
+      base: { set: 'SOR', number: '026', name: 'Catacombs of Cadera', subtitle: 'Jedha', hp: 30,
+        frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png', frontArtLowRes: null,
+        hyperspaceArt: null, hyperspaceArtHiRes: null, epicAction: '', aspects: ['Aggression'], rarity: 'Common' },
+      format: 'premier', playMode: 'bo3', totalRounds: 5, rounds: [],
+    }
+    const user = userEvent.setup()
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Help' }))
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByRole('button', { name: 'Start Match 1' })).toBeInTheDocument()
+  })
+
   it('Passes useHyperspace=true to game screen when user settings preference is true', async () => {
     mockUserSettings.useHyperspace = true
     const user = userEvent.setup()
@@ -648,7 +678,6 @@ describe('App tournament navigation', () => {
         frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png', frontArtLowRes: null,
         hyperspaceArt: null, hyperspaceArtHiRes: null, epicAction: '', aspects: ['Aggression'], rarity: 'Common' },
       format: 'premier',
-      tournamentId: '',
       playMode: 'bo3',
       totalRounds: 5,
       rounds: [],
@@ -664,7 +693,6 @@ describe('App tournament navigation', () => {
         frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png', frontArtLowRes: null,
         hyperspaceArt: null, hyperspaceArtHiRes: null, epicAction: '', aspects: ['Aggression'], rarity: 'Common' },
       format: 'premier',
-      tournamentId: 'test123',
       playMode: 'bo3',
       totalRounds: 5,
       rounds: [{ roundNumber: 1, playerScore: 0, opponentScore: 0, result: null, submitted: false }],
@@ -700,7 +728,6 @@ describe('App tournament navigation', () => {
         frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png', frontArtLowRes: null,
         hyperspaceArt: null, hyperspaceArtHiRes: null, epicAction: '', aspects: ['Aggression'], rarity: 'Common' },
       format: 'premier',
-      tournamentId: '',
       playMode: 'bo3',
       totalRounds: 5,
       rounds: [{ roundNumber: 1, playerScore: 0, opponentScore: 0, result: null, submitted: false }],
@@ -720,7 +747,6 @@ describe('App tournament navigation', () => {
         frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png', frontArtLowRes: null,
         hyperspaceArt: null, hyperspaceArtHiRes: null, epicAction: '', aspects: ['Aggression'], rarity: 'Common' },
       format: 'limited',
-      tournamentId: '',
       playMode: 'bo3',
       totalRounds: 3,
       rounds: [{ roundNumber: 1, playerScore: 0, opponentScore: 0, result: null, submitted: false }],
@@ -748,7 +774,6 @@ describe('App tournament navigation', () => {
         frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png', frontArtLowRes: null,
         hyperspaceArt: null, hyperspaceArtHiRes: null, epicAction: '', aspects: ['Aggression'], rarity: 'Common' },
       format: 'premier',
-      tournamentId: '',
       playMode: 'bo3',
       totalRounds: 5,
       rounds: [{ roundNumber: 1, playerScore: 0, opponentScore: 0, result: null, submitted: false }],

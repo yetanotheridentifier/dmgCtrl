@@ -25,7 +25,7 @@ function App() {
   const [isInGame, setIsInGame] = useState(false)
   const [tournamentCurrentBase, setTournamentCurrentBase] = useState<Base | null>(null)
   const [hasPlayedGameInCurrentMatch, setHasPlayedGameInCurrentMatch] = useState(false)
-  const [helpSource, setHelpSource] = useState<'setup' | 'game'>('setup')
+  const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament'>('setup')
   const { loading } = useBases()
   const { useHyperspace } = useUserSettings()
   const gameStartTime = useRef<number>(0)
@@ -150,9 +150,10 @@ function App() {
   }
 
   const handleHelp = () => {
-    const source: 'setup' | 'game' =
+    const source: 'setup' | 'game' | 'tournament' =
       screen === 'game' ? 'game' :
       screen === 'settings' && backStack[backStack.length - 1] === 'game' ? 'game' :
+      screen === 'tournament' ? 'tournament' :
       'setup'
     setHelpSource(source)
     setBackStack(prev => [...prev, screen])

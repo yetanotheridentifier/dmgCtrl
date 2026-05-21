@@ -22,7 +22,7 @@ src/
     GameLogOverlay.tsx      Game screen action log overlay — scrollable entry list; auto-scrolls to bottom; undo button on last undoable entry; round entries styled with blue gradient
     swuGameScreen.tsx       Game screen container
     swuGameScreenView.tsx   Game screen view (⚙ button always visible)
-    swuHelpScreen.tsx       Help screen (renders swuSetupHelp.md or swuGameHelp.md based on source prop; title row: back button + icon + "Help" h1)
+    swuHelpScreen.tsx       Help screen (renders swuSetupHelp.md, swuGameHelp.md, or swuTournamentHelp.md based on source prop; title row: back button + icon + "Help" h1)
     swuLoadingScreen.tsx    Loading screen (icon + "LOADING" text; calls onReady as soon as loading prop becomes false)
     swuSetupScreen.tsx      Setup screen container
     swuSetupScreenView.tsx  Setup screen view (title row: icon + "dmgCtrl" h1 + ⚙ button + help button)
@@ -92,6 +92,7 @@ docs/
   architecture-process.md       Workflow, CI/CD, analytics, testing strategy, future improvements
   swuSetupHelp.md               Setup screen user guide (imported as HTML string via custom Vite plugin)
   swuGameHelp.md                Game screen user guide (imported as HTML string via custom Vite plugin)
+  swuTournamentHelp.md          Tournament screen user guide (imported as HTML string via custom Vite plugin)
   project-overview.md           Product vision, planned features, AI assistant notes
 
 public/
@@ -128,6 +129,7 @@ All other state is owned at the component level:
 | State | Owner | How it flows |
 |---|---|---|
 | Current screen (`loading` / `setup` / `game` / `tournament` / `help` / `settings`) | `App` | Passed as callback props (`onReady`, `onConfirm`, `onBack`, `onHelp`, `onSettings`) |
+| Help source (`'setup'` / `'game'` / `'tournament'`) | `App` | Determines which markdown file `SwuHelpScreen` renders; set by `handleHelp` based on the current screen before navigating to `'help'`; settings falls through to whichever screen was active before settings was opened (via `backStack`) |
 | Back stack (for help/settings back-navigation) | `App` | A `Screen[]` stack; pushed when navigating to help or settings, popped on back — supports any depth of overlay navigation |
 | `useBases()` loading state (for loading screen) | `App` | `App` calls `useBases()` and passes `loading` prop to `SwuLoadingScreen`; `SwuLoadingScreen` calls `onReady` as soon as the data is ready (`loading` becomes `false`) |
 | Game start time | `App` (`useRef`) | Recorded at the start of `handleConfirm`; used by `handleBack` to compute `durationSeconds` for `onGameEnd` |

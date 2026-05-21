@@ -94,7 +94,7 @@ App
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
 │   └── SwuTournamentScreenView (view — renders config inputs, base art preview, round table, action/drop buttons; portrait and landscape layouts)
 │       └── ImagePreview  (pure view — renders art or error message from props; fill='width' in portrait, fill='height' in landscape)
-├── SwuHelpScreen         (standalone screen — renders swuSetupHelp.md or swuGameHelp.md based on source prop)
+├── SwuHelpScreen         (standalone screen — renders swuSetupHelp.md, swuGameHelp.md, or swuTournamentHelp.md based on source prop)
 └── SwuSettingsScreen     (container)
     ├── useUserSettings   (hook — persistent user preferences)
     ├── useFavourites     (hook — favourites list, remove/clear operations)
