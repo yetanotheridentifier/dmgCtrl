@@ -25,7 +25,7 @@ function App() {
   const [isInGame, setIsInGame] = useState(false)
   const [tournamentCurrentBase, setTournamentCurrentBase] = useState<Base | null>(null)
   const [hasPlayedGameInCurrentMatch, setHasPlayedGameInCurrentMatch] = useState(false)
-  const [helpSource, setHelpSource] = useState<'setup' | 'game'>('setup')
+  const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament'>('setup')
   const { loading } = useBases()
   const { useHyperspace } = useUserSettings()
   const gameStartTime = useRef<number>(0)
@@ -123,14 +123,14 @@ function App() {
     setScreen('tournament')
   }
 
-  const handleBack = () => {
+  const handleBack = (gamesCompleted = 0) => {
     if (tournament !== null) {
       const base = selectedBase ?? tournament.base
       if (base) {
         const durationSeconds = Math.round((Date.now() - gameStartTime.current) / 1000)
         void onGameEnd(`${base.set}-${base.number}`, base.set, useHyperspace, durationSeconds, selectedPlayMode)
       }
-      if (matchInProgress) setHasPlayedGameInCurrentMatch(true)
+      if (matchInProgress) setHasPlayedGameInCurrentMatch(gamesCompleted > 0)
       setScreen('tournament')
       return
     }
@@ -150,9 +150,10 @@ function App() {
   }
 
   const handleHelp = () => {
-    const source: 'setup' | 'game' =
+    const source: 'setup' | 'game' | 'tournament' =
       screen === 'game' ? 'game' :
       screen === 'settings' && backStack[backStack.length - 1] === 'game' ? 'game' :
+      screen === 'tournament' ? 'tournament' :
       'setup'
     setHelpSource(source)
     setBackStack(prev => [...prev, screen])

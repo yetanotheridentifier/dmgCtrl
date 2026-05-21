@@ -18,7 +18,7 @@ interface Props {
   base: Base
   playMode?: PlayMode
   isInTournament?: boolean
-  onBack: () => void
+  onBack: (gamesCompleted: number) => void
   onHelp: () => void
   onSettings?: () => void
   onMatchComplete?: (result: 'won' | 'lost' | 'drawn', playerScore: number, opponentScore: number) => void
@@ -208,7 +208,7 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
       game.reset()
       log.reset()
     }
-    onBack()
+    onBack(match.playerScore + match.opponentScore)
   }
 
   if (isPortrait) {

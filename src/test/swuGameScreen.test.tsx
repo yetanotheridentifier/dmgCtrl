@@ -354,6 +354,14 @@ describe('SwuGameScreen', () => {
     expect(onBack).toHaveBeenCalledOnce()
   })
 
+  it('Calls onBack with 0 games completed when no games have been played', async () => {
+    const user = userEvent.setup()
+    const onBack = vi.fn()
+    render(<SwuGameScreen base={mockBase} onBack={onBack} onHelp={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(onBack).toHaveBeenCalledWith(0)
+  })
+
   // --- Image error fallback (text) ---
 
   it('Shows base name when all image URLs fail', () => {

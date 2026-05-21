@@ -18,8 +18,9 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 - Tournament screen: round tracking, W/L/D totals, config inputs, drop/end flow ✓
 - Tournament points (Win=3, Draw=1, Loss=0) ✓
 - Base preview on tournament screen ✓
-- Tournament help screen (#209)
+- Tournament help screen (#209) ✓
 - melee.gg Player Portal button and Player ID setting (#206) ✓
+- Change base gating: overlay only shown after a game is completed, not when backing out before game 1 ✓
 
 ### Future games
 - X-Wing
