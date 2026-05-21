@@ -753,10 +753,12 @@ describe('App tournament navigation', () => {
     }
     mockUseTournament.matchInProgress = true
     render(<App />)
-    // Simulate game 1: go to game screen then press Back to establish hasPlayedGameInCurrentMatch
+    // Record game 1 win: navigate to game, click You → Confirm, then Back to tournament
     await waitFor(() => expect(screen.getByRole('button', { name: 'Return to Match 1' })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'You' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     // Now on tournament screen with hasPlayedGameInCurrentMatch=true — change base overlay shows
     await waitFor(() => expect(screen.getByTestId('change-base-overlay')).toBeInTheDocument())
@@ -765,6 +767,29 @@ describe('App tournament navigation', () => {
     await user.selectOptions(screen.getByTestId('change-base-base'), 'SOR-022')
     await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
     expect(mockOnGameStart).toHaveBeenLastCalledWith('SOR-022', 'SOR', false, 'bo3')
+  })
+
+  it('Change Base overlay is not shown when backing out of game 1 without completing it in a limited Bo3 match', async () => {
+    const user = userEvent.setup()
+    mockUseTournament.tournament = {
+      base: { set: 'SOR', number: '026', name: 'Catacombs of Cadera', subtitle: 'Jedha', hp: 30,
+        frontArt: 'https://cdn.swu-db.com/images/cards/SOR/026.png', frontArtLowRes: null,
+        hyperspaceArt: null, hyperspaceArtHiRes: null, epicAction: '', aspects: ['Aggression'], rarity: 'Common' },
+      format: 'limited',
+      playMode: 'bo3',
+      totalRounds: 3,
+      rounds: [{ roundNumber: 1, playerScore: 0, opponentScore: 0, result: null, submitted: false }],
+    }
+    mockUseTournament.matchInProgress = true
+    render(<App />)
+    // Navigate to game screen and press Back immediately without recording any result
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to Match 1' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    // Change base overlay must NOT appear — no game has been completed yet
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Return to Match 1' })).toBeInTheDocument())
+    expect(screen.queryByTestId('change-base-overlay')).not.toBeInTheDocument()
   })
 
   it('fires onGameEnd when pressing Back from a tournament game', async () => {

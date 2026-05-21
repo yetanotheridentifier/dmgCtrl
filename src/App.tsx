@@ -123,14 +123,14 @@ function App() {
     setScreen('tournament')
   }
 
-  const handleBack = () => {
+  const handleBack = (gamesCompleted = 0) => {
     if (tournament !== null) {
       const base = selectedBase ?? tournament.base
       if (base) {
         const durationSeconds = Math.round((Date.now() - gameStartTime.current) / 1000)
         void onGameEnd(`${base.set}-${base.number}`, base.set, useHyperspace, durationSeconds, selectedPlayMode)
       }
-      if (matchInProgress) setHasPlayedGameInCurrentMatch(true)
+      if (matchInProgress) setHasPlayedGameInCurrentMatch(gamesCompleted > 0)
       setScreen('tournament')
       return
     }
