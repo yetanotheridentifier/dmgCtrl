@@ -17,14 +17,15 @@ src/
   components/
     layout/
       AppScreenLayout.tsx  Shared full-screen layout wrapper (background, safe area)
-    icons.tsx               Reusable SVG icon components (BackIcon, ForwardIcon, HelpIcon, CogIcon, LogIcon)
+    icons.tsx               Reusable SVG icon components (BackIcon, ForwardIcon, HelpIcon, CogIcon, LogIcon, ShareIcon, HomeScreenIcon, DotsIcon, ChevronDownIcon)
     imagePreview.tsx        Pure view — renders card art or error message from props; fill='width' (default) constrains by width with aspect-ratio height; fill='height' constrains by height with aspect-ratio width, right-aligned via marginLeft:auto; uses useLayoutEffect to check img.complete on mount so cached images show immediately without waiting for a load event that the browser may not re-fire
     GameLogOverlay.tsx      Game screen action log overlay — scrollable entry list; auto-scrolls to bottom; undo button on last undoable entry; round entries styled with blue gradient
     swuGameScreen.tsx       Game screen container
     swuGameScreenView.tsx   Game screen view (⚙ button always visible)
     swuHelpScreen.tsx       Help screen (renders swuSetupHelp.md, swuGameHelp.md, or swuTournamentHelp.md based on source prop; title row: back button + icon + "Help" h1)
     swuLoadingScreen.tsx    Loading screen (icon + "LOADING" text; calls onReady as soon as loading prop becomes false)
-    swuSetupScreen.tsx      Setup screen container
+    swuInstallBanner.tsx    Install prompt banner — fixed bottom sheet shown on the setup screen for non-standalone users; iOS variant shows a bulleted step list: "Tap [DotsIcon] then", "[ShareIcon] Share", "[ChevronDownIcon] View More", "[HomeScreenIcon] Add to Home Screen"; Android variant shows an "Install" button that triggers the deferred `beforeinstallprompt` prompt; dismiss button (×) hides the banner for the session; font size matches setup screen (`clamp(0.9rem, 3vw, 1.1rem)`) with `WebkitTextSizeAdjust: 100%` to prevent iOS rotation inflation; rendered by SwuSetupScreen alongside SwuSetupScreenView
+    swuSetupScreen.tsx      Setup screen container — uses useInstallPrompt to conditionally render SwuInstallBanner
     swuSetupScreenView.tsx  Setup screen view (title row: icon + "dmgCtrl" h1 + ⚙ button + help button)
     swuSettingsScreen.tsx   Settings screen container
     swuSettingsScreenView.tsx Settings screen view (toggle list; calls useOrientation directly for iOS font sizing)
@@ -35,6 +36,7 @@ src/
     useBaseArt.ts           Ordered art fallback chain shared by setup, game, and tournament screens. Exports `getFirstGameImageUrl(base, useHyperspace)` which returns the first URL from the fallback chain, used by the setup screen to preload the game image while the user is still on the setup screen
     useDragScrubber.ts      Drag-to-scrub gesture — tracks pointer events on `+`/`−` counter buttons; exposes `dragIndicator` (type, value, clientX, clientY) and pointer event handlers; 15px dead zone before scrub activates; 14px per step; caps drag value at `Math.min(max, 20)`; suppresses synthetic click after drag; disabled when `enableLongPress` is false or the reachable cap is < 2
     useBases.ts             Fetches and caches the full list of Base cards
+    useInstallPrompt.ts     PWA install prompt — detects standalone mode, iOS (userAgent), and Android (captures `beforeinstallprompt` event); returns `{ showBanner, platform, onInstall, onDismiss }`; showBanner is true for iOS non-standalone, or Android non-standalone when the deferred prompt is available; dismissed state backed by `sessionStorage` under key `install_banner_dismissed` so it survives component unmount/remount within the same session but resets next session; onInstall calls `deferredPrompt.prompt()` then dismisses; onDismiss sets the sessionStorage flag and hides
     useFavourites.ts        Favourites list — add/remove/clear operations with deduplication on key; sorted by set then card number ascending; persists FavouriteBase[] to localStorage under key `favourites`; UI gated by enableFavourites in useUserSettings
     useGameLog.ts           Ordered action log — add/clearAndAdd/undoLast/reset; each `GameLogEntry` records id, type, message, colour, `prevState` (GameState snapshot), optional `undoable` flag, optional `prevLogEntries` (full previous log — set on game-result entries for full undo), optional `prevMatchState` (score snapshot — set on game-result entries)
     useOrientation.ts       Detects portrait vs landscape; returns isPortrait (via matchMedia change event) and vmin (Math.min(screen.width, screen.height) — stable across rotations)
@@ -42,7 +44,7 @@ src/
     useSwuSetup.ts          Setup screen logic — filtering, auto-select, format state, and play mode state; selectedFormat (persisted to pref_format), selectedPlayMode (persisted to pref_play_mode), validSets, handleFormatChange, handlePlayModeChange; clearing selection when the current set is not valid for the new format
     useMatch.ts             Match score state — playerScore, opponentScore, matchOver (computed), matchResult ('won'|'lost'|'drawn'|null, computed), incrementPlayerScore, incrementOpponentScore, recordDraw, closeByTimer, resetMatch, restoreState; maxScore is 1 for bo1, 2 for bo3; scores are clamped at maxScore; matchOver also true when matchDrawn or matchClosedByTimer flags are set; matchResult derived from final scores when match closes early
     useTimer.ts             Countdown timer hook — remaining (seconds), isRunning, isExpired; start (idempotent — only starts once), reset; records wall-clock start time and computes remaining from elapsed time on each tick (not by counting interval ticks), so the display catches up correctly after the device screen is off; a visibilitychange listener forces an immediate recalculation when the page becomes visible again; start is called by the game screen container on first game start
-    useUserSettings.ts      React Context — persistent user preferences (useHyperspace, forceTokenDisplay, enableEpicActions, enableWakeLock, enableFavourites, enableLongPress, enableActionLog, enableCompetitiveMode, bo1TimerMinutes, bo3TimerMinutes) backed by localStorage under key `user_settings`; forceTokenDisplay is a 3-way value ('always-on' | 'lof-only' | 'always-off'), defaulting to 'lof-only'; all other boolean preferences except enableCompetitiveMode default to `true`; enableCompetitiveMode defaults to `false`; bo1TimerMinutes defaults to 25, bo3TimerMinutes defaults to 55; migrates old enableForceToken boolean (false → 'always-off', true/missing → 'lof-only'); `UserSettingsProvider` wraps the app in `main.tsx`
+    useUserSettings.ts      React Context — persistent user preferences (useHyperspace, forceTokenDisplay, enableEpicActions, enableWakeLock, enableFavourites, enableLongPress, enableActionLog, enableCompetitiveMode, bo1TimerMinutes, bo3TimerMinutes) backed by localStorage under key `user_settings`; forceTokenDisplay is a 3-way value ('always-on' | 'lof-only' | 'always-off'), defaulting to 'lof-only'; all boolean preferences default to `true`; bo1TimerMinutes defaults to 25, bo3TimerMinutes defaults to 55; migrates old enableForceToken boolean (false → 'always-off', true/missing → 'lof-only'); `UserSettingsProvider` wraps the app in `main.tsx`
     useTournament.ts        Tournament state — TournamentState and TournamentRound interfaces; startTournament, startMatch, completeMatch, submitRound, dropTournament; persists to localStorage under key `tournament_state`; `startMatch` uses functional setState to avoid stale-closure bugs; `points` is a derived value (win=3, draw=1, loss=0) computed from completed rounds alongside `totals`
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
@@ -65,6 +67,7 @@ src/
     swuGameScreen.test.tsx  Game screen container tests
     swuHelpScreen.test.tsx  Help screen tests
     swuLoadingScreen.test.tsx Loading screen tests
+    swuInstallBanner.test.tsx Install banner component tests
     swuSetupScreen.test.tsx Setup screen container tests
     swuSettingsScreen.test.tsx Settings screen container tests
     swuTournamentScreen.test.tsx Tournament screen container tests (49 tests — rendering, action button labels, callbacks, config locking, drop confirm flow, back navigation, base art image rendering, tournament analytics, change-base overlay gating, selectors, cancel, base selection, action button with and without candidate)
@@ -81,6 +84,7 @@ src/
     useMatch.test.ts        Match score hook tests
     useUserSettings.test.ts User settings hook tests
     useTournament.test.ts   Tournament hook tests
+    useInstallPrompt.test.ts PWA install prompt hook tests
     useWakeLock.test.ts     Screen Wake Lock hook tests
 
   assets/
@@ -509,7 +513,7 @@ Format state lives in `useSwuSetup`. When the format changes, `validSets` is rec
 
 When `enableCompetitiveMode` is `true` in user settings, a **Match** dropdown appears on the setup screen on the same row as the Format selector. Three options are available: Casual, Best of 1, Best of 3. The selection is persisted to localStorage under `pref_play_mode` and defaults to `'casual'`. The selected play mode is passed to `App` via `onConfirm(base, playMode)`, stored as `selectedPlayMode` in `App` state, and forwarded to `SwuGameScreen` as a `playMode` prop.
 
-`enableCompetitiveMode` defaults to `false` and is toggled in the Settings screen.
+`enableCompetitiveMode` defaults to `true` and is toggled in the Settings screen.
 
 ### Source selector
 

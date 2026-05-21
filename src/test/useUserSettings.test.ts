@@ -233,9 +233,9 @@ describe('useUserSettings', () => {
     expect(result.current.enableActionLog).toBe(true)
   })
 
-  it('defaults enableCompetitiveMode to false when storage is empty', () => {
+  it('defaults enableCompetitiveMode to true when storage is empty', () => {
     const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableCompetitiveMode).toBe(false)
+    expect(result.current.enableCompetitiveMode).toBe(true)
   })
 
   it('loads enableCompetitiveMode=true from stored JSON', () => {
@@ -253,20 +253,20 @@ describe('useUserSettings', () => {
     expect(saved.enableCompetitiveMode).toBe(true)
   })
 
-  it('falls back to false for enableCompetitiveMode when stored JSON is corrupt', () => {
+  it('falls back to true for enableCompetitiveMode when stored JSON is corrupt', () => {
     vi.mocked(localStorage.getItem).mockImplementation((key) =>
       key === STORAGE_KEY ? 'not-valid-json{{{' : null
     )
     const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableCompetitiveMode).toBe(false)
+    expect(result.current.enableCompetitiveMode).toBe(true)
   })
 
-  it('falls back to false for enableCompetitiveMode when missing from stored JSON', () => {
+  it('falls back to true for enableCompetitiveMode when missing from stored JSON', () => {
     vi.mocked(localStorage.getItem).mockImplementation((key) =>
       key === STORAGE_KEY ? JSON.stringify({ useHyperspace: false }) : null
     )
     const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableCompetitiveMode).toBe(false)
+    expect(result.current.enableCompetitiveMode).toBe(true)
   })
 
 })
