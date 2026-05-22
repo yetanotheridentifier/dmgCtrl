@@ -6,22 +6,10 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 
 **GitHub repo:** https://github.com/yetanotheridentifier/dmgCtrl
 
-## Planned Features
+## Roadmap
 
-### Competitive mode ✓
-- Score panel: game counter within a match ✓
-- Win/loss recording: start phase, You/Opp confirm buttons, auto-loss at 0 HP, between-game display, match-over display, undo ✓
-- Timer ✓
-- Analytics + ship ✓
-
-### Tournament mode (in progress)
-- Tournament screen: round tracking, W/L/D totals, config inputs, drop/end flow ✓
-- Tournament points (Win=3, Draw=1, Loss=0) ✓
-- Base preview on tournament screen ✓
-- Tournament help screen (#209) ✓
-- melee.gg Player Portal button and Player ID setting (#206) ✓
-- Change base gating: overlay only shown after a game is completed, not when backing out before game 1 ✓
-- Install banner on setup screen for non-standalone users (#220) ✓
+### Game select screen (in progress)
+- X-Wing screen (pending)
 
 ### Future games
 - X-Wing
@@ -32,7 +20,6 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 ### Infrastructure
 - Per-game theming (X-Wing aesthetic vs SWU aesthetic)
 - Melee.gg integration (API exists, partially public)
-- Analytics custom events via Cloudflare Worker + InfluxDB — custom event tracking and Grafana dashboard complete; offline queue (#164) pending
 
 ## Development
 

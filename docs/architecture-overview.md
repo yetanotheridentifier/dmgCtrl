@@ -74,6 +74,7 @@ The app is served at `/dmgCtrl/` and is designed to be added to an iOS home scre
 ```
 App
 ├── SwuLoadingScreen      (standalone screen — icon + LOADING text; transitions as soon as data is ready)
+├── SwuGameSelectScreen   (standalone screen — game selector; shown when enableGameSelect is true; two logo buttons: Star Wars Unlimited (enabled) and Star Wars X-Wing (disabled); help button top-right)
 ├── SwuSetupScreen        (container)
 │   ├── useSwuSetup       (hook — filtering, auto-select)
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)

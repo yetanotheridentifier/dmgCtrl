@@ -36,6 +36,7 @@ interface Props {
   onKeyChange: (key: string) => void
   onSubmit: () => void
   onHelp: () => void
+  onBack?: () => void
   onSettings?: () => void
   selectionMode: SelectionMode
   onModeChange: (mode: SelectionMode) => void
@@ -243,6 +244,7 @@ function SwuSetupScreenView({
   onKeyChange,
   onSubmit,
   onHelp,
+  onBack,
   onSettings,
   selectionMode,
   onModeChange,
@@ -581,7 +583,12 @@ function SwuSetupScreenView({
             justifyContent: 'space-between',
             flexShrink: 0,
           }}>
-            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
+            <div
+              onClick={onBack}
+              role={onBack ? 'button' : undefined}
+              aria-label={onBack ? 'Game select' : undefined}
+              style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw', cursor: onBack ? 'pointer' : 'default' }}
+            >
               <img
                 src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`}
                 alt="dmgCtrl"
@@ -738,7 +745,12 @@ function SwuSetupScreenView({
           alignItems: 'center',
           justifyContent: 'space-between',
         }}>
-          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3vw' }}>
+          <div
+            onClick={onBack}
+            role={onBack ? 'button' : undefined}
+            aria-label={onBack ? 'Game select' : undefined}
+            style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3vw', cursor: onBack ? 'pointer' : 'default' }}
+          >
             <img
               src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`}
               alt="dmgCtrl"

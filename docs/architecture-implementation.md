@@ -24,9 +24,10 @@ src/
     swuGameScreenView.tsx   Game screen view (⚙ button always visible)
     swuHelpScreen.tsx       Help screen (renders swuSetupHelp.md, swuGameHelp.md, or swuTournamentHelp.md based on source prop; title row: back button + icon + "Help" h1)
     swuLoadingScreen.tsx    Loading screen (icon + "LOADING" text; calls onReady as soon as loading prop becomes false)
+    swuGameSelectScreen.tsx Game select screen — entry point when enableGameSelect is true; shows dmgCtrl title, Star Wars Unlimited button (enabled, blue accent border + glow) and Star Wars X-Wing button (disabled/greyed, pending); help button top-right; orientation-aware: portrait uses large title (`clamp(1.8rem, 8vw, 3rem)`, `5vw` padding) and column button layout; landscape uses compact title (`clamp(1.2rem, 4vw, 1.8rem)`, `3vw 4vw` padding) and row button layout — matching the setup screen convention; clicking Star Wars Unlimited navigates to the SWU setup screen; clicking the setup screen's dmgCtrl icon/title navigates back (via `onBack` prop on SwuSetupScreen)
     swuInstallBanner.tsx    Install prompt banner — fixed bottom sheet shown on the setup screen for non-standalone users; iOS variant shows a bulleted step list: "Tap [DotsIcon] then", "[ShareIcon] Share", "[ChevronDownIcon] View More", "[HomeScreenIcon] Add to Home Screen"; Android variant shows an "Install" button that triggers the deferred `beforeinstallprompt` prompt; dismiss button (×) hides the banner for the session; font size matches setup screen (`clamp(0.9rem, 3vw, 1.1rem)`) with `WebkitTextSizeAdjust: 100%` to prevent iOS rotation inflation; rendered by SwuSetupScreen alongside SwuSetupScreenView
-    swuSetupScreen.tsx      Setup screen container — uses useInstallPrompt to conditionally render SwuInstallBanner
-    swuSetupScreenView.tsx  Setup screen view (title row: icon + "dmgCtrl" h1 + ⚙ button + help button)
+    swuSetupScreen.tsx      Setup screen container — uses useInstallPrompt to conditionally render SwuInstallBanner; accepts optional `onBack` prop (passed from App when enableGameSelect is true) which is forwarded to the view
+    swuSetupScreenView.tsx  Setup screen view (title row: icon + "dmgCtrl" h1 + ⚙ button + help button); when `onBack` is provided the icon+title group becomes a clickable back button (role="button", aria-label="Game select") that returns to the game select screen
     swuSettingsScreen.tsx   Settings screen container
     swuSettingsScreenView.tsx Settings screen view (toggle list; calls useOrientation directly for iOS font sizing)
     swuTournamentScreen.tsx  Tournament screen container — local config state, action/drop handlers; calls useBases to provide options for the change-base selector; calls useBaseArt(candidateBase ?? base, useHyperspace) so art previews the candidate while the selector is active; canChangeBase (limited + bo3 + matchInProgress + hasPlayedGameInCurrentMatch + !isComplete) gates the change-base overlay; changingBase / candidateAspect / candidateBase local state manage the change-base flow; passes candidateBase to onGoToGame when selected, omits it otherwise (App falls back to tournamentCurrentBase for the game screen); fires onTournamentStarted on first match click, onTournamentDropped / onTournamentEnded on confirmed drop; delegates to view
@@ -44,7 +45,7 @@ src/
     useSwuSetup.ts          Setup screen logic — filtering, auto-select, format state, and play mode state; selectedFormat (persisted to pref_format), selectedPlayMode (persisted to pref_play_mode), validSets, handleFormatChange, handlePlayModeChange; clearing selection when the current set is not valid for the new format
     useMatch.ts             Match score state — playerScore, opponentScore, matchOver (computed), matchResult ('won'|'lost'|'drawn'|null, computed), incrementPlayerScore, incrementOpponentScore, recordDraw, closeByTimer, resetMatch, restoreState; maxScore is 1 for bo1, 2 for bo3; scores are clamped at maxScore; matchOver also true when matchDrawn or matchClosedByTimer flags are set; matchResult derived from final scores when match closes early
     useTimer.ts             Countdown timer hook — remaining (seconds), isRunning, isExpired; start (idempotent — only starts once), reset; records wall-clock start time and computes remaining from elapsed time on each tick (not by counting interval ticks), so the display catches up correctly after the device screen is off; a visibilitychange listener forces an immediate recalculation when the page becomes visible again; start is called by the game screen container on first game start
-    useUserSettings.ts      React Context — persistent user preferences (useHyperspace, forceTokenDisplay, enableEpicActions, enableWakeLock, enableFavourites, enableLongPress, enableActionLog, enableCompetitiveMode, bo1TimerMinutes, bo3TimerMinutes) backed by localStorage under key `user_settings`; forceTokenDisplay is a 3-way value ('always-on' | 'lof-only' | 'always-off'), defaulting to 'lof-only'; all boolean preferences default to `true`; bo1TimerMinutes defaults to 25, bo3TimerMinutes defaults to 55; migrates old enableForceToken boolean (false → 'always-off', true/missing → 'lof-only'); `UserSettingsProvider` wraps the app in `main.tsx`
+    useUserSettings.ts      React Context — persistent user preferences (useHyperspace, forceTokenDisplay, enableEpicActions, enableWakeLock, enableFavourites, enableLongPress, enableActionLog, enableCompetitiveMode, enableGameSelect, startScreen, bo1TimerMinutes, bo3TimerMinutes) backed by localStorage under key `user_settings`; forceTokenDisplay is a 3-way value ('always-on' | 'lof-only' | 'always-off'), defaulting to 'lof-only'; all boolean preferences default to `true` except enableGameSelect (default false — feature flag); startScreen ('gameSelect' | 'swu' | 'xwing') defaults to 'swu'; bo1TimerMinutes defaults to 25, bo3TimerMinutes defaults to 55; migrates old enableForceToken boolean (false → 'always-off', true/missing → 'lof-only'); `UserSettingsProvider` wraps the app in `main.tsx`
     useTournament.ts        Tournament state — TournamentState and TournamentRound interfaces; startTournament, startMatch, completeMatch, submitRound, dropTournament; persists to localStorage under key `tournament_state`; `startMatch` uses functional setState to avoid stale-closure bugs; `points` is a derived value (win=3, draw=1, loss=0) computed from completed rounds alongside `totals`
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
@@ -67,6 +68,7 @@ src/
     swuGameScreen.test.tsx  Game screen container tests
     swuHelpScreen.test.tsx  Help screen tests
     swuLoadingScreen.test.tsx Loading screen tests
+    swuGameSelectScreen.test.tsx Game select screen component tests
     swuInstallBanner.test.tsx Install banner component tests
     swuSetupScreen.test.tsx Setup screen container tests
     swuSettingsScreen.test.tsx Settings screen container tests
@@ -105,6 +107,8 @@ public/
   dmgCtrl-icon-512.png              App icon 512×512 (opaque); used in PWA manifest
   dmgCtrl-force-token.png           Force token icon (512×512 PNG); used on Force button and as watermark in Force overlay
   dmgctrl-icon-192-white.svg        White starburst logo SVG (192×192); used on the epic action button and as watermark in the epic action overlay
+  Star-Wars-Unlimited-logo-white.png Star Wars Unlimited logo (white); used as the SWU game button image on the game select screen
+  Star-Wars-X-wing-logo.png         Star Wars X-Wing logo; used as the X-Wing game button image on the game select screen (button disabled pending X-Wing screen)
   ...                       PWA manifest, icons
 
 .github/
@@ -133,7 +137,7 @@ All other state is owned at the component level:
 
 | State | Owner | How it flows |
 |---|---|---|
-| Current screen (`loading` / `setup` / `game` / `tournament` / `help` / `settings`) | `App` | Passed as callback props (`onReady`, `onConfirm`, `onBack`, `onHelp`, `onSettings`) |
+| Current screen (`loading` / `gameSelect` / `setup` / `game` / `tournament` / `help` / `settings`) | `App` | Passed as callback props (`onReady`, `onConfirm`, `onBack`, `onHelp`, `onSettings`); `gameSelect` is only reachable when `enableGameSelect` is true |
 | Help source (`'setup'` / `'game'` / `'tournament'`) | `App` | Determines which markdown file `SwuHelpScreen` renders; set by `handleHelp` based on the current screen before navigating to `'help'`; settings falls through to whichever screen was active before settings was opened (via `backStack`) |
 | Back stack (for help/settings back-navigation) | `App` | A `Screen[]` stack; pushed when navigating to help or settings, popped on back — supports any depth of overlay navigation |
 | `useBases()` loading state (for loading screen) | `App` | `App` calls `useBases()` and passes `loading` prop to `SwuLoadingScreen`; `SwuLoadingScreen` calls `onReady` as soon as the data is ready (`loading` becomes `false`) |

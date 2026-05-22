@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 const STORAGE_KEY = 'user_settings'
 
 type ForceTokenDisplay = 'always-on' | 'lof-only' | 'always-off'
+export type StartScreen = 'gameSelect' | 'swu' | 'xwing'
 
 interface UserSettings {
   useHyperspace: boolean
@@ -14,12 +15,16 @@ interface UserSettings {
   enableLongPress: boolean
   enableActionLog: boolean
   enableCompetitiveMode: boolean
+  enableGameSelect: boolean
+  startScreen: StartScreen
   bo1TimerMinutes: number
   bo3TimerMinutes: number
   meleePlayerGuid: string
 }
 
 const VALID_FORCE_TOKEN_DISPLAY: ForceTokenDisplay[] = ['always-on', 'lof-only', 'always-off']
+
+const VALID_START_SCREENS: StartScreen[] = ['gameSelect', 'swu', 'xwing']
 
 const DEFAULTS: UserSettings = {
   useHyperspace: true,
@@ -30,6 +35,8 @@ const DEFAULTS: UserSettings = {
   enableLongPress: true,
   enableActionLog: true,
   enableCompetitiveMode: true,
+  enableGameSelect: false,
+  startScreen: 'swu',
   bo1TimerMinutes: 25,
   bo3TimerMinutes: 55,
   meleePlayerGuid: '',
@@ -61,6 +68,10 @@ function load(): UserSettings {
       enableLongPress: (parsed.enableLongPress as boolean) ?? DEFAULTS.enableLongPress,
       enableActionLog: (parsed.enableActionLog as boolean) ?? DEFAULTS.enableActionLog,
       enableCompetitiveMode: (parsed.enableCompetitiveMode as boolean) ?? DEFAULTS.enableCompetitiveMode,
+      enableGameSelect: (parsed.enableGameSelect as boolean) ?? DEFAULTS.enableGameSelect,
+      startScreen: VALID_START_SCREENS.includes(parsed.startScreen as StartScreen)
+        ? (parsed.startScreen as StartScreen)
+        : DEFAULTS.startScreen,
       bo1TimerMinutes: (parsed.bo1TimerMinutes as number) ?? DEFAULTS.bo1TimerMinutes,
       bo3TimerMinutes: (parsed.bo3TimerMinutes as number) ?? DEFAULTS.bo3TimerMinutes,
       meleePlayerGuid: (parsed.meleePlayerGuid as string) ?? DEFAULTS.meleePlayerGuid,
@@ -83,6 +94,8 @@ type UserSettingsValue = UserSettings & {
   setEnableLongPress: (v: boolean) => void
   setEnableActionLog: (v: boolean) => void
   setEnableCompetitiveMode: (v: boolean) => void
+  setEnableGameSelect: (v: boolean) => void
+  setStartScreen: (v: StartScreen) => void
   setBo1TimerMinutes: (v: number) => void
   setBo3TimerMinutes: (v: number) => void
   setMeleePlayerGuid: (v: string) => void
@@ -110,6 +123,8 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     enableLongPress: settings.enableLongPress,
     enableActionLog: settings.enableActionLog,
     enableCompetitiveMode: settings.enableCompetitiveMode,
+    enableGameSelect: settings.enableGameSelect,
+    startScreen: settings.startScreen,
     bo1TimerMinutes: settings.bo1TimerMinutes,
     bo3TimerMinutes: settings.bo3TimerMinutes,
     meleePlayerGuid: settings.meleePlayerGuid,
@@ -121,6 +136,8 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     setEnableLongPress: (v) => update({ enableLongPress: v }),
     setEnableActionLog: (v) => update({ enableActionLog: v }),
     setEnableCompetitiveMode: (v) => update({ enableCompetitiveMode: v }),
+    setEnableGameSelect: (v) => update({ enableGameSelect: v }),
+    setStartScreen: (v) => update({ startScreen: v }),
     setBo1TimerMinutes: (v) => update({ bo1TimerMinutes: v }),
     setBo3TimerMinutes: (v) => update({ bo3TimerMinutes: v }),
     setMeleePlayerGuid: (v) => update({ meleePlayerGuid: v }),

@@ -269,4 +269,46 @@ describe('useUserSettings', () => {
     expect(result.current.enableCompetitiveMode).toBe(true)
   })
 
+  it('defaults enableGameSelect to false when storage is empty', () => {
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    expect(result.current.enableGameSelect).toBe(false)
+  })
+
+  it('falls back to false for enableGameSelect when stored JSON is corrupt', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key) =>
+      key === STORAGE_KEY ? 'not-valid-json{{{' : null
+    )
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    expect(result.current.enableGameSelect).toBe(false)
+  })
+
+  it('falls back to false for enableGameSelect when missing from stored JSON', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key) =>
+      key === STORAGE_KEY ? JSON.stringify({ useHyperspace: false }) : null
+    )
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    expect(result.current.enableGameSelect).toBe(false)
+  })
+
+  it('defaults startScreen to swu when storage is empty', () => {
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    expect(result.current.startScreen).toBe('swu')
+  })
+
+  it('falls back to swu for startScreen when stored JSON is corrupt', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key) =>
+      key === STORAGE_KEY ? 'not-valid-json{{{' : null
+    )
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    expect(result.current.startScreen).toBe('swu')
+  })
+
+  it('falls back to swu for startScreen when missing from stored JSON', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key) =>
+      key === STORAGE_KEY ? JSON.stringify({ useHyperspace: false }) : null
+    )
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    expect(result.current.startScreen).toBe('swu')
+  })
+
 })
