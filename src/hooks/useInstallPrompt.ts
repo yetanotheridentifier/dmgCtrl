@@ -27,9 +27,17 @@ export function useInstallPrompt(): UseInstallPromptReturn {
   const platform: 'ios' | 'android' | null = isIOS ? 'ios' : isAndroid ? 'android' : null
 
   useEffect(() => {
+    // Pick up the event if it fired before this hook mounted (captured in index.html inline script)
+    const w = window as Window & { __dmgInstallPrompt?: BeforeInstallPromptEvent }
+    if (w.__dmgInstallPrompt) {
+      setDeferredPrompt(w.__dmgInstallPrompt)
+    }
+
     const handler = (e: Event) => {
       e.preventDefault()
-      setDeferredPrompt(e as BeforeInstallPromptEvent)
+      const prompt = e as BeforeInstallPromptEvent
+      w.__dmgInstallPrompt = prompt
+      setDeferredPrompt(prompt)
     }
     window.addEventListener('beforeinstallprompt', handler)
     return () => window.removeEventListener('beforeinstallprompt', handler)
@@ -40,6 +48,7 @@ export function useInstallPrompt(): UseInstallPromptReturn {
   const onInstall = () => {
     if (!deferredPrompt) return
     void deferredPrompt.prompt()
+    delete (window as Window & { __dmgInstallPrompt?: BeforeInstallPromptEvent }).__dmgInstallPrompt
     sessionStorage.setItem('install_banner_dismissed', '1')
     setDismissed(true)
     setDeferredPrompt(null)
