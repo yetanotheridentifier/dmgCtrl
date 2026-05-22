@@ -18,11 +18,12 @@ export type SelectionMode = 'base-selector' | 'swudb-import' | 'favourites'
 interface Props {
   onConfirm: (base: Base, mode: SetupMode, format: Format) => void
   onHelp: () => void
+  onBack?: () => void
   onSettings?: () => void
   initialSelection?: InitialSelection | null
 }
 
-function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Props) {
+function SwuSetupScreen({ onConfirm, onHelp, onBack, onSettings, initialSelection }: Props) {
   const { useHyperspace, enableFavourites, enableCompetitiveMode } = useUserSettings()
   const { favourites, addFavourite, removeFavourite } = useFavourites()
   const setup = useSwuSetup(onConfirm, initialSelection)
@@ -174,6 +175,7 @@ function SwuSetupScreen({ onConfirm, onHelp, onSettings, initialSelection }: Pro
       onKeyChange={setup.handleKeyChange}
       onSubmit={handleSubmit}
       onHelp={onHelp}
+      onBack={onBack}
       onSettings={onSettings}
       selectionMode={selectionMode}
       onModeChange={handleModeChange}

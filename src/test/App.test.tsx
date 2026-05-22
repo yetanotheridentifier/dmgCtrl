@@ -94,6 +94,8 @@ const mockUserSettings = vi.hoisted(() => ({
   enableWakeLock: true,
   enableCompetitiveMode: false,
   enableFavourites: false,
+  enableGameSelect: false,
+  startScreen: 'swu',
   setUseHyperspace: vi.fn(),
   setEnableForceToken: vi.fn(),
   setEnableEpicActions: vi.fn(),
@@ -137,6 +139,8 @@ beforeEach(() => {
   mockUseTournament.completeMatch.mockReset()
   mockUseTournament.dropTournament.mockReset()
   mockUserSettings.enableCompetitiveMode = false
+  mockUserSettings.enableGameSelect = false
+  mockUserSettings.startScreen = 'swu'
 })
 
 afterEach(() => {
@@ -811,6 +815,41 @@ describe('App tournament navigation', () => {
     await user.click(screen.getByRole('button', { name: 'Back' }))
     await waitFor(() => expect(mockOnGameEnd).toHaveBeenCalled())
     expect(mockOnGameEnd).toHaveBeenCalledWith('SOR-026', 'SOR', expect.any(Boolean), expect.any(Number), 'bo3')
+  })
+
+})
+
+describe('App game select', () => {
+
+  it('transitions to setup screen after loading when enableGameSelect is false', async () => {
+    render(<App />)
+    await waitForSetup()
+    expect(getBaseSelectors()).toHaveLength(3)
+  })
+
+  it('transitions to game select screen after loading when enableGameSelect is true', async () => {
+    mockUserSettings.enableGameSelect = true
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /star wars unlimited/i })).toBeInTheDocument())
+  })
+
+  it('navigates to setup screen when Star Wars Unlimited is clicked on game select', async () => {
+    const user = userEvent.setup()
+    mockUserSettings.enableGameSelect = true
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /star wars unlimited/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /star wars unlimited/i }))
+    await waitForSetup()
+    expect(getBaseSelectors()).toHaveLength(3)
+  })
+
+  it('shows help screen when help is clicked on game select', async () => {
+    const user = userEvent.setup()
+    mockUserSettings.enableGameSelect = true
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /help/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /help/i }))
+    await waitFor(() => expect(screen.getByTestId('help-content')).toBeInTheDocument())
   })
 
 })

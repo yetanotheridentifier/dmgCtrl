@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import SwuLoadingScreen from './components/swuLoadingScreen'
+import SwuGameSelectScreen from './components/swuGameSelectScreen'
 import SwuSetupScreen from './components/swuSetupScreen'
 import SwuGameScreen from './components/swuGameScreen'
 import SwuTournamentScreen from './components/swuTournamentScreen'
@@ -13,7 +14,7 @@ import { onAppStart, onGameStart, onGameEnd, onAppInstall, onAppResume, onTourna
 import type { PlayMode, SetupMode } from './utils/playMode'
 import type { Format } from './utils/formatFilter'
 
-type Screen = 'loading' | 'setup' | 'game' | 'tournament' | 'help' | 'settings'
+type Screen = 'loading' | 'gameSelect' | 'setup' | 'game' | 'tournament' | 'help' | 'settings'
 
 function App() {
   const [screen, setScreen] = useState<Screen>('loading')
@@ -27,7 +28,7 @@ function App() {
   const [hasPlayedGameInCurrentMatch, setHasPlayedGameInCurrentMatch] = useState(false)
   const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament'>('setup')
   const { loading } = useBases()
-  const { useHyperspace } = useUserSettings()
+  const { useHyperspace, enableGameSelect } = useUserSettings()
   const gameStartTime = useRef<number>(0)
   const {
     tournament,
@@ -73,6 +74,8 @@ function App() {
   const handleReady = () => {
     if (tournament !== null) {
       setScreen('tournament')
+    } else if (enableGameSelect) {
+      setScreen('gameSelect')
     } else {
       setScreen('setup')
     }
@@ -175,11 +178,21 @@ function App() {
     return <SwuLoadingScreen loading={loading} onReady={handleReady} />
   }
 
+  if (screen === 'gameSelect') {
+    return (
+      <SwuGameSelectScreen
+        onSelectSwu={() => setScreen('setup')}
+        onHelp={handleHelp}
+      />
+    )
+  }
+
   if (screen === 'setup') {
     return (
       <SwuSetupScreen
         onConfirm={handleConfirm}
         onHelp={handleHelp}
+        onBack={enableGameSelect ? () => setScreen('gameSelect') : undefined}
         onSettings={handleSettings}
         initialSelection={lastSelection}
       />
