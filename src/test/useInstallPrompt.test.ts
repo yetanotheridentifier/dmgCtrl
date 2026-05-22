@@ -124,6 +124,19 @@ describe('useInstallPrompt', () => {
     expect(result.current.showBanner).toBe(false)
   })
 
+  // ── Pre-mount capture ─────────────────────────────────────────────────────
+
+  it('showBanner is true on Android when beforeinstallprompt was captured before mount', () => {
+    Object.defineProperty(window.navigator, 'userAgent', { value: androidUserAgent, configurable: true })
+    const mockPromptFn = vi.fn().mockResolvedValue(undefined)
+    const event = new Event('beforeinstallprompt')
+    Object.assign(event, { prompt: mockPromptFn, preventDefault: vi.fn() })
+    ;(window as unknown as Record<string, unknown>).__dmgInstallPrompt = event
+    const { result } = renderHook(() => useInstallPrompt())
+    expect(result.current.showBanner).toBe(true)
+    delete (window as unknown as Record<string, unknown>).__dmgInstallPrompt
+  })
+
   // ── Session persistence ───────────────────────────────────────────────────
 
   it('showBanner is false on iOS when already dismissed in sessionStorage', () => {
