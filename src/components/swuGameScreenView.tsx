@@ -845,13 +845,13 @@ function SwuGameScreenView({
               style={{
                 width: '100%',
                 background: 'transparent',
-                border: `1px solid ${pendingConfirm === 'loss' ? '#ef4444' : 'var(--color-ui-border)'}`,
+                border: `1px solid ${pendingConfirm === 'loss' ? 'var(--color-error)' : 'var(--color-ui-border)'}`,
                 borderRadius: '4px',
                 padding: '0.3rem 0',
                 cursor: matchOver ? 'default' : 'pointer',
                 fontSize: 'clamp(0.5rem, 1.1vw, 0.75rem)',
                 fontWeight: '300',
-                color: pendingConfirm === 'loss' ? '#ef4444' : 'var(--color-text-muted)',
+                color: pendingConfirm === 'loss' ? 'var(--color-error)' : 'var(--color-text-muted)',
                 letterSpacing: '0.05em',
                 textAlign: 'center',
                 WebkitTapHighlightColor: 'transparent',
@@ -883,7 +883,11 @@ function SwuGameScreenView({
             {/* Timer / Draw button — between opp markers and player markers */}
             {(() => {
               const isButton = timerInteractive || pendingConfirm === 'draw'
-              const isWarning = !timerInteractive && pendingConfirm !== 'draw' && timerRemaining < 60
+              const timerNotInteractive = !timerInteractive && pendingConfirm !== 'draw'
+              const timerColor = !timerNotInteractive ? 'var(--color-text-muted)'
+                : timerRemaining <= 60 ? 'var(--color-error)'
+                : timerRemaining <= 300 ? 'var(--color-warning)'
+                : 'var(--color-text-muted)'
               if (isButton) {
                 const isConfirm = pendingConfirm === 'draw'
                 return (
@@ -915,7 +919,7 @@ function SwuGameScreenView({
                     padding: '0.1rem 0',
                     fontSize: 'clamp(0.5rem, 1.1vw, 0.7rem)',
                     fontWeight: '300',
-                    color: isWarning ? '#ef4444' : 'var(--color-text-muted)',
+                    color: timerColor,
                     letterSpacing: '0.03em',
                     textAlign: 'center',
                   }}
@@ -950,13 +954,13 @@ function SwuGameScreenView({
               style={{
                 width: '100%',
                 background: 'transparent',
-                border: `1px solid ${pendingConfirm === 'win' ? '#22c55e' : 'var(--color-ui-border)'}`,
+                border: `1px solid ${pendingConfirm === 'win' ? 'var(--color-success)' : 'var(--color-ui-border)'}`,
                 borderRadius: '4px',
                 padding: '0.3rem 0',
                 cursor: matchOver ? 'default' : 'pointer',
                 fontSize: 'clamp(0.5rem, 1.1vw, 0.75rem)',
                 fontWeight: '300',
-                color: pendingConfirm === 'win' ? '#22c55e' : 'var(--color-text-muted)',
+                color: pendingConfirm === 'win' ? 'var(--color-success)' : 'var(--color-text-muted)',
                 letterSpacing: '0.05em',
                 textAlign: 'center',
                 WebkitTapHighlightColor: 'transparent',

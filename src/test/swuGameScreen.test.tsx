@@ -1354,7 +1354,7 @@ describe('SwuGameScreen', () => {
     await user.click(screen.getByTestId('mystic-action-btn'))
     await user.click(screen.getByTestId('force-token'))
     await user.click(screen.getByTestId('log-btn'))
-    expect(screen.getByText('Force gained (monastery)')).toBeInTheDocument()
+    expect(screen.getByText('Force gained (Monastery)')).toBeInTheDocument()
   })
 
   it('Round counter is not shown when action log is disabled', () => {
@@ -1471,12 +1471,44 @@ describe('SwuGameScreen', () => {
     expect(screen.getByTestId('score-timer')).toHaveTextContent('24:00')
   })
 
-  it('timer text is red when less than 60 seconds remain', async () => {
+  it('timer text is neutral above 300 seconds remaining', async () => {
+    mockUseTimer.mockReturnValue({ remaining: 301, isRunning: true, isExpired: false, start: vi.fn(), reset: vi.fn() })
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await startGame(user)
+    expect(screen.getByTestId('score-timer')).toHaveStyle({ color: 'var(--color-text-muted)' })
+  })
+
+  it('timer text is amber at exactly 300 seconds remaining', async () => {
+    mockUseTimer.mockReturnValue({ remaining: 300, isRunning: true, isExpired: false, start: vi.fn(), reset: vi.fn() })
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await startGame(user)
+    expect(screen.getByTestId('score-timer')).toHaveStyle({ color: 'var(--color-warning)' })
+  })
+
+  it('timer text is amber between 300 and 60 seconds remaining', async () => {
+    mockUseTimer.mockReturnValue({ remaining: 180, isRunning: true, isExpired: false, start: vi.fn(), reset: vi.fn() })
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await startGame(user)
+    expect(screen.getByTestId('score-timer')).toHaveStyle({ color: 'var(--color-warning)' })
+  })
+
+  it('timer text is red at exactly 60 seconds remaining', async () => {
+    mockUseTimer.mockReturnValue({ remaining: 60, isRunning: true, isExpired: false, start: vi.fn(), reset: vi.fn() })
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
+    await startGame(user)
+    expect(screen.getByTestId('score-timer')).toHaveStyle({ color: 'var(--color-error)' })
+  })
+
+  it('timer text is red below 60 seconds remaining', async () => {
     mockUseTimer.mockReturnValue({ remaining: 59, isRunning: true, isExpired: false, start: vi.fn(), reset: vi.fn() })
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
     await startGame(user)
-    expect(screen.getByTestId('score-timer')).toHaveStyle({ color: '#ef4444' })
+    expect(screen.getByTestId('score-timer')).toHaveStyle({ color: 'var(--color-error)' })
   })
 
   it('timer is not shown when playMode is not provided', () => {

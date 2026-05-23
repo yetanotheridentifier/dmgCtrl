@@ -83,7 +83,7 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
     if (game.round === 0) return
     const prev = game.snapshot()
     game.incrementBy(n)
-    log.add({ type: 'hit', message: `Hit +${n}`, color: '#ef4444', prevState: prev })
+    log.add({ type: 'hit', message: `Hit +${n}`, color: 'var(--color-error)', prevState: prev })
     void onDamageDealt(baseKey, baseSet, n)
   }
 
@@ -91,14 +91,14 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
     if (game.round === 0) return
     const prev = game.snapshot()
     game.decrementBy(n)
-    log.add({ type: 'heal', message: `Heal −${n}`, color: '#22c55e', prevState: prev })
+    log.add({ type: 'heal', message: `Heal −${n}`, color: 'var(--color-success)', prevState: prev })
     void onDamageHealed(baseKey, baseSet, n)
   }
 
   const handleForceGain = () => {
     const prev = game.snapshot()
     game.toggleForce()
-    log.add({ type: 'force-gain', message: 'Force gained', color: '#3b82f6', prevState: prev })
+    log.add({ type: 'force-gain', message: 'Force gained', color: 'var(--color-force)', prevState: prev })
     void onForceGained(baseKey, baseSet)
   }
 
@@ -112,7 +112,7 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
   const handleEpicActionMark = () => {
     const prev = game.snapshot()
     game.markEpicActionUsed()
-    log.add({ type: 'epic', message: 'Epic action used', color: '#f5c518', prevState: prev })
+    log.add({ type: 'epic', message: 'Epic action used', color: 'var(--color-epic)', prevState: prev })
     setEpicOverlayDismissed(false)
     void onEpicActionUsed(baseKey, baseSet)
   }
@@ -120,7 +120,7 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
   const handleMonasteryAction = () => {
     const prev = game.snapshot()
     game.gainForceViaMonastery()
-    log.add({ type: 'monastery', message: 'Force gained (monastery)', color: '#3b82f6', prevState: prev })
+    log.add({ type: 'monastery', message: 'Force gained (Monastery)', color: 'var(--color-force)', prevState: prev })
     void onForceGained(baseKey, baseSet)
   }
 

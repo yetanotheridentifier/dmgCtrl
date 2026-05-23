@@ -15,14 +15,14 @@ const mockState = {
 const entry1 = {
   type: 'hit' as const,
   message: 'Hit: +1 (0 → 1)',
-  color: '#ef4444',
+  color: 'var(--color-error)',
   prevState: mockState,
 }
 
 const entry2 = {
   type: 'heal' as const,
   message: 'Heal: -1 (2 → 1)',
-  color: '#22c55e',
+  color: 'var(--color-success)',
   prevState: { ...mockState, damage: 2 },
 }
 
