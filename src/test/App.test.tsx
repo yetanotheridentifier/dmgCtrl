@@ -49,6 +49,8 @@ vi.mock('../services/analytics', () => ({
   onForceUsed: vi.fn(),
   onMatchCompleted: vi.fn(),
   onImageLoadFailed: vi.fn(),
+  onXwingGameStarted: vi.fn().mockResolvedValue(undefined),
+  onXwingGameEnded: vi.fn().mockResolvedValue(undefined),
 }))
 
 const mockBases = vi.hoisted(() => [
@@ -850,6 +852,26 @@ describe('App game select', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /help/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /help/i }))
     await waitFor(() => expect(screen.getByTestId('help-content')).toBeInTheDocument())
+  })
+
+  it('navigates to xwing screen when X-Wing is clicked on game select', async () => {
+    const user = userEvent.setup()
+    mockUserSettings.enableGameSelect = true
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
+    await waitFor(() => expect(screen.getByTestId('start-game-btn')).toBeInTheDocument())
+  })
+
+  it('back from xwing returns to game select', async () => {
+    const user = userEvent.setup()
+    mockUserSettings.enableGameSelect = true
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
+    await waitFor(() => expect(screen.getByTestId('start-game-btn')).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /back/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
   })
 
 })

@@ -8,6 +8,7 @@ import {
   onSettingChanged, onDeckImportSuccess, onDeckImportFailure,
   onImageLoadFailed, onBasesLoadFailed, onBasesLoadStale, onWakeLockFailed,
   onTournamentStarted, onTournamentRoundCompleted, onTournamentDropped, onTournamentEnded,
+  onXwingGameStarted, onXwingGameEnded,
 } from '../services/analytics'
 import { version as APP_VERSION } from '../../package.json'
 
@@ -803,6 +804,86 @@ describe('onTournamentEnded', () => {
 
   it('does not include user-identifiable fields', async () => {
     await onTournamentEnded(5, 3, 1, 1, 10, 'premier', 'bo3')
+    const keys = Object.keys(getLastBody().data ?? {})
+    for (const piiKey of ['userId', 'email', 'name', 'ip', 'user']) {
+      expect(keys).not.toContain(piiKey)
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// onXwingGameStarted
+// ---------------------------------------------------------------------------
+
+describe('onXwingGameStarted', () => {
+  it('sends event name xwing_game_started', async () => {
+    await onXwingGameStarted(0, 0)
+    expect(getLastBody().name).toBe('xwing_game_started')
+  })
+
+  it('includes player_deficit in payload', async () => {
+    await onXwingGameStarted(3, 0)
+    expect(getLastBody().data.player_deficit).toBe(3)
+  })
+
+  it('includes opponent_deficit in payload', async () => {
+    await onXwingGameStarted(0, 5)
+    expect(getLastBody().data.opponent_deficit).toBe(5)
+  })
+
+  it('does not include user-identifiable fields', async () => {
+    await onXwingGameStarted(0, 0)
+    const keys = Object.keys(getLastBody().data ?? {})
+    for (const piiKey of ['userId', 'email', 'name', 'ip', 'user']) {
+      expect(keys).not.toContain(piiKey)
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// onXwingGameEnded
+// ---------------------------------------------------------------------------
+
+describe('onXwingGameEnded', () => {
+  const payload = { final_round: 3, player_score: 25, opponent_score: 50, player_deficit: 0, opponent_deficit: 0, result: 'loss' as const }
+
+  it('sends event name xwing_game_ended', async () => {
+    await onXwingGameEnded(payload)
+    expect(getLastBody().name).toBe('xwing_game_ended')
+  })
+
+  it('includes final_round in payload', async () => {
+    await onXwingGameEnded(payload)
+    expect(getLastBody().data.final_round).toBe(3)
+  })
+
+  it('includes player_score in payload', async () => {
+    await onXwingGameEnded(payload)
+    expect(getLastBody().data.player_score).toBe(25)
+  })
+
+  it('includes opponent_score in payload', async () => {
+    await onXwingGameEnded(payload)
+    expect(getLastBody().data.opponent_score).toBe(50)
+  })
+
+  it('includes player_deficit in payload', async () => {
+    await onXwingGameEnded(payload)
+    expect(getLastBody().data.player_deficit).toBe(0)
+  })
+
+  it('includes opponent_deficit in payload', async () => {
+    await onXwingGameEnded(payload)
+    expect(getLastBody().data.opponent_deficit).toBe(0)
+  })
+
+  it('includes result in payload', async () => {
+    await onXwingGameEnded(payload)
+    expect(getLastBody().data.result).toBe('loss')
+  })
+
+  it('does not include user-identifiable fields', async () => {
+    await onXwingGameEnded(payload)
     const keys = Object.keys(getLastBody().data ?? {})
     for (const piiKey of ['userId', 'email', 'name', 'ip', 'user']) {
       expect(keys).not.toContain(piiKey)

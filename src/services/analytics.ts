@@ -164,3 +164,20 @@ export function onTournamentDropped(roundsCompleted: number, format: string, pla
 export function onTournamentEnded(totalRounds: number, won: number, lost: number, drawn: number, points: number, format: string, playMode: string): Promise<void> {
   return sendEvent('tournament_ended', { totalRounds, won, lost, drawn, points, format, playMode })
 }
+
+export interface XwingGameEndedPayload {
+  final_round: number
+  player_score: number
+  opponent_score: number
+  player_deficit: number
+  opponent_deficit: number
+  result: 'win' | 'loss' | 'draw' | null
+}
+
+export function onXwingGameStarted(playerDeficit: number, opponentDeficit: number): Promise<void> {
+  return sendEvent('xwing_game_started', { player_deficit: playerDeficit, opponent_deficit: opponentDeficit })
+}
+
+export function onXwingGameEnded(payload: XwingGameEndedPayload): Promise<void> {
+  return sendEvent('xwing_game_ended', payload as unknown as Record<string, unknown>)
+}

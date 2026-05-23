@@ -3,6 +3,7 @@ import SwuLoadingScreen from './components/swuLoadingScreen'
 import SwuGameSelectScreen from './components/swuGameSelectScreen'
 import SwuSetupScreen from './components/swuSetupScreen'
 import SwuGameScreen from './components/swuGameScreen'
+import XwingGameScreen from './components/xwingGameScreen'
 import SwuTournamentScreen from './components/swuTournamentScreen'
 import SwuHelpScreen from './components/swuHelpScreen'
 import SwuSettingsScreen from './components/swuSettingsScreen'
@@ -14,7 +15,7 @@ import { onAppStart, onGameStart, onGameEnd, onAppInstall, onAppResume, onTourna
 import type { PlayMode, SetupMode } from './utils/playMode'
 import type { Format } from './utils/formatFilter'
 
-type Screen = 'loading' | 'gameSelect' | 'setup' | 'game' | 'tournament' | 'help' | 'settings'
+type Screen = 'loading' | 'gameSelect' | 'xwing' | 'setup' | 'game' | 'tournament' | 'help' | 'settings'
 
 function App() {
   const [screen, setScreen] = useState<Screen>('loading')
@@ -24,6 +25,7 @@ function App() {
   const [selectedFormat, setSelectedFormat] = useState<Format>('premier')
   const [lastSelection, setLastSelection] = useState<InitialSelection | null>(null)
   const [isInGame, setIsInGame] = useState(false)
+  const [isInXwing, setIsInXwing] = useState(false)
   const [tournamentCurrentBase, setTournamentCurrentBase] = useState<Base | null>(null)
   const [hasPlayedGameInCurrentMatch, setHasPlayedGameInCurrentMatch] = useState(false)
   const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament'>('setup')
@@ -168,6 +170,11 @@ function App() {
     setScreen('settings')
   }
 
+  const handleXwingBack = () => {
+    setIsInXwing(false)
+    setScreen(enableGameSelect ? 'gameSelect' : 'setup')
+  }
+
   const handleOverlayBack = () => {
     const target = backStack[backStack.length - 1] ?? 'setup'
     setBackStack(prev => prev.slice(0, -1))
@@ -182,6 +189,7 @@ function App() {
     return (
       <SwuGameSelectScreen
         onSelectSwu={() => setScreen('setup')}
+        onSelectXwing={() => { setIsInXwing(true); setScreen('xwing') }}
         onHelp={handleHelp}
       />
     )
@@ -206,6 +214,15 @@ function App() {
 
   return (
     <>
+      {isInXwing && (
+        <div style={screen === 'xwing' ? undefined : { display: 'none' }}>
+          <XwingGameScreen
+            onBack={handleXwingBack}
+            onHelp={handleHelp}
+            onSettings={handleSettings}
+          />
+        </div>
+      )}
       {isInGame && gameBase && (
         <div style={screen === 'game' ? undefined : { display: 'none' }}>
           <SwuGameScreen
