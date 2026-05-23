@@ -65,7 +65,7 @@ function SwuInstallBanner({ platform, onInstall, onDismiss }: Props) {
               padding: '0.4rem 1.1rem',
               borderRadius: '6px',
               border: 'none',
-              background: '#4a90d9',
+              background: 'var(--color-force)',
               color: '#fff',
               fontSize: 'inherit',
               fontWeight: 600,

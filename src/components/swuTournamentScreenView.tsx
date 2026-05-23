@@ -165,9 +165,9 @@ function resultLabel(result: 'won' | 'lost' | 'drawn' | null): string {
 }
 
 function resultColor(result: 'won' | 'lost' | 'drawn' | null): string {
-  if (result === 'won') return '#22c55e'
+  if (result === 'won') return 'var(--color-success)'
   if (result === 'lost') return 'var(--color-error)'
-  if (result === 'drawn') return '#facc15'
+  if (result === 'drawn') return 'var(--color-epic)'
   return 'var(--color-text-disabled)'
 }
 

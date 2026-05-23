@@ -44,7 +44,7 @@ src/
     useSwuGame.ts           Damage counter, epic action used state, Force token enabled and active state
     useSwuSetup.ts          Setup screen logic — filtering, auto-select, format state, and play mode state; selectedFormat (persisted to pref_format), selectedPlayMode (persisted to pref_play_mode), validSets, handleFormatChange, handlePlayModeChange; clearing selection when the current set is not valid for the new format
     useMatch.ts             Match score state — playerScore, opponentScore, matchOver (computed), matchResult ('won'|'lost'|'drawn'|null, computed), incrementPlayerScore, incrementOpponentScore, recordDraw, closeByTimer, resetMatch, restoreState; maxScore is 1 for bo1, 2 for bo3; scores are clamped at maxScore; matchOver also true when matchDrawn or matchClosedByTimer flags are set; matchResult derived from final scores when match closes early
-    useTimer.ts             Countdown timer hook — remaining (seconds), isRunning, isExpired; start (idempotent — only starts once), reset; records wall-clock start time and computes remaining from elapsed time on each tick (not by counting interval ticks), so the display catches up correctly after the device screen is off; a visibilitychange listener forces an immediate recalculation when the page becomes visible again; start is called by the game screen container on first game start
+    useTimer.ts             Countdown timer hook — remaining (seconds), isRunning, isExpired; start (idempotent — only starts once), reset; records wall-clock start time and computes remaining from elapsed time on each tick (not by counting interval ticks); the timer never pauses — backgrounding, opening help, or opening settings does not stop it; a visibilitychange listener forces an immediate recalculation when the page becomes visible again so the display catches up after the screen has been off; start is called by the game screen container on first game start
     useUserSettings.ts      React Context — persistent user preferences (useHyperspace, forceTokenDisplay, enableEpicActions, enableWakeLock, enableFavourites, enableLongPress, enableActionLog, enableCompetitiveMode, enableGameSelect, startScreen, bo1TimerMinutes, bo3TimerMinutes) backed by localStorage under key `user_settings`; forceTokenDisplay is a 3-way value ('always-on' | 'lof-only' | 'always-off'), defaulting to 'lof-only'; all boolean preferences default to `true` except enableGameSelect (default false — feature flag); startScreen ('gameSelect' | 'swu' | 'xwing') defaults to 'swu'; bo1TimerMinutes defaults to 25, bo3TimerMinutes defaults to 55; migrates old enableForceToken boolean (false → 'always-off', true/missing → 'lof-only'); `UserSettingsProvider` wraps the app in `main.tsx`
     useTournament.ts        Tournament state — TournamentState and TournamentRound interfaces; startTournament, startMatch, completeMatch, submitRound, dropTournament; persists to localStorage under key `tournament_state`; `startMatch` uses functional setState to avoid stale-closure bugs; `points` is a derived value (win=3, draw=1, loss=0) computed from completed rounds alongside `totals`
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
@@ -449,8 +449,11 @@ All styling is done with **inline styles** (React `style` prop). There is no CSS
 | `--color-ui-border` | `#6b7280` | Back/help button borders |
 | `--color-ui-border-muted` | `#9ca3af` | Back/help button icon colour |
 | `--color-ui-border-muted-rgb` | `156, 163, 175` | `rgba()` shadow values using the UI border colour |
-| `--color-error` | `#ff6b6b` | Error messages, fallback states |
-| `--color-epic` | `#f5c518` | Epic action button, token overlay border and glow |
+| `--color-error` | `#ff6b6b` | Error/loss states — timer ≤ 1:00, loss button, hit log entry |
+| `--color-warning` | `#f5a623` | Timer amber warning state (≤ 5:00 remaining) |
+| `--color-success` | `#22c55e` | Win/heal states — win button, heal log entry, tournament win result |
+| `--color-force` | `#3b82f6` | Force gain log entries, install banner button |
+| `--color-epic` | `#f5c518` | Epic action button, token overlay, epic log entry, tournament drawn result |
 | `--color-epic-rgb` | `245, 197, 24` | `rgba()` shadow values using the epic colour |
 
 Pros: no class name conflicts, styling is co-located with component logic, easy to make props-driven style decisions, palette changes are a one-line edit in `index.css`.
@@ -605,7 +608,7 @@ All three buttons (Opp, timer/Draw, You) are full-width within the 5vw panel col
 **Timer display and interactivity:**
 - `timerInteractive` is true when `playMode !== 'casual'` and `!matchOver` and `pendingConfirm === null` and (`isPreFirstGame` OR `timer.isExpired`); `isPreFirstGame = game.round === 0 && gamesPlayed === 0` — between Bo3 games (`round === 0` after a reset, but games have been played) the timer is not interactive and shows the running time
 - When `timerInteractive` OR `pendingConfirm === 'draw'`: rendered as a `<button>` — shows "Draw" (grey, `--color-text-muted`) when interactive, "Confirm" (accent blue, `--color-accent`) when `pendingConfirm === 'draw'`
-- When not interactive: rendered as a plain `<div>` (no border) showing `MM:SS`; text turns red when `remaining < 60`
+- When not interactive: rendered as a plain `<div>` (no border) showing `MM:SS`; text colour: neutral (`--color-text-muted`) above 5:00, amber (`--color-warning`) at 5:00 or below, red (`--color-error`) at 1:00 or below
 - The timer starts (once) when `handleStartGame` calls `timer.start()`; `useTimer` is idempotent — subsequent calls to `start()` have no effect
 
 **Win/loss/draw confirmation flow:**
