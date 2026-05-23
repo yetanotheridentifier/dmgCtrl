@@ -4,10 +4,11 @@ import { HelpIcon } from './icons'
 
 interface Props {
   onSelectSwu: () => void
+  onSelectXwing: () => void
   onHelp: () => void
 }
 
-function SwuGameSelectScreen({ onSelectSwu, onHelp }: Props) {
+function SwuGameSelectScreen({ onSelectSwu, onSelectXwing, onHelp }: Props) {
   const { isPortrait } = useOrientation()
 
   const buttonBase: React.CSSProperties = {
@@ -109,16 +110,9 @@ function SwuGameSelectScreen({ onSelectSwu, onHelp }: Props) {
             </button>
 
             <button
-              disabled
+              onClick={onSelectXwing}
               aria-label="Star Wars X-Wing"
-              style={{
-                ...buttonBase,
-                flex: 1,
-                opacity: 0.35,
-                cursor: 'not-allowed',
-                border: '2px solid var(--color-ui-border-muted)',
-                boxShadow: 'none',
-              }}
+              style={{ ...buttonBase, flex: 1 }}
             >
               <img
                 src={`${import.meta.env.BASE_URL}Star-Wars-X-wing-logo.png`}

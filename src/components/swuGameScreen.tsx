@@ -9,8 +9,7 @@ import { useUserSettings } from '../hooks/useUserSettings'
 import { useMatch } from '../hooks/useMatch'
 import { useTimer } from '../hooks/useTimer'
 import SwuGameScreenView from './swuGameScreenView'
-import { BackIcon } from './icons'
-import AppScreenLayout from './layout/AppScreenLayout'
+import RotatePrompt from './layout/RotatePrompt'
 import { onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed, onEpicActionUsed, onForceGained, onForceUsed, onMatchCompleted } from '../services/analytics'
 import type { PlayMode } from '../utils/playMode'
 
@@ -212,59 +211,7 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
   }
 
   if (isPortrait) {
-    return (
-      <AppScreenLayout>
-        <button
-          onClick={handleReset}
-          aria-label="Back"
-          style={{
-            position: 'absolute',
-            top: 'calc(env(safe-area-inset-top) + 5vw)',
-            left: 'calc(env(safe-area-inset-left) + 5vw)',
-            width: '5vw',
-            height: '5vw',
-            minWidth: '36px',
-            minHeight: '36px',
-            background: 'transparent',
-            border: '2px solid #6b7280',
-            borderRadius: '8px',
-            color: '#9ca3af',
-            fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10,
-            WebkitTapHighlightColor: 'transparent',
-            boxShadow: '0 0 8px rgba(156, 163, 175, 0.2)',
-          }}
-        >
-          <BackIcon />
-        </button>
-        <div style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '2rem',
-          zIndex: 1,
-        }}>
-          <div style={{ fontSize: '3rem', color: '#4fc3f7' }}>↻</div>
-          <p style={{
-            color: '#ffffff',
-            fontWeight: '300',
-            fontSize: 'clamp(1rem, 5vw, 1.4rem)',
-            letterSpacing: '0.05em',
-            margin: 0,
-            textAlign: 'center',
-            padding: '0 10vw',
-          }}>
-            Please rotate to landscape
-          </p>
-        </div>
-      </AppScreenLayout>
-    )
+    return <RotatePrompt onBack={handleReset} />
   }
 
   const showForce = forceTokenDisplay !== 'always-off' &&

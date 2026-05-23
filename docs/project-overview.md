@@ -8,11 +8,14 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 
 ## Roadmap
 
-### Game select screen (in progress)
-- X-Wing screen (pending)
+### X-Wing (in progress)
+- ✅ Game screen (#137) — pre-game deficit entry (0–4 per side), dual score counters (0–50), drag scrubber on all buttons, result banner centred between scores at game over
+- Timer (#228)
+- Round tracker (#230)
+- Help screen (#231)
+- Remaining features (#232) — includes applying stored deficit to score when opponent ships are destroyed
 
 ### Future games
-- X-Wing
 - Kill Team
 - Warhammer 40K
 - Mordheim / Old World
