@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import TimerStepper from '../components/shared/TimerStepper'
+import TimerStepper from '../components/shared/timerStepper'
 
 const defaultProps = {
   label: 'Game Timer',

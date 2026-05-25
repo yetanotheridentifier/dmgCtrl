@@ -5,7 +5,7 @@ import SwuSetupScreen from './components/swuSetupScreen'
 import SwuGameScreen from './components/swuGameScreen'
 import XwingGameScreen from './components/xwingGameScreen'
 import SwuTournamentScreen from './components/swuTournamentScreen'
-import SwuHelpScreen from './components/swuHelpScreen'
+import HelpScreen from './components/helpScreen'
 import SettingsScreen from './components/settingsScreen'
 import { Base, useBases } from './hooks/useBases'
 import { InitialSelection } from './hooks/useSwuSetup'
@@ -28,7 +28,7 @@ function App() {
   const [isInXwing, setIsInXwing] = useState(false)
   const [tournamentCurrentBase, setTournamentCurrentBase] = useState<Base | null>(null)
   const [hasPlayedGameInCurrentMatch, setHasPlayedGameInCurrentMatch] = useState(false)
-  const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament'>('setup')
+  const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament' | 'xwing'>('setup')
   const { loading } = useBases()
   const { useHyperspace, enableGameSelect } = useUserSettings()
   const gameStartTime = useRef<number>(0)
@@ -155,10 +155,12 @@ function App() {
   }
 
   const handleHelp = () => {
-    const source: 'setup' | 'game' | 'tournament' =
+    const source: 'setup' | 'game' | 'tournament' | 'xwing' =
       screen === 'game' ? 'game' :
       screen === 'settings' && backStack[backStack.length - 1] === 'game' ? 'game' :
       screen === 'tournament' ? 'tournament' :
+      screen === 'xwing' ? 'xwing' :
+      screen === 'settings' && backStack[backStack.length - 1] === 'xwing' ? 'xwing' :
       'setup'
     setHelpSource(source)
     setBackStack(prev => [...prev, screen])
@@ -190,7 +192,6 @@ function App() {
       <GameSelectScreen
         onSelectSwu={() => setScreen('setup')}
         onSelectXwing={() => { setIsInXwing(true); setScreen('xwing') }}
-        onHelp={handleHelp}
       />
     )
   }
@@ -256,7 +257,7 @@ function App() {
           onSettings={handleSettings}
         />
       )}
-      {screen === 'help' && <SwuHelpScreen onBack={handleOverlayBack} source={helpSource} />}
+      {screen === 'help' && <HelpScreen onBack={handleOverlayBack} source={helpSource} />}
       {screen === 'settings' && <SettingsScreen onBack={handleOverlayBack} onHelp={handleHelp} />}
     </>
   )

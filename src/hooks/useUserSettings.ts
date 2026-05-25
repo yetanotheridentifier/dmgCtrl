@@ -36,7 +36,7 @@ const DEFAULTS: UserSettings = {
   enableLongPress: true,
   enableActionLog: true,
   enableCompetitiveMode: true,
-  enableGameSelect: false,
+  enableGameSelect: true,
   startScreen: 'swu',
   bo1TimerMinutes: 25,
   bo3TimerMinutes: 55,

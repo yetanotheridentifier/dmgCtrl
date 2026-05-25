@@ -1,5 +1,5 @@
 ﻿import { useEffect } from 'react'
-import AppScreenLayout from './layout/AppScreenLayout'
+import AppScreenLayout from './layout/appScreenLayout'
 
 interface Props {
   loading: boolean

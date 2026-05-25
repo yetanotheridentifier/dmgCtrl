@@ -1,5 +1,5 @@
 import { Base } from '../hooks/useBases'
-import AppScreenLayout from './layout/AppScreenLayout'
+import AppScreenLayout from './layout/appScreenLayout'
 import ImagePreview from './imagePreview'
 import { useOrientation } from '../hooks/useOrientation'
 import { CogIcon, ForwardIcon, HelpIcon } from './icons'

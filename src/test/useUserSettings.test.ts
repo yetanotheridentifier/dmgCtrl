@@ -269,25 +269,25 @@ describe('useUserSettings', () => {
     expect(result.current.enableCompetitiveMode).toBe(true)
   })
 
-  it('defaults enableGameSelect to false when storage is empty', () => {
+  it('defaults enableGameSelect to true when storage is empty', () => {
     const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableGameSelect).toBe(false)
+    expect(result.current.enableGameSelect).toBe(true)
   })
 
-  it('falls back to false for enableGameSelect when stored JSON is corrupt', () => {
+  it('falls back to true for enableGameSelect when stored JSON is corrupt', () => {
     vi.mocked(localStorage.getItem).mockImplementation((key) =>
       key === STORAGE_KEY ? 'not-valid-json{{{' : null
     )
     const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableGameSelect).toBe(false)
+    expect(result.current.enableGameSelect).toBe(true)
   })
 
-  it('falls back to false for enableGameSelect when missing from stored JSON', () => {
+  it('falls back to true for enableGameSelect when missing from stored JSON', () => {
     vi.mocked(localStorage.getItem).mockImplementation((key) =>
       key === STORAGE_KEY ? JSON.stringify({ useHyperspace: false }) : null
     )
     const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.enableGameSelect).toBe(false)
+    expect(result.current.enableGameSelect).toBe(true)
   })
 
   it('defaults startScreen to swu when storage is empty', () => {

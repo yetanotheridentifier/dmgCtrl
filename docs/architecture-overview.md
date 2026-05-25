@@ -6,10 +6,10 @@
 
 ## 1. Overview
 
-**dmgCtrl** is a mobile-first progressive web app (PWA) designed to assist players of card games with game-state tracking. The current implementation targets **Star Wars Unlimited (SWU)**.
+**dmgCtrl** is a mobile-first progressive web app (PWA) designed to assist players of tabletop games with game-state tracking. The current implementation supports **Star Wars Unlimited (SWU)** and **Star Wars X-Wing**.
 
 Core functionality:
-- **Loading screen** — splash screen (icon + "LOADING") while base data is fetched; transitions to the setup screen as soon as data is ready
+- **Loading screen** — splash screen (icon + "LOADING") while base data is fetched; transitions to the game select screen (default) or setup screen as soon as data is ready
 - **Base selection** — filter and choose a base card by set, aspect, and card identity; or import a deck from swudb.com
 - **Damage tracking** — increment and decrement a counter against the base's HP to track remaining health
 - **Hyperspace art** — optionally display the premium "hyperspace" variant of a base card
@@ -45,7 +45,7 @@ The app is served at `/dmgCtrl/` and is designed to be added to an iOS home scre
 - Not a full rules engine — does not enforce card rules, abilities, or legality
 - Not a deck builder or collection tracker
 - Not multi-player or networked — all state is local
-- Not multi-game at launch — architecture is intended to support future games, but the current data layer is SWU-specific
+- Not a unified data layer — X-Wing is a self-contained tracker with no card data; the SWU card data layer is SWU-specific
 
 ---
 
@@ -74,7 +74,7 @@ The app is served at `/dmgCtrl/` and is designed to be added to an iOS home scre
 ```
 App
 ├── SwuLoadingScreen      (standalone screen — icon + LOADING text; transitions as soon as data is ready)
-├── GameSelectScreen   (standalone screen — game selector; shown when enableGameSelect is true; two logo buttons: Star Wars Unlimited and Star Wars X-Wing (both enabled); help button top-right)
+├── GameSelectScreen   (standalone screen — game selector; two logo buttons: Star Wars Unlimited and Star Wars X-Wing (both enabled); no help button)
 ├── XwingGameScreen       (standalone screen — X-Wing mission point tracker; landscape-only with RotatePrompt fallback; pre-game deficit entry (0–4 per side, stored for future scoring use) then dual score counters starting at 0; game ends at 50 points; countdown timer (default 75 min, configurable in Settings) starts with the game and is displayed in the centre column; timer freezes at game over or round 12; result banner replaces timer at game over; a round tracker bar (rounds 1–12) spans the top between the nav buttons — the current round segment extends downward as a seamless tab, tapping the next segment advances the round; useWakeLock keeps screen on)
 ├── SwuSetupScreen        (container)
 │   ├── useSwuSetup       (hook — filtering, auto-select)
@@ -83,7 +83,7 @@ App
 │   ├── useInstallPrompt  (hook — PWA install banner state: standalone detection, platform, deferred prompt)
 │   ├── SwuSetupScreenView (view — renders mode selector, selects, image preview, start button; ⚙ button opens settings)
 │   │   └── ImagePreview  (pure view — renders art or error message from props)
-│   └── SwuInstallBanner  (conditional — fixed bottom sheet for non-standalone users; iOS shows step-by-step instructions, Android shows Install button)
+│   └── InstallBanner  (conditional — fixed bottom sheet for non-standalone users; iOS shows step-by-step instructions, Android shows Install button)
 ├── SwuGameScreen         (container)
 │   ├── useSwuGame        (hook — damage counter, epic action, Force token enabled and active state)
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
@@ -98,7 +98,7 @@ App
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
 │   └── SwuTournamentScreenView (view — renders config inputs, base art preview, round table, action/drop buttons; portrait and landscape layouts)
 │       └── ImagePreview  (pure view — renders art or error message from props; fill='width' in portrait, fill='height' in landscape)
-├── SwuHelpScreen         (standalone screen — renders swuSetupHelp.md, swuGameHelp.md, or swuTournamentHelp.md based on source prop)
+├── HelpScreen         (standalone screen — renders swuSetupHelp.md, swuGameHelp.md, swuTournamentHelp.md, or xwingGameHelp.md based on source prop: 'setup', 'game', 'tournament', or 'xwing')
 └── SettingsScreen     (container)
     ├── useUserSettings   (hook — persistent user preferences)
     ├── useFavourites     (hook — favourites list, remove/clear operations)
@@ -116,7 +116,7 @@ Every screen is split into two files:
 
 This pattern keeps views thin and ensures logic is tested via hook and container tests rather than integration tests that have to simulate complex UI interactions.
 
-The exception is `SettingsScreenView`, which calls `useOrientation()` directly to handle iOS Dynamic Type font scaling — the same approach used by `SwuHelpScreen`.
+The exception is `SettingsScreenView`, which calls `useOrientation()` directly to handle iOS Dynamic Type font scaling — the same approach used by `HelpScreen`.
 
 ### Separation of concerns
 
@@ -145,7 +145,7 @@ The exception is `SettingsScreenView`, which calls `useOrientation()` directly t
 | **GameLogEntry** | The record stored by `useGameLog` for each action. Fields: `id` (UUID), `type` (string tag for styling: `hit`, `heal`, `epic`, `force-gain`, `force-use`, `monastery`, `round`, `game-result`), `message`, `color` (left strip accent), `prevState` (GameState snapshot for undo), optional `undoable` (defaults to true; set false to suppress the Undo button), optional `prevLogEntries` (full previous log state — set on `game-result` entries to restore the entire log on undo), optional `prevMatchState` (`playerScore`, `opponentScore`, `matchDrawn`, `matchClosedByTimer` snapshot — set on `game-result` entries to restore the match state on undo). |
 | **UserSettingsProvider** | The React Context provider from `useUserSettings.ts`. Wraps the app in `main.tsx` so all screens share one settings instance. Updates propagate immediately to all mounted consumers. |
 | **Hyperspace** | A premium variant of a card with alternate artwork. In this app, the `useHyperspace` setting (in `useUserSettings`) controls whether the Hyperspace variant is preferred on the game screen. |
-| **Loading screen** | The first screen shown on app start (`SwuLoadingScreen`). Displays the app icon and "LOADING" text. Transitions to the setup screen as soon as `useBases()` resolves — there is no minimum display time. |
+| **Loading screen** | The first screen shown on app start (`SwuLoadingScreen`). Displays the app icon and "LOADING" text. Transitions to the game select screen (when `enableGameSelect` is true, the default) or the setup screen as soon as `useBases()` resolves — there is no minimum display time. |
 | **Standard art** | The default card artwork. `frontArt` is the swu-db.com hi-res version (1560×1120); `frontArtLowRes` is the swuapi.com version (400×286). |
 | **hyperspaceArt** | The reliable low-res hyperspace image URL from swuapi.com (`cdn.starwarsunlimited.com`, 400×286). `null` for SOR/SHD/TWI (no longer in swuapi.com). |
 | **hyperspaceArtHiRes** | A constructed hi-res hyperspace image URL from swu-db.com (`cdn.swu-db.com`, 1560×1120). Derived from card number for active sets, or from the static offset map for SOR/SHD/TWI. May 403 for a small number of unindexed cards. |

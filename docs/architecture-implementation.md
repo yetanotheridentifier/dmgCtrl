@@ -16,23 +16,23 @@ src/
 
   components/
     layout/
-      AppScreenLayout.tsx  Shared full-screen layout wrapper (background, safe area)
-      RotatePrompt.tsx     Landscape-only prompt — renders a full-screen "Please rotate to landscape" message with a Back button; used by swuGameScreen and xwingGameScreen when isPortrait is true; extracted from swuGameScreen to avoid duplication
+      appScreenLayout.tsx  Shared full-screen layout wrapper (background, safe area)
+      rotatePrompt.tsx     Landscape-only prompt — renders a full-screen "Please rotate to landscape" message with a Back button; used by swuGameScreen and xwingGameScreen when isPortrait is true; extracted from swuGameScreen to avoid duplication
     icons.tsx               Reusable SVG icon components (BackIcon, ForwardIcon, HelpIcon, CogIcon, LogIcon, ShareIcon, HomeScreenIcon, DotsIcon, ChevronDownIcon)
     imagePreview.tsx        Pure view — renders card art or error message from props; fill='width' (default) constrains by width with aspect-ratio height; fill='height' constrains by height with aspect-ratio width, right-aligned via marginLeft:auto; uses useLayoutEffect to check img.complete on mount so cached images show immediately without waiting for a load event that the browser may not re-fire
-    GameLogOverlay.tsx      Game screen action log overlay — scrollable entry list; auto-scrolls to bottom; undo button on last undoable entry; round entries styled with blue gradient
+    gameLogOverlay.tsx      Game screen action log overlay — scrollable entry list; auto-scrolls to bottom; undo button on last undoable entry; round entries styled with blue gradient
     shared/
-      TimerDisplay.tsx      Shared countdown display — renders `formatTime(remaining)` with colour thresholds: > 5:00 → `--color-text-muted`, ≤ 5:00 → `--color-warning`, ≤ 1:00 → `--color-error`; accepts `remaining`, optional `testId` (default `"timer-display"`), optional `style` overrides spread after the component's own colour; used by both SWU game screen view (non-interactive timer branch) and X-Wing game screen view
-      TimerStepper.tsx      Shared [−] value [+] stepper for timer duration settings — props: `label`, `value`, optional `min`/`max`/`step` (arithmetic stepping), optional `values: number[]` (non-uniform value list — index-based stepping, overrides min/max/step), optional `formatValue: (v: number) => string` (custom display label; defaults to `${v} min`), `onChange: (v: number) => void`, `testId`; `data-testid` on the inner flex container; used by SettingsScreenView for bo1/bo3 (arithmetic 5–90 step 5) and X-Wing game timer (non-uniform list [5.5, 30, 35, …, 90], 5.5 formatted as '5:30 (test)')
+      timerDisplay.tsx      Shared countdown display — renders `formatTime(remaining)` with colour thresholds: > 5:00 → `--color-text-muted`, ≤ 5:00 → `--color-warning`, ≤ 1:00 → `--color-error`; accepts `remaining`, optional `testId` (default `"timer-display"`), optional `style` overrides spread after the component's own colour; used by both SWU game screen view (non-interactive timer branch) and X-Wing game screen view
+      timerStepper.tsx      Shared [−] value [+] stepper for timer duration settings — props: `label`, `value`, optional `min`/`max`/`step` (arithmetic stepping), optional `values: number[]` (non-uniform value list — index-based stepping, overrides min/max/step), optional `formatValue: (v: number) => string` (custom display label; defaults to `${v} min`), `onChange: (v: number) => void`, `testId`; `data-testid` on the inner flex container; used by SettingsScreenView for bo1/bo3 (arithmetic 5–90 step 5) and X-Wing game timer (non-uniform list [5.5, 30, 35, …, 90], 5.5 formatted as '5:30 (test)')
     swuGameScreen.tsx       Game screen container; uses RotatePrompt for portrait orientation
     swuGameScreenView.tsx   Game screen view (⚙ button always visible); uses `TimerDisplay` for the non-interactive timer branch (replacing local `formatTime`)
     xwingGameScreen.tsx     X-Wing game screen container — manages playerDeficit/opponentDeficit state (0–4, clamped; stored for future scoring use), gameStarted flag; calls `useTimer(xwingTimerMinutes * 60)` for the countdown; calls `useWakeLock(enableWakeLock)`; `timer.start()` called in handleStartGame; `timer.stop()` called via useEffect when `game.gameOver` becomes true (freezes remaining without reset); `timer.stop()` also called via useEffect when `game.round === 12` — the round tracker reaching its maximum halts the clock; `handleRoundAdvance` guards against timer expired, game over, and round ≥ 12 before calling `game.advanceRound()` and firing `onXwingRoundAdvanced(fromRound, toRound)`; analytics: onXwingGameStarted on start, onXwingGameEnded on back (if game was started) sending `elapsed_seconds` (duration − remaining) and `timer_expired`; deficit increment/decrement callbacks accept n: number; uses RotatePrompt for portrait orientation
     xwingGameScreenView.tsx X-Wing game screen view — pre-game: deficit entry (labels "Your deficit" / "Opp's deficit", [−][+] controls, Start Game button); in-game: labels "You" / "Opp", dual score counters; three-column layout (player column | centre column | opponent column); per-column layout: label → 15vmin score/deficit number → flex spacer → [−][+] buttons (14vmin each); centre column: invisible label placeholder aligns score-height area with outer scores, `TimerDisplay` (`testId="xwing-timer"`, `clamp(1.2rem, 8vmin, 3.5rem)` font) shown while game is in progress, result banner (Game Won / Game Lost / Draw) replaces it at game over — uses --color-success / --color-error / --color-text-muted; round tracker bar: absolute-positioned strip spanning between the nav buttons (`left/right: calc(25vw - 17.5vmin)`, `height: 5vw`, `minHeight: 36px`), 12 segment buttons each showing its round number — the current round segment is taller (`height: calc(100% + 10px)`) so it extends below the bar as a seamless tab with rounded bottom corners; border colour follows `roundTrackerColor(remaining)`: `--color-accent` > 5 min, `--color-warning` ≤ 5 min, `--color-error` ≤ 1 min; non-current segments use `--color-ui-border`; tapping the next segment advances the round (clickable only when not timerExpired); four independent useDragScrubber instances (score + deficit per side); all callbacks typed (n: number); drag indicator offsets increment right, decrement left; counters lock (disabled) when gameOver; log button shown only when enableActionLog is true (stub — no log panel yet)
-    swuHelpScreen.tsx       Help screen (renders swuSetupHelp.md, swuGameHelp.md, or swuTournamentHelp.md based on source prop; title row: back button + icon + "Help" h1)
+    helpScreen.tsx       Help screen (renders swuSetupHelp.md, swuGameHelp.md, swuTournamentHelp.md, or xwingGameHelp.md based on source prop ('setup', 'game', 'tournament', or 'xwing'); title row: back button + icon + "Help" h1)
     swuLoadingScreen.tsx    Loading screen (icon + "LOADING" text; calls onReady as soon as loading prop becomes false)
-    gameSelectScreen.tsx Game select screen — entry point when enableGameSelect is true; shows dmgCtrl title, Star Wars Unlimited button and Star Wars X-Wing button (both enabled, blue accent border + glow); help button top-right; orientation-aware: portrait uses large title (`clamp(1.8rem, 8vw, 3rem)`, `5vw` padding) and column button layout; landscape uses compact title (`clamp(1.2rem, 4vw, 1.8rem)`, `3vw 4vw` padding) and row button layout — matching the setup screen convention; `onSelectSwu` navigates to the SWU setup screen; `onSelectXwing` navigates to the X-Wing game screen; clicking the setup screen's dmgCtrl icon/title navigates back (via `onBack` prop on SwuSetupScreen)
-    swuInstallBanner.tsx    Install prompt banner — fixed bottom sheet shown on the setup screen for non-standalone users; iOS variant shows a bulleted step list: "Tap [DotsIcon] then", "[ShareIcon] Share", "[ChevronDownIcon] View More", "[HomeScreenIcon] Add to Home Screen"; Android variant shows an "Install" button that triggers the deferred `beforeinstallprompt` prompt; dismiss button (×) hides the banner for the session; font size matches setup screen (`clamp(0.9rem, 3vw, 1.1rem)`) with `WebkitTextSizeAdjust: 100%` to prevent iOS rotation inflation; rendered by SwuSetupScreen alongside SwuSetupScreenView
-    swuSetupScreen.tsx      Setup screen container — uses useInstallPrompt to conditionally render SwuInstallBanner; accepts optional `onBack` prop (passed from App when enableGameSelect is true) which is forwarded to the view
+    gameSelectScreen.tsx Game select screen — entry point when enableGameSelect is true; shows dmgCtrl title, Star Wars Unlimited button and Star Wars X-Wing button (both enabled, blue accent border + glow); no help button (help content is game-specific, not applicable at this level); orientation-aware: portrait uses large title (`clamp(1.8rem, 8vw, 3rem)`, `5vw` padding) and column button layout; landscape uses compact title (`clamp(1.2rem, 4vw, 1.8rem)`, `3vw 4vw` padding) and row button layout — matching the setup screen convention; `onSelectSwu` navigates to the SWU setup screen; `onSelectXwing` navigates to the X-Wing game screen; clicking the setup screen's dmgCtrl icon/title navigates back (via `onBack` prop on SwuSetupScreen)
+    installBanner.tsx    Install prompt banner — fixed bottom sheet shown on the setup screen for non-standalone users; iOS variant shows a bulleted step list: "Tap [DotsIcon] then", "[ShareIcon] Share", "[ChevronDownIcon] View More", "[HomeScreenIcon] Add to Home Screen"; Android variant shows an "Install" button that triggers the deferred `beforeinstallprompt` prompt; dismiss button (×) hides the banner for the session; font size matches setup screen (`clamp(0.9rem, 3vw, 1.1rem)`) with `WebkitTextSizeAdjust: 100%` to prevent iOS rotation inflation; rendered by SwuSetupScreen alongside SwuSetupScreenView
+    swuSetupScreen.tsx      Setup screen container — uses useInstallPrompt to conditionally render InstallBanner; accepts optional `onBack` prop (passed from App when enableGameSelect is true) which is forwarded to the view
     swuSetupScreenView.tsx  Setup screen view (title row: icon + "dmgCtrl" h1 + ⚙ button + help button); when `onBack` is provided the icon+title group becomes a clickable back button (role="button", aria-label="Game select") that returns to the game select screen
     settingsScreen.tsx   Settings screen container — reads `xwingTimerMinutes`/`setXwingTimerMinutes` from useUserSettings and passes to view alongside SWU timer values
     settingsScreenView.tsx Settings screen view — toggle list; uses `TimerStepper` for bo1/bo3 timer steppers (arithmetic, min=5, max=90, step=5) shown when enableCompetitiveMode is on, and for X-Wing game timer stepper (non-uniform values list [5.5, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90], with 5.5 formatted as '5:30 (test)', always visible with a section header); calls useOrientation directly for iOS font sizing
@@ -52,7 +52,7 @@ src/
     useSwuSetup.ts          Setup screen logic — filtering, auto-select, format state, and play mode state; selectedFormat (persisted to pref_format), selectedPlayMode (persisted to pref_play_mode), validSets, handleFormatChange, handlePlayModeChange; clearing selection when the current set is not valid for the new format
     useMatch.ts             Match score state — playerScore, opponentScore, matchOver (computed), matchResult ('won'|'lost'|'drawn'|null, computed), incrementPlayerScore, incrementOpponentScore, recordDraw, closeByTimer, resetMatch, restoreState; maxScore is 1 for bo1, 2 for bo3; scores are clamped at maxScore; matchOver also true when matchDrawn or matchClosedByTimer flags are set; matchResult derived from final scores when match closes early
     useTimer.ts             Countdown timer hook — remaining (seconds), isRunning, isExpired; start (idempotent — only starts once), stop (freezes remaining at current value without reset — used when game ends), reset; records wall-clock start time and computes remaining from elapsed time on each tick (not by counting interval ticks); the timer never pauses — backgrounding, opening help, or opening settings does not stop it; a visibilitychange listener forces an immediate recalculation when the page becomes visible again so the display catches up after the screen has been off; used by both SWU game screen (competitive mode) and X-Wing game screen
-    useUserSettings.ts      React Context — persistent user preferences (useHyperspace, forceTokenDisplay, enableEpicActions, enableWakeLock, enableFavourites, enableLongPress, enableActionLog, enableCompetitiveMode, enableGameSelect, startScreen, bo1TimerMinutes, bo3TimerMinutes, xwingTimerMinutes) backed by localStorage under key `user_settings`; forceTokenDisplay is a 3-way value ('always-on' | 'lof-only' | 'always-off'), defaulting to 'lof-only'; all boolean preferences default to `true` except enableGameSelect (default false — feature flag); startScreen ('gameSelect' | 'swu' | 'xwing') defaults to 'swu'; bo1TimerMinutes defaults to 25, bo3TimerMinutes defaults to 55, xwingTimerMinutes defaults to 75; migrates old enableForceToken boolean (false → 'always-off', true/missing → 'lof-only'); `UserSettingsProvider` wraps the app in `main.tsx`
+    useUserSettings.ts      React Context — persistent user preferences (useHyperspace, forceTokenDisplay, enableEpicActions, enableWakeLock, enableFavourites, enableLongPress, enableActionLog, enableCompetitiveMode, enableGameSelect, startScreen, bo1TimerMinutes, bo3TimerMinutes, xwingTimerMinutes) backed by localStorage under key `user_settings`; forceTokenDisplay is a 3-way value ('always-on' | 'lof-only' | 'always-off'), defaulting to 'lof-only'; all boolean preferences default to `true` except enableCompetitiveMode (default false); enableGameSelect defaults to `true`; startScreen ('gameSelect' | 'swu' | 'xwing') defaults to 'swu'; bo1TimerMinutes defaults to 25, bo3TimerMinutes defaults to 55, xwingTimerMinutes defaults to 75; migrates old enableForceToken boolean (false → 'always-off', true/missing → 'lof-only'); `UserSettingsProvider` wraps the app in `main.tsx`
     useTournament.ts        Tournament state — TournamentState and TournamentRound interfaces; startTournament, startMatch, completeMatch, submitRound, dropTournament; persists to localStorage under key `tournament_state`; `startMatch` uses functional setState to avoid stale-closure bugs; `points` is a derived value (win=3, draw=1, loss=0) computed from completed rounds alongside `totals`
     useWakeLock.ts          Screen Wake Lock — acquires on game screen mount, releases on unmount; reacquires on visibility change
 
@@ -72,19 +72,19 @@ src/
   test/
     setup.ts                Vitest setup — jest-dom matchers + global matchMedia mock (landscape default; tests needing portrait call makeMatchMediaMock(true))
     App.test.tsx            End-to-end navigation and feature tests
-    AppScreenLayout.test.tsx Layout component tests
+    appScreenLayout.test.tsx Layout component tests
     swuGameScreen.test.tsx  Game screen container tests
-    swuHelpScreen.test.tsx  Help screen tests
+    helpScreen.test.tsx  Help screen tests
     swuLoadingScreen.test.tsx Loading screen tests
     gameSelectScreen.test.tsx Game select screen component tests
-    swuInstallBanner.test.tsx Install banner component tests
+    installBanner.test.tsx Install banner component tests
     swuSetupScreen.test.tsx Setup screen container tests
     settingsScreen.test.tsx Settings screen container tests
     swuTournamentScreen.test.tsx Tournament screen container tests (49 tests — rendering, action button labels, callbacks, config locking, drop confirm flow, back navigation, base art image rendering, tournament analytics, change-base overlay gating, selectors, cancel, base selection, action button with and without candidate)
     analytics.test.ts       Analytics service tests — enqueue (write, shape, append, cap, silent failure), flush (batch POST, URL, clear on 200, preserve on 500, preserve on network error, no-op when empty), window.online trigger, payload shape, PII absence, env field, sessionId consistency, all 27 event functions; X-Wing payload includes elapsed_seconds and timer_expired
     formatTime.test.ts      formatTime utility tests — zero, sub-minute, exact minutes, zero-padding seconds, large values (e.g. 4500 → "75:00")
-    TimerDisplay.test.tsx   TimerDisplay component tests — renders formatted time, custom testId, style overrides; colour thresholds (> 300s → text-muted, ≤ 300s → warning, ≤ 60s → error)
-    TimerStepper.test.tsx   TimerStepper component tests — renders label and value, + increments, − decrements, + disabled at max, − disabled at min
+    timerDisplay.test.tsx   TimerDisplay component tests — renders formatted time, custom testId, style overrides; colour thresholds (> 300s → text-muted, ≤ 300s → warning, ≤ 60s → error)
+    timerStepper.test.tsx   TimerStepper component tests — renders label and value, + increments, − decrements, + disabled at max, − disabled at min
     formatFilter.test.ts    Format filtering utility tests (isSetValidForFormat, getValidSets, isBaseValidForFormat, formatValidationError — all formats and set types)
     swudbUrl.test.ts        SWUDB URL utility tests
     useDragScrubber.test.ts Drag-to-scrub hook tests
@@ -112,6 +112,7 @@ docs/
   swuSetupHelp.md               Setup screen user guide (imported as HTML string via custom Vite plugin)
   swuGameHelp.md                Game screen user guide (imported as HTML string via custom Vite plugin)
   swuTournamentHelp.md          Tournament screen user guide (imported as HTML string via custom Vite plugin)
+  xwingGameHelp.md              X-Wing game screen user guide (imported as HTML string via custom Vite plugin)
   project-overview.md           Product vision, planned features, AI assistant notes
 
 public/
@@ -121,7 +122,7 @@ public/
   dmgCtrl-force-token.png           Force token icon (512×512 PNG); used on Force button and as watermark in Force overlay
   dmgctrl-icon-192-white.svg        White starburst logo SVG (192×192); used on the epic action button and as watermark in the epic action overlay
   Star-Wars-Unlimited-logo-white.png Star Wars Unlimited logo (white); used as the SWU game button image on the game select screen
-  Star-Wars-X-wing-logo.png         Star Wars X-Wing logo; used as the X-Wing game button image on the game select screen (button disabled pending X-Wing screen)
+  Star-Wars-X-wing-logo.png         Star Wars X-Wing logo; used as the X-Wing game button image on the game select screen
   ...                       PWA manifest, icons
 
 .github/
@@ -151,7 +152,7 @@ All other state is owned at the component level:
 | State | Owner | How it flows |
 |---|---|---|
 | Current screen (`loading` / `gameSelect` / `xwing` / `setup` / `game` / `tournament` / `help` / `settings`) | `App` | Passed as callback props (`onReady`, `onConfirm`, `onBack`, `onHelp`, `onSettings`); `gameSelect` is only reachable when `enableGameSelect` is true; `xwing` is reached from the game select screen |
-| Help source (`'setup'` / `'game'` / `'tournament'`) | `App` | Determines which markdown file `SwuHelpScreen` renders; set by `handleHelp` based on the current screen before navigating to `'help'`; settings falls through to whichever screen was active before settings was opened (via `backStack`) |
+| Help source (`'setup'` / `'game'` / `'tournament'` / `'xwing'`) | `App` | Determines which markdown file `HelpScreen` renders; set by `handleHelp` based on the current screen before navigating to `'help'`; settings falls through to whichever screen was active before settings was opened (via `backStack`) |
 | Back stack (for help/settings back-navigation) | `App` | A `Screen[]` stack; pushed when navigating to help or settings, popped on back — supports any depth of overlay navigation |
 | `useBases()` loading state (for loading screen) | `App` | `App` calls `useBases()` and passes `loading` prop to `SwuLoadingScreen`; `SwuLoadingScreen` calls `onReady` as soon as the data is ready (`loading` becomes `false`) |
 | Game start time | `App` (`useRef`) | Recorded at the start of `handleConfirm`; used by `handleBack` to compute `durationSeconds` for `onGameEnd` |
@@ -188,9 +189,10 @@ All other state is owned at the component level:
 1. `App` mounts with `screen = 'loading'` and calls `useBases()` — initial `loading = true`
 2. `SwuLoadingScreen` renders: shows the app icon and "LOADING" text
 3. `onReady()` is called as soon as `loading` becomes `false`
-4. `App` sets `screen = 'setup'`
-5. `SwuSetupScreen` mounts, calls `useBases()` — resolves from cache almost immediately
-6. User sees the dmgCtrl screen with selectors populated
+4. `App` sets `screen = 'gameSelect'` (default, when `enableGameSelect` is true) or `screen = 'setup'`
+5. `GameSelectScreen` renders two game buttons (Star Wars Unlimited, Star Wars X-Wing); tapping SWU navigates to `SwuSetupScreen`
+6. `SwuSetupScreen` mounts, calls `useBases()` — resolves from cache almost immediately
+7. User sees the dmgCtrl screen with selectors populated
 
 ### Example flow: Setup → Game
 
@@ -479,7 +481,7 @@ The app is designed for **landscape orientation**. `useOrientation` is used in f
 
 - **Setup screen** (`SwuSetupScreenView`) — renders a two-column layout in landscape (selectors left, card preview right) and a single-column scrollable layout in portrait.
 - **Game screen** (`SwuGameScreen`) — renders the full-screen card layout in landscape and a rotation prompt in portrait.
-- **Help screen** (`SwuHelpScreen`) — uses `vmin` to compute JS-based font sizes for the title row; `isPortrait` is used as a React `key` to force DOM remount on rotation, flushing any cached computed styles.
+- **Help screen** (`HelpScreen`) — uses `vmin` to compute JS-based font sizes for the title row; `isPortrait` is used as a React `key` to force DOM remount on rotation, flushing any cached computed styles.
 - **Settings screen** (`SettingsScreenView`) — uses `vmin` for JS-based font sizes; `isPortrait` as a React `key` for DOM remount on rotation; `fontFamily` set to `Helvetica, Arial, sans-serif` with `-webkit-text-size-adjust: 100%` to prevent iOS Dynamic Type scaling the toggle labels.
 - **Tournament screen** (`SwuTournamentScreenView`) — portrait: single-column layout (config → base art preview → W/L/D totals → action buttons → round table); landscape: two flex columns (left: config rows + card preview filling remaining height; right: W/L/D totals + action buttons + scrollable round table).
 
@@ -494,7 +496,7 @@ The app is designed for **landscape orientation**. `useOrientation` is used in f
 1. `App` mounts with `screen = 'loading'` and calls `useBases()` to get the `loading` boolean
 2. `SwuLoadingScreen` renders: displays the app icon (`dmgCtrl-icon-transparent-192.png`) and "LOADING" text
 3. `onReady()` is called as soon as `loading` becomes `false`
-4. `App` responds to `onReady` by setting `screen = 'setup'`
+4. `App` responds to `onReady` by setting `screen = 'gameSelect'` (default) or `screen = 'setup'` (when `enableGameSelect` is false)
 
 ### Base selection flow
 

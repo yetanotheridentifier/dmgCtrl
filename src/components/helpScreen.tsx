@@ -1,18 +1,19 @@
 import setupHelpHtml from '../../docs/swuSetupHelp.md'
 import gameHelpHtml from '../../docs/swuGameHelp.md'
 import tournamentHelpHtml from '../../docs/swuTournamentHelp.md'
-import AppScreenLayout from './layout/AppScreenLayout'
+import xwingHelpHtml from '../../docs/xwingGameHelp.md'
+import AppScreenLayout from './layout/appScreenLayout'
 import { useOrientation } from '../hooks/useOrientation'
 import { BackIcon } from './icons'
 
 
 interface Props {
   onBack: () => void
-  source?: 'setup' | 'game' | 'tournament'
+  source?: 'setup' | 'game' | 'tournament' | 'xwing'
 }
 
-function SwuHelpScreen({ onBack, source = 'setup' }: Props) {
-  const rawHtml = source === 'game' ? gameHelpHtml : source === 'tournament' ? tournamentHelpHtml : setupHelpHtml
+function HelpScreen({ onBack, source = 'setup' }: Props) {
+  const rawHtml = source === 'game' ? gameHelpHtml : source === 'tournament' ? tournamentHelpHtml : source === 'xwing' ? xwingHelpHtml : setupHelpHtml
   const contentHtml = rawHtml.replace(/^<h1[^>]*>[\s\S]*?<\/h1>\n?/, '')
   const { isPortrait, vmin } = useOrientation()
   const baseFontSize = `${Math.min(Math.max(14, Math.round(vmin * 0.04)), 18)}px`
@@ -100,4 +101,4 @@ function SwuHelpScreen({ onBack, source = 'setup' }: Props) {
   )
 }
 
-export default SwuHelpScreen
+export default HelpScreen

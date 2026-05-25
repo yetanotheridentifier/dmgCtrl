@@ -5,7 +5,7 @@ import { useXwingGame } from '../hooks/useXwingGame'
 import { useTimer } from '../hooks/useTimer'
 import { useWakeLock } from '../hooks/useWakeLock'
 import XwingGameScreenView from './xwingGameScreenView'
-import RotatePrompt from './layout/RotatePrompt'
+import RotatePrompt from './layout/rotatePrompt'
 import { onXwingGameStarted, onXwingGameEnded, onXwingRoundAdvanced } from '../services/analytics'
 
 interface Props {

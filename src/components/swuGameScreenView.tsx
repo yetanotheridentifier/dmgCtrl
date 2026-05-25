@@ -2,10 +2,10 @@ import { Base } from '../hooks/useBases'
 import type { GameLogEntry } from '../hooks/useGameLog'
 import type { PlayMode } from '../utils/playMode'
 import { useDragScrubber } from '../hooks/useDragScrubber'
-import AppScreenLayout from './layout/AppScreenLayout'
-import GameLogOverlay from './GameLogOverlay'
+import AppScreenLayout from './layout/appScreenLayout'
+import GameLogOverlay from './gameLogOverlay'
 import { BackIcon, CogIcon, HelpIcon, LogIcon } from './icons'
-import TimerDisplay from './shared/TimerDisplay'
+import TimerDisplay from './shared/timerDisplay'
 
 const CARD_NATURAL_WIDTH = 1560
 const CARD_NATURAL_HEIGHT = 1120

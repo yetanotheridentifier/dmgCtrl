@@ -1,6 +1,6 @@
 # dmgCtrl — Project Overview
 
-A Progressive Web App for tracking game state in tabletop games, starting with Star Wars: Unlimited (SWU). Built to run on iPhone in landscape mode, installed via Safari "Add to Home Screen". No App Store, no native build tools required.
+A Progressive Web App for tracking game state in tabletop games, supporting Star Wars: Unlimited (SWU) and Star Wars X-Wing. Built to run on iPhone in landscape mode, installed via Safari "Add to Home Screen". No App Store, no native build tools required.
 
 **Live app:** https://yetanotheridentifier.github.io/dmgCtrl/
 
@@ -12,7 +12,7 @@ A Progressive Web App for tracking game state in tabletop games, starting with S
 - ✅ Game screen — pre-game deficit entry (0–4 per side), dual score counters (0–50), drag scrubber on all buttons, result banner centred between scores at game over
 - ✅ Timer — configurable countdown (default 75 min, 5:30–90 min via Settings); starts with the game; freezes on game over or round 12; displayed in centre column
 - ✅ Round tracker — continuous bar spanning the top of the screen between the nav buttons; 12 segments; current round extends downward as a seamless tab; tapping the next segment advances the round; colour follows the timer (accent → warning → error); timer stops at round 12
-- Help screen
+- ✅ Help screen
 - Remaining features — includes applying stored deficit to score when opponent ships are destroyed
 
 ### Future games

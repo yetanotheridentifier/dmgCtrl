@@ -3,7 +3,7 @@ import { Base } from '../hooks/useBases'
 import { useSwuSetup, InitialSelection } from '../hooks/useSwuSetup'
 import { useBaseArt, getFirstGameImageUrl } from '../hooks/useBaseArt'
 import SwuSetupScreenView from './swuSetupScreenView'
-import SwuInstallBanner from './swuInstallBanner'
+import InstallBanner from './installBanner'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { useFavourites } from '../hooks/useFavourites'
 import { useInstallPrompt } from '../hooks/useInstallPrompt'
@@ -194,7 +194,7 @@ function SwuSetupScreen({ onConfirm, onHelp, onBack, onSettings, initialSelectio
       onFavouriteKeyChange={setup.selectBaseByKey}
     />
     {showBanner && platform && (
-      <SwuInstallBanner platform={platform} onInstall={onInstall} onDismiss={onDismiss} />
+      <InstallBanner platform={platform} onInstall={onInstall} onDismiss={onDismiss} />
     )}
     </>
   )

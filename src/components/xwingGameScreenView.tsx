@@ -1,7 +1,7 @@
 import { useDragScrubber } from '../hooks/useDragScrubber'
-import AppScreenLayout from './layout/AppScreenLayout'
+import AppScreenLayout from './layout/appScreenLayout'
 import { BackIcon, CogIcon, HelpIcon, LogIcon } from './icons'
-import TimerDisplay from './shared/TimerDisplay'
+import TimerDisplay from './shared/timerDisplay'
 
 interface Props {
   gameStarted: boolean

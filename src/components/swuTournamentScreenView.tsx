@@ -2,7 +2,7 @@ import type { Base } from '../hooks/useBases'
 import type { TournamentState } from '../hooks/useTournament'
 
 import { BackIcon, CogIcon, HelpIcon } from './icons'
-import AppScreenLayout from './layout/AppScreenLayout'
+import AppScreenLayout from './layout/appScreenLayout'
 import { useOrientation } from '../hooks/useOrientation'
 import ImagePreview from './imagePreview'
 
