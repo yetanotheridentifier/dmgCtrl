@@ -23,7 +23,7 @@ function BulletRow({ icon, label }: { icon: React.ReactNode; label: React.ReactN
   )
 }
 
-function SwuInstallBanner({ platform, onInstall, onDismiss }: Props) {
+function InstallBanner({ platform, onInstall, onDismiss }: Props) {
   return (
     <div
       role="region"
@@ -101,4 +101,4 @@ function SwuInstallBanner({ platform, onInstall, onDismiss }: Props) {
   )
 }
 
-export default SwuInstallBanner
+export default InstallBanner

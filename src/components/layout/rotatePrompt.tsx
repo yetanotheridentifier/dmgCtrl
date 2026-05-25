@@ -1,4 +1,4 @@
-import AppScreenLayout from './AppScreenLayout'
+import AppScreenLayout from './appScreenLayout'
 import { BackIcon } from '../icons'
 
 interface Props {

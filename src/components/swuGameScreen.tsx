@@ -9,7 +9,7 @@ import { useUserSettings } from '../hooks/useUserSettings'
 import { useMatch } from '../hooks/useMatch'
 import { useTimer } from '../hooks/useTimer'
 import SwuGameScreenView from './swuGameScreenView'
-import RotatePrompt from './layout/RotatePrompt'
+import RotatePrompt from './layout/rotatePrompt'
 import { onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed, onEpicActionUsed, onForceGained, onForceUsed, onMatchCompleted } from '../services/analytics'
 import type { PlayMode } from '../utils/playMode'
 

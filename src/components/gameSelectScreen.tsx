@@ -1,14 +1,12 @@
-import AppScreenLayout from './layout/AppScreenLayout'
+import AppScreenLayout from './layout/appScreenLayout'
 import { useOrientation } from '../hooks/useOrientation'
-import { HelpIcon } from './icons'
 
 interface Props {
   onSelectSwu: () => void
   onSelectXwing: () => void
-  onHelp: () => void
 }
 
-function GameSelectScreen({ onSelectSwu, onSelectXwing, onHelp }: Props) {
+function GameSelectScreen({ onSelectSwu, onSelectXwing }: Props) {
   const { isPortrait } = useOrientation()
 
   const buttonBase: React.CSSProperties = {
@@ -58,28 +56,6 @@ function GameSelectScreen({ onSelectSwu, onSelectXwing, onHelp }: Props) {
               dmgCtrl
             </h1>
           </div>
-          <button
-            onClick={onHelp}
-            aria-label="Help"
-            style={{
-              width: isPortrait ? '5vw' : '5vh',
-              height: isPortrait ? '5vw' : '5vh',
-              minWidth: '36px',
-              minHeight: '36px',
-              flexShrink: 0,
-              background: 'transparent',
-              border: '2px solid var(--color-ui-border)',
-              borderRadius: '8px',
-              color: 'var(--color-ui-border-muted)',
-              fontSize: isPortrait ? 'clamp(0.8rem, 2vw, 1.2rem)' : 'clamp(0.8rem, 2vh, 1.2rem)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <HelpIcon />
-          </button>
         </div>
 
         {/* Game buttons */}

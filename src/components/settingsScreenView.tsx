@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useOrientation } from '../hooks/useOrientation'
 import { BackIcon, HelpIcon } from './icons'
 import type { FavouriteBase } from '../hooks/useFavourites'
-import TimerStepper from './shared/TimerStepper'
+import TimerStepper from './shared/timerStepper'
 
 interface ToggleRowProps {
   id: string
