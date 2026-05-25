@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import SwuSettingsScreen from '../components/swuSettingsScreen'
+import SettingsScreen from '../components/settingsScreen'
 import type { FavouriteBase } from '../hooks/useFavourites'
 
 const mockOnSettingChanged = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
@@ -32,6 +32,8 @@ const mockUserSettings = vi.hoisted(() => ({
   bo3TimerMinutes: 55,
   setBo1TimerMinutes: vi.fn(),
   setBo3TimerMinutes: vi.fn(),
+  xwingTimerMinutes: 75,
+  setXwingTimerMinutes: vi.fn(),
   meleePlayerGuid: '',
   setMeleePlayerGuid: vi.fn(),
 }))
@@ -74,111 +76,112 @@ beforeEach(() => {
   mockUserSettings.enableCompetitiveMode = false
   mockUserSettings.bo1TimerMinutes = 25
   mockUserSettings.bo3TimerMinutes = 55
+  mockUserSettings.xwingTimerMinutes = 75
   mockUserSettings.meleePlayerGuid = ''
   mockFavourites.favourites = []
   mockOrientation.isPortrait = true
 })
 
-describe('SwuSettingsScreen', () => {
+describe('SettingsScreen', () => {
 
   // --- Rendering ---
 
   it('renders a Settings heading', () => {
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByRole('heading', { name: /settings/i })).toBeInTheDocument()
   })
 
   it('renders the app icon', () => {
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByAltText('dmgCtrl')).toBeInTheDocument()
   })
 
   it('renders a back button', () => {
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
   })
 
   it('renders a help button', () => {
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument()
   })
 
   it('does not render a settings button on the settings screen', () => {
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByRole('button', { name: '⚙' })).not.toBeInTheDocument()
   })
 
   // --- Toggles ---
 
   it('renders Use Hyperspace Art toggle in checked state', () => {
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByRole('checkbox', { name: /use hyperspace art/i })).toBeChecked()
   })
 
   it('renders Force Token Display dropdown with lof-only selected by default', () => {
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     const select = screen.getByRole('combobox', { name: /force token/i })
     expect(select).toHaveValue('lof-only')
   })
 
   it('renders Enable Epic Actions toggle in checked state', () => {
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByRole('checkbox', { name: /enable epic actions/i })).toBeChecked()
   })
 
   it('renders Enable Screen Wake Lock toggle in checked state', () => {
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByRole('checkbox', { name: /enable screen wake lock/i })).toBeChecked()
   })
 
   it('calls setUseHyperspace(false) when hyperspace toggle is clicked', async () => {
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('checkbox', { name: /use hyperspace art/i }))
     expect(mockUserSettings.setUseHyperspace).toHaveBeenCalledWith(false)
   })
 
   it('calls setForceTokenDisplay when force token dropdown is changed', async () => {
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.selectOptions(screen.getByRole('combobox', { name: /force token/i }), 'always-off')
     expect(mockUserSettings.setForceTokenDisplay).toHaveBeenCalledWith('always-off')
   })
 
   it('calls setEnableEpicActions(false) when epic actions toggle is clicked', async () => {
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('checkbox', { name: /enable epic actions/i }))
     expect(mockUserSettings.setEnableEpicActions).toHaveBeenCalledWith(false)
   })
 
   it('calls setEnableWakeLock(false) when wake lock toggle is clicked', async () => {
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('checkbox', { name: /enable screen wake lock/i }))
     expect(mockUserSettings.setEnableWakeLock).toHaveBeenCalledWith(false)
   })
 
   it('renders Enable Action Log toggle in checked state', () => {
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByRole('checkbox', { name: /enable action log/i })).toBeChecked()
   })
 
   it('calls setEnableActionLog(false) when action log toggle is clicked', async () => {
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('checkbox', { name: /enable action log/i }))
     expect(mockUserSettings.setEnableActionLog).toHaveBeenCalledWith(false)
   })
 
   it('renders Enable Competitive Mode toggle in unchecked state', () => {
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByRole('checkbox', { name: /enable competitive mode/i })).not.toBeChecked()
   })
 
   it('calls setEnableCompetitiveMode(true) when competitive mode toggle is clicked', async () => {
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('checkbox', { name: /enable competitive mode/i }))
     expect(mockUserSettings.setEnableCompetitiveMode).toHaveBeenCalledWith(true)
   })
@@ -186,43 +189,43 @@ describe('SwuSettingsScreen', () => {
   // --- Timer duration steppers ---
 
   it('Bo1 timer stepper is not shown when competitive mode is off', () => {
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByTestId('bo1-timer-stepper')).not.toBeInTheDocument()
   })
 
   it('Bo3 timer stepper is not shown when competitive mode is off', () => {
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByTestId('bo3-timer-stepper')).not.toBeInTheDocument()
   })
 
   it('Bo1 timer stepper is shown when competitive mode is on', () => {
     mockUserSettings.enableCompetitiveMode = true
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByTestId('bo1-timer-stepper')).toBeInTheDocument()
   })
 
   it('Bo3 timer stepper is shown when competitive mode is on', () => {
     mockUserSettings.enableCompetitiveMode = true
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByTestId('bo3-timer-stepper')).toBeInTheDocument()
   })
 
   it('Bo1 timer stepper shows the current value in minutes', () => {
     mockUserSettings.enableCompetitiveMode = true
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByTestId('bo1-timer-stepper')).toHaveTextContent('25')
   })
 
   it('Bo3 timer stepper shows the current value in minutes', () => {
     mockUserSettings.enableCompetitiveMode = true
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByTestId('bo3-timer-stepper')).toHaveTextContent('55')
   })
 
   it('clicking + on Bo1 timer calls setBo1TimerMinutes with value + 5', async () => {
     mockUserSettings.enableCompetitiveMode = true
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(within(screen.getByTestId('bo1-timer-stepper')).getByRole('button', { name: '+' }))
     expect(mockUserSettings.setBo1TimerMinutes).toHaveBeenCalledWith(30)
   })
@@ -230,7 +233,7 @@ describe('SwuSettingsScreen', () => {
   it('clicking − on Bo1 timer calls setBo1TimerMinutes with value − 5', async () => {
     mockUserSettings.enableCompetitiveMode = true
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(within(screen.getByTestId('bo1-timer-stepper')).getByRole('button', { name: '−' }))
     expect(mockUserSettings.setBo1TimerMinutes).toHaveBeenCalledWith(20)
   })
@@ -238,7 +241,7 @@ describe('SwuSettingsScreen', () => {
   it('clicking + on Bo3 timer calls setBo3TimerMinutes with value + 5', async () => {
     mockUserSettings.enableCompetitiveMode = true
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(within(screen.getByTestId('bo3-timer-stepper')).getByRole('button', { name: '+' }))
     expect(mockUserSettings.setBo3TimerMinutes).toHaveBeenCalledWith(60)
   })
@@ -246,7 +249,7 @@ describe('SwuSettingsScreen', () => {
   it('clicking − on Bo3 timer calls setBo3TimerMinutes with value − 5', async () => {
     mockUserSettings.enableCompetitiveMode = true
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(within(screen.getByTestId('bo3-timer-stepper')).getByRole('button', { name: '−' }))
     expect(mockUserSettings.setBo3TimerMinutes).toHaveBeenCalledWith(50)
   })
@@ -254,14 +257,14 @@ describe('SwuSettingsScreen', () => {
   it('+ on Bo1 timer is disabled at maximum (90)', async () => {
     mockUserSettings.enableCompetitiveMode = true
     mockUserSettings.bo1TimerMinutes = 90
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(within(screen.getByTestId('bo1-timer-stepper')).getByRole('button', { name: '+' })).toBeDisabled()
   })
 
   it('− on Bo1 timer is disabled at minimum (5)', async () => {
     mockUserSettings.enableCompetitiveMode = true
     mockUserSettings.bo1TimerMinutes = 5
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(within(screen.getByTestId('bo1-timer-stepper')).getByRole('button', { name: '−' })).toBeDisabled()
   })
 
@@ -269,26 +272,26 @@ describe('SwuSettingsScreen', () => {
 
   it('renders Melee Player ID input when competitive mode is on', () => {
     mockUserSettings.enableCompetitiveMode = true
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByRole('textbox', { name: /melee.*player.*id/i })).toBeInTheDocument()
   })
 
   it('does not render Melee Player ID input when competitive mode is off', () => {
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByRole('textbox', { name: /melee.*player.*id/i })).not.toBeInTheDocument()
   })
 
   it('Melee Player ID input reflects the current stored value', () => {
     mockUserSettings.enableCompetitiveMode = true
     mockUserSettings.meleePlayerGuid = 'abc-123'
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByRole('textbox', { name: /melee.*player.*id/i })).toHaveValue('abc-123')
   })
 
   it('Changing Melee Player ID input calls setMeleePlayerGuid', async () => {
     mockUserSettings.enableCompetitiveMode = true
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.type(screen.getByRole('textbox', { name: /melee.*player.*id/i }), 'x')
     expect(mockUserSettings.setMeleePlayerGuid).toHaveBeenCalled()
   })
@@ -298,7 +301,7 @@ describe('SwuSettingsScreen', () => {
   it('calls onBack when back button is clicked', async () => {
     const user = userEvent.setup()
     const onBack = vi.fn()
-    render(<SwuSettingsScreen onBack={onBack} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={onBack} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('button', { name: 'Back' }))
     expect(onBack).toHaveBeenCalledOnce()
   })
@@ -306,7 +309,7 @@ describe('SwuSettingsScreen', () => {
   it('calls onHelp when help button is clicked', async () => {
     const user = userEvent.setup()
     const onHelp = vi.fn()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={onHelp} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={onHelp} />)
     await user.click(screen.getByRole('button', { name: 'Help' }))
     expect(onHelp).toHaveBeenCalledOnce()
   })
@@ -314,13 +317,13 @@ describe('SwuSettingsScreen', () => {
   // --- Favourites toggle ---
 
   it('renders Enable Favourites toggle in checked state', () => {
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByRole('checkbox', { name: /enable favourites/i })).toBeChecked()
   })
 
   it('calls setEnableFavourites(false) when favourites toggle is clicked', async () => {
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('checkbox', { name: /enable favourites/i }))
     expect(mockUserSettings.setEnableFavourites).toHaveBeenCalledWith(false)
   })
@@ -328,13 +331,13 @@ describe('SwuSettingsScreen', () => {
   // --- Favourites list ---
 
   it('shows "No favourites saved" placeholder when list is empty', () => {
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByText(/no favourites saved/i)).toBeInTheDocument()
   })
 
   it('renders each favourite with set, name, HP and aspect', () => {
     mockFavourites.favourites = sampleFavourites
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByText('SOR: Catacombs of Cadera — 30HP (Aggression)')).toBeInTheDocument()
     expect(screen.getByText('JTL: Lake Country — 30HP (None)')).toBeInTheDocument()
   })
@@ -342,7 +345,7 @@ describe('SwuSettingsScreen', () => {
   it('hides favourites section when enableFavourites is false', () => {
     mockUserSettings.enableFavourites = false
     mockFavourites.favourites = sampleFavourites
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByText('SOR: Catacombs of Cadera — 30HP (Aggression)')).not.toBeInTheDocument()
     expect(screen.queryByText(/no favourites saved/i)).not.toBeInTheDocument()
   })
@@ -351,14 +354,14 @@ describe('SwuSettingsScreen', () => {
 
   it('each favourite row has a Remove button', () => {
     mockFavourites.favourites = sampleFavourites
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getAllByRole('button', { name: /remove/i })).toHaveLength(2)
   })
 
   it('clicking Remove calls removeFavourite with the correct key', async () => {
     const user = userEvent.setup()
     mockFavourites.favourites = sampleFavourites
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getAllByRole('button', { name: /remove/i })[0])
     expect(mockFavourites.removeFavourite).toHaveBeenCalledWith('SOR-026')
   })
@@ -366,20 +369,20 @@ describe('SwuSettingsScreen', () => {
   // --- Clear All ---
 
   it('Clear All button is not shown when list is empty', () => {
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByRole('button', { name: /clear all/i })).not.toBeInTheDocument()
   })
 
   it('Clear All button is shown when list has entries', () => {
     mockFavourites.favourites = sampleFavourites
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByRole('button', { name: /clear all/i })).toBeInTheDocument()
   })
 
   it('clicking Clear All shows inline confirmation', async () => {
     const user = userEvent.setup()
     mockFavourites.favourites = sampleFavourites
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('button', { name: /clear all/i }))
     expect(screen.getByRole('button', { name: /confirm/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument()
@@ -388,7 +391,7 @@ describe('SwuSettingsScreen', () => {
   it('Cancel dismisses confirmation without calling clearFavourites', async () => {
     const user = userEvent.setup()
     mockFavourites.favourites = sampleFavourites
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('button', { name: /clear all/i }))
     await user.click(screen.getByRole('button', { name: /cancel/i }))
     expect(mockFavourites.clearFavourites).not.toHaveBeenCalled()
@@ -398,7 +401,7 @@ describe('SwuSettingsScreen', () => {
   it('Confirm calls clearFavourites', async () => {
     const user = userEvent.setup()
     mockFavourites.favourites = sampleFavourites
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('button', { name: /clear all/i }))
     await user.click(screen.getByRole('button', { name: /confirm/i }))
     expect(mockFavourites.clearFavourites).toHaveBeenCalledOnce()
@@ -409,7 +412,7 @@ describe('SwuSettingsScreen', () => {
   it('in landscape, general and favourites settings are in separate columns', () => {
     mockOrientation.isPortrait = false
     mockFavourites.favourites = sampleFavourites
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     const generalCol = screen.getByRole('group', { name: /general settings/i })
     const favouritesCol = screen.getByRole('group', { name: /favourites settings/i })
     expect(within(generalCol).getByRole('checkbox', { name: /use hyperspace art/i })).toBeInTheDocument()
@@ -420,13 +423,13 @@ describe('SwuSettingsScreen', () => {
 
   it('in portrait, settings are not split into columns', async () => {
     mockOrientation.isPortrait = true
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByRole('group', { name: /general settings/i })).not.toBeInTheDocument()
   })
 
 })
 
-describe('SwuSettingsScreen analytics', () => {
+describe('SettingsScreen analytics', () => {
 
   beforeEach(() => {
     mockOnSettingChanged.mockClear()
@@ -436,49 +439,49 @@ describe('SwuSettingsScreen analytics', () => {
 
   it('calls onSettingChanged with useHyperspace and new value when hyperspace toggle is clicked', async () => {
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('checkbox', { name: /hyperspace/i }))
     expect(mockOnSettingChanged).toHaveBeenCalledWith('useHyperspace', false)
   })
 
   it('calls onSettingChanged with forceTokenDisplay and new value when force token dropdown is changed', async () => {
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.selectOptions(screen.getByRole('combobox', { name: /force token/i }), 'always-off')
     expect(mockOnSettingChanged).toHaveBeenCalledWith('forceTokenDisplay', 'always-off')
   })
 
   it('calls onSettingChanged with enableEpicActions and new value when epic actions toggle is clicked', async () => {
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('checkbox', { name: /epic actions/i }))
     expect(mockOnSettingChanged).toHaveBeenCalledWith('enableEpicActions', false)
   })
 
   it('calls onSettingChanged with enableWakeLock and new value when wake lock toggle is clicked', async () => {
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('checkbox', { name: /wake lock/i }))
     expect(mockOnSettingChanged).toHaveBeenCalledWith('enableWakeLock', false)
   })
 
   it('calls onSettingChanged with enableActionLog and new value when action log toggle is clicked', async () => {
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('checkbox', { name: /action log/i }))
     expect(mockOnSettingChanged).toHaveBeenCalledWith('enableActionLog', false)
   })
 
   it('calls onSettingChanged with enableFavourites and new value when favourites toggle is clicked', async () => {
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('checkbox', { name: /favourites/i }))
     expect(mockOnSettingChanged).toHaveBeenCalledWith('enableFavourites', false)
   })
 
   it('calls onSettingChanged with enableCompetitiveMode and new value when competitive mode toggle is clicked', async () => {
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('checkbox', { name: /competitive mode/i }))
     expect(mockOnSettingChanged).toHaveBeenCalledWith('enableCompetitiveMode', true)
   })
@@ -488,7 +491,7 @@ describe('SwuSettingsScreen analytics', () => {
       { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
     ]
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('button', { name: /remove/i }))
     expect(mockOnFavouriteRemovedSettings).toHaveBeenCalledWith('SOR-026', 'SOR')
   })
@@ -498,10 +501,55 @@ describe('SwuSettingsScreen analytics', () => {
       { key: 'SOR-026', set: 'SOR', name: 'Catacombs of Cadera', hp: 30, aspect: 'Aggression', cardNumber: 26 },
     ]
     const user = userEvent.setup()
-    render(<SwuSettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('button', { name: /clear all/i }))
     await user.click(screen.getByRole('button', { name: /confirm/i }))
     expect(mockOnFavouritesCleared).toHaveBeenCalledOnce()
+  })
+
+  // ---------------------------------------------------------------------------
+  // X-Wing timer stepper
+  // ---------------------------------------------------------------------------
+
+  describe('X-Wing timer stepper', () => {
+
+    it('is always shown (not gated behind competitive mode)', () => {
+      mockUserSettings.enableCompetitiveMode = false
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+      expect(screen.getByTestId('xwing-timer-stepper')).toBeInTheDocument()
+    })
+
+    it('shows the current xwingTimerMinutes value', () => {
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+      expect(screen.getByTestId('xwing-timer-stepper')).toHaveTextContent('75')
+    })
+
+    it('clicking + calls setXwingTimerMinutes with value + 5', async () => {
+      const user = userEvent.setup()
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+      await user.click(within(screen.getByTestId('xwing-timer-stepper')).getByRole('button', { name: '+' }))
+      expect(mockUserSettings.setXwingTimerMinutes).toHaveBeenCalledWith(80)
+    })
+
+    it('clicking − calls setXwingTimerMinutes with value − 5', async () => {
+      const user = userEvent.setup()
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+      await user.click(within(screen.getByTestId('xwing-timer-stepper')).getByRole('button', { name: '−' }))
+      expect(mockUserSettings.setXwingTimerMinutes).toHaveBeenCalledWith(70)
+    })
+
+    it('+ is disabled at maximum (90 minutes)', () => {
+      mockUserSettings.xwingTimerMinutes = 90
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+      expect(within(screen.getByTestId('xwing-timer-stepper')).getByRole('button', { name: '+' })).toBeDisabled()
+    })
+
+    it('− is disabled at minimum (30 minutes)', () => {
+      mockUserSettings.xwingTimerMinutes = 30
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+      expect(within(screen.getByTestId('xwing-timer-stepper')).getByRole('button', { name: '−' })).toBeDisabled()
+    })
+
   })
 
 })

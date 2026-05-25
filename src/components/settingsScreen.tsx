@@ -1,7 +1,7 @@
 import { useUserSettings } from '../hooks/useUserSettings'
 import { useFavourites } from '../hooks/useFavourites'
 import AppScreenLayout from './layout/AppScreenLayout'
-import SwuSettingsScreenView from './swuSettingsScreenView'
+import SettingsScreenView from './settingsScreenView'
 import { onSettingChanged, onFavouriteRemoved, onFavouritesCleared } from '../services/analytics'
 
 interface Props {
@@ -9,7 +9,7 @@ interface Props {
   onHelp: () => void
 }
 
-function SwuSettingsScreen({ onBack, onHelp }: Props) {
+function SettingsScreen({ onBack, onHelp }: Props) {
   const {
     useHyperspace,
     forceTokenDisplay,
@@ -20,6 +20,7 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
     enableCompetitiveMode,
     bo1TimerMinutes,
     bo3TimerMinutes,
+    xwingTimerMinutes,
     meleePlayerGuid,
     setUseHyperspace,
     setForceTokenDisplay,
@@ -30,6 +31,7 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
     setEnableCompetitiveMode,
     setBo1TimerMinutes,
     setBo3TimerMinutes,
+    setXwingTimerMinutes,
     setMeleePlayerGuid,
   } = useUserSettings()
 
@@ -53,7 +55,7 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
 
   return (
     <AppScreenLayout>
-      <SwuSettingsScreenView
+      <SettingsScreenView
         useHyperspace={useHyperspace}
         forceTokenDisplay={forceTokenDisplay}
         enableEpicActions={enableEpicActions}
@@ -71,9 +73,11 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
         onEnableCompetitiveModeChange={handleSettingChange('enableCompetitiveMode', setEnableCompetitiveMode)}
         bo1TimerMinutes={bo1TimerMinutes}
         bo3TimerMinutes={bo3TimerMinutes}
+        xwingTimerMinutes={xwingTimerMinutes}
         meleePlayerGuid={meleePlayerGuid}
         onBo1TimerChange={setBo1TimerMinutes}
         onBo3TimerChange={setBo3TimerMinutes}
+        onXwingTimerChange={setXwingTimerMinutes}
         onMeleePlayerGuidChange={setMeleePlayerGuid}
         onRemoveFavourite={handleRemoveFavourite}
         onClearFavourites={handleClearFavourites}
@@ -84,4 +88,4 @@ function SwuSettingsScreen({ onBack, onHelp }: Props) {
   )
 }
 
-export default SwuSettingsScreen
+export default SettingsScreen

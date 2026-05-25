@@ -1,11 +1,13 @@
 import { useDragScrubber } from '../hooks/useDragScrubber'
 import AppScreenLayout from './layout/AppScreenLayout'
 import { BackIcon, CogIcon, HelpIcon, LogIcon } from './icons'
+import TimerDisplay from './shared/TimerDisplay'
 
 interface Props {
   gameStarted: boolean
   gameOver: boolean
   result: 'win' | 'loss' | 'draw' | null
+  timerRemaining: number
   playerDeficit: number
   opponentDeficit: number
   onPlayerDeficitIncrement: (n: number) => void
@@ -71,6 +73,7 @@ export default function XwingGameScreenView({
   gameStarted,
   gameOver,
   result,
+  timerRemaining,
   playerDeficit,
   opponentDeficit,
   onPlayerDeficitIncrement,
@@ -341,8 +344,17 @@ export default function XwingGameScreenView({
                   {result === 'win' ? 'Game Won' : result === 'loss' ? 'Game Lost' : 'Draw'}
                 </div>
               ) : gameStarted ? (
-                /* Timer placeholder — ticket #228 */
-                <div data-testid="timer-placeholder" />
+                <TimerDisplay
+                  remaining={timerRemaining}
+                  testId="xwing-timer"
+                  style={{
+                    fontSize: 'clamp(1.2rem, 8vmin, 3.5rem)',
+                    fontWeight: '300',
+                    letterSpacing: '0.06em',
+                    textAlign: 'center',
+                    lineHeight: 1,
+                  }}
+                />
               ) : null}
             </div>
 

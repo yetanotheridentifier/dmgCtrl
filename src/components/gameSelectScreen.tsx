@@ -8,7 +8,7 @@ interface Props {
   onHelp: () => void
 }
 
-function SwuGameSelectScreen({ onSelectSwu, onSelectXwing, onHelp }: Props) {
+function GameSelectScreen({ onSelectSwu, onSelectXwing, onHelp }: Props) {
   const { isPortrait } = useOrientation()
 
   const buttonBase: React.CSSProperties = {
@@ -127,4 +127,4 @@ function SwuGameSelectScreen({ onSelectSwu, onSelectXwing, onHelp }: Props) {
   )
 }
 
-export default SwuGameSelectScreen
+export default GameSelectScreen

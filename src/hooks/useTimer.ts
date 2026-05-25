@@ -5,6 +5,7 @@ interface UseTimerResult {
   isRunning: boolean
   isExpired: boolean
   start: () => void
+  stop: () => void
   reset: () => void
 }
 
@@ -42,6 +43,12 @@ export function useTimer(durationSeconds: number): UseTimerResult {
     setIsRunning(true)
   }
 
+  /** Freezes the timer at its current remaining value without resetting it.
+   *  Used when a terminal game condition is reached (game over, etc.). */
+  const stop = () => {
+    setIsRunning(false)
+  }
+
   const reset = () => {
     startedRef.current = false
     startTimeRef.current = null
@@ -54,6 +61,7 @@ export function useTimer(durationSeconds: number): UseTimerResult {
     isRunning,
     isExpired: remaining === 0,
     start,
+    stop,
     reset,
   }
 }

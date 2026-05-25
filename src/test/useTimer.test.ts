@@ -102,6 +102,42 @@ describe('useTimer', () => {
     })
   })
 
+  describe('stop', () => {
+
+    it('sets isRunning to false', () => {
+      const { result } = renderHook(() => useTimer(1500))
+      act(() => result.current.start())
+      act(() => { vi.advanceTimersByTime(5000) })
+      act(() => result.current.stop())
+      expect(result.current.isRunning).toBe(false)
+    })
+
+    it('preserves remaining at the frozen value, not resetting to duration', () => {
+      const { result } = renderHook(() => useTimer(1500))
+      act(() => result.current.start())
+      act(() => { vi.advanceTimersByTime(5000) })
+      act(() => result.current.stop())
+      expect(result.current.remaining).toBe(1495)
+    })
+
+    it('timer does not continue counting after stop', () => {
+      const { result } = renderHook(() => useTimer(1500))
+      act(() => result.current.start())
+      act(() => { vi.advanceTimersByTime(5000) })
+      act(() => result.current.stop())
+      act(() => { vi.advanceTimersByTime(10000) })
+      expect(result.current.remaining).toBe(1495)
+    })
+
+    it('calling stop before start has no effect on remaining', () => {
+      const { result } = renderHook(() => useTimer(1500))
+      act(() => result.current.stop())
+      expect(result.current.isRunning).toBe(false)
+      expect(result.current.remaining).toBe(1500)
+    })
+
+  })
+
   describe('reset', () => {
     it('resets remaining to the original duration', () => {
       const { result } = renderHook(() => useTimer(1500))

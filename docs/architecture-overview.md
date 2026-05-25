@@ -74,8 +74,8 @@ The app is served at `/dmgCtrl/` and is designed to be added to an iOS home scre
 ```
 App
 ├── SwuLoadingScreen      (standalone screen — icon + LOADING text; transitions as soon as data is ready)
-├── SwuGameSelectScreen   (standalone screen — game selector; shown when enableGameSelect is true; two logo buttons: Star Wars Unlimited and Star Wars X-Wing (both enabled); help button top-right)
-├── XwingGameScreen       (standalone screen — X-Wing mission point tracker; landscape-only with RotatePrompt fallback; pre-game deficit entry (0–4 per side, stored for future scoring use) then dual score counters starting at 0; game ends at 50 points; result banner centred between scores at game over)
+├── GameSelectScreen   (standalone screen — game selector; shown when enableGameSelect is true; two logo buttons: Star Wars Unlimited and Star Wars X-Wing (both enabled); help button top-right)
+├── XwingGameScreen       (standalone screen — X-Wing mission point tracker; landscape-only with RotatePrompt fallback; pre-game deficit entry (0–4 per side, stored for future scoring use) then dual score counters starting at 0; game ends at 50 points; countdown timer (default 75 min, configurable in Settings) starts with the game and is displayed in the centre column; timer freezes at game over; result banner replaces timer at game over; useWakeLock keeps screen on; onTimerExpired callback stub for future round tracker)
 ├── SwuSetupScreen        (container)
 │   ├── useSwuSetup       (hook — filtering, auto-select)
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
@@ -90,7 +90,7 @@ App
 │   ├── useWakeLock       (hook — prevents screen sleep during gameplay via Screen Wake Lock API)
 │   ├── useGameLog        (hook — ordered list of game log entries with add/undo/reset; each entry records event type, message, colour, and previous game state snapshot)
 │   ├── useMatch          (hook — match scores: playerScore, opponentScore, matchOver, matchResult; incrementPlayerScore, incrementOpponentScore, recordDraw, closeByTimer, resetMatch, restoreState)
-│   ├── useTimer          (hook — countdown timer: remaining seconds, isRunning, isExpired; start, reset; starts once on first game start; wall-clock based — catches up after screen-off via visibilitychange)
+│   ├── useTimer          (hook — countdown timer: remaining seconds, isRunning, isExpired; start, stop, reset; start is idempotent; stop freezes remaining without reset; wall-clock based — catches up after screen-off via visibilitychange)
 │   ├── GameLogOverlay    (view — scrollable log panel; auto-scrolls to latest entry; undo button on last undoable entry; round entries styled with blue gradient)
 │   └── SwuGameScreenView (view — renders counter, image, epic action token, Force token, score panel; ⚙ button always visible; calls useDragScrubber directly for drag-to-scrub gesture state)
 ├── SwuTournamentScreen   (container)
@@ -99,10 +99,10 @@ App
 │   └── SwuTournamentScreenView (view — renders config inputs, base art preview, round table, action/drop buttons; portrait and landscape layouts)
 │       └── ImagePreview  (pure view — renders art or error message from props; fill='width' in portrait, fill='height' in landscape)
 ├── SwuHelpScreen         (standalone screen — renders swuSetupHelp.md, swuGameHelp.md, or swuTournamentHelp.md based on source prop)
-└── SwuSettingsScreen     (container)
+└── SettingsScreen     (container)
     ├── useUserSettings   (hook — persistent user preferences)
     ├── useFavourites     (hook — favourites list, remove/clear operations)
-    └── SwuSettingsScreenView (view — toggle list; landscape: two-column layout separating general and favourites settings; calls useOrientation directly for font sizing)
+    └── SettingsScreenView (view — toggle list + TimerStepper components for bo1/bo3 timers (gated by competitive mode) and X-Wing game timer (always visible); landscape: two-column layout separating general and favourites settings; calls useOrientation directly for font sizing)
 
 Each screen is wrapped in AppScreenLayout (shared layout component)
 ```
@@ -116,7 +116,7 @@ Every screen is split into two files:
 
 This pattern keeps views thin and ensures logic is tested via hook and container tests rather than integration tests that have to simulate complex UI interactions.
 
-The exception is `SwuSettingsScreenView`, which calls `useOrientation()` directly to handle iOS Dynamic Type font scaling — the same approach used by `SwuHelpScreen`.
+The exception is `SettingsScreenView`, which calls `useOrientation()` directly to handle iOS Dynamic Type font scaling — the same approach used by `SwuHelpScreen`.
 
 ### Separation of concerns
 
