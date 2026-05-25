@@ -5,16 +5,11 @@ import { useDragScrubber } from '../hooks/useDragScrubber'
 import AppScreenLayout from './layout/AppScreenLayout'
 import GameLogOverlay from './GameLogOverlay'
 import { BackIcon, CogIcon, HelpIcon, LogIcon } from './icons'
+import TimerDisplay from './shared/TimerDisplay'
 
 const CARD_NATURAL_WIDTH = 1560
 const CARD_NATURAL_HEIGHT = 1120
 const CARD_ASPECT_RATIO = CARD_NATURAL_WIDTH / CARD_NATURAL_HEIGHT
-
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
-}
 
 interface Props {
   base: Base
@@ -883,11 +878,6 @@ function SwuGameScreenView({
             {/* Timer / Draw button — between opp markers and player markers */}
             {(() => {
               const isButton = timerInteractive || pendingConfirm === 'draw'
-              const timerNotInteractive = !timerInteractive && pendingConfirm !== 'draw'
-              const timerColor = !timerNotInteractive ? 'var(--color-text-muted)'
-                : timerRemaining <= 60 ? 'var(--color-error)'
-                : timerRemaining <= 300 ? 'var(--color-warning)'
-                : 'var(--color-text-muted)'
               if (isButton) {
                 const isConfirm = pendingConfirm === 'draw'
                 return (
@@ -912,18 +902,18 @@ function SwuGameScreenView({
                 )
               }
               return (
-                <div
-                  data-testid="score-timer"
+                <TimerDisplay
+                  remaining={timerRemaining}
+                  testId="score-timer"
                   style={{
                     width: '100%',
                     padding: '0.1rem 0',
                     fontSize: 'clamp(0.5rem, 1.1vw, 0.7rem)',
                     fontWeight: '300',
-                    color: timerColor,
                     letterSpacing: '0.03em',
                     textAlign: 'center',
                   }}
-                >{formatTime(timerRemaining)}</div>
+                />
               )
             })()}
 

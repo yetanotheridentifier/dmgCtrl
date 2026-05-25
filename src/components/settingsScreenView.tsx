@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useOrientation } from '../hooks/useOrientation'
 import { BackIcon, HelpIcon } from './icons'
 import type { FavouriteBase } from '../hooks/useFavourites'
+import TimerStepper from './shared/TimerStepper'
 
 interface ToggleRowProps {
   id: string
@@ -131,6 +132,7 @@ interface Props {
   enableCompetitiveMode: boolean
   bo1TimerMinutes: number
   bo3TimerMinutes: number
+  xwingTimerMinutes: number
   meleePlayerGuid: string
   favourites: FavouriteBase[]
   onUseHyperspaceChange: (v: boolean) => void
@@ -142,6 +144,7 @@ interface Props {
   onEnableCompetitiveModeChange: (v: boolean) => void
   onBo1TimerChange: (v: number) => void
   onBo3TimerChange: (v: number) => void
+  onXwingTimerChange: (v: number) => void
   onMeleePlayerGuidChange: (v: string) => void
   onRemoveFavourite: (key: string) => void
   onClearFavourites: () => void
@@ -149,7 +152,7 @@ interface Props {
   onHelp: () => void
 }
 
-function SwuSettingsScreenView({
+function SettingsScreenView({
   useHyperspace,
   forceTokenDisplay,
   enableEpicActions,
@@ -159,6 +162,7 @@ function SwuSettingsScreenView({
   enableCompetitiveMode,
   bo1TimerMinutes,
   bo3TimerMinutes,
+  xwingTimerMinutes,
   meleePlayerGuid,
   favourites,
   onUseHyperspaceChange,
@@ -170,6 +174,7 @@ function SwuSettingsScreenView({
   onEnableCompetitiveModeChange,
   onBo1TimerChange,
   onBo3TimerChange,
+  onXwingTimerChange,
   onMeleePlayerGuidChange,
   onRemoveFavourite,
   onClearFavourites,
@@ -265,123 +270,92 @@ function SwuSettingsScreenView({
         onChange={onEnableCompetitiveModeChange}
         vmin={vmin}
       />
-      {enableCompetitiveMode && (() => {
-        const TIMER_MIN = 5
-        const TIMER_MAX = 90
-        const stepperStyle = {
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0.3em 0',
-          gap: '0.5em',
-        }
-        const btnStyle = (disabled: boolean) => ({
-          background: 'transparent',
-          border: `1px solid ${disabled ? 'var(--color-ui-border-muted)' : 'var(--color-ui-border)'}`,
-          borderRadius: '4px',
-          color: disabled ? 'var(--color-text-muted)' : '#ffffff',
-          cursor: disabled ? 'default' : 'pointer',
-          fontSize: '1em',
-          width: '2em',
-          height: '2em',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          WebkitTapHighlightColor: 'transparent',
-          opacity: disabled ? 0.4 : 1,
-        })
-        const valueStyle = {
-          flex: 1,
-          textAlign: 'center' as const,
-          fontSize: '0.95em',
-          color: 'var(--color-text-muted)',
-          letterSpacing: '0.03em',
-        }
-        return (
-          <div style={{ paddingLeft: '0.5em' }}>
-            <div style={{ ...stepperStyle, marginBottom: '0.25em' }}>
-              <span style={{ fontSize: '0.85em', color: 'var(--color-text-muted)', flex: 2 }}>Bo1 Timer</span>
-              <div data-testid="bo1-timer-stepper" style={{ display: 'flex', alignItems: 'center', gap: '0.4em' }}>
-                <button
-                  aria-label="−"
-                  disabled={bo1TimerMinutes <= TIMER_MIN}
-                  onClick={() => onBo1TimerChange(bo1TimerMinutes - 5)}
-                  style={btnStyle(bo1TimerMinutes <= TIMER_MIN)}
-                >−</button>
-                <span style={valueStyle}>{bo1TimerMinutes} min</span>
-                <button
-                  aria-label="+"
-                  disabled={bo1TimerMinutes >= TIMER_MAX}
-                  onClick={() => onBo1TimerChange(bo1TimerMinutes + 5)}
-                  style={btnStyle(bo1TimerMinutes >= TIMER_MAX)}
-                >+</button>
-              </div>
-            </div>
-            <div style={stepperStyle}>
-              <span style={{ fontSize: '0.85em', color: 'var(--color-text-muted)', flex: 2 }}>Bo3 Timer</span>
-              <div data-testid="bo3-timer-stepper" style={{ display: 'flex', alignItems: 'center', gap: '0.4em' }}>
-                <button
-                  aria-label="−"
-                  disabled={bo3TimerMinutes <= TIMER_MIN}
-                  onClick={() => onBo3TimerChange(bo3TimerMinutes - 5)}
-                  style={btnStyle(bo3TimerMinutes <= TIMER_MIN)}
-                >−</button>
-                <span style={valueStyle}>{bo3TimerMinutes} min</span>
-                <button
-                  aria-label="+"
-                  disabled={bo3TimerMinutes >= TIMER_MAX}
-                  onClick={() => onBo3TimerChange(bo3TimerMinutes + 5)}
-                  style={btnStyle(bo3TimerMinutes >= TIMER_MAX)}
-                >+</button>
-              </div>
-            </div>
-            <div style={{
-              display: 'flex',
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '2vw',
-              padding: '1.5vh 0 0.5vh',
-              marginTop: '0.5vh',
-            }}>
-              <label
-                htmlFor="input-melee-player-id"
-                style={{
-                  flex: 1,
-                  color: 'var(--color-text-primary)',
-                  fontWeight: '300',
-                  fontSize: `clamp(0.9rem, ${vmin * 0.035}px, 1.1rem)`,
-                  letterSpacing: '0.03em',
-                  cursor: 'pointer',
-                }}
-              >
-                Melee Player ID
-              </label>
-              <input
-                id="input-melee-player-id"
-                type="text"
-                aria-label="Melee Player ID"
-                value={meleePlayerGuid}
-                onChange={e => onMeleePlayerGuidChange(e.target.value)}
-                placeholder="Enter Player ID"
-                style={{
-                  background: 'transparent',
-                  border: '2px solid var(--color-accent)',
-                  borderRadius: '12px',
-                  color: 'var(--color-text-primary)',
-                  fontWeight: '300',
-                  fontSize: `clamp(0.8rem, ${vmin * 0.03}px, 1rem)`,
-                  padding: '0.3em 0.6em',
-                  outline: 'none',
-                  flexShrink: 0,
-                  width: '45%',
-                  boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
-                }}
-              />
-            </div>
+      {enableCompetitiveMode && (
+        <div style={{ paddingLeft: '0.5em' }}>
+          <TimerStepper
+            label="Bo1 Timer"
+            value={bo1TimerMinutes}
+            min={5}
+            max={90}
+            step={5}
+            onChange={onBo1TimerChange}
+            testId="bo1-timer-stepper"
+          />
+          <TimerStepper
+            label="Bo3 Timer"
+            value={bo3TimerMinutes}
+            min={5}
+            max={90}
+            step={5}
+            onChange={onBo3TimerChange}
+            testId="bo3-timer-stepper"
+          />
+          <div style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '2vw',
+            padding: '1.5vh 0 0.5vh',
+            marginTop: '0.5vh',
+          }}>
+            <label
+              htmlFor="input-melee-player-id"
+              style={{
+                flex: 1,
+                color: 'var(--color-text-primary)',
+                fontWeight: '300',
+                fontSize: `clamp(0.9rem, ${vmin * 0.035}px, 1.1rem)`,
+                letterSpacing: '0.03em',
+                cursor: 'pointer',
+              }}
+            >
+              Melee Player ID
+            </label>
+            <input
+              id="input-melee-player-id"
+              type="text"
+              aria-label="Melee Player ID"
+              value={meleePlayerGuid}
+              onChange={e => onMeleePlayerGuidChange(e.target.value)}
+              placeholder="Enter Player ID"
+              style={{
+                background: 'transparent',
+                border: '2px solid var(--color-accent)',
+                borderRadius: '12px',
+                color: 'var(--color-text-primary)',
+                fontWeight: '300',
+                fontSize: `clamp(0.8rem, ${vmin * 0.03}px, 1rem)`,
+                padding: '0.3em 0.6em',
+                outline: 'none',
+                flexShrink: 0,
+                width: '45%',
+                boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
+              }}
+            />
           </div>
-        )
-      })()}
+        </div>
+      )}
+      <div style={{ paddingLeft: '0.5em', paddingTop: '0.5em' }}>
+        <div style={{
+          fontSize: '0.8em',
+          color: 'var(--color-text-muted)',
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          paddingBottom: '0.4em',
+        }}>
+          X-Wing
+        </div>
+        <TimerStepper
+          label="Game Timer"
+          value={xwingTimerMinutes}
+          min={30}
+          max={90}
+          step={5}
+          onChange={onXwingTimerChange}
+          testId="xwing-timer-stepper"
+        />
+      </div>
     </>
   )
 
@@ -559,4 +533,4 @@ function SwuSettingsScreenView({
   )
 }
 
-export default SwuSettingsScreenView
+export default SettingsScreenView

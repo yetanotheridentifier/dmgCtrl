@@ -845,7 +845,7 @@ describe('onXwingGameStarted', () => {
 // ---------------------------------------------------------------------------
 
 describe('onXwingGameEnded', () => {
-  const payload = { final_round: 3, player_score: 25, opponent_score: 50, player_deficit: 0, opponent_deficit: 0, result: 'loss' as const }
+  const payload = { final_round: 3, player_score: 25, opponent_score: 50, player_deficit: 0, opponent_deficit: 0, result: 'loss' as const, elapsed_seconds: 120, timer_expired: false }
 
   it('sends event name xwing_game_ended', async () => {
     await onXwingGameEnded(payload)
@@ -880,6 +880,16 @@ describe('onXwingGameEnded', () => {
   it('includes result in payload', async () => {
     await onXwingGameEnded(payload)
     expect(getLastBody().data.result).toBe('loss')
+  })
+
+  it('includes elapsed_seconds in payload', async () => {
+    await onXwingGameEnded(payload)
+    expect(getLastBody().data.elapsed_seconds).toBe(120)
+  })
+
+  it('includes timer_expired in payload', async () => {
+    await onXwingGameEnded(payload)
+    expect(getLastBody().data.timer_expired).toBe(false)
   })
 
   it('does not include user-identifiable fields', async () => {

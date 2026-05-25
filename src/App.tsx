@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import SwuLoadingScreen from './components/swuLoadingScreen'
-import SwuGameSelectScreen from './components/swuGameSelectScreen'
+import GameSelectScreen from './components/gameSelectScreen'
 import SwuSetupScreen from './components/swuSetupScreen'
 import SwuGameScreen from './components/swuGameScreen'
 import XwingGameScreen from './components/xwingGameScreen'
 import SwuTournamentScreen from './components/swuTournamentScreen'
 import SwuHelpScreen from './components/swuHelpScreen'
-import SwuSettingsScreen from './components/swuSettingsScreen'
+import SettingsScreen from './components/settingsScreen'
 import { Base, useBases } from './hooks/useBases'
 import { InitialSelection } from './hooks/useSwuSetup'
 import { useTournament } from './hooks/useTournament'
@@ -187,7 +187,7 @@ function App() {
 
   if (screen === 'gameSelect') {
     return (
-      <SwuGameSelectScreen
+      <GameSelectScreen
         onSelectSwu={() => setScreen('setup')}
         onSelectXwing={() => { setIsInXwing(true); setScreen('xwing') }}
         onHelp={handleHelp}
@@ -257,7 +257,7 @@ function App() {
         />
       )}
       {screen === 'help' && <SwuHelpScreen onBack={handleOverlayBack} source={helpSource} />}
-      {screen === 'settings' && <SwuSettingsScreen onBack={handleOverlayBack} onHelp={handleHelp} />}
+      {screen === 'settings' && <SettingsScreen onBack={handleOverlayBack} onHelp={handleHelp} />}
     </>
   )
 }

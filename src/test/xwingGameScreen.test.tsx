@@ -3,8 +3,10 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import XwingGameScreen from '../components/xwingGameScreen'
 import { useOrientation } from '../hooks/useOrientation'
+import { useWakeLock } from '../hooks/useWakeLock'
 
 vi.mock('../hooks/useOrientation')
+vi.mock('../hooks/useWakeLock', () => ({ useWakeLock: vi.fn() }))
 
 const mockOnXwingGameStarted = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnXwingGameEnded = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
@@ -16,15 +18,39 @@ vi.mock('../services/analytics', () => ({
 const mockUserSettings = vi.hoisted(() => ({
   enableLongPress: true,
   enableActionLog: true,
+  enableWakeLock: true,
+  xwingTimerMinutes: 75,
 }))
 vi.mock('../hooks/useUserSettings', () => ({
   useUserSettings: () => mockUserSettings,
 }))
 
+// Mutable timer state — tests mutate this to control what the hook returns
+const mockTimerState = vi.hoisted(() => ({
+  remaining: 4500,
+  isRunning: false,
+  isExpired: false,
+  start: vi.fn(),
+  reset: vi.fn(),
+  stop: vi.fn(),
+}))
+const mockUseTimer = vi.hoisted(() =>
+  vi.fn().mockImplementation(() => mockTimerState)
+)
+vi.mock('../hooks/useTimer', () => ({ useTimer: mockUseTimer }))
+
 beforeEach(() => {
   vi.mocked(useOrientation).mockReturnValue({ isPortrait: false, vmin: 0 })
   mockUserSettings.enableLongPress = true
   mockUserSettings.enableActionLog = true
+  mockUserSettings.enableWakeLock = true
+  mockUserSettings.xwingTimerMinutes = 75
+  mockTimerState.remaining = 4500
+  mockTimerState.isRunning = false
+  mockTimerState.isExpired = false
+  mockTimerState.start.mockClear()
+  mockTimerState.reset.mockClear()
+  mockTimerState.stop.mockClear()
   mockOnXwingGameStarted.mockClear()
   mockOnXwingGameEnded.mockClear()
 })
@@ -324,6 +350,106 @@ describe('XwingGameScreen analytics', () => {
         result: null,
       })
     )
+  })
+
+})
+
+// ---------------------------------------------------------------------------
+// Timer
+// ---------------------------------------------------------------------------
+
+describe('XwingGameScreen timer', () => {
+
+  it('timer is not shown before game starts', () => {
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('xwing-timer')).not.toBeInTheDocument()
+  })
+
+  it('timer is shown after Start Game is pressed', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.getByTestId('xwing-timer')).toBeInTheDocument()
+  })
+
+  it('timer displays the formatted remaining time', async () => {
+    mockTimerState.remaining = 4500
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.getByTestId('xwing-timer')).toHaveTextContent('75:00')
+  })
+
+  it('useTimer is called with xwingTimerMinutes * 60 as duration', () => {
+    mockUserSettings.xwingTimerMinutes = 60
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(mockUseTimer).toHaveBeenCalledWith(3600)
+  })
+
+  it('timer.start is called when Start Game is pressed', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(mockTimerState.start).toHaveBeenCalledOnce()
+  })
+
+  it('timer.stop is called when game reaches game over', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    const btn = screen.getByTestId('player-increment')
+    for (let i = 0; i < 50; i++) fireEvent.click(btn)
+    expect(mockTimerState.stop).toHaveBeenCalled()
+  })
+
+  it('onTimerExpired is called when timer isExpired becomes true', async () => {
+    const onTimerExpired = vi.fn()
+    mockTimerState.isExpired = true
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} onTimerExpired={onTimerExpired} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(onTimerExpired).toHaveBeenCalled()
+  })
+
+  it('analytics payload includes elapsed_seconds', async () => {
+    mockTimerState.remaining = 4200  // 300 s elapsed from 4500
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: /back/i }))
+    expect(mockOnXwingGameEnded).toHaveBeenCalledWith(
+      expect.objectContaining({ elapsed_seconds: 300 })
+    )
+  })
+
+  it('analytics payload includes timer_expired', async () => {
+    mockTimerState.isExpired = true
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: /back/i }))
+    expect(mockOnXwingGameEnded).toHaveBeenCalledWith(
+      expect.objectContaining({ timer_expired: true })
+    )
+  })
+
+})
+
+// ---------------------------------------------------------------------------
+// Wake lock
+// ---------------------------------------------------------------------------
+
+describe('XwingGameScreen wake lock', () => {
+
+  it('calls useWakeLock with enableWakeLock=true by default', () => {
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(vi.mocked(useWakeLock)).toHaveBeenCalledWith(true)
+  })
+
+  it('calls useWakeLock with enableWakeLock=false when setting is disabled', () => {
+    mockUserSettings.enableWakeLock = false
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(vi.mocked(useWakeLock)).toHaveBeenCalledWith(false)
   })
 
 })

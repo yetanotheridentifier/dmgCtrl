@@ -172,6 +172,8 @@ export interface XwingGameEndedPayload {
   player_deficit: number
   opponent_deficit: number
   result: 'win' | 'loss' | 'draw' | null
+  elapsed_seconds: number
+  timer_expired: boolean
 }
 
 export function onXwingGameStarted(playerDeficit: number, opponentDeficit: number): Promise<void> {

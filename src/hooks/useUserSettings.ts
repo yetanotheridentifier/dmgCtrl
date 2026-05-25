@@ -19,6 +19,7 @@ interface UserSettings {
   startScreen: StartScreen
   bo1TimerMinutes: number
   bo3TimerMinutes: number
+  xwingTimerMinutes: number
   meleePlayerGuid: string
 }
 
@@ -39,6 +40,7 @@ const DEFAULTS: UserSettings = {
   startScreen: 'swu',
   bo1TimerMinutes: 25,
   bo3TimerMinutes: 55,
+  xwingTimerMinutes: 75,
   meleePlayerGuid: '',
 }
 
@@ -74,6 +76,7 @@ function load(): UserSettings {
         : DEFAULTS.startScreen,
       bo1TimerMinutes: (parsed.bo1TimerMinutes as number) ?? DEFAULTS.bo1TimerMinutes,
       bo3TimerMinutes: (parsed.bo3TimerMinutes as number) ?? DEFAULTS.bo3TimerMinutes,
+      xwingTimerMinutes: (parsed.xwingTimerMinutes as number) ?? DEFAULTS.xwingTimerMinutes,
       meleePlayerGuid: (parsed.meleePlayerGuid as string) ?? DEFAULTS.meleePlayerGuid,
     }
   } catch {
@@ -98,6 +101,7 @@ type UserSettingsValue = UserSettings & {
   setStartScreen: (v: StartScreen) => void
   setBo1TimerMinutes: (v: number) => void
   setBo3TimerMinutes: (v: number) => void
+  setXwingTimerMinutes: (v: number) => void
   setMeleePlayerGuid: (v: string) => void
 }
 
@@ -127,6 +131,7 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     startScreen: settings.startScreen,
     bo1TimerMinutes: settings.bo1TimerMinutes,
     bo3TimerMinutes: settings.bo3TimerMinutes,
+    xwingTimerMinutes: settings.xwingTimerMinutes,
     meleePlayerGuid: settings.meleePlayerGuid,
     setUseHyperspace: (v) => update({ useHyperspace: v }),
     setForceTokenDisplay: (v) => update({ forceTokenDisplay: v }),
@@ -140,6 +145,7 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     setStartScreen: (v) => update({ startScreen: v }),
     setBo1TimerMinutes: (v) => update({ bo1TimerMinutes: v }),
     setBo3TimerMinutes: (v) => update({ bo3TimerMinutes: v }),
+    setXwingTimerMinutes: (v) => update({ xwingTimerMinutes: v }),
     setMeleePlayerGuid: (v) => update({ meleePlayerGuid: v }),
   }
 

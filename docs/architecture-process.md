@@ -240,7 +240,7 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 | Drop confirmed mid-tournament (`handleDropClick`, second click) | `onTournamentDropped(roundsCompleted, format, playMode)` |
 | End Tournament clicked (`handleDropClick` when `isComplete`) | `onTournamentEnded(totalRounds, won, lost, drawn, points, format, playMode)` |
 
-**SwuSettingsScreen (swuSettingsScreen.tsx)**
+**SettingsScreen (settingsScreen.tsx)**
 
 | Trigger | Call |
 |---|---|
