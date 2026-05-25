@@ -180,6 +180,9 @@ Twenty-seven public functions enqueue events and trigger a flush. All are fire-a
 | `onTournamentRoundCompleted(roundNumber, result, playerScore, opponentScore, format, playMode)` | `tournament_round_completed` | `roundNumber`, `result` (`'won'` \| `'lost'` \| `'drawn'`), `playerScore`, `opponentScore`, `format`, `playMode` |
 | `onTournamentDropped(roundsCompleted, format, playMode)` | `tournament_dropped` | `roundsCompleted`, `format`, `playMode` |
 | `onTournamentEnded(totalRounds, won, lost, drawn, points, format, playMode)` | `tournament_ended` | `totalRounds`, `won`, `lost`, `drawn`, `points`, `format`, `playMode` |
+| `onXwingGameStarted(playerDeficit, opponentDeficit)` | `xwing_game_started` | `player_deficit`, `opponent_deficit` |
+| `onXwingGameEnded(payload)` | `xwing_game_ended` | `final_round`, `player_score`, `opponent_score`, `player_deficit`, `opponent_deficit`, `result`, `elapsed_seconds`, `timer_expired` |
+| `onXwingRoundAdvanced(fromRound, toRound)` | `xwing_round_advanced` | `from_round`, `to_round` |
 
 `onAppInstall` fires on the first launch of the app in standalone mode (i.e. launched from the home screen icon). It checks `window.matchMedia('(display-mode: standalone)').matches` (Android/Chrome) or `window.navigator.standalone === true` (iOS Safari), and only fires if a `pwa_install_tracked` flag is not yet set in localStorage. Once fired it sets the flag, so subsequent launches do not re-fire it. This approach is used instead of the `appinstalled` browser event because Safari does not support that event. Platform is detected as `'ios'` when `navigator.standalone === true` (exclusive to iOS Safari), `'android'` when the user agent contains `'Android'`, and `'other'` otherwise.
 
@@ -273,6 +276,14 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 |---|---|
 | Fetch fails, stale cache served | `onBasesLoadStale()` |
 | Fetch fails, no cache (error screen shown) | `onBasesLoadFailed()` |
+
+**XwingGameScreen (xwingGameScreen.tsx)**
+
+| Trigger | Call |
+|---|---|
+| Start Game tapped | `onXwingGameStarted(playerDeficit, opponentDeficit)` |
+| Back tapped (if game was started) | `onXwingGameEnded(payload)` — includes `elapsed_seconds`, `timer_expired`, `final_round`, scores, deficits, result |
+| Round segment tapped to advance | `onXwingRoundAdvanced(fromRound, toRound)` |
 
 **useWakeLock (useWakeLock.ts)**
 

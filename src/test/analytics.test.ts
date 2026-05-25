@@ -8,7 +8,7 @@ import {
   onSettingChanged, onDeckImportSuccess, onDeckImportFailure,
   onImageLoadFailed, onBasesLoadFailed, onBasesLoadStale, onWakeLockFailed,
   onTournamentStarted, onTournamentRoundCompleted, onTournamentDropped, onTournamentEnded,
-  onXwingGameStarted, onXwingGameEnded,
+  onXwingGameStarted, onXwingGameEnded, onXwingRoundAdvanced,
 } from '../services/analytics'
 import { version as APP_VERSION } from '../../package.json'
 
@@ -899,4 +899,34 @@ describe('onXwingGameEnded', () => {
       expect(keys).not.toContain(piiKey)
     }
   })
+})
+
+// onXwingRoundAdvanced
+// ---------------------------------------------------------------------------
+
+describe('onXwingRoundAdvanced', () => {
+
+  it('sends event name xwing_round_advanced', async () => {
+    await onXwingRoundAdvanced(1, 2)
+    expect(getLastBody().name).toBe('xwing_round_advanced')
+  })
+
+  it('includes from_round in payload', async () => {
+    await onXwingRoundAdvanced(3, 4)
+    expect(getLastBody().data.from_round).toBe(3)
+  })
+
+  it('includes to_round in payload', async () => {
+    await onXwingRoundAdvanced(3, 4)
+    expect(getLastBody().data.to_round).toBe(4)
+  })
+
+  it('does not include user-identifiable fields', async () => {
+    await onXwingRoundAdvanced(1, 2)
+    const keys = Object.keys(getLastBody().data ?? {})
+    for (const piiKey of ['userId', 'email', 'name', 'ip', 'user']) {
+      expect(keys).not.toContain(piiKey)
+    }
+  })
+
 })

@@ -8,6 +8,8 @@ interface Props {
   gameOver: boolean
   result: 'win' | 'loss' | 'draw' | null
   timerRemaining: number
+  timerExpired: boolean
+  round: number
   playerDeficit: number
   opponentDeficit: number
   onPlayerDeficitIncrement: (n: number) => void
@@ -15,6 +17,7 @@ interface Props {
   onOpponentDeficitIncrement: (n: number) => void
   onOpponentDeficitDecrement: (n: number) => void
   onStartGame: () => void
+  onRoundAdvance: () => void
   playerScore: number
   opponentScore: number
   onPlayerIncrement: (n: number) => void
@@ -27,6 +30,12 @@ interface Props {
   onHelp: () => void
   onSettings?: () => void
   onGameEnd?: () => void
+}
+
+function roundTrackerColor(remaining: number): string {
+  if (remaining <= 60) return 'var(--color-error)'
+  if (remaining <= 300) return 'var(--color-warning)'
+  return 'var(--color-accent)'
 }
 
 const NAV_BTN: React.CSSProperties = {
@@ -74,6 +83,8 @@ export default function XwingGameScreenView({
   gameOver,
   result,
   timerRemaining,
+  timerExpired,
+  round,
   playerDeficit,
   opponentDeficit,
   onPlayerDeficitIncrement,
@@ -81,6 +92,7 @@ export default function XwingGameScreenView({
   onOpponentDeficitIncrement,
   onOpponentDeficitDecrement,
   onStartGame,
+  onRoundAdvance,
   playerScore,
   opponentScore,
   onPlayerIncrement,
@@ -165,6 +177,100 @@ export default function XwingGameScreenView({
         </button>
       )}
 
+      {/* Round tracker — continuous bar, top aligned with score buttons, only after game starts.
+          Alignment: left/right = outer edge of player/opponent score button pairs.
+          Derived: playerColCenter = 25vw - 2.5vmin, halfPairWidth = 15vmin → 25vw - 17.5vmin.
+          No container border — the bar is formed by each segment's own borders so there is
+          nothing for the tab to "show through". */}
+      {gameStarted && (
+        <div
+          data-testid="round-tracker"
+          style={{
+            position: 'absolute',
+            top: 'calc(env(safe-area-inset-top) + 2vw)',
+            left: 'calc(25vw - 17.5vmin)',
+            right: 'calc(25vw - 17.5vmin)',
+            // Height matches nav button outer size (5vw / 36px)
+            height: '5vw',
+            minHeight: '36px',
+            display: 'flex',
+            flexDirection: 'row',
+            // flex-start so the current segment (which is taller) hangs down from the top edge
+            alignItems: 'flex-start',
+            zIndex: 10,
+            borderRadius: '8px',
+            overflow: 'visible',
+            background: 'rgba(0,0,0,0.2)',
+            boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
+          }}
+        >
+          {Array.from({ length: 12 }, (_, i) => {
+            const roundNum = i + 1
+            const isCurrent = roundNum === round
+            const isNext = roundNum === round + 1
+            const isFirst = roundNum === 1
+            const isLast = roundNum === 12
+            const clickable = isNext && !timerExpired
+            const timerColor = roundTrackerColor(timerRemaining)
+
+            // Non-current: outer corners follow bar radius; inner corners are flat.
+            const radius = isFirst ? '8px 0 0 8px' : isLast ? '0 8px 8px 0' : '0'
+
+            // Current segment extends below the bar — bottom corners always rounded.
+            // top-left top-right bottom-right bottom-left
+            const currentRadius = isFirst ? '8px 0 8px 8px' : isLast ? '0 8px 8px 8px' : '0 0 8px 8px'
+
+            // Non-current segments form the bar via their own top/bottom (and edge) borders.
+            // borderColor is always set so tests can read element.style.borderColor.
+            // Individual widths control which sides are visible without a container border.
+            const segmentStyle: React.CSSProperties = isCurrent
+              ? {
+                  height: 'calc(100% + 10px)',
+                  borderWidth: '2px',
+                  borderStyle: 'solid',
+                  borderColor: timerColor,
+                  borderRadius: currentRadius,
+                }
+              : {
+                  height: '100%',
+                  borderStyle: 'solid',
+                  borderColor: 'var(--color-ui-border)',
+                  borderTopWidth: '2px',
+                  borderBottomWidth: '2px',
+                  borderLeftWidth: isFirst ? '2px' : '0',
+                  borderRightWidth: isLast ? '2px' : '0',
+                  borderRadius: radius,
+                }
+
+            return (
+              <button
+                key={roundNum}
+                aria-label={`Round ${roundNum}`}
+                onClick={clickable ? onRoundAdvance : undefined}
+                style={{
+                  position: 'relative',
+                  flex: 1,
+                  minWidth: 0,
+                  boxSizing: 'border-box',
+                  background: isCurrent ? 'rgba(0,0,0,0.35)' : 'transparent',
+                  ...segmentStyle,
+                  color: isCurrent ? timerColor : 'var(--color-text-muted)',
+                  fontSize: 'clamp(0.6rem, 1.6vw, 1rem)',
+                  cursor: clickable ? 'pointer' : 'default',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  WebkitTapHighlightColor: 'transparent',
+                  padding: 0,
+                }}
+              >
+                {roundNum}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {/* Log — bottom-left, stub */}
       {enableActionLog && (
         <button
@@ -184,7 +290,7 @@ export default function XwingGameScreenView({
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '12vw 8vmin 20vmin',
+        padding: '12vw 8vmin 8vmin',
         boxSizing: 'border-box',
         touchAction: 'none',
       }}>
@@ -213,7 +319,7 @@ export default function XwingGameScreenView({
           }}>
             {/* Label */}
             <div style={{
-              fontSize: 'clamp(0.6rem, 1.8vmin, 1rem)',
+              fontSize: 'clamp(0.75rem, 2.2vmin, 1.2rem)',
               fontWeight: '300',
               color: 'var(--color-text-muted)',
               letterSpacing: '0.08em',
@@ -311,7 +417,7 @@ export default function XwingGameScreenView({
             {/* Invisible label placeholder — aligns the score-height area
                 with the score numbers in the outer columns */}
             <div style={{
-              fontSize: 'clamp(0.6rem, 1.8vmin, 1rem)',
+              fontSize: 'clamp(0.75rem, 2.2vmin, 1.2rem)',
               marginBottom: '2vmin',
               visibility: 'hidden',
               userSelect: 'none',
@@ -397,7 +503,7 @@ export default function XwingGameScreenView({
           }}>
             {/* Label */}
             <div style={{
-              fontSize: 'clamp(0.6rem, 1.8vmin, 1rem)',
+              fontSize: 'clamp(0.75rem, 2.2vmin, 1.2rem)',
               fontWeight: '300',
               color: 'var(--color-text-muted)',
               letterSpacing: '0.08em',
@@ -486,8 +592,6 @@ export default function XwingGameScreenView({
 
         </div>
 
-        {/* Round tracker placeholder — ticket #230 */}
-        <div data-testid="round-tracker-placeholder" style={{ width: '100%' }} />
 
       </div>
 

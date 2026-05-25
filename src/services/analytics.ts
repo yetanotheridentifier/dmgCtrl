@@ -183,3 +183,7 @@ export function onXwingGameStarted(playerDeficit: number, opponentDeficit: numbe
 export function onXwingGameEnded(payload: XwingGameEndedPayload): Promise<void> {
   return sendEvent('xwing_game_ended', payload as unknown as Record<string, unknown>)
 }
+
+export function onXwingRoundAdvanced(fromRound: number, toRound: number): Promise<void> {
+  return sendEvent('xwing_round_advanced', { from_round: fromRound, to_round: toRound })
+}

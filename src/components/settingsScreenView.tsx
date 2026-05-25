@@ -349,9 +349,8 @@ function SettingsScreenView({
         <TimerStepper
           label="Game Timer"
           value={xwingTimerMinutes}
-          min={30}
-          max={90}
-          step={5}
+          values={[5.5, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90]}
+          formatValue={(v) => v === 5.5 ? '5:30 (test)' : `${v} min`}
           onChange={onXwingTimerChange}
           testId="xwing-timer-stepper"
         />

@@ -544,10 +544,38 @@ describe('SettingsScreen analytics', () => {
       expect(within(screen.getByTestId('xwing-timer-stepper')).getByRole('button', { name: '+' })).toBeDisabled()
     })
 
-    it('− is disabled at minimum (30 minutes)', () => {
-      mockUserSettings.xwingTimerMinutes = 30
+    it('− is disabled at the test minimum (5.5 = 5:30)', () => {
+      mockUserSettings.xwingTimerMinutes = 5.5
       render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
       expect(within(screen.getByTestId('xwing-timer-stepper')).getByRole('button', { name: '−' })).toBeDisabled()
+    })
+
+    it('− is enabled at 30 minutes (steps down to test value)', () => {
+      mockUserSettings.xwingTimerMinutes = 30
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+      expect(within(screen.getByTestId('xwing-timer-stepper')).getByRole('button', { name: '−' })).not.toBeDisabled()
+    })
+
+    it('clicking − from 30 calls setXwingTimerMinutes with 5.5', async () => {
+      const user = userEvent.setup()
+      mockUserSettings.xwingTimerMinutes = 30
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+      await user.click(within(screen.getByTestId('xwing-timer-stepper')).getByRole('button', { name: '−' }))
+      expect(mockUserSettings.setXwingTimerMinutes).toHaveBeenCalledWith(5.5)
+    })
+
+    it('clicking + from 5.5 calls setXwingTimerMinutes with 30', async () => {
+      const user = userEvent.setup()
+      mockUserSettings.xwingTimerMinutes = 5.5
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+      await user.click(within(screen.getByTestId('xwing-timer-stepper')).getByRole('button', { name: '+' }))
+      expect(mockUserSettings.setXwingTimerMinutes).toHaveBeenCalledWith(30)
+    })
+
+    it('shows "5:30 (test)" when xwingTimerMinutes is 5.5', () => {
+      mockUserSettings.xwingTimerMinutes = 5.5
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+      expect(screen.getByTestId('xwing-timer-stepper')).toHaveTextContent('5:30 (test)')
     })
 
   })

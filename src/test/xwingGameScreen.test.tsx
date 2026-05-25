@@ -10,9 +10,11 @@ vi.mock('../hooks/useWakeLock', () => ({ useWakeLock: vi.fn() }))
 
 const mockOnXwingGameStarted = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnXwingGameEnded = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+const mockOnXwingRoundAdvanced = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 vi.mock('../services/analytics', () => ({
   onXwingGameStarted: mockOnXwingGameStarted,
   onXwingGameEnded: mockOnXwingGameEnded,
+  onXwingRoundAdvanced: mockOnXwingRoundAdvanced,
 }))
 
 const mockUserSettings = vi.hoisted(() => ({
@@ -53,6 +55,7 @@ beforeEach(() => {
   mockTimerState.stop.mockClear()
   mockOnXwingGameStarted.mockClear()
   mockOnXwingGameEnded.mockClear()
+  mockOnXwingRoundAdvanced.mockClear()
 })
 
 // ---------------------------------------------------------------------------
@@ -450,6 +453,162 @@ describe('XwingGameScreen wake lock', () => {
     mockUserSettings.enableWakeLock = false
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(vi.mocked(useWakeLock)).toHaveBeenCalledWith(false)
+  })
+
+})
+
+// ---------------------------------------------------------------------------
+// Round tracker
+// ---------------------------------------------------------------------------
+
+describe('XwingGameScreen round tracker', () => {
+
+  it('round tracker is not shown before game starts', () => {
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('round-tracker')).not.toBeInTheDocument()
+  })
+
+  it('round tracker is shown after game starts', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.getByTestId('round-tracker')).toBeInTheDocument()
+  })
+
+  it('renders 12 round indicators', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    for (let i = 1; i <= 12; i++) {
+      expect(screen.getByRole('button', { name: `Round ${i}` })).toBeInTheDocument()
+    }
+  })
+
+  it('round 1 is highlighted on game start', async () => {
+    mockTimerState.remaining = 4500
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.getByRole('button', { name: 'Round 1' }).style.borderColor).toBe('var(--color-accent)')
+  })
+
+  it('tapping round 2 while on round 1 advances to round 2', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    expect(screen.getByRole('button', { name: 'Round 2' }).style.borderColor).toBe('var(--color-accent)')
+    expect(screen.getByRole('button', { name: 'Round 1' }).style.borderColor).not.toBe('var(--color-accent)')
+  })
+
+  it('tapping round 3 while on round 1 does nothing', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: 'Round 3' }))
+    expect(screen.getByRole('button', { name: 'Round 1' }).style.borderColor).toBe('var(--color-accent)')
+  })
+
+  it('tapping the current round (round 1) does nothing', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: 'Round 1' }))
+    expect(screen.getByRole('button', { name: 'Round 1' }).style.borderColor).toBe('var(--color-accent)')
+  })
+
+  it('fires onXwingRoundAdvanced with correct from/to values', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    expect(mockOnXwingRoundAdvanced).toHaveBeenCalledWith(1, 2)
+  })
+
+  it('does not advance round when timer is expired', async () => {
+    mockTimerState.isExpired = true
+    mockTimerState.remaining = 0
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    expect(screen.getByRole('button', { name: 'Round 1' }).style.borderColor).toBe('var(--color-error)')
+  })
+
+  it('does not fire analytics when round advance is blocked by timer expiry', async () => {
+    mockTimerState.isExpired = true
+    mockTimerState.remaining = 0
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    expect(mockOnXwingRoundAdvanced).not.toHaveBeenCalled()
+  })
+
+  it('does not advance round when game is over', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    const scoreBtn = screen.getByTestId('player-increment')
+    for (let i = 0; i < 50; i++) fireEvent.click(scoreBtn)
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    // Result banner shown means game is over; round 1 still highlighted (not advanced)
+    expect(screen.getByTestId('result-banner')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Round 1' })).toBeInTheDocument()
+  })
+
+  it('timer.stop is called when round advances to 12', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    mockTimerState.stop.mockClear()
+    for (let i = 2; i <= 12; i++) {
+      fireEvent.click(screen.getByRole('button', { name: `Round ${i}` }))
+    }
+    expect(mockTimerState.stop).toHaveBeenCalled()
+  })
+
+  // --- Colour thresholds (tracks timer) ---
+
+  it('current round indicator is accent blue when timer > 5:00', async () => {
+    mockTimerState.remaining = 301
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.getByRole('button', { name: 'Round 1' }).style.borderColor).toBe('var(--color-accent)')
+  })
+
+  it('current round indicator is amber when timer is at exactly 5:00', async () => {
+    mockTimerState.remaining = 300
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.getByRole('button', { name: 'Round 1' }).style.borderColor).toBe('var(--color-warning)')
+  })
+
+  it('current round indicator is amber when timer is between 5:00 and 1:00', async () => {
+    mockTimerState.remaining = 150
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.getByRole('button', { name: 'Round 1' }).style.borderColor).toBe('var(--color-warning)')
+  })
+
+  it('current round indicator is red when timer is at exactly 1:00', async () => {
+    mockTimerState.remaining = 60
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.getByRole('button', { name: 'Round 1' }).style.borderColor).toBe('var(--color-error)')
+  })
+
+  it('current round indicator is red when timer is expired', async () => {
+    mockTimerState.remaining = 0
+    mockTimerState.isExpired = true
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.getByRole('button', { name: 'Round 1' }).style.borderColor).toBe('var(--color-error)')
   })
 
 })
