@@ -6,7 +6,7 @@ import { useTimer } from '../hooks/useTimer'
 import { useWakeLock } from '../hooks/useWakeLock'
 import XwingGameScreenView from './xwingGameScreenView'
 import RotatePrompt from './layout/RotatePrompt'
-import { onXwingGameStarted, onXwingGameEnded } from '../services/analytics'
+import { onXwingGameStarted, onXwingGameEnded, onXwingRoundAdvanced } from '../services/analytics'
 
 interface Props {
   onBack: () => void
@@ -43,6 +43,19 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     }
   }, [gameStarted, timer.isExpired]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (game.round === 12) {
+      timer.stop()
+    }
+  }, [game.round]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRoundAdvance = () => {
+    if (timer.isExpired || game.gameOver || game.round >= 12) return
+    const fromRound = game.round
+    game.advanceRound()
+    void onXwingRoundAdvanced(fromRound, Math.min(12, fromRound + 1))
+  }
+
   const handleStartGame = () => {
     game.reset()
     setGameStarted(true)
@@ -77,6 +90,8 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
       gameStarted={gameStarted}
       gameOver={game.gameOver}
       timerRemaining={timer.remaining}
+      timerExpired={timer.isExpired}
+      round={game.round}
       result={game.result}
       playerDeficit={playerDeficit}
       opponentDeficit={opponentDeficit}
@@ -85,6 +100,7 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
       onOpponentDeficitIncrement={(n) => setOpponentDeficit(d => Math.min(4, d + n))}
       onOpponentDeficitDecrement={(n) => setOpponentDeficit(d => Math.max(0, d - n))}
       onStartGame={handleStartGame}
+      onRoundAdvance={handleRoundAdvance}
       playerScore={game.playerScore}
       opponentScore={game.opponentScore}
       onPlayerIncrement={game.incrementPlayer}

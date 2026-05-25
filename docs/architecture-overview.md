@@ -75,7 +75,7 @@ The app is served at `/dmgCtrl/` and is designed to be added to an iOS home scre
 App
 ├── SwuLoadingScreen      (standalone screen — icon + LOADING text; transitions as soon as data is ready)
 ├── GameSelectScreen   (standalone screen — game selector; shown when enableGameSelect is true; two logo buttons: Star Wars Unlimited and Star Wars X-Wing (both enabled); help button top-right)
-├── XwingGameScreen       (standalone screen — X-Wing mission point tracker; landscape-only with RotatePrompt fallback; pre-game deficit entry (0–4 per side, stored for future scoring use) then dual score counters starting at 0; game ends at 50 points; countdown timer (default 75 min, configurable in Settings) starts with the game and is displayed in the centre column; timer freezes at game over; result banner replaces timer at game over; useWakeLock keeps screen on; onTimerExpired callback stub for future round tracker)
+├── XwingGameScreen       (standalone screen — X-Wing mission point tracker; landscape-only with RotatePrompt fallback; pre-game deficit entry (0–4 per side, stored for future scoring use) then dual score counters starting at 0; game ends at 50 points; countdown timer (default 75 min, configurable in Settings) starts with the game and is displayed in the centre column; timer freezes at game over or round 12; result banner replaces timer at game over; a round tracker bar (rounds 1–12) spans the top between the nav buttons — the current round segment extends downward as a seamless tab, tapping the next segment advances the round; useWakeLock keeps screen on)
 ├── SwuSetupScreen        (container)
 │   ├── useSwuSetup       (hook — filtering, auto-select)
 │   ├── useBaseArt        (hook — ordered art fallback chain, image load state)
@@ -102,7 +102,7 @@ App
 └── SettingsScreen     (container)
     ├── useUserSettings   (hook — persistent user preferences)
     ├── useFavourites     (hook — favourites list, remove/clear operations)
-    └── SettingsScreenView (view — toggle list + TimerStepper components for bo1/bo3 timers (gated by competitive mode) and X-Wing game timer (always visible); landscape: two-column layout separating general and favourites settings; calls useOrientation directly for font sizing)
+    └── SettingsScreenView (view — toggle list + TimerStepper components for bo1/bo3 timers (gated by competitive mode, arithmetic 5–90 step 5) and X-Wing game timer (always visible, non-uniform value list [5.5, 30, 35, …, 90] with 5.5 formatted as '5:30 (test)'); landscape: two-column layout separating general and favourites settings; calls useOrientation directly for font sizing)
 
 Each screen is wrapped in AppScreenLayout (shared layout component)
 ```
