@@ -14,6 +14,7 @@ interface UserSettings {
   enableFavourites: boolean
   enableLongPress: boolean
   enableActionLog: boolean
+  enableInitiativeBar: boolean
   enableCompetitiveMode: boolean
   enableGameSelect: boolean
   startScreen: StartScreen
@@ -35,6 +36,7 @@ const DEFAULTS: UserSettings = {
   enableFavourites: true,
   enableLongPress: true,
   enableActionLog: true,
+  enableInitiativeBar: true,
   enableCompetitiveMode: true,
   enableGameSelect: true,
   startScreen: 'gameSelect',
@@ -69,6 +71,7 @@ function load(): UserSettings {
       enableFavourites: (parsed.enableFavourites as boolean) ?? DEFAULTS.enableFavourites,
       enableLongPress: (parsed.enableLongPress as boolean) ?? DEFAULTS.enableLongPress,
       enableActionLog: (parsed.enableActionLog as boolean) ?? DEFAULTS.enableActionLog,
+      enableInitiativeBar: (parsed.enableInitiativeBar as boolean) ?? DEFAULTS.enableInitiativeBar,
       enableCompetitiveMode: (parsed.enableCompetitiveMode as boolean) ?? DEFAULTS.enableCompetitiveMode,
       enableGameSelect: (parsed.enableGameSelect as boolean) ?? DEFAULTS.enableGameSelect,
       startScreen: VALID_START_SCREENS.includes(parsed.startScreen as StartScreen)
@@ -96,6 +99,7 @@ type UserSettingsValue = UserSettings & {
   setEnableFavourites: (v: boolean) => void
   setEnableLongPress: (v: boolean) => void
   setEnableActionLog: (v: boolean) => void
+  setEnableInitiativeBar: (v: boolean) => void
   setEnableCompetitiveMode: (v: boolean) => void
   setEnableGameSelect: (v: boolean) => void
   setStartScreen: (v: StartScreen) => void
@@ -126,6 +130,7 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     enableFavourites: settings.enableFavourites,
     enableLongPress: settings.enableLongPress,
     enableActionLog: settings.enableActionLog,
+    enableInitiativeBar: settings.enableInitiativeBar,
     enableCompetitiveMode: settings.enableCompetitiveMode,
     enableGameSelect: settings.enableGameSelect,
     startScreen: settings.startScreen,
@@ -140,6 +145,7 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     setEnableFavourites: (v) => update({ enableFavourites: v }),
     setEnableLongPress: (v) => update({ enableLongPress: v }),
     setEnableActionLog: (v) => update({ enableActionLog: v }),
+    setEnableInitiativeBar: (v) => update({ enableInitiativeBar: v }),
     setEnableCompetitiveMode: (v) => update({ enableCompetitiveMode: v }),
     setEnableGameSelect: (v) => update({ enableGameSelect: v }),
     setStartScreen: (v) => update({ startScreen: v }),

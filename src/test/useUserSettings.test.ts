@@ -51,6 +51,11 @@ describe('useUserSettings', () => {
     expect(result.current.enableActionLog).toBe(true)
   })
 
+  it('defaults enableInitiativeBar to true when storage is empty', () => {
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    expect(result.current.enableInitiativeBar).toBe(true)
+  })
+
   // --- Load from storage ---
 
   it('loads useHyperspace=false from stored JSON', () => {
@@ -133,6 +138,14 @@ describe('useUserSettings', () => {
     expect(result.current.enableActionLog).toBe(false)
   })
 
+  it('loads enableInitiativeBar=false from stored JSON', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key) =>
+      key === STORAGE_KEY ? JSON.stringify({ enableInitiativeBar: false }) : null
+    )
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    expect(result.current.enableInitiativeBar).toBe(false)
+  })
+
   // --- Saving ---
 
   it('saves to localStorage when setUseHyperspace is called', () => {
@@ -175,6 +188,13 @@ describe('useUserSettings', () => {
     act(() => result.current.setEnableActionLog(false))
     const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
     expect(saved.enableActionLog).toBe(false)
+  })
+
+  it('saves to localStorage when setEnableInitiativeBar is called', () => {
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    act(() => result.current.setEnableInitiativeBar(false))
+    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
+    expect(saved.enableInitiativeBar).toBe(false)
   })
 
   // --- Resilience ---

@@ -8,6 +8,7 @@ import { useWakeLock } from '../hooks/useWakeLock'
 import { useUserSettings } from '../hooks/useUserSettings'
 import { useMatch } from '../hooks/useMatch'
 import { useTimer } from '../hooks/useTimer'
+import { useInitiative } from '../hooks/useInitiative'
 import SwuGameScreenView from './swuGameScreenView'
 import RotatePrompt from './layout/rotatePrompt'
 import { onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed, onEpicActionUsed, onForceGained, onForceUsed, onMatchCompleted } from '../services/analytics'
@@ -24,7 +25,7 @@ interface Props {
 }
 
 function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBack, onHelp, onSettings, onMatchComplete }: Props) {
-  const { forceTokenDisplay, enableEpicActions, enableWakeLock, useHyperspace, enableLongPress, enableActionLog, bo1TimerMinutes, bo3TimerMinutes } = useUserSettings()
+  const { forceTokenDisplay, enableEpicActions, enableWakeLock, useHyperspace, enableLongPress, enableActionLog, enableInitiativeBar, bo1TimerMinutes, bo3TimerMinutes } = useUserSettings()
   const match = useMatch(playMode)
   const art = useBaseArt(base, useHyperspace)
   const game = useSwuGame(base.hp)
@@ -35,6 +36,7 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
   const timerDuration = (playMode === 'bo3' ? bo3TimerMinutes : bo1TimerMinutes) * 60
   const timer = useTimer(timerDuration)
 
+  const initiative = useInitiative()
   const [showLog, setShowLog] = useState(false)
   const [epicOverlayDismissed, setEpicOverlayDismissed] = useState(false)
   const [pendingConfirm, setPendingConfirm] = useState<'win' | 'loss' | 'draw' | null>(null)
@@ -274,6 +276,10 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
       lastGameResult={lastGameResult}
       timerRemaining={timer.remaining}
       timerInteractive={timerInteractive}
+      enableInitiativeBar={enableInitiativeBar}
+      initiative={initiative.initiative}
+      onInitiativeOpponent={initiative.setOpponent}
+      onInitiativePlayer={initiative.setPlayer}
     />
   )
 }

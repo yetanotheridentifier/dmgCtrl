@@ -29,6 +29,16 @@ When **Enable Action Log** is on in Settings, a log button appears in the bottom
 - Round entries cannot be undone
 - Tap the log button again to close it
 
+### Initiative Bar
+
+When **Enable Initiative Bar** is on in Settings, a narrow vertical bar appears on the left side of the game screen.
+
+- Tap the **top half** (OPP) to record that your opponent has initiative
+- Tap the **bottom half** (YOU) to record that you have initiative
+- Tapping the same side again has no effect — once set, initiative stays with that player until you tap the other side
+
+Initiative is set at the start of each game (usually by a roll-off or a Chance Cube). It doesn't reset automatically between rounds.
+
 ### Round Tracker
 
 When **Enable Action Log** is on in Settings, a round counter button appears in the bottom-right corner.
@@ -124,6 +134,7 @@ Your preferences are saved automatically and persist between sessions.
 | **Enable Epic Actions** | On | Shows the Epic Action button on the game screen. Turn off if you prefer not to track epic actions. |
 | **Enable Screen Wake Lock** | On | Keeps the screen on during play. May affect battery life. |
 | **Enable Action Log** | On | Shows a scrollable log of game actions with an Undo button for the most recent action. Also enables the round tracker button. |
+| **Enable Initiative Bar** | On | Shows a vertical initiative tracker on the left side of the game screen. Tap OPP or YOU to record who has initiative. |
 | **Enable Favourites** | On | Reveals a star button on the setup screen to save bases as favourites, and adds a Favourites input mode for quick reselection. Saved bases are kept even when this setting is off. |
 
 ## Rules

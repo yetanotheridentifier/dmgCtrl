@@ -4,9 +4,11 @@ import type { PlayMode } from '../utils/playMode'
 import { useDragScrubber } from '../hooks/useDragScrubber'
 import AppScreenLayout from './layout/appScreenLayout'
 import GameLogOverlay from './gameLogOverlay'
+import InitiativeToggle from './initiativeToggle'
 import { BackIcon, CogIcon, HelpIcon, LogIcon } from './icons'
 import TimerDisplay from './shared/timerDisplay'
 import { NAV_BTN_STYLE } from '../styles/navButton'
+import type { Initiative } from '../hooks/useInitiative'
 
 // Game screen nav buttons are absolutely positioned with a z-index to stay above card art.
 const GAME_NAV_BTN: React.CSSProperties = { ...NAV_BTN_STYLE, position: 'absolute', zIndex: 10 }
@@ -66,6 +68,10 @@ interface Props {
   lastGameResult: 'won' | 'lost' | 'drawn' | null
   timerRemaining: number
   timerInteractive: boolean
+  enableInitiativeBar: boolean
+  initiative: Initiative
+  onInitiativeOpponent: () => void
+  onInitiativePlayer: () => void
 }
 
 function SwuGameScreenView({
@@ -119,6 +125,10 @@ function SwuGameScreenView({
   lastGameResult,
   timerRemaining,
   timerInteractive,
+  enableInitiativeBar,
+  initiative,
+  onInitiativeOpponent,
+  onInitiativePlayer,
 }: Props) {
   const bothOverlaysActive = epicActionOverlayVisible && showEpicAction && forceActive && showForce
   const gameStarted = round > 0
@@ -1006,6 +1016,37 @@ function SwuGameScreenView({
           {round}
         </span>
       </button>}
+
+      {/* Initiative bar — left column, fills space between last top-left button and log */}
+      {enableInitiativeBar && (() => {
+        const topVw = showForce && (showEpicAction || showMysticMonastery) ? 23
+          : (showForce || showEpicAction || showMysticMonastery) ? 16
+          : 9
+        const bottomVw = enableActionLog ? 9 : 2
+        return (
+          <div style={{
+            position: 'absolute',
+            top: `calc(env(safe-area-inset-top) + ${topVw}vw)`,
+            bottom: `calc(env(safe-area-inset-bottom) + ${bottomVw}vw)`,
+            left: 'calc(env(safe-area-inset-left) + 2vw)',
+            width: '5vw',
+            minWidth: '36px',
+            background: 'rgba(0,0,0,0.2)',
+            border: '2px solid var(--color-ui-border)',
+            borderRadius: '8px',
+            boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
+            zIndex: 10,
+            padding: '0.4rem 0',
+            boxSizing: 'border-box',
+          }}>
+            <InitiativeToggle
+              initiative={initiative}
+              onSetOpponent={onInitiativeOpponent}
+              onSetPlayer={onInitiativePlayer}
+            />
+          </div>
+        )
+      })()}
 
       {/* Log button — bottom-left, aligned with round counter */}
       {enableActionLog && (
