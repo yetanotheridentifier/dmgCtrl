@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SettingsScreen from '../components/settingsScreen'
 import type { FavouriteBase } from '../hooks/useFavourites'
+import type { StartScreen } from '../hooks/useUserSettings'
 
 const mockOnSettingChanged = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnFavouriteRemovedSettings = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
@@ -36,6 +37,8 @@ const mockUserSettings = vi.hoisted(() => ({
   setXwingTimerMinutes: vi.fn(),
   meleePlayerGuid: '',
   setMeleePlayerGuid: vi.fn(),
+  startScreen: 'gameSelect' as StartScreen,
+  setStartScreen: vi.fn(),
 }))
 vi.mock('../hooks/useUserSettings', () => ({
   useUserSettings: () => mockUserSettings,
@@ -78,6 +81,7 @@ beforeEach(() => {
   mockUserSettings.bo3TimerMinutes = 55
   mockUserSettings.xwingTimerMinutes = 75
   mockUserSettings.meleePlayerGuid = ''
+  mockUserSettings.startScreen = 'gameSelect'
   mockFavourites.favourites = []
   mockOrientation.isPortrait = true
 })
@@ -283,6 +287,39 @@ describe('SettingsScreen', () => {
   it('X-Wing tab does not show Enable Action Log', () => {
     render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="xwing" />)
     expect(screen.queryByRole('checkbox', { name: /enable action log/i })).not.toBeInTheDocument()
+  })
+
+  // ── General tab — start screen ───────────────────────────────────────────
+
+  it('General tab shows a Start Screen selector', () => {
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="general" />)
+    expect(screen.getByRole('combobox', { name: /start screen/i })).toBeInTheDocument()
+  })
+
+  it('Start Screen selector reflects the current startScreen value', () => {
+    mockUserSettings.startScreen = 'swu'
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="general" />)
+    expect(screen.getByRole('combobox', { name: /start screen/i })).toHaveValue('swu')
+  })
+
+  it('Start Screen selector has Game Select, SWU, and X-Wing options', () => {
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="general" />)
+    const select = screen.getByRole('combobox', { name: /start screen/i })
+    expect(within(select).getByRole('option', { name: /game select/i })).toBeInTheDocument()
+    expect(within(select).getByRole('option', { name: /^swu$/i })).toBeInTheDocument()
+    expect(within(select).getByRole('option', { name: /x-wing/i })).toBeInTheDocument()
+  })
+
+  it('calls setStartScreen when Start Screen selector is changed', async () => {
+    const user = userEvent.setup()
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="general" />)
+    await user.selectOptions(screen.getByRole('combobox', { name: /start screen/i }), 'swu')
+    expect(mockUserSettings.setStartScreen).toHaveBeenCalledWith('swu')
+  })
+
+  it('Start Screen selector is not shown on SWU tab', () => {
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="swu" />)
+    expect(screen.queryByRole('combobox', { name: /start screen/i })).not.toBeInTheDocument()
   })
 
   // ── General tab — toggles ─────────────────────────────────────────────────
@@ -561,19 +598,17 @@ describe('SettingsScreen', () => {
 
   // ── Layout ────────────────────────────────────────────────────────────────
 
-  it('in landscape on the SWU tab, SWU options and favourites are in separate columns', () => {
+  it('in landscape on the SWU tab, all settings appear in a single column without separate groups', () => {
     mockOrientation.isPortrait = false
     mockFavourites.favourites = sampleFavourites
     render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="swu" />)
-    const optionsCol = screen.getByRole('group', { name: /swu options/i })
-    const favouritesCol = screen.getByRole('group', { name: /favourites settings/i })
-    expect(within(optionsCol).getByRole('checkbox', { name: /use hyperspace art/i })).toBeInTheDocument()
-    expect(within(optionsCol).queryByRole('checkbox', { name: /enable favourites/i })).not.toBeInTheDocument()
-    expect(within(favouritesCol).getByRole('checkbox', { name: /enable favourites/i })).toBeInTheDocument()
-    expect(within(favouritesCol).queryByRole('checkbox', { name: /use hyperspace art/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: /swu options/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: /favourites settings/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: /use hyperspace art/i })).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: /enable favourites/i })).toBeInTheDocument()
   })
 
-  it('in portrait on the SWU tab, settings are not split into columns', async () => {
+  it('in portrait on the SWU tab, settings are not split into columns', () => {
     mockOrientation.isPortrait = true
     render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="swu" />)
     expect(screen.queryByRole('group', { name: /swu options/i })).not.toBeInTheDocument()

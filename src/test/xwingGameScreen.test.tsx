@@ -244,6 +244,18 @@ describe('XwingGameScreen game over', () => {
 
 describe('XwingGameScreen navigation', () => {
 
+  it('shows dmgCtrl title before game starts', () => {
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByText('dmgCtrl')).toBeInTheDocument()
+  })
+
+  it('hides dmgCtrl title after game starts', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.queryByText('dmgCtrl')).not.toBeInTheDocument()
+  })
+
   it('calls onBack when back button clicked before game starts', async () => {
     const user = userEvent.setup()
     const onBack = vi.fn()

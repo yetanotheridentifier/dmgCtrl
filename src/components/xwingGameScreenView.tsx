@@ -39,7 +39,6 @@ function roundTrackerColor(remaining: number): string {
 }
 
 const NAV_BTN: React.CSSProperties = {
-  position: 'absolute',
   width: '5vw',
   height: '5vw',
   minWidth: '36px',
@@ -148,20 +147,49 @@ export default function XwingGameScreenView({
   return (
     <AppScreenLayout>
 
-      {/* Back — top-left */}
-      <button
-        aria-label="Back"
-        onClick={onBack}
-        style={{ ...NAV_BTN, top: 'calc(env(safe-area-inset-top) + 2vw)', left: 'calc(env(safe-area-inset-left) + 2vw)' }}
-      >
-        <BackIcon />
-      </button>
+      {/* Back + title — top-left flex row; title hidden once game starts */}
+      <div style={{
+        position: 'absolute',
+        top: 'calc(env(safe-area-inset-top) + 2vw)',
+        left: 'calc(env(safe-area-inset-left) + 2vw)',
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: '1vw',
+        zIndex: 10,
+      }}>
+        <button
+          aria-label="Back"
+          onClick={onBack}
+          style={NAV_BTN}
+        >
+          <BackIcon />
+        </button>
+        {!gameStarted && (
+          <>
+            <img
+              src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`}
+              alt="dmgCtrl"
+              style={{ height: 'clamp(1.2rem, 4vw, 1.8rem)', width: 'auto', pointerEvents: 'none' }}
+            />
+            <span style={{
+              color: 'var(--color-text-primary)',
+              fontWeight: '200',
+              fontSize: 'clamp(1.2rem, 4vw, 1.8rem)',
+              letterSpacing: '0.15em',
+              pointerEvents: 'none',
+            }}>
+              dmgCtrl
+            </span>
+          </>
+        )}
+      </div>
 
       {/* Help — top-right */}
       <button
         aria-label="Help"
         onClick={onHelp}
-        style={{ ...NAV_BTN, top: 'calc(env(safe-area-inset-top) + 2vw)', right: 'calc(env(safe-area-inset-right) + 2vw)' }}
+        style={{ ...NAV_BTN, position: 'absolute', top: 'calc(env(safe-area-inset-top) + 2vw)', right: 'calc(env(safe-area-inset-right) + 2vw)' }}
       >
         <HelpIcon />
       </button>
@@ -171,7 +199,7 @@ export default function XwingGameScreenView({
         <button
           aria-label="Settings"
           onClick={onSettings}
-          style={{ ...NAV_BTN, top: 'calc(env(safe-area-inset-top) + 9vw)', right: 'calc(env(safe-area-inset-right) + 2vw)' }}
+          style={{ ...NAV_BTN, position: 'absolute', top: 'calc(env(safe-area-inset-top) + 9vw)', right: 'calc(env(safe-area-inset-right) + 2vw)' }}
         >
           <CogIcon />
         </button>
@@ -276,7 +304,7 @@ export default function XwingGameScreenView({
         <button
           data-testid="log-btn"
           aria-label="Log"
-          style={{ ...NAV_BTN, bottom: 'calc(env(safe-area-inset-bottom) + 2vw)', left: 'calc(env(safe-area-inset-left) + 2vw)' }}
+          style={{ ...NAV_BTN, position: 'absolute', bottom: 'calc(env(safe-area-inset-bottom) + 2vw)', left: 'calc(env(safe-area-inset-left) + 2vw)' }}
         >
           <LogIcon />
         </button>

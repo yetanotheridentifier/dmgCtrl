@@ -31,7 +31,7 @@ function App() {
   const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament' | 'xwing'>('setup')
   const [settingsDefaultTab, setSettingsDefaultTab] = useState<'general' | 'swu' | 'xwing'>('swu')
   const { loading } = useBases()
-  const { useHyperspace, enableGameSelect } = useUserSettings()
+  const { useHyperspace, startScreen } = useUserSettings()
   const gameStartTime = useRef<number>(0)
   const {
     tournament,
@@ -77,10 +77,15 @@ function App() {
   const handleReady = () => {
     if (tournament !== null) {
       setScreen('tournament')
-    } else if (enableGameSelect) {
-      setScreen('gameSelect')
-    } else {
+      return
+    }
+    if (startScreen === 'xwing') {
+      setIsInXwing(true)
+      setScreen('xwing')
+    } else if (startScreen === 'swu') {
       setScreen('setup')
+    } else {
+      setScreen('gameSelect')
     }
   }
 
@@ -180,7 +185,7 @@ function App() {
 
   const handleXwingBack = () => {
     setIsInXwing(false)
-    setScreen(enableGameSelect ? 'gameSelect' : 'setup')
+    setScreen('gameSelect')
   }
 
   const handleOverlayBack = () => {
@@ -208,7 +213,7 @@ function App() {
       <SwuSetupScreen
         onConfirm={handleConfirm}
         onHelp={handleHelp}
-        onBack={enableGameSelect ? () => setScreen('gameSelect') : undefined}
+        onBack={() => setScreen('gameSelect')}
         onSettings={handleSettings}
         initialSelection={lastSelection}
       />

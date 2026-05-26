@@ -290,25 +290,25 @@ describe('useUserSettings', () => {
     expect(result.current.enableGameSelect).toBe(true)
   })
 
-  it('defaults startScreen to swu when storage is empty', () => {
+  it('defaults startScreen to gameSelect when storage is empty', () => {
     const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.startScreen).toBe('swu')
+    expect(result.current.startScreen).toBe('gameSelect')
   })
 
-  it('falls back to swu for startScreen when stored JSON is corrupt', () => {
+  it('falls back to gameSelect for startScreen when stored JSON is corrupt', () => {
     vi.mocked(localStorage.getItem).mockImplementation((key) =>
       key === STORAGE_KEY ? 'not-valid-json{{{' : null
     )
     const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.startScreen).toBe('swu')
+    expect(result.current.startScreen).toBe('gameSelect')
   })
 
-  it('falls back to swu for startScreen when missing from stored JSON', () => {
+  it('falls back to gameSelect for startScreen when missing from stored JSON', () => {
     vi.mocked(localStorage.getItem).mockImplementation((key) =>
       key === STORAGE_KEY ? JSON.stringify({ useHyperspace: false }) : null
     )
     const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
-    expect(result.current.startScreen).toBe('swu')
+    expect(result.current.startScreen).toBe('gameSelect')
   })
 
 })

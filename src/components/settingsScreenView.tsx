@@ -122,6 +122,7 @@ const smallButtonStyle: React.CSSProperties = {
 
 type ForceTokenDisplay = 'always-on' | 'lof-only' | 'always-off'
 type Tab = 'general' | 'swu' | 'xwing'
+type StartScreen = 'gameSelect' | 'swu' | 'xwing'
 
 interface Props {
   defaultTab: Tab
@@ -148,6 +149,8 @@ interface Props {
   onBo3TimerChange: (v: number) => void
   onXwingTimerChange: (v: number) => void
   onMeleePlayerGuidChange: (v: string) => void
+  startScreen: StartScreen
+  onStartScreenChange: (v: StartScreen) => void
   onRemoveFavourite: (key: string) => void
   onClearFavourites: () => void
   onBack: () => void
@@ -179,6 +182,8 @@ function SettingsScreenView({
   onBo3TimerChange,
   onXwingTimerChange,
   onMeleePlayerGuidChange,
+  startScreen,
+  onStartScreenChange,
   onRemoveFavourite,
   onClearFavourites,
   onBack,
@@ -191,6 +196,7 @@ function SettingsScreenView({
   const scrollableColumn: React.CSSProperties = {
     flex: 1,
     overflowY: 'auto',
+    paddingRight: '1rem',
     paddingBottom: '5vw',
   }
 
@@ -280,6 +286,51 @@ function SettingsScreenView({
 
   const generalContent = (
     <>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '2vw',
+        padding: '1.5vh 0 0.5vh',
+      }}>
+        <label
+          htmlFor="select-start-screen"
+          style={{
+            flex: 1,
+            color: 'var(--color-text-primary)',
+            fontWeight: '300',
+            fontSize: `clamp(0.9rem, ${vmin * 0.035}px, 1.1rem)`,
+            letterSpacing: '0.03em',
+            cursor: 'pointer',
+          }}
+        >
+          Start Screen
+        </label>
+        <select
+          id="select-start-screen"
+          aria-label="Start Screen"
+          value={startScreen}
+          onChange={e => onStartScreenChange(e.target.value as StartScreen)}
+          style={{
+            background: 'transparent',
+            border: '2px solid var(--color-accent)',
+            borderRadius: '12px',
+            color: 'var(--color-text-primary)',
+            fontSize: `clamp(0.8rem, ${vmin * 0.03}px, 1rem)`,
+            padding: '0.3em 0.6em',
+            cursor: 'pointer',
+            flexShrink: 0,
+            outline: 'none',
+            boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
+            WebkitAppearance: 'none',
+          }}
+        >
+          <option value="gameSelect">Game Select</option>
+          <option value="swu">SWU</option>
+          <option value="xwing">X-Wing</option>
+        </select>
+      </div>
       <ToggleRow
         id="toggle-wake-lock"
         label="Enable Screen Wake Lock"
@@ -567,19 +618,10 @@ function SettingsScreenView({
       </div>
     )
   } else if (activeTab === 'swu') {
-    tabContent = isPortrait ? (
+    tabContent = (
       <div style={scrollableColumn}>
         {swuOptions}
         {favouritesSection}
-      </div>
-    ) : (
-      <div style={{ flex: 1, display: 'flex', gap: '4vw', overflow: 'hidden' }}>
-        <div role="group" aria-label="SWU options" style={scrollableColumn}>
-          {swuOptions}
-        </div>
-        <div role="group" aria-label="Favourites settings" style={scrollableColumn}>
-          {favouritesSection}
-        </div>
       </div>
     )
   } else {

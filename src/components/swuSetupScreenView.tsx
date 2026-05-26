@@ -2,7 +2,7 @@ import { Base } from '../hooks/useBases'
 import AppScreenLayout from './layout/appScreenLayout'
 import ImagePreview from './imagePreview'
 import { useOrientation } from '../hooks/useOrientation'
-import { CogIcon, ForwardIcon, HelpIcon } from './icons'
+import { BackIcon, CogIcon, ForwardIcon, HelpIcon } from './icons'
 import { SelectionMode } from './swuSetupScreen'
 import type { FavouriteBase } from '../hooks/useFavourites'
 import { Format, FORMATS, FORMAT_LABELS } from '../utils/formatFilter'
@@ -583,12 +583,33 @@ function SwuSetupScreenView({
             justifyContent: 'space-between',
             flexShrink: 0,
           }}>
-            <div
-              onClick={onBack}
-              role={onBack ? 'button' : undefined}
-              aria-label={onBack ? 'Game select' : undefined}
-              style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw', cursor: onBack ? 'pointer' : 'default' }}
-            >
+            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
+              {onBack && (
+                <button
+                  onClick={onBack}
+                  aria-label="Back"
+                  style={{
+                    flexShrink: 0,
+                    width: '5vh',
+                    height: '5vh',
+                    minWidth: '36px',
+                    minHeight: '36px',
+                    background: 'transparent',
+                    border: '2px solid var(--color-ui-border)',
+                    borderRadius: '8px',
+                    color: 'var(--color-ui-border-muted)',
+                    fontSize: 'clamp(0.8rem, 2vh, 1.2rem)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    WebkitTapHighlightColor: 'transparent',
+                    boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
+                  }}
+                >
+                  <BackIcon />
+                </button>
+              )}
               <img
                 src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`}
                 alt="dmgCtrl"
@@ -745,12 +766,33 @@ function SwuSetupScreenView({
           alignItems: 'center',
           justifyContent: 'space-between',
         }}>
-          <div
-            onClick={onBack}
-            role={onBack ? 'button' : undefined}
-            aria-label={onBack ? 'Game select' : undefined}
-            style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3vw', cursor: onBack ? 'pointer' : 'default' }}
-          >
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '2vw' }}>
+            {onBack && (
+              <button
+                onClick={onBack}
+                aria-label="Back"
+                style={{
+                  flexShrink: 0,
+                  width: '5vw',
+                  height: '5vw',
+                  minWidth: '36px',
+                  minHeight: '36px',
+                  background: 'transparent',
+                  border: '2px solid var(--color-ui-border)',
+                  borderRadius: '8px',
+                  color: 'var(--color-ui-border-muted)',
+                  fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  WebkitTapHighlightColor: 'transparent',
+                  boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
+                }}
+              >
+                <BackIcon />
+              </button>
+            )}
             <img
               src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`}
               alt="dmgCtrl"

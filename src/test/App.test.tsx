@@ -141,7 +141,6 @@ beforeEach(() => {
   mockUseTournament.completeMatch.mockReset()
   mockUseTournament.dropTournament.mockReset()
   mockUserSettings.enableCompetitiveMode = false
-  mockUserSettings.enableGameSelect = false
   mockUserSettings.startScreen = 'swu'
 })
 
@@ -823,21 +822,27 @@ describe('App tournament navigation', () => {
 
 describe('App game select', () => {
 
-  it('transitions to setup screen after loading when enableGameSelect is false', async () => {
+  it('transitions to setup screen after loading when startScreen is swu', async () => {
     render(<App />)
     await waitForSetup()
     expect(getBaseSelectors()).toHaveLength(3)
   })
 
-  it('transitions to game select screen after loading when enableGameSelect is true', async () => {
-    mockUserSettings.enableGameSelect = true
+  it('transitions to game select screen after loading when startScreen is gameSelect', async () => {
+    mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars unlimited/i })).toBeInTheDocument())
   })
 
+  it('transitions to xwing screen after loading when startScreen is xwing', async () => {
+    mockUserSettings.startScreen = 'xwing'
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('start-game-btn')).toBeInTheDocument())
+  })
+
   it('navigates to setup screen when Star Wars Unlimited is clicked on game select', async () => {
     const user = userEvent.setup()
-    mockUserSettings.enableGameSelect = true
+    mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars unlimited/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /star wars unlimited/i }))
@@ -847,16 +852,16 @@ describe('App game select', () => {
 
   it('navigates to xwing screen when X-Wing is clicked on game select', async () => {
     const user = userEvent.setup()
-    mockUserSettings.enableGameSelect = true
+    mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
     await waitFor(() => expect(screen.getByTestId('start-game-btn')).toBeInTheDocument())
   })
 
-  it('back from xwing returns to game select', async () => {
+  it('back from xwing returns to game select when startScreen is gameSelect', async () => {
     const user = userEvent.setup()
-    mockUserSettings.enableGameSelect = true
+    mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
@@ -865,9 +870,26 @@ describe('App game select', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
   })
 
+  it('back from xwing returns to game select when startScreen is xwing', async () => {
+    const user = userEvent.setup()
+    mockUserSettings.startScreen = 'xwing'
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('start-game-btn')).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /back/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
+  })
+
+  it('back from setup returns to game select when startScreen is swu', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitForSetup()
+    await user.click(screen.getByRole('button', { name: /back/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /star wars unlimited/i })).toBeInTheDocument())
+  })
+
   it('clicking help on xwing screen shows xwing help content', async () => {
     const user = userEvent.setup()
-    mockUserSettings.enableGameSelect = true
+    mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
@@ -878,7 +900,7 @@ describe('App game select', () => {
 
   it('back from xwing help returns to xwing screen', async () => {
     const user = userEvent.setup()
-    mockUserSettings.enableGameSelect = true
+    mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
@@ -892,14 +914,14 @@ describe('App game select', () => {
   // ── Settings tab defaults per source screen ───────────────────────────────
 
   it('settings button is visible on game select screen', async () => {
-    mockUserSettings.enableGameSelect = true
+    mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument())
   })
 
   it('opening settings from game select shows the General tab active', async () => {
     const user = userEvent.setup()
-    mockUserSettings.enableGameSelect = true
+    mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /settings/i }))
@@ -918,7 +940,7 @@ describe('App game select', () => {
 
   it('opening settings from xwing shows the X-Wing tab active', async () => {
     const user = userEvent.setup()
-    mockUserSettings.enableGameSelect = true
+    mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
