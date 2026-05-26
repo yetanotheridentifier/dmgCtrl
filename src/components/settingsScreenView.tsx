@@ -202,14 +202,24 @@ function SettingsScreenView({
     { id: 'xwing', label: 'X-Wing' },
   ]
 
+  // Portrait: horizontal bar across the top
+  // Landscape: vertical sidebar on the left
   const tabBar = (
     <div
       role="tablist"
-      style={{
+      style={isPortrait ? {
         display: 'flex',
         flexShrink: 0,
         borderBottom: '1px solid rgba(107, 114, 128, 0.3)',
         marginBottom: '1.5vh',
+      } : {
+        display: 'flex',
+        flexDirection: 'column',
+        flexShrink: 0,
+        alignItems: 'center',
+        borderRight: '1px solid rgba(107, 114, 128, 0.3)',
+        paddingTop: '0.5vh',
+        gap: '0.5vh',
       }}
     >
       {tabs.map(({ id, label }) => {
@@ -220,7 +230,7 @@ function SettingsScreenView({
             role="tab"
             aria-selected={isActive}
             onClick={() => setActiveTab(id)}
-            style={{
+            style={isPortrait ? {
               flex: 1,
               background: 'transparent',
               border: 'none',
@@ -235,6 +245,25 @@ function SettingsScreenView({
               textTransform: 'uppercase',
               padding: '0.75vh 0',
               marginBottom: '-1px',
+              cursor: 'pointer',
+              transition: 'color 0.15s, border-color 0.15s',
+              WebkitTapHighlightColor: 'transparent',
+            } : {
+              flex: 1,
+              background: 'transparent',
+              border: 'none',
+              borderLeft: isActive
+                ? '2px solid var(--color-accent)'
+                : '2px solid transparent',
+              color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+              fontFamily: "'Segoe UI', Helvetica, Arial, sans-serif",
+              fontWeight: isActive ? '400' : '300',
+              fontSize: `clamp(0.75rem, ${vmin * 0.03}px, 0.9rem)`,
+              letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+              writingMode: 'vertical-rl',
+              transform: 'rotate(180deg)',
+              padding: '0.8vh 0.4vw',
               cursor: 'pointer',
               transition: 'color 0.15s, border-color 0.15s',
               WebkitTapHighlightColor: 'transparent',
@@ -610,8 +639,17 @@ function SettingsScreenView({
         </button>
       </div>
 
-      {tabBar}
-      {tabContent}
+      {isPortrait ? (
+        <>
+          {tabBar}
+          {tabContent}
+        </>
+      ) : (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'row', gap: '2vw', overflow: 'hidden' }}>
+          {tabBar}
+          {tabContent}
+        </div>
+      )}
 
     </div>
   )
