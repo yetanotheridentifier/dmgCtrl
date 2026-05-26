@@ -21,6 +21,7 @@ const mockUserSettings = vi.hoisted(() => ({
   enableLongPress: true,
   enableActionLog: true,
   enableWakeLock: true,
+  enableInitiativeBar: true,
   xwingTimerMinutes: 75,
 }))
 vi.mock('../hooks/useUserSettings', () => ({
@@ -46,6 +47,7 @@ beforeEach(() => {
   mockUserSettings.enableLongPress = true
   mockUserSettings.enableActionLog = true
   mockUserSettings.enableWakeLock = true
+  mockUserSettings.enableInitiativeBar = true
   mockUserSettings.xwingTimerMinutes = 75
   mockTimerState.remaining = 4500
   mockTimerState.isRunning = false
@@ -867,6 +869,95 @@ describe('XwingGameScreen undo', () => {
     mockTimerState.start.mockClear()
     await user.click(screen.getByTestId('start-game-btn'))
     expect(mockTimerState.start).toHaveBeenCalledOnce()
+  })
+
+})
+
+// ---------------------------------------------------------------------------
+// Initiative
+// ---------------------------------------------------------------------------
+
+describe('XwingGameScreen initiative', () => {
+
+  it('initiative bar is visible before game starts', () => {
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('initiative-indicator')).toBeInTheDocument()
+  })
+
+  it('initiative bar is visible after game starts', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.getByTestId('initiative-indicator')).toBeInTheDocument()
+  })
+
+  it('indicator position is none by default', () => {
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'none')
+  })
+
+  it('tapping OPP zone sets initiative to opponent', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('initiative-opp-zone'))
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'opponent')
+  })
+
+  it('tapping YOU zone sets initiative to player', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('initiative-you-zone'))
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'player')
+  })
+
+  it('tapping OPP zone when already opponent stays opponent', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('initiative-opp-zone'))
+    await user.click(screen.getByTestId('initiative-opp-zone'))
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'opponent')
+  })
+
+  it('tapping YOU zone when already player stays player', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('initiative-you-zone'))
+    await user.click(screen.getByTestId('initiative-you-zone'))
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'player')
+  })
+
+  it('advancing the round resets initiative to neutral', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('initiative-opp-zone'))
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'opponent')
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'none')
+  })
+
+  it('initiative is not reset when Start Game is pressed', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('initiative-opp-zone'))
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'opponent')
+  })
+
+  it('initiative is not reset when undoing game start', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('initiative-you-zone'))
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'player')
+  })
+
+  it('initiative bar is hidden when enableInitiativeBar is false', () => {
+    mockUserSettings.enableInitiativeBar = false
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('initiative-indicator')).not.toBeInTheDocument()
   })
 
 })

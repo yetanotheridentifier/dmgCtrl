@@ -33,6 +33,16 @@ The countdown timer is shown in the centre of the screen during a game. It start
 
 To configure the timer duration, tap <svg width="3.5%" height="3.5%" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> **Settings** → **X-Wing** → **Game Timer**.
 
+## Initiative Bar
+
+When **Enable Initiative Bar** is on in Settings, a narrow vertical bar appears on the left side of the game screen.
+
+- Tap the **top half** (OPP) to record that your opponent has initiative this round
+- Tap the **bottom half** (YOU) to record that you have initiative this round
+- Tapping the same side again has no effect
+
+Initiative resets to neutral at the start of each round (when you tap the next segment in the round tracker), ready for the next roll-off.
+
 ## Round Tracker
 
 The round tracker bar runs across the top of the screen, showing all 12 rounds. The current round is highlighted and extends slightly below the bar as a tab.
@@ -57,6 +67,7 @@ Tap the <svg width="3.5%" height="3.5%" viewBox="0 0 24 24" fill="none" stroke="
 |---|---|---|
 | **Game Timer** | 75 min | Timer duration for an X-Wing game. Adjust in the **X-Wing** section using **+** and **−**. |
 | **Enable Screen Wake Lock** | On | Keeps the screen on during play. May affect battery life. |
+| **Enable Initiative Bar** | On | Shows a vertical initiative tracker on the left side of the game screen. Resets each round when you advance the round tracker. |
 
 ---
 

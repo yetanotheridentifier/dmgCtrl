@@ -5,6 +5,7 @@ import { useXwingGame } from '../hooks/useXwingGame'
 import { useGameHistory } from '../hooks/useGameHistory'
 import { useTimer } from '../hooks/useTimer'
 import { useWakeLock } from '../hooks/useWakeLock'
+import { useInitiative } from '../hooks/useInitiative'
 import XwingGameScreenView from './xwingGameScreenView'
 import RotatePrompt from './layout/rotatePrompt'
 import { onXwingGameStarted, onXwingGameEnded, onXwingRoundAdvanced } from '../services/analytics'
@@ -25,7 +26,7 @@ interface Props {
 }
 
 export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd, onTimerExpired }: Props) {
-  const { enableLongPress, enableActionLog, enableWakeLock, xwingTimerMinutes } = useUserSettings()
+  const { enableLongPress, enableActionLog, enableWakeLock, enableInitiativeBar, xwingTimerMinutes } = useUserSettings()
   const { isPortrait } = useOrientation()
 
   const [playerDeficit, setPlayerDeficit] = useState(0)
@@ -35,6 +36,7 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
   const game = useXwingGame()
   const log = useGameHistory<XwingGameSnapshot>()
   const timer = useTimer(xwingTimerMinutes * 60)
+  const initiative = useInitiative()
   const [logOpen, setLogOpen] = useState(false)
 
   useWakeLock(enableWakeLock)
@@ -71,6 +73,7 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     const fromRound = game.round
     log.add({ type: 'round', message: `Round ${fromRound + 1}`, color: '#ffffff', snapshot: snapshot() })
     game.advanceRound()
+    initiative.reset()
     void onXwingRoundAdvanced(fromRound, Math.min(12, fromRound + 1))
   }
 
@@ -166,6 +169,10 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
       logOpen={logOpen}
       onLogToggle={() => setLogOpen(o => !o)}
       onLogUndo={handleLogUndo}
+      enableInitiativeBar={enableInitiativeBar}
+      initiative={initiative.initiative}
+      onInitiativeOpponent={initiative.setOpponent}
+      onInitiativePlayer={initiative.setPlayer}
       onBack={handleBack}
       onHelp={onHelp}
       onSettings={onSettings}

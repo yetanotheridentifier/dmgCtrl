@@ -3,8 +3,10 @@ import AppScreenLayout from './layout/appScreenLayout'
 import { BackIcon, CogIcon, HelpIcon, LogIcon } from './icons'
 import TimerDisplay from './shared/timerDisplay'
 import GameLogOverlay from './gameLogOverlay'
+import InitiativeToggle from './initiativeToggle'
 import { NAV_BTN_STYLE } from '../styles/navButton'
 import type { HistoryEntry } from '../hooks/useGameHistory'
+import type { Initiative } from '../hooks/useInitiative'
 
 interface Props {
   gameStarted: boolean
@@ -33,6 +35,10 @@ interface Props {
   logOpen: boolean
   onLogToggle: () => void
   onLogUndo: () => void
+  enableInitiativeBar: boolean
+  initiative: Initiative
+  onInitiativeOpponent: () => void
+  onInitiativePlayer: () => void
   onBack: () => void
   onHelp: () => void
   onSettings?: () => void
@@ -94,6 +100,10 @@ export default function XwingGameScreenView({
   logOpen,
   onLogToggle,
   onLogUndo,
+  enableInitiativeBar,
+  initiative,
+  onInitiativeOpponent,
+  onInitiativePlayer,
   onBack,
   onHelp,
   onSettings,
@@ -284,6 +294,31 @@ export default function XwingGameScreenView({
               </button>
             )
           })}
+        </div>
+      )}
+
+      {/* Initiative bar — left column, between Back (top) and Log button (bottom) */}
+      {enableInitiativeBar && (
+        <div style={{
+          position: 'absolute',
+          top: 'calc(env(safe-area-inset-top) + 9vw)',
+          bottom: `calc(env(safe-area-inset-bottom) + ${enableActionLog ? 9 : 2}vw)`,
+          left: 'calc(env(safe-area-inset-left) + 2vw)',
+          width: '5vw',
+          minWidth: '36px',
+          background: 'rgba(0,0,0,0.2)',
+          border: '2px solid var(--color-ui-border)',
+          borderRadius: '8px',
+          boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
+          zIndex: 10,
+          padding: '0.4rem 0',
+          boxSizing: 'border-box',
+        }}>
+          <InitiativeToggle
+            initiative={initiative}
+            onSetOpponent={onInitiativeOpponent}
+            onSetPlayer={onInitiativePlayer}
+          />
         </div>
       )}
 

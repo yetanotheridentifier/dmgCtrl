@@ -42,6 +42,7 @@ const mockUserSettings = vi.hoisted(() => ({
   setEnableLongPress: vi.fn(),
   enableActionLog: true,
   setEnableActionLog: vi.fn(),
+  enableInitiativeBar: true,
   bo1TimerMinutes: 25,
   bo3TimerMinutes: 55,
 }))
@@ -204,6 +205,7 @@ describe('SwuGameScreen', () => {
     mockUserSettings.useHyperspace = false
     mockUserSettings.enableLongPress = true
     mockUserSettings.enableActionLog = true
+    mockUserSettings.enableInitiativeBar = true
     mockUserSettings.bo1TimerMinutes = 25
     mockUserSettings.bo3TimerMinutes = 55
     mockUseTimer.mockImplementation((duration: number) => ({
@@ -2270,6 +2272,62 @@ describe('SwuGameScreen analytics', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} onMatchComplete={onMatchComplete} />)
     await user.click(screen.getByText('Start'))
     expect(onMatchComplete).not.toHaveBeenCalled()
+  })
+
+})
+
+// ---------------------------------------------------------------------------
+// Initiative
+// ---------------------------------------------------------------------------
+
+describe('SwuGameScreen initiative', () => {
+
+  it('initiative bar is visible on the game screen', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('initiative-indicator')).toBeInTheDocument()
+  })
+
+  it('indicator position is none by default', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'none')
+  })
+
+  it('tapping OPP zone sets initiative to opponent', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('initiative-opp-zone'))
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'opponent')
+  })
+
+  it('tapping YOU zone sets initiative to player', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('initiative-you-zone'))
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'player')
+  })
+
+  it('tapping OPP zone when already opponent stays opponent', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('initiative-opp-zone'))
+    await user.click(screen.getByTestId('initiative-opp-zone'))
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'opponent')
+  })
+
+  it('incrementing the round does not reset initiative', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByText('Start'))
+    await user.click(screen.getByTestId('initiative-opp-zone'))
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'opponent')
+    await user.click(screen.getByTestId('round-counter'))
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'opponent')
+  })
+
+  it('initiative bar is hidden when enableInitiativeBar is false', () => {
+    mockUserSettings.enableInitiativeBar = false
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('initiative-indicator')).not.toBeInTheDocument()
   })
 
 })

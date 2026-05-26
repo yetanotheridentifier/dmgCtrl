@@ -114,6 +114,7 @@ interface Props {
   enableEpicActions: boolean
   enableWakeLock: boolean
   enableActionLog: boolean
+  enableInitiativeBar: boolean
   enableFavourites: boolean
   enableCompetitiveMode: boolean
   bo1TimerMinutes: number
@@ -126,6 +127,7 @@ interface Props {
   onEnableEpicActionsChange: (v: boolean) => void
   onEnableWakeLockChange: (v: boolean) => void
   onEnableActionLogChange: (v: boolean) => void
+  onEnableInitiativeBarChange: (v: boolean) => void
   onEnableFavouritesChange: (v: boolean) => void
   onEnableCompetitiveModeChange: (v: boolean) => void
   onBo1TimerChange: (v: number) => void
@@ -147,6 +149,7 @@ function SettingsScreenView({
   enableEpicActions,
   enableWakeLock,
   enableActionLog,
+  enableInitiativeBar,
   enableFavourites,
   enableCompetitiveMode,
   bo1TimerMinutes,
@@ -159,6 +162,7 @@ function SettingsScreenView({
   onEnableEpicActionsChange,
   onEnableWakeLockChange,
   onEnableActionLogChange,
+  onEnableInitiativeBarChange,
   onEnableFavouritesChange,
   onEnableCompetitiveModeChange,
   onBo1TimerChange,
@@ -328,6 +332,14 @@ function SettingsScreenView({
         subtitle="Shows a scrollable log of game actions with undo support. Also enables the round tracker."
         checked={enableActionLog}
         onChange={onEnableActionLogChange}
+        vmin={vmin}
+      />
+      <ToggleRow
+        id="toggle-initiative-bar"
+        label="Enable Initiative Bar"
+        subtitle="Shows a vertical initiative indicator in the left column of each game screen."
+        checked={enableInitiativeBar}
+        onChange={onEnableInitiativeBarChange}
         vmin={vmin}
       />
     </>

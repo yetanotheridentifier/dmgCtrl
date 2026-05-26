@@ -10,6 +10,8 @@ Settings that apply across the whole app.
 
 **Enable Action Log** — Shows a scrollable log of game actions (damage dealt, healed, force gained/used) with undo support. Also enables the round tracker on the game screen.
 
+**Enable Initiative Bar** — Shows a vertical initiative tracker on the left side of the game screen. Tap the top half to record OPP initiative, or the bottom half to record YOUR initiative. In X-Wing, initiative resets at the start of each round; in SWU, it stays set until you change it.
+
 ## SWU
 
 Settings for the Star Wars: Unlimited game mode.

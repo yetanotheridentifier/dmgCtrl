@@ -20,6 +20,7 @@ function SettingsScreen({ onBack, onHelp, defaultTab = 'general' }: Props) {
     enableEpicActions,
     enableWakeLock,
     enableActionLog,
+    enableInitiativeBar,
     enableFavourites,
     enableCompetitiveMode,
     bo1TimerMinutes,
@@ -32,6 +33,7 @@ function SettingsScreen({ onBack, onHelp, defaultTab = 'general' }: Props) {
     setEnableEpicActions,
     setEnableWakeLock,
     setEnableActionLog,
+    setEnableInitiativeBar,
     setEnableFavourites,
     setEnableCompetitiveMode,
     setBo1TimerMinutes,
@@ -75,6 +77,8 @@ function SettingsScreen({ onBack, onHelp, defaultTab = 'general' }: Props) {
         onEnableWakeLockChange={handleSettingChange('enableWakeLock', setEnableWakeLock)}
         enableActionLog={enableActionLog}
         onEnableActionLogChange={handleSettingChange('enableActionLog', setEnableActionLog)}
+        enableInitiativeBar={enableInitiativeBar}
+        onEnableInitiativeBarChange={handleSettingChange('enableInitiativeBar', setEnableInitiativeBar)}
         onEnableFavouritesChange={handleSettingChange('enableFavourites', setEnableFavourites)}
         enableCompetitiveMode={enableCompetitiveMode}
         onEnableCompetitiveModeChange={handleSettingChange('enableCompetitiveMode', setEnableCompetitiveMode)}

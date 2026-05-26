@@ -27,6 +27,8 @@ const mockUserSettings = vi.hoisted(() => ({
   setEnableFavourites: vi.fn(),
   enableActionLog: true,
   setEnableActionLog: vi.fn(),
+  enableInitiativeBar: true,
+  setEnableInitiativeBar: vi.fn(),
   enableCompetitiveMode: false,
   setEnableCompetitiveMode: vi.fn(),
   bo1TimerMinutes: 25,
@@ -76,6 +78,7 @@ beforeEach(() => {
   mockUserSettings.enableWakeLock = true
   mockUserSettings.enableFavourites = true
   mockUserSettings.enableActionLog = true
+  mockUserSettings.enableInitiativeBar = true
   mockUserSettings.enableCompetitiveMode = false
   mockUserSettings.bo1TimerMinutes = 25
   mockUserSettings.bo3TimerMinutes = 55
@@ -657,6 +660,13 @@ describe('SettingsScreen analytics', () => {
     render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="general" />)
     await user.click(screen.getByRole('checkbox', { name: /action log/i }))
     expect(mockOnSettingChanged).toHaveBeenCalledWith('enableActionLog', false)
+  })
+
+  it('calls onSettingChanged with enableInitiativeBar and new value when initiative bar toggle is clicked', async () => {
+    const user = userEvent.setup()
+    render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="general" />)
+    await user.click(screen.getByRole('checkbox', { name: /initiative bar/i }))
+    expect(mockOnSettingChanged).toHaveBeenCalledWith('enableInitiativeBar', false)
   })
 
   it('calls onSettingChanged with enableFavourites and new value when favourites toggle is clicked', async () => {

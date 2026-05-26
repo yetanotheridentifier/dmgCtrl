@@ -14,6 +14,7 @@ A Progressive Web App for tracking game state in tabletop games, supporting Star
 - ✅ Round tracker — continuous bar spanning the top of the screen between the nav buttons; 12 segments; current round extends downward as a seamless tab; tapping the next segment advances the round; colour follows the timer (accent → warning → error); timer stops at round 12
 - ✅ Action log — all entries undoable (Round 1, round advances, score changes); entries styled consistently with SWU log; undoing Round 1 resets the timer; score entries use semantic colours (green = you scored / opponent lost points, red = opponent scored / you lost points)
 - ✅ Help screen
+- ✅ Initiative bar — vertical bar in the left column; slides between OPP/YOU; resets to neutral on round advance; shared component with SWU
 - Remaining features — includes applying stored deficit to score when opponent ships are destroyed
 
 ### Future games
