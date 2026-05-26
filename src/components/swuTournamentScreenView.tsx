@@ -5,6 +5,7 @@ import { BackIcon, CogIcon, HelpIcon } from './icons'
 import AppScreenLayout from './layout/appScreenLayout'
 import { useOrientation } from '../hooks/useOrientation'
 import ImagePreview from './imagePreview'
+import { NAV_BTN_STYLE } from '../styles/navButton'
 
 type ActionButtonLabel =
   | `Start Match ${number}`
@@ -99,24 +100,7 @@ const dropEndButtonStyle = (enabled: boolean, confirm: boolean, small = false): 
   transition: 'all 0.15s ease',
 })
 
-const iconButtonStyle = (small = false): React.CSSProperties => ({
-  width: small ? '5vh' : '5vw',
-  height: small ? '5vh' : '5vw',
-  minWidth: '36px',
-  minHeight: '36px',
-  flexShrink: 0,
-  background: 'transparent',
-  border: '2px solid var(--color-ui-border)',
-  borderRadius: '8px',
-  color: 'var(--color-ui-border-muted)',
-  fontSize: small ? 'clamp(0.8rem, 2vh, 1.2rem)' : 'clamp(0.8rem, 2vw, 1.2rem)',
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  WebkitTapHighlightColor: 'transparent',
-  boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
-})
+const iconButtonStyle = (_small = false): React.CSSProperties => NAV_BTN_STYLE
 
 interface Props {
   displayBase: Base

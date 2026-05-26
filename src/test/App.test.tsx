@@ -379,6 +379,16 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Start Match 1' })).toBeInTheDocument()
   })
 
+  it('Clicking help from settings screen shows settings-specific content', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitForSetup()
+    await user.click(screen.getByRole('button', { name: '⚙' }))
+    await user.click(screen.getByRole('button', { name: 'Help' }))
+    expect(screen.getByRole('heading', { level: 2, name: 'General' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Getting Started' })).not.toBeInTheDocument()
+  })
+
   it('Passes useHyperspace=true to game screen when user settings preference is true', async () => {
     mockUserSettings.useHyperspace = true
     const user = userEvent.setup()

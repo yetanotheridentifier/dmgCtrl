@@ -202,10 +202,10 @@ describe('SwuSetupScreen', () => {
     expect(screen.getByText('Source:')).toBeInTheDocument()
   })
 
-  it('Renders the app icon alongside the title', async () => {
+  it('Renders the dmgCtrl title', async () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    expect(screen.getByAltText('dmgCtrl')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /dmgCtrl/i })).toBeInTheDocument()
   })
 
   it('Shows three base selectors after loading', async () => {
@@ -458,8 +458,8 @@ describe('SwuSetupScreen', () => {
   it('Does not show base preview before base is selected', async () => {
     render(<SwuSetupScreen onConfirm={vi.fn()} onHelp={vi.fn()} />)
     await waitFor(() => expect(getBaseSelectors()).toHaveLength(3))
-    // Only the title icon is present; no base preview image
-    expect(screen.getAllByRole('img')).toHaveLength(1)
+    // No images present before a base is selected (title icon was removed)
+    expect(screen.queryAllByRole('img')).toHaveLength(0)
   })
 
   it('Card image wrapper strips border and shadow before load to prevent iOS Safari GPU compositing artifact', async () => {

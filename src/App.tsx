@@ -28,7 +28,7 @@ function App() {
   const [isInXwing, setIsInXwing] = useState(false)
   const [tournamentCurrentBase, setTournamentCurrentBase] = useState<Base | null>(null)
   const [hasPlayedGameInCurrentMatch, setHasPlayedGameInCurrentMatch] = useState(false)
-  const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament' | 'xwing'>('setup')
+  const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament' | 'xwing' | 'settings'>('setup')
   const [settingsDefaultTab, setSettingsDefaultTab] = useState<'general' | 'swu' | 'xwing'>('swu')
   const { loading } = useBases()
   const { useHyperspace, startScreen } = useUserSettings()
@@ -161,12 +161,11 @@ function App() {
   }
 
   const handleHelp = () => {
-    const source: 'setup' | 'game' | 'tournament' | 'xwing' =
+    const source: 'setup' | 'game' | 'tournament' | 'xwing' | 'settings' =
       screen === 'game' ? 'game' :
-      screen === 'settings' && backStack[backStack.length - 1] === 'game' ? 'game' :
       screen === 'tournament' ? 'tournament' :
       screen === 'xwing' ? 'xwing' :
-      screen === 'settings' && backStack[backStack.length - 1] === 'xwing' ? 'xwing' :
+      screen === 'settings' ? 'settings' :
       'setup'
     setHelpSource(source)
     setBackStack(prev => [...prev, screen])

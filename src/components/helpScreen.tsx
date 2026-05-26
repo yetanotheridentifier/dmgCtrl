@@ -2,18 +2,20 @@ import setupHelpHtml from '../../docs/swuSetupHelp.md'
 import gameHelpHtml from '../../docs/swuGameHelp.md'
 import tournamentHelpHtml from '../../docs/swuTournamentHelp.md'
 import xwingHelpHtml from '../../docs/xwingGameHelp.md'
+import settingsHelpHtml from '../../docs/settingsHelp.md'
 import AppScreenLayout from './layout/appScreenLayout'
 import { useOrientation } from '../hooks/useOrientation'
 import { BackIcon } from './icons'
+import { NAV_BTN_STYLE } from '../styles/navButton'
 
 
 interface Props {
   onBack: () => void
-  source?: 'setup' | 'game' | 'tournament' | 'xwing'
+  source?: 'setup' | 'game' | 'tournament' | 'xwing' | 'settings'
 }
 
 function HelpScreen({ onBack, source = 'setup' }: Props) {
-  const rawHtml = source === 'game' ? gameHelpHtml : source === 'tournament' ? tournamentHelpHtml : source === 'xwing' ? xwingHelpHtml : setupHelpHtml
+  const rawHtml = source === 'game' ? gameHelpHtml : source === 'tournament' ? tournamentHelpHtml : source === 'xwing' ? xwingHelpHtml : source === 'settings' ? settingsHelpHtml : setupHelpHtml
   const contentHtml = rawHtml.replace(/^<h1[^>]*>[\s\S]*?<\/h1>\n?/, '')
   const { isPortrait, vmin } = useOrientation()
   const baseFontSize = `${Math.min(Math.max(14, Math.round(vmin * 0.04)), 18)}px`
@@ -23,7 +25,7 @@ function HelpScreen({ onBack, source = 'setup' }: Props) {
 
       {/* Pinned header: title row + subtitle */}
       <div key={isPortrait ? 'portrait' : 'landscape'} style={{
-        padding: '5vw 5vw 0',
+        padding: '2vw 2vw 0',
         display: 'flex',
         flexDirection: 'column',
         gap: '2vh',
@@ -41,24 +43,7 @@ function HelpScreen({ onBack, source = 'setup' }: Props) {
           <button
             onClick={onBack}
             aria-label="Back"
-            style={{
-              flexShrink: 0,
-              width: '5vw',
-              height: '5vw',
-              minWidth: '36px',
-              minHeight: '36px',
-              background: 'transparent',
-              border: '2px solid var(--color-ui-border)',
-              borderRadius: '8px',
-              color: 'var(--color-ui-border-muted)',
-              fontSize: `clamp(0.8rem, ${vmin * 0.02}px, 1.2rem)`,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              WebkitTapHighlightColor: 'transparent',
-              boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
-            }}
+            style={NAV_BTN_STYLE}
           >
             <BackIcon />
           </button>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useOrientation } from '../hooks/useOrientation'
 import { BackIcon, HelpIcon } from './icons'
+import { NAV_BTN_STYLE } from '../styles/navButton'
 import type { FavouriteBase } from '../hooks/useFavourites'
 import TimerStepper from './shared/timerStepper'
 
@@ -92,24 +93,6 @@ function ToggleRow({ id, label, subtitle, checked, onChange, vmin }: ToggleRowPr
   )
 }
 
-const buttonStyle = (vmin: number): React.CSSProperties => ({
-  flexShrink: 0,
-  width: '5vw',
-  height: '5vw',
-  minWidth: '36px',
-  minHeight: '36px',
-  background: 'transparent',
-  border: '2px solid var(--color-ui-border)',
-  borderRadius: '8px',
-  color: 'var(--color-ui-border-muted)',
-  fontSize: `clamp(0.8rem, ${vmin * 0.02}px, 1.2rem)`,
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  WebkitTapHighlightColor: 'transparent',
-  boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
-})
 
 const smallButtonStyle: React.CSSProperties = {
   padding: '0.4em 0.8em',
@@ -639,7 +622,7 @@ function SettingsScreenView({
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
-      padding: '5vw 5vw 0',
+      padding: '2vw 2vw 0',
       boxSizing: 'border-box',
       fontFamily: "'Segoe UI', Helvetica, Arial, sans-serif",
       WebkitTextSizeAdjust: '100%',
@@ -654,7 +637,7 @@ function SettingsScreenView({
         paddingBottom: '2vh',
         flexShrink: 0,
       }}>
-        <button onClick={onBack} aria-label="Back" style={buttonStyle(vmin)}>
+        <button onClick={onBack} aria-label="Back" style={NAV_BTN_STYLE}>
           <BackIcon />
         </button>
 
@@ -676,7 +659,7 @@ function SettingsScreenView({
           Settings
         </h1>
 
-        <button onClick={onHelp} aria-label="Help" style={buttonStyle(vmin)}>
+        <button onClick={onHelp} aria-label="Help" style={NAV_BTN_STYLE}>
           <HelpIcon />
         </button>
       </div>

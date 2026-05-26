@@ -133,4 +133,14 @@ describe('HelpScreen', () => {
     expect(screen.queryByRole('heading', { level: 2, name: 'During a Game' })).not.toBeInTheDocument()
   })
 
+  it('source="settings" renders the General section heading', () => {
+    render(<HelpScreen onBack={vi.fn()} source="settings" />)
+    expect(screen.getByRole('heading', { level: 2, name: 'General' })).toBeInTheDocument()
+  })
+
+  it('source="settings" does not render the Getting Started section', () => {
+    render(<HelpScreen onBack={vi.fn()} source="settings" />)
+    expect(screen.queryByRole('heading', { level: 2, name: 'Getting Started' })).not.toBeInTheDocument()
+  })
+
 })

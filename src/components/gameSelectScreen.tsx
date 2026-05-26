@@ -1,6 +1,7 @@
 import AppScreenLayout from './layout/appScreenLayout'
 import { useOrientation } from '../hooks/useOrientation'
 import { CogIcon } from './icons'
+import { NAV_BTN_STYLE } from '../styles/navButton'
 
 interface Props {
   onSelectSwu: () => void
@@ -31,7 +32,7 @@ function GameSelectScreen({ onSelectSwu, onSelectXwing, onSettings }: Props) {
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        padding: isPortrait ? '5vw' : '3vw 4vw 3vw',
+        padding: isPortrait ? '2vw' : '2vw 2vw 3vw',
         boxSizing: 'border-box',
         gap: isPortrait ? '2vh' : 'clamp(12px, 3vw, 20px)',
       }}>
@@ -42,11 +43,11 @@ function GameSelectScreen({ onSelectSwu, onSelectXwing, onSettings }: Props) {
           justifyContent: 'space-between',
           flexShrink: 0,
         }}>
-          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: isPortrait ? '3vw' : '1vw' }}>
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: isPortrait ? '2vw' : '1vw' }}>
             <img
               src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`}
               alt="dmgCtrl"
-              style={{ height: isPortrait ? 'clamp(1.8rem, 8vw, 3rem)' : 'clamp(1.2rem, 4vw, 1.8rem)', width: 'auto' }}
+              style={{ width: '5vw', height: '5vw', minWidth: '36px', minHeight: '36px', objectFit: 'contain' }}
             />
             <h1 style={{
               color: 'var(--color-text-primary)',
@@ -54,6 +55,7 @@ function GameSelectScreen({ onSelectSwu, onSelectXwing, onSettings }: Props) {
               fontSize: isPortrait ? 'clamp(1.8rem, 8vw, 3rem)' : 'clamp(1.2rem, 4vw, 1.8rem)',
               letterSpacing: '0.15em',
               margin: 0,
+              lineHeight: 0.8,
             }}>
               dmgCtrl
             </h1>
@@ -62,22 +64,7 @@ function GameSelectScreen({ onSelectSwu, onSelectXwing, onSettings }: Props) {
           <button
             onClick={onSettings}
             aria-label="Settings"
-            style={{
-              background: 'transparent',
-              border: '2px solid var(--color-ui-border)',
-              borderRadius: '8px',
-              color: 'var(--color-ui-border-muted)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: isPortrait ? '8vw' : '5vw',
-              height: isPortrait ? '8vw' : '5vw',
-              minWidth: '36px',
-              minHeight: '36px',
-              WebkitTapHighlightColor: 'transparent',
-              boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
-            }}
+            style={NAV_BTN_STYLE}
           >
             <CogIcon />
           </button>
