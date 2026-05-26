@@ -1,15 +1,19 @@
 import { useUserSettings } from '../hooks/useUserSettings'
+import type { StartScreen } from '../hooks/useUserSettings'
 import { useFavourites } from '../hooks/useFavourites'
 import AppScreenLayout from './layout/appScreenLayout'
 import SettingsScreenView from './settingsScreenView'
 import { onSettingChanged, onFavouriteRemoved, onFavouritesCleared } from '../services/analytics'
 
+type Tab = 'general' | 'swu' | 'xwing'
+
 interface Props {
   onBack: () => void
   onHelp: () => void
+  defaultTab?: Tab
 }
 
-function SettingsScreen({ onBack, onHelp }: Props) {
+function SettingsScreen({ onBack, onHelp, defaultTab = 'general' }: Props) {
   const {
     useHyperspace,
     forceTokenDisplay,
@@ -22,6 +26,7 @@ function SettingsScreen({ onBack, onHelp }: Props) {
     bo3TimerMinutes,
     xwingTimerMinutes,
     meleePlayerGuid,
+    startScreen,
     setUseHyperspace,
     setForceTokenDisplay,
     setEnableEpicActions,
@@ -33,6 +38,7 @@ function SettingsScreen({ onBack, onHelp }: Props) {
     setBo3TimerMinutes,
     setXwingTimerMinutes,
     setMeleePlayerGuid,
+    setStartScreen,
   } = useUserSettings()
 
   const { favourites, removeFavourite, clearFavourites } = useFavourites()
@@ -56,6 +62,7 @@ function SettingsScreen({ onBack, onHelp }: Props) {
   return (
     <AppScreenLayout>
       <SettingsScreenView
+        defaultTab={defaultTab}
         useHyperspace={useHyperspace}
         forceTokenDisplay={forceTokenDisplay}
         enableEpicActions={enableEpicActions}
@@ -79,6 +86,8 @@ function SettingsScreen({ onBack, onHelp }: Props) {
         onBo3TimerChange={setBo3TimerMinutes}
         onXwingTimerChange={setXwingTimerMinutes}
         onMeleePlayerGuidChange={setMeleePlayerGuid}
+        startScreen={startScreen}
+        onStartScreenChange={handleSettingChange<StartScreen>('startScreen', setStartScreen)}
         onRemoveFavourite={handleRemoveFavourite}
         onClearFavourites={handleClearFavourites}
         onBack={onBack}

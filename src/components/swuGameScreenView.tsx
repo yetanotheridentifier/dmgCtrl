@@ -6,6 +6,10 @@ import AppScreenLayout from './layout/appScreenLayout'
 import GameLogOverlay from './gameLogOverlay'
 import { BackIcon, CogIcon, HelpIcon, LogIcon } from './icons'
 import TimerDisplay from './shared/timerDisplay'
+import { NAV_BTN_STYLE } from '../styles/navButton'
+
+// Game screen nav buttons are absolutely positioned with a z-index to stay above card art.
+const GAME_NAV_BTN: React.CSSProperties = { ...NAV_BTN_STYLE, position: 'absolute', zIndex: 10 }
 
 const CARD_NATURAL_WIDTH = 1560
 const CARD_NATURAL_HEIGHT = 1120
@@ -145,22 +149,7 @@ function SwuGameScreenView({
           position: 'absolute',
           top: 'calc(env(safe-area-inset-top) + 2vw)',
           left: 'calc(env(safe-area-inset-left) + 2vw)',
-          width: '5vw',
-          height: '5vw',
-          minWidth: '36px',
-          minHeight: '36px',
-          background: 'transparent',
-          border: '2px solid var(--color-ui-border)',
-          borderRadius: '8px',
-          color: 'var(--color-ui-border-muted)',
-          fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10,
-          WebkitTapHighlightColor: 'transparent',
-          boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
+          ...GAME_NAV_BTN,
         }}
       >
         <BackIcon />
@@ -374,22 +363,7 @@ function SwuGameScreenView({
           position: 'absolute',
           top: 'calc(env(safe-area-inset-top) + 2vw)',
           right: 'calc(env(safe-area-inset-right) + 2vw)',
-          width: '5vw',
-          height: '5vw',
-          minWidth: '36px',
-          minHeight: '36px',
-          background: 'transparent',
-          border: '2px solid var(--color-ui-border)',
-          borderRadius: '8px',
-          color: 'var(--color-ui-border-muted)',
-          fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10,
-          WebkitTapHighlightColor: 'transparent',
-          boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
+          ...GAME_NAV_BTN,
         }}
       >
         <HelpIcon />
@@ -401,25 +375,9 @@ function SwuGameScreenView({
           onClick={onSettings}
           aria-label="⚙"
           style={{
-            position: 'absolute',
+            ...GAME_NAV_BTN,
             top: 'calc(env(safe-area-inset-top) + 9vw)',
             right: 'calc(env(safe-area-inset-right) + 2vw)',
-            width: '5vw',
-            height: '5vw',
-            minWidth: '36px',
-            minHeight: '36px',
-            background: 'transparent',
-            border: '2px solid var(--color-ui-border)',
-            borderRadius: '8px',
-            color: 'var(--color-ui-border-muted)',
-            fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10,
-            WebkitTapHighlightColor: 'transparent',
-            boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
           }}
         >
           <CogIcon />
@@ -1055,24 +1013,9 @@ function SwuGameScreenView({
           data-testid="log-btn"
           onClick={onLogToggle}
           style={{
-            position: 'absolute',
+            ...GAME_NAV_BTN,
             bottom: 'calc(env(safe-area-inset-bottom) + 2vw)',
             left: 'calc(env(safe-area-inset-left) + 2vw)',
-            width: '5vw',
-            height: '5vw',
-            minWidth: '36px',
-            minHeight: '36px',
-            background: 'transparent',
-            border: '2px solid var(--color-ui-border)',
-            borderRadius: '8px',
-            color: 'var(--color-ui-border-muted)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10,
-            WebkitTapHighlightColor: 'transparent',
-            boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
           }}
         >
           <LogIcon />

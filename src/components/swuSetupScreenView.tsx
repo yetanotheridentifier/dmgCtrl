@@ -2,7 +2,8 @@ import { Base } from '../hooks/useBases'
 import AppScreenLayout from './layout/appScreenLayout'
 import ImagePreview from './imagePreview'
 import { useOrientation } from '../hooks/useOrientation'
-import { CogIcon, ForwardIcon, HelpIcon } from './icons'
+import { BackIcon, CogIcon, ForwardIcon, HelpIcon } from './icons'
+import { NAV_BTN_STYLE } from '../styles/navButton'
 import { SelectionMode } from './swuSetupScreen'
 import type { FavouriteBase } from '../hooks/useFavourites'
 import { Format, FORMATS, FORMAT_LABELS } from '../utils/formatFilter'
@@ -572,7 +573,7 @@ function SwuSetupScreenView({
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          padding: '3vw 4vw 3vw',
+          padding: '2vw 2vw 3vw',
         }}>
 
           {/* Title row */}
@@ -583,23 +584,23 @@ function SwuSetupScreenView({
             justifyContent: 'space-between',
             flexShrink: 0,
           }}>
-            <div
-              onClick={onBack}
-              role={onBack ? 'button' : undefined}
-              aria-label={onBack ? 'Game select' : undefined}
-              style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw', cursor: onBack ? 'pointer' : 'default' }}
-            >
-              <img
-                src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`}
-                alt="dmgCtrl"
-                style={{ height: 'clamp(1.2rem, 4vw, 1.8rem)', width: 'auto' }}
-              />
+            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
+              {onBack && (
+                <button
+                  onClick={onBack}
+                  aria-label="Back"
+                  style={NAV_BTN_STYLE}
+                >
+                  <BackIcon />
+                </button>
+              )}
               <h1 style={{
                 color: 'var(--color-text-primary)',
                 fontWeight: '200',
                 fontSize: 'clamp(1.2rem, 4vw, 1.8rem)',
                 letterSpacing: '0.15em',
                 margin: 0,
+                lineHeight: 0.8,
               }}>
                 dmgCtrl
               </h1>
@@ -610,24 +611,7 @@ function SwuSetupScreenView({
                 <button
                   onClick={onSettings}
                   aria-label="⚙"
-                  style={{
-                    width: '5vh',
-                    height: '5vh',
-                    minWidth: '36px',
-                    minHeight: '36px',
-                    flexShrink: 0,
-                    background: 'transparent',
-                    border: '2px solid var(--color-ui-border)',
-                    borderRadius: '8px',
-                    color: 'var(--color-ui-border-muted)',
-                    fontSize: 'clamp(0.8rem, 2vh, 1.2rem)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    WebkitTapHighlightColor: 'transparent',
-                    boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
-                  }}
+                  style={NAV_BTN_STYLE}
                 >
                   <CogIcon />
                 </button>
@@ -635,24 +619,7 @@ function SwuSetupScreenView({
               <button
                 onClick={onHelp}
                 aria-label="Help"
-                style={{
-                  width: '5vh',
-                  height: '5vh',
-                  minWidth: '36px',
-                  minHeight: '36px',
-                  flexShrink: 0,
-                  background: 'transparent',
-                  border: '2px solid var(--color-ui-border)',
-                  borderRadius: '8px',
-                  color: 'var(--color-ui-border-muted)',
-                  fontSize: 'clamp(0.8rem, 2vh, 1.2rem)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  WebkitTapHighlightColor: 'transparent',
-                  boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
-                }}
+                style={NAV_BTN_STYLE}
               >
                 <HelpIcon />
               </button>
@@ -732,7 +699,7 @@ function SwuSetupScreenView({
         zIndex: 1,
         display: 'flex',
         flexDirection: 'column',
-        padding: '5vw',
+        padding: '2vw',
         gap: '2vh',
         overflowY: 'auto',
         flex: 1,
@@ -745,23 +712,23 @@ function SwuSetupScreenView({
           alignItems: 'center',
           justifyContent: 'space-between',
         }}>
-          <div
-            onClick={onBack}
-            role={onBack ? 'button' : undefined}
-            aria-label={onBack ? 'Game select' : undefined}
-            style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3vw', cursor: onBack ? 'pointer' : 'default' }}
-          >
-            <img
-              src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`}
-              alt="dmgCtrl"
-              style={{ height: 'clamp(1.8rem, 8vw, 3rem)', width: 'auto' }}
-            />
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '2vw' }}>
+            {onBack && (
+              <button
+                onClick={onBack}
+                aria-label="Back"
+                style={NAV_BTN_STYLE}
+              >
+                <BackIcon />
+              </button>
+            )}
             <h1 style={{
               color: 'var(--color-text-primary)',
               fontWeight: '200',
               fontSize: 'clamp(1.8rem, 8vw, 3rem)',
               letterSpacing: '0.15em',
               margin: 0,
+              lineHeight: 0.8,
             }}>
               dmgCtrl
             </h1>
@@ -771,50 +738,16 @@ function SwuSetupScreenView({
             {onSettings && (
               <button
                 onClick={onSettings}
-                  aria-label="⚙"
-                style={{
-                  width: '5vw',
-                  height: '5vw',
-                  minWidth: '36px',
-                  minHeight: '36px',
-                  flexShrink: 0,
-                  background: 'transparent',
-                  border: '2px solid var(--color-ui-border)',
-                  borderRadius: '8px',
-                  color: 'var(--color-ui-border-muted)',
-                  fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  WebkitTapHighlightColor: 'transparent',
-                  boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
-                }}
+                aria-label="⚙"
+                style={NAV_BTN_STYLE}
               >
-                  <CogIcon />
-                </button>
+                <CogIcon />
+              </button>
             )}
             <button
               onClick={onHelp}
               aria-label="Help"
-              style={{
-                width: '5vw',
-                height: '5vw',
-                minWidth: '36px',
-                minHeight: '36px',
-                flexShrink: 0,
-                background: 'transparent',
-                border: '2px solid var(--color-ui-border)',
-                borderRadius: '8px',
-                color: 'var(--color-ui-border-muted)',
-                fontSize: 'clamp(0.8rem, 2vw, 1.2rem)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                WebkitTapHighlightColor: 'transparent',
-                boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
-              }}
+              style={NAV_BTN_STYLE}
             >
               <HelpIcon />
             </button>

@@ -37,7 +37,7 @@ const DEFAULTS: UserSettings = {
   enableActionLog: true,
   enableCompetitiveMode: true,
   enableGameSelect: true,
-  startScreen: 'swu',
+  startScreen: 'gameSelect',
   bo1TimerMinutes: 25,
   bo3TimerMinutes: 55,
   xwingTimerMinutes: 75,

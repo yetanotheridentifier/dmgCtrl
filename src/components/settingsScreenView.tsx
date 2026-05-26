@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useOrientation } from '../hooks/useOrientation'
 import { BackIcon, HelpIcon } from './icons'
+import { NAV_BTN_STYLE } from '../styles/navButton'
 import type { FavouriteBase } from '../hooks/useFavourites'
 import TimerStepper from './shared/timerStepper'
 
@@ -92,24 +93,6 @@ function ToggleRow({ id, label, subtitle, checked, onChange, vmin }: ToggleRowPr
   )
 }
 
-const buttonStyle = (vmin: number): React.CSSProperties => ({
-  flexShrink: 0,
-  width: '5vw',
-  height: '5vw',
-  minWidth: '36px',
-  minHeight: '36px',
-  background: 'transparent',
-  border: '2px solid var(--color-ui-border)',
-  borderRadius: '8px',
-  color: 'var(--color-ui-border-muted)',
-  fontSize: `clamp(0.8rem, ${vmin * 0.02}px, 1.2rem)`,
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  WebkitTapHighlightColor: 'transparent',
-  boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
-})
 
 const smallButtonStyle: React.CSSProperties = {
   padding: '0.4em 0.8em',
@@ -121,8 +104,11 @@ const smallButtonStyle: React.CSSProperties = {
 }
 
 type ForceTokenDisplay = 'always-on' | 'lof-only' | 'always-off'
+type Tab = 'general' | 'swu' | 'xwing'
+type StartScreen = 'gameSelect' | 'swu' | 'xwing'
 
 interface Props {
+  defaultTab: Tab
   useHyperspace: boolean
   forceTokenDisplay: ForceTokenDisplay
   enableEpicActions: boolean
@@ -146,6 +132,8 @@ interface Props {
   onBo3TimerChange: (v: number) => void
   onXwingTimerChange: (v: number) => void
   onMeleePlayerGuidChange: (v: string) => void
+  startScreen: StartScreen
+  onStartScreenChange: (v: StartScreen) => void
   onRemoveFavourite: (key: string) => void
   onClearFavourites: () => void
   onBack: () => void
@@ -153,6 +141,7 @@ interface Props {
 }
 
 function SettingsScreenView({
+  defaultTab,
   useHyperspace,
   forceTokenDisplay,
   enableEpicActions,
@@ -176,6 +165,8 @@ function SettingsScreenView({
   onBo3TimerChange,
   onXwingTimerChange,
   onMeleePlayerGuidChange,
+  startScreen,
+  onStartScreenChange,
   onRemoveFavourite,
   onClearFavourites,
   onBack,
@@ -183,8 +174,168 @@ function SettingsScreenView({
 }: Props) {
   const { vmin, isPortrait } = useOrientation()
   const [confirmingClear, setConfirmingClear] = useState(false)
+  const [activeTab, setActiveTab] = useState<Tab>(defaultTab)
 
-  const generalToggles = (
+  const scrollableColumn: React.CSSProperties = {
+    flex: 1,
+    overflowY: 'auto',
+    paddingRight: '1rem',
+    paddingBottom: '5vw',
+  }
+
+  // ── Tab bar ───────────────────────────────────────────────────────────────
+
+  const tabs: { id: Tab; label: string }[] = [
+    { id: 'general', label: 'General' },
+    { id: 'swu', label: 'SWU' },
+    { id: 'xwing', label: 'X-Wing' },
+  ]
+
+  // Portrait: horizontal bar across the top
+  // Landscape: vertical sidebar on the left
+  const tabBar = (
+    <div
+      role="tablist"
+      style={isPortrait ? {
+        display: 'flex',
+        flexShrink: 0,
+        borderBottom: '1px solid rgba(107, 114, 128, 0.3)',
+        marginBottom: '1.5vh',
+      } : {
+        display: 'flex',
+        flexDirection: 'column',
+        flexShrink: 0,
+        alignItems: 'center',
+        borderRight: '1px solid rgba(107, 114, 128, 0.3)',
+        paddingTop: '0.5vh',
+        gap: '0.5vh',
+      }}
+    >
+      {tabs.map(({ id, label }) => {
+        const isActive = activeTab === id
+        return (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={isActive}
+            onClick={() => setActiveTab(id)}
+            style={isPortrait ? {
+              flex: 1,
+              background: 'transparent',
+              border: 'none',
+              borderBottom: isActive
+                ? '2px solid var(--color-accent)'
+                : '2px solid transparent',
+              color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+              fontFamily: "'Segoe UI', Helvetica, Arial, sans-serif",
+              fontWeight: isActive ? '400' : '300',
+              fontSize: `clamp(0.85rem, ${vmin * 0.032}px, 1.05rem)`,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              padding: '0.75vh 0',
+              marginBottom: '-1px',
+              cursor: 'pointer',
+              transition: 'color 0.15s, border-color 0.15s',
+              WebkitTapHighlightColor: 'transparent',
+            } : {
+              flex: 1,
+              background: 'transparent',
+              border: 'none',
+              borderLeft: isActive
+                ? '2px solid var(--color-accent)'
+                : '2px solid transparent',
+              color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+              fontFamily: "'Segoe UI', Helvetica, Arial, sans-serif",
+              fontWeight: isActive ? '400' : '300',
+              fontSize: `clamp(0.75rem, ${vmin * 0.03}px, 0.9rem)`,
+              letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+              writingMode: 'vertical-rl',
+              transform: 'rotate(180deg)',
+              padding: '0.8vh 0.4vw',
+              cursor: 'pointer',
+              transition: 'color 0.15s, border-color 0.15s',
+              WebkitTapHighlightColor: 'transparent',
+            }}
+          >
+            {label}
+          </button>
+        )
+      })}
+    </div>
+  )
+
+  // ── General tab ───────────────────────────────────────────────────────────
+
+  const generalContent = (
+    <>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '2vw',
+        padding: '1.5vh 0 0.5vh',
+      }}>
+        <label
+          htmlFor="select-start-screen"
+          style={{
+            flex: 1,
+            color: 'var(--color-text-primary)',
+            fontWeight: '300',
+            fontSize: `clamp(0.9rem, ${vmin * 0.035}px, 1.1rem)`,
+            letterSpacing: '0.03em',
+            cursor: 'pointer',
+          }}
+        >
+          Start Screen
+        </label>
+        <select
+          id="select-start-screen"
+          aria-label="Start Screen"
+          value={startScreen}
+          onChange={e => onStartScreenChange(e.target.value as StartScreen)}
+          style={{
+            background: 'transparent',
+            border: '2px solid var(--color-accent)',
+            borderRadius: '12px',
+            color: 'var(--color-text-primary)',
+            fontSize: `clamp(0.8rem, ${vmin * 0.03}px, 1rem)`,
+            padding: '0.3em 0.6em',
+            cursor: 'pointer',
+            flexShrink: 0,
+            outline: 'none',
+            boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
+            WebkitAppearance: 'none',
+          }}
+        >
+          <option value="gameSelect">Game Select</option>
+          <option value="swu">SWU</option>
+          <option value="xwing">X-Wing</option>
+        </select>
+      </div>
+      <ToggleRow
+        id="toggle-wake-lock"
+        label="Enable Screen Wake Lock"
+        subtitle="Keeps the screen on during play. May affect battery life."
+        checked={enableWakeLock}
+        onChange={onEnableWakeLockChange}
+        vmin={vmin}
+      />
+      <ToggleRow
+        id="toggle-action-log"
+        label="Enable Action Log"
+        subtitle="Shows a scrollable log of game actions with undo support. Also enables the round tracker."
+        checked={enableActionLog}
+        onChange={onEnableActionLogChange}
+        vmin={vmin}
+      />
+    </>
+  )
+
+  // ── SWU tab — options column ──────────────────────────────────────────────
+
+  const swuOptions = (
     <>
       <ToggleRow
         id="toggle-hyperspace"
@@ -244,22 +395,6 @@ function SettingsScreenView({
         label="Enable Epic Actions"
         checked={enableEpicActions}
         onChange={onEnableEpicActionsChange}
-        vmin={vmin}
-      />
-      <ToggleRow
-        id="toggle-wake-lock"
-        label="Enable Screen Wake Lock"
-        subtitle="Keeps the screen on during play. May affect battery life."
-        checked={enableWakeLock}
-        onChange={onEnableWakeLockChange}
-        vmin={vmin}
-      />
-      <ToggleRow
-        id="toggle-action-log"
-        label="Enable Action Log"
-        subtitle="Shows a scrollable log of game actions with undo support. Also enables the round tracker."
-        checked={enableActionLog}
-        onChange={onEnableActionLogChange}
         vmin={vmin}
       />
       <ToggleRow
@@ -336,27 +471,10 @@ function SettingsScreenView({
           </div>
         </div>
       )}
-      <div style={{ paddingLeft: '0.5em', paddingTop: '0.5em' }}>
-        <div style={{
-          fontSize: '0.8em',
-          color: 'var(--color-text-muted)',
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-          paddingBottom: '0.4em',
-        }}>
-          X-Wing
-        </div>
-        <TimerStepper
-          label="Game Timer"
-          value={xwingTimerMinutes}
-          values={[5.5, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90]}
-          formatValue={(v) => v === 5.5 ? '5:30 (test)' : `${v} min`}
-          onChange={onXwingTimerChange}
-          testId="xwing-timer-stepper"
-        />
-      </div>
     </>
   )
+
+  // ── SWU tab — favourites column ───────────────────────────────────────────
 
   const favouritesSection = (
     <>
@@ -459,18 +577,52 @@ function SettingsScreenView({
     </>
   )
 
-  const scrollableColumn: React.CSSProperties = {
-    flex: 1,
-    overflowY: 'auto',
-    paddingBottom: '5vw',
+  // ── X-Wing tab ────────────────────────────────────────────────────────────
+
+  const xwingContent = (
+    <TimerStepper
+      label="Game Timer"
+      value={xwingTimerMinutes}
+      values={[5.5, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90]}
+      formatValue={(v) => v === 5.5 ? '5:30 (test)' : `${v} min`}
+      onChange={onXwingTimerChange}
+      testId="xwing-timer-stepper"
+    />
+  )
+
+  // ── Tab content ───────────────────────────────────────────────────────────
+
+  let tabContent: React.ReactNode
+
+  if (activeTab === 'general') {
+    tabContent = (
+      <div style={scrollableColumn}>
+        {generalContent}
+      </div>
+    )
+  } else if (activeTab === 'swu') {
+    tabContent = (
+      <div style={scrollableColumn}>
+        {swuOptions}
+        {favouritesSection}
+      </div>
+    )
+  } else {
+    tabContent = (
+      <div style={scrollableColumn}>
+        {xwingContent}
+      </div>
+    )
   }
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div key={isPortrait ? 'portrait' : 'landscape'} style={{
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
-      padding: '5vw 5vw 0',
+      padding: '2vw 2vw 0',
       boxSizing: 'border-box',
       fontFamily: "'Segoe UI', Helvetica, Arial, sans-serif",
       WebkitTextSizeAdjust: '100%',
@@ -485,7 +637,7 @@ function SettingsScreenView({
         paddingBottom: '2vh',
         flexShrink: 0,
       }}>
-        <button onClick={onBack} aria-label="Back" style={buttonStyle(vmin)}>
+        <button onClick={onBack} aria-label="Back" style={NAV_BTN_STYLE}>
           <BackIcon />
         </button>
 
@@ -507,24 +659,20 @@ function SettingsScreenView({
           Settings
         </h1>
 
-        <button onClick={onHelp} aria-label="Help" style={buttonStyle(vmin)}>
+        <button onClick={onHelp} aria-label="Help" style={NAV_BTN_STYLE}>
           <HelpIcon />
         </button>
       </div>
 
       {isPortrait ? (
-        <div style={scrollableColumn}>
-          {generalToggles}
-          {favouritesSection}
-        </div>
+        <>
+          {tabBar}
+          {tabContent}
+        </>
       ) : (
-        <div style={{ flex: 1, display: 'flex', gap: '4vw', overflow: 'hidden' }}>
-          <div role="group" aria-label="General settings" style={scrollableColumn}>
-            {generalToggles}
-          </div>
-          <div role="group" aria-label="Favourites settings" style={scrollableColumn}>
-            {favouritesSection}
-          </div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'row', gap: '2vw', overflow: 'hidden' }}>
+          {tabBar}
+          {tabContent}
         </div>
       )}
 
