@@ -4,12 +4,15 @@ import AppScreenLayout from './layout/appScreenLayout'
 import SettingsScreenView from './settingsScreenView'
 import { onSettingChanged, onFavouriteRemoved, onFavouritesCleared } from '../services/analytics'
 
+type Tab = 'general' | 'swu' | 'xwing'
+
 interface Props {
   onBack: () => void
   onHelp: () => void
+  defaultTab?: Tab
 }
 
-function SettingsScreen({ onBack, onHelp }: Props) {
+function SettingsScreen({ onBack, onHelp, defaultTab = 'general' }: Props) {
   const {
     useHyperspace,
     forceTokenDisplay,
@@ -56,6 +59,7 @@ function SettingsScreen({ onBack, onHelp }: Props) {
   return (
     <AppScreenLayout>
       <SettingsScreenView
+        defaultTab={defaultTab}
         useHyperspace={useHyperspace}
         forceTokenDisplay={forceTokenDisplay}
         enableEpicActions={enableEpicActions}

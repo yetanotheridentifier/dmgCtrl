@@ -889,4 +889,43 @@ describe('App game select', () => {
     await waitFor(() => expect(screen.getByTestId('start-game-btn')).toBeInTheDocument())
   })
 
+  // ── Settings tab defaults per source screen ───────────────────────────────
+
+  it('settings button is visible on game select screen', async () => {
+    mockUserSettings.enableGameSelect = true
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument())
+  })
+
+  it('opening settings from game select shows the General tab active', async () => {
+    const user = userEvent.setup()
+    mockUserSettings.enableGameSelect = true
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /settings/i }))
+    expect(screen.getByRole('tab', { name: /general/i })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: /swu/i })).toHaveAttribute('aria-selected', 'false')
+  })
+
+  it('opening settings from setup shows the SWU tab active', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitForSetup()
+    await user.click(screen.getByRole('button', { name: '⚙' }))
+    expect(screen.getByRole('tab', { name: /swu/i })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: /general/i })).toHaveAttribute('aria-selected', 'false')
+  })
+
+  it('opening settings from xwing shows the X-Wing tab active', async () => {
+    const user = userEvent.setup()
+    mockUserSettings.enableGameSelect = true
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /settings/i }))
+    expect(screen.getByRole('tab', { name: /x-wing/i })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: /general/i })).toHaveAttribute('aria-selected', 'false')
+  })
+
 })

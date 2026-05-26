@@ -1,12 +1,14 @@
 import AppScreenLayout from './layout/appScreenLayout'
 import { useOrientation } from '../hooks/useOrientation'
+import { CogIcon } from './icons'
 
 interface Props {
   onSelectSwu: () => void
   onSelectXwing: () => void
+  onSettings: () => void
 }
 
-function GameSelectScreen({ onSelectSwu, onSelectXwing }: Props) {
+function GameSelectScreen({ onSelectSwu, onSelectXwing, onSettings }: Props) {
   const { isPortrait } = useOrientation()
 
   const buttonBase: React.CSSProperties = {
@@ -56,6 +58,29 @@ function GameSelectScreen({ onSelectSwu, onSelectXwing }: Props) {
               dmgCtrl
             </h1>
           </div>
+
+          <button
+            onClick={onSettings}
+            aria-label="Settings"
+            style={{
+              background: 'transparent',
+              border: '2px solid var(--color-ui-border)',
+              borderRadius: '8px',
+              color: 'var(--color-ui-border-muted)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: isPortrait ? '8vw' : '5vw',
+              height: isPortrait ? '8vw' : '5vw',
+              minWidth: '36px',
+              minHeight: '36px',
+              WebkitTapHighlightColor: 'transparent',
+              boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
+            }}
+          >
+            <CogIcon />
+          </button>
         </div>
 
         {/* Game buttons */}

@@ -29,6 +29,7 @@ function App() {
   const [tournamentCurrentBase, setTournamentCurrentBase] = useState<Base | null>(null)
   const [hasPlayedGameInCurrentMatch, setHasPlayedGameInCurrentMatch] = useState(false)
   const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament' | 'xwing'>('setup')
+  const [settingsDefaultTab, setSettingsDefaultTab] = useState<'general' | 'swu' | 'xwing'>('swu')
   const { loading } = useBases()
   const { useHyperspace, enableGameSelect } = useUserSettings()
   const gameStartTime = useRef<number>(0)
@@ -168,6 +169,11 @@ function App() {
   }
 
   const handleSettings = () => {
+    const tab: 'general' | 'swu' | 'xwing' =
+      screen === 'gameSelect' ? 'general' :
+      screen === 'xwing' ? 'xwing' :
+      'swu'
+    setSettingsDefaultTab(tab)
     setBackStack(prev => [...prev, screen])
     setScreen('settings')
   }
@@ -192,6 +198,7 @@ function App() {
       <GameSelectScreen
         onSelectSwu={() => setScreen('setup')}
         onSelectXwing={() => { setIsInXwing(true); setScreen('xwing') }}
+        onSettings={handleSettings}
       />
     )
   }
@@ -258,7 +265,7 @@ function App() {
         />
       )}
       {screen === 'help' && <HelpScreen onBack={handleOverlayBack} source={helpSource} />}
-      {screen === 'settings' && <SettingsScreen onBack={handleOverlayBack} onHelp={handleHelp} />}
+      {screen === 'settings' && <SettingsScreen onBack={handleOverlayBack} onHelp={handleHelp} defaultTab={settingsDefaultTab} />}
     </>
   )
 }

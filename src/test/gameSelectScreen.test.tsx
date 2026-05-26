@@ -8,34 +8,34 @@ describe('GameSelectScreen', () => {
   // ── Title ─────────────────────────────────────────────────────────────────
 
   it('renders the dmgCtrl app icon', () => {
-    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} />)
+    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} onSettings={vi.fn()} />)
     expect(screen.getByAltText('dmgCtrl')).toBeInTheDocument()
   })
 
   it('renders the dmgCtrl title', () => {
-    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} />)
+    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} onSettings={vi.fn()} />)
     expect(screen.getByText('dmgCtrl')).toBeInTheDocument()
   })
 
   // ── Game buttons ──────────────────────────────────────────────────────────
 
   it('renders the Star Wars Unlimited logo', () => {
-    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} />)
+    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} onSettings={vi.fn()} />)
     expect(screen.getByAltText('Star Wars Unlimited')).toBeInTheDocument()
   })
 
   it('renders the Star Wars X-Wing logo', () => {
-    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} />)
+    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} onSettings={vi.fn()} />)
     expect(screen.getByAltText('Star Wars X-Wing')).toBeInTheDocument()
   })
 
   it('Star Wars Unlimited button is enabled', () => {
-    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} />)
+    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} onSettings={vi.fn()} />)
     expect(screen.getByRole('button', { name: /star wars unlimited/i })).not.toBeDisabled()
   })
 
   it('Star Wars X-Wing button is enabled', () => {
-    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} />)
+    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} onSettings={vi.fn()} />)
     expect(screen.getByRole('button', { name: /star wars x-wing/i })).not.toBeDisabled()
   })
 
@@ -44,7 +44,7 @@ describe('GameSelectScreen', () => {
   it('calls onSelectSwu when Star Wars Unlimited button is clicked', async () => {
     const onSelectSwu = vi.fn()
     const user = userEvent.setup()
-    render(<GameSelectScreen onSelectSwu={onSelectSwu} onSelectXwing={vi.fn()} />)
+    render(<GameSelectScreen onSelectSwu={onSelectSwu} onSelectXwing={vi.fn()} onSettings={vi.fn()} />)
     await user.click(screen.getByRole('button', { name: /star wars unlimited/i }))
     expect(onSelectSwu).toHaveBeenCalledOnce()
   })
@@ -52,15 +52,30 @@ describe('GameSelectScreen', () => {
   it('calls onSelectXwing when Star Wars X-Wing button is clicked', async () => {
     const onSelectXwing = vi.fn()
     const user = userEvent.setup()
-    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={onSelectXwing} />)
+    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={onSelectXwing} onSettings={vi.fn()} />)
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
     expect(onSelectXwing).toHaveBeenCalledOnce()
+  })
+
+  // ── Settings button ───────────────────────────────────────────────────────
+
+  it('renders a settings button', () => {
+    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} onSettings={vi.fn()} />)
+    expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument()
+  })
+
+  it('calls onSettings when settings button is clicked', async () => {
+    const onSettings = vi.fn()
+    const user = userEvent.setup()
+    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} onSettings={onSettings} />)
+    await user.click(screen.getByRole('button', { name: /settings/i }))
+    expect(onSettings).toHaveBeenCalledOnce()
   })
 
   // ── No help button ────────────────────────────────────────────────────────
 
   it('does not render a help button', () => {
-    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} />)
+    render(<GameSelectScreen onSelectSwu={vi.fn()} onSelectXwing={vi.fn()} onSettings={vi.fn()} />)
     expect(screen.queryByRole('button', { name: /help/i })).not.toBeInTheDocument()
   })
 
