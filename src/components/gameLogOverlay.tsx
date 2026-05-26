@@ -1,8 +1,15 @@
 import { useEffect, useRef } from 'react'
-import type { GameLogEntry } from '../hooks/useGameLog'
+
+interface LogEntryLike {
+  id: string
+  type: string
+  message: string
+  color: string
+  undoable?: boolean
+}
 
 interface Props {
-  entries: GameLogEntry[]
+  entries: LogEntryLike[]
   onUndo: () => void
 }
 
@@ -45,14 +52,14 @@ function GameLogOverlay({ entries, onUndo }: Props) {
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: '0.5rem',
-            paddingTop: entry.type === 'round' && i > 0 ? '0.35rem' : '0.2rem',
+            paddingTop: entry.type === 'round' ? '0.35rem' : '0.2rem',
             paddingRight: '0.25rem',
             paddingBottom: '0.2rem',
             paddingLeft: '0.25rem',
-            borderTop: entry.type === 'round' && i > 0 ? '1px solid rgba(147,197,253,0.4)' : undefined,
-            marginTop: entry.type === 'round' && i > 0 ? '0.15rem' : undefined,
-            borderRadius: '4px',
-            background: entry.type === 'round' ? 'linear-gradient(to bottom, rgba(59,130,246,0.2) 0%, transparent 100%)' : i === entries.length - 1 ? 'rgba(255,255,255,0.08)' : 'transparent',
+            borderTop: entry.type === 'round' ? '1px solid rgba(147,197,253,0.4)' : undefined,
+            marginTop: entry.type === 'round' && i > 0 ? '0.35rem' : undefined,
+            borderRadius: entry.type === 'round' ? '4px 4px 0 0' : '4px',
+            background: entry.type === 'round' ? 'linear-gradient(to bottom, rgba(59,130,246,0.2) 0%, rgba(59,130,246,0) 100%)' : i === entries.length - 1 ? 'rgba(255,255,255,0.08)' : 'transparent',
           }}
         >
           <span style={{ color: entry.color, fontSize: 'clamp(0.7rem, 1.5vw, 0.9rem)', flex: 1 }}>

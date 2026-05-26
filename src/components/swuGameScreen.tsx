@@ -135,7 +135,7 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
     game.incrementRound()
     timer.start()
     log.reset()
-    log.add({ type: 'round', message: 'Round 1', color: '#ffffff', prevState: prev, undoable: false })
+    log.add({ type: 'round', message: 'Round 1', color: '#ffffff', prevState: prev })
     setLastGameResult(null)
   }
 
@@ -197,6 +197,9 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
       }
       if (entry.type === 'game-result') {
         setLastGameResult(null)
+      }
+      if (entry.prevState.round === 0) {
+        timer.reset()
       }
       void onUndoUsed(baseKey, baseSet, entry.type)
     }

@@ -2,7 +2,9 @@ import { useDragScrubber } from '../hooks/useDragScrubber'
 import AppScreenLayout from './layout/appScreenLayout'
 import { BackIcon, CogIcon, HelpIcon, LogIcon } from './icons'
 import TimerDisplay from './shared/timerDisplay'
+import GameLogOverlay from './gameLogOverlay'
 import { NAV_BTN_STYLE } from '../styles/navButton'
+import type { HistoryEntry } from '../hooks/useGameHistory'
 
 interface Props {
   gameStarted: boolean
@@ -27,6 +29,10 @@ interface Props {
   onOpponentDecrement: (n: number) => void
   enableLongPress: boolean
   enableActionLog: boolean
+  logEntries: HistoryEntry<{ playerScore: number; opponentScore: number; round: number; gameStarted: boolean }>[]
+  logOpen: boolean
+  onLogToggle: () => void
+  onLogUndo: () => void
   onBack: () => void
   onHelp: () => void
   onSettings?: () => void
@@ -84,6 +90,10 @@ export default function XwingGameScreenView({
   onOpponentDecrement,
   enableLongPress,
   enableActionLog,
+  logEntries,
+  logOpen,
+  onLogToggle,
+  onLogUndo,
   onBack,
   onHelp,
   onSettings,
@@ -277,15 +287,21 @@ export default function XwingGameScreenView({
         </div>
       )}
 
-      {/* Log — bottom-left, stub */}
+      {/* Log — bottom-left */}
       {enableActionLog && (
-        <button
-          data-testid="log-btn"
-          aria-label="Log"
-          style={{ ...NAV_BTN, position: 'absolute', bottom: 'calc(env(safe-area-inset-bottom) + 2vw)', left: 'calc(env(safe-area-inset-left) + 2vw)' }}
-        >
-          <LogIcon />
-        </button>
+        <>
+          <button
+            data-testid="log-btn"
+            aria-label="Log"
+            onClick={onLogToggle}
+            style={{ ...NAV_BTN, position: 'absolute', bottom: 'calc(env(safe-area-inset-bottom) + 2vw)', left: 'calc(env(safe-area-inset-left) + 2vw)' }}
+          >
+            <LogIcon />
+          </button>
+          {logOpen && (
+            <GameLogOverlay entries={logEntries} onUndo={onLogUndo} />
+          )}
+        </>
       )}
 
       {/* Main content — centred in available area */}
