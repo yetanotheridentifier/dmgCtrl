@@ -1263,11 +1263,51 @@ describe('SwuGameScreen', () => {
   it('Undo after round increment restores the round counter', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
-    await user.click(screen.getByTestId('round-counter')) // start game → round 1 (non-undoable)
-    await user.click(screen.getByTestId('round-counter')) // round 2 (undoable)
+    await user.click(screen.getByTestId('round-counter')) // start game → round 1
+    await user.click(screen.getByTestId('round-counter')) // round 2
     await user.click(screen.getByTestId('log-btn'))
     await user.click(screen.getByTestId('log-undo-btn'))
     expect(screen.getByTestId('round-counter')).toHaveTextContent('1')
+  })
+
+  it('Round 1 entry has an undo button', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByTestId('log-undo-btn')).toBeInTheDocument()
+  })
+
+  it('Undoing Round 1 returns the round counter to 0', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByTestId('round-counter')).toHaveTextContent('0')
+  })
+
+  it('Undoing Round 1 resets the timer', async () => {
+    const timerMock = { remaining: 1500, isRunning: false, isExpired: false, start: vi.fn(), reset: vi.fn() }
+    mockUseTimer.mockReturnValue(timerMock)
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(timerMock.reset).toHaveBeenCalledOnce()
+  })
+
+  it('Undoing a damage action does not reset the timer', async () => {
+    const timerMock = { remaining: 1500, isRunning: false, isExpired: false, start: vi.fn(), reset: vi.fn() }
+    mockUseTimer.mockReturnValue(timerMock)
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
+    await user.click(screen.getByText('+'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(timerMock.reset).not.toHaveBeenCalled()
   })
 
   // --- Log entry content ---
@@ -1644,7 +1684,7 @@ describe('SwuGameScreen', () => {
     expect(screen.getByText('Round 1')).toBeInTheDocument()
   })
 
-  it('undo button is not shown when Round 1 is the only entry', async () => {
+  it('undo button is still shown after undoing the last damage entry (Round 1 is undoable)', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await startGame(user)
@@ -1652,7 +1692,7 @@ describe('SwuGameScreen', () => {
     await user.click(screen.getByTestId('log-btn'))
     await user.click(screen.getByTestId('log-undo-btn'))
     expect(screen.getByText('Round 1')).toBeInTheDocument()
-    expect(screen.queryByTestId('log-undo-btn')).not.toBeInTheDocument()
+    expect(screen.getByTestId('log-undo-btn')).toBeInTheDocument()
   })
 
   // --- Start phase ---
@@ -1694,13 +1734,13 @@ describe('SwuGameScreen', () => {
     expect(screen.getByText('−')).not.toBeDisabled()
   })
 
-  it('clicking the round counter when at 0 adds non-undoable Round 1 entry to log', async () => {
+  it('clicking the round counter when at 0 adds an undoable Round 1 entry to log', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('round-counter'))
     await user.click(screen.getByTestId('log-btn'))
     expect(screen.getByText('Round 1')).toBeInTheDocument()
-    expect(screen.queryByTestId('log-undo-btn')).not.toBeInTheDocument()
+    expect(screen.getByTestId('log-undo-btn')).toBeInTheDocument()
   })
 
   it('counter shows 0 after starting the game', async () => {

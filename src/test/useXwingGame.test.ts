@@ -225,4 +225,50 @@ describe('useXwingGame', () => {
     expect(result.current.gameOver).toBe(false)
   })
 
+  // --- restoreState ---
+
+  it('restoreState sets playerScore', () => {
+    const { result } = renderHook(() => useXwingGame())
+    act(() => result.current.incrementPlayer(10))
+    act(() => result.current.restoreState({ playerScore: 3, opponentScore: 0, round: 1 }))
+    expect(result.current.playerScore).toBe(3)
+  })
+
+  it('restoreState sets opponentScore', () => {
+    const { result } = renderHook(() => useXwingGame())
+    act(() => result.current.incrementOpponent(15))
+    act(() => result.current.restoreState({ playerScore: 0, opponentScore: 7, round: 1 }))
+    expect(result.current.opponentScore).toBe(7)
+  })
+
+  it('restoreState sets round', () => {
+    const { result } = renderHook(() => useXwingGame())
+    act(() => { result.current.advanceRound(); result.current.advanceRound() })
+    act(() => result.current.restoreState({ playerScore: 0, opponentScore: 0, round: 1 }))
+    expect(result.current.round).toBe(1)
+  })
+
+  it('restoreState clears gameOver when restored scores are below 50', () => {
+    const { result } = renderHook(() => useXwingGame())
+    act(() => result.current.incrementPlayer(50))
+    expect(result.current.gameOver).toBe(true)
+    act(() => result.current.restoreState({ playerScore: 49, opponentScore: 0, round: 3 }))
+    expect(result.current.gameOver).toBe(false)
+  })
+
+  it('restoreState works when called while gameOver is true', () => {
+    const { result } = renderHook(() => useXwingGame())
+    act(() => result.current.incrementPlayer(50))
+    act(() => result.current.restoreState({ playerScore: 20, opponentScore: 10, round: 5 }))
+    expect(result.current.playerScore).toBe(20)
+    expect(result.current.opponentScore).toBe(10)
+    expect(result.current.round).toBe(5)
+  })
+
+  it('restoreState to scores above 50 sets gameOver to true', () => {
+    const { result } = renderHook(() => useXwingGame())
+    act(() => result.current.restoreState({ playerScore: 50, opponentScore: 0, round: 6 }))
+    expect(result.current.gameOver).toBe(true)
+  })
+
 })

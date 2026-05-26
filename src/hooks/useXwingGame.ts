@@ -33,6 +33,11 @@ export function useXwingGame() {
     setOpponentScore(0)
     setRound(1)
   }
+  const restoreState = (snapshot: { playerScore: number; opponentScore: number; round: number }) => {
+    setPlayerScore(snapshot.playerScore)
+    setOpponentScore(snapshot.opponentScore)
+    setRound(snapshot.round)
+  }
 
   const result: 'win' | 'loss' | 'draw' | null = !gameOver
     ? null
@@ -46,6 +51,6 @@ export function useXwingGame() {
     playerScore, opponentScore, round, gameOver, result,
     incrementPlayer, decrementPlayer,
     incrementOpponent, decrementOpponent,
-    advanceRound, reset,
+    advanceRound, reset, restoreState,
   }
 }

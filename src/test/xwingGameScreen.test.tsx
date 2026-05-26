@@ -624,3 +624,249 @@ describe('XwingGameScreen round tracker', () => {
   })
 
 })
+
+// ---------------------------------------------------------------------------
+// Log overlay
+// ---------------------------------------------------------------------------
+
+describe('XwingGameScreen log overlay', () => {
+
+  it('log overlay is hidden by default', () => {
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('log-overlay')).not.toBeInTheDocument()
+  })
+
+  it('clicking log button shows the log overlay', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByTestId('log-overlay')).toBeInTheDocument()
+  })
+
+  it('clicking log button again hides the log overlay', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.queryByTestId('log-overlay')).not.toBeInTheDocument()
+  })
+
+  it('log overlay shows "No actions yet" when no entries exist', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText(/no actions yet/i)).toBeInTheDocument()
+  })
+
+})
+
+// ---------------------------------------------------------------------------
+// Log entries
+// ---------------------------------------------------------------------------
+
+describe('XwingGameScreen log entries', () => {
+
+  it('starting the game adds a "Round 1" entry', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Round 1')).toBeInTheDocument()
+  })
+
+  it('incrementing player score adds an entry showing the delta and new total', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('player-increment'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('You +1 (1)')).toBeInTheDocument()
+  })
+
+  it('incrementing player score twice shows cumulative total in second entry', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('player-increment'))
+    await user.click(screen.getByTestId('player-increment'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('You +1 (2)')).toBeInTheDocument()
+  })
+
+  it('decrementing player score adds an entry with minus sign', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('player-increment'))
+    await user.click(screen.getByTestId('player-increment'))
+    await user.click(screen.getByTestId('player-decrement'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('You −1 (1)')).toBeInTheDocument()
+  })
+
+  it('incrementing opponent score adds an entry with Opp prefix', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('opponent-increment'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Opp +1 (1)')).toBeInTheDocument()
+  })
+
+  it('decrementing opponent score adds an entry with minus sign', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('opponent-increment'))
+    await user.click(screen.getByTestId('opponent-increment'))
+    await user.click(screen.getByTestId('opponent-decrement'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Opp −1 (1)')).toBeInTheDocument()
+  })
+
+  it('advancing the round adds a Round entry', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Round 2')).toBeInTheDocument()
+  })
+
+  it('log is empty before game starts', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText(/no actions yet/i)).toBeInTheDocument()
+  })
+
+  it('log resets when Start Game is clicked again after undoing back to pre-game', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('player-increment'))
+    // undo the score change, then undo game start
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    // now back in pre-game; start again
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Round 1')).toBeInTheDocument()
+    expect(screen.queryByText('You +1 (1)')).not.toBeInTheDocument()
+  })
+
+})
+
+// ---------------------------------------------------------------------------
+// Undo
+// ---------------------------------------------------------------------------
+
+describe('XwingGameScreen undo', () => {
+
+  it('undo button is present on the last log entry', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByTestId('log-undo-btn')).toBeInTheDocument()
+  })
+
+  it('clicking undo removes the last log entry', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('player-increment'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.queryByText('You +1 (1)')).not.toBeInTheDocument()
+  })
+
+  it('clicking undo after a player increment reverts the player score', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('player-increment'))
+    expect(screen.getByTestId('player-score')).toHaveTextContent('1')
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByTestId('player-score')).toHaveTextContent('0')
+  })
+
+  it('clicking undo after an opponent increment reverts the opponent score', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('opponent-increment'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByTestId('opponent-score')).toHaveTextContent('0')
+  })
+
+  it('clicking undo after a round advance reverts to the previous round', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    // after undoing the round advance, Round 2 should be clickable again (current round is 1)
+    expect(screen.getByRole('button', { name: 'Round 2' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Round 2' }).style.cursor).toBe('pointer')
+  })
+
+  it('clicking undo on "Round 1" returns to the pre-game screen', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByTestId('start-game-btn')).toBeInTheDocument()
+  })
+
+  it('undo can step back through multiple entries in sequence', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('player-increment'))
+    await user.click(screen.getByTestId('player-increment'))
+    await user.click(screen.getByTestId('log-btn'))
+    // undo second increment: score back to 1
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByTestId('player-score')).toHaveTextContent('1')
+    // undo first increment: score back to 0
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByTestId('player-score')).toHaveTextContent('0')
+  })
+
+  it('undoing game start resets the timer', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(mockTimerState.reset).toHaveBeenCalledOnce()
+  })
+
+  it('undoing a score change does not reset the timer', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('player-increment'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(mockTimerState.reset).not.toHaveBeenCalled()
+  })
+
+  it('starting game again after undo calls timer.start() afresh', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    mockTimerState.start.mockClear()
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(mockTimerState.start).toHaveBeenCalledOnce()
+  })
+
+})
