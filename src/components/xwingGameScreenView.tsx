@@ -268,7 +268,7 @@ export default function XwingGameScreenView({
                   flex: 1,
                   minWidth: 0,
                   boxSizing: 'border-box',
-                  background: isCurrent ? 'rgba(0,0,0,0.35)' : 'transparent',
+                  background: isCurrent ? 'var(--color-bg-dark)' : 'transparent',
                   ...segmentStyle,
                   color: isCurrent ? timerColor : 'var(--color-text-muted)',
                   fontSize: 'clamp(0.6rem, 1.6vw, 1rem)',
