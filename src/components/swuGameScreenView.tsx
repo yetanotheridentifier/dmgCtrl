@@ -8,6 +8,7 @@ import InitiativeToggle from './initiativeToggle'
 import { BackIcon, CogIcon, HelpIcon, LogIcon } from './icons'
 import TimerDisplay from './shared/timerDisplay'
 import { NAV_BTN_STYLE } from '../styles/navButton'
+import { BAR_CONTAINER_STYLE, BAR_LABEL_STYLE } from '../styles/barContainer'
 import type { Initiative } from '../hooks/useInitiative'
 
 // Game screen nav buttons are absolutely positioned with a z-index to stay above card art.
@@ -781,150 +782,184 @@ function SwuGameScreenView({
 
       </div>
 
-      {/* Score panel — right column, fixed 16vw from top, between settings button and round tracker */}
+      {/* Score panel — right column, between settings button and round tracker.
+          Styled as a vertical bar (matching the initiative bar).
+          OPP (top, flex:1) and YOU (bottom, flex:1) are tap zones; labels sit at the
+          bar edges (flex-start / flex-end). The markers + DRAW/timer block is absolutely
+          centered at top:50% so its position is independent of panel height, keeping the
+          player markers stable regardless of whether DRAW or the timer is showing. */}
       {playMode !== 'casual' && (() => {
         const markerCount = playMode === 'bo3' ? 2 : 1
+
+        // Counter height — slightly reduced from bar width so WIN/LOSE/DRAW clear the centre block
+        const SCORE_COUNTER_H = 'max(4vw, 28px)'
+        const INSET = '4px'
+
+        // Counter-sized confirm button — replaces OPP/YOU in pending state.
+        const COUNTER_BTN = (color: string, colorRgb: string): React.CSSProperties => ({
+          ...BAR_LABEL_STYLE,
+          width: '80%',
+          height: SCORE_COUNTER_H,
+          flexShrink: 0,
+          borderRadius: '6px',
+          background: `rgba(${colorRgb}, 0.18)`,
+          border: `1.5px solid ${color}`,
+          boxShadow: `0 0 8px rgba(${colorRgb}, 0.2)`,
+          cursor: 'pointer',
+          color,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          WebkitTapHighlightColor: 'transparent',
+        })
+
+        // DRAW tap area style — plain muted text matching OPP/YOU labels, no border/background.
+        // The confirm state (COUNTER_BTN warning) provides visual differentiation after first tap.
+        const DRAW_BTN: React.CSSProperties = {
+          ...BAR_LABEL_STYLE,
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          color: 'var(--color-text-muted)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          WebkitTapHighlightColor: 'transparent',
+        }
+
+        const isOppConfirm = pendingConfirm === 'loss'
+        const isYouConfirm = pendingConfirm === 'win'
+        const isDrawConfirm = pendingConfirm === 'draw'
+
+        const markerCircle = (filled: boolean): React.CSSProperties => ({
+          width: 'clamp(8px, 1.4vw, 12px)',
+          height: 'clamp(8px, 1.4vw, 12px)',
+          borderRadius: '50%',
+          border: filled ? '1.5px solid #15803d' : '1.5px solid var(--color-ui-border-muted)',
+          background: filled ? 'linear-gradient(160deg, #4ade80 0%, #16a34a 100%)' : 'transparent',
+          boxShadow: filled ? 'inset 0 1px 0 rgba(255,255,255,0.35), 0 2px 4px rgba(0,0,0,0.5)' : 'none',
+        })
+
         return (
           <div
             data-testid="score-panel"
             style={{
               position: 'absolute',
               top: `calc(env(safe-area-inset-top) + 16vw)`,
-              bottom: `calc(env(safe-area-inset-bottom) + 9vw)`,
+              bottom: `calc(env(safe-area-inset-bottom) + ${enableActionLog ? 9 : 2}vw)`,
               right: 'calc(env(safe-area-inset-right) + 2vw)',
               width: '5vw',
               minWidth: '36px',
+              ...BAR_CONTAINER_STYLE,
               zIndex: 10,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '4px 0',
+              padding: 0,
+              overflow: 'hidden',
+              boxSizing: 'border-box',
             }}
           >
-            <button
-              onClick={matchOver ? undefined : pendingConfirm === 'loss' ? onConfirmResult : onLossPending}
-              disabled={matchOver}
-              style={{
-                width: '100%',
-                background: 'transparent',
-                border: `1px solid ${pendingConfirm === 'loss' ? 'var(--color-error)' : 'var(--color-ui-border)'}`,
-                borderRadius: '4px',
-                padding: '0.3rem 0',
-                cursor: matchOver ? 'default' : 'pointer',
-                fontSize: 'clamp(0.5rem, 1.1vw, 0.75rem)',
-                fontWeight: '300',
-                color: pendingConfirm === 'loss' ? 'var(--color-error)' : 'var(--color-text-muted)',
-                letterSpacing: '0.05em',
-                textAlign: 'center',
-                WebkitTapHighlightColor: 'transparent',
-                opacity: matchOver ? 0.4 : 1,
-              }}
-            >{pendingConfirm === 'loss' ? 'Confirm' : 'Opp'}</button>
-
-            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3px' }}>
-              {Array.from({ length: markerCount }, (_, i) => (
-                <div
-                  key={i}
-                  data-testid="score-opp-marker"
-                  style={{
-                    width: 'clamp(8px, 1.4vw, 12px)',
-                    height: 'clamp(8px, 1.4vw, 12px)',
-                    borderRadius: '50%',
-                    border: i < opponentScore ? '1.5px solid #15803d' : '1.5px solid var(--color-ui-border-muted)',
-                    background: i < opponentScore
-                      ? 'linear-gradient(160deg, #4ade80 0%, #16a34a 100%)'
-                      : 'transparent',
-                    boxShadow: i < opponentScore
-                      ? 'inset 0 1px 0 rgba(255,255,255,0.35), 0 2px 4px rgba(0,0,0,0.5)'
-                      : 'none',
-                  }}
-                />
-              ))}
+            {/* OPP zone — flex:1 top half; label/LOSE at flex-start (near top edge) */}
+            <div style={{ flex: 1, width: '100%', paddingTop: INSET, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', boxSizing: 'border-box' }}>
+              {isOppConfirm ? (
+                <button
+                  onClick={onConfirmResult}
+                  style={COUNTER_BTN('var(--color-error)', 'var(--color-error-rgb)')}
+                >LOSE</button>
+              ) : (
+                <button
+                  onClick={matchOver ? undefined : onLossPending}
+                  disabled={matchOver}
+                  style={{ width: '100%', flex: 1, padding: 0, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', WebkitTapHighlightColor: 'transparent', ...BAR_LABEL_STYLE, color: 'var(--color-text-muted)', opacity: matchOver ? 0.4 : 1 }}
+                >
+                  <span style={{ height: SCORE_COUNTER_H, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>OPP</span>
+                </button>
+              )}
             </div>
 
-            {/* Timer / Draw button — between opp markers and player markers */}
-            {(() => {
-              const isButton = timerInteractive || pendingConfirm === 'draw'
-              if (isButton) {
-                const isConfirm = pendingConfirm === 'draw'
-                return (
+            {/* YOU zone — flex:1 bottom half; label/WIN at flex-end (near bottom edge) */}
+            <div style={{ flex: 1, width: '100%', paddingBottom: INSET, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', boxSizing: 'border-box' }}>
+              {isYouConfirm ? (
+                <button
+                  onClick={onConfirmResult}
+                  style={COUNTER_BTN('var(--color-success)', 'var(--color-success-rgb)')}
+                >WIN</button>
+              ) : (
+                <button
+                  onClick={matchOver ? undefined : onWinPending}
+                  disabled={matchOver}
+                  style={{ width: '100%', flex: 1, padding: 0, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', WebkitTapHighlightColor: 'transparent', ...BAR_LABEL_STYLE, color: 'var(--color-text-muted)', opacity: matchOver ? 0.4 : 1 }}
+                >
+                  <span style={{ height: SCORE_COUNTER_H, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>YOU</span>
+                </button>
+              )}
+            </div>
+
+            {/* Centre block — absolutely positioned at 50% so opp markers / DRAW/timer /
+                player markers are always vertically centred regardless of panel height.
+                pointerEvents:none lets clicks on markers fall through to the OPP/YOU zones;
+                the timer wrapper re-enables pointer-events so DRAW/timer buttons are clickable. */}
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              left: 0,
+              right: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '4px',
+              pointerEvents: 'none',
+              zIndex: 2,
+            }}>
+              {/* Opp win markers */}
+              <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3px' }}>
+                {Array.from({ length: markerCount }, (_, i) => (
+                  <div key={i} data-testid="score-opp-marker" style={markerCircle(i < opponentScore)} />
+                ))}
+              </div>
+
+              {/* Timer / DRAW — fixed-height wrapper ensures the block height stays
+                  consistent whether DRAW button or TimerDisplay is rendered. */}
+              <div style={{ width: '80%', height: SCORE_COUNTER_H, pointerEvents: 'auto' }}>
+                {isDrawConfirm ? (
                   <button
                     data-testid="score-timer"
-                    onClick={isConfirm ? onConfirmResult : onDrawPending}
+                    onClick={onConfirmResult}
+                    style={{ ...COUNTER_BTN('var(--color-warning)', 'var(--color-warning-rgb)'), width: '100%', height: '100%' }}
+                  >DRAW</button>
+                ) : timerInteractive ? (
+                  <button
+                    data-testid="score-timer"
+                    onClick={onDrawPending}
+                    style={{ ...DRAW_BTN, width: '100%', height: '100%' }}
+                  >DRAW</button>
+                ) : (
+                  <TimerDisplay
+                    remaining={timerRemaining}
+                    testId="score-timer"
                     style={{
                       width: '100%',
-                      background: 'transparent',
-                      border: isConfirm ? '1px solid var(--color-accent)' : '1px solid #6b7280',
-                      borderRadius: '4px',
-                      padding: '0.3rem 0',
-                      cursor: 'pointer',
-                      fontSize: 'clamp(0.5rem, 1.1vw, 0.75rem)',
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 'clamp(0.5rem, 1.1vw, 0.7rem)',
                       fontWeight: '300',
-                      color: isConfirm ? 'var(--color-accent)' : 'var(--color-text-muted)',
-                      letterSpacing: '0.05em',
-                      textAlign: 'center',
-                      WebkitTapHighlightColor: 'transparent',
+                      letterSpacing: '0.03em',
                     }}
-                  >{isConfirm ? 'Confirm' : 'Draw'}</button>
-                )
-              }
-              return (
-                <TimerDisplay
-                  remaining={timerRemaining}
-                  testId="score-timer"
-                  style={{
-                    width: '100%',
-                    padding: '0.1rem 0',
-                    fontSize: 'clamp(0.5rem, 1.1vw, 0.7rem)',
-                    fontWeight: '300',
-                    letterSpacing: '0.03em',
-                    textAlign: 'center',
-                  }}
-                />
-              )
-            })()}
+                  />
+                )}
+              </div>
 
-            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3px' }}>
-              {Array.from({ length: markerCount }, (_, i) => (
-                <div
-                  key={i}
-                  data-testid="score-player-marker"
-                  style={{
-                    width: 'clamp(8px, 1.4vw, 12px)',
-                    height: 'clamp(8px, 1.4vw, 12px)',
-                    borderRadius: '50%',
-                    border: i < playerScore ? '1.5px solid #15803d' : '1.5px solid var(--color-ui-border-muted)',
-                    background: i < playerScore
-                      ? 'linear-gradient(160deg, #4ade80 0%, #16a34a 100%)'
-                      : 'transparent',
-                    boxShadow: i < playerScore
-                      ? 'inset 0 1px 0 rgba(255,255,255,0.35), 0 2px 4px rgba(0,0,0,0.5)'
-                      : 'none',
-                  }}
-                />
-              ))}
+              {/* Player win markers */}
+              <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3px' }}>
+                {Array.from({ length: markerCount }, (_, i) => (
+                  <div key={i} data-testid="score-player-marker" style={markerCircle(i < playerScore)} />
+                ))}
+              </div>
             </div>
-
-            <button
-              onClick={matchOver ? undefined : pendingConfirm === 'win' ? onConfirmResult : onWinPending}
-              disabled={matchOver}
-              style={{
-                width: '100%',
-                background: 'transparent',
-                border: `1px solid ${pendingConfirm === 'win' ? 'var(--color-success)' : 'var(--color-ui-border)'}`,
-                borderRadius: '4px',
-                padding: '0.3rem 0',
-                cursor: matchOver ? 'default' : 'pointer',
-                fontSize: 'clamp(0.5rem, 1.1vw, 0.75rem)',
-                fontWeight: '300',
-                color: pendingConfirm === 'win' ? 'var(--color-success)' : 'var(--color-text-muted)',
-                letterSpacing: '0.05em',
-                textAlign: 'center',
-                WebkitTapHighlightColor: 'transparent',
-                opacity: matchOver ? 0.4 : 1,
-              }}
-            >{pendingConfirm === 'win' ? 'Confirm' : 'You'}</button>
           </div>
         )
       })()}
@@ -1031,12 +1066,9 @@ function SwuGameScreenView({
             left: 'calc(env(safe-area-inset-left) + 2vw)',
             width: '5vw',
             minWidth: '36px',
-            background: 'rgba(0,0,0,0.2)',
-            border: '2px solid var(--color-ui-border)',
-            borderRadius: '8px',
-            boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
+            ...BAR_CONTAINER_STYLE,
             zIndex: 10,
-            padding: '0.4rem 0',
+            padding: 0,
             boxSizing: 'border-box',
           }}>
             <InitiativeToggle

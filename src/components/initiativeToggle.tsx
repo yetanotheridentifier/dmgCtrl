@@ -1,6 +1,7 @@
 import { useRef, useState, useLayoutEffect } from 'react'
 import type React from 'react'
 import type { Initiative } from '../hooks/useInitiative'
+import { BAR_LABEL_STYLE } from '../styles/barContainer'
 
 interface Props {
   initiative: Initiative
@@ -8,20 +9,14 @@ interface Props {
   onSetPlayer: () => void
 }
 
-// Counter height matches bar width (5vw, min 36px) — square indicator
-const COUNTER_H = 'max(5vw, 36px)'
-const COUNTER_H_PX = () => Math.max(window.innerWidth * 0.05, 36)
+// Counter height — slightly reduced so it clears OPP/YOU labels with breathing room
+const COUNTER_H = 'max(4vw, 28px)'
+const COUNTER_H_PX = () => Math.max(window.innerWidth * 0.04, 28)
 
 // Inset from bar edge so counter doesn't butt against the border
 const INSET = '4px'
 
-const TINY: React.CSSProperties = {
-  fontSize: 'clamp(0.35rem, 0.8vw, 0.55rem)',
-  letterSpacing: '0.08em',
-  fontWeight: 700,
-  lineHeight: 1,
-  pointerEvents: 'none',
-}
+const TINY: React.CSSProperties = { ...BAR_LABEL_STYLE, pointerEvents: 'none' }
 
 function counterTop(initiative: Initiative): string {
   if (initiative === 'opponent') return INSET

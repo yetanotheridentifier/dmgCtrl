@@ -5,6 +5,7 @@ import TimerDisplay from './shared/timerDisplay'
 import GameLogOverlay from './gameLogOverlay'
 import InitiativeToggle from './initiativeToggle'
 import { NAV_BTN_STYLE } from '../styles/navButton'
+import { BAR_CONTAINER_STYLE } from '../styles/barContainer'
 import type { HistoryEntry } from '../hooks/useGameHistory'
 import type { Initiative } from '../hooks/useInitiative'
 
@@ -306,12 +307,9 @@ export default function XwingGameScreenView({
           left: 'calc(env(safe-area-inset-left) + 2vw)',
           width: '5vw',
           minWidth: '36px',
-          background: 'rgba(0,0,0,0.2)',
-          border: '2px solid var(--color-ui-border)',
-          borderRadius: '8px',
-          boxShadow: '0 0 8px rgba(var(--color-ui-border-muted-rgb), 0.2)',
+          ...BAR_CONTAINER_STYLE,
           zIndex: 10,
-          padding: '0.4rem 0',
+          padding: 0,
           boxSizing: 'border-box',
         }}>
           <InitiativeToggle
