@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SwuGameScreen from '../components/swuGameScreen'
 import { Base } from '../hooks/useBases'
@@ -1453,14 +1453,16 @@ describe('SwuGameScreen', () => {
     expect(screen.getByTestId('score-panel')).toBeInTheDocument()
   })
 
-  it('score panel shows Opp label', () => {
+  it('score panel shows OPP label', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    expect(screen.getByText('Opp')).toBeInTheDocument()
+    const panel = screen.getByTestId('score-panel')
+    expect(within(panel).getByText('OPP')).toBeInTheDocument()
   })
 
-  it('score panel shows You label', () => {
+  it('score panel shows YOU label', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    expect(screen.getByText('You')).toBeInTheDocument()
+    const panel = screen.getByTestId('score-panel')
+    expect(within(panel).getByText('YOU')).toBeInTheDocument()
   })
 
   it('bo1 shows 1 opponent marker', () => {
@@ -1495,14 +1497,14 @@ describe('SwuGameScreen', () => {
     expect(screen.getByTestId('score-timer')).toBeInTheDocument()
   })
 
-  it('timer shows Draw initially for bo1 (before game starts)', () => {
+  it('timer shows DRAW initially for bo1 (before game starts)', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    expect(screen.getByTestId('score-timer')).toHaveTextContent('Draw')
+    expect(screen.getByTestId('score-timer')).toHaveTextContent('DRAW')
   })
 
-  it('timer shows Draw initially for bo3 (before game starts)', () => {
+  it('timer shows DRAW initially for bo3 (before game starts)', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
-    expect(screen.getByTestId('score-timer')).toHaveTextContent('Draw')
+    expect(screen.getByTestId('score-timer')).toHaveTextContent('DRAW')
   })
 
   it('timer shows formatted time during game', async () => {
@@ -1558,29 +1560,30 @@ describe('SwuGameScreen', () => {
     expect(screen.queryByTestId('score-timer')).not.toBeInTheDocument()
   })
 
-  it('tapping the timer before game starts shows Confirm on the timer button', async () => {
+  it('tapping the timer before game starts shows dismiss overlay (DRAW pending)', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
     await user.click(screen.getByTestId('score-timer'))
-    expect(screen.getByTestId('score-timer')).toHaveTextContent('Confirm')
+    expect(screen.getByTestId('score-dismiss-overlay')).toBeInTheDocument()
+    expect(screen.getByTestId('score-timer')).toHaveTextContent('DRAW')
   })
 
-  it('tapping the timer during the game does not change the timer label', async () => {
+  it('tapping the timer during the game does not activate draw pending', async () => {
     mockUseTimer.mockReturnValue({ remaining: 1400, isRunning: true, isExpired: false, start: vi.fn(), reset: vi.fn() })
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
     await startGame(user)
     await user.click(screen.getByTestId('score-timer'))
-    expect(screen.getByTestId('score-timer')).not.toHaveTextContent('Confirm')
+    expect(screen.queryByTestId('score-dismiss-overlay')).not.toBeInTheDocument()
   })
 
   it('dismiss overlay cancels the timer draw pending', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
     await user.click(screen.getByTestId('score-timer'))
-    expect(screen.getByTestId('score-timer')).toHaveTextContent('Confirm')
+    expect(screen.getByTestId('score-dismiss-overlay')).toBeInTheDocument()
     await user.click(screen.getByTestId('score-dismiss-overlay'))
-    expect(screen.getByTestId('score-timer')).not.toHaveTextContent('Confirm')
+    expect(screen.queryByTestId('score-dismiss-overlay')).not.toBeInTheDocument()
   })
 
   it('tapping Confirm after timer draw (pre-game intentional draw) shows Match Drawn', async () => {
@@ -1591,19 +1594,19 @@ describe('SwuGameScreen', () => {
     expect(screen.getByTestId('match-result-label')).toHaveTextContent('Match Drawn')
   })
 
-  it('timer shows Draw when expired', () => {
+  it('timer shows DRAW when expired', () => {
     mockUseTimer.mockReturnValue({ remaining: 0, isRunning: false, isExpired: true, start: vi.fn(), reset: vi.fn() })
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    expect(screen.getByTestId('score-timer')).toHaveTextContent('Draw')
+    expect(screen.getByTestId('score-timer')).toHaveTextContent('DRAW')
   })
 
-  it('tapping the timer when expired shows Confirm', async () => {
+  it('tapping the timer when expired shows dismiss overlay (DRAW pending)', async () => {
     mockUseTimer.mockReturnValue({ remaining: 0, isRunning: false, isExpired: true, start: vi.fn(), reset: vi.fn() })
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
     await startGame(user)
     await user.click(screen.getByTestId('score-timer'))
-    expect(screen.getByTestId('score-timer')).toHaveTextContent('Confirm')
+    expect(screen.getByTestId('score-dismiss-overlay')).toBeInTheDocument()
   })
 
   it('tapping Confirm after expired timer draw shows Match Drawn', async () => {
@@ -1620,21 +1623,21 @@ describe('SwuGameScreen', () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
     await startGame(user)
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     expect(screen.getByTestId('game-counter')).toHaveTextContent('Start Game 2')
     expect(screen.queryByTestId('match-result-label')).not.toBeInTheDocument()
   })
 
-  it('in bo3 between games, timer shows time not Draw', async () => {
+  it('in bo3 between games, timer shows time not DRAW', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
     await startGame(user)
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
-    // Between games: game counter shows "Start Game 2" but timer must not show Draw
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
+    // Between games: game counter shows "Start Game 2" but timer must not show DRAW
     expect(screen.getByTestId('game-counter')).toHaveTextContent('Start Game 2')
-    expect(screen.getByTestId('score-timer')).not.toHaveTextContent('Draw')
+    expect(screen.getByTestId('score-timer')).not.toHaveTextContent('DRAW')
     expect(screen.getByTestId('score-timer')).toHaveTextContent('55:00')
   })
 
@@ -1643,8 +1646,8 @@ describe('SwuGameScreen', () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
     await startGame(user)
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     expect(screen.getByTestId('match-result-label')).toHaveTextContent('Match Won')
   })
 
@@ -1653,8 +1656,8 @@ describe('SwuGameScreen', () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
     await startGame(user)
-    await user.click(screen.getByRole('button', { name: 'Opp' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'OPP' }))
+    await user.click(screen.getByRole('button', { name: 'LOSE' }))
     expect(screen.getByTestId('match-result-label')).toHaveTextContent('Match Lost')
   })
 
@@ -1665,7 +1668,7 @@ describe('SwuGameScreen', () => {
     render(<SwuGameScreen base={lowHpBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
     await startGame(user)
     await user.click(screen.getByText('+'))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'LOSE' }))
     expect(screen.getByTestId('match-result-label')).toHaveTextContent('Match Lost')
   })
 
@@ -1754,93 +1757,95 @@ describe('SwuGameScreen', () => {
 
   // --- Win / Loss confirmation ---
 
-  it('You label in score panel is a button in bo1', () => {
+  it('YOU label in score panel is a button in bo1', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    expect(screen.getByRole('button', { name: 'You' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'YOU' })).toBeInTheDocument()
   })
 
-  it('Opp label in score panel is a button in bo1', () => {
+  it('OPP label in score panel is a button in bo1', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    expect(screen.getByRole('button', { name: 'Opp' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'OPP' })).toBeInTheDocument()
   })
 
-  it('clicking You changes it to Confirm', async () => {
+  it('clicking YOU shows WIN button and dismiss overlay (pending confirm)', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    expect(screen.getByRole('button', { name: 'WIN' })).toBeInTheDocument()
+    expect(screen.getByTestId('score-dismiss-overlay')).toBeInTheDocument()
   })
 
-  it('clicking Opp changes it to Confirm', async () => {
+  it('clicking OPP shows LOSE button and dismiss overlay (pending confirm)', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    await user.click(screen.getByRole('button', { name: 'Opp' }))
-    expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'OPP' }))
+    expect(screen.getByRole('button', { name: 'LOSE' })).toBeInTheDocument()
+    expect(screen.getByTestId('score-dismiss-overlay')).toBeInTheDocument()
   })
 
-  it('clicking Confirm after You fills a player score marker', async () => {
+  it('clicking YOU then WIN fills a player score marker', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     const playerMarkers = screen.getAllByTestId('score-player-marker')
     expect(playerMarkers[0]).toHaveStyle({ background: 'linear-gradient(160deg, #4ade80 0%, #16a34a 100%)' })
   })
 
-  it('clicking Confirm after Opp fills an opponent score marker', async () => {
+  it('clicking OPP then LOSE fills an opponent score marker', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    await user.click(screen.getByRole('button', { name: 'Opp' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'OPP' }))
+    await user.click(screen.getByRole('button', { name: 'LOSE' }))
     const oppMarkers = screen.getAllByTestId('score-opp-marker')
     expect(oppMarkers[0]).toHaveStyle({ background: 'linear-gradient(160deg, #4ade80 0%, #16a34a 100%)' })
   })
 
-  it('clicking Confirm after You resets the game to start phase', async () => {
+  it('clicking YOU then WIN resets the game to start phase', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
     await startGame(user)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     expect(screen.getByTestId('game-counter')).toHaveTextContent('Start Game 2')
   })
 
-  it('clicking elsewhere after clicking You dismisses Confirm', async () => {
+  it('clicking elsewhere after clicking YOU dismisses pending confirm', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    await user.click(screen.getByRole('button', { name: 'You' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
     await user.click(screen.getByTestId('score-dismiss-overlay'))
-    expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'You' })).toBeInTheDocument()
+    expect(screen.queryByTestId('score-dismiss-overlay')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'YOU' })).toBeInTheDocument()
   })
 
-  it('clicking Confirm after You adds Game 1 Won to the log', async () => {
+  it('clicking YOU then WIN adds Game 1 Won to the log', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     await user.click(screen.getByTestId('log-btn'))
     expect(screen.getByText('Game 1 Won')).toBeInTheDocument()
   })
 
-  it('clicking Confirm after Opp adds Game 1 Lost to the log', async () => {
+  it('clicking OPP then LOSE adds Game 1 Lost to the log', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    await user.click(screen.getByRole('button', { name: 'Opp' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'OPP' }))
+    await user.click(screen.getByRole('button', { name: 'LOSE' }))
     await user.click(screen.getByTestId('log-btn'))
     expect(screen.getByText('Game 1 Lost')).toBeInTheDocument()
   })
 
-  it('clicking Confirm clears previous log entries', async () => {
+  it('clicking YOU then WIN clears previous log entries', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
     await startGame(user)
     await user.click(screen.getByText('+'))
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     await user.click(screen.getByTestId('log-btn'))
     expect(screen.queryByText('Hit +1')).not.toBeInTheDocument()
     expect(screen.queryByText('Round 1')).not.toBeInTheDocument()
@@ -1851,8 +1856,8 @@ describe('SwuGameScreen', () => {
   it('undo button appears on the game result entry', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     await user.click(screen.getByTestId('log-btn'))
     expect(screen.getByTestId('log-undo-btn')).toBeInTheDocument()
   })
@@ -1860,8 +1865,8 @@ describe('SwuGameScreen', () => {
   it('undo after game result reverts player score', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     await user.click(screen.getByTestId('log-btn'))
     await user.click(screen.getByTestId('log-undo-btn'))
     const playerMarkers = screen.getAllByTestId('score-player-marker')
@@ -1873,8 +1878,8 @@ describe('SwuGameScreen', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
     await startGame(user)
     await user.click(screen.getByText('+'))
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     await user.click(screen.getByTestId('log-btn'))
     await user.click(screen.getByTestId('log-undo-btn'))
     expect(screen.getByText('Hit +1')).toBeInTheDocument()
@@ -1886,8 +1891,8 @@ describe('SwuGameScreen', () => {
     await startGame(user)
     await user.click(screen.getByText('+'))
     await user.click(screen.getByText('+'))
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     await user.click(screen.getByTestId('log-btn'))
     await user.click(screen.getByTestId('log-undo-btn'))
     expect(screen.getByTestId('game-counter')).toHaveTextContent('2')
@@ -1900,8 +1905,8 @@ describe('SwuGameScreen', () => {
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
     await startGame(user)
     await user.click(screen.getByText('+'))
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     expect(screen.getByTestId('game-counter')).toHaveTextContent('Start')
   })
 
@@ -1909,40 +1914,40 @@ describe('SwuGameScreen', () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
     await startGame(user)
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     expect(screen.getByTestId('round-counter')).toHaveTextContent('0')
   })
 
   it('after a win in bo3 shows Game 1 Won label', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     expect(screen.getByTestId('game-result-label')).toHaveTextContent('Game 1 Won')
   })
 
   it('after a loss in bo3 shows Game 1 Lost label', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
-    await user.click(screen.getByRole('button', { name: 'Opp' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'OPP' }))
+    await user.click(screen.getByRole('button', { name: 'LOSE' }))
     expect(screen.getByTestId('game-result-label')).toHaveTextContent('Game 1 Lost')
   })
 
   it('after a win in bo3, counter shows Start Game 2', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     expect(screen.getByTestId('game-counter')).toHaveTextContent('Start Game 2')
   })
 
   it('clicking the counter in between-game state advances round to 1', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     await user.click(screen.getByTestId('game-counter'))
     expect(screen.getByTestId('round-counter')).toHaveTextContent('1')
   })
@@ -1950,8 +1955,8 @@ describe('SwuGameScreen', () => {
   it('starting the next game removes the game result entry from the log', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     await user.click(screen.getByTestId('game-counter'))
     await user.click(screen.getByTestId('log-btn'))
     expect(screen.queryByText('Game 1 Won')).not.toBeInTheDocument()
@@ -1960,8 +1965,8 @@ describe('SwuGameScreen', () => {
   it('game result label is hidden after starting the next game', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     await user.click(screen.getByTestId('game-counter'))
     expect(screen.queryByTestId('game-result-label')).not.toBeInTheDocument()
   })
@@ -1971,93 +1976,94 @@ describe('SwuGameScreen', () => {
   it('game counter is hidden when match is over', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     expect(screen.queryByTestId('game-counter')).not.toBeInTheDocument()
   })
 
   it('round counter is hidden when match is over', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     expect(screen.queryByTestId('round-counter')).not.toBeInTheDocument()
   })
 
   it('shows Match Won after 2 wins in bo3', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     await user.click(screen.getByTestId('game-counter'))
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     expect(screen.getByTestId('match-result-label')).toHaveTextContent('Match Won')
   })
 
   it('shows Match Lost after 2 losses in bo3', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo3" />)
-    await user.click(screen.getByRole('button', { name: 'Opp' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'OPP' }))
+    await user.click(screen.getByRole('button', { name: 'LOSE' }))
     await user.click(screen.getByTestId('game-counter'))
-    await user.click(screen.getByRole('button', { name: 'Opp' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'OPP' }))
+    await user.click(screen.getByRole('button', { name: 'LOSE' }))
     expect(screen.getByTestId('match-result-label')).toHaveTextContent('Match Lost')
   })
 
   it('shows Match Won after 1 win in bo1', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     expect(screen.getByTestId('match-result-label')).toHaveTextContent('Match Won')
   })
 
   it('shows Match Lost after 1 loss in bo1', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    await user.click(screen.getByRole('button', { name: 'Opp' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'OPP' }))
+    await user.click(screen.getByRole('button', { name: 'LOSE' }))
     expect(screen.getByTestId('match-result-label')).toHaveTextContent('Match Lost')
   })
 
   // --- Auto-loss at 0 HP ---
 
-  it('Opp auto-shows Confirm when base reaches 0 HP in bo1', async () => {
+  it('LOSE button auto-appears (OPP replaced) when base reaches 0 HP in bo1', async () => {
     const user = userEvent.setup()
     const lowHpBase = { ...mockBase, hp: 1 }
     render(<SwuGameScreen base={lowHpBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
     await startGame(user)
     await user.click(screen.getByText('+'))
-    expect(screen.queryByRole('button', { name: 'Opp' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'You' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'LOSE' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'OPP' })).not.toBeInTheDocument()
+    expect(screen.getByTestId('score-dismiss-overlay')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'YOU' })).toBeInTheDocument()
   })
 
-  it('does not auto-show Confirm in casual mode when base reaches 0 HP', async () => {
+  it('does not auto-activate confirm state in casual mode when base reaches 0 HP', async () => {
     const user = userEvent.setup()
     const lowHpBase = { ...mockBase, hp: 1 }
     render(<SwuGameScreen base={lowHpBase} onBack={vi.fn()} onHelp={vi.fn()} />)
     await startGame(user)
     await user.click(screen.getByText('+'))
-    expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument()
+    expect(screen.queryByTestId('score-dismiss-overlay')).not.toBeInTheDocument()
   })
 
-  it('You button is disabled after match is over', async () => {
+  it('YOU button is disabled after match is over', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
-    expect(screen.getByRole('button', { name: 'You' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
+    expect(screen.getByRole('button', { name: 'YOU' })).toBeDisabled()
   })
 
-  it('Opp button is disabled after match is over', async () => {
+  it('OPP button is disabled after match is over', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
-    await user.click(screen.getByRole('button', { name: 'Opp' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
-    expect(screen.getByRole('button', { name: 'Opp' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'OPP' }))
+    await user.click(screen.getByRole('button', { name: 'LOSE' }))
+    expect(screen.getByRole('button', { name: 'OPP' })).toBeDisabled()
   })
 
 })
@@ -2206,8 +2212,8 @@ describe('SwuGameScreen analytics', () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
     await user.click(screen.getByText('Start'))
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     expect(mockOnMatchCompleted).toHaveBeenCalledWith('bo1', 'won', 1, 0)
   })
 
@@ -2215,8 +2221,8 @@ describe('SwuGameScreen analytics', () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
     await user.click(screen.getByText('Start'))
-    await user.click(screen.getByRole('button', { name: 'Opp' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'OPP' }))
+    await user.click(screen.getByRole('button', { name: 'LOSE' }))
     expect(mockOnMatchCompleted).toHaveBeenCalledWith('bo1', 'lost', 0, 1)
   })
 
@@ -2232,8 +2238,8 @@ describe('SwuGameScreen analytics', () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
     await user.click(screen.getByText('Start'))
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     expect(mockOnMatchCompleted).toHaveBeenCalledTimes(1)
   })
 
@@ -2251,8 +2257,8 @@ describe('SwuGameScreen analytics', () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" onMatchComplete={onMatchComplete} />)
     await user.click(screen.getByText('Start'))
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     expect(onMatchComplete).toHaveBeenCalledWith('won', 1, 0)
   })
 
@@ -2261,8 +2267,8 @@ describe('SwuGameScreen analytics', () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" onMatchComplete={onMatchComplete} />)
     await user.click(screen.getByText('Start'))
-    await user.click(screen.getByRole('button', { name: 'Opp' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'OPP' }))
+    await user.click(screen.getByRole('button', { name: 'LOSE' }))
     expect(onMatchComplete).toHaveBeenCalledWith('lost', 0, 1)
   })
 

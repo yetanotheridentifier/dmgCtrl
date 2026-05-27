@@ -771,9 +771,9 @@ describe('App tournament navigation', () => {
     // Record game 1 win: navigate to game, click You → Confirm, then Back to tournament
     await waitFor(() => expect(screen.getByRole('button', { name: 'Return to Match 1' })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'You' })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: 'You' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'YOU' })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'YOU' }))
+    await user.click(screen.getByRole('button', { name: 'WIN' }))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     // Now on tournament screen with hasPlayedGameInCurrentMatch=true — change base overlay shows
     await waitFor(() => expect(screen.getByTestId('change-base-overlay')).toBeInTheDocument())

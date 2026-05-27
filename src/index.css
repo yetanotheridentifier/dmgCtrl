@@ -12,8 +12,11 @@
   --color-ui-border-muted: #9ca3af;
   --color-ui-border-muted-rgb: 156, 163, 175;
   --color-error: #ff6b6b;
+  --color-error-rgb: 255, 107, 107;
   --color-warning: #f5a623;
+  --color-warning-rgb: 245, 166, 35;
   --color-success: #22c55e;
+  --color-success-rgb: 34, 197, 94;
   --color-force: #3b82f6;
   --color-epic: #f5c518;
   --color-epic-rgb: 245, 197, 24;

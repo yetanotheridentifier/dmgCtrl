@@ -49,14 +49,15 @@ When **Enable Action Log** is on in Settings, a round counter button appears in 
 
 ### Competitive Mode (Best of 1 / Best of 3)
 
-When **Competitive Mode** is enabled in Settings and you select **Best of 1** or **Best of 3** on the setup screen, a score panel appears in the right column — **Opp** at the top, win marker circles, a **timer** in the middle, more marker circles, and **You** at the bottom.
+When **Competitive Mode** is enabled in Settings and you select **Best of 1** or **Best of 3** on the setup screen, a score panel appears in the right column — **OPP** at the top, win marker circles, a **DRAW / timer** in the middle, more marker circles, and **YOU** at the bottom.
 
 **Recording a result:**
-- Tap **You** to record a win, or **Opp** to record a loss — the button changes to **Confirm**
-- Tap **Confirm** to apply the result: the score advances, damage resets to 0, and a "Game N Won/Lost" entry is added to the log
+- Tap **YOU** to record a win — a **WIN** button appears; tap **WIN** to confirm
+- Tap **OPP** to record a loss — a **LOSE** button appears; tap **LOSE** to confirm
+- After confirming: the score advances, damage resets to 0, and a "Game N Won/Lost" entry is added to the log
 - Tap anywhere else to cancel without recording
 
-**If your base reaches 0 HP** in a competitive game, the loss confirmation is triggered automatically — tap **Confirm** to record it.
+**If your base reaches 0 HP** in a competitive game, the **LOSE** button appears automatically — tap it to confirm.
 
 **Between games (Best of 3):**
 - After a result is confirmed, the counter shows **Start Game N** — tap it to begin the next game
@@ -65,7 +66,7 @@ When **Competitive Mode** is enabled in Settings and you select **Best of 1** or
 
 **Match over:**
 - After the match is decided, **Match Won**, **Match Lost**, or **Match Drawn** is shown on screen
-- The Start button and round tracker are hidden; the You/Opp buttons and timer are disabled
+- The Start button and round tracker are hidden; the OPP/YOU buttons and timer are disabled
 
 To return to base selection, tap <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M15.5 5L7 12L15.5 19Z"/></svg> in the top-left corner. In **Casual** play this resets the damage counter to zero, ready for a new game. In **Competitive** play it records the final result if the match is over, or abandons the match if it is still in progress.
 
@@ -74,19 +75,19 @@ To return to base selection, tap <svg width="0.8em" height="0.8em" viewBox="0 0 
 The timer in the score panel counts down from the configured match duration (default: 25 minutes for Best of 1, 55 minutes for Best of 3). It starts when you tap **Start** at the beginning of the first game and runs continuously until the match ends.
 
 **Timer states:**
-- **Before the first game:** the timer shows a **Draw** button — tap it to record an intentional draw (see below)
+- **Before the first game:** the timer area shows **DRAW** — tap it to record an intentional draw (see below)
 - **During play:** the timer counts down; it turns red when less than one minute remains
-- **When time expires (0:00):** the timer shows a **Draw** button again
+- **When time expires (0:00):** the timer area shows **DRAW** again
 
 **Recording a draw:**
 
-Draws can occur in two situations: an intentional draw agreed before the first game starts, or when time expires and neither player has a decisive lead. After time expires, complete the current round, then record the result using **You**, **Opp**, or **Draw**.
+Draws can occur in two situations: an intentional draw agreed before the first game starts, or when time expires and neither player has a decisive lead. After time expires, complete the current round, then record the result using **YOU**, **OPP**, or **DRAW**.
 
-- Tap **Draw** → the button changes to **Confirm**
-- Tap **Confirm** to record the draw — the match ends immediately; **Match Drawn** is shown if scores are level, or **Match Won/Lost** if one player has more game wins
+- Tap **DRAW** → the button highlights with a coloured border
+- Tap **DRAW** again to record the draw — the match ends immediately; **Match Drawn** is shown if scores are level, or **Match Won/Lost** if one player has more game wins
 - Tap anywhere else to cancel without recording
 
-When time expires mid-game, **You** and **Opp** are still available — recording a win or loss at that point also closes the match.
+When time expires mid-game, **YOU** and **OPP** are still available — recording a win or loss at that point also closes the match.
 
 **Configuring the timer duration:**
 
