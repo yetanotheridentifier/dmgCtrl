@@ -1679,7 +1679,18 @@
                   }
                 }
               ],
-              "transformations": [],
+              "transformations": [
+                {
+                  "kind": "Transformation",
+                  "group": "rowsToFields",
+                  "spec": {
+                    "options": {
+                      "nameField": "format",
+                      "valueField": "tournaments"
+                    }
+                  }
+                }
+              ],
               "queryOptions": {}
             }
           },
