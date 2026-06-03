@@ -1839,7 +1839,7 @@ describe('SwuGameScreen', () => {
     expect(screen.getByText('Game 1 Lost')).toBeInTheDocument()
   })
 
-  it('clicking YOU then WIN clears previous log entries', async () => {
+  it('clicking YOU then WIN preserves previous log entries', async () => {
     const user = userEvent.setup()
     render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} playMode="bo1" />)
     await startGame(user)
@@ -1847,8 +1847,9 @@ describe('SwuGameScreen', () => {
     await user.click(screen.getByRole('button', { name: 'YOU' }))
     await user.click(screen.getByRole('button', { name: 'WIN' }))
     await user.click(screen.getByTestId('log-btn'))
-    expect(screen.queryByText('Hit +1')).not.toBeInTheDocument()
-    expect(screen.queryByText('Round 1')).not.toBeInTheDocument()
+    expect(screen.getByText('Hit +1')).toBeInTheDocument()
+    expect(screen.getByText('Round 1')).toBeInTheDocument()
+    expect(screen.getByText('Game 1 Won')).toBeInTheDocument()
   })
 
   // --- Undo game result ---
