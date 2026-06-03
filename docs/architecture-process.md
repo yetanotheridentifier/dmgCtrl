@@ -300,10 +300,10 @@ Install detection and resume detection are in separate `useEffect` calls. The in
 
 Dashboards are defined as JSON under `grafana/` and can be imported directly into any Grafana instance. All require an InfluxDB datasource configured against the `dmgctrl` bucket (InfluxDB 3.x / SQL query language). Each dashboard has an **Environment** variable (`$env`) — dropdown with `production` / `development` — that filters all panels to a single deployment environment.
 
-| File | Purpose |
-|---|---|
-| `grafana/dmgctrl-dashboard.json` | Core app analytics — cross-game metrics, game selection, settings |
-| `grafana/dmgctrl-swu-dashboard.json` | SWU-specific analytics — sessions, bases, competitive play, settings |
+| File | Purpose | Public link |
+|---|---|---|
+| `grafana/dmgctrl-dashboard.json` | Core app analytics — cross-game metrics, game selection, settings | [dmgCtrl Analytics](https://yetanotheridentifier.grafana.net/public-dashboards/022803ee5cd043dcaf0a19ce2f8e1d4a) |
+| `grafana/dmgctrl-swu-dashboard.json` | SWU-specific analytics — sessions, bases, competitive play, settings | [dmgCtrl SWU Analytics](https://yetanotheridentifier.grafana.net/public-dashboards/02e71e370db24d1bbf6519ab9074405f) |
 
 **Core dashboard panels (`dmgctrl-dashboard.json`):**
 
