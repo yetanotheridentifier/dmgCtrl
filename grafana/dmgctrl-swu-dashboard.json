@@ -2,22 +2,8 @@
   "apiVersion": "dashboard.grafana.app/v2",
   "kind": "Dashboard",
   "metadata": {
-    "name": "dmgctrl-analytics",
-    "namespace": "stacks-1634354",
-    "uid": "ab1c688e-d1e9-4953-bc7b-6bd341613e84",
-    "resourceVersion": "2054230996189970747",
-    "generation": 15,
-    "creationTimestamp": "2026-05-12T15:52:13Z",
-    "labels": {
-      "grafana.app/deprecatedInternalID": "586727161597952"
-    },
-    "annotations": {
-      "grafana.app/createdBy": "user:ffltnij3rez28a",
-      "grafana.app/folder": "",
-      "grafana.app/saved-from-ui": "Grafana Cloud",
-      "grafana.app/updatedBy": "user:ffltnij3rez28a",
-      "grafana.app/updatedTimestamp": "2026-05-12T16:03:29Z"
-    }
+    "name": "dmgctrl-swu",
+    "namespace": "stacks-1634354"
   },
   "spec": {
     "annotations": [
@@ -42,7 +28,7 @@
       }
     ],
     "cursorSync": "Crosshair",
-    "description": "dmgCtrl analytics — sessions, games, installs, base popularity, feature adoption",
+    "description": "dmgCtrl SWU analytics \u2014 sessions, games, bases, features, competitive play",
     "editable": true,
     "elements": {
       "panel-1": {
@@ -50,7 +36,7 @@
         "spec": {
           "id": 1,
           "title": "Sessions over time",
-          "description": "Distinct sessions (by sessionId) per day",
+          "description": "Distinct sessions per day in which a SWU game was started",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -71,7 +57,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = 'production'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
+                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = '$env'\n  AND event = 'game_started'\n  AND (game IS NULL OR game = 'swu')\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
                       }
                     },
                     "refId": "A",
@@ -190,7 +176,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'deck_import_failure' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 3) AS \"Deck import failure\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'image_load_failed' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 3) AS \"Image load failed\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'bases_load_failed' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 3) AS \"Bases load failed\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'bases_load_stale' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 3) AS \"Bases load stale\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'wake_lock_failed' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 3) AS \"Wake lock failed\"\nFROM events\nWHERE env = 'production'\n  AND $__timeFilter(time)"
+                        "rawSql": "SELECT\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'deck_import_failure' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 3) AS \"Deck import failure\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'image_load_failed' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 3) AS \"Image load failed\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'bases_load_failed' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 3) AS \"Bases load failed\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'bases_load_stale' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 3) AS \"Bases load stale\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'wake_lock_failed' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT \"sessionId\"), 0), 3) AS \"Wake lock failed\"\nFROM events\nWHERE env = '$env'\n  AND $__timeFilter(time)"
                       }
                     },
                     "refId": "A",
@@ -288,7 +274,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day, COUNT(*) AS games\nFROM events\nWHERE env = 'production'\n  AND event = 'game_ended'\n  AND \"durationSeconds\" > 60\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
+                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day, COUNT(*) AS games\nFROM events\nWHERE env = '$env'\n  AND event = 'game_ended'\n  AND (game IS NULL OR game = 'swu')\n  AND \"durationSeconds\" > 60\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
                       }
                     },
                     "refId": "A",
@@ -386,7 +372,7 @@
         "spec": {
           "id": 4,
           "title": "Sessions by city",
-          "description": "Sessions per city plotted by approximate location (Cloudflare edge PoP coordinates)",
+          "description": "SWU sessions per city, plotted by approximate location (Cloudflare edge PoP coordinates)",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -407,7 +393,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT country, city, AVG(latitude) AS latitude, AVG(longitude) AS longitude, COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = 'production'\n  AND city != 'unknown'\n  AND latitude IS NOT NULL\n  AND $__timeFilter(time)\nGROUP BY country, city\nORDER BY sessions DESC\nLIMIT 100"
+                        "rawSql": "SELECT country, city,\n  AVG(latitude) AS latitude,\n  AVG(longitude) AS longitude,\n  COUNT(DISTINCT \"sessionId\") AS sessions\nFROM events\nWHERE env = '$env'\n  AND event = 'game_started'\n  AND (game IS NULL OR game = 'swu')\n  AND $__timeFilter(time)\nGROUP BY country, city"
                       }
                     },
                     "refId": "A",
@@ -531,7 +517,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT CONCAT(e.\"baseKey\", ' ', COALESCE(la.aspect, 'None')) AS label,\n  COUNT(*) AS games,\n  CASE COALESCE(la.aspect, 'None')\n    WHEN 'Aggression' THEN '#c4162a'\n    WHEN 'Command' THEN '#37872d'\n    WHEN 'Vigilance' THEN '#1e6fa8'\n    WHEN 'Cunning' THEN '#e0b400'\n    ELSE '#9e9e9e'\n  END AS color\nFROM events e\nLEFT JOIN (\n  SELECT ba.\"baseKey\", ba.aspect\n  FROM base_aspects ba\n  INNER JOIN (SELECT MAX(time) AS max_time FROM base_aspects) lr ON ba.time = lr.max_time\n) la ON e.\"baseKey\" = la.\"baseKey\"\nWHERE e.env = 'production'\n  AND e.event = 'game_ended'\n  AND e.\"durationSeconds\" > 60\n  AND $__timeFilter(e.time)\nGROUP BY e.\"baseKey\", COALESCE(la.aspect, 'None')\nORDER BY games DESC\nLIMIT 25"
+                        "rawSql": "SELECT CONCAT(e.\"baseKey\", ' ', COALESCE(la.aspect, 'None')) AS label,\n  COUNT(*) AS games,\n  CASE COALESCE(la.aspect, 'None')\n    WHEN 'Aggression' THEN '#c4162a'\n    WHEN 'Command'    THEN '#37872d'\n    WHEN 'Vigilance'  THEN '#1e6fa8'\n    WHEN 'Cunning'    THEN '#e0b400'\n    ELSE '#9e9e9e'\n  END AS color\nFROM events e\nLEFT JOIN (\n  SELECT ba.\"baseKey\", ba.aspect\n  FROM base_aspects ba\n  INNER JOIN (SELECT MAX(time) AS max_time FROM base_aspects) lr ON ba.time = lr.max_time\n) la ON e.\"baseKey\" = la.\"baseKey\"\nWHERE e.env = '$env'\n  AND e.event = 'game_ended'\n  AND (e.game IS NULL OR e.game = 'swu')\n  AND e.\"durationSeconds\" > 60\n  AND $__timeFilter(e.time)\nGROUP BY e.\"baseKey\", COALESCE(la.aspect, 'None')\nORDER BY games DESC\nLIMIT 25"
                       }
                     },
                     "refId": "A",
@@ -548,7 +534,10 @@
                       "nameField": "label",
                       "valueField": "games",
                       "mappings": [
-                        { "fieldName": "color", "handlerKey": "color" }
+                        {
+                          "fieldName": "color",
+                          "handlerKey": "color"
+                        }
                       ]
                     }
                   }
@@ -626,7 +615,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT CAST(game_count AS VARCHAR) AS \"Games\", COUNT(*) AS sessions\nFROM (\n  SELECT COUNT(*) AS game_count\n  FROM events\n  WHERE env = 'production'\n    AND event = 'game_ended'\n    AND \"durationSeconds\" > 60\n    AND $__timeFilter(time)\n  GROUP BY \"sessionId\"\n) sub\nGROUP BY game_count\nORDER BY game_count"
+                        "rawSql": "SELECT CAST(game_count AS VARCHAR) AS \"Games\", COUNT(*) AS sessions\nFROM (\n  SELECT COUNT(*) AS game_count\n  FROM events\n  WHERE env = '$env'\n    AND event = 'game_ended'\n    AND (game IS NULL OR game = 'swu')\n    AND \"durationSeconds\" > 60\n    AND $__timeFilter(time)\n  GROUP BY \"sessionId\"\n) sub\nGROUP BY game_count\nORDER BY game_count"
                       }
                     },
                     "refId": "A",
@@ -709,224 +698,6 @@
           }
         }
       },
-      "panel-7": {
-        "kind": "Panel",
-        "spec": {
-          "id": 7,
-          "title": "App installs over time",
-          "description": "app_installed events per day, split by platform",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "influxdb",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "afltq9th19d6ob"
-                      },
-                      "spec": {
-                        "dataset": "iox",
-                        "editorMode": "code",
-                        "format": "table",
-                        "rawQuery": true,
-                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day,\n  COUNT(CASE WHEN platform = 'ios' THEN 1 END) AS \"iOS\",\n  COUNT(CASE WHEN platform = 'android' THEN 1 END) AS \"Android\"\nFROM events\nWHERE env = 'production'\n  AND event = 'app_installed'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "timeseries",
-            "version": "13.1.0-25668120414",
-            "spec": {
-              "options": {
-                "annotations": {
-                  "clustering": -1,
-                  "multiLane": false
-                },
-                "legend": {
-                  "calcs": [],
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": true
-                },
-                "tooltip": {
-                  "hideZeros": false,
-                  "mode": "multi",
-                  "sort": "none"
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "value": 0,
-                        "color": "green"
-                      },
-                      {
-                        "value": 80,
-                        "color": "red"
-                      }
-                    ]
-                  },
-                  "color": {
-                    "mode": "continuous-YlBl",
-                    "fixedColor": "semi-dark-blue"
-                  },
-                  "custom": {
-                    "axisBorderShow": false,
-                    "axisCenteredZero": false,
-                    "axisColorMode": "text",
-                    "axisLabel": "",
-                    "axisPlacement": "auto",
-                    "barAlignment": 0,
-                    "barWidthFactor": 0.6,
-                    "drawStyle": "line",
-                    "fillOpacity": 10,
-                    "gradientMode": "none",
-                    "hideFrom": {
-                      "legend": false,
-                      "tooltip": false,
-                      "viz": false
-                    },
-                    "insertNulls": false,
-                    "lineInterpolation": "linear",
-                    "lineWidth": 2,
-                    "pointSize": 5,
-                    "scaleDistribution": {
-                      "type": "linear"
-                    },
-                    "showPoints": "auto",
-                    "showValues": false,
-                    "spanNulls": false,
-                    "stacking": {
-                      "group": "A",
-                      "mode": "none"
-                    },
-                    "thresholdsStyle": {
-                      "mode": "off"
-                    }
-                  }
-                },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
-      "panel-8": {
-        "kind": "Panel",
-        "spec": {
-          "id": 8,
-          "title": "Installs by platform",
-          "description": "Cumulative install count split by platform, selected time range",
-          "links": [],
-          "data": {
-            "kind": "QueryGroup",
-            "spec": {
-              "queries": [
-                {
-                  "kind": "PanelQuery",
-                  "spec": {
-                    "query": {
-                      "kind": "DataQuery",
-                      "group": "influxdb",
-                      "version": "v0",
-                      "datasource": {
-                        "name": "afltq9th19d6ob"
-                      },
-                      "spec": {
-                        "dataset": "iox",
-                        "editorMode": "code",
-                        "format": "table",
-                        "rawQuery": true,
-                        "rawSql": "SELECT platform, COUNT(*) AS installs\nFROM events\nWHERE env = 'production'\n  AND event = 'app_installed'\n  AND $__timeFilter(time)\nGROUP BY platform\nORDER BY installs DESC"
-                      }
-                    },
-                    "refId": "A",
-                    "hidden": false
-                  }
-                }
-              ],
-              "transformations": [
-                {
-                  "kind": "Transformation",
-                  "group": "rowsToFields",
-                  "spec": {
-                    "options": {
-                      "nameField": "platform",
-                      "valueField": "installs"
-                    }
-                  }
-                }
-              ],
-              "queryOptions": {}
-            }
-          },
-          "vizConfig": {
-            "kind": "VizConfig",
-            "group": "piechart",
-            "version": "13.1.0-25668120414",
-            "spec": {
-              "options": {
-                "legend": {
-                  "displayMode": "table",
-                  "placement": "right",
-                  "showLegend": true,
-                  "values": [
-                    "value"
-                  ]
-                },
-                "pieType": "donut",
-                "reduceOptions": {
-                  "calcs": [
-                    "lastNotNull"
-                  ],
-                  "fields": "",
-                  "values": false
-                },
-                "sort": "desc",
-                "tooltip": {
-                  "hideZeros": false,
-                  "mode": "single",
-                  "sort": "none"
-                }
-              },
-              "fieldConfig": {
-                "defaults": {
-                  "color": {
-                    "mode": "shades",
-                    "fixedColor": "semi-dark-blue"
-                  },
-                  "custom": {
-                    "hideFrom": {
-                      "legend": false,
-                      "tooltip": false,
-                      "viz": false
-                    }
-                  }
-                },
-                "overrides": []
-              }
-            }
-          }
-        }
-      },
       "panel-9": {
         "kind": "Panel",
         "spec": {
@@ -953,7 +724,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 AND hyperspace = true THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Hyperspace\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'force_gained' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Force token\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'epic_action_used' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Epic action\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'undo_used' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Undo\"\nFROM events\nWHERE env = 'production' AND $__timeFilter(time)"
+                        "rawSql": "SELECT\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'game_ended' AND (game IS NULL OR game = 'swu') AND \"durationSeconds\" > 60 AND hyperspace = true THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND (game IS NULL OR game = 'swu') AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Hyperspace\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'force_gained' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND (game IS NULL OR game = 'swu') AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Force token\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'epic_action_used' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND (game IS NULL OR game = 'swu') AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Epic action\",\n  ROUND(100.0 * COUNT(DISTINCT CASE WHEN event = 'undo_used' THEN \"sessionId\" END) / NULLIF(COUNT(DISTINCT CASE WHEN event = 'game_ended' AND (game IS NULL OR game = 'swu') AND \"durationSeconds\" > 60 THEN \"sessionId\" END), 0), 1) AS \"Undo\"\nFROM events\nWHERE env = '$env' AND $__timeFilter(time)"
                       }
                     },
                     "refId": "A",
@@ -1026,8 +797,8 @@
         "kind": "Panel",
         "spec": {
           "id": 11,
-          "title": "Sessions by play mode",
-          "description": "Breakdown of game sessions by play mode (Casual / Bo1 / Bo3)",
+          "title": "Play mode",
+          "description": "SWU game sessions by play mode (Casual / Bo1 / Bo3)",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -1048,7 +819,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT \"playMode\", COUNT(*) AS sessions\nFROM events\nWHERE env = 'production'\n  AND event = 'game_started'\n  AND $__timeFilter(time)\nGROUP BY \"playMode\"\nORDER BY sessions DESC"
+                        "rawSql": "SELECT \"playMode\", COUNT(*) AS sessions\nFROM events\nWHERE env = '$env'\n  AND event = 'game_started'\n  AND (game IS NULL OR game = 'swu')\n  AND $__timeFilter(time)\nGROUP BY \"playMode\"\nORDER BY sessions DESC"
                       }
                     },
                     "refId": "A",
@@ -1103,8 +874,7 @@
               "fieldConfig": {
                 "defaults": {
                   "color": {
-                    "mode": "shades",
-                    "fixedColor": "semi-dark-blue"
+                    "mode": "palette-classic"
                   },
                   "custom": {
                     "hideFrom": {
@@ -1114,7 +884,53 @@
                     }
                   }
                 },
-                "overrides": []
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "casual"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-green"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "bo1"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-blue"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "bo3"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-purple"
+                        }
+                      }
+                    ]
+                  }
+                ]
               }
             }
           }
@@ -1146,7 +962,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT \"matchResult\", COUNT(*) AS matches\nFROM events\nWHERE env = 'production'\n  AND event = 'match_completed'\n  AND \"playMode\" = 'bo1'\n  AND $__timeFilter(time)\nGROUP BY \"matchResult\"\nORDER BY \"matchResult\""
+                        "rawSql": "SELECT \"matchResult\", COUNT(*) AS matches\nFROM events\nWHERE env = '$env'\n  AND event = 'match_completed'\n  AND \"playMode\" = 'bo1'\n  AND $__timeFilter(time)\nGROUP BY \"matchResult\"\nORDER BY \"matchResult\""
                       }
                     },
                     "refId": "A",
@@ -1219,11 +1035,56 @@
                     ]
                   },
                   "color": {
-                    "mode": "continuous-YlBl",
-                    "fixedColor": "blue"
+                    "mode": "palette-classic"
                   }
                 },
-                "overrides": []
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "won"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-green"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "lost"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-red"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "drawn"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-yellow"
+                        }
+                      }
+                    ]
+                  }
+                ]
               }
             }
           }
@@ -1255,7 +1116,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day, COUNT(*) AS tournaments\nFROM events\nWHERE env = 'production'\n  AND event = 'tournament_started'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
+                        "rawSql": "SELECT DATE_TRUNC('day', time) AS day, COUNT(*) AS tournaments\nFROM events\nWHERE env = '$env'\n  AND event = 'tournament_started'\n  AND $__timeFilter(time)\nGROUP BY DATE_TRUNC('day', time)\nORDER BY day ASC"
                       }
                     },
                     "refId": "A",
@@ -1374,7 +1235,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT \"result\", COUNT(*) AS rounds\nFROM events\nWHERE env = 'production'\n  AND event = 'tournament_round_completed'\n  AND $__timeFilter(time)\nGROUP BY \"result\"\nORDER BY \"result\""
+                        "rawSql": "SELECT \"result\", COUNT(*) AS rounds\nFROM events\nWHERE env = '$env'\n  AND event = 'tournament_round_completed'\n  AND $__timeFilter(time)\nGROUP BY \"result\"\nORDER BY \"result\""
                       }
                     },
                     "refId": "A",
@@ -1447,11 +1308,56 @@
                     ]
                   },
                   "color": {
-                    "mode": "continuous-YlBl",
-                    "fixedColor": "blue"
+                    "mode": "palette-classic"
                   }
                 },
-                "overrides": []
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "won"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-green"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "lost"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-red"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "drawn"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-yellow"
+                        }
+                      }
+                    ]
+                  }
+                ]
               }
             }
           }
@@ -1483,7 +1389,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT event AS outcome, COUNT(*) AS count\nFROM events\nWHERE env = 'production'\n  AND event IN ('tournament_ended', 'tournament_dropped')\n  AND $__timeFilter(time)\nGROUP BY event\nORDER BY event"
+                        "rawSql": "SELECT event AS outcome, COUNT(*) AS count\nFROM events\nWHERE env = '$env'\n  AND event IN ('tournament_ended', 'tournament_dropped')\n  AND $__timeFilter(time)\nGROUP BY event\nORDER BY event"
                       }
                     },
                     "refId": "A",
@@ -1538,8 +1444,7 @@
               "fieldConfig": {
                 "defaults": {
                   "color": {
-                    "mode": "shades",
-                    "fixedColor": "semi-dark-blue"
+                    "mode": "palette-classic"
                   },
                   "custom": {
                     "hideFrom": {
@@ -1549,7 +1454,38 @@
                     }
                   }
                 },
-                "overrides": []
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "tournament_ended"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-green"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "tournament_dropped"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-red"
+                        }
+                      }
+                    ]
+                  }
+                ]
               }
             }
           }
@@ -1581,7 +1517,7 @@
                         "editorMode": "code",
                         "format": "table",
                         "rawQuery": true,
-                        "rawSql": "SELECT \"matchResult\", COUNT(*) AS matches\nFROM events\nWHERE env = 'production'\n  AND event = 'match_completed'\n  AND \"playMode\" = 'bo3'\n  AND $__timeFilter(time)\nGROUP BY \"matchResult\"\nORDER BY \"matchResult\""
+                        "rawSql": "SELECT \"matchResult\", COUNT(*) AS matches\nFROM events\nWHERE env = '$env'\n  AND event = 'match_completed'\n  AND \"playMode\" = 'bo3'\n  AND $__timeFilter(time)\nGROUP BY \"matchResult\"\nORDER BY \"matchResult\""
                       }
                     },
                     "refId": "A",
@@ -1654,8 +1590,450 @@
                     ]
                   },
                   "color": {
-                    "mode": "continuous-YlBl",
-                    "fixedColor": "blue"
+                    "mode": "palette-classic"
+                  }
+                },
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "won"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-green"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "lost"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-red"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "drawn"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-yellow"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "panel-17": {
+        "kind": "Panel",
+        "spec": {
+          "id": 17,
+          "title": "Tournament format",
+          "description": "Tournaments started by format in the selected time range",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "influxdb",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "afltq9th19d6ob"
+                      },
+                      "spec": {
+                        "dataset": "iox",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT format, COUNT(*) AS tournaments\nFROM events\nWHERE env = '$env'\n  AND event = 'tournament_started'\n  AND $__timeFilter(time)\nGROUP BY format\nORDER BY tournaments DESC"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [
+                {
+                  "kind": "Transformation",
+                  "group": "rowsToFields",
+                  "spec": {
+                    "options": {
+                      "nameField": "format",
+                      "valueField": "tournaments"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "piechart",
+            "version": "13.1.0-25668120414",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "table",
+                  "placement": "right",
+                  "showLegend": true,
+                  "values": [
+                    "value"
+                  ]
+                },
+                "pieType": "donut",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "sort": "desc",
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "single",
+                  "sort": "none"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    }
+                  }
+                },
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "premier"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-blue"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "limited"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-green"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "eternal"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-orange"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "twin-suns"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-red"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "panel-18": {
+        "kind": "Panel",
+        "spec": {
+          "id": 18,
+          "title": "Tournament rounds",
+          "description": "Tournament length split by match format (bo1 / bo3) in the selected time range",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "influxdb",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "afltq9th19d6ob"
+                      },
+                      "spec": {
+                        "dataset": "iox",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT\n  CAST(\"totalRounds\" AS VARCHAR) || ' rounds (' || \"playMode\" || ')' AS label,\n  COUNT(*) AS tournaments\nFROM events\nWHERE env = '$env'\n  AND event = 'tournament_started'\n  AND $__timeFilter(time)\nGROUP BY \"totalRounds\", \"playMode\"\nORDER BY \"totalRounds\", \"playMode\" "
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [
+                {
+                  "kind": "Transformation",
+                  "group": "rowsToFields",
+                  "spec": {
+                    "options": {
+                      "nameField": "label",
+                      "valueField": "tournaments"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "bargauge",
+            "version": "13.1.0-25668120414",
+            "spec": {
+              "options": {
+                "displayMode": "basic",
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false
+                },
+                "maxVizHeight": 300,
+                "minVizHeight": 16,
+                "minVizWidth": 8,
+                "namePlacement": "auto",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showUnfilled": true,
+                "sizing": "auto",
+                "valueMode": "color"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
+                  }
+                },
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byRegexp",
+                      "options": ".*\\(bo1\\)"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-blue"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byRegexp",
+                      "options": ".*\\(bo3\\)"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "semi-dark-purple"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "panel-19": {
+        "kind": "Panel",
+        "spec": {
+          "id": 19,
+          "title": "SWU settings changes",
+          "description": "Changes to SWU-specific settings in the selected time range",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "influxdb",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "afltq9th19d6ob"
+                      },
+                      "spec": {
+                        "dataset": "iox",
+                        "editorMode": "code",
+                        "format": "table",
+                        "rawQuery": true,
+                        "rawSql": "SELECT setting, COUNT(*) AS changes\nFROM events\nWHERE env = '$env'\n  AND event = 'setting_changed'\n  AND setting IN (\n    'useHyperspace', 'forceTokenDisplay', 'enableEpicActions',\n    'enableWakeLock', 'enableLongPress', 'enableCompetitiveMode',\n    'enableActionLog', 'enableInitiativeBar',\n    'bo1TimerMinutes', 'bo3TimerMinutes'\n  )\n  AND $__timeFilter(time)\nGROUP BY setting\nORDER BY changes DESC"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [
+                {
+                  "kind": "Transformation",
+                  "group": "rowsToFields",
+                  "spec": {
+                    "options": {
+                      "nameField": "setting",
+                      "valueField": "changes"
+                    }
+                  }
+                }
+              ],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "bargauge",
+            "version": "13.1.0-25668120414",
+            "spec": {
+              "options": {
+                "displayMode": "basic",
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": false
+                },
+                "maxVizHeight": 300,
+                "minVizHeight": 16,
+                "minVizWidth": 8,
+                "namePlacement": "auto",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showUnfilled": true,
+                "sizing": "auto",
+                "valueMode": "color"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "short",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "value": 0,
+                        "color": "green"
+                      },
+                      {
+                        "value": 80,
+                        "color": "red"
+                      }
+                    ]
+                  },
+                  "color": {
+                    "mode": "palette-classic"
                   }
                 },
                 "overrides": []
@@ -1739,33 +2117,7 @@
             "spec": {
               "x": 0,
               "y": 28,
-              "width": 12,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-7"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 12,
-              "y": 28,
-              "width": 6,
-              "height": 8,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-8"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 18,
-              "y": 28,
-              "width": 6,
+              "width": 8,
               "height": 8,
               "element": {
                 "kind": "ElementReference",
@@ -1776,9 +2128,22 @@
           {
             "kind": "GridLayoutItem",
             "spec": {
-              "x": 0,
-              "y": 36,
-              "width": 24,
+              "x": 8,
+              "y": 28,
+              "width": 8,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-19"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 16,
+              "y": 28,
+              "width": 8,
               "height": 8,
               "element": {
                 "kind": "ElementReference",
@@ -1790,7 +2155,7 @@
             "kind": "GridLayoutItem",
             "spec": {
               "x": 0,
-              "y": 44,
+              "y": 36,
               "width": 8,
               "height": 8,
               "element": {
@@ -1803,8 +2168,34 @@
             "kind": "GridLayoutItem",
             "spec": {
               "x": 8,
-              "y": 44,
+              "y": 36,
               "width": 8,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-17"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 16,
+              "y": 36,
+              "width": 8,
+              "height": 8,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-18"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 0,
+              "y": 44,
+              "width": 12,
               "height": 8,
               "element": {
                 "kind": "ElementReference",
@@ -1815,9 +2206,9 @@
           {
             "kind": "GridLayoutItem",
             "spec": {
-              "x": 16,
+              "x": 12,
               "y": 44,
-              "width": 8,
+              "width": 12,
               "height": 8,
               "element": {
                 "kind": "ElementReference",
@@ -1894,7 +2285,36 @@
       "hideTimepicker": false,
       "fiscalYearStartMonth": 0
     },
-    "title": "dmgCtrl Analytics",
-    "variables": []
+    "title": "dmgCtrl SWU Analytics",
+    "variables": [
+      {
+        "kind": "CustomVariable",
+        "spec": {
+          "name": "env",
+          "label": "Environment",
+          "description": "Filter by deployment environment",
+          "hide": "dontHide",
+          "query": "production,development",
+          "current": {
+            "text": "production",
+            "value": "production"
+          },
+          "options": [
+            {
+              "selected": true,
+              "text": "production",
+              "value": "production"
+            },
+            {
+              "selected": false,
+              "text": "development",
+              "value": "development"
+            }
+          ],
+          "multi": false,
+          "includeAll": false
+        }
+      }
+    ]
   }
 }

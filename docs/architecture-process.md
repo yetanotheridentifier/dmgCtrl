@@ -300,10 +300,10 @@ Install detection and resume detection are in separate `useEffect` calls. The in
 
 Dashboards are defined as JSON under `grafana/` and can be imported directly into any Grafana instance. All require an InfluxDB datasource configured against the `dmgctrl` bucket (InfluxDB 3.x / SQL query language). Each dashboard has an **Environment** variable (`$env`) — dropdown with `production` / `development` — that filters all panels to a single deployment environment.
 
-| File | Purpose |
-|---|---|
-| `grafana/dmgctrl-dashboard.json` | Core app analytics — cross-game metrics, game selection, settings |
-| `grafana/dmgctrl-swu-dashboard.json` | SWU-specific analytics — starting point for the SWU dashboard (#247) |
+| File | Purpose | Public link |
+|---|---|---|
+| `grafana/dmgctrl-dashboard.json` | Core app analytics — cross-game metrics, game selection, settings | [dmgCtrl Analytics](https://yetanotheridentifier.grafana.net/public-dashboards/022803ee5cd043dcaf0a19ce2f8e1d4a) |
+| `grafana/dmgctrl-swu-dashboard.json` | SWU-specific analytics — sessions, bases, competitive play, settings | [dmgCtrl SWU Analytics](https://yetanotheridentifier.grafana.net/public-dashboards/02e71e370db24d1bbf6519ab9074405f) |
 
 **Core dashboard panels (`dmgctrl-dashboard.json`):**
 
@@ -321,6 +321,36 @@ Dashboards are defined as JSON under `grafana/` and can be imported directly int
 | Errors per session | Bar gauge | % of sessions that encountered cross-game errors (wake lock, image load) |
 
 **Note on game discrimination:** The `game` field on `game_started`/`game_ended` events is only present in events written after the #246 deployment. Until historical X-Wing data is migrated, the "games over time" and "game selection" panels use event names as the discriminator: `game_started` = SWU, `xwing_game_started` = X-Wing (historical). New X-Wing events also fire `game_started` (with `game: 'xwing'`), so they are currently counted in the SWU bucket until a future SQL update adds a `game` field filter once the column is established in InfluxDB.
+
+**SWU dashboard panels (`dmgctrl-swu-dashboard.json`):**
+
+All SWU panels filter to SWU game events using `AND (game IS NULL OR game = 'swu')` — this captures all historical events (where the `game` column was not yet written, so it is `NULL`) and new tagged events, while excluding X-Wing. The dashboard title is "dmgCtrl SWU Analytics".
+
+| Panel | Type | What it shows |
+|---|---|---|
+| Sessions over time | Time series | Distinct `sessionId` values per day |
+| Games over time | Time series | SWU game sessions started per day |
+| Sessions by city | Geomap (markers) | Where SWU games are started, plotted by Cloudflare edge PoP coordinates |
+| Base popularity | Bar gauge | Most-played bases (by `baseKey`), coloured by aspect |
+| Games per session | Bar gauge | How many SWU game sessions players start per session |
+| Feature adoption | Bar gauge | % of SWU game sessions that used each feature (undo, multi-session) |
+| SWU settings changes | Bar gauge | Change count for SWU-specific settings (`useHyperspace`, `enableEpicActions`, `forceTokenDisplay`, `enableCompetitiveMode`) |
+| Errors per session | Bar gauge | % of SWU sessions that encountered errors (wake lock, image load) |
+| Play mode | Donut | Proportion of SWU game sessions by play mode (casual / bo1 / bo3); colours: green = casual, blue = bo1, purple = bo3 |
+| Tournament format | Donut | Tournaments started by format (premier / limited / eternal / twin-suns); colours: blue / green / orange / red |
+| Tournament rounds | Bar gauge | Distribution of tournament length (total rounds), split by play mode (bo1 / bo3); labels show "N rounds (bo1/bo3)" |
+| Bo1 game results | Bar gauge | Win / loss / draw outcomes for bo1 matches; colours: green = won, red = lost, yellow = drawn |
+| Bo3 game results | Bar gauge | Win / loss / draw outcomes for bo3 matches (same colour scheme) |
+| Tournament usage over time | Time series | Tournament sessions started per day |
+| Tournament round outcomes | Bar gauge | Cumulative round result distribution across all tournament rounds |
+| Tournament completion vs drop | Bar gauge | How tournaments end: completed (`tournament_ended`) vs dropped (`tournament_dropped`); colours: green = ended, red = dropped |
+
+Consistent colour palettes are applied across related panels using Grafana `byName` overrides:
+- **Play mode:** casual = `semi-dark-green`, bo1 = `semi-dark-blue`, bo3 = `semi-dark-purple`
+- **Format:** premier = `semi-dark-blue`, limited = `semi-dark-green`, eternal = `semi-dark-orange`, twin-suns = `semi-dark-red`
+- **Results:** won = `semi-dark-green`, lost = `semi-dark-red`, drawn = `semi-dark-yellow`
+- **Tournament end:** `tournament_ended` = `semi-dark-green`, `tournament_dropped` = `semi-dark-red`
+- **Tournament rounds:** `byRegexp` on `.*\(bo1\)` = `semi-dark-blue`, `.*\(bo3\)` = `semi-dark-purple`
 
 Feature use is measured via usage events (sessions containing at least one relevant event) rather than settings state — this reflects actual use rather than whether the feature was merely enabled.
 
