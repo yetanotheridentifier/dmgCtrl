@@ -514,7 +514,7 @@ describe('App analytics', () => {
     await waitFor(() => expect(mockOnAppStart).toHaveBeenCalledTimes(1))
   })
 
-  it('calls onGameStart when a game is started', async () => {
+  it('calls onGameStart when the user starts a game (clicks Start on the round counter)', async () => {
     mockUserSettings.useHyperspace = true
     const user = userEvent.setup()
     render(<App />)
@@ -523,7 +523,21 @@ describe('App analytics', () => {
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
     await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
+    await user.click(screen.getByTestId('game-counter'))
     expect(mockOnGameStart).toHaveBeenCalledWith('SOR-026', 'SOR', true, 'casual')
+  })
+
+  it('does not call onGameStart when navigating to the game screen', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await waitForSetup()
+    await user.selectOptions(getBaseSelectors()[0], 'SOR')
+    await user.selectOptions(getBaseSelectors()[1], 'Aggression')
+    await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
+    await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
+    expect(mockOnGameStart).not.toHaveBeenCalled()
   })
 
   it('calls onGameEnd when the back button is pressed from the game screen', async () => {
@@ -735,7 +749,7 @@ describe('App tournament navigation', () => {
     await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('1'))
   })
 
-  it('fires onGameStart when navigating to game from tournament', async () => {
+  it('fires onGameStart when the user clicks Start within the game screen (not on navigation)', async () => {
     mockUserSettings.useHyperspace = false
     const user = userEvent.setup()
     mockUseTournament.tournament = {
@@ -751,6 +765,11 @@ describe('App tournament navigation', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Return to Match 1' })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+    // Navigation itself must not count as a game start
+    expect(mockOnGameStart).not.toHaveBeenCalled()
+    // Starting the game (round counter) must fire onGameStart
+    await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
+    await user.click(screen.getByTestId('game-counter'))
     expect(mockOnGameStart).toHaveBeenCalledWith('SOR-026', 'SOR', false, 'bo3')
   })
 
@@ -781,6 +800,8 @@ describe('App tournament navigation', () => {
     await user.selectOptions(screen.getByTestId('change-base-aspect'), 'Cunning')
     await user.selectOptions(screen.getByTestId('change-base-base'), 'SOR-022')
     await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
+    await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
+    await user.click(screen.getByTestId('game-counter'))
     expect(mockOnGameStart).toHaveBeenLastCalledWith('SOR-022', 'SOR', false, 'bo3')
   })
 

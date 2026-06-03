@@ -231,6 +231,11 @@ describe('onGameStart', () => {
     expect(getLastBody().data.playMode).toBe('bo3')
   })
 
+  it("includes game: 'swu' in payload", async () => {
+    await onGameStart('SOR-026', 'SOR', false, 'casual')
+    expect(getLastBody().data.game).toBe('swu')
+  })
+
   it('does not include user-identifiable fields', async () => {
     await onGameStart('SOR-026', 'SOR', false, 'casual')
     const keys = Object.keys(getLastBody().data ?? {})
@@ -278,6 +283,11 @@ describe('onGameEnd', () => {
   it('includes playMode in payload', async () => {
     await onGameEnd('SOR-026', 'SOR', false, 120, 'bo1')
     expect(getLastBody().data.playMode).toBe('bo1')
+  })
+
+  it("includes game: 'swu' in payload", async () => {
+    await onGameEnd('SOR-026', 'SOR', false, 120, 'casual')
+    expect(getLastBody().data.game).toBe('swu')
   })
 
   it('does not include user-identifiable fields', async () => {
@@ -816,9 +826,14 @@ describe('onTournamentEnded', () => {
 // ---------------------------------------------------------------------------
 
 describe('onXwingGameStarted', () => {
-  it('sends event name xwing_game_started', async () => {
+  it('sends event name game_started', async () => {
     await onXwingGameStarted(0, 0)
-    expect(getLastBody().name).toBe('xwing_game_started')
+    expect(getLastBody().name).toBe('game_started')
+  })
+
+  it("includes game: 'xwing' in payload", async () => {
+    await onXwingGameStarted(0, 0)
+    expect(getLastBody().data.game).toBe('xwing')
   })
 
   it('includes player_deficit in payload', async () => {
@@ -847,9 +862,14 @@ describe('onXwingGameStarted', () => {
 describe('onXwingGameEnded', () => {
   const payload = { final_round: 3, player_score: 25, opponent_score: 50, player_deficit: 0, opponent_deficit: 0, result: 'loss' as const, elapsed_seconds: 120, timer_expired: false }
 
-  it('sends event name xwing_game_ended', async () => {
+  it('sends event name game_ended', async () => {
     await onXwingGameEnded(payload)
-    expect(getLastBody().name).toBe('xwing_game_ended')
+    expect(getLastBody().name).toBe('game_ended')
+  })
+
+  it("includes game: 'xwing' in payload", async () => {
+    await onXwingGameEnded(payload)
+    expect(getLastBody().data.game).toBe('xwing')
   })
 
   it('includes final_round in payload', async () => {

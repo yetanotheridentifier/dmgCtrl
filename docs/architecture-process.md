@@ -154,8 +154,8 @@ Twenty-seven public functions enqueue events and trigger a flush. All are fire-a
 | Function | Event name | Payload fields |
 |---|---|---|
 | `onAppStart()` | `app_started` | `version` (from package.json) |
-| `onGameStart(baseKey, baseSet, hyperspace, playMode)` | `game_started` | `baseKey`, `baseSet`, `hyperspace`, `playMode` (`'casual'` \| `'bo1'` \| `'bo3'`) |
-| `onGameEnd(baseKey, baseSet, hyperspace, durationSeconds, playMode)` | `game_ended` | `baseKey`, `baseSet`, `hyperspace`, `durationSeconds`, `playMode` |
+| `onGameStart(baseKey, baseSet, hyperspace, playMode)` | `game_started` | `game` (`'swu'`), `baseKey`, `baseSet`, `hyperspace`, `playMode` (`'casual'` \| `'bo1'` \| `'bo3'`) |
+| `onGameEnd(baseKey, baseSet, hyperspace, durationSeconds, playMode)` | `game_ended` | `game` (`'swu'`), `baseKey`, `baseSet`, `hyperspace`, `durationSeconds`, `playMode` |
 | `onMatchCompleted(playMode, matchResult, playerScore, opponentScore)` | `match_completed` | `playMode`, `matchResult` (`'won'` \| `'lost'` \| `'drawn'`), `playerScore`, `opponentScore` |
 | `onAppInstall(platform)` | `app_installed` | `platform` (`'ios'` \| `'android'` \| `'other'`) |
 | `onAppResume()` | `app_resumed` | `sessionDurationSoFarSeconds` |
@@ -180,8 +180,8 @@ Twenty-seven public functions enqueue events and trigger a flush. All are fire-a
 | `onTournamentRoundCompleted(roundNumber, result, playerScore, opponentScore, format, playMode)` | `tournament_round_completed` | `roundNumber`, `result` (`'won'` \| `'lost'` \| `'drawn'`), `playerScore`, `opponentScore`, `format`, `playMode` |
 | `onTournamentDropped(roundsCompleted, format, playMode)` | `tournament_dropped` | `roundsCompleted`, `format`, `playMode` |
 | `onTournamentEnded(totalRounds, won, lost, drawn, points, format, playMode)` | `tournament_ended` | `totalRounds`, `won`, `lost`, `drawn`, `points`, `format`, `playMode` |
-| `onXwingGameStarted(playerDeficit, opponentDeficit)` | `xwing_game_started` | `player_deficit`, `opponent_deficit` |
-| `onXwingGameEnded(payload)` | `xwing_game_ended` | `final_round`, `player_score`, `opponent_score`, `player_deficit`, `opponent_deficit`, `result`, `elapsed_seconds`, `timer_expired` |
+| `onXwingGameStarted(playerDeficit, opponentDeficit)` | `game_started` | `game` (`'xwing'`), `player_deficit`, `opponent_deficit` |
+| `onXwingGameEnded(payload)` | `game_ended` | `game` (`'xwing'`), `final_round`, `player_score`, `opponent_score`, `player_deficit`, `opponent_deficit`, `result`, `elapsed_seconds`, `timer_expired` |
 | `onXwingRoundAdvanced(fromRound, toRound)` | `xwing_round_advanced` | `from_round`, `to_round` |
 
 `onAppInstall` fires on the first launch of the app in standalone mode (i.e. launched from the home screen icon). It checks `window.matchMedia('(display-mode: standalone)').matches` (Android/Chrome) or `window.navigator.standalone === true` (iOS Safari), and only fires if a `pwa_install_tracked` flag is not yet set in localStorage. Once fired it sets the flag, so subsequent launches do not re-fire it. This approach is used instead of the `appinstalled` browser event because Safari does not support that event. Platform is detected as `'ios'` when `navigator.standalone === true` (exclusive to iOS Safari), `'android'` when the user agent contains `'Android'`, and `'other'` otherwise.
@@ -219,9 +219,7 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 | App mount (`useEffect`) | `onAppStart()` |
 | App mount, standalone mode, `pwa_install_tracked` flag not set | `onAppInstall()` |
 | `visibilitychange` → hidden then visible | `onAppResume()` |
-| User starts a casual game (`handleConfirm`) | `onGameStart(baseKey, baseSet, useHyperspace, 'casual')` |
 | User ends a casual game (`handleBack`) | `onGameEnd(baseKey, baseSet, useHyperspace, durationSeconds, 'casual')` |
-| User enters a tournament game (`handleGoToGame`) | `onGameStart(baseKey, baseSet, useHyperspace, playMode)` — `baseKey` uses `newBase` when passed (change-base), otherwise `tournamentCurrentBase ?? selectedBase ?? tournament?.base` |
 | User backs out of a tournament game (`handleBack`) | `onGameEnd(baseKey, baseSet, useHyperspace, durationSeconds, playMode)` |
 | A tournament match is confirmed complete (`handleMatchComplete`) | `onGameEnd(...)` then `onTournamentRoundCompleted(roundNumber, result, playerScore, opponentScore, format, playMode)` |
 
@@ -255,6 +253,7 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 
 | Trigger | Call |
 |---|---|
+| Start button tapped (`handleStartGame`, round 0 → 1) | `onGameStart(baseKey, baseSet, useHyperspace, playMode)` |
 | `+` tapped or drag-released | `onDamageDealt(baseKey, baseSet, amount)` |
 | `−` tapped or drag-released | `onDamageHealed(baseKey, baseSet, amount)` |
 | Round counter tapped | `onRoundIncremented(baseKey, baseSet, newRound)` |
@@ -291,39 +290,39 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 |---|---|
 | `navigator.wakeLock.request()` rejects | `onWakeLockFailed(reason)` |
 
-`durationSeconds` is computed as `Math.round((Date.now() - gameStartTime) / 1000)` where `gameStartTime` is recorded when a game starts (`handleConfirm` for casual, `handleGoToGame` for tournament rounds). `handleBack` fires `onGameEnd` on both paths: for casual/competitive games when `selectedBase` is set, and for tournament games using `selectedBase ?? tournament.base` as the base fallback. `handleBack` does not fire for help or settings back-navigation. `gameBase` in App uses `tournamentCurrentBase ?? selectedBase ?? tournament?.base` so the game screen always gets the correct base after a change-base selection.
+`durationSeconds` is computed as `Math.round((Date.now() - gameStartTime) / 1000)` where `gameStartTime` is a `useRef` in App recorded in `handleConfirm` (casual) and `handleGoToGame` (tournament) when navigating to the game screen — not when the Start button is tapped. `onGameStart` fires from `handleStartGame` in `SwuGameScreen` (when the user taps the round counter for the first time), so there is a small gap between `gameStartTime` and when `onGameStart` fires. `handleBack` fires `onGameEnd` on both paths: for casual/competitive games when `selectedBase` is set, and for tournament games using `selectedBase ?? tournament.base` as the base fallback. `handleBack` does not fire for help or settings back-navigation. `gameBase` in App uses `tournamentCurrentBase ?? selectedBase ?? tournament?.base` so the game screen always gets the correct base after a change-base selection.
 
 Install detection and resume detection are in separate `useEffect` calls. The install effect runs once on mount, checks standalone mode and the localStorage flag, and fires `onAppInstall` at most once per device. The visibility effect registers a `visibilitychange` listener with a `hasBeenHidden` local flag; the flag starts `false`, is set to `true` when `visibilityState === 'hidden'`, and `onAppResume` only fires when `visibilityState === 'visible'` and `hasBeenHidden` is already `true` — preventing a spurious event on first page load.
 
 **React StrictMode note:** In development mode, React intentionally mounts, unmounts, and remounts components to detect side-effect bugs. This causes `onAppStart` to fire twice per page load in dev (two `app_started` rows within milliseconds of each other). This is expected and only happens in development — production builds fire once.
 
-### Grafana dashboard
+### Grafana dashboards
 
-The dashboard is defined as JSON at `grafana/dmgctrl-dashboard.json` and can be imported directly into any Grafana instance. It requires an InfluxDB datasource configured against the `dmgctrl` bucket (InfluxDB 3.x / SQL query language).
+Dashboards are defined as JSON under `grafana/` and can be imported directly into any Grafana instance. All require an InfluxDB datasource configured against the `dmgctrl` bucket (InfluxDB 3.x / SQL query language). Each dashboard has an **Environment** variable (`$env`) — dropdown with `production` / `development` — that filters all panels to a single deployment environment.
 
-**Public URL:** https://yetanotheridentifier.grafana.net/public-dashboards/18828e6c27af43318e6eb8baad0c1efb
+| File | Purpose |
+|---|---|
+| `grafana/dmgctrl-dashboard.json` | Core app analytics — cross-game metrics, game selection, settings |
+| `grafana/dmgctrl-swu-dashboard.json` | SWU-specific analytics — starting point for the SWU dashboard (#247) |
 
-**Panels:**
+**Core dashboard panels (`dmgctrl-dashboard.json`):**
 
 | Panel | Type | What it shows |
 |---|---|---|
 | Sessions over time | Time series | Distinct `sessionId` values per day |
-| Games over time | Time series | `game_ended` events with `durationSeconds > 60` per day |
+| Games over time | Time series | Game sessions per day, split by game — SWU (`game_started`) / X-Wing (`xwing_game_started` historical + `game_started` with `game='xwing'` going forward) |
 | Sessions by city | Geomap (markers) | Sessions per city, plotted by Cloudflare edge PoP coordinates |
-| Base popularity | Bar gauge | Top 25 bases by completed games; bars colour-coded by aspect (Aggression=red, Command=green, Vigilance=blue, Cunning=yellow, no aspect=grey); joined with the `base_aspects` lookup measurement |
-| Games per session distribution | Bar gauge | How many games players complete per session |
+| Game selection | Donut | Total game sessions split by game (same event-name approach as above) |
+| Games per session | Bar gauge | How many game sessions players start per session |
 | App installs over time | Time series | `app_installed` events per day, split by platform |
 | Installs by platform | Donut | Cumulative installs split by `ios` / `android` / `other` |
-| Errors per session | Bar gauge | % of sessions that encountered each error event type |
-| Feature adoption | Bar gauge | % of sessions using hyperspace, force token, epic action, undo |
-| Sessions by play mode | Donut | `game_started` events split by `playMode` (`casual` / `bo1` / `bo3`) |
-| Bo1 match results | Bar gauge | Count of `match_completed` outcomes for Bo1 matches (`won` / `lost` / `drawn`) |
-| Bo3 match results | Bar gauge | Count of `match_completed` outcomes for Bo3 matches (`won` / `lost` / `drawn`) |
-| Tournament usage over time | Time series | `tournament_started` events per day |
-| Tournament round outcomes | Bar gauge | Count of `tournament_round_completed` results (`won` / `lost` / `drawn`) |
-| Tournament completion vs drop | Donut | `tournament_ended` vs `tournament_dropped` event counts |
+| General feature use | Bar gauge | % of game sessions using cross-game features (undo used, multi-session) |
+| Settings changes | Bar gauge | Change count for general settings (`enableActionLog`, `enableInitiativeBar`) |
+| Errors per session | Bar gauge | % of sessions that encountered cross-game errors (wake lock, image load) |
 
-Feature adoption and errors per session are measured via usage events (sessions containing at least one relevant event) rather than settings state — this reflects actual use rather than whether the feature was merely enabled.
+**Note on game discrimination:** The `game` field on `game_started`/`game_ended` events is only present in events written after the #246 deployment. Until historical X-Wing data is migrated, the "games over time" and "game selection" panels use event names as the discriminator: `game_started` = SWU, `xwing_game_started` = X-Wing (historical). New X-Wing events also fire `game_started` (with `game: 'xwing'`), so they are currently counted in the SWU bucket until a future SQL update adds a `game` field filter once the column is established in InfluxDB.
+
+Feature use is measured via usage events (sessions containing at least one relevant event) rather than settings state — this reflects actual use rather than whether the feature was merely enabled.
 
 ### `base_aspects` InfluxDB measurement
 
@@ -341,7 +340,7 @@ LEFT JOIN (
 
 Aspect colour is embedded directly in the SQL result (a `CASE` expression returning a hex string) and injected into each field's `fieldConfig` via the Grafana `rowsToFields` transformation's `color` mapping handler. This bypasses Grafana's field-override matcher, which does not reliably see post-transformation fields.
 
-All panels respect the Grafana time range picker and filter by `env = 'production'`. `country`, `city`, `latitude`, and `longitude` are populated by the Cloudflare Worker from `request.cf` and are absent or `'unknown'` for events received outside the production edge network (e.g. local dev). Coordinates reflect the Cloudflare edge PoP location, not the user's device — they are approximate but accurate enough for city-level mapping.
+All panels respect the Grafana time range picker and use the `$env` variable to filter by environment. `country`, `city`, `latitude`, and `longitude` are populated by the Cloudflare Worker from `request.cf` and are absent or `'unknown'` for events received outside the production edge network (e.g. local dev). Coordinates reflect the Cloudflare edge PoP location, not the user's device — they are approximate but accurate enough for city-level mapping.
 
 ---
 

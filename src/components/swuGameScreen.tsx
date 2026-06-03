@@ -12,7 +12,7 @@ import { useTimer } from '../hooks/useTimer'
 import { useInitiative } from '../hooks/useInitiative'
 import SwuGameScreenView from './swuGameScreenView'
 import RotatePrompt from './layout/rotatePrompt'
-import { onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed, onEpicActionUsed, onForceGained, onForceUsed, onMatchCompleted } from '../services/analytics'
+import { onGameStart, onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed, onEpicActionUsed, onForceGained, onForceUsed, onMatchCompleted } from '../services/analytics'
 import type { PlayMode } from '../utils/playMode'
 
 interface SwuGameSnapshot {
@@ -157,6 +157,7 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
     log.reset()
     log.add({ type: 'round', message: 'Round 1', color: '#ffffff', snapshot: snap })
     setLastGameResult(null)
+    void onGameStart(baseKey, baseSet, useHyperspace, playMode)
   }
 
   const handleRoundButton = () => {
