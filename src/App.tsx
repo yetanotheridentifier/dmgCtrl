@@ -11,7 +11,7 @@ import { Base, useBases } from './hooks/useBases'
 import { InitialSelection } from './hooks/useSwuSetup'
 import { useTournament } from './hooks/useTournament'
 import { useUserSettings } from './hooks/useUserSettings'
-import { onAppStart, onGameStart, onGameEnd, onAppInstall, onAppResume, onTournamentRoundCompleted } from './services/analytics'
+import { onAppStart, onGameEnd, onAppInstall, onAppResume, onTournamentRoundCompleted } from './services/analytics'
 import type { PlayMode, SetupMode } from './utils/playMode'
 import type { Format } from './utils/formatFilter'
 
@@ -102,12 +102,10 @@ function App() {
     setIsInGame(true)
     setScreen('game')
     gameStartTime.current = Date.now()
-    void onGameStart(`${base.set}-${base.number}`, base.set, useHyperspace, 'casual')
   }
 
   const handleGoToGame = (playMode: 'bo1' | 'bo3', newBase?: Base) => {
     if (newBase) setTournamentCurrentBase(newBase)
-    const base = newBase ?? tournamentCurrentBase ?? selectedBase ?? tournament?.base
     // matchInProgress is false when starting game 1 of any match (React state not yet updated
     // from startMatch() in the same handler); true when continuing mid-match for game 2/3.
     if (!matchInProgress) setHasPlayedGameInCurrentMatch(false)
@@ -115,9 +113,6 @@ function App() {
     setIsInGame(true)
     setScreen('game')
     gameStartTime.current = Date.now()
-    if (base) {
-      void onGameStart(`${base.set}-${base.number}`, base.set, useHyperspace, playMode)
-    }
   }
 
   const handleMatchComplete = (result: 'won' | 'lost' | 'drawn', playerScore: number, opponentScore: number) => {

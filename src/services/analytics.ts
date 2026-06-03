@@ -61,11 +61,11 @@ export function onAppStart(): Promise<void> {
 }
 
 export function onGameStart(baseKey: string, baseSet: string, hyperspace: boolean, playMode: string): Promise<void> {
-  return sendEvent('game_started', { baseKey, baseSet, hyperspace, playMode })
+  return sendEvent('game_started', { game: 'swu', baseKey, baseSet, hyperspace, playMode })
 }
 
 export function onGameEnd(baseKey: string, baseSet: string, hyperspace: boolean, durationSeconds: number, playMode: string): Promise<void> {
-  return sendEvent('game_ended', { baseKey, baseSet, hyperspace, durationSeconds, playMode })
+  return sendEvent('game_ended', { game: 'swu', baseKey, baseSet, hyperspace, durationSeconds, playMode })
 }
 
 export function onMatchCompleted(playMode: string, matchResult: string, playerScore: number, opponentScore: number): Promise<void> {
@@ -177,11 +177,11 @@ export interface XwingGameEndedPayload {
 }
 
 export function onXwingGameStarted(playerDeficit: number, opponentDeficit: number): Promise<void> {
-  return sendEvent('xwing_game_started', { player_deficit: playerDeficit, opponent_deficit: opponentDeficit })
+  return sendEvent('game_started', { game: 'xwing', player_deficit: playerDeficit, opponent_deficit: opponentDeficit })
 }
 
 export function onXwingGameEnded(payload: XwingGameEndedPayload): Promise<void> {
-  return sendEvent('xwing_game_ended', payload as unknown as Record<string, unknown>)
+  return sendEvent('game_ended', { game: 'xwing', ...payload } as unknown as Record<string, unknown>)
 }
 
 export function onXwingRoundAdvanced(fromRound: number, toRound: number): Promise<void> {

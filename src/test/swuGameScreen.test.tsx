@@ -9,6 +9,7 @@ import { useWakeLock } from '../hooks/useWakeLock'
 vi.mock('../hooks/useOrientation')
 vi.mock('../hooks/useWakeLock', () => ({ useWakeLock: vi.fn() }))
 
+const mockOnGameStart = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnDamageDealt = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnDamageHealed = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnRoundIncremented = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
@@ -18,6 +19,7 @@ const mockOnForceGained = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnForceUsed = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockOnMatchCompleted = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 vi.mock('../services/analytics', () => ({
+  onGameStart: mockOnGameStart,
   onDamageDealt: mockOnDamageDealt,
   onDamageHealed: mockOnDamageHealed,
   onRoundIncremented: mockOnRoundIncremented,
@@ -215,6 +217,7 @@ describe('SwuGameScreen', () => {
       start: vi.fn(),
       reset: vi.fn(),
     }))
+    mockOnGameStart.mockClear()
     mockOnDamageDealt.mockClear()
     mockOnDamageHealed.mockClear()
     mockOnRoundIncremented.mockClear()
@@ -227,6 +230,27 @@ describe('SwuGameScreen', () => {
   const startGame = async (user: ReturnType<typeof userEvent.setup>) => {
     await user.click(screen.getByText('Start'))
   }
+
+  // --- Analytics ---
+
+  it('calls onGameStart when the round counter Start button is clicked', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} playMode="casual" onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
+    expect(mockOnGameStart).toHaveBeenCalledWith('SOR-026', 'SOR', false, 'casual')
+  })
+
+  it('calls onGameStart with the correct playMode for bo3', async () => {
+    const user = userEvent.setup()
+    render(<SwuGameScreen base={mockBase} playMode="bo3" onBack={vi.fn()} onHelp={vi.fn()} />)
+    await startGame(user)
+    expect(mockOnGameStart).toHaveBeenCalledWith('SOR-026', 'SOR', false, 'bo3')
+  })
+
+  it('does not call onGameStart on render', () => {
+    render(<SwuGameScreen base={mockBase} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(mockOnGameStart).not.toHaveBeenCalled()
+  })
 
   // --- Rendering ---
 
