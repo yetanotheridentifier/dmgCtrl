@@ -194,7 +194,7 @@
             "version": "13.1.0-25668120414",
             "spec": {
               "options": {
-                "displayMode": "basic",
+                "displayMode": "gradient",
                 "legend": {
                   "calcs": [],
                   "displayMode": "list",
@@ -644,7 +644,7 @@
             "version": "13.1.0-25668120414",
             "spec": {
               "options": {
-                "displayMode": "basic",
+                "displayMode": "gradient",
                 "legend": {
                   "calcs": [],
                   "displayMode": "list",
@@ -925,7 +925,7 @@
                         "id": "color",
                         "value": {
                           "mode": "fixed",
-                          "fixedColor": "semi-dark-purple"
+                          "fixedColor": "#9e9e9e"
                         }
                       }
                     ]
@@ -1777,7 +1777,7 @@
                         "id": "color",
                         "value": {
                           "mode": "fixed",
-                          "fixedColor": "semi-dark-orange"
+                          "fixedColor": "#9e9e9e"
                         }
                       }
                     ]
@@ -1927,7 +1927,7 @@
                         "id": "color",
                         "value": {
                           "mode": "fixed",
-                          "fixedColor": "semi-dark-purple"
+                          "fixedColor": "#9e9e9e"
                         }
                       }
                     ]
@@ -1993,7 +1993,7 @@
             "version": "13.1.0-25668120414",
             "spec": {
               "options": {
-                "displayMode": "basic",
+                "displayMode": "gradient",
                 "legend": {
                   "calcs": [],
                   "displayMode": "list",
@@ -2033,7 +2033,7 @@
                     ]
                   },
                   "color": {
-                    "mode": "palette-classic"
+                    "mode": "continuous-YlBl"
                   }
                 },
                 "overrides": []
@@ -2181,7 +2181,7 @@
                         "id": "color",
                         "value": {
                           "mode": "fixed",
-                          "fixedColor": "semi-dark-purple"
+                          "fixedColor": "#9e9e9e"
                         }
                       }
                     ]
@@ -2331,7 +2331,7 @@
                         "id": "color",
                         "value": {
                           "mode": "fixed",
-                          "fixedColor": "semi-dark-orange"
+                          "fixedColor": "#9e9e9e"
                         }
                       }
                     ]
@@ -2452,7 +2452,8 @@
                     ]
                   },
                   "color": {
-                    "mode": "palette-classic"
+                    "mode": "fixed",
+                    "fixedColor": "#9e9e9e"
                   }
                 },
                 "overrides": [
@@ -2504,7 +2505,7 @@
                   {
                     "matcher": {
                       "id": "byName",
-                      "options": "Heroism"
+                      "options": "Vigilance"
                     },
                     "properties": [
                       {
@@ -2519,21 +2520,6 @@
                   {
                     "matcher": {
                       "id": "byName",
-                      "options": "Vigilance"
-                    },
-                    "properties": [
-                      {
-                        "id": "color",
-                        "value": {
-                          "mode": "fixed",
-                          "fixedColor": "semi-dark-purple"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "matcher": {
-                      "id": "byName",
                       "options": "Villainy"
                     },
                     "properties": [
@@ -2541,7 +2527,7 @@
                         "id": "color",
                         "value": {
                           "mode": "fixed",
-                          "fixedColor": "semi-dark-orange"
+                          "fixedColor": "#636363"
                         }
                       }
                     ]

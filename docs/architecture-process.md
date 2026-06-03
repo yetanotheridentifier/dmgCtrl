@@ -336,8 +336,8 @@ All SWU panels filter to SWU game events using `AND (game IS NULL OR game = 'swu
 | Feature adoption | Bar gauge | % of SWU game sessions that used each feature (undo, multi-session) |
 | SWU settings changes | Bar gauge | Change count for SWU-specific settings (`useHyperspace`, `enableEpicActions`, `forceTokenDisplay`, `enableCompetitiveMode`) |
 | Errors per session | Bar gauge | % of SWU sessions that encountered errors (wake lock, image load) |
-| Play mode | Donut | Proportion of SWU game sessions by play mode (casual / bo1 / bo3); colours: green = casual, blue = bo1, purple = bo3 |
-| Tournament format | Donut | Tournaments started by format (premier / limited / eternal / twin-suns); colours: blue / green / orange / red |
+| Play mode | Donut | Proportion of SWU game sessions by play mode (casual / bo1 / bo3); colours: green = casual, blue = bo1, grey = bo3 |
+| Tournament format | Donut | Tournaments started by format (premier / limited / eternal / twin-suns); colours: blue / green / red / grey |
 | Tournament rounds | Bar gauge | Distribution of tournament length (total rounds), split by play mode (bo1 / bo3); labels show "N rounds (bo1/bo3)" |
 | Bo1 game results | Bar gauge | Win / loss / draw outcomes for bo1 matches; colours: green = won, red = lost, yellow = drawn |
 | Bo3 game results | Bar gauge | Win / loss / draw outcomes for bo3 matches (same colour scheme) |
@@ -349,11 +349,13 @@ All SWU panels filter to SWU game events using `AND (game IS NULL OR game = 'swu
 | Avg game duration by aspect | Bar gauge | Average SWU game duration in minutes, split by base aspect (joined from `base_aspects` measurement) |
 
 Consistent colour palettes are applied across related panels using Grafana `byName` overrides:
-- **Play mode:** casual = `semi-dark-green`, bo1 = `semi-dark-blue`, bo3 = `semi-dark-purple`
-- **Format:** premier = `semi-dark-blue`, limited = `semi-dark-green`, eternal = `semi-dark-orange`, twin-suns = `semi-dark-red`
+- **Play mode:** casual = `semi-dark-green`, bo1 = `semi-dark-blue`, bo3 = `#9e9e9e`
+- **Format:** premier = `semi-dark-blue`, limited = `semi-dark-green`, twin-suns = `semi-dark-red`, eternal = `#9e9e9e`
 - **Results:** won = `semi-dark-green`, lost = `semi-dark-red`, drawn = `semi-dark-yellow`
 - **Tournament end:** `tournament_ended` = `semi-dark-green`, `tournament_dropped` = `semi-dark-red`
-- **Tournament rounds:** `byRegexp` on `.*\(bo1\)` = `semi-dark-blue`, `.*\(bo3\)` = `semi-dark-purple`
+- **Tournament rounds:** `byRegexp` on `.*\(bo1\)` = `semi-dark-blue`, `.*\(bo3\)` = `#9e9e9e`
+- **Aspect (avg duration panel):** Aggression = `semi-dark-red`, Command = `semi-dark-green`, Cunning = `semi-dark-yellow`, Vigilance = `semi-dark-blue`, Villainy = `#636363`; all others (Heroism, None) fall through to default `#9e9e9e`
+- Bar gauge panels use `displayMode: gradient` and `color.mode: continuous-YlBl` as the standard styling; aspect panels use `color.mode: fixed, fixedColor: #9e9e9e` as the default with named overrides per aspect
 
 Feature use is measured via usage events (sessions containing at least one relevant event) rather than settings state — this reflects actual use rather than whether the feature was merely enabled.
 
