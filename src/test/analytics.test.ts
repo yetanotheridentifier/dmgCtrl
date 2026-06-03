@@ -251,47 +251,52 @@ describe('onGameStart', () => {
 
 describe('onGameEnd', () => {
   it('POSTs to the batch URL', async () => {
-    await onGameEnd('SOR-026', 'SOR', false, 120, 'casual')
+    await onGameEnd('SOR-026', 'SOR', false, 120, 'casual', 'premier')
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(BATCH_URL, expect.objectContaining({ method: 'POST' }))
   })
 
   it('sends event name game_ended', async () => {
-    await onGameEnd('SOR-026', 'SOR', false, 120, 'casual')
+    await onGameEnd('SOR-026', 'SOR', false, 120, 'casual', 'premier')
     expect(getLastBody().name).toBe('game_ended')
   })
 
   it('includes baseKey in payload', async () => {
-    await onGameEnd('SOR-026', 'SOR', false, 120, 'casual')
+    await onGameEnd('SOR-026', 'SOR', false, 120, 'casual', 'premier')
     expect(getLastBody().data.baseKey).toBe('SOR-026')
   })
 
   it('includes baseSet in payload', async () => {
-    await onGameEnd('SOR-026', 'SOR', false, 120, 'casual')
+    await onGameEnd('SOR-026', 'SOR', false, 120, 'casual', 'premier')
     expect(getLastBody().data.baseSet).toBe('SOR')
   })
 
   it('includes hyperspace flag in payload', async () => {
-    await onGameEnd('SOR-026', 'SOR', true, 120, 'casual')
+    await onGameEnd('SOR-026', 'SOR', true, 120, 'casual', 'premier')
     expect(getLastBody().data.hyperspace).toBe(true)
   })
 
   it('includes durationSeconds in payload', async () => {
-    await onGameEnd('SOR-026', 'SOR', false, 120, 'casual')
+    await onGameEnd('SOR-026', 'SOR', false, 120, 'casual', 'premier')
     expect(getLastBody().data.durationSeconds).toBe(120)
   })
 
   it('includes playMode in payload', async () => {
-    await onGameEnd('SOR-026', 'SOR', false, 120, 'bo1')
+    await onGameEnd('SOR-026', 'SOR', false, 120, 'bo1', 'premier')
     expect(getLastBody().data.playMode).toBe('bo1')
   })
 
+  it('includes format in payload', async () => {
+    await onGameEnd('SOR-026', 'SOR', false, 120, 'casual', 'limited')
+    expect(getLastBody().data.format).toBe('limited')
+  })
+
   it("includes game: 'swu' in payload", async () => {
-    await onGameEnd('SOR-026', 'SOR', false, 120, 'casual')
+    await onGameEnd('SOR-026', 'SOR', false, 120, 'casual', 'premier')
     expect(getLastBody().data.game).toBe('swu')
   })
 
   it('does not include user-identifiable fields', async () => {
-    await onGameEnd('SOR-026', 'SOR', false, 120, 'casual')
+    await onGameEnd('SOR-026', 'SOR', false, 120, 'casual', 'premier')
     const keys = Object.keys(getLastBody().data ?? {})
     for (const piiKey of ['userId', 'email', 'name', 'ip', 'user']) {
       expect(keys).not.toContain(piiKey)
@@ -406,7 +411,7 @@ describe('sessionId', () => {
     expect(id).toBeDefined()
     await onGameStart('SOR-026', 'SOR', false, 'casual')
     expect(getLastBody().data.sessionId).toBe(id)
-    await onGameEnd('SOR-026', 'SOR', false, 30, 'casual')
+    await onGameEnd('SOR-026', 'SOR', false, 30, 'casual', 'premier')
     expect(getLastBody().data.sessionId).toBe(id)
   })
 })

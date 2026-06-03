@@ -64,8 +64,8 @@ export function onGameStart(baseKey: string, baseSet: string, hyperspace: boolea
   return sendEvent('game_started', { game: 'swu', baseKey, baseSet, hyperspace, playMode })
 }
 
-export function onGameEnd(baseKey: string, baseSet: string, hyperspace: boolean, durationSeconds: number, playMode: string): Promise<void> {
-  return sendEvent('game_ended', { game: 'swu', baseKey, baseSet, hyperspace, durationSeconds, playMode })
+export function onGameEnd(baseKey: string, baseSet: string, hyperspace: boolean, durationSeconds: number, playMode: string, format: string): Promise<void> {
+  return sendEvent('game_ended', { game: 'swu', baseKey, baseSet, hyperspace, durationSeconds, playMode, format })
 }
 
 export function onMatchCompleted(playMode: string, matchResult: string, playerScore: number, opponentScore: number): Promise<void> {

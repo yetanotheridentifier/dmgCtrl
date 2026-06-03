@@ -549,8 +549,10 @@ describe('App analytics', () => {
     await user.selectOptions(getBaseSelectors()[1], 'Aggression')
     await user.selectOptions(getBaseSelectors()[2], 'SOR-026')
     await user.click(screen.getByRole('button', { name: 'Start game' }))
+    await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
+    await user.click(screen.getByTestId('game-counter'))
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    expect(mockOnGameEnd).toHaveBeenCalledWith('SOR-026', 'SOR', false, expect.any(Number), 'casual')
+    expect(mockOnGameEnd).toHaveBeenCalledWith('SOR-026', 'SOR', false, expect.any(Number), 'casual', expect.any(String))
   })
 
   it('does not call onGameEnd when back is pressed from help screen', async () => {
@@ -843,10 +845,11 @@ describe('App tournament navigation', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Return to Match 1' })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Return to Match 1' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('game-counter')).toHaveTextContent('Start'))
+    await user.click(screen.getByTestId('game-counter'))
     await user.click(screen.getByRole('button', { name: 'Back' }))
     await waitFor(() => expect(mockOnGameEnd).toHaveBeenCalled())
-    expect(mockOnGameEnd).toHaveBeenCalledWith('SOR-026', 'SOR', expect.any(Boolean), expect.any(Number), 'bo3')
+    expect(mockOnGameEnd).toHaveBeenCalledWith('SOR-026', 'SOR', expect.any(Boolean), expect.any(Number), 'bo3', expect.any(String))
   })
 
 })
