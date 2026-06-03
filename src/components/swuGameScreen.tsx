@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { Base } from '../hooks/useBases'
 import { useSwuGame } from '../hooks/useSwuGame'
-import { useGameLog } from '../hooks/useGameLog'
+import type { GameState } from '../hooks/useSwuGame'
+import { useGameHistory } from '../hooks/useGameHistory'
 import { useBaseArt } from '../hooks/useBaseArt'
 import { useOrientation } from '../hooks/useOrientation'
 import { useWakeLock } from '../hooks/useWakeLock'
@@ -13,6 +14,12 @@ import SwuGameScreenView from './swuGameScreenView'
 import RotatePrompt from './layout/rotatePrompt'
 import { onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed, onEpicActionUsed, onForceGained, onForceUsed, onMatchCompleted } from '../services/analytics'
 import type { PlayMode } from '../utils/playMode'
+
+interface SwuGameSnapshot {
+  gameState: GameState
+  matchState: { playerScore: number; opponentScore: number; matchDrawn: boolean; matchClosedByTimer: boolean }
+  lastGameResult: 'won' | 'lost' | 'drawn' | null
+}
 
 interface Props {
   base: Base
@@ -29,7 +36,7 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
   const match = useMatch(playMode)
   const art = useBaseArt(base, useHyperspace)
   const game = useSwuGame(base.hp)
-  const log = useGameLog()
+  const log = useGameHistory<SwuGameSnapshot>()
   const { isPortrait } = useOrientation()
   useWakeLock(enableWakeLock)
 
@@ -65,6 +72,17 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
     }
   }, [game.count, base.hp, playMode, game.round, match.matchOver])
 
+  const makeSnapshot = (): SwuGameSnapshot => ({
+    gameState: game.snapshot(),
+    matchState: {
+      playerScore: match.playerScore,
+      opponentScore: match.opponentScore,
+      matchDrawn: false,
+      matchClosedByTimer: false,
+    },
+    lastGameResult,
+  })
+
   const baseKey = `${base.set}-${base.number}`
   const baseSet = base.set
 
@@ -82,62 +100,62 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
 
   const handleIncrement = (n: number) => {
     if (game.round === 0) return
-    const prev = game.snapshot()
+    const snap = makeSnapshot()
     game.incrementBy(n)
-    log.add({ type: 'hit', message: `Hit +${n}`, color: 'var(--color-error)', prevState: prev })
+    log.add({ type: 'hit', message: `Hit +${n}`, color: 'var(--color-error)', snapshot: snap })
     void onDamageDealt(baseKey, baseSet, n)
   }
 
   const handleDecrement = (n: number) => {
     if (game.round === 0) return
-    const prev = game.snapshot()
+    const snap = makeSnapshot()
     game.decrementBy(n)
-    log.add({ type: 'heal', message: `Heal −${n}`, color: 'var(--color-success)', prevState: prev })
+    log.add({ type: 'heal', message: `Heal −${n}`, color: 'var(--color-success)', snapshot: snap })
     void onDamageHealed(baseKey, baseSet, n)
   }
 
   const handleForceGain = () => {
-    const prev = game.snapshot()
+    const snap = makeSnapshot()
     game.toggleForce()
-    log.add({ type: 'force-gain', message: 'Force gained', color: 'var(--color-force)', prevState: prev })
+    log.add({ type: 'force-gain', message: 'Force gained', color: 'var(--color-force)', snapshot: snap })
     void onForceGained(baseKey, baseSet)
   }
 
   const handleForceDismiss = () => {
-    const prev = game.snapshot()
+    const snap = makeSnapshot()
     game.toggleForce()
-    log.add({ type: 'force-use', message: 'Force used', color: '#93c5fd', prevState: prev })
+    log.add({ type: 'force-use', message: 'Force used', color: '#93c5fd', snapshot: snap })
     void onForceUsed(baseKey, baseSet)
   }
 
   const handleEpicActionMark = () => {
-    const prev = game.snapshot()
+    const snap = makeSnapshot()
     game.markEpicActionUsed()
-    log.add({ type: 'epic', message: 'Epic action used', color: 'var(--color-epic)', prevState: prev })
+    log.add({ type: 'epic', message: 'Epic action used', color: 'var(--color-epic)', snapshot: snap })
     setEpicOverlayDismissed(false)
     void onEpicActionUsed(baseKey, baseSet)
   }
 
   const handleMonasteryAction = () => {
-    const prev = game.snapshot()
+    const snap = makeSnapshot()
     game.gainForceViaMonastery()
-    log.add({ type: 'monastery', message: 'Force gained (Monastery)', color: 'var(--color-force)', prevState: prev })
+    log.add({ type: 'monastery', message: 'Force gained (Monastery)', color: 'var(--color-force)', snapshot: snap })
     void onForceGained(baseKey, baseSet)
   }
 
   const handleRoundIncrement = () => {
-    const prev = game.snapshot()
+    const snap = makeSnapshot()
     game.incrementRound()
-    log.add({ type: 'round', message: `Round ${prev.round + 1}`, color: '#ffffff', prevState: prev })
-    void onRoundIncremented(baseKey, baseSet, prev.round + 1)
+    log.add({ type: 'round', message: `Round ${snap.gameState.round + 1}`, color: '#ffffff', snapshot: snap })
+    void onRoundIncremented(baseKey, baseSet, snap.gameState.round + 1)
   }
 
   const handleStartGame = () => {
-    const prev = game.snapshot()
+    const snap = makeSnapshot()
     game.incrementRound()
     timer.start()
     log.reset()
-    log.add({ type: 'round', message: 'Round 1', color: '#ffffff', prevState: prev })
+    log.add({ type: 'round', message: 'Round 1', color: '#ffffff', snapshot: snap })
     setLastGameResult(null)
   }
 
@@ -151,14 +169,7 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
 
   const handleConfirmResult = (outcome: 'win' | 'loss' | 'draw') => {
     const gameNumber = match.playerScore + match.opponentScore + 1
-    const prevLogEntries = [...log.entries]
-    const prevMatchState = {
-      playerScore: match.playerScore,
-      opponentScore: match.opponentScore,
-      matchDrawn: false,
-      matchClosedByTimer: false,
-    }
-    const prevGameState = game.snapshot()
+    const snap = makeSnapshot()
 
     if (outcome === 'win') {
       match.incrementPlayerScore()
@@ -176,14 +187,11 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
       ? 'Match Drawn'
       : `Game ${gameNumber} ${outcome === 'win' ? 'Won' : 'Lost'}`
 
-    log.clearAndAdd({
+    log.add({
       type: 'game-result',
       message,
       color: '#ffffff',
-      prevState: prevGameState,
-      prevLogEntries,
-      prevMatchState,
-      undoable: true,
+      snapshot: snap,
     })
 
     setLastGameResult(outcome === 'win' ? 'won' : outcome === 'loss' ? 'lost' : 'drawn')
@@ -193,16 +201,10 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
   const handleUndo = () => {
     const entry = log.undoLast()
     if (entry) {
-      game.restoreState(entry.prevState)
-      if (entry.prevMatchState) {
-        match.restoreState(entry.prevMatchState)
-      }
-      if (entry.type === 'game-result') {
-        setLastGameResult(null)
-      }
-      if (entry.prevState.round === 0) {
-        timer.reset()
-      }
+      game.restoreState(entry.snapshot.gameState)
+      match.restoreState(entry.snapshot.matchState)
+      setLastGameResult(entry.snapshot.lastGameResult)
+      if (entry.snapshot.gameState.round === 0) timer.reset()
       void onUndoUsed(baseKey, baseSet, entry.type)
     }
   }

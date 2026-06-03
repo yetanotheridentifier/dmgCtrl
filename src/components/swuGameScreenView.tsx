@@ -1,5 +1,5 @@
 import { Base } from '../hooks/useBases'
-import type { GameLogEntry } from '../hooks/useGameLog'
+import type { HistoryEntry } from '../hooks/useGameHistory'
 import type { PlayMode } from '../utils/playMode'
 import { useDragScrubber } from '../hooks/useDragScrubber'
 import AppScreenLayout from './layout/appScreenLayout'
@@ -50,7 +50,7 @@ interface Props {
   round: number
   onRoundIncrement: () => void
   onStartGame: () => void
-  logEntries: GameLogEntry[]
+  logEntries: HistoryEntry<unknown>[]
   onUndo: () => void
   enableActionLog: boolean
   showLog: boolean
