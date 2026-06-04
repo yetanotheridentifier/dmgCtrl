@@ -7,25 +7,28 @@ interface Props {
   initiative: Initiative
   onSetOpponent: () => void
   onSetPlayer: () => void
+  interactive?: boolean
 }
 
 // Counter height — slightly reduced so it clears OPP/YOU labels with breathing room
 const COUNTER_H = 'max(4vw, 28px)'
 const COUNTER_H_PX = () => Math.max(window.innerWidth * 0.04, 28)
 
-// Inset from bar edge so counter doesn't butt against the border
-const INSET = '4px'
+// Optical correction: top appears more spacious than bottom at equal values,
+// so OPP (top) uses a smaller raw value to achieve visual parity with YOU (bottom)
+const INSET_TOP = '4px'
+const INSET_BOTTOM = '6px'
 
 const TINY: React.CSSProperties = { ...BAR_LABEL_STYLE, pointerEvents: 'none' }
 
 function counterTop(initiative: Initiative): string {
-  if (initiative === 'opponent') return INSET
-  if (initiative === 'player')   return `calc(100% - ${COUNTER_H} - ${INSET})`
+  if (initiative === 'opponent') return INSET_TOP
+  if (initiative === 'player')   return `calc(100% - ${COUNTER_H} - ${INSET_BOTTOM})`
   // neutral: centred — counter stays here but is invisible
   return `calc(50% - ${COUNTER_H} / 2)`
 }
 
-function InitiativeToggle({ initiative, onSetOpponent, onSetPlayer }: Props) {
+function InitiativeToggle({ initiative, onSetOpponent, onSetPlayer, interactive = true }: Props) {
   const active = initiative !== null
   const wrapperRef = useRef<HTMLDivElement>(null)
 
@@ -56,45 +59,47 @@ function InitiativeToggle({ initiative, onSetOpponent, onSetPlayer }: Props) {
   return (
     <div ref={wrapperRef} style={{ position: 'relative', width: '100%', height: '100%' }}>
 
-      {/* OPP tap zone — top half */}
-      <button
-        data-testid="initiative-opp-zone"
-        aria-label="Opponent initiative"
-        onClick={onSetOpponent}
-        style={{
-          position: 'absolute',
-          top: 0, left: 0, right: 0,
-          height: '50%',
-          background: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
-          zIndex: 3,
-          WebkitTapHighlightColor: 'transparent',
-        }}
-      />
-
-      {/* YOU tap zone — bottom half */}
-      <button
-        data-testid="initiative-you-zone"
-        aria-label="Player initiative"
-        onClick={onSetPlayer}
-        style={{
-          position: 'absolute',
-          bottom: 0, left: 0, right: 0,
-          height: '50%',
-          background: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
-          zIndex: 3,
-          WebkitTapHighlightColor: 'transparent',
-        }}
-      />
+      {/* Tap zones — only rendered when interactive (Planning phase or pre-game) */}
+      {interactive && (
+        <>
+          <button
+            data-testid="initiative-opp-zone"
+            aria-label="Opponent initiative"
+            onClick={onSetOpponent}
+            style={{
+              position: 'absolute',
+              top: 0, left: 0, right: 0,
+              height: '50%',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              zIndex: 3,
+              WebkitTapHighlightColor: 'transparent',
+            }}
+          />
+          <button
+            data-testid="initiative-you-zone"
+            aria-label="Player initiative"
+            onClick={onSetPlayer}
+            style={{
+              position: 'absolute',
+              bottom: 0, left: 0, right: 0,
+              height: '50%',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              zIndex: 3,
+              WebkitTapHighlightColor: 'transparent',
+            }}
+          />
+        </>
+      )}
 
       {/* OPP external label — fades out as counter slides over it */}
       <span style={{
         ...TINY,
         position: 'absolute',
-        top: INSET,
+        top: INSET_TOP,
         left: 0, right: 0,
         height: COUNTER_H,
         display: 'flex',
@@ -131,7 +136,7 @@ function InitiativeToggle({ initiative, onSetOpponent, onSetPlayer }: Props) {
       <span style={{
         ...TINY,
         position: 'absolute',
-        bottom: INSET,
+        bottom: INSET_BOTTOM,
         left: 0, right: 0,
         height: COUNTER_H,
         display: 'flex',

@@ -6,6 +6,7 @@ import { useGameHistory } from '../hooks/useGameHistory'
 import { useTimer } from '../hooks/useTimer'
 import { useWakeLock } from '../hooks/useWakeLock'
 import { useInitiative } from '../hooks/useInitiative'
+import { usePhaseTracker, XWING_PHASES } from '../hooks/usePhaseTracker'
 import XwingGameScreenView from './xwingGameScreenView'
 import RotatePrompt from './layout/rotatePrompt'
 import { onXwingGameStarted, onXwingGameEnded, onXwingRoundAdvanced } from '../services/analytics'
@@ -15,6 +16,8 @@ interface XwingGameSnapshot {
   opponentScore: number
   round: number
   gameStarted: boolean
+  phaseIndex: number
+  gameEnded: boolean
 }
 
 interface Props {
@@ -26,7 +29,7 @@ interface Props {
 }
 
 export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd, onTimerExpired }: Props) {
-  const { enableLongPress, enableActionLog, enableWakeLock, enableInitiativeBar, xwingTimerMinutes } = useUserSettings()
+  const { enableLongPress, enableActionLog, enableWakeLock, enableInitiativeBar, enableXwingPhases, xwingTimerMinutes } = useUserSettings()
   const { isPortrait } = useOrientation()
 
   const [playerDeficit, setPlayerDeficit] = useState(0)
@@ -37,6 +40,7 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
   const log = useGameHistory<XwingGameSnapshot>()
   const timer = useTimer(xwingTimerMinutes * 60)
   const initiative = useInitiative()
+  const phaseTracker = usePhaseTracker(XWING_PHASES)
   const [logOpen, setLogOpen] = useState(false)
 
   useWakeLock(enableWakeLock)
@@ -48,6 +52,8 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     opponentScore: game.opponentScore,
     round: game.round,
     gameStarted,
+    phaseIndex: phaseTracker.phaseIndex,
+    gameEnded: game.gameEnded,
   })
 
   useEffect(() => {
@@ -62,26 +68,40 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     }
   }, [gameStarted, timer.isExpired]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    if (game.round === 12) {
-      timer.stop()
-    }
-  }, [game.round]) // eslint-disable-line react-hooks/exhaustive-deps
-
   const handleRoundAdvance = () => {
     if (timer.isExpired || game.gameOver || game.round >= 12) return
     const fromRound = game.round
     log.add({ type: 'round', message: `Round ${fromRound + 1}`, color: '#ffffff', snapshot: snapshot() })
     game.advanceRound()
     initiative.reset()
+    phaseTracker.reset()
     void onXwingRoundAdvanced(fromRound, Math.min(12, fromRound + 1))
+  }
+
+  const handlePhaseAdvance = () => {
+    if (phaseTracker.isLastPhase) {
+      if (game.round >= 12 || timer.isExpired) {
+        const snap = snapshot()
+        const resultMsg = game.playerScore > game.opponentScore ? 'Game Won'
+          : game.opponentScore > game.playerScore ? 'Game Lost'
+          : 'Draw'
+        game.endGame()
+        log.add({ type: 'game-result', message: resultMsg, color: '#ffffff', snapshot: snap })
+        return
+      }
+      handleRoundAdvance()
+      phaseTracker.reset()
+    } else {
+      phaseTracker.advance()
+    }
   }
 
   const handleStartGame = () => {
     log.reset()
     setLogOpen(false)
     log.add({ type: 'round', message: 'Round 1', color: '#ffffff', snapshot: snapshot() })
-    game.reset()
+    game.reset(opponentDeficit, playerDeficit)
+    phaseTracker.reset()
     setGameStarted(true)
     gameStartedRef.current = true
     timer.start()
@@ -113,10 +133,17 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
   const handleLogUndo = () => {
     const entry = log.undoLast()
     if (!entry) return
+    const wasGameOver = game.gameOver
     game.restoreState(entry.snapshot)
     setGameStarted(entry.snapshot.gameStarted)
+    phaseTracker.restore(entry.snapshot.phaseIndex)
+    const snapshotGameOver = entry.snapshot.playerScore >= 50
+      || entry.snapshot.opponentScore >= 50
+      || (entry.snapshot.gameEnded ?? false)
     if (!entry.snapshot.gameStarted) {
       timer.reset()
+    } else if (wasGameOver && !snapshotGameOver && !timer.isExpired) {
+      timer.resume()
     }
   }
 
@@ -145,6 +172,9 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     <XwingGameScreenView
       gameStarted={gameStarted}
       gameOver={game.gameOver}
+      phase={phaseTracker.phase}
+      onPhaseAdvance={handlePhaseAdvance}
+      enableXwingPhases={enableXwingPhases}
       timerRemaining={timer.remaining}
       timerExpired={timer.isExpired}
       round={game.round}

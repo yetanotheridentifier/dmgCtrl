@@ -37,3 +37,5 @@ Settings for the Star Wars: Unlimited game mode.
 Settings for the X-Wing game mode.
 
 **Game Timer** — Duration of the X-Wing game timer in minutes. The 5:30 option is a short test value. All other options are in 5-minute increments from 30 to 90 minutes.
+
+**Enable Phase Tracker** — Shows a phase button in the centre of the game screen during a game. Tap to advance through Planning → System → Activation → Engagement → End. Tapping End advances the round (or ends the game at round 12 / timer expiry). When enabled, initiative can only be set during the Planning phase.

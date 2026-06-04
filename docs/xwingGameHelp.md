@@ -2,7 +2,7 @@
 
 ## Mission Points
 
-Each player's mission points are shown on the left (**You**) and right (**Opp**). Points start at 0; the first player to reach 50 wins.
+Each player's mission points are shown on the left (**You**) and right (**Opp**). Points start equal to the opponent's deficit (see *Before the Game* below); the first player to reach 50 wins.
 
 - Tap **+** to add a point
 - Tap **−** to remove a point (won't go below zero)
@@ -19,7 +19,7 @@ The number increases by 1 for roughly every 14px of upward movement, starting fr
 
 ## Before the Game
 
-Before tapping **Start Game**, you can enter a starting mission point deficit for each player (0–4) using the **−** and **+** controls under each label. These values are recorded for scoring purposes.
+Before tapping **Start Game**, you can enter a starting mission point deficit for each player (0–4) using the **−** and **+** controls under each label. Per the X-Wing rules, each player earns mission points equal to their **opponent's** deficit at the start of the game — so if your opponent has a deficit of 3, you start with 3 points.
 
 Once you tap **Start Game**, the deficit controls are replaced by the live score counters and the timer begins.
 
@@ -29,9 +29,19 @@ The countdown timer is shown in the centre of the screen during a game. It start
 
 - The timer turns amber when less than 5 minutes remain
 - The timer turns red when less than 1 minute remains
-- The timer stops when 50 points are reached or when Round 12 is completed
+- The timer stops when the game ends (50 points reached, or End phase confirmed at round 12 or timer expiry)
 
 To configure the timer duration, tap <svg width="3.5%" height="3.5%" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> **Settings** → **X-Wing** → **Game Timer**.
+
+## Phase Tracker
+
+When **Enable Phase Tracker** is on in Settings, a phase button appears in the centre of the screen between the two score displays.
+
+- Tap it to advance to the next phase: **Planning → System → Activation → Engagement → End**
+- Tapping **End** advances the round and resets to Planning (unless the game is about to end — see below)
+- When Round 12 is reached, or when the timer has expired, tapping **End** ends the game and shows the result
+
+Initiative can only be set during the **Planning** phase. It is locked for all other phases and unlocks again at the start of the next Planning phase.
 
 ## Initiative Bar
 
@@ -40,6 +50,7 @@ When **Enable Initiative Bar** is on in Settings, a narrow vertical bar appears 
 - Tap the **top half** (OPP) to record that your opponent has initiative this round
 - Tap the **bottom half** (YOU) to record that you have initiative this round
 - Tapping the same side again has no effect
+- When the phase tracker is enabled, initiative can only be set during the **Planning** phase
 
 Initiative resets to neutral at the start of each round (when you tap the next segment in the round tracker), ready for the next roll-off.
 
@@ -49,7 +60,14 @@ The round tracker bar runs across the top of the screen, showing all 12 rounds. 
 
 - Tap the **next** segment to advance to that round
 - The tracker is not available until the game has started
-- The timer stops automatically when Round 12 is reached
+
+## Game End
+
+The game ends when:
+- Either player reaches **50 mission points** — a result banner (Game Won / Game Lost / Draw) replaces the timer immediately
+- The **phase tracker** is enabled and the **End** phase is tapped at Round 12 or after the timer has expired — the result is calculated from current scores
+
+To undo a game-end result, open the action log and tap **Undo**. The game state is restored to the moment before the end was confirmed, and the timer resumes from where it left off.
 
 ## Navigation
 
@@ -66,6 +84,7 @@ Tap the <svg width="3.5%" height="3.5%" viewBox="0 0 24 24" fill="none" stroke="
 | Setting | Default | Description |
 |---|---|---|
 | **Game Timer** | 75 min | Timer duration for an X-Wing game. Adjust in the **X-Wing** section using **+** and **−**. |
+| **Enable Phase Tracker** | On | Shows a phase button in the centre of the game screen. Tap to cycle through Planning → System → Activation → Engagement → End. Tapping End advances the round or ends the game. |
 | **Enable Screen Wake Lock** | On | Keeps the screen on during play. May affect battery life. |
 | **Enable Initiative Bar** | On | Shows a vertical initiative tracker on the left side of the game screen. Resets each round when you advance the round tracker. |
 

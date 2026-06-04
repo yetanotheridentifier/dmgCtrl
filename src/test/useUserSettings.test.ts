@@ -56,6 +56,11 @@ describe('useUserSettings', () => {
     expect(result.current.enableInitiativeBar).toBe(true)
   })
 
+  it('defaults enableXwingPhases to true when storage is empty', () => {
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    expect(result.current.enableXwingPhases).toBe(true)
+  })
+
   // --- Load from storage ---
 
   it('loads useHyperspace=false from stored JSON', () => {
@@ -146,6 +151,14 @@ describe('useUserSettings', () => {
     expect(result.current.enableInitiativeBar).toBe(false)
   })
 
+  it('loads enableXwingPhases=false from stored JSON', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key) =>
+      key === STORAGE_KEY ? JSON.stringify({ enableXwingPhases: false }) : null
+    )
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    expect(result.current.enableXwingPhases).toBe(false)
+  })
+
   // --- Saving ---
 
   it('saves to localStorage when setUseHyperspace is called', () => {
@@ -195,6 +208,13 @@ describe('useUserSettings', () => {
     act(() => result.current.setEnableInitiativeBar(false))
     const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
     expect(saved.enableInitiativeBar).toBe(false)
+  })
+
+  it('saves to localStorage when setEnableXwingPhases is called', () => {
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    act(() => result.current.setEnableXwingPhases(false))
+    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
+    expect(saved.enableXwingPhases).toBe(false)
   })
 
   // --- Resilience ---

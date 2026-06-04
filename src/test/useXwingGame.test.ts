@@ -271,4 +271,51 @@ describe('useXwingGame', () => {
     expect(result.current.gameOver).toBe(true)
   })
 
+  // --- endGame ---
+
+  it('endGame sets gameOver to true', () => {
+    const { result } = renderHook(() => useXwingGame())
+    act(() => result.current.endGame())
+    expect(result.current.gameOver).toBe(true)
+  })
+
+  it('result is win when player score is higher after endGame', () => {
+    const { result } = renderHook(() => useXwingGame())
+    act(() => result.current.incrementPlayer(10))
+    act(() => result.current.incrementOpponent(7))
+    act(() => result.current.endGame())
+    expect(result.current.result).toBe('win')
+  })
+
+  it('result is loss when opponent score is higher after endGame', () => {
+    const { result } = renderHook(() => useXwingGame())
+    act(() => result.current.incrementPlayer(5))
+    act(() => result.current.incrementOpponent(12))
+    act(() => result.current.endGame())
+    expect(result.current.result).toBe('loss')
+  })
+
+  it('result is draw when scores are equal after endGame', () => {
+    const { result } = renderHook(() => useXwingGame())
+    act(() => result.current.incrementPlayer(8))
+    act(() => result.current.incrementOpponent(8))
+    act(() => result.current.endGame())
+    expect(result.current.result).toBe('draw')
+  })
+
+  it('reset clears gameEnded', () => {
+    const { result } = renderHook(() => useXwingGame())
+    act(() => result.current.endGame())
+    expect(result.current.gameOver).toBe(true)
+    act(() => result.current.reset())
+    expect(result.current.gameOver).toBe(false)
+  })
+
+  it('reset accepts initial player and opponent scores', () => {
+    const { result } = renderHook(() => useXwingGame())
+    act(() => result.current.reset(3, 2))
+    expect(result.current.playerScore).toBe(3)
+    expect(result.current.opponentScore).toBe(2)
+  })
+
 })

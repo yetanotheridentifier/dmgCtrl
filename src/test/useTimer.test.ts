@@ -172,4 +172,35 @@ describe('useTimer', () => {
     })
   })
 
+  describe('resume', () => {
+
+    it('sets isRunning to true after stop', () => {
+      const { result } = renderHook(() => useTimer(1500))
+      act(() => result.current.start())
+      act(() => result.current.stop())
+      act(() => result.current.resume())
+      expect(result.current.isRunning).toBe(true)
+    })
+
+    it('accounts for time elapsed during the stopped period', () => {
+      const { result } = renderHook(() => useTimer(1500))
+      act(() => result.current.start())
+      act(() => { vi.advanceTimersByTime(10000) }) // 10s elapsed, 1490 remaining
+      act(() => result.current.stop())
+      act(() => { vi.advanceTimersByTime(5000) })  // 5s pass while stopped
+      act(() => result.current.resume())
+      act(() => { vi.advanceTimersByTime(1000) })  // trigger recalculate
+      // total elapsed = 16s → remaining = 1500 - 16 = 1484
+      expect(result.current.remaining).toBe(1484)
+    })
+
+    it('does nothing if the timer was never started', () => {
+      const { result } = renderHook(() => useTimer(1500))
+      act(() => result.current.resume())
+      expect(result.current.isRunning).toBe(false)
+      expect(result.current.remaining).toBe(1500)
+    })
+
+  })
+
 })

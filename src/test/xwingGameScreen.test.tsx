@@ -22,6 +22,7 @@ const mockUserSettings = vi.hoisted(() => ({
   enableActionLog: true,
   enableWakeLock: true,
   enableInitiativeBar: true,
+  enableXwingPhases: true,
   xwingTimerMinutes: 75,
 }))
 vi.mock('../hooks/useUserSettings', () => ({
@@ -36,6 +37,7 @@ const mockTimerState = vi.hoisted(() => ({
   start: vi.fn(),
   reset: vi.fn(),
   stop: vi.fn(),
+  resume: vi.fn(),
 }))
 const mockUseTimer = vi.hoisted(() =>
   vi.fn().mockImplementation(() => mockTimerState)
@@ -48,6 +50,7 @@ beforeEach(() => {
   mockUserSettings.enableActionLog = true
   mockUserSettings.enableWakeLock = true
   mockUserSettings.enableInitiativeBar = true
+  mockUserSettings.enableXwingPhases = true
   mockUserSettings.xwingTimerMinutes = 75
   mockTimerState.remaining = 4500
   mockTimerState.isRunning = false
@@ -55,6 +58,7 @@ beforeEach(() => {
   mockTimerState.start.mockClear()
   mockTimerState.reset.mockClear()
   mockTimerState.stop.mockClear()
+  mockTimerState.resume.mockClear()
   mockOnXwingGameStarted.mockClear()
   mockOnXwingGameEnded.mockClear()
   mockOnXwingRoundAdvanced.mockClear()
@@ -145,21 +149,23 @@ describe('XwingGameScreen pre-game', () => {
 
 describe('XwingGameScreen score counters', () => {
 
-  it('player score starts at 0 after Start Game regardless of deficit', async () => {
-    const user = userEvent.setup()
-    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    await user.click(screen.getByTestId('player-deficit-increment'))
-    await user.click(screen.getByTestId('player-deficit-increment'))
-    await user.click(screen.getByTestId('start-game-btn'))
-    expect(screen.getByTestId('player-score')).toHaveTextContent('0')
-  })
-
-  it('opponent score starts at 0 after Start Game regardless of deficit', async () => {
+  it('player score starts equal to opponent deficit', async () => {
     const user = userEvent.setup()
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('opponent-deficit-increment'))
+    await user.click(screen.getByTestId('opponent-deficit-increment'))
+    await user.click(screen.getByTestId('opponent-deficit-increment'))
     await user.click(screen.getByTestId('start-game-btn'))
-    expect(screen.getByTestId('opponent-score')).toHaveTextContent('0')
+    expect(screen.getByTestId('player-score')).toHaveTextContent('3')
+  })
+
+  it('opponent score starts equal to player deficit', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('player-deficit-increment'))
+    await user.click(screen.getByTestId('player-deficit-increment'))
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.getByTestId('opponent-score')).toHaveTextContent('2')
   })
 
   it('player increment adds 1', async () => {
@@ -571,7 +577,7 @@ describe('XwingGameScreen round tracker', () => {
     expect(screen.getByRole('button', { name: 'Round 1' })).toBeInTheDocument()
   })
 
-  it('timer.stop is called when round advances to 12', async () => {
+  it('timer does not stop when round advances to 12', async () => {
     const user = userEvent.setup()
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByTestId('start-game-btn'))
@@ -579,7 +585,7 @@ describe('XwingGameScreen round tracker', () => {
     for (let i = 2; i <= 12; i++) {
       fireEvent.click(screen.getByRole('button', { name: `Round ${i}` }))
     }
-    expect(mockTimerState.stop).toHaveBeenCalled()
+    expect(mockTimerState.stop).not.toHaveBeenCalled()
   })
 
   // --- Colour thresholds (tracks timer) ---
@@ -871,6 +877,48 @@ describe('XwingGameScreen undo', () => {
     expect(mockTimerState.start).toHaveBeenCalledOnce()
   })
 
+  it('undoing from game-ended state resumes the timer', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('player-increment')) // adds a log entry
+    // advance to round 12 and trigger game end via phase button
+    for (let r = 2; r <= 12; r++) {
+      await user.click(screen.getByRole('button', { name: `Round ${r}` }))
+    }
+    const btn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(btn) // reach End
+    await user.click(btn)                              // trigger game over
+    expect(screen.getByTestId('result-banner')).toBeInTheDocument()
+    // undo the score change (last log entry before game end)
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(mockTimerState.resume).toHaveBeenCalledOnce()
+    expect(mockTimerState.reset).not.toHaveBeenCalled()
+  })
+
+  it('timer resumes after undoing the score change that triggered score-based game over', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    for (let i = 0; i < 50; i++) await user.click(screen.getByTestId('player-increment'))
+    mockTimerState.stop.mockClear()
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(mockTimerState.resume).toHaveBeenCalledOnce()
+    expect(mockTimerState.reset).not.toHaveBeenCalled()
+  })
+
+  it('undoing a score change during normal play does not call resume', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('player-increment'))
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(mockTimerState.resume).not.toHaveBeenCalled()
+  })
+
 })
 
 // ---------------------------------------------------------------------------
@@ -958,6 +1006,303 @@ describe('XwingGameScreen initiative', () => {
     mockUserSettings.enableInitiativeBar = false
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.queryByTestId('initiative-indicator')).not.toBeInTheDocument()
+  })
+
+  it('initiative tap zones are present in the Planning phase', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    // phase is Planning after Start Game
+    expect(screen.getByTestId('initiative-opp-zone')).toBeInTheDocument()
+    expect(screen.getByTestId('initiative-you-zone')).toBeInTheDocument()
+  })
+
+  it('initiative tap zones are absent once past the Planning phase', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('phase-btn')) // Planning → System
+    expect(screen.queryByTestId('initiative-opp-zone')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('initiative-you-zone')).not.toBeInTheDocument()
+  })
+
+  it('initiative set in Planning is preserved when phase advances to System', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('initiative-opp-zone'))
+    await user.click(screen.getByTestId('phase-btn')) // Planning → System
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'opponent')
+  })
+
+  it('initiative can be updated again in the next Planning phase', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('initiative-opp-zone')) // set to opponent
+    // advance to next round via phase button (Planning → ... → End → advance round)
+    for (let i = 0; i < 5; i++) await user.click(screen.getByTestId('phase-btn'))
+    // now in Planning of round 2; initiative was reset by round advance
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'none')
+    // can now set initiative
+    await user.click(screen.getByTestId('initiative-you-zone'))
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'player')
+  })
+
+})
+
+// ---------------------------------------------------------------------------
+// Phase tracker
+// ---------------------------------------------------------------------------
+
+describe('XwingGameScreen phase tracker', () => {
+
+  it('phase button is not shown before game starts', () => {
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('phase-btn')).not.toBeInTheDocument()
+  })
+
+  it('phase button shows Planning after Start Game', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.getByTestId('phase-btn')).toHaveTextContent('Planning')
+  })
+
+  it('tapping cycles through all five phases in order', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    const btn = screen.getByTestId('phase-btn')
+    expect(btn).toHaveTextContent('Planning')
+    await user.click(btn)
+    expect(btn).toHaveTextContent('System')
+    await user.click(btn)
+    expect(btn).toHaveTextContent('Activation')
+    await user.click(btn)
+    expect(btn).toHaveTextContent('Engagement')
+    await user.click(btn)
+    expect(btn).toHaveTextContent('End')
+  })
+
+  it('tapping End advances the round and resets to Planning', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    const btn = screen.getByTestId('phase-btn')
+    // advance to End
+    for (let i = 0; i < 4; i++) await user.click(btn)
+    expect(btn).toHaveTextContent('End')
+    // tap End
+    await user.click(btn)
+    expect(btn).toHaveTextContent('Planning')
+    expect(screen.getByRole('button', { name: 'Round 2' }).style.borderColor).toBe('var(--color-accent)')
+  })
+
+  it('tapping End when timer has expired triggers game over rather than advancing the round', async () => {
+    mockTimerState.isExpired = true
+    mockTimerState.remaining = 0
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    const btn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(btn) // Planning → End
+    await user.click(btn) // End → game over
+    expect(screen.getByTestId('result-banner')).toBeInTheDocument()
+    expect(screen.queryByTestId('phase-btn')).not.toBeInTheDocument()
+  })
+
+  it('advancing round via round tracker resets phase to Planning', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    const btn = screen.getByTestId('phase-btn')
+    await user.click(btn)
+    await user.click(btn)
+    expect(btn).toHaveTextContent('Activation')
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    expect(btn).toHaveTextContent('Planning')
+  })
+
+  it('phase button is not shown at game over', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    // drive player score to 50 to trigger game over
+    for (let i = 0; i < 50; i++) await user.click(screen.getByTestId('player-increment'))
+    expect(screen.queryByTestId('phase-btn')).not.toBeInTheDocument()
+  })
+
+  it('undo after End-tap restores phase to End', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    const btn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(btn)
+    await user.click(btn) // End → advance round → Planning
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(btn).toHaveTextContent('End')
+  })
+
+  it('undo after round-tracker advance restores phase to what it was before', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    const btn = screen.getByTestId('phase-btn')
+    await user.click(btn)
+    await user.click(btn)
+    expect(btn).toHaveTextContent('Activation')
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    expect(btn).toHaveTextContent('Planning')
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(btn).toHaveTextContent('Activation')
+  })
+
+  it('tapping End on round 12 does not advance to Planning', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    for (let r = 2; r <= 12; r++) {
+      await user.click(screen.getByRole('button', { name: `Round ${r}` }))
+    }
+    const btn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(btn) // Planning → System → Activation → Engagement → End
+    expect(btn).toHaveTextContent('End')
+    await user.click(btn) // should stay at End
+    expect(btn).toHaveTextContent('End')
+  })
+
+  it('non-End phases on round 12 still advance normally', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    for (let r = 2; r <= 12; r++) {
+      await user.click(screen.getByRole('button', { name: `Round ${r}` }))
+    }
+    const btn = screen.getByTestId('phase-btn')
+    expect(btn).toHaveTextContent('Planning')
+    await user.click(btn)
+    expect(btn).toHaveTextContent('System')
+    await user.click(btn)
+    expect(btn).toHaveTextContent('Activation')
+  })
+
+  it('phase button is not shown when enableXwingPhases is false', async () => {
+    mockUserSettings.enableXwingPhases = false
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.queryByTestId('phase-btn')).not.toBeInTheDocument()
+  })
+
+  it('tapping End phase at round 12 triggers game over and shows result banner', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    for (let r = 2; r <= 12; r++) {
+      await user.click(screen.getByRole('button', { name: `Round ${r}` }))
+    }
+    const btn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(btn) // reach End phase
+    await user.click(btn) // trigger game over
+    expect(screen.getByTestId('result-banner')).toBeInTheDocument()
+  })
+
+  it('undo from round-12 game-end restores to round 12 End phase, not round 11', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    for (let r = 2; r <= 12; r++) {
+      await user.click(screen.getByRole('button', { name: `Round ${r}` }))
+    }
+    const btn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(btn)
+    await user.click(btn) // game over
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    // game should be restored to round 12, End phase — not round 11
+    expect(screen.getByRole('button', { name: 'Round 12' }).style.borderColor).toBe('var(--color-accent)')
+    expect(btn).toHaveTextContent('End')
+  })
+
+  it('undo from timer-expired game-end restores to the End phase of the current round', async () => {
+    mockTimerState.isExpired = true
+    mockTimerState.remaining = 0
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    const btn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(btn) // reach End
+    await user.click(btn) // game over
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(btn).toHaveTextContent('End')
+    expect(screen.queryByTestId('result-banner')).not.toBeInTheDocument()
+  })
+
+  it('tapping End phase when timer expired triggers game over and shows result banner', async () => {
+    mockTimerState.isExpired = true
+    mockTimerState.remaining = 0
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    const btn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(btn) // reach End phase
+    await user.click(btn) // trigger game over
+    expect(screen.getByTestId('result-banner')).toBeInTheDocument()
+  })
+
+  it('result banner shows Game Won when player has more points at end', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('player-increment'))
+    for (let r = 2; r <= 12; r++) {
+      await user.click(screen.getByRole('button', { name: `Round ${r}` }))
+    }
+    const btn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(btn)
+    await user.click(btn)
+    expect(screen.getByTestId('result-banner')).toHaveTextContent('Game Won')
+  })
+
+  it('result banner shows Game Lost when opponent has more points at end', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('opponent-increment'))
+    for (let r = 2; r <= 12; r++) {
+      await user.click(screen.getByRole('button', { name: `Round ${r}` }))
+    }
+    const btn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(btn)
+    await user.click(btn)
+    expect(screen.getByTestId('result-banner')).toHaveTextContent('Game Lost')
+  })
+
+  it('result banner shows Draw when scores are equal at end', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    for (let r = 2; r <= 12; r++) {
+      await user.click(screen.getByRole('button', { name: `Round ${r}` }))
+    }
+    const btn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(btn)
+    await user.click(btn)
+    expect(screen.getByTestId('result-banner')).toHaveTextContent('Draw')
+  })
+
+  it('initiative tap zones are always present when phases are disabled', async () => {
+    mockUserSettings.enableXwingPhases = false
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    // advance a phase would normally lock initiative, but phases are disabled
+    expect(screen.getByTestId('initiative-opp-zone')).toBeInTheDocument()
+    expect(screen.getByTestId('initiative-you-zone')).toBeInTheDocument()
   })
 
 })

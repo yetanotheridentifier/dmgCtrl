@@ -7,6 +7,7 @@ interface UseTimerResult {
   start: () => void
   stop: () => void
   reset: () => void
+  resume: () => void
 }
 
 export function useTimer(durationSeconds: number): UseTimerResult {
@@ -49,6 +50,14 @@ export function useTimer(durationSeconds: number): UseTimerResult {
     setIsRunning(false)
   }
 
+  /** Resumes a stopped timer, accounting for time elapsed since it was stopped.
+   *  startTimeRef is preserved through stop(), so recalculate() correctly
+   *  includes elapsed time during the paused period. No-op if never started. */
+  const resume = () => {
+    if (startTimeRef.current === null) return
+    setIsRunning(true)
+  }
+
   const reset = () => {
     startedRef.current = false
     startTimeRef.current = null
@@ -63,5 +72,6 @@ export function useTimer(durationSeconds: number): UseTimerResult {
     start,
     stop,
     reset,
+    resume,
   }
 }
