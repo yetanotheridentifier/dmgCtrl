@@ -14,14 +14,16 @@ interface Props {
 const COUNTER_H = 'max(4vw, 28px)'
 const COUNTER_H_PX = () => Math.max(window.innerWidth * 0.04, 28)
 
-// Inset from bar edge so counter doesn't butt against the border
-const INSET = '4px'
+// Optical correction: top appears more spacious than bottom at equal values,
+// so OPP (top) uses a smaller raw value to achieve visual parity with YOU (bottom)
+const INSET_TOP = '4px'
+const INSET_BOTTOM = '6px'
 
 const TINY: React.CSSProperties = { ...BAR_LABEL_STYLE, pointerEvents: 'none' }
 
 function counterTop(initiative: Initiative): string {
-  if (initiative === 'opponent') return INSET
-  if (initiative === 'player')   return `calc(100% - ${COUNTER_H} - ${INSET})`
+  if (initiative === 'opponent') return INSET_TOP
+  if (initiative === 'player')   return `calc(100% - ${COUNTER_H} - ${INSET_BOTTOM})`
   // neutral: centred — counter stays here but is invisible
   return `calc(50% - ${COUNTER_H} / 2)`
 }
@@ -97,7 +99,7 @@ function InitiativeToggle({ initiative, onSetOpponent, onSetPlayer, interactive 
       <span style={{
         ...TINY,
         position: 'absolute',
-        top: INSET,
+        top: INSET_TOP,
         left: 0, right: 0,
         height: COUNTER_H,
         display: 'flex',
@@ -134,7 +136,7 @@ function InitiativeToggle({ initiative, onSetOpponent, onSetPlayer, interactive 
       <span style={{
         ...TINY,
         position: 'absolute',
-        bottom: INSET,
+        bottom: INSET_BOTTOM,
         left: 0, right: 0,
         height: COUNTER_H,
         display: 'flex',
