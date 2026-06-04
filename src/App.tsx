@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import SwuLoadingScreen from './components/swuLoadingScreen'
 import GameSelectScreen from './components/gameSelectScreen'
 import SwuSetupScreen from './components/swuSetupScreen'
@@ -11,7 +11,7 @@ import { Base, useBases } from './hooks/useBases'
 import { InitialSelection } from './hooks/useSwuSetup'
 import { useTournament } from './hooks/useTournament'
 import { useUserSettings } from './hooks/useUserSettings'
-import { onAppStart, onGameEnd, onAppInstall, onAppResume, onTournamentRoundCompleted } from './services/analytics'
+import { onAppStart, onAppInstall, onAppResume, onTournamentRoundCompleted } from './services/analytics'
 import type { PlayMode, SetupMode } from './utils/playMode'
 import type { Format } from './utils/formatFilter'
 
@@ -31,8 +31,7 @@ function App() {
   const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament' | 'xwing' | 'settings'>('setup')
   const [settingsDefaultTab, setSettingsDefaultTab] = useState<'general' | 'swu' | 'xwing'>('swu')
   const { loading } = useBases()
-  const { useHyperspace, startScreen } = useUserSettings()
-  const gameStartTime = useRef<number>(0)
+  const { startScreen } = useUserSettings()
   const {
     tournament,
     matchInProgress,
@@ -101,7 +100,6 @@ function App() {
     setLastSelection({ set: base.set, aspect: base.aspects[0] ?? 'None', key: `${base.set}-${base.number}` })
     setIsInGame(true)
     setScreen('game')
-    gameStartTime.current = Date.now()
   }
 
   const handleGoToGame = (playMode: 'bo1' | 'bo3', newBase?: Base) => {
@@ -112,15 +110,9 @@ function App() {
     setSelectedPlayMode(playMode)
     setIsInGame(true)
     setScreen('game')
-    gameStartTime.current = Date.now()
   }
 
   const handleMatchComplete = (result: 'won' | 'lost' | 'drawn', playerScore: number, opponentScore: number) => {
-    const base = selectedBase ?? tournament?.base
-    if (base) {
-      const durationSeconds = Math.round((Date.now() - gameStartTime.current) / 1000)
-      void onGameEnd(`${base.set}-${base.number}`, base.set, useHyperspace, durationSeconds, selectedPlayMode)
-    }
     const roundNumber = (tournament?.rounds.length ?? 0)
     void onTournamentRoundCompleted(roundNumber, result, playerScore, opponentScore, tournament?.format ?? '', selectedPlayMode)
     completeMatch(result, playerScore, opponentScore)
@@ -131,18 +123,9 @@ function App() {
 
   const handleBack = (gamesCompleted = 0) => {
     if (tournament !== null) {
-      const base = selectedBase ?? tournament.base
-      if (base) {
-        const durationSeconds = Math.round((Date.now() - gameStartTime.current) / 1000)
-        void onGameEnd(`${base.set}-${base.number}`, base.set, useHyperspace, durationSeconds, selectedPlayMode)
-      }
       if (matchInProgress) setHasPlayedGameInCurrentMatch(gamesCompleted > 0)
       setScreen('tournament')
       return
-    }
-    if (selectedBase) {
-      const durationSeconds = Math.round((Date.now() - gameStartTime.current) / 1000)
-      void onGameEnd(`${selectedBase.set}-${selectedBase.number}`, selectedBase.set, useHyperspace, durationSeconds, selectedPlayMode)
     }
     setIsInGame(false)
     setScreen('setup')
@@ -235,6 +218,7 @@ function App() {
           <SwuGameScreen
             base={gameBase}
             playMode={selectedPlayMode}
+            format={selectedFormat}
             isInTournament={tournament !== null}
             onBack={handleBack}
             onHelp={handleHelp}

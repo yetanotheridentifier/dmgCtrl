@@ -12,7 +12,7 @@ import { useTimer } from '../hooks/useTimer'
 import { useInitiative } from '../hooks/useInitiative'
 import SwuGameScreenView from './swuGameScreenView'
 import RotatePrompt from './layout/rotatePrompt'
-import { onGameStart, onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed, onEpicActionUsed, onForceGained, onForceUsed, onMatchCompleted } from '../services/analytics'
+import { onGameStart, onGameEnd, onDamageDealt, onDamageHealed, onRoundIncremented, onUndoUsed, onEpicActionUsed, onForceGained, onForceUsed, onMatchCompleted } from '../services/analytics'
 import type { PlayMode } from '../utils/playMode'
 
 interface SwuGameSnapshot {
@@ -24,6 +24,7 @@ interface SwuGameSnapshot {
 interface Props {
   base: Base
   playMode?: PlayMode
+  format?: string
   isInTournament?: boolean
   onBack: (gamesCompleted: number) => void
   onHelp: () => void
@@ -31,7 +32,7 @@ interface Props {
   onMatchComplete?: (result: 'won' | 'lost' | 'drawn', playerScore: number, opponentScore: number) => void
 }
 
-function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBack, onHelp, onSettings, onMatchComplete }: Props) {
+function SwuGameScreen({ base, playMode = 'casual', format = 'premier', isInTournament = false, onBack, onHelp, onSettings, onMatchComplete }: Props) {
   const { forceTokenDisplay, enableEpicActions, enableWakeLock, useHyperspace, enableLongPress, enableActionLog, enableInitiativeBar, bo1TimerMinutes, bo3TimerMinutes } = useUserSettings()
   const match = useMatch(playMode)
   const art = useBaseArt(base, useHyperspace)
@@ -48,6 +49,7 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
   const [epicOverlayDismissed, setEpicOverlayDismissed] = useState(false)
   const [pendingConfirm, setPendingConfirm] = useState<'win' | 'loss' | 'draw' | null>(null)
   const [lastGameResult, setLastGameResult] = useState<'won' | 'lost' | 'drawn' | null>(null)
+  const gameStartTime = useRef<number>(0)
   const pendingConfirmRef = useRef(pendingConfirm)
   useEffect(() => { pendingConfirmRef.current = pendingConfirm }, [pendingConfirm])
 
@@ -157,6 +159,7 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
     log.reset()
     log.add({ type: 'round', message: 'Round 1', color: '#ffffff', snapshot: snap })
     setLastGameResult(null)
+    gameStartTime.current = Date.now()
     void onGameStart(baseKey, baseSet, useHyperspace, playMode)
   }
 
@@ -195,6 +198,8 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
       snapshot: snap,
     })
 
+    const durationSeconds = Math.round((Date.now() - gameStartTime.current) / 1000)
+    void onGameEnd(baseKey, baseSet, useHyperspace, durationSeconds, playMode, format)
     setLastGameResult(outcome === 'win' ? 'won' : outcome === 'loss' ? 'lost' : 'drawn')
     setPendingConfirm(null)
   }
@@ -211,6 +216,10 @@ function SwuGameScreen({ base, playMode = 'casual', isInTournament = false, onBa
   }
 
   const handleReset = () => {
+    if (game.round > 0) {
+      const durationSeconds = Math.round((Date.now() - gameStartTime.current) / 1000)
+      void onGameEnd(baseKey, baseSet, useHyperspace, durationSeconds, playMode, format)
+    }
     if (!isInTournament) {
       game.reset()
       log.reset()

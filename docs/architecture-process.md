@@ -155,7 +155,7 @@ Twenty-seven public functions enqueue events and trigger a flush. All are fire-a
 |---|---|---|
 | `onAppStart()` | `app_started` | `version` (from package.json) |
 | `onGameStart(baseKey, baseSet, hyperspace, playMode)` | `game_started` | `game` (`'swu'`), `baseKey`, `baseSet`, `hyperspace`, `playMode` (`'casual'` \| `'bo1'` \| `'bo3'`) |
-| `onGameEnd(baseKey, baseSet, hyperspace, durationSeconds, playMode)` | `game_ended` | `game` (`'swu'`), `baseKey`, `baseSet`, `hyperspace`, `durationSeconds`, `playMode` |
+| `onGameEnd(baseKey, baseSet, hyperspace, durationSeconds, playMode, format)` | `game_ended` | `game` (`'swu'`), `baseKey`, `baseSet`, `hyperspace`, `durationSeconds`, `playMode`, `format` |
 | `onMatchCompleted(playMode, matchResult, playerScore, opponentScore)` | `match_completed` | `playMode`, `matchResult` (`'won'` \| `'lost'` \| `'drawn'`), `playerScore`, `opponentScore` |
 | `onAppInstall(platform)` | `app_installed` | `platform` (`'ios'` \| `'android'` \| `'other'`) |
 | `onAppResume()` | `app_resumed` | `sessionDurationSoFarSeconds` |
@@ -219,9 +219,7 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 | App mount (`useEffect`) | `onAppStart()` |
 | App mount, standalone mode, `pwa_install_tracked` flag not set | `onAppInstall()` |
 | `visibilitychange` → hidden then visible | `onAppResume()` |
-| User ends a casual game (`handleBack`) | `onGameEnd(baseKey, baseSet, useHyperspace, durationSeconds, 'casual')` |
-| User backs out of a tournament game (`handleBack`) | `onGameEnd(baseKey, baseSet, useHyperspace, durationSeconds, playMode)` |
-| A tournament match is confirmed complete (`handleMatchComplete`) | `onGameEnd(...)` then `onTournamentRoundCompleted(roundNumber, result, playerScore, opponentScore, format, playMode)` |
+| A tournament match is confirmed complete (`handleMatchComplete`) | `onTournamentRoundCompleted(roundNumber, result, playerScore, opponentScore, format, playMode)` |
 
 **SwuSetupScreen (swuSetupScreen.tsx)**
 
@@ -254,6 +252,8 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 | Trigger | Call |
 |---|---|
 | Start button tapped (`handleStartGame`, round 0 → 1) | `onGameStart(baseKey, baseSet, useHyperspace, playMode)` |
+| Result confirmed (`handleConfirmResult`) | `onGameEnd(baseKey, baseSet, useHyperspace, durationSeconds, playMode, format)` — duration from Start tap to result confirmation |
+| Back pressed while game is in progress (`handleReset`, `game.round > 0`) | `onGameEnd(baseKey, baseSet, useHyperspace, durationSeconds, playMode, format)` — covers casual back-out and mid-game abandonment; guard prevents double-fire after a result is already confirmed |
 | `+` tapped or drag-released | `onDamageDealt(baseKey, baseSet, amount)` |
 | `−` tapped or drag-released | `onDamageHealed(baseKey, baseSet, amount)` |
 | Round counter tapped | `onRoundIncremented(baseKey, baseSet, newRound)` |
@@ -290,7 +290,7 @@ The endpoint URL defaults to `https://worker.dmgctrl.app/analytics` and can be o
 |---|---|
 | `navigator.wakeLock.request()` rejects | `onWakeLockFailed(reason)` |
 
-`durationSeconds` is computed as `Math.round((Date.now() - gameStartTime) / 1000)` where `gameStartTime` is a `useRef` in App recorded in `handleConfirm` (casual) and `handleGoToGame` (tournament) when navigating to the game screen — not when the Start button is tapped. `onGameStart` fires from `handleStartGame` in `SwuGameScreen` (when the user taps the round counter for the first time), so there is a small gap between `gameStartTime` and when `onGameStart` fires. `handleBack` fires `onGameEnd` on both paths: for casual/competitive games when `selectedBase` is set, and for tournament games using `selectedBase ?? tournament.base` as the base fallback. `handleBack` does not fire for help or settings back-navigation. `gameBase` in App uses `tournamentCurrentBase ?? selectedBase ?? tournament?.base` so the game screen always gets the correct base after a change-base selection.
+`durationSeconds` for SWU game events is computed in `SwuGameScreen` as `Math.round((Date.now() - gameStartTime.current) / 1000)` where `gameStartTime` is a `useRef` set in `handleStartGame` when the user taps Start. Duration therefore reflects the time spent actually playing (Start tap → result confirmation or back-out), not the time spent on the setup or between-game screens. `handleBack` in App does not fire for help or settings back-navigation. `gameBase` in App uses `tournamentCurrentBase ?? selectedBase ?? tournament?.base` so the game screen always gets the correct base after a change-base selection.
 
 Install detection and resume detection are in separate `useEffect` calls. The install effect runs once on mount, checks standalone mode and the localStorage flag, and fires `onAppInstall` at most once per device. The visibility effect registers a `visibilitychange` listener with a `hasBeenHidden` local flag; the flag starts `false`, is set to `true` when `visibilityState === 'hidden'`, and `onAppResume` only fires when `visibilityState === 'visible'` and `hasBeenHidden` is already `true` — preventing a spurious event on first page load.
 
@@ -336,21 +336,26 @@ All SWU panels filter to SWU game events using `AND (game IS NULL OR game = 'swu
 | Feature adoption | Bar gauge | % of SWU game sessions that used each feature (undo, multi-session) |
 | SWU settings changes | Bar gauge | Change count for SWU-specific settings (`useHyperspace`, `enableEpicActions`, `forceTokenDisplay`, `enableCompetitiveMode`) |
 | Errors per session | Bar gauge | % of SWU sessions that encountered errors (wake lock, image load) |
-| Play mode | Donut | Proportion of SWU game sessions by play mode (casual / bo1 / bo3); colours: green = casual, blue = bo1, purple = bo3 |
-| Tournament format | Donut | Tournaments started by format (premier / limited / eternal / twin-suns); colours: blue / green / orange / red |
+| Play mode | Donut | Proportion of SWU game sessions by play mode (casual / bo1 / bo3); colours: green = casual, blue = bo1, grey = bo3 |
+| Tournament format | Donut | Tournaments started by format (premier / limited / eternal / twin-suns); colours: blue / green / red / grey |
 | Tournament rounds | Bar gauge | Distribution of tournament length (total rounds), split by play mode (bo1 / bo3); labels show "N rounds (bo1/bo3)" |
 | Bo1 game results | Bar gauge | Win / loss / draw outcomes for bo1 matches; colours: green = won, red = lost, yellow = drawn |
 | Bo3 game results | Bar gauge | Win / loss / draw outcomes for bo3 matches (same colour scheme) |
 | Tournament usage over time | Time series | Tournament sessions started per day |
 | Tournament round outcomes | Bar gauge | Cumulative round result distribution across all tournament rounds |
 | Tournament completion vs drop | Bar gauge | How tournaments end: completed (`tournament_ended`) vs dropped (`tournament_dropped`); colours: green = ended, red = dropped |
+| Avg game duration by play mode | Bar gauge | Average SWU game duration in minutes (Start tap to result), split by play mode |
+| Avg game duration by format | Bar gauge | Average SWU game duration in minutes, split by format |
+| Avg game duration by aspect | Bar gauge | Average SWU game duration in minutes, split by base aspect (joined from `base_aspects` measurement) |
 
 Consistent colour palettes are applied across related panels using Grafana `byName` overrides:
-- **Play mode:** casual = `semi-dark-green`, bo1 = `semi-dark-blue`, bo3 = `semi-dark-purple`
-- **Format:** premier = `semi-dark-blue`, limited = `semi-dark-green`, eternal = `semi-dark-orange`, twin-suns = `semi-dark-red`
+- **Play mode:** casual = `semi-dark-green`, bo1 = `semi-dark-blue`, bo3 = `#9e9e9e`
+- **Format:** premier = `semi-dark-blue`, limited = `semi-dark-green`, twin-suns = `semi-dark-red`, eternal = `#9e9e9e`
 - **Results:** won = `semi-dark-green`, lost = `semi-dark-red`, drawn = `semi-dark-yellow`
 - **Tournament end:** `tournament_ended` = `semi-dark-green`, `tournament_dropped` = `semi-dark-red`
-- **Tournament rounds:** `byRegexp` on `.*\(bo1\)` = `semi-dark-blue`, `.*\(bo3\)` = `semi-dark-purple`
+- **Tournament rounds:** `byRegexp` on `.*\(bo1\)` = `semi-dark-blue`, `.*\(bo3\)` = `#9e9e9e`
+- **Aspect (avg duration panel):** Aggression = `semi-dark-red`, Command = `semi-dark-green`, Cunning = `semi-dark-yellow`, Vigilance = `semi-dark-blue`, Villainy = `#636363`; all others (Heroism, None) fall through to default `#9e9e9e`
+- Bar gauge panels use `displayMode: gradient` and `color.mode: continuous-YlBl` as the standard styling; aspect panels use `color.mode: fixed, fixedColor: #9e9e9e` as the default with named overrides per aspect
 
 Feature use is measured via usage events (sessions containing at least one relevant event) rather than settings state — this reflects actual use rather than whether the feature was merely enabled.
 
