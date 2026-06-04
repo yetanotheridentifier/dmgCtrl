@@ -7,9 +7,10 @@ export function useXwingGame() {
   const [playerScore, setPlayerScore] = useState(0)
   const [opponentScore, setOpponentScore] = useState(0)
   const [round, setRound] = useState(1)
+  const [gameEnded, setGameEnded] = useState(false)
 
   const gameOver =
-    playerScore >= 50 || opponentScore >= 50
+    playerScore >= 50 || opponentScore >= 50 || gameEnded
 
   const incrementPlayer = (n: number) => {
     if (gameOver) return
@@ -28,29 +29,32 @@ export function useXwingGame() {
     setOpponentScore(s => Math.max(0, s - n))
   }
   const advanceRound = () => setRound(r => Math.min(12, r + 1))
-  const reset = () => {
-    setPlayerScore(0)
-    setOpponentScore(0)
+  const endGame = () => setGameEnded(true)
+  const reset = (initialPlayerScore = 0, initialOpponentScore = 0) => {
+    setPlayerScore(initialPlayerScore)
+    setOpponentScore(initialOpponentScore)
     setRound(1)
+    setGameEnded(false)
   }
-  const restoreState = (snapshot: { playerScore: number; opponentScore: number; round: number }) => {
+  const restoreState = (snapshot: { playerScore: number; opponentScore: number; round: number; gameEnded?: boolean }) => {
     setPlayerScore(snapshot.playerScore)
     setOpponentScore(snapshot.opponentScore)
     setRound(snapshot.round)
+    setGameEnded(snapshot.gameEnded ?? false)
   }
 
   const result: 'win' | 'loss' | 'draw' | null = !gameOver
     ? null
-    : playerScore >= 50 && opponentScore >= 50
-      ? 'draw'
-      : playerScore >= 50
-        ? 'win'
-        : 'loss'
+    : playerScore > opponentScore
+      ? 'win'
+      : opponentScore > playerScore
+        ? 'loss'
+        : 'draw'
 
   return {
-    playerScore, opponentScore, round, gameOver, result,
+    playerScore, opponentScore, round, gameOver, gameEnded, result,
     incrementPlayer, decrementPlayer,
     incrementOpponent, decrementOpponent,
-    advanceRound, reset, restoreState,
+    advanceRound, endGame, reset, restoreState,
   }
 }

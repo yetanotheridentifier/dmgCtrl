@@ -24,6 +24,7 @@ interface Props {
   onOpponentDeficitDecrement: (n: number) => void
   phase: string
   onPhaseAdvance: () => void
+  enableXwingPhases: boolean
   onStartGame: () => void
   onRoundAdvance: () => void
   playerScore: number
@@ -85,6 +86,7 @@ export default function XwingGameScreenView({
   round,
   phase,
   onPhaseAdvance,
+  enableXwingPhases,
   playerDeficit,
   opponentDeficit,
   onPlayerDeficitIncrement,
@@ -320,7 +322,7 @@ export default function XwingGameScreenView({
             initiative={initiative}
             onSetOpponent={onInitiativeOpponent}
             onSetPlayer={onInitiativePlayer}
-            interactive={!gameStarted || phase === 'Planning'}
+            interactive={!enableXwingPhases || !gameStarted || phase === 'Planning'}
           />
         </div>
       )}
@@ -527,8 +529,8 @@ export default function XwingGameScreenView({
             {/* Spacer — pushes bottom content down */}
             <div style={{ flexGrow: 1 }} />
 
-            {/* Phase button — visible during game, hidden pre-game and at game over */}
-            {gameStarted && !gameOver && (
+            {/* Phase button — visible during game when phases enabled, hidden pre-game and at game over */}
+            {enableXwingPhases && gameStarted && !gameOver && (
               <button
                 data-testid="phase-btn"
                 onClick={onPhaseAdvance}

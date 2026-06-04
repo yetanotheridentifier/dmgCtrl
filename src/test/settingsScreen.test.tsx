@@ -37,6 +37,8 @@ const mockUserSettings = vi.hoisted(() => ({
   setBo3TimerMinutes: vi.fn(),
   xwingTimerMinutes: 75,
   setXwingTimerMinutes: vi.fn(),
+  enableXwingPhases: true,
+  setEnableXwingPhases: vi.fn(),
   meleePlayerGuid: '',
   setMeleePlayerGuid: vi.fn(),
   startScreen: 'gameSelect' as StartScreen,
@@ -83,6 +85,7 @@ beforeEach(() => {
   mockUserSettings.bo1TimerMinutes = 25
   mockUserSettings.bo3TimerMinutes = 55
   mockUserSettings.xwingTimerMinutes = 75
+  mockUserSettings.enableXwingPhases = true
   mockUserSettings.meleePlayerGuid = ''
   mockUserSettings.startScreen = 'gameSelect'
   mockFavourites.favourites = []
@@ -771,6 +774,35 @@ describe('SettingsScreen analytics', () => {
       mockUserSettings.xwingTimerMinutes = 5.5
       render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="xwing" />)
       expect(screen.getByTestId('xwing-timer-stepper')).toHaveTextContent('5:30 (test)')
+    })
+
+  })
+
+  // ── X-Wing phase tracker toggle ───────────────────────────────────────────
+
+  describe('X-Wing phase tracker toggle', () => {
+
+    it('is present in the X-Wing tab', () => {
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="xwing" />)
+      expect(screen.getByRole('checkbox', { name: /phase tracker/i })).toBeInTheDocument()
+    })
+
+    it('is checked when enableXwingPhases is true', () => {
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="xwing" />)
+      expect(screen.getByRole('checkbox', { name: /phase tracker/i })).toBeChecked()
+    })
+
+    it('is unchecked when enableXwingPhases is false', () => {
+      mockUserSettings.enableXwingPhases = false
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="xwing" />)
+      expect(screen.getByRole('checkbox', { name: /phase tracker/i })).not.toBeChecked()
+    })
+
+    it('calls onSettingChanged with enableXwingPhases and new value when toggled', async () => {
+      const user = userEvent.setup()
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="xwing" />)
+      await user.click(screen.getByRole('checkbox', { name: /phase tracker/i }))
+      expect(mockOnSettingChanged).toHaveBeenCalledWith('enableXwingPhases', false)
     })
 
   })

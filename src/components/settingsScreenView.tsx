@@ -120,6 +120,7 @@ interface Props {
   bo1TimerMinutes: number
   bo3TimerMinutes: number
   xwingTimerMinutes: number
+  enableXwingPhases: boolean
   meleePlayerGuid: string
   favourites: FavouriteBase[]
   onUseHyperspaceChange: (v: boolean) => void
@@ -133,6 +134,7 @@ interface Props {
   onBo1TimerChange: (v: number) => void
   onBo3TimerChange: (v: number) => void
   onXwingTimerChange: (v: number) => void
+  onEnableXwingPhasesChange: (v: boolean) => void
   onMeleePlayerGuidChange: (v: string) => void
   startScreen: StartScreen
   onStartScreenChange: (v: StartScreen) => void
@@ -155,6 +157,7 @@ function SettingsScreenView({
   bo1TimerMinutes,
   bo3TimerMinutes,
   xwingTimerMinutes,
+  enableXwingPhases,
   meleePlayerGuid,
   favourites,
   onUseHyperspaceChange,
@@ -168,6 +171,7 @@ function SettingsScreenView({
   onBo1TimerChange,
   onBo3TimerChange,
   onXwingTimerChange,
+  onEnableXwingPhasesChange,
   onMeleePlayerGuidChange,
   startScreen,
   onStartScreenChange,
@@ -592,14 +596,24 @@ function SettingsScreenView({
   // ── X-Wing tab ────────────────────────────────────────────────────────────
 
   const xwingContent = (
-    <TimerStepper
-      label="Game Timer"
-      value={xwingTimerMinutes}
-      values={[5.5, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90]}
-      formatValue={(v) => v === 5.5 ? '5:30 (test)' : `${v} min`}
-      onChange={onXwingTimerChange}
-      testId="xwing-timer-stepper"
-    />
+    <>
+      <TimerStepper
+        label="Game Timer"
+        value={xwingTimerMinutes}
+        values={[5.5, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90]}
+        formatValue={(v) => v === 5.5 ? '5:30 (test)' : `${v} min`}
+        onChange={onXwingTimerChange}
+        testId="xwing-timer-stepper"
+      />
+      <ToggleRow
+        id="toggle-xwing-phases"
+        label="Enable Phase Tracker"
+        subtitle="Shows the current game phase in the centre of the game screen. Tap to advance through Planning, System, Activation, Engagement, and End."
+        checked={enableXwingPhases}
+        onChange={onEnableXwingPhasesChange}
+        vmin={vmin}
+      />
+    </>
   )
 
   // ── Tab content ───────────────────────────────────────────────────────────
