@@ -7,6 +7,7 @@ interface Props {
   initiative: Initiative
   onSetOpponent: () => void
   onSetPlayer: () => void
+  interactive?: boolean
 }
 
 // Counter height — slightly reduced so it clears OPP/YOU labels with breathing room
@@ -25,7 +26,7 @@ function counterTop(initiative: Initiative): string {
   return `calc(50% - ${COUNTER_H} / 2)`
 }
 
-function InitiativeToggle({ initiative, onSetOpponent, onSetPlayer }: Props) {
+function InitiativeToggle({ initiative, onSetOpponent, onSetPlayer, interactive = true }: Props) {
   const active = initiative !== null
   const wrapperRef = useRef<HTMLDivElement>(null)
 
@@ -56,39 +57,41 @@ function InitiativeToggle({ initiative, onSetOpponent, onSetPlayer }: Props) {
   return (
     <div ref={wrapperRef} style={{ position: 'relative', width: '100%', height: '100%' }}>
 
-      {/* OPP tap zone — top half */}
-      <button
-        data-testid="initiative-opp-zone"
-        aria-label="Opponent initiative"
-        onClick={onSetOpponent}
-        style={{
-          position: 'absolute',
-          top: 0, left: 0, right: 0,
-          height: '50%',
-          background: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
-          zIndex: 3,
-          WebkitTapHighlightColor: 'transparent',
-        }}
-      />
-
-      {/* YOU tap zone — bottom half */}
-      <button
-        data-testid="initiative-you-zone"
-        aria-label="Player initiative"
-        onClick={onSetPlayer}
-        style={{
-          position: 'absolute',
-          bottom: 0, left: 0, right: 0,
-          height: '50%',
-          background: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
-          zIndex: 3,
-          WebkitTapHighlightColor: 'transparent',
-        }}
-      />
+      {/* Tap zones — only rendered when interactive (Planning phase or pre-game) */}
+      {interactive && (
+        <>
+          <button
+            data-testid="initiative-opp-zone"
+            aria-label="Opponent initiative"
+            onClick={onSetOpponent}
+            style={{
+              position: 'absolute',
+              top: 0, left: 0, right: 0,
+              height: '50%',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              zIndex: 3,
+              WebkitTapHighlightColor: 'transparent',
+            }}
+          />
+          <button
+            data-testid="initiative-you-zone"
+            aria-label="Player initiative"
+            onClick={onSetPlayer}
+            style={{
+              position: 'absolute',
+              bottom: 0, left: 0, right: 0,
+              height: '50%',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              zIndex: 3,
+              WebkitTapHighlightColor: 'transparent',
+            }}
+          />
+        </>
+      )}
 
       {/* OPP external label — fades out as counter slides over it */}
       <span style={{

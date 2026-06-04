@@ -22,6 +22,8 @@ interface Props {
   onPlayerDeficitDecrement: (n: number) => void
   onOpponentDeficitIncrement: (n: number) => void
   onOpponentDeficitDecrement: (n: number) => void
+  phase: string
+  onPhaseAdvance: () => void
   onStartGame: () => void
   onRoundAdvance: () => void
   playerScore: number
@@ -81,6 +83,8 @@ export default function XwingGameScreenView({
   timerRemaining,
   timerExpired,
   round,
+  phase,
+  onPhaseAdvance,
   playerDeficit,
   opponentDeficit,
   onPlayerDeficitIncrement,
@@ -316,6 +320,7 @@ export default function XwingGameScreenView({
             initiative={initiative}
             onSetOpponent={onInitiativeOpponent}
             onSetPlayer={onInitiativePlayer}
+            interactive={!gameStarted || phase === 'Planning'}
           />
         </div>
       )}
@@ -337,15 +342,15 @@ export default function XwingGameScreenView({
         </>
       )}
 
-      {/* Main content — centred in available area */}
+      {/* Main content — bottom-anchored to align with the initiative bar bottom */}
       <div style={{
         position: 'absolute',
         inset: 0,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'center',
-        padding: '12vw 8vmin 8vmin',
+        justifyContent: 'flex-end',
+        padding: `12vw 8vmin calc(env(safe-area-inset-bottom) + 9vw)`,
         boxSizing: 'border-box',
         touchAction: 'none',
       }}>
@@ -519,8 +524,33 @@ export default function XwingGameScreenView({
               ) : null}
             </div>
 
-            {/* Spacer — pushes bottom content to align with outer column buttons */}
+            {/* Spacer — pushes bottom content down */}
             <div style={{ flexGrow: 1 }} />
+
+            {/* Phase button — visible during game, hidden pre-game and at game over */}
+            {gameStarted && !gameOver && (
+              <button
+                data-testid="phase-btn"
+                onClick={onPhaseAdvance}
+                style={{
+                  height: '14vmin',
+                  minHeight: '36px',
+                  padding: '0 4vmin',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--color-text-muted)',
+                  fontSize: 'clamp(0.8rem, 2.5vmin, 1.4rem)',
+                  fontWeight: '300',
+                  letterSpacing: '0.1em',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                  WebkitTapHighlightColor: 'transparent',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {phase}
+              </button>
+            )}
 
             {/* Start Game — pre-game only */}
             {!gameStarted && (

@@ -6,6 +6,7 @@ import { useGameHistory } from '../hooks/useGameHistory'
 import { useTimer } from '../hooks/useTimer'
 import { useWakeLock } from '../hooks/useWakeLock'
 import { useInitiative } from '../hooks/useInitiative'
+import { usePhaseTracker, XWING_PHASES } from '../hooks/usePhaseTracker'
 import XwingGameScreenView from './xwingGameScreenView'
 import RotatePrompt from './layout/rotatePrompt'
 import { onXwingGameStarted, onXwingGameEnded, onXwingRoundAdvanced } from '../services/analytics'
@@ -15,6 +16,7 @@ interface XwingGameSnapshot {
   opponentScore: number
   round: number
   gameStarted: boolean
+  phaseIndex: number
 }
 
 interface Props {
@@ -37,6 +39,7 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
   const log = useGameHistory<XwingGameSnapshot>()
   const timer = useTimer(xwingTimerMinutes * 60)
   const initiative = useInitiative()
+  const phaseTracker = usePhaseTracker(XWING_PHASES)
   const [logOpen, setLogOpen] = useState(false)
 
   useWakeLock(enableWakeLock)
@@ -48,6 +51,7 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     opponentScore: game.opponentScore,
     round: game.round,
     gameStarted,
+    phaseIndex: phaseTracker.phaseIndex,
   })
 
   useEffect(() => {
@@ -74,7 +78,17 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     log.add({ type: 'round', message: `Round ${fromRound + 1}`, color: '#ffffff', snapshot: snapshot() })
     game.advanceRound()
     initiative.reset()
+    phaseTracker.reset()
     void onXwingRoundAdvanced(fromRound, Math.min(12, fromRound + 1))
+  }
+
+  const handlePhaseAdvance = () => {
+    if (phaseTracker.isLastPhase) {
+      handleRoundAdvance()
+      phaseTracker.reset()
+    } else {
+      phaseTracker.advance()
+    }
   }
 
   const handleStartGame = () => {
@@ -82,6 +96,7 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     setLogOpen(false)
     log.add({ type: 'round', message: 'Round 1', color: '#ffffff', snapshot: snapshot() })
     game.reset()
+    phaseTracker.reset()
     setGameStarted(true)
     gameStartedRef.current = true
     timer.start()
@@ -115,6 +130,7 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     if (!entry) return
     game.restoreState(entry.snapshot)
     setGameStarted(entry.snapshot.gameStarted)
+    phaseTracker.restore(entry.snapshot.phaseIndex)
     if (!entry.snapshot.gameStarted) {
       timer.reset()
     }
@@ -145,6 +161,8 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     <XwingGameScreenView
       gameStarted={gameStarted}
       gameOver={game.gameOver}
+      phase={phaseTracker.phase}
+      onPhaseAdvance={handlePhaseAdvance}
       timerRemaining={timer.remaining}
       timerExpired={timer.isExpired}
       round={game.round}

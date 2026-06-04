@@ -960,4 +960,158 @@ describe('XwingGameScreen initiative', () => {
     expect(screen.queryByTestId('initiative-indicator')).not.toBeInTheDocument()
   })
 
+  it('initiative tap zones are present in the Planning phase', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    // phase is Planning after Start Game
+    expect(screen.getByTestId('initiative-opp-zone')).toBeInTheDocument()
+    expect(screen.getByTestId('initiative-you-zone')).toBeInTheDocument()
+  })
+
+  it('initiative tap zones are absent once past the Planning phase', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('phase-btn')) // Planning → System
+    expect(screen.queryByTestId('initiative-opp-zone')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('initiative-you-zone')).not.toBeInTheDocument()
+  })
+
+  it('initiative set in Planning is preserved when phase advances to System', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('initiative-opp-zone'))
+    await user.click(screen.getByTestId('phase-btn')) // Planning → System
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'opponent')
+  })
+
+  it('initiative can be updated again in the next Planning phase', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByTestId('initiative-opp-zone')) // set to opponent
+    // advance to next round via phase button (Planning → ... → End → advance round)
+    for (let i = 0; i < 5; i++) await user.click(screen.getByTestId('phase-btn'))
+    // now in Planning of round 2; initiative was reset by round advance
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'none')
+    // can now set initiative
+    await user.click(screen.getByTestId('initiative-you-zone'))
+    expect(screen.getByTestId('initiative-indicator')).toHaveAttribute('data-position', 'player')
+  })
+
+})
+
+// ---------------------------------------------------------------------------
+// Phase tracker
+// ---------------------------------------------------------------------------
+
+describe('XwingGameScreen phase tracker', () => {
+
+  it('phase button is not shown before game starts', () => {
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('phase-btn')).not.toBeInTheDocument()
+  })
+
+  it('phase button shows Planning after Start Game', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.getByTestId('phase-btn')).toHaveTextContent('Planning')
+  })
+
+  it('tapping cycles through all five phases in order', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    const btn = screen.getByTestId('phase-btn')
+    expect(btn).toHaveTextContent('Planning')
+    await user.click(btn)
+    expect(btn).toHaveTextContent('System')
+    await user.click(btn)
+    expect(btn).toHaveTextContent('Activation')
+    await user.click(btn)
+    expect(btn).toHaveTextContent('Engagement')
+    await user.click(btn)
+    expect(btn).toHaveTextContent('End')
+  })
+
+  it('tapping End advances the round and resets to Planning', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    const btn = screen.getByTestId('phase-btn')
+    // advance to End
+    for (let i = 0; i < 4; i++) await user.click(btn)
+    expect(btn).toHaveTextContent('End')
+    // tap End
+    await user.click(btn)
+    expect(btn).toHaveTextContent('Planning')
+    expect(screen.getByRole('button', { name: 'Round 2' }).style.borderColor).toBe('var(--color-accent)')
+  })
+
+  it('tapping End when timer has expired resets to Planning but does not advance the round', async () => {
+    mockTimerState.isExpired = true
+    mockTimerState.remaining = 0
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    const btn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(btn)
+    await user.click(btn)
+    expect(btn).toHaveTextContent('Planning')
+    // round should still be 1: Round 1 is current (error color), Round 2 is not current
+    expect(screen.getByRole('button', { name: 'Round 1' }).style.borderColor).toBe('var(--color-error)')
+    expect(screen.getByRole('button', { name: 'Round 2' }).style.borderColor).not.toBe('var(--color-error)')
+  })
+
+  it('advancing round via round tracker resets phase to Planning', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    const btn = screen.getByTestId('phase-btn')
+    await user.click(btn)
+    await user.click(btn)
+    expect(btn).toHaveTextContent('Activation')
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    expect(btn).toHaveTextContent('Planning')
+  })
+
+  it('phase button is not shown at game over', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    // drive player score to 50 to trigger game over
+    for (let i = 0; i < 50; i++) await user.click(screen.getByTestId('player-increment'))
+    expect(screen.queryByTestId('phase-btn')).not.toBeInTheDocument()
+  })
+
+  it('undo after End-tap restores phase to End', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    const btn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(btn)
+    await user.click(btn) // End → advance round → Planning
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(btn).toHaveTextContent('End')
+  })
+
+  it('undo after round-tracker advance restores phase to what it was before', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    const btn = screen.getByTestId('phase-btn')
+    await user.click(btn)
+    await user.click(btn)
+    expect(btn).toHaveTextContent('Activation')
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    expect(btn).toHaveTextContent('Planning')
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(btn).toHaveTextContent('Activation')
+  })
+
 })
