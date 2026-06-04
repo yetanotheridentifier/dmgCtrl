@@ -31,7 +31,7 @@ function App() {
   const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament' | 'xwing' | 'settings'>('setup')
   const [settingsDefaultTab, setSettingsDefaultTab] = useState<'general' | 'swu' | 'xwing'>('swu')
   const { loading } = useBases()
-  const { useHyperspace, startScreen } = useUserSettings()
+  const { startScreen } = useUserSettings()
   const {
     tournament,
     matchInProgress,
