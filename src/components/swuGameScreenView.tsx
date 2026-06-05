@@ -9,6 +9,7 @@ import { BackIcon, CogIcon, HelpIcon, LogIcon } from './icons'
 import TimerDisplay from './shared/timerDisplay'
 import { NAV_BTN_STYLE } from '../styles/navButton'
 import { BAR_CONTAINER_STYLE, BAR_LABEL_STYLE } from '../styles/barContainer'
+import { START_TEXT_STYLE } from '../styles/startText'
 import type { Initiative } from '../hooks/useInitiative'
 
 // Game screen nav buttons are absolutely positioned with a z-index to stay above card art.
@@ -615,10 +616,8 @@ function SwuGameScreenView({
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  ...START_TEXT_STYLE,
                   fontSize: gameStarted ? '20vmin' : '8vmin',
-                  fontWeight: '300',
-                  color: 'var(--color-text-primary)',
-                  textShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.4), 0 0 8px rgba(0,0,0,1)',
                   cursor: gameStarted ? 'default' : 'pointer',
                   letterSpacing: gameStarted ? undefined : '0.05em',
                 }}

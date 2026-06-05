@@ -2,6 +2,7 @@ import setupHelpHtml from '../../docs/swuSetupHelp.md'
 import gameHelpHtml from '../../docs/swuGameHelp.md'
 import tournamentHelpHtml from '../../docs/swuTournamentHelp.md'
 import xwingHelpHtml from '../../docs/xwingGameHelp.md'
+import xwingSetupHelpHtml from '../../docs/xwingSetupHelp.md'
 import settingsHelpHtml from '../../docs/settingsHelp.md'
 import AppScreenLayout from './layout/appScreenLayout'
 import { useOrientation } from '../hooks/useOrientation'
@@ -11,11 +12,16 @@ import { NAV_BTN_STYLE } from '../styles/navButton'
 
 interface Props {
   onBack: () => void
-  source?: 'setup' | 'game' | 'tournament' | 'xwing' | 'settings'
+  source?: 'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'settings'
 }
 
 function HelpScreen({ onBack, source = 'setup' }: Props) {
-  const rawHtml = source === 'game' ? gameHelpHtml : source === 'tournament' ? tournamentHelpHtml : source === 'xwing' ? xwingHelpHtml : source === 'settings' ? settingsHelpHtml : setupHelpHtml
+  const rawHtml = source === 'game' ? gameHelpHtml
+    : source === 'tournament' ? tournamentHelpHtml
+    : source === 'xwing' ? xwingHelpHtml
+    : source === 'xwingSetup' ? xwingSetupHelpHtml
+    : source === 'settings' ? settingsHelpHtml
+    : setupHelpHtml
   const contentHtml = rawHtml.replace(/^<h1[^>]*>[\s\S]*?<\/h1>\n?/, '')
   const { isPortrait, vmin } = useOrientation()
   const baseFontSize = `${Math.min(Math.max(14, Math.round(vmin * 0.04)), 18)}px`

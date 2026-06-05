@@ -4,6 +4,7 @@ import GameSelectScreen from './components/gameSelectScreen'
 import SwuSetupScreen from './components/swuSetupScreen'
 import SwuGameScreen from './components/swuGameScreen'
 import XwingGameScreen from './components/xwingGameScreen'
+import XwingSetupScreen from './components/xwingSetupScreen'
 import SwuTournamentScreen from './components/swuTournamentScreen'
 import HelpScreen from './components/helpScreen'
 import SettingsScreen from './components/settingsScreen'
@@ -15,7 +16,7 @@ import { onAppStart, onAppInstall, onAppResume, onTournamentRoundCompleted } fro
 import type { PlayMode, SetupMode } from './utils/playMode'
 import type { Format } from './utils/formatFilter'
 
-type Screen = 'loading' | 'gameSelect' | 'xwing' | 'setup' | 'game' | 'tournament' | 'help' | 'settings'
+type Screen = 'loading' | 'gameSelect' | 'xwingSetup' | 'xwing' | 'setup' | 'game' | 'tournament' | 'help' | 'settings'
 
 function App() {
   const [screen, setScreen] = useState<Screen>('loading')
@@ -26,9 +27,11 @@ function App() {
   const [lastSelection, setLastSelection] = useState<InitialSelection | null>(null)
   const [isInGame, setIsInGame] = useState(false)
   const [isInXwing, setIsInXwing] = useState(false)
+  const [xwingPlayerDeficit, setXwingPlayerDeficit] = useState(0)
+  const [xwingOpponentDeficit, setXwingOpponentDeficit] = useState(0)
   const [tournamentCurrentBase, setTournamentCurrentBase] = useState<Base | null>(null)
   const [hasPlayedGameInCurrentMatch, setHasPlayedGameInCurrentMatch] = useState(false)
-  const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament' | 'xwing' | 'settings'>('setup')
+  const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'settings'>('setup')
   const [settingsDefaultTab, setSettingsDefaultTab] = useState<'general' | 'swu' | 'xwing'>('swu')
   const { loading } = useBases()
   const { startScreen } = useUserSettings()
@@ -79,8 +82,7 @@ function App() {
       return
     }
     if (startScreen === 'xwing') {
-      setIsInXwing(true)
-      setScreen('xwing')
+      setScreen('xwingSetup')
     } else if (startScreen === 'swu') {
       setScreen('setup')
     } else {
@@ -139,10 +141,11 @@ function App() {
   }
 
   const handleHelp = () => {
-    const source: 'setup' | 'game' | 'tournament' | 'xwing' | 'settings' =
+    const source: 'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'settings' =
       screen === 'game' ? 'game' :
       screen === 'tournament' ? 'tournament' :
       screen === 'xwing' ? 'xwing' :
+      screen === 'xwingSetup' ? 'xwingSetup' :
       screen === 'settings' ? 'settings' :
       'setup'
     setHelpSource(source)
@@ -153,16 +156,23 @@ function App() {
   const handleSettings = () => {
     const tab: 'general' | 'swu' | 'xwing' =
       screen === 'gameSelect' ? 'general' :
-      screen === 'xwing' ? 'xwing' :
+      screen === 'xwing' || screen === 'xwingSetup' ? 'xwing' :
       'swu'
     setSettingsDefaultTab(tab)
     setBackStack(prev => [...prev, screen])
     setScreen('settings')
   }
 
+  const handleXwingStart = (playerDeficit: number, opponentDeficit: number) => {
+    setXwingPlayerDeficit(playerDeficit)
+    setXwingOpponentDeficit(opponentDeficit)
+    setIsInXwing(true)
+    setScreen('xwing')
+  }
+
   const handleXwingBack = () => {
     setIsInXwing(false)
-    setScreen('gameSelect')
+    setScreen('xwingSetup')
   }
 
   const handleOverlayBack = () => {
@@ -179,7 +189,18 @@ function App() {
     return (
       <GameSelectScreen
         onSelectSwu={() => setScreen('setup')}
-        onSelectXwing={() => { setIsInXwing(true); setScreen('xwing') }}
+        onSelectXwing={() => setScreen('xwingSetup')}
+        onSettings={handleSettings}
+      />
+    )
+  }
+
+  if (screen === 'xwingSetup') {
+    return (
+      <XwingSetupScreen
+        onStart={handleXwingStart}
+        onBack={() => setScreen('gameSelect')}
+        onHelp={handleHelp}
         onSettings={handleSettings}
       />
     )
@@ -210,6 +231,8 @@ function App() {
             onBack={handleXwingBack}
             onHelp={handleHelp}
             onSettings={handleSettings}
+            playerDeficit={xwingPlayerDeficit}
+            opponentDeficit={xwingOpponentDeficit}
           />
         </div>
       )}

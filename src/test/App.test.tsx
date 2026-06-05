@@ -868,10 +868,10 @@ describe('App game select', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars unlimited/i })).toBeInTheDocument())
   })
 
-  it('transitions to xwing screen after loading when startScreen is xwing', async () => {
+  it('transitions to xwing setup screen after loading when startScreen is xwing', async () => {
     mockUserSettings.startScreen = 'xwing'
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('start-game-btn')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('ruleset-select')).toBeInTheDocument())
   })
 
   it('navigates to setup screen when Star Wars Unlimited is clicked on game select', async () => {
@@ -884,33 +884,57 @@ describe('App game select', () => {
     expect(getBaseSelectors()).toHaveLength(3)
   })
 
-  it('navigates to xwing screen when X-Wing is clicked on game select', async () => {
+  it('navigates to xwing setup screen when X-Wing is clicked on game select', async () => {
     const user = userEvent.setup()
     mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
-    await waitFor(() => expect(screen.getByTestId('start-game-btn')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('ruleset-select')).toBeInTheDocument())
   })
 
-  it('back from xwing returns to game select when startScreen is gameSelect', async () => {
+  it('back from xwing setup returns to game select when startScreen is gameSelect', async () => {
     const user = userEvent.setup()
     mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
-    await waitFor(() => expect(screen.getByTestId('start-game-btn')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('ruleset-select')).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /back/i }))
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
   })
 
-  it('back from xwing returns to game select when startScreen is xwing', async () => {
+  it('back from xwing setup returns to game select when startScreen is xwing', async () => {
     const user = userEvent.setup()
     mockUserSettings.startScreen = 'xwing'
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('start-game-btn')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('ruleset-select')).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /back/i }))
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
+  })
+
+  it('clicking Start Game on xwing setup navigates to xwing game screen', async () => {
+    const user = userEvent.setup()
+    mockUserSettings.startScreen = 'gameSelect'
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
+    await waitFor(() => expect(screen.getByTestId('ruleset-select')).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /start game/i }))
+    await waitFor(() => expect(screen.getByTestId('start-game-btn')).toBeInTheDocument())
+  })
+
+  it('back from xwing game returns to xwing setup screen', async () => {
+    const user = userEvent.setup()
+    mockUserSettings.startScreen = 'gameSelect'
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /star wars x-wing/i })).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
+    await waitFor(() => expect(screen.getByTestId('ruleset-select')).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /start game/i }))
+    await waitFor(() => expect(screen.getByTestId('start-game-btn')).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /back/i }))
+    await waitFor(() => expect(screen.getByTestId('ruleset-select')).toBeInTheDocument())
   })
 
   it('back from setup returns to game select when startScreen is swu', async () => {
@@ -921,7 +945,7 @@ describe('App game select', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /star wars unlimited/i })).toBeInTheDocument())
   })
 
-  it('clicking help on xwing screen shows xwing help content', async () => {
+  it('clicking help on xwing setup screen shows xwing setup help content', async () => {
     const user = userEvent.setup()
     mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
@@ -929,10 +953,10 @@ describe('App game select', () => {
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
     await waitFor(() => expect(screen.getByRole('button', { name: /help/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /help/i }))
-    await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Mission Points' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Ruleset' })).toBeInTheDocument())
   })
 
-  it('back from xwing help returns to xwing screen', async () => {
+  it('back from xwing setup help returns to xwing setup screen', async () => {
     const user = userEvent.setup()
     mockUserSettings.startScreen = 'gameSelect'
     render(<App />)
@@ -940,9 +964,9 @@ describe('App game select', () => {
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
     await waitFor(() => expect(screen.getByRole('button', { name: /help/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /help/i }))
-    await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Mission Points' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Ruleset' })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /back/i }))
-    await waitFor(() => expect(screen.getByTestId('start-game-btn')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('ruleset-select')).toBeInTheDocument())
   })
 
   // ── Settings tab defaults per source screen ───────────────────────────────

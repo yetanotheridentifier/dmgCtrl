@@ -27,7 +27,7 @@ const btnStyle = (disabled: boolean): React.CSSProperties => ({
 })
 
 const valueStyle: React.CSSProperties = {
-  flex: 1,
+  minWidth: '2.5em',
   textAlign: 'center',
   fontSize: '0.95em',
   color: 'var(--color-text-muted)',

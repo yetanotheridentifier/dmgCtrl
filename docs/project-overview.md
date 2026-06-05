@@ -9,7 +9,8 @@ A Progressive Web App for tracking game state in tabletop games, supporting Star
 ## Roadmap
 
 ### X-Wing (in progress)
-- ✅ Game screen — pre-game deficit entry (0–4 per side); each player starts with points equal to the opponent's deficit (per X-Wing rules); dual score counters (0–50); drag scrubber on all buttons; result banner at game over
+- ✅ Setup screen — Match (Casual/Tournament) with Rounds stepper (2–10); Ruleset dropdown (XWA active; Legacy/AMG/2.0/1.0 greyed out); List Import dropdown (None active; YASB/Text greyed out); Your Deficit + Opp's Deficit steppers (0–4 each) when Import = None; settings persisted to localStorage except deficits (session-only); portrait + landscape layouts matching SWU style
+- ✅ Game screen — receives deficit values as props from setup screen; each player starts with points equal to the opponent's deficit (per X-Wing rules); dual score counters (0–50); drag scrubber on all buttons; result banner at game over
 - ✅ Timer — configurable countdown (default 75 min, 5:30–90 min via Settings); starts with the game; runs until game over (does not stop at round 12); displayed in centre column
 - ✅ Round tracker — continuous bar spanning the top of the screen; 12 segments; current round extends downward as a seamless tab; colour follows the timer (accent → warning → error)
 - ✅ Phase tracker — optional button in the centre column; cycles Planning → System → Activation → Engagement → End; End advances the round or ends the game at round 12 / timer expiry; initiative locked during non-Planning phases; gated by Settings toggle (on by default)

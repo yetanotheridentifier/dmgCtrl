@@ -1,6 +1,6 @@
 # dmgCtrl
 
-A mobile-first progressive web app for tracking game state in tabletop games, starting with Star Wars: Unlimited.
+A mobile-first progressive web app for tracking game state in tabletop games, supporting Star Wars: Unlimited and Star Wars X-Wing.
 
 **Live app:** https://yetanotheridentifier.github.io/dmgCtrl/
 
@@ -67,8 +67,12 @@ git push
 | [docs/architecture-implementation.md](docs/architecture-implementation.md) | Folder structure, state management, data layer, UI system, feature details, performance |
 | [docs/architecture-process.md](docs/architecture-process.md) | Workflow, CI/CD, analytics, testing strategy, future improvements |
 | [docs/project-overview.md](docs/project-overview.md) | Product vision, planned features, known issues, notes for AI assistants |
-| [docs/swuSetupHelp.md](docs/swuSetupHelp.md) | Setup screen help (shown via the ? button on the setup screen) |
-| [docs/swuGameHelp.md](docs/swuGameHelp.md) | Game screen help (shown via the ? button on the game screen) |
+| [docs/swuSetupHelp.md](docs/swuSetupHelp.md) | SWU setup screen help (shown via the ? button on the setup screen) |
+| [docs/swuGameHelp.md](docs/swuGameHelp.md) | SWU game screen help (shown via the ? button on the game screen) |
+| [docs/swuTournamentHelp.md](docs/swuTournamentHelp.md) | SWU tournament screen help (shown via the ? button on the tournament screen) |
+| [docs/xwingSetupHelp.md](docs/xwingSetupHelp.md) | X-Wing setup screen help (shown via the ? button on the X-Wing setup screen) |
+| [docs/xwingGameHelp.md](docs/xwingGameHelp.md) | X-Wing game screen help (shown via the ? button on the X-Wing game screen) |
+| [docs/settingsHelp.md](docs/settingsHelp.md) | Settings screen help (shown via the ? button on the settings screen) |
 
 ---
 
