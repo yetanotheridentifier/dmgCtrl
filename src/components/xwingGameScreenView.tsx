@@ -6,6 +6,7 @@ import GameLogOverlay from './gameLogOverlay'
 import InitiativeToggle from './initiativeToggle'
 import { NAV_BTN_STYLE } from '../styles/navButton'
 import { BAR_CONTAINER_STYLE } from '../styles/barContainer'
+import { START_TEXT_STYLE } from '../styles/startText'
 import type { HistoryEntry } from '../hooks/useGameHistory'
 import type { Initiative } from '../hooks/useInitiative'
 
@@ -16,12 +17,6 @@ interface Props {
   timerRemaining: number
   timerExpired: boolean
   round: number
-  playerDeficit: number
-  opponentDeficit: number
-  onPlayerDeficitIncrement: (n: number) => void
-  onPlayerDeficitDecrement: (n: number) => void
-  onOpponentDeficitIncrement: (n: number) => void
-  onOpponentDeficitDecrement: (n: number) => void
   phase: string
   onPhaseAdvance: () => void
   enableXwingPhases: boolean
@@ -29,6 +24,8 @@ interface Props {
   onRoundAdvance: () => void
   playerScore: number
   opponentScore: number
+  playerDeficit: number
+  opponentDeficit: number
   onPlayerIncrement: (n: number) => void
   onPlayerDecrement: (n: number) => void
   onOpponentIncrement: (n: number) => void
@@ -87,16 +84,12 @@ export default function XwingGameScreenView({
   phase,
   onPhaseAdvance,
   enableXwingPhases,
-  playerDeficit,
-  opponentDeficit,
-  onPlayerDeficitIncrement,
-  onPlayerDeficitDecrement,
-  onOpponentDeficitIncrement,
-  onOpponentDeficitDecrement,
   onStartGame,
   onRoundAdvance,
   playerScore,
   opponentScore,
+  playerDeficit,
+  opponentDeficit,
   onPlayerIncrement,
   onPlayerDecrement,
   onOpponentIncrement,
@@ -132,28 +125,9 @@ export default function XwingGameScreenView({
     enableLongPress && gameStarted && !gameOver,
   )
 
-  // Deficit scrubbers — active pre-game
-  const playerDeficitScrubber = useDragScrubber(
-    onPlayerDeficitIncrement,
-    onPlayerDeficitDecrement,
-    4 - playerDeficit,
-    playerDeficit,
-    enableLongPress && !gameStarted,
-  )
-
-  const opponentDeficitScrubber = useDragScrubber(
-    onOpponentDeficitIncrement,
-    onOpponentDeficitDecrement,
-    4 - opponentDeficit,
-    opponentDeficit,
-    enableLongPress && !gameStarted,
-  )
-
   const dragIndicator =
     playerScrubber.dragIndicator ??
-    opponentScrubber.dragIndicator ??
-    playerDeficitScrubber.dragIndicator ??
-    opponentDeficitScrubber.dragIndicator
+    opponentScrubber.dragIndicator
 
   return (
     <AppScreenLayout>
@@ -388,12 +362,12 @@ export default function XwingGameScreenView({
               textTransform: 'uppercase',
               marginBottom: '2vmin',
             }}>
-              {gameStarted ? 'You' : 'Your deficit'}
+              You
             </div>
 
-            {/* Score / deficit number — sits near top of flex space */}
+            {/* Score number — pre-game shows opponent's deficit (their starting score) */}
             <div
-              data-testid={gameStarted ? 'player-score' : 'player-deficit-value'}
+              data-testid="player-score"
               style={{
                 fontSize: '15vmin',
                 fontWeight: '300',
@@ -404,16 +378,16 @@ export default function XwingGameScreenView({
                 textAlign: 'center',
               }}
             >
-              {gameStarted ? playerScore : playerDeficit}
+              {gameStarted ? playerScore : opponentDeficit}
             </div>
 
-            {/* Spacer — pushes buttons to the bottom */}
-            <div style={{ flexGrow: 1, minHeight: '4vmin' }} />
+            {/* Spacer — pushes button slot to the bottom */}
+            <div style={{ flexGrow: 1 }} />
 
-            {/* Buttons — [−] [+] */}
-            <div style={{ display: 'flex', flexDirection: 'row', gap: '2vmin' }}>
-              {gameStarted ? (
-                <>
+            {/* Fixed-height button slot — always present to prevent layout jump */}
+            <div style={{ height: '14vmin', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {gameStarted && (
+                <div style={{ display: 'flex', flexDirection: 'row', gap: '2vmin' }}>
                   <button
                     data-testid="player-decrement"
                     onClick={playerScrubber.handleClick('-')}
@@ -438,32 +412,7 @@ export default function XwingGameScreenView({
                   >
                     +
                   </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    data-testid="player-deficit-decrement"
-                    onClick={playerDeficitScrubber.handleClick('-')}
-                    onPointerDown={playerDeficitScrubber.handlePointerDown('-')}
-                    onPointerMove={playerDeficitScrubber.handlePointerMove}
-                    onPointerUp={playerDeficitScrubber.handlePointerUp}
-                    onPointerCancel={playerDeficitScrubber.handlePointerCancel}
-                    style={COUNTER_BTN(false)}
-                  >
-                    −
-                  </button>
-                  <button
-                    data-testid="player-deficit-increment"
-                    onClick={playerDeficitScrubber.handleClick('+')}
-                    onPointerDown={playerDeficitScrubber.handlePointerDown('+')}
-                    onPointerMove={playerDeficitScrubber.handlePointerMove}
-                    onPointerUp={playerDeficitScrubber.handlePointerUp}
-                    onPointerCancel={playerDeficitScrubber.handlePointerCancel}
-                    style={COUNTER_BTN(false)}
-                  >
-                    +
-                  </button>
-                </>
+                </div>
               )}
             </div>
           </div>
@@ -488,7 +437,7 @@ export default function XwingGameScreenView({
             </div>
 
             {/* Score-height area — result banner at game over; timer during
-                game (ticket #228); empty pre-game. Height matches score font
+                game; Start Game text pre-game. Height matches score font
                 so content is vertically centred relative to the score numbers. */}
             <div style={{
               height: '15vmin',
@@ -523,62 +472,51 @@ export default function XwingGameScreenView({
                     lineHeight: 1,
                   }}
                 />
-              ) : null}
+              ) : (
+                <div
+                  data-testid="start-game-btn"
+                  onClick={onStartGame}
+                  style={{
+                    ...START_TEXT_STYLE,
+                    fontSize: '8vmin',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Start Game
+                </div>
+              )}
             </div>
 
-            {/* Spacer — pushes bottom content down */}
+            {/* Spacer — pushes button slot to the bottom */}
             <div style={{ flexGrow: 1 }} />
 
-            {/* Phase button — visible during game when phases enabled, hidden pre-game and at game over */}
-            {enableXwingPhases && gameStarted && !gameOver && (
-              <button
-                data-testid="phase-btn"
-                onClick={onPhaseAdvance}
-                style={{
-                  height: '14vmin',
-                  minHeight: '36px',
-                  padding: '0 4vmin',
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--color-text-muted)',
-                  fontSize: 'clamp(0.8rem, 2.5vmin, 1.4rem)',
-                  fontWeight: '300',
-                  letterSpacing: '0.1em',
-                  textTransform: 'uppercase',
-                  cursor: 'pointer',
-                  WebkitTapHighlightColor: 'transparent',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {phase}
-              </button>
-            )}
+            {/* Fixed-height button slot — always present to prevent layout jump */}
+            <div style={{ height: '14vmin', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {enableXwingPhases && gameStarted && !gameOver && (
+                <button
+                  data-testid="phase-btn"
+                  onClick={onPhaseAdvance}
+                  style={{
+                    height: '14vmin',
+                    minHeight: '36px',
+                    padding: '0 4vmin',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--color-text-muted)',
+                    fontSize: 'clamp(0.8rem, 2.5vmin, 1.4rem)',
+                    fontWeight: '300',
+                    letterSpacing: '0.1em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    WebkitTapHighlightColor: 'transparent',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {phase}
+                </button>
+              )}
+            </div>
 
-            {/* Start Game — pre-game only */}
-            {!gameStarted && (
-              <button
-                data-testid="start-game-btn"
-                onClick={onStartGame}
-                style={{
-                  height: '14vmin',
-                  minHeight: '36px',
-                  padding: '0 4vmin',
-                  background: 'transparent',
-                  border: '2px solid var(--color-accent)',
-                  borderRadius: '8px',
-                  color: 'var(--color-accent)',
-                  fontSize: 'clamp(0.8rem, 2.2vmin, 1.2rem)',
-                  fontWeight: '300',
-                  letterSpacing: '0.08em',
-                  cursor: 'pointer',
-                  WebkitTapHighlightColor: 'transparent',
-                  boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Start Game
-              </button>
-            )}
           </div>
 
           {/* ── Opponent column ── */}
@@ -597,12 +535,12 @@ export default function XwingGameScreenView({
               textTransform: 'uppercase',
               marginBottom: '2vmin',
             }}>
-              {gameStarted ? 'Opp' : "Opp's deficit"}
+              Opp
             </div>
 
-            {/* Score / deficit number — sits near top of flex space */}
+            {/* Score number — pre-game shows player's deficit (opponent's starting score) */}
             <div
-              data-testid={gameStarted ? 'opponent-score' : 'opponent-deficit-value'}
+              data-testid="opponent-score"
               style={{
                 fontSize: '15vmin',
                 fontWeight: '300',
@@ -613,16 +551,16 @@ export default function XwingGameScreenView({
                 textAlign: 'center',
               }}
             >
-              {gameStarted ? opponentScore : opponentDeficit}
+              {gameStarted ? opponentScore : playerDeficit}
             </div>
 
-            {/* Spacer — pushes buttons to the bottom */}
-            <div style={{ flexGrow: 1, minHeight: '4vmin' }} />
+            {/* Spacer — pushes button slot to the bottom */}
+            <div style={{ flexGrow: 1 }} />
 
-            {/* Buttons — [−] [+] */}
-            <div style={{ display: 'flex', flexDirection: 'row', gap: '2vmin' }}>
-              {gameStarted ? (
-                <>
+            {/* Fixed-height button slot — always present to prevent layout jump */}
+            <div style={{ height: '14vmin', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {gameStarted && (
+                <div style={{ display: 'flex', flexDirection: 'row', gap: '2vmin' }}>
                   <button
                     data-testid="opponent-decrement"
                     onClick={opponentScrubber.handleClick('-')}
@@ -647,32 +585,7 @@ export default function XwingGameScreenView({
                   >
                     +
                   </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    data-testid="opponent-deficit-decrement"
-                    onClick={opponentDeficitScrubber.handleClick('-')}
-                    onPointerDown={opponentDeficitScrubber.handlePointerDown('-')}
-                    onPointerMove={opponentDeficitScrubber.handlePointerMove}
-                    onPointerUp={opponentDeficitScrubber.handlePointerUp}
-                    onPointerCancel={opponentDeficitScrubber.handlePointerCancel}
-                    style={COUNTER_BTN(false)}
-                  >
-                    −
-                  </button>
-                  <button
-                    data-testid="opponent-deficit-increment"
-                    onClick={opponentDeficitScrubber.handleClick('+')}
-                    onPointerDown={opponentDeficitScrubber.handlePointerDown('+')}
-                    onPointerMove={opponentDeficitScrubber.handlePointerMove}
-                    onPointerUp={opponentDeficitScrubber.handlePointerUp}
-                    onPointerCancel={opponentDeficitScrubber.handlePointerCancel}
-                    style={COUNTER_BTN(false)}
-                  >
-                    +
-                  </button>
-                </>
+                </div>
               )}
             </div>
           </div>

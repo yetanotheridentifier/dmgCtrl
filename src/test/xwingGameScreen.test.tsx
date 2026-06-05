@@ -85,60 +85,24 @@ describe('XwingGameScreen portrait', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Pre-game (deficit entry)
+// Pre-game
 // ---------------------------------------------------------------------------
 
 describe('XwingGameScreen pre-game', () => {
 
-  it('shows Your deficit label before game starts', () => {
-    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    expect(screen.getByText(/your deficit/i)).toBeInTheDocument()
-  })
-
-  it("shows Opp's deficit label before game starts", () => {
-    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    expect(screen.getByText(/opp's deficit/i)).toBeInTheDocument()
-  })
-
-  it('shows Start Game button before game starts', () => {
+  it('shows Start Game element before game starts', () => {
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByTestId('start-game-btn')).toBeInTheDocument()
   })
 
-  it('deficit inputs default to 0', () => {
-    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    expect(screen.getByTestId('player-deficit-value')).toHaveTextContent('0')
-    expect(screen.getByTestId('opponent-deficit-value')).toHaveTextContent('0')
+  it('shows opponent deficit as player score before game starts', () => {
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerDeficit={0} opponentDeficit={3} />)
+    expect(screen.getByTestId('player-score')).toHaveTextContent('3')
   })
 
-  it('player deficit increments', async () => {
-    const user = userEvent.setup()
-    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    await user.click(screen.getByTestId('player-deficit-increment'))
-    expect(screen.getByTestId('player-deficit-value')).toHaveTextContent('1')
-  })
-
-  it('player deficit decrements but clamps at 0', async () => {
-    const user = userEvent.setup()
-    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    await user.click(screen.getByTestId('player-deficit-decrement'))
-    expect(screen.getByTestId('player-deficit-value')).toHaveTextContent('0')
-  })
-
-  it('opponent deficit increments', async () => {
-    const user = userEvent.setup()
-    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    await user.click(screen.getByTestId('opponent-deficit-increment'))
-    expect(screen.getByTestId('opponent-deficit-value')).toHaveTextContent('1')
-  })
-
-  it('hides deficit controls after Start Game', async () => {
-    const user = userEvent.setup()
-    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    await user.click(screen.getByTestId('start-game-btn'))
-    expect(screen.queryByText(/your deficit/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/opp's deficit/i)).not.toBeInTheDocument()
-    expect(screen.queryByTestId('start-game-btn')).not.toBeInTheDocument()
+  it('shows player deficit as opponent score before game starts', () => {
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerDeficit={2} opponentDeficit={0} />)
+    expect(screen.getByTestId('opponent-score')).toHaveTextContent('2')
   })
 
 })
@@ -151,19 +115,14 @@ describe('XwingGameScreen score counters', () => {
 
   it('player score starts equal to opponent deficit', async () => {
     const user = userEvent.setup()
-    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    await user.click(screen.getByTestId('opponent-deficit-increment'))
-    await user.click(screen.getByTestId('opponent-deficit-increment'))
-    await user.click(screen.getByTestId('opponent-deficit-increment'))
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerDeficit={0} opponentDeficit={3} />)
     await user.click(screen.getByTestId('start-game-btn'))
     expect(screen.getByTestId('player-score')).toHaveTextContent('3')
   })
 
   it('opponent score starts equal to player deficit', async () => {
     const user = userEvent.setup()
-    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    await user.click(screen.getByTestId('player-deficit-increment'))
-    await user.click(screen.getByTestId('player-deficit-increment'))
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerDeficit={2} opponentDeficit={0} />)
     await user.click(screen.getByTestId('start-game-btn'))
     expect(screen.getByTestId('opponent-score')).toHaveTextContent('2')
   })
@@ -334,10 +293,7 @@ describe('XwingGameScreen analytics', () => {
 
   it('fires onXwingGameStarted with correct deficit values', async () => {
     const user = userEvent.setup()
-    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    await user.click(screen.getByTestId('player-deficit-increment'))
-    await user.click(screen.getByTestId('player-deficit-increment'))
-    await user.click(screen.getByTestId('opponent-deficit-increment'))
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerDeficit={2} opponentDeficit={1} />)
     await user.click(screen.getByTestId('start-game-btn'))
     expect(mockOnXwingGameStarted).toHaveBeenCalledWith(2, 1)
   })

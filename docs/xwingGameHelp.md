@@ -2,7 +2,7 @@
 
 ## Mission Points
 
-Each player's mission points are shown on the left (**You**) and right (**Opp**). Points start equal to the opponent's deficit (see *Before the Game* below); the first player to reach 50 wins.
+Each player's mission points are shown on the left (**You**) and right (**Opp**). Points start equal to the opponent's deficit as entered on the setup screen; the first player to reach 50 wins.
 
 - Tap **+** to add a point
 - Tap **−** to remove a point (won't go below zero)
@@ -16,12 +16,6 @@ Press and hold **+** or **−**, then drag upward:
 3. **Release** — all points are applied at once
 
 The number increases by 1 for roughly every 14px of upward movement, starting from 2.
-
-## Before the Game
-
-Before tapping **Start Game**, you can enter a starting mission point deficit for each player (0–4) using the **−** and **+** controls under each label. Per the X-Wing rules, each player earns mission points equal to their **opponent's** deficit at the start of the game — so if your opponent has a deficit of 3, you start with 3 points.
-
-Once you tap **Start Game**, the deficit controls are replaced by the live score counters and the timer begins.
 
 ## Timer
 
@@ -73,7 +67,7 @@ To undo a game-end result, open the action log and tap **Undo**. The game state 
 
 | Button | Position | Action |
 |---|---|---|
-| <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M15.5 5L7 12L15.5 19Z"/></svg> Back | Top-left | Return to the game select screen |
+| <svg width="0.8em" height="0.8em" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="vertical-align:middle;display:inline-block"><path d="M15.5 5L7 12L15.5 19Z"/></svg> Back | Top-left | Return to the X-Wing setup screen |
 | <svg width="3.5%" height="3.5%" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings | Top-right | Open Settings |
 | ? Help | Top-right | Open this screen |
 

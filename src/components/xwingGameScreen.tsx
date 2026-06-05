@@ -26,14 +26,14 @@ interface Props {
   onSettings?: () => void
   onGameEnd?: () => void
   onTimerExpired?: () => void
+  playerDeficit?: number
+  opponentDeficit?: number
 }
 
-export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd, onTimerExpired }: Props) {
+export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd, onTimerExpired, playerDeficit = 0, opponentDeficit = 0 }: Props) {
   const { enableLongPress, enableActionLog, enableWakeLock, enableInitiativeBar, enableXwingPhases, xwingTimerMinutes } = useUserSettings()
   const { isPortrait } = useOrientation()
 
-  const [playerDeficit, setPlayerDeficit] = useState(0)
-  const [opponentDeficit, setOpponentDeficit] = useState(0)
   const [gameStarted, setGameStarted] = useState(false)
 
   const game = useXwingGame()
@@ -179,16 +179,12 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
       timerExpired={timer.isExpired}
       round={game.round}
       result={game.result}
-      playerDeficit={playerDeficit}
-      opponentDeficit={opponentDeficit}
-      onPlayerDeficitIncrement={(n) => setPlayerDeficit(d => Math.min(4, d + n))}
-      onPlayerDeficitDecrement={(n) => setPlayerDeficit(d => Math.max(0, d - n))}
-      onOpponentDeficitIncrement={(n) => setOpponentDeficit(d => Math.min(4, d + n))}
-      onOpponentDeficitDecrement={(n) => setOpponentDeficit(d => Math.max(0, d - n))}
       onStartGame={handleStartGame}
       onRoundAdvance={handleRoundAdvance}
       playerScore={game.playerScore}
       opponentScore={game.opponentScore}
+      playerDeficit={playerDeficit}
+      opponentDeficit={opponentDeficit}
       onPlayerIncrement={handlePlayerIncrement}
       onPlayerDecrement={handlePlayerDecrement}
       onOpponentIncrement={handleOpponentIncrement}
