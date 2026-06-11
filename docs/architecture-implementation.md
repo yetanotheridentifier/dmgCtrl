@@ -76,6 +76,7 @@ src/
 
   utils/
     formatFilter.ts         Format filtering — isSetValidForFormat, getValidSets, isBaseValidForFormat, formatValidationError; exports Format type ('premier' | 'limited' | 'eternal' | 'twin-suns') and FORMAT_LABELS; pure functions with no side effects
+    parseXwsText.ts         XWS list parser — `parseXwsText(text: string): ParseResult`; parses XWS JSON exported by YASB; extracts `pilots: XwingPilot[]` (each with `name`, `ship`, `points` as XWS slugs) and `total` from the top-level `points` field; validation: `too-few-ships` (< 3), `too-many-ships` (> 8), `invalid-total` (< 46 or > 50), `invalid-format` (non-JSON, missing `pilots` array, missing `points`, malformed pilot entries); zero-cost ships count toward both min and max; pilot name display formatting deferred to #276; duplicate pilot detection deferred to #277; exports `XwingPilot` and `ParseResult` types
     formatTime.ts           Shared time formatter — `formatTime(seconds: number): string`; outputs `M:SS` (e.g. 4500 → "75:00", 65 → "1:05"); used by TimerDisplay
     playMode.ts             Play mode constants — PlayMode type ('casual' | 'bo1' | 'bo3'), PLAY_MODES array, PLAY_MODE_LABELS record; no logic, no side effects
     swudbUrl.ts             SWUDB URL utilities: normaliseSwudbUrl, isValidSwudbUrl, fetchSwudbDeck
