@@ -15,6 +15,8 @@ import type { XwingScenario } from '../hooks/useXwingSetup'
 interface XwingGameSnapshot {
   playerScore: number
   opponentScore: number
+  playerScenarioScore: number
+  opponentScenarioScore: number
   round: number
   gameStarted: boolean
   phaseIndex: number
@@ -32,11 +34,13 @@ interface Props {
   scenario?: XwingScenario
 }
 
-export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd, onTimerExpired, playerDeficit = 0, opponentDeficit = 0, scenario: _scenario = 'None' }: Props) {
+export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd, onTimerExpired, playerDeficit = 0, opponentDeficit = 0, scenario = 'None' }: Props) {
   const { enableLongPress, enableActionLog, enableWakeLock, enableInitiativeBar, enableXwingPhases, xwingTimerMinutes } = useUserSettings()
   const { isPortrait } = useOrientation()
 
   const [gameStarted, setGameStarted] = useState(false)
+  const [pendingPlayerScenario, setPendingPlayerScenario] = useState<number | null>(null)
+  const [pendingOpponentScenario, setPendingOpponentScenario] = useState<number | null>(null)
 
   const game = useXwingGame()
   const log = useGameHistory<XwingGameSnapshot>()
@@ -49,9 +53,23 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
 
   const gameStartedRef = useRef(false)
 
+  const scenarioScoringActive =
+    scenario !== 'None' &&
+    enableXwingPhases &&
+    phaseTracker.isLastPhase &&
+    gameStarted &&
+    !game.gameOver &&
+    game.round >= 2
+
+  const scenarioAlreadyScoredThisRound = log.entries.some(
+    e => e.type === 'scenario' && e.snapshot.round === game.round
+  )
+
   const snapshot = (): XwingGameSnapshot => ({
     playerScore: game.playerScore,
     opponentScore: game.opponentScore,
+    playerScenarioScore: game.playerScenarioScore,
+    opponentScenarioScore: game.opponentScenarioScore,
     round: game.round,
     gameStarted,
     phaseIndex: phaseTracker.phaseIndex,
@@ -72,8 +90,17 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
 
   const handleRoundAdvance = () => {
     if (timer.isExpired || game.gameOver || game.round >= 12) return
+    const p = scenarioScoringActive ? (pendingPlayerScenario ?? 0) : 0
+    const o = scenarioScoringActive ? (pendingOpponentScenario ?? 0) : 0
     const fromRound = game.round
-    log.add({ type: 'round', message: `Round ${fromRound + 1}`, color: '#ffffff', snapshot: snapshot() })
+    const snap = snapshot()
+    if (p > 0 || o > 0) {
+      log.add({ type: 'scenario', message: `Scenario: You +${p}, Opp +${o}`, color: 'var(--color-accent)', snapshot: snap })
+      game.addScenarioPoints(p, o)
+    }
+    setPendingPlayerScenario(null)
+    setPendingOpponentScenario(null)
+    log.add({ type: 'round', message: `Round ${fromRound + 1}`, color: '#ffffff', snapshot: snap })
     game.advanceRound()
     initiative.reset()
     phaseTracker.reset()
@@ -83,16 +110,22 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
   const handlePhaseAdvance = () => {
     if (phaseTracker.isLastPhase) {
       if (game.round >= 12 || timer.isExpired) {
+        const p = scenarioScoringActive ? (pendingPlayerScenario ?? 0) : 0
+        const o = scenarioScoringActive ? (pendingOpponentScenario ?? 0) : 0
         const snap = snapshot()
-        const resultMsg = game.playerScore > game.opponentScore ? 'Game Won'
-          : game.opponentScore > game.playerScore ? 'Game Lost'
+        if (p > 0 || o > 0) game.addScenarioPoints(p, o)
+        setPendingPlayerScenario(null)
+        setPendingOpponentScenario(null)
+        const finalPlayer = game.playerScore + game.playerScenarioScore + p
+        const finalOpponent = game.opponentScore + game.opponentScenarioScore + o
+        const resultMsg = finalPlayer > finalOpponent ? 'Game Won'
+          : finalOpponent > finalPlayer ? 'Game Lost'
           : 'Draw'
         game.endGame()
         log.add({ type: 'game-result', message: resultMsg, color: '#ffffff', snapshot: snap })
         return
       }
       handleRoundAdvance()
-      phaseTracker.reset()
     } else {
       phaseTracker.advance()
     }
@@ -104,6 +137,8 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     log.add({ type: 'round', message: 'Round 1', color: '#ffffff', snapshot: snapshot() })
     game.reset(opponentDeficit, playerDeficit)
     phaseTracker.reset()
+    setPendingPlayerScenario(null)
+    setPendingOpponentScenario(null)
     setGameStarted(true)
     gameStartedRef.current = true
     timer.start()
@@ -139,9 +174,10 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     game.restoreState(entry.snapshot)
     setGameStarted(entry.snapshot.gameStarted)
     phaseTracker.restore(entry.snapshot.phaseIndex)
-    const snapshotGameOver = entry.snapshot.playerScore >= 50
-      || entry.snapshot.opponentScore >= 50
-      || (entry.snapshot.gameEnded ?? false)
+    const snapshotGameOver =
+      (entry.snapshot.playerScore + (entry.snapshot.playerScenarioScore ?? 0)) >= 50 ||
+      (entry.snapshot.opponentScore + (entry.snapshot.opponentScenarioScore ?? 0)) >= 50 ||
+      (entry.snapshot.gameEnded ?? false)
     if (!entry.snapshot.gameStarted) {
       timer.reset()
     } else if (wasGameOver && !snapshotGameOver && !timer.isExpired) {
@@ -154,8 +190,8 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
       const elapsed_seconds = xwingTimerMinutes * 60 - timer.remaining
       void onXwingGameEnded({
         final_round: game.round,
-        player_score: game.playerScore,
-        opponent_score: game.opponentScore,
+        player_score: game.playerScore + game.playerScenarioScore,
+        opponent_score: game.opponentScore + game.opponentScenarioScore,
         player_deficit: playerDeficit,
         opponent_deficit: opponentDeficit,
         result: game.result,
@@ -183,8 +219,8 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
       result={game.result}
       onStartGame={handleStartGame}
       onRoundAdvance={handleRoundAdvance}
-      playerScore={game.playerScore}
-      opponentScore={game.opponentScore}
+      playerScore={game.playerScore + game.playerScenarioScore}
+      opponentScore={game.opponentScore + game.opponentScenarioScore}
       playerDeficit={playerDeficit}
       opponentDeficit={opponentDeficit}
       onPlayerIncrement={handlePlayerIncrement}
@@ -205,6 +241,13 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
       onHelp={onHelp}
       onSettings={onSettings}
       onGameEnd={onGameEnd}
+      scenario={scenario}
+      scenarioScoringActive={scenarioScoringActive}
+      scenarioAlreadyScoredThisRound={scenarioAlreadyScoredThisRound}
+      pendingPlayerScenario={pendingPlayerScenario}
+      pendingOpponentScenario={pendingOpponentScenario}
+      onPlayerScenarioSelect={(v) => setPendingPlayerScenario(v)}
+      onOpponentScenarioSelect={(v) => setPendingOpponentScenario(v)}
     />
   )
 }
