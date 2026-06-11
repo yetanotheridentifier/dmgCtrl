@@ -7,13 +7,9 @@ dmgCtrl supports the **X-Wing Alliance (XWA)** ruleset.
 - **Casual** — a standard pick-up game with no round limit.
 - **Tournament** — enables the **Rounds** stepper so you can set the maximum number of rounds (2–10).
 
-## List Import
-
-How player lists are entered before the game. Currently only **None** is supported (manual deficit entry). YASB and Text import will be available in a future update.
-
 ## Scenario
 
-When playing under **XWA** rules, choose the scenario for this game:
+Choose the scenario for this game:
 
 - **None** — no scenario; mission points come from ship kills only (casual deathmatch).
 - **Assault at the Satellite Array**
@@ -26,8 +22,23 @@ Tap the **dice button** to pick a scenario at random from the five named options
 
 The scenario selection is not saved between sessions — choose it fresh each game.
 
-## Deficits
+## List Import
 
-When **List Import** is set to **None**, use the steppers to enter each player's mission point deficit (0–4). Per the X-Wing rulebook, each player starts the game with mission points equal to their **opponent's** deficit — so if your opponent has a deficit of 3, you start with 3 points.
+Lists are entered one at a time in sequence. Confirm **Your list** before the **Opp list** section appears.
 
-Tap **Start Game** when you are ready to begin.
+Each player's import method is set independently:
+
+- **None** — manual deficit entry only. Use the stepper to enter the player's mission point deficit (0–4). Per the X-Wing rulebook, each player starts with mission points equal to their **opponent's** deficit.
+- **XWA** — paste the XWS JSON exported from the YASB (Yet Another Squad Builder) website. Tap the **tick button** to validate the list; if the list cannot be parsed, a descriptive error message will appear and you can correct the text before trying again.
+- **YASB** — direct YASB import (coming soon).
+
+Once both lists are confirmed, the **Go to game** button appears (portrait: below the help button; landscape: top-right). Tap **Edit** next to either player to go back and change their list — editing one player does not affect the other.
+
+### XWS Import
+
+Export your squad from YASB as XWS, copy the JSON text, and paste it into the text box. A valid XWS list must:
+
+- Contain between 3 and 8 ships.
+- Have a total points cost between 46 and 50.
+
+If the list is imported via XWA, the mission point deficit is calculated automatically as `50 − total points`. If the total is exactly 50, the deficit is 0.
