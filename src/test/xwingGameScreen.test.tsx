@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import XwingGameScreen from '../components/xwingGameScreen'
 import { useOrientation } from '../hooks/useOrientation'
@@ -1458,4 +1458,119 @@ describe('XwingGameScreen scenario scoring', () => {
     expect(screen.getByTestId('opponent-scenario-0')).toBeDisabled()
   })
 
+})
+
+// ─── Scenario validation ────────────────────────────────────────────────────
+
+async function reachEndPhaseRound2(user: ReturnType<typeof userEvent.setup>, scenario: string) {
+  render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} scenario={scenario as import('../hooks/useXwingSetup').XwingScenario} />)
+  await user.click(screen.getByTestId('start-game-btn'))
+  await user.click(screen.getByRole('button', { name: 'Round 2' }))
+  const phaseBtn = screen.getByTestId('phase-btn')
+  for (let i = 0; i < 4; i++) await user.click(phaseBtn)
+}
+
+describe('XwingGameScreen scenario validation', () => {
+  // Standard scenarios — only (4, 4) is invalid
+
+  it('standard: selecting player 4 disables opponent 4', async () => {
+    const user = userEvent.setup()
+    await reachEndPhaseRound2(user, 'Salvage Mission')
+    await user.click(screen.getByTestId('player-scenario-4'))
+    expect(screen.getByTestId('opponent-scenario-4')).toBeDisabled()
+    expect(screen.getByTestId('opponent-scenario-0')).not.toBeDisabled()
+    expect(screen.getByTestId('opponent-scenario-2')).not.toBeDisabled()
+  })
+
+  it('standard: selecting opponent 4 disables player 4', async () => {
+    const user = userEvent.setup()
+    await reachEndPhaseRound2(user, 'Salvage Mission')
+    await user.click(screen.getByTestId('opponent-scenario-4'))
+    expect(screen.getByTestId('player-scenario-4')).toBeDisabled()
+    expect(screen.getByTestId('player-scenario-0')).not.toBeDisabled()
+    expect(screen.getByTestId('player-scenario-2')).not.toBeDisabled()
+  })
+
+  it('standard: switching player selection from 4 to 2 re-enables opponent 4', async () => {
+    const user = userEvent.setup()
+    await reachEndPhaseRound2(user, 'Salvage Mission')
+    await user.click(screen.getByTestId('player-scenario-4'))
+    await user.click(screen.getByTestId('player-scenario-2'))
+    expect(screen.getByTestId('opponent-scenario-4')).not.toBeDisabled()
+  })
+
+  it('standard: selecting player 0 or 2 does not disable any opponent value', async () => {
+    const user = userEvent.setup()
+    await reachEndPhaseRound2(user, 'Salvage Mission')
+    await user.click(screen.getByTestId('player-scenario-2'))
+    expect(screen.getByTestId('opponent-scenario-4')).not.toBeDisabled()
+    expect(screen.getByTestId('opponent-scenario-2')).not.toBeDisabled()
+    expect(screen.getByTestId('opponent-scenario-0')).not.toBeDisabled()
+  })
+
+  it('standard: applies to all four standard scenarios', async () => {
+    for (const scenario of ['Assault at the Satellite Array', 'Scramble the Transmissions', 'Ancient Knowledge']) {
+      cleanup()
+      const user = userEvent.setup()
+      await reachEndPhaseRound2(user, scenario)
+      await user.click(screen.getByTestId('player-scenario-4'))
+      expect(screen.getByTestId('opponent-scenario-4')).toBeDisabled()
+    }
+  })
+
+  // Chance Engagement — valid pairs: (0,0), (2,2), (4,0), (0,4)
+
+  it('Chance Engagement: player selects 0 — disables opponent 2', async () => {
+    const user = userEvent.setup()
+    await reachEndPhaseRound2(user, 'Chance Engagement')
+    await user.click(screen.getByTestId('player-scenario-0'))
+    expect(screen.getByTestId('opponent-scenario-2')).toBeDisabled()
+    expect(screen.getByTestId('opponent-scenario-0')).not.toBeDisabled()
+    expect(screen.getByTestId('opponent-scenario-4')).not.toBeDisabled()
+  })
+
+  it('Chance Engagement: player selects 2 — disables opponent 0 and 4', async () => {
+    const user = userEvent.setup()
+    await reachEndPhaseRound2(user, 'Chance Engagement')
+    await user.click(screen.getByTestId('player-scenario-2'))
+    expect(screen.getByTestId('opponent-scenario-0')).toBeDisabled()
+    expect(screen.getByTestId('opponent-scenario-4')).toBeDisabled()
+    expect(screen.getByTestId('opponent-scenario-2')).not.toBeDisabled()
+  })
+
+  it('Chance Engagement: player selects 4 — disables opponent 2 and 4', async () => {
+    const user = userEvent.setup()
+    await reachEndPhaseRound2(user, 'Chance Engagement')
+    await user.click(screen.getByTestId('player-scenario-4'))
+    expect(screen.getByTestId('opponent-scenario-2')).toBeDisabled()
+    expect(screen.getByTestId('opponent-scenario-4')).toBeDisabled()
+    expect(screen.getByTestId('opponent-scenario-0')).not.toBeDisabled()
+  })
+
+  it('Chance Engagement: opponent selects 2 — disables player 0 and 4', async () => {
+    const user = userEvent.setup()
+    await reachEndPhaseRound2(user, 'Chance Engagement')
+    await user.click(screen.getByTestId('opponent-scenario-2'))
+    expect(screen.getByTestId('player-scenario-0')).toBeDisabled()
+    expect(screen.getByTestId('player-scenario-4')).toBeDisabled()
+    expect(screen.getByTestId('player-scenario-2')).not.toBeDisabled()
+  })
+
+  it('Chance Engagement: switching player selection re-evaluates disabled opponent values', async () => {
+    const user = userEvent.setup()
+    await reachEndPhaseRound2(user, 'Chance Engagement')
+    await user.click(screen.getByTestId('player-scenario-4')) // disables opponent 2 and 4
+    await user.click(screen.getByTestId('player-scenario-2')) // now only opponent 2 valid
+    expect(screen.getByTestId('opponent-scenario-0')).toBeDisabled()
+    expect(screen.getByTestId('opponent-scenario-4')).toBeDisabled()
+    expect(screen.getByTestId('opponent-scenario-2')).not.toBeDisabled()
+  })
+
+  it('Chance Engagement: no selection — all buttons enabled', async () => {
+    const user = userEvent.setup()
+    await reachEndPhaseRound2(user, 'Chance Engagement')
+    expect(screen.getByTestId('opponent-scenario-0')).not.toBeDisabled()
+    expect(screen.getByTestId('opponent-scenario-2')).not.toBeDisabled()
+    expect(screen.getByTestId('opponent-scenario-4')).not.toBeDisabled()
+  })
 })
