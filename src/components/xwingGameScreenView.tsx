@@ -44,7 +44,33 @@ interface Props {
   onHelp: () => void
   onSettings?: () => void
   onGameEnd?: () => void
+  scenario?: string
+  scenarioScoringActive?: boolean
+  scenarioAlreadyScoredThisRound?: boolean
+  pendingPlayerScenario?: number | null
+  pendingOpponentScenario?: number | null
+  onPlayerScenarioSelect?: (v: number) => void
+  onOpponentScenarioSelect?: (v: number) => void
 }
+
+const SCENARIO_BTN = (selected: boolean, disabled = false): React.CSSProperties => ({
+  width: '5vw',
+  height: '5vw',
+  minWidth: '36px',
+  minHeight: '36px',
+  background: selected ? 'rgba(var(--color-accent-rgb), 0.15)' : 'rgba(0,0,0,0.45)',
+  color: selected ? 'var(--color-accent)' : 'var(--color-text-muted)',
+  border: `2px solid ${selected ? 'var(--color-accent)' : 'var(--color-ui-border)'}`,
+  borderRadius: '8px',
+  fontSize: 'clamp(0.55rem, 1.5vw, 0.85rem)',
+  fontWeight: '300',
+  cursor: disabled ? 'default' : 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  WebkitTapHighlightColor: 'transparent',
+  opacity: disabled ? 0.4 : 1,
+})
 
 function roundTrackerColor(remaining: number): string {
   if (remaining <= 60) return 'var(--color-error)'
@@ -107,6 +133,13 @@ export default function XwingGameScreenView({
   onBack,
   onHelp,
   onSettings,
+  scenario,
+  scenarioScoringActive = false,
+  scenarioAlreadyScoredThisRound = false,
+  pendingPlayerScenario = null,
+  pendingOpponentScenario = null,
+  onPlayerScenarioSelect,
+  onOpponentScenarioSelect,
 }: Props) {
   // Score scrubbers — active during game; floor is 0 (deficit applied separately, future ticket)
   const playerScrubber = useDragScrubber(
@@ -395,8 +428,8 @@ export default function XwingGameScreenView({
                     onPointerMove={playerScrubber.handlePointerMove}
                     onPointerUp={playerScrubber.handlePointerUp}
                     onPointerCancel={playerScrubber.handlePointerCancel}
-                    disabled={gameOver}
-                    style={COUNTER_BTN(gameOver)}
+                    disabled={gameOver || scenarioScoringActive}
+                    style={COUNTER_BTN(gameOver || scenarioScoringActive)}
                   >
                     −
                   </button>
@@ -407,8 +440,8 @@ export default function XwingGameScreenView({
                     onPointerMove={playerScrubber.handlePointerMove}
                     onPointerUp={playerScrubber.handlePointerUp}
                     onPointerCancel={playerScrubber.handlePointerCancel}
-                    disabled={gameOver}
-                    style={COUNTER_BTN(gameOver)}
+                    disabled={gameOver || scenarioScoringActive}
+                    style={COUNTER_BTN(gameOver || scenarioScoringActive)}
                   >
                     +
                   </button>
@@ -435,6 +468,25 @@ export default function XwingGameScreenView({
             }}>
               _
             </div>
+
+            {/* Scenario name subtitle — shown when playing a named scenario */}
+            {gameStarted && scenario && scenario !== 'None' && (
+              <div
+                data-testid="scenario-name"
+                style={{
+                  fontSize: 'clamp(0.8rem, 2.5vmin, 1.4rem)',
+                  fontWeight: '300',
+                  color: 'var(--color-text-muted)',
+                  letterSpacing: '0.04em',
+                  textAlign: 'center',
+                  lineHeight: 1.3,
+                  marginBottom: '1vmin',
+                  maxWidth: '22vmin',
+                }}
+              >
+                {scenario}
+              </div>
+            )}
 
             {/* Score-height area — result banner at game over; timer during
                 game; Start Game text pre-game. Height matches score font
@@ -568,8 +620,8 @@ export default function XwingGameScreenView({
                     onPointerMove={opponentScrubber.handlePointerMove}
                     onPointerUp={opponentScrubber.handlePointerUp}
                     onPointerCancel={opponentScrubber.handlePointerCancel}
-                    disabled={gameOver}
-                    style={COUNTER_BTN(gameOver)}
+                    disabled={gameOver || scenarioScoringActive}
+                    style={COUNTER_BTN(gameOver || scenarioScoringActive)}
                   >
                     −
                   </button>
@@ -580,8 +632,8 @@ export default function XwingGameScreenView({
                     onPointerMove={opponentScrubber.handlePointerMove}
                     onPointerUp={opponentScrubber.handlePointerUp}
                     onPointerCancel={opponentScrubber.handlePointerCancel}
-                    disabled={gameOver}
-                    style={COUNTER_BTN(gameOver)}
+                    disabled={gameOver || scenarioScoringActive}
+                    style={COUNTER_BTN(gameOver || scenarioScoringActive)}
                   >
                     +
                   </button>
@@ -594,6 +646,57 @@ export default function XwingGameScreenView({
 
 
       </div>
+
+      {/* Scenario scoring buttons — absolutely positioned at the same level as the log button.
+          Centered on the player column (~25vw) and opponent column (~75vw). */}
+      {scenarioScoringActive && (
+        <>
+          <div style={{
+            position: 'absolute',
+            bottom: 'calc(env(safe-area-inset-bottom) + 2vw)',
+            left: '25vw',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            flexDirection: 'row',
+            gap: '1vw',
+            zIndex: 10,
+          }}>
+            {[0, 2, 4].map(v => (
+              <button
+                key={v}
+                data-testid={`player-scenario-${v}`}
+                onClick={() => onPlayerScenarioSelect?.(v)}
+                disabled={scenarioAlreadyScoredThisRound}
+                style={SCENARIO_BTN(pendingPlayerScenario === v, scenarioAlreadyScoredThisRound)}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+          <div style={{
+            position: 'absolute',
+            bottom: 'calc(env(safe-area-inset-bottom) + 2vw)',
+            left: '75vw',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            flexDirection: 'row',
+            gap: '1vw',
+            zIndex: 10,
+          }}>
+            {[4, 2, 0].map(v => (
+              <button
+                key={v}
+                data-testid={`opponent-scenario-${v}`}
+                onClick={() => onOpponentScenarioSelect?.(v)}
+                disabled={scenarioAlreadyScoredThisRound}
+                style={SCENARIO_BTN(pendingOpponentScenario === v, scenarioAlreadyScoredThisRound)}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* Drag indicator — increment offsets right, decrement offsets left */}
       {dragIndicator && (() => {

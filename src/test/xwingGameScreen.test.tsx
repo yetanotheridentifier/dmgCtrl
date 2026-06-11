@@ -1262,3 +1262,200 @@ describe('XwingGameScreen phase tracker', () => {
   })
 
 })
+
+// ---------------------------------------------------------------------------
+// Scenario name
+// ---------------------------------------------------------------------------
+
+describe('XwingGameScreen scenario name', () => {
+
+  it('shows scenario name subtitle after game starts when scenario is set', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} scenario="Salvage Mission" />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.getByTestId('scenario-name')).toHaveTextContent('Salvage Mission')
+  })
+
+  it('does not show scenario name when scenario is None', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.queryByTestId('scenario-name')).not.toBeInTheDocument()
+  })
+
+  it('does not show scenario name before game starts', () => {
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} scenario="Ancient Knowledge" />)
+    expect(screen.queryByTestId('scenario-name')).not.toBeInTheDocument()
+  })
+
+})
+
+// ---------------------------------------------------------------------------
+// Scenario scoring
+// ---------------------------------------------------------------------------
+
+describe('XwingGameScreen scenario scoring', () => {
+
+  it('scenario point buttons are not shown when scenario is None', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    const phaseBtn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(phaseBtn)
+    expect(screen.queryByTestId('player-scenario-0')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('opponent-scenario-0')).not.toBeInTheDocument()
+  })
+
+  it('scenario point buttons are not shown in round 1 End phase', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} scenario="Salvage Mission" />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    const phaseBtn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(phaseBtn) // reach End of round 1
+    expect(screen.queryByTestId('player-scenario-0')).not.toBeInTheDocument()
+  })
+
+  it('scenario point buttons are not shown when phases are disabled', async () => {
+    mockUserSettings.enableXwingPhases = false
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} scenario="Salvage Mission" />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.queryByTestId('player-scenario-0')).not.toBeInTheDocument()
+  })
+
+  it('scenario point buttons appear in End phase of round 2 with a scenario', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} scenario="Salvage Mission" />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    const phaseBtn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(phaseBtn)
+    expect(screen.getByTestId('player-scenario-0')).toBeInTheDocument()
+    expect(screen.getByTestId('player-scenario-2')).toBeInTheDocument()
+    expect(screen.getByTestId('player-scenario-4')).toBeInTheDocument()
+    expect(screen.getByTestId('opponent-scenario-0')).toBeInTheDocument()
+    expect(screen.getByTestId('opponent-scenario-2')).toBeInTheDocument()
+    expect(screen.getByTestId('opponent-scenario-4')).toBeInTheDocument()
+  })
+
+  it('inc/dec buttons are disabled by scenario buttons during End-phase scoring', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} scenario="Salvage Mission" />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    const phaseBtn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(phaseBtn)
+    expect(screen.getByTestId('player-increment')).toBeDisabled()
+    expect(screen.getByTestId('opponent-increment')).toBeDisabled()
+    expect(screen.getByTestId('player-scenario-0')).toBeInTheDocument()
+  })
+
+  it('inc/dec buttons return after phase advance from End', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} scenario="Salvage Mission" />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    const phaseBtn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(phaseBtn) // reach End
+    await user.click(phaseBtn) // advance to round 3
+    expect(screen.getByTestId('player-increment')).toBeInTheDocument()
+    expect(screen.queryByTestId('player-scenario-0')).not.toBeInTheDocument()
+  })
+
+  it('tapping phase button applies pending player scenario points to displayed score', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} scenario="Salvage Mission" />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    const phaseBtn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(phaseBtn)
+    await user.click(screen.getByTestId('player-scenario-2'))
+    await user.click(phaseBtn)
+    expect(screen.getByTestId('player-score')).toHaveTextContent('2')
+  })
+
+  it('tapping phase button applies pending opponent scenario points to displayed score', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} scenario="Salvage Mission" />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    const phaseBtn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(phaseBtn)
+    await user.click(screen.getByTestId('opponent-scenario-4'))
+    await user.click(phaseBtn)
+    expect(screen.getByTestId('opponent-score')).toHaveTextContent('4')
+  })
+
+  it('advancing via round tracker from End phase applies pending scenario points', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} scenario="Salvage Mission" />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    const phaseBtn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(phaseBtn)
+    await user.click(screen.getByTestId('player-scenario-2'))
+    await user.click(screen.getByRole('button', { name: 'Round 3' }))
+    expect(screen.getByTestId('player-score')).toHaveTextContent('2')
+  })
+
+  it('combined scenario and ship score of 50 triggers game over', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} scenario="Salvage Mission" />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    for (let i = 0; i < 48; i++) fireEvent.click(screen.getByTestId('player-increment'))
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    const phaseBtn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(phaseBtn)
+    await user.click(screen.getByTestId('player-scenario-2'))
+    await user.click(phaseBtn)
+    expect(screen.getByTestId('result-banner')).toBeInTheDocument()
+  })
+
+  it('log records a separate scenario entry when scenario points are scored', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} scenario="Salvage Mission" />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    const phaseBtn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(phaseBtn)
+    await user.click(screen.getByTestId('player-scenario-2'))
+    await user.click(phaseBtn)
+    await user.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText('Scenario: You +2, Opp +0')).toBeInTheDocument()
+    expect(screen.getByText('Round 3')).toBeInTheDocument()
+  })
+
+  it('undo of scenario round advance restores both score and round', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} scenario="Salvage Mission" />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    const phaseBtn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(phaseBtn)
+    await user.click(screen.getByTestId('player-scenario-2'))
+    await user.click(phaseBtn) // apply +2, advance to round 3
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByTestId('player-score')).toHaveTextContent('0')
+    expect(screen.getByRole('button', { name: 'Round 2' }).style.borderColor).toBe('var(--color-accent)')
+  })
+
+  it('scenario buttons are disabled after undo when a scenario entry already exists for the current round', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} scenario="Salvage Mission" />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    const phaseBtn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(phaseBtn) // reach End
+    await user.click(screen.getByTestId('player-scenario-2'))
+    await user.click(phaseBtn) // advance to round 3 — logs scenario + round entries
+    await user.click(screen.getByTestId('log-btn'))
+    await user.click(screen.getByTestId('log-undo-btn')) // undo Round 3, back in End phase round 2
+    expect(screen.getByTestId('player-scenario-0')).toBeDisabled()
+    expect(screen.getByTestId('player-scenario-2')).toBeDisabled()
+    expect(screen.getByTestId('player-scenario-4')).toBeDisabled()
+    expect(screen.getByTestId('opponent-scenario-0')).toBeDisabled()
+  })
+
+})

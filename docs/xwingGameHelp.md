@@ -37,6 +37,17 @@ When **Enable Phase Tracker** is on in Settings, a phase button appears in the c
 
 Initiative can only be set during the **Planning** phase. It is locked for all other phases and unlocks again at the start of the next Planning phase.
 
+## Scenario Scoring
+
+When a named scenario is selected on the setup screen, the scenario name is shown in the centre of the game screen during play.
+
+From round 2 onwards, three scoring buttons (**0**, **2**, **4**) appear at the bottom of each player's column during the **End** phase. Tap the number of scenario points scored by each player this round. The inc/dec buttons are disabled while these buttons are active.
+
+- Points are applied when you advance from the End phase (by tapping the phase button or the next round in the round tracker)
+- Each set of scenario points is logged as a separate entry ("Scenario: You +Y, Opp +Z") before the round advance
+- If the running total of ship points plus scenario points reaches 50, the game ends immediately
+- Scenario buttons are disabled if points have already been entered for the current round (e.g. after an undo) — undo a second time to re-enable them
+
 ## Initiative Bar
 
 When **Enable Initiative Bar** is on in Settings, a narrow vertical bar appears on the left side of the game screen.
