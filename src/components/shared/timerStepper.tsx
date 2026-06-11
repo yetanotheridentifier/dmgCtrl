@@ -1,5 +1,6 @@
 interface Props {
   label: string
+  labelStyle?: React.CSSProperties
   value: number
   min?: number
   max?: number
@@ -46,7 +47,7 @@ const valueStyle: React.CSSProperties = {
  * Display is controlled by the optional `formatValue` prop; when absent the
  * default is `"${v} min"`.
  */
-export default function TimerStepper({ label, value, min, max, step, values, formatValue, onChange, testId }: Props) {
+export default function TimerStepper({ label, labelStyle: labelStyleProp, value, min, max, step, values, formatValue, onChange, testId }: Props) {
   const display = formatValue ? formatValue(value) : `${value} min`
 
   let atMin: boolean
@@ -78,7 +79,7 @@ export default function TimerStepper({ label, value, min, max, step, values, for
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.3em 0', gap: '0.5em' }}>
-      <span style={{ fontSize: '0.85em', color: 'var(--color-text-muted)', flex: 2 }}>{label}</span>
+      <span style={labelStyleProp ?? { fontSize: '0.85em', color: 'var(--color-text-muted)', flex: 2 }}>{label}</span>
       <div data-testid={testId} style={{ display: 'flex', alignItems: 'center', gap: '0.4em' }}>
         <button
           aria-label="−"

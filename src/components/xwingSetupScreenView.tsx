@@ -181,6 +181,7 @@ export default function XwingSetupScreenView({
         <>
           <TimerStepper
             label="Your Deficit"
+            labelStyle={labelStyle(small)}
             value={playerDeficit}
             min={0}
             max={4}
@@ -191,6 +192,7 @@ export default function XwingSetupScreenView({
           />
           <TimerStepper
             label="Opponent's Deficit"
+            labelStyle={labelStyle(small)}
             value={opponentDeficit}
             min={0}
             max={4}

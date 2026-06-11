@@ -953,7 +953,7 @@ describe('App game select', () => {
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
     await waitFor(() => expect(screen.getByRole('button', { name: /help/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /help/i }))
-    await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Ruleset' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Match Type' })).toBeInTheDocument())
   })
 
   it('back from xwing setup help returns to xwing setup screen', async () => {
@@ -964,7 +964,7 @@ describe('App game select', () => {
     await user.click(screen.getByRole('button', { name: /star wars x-wing/i }))
     await waitFor(() => expect(screen.getByRole('button', { name: /help/i })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /help/i }))
-    await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Ruleset' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Match Type' })).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /back/i }))
     await waitFor(() => expect(screen.getByTestId('scenario-select')).toBeInTheDocument())
   })
