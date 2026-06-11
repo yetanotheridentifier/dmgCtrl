@@ -48,6 +48,11 @@ From round 2 onwards, three scoring buttons (**0**, **2**, **4**) appear at the 
 - If the running total of ship points plus scenario points reaches 50, the game ends immediately
 - Scenario buttons are disabled if points have already been entered for the current round (e.g. after an undo) — undo a second time to re-enable them
 
+**Invalid combinations are automatically disabled:**
+
+- *Standard scenarios* (Assault at the Satellite Array, Salvage Mission, Scramble the Transmissions, Ancient Knowledge): both players scoring 4 is impossible — selecting 4 on one side disables 4 on the other.
+- *Chance Engagement*: only (0, 0), (2, 2), (4, 0), and (0, 4) are valid. Selecting a value on one side disables any opponent values that would form an illegal pair. Changing your selection immediately re-evaluates which opponent values are available.
+
 ## Initiative Bar
 
 When **Enable Initiative Bar** is on in Settings, a narrow vertical bar appears on the left side of the game screen.

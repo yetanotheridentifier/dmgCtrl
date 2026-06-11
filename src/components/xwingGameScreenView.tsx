@@ -53,6 +53,27 @@ interface Props {
   onOpponentScenarioSelect?: (v: number) => void
 }
 
+const CHANCE_ENGAGEMENT = 'Chance Engagement'
+const VALID_CHANCE_PAIRS: [number, number][] = [[0, 0], [2, 2], [4, 0], [0, 4]]
+
+function getDisabledOpponentValues(scenario: string | undefined, playerSelected: number | null): Set<number> {
+  if (playerSelected === null) return new Set()
+  if (scenario === CHANCE_ENGAGEMENT) {
+    const valid = VALID_CHANCE_PAIRS.filter(([p]) => p === playerSelected).map(([, o]) => o)
+    return new Set([0, 2, 4].filter(v => !valid.includes(v)))
+  }
+  return playerSelected === 4 ? new Set([4]) : new Set()
+}
+
+function getDisabledPlayerValues(scenario: string | undefined, opponentSelected: number | null): Set<number> {
+  if (opponentSelected === null) return new Set()
+  if (scenario === CHANCE_ENGAGEMENT) {
+    const valid = VALID_CHANCE_PAIRS.filter(([, o]) => o === opponentSelected).map(([p]) => p)
+    return new Set([0, 2, 4].filter(v => !valid.includes(v)))
+  }
+  return opponentSelected === 4 ? new Set([4]) : new Set()
+}
+
 const SCENARIO_BTN = (selected: boolean, disabled = false): React.CSSProperties => ({
   width: '5vw',
   height: '5vw',
@@ -649,54 +670,62 @@ export default function XwingGameScreenView({
 
       {/* Scenario scoring buttons — absolutely positioned at the same level as the log button.
           Centered on the player column (~25vw) and opponent column (~75vw). */}
-      {scenarioScoringActive && (
-        <>
-          <div style={{
-            position: 'absolute',
-            bottom: 'calc(env(safe-area-inset-bottom) + 2vw)',
-            left: '25vw',
-            transform: 'translateX(-50%)',
-            display: 'flex',
-            flexDirection: 'row',
-            gap: '1vw',
-            zIndex: 10,
-          }}>
-            {[0, 2, 4].map(v => (
-              <button
-                key={v}
-                data-testid={`player-scenario-${v}`}
-                onClick={() => onPlayerScenarioSelect?.(v)}
-                disabled={scenarioAlreadyScoredThisRound}
-                style={SCENARIO_BTN(pendingPlayerScenario === v, scenarioAlreadyScoredThisRound)}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
-          <div style={{
-            position: 'absolute',
-            bottom: 'calc(env(safe-area-inset-bottom) + 2vw)',
-            left: '75vw',
-            transform: 'translateX(-50%)',
-            display: 'flex',
-            flexDirection: 'row',
-            gap: '1vw',
-            zIndex: 10,
-          }}>
-            {[4, 2, 0].map(v => (
-              <button
-                key={v}
-                data-testid={`opponent-scenario-${v}`}
-                onClick={() => onOpponentScenarioSelect?.(v)}
-                disabled={scenarioAlreadyScoredThisRound}
-                style={SCENARIO_BTN(pendingOpponentScenario === v, scenarioAlreadyScoredThisRound)}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+      {scenarioScoringActive && (() => {
+        const disabledOpp = scenarioAlreadyScoredThisRound
+          ? new Set([0, 2, 4])
+          : getDisabledOpponentValues(scenario, pendingPlayerScenario ?? null)
+        const disabledPlayer = scenarioAlreadyScoredThisRound
+          ? new Set([0, 2, 4])
+          : getDisabledPlayerValues(scenario, pendingOpponentScenario ?? null)
+        return (
+          <>
+            <div style={{
+              position: 'absolute',
+              bottom: 'calc(env(safe-area-inset-bottom) + 2vw)',
+              left: '25vw',
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              flexDirection: 'row',
+              gap: '1vw',
+              zIndex: 10,
+            }}>
+              {[0, 2, 4].map(v => (
+                <button
+                  key={v}
+                  data-testid={`player-scenario-${v}`}
+                  onClick={() => onPlayerScenarioSelect?.(v)}
+                  disabled={disabledPlayer.has(v)}
+                  style={SCENARIO_BTN(pendingPlayerScenario === v, disabledPlayer.has(v))}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+            <div style={{
+              position: 'absolute',
+              bottom: 'calc(env(safe-area-inset-bottom) + 2vw)',
+              left: '75vw',
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              flexDirection: 'row',
+              gap: '1vw',
+              zIndex: 10,
+            }}>
+              {[4, 2, 0].map(v => (
+                <button
+                  key={v}
+                  data-testid={`opponent-scenario-${v}`}
+                  onClick={() => onOpponentScenarioSelect?.(v)}
+                  disabled={disabledOpp.has(v)}
+                  style={SCENARIO_BTN(pendingOpponentScenario === v, disabledOpp.has(v))}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          </>
+        )
+      })()}
 
       {/* Drag indicator — increment offsets right, decrement offsets left */}
       {dragIndicator && (() => {
