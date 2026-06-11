@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import XwingSetupScreen from '../components/xwingSetupScreen'
+import { XWING_NAMED_SCENARIOS } from '../hooks/useXwingSetup'
 
 const mockSetupState = vi.hoisted(() => ({
   ruleset: 'XWA',
@@ -16,10 +17,19 @@ const mockSetupState = vi.hoisted(() => ({
   setPlayerDeficit: vi.fn(),
   opponentDeficit: 0,
   setOpponentDeficit: vi.fn(),
+  scenario: 'None',
+  setScenario: vi.fn(),
 }))
 
 vi.mock('../hooks/useXwingSetup', () => ({
   useXwingSetup: () => mockSetupState,
+  XWING_NAMED_SCENARIOS: [
+    'Assault at the Satellite Array',
+    'Chance Engagement',
+    'Salvage Mission',
+    'Scramble the Transmissions',
+    'Ancient Knowledge',
+  ],
 }))
 
 beforeEach(() => {
@@ -29,43 +39,23 @@ beforeEach(() => {
   mockSetupState.listImport = 'None'
   mockSetupState.playerDeficit = 0
   mockSetupState.opponentDeficit = 0
+  mockSetupState.scenario = 'None'
   mockSetupState.setRuleset.mockClear()
   mockSetupState.setMatchType.mockClear()
   mockSetupState.setRounds.mockClear()
   mockSetupState.setListImport.mockClear()
   mockSetupState.setPlayerDeficit.mockClear()
   mockSetupState.setOpponentDeficit.mockClear()
+  mockSetupState.setScenario.mockClear()
 })
 
 describe('XwingSetupScreen', () => {
 
-  // --- Ruleset dropdown ---
+  // --- Ruleset ---
 
-  it('shows ruleset dropdown', () => {
+  it('ruleset dropdown is not shown', () => {
     render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
-    expect(screen.getByTestId('ruleset-select')).toBeInTheDocument()
-  })
-
-  it('ruleset dropdown reflects current ruleset', () => {
-    render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
-    expect(screen.getByTestId('ruleset-select')).toHaveValue('XWA')
-  })
-
-  it('XWA is the only enabled ruleset option', () => {
-    render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
-    const select = screen.getByTestId('ruleset-select') as HTMLSelectElement
-    const enabled = Array.from(select.options).filter(o => !o.disabled).map(o => o.value)
-    expect(enabled).toEqual(['XWA'])
-  })
-
-  it('Legacy, AMG, 2.0, and 1.0 ruleset options are disabled', () => {
-    render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
-    const select = screen.getByTestId('ruleset-select') as HTMLSelectElement
-    const disabled = Array.from(select.options).filter(o => o.disabled).map(o => o.value)
-    expect(disabled).toContain('Legacy')
-    expect(disabled).toContain('AMG')
-    expect(disabled).toContain('2.0')
-    expect(disabled).toContain('1.0')
+    expect(screen.queryByTestId('ruleset-select')).not.toBeInTheDocument()
   })
 
   // --- Match dropdown ---
@@ -139,14 +129,61 @@ describe('XwingSetupScreen', () => {
     expect(screen.getByRole('button', { name: /start game/i })).toBeInTheDocument()
   })
 
-  it('clicking Start Game calls onStart with current deficits', async () => {
+  it('clicking Start Game calls onStart with current deficits and scenario', async () => {
     const user = userEvent.setup()
     const onStart = vi.fn()
     mockSetupState.playerDeficit = 2
     mockSetupState.opponentDeficit = 1
+    mockSetupState.scenario = 'Chance Engagement'
     render(<XwingSetupScreen onStart={onStart} onBack={vi.fn()} onHelp={vi.fn()} />)
     await user.click(screen.getByRole('button', { name: /start game/i }))
-    expect(onStart).toHaveBeenCalledWith(2, 1)
+    expect(onStart).toHaveBeenCalledWith(2, 1, 'Chance Engagement')
+  })
+
+  // --- Scenario ---
+
+  it('scenario dropdown is shown', () => {
+    render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('scenario-select')).toBeInTheDocument()
+  })
+
+  it('scenario dropdown has None and all 5 named scenarios', () => {
+    render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+    const select = screen.getByTestId('scenario-select') as HTMLSelectElement
+    const values = Array.from(select.options).map(o => o.value)
+    expect(values).toContain('None')
+    expect(values).toContain('Assault at the Satellite Array')
+    expect(values).toContain('Chance Engagement')
+    expect(values).toContain('Salvage Mission')
+    expect(values).toContain('Scramble the Transmissions')
+    expect(values).toContain('Ancient Knowledge')
+    expect(values).toHaveLength(6)
+  })
+
+  it('scenario dropdown defaults to None', () => {
+    render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('scenario-select')).toHaveValue('None')
+  })
+
+  it('changing scenario dropdown calls setScenario', async () => {
+    const user = userEvent.setup()
+    render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.selectOptions(screen.getByTestId('scenario-select'), 'Salvage Mission')
+    expect(mockSetupState.setScenario).toHaveBeenCalledWith('Salvage Mission')
+  })
+
+  it('random scenario button is shown', () => {
+    render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.getByTestId('scenario-random-btn')).toBeInTheDocument()
+  })
+
+  it('clicking random button calls setScenario with a named scenario', async () => {
+    const user = userEvent.setup()
+    render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('scenario-random-btn'))
+    expect(mockSetupState.setScenario).toHaveBeenCalledOnce()
+    const calledWith = mockSetupState.setScenario.mock.calls[0][0]
+    expect(XWING_NAMED_SCENARIOS).toContain(calledWith)
   })
 
   // --- Navigation ---

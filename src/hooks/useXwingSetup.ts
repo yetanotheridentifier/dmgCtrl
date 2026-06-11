@@ -5,6 +5,15 @@ const STORAGE_KEY = 'xwing_setup'
 export type XwingRuleset = 'XWA' | 'Legacy' | 'AMG' | '2.0' | '1.0'
 export type XwingMatchType = 'Casual' | 'Tournament'
 export type XwingListImport = 'None' | 'YASB' | 'Text'
+export type XwingScenario = 'None' | 'Assault at the Satellite Array' | 'Chance Engagement' | 'Salvage Mission' | 'Scramble the Transmissions' | 'Ancient Knowledge'
+
+export const XWING_NAMED_SCENARIOS: XwingScenario[] = [
+  'Assault at the Satellite Array',
+  'Chance Engagement',
+  'Salvage Mission',
+  'Scramble the Transmissions',
+  'Ancient Knowledge',
+]
 
 interface PersistedSetup {
   ruleset: XwingRuleset
@@ -57,12 +66,15 @@ export interface XwingSetupValue {
   setPlayerDeficit: (v: number) => void
   opponentDeficit: number
   setOpponentDeficit: (v: number) => void
+  scenario: XwingScenario
+  setScenario: (v: XwingScenario) => void
 }
 
 export function useXwingSetup(): XwingSetupValue {
   const [persisted, setPersisted] = useState<PersistedSetup>(load)
   const [playerDeficit, setPlayerDeficitState] = useState(0)
   const [opponentDeficit, setOpponentDeficitState] = useState(0)
+  const [scenario, setScenario] = useState<XwingScenario>('None')
 
   function update(patch: Partial<PersistedSetup>) {
     setPersisted(prev => {
@@ -85,5 +97,7 @@ export function useXwingSetup(): XwingSetupValue {
     setPlayerDeficit: (v) => setPlayerDeficitState(clampDeficit(v)),
     opponentDeficit,
     setOpponentDeficit: (v) => setOpponentDeficitState(clampDeficit(v)),
+    scenario,
+    setScenario,
   }
 }

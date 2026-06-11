@@ -10,6 +10,7 @@ import HelpScreen from './components/helpScreen'
 import SettingsScreen from './components/settingsScreen'
 import { Base, useBases } from './hooks/useBases'
 import { InitialSelection } from './hooks/useSwuSetup'
+import type { XwingScenario } from './hooks/useXwingSetup'
 import { useTournament } from './hooks/useTournament'
 import { useUserSettings } from './hooks/useUserSettings'
 import { onAppStart, onAppInstall, onAppResume, onTournamentRoundCompleted } from './services/analytics'
@@ -29,6 +30,7 @@ function App() {
   const [isInXwing, setIsInXwing] = useState(false)
   const [xwingPlayerDeficit, setXwingPlayerDeficit] = useState(0)
   const [xwingOpponentDeficit, setXwingOpponentDeficit] = useState(0)
+  const [xwingScenario, setXwingScenario] = useState<XwingScenario>('None')
   const [tournamentCurrentBase, setTournamentCurrentBase] = useState<Base | null>(null)
   const [hasPlayedGameInCurrentMatch, setHasPlayedGameInCurrentMatch] = useState(false)
   const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'settings'>('setup')
@@ -163,9 +165,10 @@ function App() {
     setScreen('settings')
   }
 
-  const handleXwingStart = (playerDeficit: number, opponentDeficit: number) => {
+  const handleXwingStart = (playerDeficit: number, opponentDeficit: number, scenario: XwingScenario) => {
     setXwingPlayerDeficit(playerDeficit)
     setXwingOpponentDeficit(opponentDeficit)
+    setXwingScenario(scenario)
     setIsInXwing(true)
     setScreen('xwing')
   }
@@ -233,6 +236,7 @@ function App() {
             onSettings={handleSettings}
             playerDeficit={xwingPlayerDeficit}
             opponentDeficit={xwingOpponentDeficit}
+            scenario={xwingScenario}
           />
         </div>
       )}
