@@ -36,9 +36,14 @@ describe('useXwingSetup', () => {
     expect(result.current.rounds).toBe(6)
   })
 
-  it('defaults listImport to None', () => {
+  it('defaults playerListImport to None', () => {
     const { result } = renderHook(() => useXwingSetup())
-    expect(result.current.listImport).toBe('None')
+    expect(result.current.playerListImport).toBe('None')
+  })
+
+  it('defaults opponentListImport to None', () => {
+    const { result } = renderHook(() => useXwingSetup())
+    expect(result.current.opponentListImport).toBe('None')
   })
 
   it('defaults playerDeficit to 0', () => {
@@ -77,12 +82,36 @@ describe('useXwingSetup', () => {
     expect(result.current.rounds).toBe(8)
   })
 
-  it('loads listImport from localStorage', () => {
+  it('loads playerListImport from localStorage', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key) =>
+      key === STORAGE_KEY ? JSON.stringify({ playerListImport: 'YASB' }) : null
+    )
+    const { result } = renderHook(() => useXwingSetup())
+    expect(result.current.playerListImport).toBe('YASB')
+  })
+
+  it('migrates stored Text value to None for playerListImport', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key) =>
+      key === STORAGE_KEY ? JSON.stringify({ playerListImport: 'Text' }) : null
+    )
+    const { result } = renderHook(() => useXwingSetup())
+    expect(result.current.playerListImport).toBe('None')
+  })
+
+  it('migrates legacy listImport field to playerListImport', () => {
     vi.mocked(localStorage.getItem).mockImplementation((key) =>
       key === STORAGE_KEY ? JSON.stringify({ listImport: 'YASB' }) : null
     )
     const { result } = renderHook(() => useXwingSetup())
-    expect(result.current.listImport).toBe('YASB')
+    expect(result.current.playerListImport).toBe('YASB')
+  })
+
+  it('opponentListImport is session-only and always starts at None', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key) =>
+      key === STORAGE_KEY ? JSON.stringify({ opponentListImport: 'XWA' }) : null
+    )
+    const { result } = renderHook(() => useXwingSetup())
+    expect(result.current.opponentListImport).toBe('None')
   })
 
   it('does not load playerDeficit from localStorage (always starts at 0)', () => {
@@ -124,11 +153,18 @@ describe('useXwingSetup', () => {
     expect(saved.rounds).toBe(8)
   })
 
-  it('saves listImport to localStorage when setListImport is called', () => {
+  it('saves playerListImport to localStorage when setPlayerListImport is called', () => {
     const { result } = renderHook(() => useXwingSetup())
-    act(() => result.current.setListImport('YASB'))
+    act(() => result.current.setPlayerListImport('YASB'))
     const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
-    expect(saved.listImport).toBe('YASB')
+    expect(saved.playerListImport).toBe('YASB')
+  })
+
+  it('does not save opponentListImport to localStorage', () => {
+    const { result } = renderHook(() => useXwingSetup())
+    const callsBefore = vi.mocked(localStorage.setItem).mock.calls.length
+    act(() => result.current.setOpponentListImport('XWA'))
+    expect(vi.mocked(localStorage.setItem).mock.calls.length).toBe(callsBefore)
   })
 
   it('does not save playerDeficit to localStorage', () => {

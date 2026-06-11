@@ -11,6 +11,7 @@ import SettingsScreen from './components/settingsScreen'
 import { Base, useBases } from './hooks/useBases'
 import { InitialSelection } from './hooks/useSwuSetup'
 import type { XwingScenario } from './hooks/useXwingSetup'
+import type { XwingPilot } from './utils/parseXwsText'
 import { useTournament } from './hooks/useTournament'
 import { useUserSettings } from './hooks/useUserSettings'
 import { onAppStart, onAppInstall, onAppResume, onTournamentRoundCompleted } from './services/analytics'
@@ -31,6 +32,8 @@ function App() {
   const [xwingPlayerDeficit, setXwingPlayerDeficit] = useState(0)
   const [xwingOpponentDeficit, setXwingOpponentDeficit] = useState(0)
   const [xwingScenario, setXwingScenario] = useState<XwingScenario>('None')
+  const [xwingPlayerPilots, setXwingPlayerPilots] = useState<XwingPilot[]>([])
+  const [xwingOpponentPilots, setXwingOpponentPilots] = useState<XwingPilot[]>([])
   const [tournamentCurrentBase, setTournamentCurrentBase] = useState<Base | null>(null)
   const [hasPlayedGameInCurrentMatch, setHasPlayedGameInCurrentMatch] = useState(false)
   const [helpSource, setHelpSource] = useState<'setup' | 'game' | 'tournament' | 'xwing' | 'xwingSetup' | 'settings'>('setup')
@@ -165,10 +168,12 @@ function App() {
     setScreen('settings')
   }
 
-  const handleXwingStart = (playerDeficit: number, opponentDeficit: number, scenario: XwingScenario) => {
+  const handleXwingStart = (playerDeficit: number, opponentDeficit: number, scenario: XwingScenario, playerPilots: XwingPilot[], opponentPilots: XwingPilot[]) => {
     setXwingPlayerDeficit(playerDeficit)
     setXwingOpponentDeficit(opponentDeficit)
     setXwingScenario(scenario)
+    setXwingPlayerPilots(playerPilots)
+    setXwingOpponentPilots(opponentPilots)
     setIsInXwing(true)
     setScreen('xwing')
   }
@@ -237,6 +242,8 @@ function App() {
             playerDeficit={xwingPlayerDeficit}
             opponentDeficit={xwingOpponentDeficit}
             scenario={xwingScenario}
+            playerPilots={xwingPlayerPilots}
+            opponentPilots={xwingOpponentPilots}
           />
         </div>
       )}

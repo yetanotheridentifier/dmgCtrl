@@ -11,6 +11,7 @@ import XwingGameScreenView from './xwingGameScreenView'
 import RotatePrompt from './layout/rotatePrompt'
 import { onXwingGameStarted, onXwingGameEnded, onXwingRoundAdvanced } from '../services/analytics'
 import type { XwingScenario } from '../hooks/useXwingSetup'
+import type { XwingPilot } from '../utils/parseXwsText'
 
 interface XwingGameSnapshot {
   playerScore: number
@@ -32,6 +33,8 @@ interface Props {
   playerDeficit?: number
   opponentDeficit?: number
   scenario?: XwingScenario
+  playerPilots?: XwingPilot[]
+  opponentPilots?: XwingPilot[]
 }
 
 export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd, onTimerExpired, playerDeficit = 0, opponentDeficit = 0, scenario = 'None' }: Props) {
