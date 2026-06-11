@@ -10,6 +10,7 @@ import { usePhaseTracker, XWING_PHASES } from '../hooks/usePhaseTracker'
 import XwingGameScreenView from './xwingGameScreenView'
 import RotatePrompt from './layout/rotatePrompt'
 import { onXwingGameStarted, onXwingGameEnded, onXwingRoundAdvanced } from '../services/analytics'
+import type { XwingScenario } from '../hooks/useXwingSetup'
 
 interface XwingGameSnapshot {
   playerScore: number
@@ -28,9 +29,10 @@ interface Props {
   onTimerExpired?: () => void
   playerDeficit?: number
   opponentDeficit?: number
+  scenario?: XwingScenario
 }
 
-export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd, onTimerExpired, playerDeficit = 0, opponentDeficit = 0 }: Props) {
+export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd, onTimerExpired, playerDeficit = 0, opponentDeficit = 0, scenario: _scenario = 'None' }: Props) {
   const { enableLongPress, enableActionLog, enableWakeLock, enableInitiativeBar, enableXwingPhases, xwingTimerMinutes } = useUserSettings()
   const { isPortrait } = useOrientation()
 

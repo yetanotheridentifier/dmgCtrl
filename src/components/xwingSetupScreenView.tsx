@@ -1,13 +1,12 @@
 import { useOrientation } from '../hooks/useOrientation'
 import AppScreenLayout from './layout/appScreenLayout'
-import { BackIcon, CogIcon, ForwardIcon, HelpIcon } from './icons'
+import { BackIcon, CogIcon, DiceIcon, ForwardIcon, HelpIcon } from './icons'
 import { NAV_BTN_STYLE } from '../styles/navButton'
 import TimerStepper from './shared/timerStepper'
-import type { XwingRuleset, XwingMatchType, XwingListImport } from '../hooks/useXwingSetup'
+import type { XwingMatchType, XwingListImport, XwingScenario } from '../hooks/useXwingSetup'
+import { XWING_NAMED_SCENARIOS } from '../hooks/useXwingSetup'
 
 interface Props {
-  ruleset: XwingRuleset
-  onRulesetChange: (v: XwingRuleset) => void
   matchType: XwingMatchType
   onMatchTypeChange: (v: XwingMatchType) => void
   rounds: number
@@ -18,6 +17,9 @@ interface Props {
   onPlayerDeficitChange: (v: number) => void
   opponentDeficit: number
   onOpponentDeficitChange: (v: number) => void
+  scenario: XwingScenario
+  onScenarioChange: (v: XwingScenario) => void
+  onScenarioRandom: () => void
   onStart: () => void
   onBack: () => void
   onHelp: () => void
@@ -75,8 +77,6 @@ const submitButtonStyle = (small = false): React.CSSProperties => ({
 })
 
 export default function XwingSetupScreenView({
-  ruleset,
-  onRulesetChange,
   matchType,
   onMatchTypeChange,
   rounds,
@@ -87,6 +87,9 @@ export default function XwingSetupScreenView({
   onPlayerDeficitChange,
   opponentDeficit,
   onOpponentDeficitChange,
+  scenario,
+  onScenarioChange,
+  onScenarioRandom,
   onStart,
   onBack,
   onHelp,
@@ -127,33 +130,31 @@ export default function XwingSetupScreenView({
         )}
       </div>
 
-      {/* Row 2: Ruleset | > start */}
-      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '2vw' }}>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
-          <label style={labelStyle(small)}>Ruleset</label>
-          <select
-            data-testid="ruleset-select"
-            value={ruleset}
-            onChange={e => onRulesetChange(e.target.value as XwingRuleset)}
-            style={selectStyle(true, true, small)}
-          >
-            <option value="XWA" style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>XWA</option>
-            <option value="Legacy" disabled style={{ color: 'var(--color-text-muted)', background: 'var(--color-bg-deep)' }}>Legacy</option>
-            <option value="AMG" disabled style={{ color: 'var(--color-text-muted)', background: 'var(--color-bg-deep)' }}>AMG</option>
-            <option value="2.0" disabled style={{ color: 'var(--color-text-muted)', background: 'var(--color-bg-deep)' }}>2.0</option>
-            <option value="1.0" disabled style={{ color: 'var(--color-text-muted)', background: 'var(--color-bg-deep)' }}>1.0</option>
-          </select>
-        </div>
+      {/* Row 2: Scenario */}
+      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
+        <label style={labelStyle(small)}>Scenario</label>
+        <select
+          data-testid="scenario-select"
+          value={scenario}
+          onChange={e => onScenarioChange(e.target.value as XwingScenario)}
+          style={selectStyle(true, scenario !== 'None', small)}
+        >
+          <option value="None" style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>None</option>
+          {XWING_NAMED_SCENARIOS.map(s => (
+            <option key={s} value={s} style={{ color: 'var(--color-text-primary)', background: 'var(--color-bg-deep)' }}>{s}</option>
+          ))}
+        </select>
         <button
-          onClick={onStart}
-          aria-label="Start game"
+          data-testid="scenario-random-btn"
+          onClick={onScenarioRandom}
+          aria-label="Random scenario"
           style={submitButtonStyle(small)}
         >
-          <ForwardIcon />
+          <DiceIcon />
         </button>
       </div>
 
-      {/* Row 3: Import */}
+      {/* Row 3: Import | > start */}
       <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
         <label style={labelStyle(small)}>Import</label>
         <select
@@ -166,36 +167,39 @@ export default function XwingSetupScreenView({
           <option value="YASB" disabled style={{ color: 'var(--color-text-muted)', background: 'var(--color-bg-deep)' }}>YASB</option>
           <option value="Text" disabled style={{ color: 'var(--color-text-muted)', background: 'var(--color-bg-deep)' }}>Text</option>
         </select>
+        <button
+          onClick={onStart}
+          aria-label="Start game"
+          style={submitButtonStyle(small)}
+        >
+          <ForwardIcon />
+        </button>
       </div>
 
-      {/* Row 4: Your Deficit | Opp's Deficit (None mode only) */}
+      {/* Rows 4–5: Your Deficit / Opponent's Deficit (None import only) */}
       {listImport === 'None' && (
-        <div style={{ display: 'flex', flexDirection: 'row', gap: '2vw' }}>
-          <div style={{ flex: 1 }}>
-            <TimerStepper
-              label="Your Deficit"
-              value={playerDeficit}
-              min={0}
-              max={4}
-              step={1}
-              formatValue={(v) => String(v)}
-              onChange={onPlayerDeficitChange}
-              testId="player-deficit-stepper"
-            />
-          </div>
-          <div style={{ flex: 1 }}>
-            <TimerStepper
-              label="Opp's Deficit"
-              value={opponentDeficit}
-              min={0}
-              max={4}
-              step={1}
-              formatValue={(v) => String(v)}
-              onChange={onOpponentDeficitChange}
-              testId="opponent-deficit-stepper"
-            />
-          </div>
-        </div>
+        <>
+          <TimerStepper
+            label="Your Deficit"
+            value={playerDeficit}
+            min={0}
+            max={4}
+            step={1}
+            formatValue={(v) => String(v)}
+            onChange={onPlayerDeficitChange}
+            testId="player-deficit-stepper"
+          />
+          <TimerStepper
+            label="Opponent's Deficit"
+            value={opponentDeficit}
+            min={0}
+            max={4}
+            step={1}
+            formatValue={(v) => String(v)}
+            onChange={onOpponentDeficitChange}
+            testId="opponent-deficit-stepper"
+          />
+        </>
       )}
     </>
   )
