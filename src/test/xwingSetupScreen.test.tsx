@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import XwingSetupScreen from '../components/xwingSetupScreen'
 import { XWING_NAMED_SCENARIOS } from '../hooks/useXwingSetup'
@@ -404,6 +404,44 @@ describe('XwingSetupScreen', () => {
     render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} onSettings={onSettings} />)
     await user.click(screen.getByRole('button', { name: /settings/i }))
     expect(onSettings).toHaveBeenCalledOnce()
+  })
+
+  describe('pilot list display', () => {
+    it('shows pilot list after confirming XWA player list', async () => {
+      const user = userEvent.setup()
+      mockSetupState.playerListImport = 'XWA'
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      fireEvent.change(screen.getByTestId('player-list-textarea'), { target: { value: VALID_XWS } })
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      const list = screen.getByTestId('player-pilot-list')
+      // bobafett-armedanddangerous → bobafett (slug before first hyphen)
+      expect(within(list).getByText(/asajjventress/)).toBeInTheDocument()
+      expect(within(list).getByText(/bobafett/)).toBeInTheDocument()
+      expect(within(list).getByText(/bossk/)).toBeInTheDocument()
+      expect(within(list).getByText(/nashtahpup/)).toBeInTheDocument()
+    })
+
+    it('hides pilot list when player edit is clicked', async () => {
+      const user = userEvent.setup()
+      mockSetupState.playerListImport = 'XWA'
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      fireEvent.change(screen.getByTestId('player-list-textarea'), { target: { value: VALID_XWS } })
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      await user.click(screen.getByTestId('player-edit-btn'))
+      expect(screen.queryByTestId('player-pilot-list')).not.toBeInTheDocument()
+    })
+
+    it('shows opponent pilot list after confirming XWA opponent list', async () => {
+      const user = userEvent.setup()
+      mockSetupState.playerListImport = 'XWA'
+      mockSetupState.opponentListImport = 'XWA'
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      fireEvent.change(screen.getByTestId('player-list-textarea'), { target: { value: VALID_XWS } })
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      fireEvent.change(screen.getByTestId('opponent-list-textarea'), { target: { value: VALID_XWS_46 } })
+      await user.click(screen.getByTestId('opponent-confirm-btn'))
+      expect(screen.getByTestId('opponent-pilot-list')).toBeInTheDocument()
+    })
   })
 
 })
