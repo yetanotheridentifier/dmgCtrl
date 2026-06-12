@@ -7,10 +7,12 @@ import InitiativeToggle from './initiativeToggle'
 import { NAV_BTN_STYLE } from '../styles/navButton'
 import { BAR_CONTAINER_STYLE } from '../styles/barContainer'
 import { START_TEXT_STYLE } from '../styles/startText'
+import { useRef } from 'react'
 import type { HistoryEntry } from '../hooks/useGameHistory'
 import type { Initiative } from '../hooks/useInitiative'
 import type { XwingPilot } from '../utils/parseXwsText'
 import { displayPilots } from '../utils/displayPilots'
+import type { ShipEntry } from '../utils/shipRoster'
 
 interface Props {
   gameStarted: boolean
@@ -55,6 +57,10 @@ interface Props {
   onOpponentScenarioSelect?: (v: number) => void
   playerPilots?: XwingPilot[]
   opponentPilots?: XwingPilot[]
+  playerShips?: ShipEntry[]
+  opponentShips?: ShipEntry[]
+  onPlayerShipAdvance?: (index: number, skip: boolean) => void
+  onOpponentShipAdvance?: (index: number, skip: boolean) => void
 }
 
 const CHANCE_ENGAGEMENT = 'Chance Engagement'
@@ -96,6 +102,107 @@ const SCENARIO_BTN = (selected: boolean, disabled = false): React.CSSProperties 
   WebkitTapHighlightColor: 'transparent',
   opacity: disabled ? 0.4 : 1,
 })
+
+const LONG_PRESS_MS = 400
+
+function ShipButton({ entry, index, onAdvance, align }: {
+  entry: ShipEntry
+  index: number
+  onAdvance: (index: number, skip: boolean) => void
+  align: 'left' | 'right'
+}) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const startPos = useRef<{ x: number; y: number } | null>(null)
+
+  const cancel = () => {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
+  }
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    startPos.current = { x: e.clientX, y: e.clientY }
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null
+      onAdvance(index, true)
+    }, LONG_PRESS_MS)
+  }
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!startPos.current) return
+    if (Math.abs(e.clientX - startPos.current.x) > 10 || Math.abs(e.clientY - startPos.current.y) > 10) cancel()
+  }
+
+  const onPointerUp = () => {
+    if (timerRef.current) { cancel(); onAdvance(index, false) }
+  }
+
+  const isHalf = entry.state === 'half'
+  const color = isHalf ? 'var(--color-warning)' : 'var(--color-accent)'
+  const displayName = displayPilots([entry.pilot])[0].displayName
+
+  const iconEl = (
+    <button
+      data-testid={`${align === 'left' ? 'player' : 'opponent'}-ship-btn-${index}`}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={cancel}
+      style={{
+        width: '5vw',
+        height: '5vw',
+        minWidth: '30px',
+        minHeight: '30px',
+        background: 'transparent',
+        border: `1.5px solid ${color}`,
+        borderRadius: '8px',
+        padding: '2px',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        WebkitTapHighlightColor: 'transparent',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+      }}
+    >
+      <img
+        src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`}
+        alt=""
+        style={{ width: '100%', height: '100%', objectFit: 'contain', filter: isHalf ? 'sepia(1) saturate(3) hue-rotate(5deg)' : undefined }}
+        draggable={false}
+      />
+    </button>
+  )
+
+  const nameEl = (
+    <span style={{
+      fontSize: 'clamp(0.5rem, 1.5vmin, 0.85rem)',
+      fontWeight: '300',
+      color,
+      letterSpacing: '0.04em',
+      lineHeight: 1.2,
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+      minWidth: 0,
+    }}>
+      {displayName}
+    </span>
+  )
+
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: '1vmin',
+      width: '100%',
+      justifyContent: align === 'left' ? 'flex-start' : 'flex-end',
+    }}>
+      {align === 'left' ? <>{iconEl}{nameEl}</> : <>{nameEl}{iconEl}</>}
+    </div>
+  )
+}
 
 function roundTrackerColor(remaining: number): string {
   if (remaining <= 60) return 'var(--color-error)'
@@ -167,6 +274,10 @@ export default function XwingGameScreenView({
   onOpponentScenarioSelect,
   playerPilots,
   opponentPilots,
+  playerShips,
+  opponentShips,
+  onPlayerShipAdvance,
+  onOpponentShipAdvance,
 }: Props) {
   // Score scrubbers — active during game; floor is 0 (deficit applied separately, future ticket)
   const playerScrubber = useDragScrubber(
@@ -441,8 +552,24 @@ export default function XwingGameScreenView({
               {gameStarted ? playerScore : opponentDeficit}
             </div>
 
-            {/* Pilot list / spacer — pushes button slot to the bottom */}
-            {playerPilots && playerPilots.length > 0 ? (
+            {/* Pilot area: ship buttons when in-game, text list pre-game, spacer if no list */}
+            {gameStarted && playerShips && playerShips.length > 0 ? (
+              <div data-testid="player-pilot-list" style={{
+                flex: 1,
+                overflowY: 'auto',
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1vmin',
+                paddingTop: '1vmin',
+              }}>
+                {playerShips.map((entry, i) =>
+                  entry.state !== 'destroyed' ? (
+                    <ShipButton key={i} entry={entry} index={i} onAdvance={onPlayerShipAdvance!} align="left" />
+                  ) : null
+                )}
+              </div>
+            ) : playerPilots && playerPilots.length > 0 ? (
               <div data-testid="player-pilot-list" style={{
                 flex: 1,
                 overflowY: 'auto',
@@ -469,37 +596,39 @@ export default function XwingGameScreenView({
               <div style={{ flexGrow: 1 }} />
             )}
 
-            {/* Fixed-height button slot — always present to prevent layout jump */}
-            <div style={{ height: '14vmin', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {gameStarted && (
-                <div style={{ display: 'flex', flexDirection: 'row', gap: '2vmin' }}>
-                  <button
-                    data-testid="player-decrement"
-                    onClick={playerScrubber.handleClick('-')}
-                    onPointerDown={playerScrubber.handlePointerDown('-')}
-                    onPointerMove={playerScrubber.handlePointerMove}
-                    onPointerUp={playerScrubber.handlePointerUp}
-                    onPointerCancel={playerScrubber.handlePointerCancel}
-                    disabled={gameOver || scenarioScoringActive}
-                    style={COUNTER_BTN(gameOver || scenarioScoringActive)}
-                  >
-                    −
-                  </button>
-                  <button
-                    data-testid="player-increment"
-                    onClick={playerScrubber.handleClick('+')}
-                    onPointerDown={playerScrubber.handlePointerDown('+')}
-                    onPointerMove={playerScrubber.handlePointerMove}
-                    onPointerUp={playerScrubber.handlePointerUp}
-                    onPointerCancel={playerScrubber.handlePointerCancel}
-                    disabled={gameOver || scenarioScoringActive}
-                    style={COUNTER_BTN(gameOver || scenarioScoringActive)}
-                  >
-                    +
-                  </button>
-                </div>
-              )}
-            </div>
+            {/* Fixed-height button slot — visible when opponent has no ship buttons (player must score manually) */}
+            {!(gameStarted && opponentShips && opponentShips.length > 0) && (
+              <div style={{ height: '14vmin', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {gameStarted && (
+                  <div style={{ display: 'flex', flexDirection: 'row', gap: '2vmin' }}>
+                    <button
+                      data-testid="player-decrement"
+                      onClick={playerScrubber.handleClick('-')}
+                      onPointerDown={playerScrubber.handlePointerDown('-')}
+                      onPointerMove={playerScrubber.handlePointerMove}
+                      onPointerUp={playerScrubber.handlePointerUp}
+                      onPointerCancel={playerScrubber.handlePointerCancel}
+                      disabled={gameOver || scenarioScoringActive}
+                      style={COUNTER_BTN(gameOver || scenarioScoringActive)}
+                    >
+                      −
+                    </button>
+                    <button
+                      data-testid="player-increment"
+                      onClick={playerScrubber.handleClick('+')}
+                      onPointerDown={playerScrubber.handlePointerDown('+')}
+                      onPointerMove={playerScrubber.handlePointerMove}
+                      onPointerUp={playerScrubber.handlePointerUp}
+                      onPointerCancel={playerScrubber.handlePointerCancel}
+                      disabled={gameOver || scenarioScoringActive}
+                      style={COUNTER_BTN(gameOver || scenarioScoringActive)}
+                    >
+                      +
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* ── Centre column: result banner / Start Game / Timer ── */}
@@ -658,8 +787,24 @@ export default function XwingGameScreenView({
               {gameStarted ? opponentScore : playerDeficit}
             </div>
 
-            {/* Pilot list / spacer — pushes button slot to the bottom */}
-            {opponentPilots && opponentPilots.length > 0 ? (
+            {/* Pilot area: ship buttons when in-game, text list pre-game, spacer if no list */}
+            {gameStarted && opponentShips && opponentShips.length > 0 ? (
+              <div data-testid="opponent-pilot-list" style={{
+                flex: 1,
+                overflowY: 'auto',
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1vmin',
+                paddingTop: '1vmin',
+              }}>
+                {opponentShips.map((entry, i) =>
+                  entry.state !== 'destroyed' ? (
+                    <ShipButton key={i} entry={entry} index={i} onAdvance={onOpponentShipAdvance!} align="right" />
+                  ) : null
+                )}
+              </div>
+            ) : opponentPilots && opponentPilots.length > 0 ? (
               <div data-testid="opponent-pilot-list" style={{
                 flex: 1,
                 overflowY: 'auto',
@@ -686,37 +831,39 @@ export default function XwingGameScreenView({
               <div style={{ flexGrow: 1 }} />
             )}
 
-            {/* Fixed-height button slot — always present to prevent layout jump */}
-            <div style={{ height: '14vmin', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {gameStarted && (
-                <div style={{ display: 'flex', flexDirection: 'row', gap: '2vmin' }}>
-                  <button
-                    data-testid="opponent-decrement"
-                    onClick={opponentScrubber.handleClick('-')}
-                    onPointerDown={opponentScrubber.handlePointerDown('-')}
-                    onPointerMove={opponentScrubber.handlePointerMove}
-                    onPointerUp={opponentScrubber.handlePointerUp}
-                    onPointerCancel={opponentScrubber.handlePointerCancel}
-                    disabled={gameOver || scenarioScoringActive}
-                    style={COUNTER_BTN(gameOver || scenarioScoringActive)}
-                  >
-                    −
-                  </button>
-                  <button
-                    data-testid="opponent-increment"
-                    onClick={opponentScrubber.handleClick('+')}
-                    onPointerDown={opponentScrubber.handlePointerDown('+')}
-                    onPointerMove={opponentScrubber.handlePointerMove}
-                    onPointerUp={opponentScrubber.handlePointerUp}
-                    onPointerCancel={opponentScrubber.handlePointerCancel}
-                    disabled={gameOver || scenarioScoringActive}
-                    style={COUNTER_BTN(gameOver || scenarioScoringActive)}
-                  >
-                    +
-                  </button>
-                </div>
-              )}
-            </div>
+            {/* Fixed-height button slot — visible when player has no ship buttons (opponent must score manually) */}
+            {!(gameStarted && playerShips && playerShips.length > 0) && (
+              <div style={{ height: '14vmin', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {gameStarted && (
+                  <div style={{ display: 'flex', flexDirection: 'row', gap: '2vmin' }}>
+                    <button
+                      data-testid="opponent-decrement"
+                      onClick={opponentScrubber.handleClick('-')}
+                      onPointerDown={opponentScrubber.handlePointerDown('-')}
+                      onPointerMove={opponentScrubber.handlePointerMove}
+                      onPointerUp={opponentScrubber.handlePointerUp}
+                      onPointerCancel={opponentScrubber.handlePointerCancel}
+                      disabled={gameOver || scenarioScoringActive}
+                      style={COUNTER_BTN(gameOver || scenarioScoringActive)}
+                    >
+                      −
+                    </button>
+                    <button
+                      data-testid="opponent-increment"
+                      onClick={opponentScrubber.handleClick('+')}
+                      onPointerDown={opponentScrubber.handlePointerDown('+')}
+                      onPointerMove={opponentScrubber.handlePointerMove}
+                      onPointerUp={opponentScrubber.handlePointerUp}
+                      onPointerCancel={opponentScrubber.handlePointerCancel}
+                      disabled={gameOver || scenarioScoringActive}
+                      style={COUNTER_BTN(gameOver || scenarioScoringActive)}
+                    >
+                      +
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
         </div>

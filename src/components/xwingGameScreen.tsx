@@ -12,6 +12,9 @@ import RotatePrompt from './layout/rotatePrompt'
 import { onXwingGameStarted, onXwingGameEnded, onXwingRoundAdvanced } from '../services/analytics'
 import type { XwingScenario } from '../hooks/useXwingSetup'
 import type { XwingPilot } from '../utils/parseXwsText'
+import { type ShipEntry, initShips, halfPoints, remainingPoints } from '../utils/shipRoster'
+import { resolveXwsName } from '../utils/resolveXwsName'
+import { xwsPilotNames } from '../data/xwsPilotNames'
 
 interface XwingGameSnapshot {
   playerScore: number
@@ -22,6 +25,8 @@ interface XwingGameSnapshot {
   gameStarted: boolean
   phaseIndex: number
   gameEnded: boolean
+  playerShips: ShipEntry[]
+  opponentShips: ShipEntry[]
 }
 
 interface Props {
@@ -44,6 +49,8 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
   const [gameStarted, setGameStarted] = useState(false)
   const [pendingPlayerScenario, setPendingPlayerScenario] = useState<number | null>(null)
   const [pendingOpponentScenario, setPendingOpponentScenario] = useState<number | null>(null)
+  const [playerShips, setPlayerShips] = useState<ShipEntry[]>([])
+  const [opponentShips, setOpponentShips] = useState<ShipEntry[]>([])
 
   const game = useXwingGame()
   const log = useGameHistory<XwingGameSnapshot>()
@@ -77,6 +84,8 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     gameStarted,
     phaseIndex: phaseTracker.phaseIndex,
     gameEnded: game.gameEnded,
+    playerShips: [...playerShips],
+    opponentShips: [...opponentShips],
   })
 
   useEffect(() => {
@@ -142,10 +151,39 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     phaseTracker.reset()
     setPendingPlayerScenario(null)
     setPendingOpponentScenario(null)
+    setPlayerShips(playerPilots ? initShips(playerPilots) : [])
+    setOpponentShips(opponentPilots ? initShips(opponentPilots) : [])
     setGameStarted(true)
     gameStartedRef.current = true
     timer.start()
     void onXwingGameStarted(playerDeficit, opponentDeficit)
+  }
+
+  const handleShipAdvance = (side: 'player' | 'opponent', index: number, skip: boolean) => {
+    const ships = side === 'player' ? playerShips : opponentShips
+    const setShips = side === 'player' ? setPlayerShips : setOpponentShips
+    const entry = ships[index]
+    if (!entry || entry.state === 'destroyed') return
+
+    const snap = snapshot()
+    const displayName = resolveXwsName(entry.pilot.name.split('-')[0], xwsPilotNames)
+    const isHalf = entry.state === 'half'
+    const pts = isHalf ? remainingPoints(entry.pilot.points) : skip ? entry.pilot.points : halfPoints(entry.pilot.points)
+    const nextState: 'half' | 'destroyed' = isHalf || skip ? 'destroyed' : 'half'
+    const action = nextState === 'half' ? 'Damaged' : 'Destroyed'
+    const color = side === 'player' ? 'var(--color-error)' : 'var(--color-success)'
+
+    if (pts > 0) {
+      log.add({ type: 'score', message: `${displayName} — ${action} (${pts})`, color, snapshot: snap })
+    }
+    if (side === 'player') {
+      if (pts > 0) game.incrementOpponent(pts)
+    } else {
+      if (pts > 0) game.incrementPlayer(pts)
+    }
+
+    const updated = ships.map((s, i) => i === index ? { ...s, state: nextState } : s)
+    setShips(updated)
   }
 
   const handlePlayerIncrement = (n: number) => {
@@ -181,6 +219,8 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
       (entry.snapshot.playerScore + (entry.snapshot.playerScenarioScore ?? 0)) >= 50 ||
       (entry.snapshot.opponentScore + (entry.snapshot.opponentScenarioScore ?? 0)) >= 50 ||
       (entry.snapshot.gameEnded ?? false)
+    setPlayerShips(entry.snapshot.playerShips ?? [])
+    setOpponentShips(entry.snapshot.opponentShips ?? [])
     if (!entry.snapshot.gameStarted) {
       timer.reset()
     } else if (wasGameOver && !snapshotGameOver && !timer.isExpired) {
@@ -253,6 +293,10 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
       onOpponentScenarioSelect={(v) => setPendingOpponentScenario(v)}
       playerPilots={playerPilots}
       opponentPilots={opponentPilots}
+      playerShips={playerShips}
+      opponentShips={opponentShips}
+      onPlayerShipAdvance={(i, skip) => handleShipAdvance('player', i, skip)}
+      onOpponentShipAdvance={(i, skip) => handleShipAdvance('opponent', i, skip)}
     />
   )
 }

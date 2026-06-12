@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, within, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import XwingGameScreen from '../components/xwingGameScreen'
 import { useOrientation } from '../hooks/useOrientation'
@@ -1612,5 +1612,142 @@ describe('pilot list display', () => {
     expect(within(list).getByText(/Academy Pilot 1/)).toBeInTheDocument()
     expect(within(list).getByText(/Academy Pilot 2/)).toBeInTheDocument()
     expect(within(list).getByText(/Academy Pilot 3/)).toBeInTheDocument()
+  })
+})
+
+describe('ship scoring', () => {
+  const PILOTS = [
+    { name: 'asajjventress', ship: 'lancerclasspursuitcraft', points: 15 },
+    { name: 'bossk', ship: 'yv666lightfreighter', points: 17 },
+    { name: 'nashtahpup', ship: 'z95af4headhunter', points: 0 },
+  ]
+
+  async function startWithPilots() {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerPilots={PILOTS} opponentPilots={PILOTS} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    return user
+  }
+
+  it('shows ship buttons after game start when pilots provided', async () => {
+    await startWithPilots()
+    expect(screen.getByTestId('player-ship-btn-0')).toBeInTheDocument()
+    expect(screen.getByTestId('opponent-ship-btn-0')).toBeInTheDocument()
+  })
+
+  it('hides all inc/dec buttons when both players have lists', async () => {
+    await startWithPilots()
+    expect(screen.queryByTestId('player-increment')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('player-decrement')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('opponent-increment')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('opponent-decrement')).not.toBeInTheDocument()
+  })
+
+  it('keeps player inc/dec visible and hides opponent inc/dec when only player has a list', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerPilots={PILOTS} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.getByTestId('player-increment')).toBeInTheDocument()
+    expect(screen.getByTestId('player-decrement')).toBeInTheDocument()
+    expect(screen.queryByTestId('opponent-increment')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('opponent-decrement')).not.toBeInTheDocument()
+  })
+
+  it('keeps opponent inc/dec visible and hides player inc/dec when only opponent has a list', async () => {
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} opponentPilots={PILOTS} />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    expect(screen.queryByTestId('player-increment')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('player-decrement')).not.toBeInTheDocument()
+    expect(screen.getByTestId('opponent-increment')).toBeInTheDocument()
+    expect(screen.getByTestId('opponent-decrement')).toBeInTheDocument()
+  })
+
+  it('tapping opponent ship awards floor(pts/2) to player score', async () => {
+    const user = await startWithPilots()
+    await user.click(screen.getByTestId('opponent-ship-btn-0')) // Asajj 15pts → floor(15/2)=7
+    expect(screen.getByTestId('player-score')).toHaveTextContent('7')
+  })
+
+  it('tapping player ship awards floor(pts/2) to opponent score', async () => {
+    const user = await startWithPilots()
+    await user.click(screen.getByTestId('player-ship-btn-0')) // Asajj 15pts → 7
+    expect(screen.getByTestId('opponent-score')).toHaveTextContent('7')
+  })
+
+  it('logs Damaged entry on first tap', async () => {
+    const user = await startWithPilots()
+    await user.click(screen.getByTestId('opponent-ship-btn-0'))
+    fireEvent.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText(/Asajj Ventress — Damaged \(7\)/)).toBeInTheDocument()
+  })
+
+  it('second tap awards ceil(pts/2) and removes ship button', async () => {
+    const user = await startWithPilots()
+    await user.click(screen.getByTestId('opponent-ship-btn-0')) // half: 7pts
+    await user.click(screen.getByTestId('opponent-ship-btn-0')) // destroyed: 8pts
+    expect(screen.getByTestId('player-score')).toHaveTextContent('15')
+    expect(screen.queryByTestId('opponent-ship-btn-0')).not.toBeInTheDocument()
+  })
+
+  it('logs Destroyed on second tap', async () => {
+    const user = await startWithPilots()
+    await user.click(screen.getByTestId('opponent-ship-btn-0'))
+    await user.click(screen.getByTestId('opponent-ship-btn-0'))
+    fireEvent.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText(/Asajj Ventress — Destroyed \(8\)/)).toBeInTheDocument()
+  })
+
+  it('long-press on alive ship skips to destroyed and awards all points', async () => {
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerPilots={PILOTS} opponentPilots={PILOTS} />)
+    fireEvent.click(screen.getByTestId('start-game-btn'))
+    vi.useFakeTimers()
+    fireEvent.pointerDown(screen.getByTestId('opponent-ship-btn-0'))
+    await act(async () => { vi.advanceTimersByTime(500) })
+    vi.useRealTimers()
+    expect(screen.getByTestId('player-score')).toHaveTextContent('15')
+    expect(screen.queryByTestId('opponent-ship-btn-0')).not.toBeInTheDocument()
+  })
+
+  it('long-press logs Destroyed with full points', async () => {
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerPilots={PILOTS} opponentPilots={PILOTS} />)
+    fireEvent.click(screen.getByTestId('start-game-btn'))
+    vi.useFakeTimers()
+    fireEvent.pointerDown(screen.getByTestId('opponent-ship-btn-0'))
+    await act(async () => { vi.advanceTimersByTime(500) })
+    vi.useRealTimers()
+    fireEvent.click(screen.getByTestId('log-btn'))
+    expect(screen.getByText(/Asajj Ventress — Destroyed \(15\)/)).toBeInTheDocument()
+  })
+
+  it('zero-point ship awards no points and produces no log entry', async () => {
+    const user = await startWithPilots()
+    // nashtahpup at index 2 has 0 points
+    await user.click(screen.getByTestId('opponent-ship-btn-2')) // → half, 0pts
+    await user.click(screen.getByTestId('opponent-ship-btn-2')) // → destroyed, 0pts
+    expect(screen.getByTestId('player-score')).toHaveTextContent('0')
+    fireEvent.click(screen.getByTestId('log-btn'))
+    expect(within(screen.getByTestId('log-overlay')).queryByText(/Nashtah Pup/)).not.toBeInTheDocument()
+  })
+
+  it('undo after damage restores score and ship to alive', async () => {
+    const user = await startWithPilots()
+    await user.click(screen.getByTestId('opponent-ship-btn-0')) // → half, 7pts
+    fireEvent.click(screen.getByTestId('log-btn'))
+    fireEvent.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByTestId('player-score')).toHaveTextContent('0')
+    // ship is alive again: tapping it should award 7pts (half), not 8pts (destroy)
+    await user.click(screen.getByTestId('opponent-ship-btn-0'))
+    expect(screen.getByTestId('player-score')).toHaveTextContent('7')
+  })
+
+  it('undo after destroy restores ship button and score to half', async () => {
+    const user = await startWithPilots()
+    await user.click(screen.getByTestId('opponent-ship-btn-0')) // → half, 7pts
+    await user.click(screen.getByTestId('opponent-ship-btn-0')) // → destroyed, 15pts total
+    fireEvent.click(screen.getByTestId('log-btn'))
+    fireEvent.click(screen.getByTestId('log-undo-btn'))
+    expect(screen.getByTestId('player-score')).toHaveTextContent('7')
+    expect(screen.getByTestId('opponent-ship-btn-0')).toBeInTheDocument()
   })
 })
