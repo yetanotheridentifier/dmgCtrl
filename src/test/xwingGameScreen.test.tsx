@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import XwingGameScreen from '../components/xwingGameScreen'
 import { useOrientation } from '../hooks/useOrientation'
@@ -1572,5 +1572,45 @@ describe('XwingGameScreen scenario validation', () => {
     expect(screen.getByTestId('opponent-scenario-0')).not.toBeDisabled()
     expect(screen.getByTestId('opponent-scenario-2')).not.toBeDisabled()
     expect(screen.getByTestId('opponent-scenario-4')).not.toBeDisabled()
+  })
+})
+
+describe('pilot list display', () => {
+  const PILOTS = [
+    { name: 'asajjventress', ship: 'lancerclasspursuitcraft', points: 15 },
+    { name: 'bobafett-armedanddangerous', ship: 'firesprayclasspatrolcraft', points: 18 },
+    { name: 'bossk', ship: 'yv666lightfreighter', points: 17 },
+  ]
+
+  it('renders player and opponent pilot lists when provided', () => {
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerPilots={PILOTS} opponentPilots={PILOTS} />)
+    expect(screen.getByTestId('player-pilot-list')).toBeInTheDocument()
+    expect(screen.getByTestId('opponent-pilot-list')).toBeInTheDocument()
+  })
+
+  it('shows slug before first hyphen as display name', () => {
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerPilots={PILOTS} />)
+    const list = screen.getByTestId('player-pilot-list')
+    expect(within(list).getByText(/bobafett/)).toBeInTheDocument()
+    expect(within(list).queryByText(/armedanddangerous/)).not.toBeInTheDocument()
+  })
+
+  it('renders no pilot lists when pilots not provided', () => {
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
+    expect(screen.queryByTestId('player-pilot-list')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('opponent-pilot-list')).not.toBeInTheDocument()
+  })
+
+  it('numbers duplicate pilot names', () => {
+    const duplicates = [
+      { name: 'academypilot', ship: 'tiefighter', points: 12 },
+      { name: 'academypilot', ship: 'tiefighter', points: 12 },
+      { name: 'academypilot', ship: 'tiefighter', points: 12 },
+    ]
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerPilots={duplicates} />)
+    const list = screen.getByTestId('player-pilot-list')
+    expect(within(list).getByText(/academypilot 1/)).toBeInTheDocument()
+    expect(within(list).getByText(/academypilot 2/)).toBeInTheDocument()
+    expect(within(list).getByText(/academypilot 3/)).toBeInTheDocument()
   })
 })

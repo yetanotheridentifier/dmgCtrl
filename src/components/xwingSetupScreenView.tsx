@@ -6,6 +6,7 @@ import TimerStepper from './shared/timerStepper'
 import type { XwingMatchType, XwingListImport, XwingScenario } from '../hooks/useXwingSetup'
 import { XWING_NAMED_SCENARIOS } from '../hooks/useXwingSetup'
 import type { XwingPilot } from '../utils/parseXwsText'
+import { displayPilots } from '../utils/displayPilots'
 
 interface Props {
   matchType: XwingMatchType
@@ -124,6 +125,26 @@ const textareaStyle = (small = false, fill = false): React.CSSProperties => ({
   wordBreak: 'break-all',
 })
 
+function PilotList({ pilots, testId, small }: { pilots: XwingPilot[], testId: string, small: boolean }) {
+  return (
+    <div data-testid={testId} style={{ display: 'flex', flexDirection: 'column', gap: small ? '0.4vh' : '0.6vh' }}>
+      {displayPilots(pilots).map((p, i) => (
+        <div key={i} style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          fontSize: small ? 'clamp(0.6rem, 1.4vw, 0.75rem)' : 'clamp(0.7rem, 2.5vw, 0.9rem)',
+          fontWeight: '300',
+          color: 'var(--color-text-muted)',
+          letterSpacing: '0.04em',
+        }}>
+          <span>{p.displayName} - {p.ship}</span>
+          <span>{p.points}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function TextareaField({ testId, errorTestId, value, onChange, error, small, fill }: {
   testId: string
   errorTestId: string
@@ -201,6 +222,8 @@ export default function XwingSetupScreenView({
   onOpponentTextChange,
   playerError,
   opponentError,
+  playerPilots,
+  opponentPilots,
   scenario,
   onScenarioChange,
   onScenarioRandom,
@@ -343,6 +366,13 @@ export default function XwingSetupScreenView({
         </button>
       )}
 
+      {/* Confirmed player pilot list */}
+      {playerConfirmed && playerListImport === 'XWA' && playerPilots.length > 0 && (
+        <div style={{ gridColumn: '1 / -1' }}>
+          <PilotList pilots={playerPilots} testId="player-pilot-list" small={small} />
+        </div>
+      )}
+
       {/* Player textarea (inline portrait only) */}
       {renderTextareaInline && !playerConfirmed && playerListImport === 'XWA' && (
         <div style={{ gridColumn: '1 / -1' }}>
@@ -404,6 +434,13 @@ export default function XwingSetupScreenView({
           >
             <CheckIcon />
           </button>
+        )}
+
+        {/* Confirmed opponent pilot list */}
+        {opponentConfirmed && opponentListImport === 'XWA' && opponentPilots.length > 0 && (
+          <div style={{ gridColumn: '1 / -1' }}>
+            <PilotList pilots={opponentPilots} testId="opponent-pilot-list" small={small} />
+          </div>
         )}
 
         {/* Opponent textarea (inline portrait only) */}
@@ -619,6 +656,11 @@ export default function XwingSetupScreenView({
                     </button>
                   </>
                 )}
+                {playerConfirmed && playerListImport === 'XWA' && playerPilots.length > 0 && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <PilotList pilots={playerPilots} testId="player-pilot-list" small={true} />
+                  </div>
+                )}
 
                 {/* Confirmed opponent row */}
                 {opponentConfirmed && (
@@ -639,6 +681,11 @@ export default function XwingSetupScreenView({
                       Edit
                     </button>
                   </>
+                )}
+                {opponentConfirmed && opponentListImport === 'XWA' && opponentPilots.length > 0 && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <PilotList pilots={opponentPilots} testId="opponent-pilot-list" small={true} />
+                  </div>
                 )}
 
               </div>

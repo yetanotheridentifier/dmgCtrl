@@ -29,7 +29,7 @@ Lists are entered one at a time in sequence. Confirm **Your list** before the **
 Each player's import method is set independently:
 
 - **None** — manual deficit entry only. Use the stepper to enter the player's mission point deficit (0–4). Per the X-Wing rulebook, each player starts with mission points equal to their **opponent's** deficit.
-- **XWA** — paste the XWS JSON exported from the YASB (Yet Another Squad Builder) website. Tap the **tick button** to validate the list; if the list cannot be parsed, a descriptive error message will appear and you can correct the text before trying again.
+- **XWA** — paste the XWS JSON exported from the YASB (Yet Another Squad Builder) website. Tap the **tick button** to validate the list; if the list cannot be parsed, a descriptive error message will appear and you can correct the text before trying again. Once confirmed, your squad is shown as a list of pilots with their ship and points so you can verify before starting.
 - **YASB** — direct YASB import (coming soon).
 
 Once both lists are confirmed, the **Go to game** button appears (portrait: below the help button; landscape: top-right). Tap **Edit** next to either player to go back and change their list — editing one player does not affect the other.
