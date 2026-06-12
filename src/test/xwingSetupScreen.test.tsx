@@ -414,11 +414,10 @@ describe('XwingSetupScreen', () => {
       fireEvent.change(screen.getByTestId('player-list-textarea'), { target: { value: VALID_XWS } })
       await user.click(screen.getByTestId('player-confirm-btn'))
       const list = screen.getByTestId('player-pilot-list')
-      // bobafett-armedanddangerous → bobafett (slug before first hyphen)
-      expect(within(list).getByText(/asajjventress/)).toBeInTheDocument()
-      expect(within(list).getByText(/bobafett/)).toBeInTheDocument()
-      expect(within(list).getByText(/bossk/)).toBeInTheDocument()
-      expect(within(list).getByText(/nashtahpup/)).toBeInTheDocument()
+      expect(within(list).getByText(/Asajj Ventress/)).toBeInTheDocument()
+      expect(within(list).getByText(/Boba Fett/)).toBeInTheDocument()
+      expect(within(list).getByText(/Bossk/)).toBeInTheDocument()
+      expect(within(list).getByText(/Nashtah Pup/)).toBeInTheDocument()
     })
 
     it('hides pilot list when player edit is clicked', async () => {

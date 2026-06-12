@@ -1588,10 +1588,10 @@ describe('pilot list display', () => {
     expect(screen.getByTestId('opponent-pilot-list')).toBeInTheDocument()
   })
 
-  it('shows slug before first hyphen as display name', () => {
+  it('shows resolved pilot display name, not raw slug', () => {
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerPilots={PILOTS} />)
     const list = screen.getByTestId('player-pilot-list')
-    expect(within(list).getByText(/bobafett/)).toBeInTheDocument()
+    expect(within(list).getByText(/Boba Fett/)).toBeInTheDocument()
     expect(within(list).queryByText(/armedanddangerous/)).not.toBeInTheDocument()
   })
 
@@ -1609,8 +1609,8 @@ describe('pilot list display', () => {
     ]
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerPilots={duplicates} />)
     const list = screen.getByTestId('player-pilot-list')
-    expect(within(list).getByText(/academypilot 1/)).toBeInTheDocument()
-    expect(within(list).getByText(/academypilot 2/)).toBeInTheDocument()
-    expect(within(list).getByText(/academypilot 3/)).toBeInTheDocument()
+    expect(within(list).getByText(/Academy Pilot 1/)).toBeInTheDocument()
+    expect(within(list).getByText(/Academy Pilot 2/)).toBeInTheDocument()
+    expect(within(list).getByText(/Academy Pilot 3/)).toBeInTheDocument()
   })
 })
