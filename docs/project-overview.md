@@ -10,7 +10,7 @@ A Progressive Web App for tracking game state in tabletop games, supporting Star
 
 ### X-Wing (in progress)
 - ✅ Setup screen — Match (Casual/Tournament) with Rounds stepper (2–10); Ruleset dropdown (XWA active; Legacy/AMG/2.0/1.0 greyed out); List Import dropdown (None/XWA active; YASB greyed out); XWA: paste XWS JSON from YASB, validated on confirm, deficit auto-calculated; pilot list (display name - ship | points, resolved via xwsPilotNames/xwsShipNames lookup with slug fallback) shown after confirmation; None: manual deficit stepper (0–4); portrait + landscape layouts; settings persisted to localStorage except deficits (session-only)
-- ✅ Game screen — receives deficit values as props from setup screen; each player starts with points equal to the opponent's deficit (per X-Wing rules); dual score counters (0–50); drag scrubber on all buttons; result banner at game over
+- ✅ Game screen — receives deficit values as props from setup screen; each player starts with points equal to the opponent's deficit (per X-Wing rules); dual score counters (0–50); drag scrubber on all buttons when no lists loaded; result banner at game over
 - ✅ Timer — configurable countdown (default 75 min, 5:30–90 min via Settings); starts with the game; runs until game over (does not stop at round 12); displayed in centre column
 - ✅ Round tracker — continuous bar spanning the top of the screen; 12 segments; current round extends downward as a seamless tab; colour follows the timer (accent → warning → error)
 - ✅ Phase tracker — optional button in the centre column; cycles Planning → System → Activation → Engagement → End; End advances the round or ends the game at round 12 / timer expiry; initiative locked during non-Planning phases; gated by Settings toggle (on by default)
@@ -18,7 +18,7 @@ A Progressive Web App for tracking game state in tabletop games, supporting Star
 - ✅ Action log — all entries undoable including game-end; undoing game-end resumes the timer from where it was stopped; score entries use semantic colours
 - ✅ Help screen
 - ✅ Initiative bar — vertical bar in the left column; slides between OPP/YOU; resets to neutral on round advance; locked during non-Planning phases when phase tracker is enabled; shared component with SWU
-- Remaining features — applying stored deficit to score when opponent ships are destroyed
+- ✅ Per-ship scoring (#243) — when lists are imported, each outer column shows a vertical stack of dmgCtrl icon buttons (one per ship); tap once → Damaged (awards `floor(pts/2)`, button turns amber); tap again → Destroyed (awards `ceil(pts/2)`, button removed); long-press from alive skips directly to Destroyed (awards all points); zero-point ships cycle state without scoring or logging; each event is a separate undoable log entry; inc/dec buttons replaced when the opposing column has ship buttons (player scores via opposing ship taps; if only one side has a list, the listless side retains inc/dec for manual scoring)
 
 ### Future games
 - Kill Team
