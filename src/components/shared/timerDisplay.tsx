@@ -23,12 +23,25 @@ function timerColor(remaining: number): string {
  *   ≤ 1:00 → --color-error
  */
 export default function TimerDisplay({ remaining, testId = 'timer-display', style }: Props) {
+  const formatted = formatTime(remaining)
+  const colon = formatted.indexOf(':')
+  const minutes = formatted.slice(0, colon)
+  const seconds = formatted.slice(colon + 1)
+
   return (
     <div
       data-testid={testId}
-      style={{ color: timerColor(remaining), ...style }}
+      style={{ display: 'flex', alignItems: 'baseline', color: timerColor(remaining), ...style }}
     >
-      {formatTime(remaining)}
+      {/* Right-align minutes in a fixed 2ch slot so the colon never shifts */}
+      <span style={{ fontVariantNumeric: 'tabular-nums', minWidth: '2ch', textAlign: 'right', display: 'inline-block' }}>
+        {minutes}
+      </span>
+      <span>:</span>
+      {/* Seconds are always 2 digits (padStart) — fixed width keeps right side stable */}
+      <span style={{ fontVariantNumeric: 'tabular-nums', width: '2ch', display: 'inline-block' }}>
+        {seconds}
+      </span>
     </div>
   )
 }
