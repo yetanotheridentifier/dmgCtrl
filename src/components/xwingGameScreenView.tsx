@@ -28,8 +28,6 @@ interface Props {
   onRoundAdvance: () => void
   playerScore: number
   opponentScore: number
-  playerDeficit: number
-  opponentDeficit: number
   onPlayerIncrement: (n: number) => void
   onPlayerDecrement: (n: number) => void
   onOpponentIncrement: (n: number) => void
@@ -247,8 +245,6 @@ export default function XwingGameScreenView({
   onRoundAdvance,
   playerScore,
   opponentScore,
-  playerDeficit,
-  opponentDeficit,
   onPlayerIncrement,
   onPlayerDecrement,
   onOpponentIncrement,
@@ -604,7 +600,7 @@ export default function XwingGameScreenView({
                   textAlign: 'center',
                 }}
               >
-                {gameStarted ? playerScore : opponentDeficit}
+                {gameStarted ? playerScore : 0}
               </div>
             </div>
             </div>
@@ -890,7 +886,7 @@ export default function XwingGameScreenView({
                   textAlign: 'center',
                 }}
               >
-                {gameStarted ? opponentScore : playerDeficit}
+                {gameStarted ? opponentScore : 0}
               </div>
               <div style={{
                 fontSize: 'clamp(0.75rem, 2.2vmin, 1.2rem)',

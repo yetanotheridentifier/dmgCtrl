@@ -147,7 +147,7 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     log.reset()
     setLogOpen(false)
     log.add({ type: 'round', message: 'Round 1', color: '#ffffff', snapshot: snapshot() })
-    game.reset(opponentDeficit, playerDeficit)
+    game.reset()
     phaseTracker.reset()
     setPendingPlayerScenario(null)
     setPendingOpponentScenario(null)
@@ -173,16 +173,22 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
     const action = nextState === 'half' ? 'Damaged' : 'Destroyed'
     const color = side === 'player' ? 'var(--color-error)' : 'var(--color-success)'
 
+    const updated = ships.map((s, i) => i === index ? { ...s, state: nextState } : s)
+    const allDestroyed = nextState === 'destroyed' && updated.every(s => s.state === 'destroyed')
+    const deficit = allDestroyed ? (side === 'player' ? playerDeficit : opponentDeficit) : 0
+
     if (pts > 0) {
-      log.add({ type: 'score', message: `${displayName} — ${action} (${pts})`, color, snapshot: snap })
+      const suffix = deficit > 0 ? ` +${deficit} deficit` : ''
+      log.add({ type: 'score', message: `${displayName} — ${action} (${pts}${suffix})`, color, snapshot: snap })
+    } else if (deficit > 0) {
+      log.add({ type: 'score', message: `Squad destroyed — +${deficit} deficit`, color, snapshot: snap })
     }
     if (side === 'player') {
-      if (pts > 0) game.incrementOpponent(pts)
+      if (pts + deficit > 0) game.incrementOpponent(pts + deficit)
     } else {
-      if (pts > 0) game.incrementPlayer(pts)
+      if (pts + deficit > 0) game.incrementPlayer(pts + deficit)
     }
 
-    const updated = ships.map((s, i) => i === index ? { ...s, state: nextState } : s)
     setShips(updated)
   }
 
@@ -264,8 +270,6 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
       onRoundAdvance={handleRoundAdvance}
       playerScore={game.playerScore + game.playerScenarioScore}
       opponentScore={game.opponentScore + game.opponentScenarioScore}
-      playerDeficit={playerDeficit}
-      opponentDeficit={opponentDeficit}
       onPlayerIncrement={handlePlayerIncrement}
       onPlayerDecrement={handlePlayerDecrement}
       onOpponentIncrement={handleOpponentIncrement}

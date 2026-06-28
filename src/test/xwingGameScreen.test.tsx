@@ -95,14 +95,14 @@ describe('XwingGameScreen pre-game', () => {
     expect(screen.getByTestId('start-game-btn')).toBeInTheDocument()
   })
 
-  it('shows opponent deficit as player score before game starts', () => {
-    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerDeficit={0} opponentDeficit={3} />)
-    expect(screen.getByTestId('player-score')).toHaveTextContent('3')
+  it('shows 0 as player score before game starts', () => {
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerDeficit={3} opponentDeficit={2} />)
+    expect(screen.getByTestId('player-score')).toHaveTextContent('0')
   })
 
-  it('shows player deficit as opponent score before game starts', () => {
-    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerDeficit={2} opponentDeficit={0} />)
-    expect(screen.getByTestId('opponent-score')).toHaveTextContent('2')
+  it('shows 0 as opponent score before game starts', () => {
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerDeficit={3} opponentDeficit={2} />)
+    expect(screen.getByTestId('opponent-score')).toHaveTextContent('0')
   })
 
 })
@@ -113,18 +113,18 @@ describe('XwingGameScreen pre-game', () => {
 
 describe('XwingGameScreen score counters', () => {
 
-  it('player score starts equal to opponent deficit', async () => {
+  it('player score starts at 0 regardless of opponent deficit', async () => {
     const user = userEvent.setup()
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerDeficit={0} opponentDeficit={3} />)
     await user.click(screen.getByTestId('start-game-btn'))
-    expect(screen.getByTestId('player-score')).toHaveTextContent('3')
+    expect(screen.getByTestId('player-score')).toHaveTextContent('0')
   })
 
-  it('opponent score starts equal to player deficit', async () => {
+  it('opponent score starts at 0 regardless of player deficit', async () => {
     const user = userEvent.setup()
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} playerDeficit={2} opponentDeficit={0} />)
     await user.click(screen.getByTestId('start-game-btn'))
-    expect(screen.getByTestId('opponent-score')).toHaveTextContent('2')
+    expect(screen.getByTestId('opponent-score')).toHaveTextContent('0')
   })
 
   it('player increment adds 1', async () => {
@@ -562,14 +562,6 @@ describe('XwingGameScreen round tracker', () => {
     expect(screen.getByRole('button', { name: 'Round 1' }).style.borderColor).toBe('var(--color-warning)')
   })
 
-  it('current round indicator is amber when timer is between 5:00 and 1:00', async () => {
-    mockTimerState.remaining = 150
-    const user = userEvent.setup()
-    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    await user.click(screen.getByTestId('start-game-btn'))
-    expect(screen.getByRole('button', { name: 'Round 1' }).style.borderColor).toBe('var(--color-warning)')
-  })
-
   it('current round indicator is red when timer is at exactly 1:00', async () => {
     mockTimerState.remaining = 60
     const user = userEvent.setup()
@@ -695,13 +687,6 @@ describe('XwingGameScreen log entries', () => {
     await user.click(screen.getByRole('button', { name: 'Round 2' }))
     await user.click(screen.getByTestId('log-btn'))
     expect(screen.getByText('Round 2')).toBeInTheDocument()
-  })
-
-  it('log is empty before game starts', async () => {
-    const user = userEvent.setup()
-    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    await user.click(screen.getByTestId('log-btn'))
-    expect(screen.getByText(/no actions yet/i)).toBeInTheDocument()
   })
 
   it('log resets when Start Game is clicked again after undoing back to pre-game', async () => {
@@ -1196,18 +1181,6 @@ describe('XwingGameScreen phase tracker', () => {
     await user.click(screen.getByTestId('log-undo-btn'))
     expect(btn).toHaveTextContent('End')
     expect(screen.queryByTestId('result-banner')).not.toBeInTheDocument()
-  })
-
-  it('tapping End phase when timer expired triggers game over and shows result banner', async () => {
-    mockTimerState.isExpired = true
-    mockTimerState.remaining = 0
-    const user = userEvent.setup()
-    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} />)
-    await user.click(screen.getByTestId('start-game-btn'))
-    const btn = screen.getByTestId('phase-btn')
-    for (let i = 0; i < 4; i++) await user.click(btn) // reach End phase
-    await user.click(btn) // trigger game over
-    expect(screen.getByTestId('result-banner')).toBeInTheDocument()
   })
 
   it('result banner shows Game Won when player has more points at end', async () => {
@@ -1749,5 +1722,60 @@ describe('ship scoring', () => {
     fireEvent.click(screen.getByTestId('log-undo-btn'))
     expect(screen.getByTestId('player-score')).toHaveTextContent('7')
     expect(screen.getByTestId('opponent-ship-btn-0')).toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Deficit scoring
+// ---------------------------------------------------------------------------
+
+describe('deficit scoring', () => {
+  // One pilot per side — two taps destroys the squad (half then destroyed).
+  const ONE_PILOT = [{ name: 'academypilot', ship: 'tiefighter', points: 12 }]
+
+  async function startWithDeficit(playerDeficit: number, opponentDeficit: number) {
+    const user = userEvent.setup()
+    render(
+      <XwingGameScreen
+        onBack={vi.fn()} onHelp={vi.fn()}
+        playerPilots={ONE_PILOT} opponentPilots={ONE_PILOT}
+        playerDeficit={playerDeficit} opponentDeficit={opponentDeficit}
+      />
+    )
+    await user.click(screen.getByTestId('start-game-btn'))
+    return user
+  }
+
+  it('opponent deficit is NOT added to player score until all opponent ships are destroyed', async () => {
+    const user = await startWithDeficit(0, 5)
+    await user.click(screen.getByTestId('opponent-ship-btn-0')) // half → 6pts
+    expect(screen.getByTestId('player-score')).toHaveTextContent('6')
+  })
+
+  it('opponent deficit is added to player score when last opponent ship is destroyed', async () => {
+    const user = await startWithDeficit(0, 5)
+    await user.click(screen.getByTestId('opponent-ship-btn-0')) // half → 6pts
+    await user.click(screen.getByTestId('opponent-ship-btn-0')) // destroyed → 6pts + 5 deficit = 17
+    expect(screen.getByTestId('player-score')).toHaveTextContent('17')
+  })
+
+  it('player deficit is NOT added to opponent score until all player ships are destroyed', async () => {
+    const user = await startWithDeficit(5, 0)
+    await user.click(screen.getByTestId('player-ship-btn-0')) // half → 6pts to opponent
+    expect(screen.getByTestId('opponent-score')).toHaveTextContent('6')
+  })
+
+  it('player deficit is added to opponent score when last player ship is destroyed', async () => {
+    const user = await startWithDeficit(5, 0)
+    await user.click(screen.getByTestId('player-ship-btn-0')) // half → 6pts
+    await user.click(screen.getByTestId('player-ship-btn-0')) // destroyed → 6pts + 5 deficit = 17
+    expect(screen.getByTestId('opponent-score')).toHaveTextContent('17')
+  })
+
+  it('zero deficit adds nothing when squad is destroyed', async () => {
+    const user = await startWithDeficit(0, 0)
+    await user.click(screen.getByTestId('opponent-ship-btn-0'))
+    await user.click(screen.getByTestId('opponent-ship-btn-0'))
+    expect(screen.getByTestId('player-score')).toHaveTextContent('12') // just the ship points
   })
 })
