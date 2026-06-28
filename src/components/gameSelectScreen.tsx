@@ -16,14 +16,16 @@ function GameSelectScreen({ onSelectSwu, onSelectXwing, onSettings }: Props) {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    aspectRatio: '1 / 1',
     background: 'rgba(255,255,255,0.04)',
     border: '2px solid var(--color-accent)',
     borderRadius: '16px',
     cursor: 'pointer',
-    padding: '12%',
+    padding: '64px',
     boxSizing: 'border-box',
     boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
+    width: 'min(65vmin, 300px)',
+    height: 'min(65vmin, 300px)',
+    flexShrink: 0,
   }
 
   return (
@@ -76,19 +78,16 @@ function GameSelectScreen({ onSelectSwu, onSelectXwing, onSettings }: Props) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: isPortrait ? '0 10%' : '0 5%',
         }}>
           <div style={{
             display: 'flex',
             flexDirection: isPortrait ? 'column' : 'row',
             gap: 'clamp(12px, 4vw, 24px)',
-            width: '100%',
-            maxWidth: isPortrait ? '320px' : '640px',
           }}>
             <button
               onClick={onSelectSwu}
               aria-label="Star Wars Unlimited"
-              style={{ ...buttonBase, flex: 1 }}
+              style={buttonBase}
             >
               <img
                 src={`${import.meta.env.BASE_URL}Star-Wars-Unlimited-logo-white.png`}
@@ -100,7 +99,7 @@ function GameSelectScreen({ onSelectSwu, onSelectXwing, onSettings }: Props) {
             <button
               onClick={onSelectXwing}
               aria-label="Star Wars X-Wing"
-              style={{ ...buttonBase, flex: 1 }}
+              style={buttonBase}
             >
               <img
                 src={`${import.meta.env.BASE_URL}Star-Wars-X-wing-logo.png`}
