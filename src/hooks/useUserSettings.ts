@@ -18,6 +18,7 @@ interface UserSettings {
   enableCompetitiveMode: boolean
   enableGameSelect: boolean
   enableXwingPhases: boolean
+  enableXwingAlwaysIncDec: boolean
   startScreen: StartScreen
   bo1TimerMinutes: number
   bo3TimerMinutes: number
@@ -41,6 +42,7 @@ const DEFAULTS: UserSettings = {
   enableCompetitiveMode: true,
   enableGameSelect: true,
   enableXwingPhases: true,
+  enableXwingAlwaysIncDec: false,
   startScreen: 'gameSelect',
   bo1TimerMinutes: 25,
   bo3TimerMinutes: 55,
@@ -77,6 +79,7 @@ function load(): UserSettings {
       enableCompetitiveMode: (parsed.enableCompetitiveMode as boolean) ?? DEFAULTS.enableCompetitiveMode,
       enableGameSelect: (parsed.enableGameSelect as boolean) ?? DEFAULTS.enableGameSelect,
       enableXwingPhases: (parsed.enableXwingPhases as boolean) ?? DEFAULTS.enableXwingPhases,
+      enableXwingAlwaysIncDec: (parsed.enableXwingAlwaysIncDec as boolean) ?? DEFAULTS.enableXwingAlwaysIncDec,
       startScreen: VALID_START_SCREENS.includes(parsed.startScreen as StartScreen)
         ? (parsed.startScreen as StartScreen)
         : DEFAULTS.startScreen,
@@ -106,6 +109,7 @@ type UserSettingsValue = UserSettings & {
   setEnableCompetitiveMode: (v: boolean) => void
   setEnableGameSelect: (v: boolean) => void
   setEnableXwingPhases: (v: boolean) => void
+  setEnableXwingAlwaysIncDec: (v: boolean) => void
   setStartScreen: (v: StartScreen) => void
   setBo1TimerMinutes: (v: number) => void
   setBo3TimerMinutes: (v: number) => void
@@ -138,6 +142,7 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     enableCompetitiveMode: settings.enableCompetitiveMode,
     enableGameSelect: settings.enableGameSelect,
     enableXwingPhases: settings.enableXwingPhases,
+    enableXwingAlwaysIncDec: settings.enableXwingAlwaysIncDec,
     startScreen: settings.startScreen,
     bo1TimerMinutes: settings.bo1TimerMinutes,
     bo3TimerMinutes: settings.bo3TimerMinutes,
@@ -154,6 +159,7 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     setEnableCompetitiveMode: (v) => update({ enableCompetitiveMode: v }),
     setEnableGameSelect: (v) => update({ enableGameSelect: v }),
     setEnableXwingPhases: (v) => update({ enableXwingPhases: v }),
+    setEnableXwingAlwaysIncDec: (v) => update({ enableXwingAlwaysIncDec: v }),
     setStartScreen: (v) => update({ startScreen: v }),
     setBo1TimerMinutes: (v) => update({ bo1TimerMinutes: v }),
     setBo3TimerMinutes: (v) => update({ bo3TimerMinutes: v }),

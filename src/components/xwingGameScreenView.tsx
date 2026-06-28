@@ -34,6 +34,7 @@ interface Props {
   onOpponentDecrement: (n: number) => void
   enableLongPress: boolean
   enableActionLog: boolean
+  enableXwingAlwaysIncDec?: boolean
   logEntries: HistoryEntry<{ playerScore: number; opponentScore: number; round: number; gameStarted: boolean }>[]
   logOpen: boolean
   onLogToggle: () => void
@@ -251,6 +252,7 @@ export default function XwingGameScreenView({
   onOpponentDecrement,
   enableLongPress,
   enableActionLog,
+  enableXwingAlwaysIncDec = false,
   logEntries,
   logOpen,
   onLogToggle,
@@ -536,7 +538,7 @@ export default function XwingGameScreenView({
                 Column top = safe_top+9vw+paddingTop (row paddingTop shifts the column element).
                 top (col coords) = −3.5vw + 5vmin + min(0, 4.5vw−16.5vmin+safe/4) — see derivation
                 in git history. Horizontally right-aligned: + RHS sits at the DmgCtrl icon edge. */}
-            {gameStarted && !scenarioScoringActive && !(opponentShips && opponentShips.length > 0) && (
+            {gameStarted && (enableXwingAlwaysIncDec || (!scenarioScoringActive && !(opponentShips && opponentShips.length > 0))) && (
               <div style={{
                 position: 'absolute',
                 top: 'calc(-3.5vw + 5vmin + min(0px, 4.5vw - 16.5vmin + env(safe-area-inset-top) / 4 + env(safe-area-inset-bottom) / 4))',
@@ -831,7 +833,7 @@ export default function XwingGameScreenView({
           }}>
             {/* Inc/Dec overlay — same vertical formula as player; left-aligned so
                 − LHS sits at the opponent DmgCtrl icon edge. */}
-            {gameStarted && !scenarioScoringActive && !(playerShips && playerShips.length > 0) && (
+            {gameStarted && (enableXwingAlwaysIncDec || (!scenarioScoringActive && !(playerShips && playerShips.length > 0))) && (
               <div style={{
                 position: 'absolute',
                 top: 'calc(-3.5vw + 5vmin + min(0px, 4.5vw - 16.5vmin + env(safe-area-inset-top) / 4 + env(safe-area-inset-bottom) / 4))',
