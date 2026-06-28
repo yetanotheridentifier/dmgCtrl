@@ -1339,15 +1339,15 @@ describe('XwingGameScreen scenario scoring', () => {
     expect(screen.getByTestId('opponent-scenario-4')).toBeInTheDocument()
   })
 
-  it('inc/dec buttons are disabled by scenario buttons during End-phase scoring', async () => {
+  it('inc/dec buttons are replaced (not just disabled) during End-phase scenario scoring', async () => {
     const user = userEvent.setup()
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} scenario="Salvage Mission" />)
     await user.click(screen.getByTestId('start-game-btn'))
     await user.click(screen.getByRole('button', { name: 'Round 2' }))
     const phaseBtn = screen.getByTestId('phase-btn')
     for (let i = 0; i < 4; i++) await user.click(phaseBtn)
-    expect(screen.getByTestId('player-increment')).toBeDisabled()
-    expect(screen.getByTestId('opponent-increment')).toBeDisabled()
+    expect(screen.queryByTestId('player-increment')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('opponent-increment')).not.toBeInTheDocument()
     expect(screen.getByTestId('player-scenario-0')).toBeInTheDocument()
   })
 

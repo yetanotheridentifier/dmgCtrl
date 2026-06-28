@@ -7,7 +7,7 @@ import InitiativeToggle from './initiativeToggle'
 import { NAV_BTN_STYLE } from '../styles/navButton'
 import { BAR_CONTAINER_STYLE } from '../styles/barContainer'
 import { START_TEXT_STYLE } from '../styles/startText'
-import { useRef } from 'react'
+import { useRef, Fragment } from 'react'
 import type { HistoryEntry } from '../hooks/useGameHistory'
 import type { Initiative } from '../hooks/useInitiative'
 import type { XwingPilot } from '../utils/parseXwsText'
@@ -85,15 +85,14 @@ function getDisabledPlayerValues(scenario: string | undefined, opponentSelected:
 }
 
 const SCENARIO_BTN = (selected: boolean, disabled = false): React.CSSProperties => ({
-  width: '5vw',
-  height: '5vw',
-  minWidth: '36px',
+  width: '100%',
+  height: '10vmin',
   minHeight: '36px',
   background: selected ? 'rgba(var(--color-accent-rgb), 0.15)' : 'rgba(0,0,0,0.45)',
   color: selected ? 'var(--color-accent)' : 'var(--color-text-muted)',
   border: `2px solid ${selected ? 'var(--color-accent)' : 'var(--color-ui-border)'}`,
   borderRadius: '8px',
-  fontSize: 'clamp(0.55rem, 1.5vw, 0.85rem)',
+  fontSize: 'clamp(0.65rem, 2vmin, 1rem)',
   fontWeight: '300',
   cursor: disabled ? 'default' : 'pointer',
   display: 'flex',
@@ -105,11 +104,24 @@ const SCENARIO_BTN = (selected: boolean, disabled = false): React.CSSProperties 
 
 const LONG_PRESS_MS = 400
 
-function ShipButton({ entry, index, onAdvance, align }: {
+function DmgCtrlIcon({ color }: { color: string }) {
+  return (
+    <svg viewBox="0 0 192 192" style={{ width: '100%', height: '100%' }} xmlns="http://www.w3.org/2000/svg">
+      <path d="M 96,26 L 103.2,77.2 L 141.3,42.7 L 113.8,86.1 L 138.3,88.9 L 116.2,99.9 L 156.9,131.3 L 109.2,111.8 L 110.8,136.5 L 96.0,116.6 L 72.3,162.3 L 83.2,111.8 L 59.3,117.6 L 76.3,99.9 L 27.3,108.4 L 78.7,86.1 L 51.2,42.7 L 89.4,77.2 Z"
+        fill="none" stroke="rgba(0,0,0,0.6)" strokeWidth="11" strokeLinejoin="round" transform="translate(1,1)" />
+      <path d="M 96,26 L 103.2,77.2 L 141.3,42.7 L 113.8,86.1 L 138.3,88.9 L 116.2,99.9 L 156.9,131.3 L 109.2,111.8 L 110.8,136.5 L 96.0,116.6 L 72.3,162.3 L 83.2,111.8 L 59.3,117.6 L 76.3,99.9 L 27.3,108.4 L 78.7,86.1 L 51.2,42.7 L 89.4,77.2 Z"
+        fill="none" stroke={color} strokeWidth="8" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function ShipButton({ entry, index, onAdvance, align, side, displayName }: {
   entry: ShipEntry
   index: number
   onAdvance: (index: number, skip: boolean) => void
   align: 'left' | 'right'
+  side: 'player' | 'opponent'
+  displayName: string
 }) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const startPos = useRef<{ x: number; y: number } | null>(null)
@@ -137,24 +149,23 @@ function ShipButton({ entry, index, onAdvance, align }: {
 
   const isHalf = entry.state === 'half'
   const color = isHalf ? 'var(--color-warning)' : 'var(--color-accent)'
-  const displayName = displayPilots([entry.pilot])[0].displayName
 
   const iconEl = (
     <button
-      data-testid={`${align === 'left' ? 'player' : 'opponent'}-ship-btn-${index}`}
+      data-testid={`${side}-ship-btn-${index}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={cancel}
       style={{
-        width: '5vw',
-        height: '5vw',
-        minWidth: '30px',
-        minHeight: '30px',
+        width: '3vmin',
+        height: '3vmin',
+        minWidth: '20px',
+        minHeight: '20px',
         background: 'transparent',
         border: `1.5px solid ${color}`,
-        borderRadius: '8px',
-        padding: '2px',
+        borderRadius: '5px',
+        padding: '1px',
         cursor: 'pointer',
         display: 'flex',
         alignItems: 'center',
@@ -165,18 +176,14 @@ function ShipButton({ entry, index, onAdvance, align }: {
         WebkitUserSelect: 'none',
       }}
     >
-      <img
-        src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`}
-        alt=""
-        style={{ width: '100%', height: '100%', objectFit: 'contain', filter: isHalf ? 'sepia(1) saturate(3) hue-rotate(5deg)' : undefined }}
-        draggable={false}
-      />
+      <DmgCtrlIcon color={color} />
     </button>
   )
 
   const nameEl = (
     <span style={{
-      fontSize: 'clamp(0.5rem, 1.5vmin, 0.85rem)',
+      flex: 1,
+      fontSize: 'clamp(0.7rem, 2.2vmin, 1.2rem)',
       fontWeight: '300',
       color,
       letterSpacing: '0.04em',
@@ -185,6 +192,7 @@ function ShipButton({ entry, index, onAdvance, align }: {
       textOverflow: 'ellipsis',
       whiteSpace: 'nowrap',
       minWidth: 0,
+      textAlign: align === 'right' ? 'right' : 'left',
     }}>
       {displayName}
     </span>
@@ -213,23 +221,16 @@ function roundTrackerColor(remaining: number): string {
 const NAV_BTN: React.CSSProperties = { ...NAV_BTN_STYLE, zIndex: 10 }
 
 const COUNTER_BTN = (disabled: boolean): React.CSSProperties => ({
-  width: '14vmin',
-  height: '14vmin',
-  background: 'rgba(0,0,0,0.45)',
+  ...NAV_BTN_STYLE,
   color: disabled ? 'var(--color-ui-border)' : 'var(--color-accent)',
   border: `2px solid ${disabled ? 'var(--color-ui-border)' : 'var(--color-accent)'}`,
-  borderRadius: '8px',
-  fontSize: '5vmin',
+  fontSize: '4vmin',
   cursor: disabled ? 'default' : 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  flexShrink: 0,
-  WebkitTapHighlightColor: 'transparent',
   boxShadow: disabled ? 'none' : '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
   userSelect: 'none',
   WebkitUserSelect: 'none',
   opacity: disabled ? 0.4 : 1,
+  zIndex: 10,
 })
 
 export default function XwingGameScreenView({
@@ -299,6 +300,13 @@ export default function XwingGameScreenView({
   const dragIndicator =
     playerScrubber.dragIndicator ??
     opponentScrubber.dragIndicator
+
+  const disabledPlayerSet: Set<number> = scenarioAlreadyScoredThisRound
+    ? new Set([0, 2, 4])
+    : getDisabledPlayerValues(scenario, pendingOpponentScenario ?? null)
+  const disabledOppSet: Set<number> = scenarioAlreadyScoredThisRound
+    ? new Set([0, 2, 4])
+    : getDisabledOpponentValues(scenario, pendingPlayerScenario ?? null)
 
   return (
     <AppScreenLayout>
@@ -489,99 +497,160 @@ export default function XwingGameScreenView({
         </>
       )}
 
-      {/* Main content — bottom-anchored to align with the initiative bar bottom */}
+      {/* Main content — top-down; spacer clears nav/round-tracker; bounded row fills remaining height */}
       <div style={{
         position: 'absolute',
         inset: 0,
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        padding: `12vw 8vmin calc(env(safe-area-inset-bottom) + 9vw)`,
         boxSizing: 'border-box',
         touchAction: 'none',
       }}>
+        <div style={{ flexShrink: 0, height: 'calc(env(safe-area-inset-top) + 9vw)' }} />
 
-        {/*
-          Three-column layout.
-          Outer row stretches all columns to the same height so the centre
-          column can pin Start Game / timer to the bottom, aligning it with
-          the [−][+] buttons in the player/opponent columns.
-        */}
         <div style={{
+          flex: 1,
+          minHeight: 0,
           display: 'flex',
           flexDirection: 'row',
           alignItems: 'stretch',
-          justifyContent: 'space-between',
-          width: '100%',
           gap: '2vmin',
+          paddingLeft: 'calc(env(safe-area-inset-left) + 8vw)',
+          paddingRight: 'calc(env(safe-area-inset-right) + 8vw)',
+          paddingBottom: `calc(env(safe-area-inset-bottom) + ${gameStarted && scenarioScoringActive ? '2vw' : gameStarted ? '8vw' : '2vw'})`,
+          // Pin score row centre to the INIT label centre in the initiative bar (both pre-game and in-game).
+          // INIT label Y = 50vh + (safe_top−safe_bottom)/2 (it sits at top:50% inside the bar which
+          // spans env(safe-area-inset-top)+9vw → env(safe-area-inset-bottom)+9vw).
+          // Score row centre = topSpacer(safe_top+9vw) + paddingTop + buttonSlot(10vmin) + ½scoreRow(7vmin);
+          // solving for paddingTop gives:  33vmin − 9vw − safe_top/2 − safe_bottom/2
+          paddingTop: 'max(0px, calc(33vmin - 9vw - env(safe-area-inset-top) / 2 - env(safe-area-inset-bottom) / 2))',
+          boxSizing: 'border-box',
         }}>
 
           {/* ── Player column ── */}
           <div style={{
             flex: 1,
+            minHeight: 0,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
+            position: 'relative',
           }}>
-            {/* Label */}
-            <div style={{
-              fontSize: 'clamp(0.75rem, 2.2vmin, 1.2rem)',
-              fontWeight: '300',
-              color: 'var(--color-text-muted)',
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              marginBottom: '2vmin',
-            }}>
-              You
-            </div>
+            {/* Inc/Dec overlay — vertically centred between round-tracker bottom and score row top.
+                Column top = safe_top+9vw+paddingTop (row paddingTop shifts the column element).
+                top (col coords) = −3.5vw + 5vmin + min(0, 4.5vw−16.5vmin+safe/4) — see derivation
+                in git history. Horizontally right-aligned: + RHS sits at the DmgCtrl icon edge. */}
+            {gameStarted && !scenarioScoringActive && !(opponentShips && opponentShips.length > 0) && (
+              <div style={{
+                position: 'absolute',
+                top: 'calc(-3.5vw + 5vmin + min(0px, 4.5vw - 16.5vmin + env(safe-area-inset-top) / 4 + env(safe-area-inset-bottom) / 4))',
+                left: 0,
+                right: 0,
+                height: '5vw',
+                minHeight: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                paddingRight: 'calc(50% - 14vmin)',
+                gap: '2vmin',
+              }}>
+                <button
+                  data-testid="player-decrement"
+                  onClick={playerScrubber.handleClick('-')}
+                  onPointerDown={playerScrubber.handlePointerDown('-')}
+                  onPointerMove={playerScrubber.handlePointerMove}
+                  onPointerUp={playerScrubber.handlePointerUp}
+                  onPointerCancel={playerScrubber.handlePointerCancel}
+                  disabled={gameOver}
+                  style={COUNTER_BTN(gameOver)}
+                >−</button>
+                <button
+                  data-testid="player-increment"
+                  onClick={playerScrubber.handleClick('+')}
+                  onPointerDown={playerScrubber.handlePointerDown('+')}
+                  onPointerMove={playerScrubber.handlePointerMove}
+                  onPointerUp={playerScrubber.handlePointerUp}
+                  onPointerCancel={playerScrubber.handlePointerCancel}
+                  disabled={gameOver}
+                  style={COUNTER_BTN(gameOver)}
+                >+</button>
+              </div>
+            )}
 
-            {/* Score number — pre-game shows opponent's deficit (their starting score) */}
-            <div
-              data-testid="player-score"
-              style={{
-                fontSize: '15vmin',
+            {/* Button slot — fixed 10vmin; reserved for alignment (scenario buttons moved to centre column) */}
+            <div style={{ height: '10vmin', minHeight: '36px' }} />
+
+            {/* Score row — fixed height matches centre timer so all three centres align */}
+            <div style={{ height: '14vmin', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3vmin' }}>
+              <div style={{
+                fontSize: 'clamp(0.75rem, 2.2vmin, 1.2rem)',
                 fontWeight: '300',
-                color: 'var(--color-text-primary)',
-                textShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.4), 0 0 8px rgba(0,0,0,1)',
-                lineHeight: 1,
-                minWidth: '8vmin',
-                textAlign: 'center',
-              }}
-            >
-              {gameStarted ? playerScore : opponentDeficit}
+                color: 'var(--color-text-muted)',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}>
+                You
+              </div>
+              <div
+                data-testid="player-score"
+                style={{
+                  fontSize: '14vmin',
+                  fontWeight: '300',
+                  color: 'var(--color-text-primary)',
+                  textShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.4), 0 0 8px rgba(0,0,0,1)',
+                  lineHeight: 1,
+                  width: '3ch',
+                  textAlign: 'center',
+                }}
+              >
+                {gameStarted ? playerScore : opponentDeficit}
+              </div>
+            </div>
             </div>
 
-            {/* Pilot area: ship buttons when in-game, text list pre-game, spacer if no list */}
+            {/* Pilot area — ship buttons in-game, text list pre-game, spacer if no list; no scroll */}
             {gameStarted && playerShips && playerShips.length > 0 ? (
               <div data-testid="player-pilot-list" style={{
                 flex: 1,
-                overflowY: 'auto',
+                minHeight: 0,
                 width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '1vmin',
-                paddingTop: '1vmin',
-              }}>
-                {playerShips.map((entry, i) =>
-                  entry.state !== 'destroyed' ? (
-                    <ShipButton key={i} entry={entry} index={i} onAdvance={onPlayerShipAdvance!} align="left" />
-                  ) : null
-                )}
-              </div>
-            ) : playerPilots && playerPilots.length > 0 ? (
-              <div data-testid="player-pilot-list" style={{
-                flex: 1,
-                overflowY: 'auto',
-                width: '100%',
+                boxSizing: 'border-box',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '0.5vmin',
                 paddingTop: '1vmin',
+                // Align icon RHS with score right edge = column_centre + ½score_row_width (≈14vmin)
+                paddingRight: 'calc(50% - 14vmin)',
+              }}>
+                {(() => {
+                  const names = displayPilots(playerShips.map(e => e.pilot))
+                  return playerShips.map((entry, i) =>
+                    entry.state !== 'destroyed' ? (
+                      <ShipButton key={i} entry={entry} index={i} onAdvance={onPlayerShipAdvance!} align="right" side="player" displayName={names[i].displayName} />
+                    ) : null
+                  )
+                })()}
+              </div>
+            ) : playerPilots && playerPilots.length > 0 ? (
+              <div data-testid="player-pilot-list" style={{
+                flex: 1,
+                minHeight: 0,
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.5vmin',
+                // paddingTop: push first ship down so ship 8 bottom aligns with log button bottom.
+                // Derivation: pilot_list_height = 43vmin − 2vw − (safe_top+safe_bottom)/2;
+                // paddingTop = pilot_list_height − 8×2.64vmin − 7×0.5vmin = 18vmin − 2vw − safe/2
+                paddingTop: 'max(0px, calc(13.5vmin - 1.5vw - env(safe-area-inset-top) / 2 - env(safe-area-inset-bottom) / 2))',
+                // paddingLeft: shifts text centre 3.5vmin right (= half of label+gap = (label+3vmin)/2)
+                // so the list centre aligns with the score number centre, not the column centre.
+                paddingLeft: '7vmin',
               }}>
                 {displayPilots(playerPilots).map((p, i) => (
                   <div key={i} style={{
-                    fontSize: 'clamp(0.55rem, 1.6vmin, 0.9rem)',
+                    fontSize: 'clamp(0.75rem, 2.2vmin, 1.2rem)',
                     fontWeight: '300',
                     color: 'var(--color-text-muted)',
                     textAlign: 'center',
@@ -593,87 +662,49 @@ export default function XwingGameScreenView({
                 ))}
               </div>
             ) : (
-              <div style={{ flexGrow: 1 }} />
-            )}
-
-            {/* Fixed-height button slot — visible when opponent has no ship buttons (player must score manually) */}
-            {!(gameStarted && opponentShips && opponentShips.length > 0) && (
-              <div style={{ height: '14vmin', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {gameStarted && (
-                  <div style={{ display: 'flex', flexDirection: 'row', gap: '2vmin' }}>
-                    <button
-                      data-testid="player-decrement"
-                      onClick={playerScrubber.handleClick('-')}
-                      onPointerDown={playerScrubber.handlePointerDown('-')}
-                      onPointerMove={playerScrubber.handlePointerMove}
-                      onPointerUp={playerScrubber.handlePointerUp}
-                      onPointerCancel={playerScrubber.handlePointerCancel}
-                      disabled={gameOver || scenarioScoringActive}
-                      style={COUNTER_BTN(gameOver || scenarioScoringActive)}
-                    >
-                      −
-                    </button>
-                    <button
-                      data-testid="player-increment"
-                      onClick={playerScrubber.handleClick('+')}
-                      onPointerDown={playerScrubber.handlePointerDown('+')}
-                      onPointerMove={playerScrubber.handlePointerMove}
-                      onPointerUp={playerScrubber.handlePointerUp}
-                      onPointerCancel={playerScrubber.handlePointerCancel}
-                      disabled={gameOver || scenarioScoringActive}
-                      style={COUNTER_BTN(gameOver || scenarioScoringActive)}
-                    >
-                      +
-                    </button>
-                  </div>
-                )}
-              </div>
+              <div style={{ flex: 1 }} />
             )}
           </div>
 
           {/* ── Centre column: result banner / Start Game / Timer ── */}
           <div style={{
             width: '22vmin',
+            minHeight: 0,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             flexShrink: 0,
           }}>
-            {/* Invisible label placeholder — aligns the score-height area
-                with the score numbers in the outer columns */}
-            <div style={{
-              fontSize: 'clamp(0.75rem, 2.2vmin, 1.2rem)',
-              marginBottom: '2vmin',
-              visibility: 'hidden',
-              userSelect: 'none',
-            }}>
-              _
+            {/* Button slot — phase button (aligns with outer inc/dec and scenario slots) */}
+            <div style={{ height: '10vmin', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {enableXwingPhases && gameStarted && !gameOver && (
+                <button
+                  data-testid="phase-btn"
+                  onClick={onPhaseAdvance}
+                  style={{
+                    height: '10vmin',
+                    minHeight: '36px',
+                    padding: '0 4vmin',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--color-text-muted)',
+                    fontSize: 'clamp(0.8rem, 2.5vmin, 1.4rem)',
+                    fontWeight: '300',
+                    letterSpacing: '0.1em',
+                    textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    WebkitTapHighlightColor: 'transparent',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {phase}
+                </button>
+              )}
             </div>
 
-            {/* Scenario name subtitle — shown when playing a named scenario */}
-            {gameStarted && scenario && scenario !== 'None' && (
-              <div
-                data-testid="scenario-name"
-                style={{
-                  fontSize: 'clamp(0.8rem, 2.5vmin, 1.4rem)',
-                  fontWeight: '300',
-                  color: 'var(--color-text-muted)',
-                  letterSpacing: '0.04em',
-                  textAlign: 'center',
-                  lineHeight: 1.3,
-                  marginBottom: '1vmin',
-                  maxWidth: '22vmin',
-                }}
-              >
-                {scenario}
-              </div>
-            )}
-
-            {/* Score-height area — result banner at game over; timer during
-                game; Start Game text pre-game. Height matches score font
-                so content is vertically centred relative to the score numbers. */}
+            {/* Timer/result/start — height matches score row (14vmin) so all three centres align */}
             <div style={{
-              height: '15vmin',
+              height: '14vmin',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -720,103 +751,196 @@ export default function XwingGameScreenView({
               )}
             </div>
 
-            {/* Spacer — pushes button slot to the bottom */}
-            <div style={{ flexGrow: 1 }} />
-
-            {/* Fixed-height button slot — always present to prevent layout jump */}
-            <div style={{ height: '14vmin', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {enableXwingPhases && gameStarted && !gameOver && (
-                <button
-                  data-testid="phase-btn"
-                  onClick={onPhaseAdvance}
+            {/* Scenario name slot — locked directly below timer, same 10vmin slot as phase above */}
+            <div style={{ height: '10vmin', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {gameStarted && scenario && scenario !== 'None' && (
+                <div
+                  data-testid="scenario-name"
                   style={{
-                    height: '14vmin',
-                    minHeight: '36px',
-                    padding: '0 4vmin',
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--color-text-muted)',
                     fontSize: 'clamp(0.8rem, 2.5vmin, 1.4rem)',
                     fontWeight: '300',
-                    letterSpacing: '0.1em',
-                    textTransform: 'uppercase',
-                    cursor: 'pointer',
-                    WebkitTapHighlightColor: 'transparent',
+                    color: 'var(--color-text-muted)',
+                    letterSpacing: '0.04em',
+                    textAlign: 'center',
                     whiteSpace: 'nowrap',
+                    lineHeight: 1.3,
                   }}
                 >
-                  {phase}
-                </button>
+                  {scenario}
+                </div>
               )}
             </div>
+
+            {/* Spacer — pushes scenario grid to the bottom */}
+            <div style={{ flexGrow: 1 }} />
+
+            {/* Scenario scoring grid — 2×3, left col = player, right col = opponent.
+                Column width = 5vw (matches nav buttons). Gap widens to keep outer edges
+                level with the timer digit edges: timer ≈ 4ch+1em in 8vmin font. */}
+            {gameStarted && scenarioScoringActive && (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '5vw 5vw',
+                columnGap: 'max(2vmin, calc(4ch + 1em - 10vw))',
+                rowGap: '2vmin',
+                fontSize: 'clamp(1.2rem, 8vmin, 3.5rem)',
+                alignSelf: 'center',
+                paddingBottom: '2vmin',
+              }}>
+                {[0, 2, 4].map(v => (
+                  <Fragment key={v}>
+                    <button
+                      data-testid={`player-scenario-${v}`}
+                      onClick={() => onPlayerScenarioSelect?.(v)}
+                      disabled={disabledPlayerSet.has(v)}
+                      style={{
+                        ...SCENARIO_BTN(pendingPlayerScenario === v, disabledPlayerSet.has(v)),
+                        height: undefined,
+                        minHeight: '36px',
+                        aspectRatio: '1 / 1',
+                        fontSize: 'clamp(0.65rem, 2vmin, 1rem)',
+                      }}
+                    >
+                      {v}
+                    </button>
+                    <button
+                      data-testid={`opponent-scenario-${v}`}
+                      onClick={() => onOpponentScenarioSelect?.(v)}
+                      disabled={disabledOppSet.has(v)}
+                      style={{
+                        ...SCENARIO_BTN(pendingOpponentScenario === v, disabledOppSet.has(v)),
+                        height: undefined,
+                        minHeight: '36px',
+                        aspectRatio: '1 / 1',
+                        fontSize: 'clamp(0.65rem, 2vmin, 1rem)',
+                      }}
+                    >
+                      {v}
+                    </button>
+                  </Fragment>
+                ))}
+              </div>
+            )}
 
           </div>
 
           {/* ── Opponent column ── */}
           <div style={{
             flex: 1,
+            minHeight: 0,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
+            position: 'relative',
           }}>
-            {/* Label */}
-            <div style={{
-              fontSize: 'clamp(0.75rem, 2.2vmin, 1.2rem)',
-              fontWeight: '300',
-              color: 'var(--color-text-muted)',
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              marginBottom: '2vmin',
-            }}>
-              Opp
-            </div>
+            {/* Inc/Dec overlay — same vertical formula as player; left-aligned so
+                − LHS sits at the opponent DmgCtrl icon edge. */}
+            {gameStarted && !scenarioScoringActive && !(playerShips && playerShips.length > 0) && (
+              <div style={{
+                position: 'absolute',
+                top: 'calc(-3.5vw + 5vmin + min(0px, 4.5vw - 16.5vmin + env(safe-area-inset-top) / 4 + env(safe-area-inset-bottom) / 4))',
+                left: 0,
+                right: 0,
+                height: '5vw',
+                minHeight: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-start',
+                paddingLeft: 'calc(50% - 14vmin)',
+                gap: '2vmin',
+              }}>
+                <button
+                  data-testid="opponent-decrement"
+                  onClick={opponentScrubber.handleClick('-')}
+                  onPointerDown={opponentScrubber.handlePointerDown('-')}
+                  onPointerMove={opponentScrubber.handlePointerMove}
+                  onPointerUp={opponentScrubber.handlePointerUp}
+                  onPointerCancel={opponentScrubber.handlePointerCancel}
+                  disabled={gameOver}
+                  style={COUNTER_BTN(gameOver)}
+                >−</button>
+                <button
+                  data-testid="opponent-increment"
+                  onClick={opponentScrubber.handleClick('+')}
+                  onPointerDown={opponentScrubber.handlePointerDown('+')}
+                  onPointerMove={opponentScrubber.handlePointerMove}
+                  onPointerUp={opponentScrubber.handlePointerUp}
+                  onPointerCancel={opponentScrubber.handlePointerCancel}
+                  disabled={gameOver}
+                  style={COUNTER_BTN(gameOver)}
+                >+</button>
+              </div>
+            )}
 
-            {/* Score number — pre-game shows player's deficit (opponent's starting score) */}
-            <div
-              data-testid="opponent-score"
-              style={{
-                fontSize: '15vmin',
+            {/* Button slot — reserved for alignment (scenario buttons moved to centre column) */}
+            <div style={{ height: '10vmin', minHeight: '36px' }} />
+
+            {/* Score row — fixed height matches centre timer so all three centres align */}
+            <div style={{ height: '14vmin', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3vmin' }}>
+              <div
+                data-testid="opponent-score"
+                style={{
+                  fontSize: '14vmin',
+                  fontWeight: '300',
+                  color: 'var(--color-text-primary)',
+                  textShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.4), 0 0 8px rgba(0,0,0,1)',
+                  lineHeight: 1,
+                  width: '3ch',
+                  textAlign: 'center',
+                }}
+              >
+                {gameStarted ? opponentScore : playerDeficit}
+              </div>
+              <div style={{
+                fontSize: 'clamp(0.75rem, 2.2vmin, 1.2rem)',
                 fontWeight: '300',
-                color: 'var(--color-text-primary)',
-                textShadow: '0 0 20px rgba(var(--color-accent-rgb), 0.4), 0 0 8px rgba(0,0,0,1)',
-                lineHeight: 1,
-                minWidth: '8vmin',
-                textAlign: 'center',
-              }}
-            >
-              {gameStarted ? opponentScore : playerDeficit}
+                color: 'var(--color-text-muted)',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}>
+                Opp
+              </div>
+            </div>
             </div>
 
             {/* Pilot area: ship buttons when in-game, text list pre-game, spacer if no list */}
             {gameStarted && opponentShips && opponentShips.length > 0 ? (
               <div data-testid="opponent-pilot-list" style={{
                 flex: 1,
-                overflowY: 'auto',
+                minHeight: 0,
                 width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '1vmin',
-                paddingTop: '1vmin',
-              }}>
-                {opponentShips.map((entry, i) =>
-                  entry.state !== 'destroyed' ? (
-                    <ShipButton key={i} entry={entry} index={i} onAdvance={onOpponentShipAdvance!} align="right" />
-                  ) : null
-                )}
-              </div>
-            ) : opponentPilots && opponentPilots.length > 0 ? (
-              <div data-testid="opponent-pilot-list" style={{
-                flex: 1,
-                overflowY: 'auto',
-                width: '100%',
+                boxSizing: 'border-box',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '0.5vmin',
                 paddingTop: '1vmin',
+                // Align icon LHS with score left edge = column_centre − ½score_row_width (≈14vmin)
+                paddingLeft: 'calc(50% - 14vmin)',
+              }}>
+                {(() => {
+                  const names = displayPilots(opponentShips.map(e => e.pilot))
+                  return opponentShips.map((entry, i) =>
+                    entry.state !== 'destroyed' ? (
+                      <ShipButton key={i} entry={entry} index={i} onAdvance={onOpponentShipAdvance!} align="left" side="opponent" displayName={names[i].displayName} />
+                    ) : null
+                  )
+                })()}
+              </div>
+            ) : opponentPilots && opponentPilots.length > 0 ? (
+              <div data-testid="opponent-pilot-list" style={{
+                flex: 1,
+                minHeight: 0,
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.5vmin',
+                paddingTop: 'max(0px, calc(13.5vmin - 1.5vw - env(safe-area-inset-top) / 2 - env(safe-area-inset-bottom) / 2))',
+                paddingRight: '7vmin',
               }}>
                 {displayPilots(opponentPilots).map((p, i) => (
                   <div key={i} style={{
-                    fontSize: 'clamp(0.55rem, 1.6vmin, 0.9rem)',
+                    fontSize: 'clamp(0.75rem, 2.2vmin, 1.2rem)',
                     fontWeight: '300',
                     color: 'var(--color-text-muted)',
                     textAlign: 'center',
@@ -828,41 +952,7 @@ export default function XwingGameScreenView({
                 ))}
               </div>
             ) : (
-              <div style={{ flexGrow: 1 }} />
-            )}
-
-            {/* Fixed-height button slot — visible when player has no ship buttons (opponent must score manually) */}
-            {!(gameStarted && playerShips && playerShips.length > 0) && (
-              <div style={{ height: '14vmin', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {gameStarted && (
-                  <div style={{ display: 'flex', flexDirection: 'row', gap: '2vmin' }}>
-                    <button
-                      data-testid="opponent-decrement"
-                      onClick={opponentScrubber.handleClick('-')}
-                      onPointerDown={opponentScrubber.handlePointerDown('-')}
-                      onPointerMove={opponentScrubber.handlePointerMove}
-                      onPointerUp={opponentScrubber.handlePointerUp}
-                      onPointerCancel={opponentScrubber.handlePointerCancel}
-                      disabled={gameOver || scenarioScoringActive}
-                      style={COUNTER_BTN(gameOver || scenarioScoringActive)}
-                    >
-                      −
-                    </button>
-                    <button
-                      data-testid="opponent-increment"
-                      onClick={opponentScrubber.handleClick('+')}
-                      onPointerDown={opponentScrubber.handlePointerDown('+')}
-                      onPointerMove={opponentScrubber.handlePointerMove}
-                      onPointerUp={opponentScrubber.handlePointerUp}
-                      onPointerCancel={opponentScrubber.handlePointerCancel}
-                      disabled={gameOver || scenarioScoringActive}
-                      style={COUNTER_BTN(gameOver || scenarioScoringActive)}
-                    >
-                      +
-                    </button>
-                  </div>
-                )}
-              </div>
+              <div style={{ flex: 1 }} />
             )}
           </div>
 
@@ -871,64 +961,6 @@ export default function XwingGameScreenView({
 
       </div>
 
-      {/* Scenario scoring buttons — absolutely positioned at the same level as the log button.
-          Centered on the player column (~25vw) and opponent column (~75vw). */}
-      {scenarioScoringActive && (() => {
-        const disabledOpp = scenarioAlreadyScoredThisRound
-          ? new Set([0, 2, 4])
-          : getDisabledOpponentValues(scenario, pendingPlayerScenario ?? null)
-        const disabledPlayer = scenarioAlreadyScoredThisRound
-          ? new Set([0, 2, 4])
-          : getDisabledPlayerValues(scenario, pendingOpponentScenario ?? null)
-        return (
-          <>
-            <div style={{
-              position: 'absolute',
-              bottom: 'calc(env(safe-area-inset-bottom) + 2vw)',
-              left: '25vw',
-              transform: 'translateX(-50%)',
-              display: 'flex',
-              flexDirection: 'row',
-              gap: '1vw',
-              zIndex: 10,
-            }}>
-              {[0, 2, 4].map(v => (
-                <button
-                  key={v}
-                  data-testid={`player-scenario-${v}`}
-                  onClick={() => onPlayerScenarioSelect?.(v)}
-                  disabled={disabledPlayer.has(v)}
-                  style={SCENARIO_BTN(pendingPlayerScenario === v, disabledPlayer.has(v))}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-            <div style={{
-              position: 'absolute',
-              bottom: 'calc(env(safe-area-inset-bottom) + 2vw)',
-              left: '75vw',
-              transform: 'translateX(-50%)',
-              display: 'flex',
-              flexDirection: 'row',
-              gap: '1vw',
-              zIndex: 10,
-            }}>
-              {[4, 2, 0].map(v => (
-                <button
-                  key={v}
-                  data-testid={`opponent-scenario-${v}`}
-                  onClick={() => onOpponentScenarioSelect?.(v)}
-                  disabled={disabledOpp.has(v)}
-                  style={SCENARIO_BTN(pendingOpponentScenario === v, disabledOpp.has(v))}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-          </>
-        )
-      })()}
 
       {/* Drag indicator — increment offsets right, decrement offsets left */}
       {dragIndicator && (() => {
