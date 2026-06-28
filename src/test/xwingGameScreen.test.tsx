@@ -23,6 +23,7 @@ const mockUserSettings = vi.hoisted(() => ({
   enableWakeLock: true,
   enableInitiativeBar: true,
   enableXwingPhases: true,
+  enableXwingAlwaysIncDec: false,
   xwingTimerMinutes: 75,
 }))
 vi.mock('../hooks/useUserSettings', () => ({
@@ -51,6 +52,7 @@ beforeEach(() => {
   mockUserSettings.enableWakeLock = true
   mockUserSettings.enableInitiativeBar = true
   mockUserSettings.enableXwingPhases = true
+  mockUserSettings.enableXwingAlwaysIncDec = false
   mockUserSettings.xwingTimerMinutes = 75
   mockTimerState.remaining = 4500
   mockTimerState.isRunning = false
@@ -1312,6 +1314,19 @@ describe('XwingGameScreen scenario scoring', () => {
     expect(screen.getByTestId('opponent-scenario-4')).toBeInTheDocument()
   })
 
+  it('shows inc/dec buttons during End-phase scenario scoring when enableXwingAlwaysIncDec is true', async () => {
+    mockUserSettings.enableXwingAlwaysIncDec = true
+    const user = userEvent.setup()
+    render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} scenario="Salvage Mission" />)
+    await user.click(screen.getByTestId('start-game-btn'))
+    await user.click(screen.getByRole('button', { name: 'Round 2' }))
+    const phaseBtn = screen.getByTestId('phase-btn')
+    for (let i = 0; i < 4; i++) await user.click(phaseBtn)
+    expect(screen.getByTestId('player-increment')).toBeInTheDocument()
+    expect(screen.getByTestId('opponent-increment')).toBeInTheDocument()
+    expect(screen.getByTestId('player-scenario-0')).toBeInTheDocument()
+  })
+
   it('inc/dec buttons are replaced (not just disabled) during End-phase scenario scoring', async () => {
     const user = userEvent.setup()
     render(<XwingGameScreen onBack={vi.fn()} onHelp={vi.fn()} scenario="Salvage Mission" />)
@@ -1722,6 +1737,15 @@ describe('ship scoring', () => {
     fireEvent.click(screen.getByTestId('log-undo-btn'))
     expect(screen.getByTestId('player-score')).toHaveTextContent('7')
     expect(screen.getByTestId('opponent-ship-btn-0')).toBeInTheDocument()
+  })
+
+  it('shows all inc/dec buttons when enableXwingAlwaysIncDec is true even with both lists', async () => {
+    mockUserSettings.enableXwingAlwaysIncDec = true
+    await startWithPilots()
+    expect(screen.getByTestId('player-increment')).toBeInTheDocument()
+    expect(screen.getByTestId('player-decrement')).toBeInTheDocument()
+    expect(screen.getByTestId('opponent-increment')).toBeInTheDocument()
+    expect(screen.getByTestId('opponent-decrement')).toBeInTheDocument()
   })
 })
 

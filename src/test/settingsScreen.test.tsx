@@ -39,6 +39,8 @@ const mockUserSettings = vi.hoisted(() => ({
   setXwingTimerMinutes: vi.fn(),
   enableXwingPhases: true,
   setEnableXwingPhases: vi.fn(),
+  enableXwingAlwaysIncDec: false,
+  setEnableXwingAlwaysIncDec: vi.fn(),
   meleePlayerGuid: '',
   setMeleePlayerGuid: vi.fn(),
   startScreen: 'gameSelect' as StartScreen,
@@ -86,6 +88,7 @@ beforeEach(() => {
   mockUserSettings.bo3TimerMinutes = 55
   mockUserSettings.xwingTimerMinutes = 75
   mockUserSettings.enableXwingPhases = true
+  mockUserSettings.enableXwingAlwaysIncDec = false
   mockUserSettings.meleePlayerGuid = ''
   mockUserSettings.startScreen = 'gameSelect'
   mockFavourites.favourites = []
@@ -803,6 +806,33 @@ describe('SettingsScreen analytics', () => {
       render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="xwing" />)
       await user.click(screen.getByRole('checkbox', { name: /phase tracker/i }))
       expect(mockOnSettingChanged).toHaveBeenCalledWith('enableXwingPhases', false)
+    })
+
+  })
+
+  describe('Always Show +/− Buttons toggle', () => {
+
+    it('is present in the X-Wing tab', () => {
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="xwing" />)
+      expect(screen.getByRole('checkbox', { name: /always show.*buttons/i })).toBeInTheDocument()
+    })
+
+    it('is unchecked by default', () => {
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="xwing" />)
+      expect(screen.getByRole('checkbox', { name: /always show.*buttons/i })).not.toBeChecked()
+    })
+
+    it('is checked when enableXwingAlwaysIncDec is true', () => {
+      mockUserSettings.enableXwingAlwaysIncDec = true
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="xwing" />)
+      expect(screen.getByRole('checkbox', { name: /always show.*buttons/i })).toBeChecked()
+    })
+
+    it('calls onSettingChanged with enableXwingAlwaysIncDec and new value when toggled', async () => {
+      const user = userEvent.setup()
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="xwing" />)
+      await user.click(screen.getByRole('checkbox', { name: /always show.*buttons/i }))
+      expect(mockOnSettingChanged).toHaveBeenCalledWith('enableXwingAlwaysIncDec', true)
     })
 
   })

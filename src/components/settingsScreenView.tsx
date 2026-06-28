@@ -121,6 +121,7 @@ interface Props {
   bo3TimerMinutes: number
   xwingTimerMinutes: number
   enableXwingPhases: boolean
+  enableXwingAlwaysIncDec: boolean
   meleePlayerGuid: string
   favourites: FavouriteBase[]
   onUseHyperspaceChange: (v: boolean) => void
@@ -135,6 +136,7 @@ interface Props {
   onBo3TimerChange: (v: number) => void
   onXwingTimerChange: (v: number) => void
   onEnableXwingPhasesChange: (v: boolean) => void
+  onEnableXwingAlwaysIncDecChange: (v: boolean) => void
   onMeleePlayerGuidChange: (v: string) => void
   startScreen: StartScreen
   onStartScreenChange: (v: StartScreen) => void
@@ -158,6 +160,7 @@ function SettingsScreenView({
   bo3TimerMinutes,
   xwingTimerMinutes,
   enableXwingPhases,
+  enableXwingAlwaysIncDec,
   meleePlayerGuid,
   favourites,
   onUseHyperspaceChange,
@@ -172,6 +175,7 @@ function SettingsScreenView({
   onBo3TimerChange,
   onXwingTimerChange,
   onEnableXwingPhasesChange,
+  onEnableXwingAlwaysIncDecChange,
   onMeleePlayerGuidChange,
   startScreen,
   onStartScreenChange,
@@ -611,6 +615,14 @@ function SettingsScreenView({
         subtitle="Shows the current game phase in the centre of the game screen. Tap to advance through Planning, System, Activation, Engagement, and End."
         checked={enableXwingPhases}
         onChange={onEnableXwingPhasesChange}
+        vmin={vmin}
+      />
+      <ToggleRow
+        id="toggle-xwing-always-inc-dec"
+        label="Always Show +/− Buttons"
+        subtitle="Always show the score increment and decrement buttons, even when ship lists are loaded or scenario scoring is active."
+        checked={enableXwingAlwaysIncDec}
+        onChange={onEnableXwingAlwaysIncDecChange}
         vmin={vmin}
       />
     </>

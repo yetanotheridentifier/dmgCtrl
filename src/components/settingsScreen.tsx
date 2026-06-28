@@ -27,6 +27,7 @@ function SettingsScreen({ onBack, onHelp, defaultTab = 'general' }: Props) {
     bo3TimerMinutes,
     xwingTimerMinutes,
     enableXwingPhases,
+    enableXwingAlwaysIncDec,
     meleePlayerGuid,
     startScreen,
     setUseHyperspace,
@@ -41,6 +42,7 @@ function SettingsScreen({ onBack, onHelp, defaultTab = 'general' }: Props) {
     setBo3TimerMinutes,
     setXwingTimerMinutes,
     setEnableXwingPhases,
+    setEnableXwingAlwaysIncDec,
     setMeleePlayerGuid,
     setStartScreen,
   } = useUserSettings()
@@ -88,11 +90,13 @@ function SettingsScreen({ onBack, onHelp, defaultTab = 'general' }: Props) {
         bo3TimerMinutes={bo3TimerMinutes}
         xwingTimerMinutes={xwingTimerMinutes}
         enableXwingPhases={enableXwingPhases}
+        enableXwingAlwaysIncDec={enableXwingAlwaysIncDec}
         meleePlayerGuid={meleePlayerGuid}
         onBo1TimerChange={setBo1TimerMinutes}
         onBo3TimerChange={setBo3TimerMinutes}
         onXwingTimerChange={setXwingTimerMinutes}
         onEnableXwingPhasesChange={handleSettingChange('enableXwingPhases', setEnableXwingPhases)}
+        onEnableXwingAlwaysIncDecChange={handleSettingChange('enableXwingAlwaysIncDec', setEnableXwingAlwaysIncDec)}
         onMeleePlayerGuidChange={setMeleePlayerGuid}
         startScreen={startScreen}
         onStartScreenChange={handleSettingChange<StartScreen>('startScreen', setStartScreen)}

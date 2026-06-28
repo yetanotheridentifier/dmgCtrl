@@ -41,7 +41,7 @@ Initiative can only be set during the **Planning** phase. It is locked for all o
 
 When a named scenario is selected on the setup screen, the scenario name is shown in the centre of the game screen during play.
 
-From round 2 onwards, three scoring buttons (**0**, **2**, **4**) appear at the bottom of each player's column during the **End** phase. Tap the number of scenario points scored by each player this round. The inc/dec buttons are disabled while these buttons are active.
+From round 2 onwards, three scoring buttons (**0**, **2**, **4**) appear at the bottom of each player's column during the **End** phase. Tap the number of scenario points scored by each player this round. The inc/dec buttons are hidden while these buttons are active, unless **Always Show +/− Buttons** is enabled in Settings.
 
 - Points are applied when you advance from the End phase (by tapping the phase button or the next round in the round tracker)
 - Each set of scenario points is logged as a separate entry ("Scenario: You +Y, Opp +Z") before the round advance

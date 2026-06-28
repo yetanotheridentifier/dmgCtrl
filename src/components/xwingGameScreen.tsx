@@ -43,7 +43,7 @@ interface Props {
 }
 
 export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd, onTimerExpired, playerDeficit = 0, opponentDeficit = 0, scenario = 'None', playerPilots, opponentPilots }: Props) {
-  const { enableLongPress, enableActionLog, enableWakeLock, enableInitiativeBar, enableXwingPhases, xwingTimerMinutes } = useUserSettings()
+  const { enableLongPress, enableActionLog, enableWakeLock, enableInitiativeBar, enableXwingPhases, enableXwingAlwaysIncDec, xwingTimerMinutes } = useUserSettings()
   const { isPortrait } = useOrientation()
 
   const [gameStarted, setGameStarted] = useState(false)
@@ -276,6 +276,7 @@ export default function XwingGameScreen({ onBack, onHelp, onSettings, onGameEnd,
       onOpponentDecrement={handleOpponentDecrement}
       enableLongPress={enableLongPress}
       enableActionLog={enableActionLog}
+      enableXwingAlwaysIncDec={enableXwingAlwaysIncDec}
       logEntries={log.entries}
       logOpen={logOpen}
       onLogToggle={() => setLogOpen(o => !o)}

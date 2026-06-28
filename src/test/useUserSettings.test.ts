@@ -61,6 +61,11 @@ describe('useUserSettings', () => {
     expect(result.current.enableXwingPhases).toBe(true)
   })
 
+  it('defaults enableXwingAlwaysIncDec to false when storage is empty', () => {
+    const { result } = renderHook(() => useUserSettings(), { wrapper: UserSettingsProvider })
+    expect(result.current.enableXwingAlwaysIncDec).toBe(false)
+  })
+
   // --- Load from storage ---
 
   it('loads useHyperspace=false from stored JSON', () => {
