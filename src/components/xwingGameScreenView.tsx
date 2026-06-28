@@ -115,12 +115,13 @@ function DmgCtrlIcon({ color }: { color: string }) {
   )
 }
 
-function ShipButton({ entry, index, onAdvance, align, side }: {
+function ShipButton({ entry, index, onAdvance, align, side, displayName }: {
   entry: ShipEntry
   index: number
   onAdvance: (index: number, skip: boolean) => void
   align: 'left' | 'right'
   side: 'player' | 'opponent'
+  displayName: string
 }) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const startPos = useRef<{ x: number; y: number } | null>(null)
@@ -148,7 +149,6 @@ function ShipButton({ entry, index, onAdvance, align, side }: {
 
   const isHalf = entry.state === 'half'
   const color = isHalf ? 'var(--color-warning)' : 'var(--color-accent)'
-  const displayName = displayPilots([entry.pilot])[0].displayName
 
   const iconEl = (
     <button
@@ -158,10 +158,10 @@ function ShipButton({ entry, index, onAdvance, align, side }: {
       onPointerUp={onPointerUp}
       onPointerCancel={cancel}
       style={{
-        width: '3.5vmin',
-        height: '3.5vmin',
-        minWidth: '22px',
-        minHeight: '22px',
+        width: '3vmin',
+        height: '3vmin',
+        minWidth: '20px',
+        minHeight: '20px',
         background: 'transparent',
         border: `1.5px solid ${color}`,
         borderRadius: '5px',
@@ -183,7 +183,7 @@ function ShipButton({ entry, index, onAdvance, align, side }: {
   const nameEl = (
     <span style={{
       flex: 1,
-      fontSize: 'clamp(0.5rem, 1.5vmin, 0.85rem)',
+      fontSize: 'clamp(0.7rem, 2.2vmin, 1.2rem)',
       fontWeight: '300',
       color,
       letterSpacing: '0.04em',
@@ -536,20 +536,22 @@ export default function XwingGameScreenView({
             alignItems: 'center',
             position: 'relative',
           }}>
-            {/* Inc/Dec overlay — absolutely positioned at settings-button height.
-                top = −paddingTop = min(0px, −(33vmin−9vw−safe/2)) so they sit at
-                the same Y as the Settings nav button above the content area. */}
+            {/* Inc/Dec overlay — vertically centred between round-tracker bottom and score row top.
+                Column top = safe_top+9vw+paddingTop (row paddingTop shifts the column element).
+                top (col coords) = −3.5vw + 5vmin + min(0, 4.5vw−16.5vmin+safe/4) — see derivation
+                in git history. Horizontally right-aligned: + RHS sits at the DmgCtrl icon edge. */}
             {gameStarted && !scenarioScoringActive && !(opponentShips && opponentShips.length > 0) && (
               <div style={{
                 position: 'absolute',
-                top: 'min(0px, calc(-33vmin + 9vw + env(safe-area-inset-top) / 2 + env(safe-area-inset-bottom) / 2))',
+                top: 'calc(-3.5vw + 5vmin + min(0px, 4.5vw - 16.5vmin + env(safe-area-inset-top) / 4 + env(safe-area-inset-bottom) / 4))',
                 left: 0,
                 right: 0,
                 height: '5vw',
                 minHeight: '36px',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
+                justifyContent: 'flex-end',
+                paddingRight: 'calc(50% - 14vmin)',
                 gap: '2vmin',
               }}>
                 <button
@@ -621,11 +623,14 @@ export default function XwingGameScreenView({
                 // Align icon RHS with score right edge = column_centre + ½score_row_width (≈14vmin)
                 paddingRight: 'calc(50% - 14vmin)',
               }}>
-                {playerShips.map((entry, i) =>
-                  entry.state !== 'destroyed' ? (
-                    <ShipButton key={i} entry={entry} index={i} onAdvance={onPlayerShipAdvance!} align="right" side="player" />
-                  ) : null
-                )}
+                {(() => {
+                  const names = displayPilots(playerShips.map(e => e.pilot))
+                  return playerShips.map((entry, i) =>
+                    entry.state !== 'destroyed' ? (
+                      <ShipButton key={i} entry={entry} index={i} onAdvance={onPlayerShipAdvance!} align="right" side="player" displayName={names[i].displayName} />
+                    ) : null
+                  )
+                })()}
               </div>
             ) : playerPilots && playerPilots.length > 0 ? (
               <div data-testid="player-pilot-list" style={{
@@ -638,7 +643,7 @@ export default function XwingGameScreenView({
                 // paddingTop: push first ship down so ship 8 bottom aligns with log button bottom.
                 // Derivation: pilot_list_height = 43vmin − 2vw − (safe_top+safe_bottom)/2;
                 // paddingTop = pilot_list_height − 8×2.64vmin − 7×0.5vmin = 18vmin − 2vw − safe/2
-                paddingTop: 'max(0px, calc(18vmin - 2vw - env(safe-area-inset-top) / 2 - env(safe-area-inset-bottom) / 2))',
+                paddingTop: 'max(0px, calc(13.5vmin - 1.5vw - env(safe-area-inset-top) / 2 - env(safe-area-inset-bottom) / 2))',
                 // paddingLeft: shifts text centre 3.5vmin right (= half of label+gap = (label+3vmin)/2)
                 // so the list centre aligns with the score number centre, not the column centre.
                 paddingLeft: '7vmin',
@@ -828,18 +833,20 @@ export default function XwingGameScreenView({
             alignItems: 'center',
             position: 'relative',
           }}>
-            {/* Inc/Dec overlay — same absolute positioning as player side */}
+            {/* Inc/Dec overlay — same vertical formula as player; left-aligned so
+                − LHS sits at the opponent DmgCtrl icon edge. */}
             {gameStarted && !scenarioScoringActive && !(playerShips && playerShips.length > 0) && (
               <div style={{
                 position: 'absolute',
-                top: 'min(0px, calc(-33vmin + 9vw + env(safe-area-inset-top) / 2 + env(safe-area-inset-bottom) / 2))',
+                top: 'calc(-3.5vw + 5vmin + min(0px, 4.5vw - 16.5vmin + env(safe-area-inset-top) / 4 + env(safe-area-inset-bottom) / 4))',
                 left: 0,
                 right: 0,
                 height: '5vw',
                 minHeight: '36px',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
+                justifyContent: 'flex-start',
+                paddingLeft: 'calc(50% - 14vmin)',
                 gap: '2vmin',
               }}>
                 <button
@@ -911,11 +918,14 @@ export default function XwingGameScreenView({
                 // Align icon LHS with score left edge = column_centre − ½score_row_width (≈14vmin)
                 paddingLeft: 'calc(50% - 14vmin)',
               }}>
-                {opponentShips.map((entry, i) =>
-                  entry.state !== 'destroyed' ? (
-                    <ShipButton key={i} entry={entry} index={i} onAdvance={onOpponentShipAdvance!} align="left" side="opponent" />
-                  ) : null
-                )}
+                {(() => {
+                  const names = displayPilots(opponentShips.map(e => e.pilot))
+                  return opponentShips.map((entry, i) =>
+                    entry.state !== 'destroyed' ? (
+                      <ShipButton key={i} entry={entry} index={i} onAdvance={onOpponentShipAdvance!} align="left" side="opponent" displayName={names[i].displayName} />
+                    ) : null
+                  )
+                })()}
               </div>
             ) : opponentPilots && opponentPilots.length > 0 ? (
               <div data-testid="opponent-pilot-list" style={{
@@ -925,7 +935,7 @@ export default function XwingGameScreenView({
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '0.5vmin',
-                paddingTop: 'max(0px, calc(18vmin - 2vw - env(safe-area-inset-top) / 2 - env(safe-area-inset-bottom) / 2))',
+                paddingTop: 'max(0px, calc(13.5vmin - 1.5vw - env(safe-area-inset-top) / 2 - env(safe-area-inset-bottom) / 2))',
                 paddingRight: '7vmin',
               }}>
                 {displayPilots(opponentPilots).map((p, i) => (
