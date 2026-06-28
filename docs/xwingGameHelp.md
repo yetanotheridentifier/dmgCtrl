@@ -2,7 +2,7 @@
 
 ## Mission Points
 
-Each player's mission points are shown on the left (**You**) and right (**Opp**). Points start equal to the opponent's deficit as entered on the setup screen; the first player to reach 50 wins.
+Each player's mission points are shown on the left (**You**) and right (**Opp**). Points start at 0. If the opponent's entire squad is destroyed, their mission point deficit (if any) is automatically added to your score at that moment. The first player to reach 50 wins.
 
 - Tap **+** to add a point
 - Tap **−** to remove a point (won't go below zero)
