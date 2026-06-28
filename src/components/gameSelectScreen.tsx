@@ -20,7 +20,7 @@ function GameSelectScreen({ onSelectSwu, onSelectXwing, onSettings }: Props) {
     border: '2px solid var(--color-accent)',
     borderRadius: '16px',
     cursor: 'pointer',
-    padding: '12%',
+    padding: '64px',
     boxSizing: 'border-box',
     boxShadow: '0 0 12px rgba(var(--color-accent-rgb), 0.3)',
     width: 'min(65vmin, 300px)',
