@@ -3,8 +3,10 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import XwingSetupScreen from '../components/xwingSetupScreen'
 import { XWING_NAMED_SCENARIOS } from '../hooks/useXwingSetup'
+import type { XwingSquadFavourite } from '../hooks/useXwingFavourites'
 
 const VALID_XWS = JSON.stringify({
+  name: 'Scum Syndicate',
   pilots: [
     { name: 'asajjventress', ship: 'lancerclasspursuitcraft', points: 15 },
     { name: 'bobafett-armedanddangerous', ship: 'firesprayclasspatrolcraft', points: 18 },
@@ -30,9 +32,9 @@ const mockSetupState = vi.hoisted(() => ({
   setMatchType: vi.fn(),
   rounds: 6,
   setRounds: vi.fn(),
-  playerListImport: 'None' as 'None' | 'XWA' | 'YASB',
+  playerListImport: 'None' as 'None' | 'XWA' | 'YASB' | 'Favourites',
   setPlayerListImport: vi.fn(),
-  opponentListImport: 'None' as 'None' | 'XWA' | 'YASB',
+  opponentListImport: 'None' as 'None' | 'XWA' | 'YASB' | 'Favourites',
   setOpponentListImport: vi.fn(),
   playerDeficit: 0,
   setPlayerDeficit: vi.fn(),
@@ -53,7 +55,31 @@ vi.mock('../hooks/useXwingSetup', () => ({
   ],
 }))
 
+const mockXwingFavourites = vi.hoisted(() => ({
+  favourites: [] as XwingSquadFavourite[],
+  addFavourite: vi.fn(),
+  removeFavourite: vi.fn(),
+  clearFavourites: vi.fn(),
+}))
+vi.mock('../hooks/useXwingFavourites', () => ({
+  useXwingFavourites: () => mockXwingFavourites,
+}))
+
+const SAMPLE_FAVOURITE: XwingSquadFavourite = {
+  id: 'fav-1',
+  name: 'Scum Squad',
+  pilots: [
+    { name: 'asajjventress', ship: 'lancerclasspursuitcraft', points: 15 },
+    { name: 'bobafett-armedanddangerous', ship: 'firesprayclasspatrolcraft', points: 18 },
+    { name: 'bossk', ship: 'yv666lightfreighter', points: 17 },
+  ],
+}
+
 beforeEach(() => {
+  mockXwingFavourites.favourites = []
+  mockXwingFavourites.addFavourite.mockClear()
+  mockXwingFavourites.removeFavourite.mockClear()
+  mockXwingFavourites.clearFavourites.mockClear()
   mockSetupState.ruleset = 'XWA'
   mockSetupState.matchType = 'Casual'
   mockSetupState.rounds = 6
@@ -441,6 +467,209 @@ describe('XwingSetupScreen', () => {
       await user.click(screen.getByTestId('opponent-confirm-btn'))
       expect(screen.getByTestId('opponent-pilot-list')).toBeInTheDocument()
     })
+  })
+
+  describe('favourites', () => {
+
+    // --- dropdown option ---
+
+    it('Favourites option not shown in player dropdown when no favourites exist', () => {
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      expect(within(screen.getByTestId('player-list-import-select')).queryByText('Favourites')).not.toBeInTheDocument()
+    })
+
+    it('Favourites option shown in player dropdown when favourites exist', () => {
+      mockXwingFavourites.favourites = [SAMPLE_FAVOURITE]
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      expect(within(screen.getByTestId('player-list-import-select')).getByText('Favourites')).toBeInTheDocument()
+    })
+
+    // --- favourites picker ---
+
+    it('Favourites picker is shown when Favourites is selected', () => {
+      mockXwingFavourites.favourites = [SAMPLE_FAVOURITE]
+      mockSetupState.playerListImport = 'Favourites'
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      expect(screen.getByTestId('player-favourites-select')).toBeInTheDocument()
+    })
+
+    it('Favourites picker lists saved squad names', () => {
+      mockXwingFavourites.favourites = [SAMPLE_FAVOURITE]
+      mockSetupState.playerListImport = 'Favourites'
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      expect(within(screen.getByTestId('player-favourites-select')).getByText('Scum Squad')).toBeInTheDocument()
+    })
+
+    it('confirming from Favourites picker shows player edit button', async () => {
+      const user = userEvent.setup()
+      mockXwingFavourites.favourites = [SAMPLE_FAVOURITE]
+      mockSetupState.playerListImport = 'Favourites'
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      fireEvent.change(screen.getByTestId('player-favourites-select'), { target: { value: 'fav-1' } })
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      expect(screen.getByTestId('player-edit-btn')).toBeInTheDocument()
+    })
+
+    it('confirming from Favourites picker shows player pilot list', async () => {
+      const user = userEvent.setup()
+      mockXwingFavourites.favourites = [SAMPLE_FAVOURITE]
+      mockSetupState.playerListImport = 'Favourites'
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      fireEvent.change(screen.getByTestId('player-favourites-select'), { target: { value: 'fav-1' } })
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      expect(screen.getByTestId('player-pilot-list')).toBeInTheDocument()
+    })
+
+    it('Favourites option shown in opponent dropdown when favourites exist and player is confirmed', async () => {
+      const user = userEvent.setup()
+      mockXwingFavourites.favourites = [SAMPLE_FAVOURITE]
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      expect(within(screen.getByTestId('opponent-list-import-select')).getByText('Favourites')).toBeInTheDocument()
+    })
+
+    it('confirming from opponent Favourites picker shows opponent edit button', async () => {
+      const user = userEvent.setup()
+      mockXwingFavourites.favourites = [SAMPLE_FAVOURITE]
+      mockSetupState.opponentListImport = 'Favourites'
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      fireEvent.change(screen.getByTestId('opponent-favourites-select'), { target: { value: 'fav-1' } })
+      await user.click(screen.getByTestId('opponent-confirm-btn'))
+      expect(screen.getByTestId('opponent-edit-btn')).toBeInTheDocument()
+    })
+
+    // --- star button visibility ---
+
+    it('star button shown after XWA confirm with named squad', async () => {
+      const user = userEvent.setup()
+      mockSetupState.playerListImport = 'XWA'
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      fireEvent.change(screen.getByTestId('player-list-textarea'), { target: { value: VALID_XWS } })
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      expect(screen.getByTestId('player-star-btn')).toBeInTheDocument()
+    })
+
+    it('star button not shown after XWA confirm for squad without name', async () => {
+      const user = userEvent.setup()
+      mockSetupState.playerListImport = 'XWA'
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      fireEvent.change(screen.getByTestId('player-list-textarea'), { target: { value: VALID_XWS_46 } })
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      expect(screen.queryByTestId('player-star-btn')).not.toBeInTheDocument()
+    })
+
+    it('star button not shown after None confirm', async () => {
+      const user = userEvent.setup()
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      expect(screen.queryByTestId('player-star-btn')).not.toBeInTheDocument()
+    })
+
+    // --- star state ---
+
+    it('star shows ☆ after fresh XWA confirm', async () => {
+      const user = userEvent.setup()
+      mockSetupState.playerListImport = 'XWA'
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      fireEvent.change(screen.getByTestId('player-list-textarea'), { target: { value: VALID_XWS } })
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      expect(screen.getByTestId('player-star-btn')).toHaveTextContent('☆')
+    })
+
+    it('star shows ★ after loading from Favourites picker', async () => {
+      const user = userEvent.setup()
+      mockXwingFavourites.favourites = [SAMPLE_FAVOURITE]
+      mockSetupState.playerListImport = 'Favourites'
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      fireEvent.change(screen.getByTestId('player-favourites-select'), { target: { value: 'fav-1' } })
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      expect(screen.getByTestId('player-star-btn')).toHaveTextContent('★')
+    })
+
+    // --- star click: save (☆) ---
+
+    it('clicking ☆ star calls addFavourite with squad name and pilots', async () => {
+      const user = userEvent.setup()
+      mockSetupState.playerListImport = 'XWA'
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      fireEvent.change(screen.getByTestId('player-list-textarea'), { target: { value: VALID_XWS } })
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      await user.click(screen.getByTestId('player-star-btn'))
+      expect(mockXwingFavourites.addFavourite).toHaveBeenCalledWith('Scum Syndicate', expect.any(Array))
+    })
+
+    it('star shows ★ after clicking ☆ to save', async () => {
+      const user = userEvent.setup()
+      mockSetupState.playerListImport = 'XWA'
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      fireEvent.change(screen.getByTestId('player-list-textarea'), { target: { value: VALID_XWS } })
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      await user.click(screen.getByTestId('player-star-btn'))
+      expect(screen.getByTestId('player-star-btn')).toHaveTextContent('★')
+    })
+
+    it('clicking ☆ star with name collision shows overwrite warning', async () => {
+      const user = userEvent.setup()
+      mockSetupState.playerListImport = 'XWA'
+      mockXwingFavourites.favourites = [{ id: 'old', name: 'Scum Syndicate', pilots: [] }]
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      fireEvent.change(screen.getByTestId('player-list-textarea'), { target: { value: VALID_XWS } })
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      await user.click(screen.getByTestId('player-star-btn'))
+      expect(screen.getByTestId('player-overwrite-confirm-btn')).toBeInTheDocument()
+    })
+
+    it('overwrite confirm calls removeFavourite then addFavourite', async () => {
+      const user = userEvent.setup()
+      mockSetupState.playerListImport = 'XWA'
+      mockXwingFavourites.favourites = [{ id: 'old', name: 'Scum Syndicate', pilots: [] }]
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      fireEvent.change(screen.getByTestId('player-list-textarea'), { target: { value: VALID_XWS } })
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      await user.click(screen.getByTestId('player-star-btn'))
+      await user.click(screen.getByTestId('player-overwrite-confirm-btn'))
+      expect(mockXwingFavourites.removeFavourite).toHaveBeenCalledWith('old')
+      expect(mockXwingFavourites.addFavourite).toHaveBeenCalledWith('Scum Syndicate', expect.any(Array))
+    })
+
+    it('overwrite cancel dismisses the warning and restores the star', async () => {
+      const user = userEvent.setup()
+      mockSetupState.playerListImport = 'XWA'
+      mockXwingFavourites.favourites = [{ id: 'old', name: 'Scum Syndicate', pilots: [] }]
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      fireEvent.change(screen.getByTestId('player-list-textarea'), { target: { value: VALID_XWS } })
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      await user.click(screen.getByTestId('player-star-btn'))
+      await user.click(screen.getByTestId('player-overwrite-cancel-btn'))
+      expect(screen.queryByTestId('player-overwrite-confirm-btn')).not.toBeInTheDocument()
+      expect(screen.getByTestId('player-star-btn')).toBeInTheDocument()
+    })
+
+    // --- star click: unsave (★) ---
+
+    it('clicking ★ star calls removeFavourite with the favourite id', async () => {
+      const user = userEvent.setup()
+      mockXwingFavourites.favourites = [SAMPLE_FAVOURITE]
+      mockSetupState.playerListImport = 'Favourites'
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      fireEvent.change(screen.getByTestId('player-favourites-select'), { target: { value: 'fav-1' } })
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      await user.click(screen.getByTestId('player-star-btn'))
+      expect(mockXwingFavourites.removeFavourite).toHaveBeenCalledWith('fav-1')
+    })
+
+    it('star shows ☆ after clicking ★ to unsave', async () => {
+      const user = userEvent.setup()
+      mockXwingFavourites.favourites = [SAMPLE_FAVOURITE]
+      mockSetupState.playerListImport = 'Favourites'
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      fireEvent.change(screen.getByTestId('player-favourites-select'), { target: { value: 'fav-1' } })
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      await user.click(screen.getByTestId('player-star-btn'))
+      expect(screen.getByTestId('player-star-btn')).toHaveTextContent('☆')
+    })
+
   })
 
 })

@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SettingsScreen from '../components/settingsScreen'
 import type { FavouriteBase } from '../hooks/useFavourites'
+import type { XwingSquadFavourite } from '../hooks/useXwingFavourites'
 import type { StartScreen } from '../hooks/useUserSettings'
 
 const mockOnSettingChanged = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
@@ -59,6 +60,15 @@ vi.mock('../hooks/useFavourites', () => ({
   useFavourites: () => mockFavourites,
 }))
 
+const mockXwingFavourites = vi.hoisted(() => ({
+  favourites: [] as XwingSquadFavourite[],
+  removeFavourite: vi.fn(),
+  clearFavourites: vi.fn(),
+}))
+vi.mock('../hooks/useXwingFavourites', () => ({
+  useXwingFavourites: () => mockXwingFavourites,
+}))
+
 const mockOrientation = vi.hoisted(() => ({
   vmin: 375,
   isPortrait: true,
@@ -92,6 +102,9 @@ beforeEach(() => {
   mockUserSettings.meleePlayerGuid = ''
   mockUserSettings.startScreen = 'gameSelect'
   mockFavourites.favourites = []
+  mockXwingFavourites.favourites = []
+  mockXwingFavourites.removeFavourite.mockClear()
+  mockXwingFavourites.clearFavourites.mockClear()
   mockOrientation.isPortrait = true
 })
 
@@ -833,6 +846,52 @@ describe('SettingsScreen analytics', () => {
       render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="xwing" />)
       await user.click(screen.getByRole('checkbox', { name: /always show.*buttons/i }))
       expect(mockOnSettingChanged).toHaveBeenCalledWith('enableXwingAlwaysIncDec', true)
+    })
+
+  })
+
+  // ── X-Wing tab — squad favourites ─────────────────────────────────────────
+
+  describe('xwing tab — squad favourites', () => {
+
+    it('shows empty state when no x-wing squad favourites are saved', () => {
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="xwing" />)
+      expect(screen.getByTestId('xwing-favourites-empty')).toBeInTheDocument()
+    })
+
+    it('lists saved x-wing squad favourites by name', () => {
+      mockXwingFavourites.favourites = [
+        { id: 'f1', name: 'Scum Squad', pilots: [] },
+        { id: 'f2', name: 'Empire Aces', pilots: [] },
+      ]
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="xwing" />)
+      expect(screen.getByText('Scum Squad')).toBeInTheDocument()
+      expect(screen.getByText('Empire Aces')).toBeInTheDocument()
+    })
+
+    it('calls removeFavourite with the correct id when remove is clicked', async () => {
+      const user = userEvent.setup()
+      mockXwingFavourites.favourites = [
+        { id: 'f1', name: 'Scum Squad', pilots: [] },
+      ]
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="xwing" />)
+      await user.click(screen.getByTestId('xwing-favourite-remove-f1'))
+      expect(mockXwingFavourites.removeFavourite).toHaveBeenCalledWith('f1')
+    })
+
+    it('shows a clear all button when favourites exist', () => {
+      mockXwingFavourites.favourites = [{ id: 'f1', name: 'Scum Squad', pilots: [] }]
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="xwing" />)
+      expect(screen.getByTestId('xwing-favourites-clear-btn')).toBeInTheDocument()
+    })
+
+    it('calls clearFavourites after confirming clear all', async () => {
+      const user = userEvent.setup()
+      mockXwingFavourites.favourites = [{ id: 'f1', name: 'Scum Squad', pilots: [] }]
+      render(<SettingsScreen onBack={vi.fn()} onHelp={vi.fn()} defaultTab="xwing" />)
+      await user.click(screen.getByTestId('xwing-favourites-clear-btn'))
+      await user.click(screen.getByTestId('xwing-favourites-clear-confirm-btn'))
+      expect(mockXwingFavourites.clearFavourites).toHaveBeenCalledOnce()
     })
 
   })

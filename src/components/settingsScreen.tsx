@@ -1,6 +1,7 @@
 import { useUserSettings } from '../hooks/useUserSettings'
 import type { StartScreen } from '../hooks/useUserSettings'
 import { useFavourites } from '../hooks/useFavourites'
+import { useXwingFavourites } from '../hooks/useXwingFavourites'
 import AppScreenLayout from './layout/appScreenLayout'
 import SettingsScreenView from './settingsScreenView'
 import { onSettingChanged, onFavouriteRemoved, onFavouritesCleared } from '../services/analytics'
@@ -48,6 +49,7 @@ function SettingsScreen({ onBack, onHelp, defaultTab = 'general' }: Props) {
   } = useUserSettings()
 
   const { favourites, removeFavourite, clearFavourites } = useFavourites()
+  const { favourites: xwingFavourites, removeFavourite: removeXwingFavourite, clearFavourites: clearXwingFavourites } = useXwingFavourites()
 
   const handleSettingChange = <T,>(name: string, setter: (v: T) => void) => (v: T) => {
     setter(v)
@@ -102,6 +104,9 @@ function SettingsScreen({ onBack, onHelp, defaultTab = 'general' }: Props) {
         onStartScreenChange={handleSettingChange<StartScreen>('startScreen', setStartScreen)}
         onRemoveFavourite={handleRemoveFavourite}
         onClearFavourites={handleClearFavourites}
+        xwingFavourites={xwingFavourites}
+        onRemoveXwingFavourite={removeXwingFavourite}
+        onClearXwingFavourites={clearXwingFavourites}
         onBack={onBack}
         onHelp={onHelp}
       />

@@ -4,7 +4,7 @@ const STORAGE_KEY = 'xwing_setup'
 
 export type XwingRuleset = 'XWA' | 'Legacy' | 'AMG' | '2.0' | '1.0'
 export type XwingMatchType = 'Casual' | 'Tournament'
-export type XwingListImport = 'None' | 'YASB' | 'XWA'
+export type XwingListImport = 'None' | 'YASB' | 'XWA' | 'Favourites'
 export type XwingScenario = 'None' | 'Assault at the Satellite Array' | 'Chance Engagement' | 'Salvage Mission' | 'Scramble the Transmissions' | 'Ancient Knowledge'
 
 export const XWING_NAMED_SCENARIOS: XwingScenario[] = [
