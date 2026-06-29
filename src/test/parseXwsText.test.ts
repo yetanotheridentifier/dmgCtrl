@@ -72,7 +72,27 @@ describe('parseXwsText — valid input', () => {
     expect(parseXwsText(text)).toMatchObject({ ok: true, total: 46 })
   })
 
-  it('ignores extra top-level fields (faction, name, vendor, etc.)', () => {
+  it('extracts the squad name from the top-level name field', () => {
+    const result = parseXwsText(VALID_LIST)
+    if (!result.ok) throw new Error('expected ok')
+    expect(result.name).toBe('Finding Your Fear Charming')
+  })
+
+  it('returns undefined for name when the name field is absent', () => {
+    const text = JSON.stringify({
+      pilots: [
+        { name: 'pilota', ship: 'shipa', points: 17 },
+        { name: 'pilotb', ship: 'shipb', points: 17 },
+        { name: 'pilotc', ship: 'shipc', points: 16 },
+      ],
+      points: 50,
+    })
+    const result = parseXwsText(text)
+    if (!result.ok) throw new Error('expected ok')
+    expect(result.name).toBeUndefined()
+  })
+
+  it('ignores extra top-level fields (faction, vendor, etc.)', () => {
     expect(parseXwsText(VALID_LIST).ok).toBe(true)
   })
 })

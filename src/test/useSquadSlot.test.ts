@@ -1,15 +1,30 @@
 import { describe, it, expect } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useSquadSlot } from '../hooks/useSquadSlot'
+import type { XwingSquadFavourite } from '../hooks/useXwingFavourites'
+
+const PILOTS = [
+  { name: 'asajjventress', ship: 'lancerclasspursuitcraft', points: 15 },
+  { name: 'bobafett-armedanddangerous', ship: 'firesprayclasspatrolcraft', points: 18 },
+  { name: 'bossk', ship: 'yv666lightfreighter', points: 17 },
+]
 
 const VALID_XWS = JSON.stringify({
-  pilots: [
-    { name: 'asajjventress', ship: 'lancerclasspursuitcraft', points: 15 },
-    { name: 'bobafett-armedanddangerous', ship: 'firesprayclasspatrolcraft', points: 18 },
-    { name: 'bossk', ship: 'yv666lightfreighter', points: 17 },
-  ],
+  pilots: PILOTS,
   points: 50,
 })
+
+const VALID_XWS_NAMED = JSON.stringify({
+  name: 'Finding Your Fear Charming',
+  pilots: PILOTS,
+  points: 50,
+})
+
+const FAVOURITE: XwingSquadFavourite = {
+  id: 'fav-1',
+  name: 'My Scum Squad',
+  pilots: PILOTS,
+}
 
 const XWS_LOW_POINTS = JSON.stringify({
   pilots: [
@@ -173,6 +188,119 @@ describe('useSquadSlot', () => {
     act(() => { result.current.confirm('XWA') })
     act(() => { result.current.edit() })
     expect(result.current.pilots).toHaveLength(3)
+  })
+
+  // --- squadName ---
+
+  it('squadName is undefined initially', () => {
+    const { result } = renderHook(() => useSquadSlot())
+    expect(result.current.squadName).toBeUndefined()
+  })
+
+  it('confirm(XWA) with a named XWS sets squadName', () => {
+    const { result } = renderHook(() => useSquadSlot())
+    act(() => { result.current.setText(VALID_XWS_NAMED) })
+    act(() => { result.current.confirm('XWA') })
+    expect(result.current.squadName).toBe('Finding Your Fear Charming')
+  })
+
+  it('confirm(XWA) with a nameless XWS leaves squadName undefined', () => {
+    const { result } = renderHook(() => useSquadSlot())
+    act(() => { result.current.setText(VALID_XWS) })
+    act(() => { result.current.confirm('XWA') })
+    expect(result.current.squadName).toBeUndefined()
+  })
+
+  it('edit() retains squadName', () => {
+    const { result } = renderHook(() => useSquadSlot())
+    act(() => { result.current.setText(VALID_XWS_NAMED) })
+    act(() => { result.current.confirm('XWA') })
+    act(() => { result.current.edit() })
+    expect(result.current.squadName).toBe('Finding Your Fear Charming')
+  })
+
+  // --- confirmFromFavourite ---
+
+  it('confirmFromFavourite sets confirmed to true', () => {
+    const { result } = renderHook(() => useSquadSlot())
+    act(() => { result.current.confirmFromFavourite(FAVOURITE) })
+    expect(result.current.confirmed).toBe(true)
+  })
+
+  it('confirmFromFavourite sets pilots from the favourite', () => {
+    const { result } = renderHook(() => useSquadSlot())
+    act(() => { result.current.confirmFromFavourite(FAVOURITE) })
+    expect(result.current.pilots).toEqual(PILOTS)
+  })
+
+  it('confirmFromFavourite sets squadName from the favourite name', () => {
+    const { result } = renderHook(() => useSquadSlot())
+    act(() => { result.current.confirmFromFavourite(FAVOURITE) })
+    expect(result.current.squadName).toBe('My Scum Squad')
+  })
+
+  it('confirmFromFavourite clears any prior error', () => {
+    const { result } = renderHook(() => useSquadSlot())
+    act(() => { result.current.confirm('XWA') })
+    act(() => { result.current.confirmFromFavourite(FAVOURITE) })
+    expect(result.current.error).toBeNull()
+  })
+
+  it('confirmFromFavourite clears text', () => {
+    const { result } = renderHook(() => useSquadSlot())
+    act(() => { result.current.setText('some pasted json') })
+    act(() => { result.current.confirmFromFavourite(FAVOURITE) })
+    expect(result.current.text).toBe('')
+  })
+
+  // --- isFromFavourite ---
+
+  it('isFromFavourite is false initially', () => {
+    const { result } = renderHook(() => useSquadSlot())
+    expect(result.current.isFromFavourite).toBe(false)
+  })
+
+  it('isFromFavourite is false after confirm(None)', () => {
+    const { result } = renderHook(() => useSquadSlot())
+    act(() => { result.current.confirm('None') })
+    expect(result.current.isFromFavourite).toBe(false)
+  })
+
+  it('isFromFavourite is true after confirmFromFavourite()', () => {
+    const { result } = renderHook(() => useSquadSlot())
+    act(() => { result.current.confirmFromFavourite(FAVOURITE) })
+    expect(result.current.isFromFavourite).toBe(true)
+  })
+
+  it('isFromFavourite resets to false after edit()', () => {
+    const { result } = renderHook(() => useSquadSlot())
+    act(() => { result.current.confirmFromFavourite(FAVOURITE) })
+    act(() => { result.current.edit() })
+    expect(result.current.isFromFavourite).toBe(false)
+  })
+
+  // --- markUnsaved ---
+
+  it('markUnsaved() sets isFromFavourite to false without clearing confirmed', () => {
+    const { result } = renderHook(() => useSquadSlot())
+    act(() => { result.current.confirmFromFavourite(FAVOURITE) })
+    act(() => { result.current.markUnsaved() })
+    expect(result.current.isFromFavourite).toBe(false)
+    expect(result.current.confirmed).toBe(true)
+  })
+
+  it('markUnsaved() does not change pilots', () => {
+    const { result } = renderHook(() => useSquadSlot())
+    act(() => { result.current.confirmFromFavourite(FAVOURITE) })
+    act(() => { result.current.markUnsaved() })
+    expect(result.current.pilots).toEqual(PILOTS)
+  })
+
+  it('markUnsaved() does not change squadName', () => {
+    const { result } = renderHook(() => useSquadSlot())
+    act(() => { result.current.confirmFromFavourite(FAVOURITE) })
+    act(() => { result.current.markUnsaved() })
+    expect(result.current.squadName).toBe('My Scum Squad')
   })
 
   it('re-confirming after edit with new valid XWS updates pilots', () => {
