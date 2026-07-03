@@ -106,12 +106,28 @@ describe('useXwingSetup', () => {
     expect(result.current.playerListImport).toBe('YASB')
   })
 
-  it('opponentListImport is session-only and always starts at None', () => {
+  it('loads opponentListImport from localStorage', () => {
     vi.mocked(localStorage.getItem).mockImplementation((key) =>
       key === STORAGE_KEY ? JSON.stringify({ opponentListImport: 'XWA' }) : null
     )
     const { result } = renderHook(() => useXwingSetup())
-    expect(result.current.opponentListImport).toBe('None')
+    expect(result.current.opponentListImport).toBe('XWA')
+  })
+
+  it('loads Favourites value for playerListImport', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key) =>
+      key === STORAGE_KEY ? JSON.stringify({ playerListImport: 'Favourites' }) : null
+    )
+    const { result } = renderHook(() => useXwingSetup())
+    expect(result.current.playerListImport).toBe('Favourites')
+  })
+
+  it('loads Favourites value for opponentListImport', () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key) =>
+      key === STORAGE_KEY ? JSON.stringify({ opponentListImport: 'Favourites' }) : null
+    )
+    const { result } = renderHook(() => useXwingSetup())
+    expect(result.current.opponentListImport).toBe('Favourites')
   })
 
   it('does not load playerDeficit from localStorage (always starts at 0)', () => {
@@ -160,11 +176,11 @@ describe('useXwingSetup', () => {
     expect(saved.playerListImport).toBe('YASB')
   })
 
-  it('does not save opponentListImport to localStorage', () => {
+  it('saves opponentListImport to localStorage when setOpponentListImport is called', () => {
     const { result } = renderHook(() => useXwingSetup())
-    const callsBefore = vi.mocked(localStorage.setItem).mock.calls.length
     act(() => result.current.setOpponentListImport('XWA'))
-    expect(vi.mocked(localStorage.setItem).mock.calls.length).toBe(callsBefore)
+    const saved = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
+    expect(saved.opponentListImport).toBe('XWA')
   })
 
   it('does not save playerDeficit to localStorage', () => {

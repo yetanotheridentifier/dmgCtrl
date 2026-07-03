@@ -691,10 +691,6 @@ export default function XwingSetupScreenView({
   }
 
   if (!isPortrait) {
-    const opponentVisible = playerConfirmed || opponentConfirmed
-    const playerActive = !playerConfirmed
-    const opponentActive = opponentVisible && !opponentConfirmed
-
     const landscapeGridStyle: React.CSSProperties = {
       display: 'grid',
       gridTemplateColumns: 'auto 1fr auto',
@@ -703,37 +699,166 @@ export default function XwingSetupScreenView({
       alignItems: 'center',
     }
 
+    // One player's column: flex column that holds the import grid (and, for the opponent, Go to game).
+    const landscapeColStyle: React.CSSProperties = {
+      flex: 1,
+      display: 'flex',
+      flexDirection: 'column',
+      overflowY: 'auto',
+      padding: '14px',
+    }
+
     const editBtnStyle: React.CSSProperties = submitButtonStyle(true)
 
-    // Helper: select + confirm button row rendered in the RHS for the active player
-    const activeImportRow = (
-      label: string,
-      selectTestId: string,
-      confirmTestId: string,
-      value: XwingListImport,
-      onChange: (v: XwingListImport) => void,
-      onConfirm: () => void,
-      confirmDisabled?: boolean,
-      onFavReset?: () => void,
-    ) => (
-      <div style={{ display: 'flex', gap: '1vw', alignItems: 'center', flexShrink: 0 }}>
-        <label style={labelStyle(true)}>{label}</label>
-        <select
-          data-testid={selectTestId}
-          value={value}
-          onChange={e => { onChange(e.target.value as XwingListImport); onFavReset?.() }}
-          style={{ ...selectStyle(true, true, true), flex: 1 }}
-        >
-          <option value="None" style={optionStyle}>None</option>
-          <option value="YASB" disabled style={optionMuted}>YASB</option>
-          <option value="XWA" style={optionStyle}>XWA</option>
-          {favourites.length > 0 && <option value="Favourites" style={optionStyle}>Favourites</option>}
-        </select>
-        <button data-testid={confirmTestId} disabled={confirmDisabled} onClick={onConfirm} style={submitButtonStyle(true)}>
-          <CheckIcon />
-        </button>
-      </div>
-    )
+    // Renders one player's full import column — active editing state (unconfirmed) or the
+    // confirmed state (squad name + star + pilot list). Used for both the player (LHS) and
+    // opponent (RHS) columns.
+    const renderImportColumn = (side: 'player' | 'opponent') => {
+      const isPlayer = side === 'player'
+      const confirmed = isPlayer ? playerConfirmed : opponentConfirmed
+      const listImport = isPlayer ? playerListImport : opponentListImport
+      const onListImportChange = isPlayer ? onPlayerListImportChange : onOpponentListImportChange
+      const squadName = isPlayer ? playerSquadName : opponentSquadName
+      const starFilled = isPlayer ? playerStarFilled : opponentStarFilled
+      const pilots = isPlayer ? playerPilots : opponentPilots
+      const selectedFavId = isPlayer ? playerSelectedFavId : opponentSelectedFavId
+      const setSelectedFavId = isPlayer ? setPlayerSelectedFavId : setOpponentSelectedFavId
+      const showOverwrite = isPlayer ? playerShowOverwrite : opponentShowOverwrite
+      const setShowOverwrite = isPlayer ? setPlayerShowOverwrite : setOpponentShowOverwrite
+      const text = isPlayer ? playerText : opponentText
+      const onTextChange = isPlayer ? onPlayerTextChange : onOpponentTextChange
+      const error = isPlayer ? playerError : opponentError
+      const deficit = isPlayer ? playerDeficit : opponentDeficit
+      const onDeficitChange = isPlayer ? onPlayerDeficitChange : onOpponentDeficitChange
+      const onEdit = isPlayer ? onPlayerEdit : onOpponentEdit
+      const onConfirm = isPlayer ? onPlayerConfirm : onOpponentConfirm
+      const onLoadFavourite = isPlayer ? onPlayerLoadFavourite : onOpponentLoadFavourite
+      const onSave = isPlayer ? onPlayerSave : onOpponentSave
+      const onUnsave = isPlayer ? onPlayerUnsave : onOpponentUnsave
+      const label = isPlayer ? 'Your list' : 'Opp list'
+      const deficitLabel = isPlayer ? 'Your Deficit' : 'Opp Deficit'
+      const t = (suffix: string) => `${side}-${suffix}`
+
+      return (
+        <div style={landscapeGridStyle}>
+          <label style={labelStyle(true)}>{label}</label>
+          <select
+            data-testid={t('list-import-select')}
+            value={listImport}
+            disabled={confirmed}
+            onChange={e => { onListImportChange(e.target.value as XwingListImport); setSelectedFavId('') }}
+            style={selectStyle(!confirmed, true, true)}
+          >
+            <option value="None" style={optionStyle}>None</option>
+            <option value="YASB" disabled style={optionMuted}>YASB</option>
+            <option value="XWA" style={optionStyle}>XWA</option>
+            {favourites.length > 0 && <option value="Favourites" style={optionStyle}>Favourites</option>}
+          </select>
+          {confirmed ? (
+            <button data-testid={t('edit-btn')} onClick={() => { onEdit(); setShowOverwrite(false) }} style={editBtnStyle}>
+              <EditIcon />
+            </button>
+          ) : (
+            <button
+              data-testid={t('confirm-btn')}
+              disabled={listImport === 'Favourites' && !selectedFavId}
+              onClick={() => {
+                if (listImport === 'Favourites') {
+                  const fav = favourites.find(f => f.id === selectedFavId)
+                  if (fav) onLoadFavourite(fav)
+                } else {
+                  onConfirm()
+                }
+              }}
+              style={submitButtonStyle(true)}
+            >
+              <CheckIcon />
+            </button>
+          )}
+
+          {/* Unconfirmed: favourites picker / textarea / deficit stepper */}
+          {!confirmed && listImport === 'Favourites' && (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <select
+                data-testid={t('favourites-select')}
+                value={selectedFavId}
+                onChange={e => setSelectedFavId(e.target.value)}
+                style={selectStyle(true, !!selectedFavId, true)}
+              >
+                <option value="" disabled style={optionMuted}>Select a squad</option>
+                {favourites.map(f => (
+                  <option key={f.id} value={f.id} style={optionStyle}>{f.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {!confirmed && listImport === 'XWA' && (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <TextareaField
+                testId={t('list-textarea')}
+                errorTestId={t('import-error')}
+                value={text}
+                onChange={onTextChange}
+                error={error}
+                small={true}
+              />
+            </div>
+          )}
+          {!confirmed && listImport === 'None' && (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <TimerStepper
+                label={deficitLabel}
+                labelStyle={labelStyle(true)}
+                value={deficit}
+                min={0}
+                max={4}
+                step={1}
+                formatValue={(v) => String(v)}
+                onChange={onDeficitChange}
+                testId={t('deficit-stepper')}
+              />
+            </div>
+          )}
+
+          {/* Confirmed: squad name + star, overwrite warning, pilot list */}
+          {confirmed && squadName !== undefined && <>
+            <span />
+            <input type="text" readOnly value={squadName} style={squadNameInputStyle(true)} />
+            <button
+              data-testid={t('star-btn')}
+              aria-pressed={starFilled}
+              aria-label={starFilled ? 'Remove from favourites' : 'Add to favourites'}
+              onClick={() => {
+                if (starFilled) { onUnsave(); setShowOverwrite(false) }
+                else if (favourites.some(f => f.name === squadName)) { setShowOverwrite(true) }
+                else { onSave(squadName) }
+              }}
+              style={starButtonStyle(true)}
+            >
+              {starFilled ? '★' : '☆'}
+            </button>
+          </>}
+          {confirmed && showOverwrite && squadName !== undefined && (
+            <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '1vw' }}>
+              <span style={{ color: 'var(--color-text-muted)', fontWeight: '300', fontSize: 'clamp(0.55rem, 1.4vw, 0.7rem)', flex: 1 }}>
+                Overwrite '{squadName}'?
+              </span>
+              <button data-testid={t('overwrite-confirm-btn')} aria-label="Confirm overwrite"
+                onClick={() => { onSave(squadName); setShowOverwrite(false) }}
+                style={starButtonStyle(true)}>★</button>
+              <button data-testid={t('overwrite-cancel-btn')} aria-label="Cancel"
+                onClick={() => setShowOverwrite(false)}
+                style={overwriteCancelStyle(true)}>✕</button>
+            </div>
+          )}
+          {confirmed && listImport !== 'None' && pilots.length > 0 && (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <PilotList pilots={pilots} testId={t('pilot-list')} small={true} />
+            </div>
+          )}
+        </div>
+      )
+    }
 
     return (
       <AppScreenLayout>
@@ -773,6 +898,56 @@ export default function XwingSetupScreenView({
             </div>
           </div>
 
+          {/* Shared settings — Match / Rounds / Scenario span the top */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5vh', flexShrink: 0, padding: '1.5vh 0 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1.5vw' }}>
+              <label style={labelStyle(true)}>Match</label>
+              <select
+                data-testid="match-select"
+                value={matchType}
+                onChange={e => onMatchTypeChange(e.target.value as XwingMatchType)}
+                style={{ ...selectStyle(true, true, true), flex: 1 }}
+              >
+                <option value="Casual" style={optionStyle}>Casual</option>
+                <option value="Tournament" style={optionStyle}>Tournament</option>
+              </select>
+              <label style={labelStyle(true)}>Scenario</label>
+              <select
+                data-testid="scenario-select"
+                value={scenario}
+                onChange={e => onScenarioChange(e.target.value as XwingScenario)}
+                style={{ ...selectStyle(true, scenario !== 'None', true), flex: 1 }}
+              >
+                <option value="None" style={optionStyle}>None</option>
+                {XWING_NAMED_SCENARIOS.map(s => (
+                  <option key={s} value={s} style={optionStyle}>{s}</option>
+                ))}
+              </select>
+              <button
+                data-testid="scenario-random-btn"
+                onClick={onScenarioRandom}
+                aria-label="Random scenario"
+                style={submitButtonStyle(true)}
+              >
+                <DiceIcon />
+              </button>
+            </div>
+            {matchType === 'Tournament' && (
+              <TimerStepper
+                label="Rounds"
+                labelStyle={labelStyle(true)}
+                value={rounds}
+                min={2}
+                max={10}
+                step={1}
+                formatValue={(v) => String(v)}
+                onChange={onRoundsChange}
+                testId="rounds-stepper"
+              />
+            )}
+          </div>
+
+          {/* Two columns: player (LHS) and opponent (RHS, revealed once the player confirms) */}
           <div style={{
             flex: 1,
             display: 'flex',
@@ -781,312 +956,37 @@ export default function XwingSetupScreenView({
             padding: '1.5vh 0 0',
             gap: '3vw',
           }}>
-            {/* LHS: stable fields + confirmed list rows */}
-            <div style={{
-              flex: '0 0 45%',
-              display: 'flex',
-              flexDirection: 'column',
-              overflowY: 'auto',
-              padding: '14px',
-            }}>
-              <div style={landscapeGridStyle}>
-
-                {/* Match select spans cols 2+3 so its RHS aligns with the random button */}
-                <label style={labelStyle(true)}>Match</label>
-                <select
-                  data-testid="match-select"
-                  value={matchType}
-                  onChange={e => onMatchTypeChange(e.target.value as XwingMatchType)}
-                  style={{ ...selectStyle(true, true, true), gridColumn: '2 / 4' }}
-                >
-                  <option value="Casual" style={optionStyle}>Casual</option>
-                  <option value="Tournament" style={optionStyle}>Tournament</option>
-                </select>
-
-                {matchType === 'Tournament' && (
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <TimerStepper
-                      label="Rounds"
-                      labelStyle={labelStyle(true)}
-                      value={rounds}
-                      min={2}
-                      max={10}
-                      step={1}
-                      formatValue={(v) => String(v)}
-                      onChange={onRoundsChange}
-                      testId="rounds-stepper"
-                    />
-                  </div>
-                )}
-
-                <label style={labelStyle(true)}>Scenario</label>
-                <select
-                  data-testid="scenario-select"
-                  value={scenario}
-                  onChange={e => onScenarioChange(e.target.value as XwingScenario)}
-                  style={selectStyle(true, scenario !== 'None', true)}
-                >
-                  <option value="None" style={optionStyle}>None</option>
-                  {XWING_NAMED_SCENARIOS.map(s => (
-                    <option key={s} value={s} style={optionStyle}>{s}</option>
-                  ))}
-                </select>
-                <button
-                  data-testid="scenario-random-btn"
-                  onClick={onScenarioRandom}
-                  aria-label="Random scenario"
-                  style={submitButtonStyle(true)}
-                >
-                  <DiceIcon />
-                </button>
-
-                {/* Confirmed player row */}
-                {playerConfirmed && (
-                  <>
-                    <label style={labelStyle(true)}>Your list</label>
-                    <select
-                      data-testid="player-list-import-select"
-                      value={playerListImport}
-                      disabled
-                      onChange={e => onPlayerListImportChange(e.target.value as XwingListImport)}
-                      style={selectStyle(false, true, true)}
-                    >
-                      <option value="None" style={optionStyle}>None</option>
-                      <option value="YASB" style={optionStyle}>YASB</option>
-                      <option value="XWA" style={optionStyle}>XWA</option>
-                    </select>
-                    <button data-testid="player-edit-btn" onClick={() => { onPlayerEdit(); setPlayerShowOverwrite(false) }} style={editBtnStyle}>
-                      <EditIcon />
-                    </button>
-                  </>
-                )}
-                {playerConfirmed && playerSquadName !== undefined && <>
-                  <span />
-                  <input type="text" readOnly value={playerSquadName} style={squadNameInputStyle(true)} />
-                  <button
-                    data-testid="player-star-btn"
-                    aria-pressed={playerStarFilled}
-                    aria-label={playerStarFilled ? 'Remove from favourites' : 'Add to favourites'}
-                    onClick={() => {
-                      if (playerStarFilled) { onPlayerUnsave(); setPlayerShowOverwrite(false) }
-                      else if (favourites.some(f => f.name === playerSquadName)) { setPlayerShowOverwrite(true) }
-                      else { onPlayerSave(playerSquadName) }
-                    }}
-                    style={starButtonStyle(true)}
-                  >
-                    {playerStarFilled ? '★' : '☆'}
-                  </button>
-                </>}
-                {playerShowOverwrite && playerSquadName !== undefined && (
-                  <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '1vw' }}>
-                    <span style={{ color: 'var(--color-text-muted)', fontWeight: '300', fontSize: 'clamp(0.55rem, 1.4vw, 0.7rem)', flex: 1 }}>
-                      Overwrite '{playerSquadName}'?
-                    </span>
-                    <button data-testid="player-overwrite-confirm-btn" aria-label="Confirm overwrite"
-                      onClick={() => { onPlayerSave(playerSquadName); setPlayerShowOverwrite(false) }}
-                      style={starButtonStyle(true)}>★</button>
-                    <button data-testid="player-overwrite-cancel-btn" aria-label="Cancel"
-                      onClick={() => setPlayerShowOverwrite(false)}
-                      style={overwriteCancelStyle(true)}>✕</button>
-                  </div>
-                )}
-                {playerConfirmed && playerListImport !== 'None' && playerPilots.length > 0 && (
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <PilotList pilots={playerPilots} testId="player-pilot-list" small={true} />
-                  </div>
-                )}
-
-                {/* Confirmed opponent row */}
-                {opponentConfirmed && (
-                  <>
-                    <label style={labelStyle(true)}>Opp list</label>
-                    <select
-                      data-testid="opponent-list-import-select"
-                      value={opponentListImport}
-                      disabled
-                      onChange={e => onOpponentListImportChange(e.target.value as XwingListImport)}
-                      style={selectStyle(false, true, true)}
-                    >
-                      <option value="None" style={optionStyle}>None</option>
-                      <option value="YASB" style={optionStyle}>YASB</option>
-                      <option value="XWA" style={optionStyle}>XWA</option>
-                    </select>
-                    <button data-testid="opponent-edit-btn" onClick={() => { onOpponentEdit(); setOpponentShowOverwrite(false) }} style={editBtnStyle}>
-                      <EditIcon />
-                    </button>
-                  </>
-                )}
-                {opponentConfirmed && opponentSquadName !== undefined && <>
-                  <span />
-                  <input type="text" readOnly value={opponentSquadName} style={squadNameInputStyle(true)} />
-                  <button
-                    data-testid="opponent-star-btn"
-                    aria-pressed={opponentStarFilled}
-                    aria-label={opponentStarFilled ? 'Remove from favourites' : 'Add to favourites'}
-                    onClick={() => {
-                      if (opponentStarFilled) { onOpponentUnsave(); setOpponentShowOverwrite(false) }
-                      else if (favourites.some(f => f.name === opponentSquadName)) { setOpponentShowOverwrite(true) }
-                      else { onOpponentSave(opponentSquadName) }
-                    }}
-                    style={starButtonStyle(true)}
-                  >
-                    {opponentStarFilled ? '★' : '☆'}
-                  </button>
-                </>}
-                {opponentShowOverwrite && opponentSquadName !== undefined && (
-                  <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '1vw' }}>
-                    <span style={{ color: 'var(--color-text-muted)', fontWeight: '300', fontSize: 'clamp(0.55rem, 1.4vw, 0.7rem)', flex: 1 }}>
-                      Overwrite '{opponentSquadName}'?
-                    </span>
-                    <button data-testid="opponent-overwrite-confirm-btn" aria-label="Confirm overwrite"
-                      onClick={() => { onOpponentSave(opponentSquadName); setOpponentShowOverwrite(false) }}
-                      style={starButtonStyle(true)}>★</button>
-                    <button data-testid="opponent-overwrite-cancel-btn" aria-label="Cancel"
-                      onClick={() => setOpponentShowOverwrite(false)}
-                      style={overwriteCancelStyle(true)}>✕</button>
-                  </div>
-                )}
-                {opponentConfirmed && opponentListImport !== 'None' && opponentPilots.length > 0 && (
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <PilotList pilots={opponentPilots} testId="opponent-pilot-list" small={true} />
-                  </div>
-                )}
-
-              </div>
+            <div style={landscapeColStyle}>
+              {renderImportColumn('player')}
             </div>
-
-            {/* RHS: active (unconfirmed) import section, or Go to game when both confirmed */}
-            <div style={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              padding: '14px 14px 14px 0',
-              gap: '1.5vh',
-            }}>
-              {/* Go to game sits at the top of the RHS, level with the Match row */}
-              {canStart && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1vw', flexShrink: 0 }}>
-                  <label style={labelStyle(true)}>Go to game</label>
-                  <button onClick={onStart} aria-label="Start game" style={submitButtonStyle(true)}>
-                    <ForwardIcon />
-                  </button>
+            <div style={landscapeColStyle}>
+              {(playerConfirmed || opponentConfirmed) ? (
+                <>
+                  {renderImportColumn('opponent')}
+                  {canStart && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1vw', flexShrink: 0, marginTop: '1.5vh' }}>
+                      <label style={labelStyle(true)}>Go to game</label>
+                      <button onClick={onStart} aria-label="Start game" style={submitButtonStyle(true)}>
+                        <ForwardIcon />
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div data-testid="opponent-placeholder" style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textAlign: 'center',
+                  color: 'var(--color-text-muted)',
+                  fontWeight: '300',
+                  fontSize: 'clamp(0.7rem, 2.5vw, 0.9rem)',
+                  letterSpacing: '0.04em',
+                  padding: '2vw',
+                }}>
+                  Confirm your list to set up your opponent
                 </div>
-              )}
-              {playerActive && (
-                <>
-                  {activeImportRow(
-                    'Your list',
-                    'player-list-import-select',
-                    'player-confirm-btn',
-                    playerListImport,
-                    onPlayerListImportChange,
-                    () => {
-                      if (playerListImport === 'Favourites') {
-                        const fav = favourites.find(f => f.id === playerSelectedFavId)
-                        if (fav) onPlayerLoadFavourite(fav)
-                      } else {
-                        onPlayerConfirm()
-                      }
-                    },
-                    playerListImport === 'Favourites' && !playerSelectedFavId,
-                    () => setPlayerSelectedFavId(''),
-                  )}
-                  {playerListImport === 'Favourites' && (
-                    <select
-                      data-testid="player-favourites-select"
-                      value={playerSelectedFavId}
-                      onChange={e => setPlayerSelectedFavId(e.target.value)}
-                      style={selectStyle(true, !!playerSelectedFavId, true)}
-                    >
-                      <option value="" disabled style={optionMuted}>Select a squad</option>
-                      {favourites.map(f => (
-                        <option key={f.id} value={f.id} style={optionStyle}>{f.name}</option>
-                      ))}
-                    </select>
-                  )}
-                  {playerListImport === 'XWA' && (
-                    <TextareaField
-                      testId="player-list-textarea"
-                      errorTestId="player-import-error"
-                      value={playerText}
-                      onChange={onPlayerTextChange}
-                      error={playerError}
-                      small={true}
-                      fill
-                    />
-                  )}
-                  {playerListImport === 'None' && (
-                    <TimerStepper
-                      label="Your Deficit"
-                      labelStyle={labelStyle(true)}
-                      value={playerDeficit}
-                      min={0}
-                      max={4}
-                      step={1}
-                      formatValue={(v) => String(v)}
-                      onChange={onPlayerDeficitChange}
-                      testId="player-deficit-stepper"
-                    />
-                  )}
-                </>
-              )}
-              {opponentActive && (
-                <>
-                  {activeImportRow(
-                    'Opp list',
-                    'opponent-list-import-select',
-                    'opponent-confirm-btn',
-                    opponentListImport,
-                    onOpponentListImportChange,
-                    () => {
-                      if (opponentListImport === 'Favourites') {
-                        const fav = favourites.find(f => f.id === opponentSelectedFavId)
-                        if (fav) onOpponentLoadFavourite(fav)
-                      } else {
-                        onOpponentConfirm()
-                      }
-                    },
-                    opponentListImport === 'Favourites' && !opponentSelectedFavId,
-                    () => setOpponentSelectedFavId(''),
-                  )}
-                  {opponentListImport === 'Favourites' && (
-                    <select
-                      data-testid="opponent-favourites-select"
-                      value={opponentSelectedFavId}
-                      onChange={e => setOpponentSelectedFavId(e.target.value)}
-                      style={selectStyle(true, !!opponentSelectedFavId, true)}
-                    >
-                      <option value="" disabled style={optionMuted}>Select a squad</option>
-                      {favourites.map(f => (
-                        <option key={f.id} value={f.id} style={optionStyle}>{f.name}</option>
-                      ))}
-                    </select>
-                  )}
-                  {opponentListImport === 'XWA' && (
-                    <TextareaField
-                      testId="opponent-list-textarea"
-                      errorTestId="opponent-import-error"
-                      value={opponentText}
-                      onChange={onOpponentTextChange}
-                      error={opponentError}
-                      small={true}
-                      fill
-                    />
-                  )}
-                  {opponentListImport === 'None' && (
-                    <TimerStepper
-                      label="Opp Deficit"
-                      labelStyle={labelStyle(true)}
-                      value={opponentDeficit}
-                      min={0}
-                      max={4}
-                      step={1}
-                      formatValue={(v) => String(v)}
-                      onChange={onOpponentDeficitChange}
-                      testId="opponent-deficit-stepper"
-                    />
-                  )}
-                </>
               )}
             </div>
           </div>
@@ -1125,29 +1025,29 @@ export default function XwingSetupScreenView({
               dmgCtrl
             </h1>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '1vh' }}>
-            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '2vw' }}>
-              {onSettings && (
-                <button onClick={onSettings} aria-label="Settings" style={NAV_BTN_STYLE}>
-                  <CogIcon />
-                </button>
-              )}
-              <button onClick={onHelp} aria-label="Help" style={NAV_BTN_STYLE}>
-                <HelpIcon />
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '2vw' }}>
+            {onSettings && (
+              <button onClick={onSettings} aria-label="Settings" style={NAV_BTN_STYLE}>
+                <CogIcon />
               </button>
-            </div>
-            {canStart && (
-              <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '2vw' }}>
-                <label style={labelStyle(false)}>Go to game</label>
-                <button onClick={onStart} aria-label="Start game" style={submitButtonStyle(false)}>
-                  <ForwardIcon />
-                </button>
-              </div>
             )}
+            <button onClick={onHelp} aria-label="Help" style={NAV_BTN_STYLE}>
+              <HelpIcon />
+            </button>
           </div>
         </div>
 
         {controlGrid(true)}
+
+        {/* Go to game — floats directly under the opponent list, bottom-right */}
+        {canStart && (
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: '2vw' }}>
+            <label style={labelStyle(false)}>Go to game</label>
+            <button onClick={onStart} aria-label="Start game" style={submitButtonStyle(false)}>
+              <ForwardIcon />
+            </button>
+          </div>
+        )}
 
       </div>
     </AppScreenLayout>

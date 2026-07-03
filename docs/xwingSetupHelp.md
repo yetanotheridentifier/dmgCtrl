@@ -33,7 +33,7 @@ Each player's import method is set independently:
 - **YASB** — direct YASB import (coming soon).
 - **Favourites** — load a previously saved squad. Appears only when you have saved squads. Select a squad from the dropdown, then tap the **tick button** to load it.
 
-Once both lists are confirmed, the **Go to game** button appears (portrait: below the help button; landscape: top-right). Tap **Edit** next to either player to go back and change their list — editing one player does not affect the other.
+Once both lists are confirmed, the **Go to game** button appears at the bottom-right of the screen. Tap **Edit** next to either player to go back and change their list — editing one player does not affect the other.
 
 ### Saving squads
 

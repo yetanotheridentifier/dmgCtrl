@@ -20,8 +20,13 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings }
   const opponentSlot = useSquadSlot()
   const { favourites, addFavourite, removeFavourite } = useXwingFavourites()
 
-  const [playerListImport, setPlayerListImportState] = useState<XwingListImport>(setup.playerListImport)
-  const [opponentListImport, setOpponentListImportState] = useState<XwingListImport>(setup.opponentListImport)
+  // A remembered 'Favourites' preference is only valid while saved squads exist —
+  // otherwise the dropdown would show a mode with no options, so fall back to None.
+  const sanitizeImport = (v: XwingListImport): XwingListImport =>
+    v === 'Favourites' && favourites.length === 0 ? 'None' : v
+
+  const [playerListImport, setPlayerListImportState] = useState<XwingListImport>(sanitizeImport(setup.playerListImport))
+  const [opponentListImport, setOpponentListImportState] = useState<XwingListImport>(sanitizeImport(setup.opponentListImport))
   const [playerManualSaved, setPlayerManualSaved] = useState(false)
   const [opponentManualSaved, setOpponentManualSaved] = useState(false)
 
@@ -34,6 +39,7 @@ export default function XwingSetupScreen({ onStart, onBack, onHelp, onSettings }
 
   const handleOpponentListImportChange = (v: XwingListImport) => {
     setOpponentListImportState(v)
+    setup.setOpponentListImport(v)
     opponentSlot.edit()
     setOpponentManualSaved(false)
   }

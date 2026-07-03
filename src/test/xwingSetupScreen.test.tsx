@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import XwingSetupScreen from '../components/xwingSetupScreen'
 import { XWING_NAMED_SCENARIOS } from '../hooks/useXwingSetup'
 import type { XwingSquadFavourite } from '../hooks/useXwingFavourites'
+import { makeMatchMediaMock } from './setup'
 
 const VALID_XWS = JSON.stringify({
   name: 'Scum Syndicate',
@@ -178,6 +179,19 @@ describe('XwingSetupScreen', () => {
     expect(screen.queryByTestId('opponent-list-import-select')).not.toBeInTheDocument()
   })
 
+  it('landscape: opponent column shows a placeholder until the player confirms their list', async () => {
+    // landscape is the default test orientation
+    const user = userEvent.setup()
+    render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+    // opponent controls are hidden; a placeholder invites the player to confirm their own list first
+    expect(screen.queryByTestId('opponent-list-import-select')).not.toBeInTheDocument()
+    expect(screen.getByTestId('opponent-placeholder')).toBeInTheDocument()
+    await user.click(screen.getByTestId('player-confirm-btn'))
+    // once confirmed, the opponent column is populated and the placeholder is gone
+    expect(screen.getByTestId('opponent-list-import-select')).toBeInTheDocument()
+    expect(screen.queryByTestId('opponent-placeholder')).not.toBeInTheDocument()
+  })
+
   it('player confirm button is present in None mode', () => {
     render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
     expect(screen.getByTestId('player-confirm-btn')).toBeInTheDocument()
@@ -306,6 +320,21 @@ describe('XwingSetupScreen', () => {
     await user.click(screen.getByTestId('opponent-confirm-btn'))
     await user.click(screen.getByTestId('player-edit-btn'))
     expect(screen.queryByRole('button', { name: /start game/i })).not.toBeInTheDocument()
+  })
+
+  it('Start Game button sits at the foot of the screen (after the controls) in portrait', async () => {
+    makeMatchMediaMock(true) // portrait
+    const user = userEvent.setup()
+    render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+    await user.click(screen.getByTestId('player-confirm-btn'))
+    await user.click(screen.getByTestId('opponent-confirm-btn'))
+    const startBtn = screen.getByRole('button', { name: /start game/i })
+    const scenarioSelect = screen.getByTestId('scenario-select')
+    // The start action lives in a footer below the control grid — so it must follow the
+    // scenario control in document order. Previously it rendered in the top title bar (before it).
+    expect(
+      scenarioSelect.compareDocumentPosition(startBtn) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
   })
 
   it('clicking Start Game calls onStart with manual deficits and empty pilots (None/None)', async () => {
@@ -668,6 +697,39 @@ describe('XwingSetupScreen', () => {
       await user.click(screen.getByTestId('player-confirm-btn'))
       await user.click(screen.getByTestId('player-star-btn'))
       expect(screen.getByTestId('player-star-btn')).toHaveTextContent('☆')
+    })
+
+  })
+
+  // --- List import preference persistence ---
+
+  describe('list import persistence', () => {
+
+    it('persists the player list import selection', async () => {
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      await userEvent.selectOptions(screen.getByTestId('player-list-import-select'), 'XWA')
+      expect(mockSetupState.setPlayerListImport).toHaveBeenCalledWith('XWA')
+    })
+
+    it('persists the opponent list import selection', async () => {
+      const user = userEvent.setup()
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      await user.click(screen.getByTestId('player-confirm-btn'))
+      await user.selectOptions(screen.getByTestId('opponent-list-import-select'), 'XWA')
+      expect(mockSetupState.setOpponentListImport).toHaveBeenCalledWith('XWA')
+    })
+
+    it('initialises the dropdowns from the remembered preference', () => {
+      mockSetupState.playerListImport = 'XWA'
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      expect((screen.getByTestId('player-list-import-select') as HTMLSelectElement).value).toBe('XWA')
+    })
+
+    it('falls back to None when a remembered Favourites preference has no saved squads', () => {
+      mockSetupState.playerListImport = 'Favourites'
+      mockXwingFavourites.favourites = []
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      expect((screen.getByTestId('player-list-import-select') as HTMLSelectElement).value).toBe('None')
     })
 
   })
