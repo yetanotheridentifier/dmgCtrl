@@ -20,6 +20,7 @@ interface PersistedSetup {
   matchType: XwingMatchType
   rounds: number
   playerListImport: XwingListImport
+  opponentListImport: XwingListImport
 }
 
 const DEFAULTS: PersistedSetup = {
@@ -27,12 +28,13 @@ const DEFAULTS: PersistedSetup = {
   matchType: 'Casual',
   rounds: 6,
   playerListImport: 'None',
+  opponentListImport: 'None',
 }
 
 function migrateListImport(value: unknown): XwingListImport {
   if (value === 'Text') return 'None'
-  if (value === 'None' || value === 'YASB' || value === 'XWA') return value as XwingListImport
-  return DEFAULTS.playerListImport
+  if (value === 'None' || value === 'YASB' || value === 'XWA' || value === 'Favourites') return value as XwingListImport
+  return 'None'
 }
 
 function load(): PersistedSetup {
@@ -46,6 +48,7 @@ function load(): PersistedSetup {
       matchType: (parsed.matchType as XwingMatchType) ?? DEFAULTS.matchType,
       rounds: (parsed.rounds as number) ?? DEFAULTS.rounds,
       playerListImport: migrateListImport(rawImport),
+      opponentListImport: migrateListImport(parsed.opponentListImport),
     }
   } catch {
     return { ...DEFAULTS }
@@ -81,7 +84,6 @@ export interface XwingSetupValue {
 
 export function useXwingSetup(): XwingSetupValue {
   const [persisted, setPersisted] = useState<PersistedSetup>(load)
-  const [opponentListImport, setOpponentListImportState] = useState<XwingListImport>('None')
   const [playerDeficit, setPlayerDeficitState] = useState(0)
   const [opponentDeficit, setOpponentDeficitState] = useState(0)
   const [scenario, setScenario] = useState<XwingScenario>('None')
@@ -103,8 +105,8 @@ export function useXwingSetup(): XwingSetupValue {
     setRounds: (v) => update({ rounds: v }),
     playerListImport: persisted.playerListImport,
     setPlayerListImport: (v) => update({ playerListImport: v }),
-    opponentListImport,
-    setOpponentListImport: setOpponentListImportState,
+    opponentListImport: persisted.opponentListImport,
+    setOpponentListImport: (v) => update({ opponentListImport: v }),
     playerDeficit,
     setPlayerDeficit: (v) => setPlayerDeficitState(clampDeficit(v)),
     opponentDeficit,
