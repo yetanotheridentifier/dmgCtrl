@@ -80,9 +80,11 @@ const labelStyle = (small = false): React.CSSProperties => ({
 
 const selectStyle = (enabled: boolean, hasValue: boolean, small = false): React.CSSProperties => ({
   flex: 1,
-  padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
+  padding: small ? '0.8vh 1.5vw' : '0 2vw',
   fontSize: small ? 'clamp(0.75rem, 1.8vw, 0.9rem)' : 'clamp(0.9rem, 3vw, 1.2rem)',
-  ...(small && { height: 'max(44px, 8vh)' }),
+  // Same height sizing as the square action buttons so selects line up with them (portrait 5vw/36px, landscape 8vh/44px).
+  height: small ? '8vh' : '5vw',
+  minHeight: small ? '44px' : '36px',
   fontWeight: '300',
   background: 'transparent',
   border: '2px solid var(--color-accent)',
@@ -98,11 +100,14 @@ const selectStyle = (enabled: boolean, hasValue: boolean, small = false): React.
 })
 
 const submitButtonStyle = (small = false): React.CSSProperties => ({
-  width: small ? '8vh' : '12vw',
-  minWidth: '44px',
-  minHeight: '44px',
+  // Portrait matches the nav buttons' 5vw / 36px square footprint; landscape unchanged (8vh / 44px).
+  // Inner padding is kept in both orientations so the %-sized icons render at a consistent size.
+  width: small ? '8vh' : '5vw',
+  height: small ? undefined : '5vw',
+  minWidth: small ? '44px' : '36px',
+  minHeight: small ? '44px' : '36px',
   flexShrink: 0,
-  padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
+  padding: '0.8vh 1.5vw',
   fontSize: small ? 'clamp(1rem, 3vh, 1.8rem)' : 'clamp(1rem, 3vw, 1.8rem)',
   fontWeight: '300',
   background: 'transparent',
@@ -119,11 +124,14 @@ const submitButtonStyle = (small = false): React.CSSProperties => ({
 })
 
 const starButtonStyle = (small = false): React.CSSProperties => ({
-  width: small ? '8vh' : '12vw',
-  minWidth: '44px',
-  minHeight: '44px',
+  // Portrait matches the nav buttons' 5vw / 36px square footprint; landscape unchanged (8vh / 44px).
+  // Inner padding is kept in both orientations so the ☆/★ glyph renders at a consistent size.
+  width: small ? '8vh' : '5vw',
+  height: small ? undefined : '5vw',
+  minWidth: small ? '44px' : '36px',
+  minHeight: small ? '44px' : '36px',
   flexShrink: 0,
-  padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
+  padding: '0.8vh 1.5vw',
   fontSize: small ? 'clamp(1rem, 3vh, 1.8rem)' : 'clamp(1rem, 3vw, 1.8rem)',
   fontWeight: '300',
   background: 'transparent',
@@ -140,9 +148,11 @@ const starButtonStyle = (small = false): React.CSSProperties => ({
 
 const squadNameInputStyle = (small = false): React.CSSProperties => ({
   flex: 1,
-  padding: small ? '0.8vh 1.5vw' : '1.5vh 2vw',
+  padding: small ? '0.8vh 1.5vw' : '0 2vw',
   fontSize: small ? 'clamp(0.75rem, 1.8vw, 0.9rem)' : 'clamp(0.9rem, 3vw, 1.2rem)',
-  ...(small && { height: 'max(44px, 8vh)' }),
+  // Matches selectStyle so the read-only name field lines up with the star button (portrait 5vw/36px, landscape 8vh/44px).
+  height: small ? '8vh' : '5vw',
+  minHeight: small ? '44px' : '36px',
   fontWeight: '300',
   background: 'transparent',
   border: '2px solid var(--color-accent)',
@@ -150,6 +160,10 @@ const squadNameInputStyle = (small = false): React.CSSProperties => ({
   color: 'var(--color-text-primary)',
   outline: 'none',
   boxSizing: 'border-box' as const,
+  // Reset the native appearance (like selectStyle) so iOS/WebKit lets the input stretch to
+  // width: 100% inside the grid cell; minWidth: 0 lets it fill rather than sit at its intrinsic size.
+  WebkitAppearance: 'none',
+  minWidth: 0,
   cursor: 'default',
   width: '100%',
 })
@@ -471,12 +485,11 @@ export default function XwingSetupScreenView({
 
       {/* Player squad name + star */}
       {playerConfirmed && playerSquadName !== undefined && <>
-        <span />
         <input
           type="text"
           readOnly
           value={playerSquadName}
-          style={squadNameInputStyle(small)}
+          style={{ ...squadNameInputStyle(small), gridColumn: '1 / 3' }}
         />
         <button
           data-testid="player-star-btn"
@@ -605,12 +618,11 @@ export default function XwingSetupScreenView({
 
         {/* Opponent squad name + star */}
         {opponentConfirmed && opponentSquadName !== undefined && <>
-          <span />
           <input
             type="text"
             readOnly
             value={opponentSquadName}
-            style={squadNameInputStyle(small)}
+            style={{ ...squadNameInputStyle(small), gridColumn: '1 / 3' }}
           />
           <button
             data-testid="opponent-star-btn"
@@ -700,12 +712,17 @@ export default function XwingSetupScreenView({
     }
 
     // One player's column: flex column that holds the import grid (and, for the opponent, Go to game).
+    // Columns scroll vertically (long pilot lists), so they clip overflow — the `14px` padding
+    // gives the buttons'/selects' glow shadows room instead of truncating them at the edge. The
+    // header and shared-settings rows below are inset by the same `COL_INSET` so the opponent
+    // column's confirm / Go-to-game buttons stay aligned with the header (help) and dice buttons.
+    const COL_INSET = '14px'
     const landscapeColStyle: React.CSSProperties = {
       flex: 1,
       display: 'flex',
       flexDirection: 'column',
       overflowY: 'auto',
-      padding: '14px',
+      padding: COL_INSET,
     }
 
     const editBtnStyle: React.CSSProperties = submitButtonStyle(true)
@@ -822,8 +839,7 @@ export default function XwingSetupScreenView({
 
           {/* Confirmed: squad name + star, overwrite warning, pilot list */}
           {confirmed && squadName !== undefined && <>
-            <span />
-            <input type="text" readOnly value={squadName} style={squadNameInputStyle(true)} />
+            <input type="text" readOnly value={squadName} style={{ ...squadNameInputStyle(true), gridColumn: '1 / 3' }} />
             <button
               data-testid={t('star-btn')}
               aria-pressed={starFilled}
@@ -870,7 +886,7 @@ export default function XwingSetupScreenView({
           padding: '2vw 2vw 3vw',
         }}>
 
-          <div style={titleRowStyle}>
+          <div style={{ ...titleRowStyle, padding: `0 ${COL_INSET}` }}>
             <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1vw' }}>
               <button onClick={onBack} aria-label="Back" style={NAV_BTN_STYLE}>
                 <BackIcon />
@@ -899,7 +915,7 @@ export default function XwingSetupScreenView({
           </div>
 
           {/* Shared settings — Match / Rounds / Scenario span the top */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5vh', flexShrink: 0, padding: '1.5vh 0 0' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5vh', flexShrink: 0, padding: `1.5vh ${COL_INSET} 0` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1.5vw' }}>
               <label style={labelStyle(true)}>Match</label>
               <select

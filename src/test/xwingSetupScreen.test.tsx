@@ -734,4 +734,45 @@ describe('XwingSetupScreen', () => {
 
   })
 
+  // --- Button sizing (#282) ---
+
+  describe('button sizing', () => {
+
+    it('portrait: square action buttons match the nav buttons', () => {
+      makeMatchMediaMock(true) // portrait
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} />)
+      const action = screen.getByTestId('player-confirm-btn')
+      const nav = screen.getByRole('button', { name: /back/i })
+      expect(action.style.width).toBe(nav.style.width)
+      expect(action.style.height).toBe(nav.style.height)
+      expect(action.style.minWidth).toBe(nav.style.minWidth)
+      expect(action.style.minHeight).toBe(nav.style.minHeight)
+    })
+
+    it('landscape: action-button minimum size is unchanged (44px)', () => {
+      // landscape is the default test orientation
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} />)
+      const action = screen.getByTestId('player-confirm-btn')
+      expect(action.style.minWidth).toBe('44px')
+      expect(action.style.minHeight).toBe('44px')
+    })
+
+    it('portrait: action buttons keep inner padding so their icons match the landscape size', () => {
+      makeMatchMediaMock(true) // portrait
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} />)
+      const action = screen.getByTestId('player-confirm-btn')
+      expect(action.style.padding).toBe('0.8vh 1.5vw')
+    })
+
+    it('portrait: text/selection boxes are sized down to match the action buttons', () => {
+      makeMatchMediaMock(true) // portrait
+      render(<XwingSetupScreen onStart={vi.fn()} onBack={vi.fn()} onHelp={vi.fn()} onSettings={vi.fn()} />)
+      const select = screen.getByTestId('player-list-import-select')
+      const action = screen.getByTestId('player-confirm-btn')
+      expect(select.style.height).toBe(action.style.height)
+      expect(select.style.minHeight).toBe(action.style.minHeight)
+    })
+
+  })
+
 })
