@@ -12,6 +12,16 @@ export default defineConfig(({ mode }) => {
     base,
     server: {
       host: true,
+      // The sealed app dev server (sealed/, port 5174) is proxied under /sealed
+      // so https://dev.dmgctrl.app:5173/sealed/ works with the mkcert cert.
+      // ws: true forwards its HMR websocket. Harmless when 5174 isn't running.
+      proxy: {
+        '/sealed': {
+          target: 'http://localhost:5174',
+          changeOrigin: true,
+          ws: true,
+        },
+      },
     },
     plugins: [
       {
@@ -27,6 +37,11 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'autoUpdate',
         devOptions: { enabled: false },
+        workbox: {
+          // The sealed app lives under /sealed as a separate build — the PWA's
+          // service worker must not rewrite its navigations to the PWA index.
+          navigateFallbackDenylist: [/^\/sealed/],
+        },
         manifest: {
           name: 'dmgCtrl',
           short_name: 'dmgCtrl',
@@ -53,7 +68,7 @@ export default defineConfig(({ mode }) => {
       globals: true,
       environment: 'jsdom',
       setupFiles: './src/test/setup.ts',
-      exclude: ['proxy/**', 'node_modules/**'],
+      exclude: ['proxy/**', 'sealed/**', 'node_modules/**'],
     },
   }
 })
