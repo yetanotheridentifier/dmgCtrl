@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SWU Sealed AI Opponent — Build Handoff · dmgCtrl</title>
+<style>
+  /* ============================================================
+     dmgCtrl docs — token layer aligned with the app theme
+     (src/index.css: starfield, #4fc3f7 accent, Segoe UI).
+     ============================================================ */
+  :root{
+    --bg:        #0a0e1a;   /* --color-bg-deep                */
+    --bg-dark:   #000510;   /* --color-bg-dark                */
+    --surface:   rgba(13, 27, 42, 0.45); /* translucent panel */
+    --surface-2: rgba(13, 27, 42, 0.7);
+    --line:      rgba(107, 114, 128, 0.6); /* --color-ui-border */
+    --line-soft: rgba(107, 114, 128, 0.3);
+    --ink:       #ffffff;   /* --color-text-primary           */
+    --ink-dim:   #a8a8b3;   /* --color-text-muted             */
+    --ink-faint: #6b7280;   /* --color-text-disabled          */
+    --accent:    #4fc3f7;   /* --color-accent                 */
+    --amber:     #f5a623;   /* --color-warning                */
+    --red:       #ff6b6b;   /* --color-error                  */
+    --cyan:      #4fc3f7;   /* readout / info = accent        */
+    --green:     #22c55e;   /* --color-success                */
+
+    --f-display: 'Segoe UI', Helvetica, Arial, sans-serif;
+    --f-body:    'Segoe UI', Helvetica, Arial, sans-serif;
+    --f-mono:    'SF Mono', Consolas, Menlo, monospace;
+
+    --col: 1080px;
+    color-scheme: dark;
+  }
+
+  *{box-sizing:border-box}
+  html{
+    scroll-behavior:smooth;
+    background-color:var(--bg-dark);
+    background-attachment:fixed;
+    background-image:
+      radial-gradient(1px 1px at 10% 20%, rgba(255,255,255,0.6) 0%, transparent 100%),
+      radial-gradient(1px 1px at 25% 75%, rgba(255,255,255,0.4) 0%, transparent 100%),
+      radial-gradient(1px 1px at 40% 35%, rgba(255,255,255,0.7) 0%, transparent 100%),
+      radial-gradient(1px 1px at 55% 60%, rgba(255,255,255,0.3) 0%, transparent 100%),
+      radial-gradient(1px 1px at 65% 15%, rgba(255,255,255,0.5) 0%, transparent 100%),
+      radial-gradient(1px 1px at 75% 85%, rgba(255,255,255,0.6) 0%, transparent 100%),
+      radial-gradient(1px 1px at 85% 40%, rgba(255,255,255,0.4) 0%, transparent 100%),
+      radial-gradient(1px 1px at 90% 70%, rgba(255,255,255,0.5) 0%, transparent 100%),
+      radial-gradient(1px 1px at 15% 90%, rgba(255,255,255,0.3) 0%, transparent 100%),
+      radial-gradient(1px 1px at 50% 10%, rgba(255,255,255,0.6) 0%, transparent 100%),
+      radial-gradient(2px 2px at 30% 50%, rgba(255,255,255,0.2) 0%, transparent 100%),
+      radial-gradient(2px 2px at 70% 30%, rgba(255,255,255,0.15) 0%, transparent 100%),
+      radial-gradient(ellipse at 20% 50%, #0d1b2a 0%, var(--bg) 60%, var(--bg-dark) 100%);
+  }
+  body{
+    margin:0;
+    background:transparent;
+    color:var(--ink);
+    font-family:var(--f-body);
+    font-size:16px;
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--cyan);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  .wrap{max-width:var(--col);margin:0 auto;padding:0 32px}
+
+  /* ---------- console header ---------- */
+  header.hud{
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, rgba(79,195,247,.04), transparent 70%);
+    padding:56px 0 34px;
+  }
+  .brandline{display:flex;align-items:center;gap:18px;margin-bottom:26px}
+  .mark{width:46px;height:46px;flex:none;filter:drop-shadow(0 0 14px rgba(255,107,107,.35))}
+  .mark polygon{fill:var(--red)}
+  .mark circle{fill:var(--bg)}
+  .brandtxt .k{
+    font-family:var(--f-mono);font-size:12px;letter-spacing:.28em;
+    text-transform:uppercase;color:var(--ink-faint);
+  }
+  .brandtxt .n{
+    font-family:var(--f-display);font-weight:200;font-size:19px;letter-spacing:.15em;
+    color:var(--ink);line-height:1.1;
+  }
+  .brandtxt .n b{color:var(--red);font-weight:400}
+
+  h1{
+    font-family:var(--f-display);font-weight:200;
+    font-size:clamp(30px,4.6vw,50px);line-height:1.04;letter-spacing:-.01em;
+    margin:0 0 14px;
+  }
+  h1 .dim{color:var(--ink-dim);font-weight:200}
+  .lede{color:var(--ink-dim);font-size:18px;max-width:70ch;margin:0}
+
+  /* status strip */
+  .strip{
+    display:flex;flex-wrap:wrap;gap:10px;margin-top:30px;
+  }
+  .chip{
+    font-family:var(--f-mono);font-size:11.5px;letter-spacing:.06em;
+    border:2px solid var(--line);border-radius:12px;
+    padding:7px 13px;color:var(--ink-dim);background:var(--surface);
+    display:inline-flex;gap:8px;align-items:center;
+  }
+  .chip b{color:var(--ink);font-weight:500}
+  .chip .dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  .chip.crit .dot{background:var(--red)}
+  .chip.ok .dot{background:var(--green)}
+  .chip.info .dot{background:var(--cyan)}
+
+  /* ---------- sections ---------- */
+  main{padding:12px 0 100px}
+  section{padding:52px 0 8px;border-bottom:1px solid var(--line-soft)}
+  section:last-child{border-bottom:0}
+  .eyebrow{
+    font-family:var(--f-mono);font-size:12px;letter-spacing:.24em;
+    text-transform:uppercase;color:var(--accent);margin-bottom:10px;
+    display:flex;align-items:center;gap:12px;
+  }
+  .eyebrow::before{
+    content:"";width:22px;height:1px;background:var(--accent);opacity:.6;
+  }
+  h2{
+    font-family:var(--f-display);font-weight:300;font-size:clamp(22px,3vw,30px);
+    letter-spacing:-.01em;margin:0 0 8px;
+  }
+  section > .wrap > p{color:var(--ink-dim);max-width:74ch}
+  section > .wrap > p b, li b{color:var(--ink);font-weight:600}
+  h3{
+    font-family:var(--f-display);font-weight:500;font-size:17px;
+    letter-spacing:.01em;color:var(--ink);margin:30px 0 10px;
+  }
+
+  ul.clean{list-style:none;padding:0;margin:14px 0}
+  ul.clean li{
+    position:relative;padding:5px 0 5px 22px;color:var(--ink-dim);
+  }
+  ul.clean li::before{
+    content:"›";position:absolute;left:2px;color:var(--red);font-weight:700;
+  }
+
+  /* ---------- tables ---------- */
+  .tbl{width:100%;border-collapse:collapse;margin:18px 0;font-size:14.5px}
+  .tbl th,.tbl td{
+    text-align:left;padding:11px 14px;border-bottom:1px solid var(--line-soft);
+    vertical-align:top;
+  }
+  .tbl thead th{
+    font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink-faint);font-weight:500;
+    border-bottom:1px solid var(--line);
+  }
+  .tbl td{color:var(--ink-dim)}
+  .tbl td:first-child{color:var(--ink);font-weight:500}
+  .tbl tr:hover td{background:rgba(255,255,255,.015)}
+  .tag{
+    font-family:var(--f-mono);font-size:11px;padding:2px 9px;border-radius:8px;
+    border:1px solid var(--line);color:var(--ink-dim);white-space:nowrap;
+  }
+  .tag.free{color:var(--green);border-color:rgba(34,197,94,.4)}
+  .tag.cost{color:var(--amber);border-color:rgba(245,166,35,.4)}
+  .tag.later{color:var(--ink-faint)}
+
+  /* ---------- architecture rail ---------- */
+  .rail{
+    display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:22px 0 6px;
+  }
+  .node{
+    border:2px solid var(--line);border-radius:12px;background:var(--surface);
+    padding:16px 18px;
+  }
+  .node .lbl{
+    font-family:var(--f-mono);font-size:10.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--amber);margin-bottom:7px;
+  }
+  .node .lbl.thread{color:var(--cyan)}
+  .node h4{font-family:var(--f-display);font-weight:500;font-size:15px;margin:0 0 6px}
+  .node p{margin:0;font-size:13.5px;color:var(--ink-dim);line-height:1.5}
+
+  /* ---------- AI ladder ---------- */
+  .ladder{margin:20px 0;border-left:2px solid var(--line);padding-left:0}
+  .rung{
+    position:relative;padding:12px 0 12px 30px;border-bottom:1px solid var(--line-soft);
+  }
+  .rung:last-child{border-bottom:0}
+  .rung::before{
+    content:"";position:absolute;left:-6px;top:18px;width:10px;height:10px;
+    border-radius:50%;background:var(--bg);border:2px solid var(--accent);
+  }
+  .rung.peak::before{background:var(--red);border-color:var(--red)}
+  .rung .step{
+    font-family:var(--f-mono);font-size:11px;color:var(--ink-faint);
+    letter-spacing:.1em;
+  }
+  .rung .t{font-family:var(--f-display);font-weight:500;font-size:15px;margin:2px 0 3px}
+  .rung .d{font-size:13.5px;color:var(--ink-dim)}
+
+  /* ---------- epics ---------- */
+  .epic{
+    border:2px solid var(--line);border-radius:12px;background:var(--surface);
+    margin:16px 0;overflow:hidden;
+  }
+  .epic > summary{
+    list-style:none;cursor:pointer;padding:16px 20px;
+    display:flex;align-items:center;gap:16px;
+    background:linear-gradient(180deg, var(--surface-2), var(--surface));
+    border-bottom:1px solid transparent;
+  }
+  .epic[open] > summary{border-bottom-color:var(--line)}
+  .epic > summary::-webkit-details-marker{display:none}
+  .epic .code{
+    font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--bg-dark);
+    background:var(--accent);padding:4px 9px;border-radius:8px;letter-spacing:.04em;
+    flex:none;
+  }
+  .epic .etitle{font-family:var(--f-display);font-weight:500;font-size:17px;flex:1}
+  .epic .etitle span{color:var(--ink-faint);font-weight:400;font-size:13px;display:block;margin-top:1px}
+  .epic .chev{color:var(--ink-faint);font-family:var(--f-mono);font-size:13px;transition:transform .2s}
+  .epic[open] .chev{transform:rotate(90deg)}
+  .epic .body{padding:6px 20px 14px}
+  .ticket{
+    display:grid;grid-template-columns:64px 1fr;gap:14px;
+    padding:11px 0;border-bottom:1px solid var(--line-soft);
+  }
+  .ticket:last-child{border-bottom:0}
+  .ticket .tid{
+    font-family:var(--f-mono);font-size:12px;color:var(--accent);font-weight:500;
+    padding-top:1px;
+  }
+  .ticket .tt{font-weight:500;color:var(--ink);font-size:14.5px;display:block;margin-bottom:2px;font-family:var(--f-display)}
+  .ticket .td{font-size:13.5px;color:var(--ink-dim);line-height:1.5}
+  .milestone-flag{
+    display:inline-block;font-family:var(--f-mono);font-size:10.5px;
+    color:var(--red);border:1px solid rgba(255,107,107,.4);border-radius:8px;
+    padding:1px 6px;margin-left:8px;letter-spacing:.05em;vertical-align:middle;
+  }
+
+  /* ---------- sequence readout ---------- */
+  .seq{
+    font-family:var(--f-mono);font-size:13px;line-height:1.9;
+    background:var(--surface);border:2px solid var(--line);border-radius:12px;
+    padding:20px 22px;margin:20px 0;color:var(--ink-dim);overflow-x:auto;
+  }
+  .seq .arm{color:var(--green)}
+  .seq .ms{color:var(--red);font-weight:700}
+  .seq .lbl{color:var(--cyan)}
+
+  /* ---------- callout ---------- */
+  .call{
+    border:2px solid var(--line);border-left:3px solid var(--accent);
+    background:var(--surface);border-radius:0 12px 12px 0;
+    padding:16px 20px;margin:22px 0;
+  }
+  .call .h{
+    font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent);margin-bottom:6px;
+  }
+  .call.crit{border-left-color:var(--red)}
+  .call.crit .h{color:var(--red)}
+  .call p{margin:0;color:var(--ink-dim);font-size:14.5px}
+  .call p + p{margin-top:10px}
+
+  footer{
+    border-top:1px solid var(--line);padding:26px 0 60px;
+    font-family:var(--f-mono);font-size:11.5px;color:var(--ink-faint);
+    letter-spacing:.06em;
+  }
+  footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+
+  code{font-family:var(--f-mono);font-size:.88em;color:var(--accent);
+    background:var(--surface-2);padding:1px 6px;border-radius:6px}
+
+  @media (max-width:720px){
+    .rail{grid-template-columns:1fr}
+    .wrap{padding:0 20px}
+    .ticket{grid-template-columns:54px 1fr;gap:10px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none!important;scroll-behavior:auto!important}
+  }
+</style>
+</head>
+<body>
+
+<header class="hud">
+  <div class="wrap">
+    <div class="brandline">
+      <svg class="mark" viewBox="0 0 100 100" aria-hidden="true">
+        <polygon points="50,2 57.2,30.3 80.9,13.2 68.2,39.5 97.3,41.7 70.7,53.7 91.6,74 63.5,66.1 66.4,95.1 50,71 33.6,95.1 36.5,66.1 8.4,74 29.3,53.7 2.7,41.7 31.8,39.5 19.1,13.2 42.8,30.3"/>
+        <circle cx="50" cy="50" r="15"/>
+      </svg>
+      <div class="brandtxt">
+        <div class="k">dmgctrl.app / docs</div>
+        <div class="n">dmg<b>Ctrl</b> · project documentation</div>
+      </div>
+    </div>
+
+    <h1>SWU Sealed AI Opponent<br><span class="dim">build handoff</span></h1>
+    <p class="lede">A learning, lookahead-capable AI opponent for Star Wars: Unlimited Sealed — designed to reason about future threats rather than dump resources like existing tools. This document is the build plan: scope, architecture, storage, and the ticketed path from empty repo to a self-improving opponent.</p>
+
+    <div class="strip">
+      <span class="chip"><span class="dot"></span>FORMAT <b>Sealed</b></span>
+      <span class="chip info"><span class="dot"></span>TARGET <b>Desktop first</b></span>
+      <span class="chip info"><span class="dot"></span>HOST <b>dmgctrl.app/docs</b></span>
+      <span class="chip"><span class="dot"></span>PWA <b>Excluded (for now)</b></span>
+      <span class="chip crit"><span class="dot"></span>STATUS <b>Spec</b></span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- OVERVIEW -->
+  <section>
+    <div class="wrap">
+      <div class="eyebrow">00 · Overview</div>
+      <h2>What we're building, and why it's different</h2>
+      <p>Forcetable's AI is weak because it's <b>greedy</b>: it optimises the current move with no model of consequences. It over-commits resources, ignores what the opponent holds, and paints itself into corners. The goal here is an opponent with <b>lookahead</b> and <b>threat modelling</b> — one that gets punished in simulation for leaving itself exposed, and improves the more it's played.</p>
+      <ul class="clean">
+        <li>Standalone app that reuses dmgCtrl's <b>deck-import</b> and <b>card-lookup</b> patterns.</li>
+        <li>Lives at <b>dmgctrl.app</b> as a desktop page, kept <b>separate from the PWA</b> until the desktop experience is solid.</li>
+        <li>Filed in the docs <b>alongside the SWU rules</b> as the reference build plan.</li>
+        <li>Runs and is developed <b>locally</b> — Windows + WSL2 + VS Code, Docker for infrastructure.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- SCOPE -->
+  <section>
+    <div class="wrap">
+      <div class="eyebrow">01 · Scope</div>
+      <h2>Locked decisions</h2>
+      <p>Sealed is the deliberate choice: a smaller <b>~250-card pool</b> and <b>30-card minimum</b> decks, with gameplay that emphasises <b>unit trading</b> over deep combo heuristics. That makes the rules engine and AI more tractable, cheaper to train, and differentiates the app from Forcetable and constructed-focused tools.</p>
+      <table class="tbl">
+        <thead><tr><th>Decision</th><th>Choice</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td>Format</td><td>Sealed only</td><td>~250 pool, 30-card min decks; unit-trading focus</td></tr>
+          <tr><td>Player deck import</td><td>ProtectThePod JSON</td><td>Pasted from clipboard, not a URL fetch</td></tr>
+          <tr><td>AI deck</td><td>Second import or generated pool</td><td>Sealed pool for testing</td></tr>
+          <tr><td>Card data</td><td>SWUDB detail → IndexedDB</td><td>Progressive sync, low-res thumbnails only</td></tr>
+          <tr><td>Delivery</td><td>Desktop web page</td><td>Won't scale to mobile well — desktop first, deliberately</td></tr>
+          <tr><td>PWA</td><td>Excluded for now</td><td>Revisit once desktop play is solid</td></tr>
+          <tr><td>Environment</td><td>Local · WSL2 · Docker</td><td>Keep project files under <code>~/</code>, not <code>/mnt/c/</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ARCHITECTURE -->
+  <section>
+    <div class="wrap">
+      <div class="eyebrow">02 · Architecture</div>
+      <h2>Layers of the machine</h2>
+      <p>The heart of the app is a <b>pure rules engine</b>: <code>(gameState, action) => newGameState</code>. All validation lives in the legal-move generator; the resolver only applies legal actions. Everything else — UI, AI, storage — sits around that core. The AI runs in a <b>Web Worker</b> so the board stays responsive while it thinks.</p>
+      <div class="rail">
+        <div class="node"><div class="lbl thread">Main thread</div><h4>Board UI &amp; input</h4><p>Renders game state, surfaces the active player's legal moves, shows the game log. Sends actions in, gets new state back.</p></div>
+        <div class="node"><div class="lbl">Rules engine</div><h4>State · moves · resolver</h4><p>Game-state schema, legal-move generator, action resolver, win check. The single source of truth for what is legal and what happens.</p></div>
+        <div class="node"><div class="lbl thread">Web Worker</div><h4>AI decision layer</h4><p>Heuristic scorer → MCTS → LLM evaluator. Off the main thread so search never blocks the UI.</p></div>
+        <div class="node"><div class="lbl">External</div><h4>Data &amp; models</h4><p>SWUDB card detail, ProtectThePod deck JSON, local Ollama model, optional Claude API fallback.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AI -->
+  <section>
+    <div class="wrap">
+      <div class="eyebrow">03 · AI approach</div>
+      <h2>From random to reasoning</h2>
+      <p>The opponent is built up a ladder — each rung is independently shippable and beats the one below. The fix for Forcetable's core flaw arrives at MCTS (moves that lose future turns get punished in simulation) and sharpens with the LLM's explicit <b>threat modelling</b>.</p>
+      <div class="ladder">
+        <div class="rung"><div class="step">RUNG 0</div><div class="t">Random legal move</div><div class="d">Proves the engine works end-to-end. Instantly beatable.</div></div>
+        <div class="rung"><div class="step">RUNG 1</div><div class="t">Greedy heuristic scorer</div><div class="d">Scores moves on damage, board presence, resource efficiency, base-HP swing. Already better than Forcetable.</div></div>
+        <div class="rung"><div class="step">RUNG 2</div><div class="t">Sealed-tuned heuristics</div><div class="d">Weights unit-trade value and tempo — where Sealed games are actually decided.</div></div>
+        <div class="rung"><div class="step">RUNG 3</div><div class="t">MCTS in a Web Worker</div><div class="d">Monte Carlo Tree Search with the heuristic for rollouts. Lookahead punishes over-commitment — solves the "paints itself into a corner" problem.</div></div>
+        <div class="rung"><div class="step">RUNG 4</div><div class="t">Local LLM evaluator (Ollama)</div><div class="d">Replaces noisy rollouts with a position score + threat model on the top-N candidates only. Q4 Mistral 7B / Llama 3.1 8B on the RTX 2080.</div></div>
+        <div class="rung peak"><div class="step">RUNG 5</div><div class="t">Claude API fallback + self-play training</div><div class="d">Optional higher-quality evaluation, plus an overnight fine-tuning loop that makes the local model SWU-specialised over time.</div></div>
+      </div>
+      <div class="call">
+        <div class="h">Performance envelope · RTX 2080 8GB</div>
+        <p>Q4 7–8B inference runs at roughly <b>30–50 tok/s</b>, so a position evaluation is <b>~10–20s per call</b>. Budget: heuristics drive the wide/deep tree for free; the LLM is called <b>once per turn</b> on the shortlisted candidates only, behind an "AI is thinking…" indicator. Fine-tuning (Unsloth + LoRA) is feasible but an <b>overnight job</b> — treat it as a long-horizon goal, not an inner-loop.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- STORAGE -->
+  <section>
+    <div class="wrap">
+      <div class="eyebrow">04 · Storage</div>
+      <h2>Progressive persistence</h2>
+      <p>Start with the simplest thing that works and add infrastructure only when a specific pain demands it. Each tier is introduced at the epic that needs it — nothing dockerised until the AI and training loops make it worthwhile.</p>
+      <table class="tbl">
+        <thead><tr><th>Tier</th><th>Holds</th><th>Introduced</th><th>Cost</th></tr></thead>
+        <tbody>
+          <tr><td>localStorage</td><td>Deck selection, preferences, active-game backup</td><td>Epic 1</td><td><span class="tag free">Free</span></td></tr>
+          <tr><td>IndexedDB (Dexie)</td><td>Card catalogue JSON + thumbnail blobs</td><td>Epic 1</td><td><span class="tag free">Free</span></td></tr>
+          <tr><td>SQLite (Drizzle)</td><td>Completed game records, decks, moves</td><td>Epic 2</td><td><span class="tag free">Free</span></td></tr>
+          <tr><td>Redis (Docker)</td><td>MCTS position-evaluation cache</td><td>Epic 5 · optional</td><td><span class="tag free">Free</span></td></tr>
+          <tr><td>InfluxDB + Grafana (Docker)</td><td>Win rates, think time, training metrics</td><td>Epic 7</td><td><span class="tag free">Free · local</span></td></tr>
+        </tbody>
+      </table>
+      <div class="call">
+        <div class="h">Why not localStorage for cards</div>
+        <p>~2,250 cards at 1–2KB each is 3–4MB of JSON before a single image — past the ~5MB localStorage ceiling. IndexedDB holds the JSON plus low-res WebP thumbnails as blobs (~10–15KB each), stays queryable, and works offline. Full art is fetched on demand, never cached. Running Influx and Grafana locally in Docker sidesteps every cloud free-tier limit.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- TECH STACK -->
+  <section>
+    <div class="wrap">
+      <div class="eyebrow">05 · Stack</div>
+      <h2>Technologies</h2>
+      <table class="tbl">
+        <thead><tr><th>Layer</th><th>Choice</th><th>Cost</th></tr></thead>
+        <tbody>
+          <tr><td>Framework</td><td>React + Vite</td><td><span class="tag free">Free</span></td></tr>
+          <tr><td>Styling</td><td>Tailwind</td><td><span class="tag free">Free</span></td></tr>
+          <tr><td>Board rendering</td><td>CSS Grid (Konva.js if drag-drop needed)</td><td><span class="tag free">Free</span></td></tr>
+          <tr><td>Card catalogue</td><td>IndexedDB via Dexie</td><td><span class="tag free">Free</span></td></tr>
+          <tr><td>Game records</td><td>SQLite via Drizzle + better-sqlite3</td><td><span class="tag free">Free</span></td></tr>
+          <tr><td>AI search</td><td>MCTS in a Web Worker</td><td><span class="tag free">Free</span></td></tr>
+          <tr><td>Local model</td><td>Ollama · Q4 Mistral 7B / Llama 3.1 8B</td><td><span class="tag free">Free</span></td></tr>
+          <tr><td>Fine-tuning</td><td>Unsloth + LoRA</td><td><span class="tag free">Free</span></td></tr>
+          <tr><td>Cache</td><td>Redis (Docker)</td><td><span class="tag free">Free</span></td></tr>
+          <tr><td>Observability</td><td>InfluxDB + Grafana (Docker)</td><td><span class="tag free">Free · local</span></td></tr>
+          <tr><td>Cloud model (optional)</td><td>Claude API fallback</td><td><span class="tag cost">Pennies/session</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- BUILD -->
+  <section>
+    <div class="wrap">
+      <div class="eyebrow">06 · The build</div>
+      <h2>Epics &amp; tickets</h2>
+      <p>Small, independently deliverable tickets — TDD throughout, one feature branch per ticket. Each epic boundary is a shippable state. Expand a panel for its tickets.</p>
+
+      <details class="epic" open>
+        <summary><span class="code">E1</span><span class="etitle">Foundation &amp; data layer<span>Scaffold, card catalogue, deck import</span></span><span class="chev">▶</span></summary>
+        <div class="body">
+          <div class="ticket"><div class="tid">T1.1</div><div><span class="tt">Project scaffold</span><span class="td">Vite + React, Tailwind, routing, ESLint. Docker compose file with placeholder services.</span></div></div>
+          <div class="ticket"><div class="tid">T1.2</div><div><span class="tt">IndexedDB setup (Dexie)</span><span class="td">Initialise the database and card schema (JSON + thumbnail blob). No data yet.</span></div></div>
+          <div class="ticket"><div class="tid">T1.3</div><div><span class="tt">Card JSON hydration</span><span class="td">Fetch card detail from SWUDB by ID; write to IndexedDB; read local-first on subsequent lookups.</span></div></div>
+          <div class="ticket"><div class="tid">T1.4</div><div><span class="tt">Thumbnail fetching</span><span class="td">After JSON is cached, fetch a low-res WebP thumbnail and store as a blob. Background, non-blocking.</span></div></div>
+          <div class="ticket"><div class="tid">T1.5</div><div><span class="tt">Background catalogue sync</span><span class="td">Progressively fetch any Sealed cards not yet cached, prioritising active decks. No need to pull all ~250 upfront.</span></div></div>
+          <div class="ticket"><div class="tid">T1.6</div><div><span class="tt">ProtectThePod deck import</span><span class="td">Paste JSON from clipboard, parse to internal structure, validate a legal Sealed deck (≥30 cards, 1 leader, 1 base). Store in localStorage.</span></div></div>
+          <div class="ticket"><div class="tid">T1.7</div><div><span class="tt">Deck selection screen</span><span class="td">List saved decks, import new, select one to play. Minimal, functional.</span></div></div>
+        </div>
+      </details>
+
+      <details class="epic">
+        <summary><span class="code">E2</span><span class="etitle">Game state engine<span>The rules core — the real bottleneck</span></span><span class="chev">▶</span></summary>
+        <div class="body">
+          <div class="ticket"><div class="tid">T2.1</div><div><span class="tt">Game state schema</span><span class="td">Full JS object for a Sealed game: leaders, bases, hand, deck, discard, resources, ground/space zones, initiative, phase, turn. Data only.</span></div></div>
+          <div class="ticket"><div class="tid">T2.2</div><div><span class="tt">Game initialiser</span><span class="td">Two decklists → valid starting state. Shuffle, deal 6, place leader and base.</span></div></div>
+          <div class="ticket"><div class="tid">T2.3</div><div><span class="tt">Resource system</span><span class="td">Play cards as face-down resources; exhaust to pay costs; regroup restores all.</span></div></div>
+          <div class="ticket"><div class="tid">T2.4</div><div><span class="tt">Legal move generator</span><span class="td">Given state + active player, return every legal action. The rules core — get it right before building on top.</span></div></div>
+          <div class="ticket"><div class="tid">T2.5</div><div><span class="tt">Action resolver</span><span class="td">Pure <code>(state, action) => state</code>: play card, play resource, attack, pass, deploy leader.</span></div></div>
+          <div class="ticket"><div class="tid">T2.6</div><div><span class="tt">Win condition checker</span><span class="td">After each resolution, check base HP; return game-over state when triggered.</span></div></div>
+          <div class="ticket"><div class="tid">T2.7</div><div><span class="tt">SQLite setup</span><span class="td">Drizzle + better-sqlite3. Schema for games, moves, outcomes. Wired up, not yet used in play.</span></div></div>
+        </div>
+      </details>
+
+      <details class="epic">
+        <summary><span class="code">E3</span><span class="etitle">Turn structure &amp; combat<span>Phases, damage, leaders</span></span><span class="chev">▶</span></summary>
+        <div class="body">
+          <div class="ticket"><div class="tid">T3.1</div><div><span class="tt">Phase manager</span><span class="td">Enforce action → regroup cycle; track initiative, turn, action windows.</span></div></div>
+          <div class="ticket"><div class="tid">T3.2</div><div><span class="tt">Unit combat resolution</span><span class="td">Attack between units; apply damage both ways; check defeat; remove defeated units.</span></div></div>
+          <div class="ticket"><div class="tid">T3.3</div><div><span class="tt">Base attacks</span><span class="td">Units attacking the opponent base; apply damage; trigger win check.</span></div></div>
+          <div class="ticket"><div class="tid">T3.4</div><div><span class="tt">Leader deployment</span><span class="td">Epic action to deploy the leader as a unit: flip, place in the correct arena, exhaust.</span></div></div>
+          <div class="ticket"><div class="tid">T3.5</div><div><span class="tt">Regroup phase</span><span class="td">Ready exhausted cards, draw to hand limit, pass initiative if taken.</span></div></div>
+        </div>
+      </details>
+
+      <details class="epic">
+        <summary><span class="code">E4</span><span class="etitle">Text UI — playable MVP<span>The first thing you can actually play</span></span><span class="chev">▶</span></summary>
+        <div class="body">
+          <div class="ticket"><div class="tid">T4.1</div><div><span class="tt">Board state display</span><span class="td">Text/card rendering of the full state: both zones, resources, hand sizes, base HP, leader state.</span></div></div>
+          <div class="ticket"><div class="tid">T4.2</div><div><span class="tt">Hand display</span><span class="td">Your cards with cost, type, stats; greyed out when unplayable given current resources.</span></div></div>
+          <div class="ticket"><div class="tid">T4.3</div><div><span class="tt">Action menu</span><span class="td">Clickable list of current legal moves; selecting one resolves and re-renders.</span></div></div>
+          <div class="ticket"><div class="tid">T4.4</div><div><span class="tt">Game log</span><span class="td">Running log of every action — for following play and debugging.</span></div></div>
+          <div class="ticket"><div class="tid">T4.5</div><div><span class="tt">Game record save</span><span class="td">On game over, serialise the full record (states, moves, outcome) to SQLite.</span></div></div>
+          <div class="ticket"><div class="tid">T4.6</div><div><span class="tt">Game over screen</span><span class="td">Winner, final board, rematch or back to deck selection.</span></div></div>
+        </div>
+      </details>
+
+      <details class="epic">
+        <summary><span class="code">E5</span><span class="etitle">AI opponent<span>Random → heuristic → MCTS</span></span><span class="chev">▶</span></summary>
+        <div class="body">
+          <div class="ticket"><div class="tid">T5.1</div><div><span class="tt">Random AI</span><span class="td">Picks a random legal move. Proves the loop end-to-end and gives you something to beat.</span></div></div>
+          <div class="ticket"><div class="tid">T5.2</div><div><span class="tt">Greedy heuristic scorer</span><span class="td">Score by damage, board presence, resource efficiency, base-HP swing; pick highest.</span></div></div>
+          <div class="ticket"><div class="tid">T5.3</div><div><span class="tt">Sealed-specific heuristics</span><span class="td">Tune for unit-trade value and tempo — higher-impact in Sealed than constructed.</span></div></div>
+          <div class="ticket"><div class="tid">T5.4</div><div><span class="tt">Web Worker offload</span><span class="td">Move AI computation off the main thread. Required before MCTS.</span></div></div>
+          <div class="ticket"><div class="tid">T5.5</div><div><span class="tt">MCTS implementation</span><span class="td">Replace the greedy picker with Monte Carlo Tree Search; heuristic scorer for rollouts; configurable sim count.</span></div></div>
+          <div class="ticket"><div class="tid">T5.6</div><div><span class="tt">AI deck assignment</span><span class="td">Give the AI a Sealed deck — a second import or a generated pool for testing.</span></div></div>
+        </div>
+      </details>
+
+      <details class="epic">
+        <summary><span class="code">E6</span><span class="etitle">Local LLM integration<span>Ollama evaluator + threat modelling</span></span><span class="chev">▶</span></summary>
+        <div class="body">
+          <div class="ticket"><div class="tid">T6.1</div><div><span class="tt">Ollama setup</span><span class="td">Docker compose addition; pull Q4 Mistral 7B; confirm it runs on the RTX 2080 8GB.</span></div></div>
+          <div class="ticket"><div class="tid">T6.2</div><div><span class="tt">Game state serialiser</span><span class="td">Compact, token-efficient text representation of state for prompts.</span></div></div>
+          <div class="ticket"><div class="tid">T6.3</div><div><span class="tt">Position evaluation prompt</span><span class="td">Ask the model to score a position −1.0…+1.0; iterate to reliable JSON; test against known positions.</span></div></div>
+          <div class="ticket"><div class="tid">T6.4</div><div><span class="tt">Threat assessment prompt</span><span class="td">Given opponent resources and known cards, enumerate their most dangerous next moves; penalise exposing moves.</span></div></div>
+          <div class="ticket"><div class="tid">T6.5</div><div><span class="tt">Wire LLM into MCTS</span><span class="td">Use the LLM evaluator for the top 3 candidates only; heuristics for deeper nodes.</span></div></div>
+          <div class="ticket"><div class="tid">T6.6</div><div><span class="tt">Think-time indicator</span><span class="td">"AI is thinking…" with an estimated wait given ~10–20s per call.</span></div></div>
+          <div class="ticket"><div class="tid">T6.7</div><div><span class="tt">Claude API fallback</span><span class="td">Settings toggle: use Claude API instead of Ollama for higher-quality evaluation and comparison.</span></div></div>
+        </div>
+      </details>
+
+      <details class="epic">
+        <summary><span class="code">E7</span><span class="etitle">Training pipeline<span>Self-improving opponent · post-MVP</span></span><span class="chev">▶</span></summary>
+        <div class="body">
+          <div class="ticket"><div class="tid">T7.1</div><div><span class="tt">Game record schema extension</span><span class="td">Store per-move states, not just outcomes — required for training data.</span></div></div>
+          <div class="ticket"><div class="tid">T7.2</div><div><span class="tt">Training data extractor</span><span class="td">Extract (state → move → outcome) triples; label winning moves; export JSONL.</span></div></div>
+          <div class="ticket"><div class="tid">T7.3</div><div><span class="tt">Docker: InfluxDB + Grafana</span><span class="td">Add to compose; configure the Influx datasource in Grafana; verify the stack in WSL2.</span></div></div>
+          <div class="ticket"><div class="tid">T7.4</div><div><span class="tt">Game outcome metrics</span><span class="td">Emit win/loss, turn count, resource efficiency, unit-trade ratios to InfluxDB.</span></div></div>
+          <div class="ticket"><div class="tid">T7.5</div><div><span class="tt">Grafana game dashboard</span><span class="td">Win rate over time, average game length, most-played cards, think time.</span></div></div>
+          <div class="ticket"><div class="tid">T7.6</div><div><span class="tt">Unsloth fine-tuning script</span><span class="td">Unsloth + LoRA on extracted data; designed to run overnight on the 2080.</span></div></div>
+          <div class="ticket"><div class="tid">T7.7</div><div><span class="tt">Model version management</span><span class="td">Track the loaded Ollama version; tag it against game records to correlate versions with win rates.</span></div></div>
+          <div class="ticket"><div class="tid">T7.8</div><div><span class="tt">Model evaluation harness</span><span class="td">Pit new model vs previous over N games; report win-rate delta; gate promotion on real improvement.</span></div></div>
+          <div class="ticket"><div class="tid">T7.9</div><div><span class="tt">Training metrics dashboard</span><span class="td">Grafana view for training runs: loss curves, evaluation win rates, improvement across versions.</span></div></div>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <!-- SEQUENCE -->
+  <section>
+    <div class="wrap">
+      <div class="eyebrow">07 · Sequence</div>
+      <h2>Power-up order &amp; milestones</h2>
+      <div class="seq">
+<span class="arm">▸ ARM</span> <span class="lbl">E1</span> data ──▸ <span class="lbl">E2</span> engine ──▸ <span class="lbl">E3</span> combat ──▸ <span class="lbl">E4 + T5.1</span>
+                                          <span class="ms">◆ MILESTONE 1 — playable vs random AI</span><br>
+<span class="arm">▸ ARM</span> <span class="lbl">T5.2–5.3</span> heuristics ────────────▸ beats Forcetable<br>
+<span class="arm">▸ ARM</span> <span class="lbl">T5.4–5.5</span> MCTS ─────────────────▸ thinks ahead, stops self-cornering<br>
+<span class="arm">▸ ARM</span> <span class="lbl">E6</span> local LLM ───────────────────▸ <span class="ms">◆ MILESTONE 2 — reasons about threats</span><br>
+<span class="arm">▸ ARM</span> <span class="lbl">E7</span> training ────────────────────▸ <span class="ms">◆ GOAL — self-improving opponent</span>
+      </div>
+      <p>E1–E4 plus T5.1 is the true MVP: a game you can actually play, even with a random opponent. Everything after that is opponent quality.</p>
+    </div>
+  </section>
+
+  <!-- MODEL STRATEGY -->
+  <section>
+    <div class="wrap">
+      <div class="eyebrow">08 · Model strategy</div>
+      <h2>Where to spend the capable model</h2>
+      <p>The model isn't the bottleneck — <b>rules-engine correctness (Epic 2) is</b>. That's the densest, most interdependent work, and the one place a Mythos-class model's advantage genuinely compounds. Strict TDD keeps either model honest and narrows the gap everywhere else.</p>
+      <div class="call crit">
+        <div class="h">Recommendation</div>
+        <p>Point the <b>Fable 5</b> window at <b>Epic 2</b> specifically — the schema, legal-move generator and action resolver. Let <b>Opus 4.8</b> handle the scaffold, data layer and UI tickets, where it's already as strong and half the cost. Don't reorganise the plan around having Fable; the tight test loop means you'd get ~90% of the same result on Opus.</p>
+        <p>If you do adopt Fable: it carries a mandatory 30-day data-retention requirement (Opus offers zero-retention). A non-issue for a hobby project, but a conscious tick.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- HARDWARE -->
+  <section>
+    <div class="wrap">
+      <div class="eyebrow">09 · Hardware</div>
+      <h2>RTX 2080 8GB — what fits</h2>
+      <table class="tbl">
+        <thead><tr><th>Task</th><th>Feasibility</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td>Q4 7–8B inference</td><td><span class="tag free">Good</span></td><td>~30–50 tok/s; ~10–20s per evaluation call</td></tr>
+          <tr><td>LoRA fine-tune, 7B (Unsloth)</td><td><span class="tag cost">Tight</span></td><td>Feasible but an overnight job</td></tr>
+          <tr><td>Full-precision 8B / any 13B+</td><td><span class="tag later">No</span></td><td>Exceeds 8GB VRAM</td></tr>
+        </tbody>
+      </table>
+      <p>Quantisation is the enabler: Q4 trades a little reasoning quality for a big memory saving — an acceptable deal for a model that will be fine-tuned on SWU specifically. A local model that has "played" thousands of Sealed games is a different proposition from a general-purpose one doing its best cold.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>dmgCtrl · SWU Sealed AI Opponent · Build Handoff v1</span>
+    <span>Desktop-first · Docs reference · Status: Spec</span>
+  </div>
+</footer>
+
+</body>
+</html>

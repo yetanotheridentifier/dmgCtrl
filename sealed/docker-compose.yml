@@ -1,0 +1,38 @@
+# dmgCtrl Sealed — local infrastructure (placeholders per build handoff T1.1).
+# Nothing here is required until the epics that introduce each service:
+#   redis     → Epic 5 (optional MCTS position-evaluation cache)
+#   influxdb  → Epic 7 (game/training metrics)
+#   grafana   → Epic 7 (dashboards)
+#   ollama    → Epic 6 (local LLM evaluator)
+# Uncomment a service when its epic begins.
+
+services: {}
+
+#  redis:
+#    image: redis:7-alpine
+#    ports:
+#      - "6379:6379"
+#
+#  influxdb:
+#    image: influxdb:2
+#    ports:
+#      - "8086:8086"
+#
+#  grafana:
+#    image: grafana/grafana-oss
+#    ports:
+#      - "3000:3000"
+#    depends_on:
+#      - influxdb
+#
+#  ollama:
+#    image: ollama/ollama
+#    ports:
+#      - "11434:11434"
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
+#              count: 1
+#              capabilities: [gpu]

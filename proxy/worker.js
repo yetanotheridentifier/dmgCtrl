@@ -30,16 +30,31 @@ export default {
       })
     }
 
+    // Passthrough to api.swu-db.com. Upstream errors are passed through with
+    // their status and a JSON body, ALWAYS with CORS headers — an uncaught
+    // throw here would become a Cloudflare 1101 page without CORS, which
+    // browsers surface as an opaque "Failed to fetch".
     const target = 'https://api.swu-db.com' + url.pathname + url.search
-    const response = await fetch(target)
-    const data = await response.json()
-    return new Response(JSON.stringify(data), {
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET',
+    const passthroughHeaders = {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET',
+    }
+    try {
+      const response = await fetch(target)
+      let body
+      try {
+        body = JSON.stringify(await response.json())
+      } catch {
+        body = JSON.stringify({ error: `Upstream returned non-JSON (status ${response.status})` })
       }
-    })
+      return new Response(body, { status: response.status, headers: passthroughHeaders })
+    } catch (err) {
+      return new Response(JSON.stringify({ error: `Upstream fetch failed: ${err.message}` }), {
+        status: 502,
+        headers: passthroughHeaders,
+      })
+    }
   }
 }
 

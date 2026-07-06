@@ -55,6 +55,40 @@ describe('GET passthrough', () => {
       expect.stringContaining('api.swu-db.com/cards?q=test')
     )
   })
+
+  // Upstream errors are often non-JSON (HTML/plain error pages). The worker
+  // must still return a real response WITH CORS headers — an uncaught throw
+  // becomes a Cloudflare 1101 page without CORS, which browsers surface as an
+  // opaque "Failed to fetch" instead of a readable error status.
+  it('passes through an upstream error status with CORS headers intact', async () => {
+    stubFetch(() =>
+      new Response(JSON.stringify({ message: 'Internal server error' }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    )
+
+    const response = await SELF.fetch('https://worker.example/cards/ASH/020')
+
+    expect(response.status).toBe(502)
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
+  })
+
+  it('survives a non-JSON upstream body and keeps CORS headers', async () => {
+    stubFetch(() =>
+      new Response('<html>Bad Gateway</html>', {
+        status: 502,
+        headers: { 'Content-Type': 'text/html' },
+      })
+    )
+
+    const response = await SELF.fetch('https://worker.example/cards/ASH/020')
+    const data = await response.json()
+
+    expect(response.status).toBe(502)
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
+    expect(data).toHaveProperty('error')
+  })
 })
 
 describe('POST /analytics/batch', () => {

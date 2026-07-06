@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+/* dmgCtrl app theme — tokens mirror the main app's src/index.css palette. */
+@theme {
+  --color-bg: #0a0e1a;            /* --color-bg-deep    */
+  --color-bg-dark: #000510;       /* --color-bg-dark    */
+  --color-surface: rgba(13, 27, 42, 0.45); /* translucent panel over starfield */
+  --color-line: #6b7280;          /* --color-ui-border  */
+  --color-ink: #ffffff;           /* --color-text-primary */
+  --color-ink-body: #d0d0d8;      /* --color-text-body  */
+  --color-ink-dim: #a8a8b3;       /* --color-text-muted */
+  --color-ink-faint: #6b7280;     /* --color-text-disabled */
+  --color-accent: #4fc3f7;        /* --color-accent     */
+  --color-amber: #f5a623;         /* --color-warning    */
+  --color-red: #ff6b6b;           /* --color-error      */
+  --color-green: #22c55e;         /* --color-success    */
+
+  --font-sans: 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono: 'SF Mono', Consolas, Menlo, monospace;
+}
+
+:root {
+  /* Native form controls (select popups, scrollbars) render dark. */
+  color-scheme: dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Dropdown option lists — explicit colours for browsers that ignore color-scheme. */
+select option {
+  background-color: #0d1b2a;
+  color: var(--color-ink);
+}
+
+/* Starfield background — same recipe as the main app. */
+html {
+  min-height: 100%;
+  background-color: var(--color-bg-dark);
+  background-attachment: fixed;
+  background-image:
+    radial-gradient(1px 1px at 10% 20%, rgba(255,255,255,0.6) 0%, transparent 100%),
+    radial-gradient(1px 1px at 25% 75%, rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 40% 35%, rgba(255,255,255,0.7) 0%, transparent 100%),
+    radial-gradient(1px 1px at 55% 60%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 65% 15%, rgba(255,255,255,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 75% 85%, rgba(255,255,255,0.6) 0%, transparent 100%),
+    radial-gradient(1px 1px at 85% 40%, rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 90% 70%, rgba(255,255,255,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 15% 90%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 50% 10%, rgba(255,255,255,0.6) 0%, transparent 100%),
+    radial-gradient(2px 2px at 30% 50%, rgba(255,255,255,0.2) 0%, transparent 100%),
+    radial-gradient(2px 2px at 70% 30%, rgba(255,255,255,0.15) 0%, transparent 100%),
+    radial-gradient(ellipse at 20% 50%, #0d1b2a 0%, #0a0e1a 60%, #000510 100%);
+}
+
+body {
+  margin: 0;
+  background: transparent;
+  color: var(--color-ink);
+}
+
+/* Rendered-markdown styling for the help screen (content arrives as raw HTML). */
+.help-content h2 {
+  color: var(--color-accent);
+  font-weight: 300;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin: 1.5rem 0 0.5rem;
+}
+.help-content h3 {
+  color: var(--color-ink);
+  font-weight: 500;
+  font-size: 0.95rem;
+  margin: 1rem 0 0.25rem;
+}
+.help-content p {
+  margin: 0.5rem 0;
+}
+.help-content ul,
+.help-content ol {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+.help-content li {
+  margin: 0.25rem 0;
+}
+.help-content strong {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
