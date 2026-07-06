@@ -6,6 +6,12 @@ import type { SavedDeck } from './data/deckStore'
 
 type Screen = 'decks' | 'game' | 'help'
 
+/**
+ * Visible build marker — bump on every meaningful change so "which code is this
+ * browser running?" is answerable at a glance (shown in the header, also logged).
+ */
+export const BUILD_TAG = 'b7'
+
 export default function App() {
   const [screen, setScreen] = useState<Screen>('decks')
   const [helpReturn, setHelpReturn] = useState<Screen>('decks')
@@ -29,6 +35,9 @@ export default function App() {
           <h1 className="text-2xl font-extralight tracking-[0.15em] text-ink">
             dmgCtrl <span className="text-ink-dim">· Sealed</span>
           </h1>
+          <span data-testid="build-tag" className="self-end text-[10px] text-ink-faint font-mono pb-1">
+            {BUILD_TAG}
+          </span>
         </div>
         {screen !== 'help' && (
           <button

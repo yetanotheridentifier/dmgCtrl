@@ -98,6 +98,30 @@ describe('getCard hydration', () => {
   })
 })
 
+describe('getCard — IndexedDB resilience (crossed schema versions, private mode)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('still hydrates from the network when the cache read fails', async () => {
+    vi.spyOn(db.cards, 'get').mockRejectedValue(new Error('VersionError: requested version is lower'))
+    vi.stubGlobal('fetch', mockFetchOk(VADER))
+
+    const card = await getCard('SOR', '010')
+    expect(card.Name).toBe('Darth Vader')
+  })
+
+  it('still returns the card when the cache write fails', async () => {
+    vi.spyOn(db.cards, 'get').mockResolvedValue(undefined)
+    vi.spyOn(db.cards, 'put').mockRejectedValue(new Error('QuotaExceededError'))
+    vi.stubGlobal('fetch', mockFetchOk(VADER))
+
+    const card = await getCard('SOR', '010')
+    expect(card.Name).toBe('Darth Vader')
+  })
+})
+
 describe('getCard — swuapi fallback (SWUDB card-detail 502s on some bases)', () => {
   const SWUAPI_BASE_PAGE = {
     cards: [
@@ -195,5 +219,37 @@ describe('getCard — swuapi fallback (SWUDB card-detail 502s on some bases)', (
     }))
 
     await expect(getCard('ASH', '999')).rejects.toThrow(/ASH_999.*502/)
+  })
+
+  // In a browser, a CORS-blocked response REJECTS the fetch promise ("TypeError:
+  // Failed to fetch") — it never yields an ok:false response. Cloudflare's 1101
+  // error page (worker exception) carries no CORS headers, so this is exactly
+  // what upstream 502s looked like to the browser.
+  it('falls back when the primary fetch rejects outright (CORS/network)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      if (url.startsWith(SWU_DB_API)) return Promise.reject(new TypeError('Failed to fetch'))
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(SWUAPI_BASE_PAGE) })
+    }))
+
+    const card = await getCard('ASH', '020')
+    expect(card.Name).toBe('Shadowed Undercity')
+  })
+
+  it('names the card when the primary rejects and the fallback misses', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      if (url.startsWith(SWU_DB_API)) return Promise.reject(new TypeError('Failed to fetch'))
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ cards: [], pagination: { next_cursor: null } }) })
+    }))
+
+    await expect(getCard('ASH', '999')).rejects.toThrow(/ASH_999/)
+  })
+
+  it('treats a rejecting fallback fetch as a miss rather than crashing', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      if (url.startsWith(SWU_DB_API)) return Promise.resolve({ ok: false, status: 502 })
+      return Promise.reject(new TypeError('Failed to fetch'))
+    }))
+
+    await expect(getCard('ASH', '020')).rejects.toThrow(/ASH_020/)
   })
 })

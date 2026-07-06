@@ -97,7 +97,13 @@ async function fetchBaseFromSwuApi(set: string, number: string): Promise<SwuCard
     const url: string = cursor
       ? `${SWUAPI_URL}/cards?type=Base&variant=all&limit=100&after=${cursor}`
       : `${SWUAPI_URL}/cards?type=Base&variant=all&limit=100`
-    const response = await fetch(url)
+    let response: Response
+    try {
+      response = await fetch(url)
+    } catch (err) {
+      logger.warn('swuapi fallback fetch rejected', { id, error: String(err) })
+      return null
+    }
     if (!response.ok) {
       logger.warn('swuapi fallback fetch failed', { id, status: response.status })
       return null
@@ -119,24 +125,49 @@ async function fetchBaseFromSwuApi(set: string, number: string): Promise<SwuCard
 export async function getCard(set: string, number: string): Promise<SwuCard> {
   const id = cardId(set, number)
 
-  const cached = await db.cards.get(id)
-  if (cached) return cached.json as SwuCard
-
-  const response = await fetch(`${SWU_DB_API}/cards/${set.toUpperCase()}/${number}`)
-  if (response.ok) {
-    const json = (await response.json()) as SwuCard
-    await db.cards.put({ id, json, fetchedAt: Date.now() })
-    return json
+  // The cache is an optimisation, never a gatekeeper: a broken IndexedDB
+  // (crossed schema versions during dev, private browsing, quota) must not
+  // block hydration while the network path still works.
+  try {
+    const cached = await db.cards.get(id)
+    if (cached) return cached.json as SwuCard
+  } catch (err) {
+    logger.warn('card cache read failed — continuing to network', { id, error: String(err) })
   }
 
-  logger.warn('SWUDB card fetch failed, trying swuapi fallback', { id, status: response.status })
+  // A browser rejects the whole fetch for CORS-blocked responses ("Failed to
+  // fetch") — e.g. Cloudflare's 1101 worker-exception page, which carries no
+  // CORS headers. Treat a rejection exactly like an error status: try the
+  // fallback source before giving up.
+  let primaryStatus: string
+  try {
+    const response = await fetch(`${SWU_DB_API}/cards/${set.toUpperCase()}/${number}`)
+    if (response.ok) {
+      const json = (await response.json()) as SwuCard
+      await cacheCard(id, json)
+      return json
+    }
+    primaryStatus = String(response.status)
+  } catch (err) {
+    primaryStatus = `unreachable: ${err instanceof Error ? err.message : String(err)}`
+  }
+
+  logger.warn('SWUDB card fetch failed, trying swuapi fallback', { id, primaryStatus })
   const fallback = await fetchBaseFromSwuApi(set, number)
   if (fallback) {
     logger.info('card hydrated via swuapi fallback', { id })
-    await db.cards.put({ id, json: fallback, fetchedAt: Date.now() })
+    await cacheCard(id, fallback)
     return fallback
   }
 
-  logger.error('card hydration failed on all sources', { id, primaryStatus: response.status })
-  throw new Error(`Card ${id} could not be loaded (SWUDB ${response.status}, no swuapi match)`)
+  logger.error('card hydration failed on all sources', { id, primaryStatus })
+  throw new Error(`Card ${id} could not be loaded (SWUDB ${primaryStatus}, no swuapi match)`)
+}
+
+async function cacheCard(id: string, json: SwuCard): Promise<void> {
+  try {
+    await db.cards.put({ id, json, fetchedAt: Date.now() })
+  } catch (err) {
+    logger.warn('card cache write failed — card served uncached', { id, error: String(err) })
+  }
 }

@@ -9,6 +9,11 @@ describe('App shell', () => {
     expect(screen.getByRole('heading', { name: /dmgctrl · sealed/i })).toBeInTheDocument()
   })
 
+  it('shows the build tag so stale deployments are identifiable', () => {
+    render(<App />)
+    expect(screen.getByTestId('build-tag')).toHaveTextContent(/b\d+/)
+  })
+
   it('shows the dmgCtrl icon left of the title', () => {
     render(<App />)
     const icon = screen.getByRole('img', { name: /dmgctrl/i })

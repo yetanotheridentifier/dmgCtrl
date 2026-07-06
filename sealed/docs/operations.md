@@ -17,7 +17,13 @@ The root `npm test` runs all three suites (main app, proxy worker, sealed).
 
 The sealed app rides the PWA's dev setup — the main Vite server proxies
 `/sealed` (including the HMR websocket) to the sealed dev server on port 5174.
-Run **both** servers, in two terminals:
+One command starts both (Ctrl+C stops both):
+
+```bash
+npm run dev:all       # sealed dev server (5174) + main PWA dev server (5173)
+```
+
+Or run them individually in two terminals:
 
 ```bash
 npm run dev:https     # main PWA dev server — https via mkcert, port 5173
@@ -104,10 +110,27 @@ If a card fails on all sources, the thrown error names the card id and the
 upstream status — check whether the id exists on swudb.com, whether the worker
 is up, and whether the browser is offline.
 
+**"Failed to fetch" in the log** means the browser rejected the request before
+any HTTP status existed — usually a response without CORS headers. The worker
+now guarantees CORS headers on *error* responses too (upstream errors used to
+escape as Cloudflare 1101 pages without them), and the client treats a rejected
+fetch like an error status and continues to the fallback. If the worker is
+changed, redeploy it (`npx wrangler deploy` in `proxy/`) — the client-side
+fallback covers base cards even against a broken worker, but other card types
+need the worker healthy.
+
 When chasing a load failure, first make sure you're running current code:
-restart both dev servers and hard-reload the browser (Ctrl+Shift+R). Known
+the header shows a **build tag** (e.g. `b6` — the `BUILD_TAG` constant in
+`src/App.tsx`, bumped on every meaningful change). If the browser shows an
+older tag, restart the dev servers and hard-reload (Ctrl+Shift+R). Known
 upstream state (2026-07): SWUDB card detail 502s on the ASH bases
 (ASH_019/020/023 confirmed); all recover via the swuapi fallback.
+
+A broken IndexedDB cannot break card loading: cache reads/writes are
+non-fatal (logged as warnings, hydration continues from the network). If the
+`dmgctrl-sealed` database gets into a crossed-version state during dev (e.g. a
+`VersionError` in the log after switching between old and new code), delete it
+in devtools → Application → IndexedDB; it rebuilds on the next game.
 
 ## Updating for new card sets
 
