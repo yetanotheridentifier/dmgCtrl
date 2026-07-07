@@ -4,9 +4,15 @@ import userEvent from '@testing-library/user-event'
 import DeckSelectScreen from '../components/deckSelectScreen'
 import { saveDeck } from '../data/deckStore'
 import { syncCatalogue } from '../data/catalogueSync'
+import { importSet } from '../data/setImport'
 
 vi.mock('../data/catalogueSync', () => ({
   syncCatalogue: vi.fn().mockResolvedValue({ hydrated: 0, skipped: 0, failed: 0 }),
+}))
+
+vi.mock('../data/setImport', () => ({
+  importSet: vi.fn().mockResolvedValue({ cached: 264, total: 264 }),
+  cachedSetCount: vi.fn().mockResolvedValue(0),
 }))
 
 function validDeckJson(name = 'Vader Aggro') {
@@ -134,6 +140,33 @@ describe('DeckSelectScreen', () => {
   it('hides the opponent selector when no decks are saved', () => {
     render(<DeckSelectScreen onPlay={vi.fn()} />)
     expect(screen.queryByTestId('opponent-deck-select')).not.toBeInTheDocument()
+  })
+
+  it('imports a full card set and reports the count', async () => {
+    const user = userEvent.setup()
+    render(<DeckSelectScreen onPlay={vi.fn()} />)
+
+    await user.type(screen.getByTestId('set-import-input'), 'ash')
+    await user.click(screen.getByTestId('set-import-btn'))
+
+    expect(importSet).toHaveBeenCalledWith('ash', expect.anything())
+    expect(await screen.findByTestId('set-import-status')).toHaveTextContent(/264 cards cached for ASH/i)
+  })
+
+  it('shows a set-import failure with its detail', async () => {
+    vi.mocked(importSet).mockRejectedValueOnce(new Error('Set ZZZ could not be fetched (SWUDB 502)'))
+    const user = userEvent.setup()
+    render(<DeckSelectScreen onPlay={vi.fn()} />)
+
+    await user.type(screen.getByTestId('set-import-input'), 'zzz')
+    await user.click(screen.getByTestId('set-import-btn'))
+
+    expect(await screen.findByTestId('set-import-status')).toHaveTextContent(/could not be fetched/i)
+  })
+
+  it('disables the set import button until a set code is entered', () => {
+    render(<DeckSelectScreen onPlay={vi.fn()} />)
+    expect(screen.getByTestId('set-import-btn')).toBeDisabled()
   })
 
   it('removes a deck', async () => {

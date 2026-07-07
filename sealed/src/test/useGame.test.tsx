@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { db } from '../data/db'
@@ -46,15 +47,59 @@ describe('useGame', () => {
     vi.unstubAllGlobals()
   })
 
-  it('hydrates cards and initialises a playable game', async () => {
+  it('hydrates cards and opens in the setup phase (mulligan decision)', async () => {
     const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
     await waitFor(() => expect(result.current.status).toBe('playing'))
 
     const game = result.current.gameState!
+    expect(game.phase).toBe('setup')
+    expect(game.players.player.hand).toHaveLength(6)
+    expect(game.players.player.resources).toHaveLength(0)
+    expect(game.activePlayer).toBe('player')
+    expect(result.current.legal.map(a => a.type)).toEqual(['mulligan', 'keepHand'])
+  })
+
+  it('keeping the hand moves to the resource choice; picking a pair starts round 1', async () => {
+    const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
+    await waitFor(() => expect(result.current.status).toBe('playing'))
+
+    act(() => result.current.act({ type: 'keepHand' }))
+
+    // The AI (heuristic) made its mulligan call; the human now picks resources.
+    let game = result.current.gameState!
+    expect(game.phase).toBe('setup')
+    expect(game.setupStage).toBe('resource')
+    expect(result.current.legal.every(a => a.type === 'setupResource')).toBe(true)
+
+    act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
+    act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
+
+    game = result.current.gameState!
+    expect(game.phase).toBe('action')
     expect(game.players.player.hand).toHaveLength(4)
     expect(game.players.player.resources).toHaveLength(2)
     expect(game.activePlayer).toBe('player')
-    expect(result.current.legal.length).toBeGreaterThan(0)
+  })
+
+  it('does not duplicate log entries under StrictMode (updater must be pure)', async () => {
+    // The app renders inside <StrictMode>, which double-invokes state updaters
+    // in dev to surface impurity. Any side effect inside a setState updater
+    // (logging, driving the AI) then runs twice → doubled log entries.
+    const { result } = renderHook(() => useGame(DECK, DECK, OPTS), { wrapper: StrictMode })
+    await waitFor(() => expect(result.current.status).toBe('playing'))
+
+    act(() => result.current.act({ type: 'keepHand' }))
+
+    const keepEntries = result.current.log.filter(e => e.by === 'player' && /keep hand/i.test(e.text))
+    expect(keepEntries).toHaveLength(1)
+
+    act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
+    act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
+    act(() => result.current.act({ type: 'playCard', handIndex: 0 }))
+
+    // Exactly one log entry per human action taken (keepHand, resource ×2, play).
+    expect(result.current.log.filter(e => e.by === 'player')).toHaveLength(4)
+    expect(result.current.log.filter(e => e.by === 'player' && /play/i.test(e.text))).toHaveLength(1)
   })
 
   it('reports an error with diagnostic detail when a deck card cannot be hydrated', async () => {
@@ -70,6 +115,9 @@ describe('useGame', () => {
     const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
     await waitFor(() => expect(result.current.status).toBe('playing'))
 
+    act(() => result.current.act({ type: 'keepHand' }))
+    act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
+    act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
     act(() => result.current.act({ type: 'playCard', handIndex: 0 }))
 
     const game = result.current.gameState!
@@ -83,6 +131,9 @@ describe('useGame', () => {
     const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
     await waitFor(() => expect(result.current.status).toBe('playing'))
 
+    act(() => result.current.act({ type: 'keepHand' }))
+    act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
+    act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
     act(() => result.current.act({ type: 'playCard', handIndex: 0 }))
     act(() => result.current.act({ type: 'pass' })) // AI passes → regroup begins
     // human regroup choice
@@ -99,6 +150,9 @@ describe('useGame', () => {
     const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
     await waitFor(() => expect(result.current.status).toBe('playing'))
 
+    act(() => result.current.act({ type: 'keepHand' }))
+    act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
+    act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
     act(() => result.current.act({ type: 'playCard', handIndex: 0 }))
     act(() => result.current.act({ type: 'pass' }))
     act(() => result.current.act({ type: 'skipResource' }))
@@ -122,6 +176,9 @@ describe('useGame', () => {
     const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
     await waitFor(() => expect(result.current.status).toBe('playing'))
 
+    act(() => result.current.act({ type: 'keepHand' }))
+    act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
+    act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
     act(() => result.current.act({ type: 'playCard', handIndex: 0 }))
     act(() => result.current.rematch())
 

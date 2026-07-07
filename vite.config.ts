@@ -5,6 +5,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { marked } from 'marked'
 import mkcert from 'vite-plugin-mkcert'
 
+import { cloudflare } from "@cloudflare/vite-plugin";
+
 export default defineConfig(({ mode }) => {
   const base = mode === 'github' ? '/dmgCtrl/' : '/'
 
@@ -23,52 +25,47 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
-    plugins: [
-      {
-        name: 'markdown',
-        transform(code: string, id: string) {
-          if (!id.endsWith('.md')) return
-          const html = marked.parse(code) as string
-          return `export default ${JSON.stringify(html)}`
-        },
+    plugins: [{
+      name: 'markdown',
+      transform(code: string, id: string) {
+        if (!id.endsWith('.md')) return
+        const html = marked.parse(code) as string
+        return `export default ${JSON.stringify(html)}`
       },
-      mkcert(),
-      react(),
-      VitePWA({
-        registerType: 'autoUpdate',
-        devOptions: { enabled: false },
-        workbox: {
-          // The sealed app lives under /sealed as a separate build — the PWA's
-          // service worker must not rewrite its navigations to the PWA index.
-          navigateFallbackDenylist: [/^\/sealed/],
-        },
-        manifest: {
-          name: 'dmgCtrl',
-          short_name: 'dmgCtrl',
-          description: 'Star Wars Unlimited game state tracker',
-          theme_color: '#0a0e1a',
-          background_color: '#0a0e1a',
-          display: 'standalone',
-          icons: [
-            {
-              src: 'dmgCtrl-icon-192.png',
-              sizes: '192x192',
-              type: 'image/png'
-            },
-            {
-              src: 'dmgCtrl-icon-512.png',
-              sizes: '512x512',
-              type: 'image/png'
-            }
-          ]
-        }
-      })
-    ],
+    }, mkcert(), react(), VitePWA({
+      registerType: 'autoUpdate',
+      devOptions: { enabled: false },
+      workbox: {
+        // The sealed app lives under /sealed as a separate build — the PWA's
+        // service worker must not rewrite its navigations to the PWA index.
+        navigateFallbackDenylist: [/^\/sealed/],
+      },
+      manifest: {
+        name: 'dmgCtrl',
+        short_name: 'dmgCtrl',
+        description: 'Star Wars Unlimited game state tracker',
+        theme_color: '#0a0e1a',
+        background_color: '#0a0e1a',
+        display: 'standalone',
+        icons: [
+          {
+            src: 'dmgCtrl-icon-192.png',
+            sizes: '192x192',
+            type: 'image/png'
+          },
+          {
+            src: 'dmgCtrl-icon-512.png',
+            sizes: '512x512',
+            type: 'image/png'
+          }
+        ]
+      }
+    }), cloudflare()],
     test: {
       globals: true,
       environment: 'jsdom',
       setupFiles: './src/test/setup.ts',
       exclude: ['proxy/**', 'sealed/**', 'node_modules/**'],
     },
-  }
+  };
 })

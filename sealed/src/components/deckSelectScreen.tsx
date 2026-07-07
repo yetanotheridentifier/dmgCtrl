@@ -4,6 +4,7 @@ import type { SavedDeck } from '../data/deckStore'
 import { cardRefFromId } from '../utils/parseProtectThePod'
 import type { ParseDeckError, ParsedDeck } from '../utils/parseProtectThePod'
 import { syncCatalogue } from '../data/catalogueSync'
+import { importSet } from '../data/setImport'
 import type { CardRef } from '../data/catalogueSync'
 
 interface Props {
@@ -39,6 +40,8 @@ export default function DeckSelectScreen({ onPlay }: Props) {
   const [importText, setImportText] = useState('')
   const [importError, setImportError] = useState<ParseDeckError | null>(null)
   const [opponentChoice, setOpponentChoice] = useState('random')
+  const [setCode, setSetCode] = useState('')
+  const [setStatus, setSetStatus] = useState<string | null>(null)
 
   function handleImport() {
     const result = importDeck(importText)
@@ -55,6 +58,20 @@ export default function DeckSelectScreen({ onPlay }: Props) {
 
   function handlePlay(deck: SavedDeck) {
     onPlay(deck, pickOpponent(decks, opponentChoice, deck))
+  }
+
+  async function handleSetImport() {
+    const code = setCode.trim()
+    if (!code) return
+    setSetStatus(`Importing ${code.toUpperCase()}…`)
+    try {
+      const result = await importSet(code, {
+        onProgress: (done, total) => setSetStatus(`Importing ${code.toUpperCase()}… ${done}/${total}`),
+      })
+      setSetStatus(`${result.cached} cards cached for ${code.toUpperCase()}`)
+    } catch (err) {
+      setSetStatus(err instanceof Error ? err.message : String(err))
+    }
   }
 
   return (
@@ -137,6 +154,36 @@ export default function DeckSelectScreen({ onPlay }: Props) {
         >
           Import
         </button>
+      </div>
+
+      <div className="mt-8">
+        <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">Card catalogue</h3>
+        <p className="mt-1 text-ink-faint text-xs">
+          Cache a full set locally (e.g. ASH) — games and deck views then work offline, including bases.
+        </p>
+        <div className="mt-2 flex items-center gap-3">
+          <input
+            data-testid="set-import-input"
+            value={setCode}
+            onChange={e => setSetCode(e.target.value)}
+            placeholder="Set code"
+            maxLength={3}
+            className="w-28 bg-transparent border-2 border-accent rounded-xl px-3 py-1.5 text-sm text-ink uppercase placeholder:normal-case placeholder:text-ink-faint shadow-[0_0_12px_rgba(79,195,247,0.3)] focus:outline-none"
+          />
+          <button
+            data-testid="set-import-btn"
+            onClick={handleSetImport}
+            disabled={setCode.trim() === ''}
+            className="px-4 py-1.5 text-sm border-2 border-ink text-ink rounded-xl shadow-[0_0_12px_rgba(255,255,255,0.2)] hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Import set
+          </button>
+          {setStatus && (
+            <span data-testid="set-import-status" className="text-ink-dim text-xs">
+              {setStatus}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   )

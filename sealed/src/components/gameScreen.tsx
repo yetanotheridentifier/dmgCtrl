@@ -1,8 +1,12 @@
+import { useState, type CSSProperties } from 'react'
 import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
 import type { SavedDeck } from '../data/deckStore'
 import type { GameState, PlayerId, UnitState } from '../engine/types'
+import type { Action } from '../engine/actions'
 import { describeAction } from '../utils/describeAction'
+import { orderUnits } from './boardLayout'
+import CardFace from './cardFace'
 
 interface Props {
   deck: SavedDeck
@@ -12,85 +16,218 @@ interface Props {
   gameOptions?: UseGameOptions
 }
 
-function UnitLine({ state, unit }: { state: GameState; unit: UnitState }) {
+export interface UnitInteraction {
+  /** This friendly unit has at least one legal action — click to select it. */
+  actionable: boolean
+  selected: boolean
+  /** This enemy unit is a legal target of the selected attacker. */
+  isTarget: boolean
+  onClick?: () => void
+}
+
+function UnitLine({ state, unit, interact }: { state: GameState; unit: UnitState; interact: UnitInteraction }) {
   const card = state.cards[unit.cardId]
   const hp = card?.hp ?? 0
+  const clickable = (interact.actionable || interact.isTarget) && interact.onClick
+  const ring = interact.selected
+    ? 'ring-2 ring-accent'
+    : interact.isTarget
+      ? 'ring-2 ring-red'
+      : interact.actionable
+        ? 'ring-1 ring-accent/50'
+        : ''
   return (
-    <li className="flex items-center gap-2 text-sm">
-      <span className={unit.exhausted ? 'text-ink-faint' : 'text-ink'}>
-        {card?.name ?? unit.cardId}
-        {unit.isLeader && <span className="text-accent"> ♦</span>}
-      </span>
-      <span className="text-ink-dim font-mono text-xs">
-        {card?.power ?? 0}/{hp - unit.damage}
-        {unit.damage > 0 && <span className="text-red"> ({unit.damage} dmg)</span>}
-      </span>
-      {unit.exhausted && <span className="text-ink-faint text-xs">exhausted</span>}
+    <li
+      data-testid={`board-unit-${unit.instanceId}`}
+      data-actionable={interact.actionable}
+      data-selected={interact.selected}
+      data-target={interact.isTarget}
+      onClick={clickable ? interact.onClick : undefined}
+      className={`w-fit shrink-0 rounded-lg ${ring} ${clickable ? 'cursor-pointer' : ''}`}
+    >
+      <CardFace card={card} fallbackName={unit.cardId} deployed={unit.isLeader} exhausted={unit.exhausted} />
+      <div className="mt-0.5 flex items-center justify-between px-0.5 font-mono text-[10px] text-ink-dim">
+        <span>
+          {unit.isLeader && <span className="text-accent">♦ </span>}
+          {card?.power ?? 0}/{hp - unit.damage}
+        </span>
+        {unit.damage > 0 && <span className="text-red">{unit.damage}dmg</span>}
+      </div>
     </li>
   )
 }
 
-function Arena({ state, side, arena }: { state: GameState; side: PlayerId; arena: 'ground' | 'space' }) {
-  const units = state.players[side].units.filter(u => u.arena === arena)
+/**
+ * One player's units in one arena, anchored to the battlefront. The grid cell's
+ * alignment (items-end for the opponent, items-start for you) pins the lane to
+ * the centre line; extra units wrap *away* from it. Keeps `{side}-{arena}-units`.
+ */
+function ArenaZone({ state, side, arena, unitInteraction, anchor }: {
+  state: GameState
+  side: PlayerId
+  arena: 'ground' | 'space'
+  unitInteraction: (unit: UnitState) => UnitInteraction
+  anchor: 'top' | 'bottom'
+}) {
+  const units = orderUnits(state, state.players[side].units.filter(u => u.arena === arena), anchor)
   return (
-    <div data-testid={`${side}-${arena}-units`}>
-      <span className="text-ink-faint text-xs uppercase tracking-widest">{arena}</span>
+    <div data-testid={`${side}-${arena}-units`} className="flex flex-wrap gap-2 justify-center">
       {units.length === 0 ? (
         <p className="text-ink-faint text-xs italic">empty</p>
       ) : (
-        <ul className="mt-1 space-y-0.5">
-          {units.map(u => (
-            <UnitLine key={u.instanceId} state={state} unit={u} />
-          ))}
-        </ul>
+        units.map(u => <UnitLine key={u.instanceId} state={state} unit={u} interact={unitInteraction(u)} />)
       )}
     </div>
   )
 }
 
-function SidePanel({ state, side }: { state: GameState; side: PlayerId }) {
+/** A base card in the central strip, with an HP overlay; clickable when a target. */
+function BaseCard({ state, side, onAttack }: {
+  state: GameState
+  side: PlayerId
+  onAttack?: () => void
+}) {
   const p = state.players[side]
   const baseCard = state.cards[p.base.cardId]
-  const leaderCard = state.cards[p.leader.cardId]
   const baseHp = baseCard?.hp ?? 0
-  const readyRes = p.resources.filter(r => !r.exhausted).length
+  const inner = (
+    <div className="relative">
+      <CardFace card={baseCard} fallbackName={p.base.cardId} />
+      <span
+        data-testid={`${side}-base-hp`}
+        className="absolute bottom-0 right-0 m-1 rounded bg-black/70 px-1 font-mono text-xs text-ink"
+      >
+        {baseHp - p.base.damage}/{baseHp}
+      </span>
+    </div>
+  )
+  return (
+    <div data-testid={`${side}-base-card`}>
+      {onAttack ? (
+        <button
+          data-testid={`target-${side}-base`}
+          onClick={onAttack}
+          className="block rounded-lg ring-2 ring-red cursor-pointer hover:bg-red/10"
+        >
+          {inner}
+        </button>
+      ) : (
+        inner
+      )}
+    </div>
+  )
+}
 
+/** A leader in the central strip: its card while undeployed, a marker once deployed. */
+function LeaderCard({ state, side }: { state: GameState; side: PlayerId }) {
+  const p = state.players[side]
+  const leaderCard = state.cards[p.leader.cardId]
+  const name = leaderCard?.name ?? p.leader.cardId
+  return (
+    <div data-testid={`${side}-leader-card`}>
+      {p.leader.deployed ? (
+        <div className="flex h-[72px] w-[120px] items-center justify-center rounded-lg border border-dashed border-line/40 px-1 text-center text-[10px] text-ink-faint">
+          {name} · deployed
+        </div>
+      ) : (
+        <CardFace card={leaderCard} fallbackName={p.leader.cardId} exhausted={p.leader.exhausted} />
+      )}
+    </div>
+  )
+}
+
+/** Compact info line for a player: resources, leader status, hand (opp), piles. */
+function InfoBar({ state, side }: { state: GameState; side: PlayerId }) {
+  const p = state.players[side]
+  const leaderCard = state.cards[p.leader.cardId]
+  const readyRes = p.resources.filter(r => !r.exhausted).length
   const leaderStatus = p.leader.deployed
     ? 'deployed'
     : p.leader.epicActionUsed
       ? 'epic action used'
       : 'undeployed'
-
   return (
-    <section data-testid={`${side}-panel`} className="border-2 border-line/60 rounded-xl bg-surface p-4">
-      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
-        <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">{side === 'player' ? 'You' : 'Opponent'}</h3>
+    <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+      <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">{side === 'player' ? 'You' : 'Opponent'}</h3>
+      <span className="text-sm">
+        Resources <span data-testid={`${side}-resources`} className="font-mono">{readyRes}/{p.resources.length}</span>
+      </span>
+      <span className="text-sm text-ink-dim">{leaderCard?.name ?? 'Leader'} · {leaderStatus}</span>
+      {side === 'opponent' && (
         <span className="text-sm">
-          Base <span data-testid={`${side}-base-hp`} className="font-mono">{baseHp - p.base.damage}/{baseHp}</span>
+          Hand <span data-testid="opponent-hand-count" className="font-mono">{p.hand.length}</span>
         </span>
-        <span className="text-sm">
-          Resources <span data-testid={`${side}-resources`} className="font-mono">{readyRes}/{p.resources.length}</span>
-        </span>
-        <span className="text-sm text-ink-dim">
-          {leaderCard?.name ?? 'Leader'} · {leaderStatus}
-        </span>
-        {side === 'opponent' && (
-          <span className="text-sm">
-            Hand <span data-testid="opponent-hand-count" className="font-mono">{p.hand.length}</span>
-          </span>
-        )}
-        <span className="text-sm text-ink-faint">Deck {p.deck.length} · Discard {p.discard.length}</span>
+      )}
+      <span className="text-sm text-ink-faint">Deck {p.deck.length} · Discard {p.discard.length}</span>
+    </div>
+  )
+}
+
+/**
+ * The battlefield (#4): Ground and Space lanes flank a central strip holding both
+ * players' bases and leaders. Reading down the centre — opponent leader, opponent
+ * base, your base, your leader — so the bases sit closest together and the leaders
+ * are outermost. Each grid row is one player, aligning their lanes with their cards.
+ */
+function Board({ state, playerInteraction, opponentInteraction, baseAttack }: {
+  state: GameState
+  playerInteraction: (unit: UnitState) => UnitInteraction
+  opponentInteraction: (unit: UnitState) => UnitInteraction
+  baseAttack?: () => void
+}) {
+  // Ground | Leaders+Bases | Space. Set the template with an inline style rather
+  // than a Tailwind arbitrary value: the commas inside minmax() don't compile
+  // reliably as an arbitrary `grid-cols-[…]` value, which collapsed the grid.
+  const cols: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)', columnGap: '1rem' }
+  return (
+    <section data-testid="battlefield" className="border-2 border-line/60 rounded-xl bg-surface p-4 space-y-2">
+      <InfoBar state={state} side="opponent" />
+
+      {/* Lane labels, aligned to the same three columns as the battlefield. */}
+      <div style={cols}>
+        <div className="text-ink-faint text-[10px] uppercase tracking-widest">Ground</div>
+        <div />
+        <div className="text-ink-faint text-[10px] uppercase tracking-widest text-right">Space</div>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-4">
-        <Arena state={state} side={side} arena="ground" />
-        <Arena state={state} side={side} arena="space" />
+
+      {/* Opponent half: everything anchored to the BOTTOM (the battlefront), so
+          the opponent base and front-line units meet the centre; extra units
+          stack upward, away from it. */}
+      <div className="items-end" style={cols}>
+        <ArenaZone state={state} side="opponent" arena="ground" unitInteraction={opponentInteraction} anchor="bottom" />
+        <div className="flex flex-col items-center gap-2">
+          <LeaderCard state={state} side="opponent" />
+          <BaseCard state={state} side="opponent" onAttack={baseAttack} />
+        </div>
+        <ArenaZone state={state} side="opponent" arena="space" unitInteraction={opponentInteraction} anchor="bottom" />
       </div>
+
+      {/* Player half: everything anchored to the TOP (the battlefront). Your base
+          sits just below the opponent's, so the two bases meet at the centre. */}
+      <div className="items-start" style={cols}>
+        <ArenaZone state={state} side="player" arena="ground" unitInteraction={playerInteraction} anchor="top" />
+        <div className="flex flex-col items-center gap-2">
+          <BaseCard state={state} side="player" />
+          <LeaderCard state={state} side="player" />
+        </div>
+        <ArenaZone state={state} side="player" arena="space" unitInteraction={playerInteraction} anchor="top" />
+      </div>
+
+      <InfoBar state={state} side="player" />
     </section>
   )
 }
 
 export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: Props) {
   const { status, errorDetail, gameState, legal, log, act, rematch } = useGame(deck, opponentDeck, gameOptions)
+  // Board affordance (#314): click an actionable friendly unit to select it,
+  // then click a highlighted target to attack. Any action clears the selection.
+  const [selectedAttacker, setSelectedAttacker] = useState<string | null>(null)
+
+  function actAndClear(action: Action) {
+    setSelectedAttacker(null)
+    act(action)
+  }
 
   if (status === 'loading') {
     return (
@@ -116,14 +253,47 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
     )
   }
 
-  const playableHandIndices = new Set(
-    legal.filter(a => a.type === 'playCard').map(a => (a.type === 'playCard' ? a.handIndex : -1)),
-  )
+  // What clicking each hand card does, keyed by hand index: play it in the
+  // action phase, resource it in the regroup phase (#6). Derived from the legal
+  // moves so the hand affordance always matches what the engine allows.
+  const handAction = new Map<number, Action>()
+  for (const a of legal) {
+    if (a.type === 'playCard' || a.type === 'resourceCard') handAction.set(a.handIndex, a)
+  }
   const hand = gameState.players.player.hand
 
+  const attacks = legal.filter(a => a.type === 'attack')
+  const attackerIds = new Set(attacks.map(a => a.attackerId))
+  const selectedAttacks = selectedAttacker
+    ? attacks.filter(a => a.attackerId === selectedAttacker)
+    : []
+  const targetUnitIds = new Set(
+    selectedAttacks.flatMap(a => (a.target.kind === 'unit' ? [a.target.instanceId] : [])),
+  )
+  const baseAttack = selectedAttacks.find(a => a.target.kind === 'base')
+
+  const playerInteraction = (unit: { instanceId: string }): UnitInteraction => ({
+    actionable: attackerIds.has(unit.instanceId),
+    selected: selectedAttacker === unit.instanceId,
+    isTarget: false,
+    onClick: attackerIds.has(unit.instanceId)
+      ? () => setSelectedAttacker(prev => (prev === unit.instanceId ? null : unit.instanceId))
+      : undefined,
+  })
+
+  const opponentInteraction = (unit: { instanceId: string }): UnitInteraction => ({
+    actionable: false,
+    selected: false,
+    isTarget: targetUnitIds.has(unit.instanceId),
+    onClick: targetUnitIds.has(unit.instanceId)
+      ? () => actAndClear({ type: 'attack', attackerId: selectedAttacker!, target: { kind: 'unit', instanceId: unit.instanceId } })
+      : undefined,
+  })
+
   return (
-    <div data-testid="game-screen" className="max-w-5xl space-y-4">
-      <div data-testid="game-board" className="space-y-4">
+    <div data-testid="game-screen" className="w-full space-y-4">
+      <div data-testid="game-board" className="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-4 lg:items-start">
+        <div className="space-y-4 min-w-0">
         <div className="flex items-center gap-6 text-sm text-ink-dim">
           <span>Round <span className="font-mono text-ink">{gameState.round}</span></span>
           <span>Phase <span className="font-mono text-ink">{gameState.phase}</span></span>
@@ -133,8 +303,12 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
           </button>
         </div>
 
-        <SidePanel state={gameState} side="opponent" />
-        <SidePanel state={gameState} side="player" />
+        <Board
+          state={gameState}
+          playerInteraction={playerInteraction}
+          opponentInteraction={opponentInteraction}
+          baseAttack={baseAttack ? () => actAndClear(baseAttack) : undefined}
+        />
 
         {/* Your hand */}
         <section className="border-2 border-line/60 rounded-xl bg-surface p-4">
@@ -143,17 +317,28 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
             {hand.length === 0 && <li className="text-ink-faint text-xs italic">empty</li>}
             {hand.map((cardId, i) => {
               const card = gameState.cards[cardId]
-              const playable = playableHandIndices.has(i)
+              const action = handAction.get(i)
               return (
-                <li
-                  key={`${cardId}-${i}`}
-                  data-testid={`hand-card-${i}`}
-                  data-playable={playable}
-                  className={`border-2 rounded-xl px-3 py-2 text-sm ${playable ? 'border-accent text-ink shadow-[0_0_12px_rgba(79,195,247,0.3)]' : 'border-line/50 text-ink-faint'}`}
-                >
-                  <span className="font-mono text-xs">({card?.cost ?? '?'})</span> {card?.name ?? cardId}
-                  {card?.type === 'unit' && (
-                    <span className="font-mono text-xs text-ink-dim"> {card.power}/{card.hp}</span>
+                <li key={`${cardId}-${i}`}>
+                  {action ? (
+                    // Clickable shortcut for the matching action-menu button:
+                    // "Play …" in the action phase, "Resource …" in regroup.
+                    <button
+                      data-testid={`hand-card-${i}`}
+                      data-playable={true}
+                      onClick={() => actAndClear(action)}
+                      className="block w-fit shrink-0 rounded-lg ring-2 ring-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:ring-accent/70 cursor-pointer"
+                    >
+                      <CardFace card={card} fallbackName={cardId} />
+                    </button>
+                  ) : (
+                    <span
+                      data-testid={`hand-card-${i}`}
+                      data-playable={false}
+                      className="block w-fit shrink-0 rounded-lg opacity-60"
+                    >
+                      <CardFace card={card} fallbackName={cardId} />
+                    </span>
                   )}
                 </li>
               )
@@ -186,7 +371,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
                 <button
                   key={i}
                   data-testid={`action-btn-${i}`}
-                  onClick={() => act(action)}
+                  onClick={() => actAndClear(action)}
                   className="px-4 py-1.5 text-sm border-2 border-accent text-accent rounded-xl shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10"
                 >
                   {describeAction(gameState, 'player', action)}
@@ -196,10 +381,12 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
           </section>
         )}
 
-        {/* Log */}
-        <section className="border-2 border-line/60 rounded-xl bg-surface p-4">
+        </div>
+
+        {/* Log — right-hand panel so the board keeps the width (#315) */}
+        <aside data-testid="game-log-panel" className="mt-4 lg:mt-0 lg:sticky lg:top-4 lg:self-start border-2 border-line/60 rounded-xl bg-surface p-4">
           <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">Log</h3>
-          <ol data-testid="game-log" className="mt-2 space-y-0.5 text-xs font-mono text-ink-dim max-h-48 overflow-y-auto">
+          <ol data-testid="game-log" className="mt-2 space-y-0.5 text-xs font-mono text-ink-dim max-h-48 lg:max-h-[70vh] overflow-y-auto">
             {log.map((entry, i) => (
               <li key={i}>
                 <span className={entry.by === 'player' ? 'text-accent' : 'text-amber'}>
@@ -209,7 +396,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
               </li>
             ))}
           </ol>
-        </section>
+        </aside>
       </div>
     </div>
   )

@@ -2,7 +2,8 @@
   "name": "swu-proxy",
   "type": "module",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "deploy": "wrangler deploy --config wrangler.toml"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.16.6",

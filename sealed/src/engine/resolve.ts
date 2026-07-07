@@ -3,6 +3,10 @@ import type { GameState, PlayerId, PlayerState, UnitState } from './types'
 import { opponentOf } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost } from './legalMoves'
+import { runTrigger } from './abilities'
+import { seededShuffle, nextSeed } from './rng'
+import { effectivePower, effectiveHp } from './stats'
+import { hasKeyword, keywordValue } from './keywords'
 
 /**
  * Action resolver (T2.5) — pure `(state, action) => state`.
@@ -18,7 +22,10 @@ export function resolve(state: GameState, action: Action): GameState {
 
   switch (action.type) {
     case 'playCard':
-      return requirePhase(state, 'action', () => advanceTurn(resetPasses(playCard(state, action.handIndex))))
+      return requirePhase(state, 'action', () => {
+        const played = playCard(state, action.handIndex)
+        return played.winner !== null ? played : advanceTurn(resetPasses(played))
+      })
     case 'deployLeader':
       return requirePhase(state, 'action', () => advanceTurn(resetPasses(deployLeader(state))))
     case 'attack':
@@ -34,6 +41,12 @@ export function resolve(state: GameState, action: Action): GameState {
       return requirePhase(state, 'regroup', () => regroupChoice(state, action.handIndex))
     case 'skipResource':
       return requirePhase(state, 'regroup', () => regroupChoice(state, null))
+    case 'mulligan':
+      return requirePhase(state, 'setup', () => setupDecision(state, true))
+    case 'keepHand':
+      return requirePhase(state, 'setup', () => setupDecision(state, false))
+    case 'setupResource':
+      return requirePhase(state, 'setup', () => setupResourceChoice(state, action.handIndex))
   }
 }
 
@@ -76,6 +89,70 @@ function advanceTurn(state: GameState): GameState {
 }
 
 // ---------------------------------------------------------------------------
+// Setup phase (CR 5.2.1e–f): mulligan decisions, initiative holder first,
+// then both players take 2 starting resources and round 1 begins.
+// ---------------------------------------------------------------------------
+
+
+function setupDecision(state: GameState, takeMulligan: boolean): GameState {
+  if (state.setupStage !== 'mulligan') {
+    throw new Error('Mulligan decisions are only legal in the mulligan stage of setup')
+  }
+  const playerId = state.activePlayer
+  let next = state
+
+  if (takeMulligan) {
+    // Shuffle the entire hand back into the deck and draw a new 6 (CR 5.2.1e).
+    const p = state.players[playerId]
+    const reshuffled = seededShuffle([...p.hand, ...p.deck], state.rngSeed)
+    next = updatePlayer(state, playerId, {
+      hand: reshuffled.slice(0, p.hand.length),
+      deck: reshuffled.slice(p.hand.length),
+    })
+    next = { ...next, rngSeed: nextSeed(state.rngSeed) }
+  }
+
+  // Initiative holder decides first; after the other player's decision the
+  // resource stage begins, back with the initiative holder (CR 5.2.1f).
+  if (playerId === next.initiative) {
+    return { ...next, activePlayer: opponentOf(playerId) }
+  }
+  return { ...next, setupStage: 'resource', activePlayer: next.initiative }
+}
+
+const SETUP_RESOURCES = 2
+
+/**
+ * Resource one chosen hand card, facedown and ready (CR 5.2.1f). Each player
+ * picks one card at a time until they hold two starting resources; once both
+ * players are done, round 1's action phase begins with the initiative holder.
+ */
+function setupResourceChoice(state: GameState, handIndex: number): GameState {
+  if (state.setupStage !== 'resource') {
+    throw new Error('setupResource is only legal in the resource stage of setup')
+  }
+  const playerId = state.activePlayer
+  const p = state.players[playerId]
+  if (handIndex < 0 || handIndex >= p.hand.length) {
+    throw new Error(`setupResource: invalid hand index ${handIndex}`)
+  }
+
+  const next = updatePlayer(state, playerId, {
+    hand: p.hand.filter((_, i) => i !== handIndex),
+    resources: [...p.resources, { cardId: p.hand[handIndex], exhausted: false }],
+  })
+
+  const mine = next.players[playerId].resources.length
+  if (mine < SETUP_RESOURCES) {
+    return next // same player picks again
+  }
+  if (playerId === next.initiative) {
+    return { ...next, activePlayer: opponentOf(playerId) }
+  }
+  return { ...next, phase: 'action', activePlayer: next.initiative }
+}
+
+// ---------------------------------------------------------------------------
 // Action phase
 // ---------------------------------------------------------------------------
 
@@ -99,12 +176,21 @@ function playCard(state: GameState, handIndex: number): GameState {
     upgrades: [],
   }
 
-  const next = updatePlayer(state, playerId, {
+  let next = updatePlayer(state, playerId, {
     ...paid,
     hand: paid.hand.filter((_, i) => i !== handIndex),
     units: [...paid.units, newUnit],
   })
-  return { ...next, instanceCounter: state.instanceCounter + 1 }
+  next = { ...next, instanceCounter: state.instanceCounter + 1 }
+
+  // "When Played" abilities fire after the card enters play (CR 6.2.0f);
+  // their effects can defeat a base, so the win check runs afterwards.
+  next = runTrigger(next, 'whenPlayed', {
+    owner: playerId,
+    cardId: card.id,
+    sourceInstanceId: newUnit.instanceId,
+  })
+  return checkWin(next)
 }
 
 function deployLeader(state: GameState): GameState {
@@ -156,14 +242,6 @@ function pass(state: GameState): GameState {
 // Combat (basic resolution — T2.5/T3.2/T3.3)
 // ---------------------------------------------------------------------------
 
-function unitPower(state: GameState, u: UnitState): number {
-  return state.cards[u.cardId]?.power ?? 0
-}
-
-function unitHp(state: GameState, u: UnitState): number {
-  return state.cards[u.cardId]?.hp ?? 0
-}
-
 /** Apply damage to a player's units, defeating any with damage ≥ HP (CR 1.9.6). */
 function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<string, number>): GameState {
   const p = state.players[owner]
@@ -174,7 +252,7 @@ function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<string,
     const extra = damaged.get(u.instanceId) ?? 0
     const total = u.damage + extra
     const next = extra > 0 ? { ...u, damage: total } : u
-    if (total >= unitHp(state, next)) {
+    if (total >= effectiveHp(state, next)) {
       defeated.push(next)
     } else {
       survivors.push(next)
@@ -206,6 +284,11 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
   if (!attacker) throw new Error(`attack: no friendly unit ${attackerId}`)
   if (attacker.exhausted) throw new Error(`attack: unit ${attackerId} is exhausted`)
 
+  // Combat damage is CALCULATED before it is dealt (CR 6.3.4): both amounts
+  // come from the pre-damage state, so e.g. a Grit defender's counter uses its
+  // pre-attack damage.
+  const attackerPower = effectivePower(state, attacker, { attacking: true })
+
   // Attacking exhausts the attacker (CR 1.5.4d).
   let next = updatePlayer(state, playerId, {
     units: state.players[playerId].units.map(u =>
@@ -213,21 +296,42 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
     ),
   })
 
+  // Restore N: heals the attacking player's base when the unit attacks (CR 7.5).
+  const restore = keywordValue(next, attacker.cardId, 'Restore')
+  if (restore > 0) {
+    const own = next.players[playerId]
+    next = updatePlayer(next, playerId, {
+      base: { ...own.base, damage: Math.max(0, own.base.damage - restore) },
+    })
+  }
+
   if (target.kind === 'base') {
     const enemy = next.players[enemyId]
-    const damage = enemy.base.damage + unitPower(next, attacker)
-    next = updatePlayer(next, enemyId, { base: { ...enemy.base, damage } })
+    next = updatePlayer(next, enemyId, { base: { ...enemy.base, damage: enemy.base.damage + attackerPower } })
     return checkWin(next)
   }
 
   const defender = next.players[enemyId].units.find(u => u.instanceId === target.instanceId)
   if (!defender) throw new Error(`attack: no enemy unit ${target.instanceId}`)
 
-  // Combat damage is simultaneous (CR 1.9.10): attacker's power to defender,
-  // defender's power back to attacker.
-  next = applyUnitDamage(next, enemyId, new Map([[defender.instanceId, unitPower(next, attacker)]]))
-  next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, unitPower(next, defender)]]))
-  return next
+  const counterPower = effectivePower(next, defender)
+
+  // Overwhelm: excess combat damage beyond the defender's remaining HP hits
+  // the defending player's base (CR 1.9.11).
+  const remainingHp = effectiveHp(next, defender) - defender.damage
+  const overwhelmExcess = hasKeyword(next, attacker.cardId, 'Overwhelm')
+    ? Math.max(0, attackerPower - remainingHp)
+    : 0
+
+  // Simultaneous combat damage (CR 1.9.10).
+  next = applyUnitDamage(next, enemyId, new Map([[defender.instanceId, attackerPower]]))
+  next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, counterPower]]))
+
+  if (overwhelmExcess > 0) {
+    const enemy = next.players[enemyId]
+    next = updatePlayer(next, enemyId, { base: { ...enemy.base, damage: enemy.base.damage + overwhelmExcess } })
+  }
+  return checkWin(next)
 }
 
 /** Base with damage ≥ HP defeats its owner (CR 1.9.7, 3.2.5). */

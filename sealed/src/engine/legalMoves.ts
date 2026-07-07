@@ -2,6 +2,7 @@ import type { Action } from './actions'
 import type { EngineCard, GameState, PlayerId } from './types'
 import { opponentOf } from './types'
 import { canAfford, readyResourceCount } from './resources'
+import { hasKeyword } from './keywords'
 
 /**
  * Effective cost of playing a card, including the aspect penalty (CR 8.1):
@@ -35,7 +36,25 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
 export function legalMoves(state: GameState): Action[] {
   if (state.winner !== null) return []
 
-  return state.phase === 'action' ? actionPhaseMoves(state) : regroupPhaseMoves(state)
+  switch (state.phase) {
+    case 'setup':
+      return setupMoves(state)
+    case 'action':
+      return actionPhaseMoves(state)
+    case 'regroup':
+      return regroupPhaseMoves(state)
+  }
+}
+
+function setupMoves(state: GameState): Action[] {
+  // CR 5.2.1e: first, each player decides whether to take their one mulligan.
+  if (state.setupStage === 'mulligan') {
+    return [{ type: 'mulligan' }, { type: 'keepHand' }]
+  }
+  // CR 5.2.1f: then each player resources two cards, one pick at a time.
+  return state.players[state.activePlayer].hand.map(
+    (_, handIndex): Action => ({ type: 'setupResource', handIndex }),
+  )
 }
 
 function actionPhaseMoves(state: GameState): Action[] {
@@ -54,15 +73,23 @@ function actionPhaseMoves(state: GameState): Action[] {
   })
 
   // Attack With a Unit — ready units; targets are enemy units in the same
-  // arena, or the enemy base (CR 1.15.3, 3.2.3).
+  // arena, or the enemy base (CR 1.15.3, 3.2.3). Sentinel forces the attack
+  // onto a Sentinel unit in that arena — even the base is off-limits — unless
+  // the attacker has Saboteur (CR 6.3.2b).
   for (const unit of p.units) {
     if (unit.exhausted) continue
-    for (const enemyUnit of enemy.units) {
-      if (enemyUnit.arena === unit.arena) {
-        moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'unit', instanceId: enemyUnit.instanceId } })
-      }
+
+    const sameArena = enemy.units.filter(e => e.arena === unit.arena)
+    const sentinels = sameArena.filter(e => hasKeyword(state, e.cardId, 'Sentinel'))
+    const sentinelLocked = sentinels.length > 0 && !hasKeyword(state, unit.cardId, 'Saboteur')
+
+    const targets = sentinelLocked ? sentinels : sameArena
+    for (const enemyUnit of targets) {
+      moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'unit', instanceId: enemyUnit.instanceId } })
     }
-    moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'base' } })
+    if (!sentinelLocked) {
+      moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'base' } })
+    }
   }
 
   // Deploy Leader — epic action; requires CONTROLLING resources equal to the

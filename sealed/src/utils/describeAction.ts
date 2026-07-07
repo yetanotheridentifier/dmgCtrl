@@ -8,8 +8,16 @@ function unitName(state: GameState, owner: PlayerId, instanceId: string): string
   return unit ? state.cards[unit.cardId]?.name ?? unit.cardId : instanceId
 }
 
+export interface DescribeOptions {
+  /**
+   * Hide hidden information (CR 1.17): which card an opponent resources is
+   * private, so log entries for the other player's resource picks are redacted.
+   */
+  redact?: boolean
+}
+
 /** Human-readable action label — used by the action menu and the game log. */
-export function describeAction(state: GameState, by: PlayerId, action: Action): string {
+export function describeAction(state: GameState, by: PlayerId, action: Action, opts: DescribeOptions = {}): string {
   switch (action.type) {
     case 'playCard': {
       const cardId = state.players[by].hand[action.handIndex]
@@ -31,10 +39,20 @@ export function describeAction(state: GameState, by: PlayerId, action: Action): 
     case 'pass':
       return 'Pass'
     case 'resourceCard': {
+      if (opts.redact) return 'Resource a card (facedown)'
       const cardId = state.players[by].hand[action.handIndex]
       return `Resource ${cardId ? state.cards[cardId]?.name ?? cardId : 'a card'}`
     }
     case 'skipResource':
       return 'Skip resourcing'
+    case 'mulligan':
+      return 'Mulligan (redraw 6)'
+    case 'keepHand':
+      return 'Keep hand'
+    case 'setupResource': {
+      if (opts.redact) return 'Resource a card (facedown)'
+      const cardId = state.players[by].hand[action.handIndex]
+      return `Resource ${cardId ? state.cards[cardId]?.name ?? cardId : 'a card'}`
+    }
   }
 }

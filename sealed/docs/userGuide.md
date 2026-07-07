@@ -10,6 +10,10 @@ dmgCtrl Sealed lets you play Star Wars: Unlimited **Sealed** games against an AI
 
 Your decks are saved on this device and appear in the deck list. The first time you play a deck, its card details are fetched and cached locally — later games work from the cache.
 
+## Caching a full set
+
+The **Card catalogue** section lets you cache an entire set by its code (e.g. `ASH`): one click fetches every card in the set and stores it on this device. Games and deck views then work without touching the network — and this also covers the handful of base cards whose individual lookups are unreliable upstream.
+
 ## Choosing an opponent
 
 The **Opponent** selector controls which deck the AI plays:
@@ -21,18 +25,21 @@ The current AI opponent plays **random legal moves**. It exists to exercise the 
 
 ## Playing a game
 
-Press **Play** next to your deck. Cards hydrate, hands are dealt (6 cards, of which 2 become your starting resources), and the board appears.
+Press **Play** next to your deck. Cards hydrate, both players draw 6, and the board appears in the **setup step**: choose **Keep hand** or **Mulligan** (shuffle your hand back and draw a fresh 6 — once only; whoever holds the initiative decides first). Then **resource 2 cards, one pick at a time** — each hand card is offered as a button, and you can also just avoid banking your early plays. Aim to keep a curve: something to play on turn 1 (cost ≤ 2), turn 2 (≤ 3), turn 3 (≤ 4). Once both players have resourced 2, round 1 begins. Resourcing is private: the log shows only that your opponent resourced, never which card.
+
+The AI opponent mulligans any hand without a turn-1 play and resources the pair of cards that best preserves its early curve.
 
 ### The board
 
-- **Opponent panel and your panel** — base HP, ready/total resources, leader status, hand size, and units in the ground and space arenas. Each unit shows its power and remaining HP; exhausted units are dimmed.
-- **Your hand** — cards you can afford right now are highlighted; unplayable cards are dimmed. A card's shown cost includes any **aspect penalty** (+2 per aspect icon your leader and base don't provide).
-- **Your move** — every legal action appears as a button: play a card, attack (choose any legal target), deploy your leader, take the initiative, or pass.
-- **Log** — a running record of every action both players have taken.
+- **The battlefield** — laid out like the tabletop around a central **battlefront**. The **Ground** and **Space** lanes flank a central strip holding both bases and leaders: reading down the middle you'll find the opponent's leader, the opponent's base, your base, then your leader — so the two bases meet at the battlefront and the leaders are outermost. Units line up **along the battlefront** (level with the bases); as you play more, they stack **further back** — the opponent's toward the top, yours toward the bottom. **Sentinels** are held at the front, closest to the battlefront. Each player's **resources, leader status, hand size and pile counts** sit in a compact line above (opponent) and below (you).
+- **Cards** — each card is shown as its **card art** (units carry their power/remaining-HP beneath). Cards are drawn at a fixed size in a uniform square slot and in their true orientation — units stand **portrait** when ready and rotate **landscape** (sideways, dimmed) when exhausted; a **deployed leader** shows its unit side. The square slots mean cards never overlap, even when rotated. If a card's art can't be loaded, the card instead shows a **text summary** — cost, name, power/HP, keywords and abilities — so it's always readable.
+- **Your hand** — cards you can afford right now are highlighted and **clickable — click a highlighted card to play it**; unplayable cards are dimmed. A card's shown cost includes any **aspect penalty** (+2 per aspect icon your leader and base don't provide).
+- **Your move** — click a **glowing unit** to select it, then click a highlighted target (enemy unit or their base) to attack. Every legal action also appears as a button below the board: play a card, attack, deploy your leader, take the initiative, or pass.
+- **Log** — a running record of every action, in a panel on the right of the board.
 
 ### Turn structure
 
-Players alternate single actions. When both players pass consecutively, the round moves to the **regroup phase**: each player draws 2, may put 1 card from hand into resources, then everything readies and a new round begins. Whoever holds the **initiative** acts first each round — take it during a round to act first in the next one (but you'll pass for the rest of the current one).
+Players alternate single actions. When both players pass consecutively, the round moves to the **regroup phase**: each player draws 2, may put 1 card from hand into resources, then everything readies and a new round begins. In regroup, **click any hand card to resource it** (or Skip resourcing to bank nothing). Whoever holds the **initiative** acts first each round — take it during a round to act first in the next one (but you'll pass for the rest of the current one).
 
 ### Winning
 
@@ -40,8 +47,7 @@ Reduce the opponent's base to 0 HP before they do the same to you. If your deck 
 
 ### Current limitations
 
-- Card **abilities, keywords, events, and upgrades are not executed** yet — units play with their printed stats ("vanilla"). Events and upgrades can still be used as resources.
-- No mulligan during setup; starting resources are chosen automatically.
+- **Keywords work**: Sentinel (you must attack it), Saboteur, Raid, Grit, Overwhelm and Restore all apply. **Card ability text, events, and upgrades are not executed yet** — those cards still make fine resources. Ambush and Shielded arrive with abilities/upgrades support.
 
 ## After the game
 

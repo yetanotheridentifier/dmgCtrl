@@ -5,17 +5,11 @@ export interface InitGameOptions {
   firstPlayer: PlayerId
   /** Injectable for deterministic tests/AI; defaults to Fisher–Yates. */
   shuffle?: <T>(arr: T[]) => T[]
-  /**
-   * SWU setup: after drawing 6, each player takes 2 cards from hand as starting
-   * resources (CR §5.2 — section absent from the docs PDF; standard setup rule).
-   * Receives the dealt hand, returns the indices to resource. Defaults to the
-   * last two dealt. The UI can pass a real choice later without engine changes.
-   */
-  chooseSetupResources?: (hand: string[]) => [number, number]
+  /** Seed for in-game shuffles (mulligans); defaults to a random seed. */
+  rngSeed?: number
 }
 
 const OPENING_HAND = 6
-const SETUP_RESOURCES = 2
 
 export function fisherYates<T>(arr: T[]): T[] {
   const out = [...arr]
@@ -34,30 +28,26 @@ function expandDeck(deck: ParsedDeck): string[] {
   return cards
 }
 
-function initPlayer(deck: ParsedDeck, opts: Required<Pick<InitGameOptions, 'shuffle' | 'chooseSetupResources'>>): PlayerState {
-  const shuffled = opts.shuffle(expandDeck(deck))
-  const dealt = shuffled.slice(0, OPENING_HAND)
-  const remaining = shuffled.slice(OPENING_HAND)
-
-  const resourceIndices = opts.chooseSetupResources(dealt)
-  const resourceSet = new Set<number>(resourceIndices)
-  const hand = dealt.filter((_, i) => !resourceSet.has(i))
-  const resources = dealt
-    .filter((_, i) => resourceSet.has(i))
-    .map(cardId => ({ cardId, exhausted: false }))
-
+function initPlayer(deck: ParsedDeck, shuffle: <T>(arr: T[]) => T[]): PlayerState {
+  const shuffled = shuffle(expandDeck(deck))
   return {
     leader: { cardId: deck.leader, deployed: false, epicActionUsed: false, exhausted: false },
     base: { cardId: deck.base, damage: 0 },
-    hand,
-    deck: remaining,
+    hand: shuffled.slice(0, OPENING_HAND),
+    deck: shuffled.slice(OPENING_HAND),
     discard: [],
-    resources,
+    resources: [],
     units: [],
   }
 }
 
-/** Two decklists → a valid starting state (T2.2). */
+/**
+ * Two decklists → the start of setup (T2.2 + #304): bases and leaders placed,
+ * decks shuffled, 6 cards dealt. The game begins in the SETUP phase — mulligan
+ * decisions (CR 5.2.1e, initiative holder first) and the taking of 2 starting
+ * resources (CR 5.2.1f) resolve through the normal action pipeline; round 1's
+ * action phase starts once both players have decided.
+ */
 export function initGame(
   playerDeck: ParsedDeck,
   opponentDeck: ParsedDeck,
@@ -65,23 +55,23 @@ export function initGame(
   options: InitGameOptions,
 ): GameState {
   const shuffle = options.shuffle ?? fisherYates
-  const chooseSetupResources = options.chooseSetupResources
-    ?? ((hand: string[]): [number, number] => [hand.length - SETUP_RESOURCES, hand.length - 1])
 
   return {
     cards,
     players: {
-      player: initPlayer(playerDeck, { shuffle, chooseSetupResources }),
-      opponent: initPlayer(opponentDeck, { shuffle, chooseSetupResources }),
+      player: initPlayer(playerDeck, shuffle),
+      opponent: initPlayer(opponentDeck, shuffle),
     },
     initiative: options.firstPlayer,
     initiativeTakenBy: null,
     activePlayer: options.firstPlayer,
-    phase: 'action',
+    phase: 'setup',
     round: 1,
     consecutivePasses: 0,
     regroupResourced: { player: false, opponent: false },
     instanceCounter: 1,
+    rngSeed: options.rngSeed ?? Math.floor(Math.random() * 0xffffffff),
+    setupStage: 'mulligan',
     winner: null,
   }
 }
