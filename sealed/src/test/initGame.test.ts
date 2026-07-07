@@ -47,53 +47,30 @@ describe('initGame', () => {
     }
   })
 
-  it('expands deck entries by count, deals 6, resources 2, leaves 24 in deck', () => {
+  it('expands deck entries by count and deals 6 (resources are taken after mulligans — #304)', () => {
     const state = initGame(DECK, DECK, CARD_DB, { firstPlayer: 'player', shuffle: identity })
     for (const side of ['player', 'opponent'] as const) {
       const p = state.players[side]
-      expect(p.hand).toHaveLength(4)
-      expect(p.resources).toHaveLength(2)
+      expect(p.hand).toHaveLength(6)
+      expect(p.resources).toHaveLength(0)
       expect(p.deck).toHaveLength(24)
       expect(p.discard).toEqual([])
       expect(p.units).toEqual([])
     }
   })
 
-  it('starting resources enter play ready', () => {
-    const state = initGame(DECK, DECK, CARD_DB, { firstPlayer: 'player', shuffle: identity })
-    expect(state.players.player.resources.every(r => !r.exhausted)).toBe(true)
-  })
-
-  it('default setup chooser resources the last two dealt cards', () => {
-    const state = initGame(DECK, DECK, CARD_DB, { firstPlayer: 'player', shuffle: identity })
-    // identity shuffle: deal order is expansion order TST_100, TST_100, TST_101, TST_101, TST_102, TST_102
-    expect(state.players.player.hand).toEqual(['TST_100', 'TST_100', 'TST_101', 'TST_101'])
-    expect(state.players.player.resources.map(r => r.cardId)).toEqual(['TST_102', 'TST_102'])
-  })
-
-  it('honours a custom setup-resource chooser', () => {
-    const state = initGame(DECK, DECK, CARD_DB, {
-      firstPlayer: 'player',
-      shuffle: identity,
-      chooseSetupResources: () => [0, 1],
-    })
-    expect(state.players.player.resources.map(r => r.cardId)).toEqual(['TST_100', 'TST_100'])
-    expect(state.players.player.hand).toEqual(['TST_101', 'TST_101', 'TST_102', 'TST_102'])
-  })
-
-  it('applies the injected shuffle to each deck', () => {
+  it('deals in shuffled order (injectable shuffle)', () => {
     const reverse = <T,>(arr: T[]) => [...arr].reverse()
     const state = initGame(DECK, DECK, CARD_DB, { firstPlayer: 'player', shuffle: reverse })
-    // reversed expansion: TST_114, TST_114, TST_113, ...
     expect(state.players.player.hand.slice(0, 2)).toEqual(['TST_114', 'TST_114'])
   })
 
-  it('sets initiative, active player, phase, and round', () => {
+  it('begins in the setup phase with the initiative holder deciding first', () => {
     const state = initGame(DECK, DECK, CARD_DB, { firstPlayer: 'opponent', shuffle: identity })
+    expect(state.phase).toBe('setup')
     expect(state.initiative).toBe('opponent')
     expect(state.activePlayer).toBe('opponent')
     expect(state.initiativeTakenBy).toBeNull()
-    expect(state.phase).toBe('action')
     expect(state.round).toBe(1)
     expect(state.consecutivePasses).toBe(0)
     expect(state.regroupResourced).toEqual({ player: false, opponent: false })
@@ -101,8 +78,15 @@ describe('initGame', () => {
     expect(state.winner).toBeNull()
   })
 
+  it('uses the provided rng seed and defaults to a random one', () => {
+    const seeded = initGame(DECK, DECK, CARD_DB, { firstPlayer: 'player', shuffle: identity, rngSeed: 7 })
+    expect(seeded.rngSeed).toBe(7)
+    const defaulted = initGame(DECK, DECK, CARD_DB, { firstPlayer: 'player', shuffle: identity })
+    expect(Number.isInteger(defaulted.rngSeed)).toBe(true)
+  })
+
   it('produces a JSON-serialisable state carrying the card db', () => {
-    const state = initGame(DECK, DECK, CARD_DB, { firstPlayer: 'player', shuffle: identity })
+    const state = initGame(DECK, DECK, CARD_DB, { firstPlayer: 'player', shuffle: identity, rngSeed: 1 })
     expect(JSON.parse(JSON.stringify(state))).toEqual(state)
     expect(state.cards['TST_001'].type).toBe('leader')
   })

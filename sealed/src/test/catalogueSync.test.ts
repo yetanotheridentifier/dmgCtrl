@@ -18,6 +18,15 @@ function mockNetwork(failFor: string[] = []) {
   return vi.fn().mockImplementation((url: string) => {
     const failed = failFor.some(f => url.includes(f))
     if (failed) return Promise.resolve({ ok: false, status: 500 })
+    // Art requests also route through the worker now (#311) — match them first.
+    if (url.includes('/art/')) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        arrayBuffer: () => Promise.resolve(new Uint8Array([1]).buffer),
+        headers: { get: () => 'image/webp' },
+      })
+    }
     if (url.startsWith(SWU_DB_API)) {
       const [, set, number] = url.slice(SWU_DB_API.length).match(/\/cards\/(\w+)\/(\w+)/)!
       return Promise.resolve({
@@ -77,7 +86,7 @@ describe('syncCatalogue', () => {
     ])
 
     expect(result).toEqual({ hydrated: 1, skipped: 1, failed: 0 })
-    const apiCalls = fetchMock.mock.calls.filter(c => String(c[0]).startsWith(SWU_DB_API))
+    const apiCalls = fetchMock.mock.calls.filter(c => String(c[0]).startsWith(SWU_DB_API) && !String(c[0]).includes('/art/'))
     expect(apiCalls).toHaveLength(1)
     expect(String(apiCalls[0][0])).toContain('/cards/SOR/011')
   })
@@ -106,7 +115,7 @@ describe('syncCatalogue', () => {
 
     const apiCalls = fetchMock.mock.calls
       .map(c => String(c[0]))
-      .filter(u => u.startsWith(SWU_DB_API))
+      .filter(u => u.startsWith(SWU_DB_API) && !u.includes('/art/'))
     expect(apiCalls[0]).toContain('/cards/JTL/050')
     expect(apiCalls[1]).toContain('/cards/SOR/001')
   })
@@ -122,7 +131,7 @@ describe('syncCatalogue', () => {
     ])
 
     expect(result.hydrated).toBe(1)
-    const apiCalls = fetchMock.mock.calls.filter(c => String(c[0]).startsWith(SWU_DB_API))
+    const apiCalls = fetchMock.mock.calls.filter(c => String(c[0]).startsWith(SWU_DB_API) && !String(c[0]).includes('/art/'))
     expect(apiCalls).toHaveLength(1)
   })
 

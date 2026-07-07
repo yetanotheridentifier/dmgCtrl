@@ -10,6 +10,7 @@ import type { GameState, PlayerId } from '../engine/types'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
 import { randomAi } from '../ai/randomAi'
+import { setupAi } from '../ai/setupAi'
 import { describeAction } from '../utils/describeAction'
 import { saveGameRecord } from '../data/gameRecords'
 import { logger } from '../data/log'
@@ -62,6 +63,11 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
   const initialStateRef = useRef<GameState | null>(null)
   const movesRef = useRef<MoveRecord[]>([])
   const recordSavedRef = useRef(false)
+  // Mirror of the live game state, read synchronously by `act`. The app runs in
+  // <StrictMode>, which double-invokes setState updaters; keeping the mutating
+  // logic out of the updater (and reading `prev` from this ref instead) makes
+  // each action apply — and log — exactly once. See useGame StrictMode test.
+  const gameStateRef = useRef<GameState | null>(null)
 
   /** Advance the AI while it is the active player; returns the resulting state. */
   const driveAi = useCallback(
@@ -69,9 +75,11 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
       let current = state
       let steps = 0
       while (current.winner === null && current.activePlayer === AI && steps < MAX_AI_STEPS) {
-        const action = randomAi(current, rng)
+        // Setup decisions (mulligan/resourcing) use the dedicated heuristic —
+        // random choices there are game-ruiningly bad. See ai/setupAi.ts.
+        const action = setupAi(current) ?? randomAi(current, rng)
         if (!action) break
-        entries.push({ by: AI, text: describeAction(current, AI, action) })
+        entries.push({ by: AI, text: describeAction(current, AI, action, { redact: true }) })
         movesRef.current.push({ by: AI, action })
         current = resolve(current, action)
         steps++
@@ -88,6 +96,7 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
       setStatus('loading')
       setErrorDetail(null)
       setGameState(null)
+      gameStateRef.current = null
       setLog([])
       movesRef.current = []
       recordSavedRef.current = false
@@ -119,6 +128,7 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
         const entries: LogEntry[] = []
         state = driveAi(state, entries)
 
+        gameStateRef.current = state
         setGameState(state)
         setLog(entries)
         setStatus('playing')
@@ -160,15 +170,18 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
 
   const act = useCallback(
     (action: Action) => {
-      setGameState(prev => {
-        if (!prev || prev.winner !== null || prev.activePlayer !== HUMAN) return prev
-        const entries: LogEntry[] = [{ by: HUMAN, text: describeAction(prev, HUMAN, action) }]
-        movesRef.current.push({ by: HUMAN, action })
-        let next = resolve(prev, action)
-        next = driveAi(next, entries)
-        setLog(existing => [...existing, ...entries])
-        return next
-      })
+      // Read the live state from the ref, not a setState updater — this handler
+      // must run its side effects (logging, AI drive, move recording) exactly
+      // once even though StrictMode double-invokes updaters.
+      const prev = gameStateRef.current
+      if (!prev || prev.winner !== null || prev.activePlayer !== HUMAN) return
+      const entries: LogEntry[] = [{ by: HUMAN, text: describeAction(prev, HUMAN, action) }]
+      movesRef.current.push({ by: HUMAN, action })
+      let next = resolve(prev, action)
+      next = driveAi(next, entries)
+      gameStateRef.current = next
+      setGameState(next)
+      setLog(existing => [...existing, ...entries])
     },
     [driveAi],
   )

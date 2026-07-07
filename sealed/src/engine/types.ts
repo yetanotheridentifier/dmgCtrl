@@ -12,8 +12,14 @@
 
 export type PlayerId = 'player' | 'opponent'
 export type Arena = 'ground' | 'space'
-export type Phase = 'action' | 'regroup'
+export type Phase = 'setup' | 'action' | 'regroup'
 export type CardType = 'unit' | 'event' | 'upgrade' | 'leader' | 'base' | 'token'
+
+/** A keyword on a card; `value` carries the numeral for Raid 2, Restore 1, etc. */
+export interface KeywordInstance {
+  name: string
+  value?: number
+}
 
 /** Normalised static card data (from SWUDB detail via cardDb.ts). */
 export interface EngineCard {
@@ -27,7 +33,14 @@ export interface EngineCard {
   hp?: number
   aspects: string[]
   traits: string[]
+  keywords: KeywordInstance[]
   unique: boolean
+  /** Card art URL as served by the data source; render via artUrl() (#311). */
+  frontArt?: string
+  /** Back-side art (SWUDB BackArt): the unit side of a deployed leader. */
+  backArt?: string
+  /** Rules/ability text (SWUDB FrontText); shown in the textual card fallback. */
+  text?: string
 }
 
 export type CardDb = Readonly<Record<string, EngineCard>>
@@ -93,6 +106,10 @@ export interface GameState {
   regroupResourced: Record<PlayerId, boolean>
   /** Monotonic counter for deterministic unit instance ids. */
   instanceCounter: number
+  /** Seed for in-game shuffles (mulligans) — advances on use, replays deterministically. */
+  rngSeed: number
+  /** Sub-stage of the setup phase: mulligan decisions, then resource picks (CR 5.2.1e–f). */
+  setupStage: 'mulligan' | 'resource'
   winner: PlayerId | null
 }
 

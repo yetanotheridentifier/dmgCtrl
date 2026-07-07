@@ -72,10 +72,43 @@ mkdir -p dist/sealed && cp -r sealed/dist/* dist/sealed/
 ```
 
 **Worker dependency**: card detail is proxied through the worker's fallback route
-(`proxy/worker.js`, bottom of `fetch`). If the worker's routing changes, keep a
-path that forwards `/cards/{set}/{number}` to `api.swu-db.com` with
-`Access-Control-Allow-Origin`. The app-side base URL is `SWU_DB_API` in
-`sealed/src/data/cards.ts` (pinned by a test).
+and card art through its `/art/<path>` route (`proxy/worker.js`). If the worker's
+routing changes, keep paths that forward `/cards/...` to `api.swu-db.com` and
+`/art/...` to `cdn.swu-db.com`, both with `Access-Control-Allow-Origin`. The
+app-side base URL is `SWU_DB_API` in `sealed/src/data/cards.ts` (pinned by a
+test).
+
+### ⚠️ Two workers — deploy the right one
+
+There are **two separate Cloudflare Worker projects** in this repo, and they are
+easy to confuse:
+
+| Worker | Config | Serves | Deploy |
+|---|---|---|---|
+| **swu-proxy** | `proxy/wrangler.toml` | `worker.dmgctrl.app` — the CORS/art proxy the sealed app depends on | `npm run deploy:proxy` |
+| **dmgctrl** | root `wrangler.jsonc` | the main app as a CF Worker (added with `@cloudflare/vite-plugin`) | `npm run deploy` |
+
+Running bare `wrangler deploy` (or `npm run deploy`) **from the repo root deploys
+the main-app worker, NOT the proxy** — it picks up the root `wrangler.jsonc`.
+Changes to `proxy/worker.js` (the `/art/`, `/cards/`, `/analytics` routes) only
+go live via **`npm run deploy:proxy`**.
+
+**The redirect trap (why `deploy:proxy` needs `--config`):** the
+`@cloudflare/vite-plugin` writes a repo-wide redirect at
+`.wrangler/deploy/config.json` pointing wrangler at the built main-app config
+(`dist/wrangler.json`). Wrangler honours that redirect from *any* subdirectory,
+so even `wrangler deploy` run inside `proxy/` will silently redeploy the **main
+app** instead of the proxy (telltale: `Using redirected Wrangler configuration`
++ `Uploaded dmgctrl` in the output). The `deploy:proxy` script therefore passes
+`--config wrangler.toml` explicitly, which overrides the redirect. Do **not**
+remove that flag.
+
+Quick check that the proxy is current — art must return an image, not JSON:
+
+```bash
+curl -sI "https://worker.dmgctrl.app/art/images/cards/SOR/086.png" | grep -i content-type
+# expect: content-type: image/png   (JSON => old worker, redeploy the proxy)
+```
 
 ## Client-side state (support playbook)
 

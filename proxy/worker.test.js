@@ -91,6 +91,40 @@ describe('GET passthrough', () => {
   })
 })
 
+describe('GET /art passthrough (card images)', () => {
+  it('proxies to cdn.swu-db.com, streaming bytes with CORS headers', async () => {
+    const bytes = new Uint8Array([137, 80, 78, 71]) // PNG magic
+    const mock = stubFetch(() =>
+      new Response(bytes, {
+        status: 200,
+        headers: { 'Content-Type': 'image/png' },
+      })
+    )
+
+    const response = await SELF.fetch('https://worker.example/art/images/cards/ASH/011.png')
+    const body = new Uint8Array(await response.arrayBuffer())
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
+    expect(response.headers.get('Content-Type')).toBe('image/png')
+    expect(Array.from(body)).toEqual([137, 80, 78, 71])
+    expect(mock).toHaveBeenCalledWith('https://cdn.swu-db.com/images/cards/ASH/011.png')
+  })
+
+  it('adds a long cache lifetime so art is served from the edge', async () => {
+    stubFetch(() => new Response(new Uint8Array([1]), { status: 200, headers: { 'Content-Type': 'image/webp' } }))
+    const response = await SELF.fetch('https://worker.example/art/images/cards/ASH/011.png')
+    expect(response.headers.get('Cache-Control')).toContain('max-age')
+  })
+
+  it('passes upstream errors through with CORS headers intact', async () => {
+    stubFetch(() => new Response('nope', { status: 404, headers: { 'Content-Type': 'text/plain' } }))
+    const response = await SELF.fetch('https://worker.example/art/images/cards/ZZZ/999.png')
+    expect(response.status).toBe(404)
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
+  })
+})
+
 describe('POST /analytics/batch', () => {
   it('returns 200 with received count for a valid payload', async () => {
     stubFetch(() => new Response(null, { status: 204 }))

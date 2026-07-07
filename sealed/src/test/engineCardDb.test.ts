@@ -16,6 +16,8 @@ const VADER_UNIT: SwuCard = {
   Aspects: ['Aggression', 'Villainy'],
   Traits: ['FORCE', 'IMPERIAL', 'SITH'],
   Unique: true,
+  FrontArt: 'https://cdn.swu-db.com/images/cards/SOR/086.png',
+  FrontText: 'When Played: Deal 3 damage to a unit.',
 }
 
 describe('normaliseCard', () => {
@@ -32,8 +34,35 @@ describe('normaliseCard', () => {
       hp: 7,
       aspects: ['Aggression', 'Villainy'],
       traits: ['FORCE', 'IMPERIAL', 'SITH'],
+      keywords: [],
       unique: true,
+      frontArt: 'https://cdn.swu-db.com/images/cards/SOR/086.png',
+      text: 'When Played: Deal 3 damage to a unit.',
     })
+  })
+
+  it('omits frontArt when the payload has none', () => {
+    const card = normaliseCard({ Set: 'SOR', Number: '001', Name: 'Artless', Type: 'Unit' })
+    expect(card.frontArt).toBeUndefined()
+  })
+
+  it('carries ability text, and omits it when absent', () => {
+    expect(normaliseCard(VADER_UNIT).text).toBe('When Played: Deal 3 damage to a unit.')
+    expect(normaliseCard({ Set: 'SOR', Number: '001', Name: 'Vanilla', Type: 'Unit' }).text).toBeUndefined()
+  })
+
+  it('carries front and back art (leaders/bases are double-sided or landscape)', () => {
+    const leader = normaliseCard({
+      Set: 'SOR',
+      Number: '010',
+      Name: 'Darth Vader',
+      Type: 'Leader',
+      FrontArt: 'https://cdn.swu-db.com/images/cards/SOR/010.png',
+      BackArt: 'https://cdn.swu-db.com/images/cards/SOR/010-b.png',
+    })
+    expect(leader.frontArt).toBe('https://cdn.swu-db.com/images/cards/SOR/010.png')
+    expect(leader.backArt).toBe('https://cdn.swu-db.com/images/cards/SOR/010-b.png')
+    expect(normaliseCard({ Set: 'SOR', Number: '001', Name: 'X', Type: 'Unit' }).backArt).toBeUndefined()
   })
 
   it('normalises a space unit arena', () => {
@@ -128,6 +157,8 @@ describe('GameState schema', () => {
       consecutivePasses: 0,
       regroupResourced: { player: false, opponent: false },
       instanceCounter: 1,
+      rngSeed: 42,
+      setupStage: 'resource',
       winner: null,
     }
 

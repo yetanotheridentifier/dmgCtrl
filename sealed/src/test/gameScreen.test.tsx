@@ -10,7 +10,7 @@ import type { UseGameOptions } from '../hooks/useGame'
 const SWU_CARDS: SwuCard[] = [
   { Set: 'TST', Number: '001', Name: 'Test Leader', Type: 'Leader', Cost: '5', Power: '4', HP: '7' },
   { Set: 'TST', Number: '002', Name: 'Test Base', Type: 'Base', HP: '30' },
-  { Set: 'TST', Number: '900', Name: 'Big Test Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '0', Power: '30', HP: '30' },
+  { Set: 'TST', Number: '900', Name: 'Big Test Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '0', Power: '30', HP: '30', FrontArt: 'https://cdn.swu-db.com/images/cards/TST/900.png' },
   { Set: 'TST', Number: '901', Name: 'Pricey Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '9', Power: '1', HP: '1' },
 ]
 
@@ -40,6 +40,13 @@ async function seedCards() {
 async function renderBoard(onExit = vi.fn()) {
   render(<GameScreen deck={DECK} opponentDeck={DECK} onExit={onExit} gameOptions={OPTS} />)
   await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
+  // Setup phase (#304): keep the opening hand, then resource two Pricey Units
+  // one pick at a time. The AI's setup heuristic does the same, landing in
+  // round 1's action phase with hand 901,900,900,900.
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name: /keep hand/i }))
+  await user.click(screen.getAllByRole('button', { name: /^resource pricey unit$/i })[0])
+  await user.click(screen.getAllByRole('button', { name: /^resource pricey unit$/i })[0])
   return onExit
 }
 
@@ -54,6 +61,13 @@ describe('GameScreen', () => {
     render(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} gameOptions={OPTS} />)
     expect(screen.getByTestId('game-loading')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
+  })
+
+  it('offers the mulligan decision during setup', async () => {
+    render(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} gameOptions={OPTS} />)
+    await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /mulligan/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /keep hand/i })).toBeInTheDocument()
   })
 
   it('displays base HP for both sides', async () => {
@@ -73,9 +87,11 @@ describe('GameScreen', () => {
     const hand = screen.getByTestId('player-hand')
     const cards = within(hand).getAllByTestId(/hand-card-/)
     expect(cards).toHaveLength(4)
+    // Pricey Unit has no art → textual fallback shows its name.
     expect(cards[0]).toHaveTextContent('Pricey Unit')
     expect(cards[0]).toHaveAttribute('data-playable', 'false')
-    expect(cards[3]).toHaveTextContent('Big Test Unit')
+    // Big Test Unit has art → the card is the art image (name via alt).
+    expect(within(cards[3]).getByRole('img', { name: /big test unit/i })).toBeInTheDocument()
     expect(cards[3]).toHaveAttribute('data-playable', 'true')
   })
 
@@ -83,10 +99,10 @@ describe('GameScreen', () => {
     const user = userEvent.setup()
     await renderBoard()
 
-    await user.click(screen.getByRole('button', { name: /play big test unit/i }))
+    await user.click(screen.getAllByRole('button', { name: /play big test unit/i })[0])
 
     // Unit hits the board; passive AI passed; turn is back with the human.
-    expect(within(screen.getByTestId('player-ground-units')).getByText(/big test unit/i)).toBeInTheDocument()
+    expect(within(screen.getByTestId('player-ground-units')).getByRole('img', { name: /big test unit/i })).toBeInTheDocument()
     expect(within(screen.getByTestId('game-log')).getAllByText(/pass/i).length).toBeGreaterThan(0)
   })
 
@@ -94,7 +110,7 @@ describe('GameScreen', () => {
     const user = userEvent.setup()
     await renderBoard()
 
-    await user.click(screen.getByRole('button', { name: /play big test unit/i }))
+    await user.click(screen.getAllByRole('button', { name: /play big test unit/i })[0])
     await user.click(screen.getByRole('button', { name: /^pass$/i }))
     await user.click(screen.getByRole('button', { name: /skip resourcing/i }))
     await user.click(screen.getByRole('button', { name: /attack base with big test unit/i }))
@@ -107,6 +123,137 @@ describe('GameScreen', () => {
       expect(screen.queryByTestId('game-over-banner')).not.toBeInTheDocument()
       expect(screen.getByTestId('player-base-hp')).toHaveTextContent('30/30')
     })
+  })
+
+  it('clicking a playable hand card plays it (shortcut for the action button)', async () => {
+    const user = userEvent.setup()
+    await renderBoard()
+
+    // hand: 901,900,900,900 — index 3 is a playable Big Test Unit
+    await user.click(screen.getByTestId('hand-card-3'))
+
+    expect(within(screen.getByTestId('player-ground-units')).getByRole('img', { name: /big test unit/i })).toBeInTheDocument()
+  })
+
+  it('clicking a hand card in the regroup phase resources it (#6)', async () => {
+    const user = userEvent.setup()
+    await renderBoard()
+
+    // Reach the regroup phase: play a unit, then pass (AI passes → regroup).
+    await user.click(screen.getAllByRole('button', { name: /play big test unit/i })[0])
+    await user.click(screen.getByRole('button', { name: /^pass$/i }))
+
+    // Now the human's regroup resource choice — clicking any hand card resources it.
+    await user.click(screen.getByTestId('hand-card-0'))
+
+    // Started round 2 with a third resource (2 starting + 1 just resourced), all ready.
+    expect(screen.getByTestId('player-resources')).toHaveTextContent('3/3')
+  })
+
+  it('clicking an unplayable hand card does nothing', async () => {
+    const user = userEvent.setup()
+    await renderBoard()
+
+    await user.click(screen.getByTestId('hand-card-0')) // Pricey Unit, unaffordable
+
+    expect(screen.getByTestId('player-ground-units')).not.toHaveTextContent(/pricey unit/i)
+    expect(screen.getByTestId('game-board')).toBeInTheDocument()
+  })
+
+  it('renders card art in the hand via the worker art proxy (#312)', async () => {
+    await renderBoard()
+    const hand = screen.getByTestId('player-hand')
+    const art = within(hand).getAllByRole('img', { name: /big test unit/i })
+    expect(art.length).toBeGreaterThan(0)
+    expect(art[0]).toHaveAttribute('src', 'https://worker.dmgctrl.app/art/images/cards/TST/900.png')
+  })
+
+  it('renders card art for units on the board (#312)', async () => {
+    const user = userEvent.setup()
+    await renderBoard()
+    await user.click(screen.getAllByRole('button', { name: /play big test unit/i })[0])
+
+    const units = screen.getByTestId('player-ground-units')
+    expect(within(units).getByRole('img', { name: /big test unit/i }))
+      .toHaveAttribute('src', 'https://worker.dmgctrl.app/art/images/cards/TST/900.png')
+  })
+
+  it('shows exhausted units rotated and dimmed; ready units upright (#313)', async () => {
+    const user = userEvent.setup()
+    await renderBoard()
+    await user.click(screen.getAllByRole('button', { name: /play big test unit/i })[0])
+
+    // Just played → enters exhausted: the card lies landscape (rotated).
+    const units = screen.getByTestId('player-ground-units')
+    expect(within(units).getByTestId('card-face')).toHaveAttribute('data-orientation', 'landscape')
+
+    // Pass through regroup so the unit readies for round 2
+    await user.click(screen.getByRole('button', { name: /^pass$/i }))
+    await user.click(screen.getByRole('button', { name: /skip resourcing/i }))
+
+    expect(within(screen.getByTestId('player-ground-units')).getByTestId('card-face'))
+      .toHaveAttribute('data-orientation', 'portrait')
+  })
+
+  it('board affordance: click a ready unit, then a highlighted target, to attack (#314)', async () => {
+    const user = userEvent.setup()
+    await renderBoard()
+    await user.click(screen.getAllByRole('button', { name: /play big test unit/i })[0])
+    // pass through regroup so the unit readies
+    await user.click(screen.getByRole('button', { name: /^pass$/i }))
+    await user.click(screen.getByRole('button', { name: /skip resourcing/i }))
+
+    // The ready unit is actionable — click it to select
+    const unitTile = screen.getByTestId('board-unit-u1')
+    expect(unitTile).toHaveAttribute('data-actionable', 'true')
+    await user.click(unitTile)
+    expect(screen.getByTestId('board-unit-u1')).toHaveAttribute('data-selected', 'true')
+
+    // The enemy base is now a highlighted target — click it to attack
+    await user.click(screen.getByTestId('target-opponent-base'))
+    expect(screen.getByTestId('opponent-base-hp')).toHaveTextContent('0/30')
+  })
+
+  it('clicking a selected unit deselects it (#314)', async () => {
+    const user = userEvent.setup()
+    await renderBoard()
+    await user.click(screen.getAllByRole('button', { name: /play big test unit/i })[0])
+    await user.click(screen.getByRole('button', { name: /^pass$/i }))
+    await user.click(screen.getByRole('button', { name: /skip resourcing/i }))
+
+    await user.click(screen.getByTestId('board-unit-u1'))
+    await user.click(screen.getByTestId('board-unit-u1'))
+    expect(screen.getByTestId('board-unit-u1')).toHaveAttribute('data-selected', 'false')
+    expect(screen.queryByTestId('target-opponent-base')).not.toBeInTheDocument()
+  })
+
+  it('an exhausted unit is not actionable (#314)', async () => {
+    const user = userEvent.setup()
+    await renderBoard()
+    await user.click(screen.getAllByRole('button', { name: /play big test unit/i })[0])
+
+    // just played → exhausted → no action available
+    expect(screen.getByTestId('board-unit-u1')).toHaveAttribute('data-actionable', 'false')
+  })
+
+  it('shows bases and leaders in a central strip, bases innermost / leaders outermost (#4)', async () => {
+    await renderBoard()
+    const order = within(screen.getByTestId('battlefield'))
+      .getAllByTestId(/-(base|leader)-card$/)
+      .map(el => el.getAttribute('data-testid'))
+    expect(order).toEqual([
+      'opponent-leader-card',
+      'opponent-base-card',
+      'player-base-card',
+      'player-leader-card',
+    ])
+  })
+
+  it('renders the log in a right-hand side panel (#315)', async () => {
+    await renderBoard()
+    const panel = screen.getByTestId('game-log-panel')
+    expect(panel.tagName).toBe('ASIDE')
+    expect(within(panel).getByTestId('game-log')).toBeInTheDocument()
   })
 
   it('exit returns to deck selection', async () => {

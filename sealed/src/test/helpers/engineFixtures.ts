@@ -9,6 +9,7 @@ export function card(partial: Partial<EngineCard> & { id: string }): EngineCard 
     hp: 1,
     aspects: [],
     traits: [],
+    keywords: [],
     unique: false,
     ...partial,
   }
@@ -25,11 +26,11 @@ export const CARDS = {
   TST_E1: card({ id: 'TST_E1', type: 'event', cost: 1, aspects: ['Command'] }),
 }
 
-export function unit(instanceId: string, cardId: keyof typeof CARDS, overrides: Partial<UnitState> = {}): UnitState {
+export function unit(instanceId: string, cardId: string, overrides: Partial<UnitState> = {}): UnitState {
   return {
     instanceId,
     cardId,
-    arena: CARDS[cardId].arena ?? 'ground',
+    arena: (CARDS as Record<string, EngineCard>)[cardId]?.arena ?? 'ground',
     damage: 0,
     exhausted: false,
     isLeader: false,
@@ -63,6 +64,8 @@ export function state(overrides: Partial<GameState> = {}): GameState {
     consecutivePasses: 0,
     regroupResourced: { player: false, opponent: false },
     instanceCounter: 10,
+    rngSeed: 42,
+    setupStage: 'resource',
     winner: null,
     ...overrides,
   }

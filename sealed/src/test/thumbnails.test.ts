@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { db } from '../data/db'
-import { ensureThumb } from '../data/thumbnails'
+import { ensureThumb, artUrl } from '../data/thumbnails'
 
 const CARD = {
   Set: 'SOR',
@@ -43,14 +43,14 @@ describe('ensureThumb', () => {
     expect(new Uint8Array(record!.thumb!.buf)).toEqual(new Uint8Array([9, 8, 7]))
   })
 
-  it('requests the FrontArt URL from the cached card JSON', async () => {
+  it('requests the FrontArt URL through the worker art proxy (cdn has no CORS)', async () => {
     await db.cards.put({ id: 'SOR_010', json: CARD, fetchedAt: 1 })
     const fetchMock = mockImageFetch([1])
     vi.stubGlobal('fetch', fetchMock)
 
     await ensureThumb('SOR', '010')
 
-    expect(fetchMock.mock.calls[0][0]).toBe(CARD.FrontArt)
+    expect(fetchMock.mock.calls[0][0]).toBe('https://worker.dmgctrl.app/art/images/cards/SOR/010.png')
   })
 
   it('no-ops without fetching when a thumbnail is already stored', async () => {
@@ -99,5 +99,21 @@ describe('ensureThumb', () => {
 
     expect(ok).toBe(false)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('artUrl (#311 — CORS-safe art URLs)', () => {
+  it('rewrites cdn.swu-db.com URLs through the worker /art route', () => {
+    expect(artUrl('https://cdn.swu-db.com/images/cards/ASH/011.png'))
+      .toBe('https://worker.dmgctrl.app/art/images/cards/ASH/011.png')
+  })
+
+  it('leaves other hosts untouched (cdn.starwarsunlimited.com serves CORS)', () => {
+    const swu = 'https://cdn.starwarsunlimited.com/card_x.png'
+    expect(artUrl(swu)).toBe(swu)
+  })
+
+  it('passes undefined through', () => {
+    expect(artUrl(undefined)).toBeUndefined()
   })
 })

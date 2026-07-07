@@ -12,6 +12,7 @@ function card(partial: Partial<EngineCard> & { id: string }): EngineCard {
     hp: 1,
     aspects: [],
     traits: [],
+    keywords: [],
     unique: false,
     ...partial,
   }
@@ -52,6 +53,8 @@ function state(overrides: Partial<GameState> = {}): GameState {
     consecutivePasses: 0,
     regroupResourced: { player: false, opponent: false },
     instanceCounter: 10,
+    rngSeed: 42,
+    setupStage: 'resource',
     winner: null,
     ...overrides,
   }

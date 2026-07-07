@@ -18,3 +18,10 @@ export type Action =
   | { type: 'pass' }
   | { type: 'resourceCard'; handIndex: number }
   | { type: 'skipResource' }
+  // Setup phase (CR 5.2.1e–f): each player may mulligan once (initiative holder
+  // first), then each resources two cards, one pick at a time. (Physically
+  // simultaneous; modelled sequentially — resources are facedown so no
+  // information leaks either way.)
+  | { type: 'mulligan' }
+  | { type: 'keepHand' }
+  | { type: 'setupResource'; handIndex: number }

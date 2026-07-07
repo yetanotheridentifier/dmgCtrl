@@ -30,6 +30,32 @@ export default {
       })
     }
 
+    // Card art passthrough: cdn.swu-db.com serves images without CORS headers,
+    // so the sealed app fetches them via /art/<cdn-path>. Bytes stream through
+    // untouched; the fixed upstream host keeps this from being an open proxy.
+    if (url.pathname.startsWith('/art/')) {
+      const cdnPath = url.pathname.slice('/art/'.length)
+      try {
+        const upstream = await fetch(`https://cdn.swu-db.com/${cdnPath}`)
+        const headers = new Headers()
+        headers.set('Content-Type', upstream.headers.get('Content-Type') ?? 'application/octet-stream')
+        headers.set('Access-Control-Allow-Origin', '*')
+        headers.set('Access-Control-Allow-Methods', 'GET')
+        // Art is immutable per URL — let browsers and the edge cache it hard.
+        headers.set('Cache-Control', 'public, max-age=86400, immutable')
+        return new Response(upstream.body, { status: upstream.status, headers })
+      } catch (err) {
+        return new Response(JSON.stringify({ error: `Art fetch failed: ${err.message}` }), {
+          status: 502,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET',
+          },
+        })
+      }
+    }
+
     // Passthrough to api.swu-db.com. Upstream errors are passed through with
     // their status and a JSON body, ALWAYS with CORS headers — an uncaught
     // throw here would become a Cloudflare 1101 page without CORS, which
