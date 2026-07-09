@@ -44,6 +44,10 @@ server on 5173 is down.)
 Plain `npm --prefix sealed run dev` alone still works too, at
 `http://localhost:5174/sealed/` (no https, no PWA).
 
+**Tab favicon**: dev shows the **white** dmgCtrl icon, prod the **blue** one, so
+the dev tab is easy to tell apart (`src/favicon.ts`, driven by `import.meta.env.DEV`;
+static blue fallback in `index.html`). Both icons live in `sealed/public/` (#329).
+
 ## Build & deploy (prod: https://dmgctrl.app/sealed)
 
 Production is GitHub Pages, deployed by `.github/workflows/deploy.yml` on every

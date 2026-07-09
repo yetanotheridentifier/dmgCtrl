@@ -308,12 +308,12 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
     )
   }
 
-  // What clicking each hand card does, keyed by hand index: play it in the
-  // action phase, resource it in the regroup phase (#6). Derived from the legal
-  // moves so the hand affordance always matches what the engine allows.
+  // What clicking each hand card does, keyed by hand index: play it in the action
+  // phase, resource it in the setup or regroup phase (#6, #328). Derived from the
+  // legal moves so the hand affordance always matches what the engine allows.
   const handAction = new Map<number, Action>()
   for (const a of legal) {
-    if (a.type === 'playCard' || a.type === 'resourceCard') handAction.set(a.handIndex, a)
+    if (a.type === 'playCard' || a.type === 'resourceCard' || a.type === 'setupResource') handAction.set(a.handIndex, a)
   }
   const hand = gameState.players.player.hand
 
@@ -368,31 +368,33 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
         {/* Your hand */}
         <section className="border-2 border-line/60 rounded-xl bg-surface p-4">
           <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">Your hand</h3>
-          <ul data-testid="player-hand" className="mt-2 flex flex-wrap gap-2">
+          <ul data-testid="player-hand" className="mt-2 flex flex-wrap gap-1">
             {hand.length === 0 && <li className="text-ink-faint text-xs italic">empty</li>}
             {hand.map((cardId, i) => {
               const card = gameState.cards[cardId]
               const action = handAction.get(i)
+              // Resourcing (setup/regroup) highlights green; playing a card is blue (#328).
+              const isResource = action?.type === 'resourceCard' || action?.type === 'setupResource'
               return (
                 <li key={`${cardId}-${i}`}>
                   {action ? (
                     // Clickable shortcut for the matching action-menu button:
-                    // "Play …" in the action phase, "Resource …" in regroup.
+                    // "Play …" (action phase) or "Resource …" (setup/regroup).
                     <button
                       data-testid={`hand-card-${i}`}
                       data-playable={true}
                       onClick={() => actAndClear(action)}
                       className="block w-fit shrink-0 cursor-pointer"
                     >
-                      <CardFace card={card} fallbackName={cardId} highlight="accent" />
+                      <CardFace card={card} fallbackName={cardId} tight highlight={isResource ? 'green' : 'accent'} />
                     </button>
                   ) : (
                     <span
                       data-testid={`hand-card-${i}`}
                       data-playable={false}
-                      className="block w-fit shrink-0 rounded-lg opacity-60"
+                      className="block w-fit shrink-0 opacity-60"
                     >
-                      <CardFace card={card} fallbackName={cardId} />
+                      <CardFace card={card} fallbackName={cardId} tight />
                     </span>
                   )}
                 </li>

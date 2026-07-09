@@ -137,6 +137,31 @@ describe('GameScreen', () => {
     expect(within(screen.getByTestId('player-ground-units')).getByRole('img', { name: /big test unit/i })).toBeInTheDocument()
   })
 
+  it('resources a card by clicking it in the setup phase, highlighted green (#328)', async () => {
+    const user = userEvent.setup()
+    render(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} gameOptions={OPTS} />)
+    await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /keep hand/i }))
+
+    // In the setup resource step, hand cards are clickable and highlighted GREEN.
+    expect(within(screen.getByTestId('hand-card-0')).getByTestId('card-face')).toHaveAttribute('data-highlight', 'green')
+    await user.click(screen.getByTestId('hand-card-0'))
+    expect(screen.getByTestId('player-resources')).toHaveTextContent('1/1')
+  })
+
+  it('highlights playable hand cards blue (accent) in the action phase (#328)', async () => {
+    await renderBoard()
+    // hand: 901,900,900,900 — index 3 is a playable Big Test Unit
+    expect(within(screen.getByTestId('hand-card-3')).getByTestId('card-face')).toHaveAttribute('data-highlight', 'accent')
+  })
+
+  it('renders hand cards in a tight portrait frame — no square-slot padding (#328)', async () => {
+    await renderBoard()
+    const face = within(screen.getByTestId('hand-card-3')).getByTestId('card-face')
+    // Portrait card, tight: the frame is the card itself (120×168), not the 168 square slot.
+    expect(face).toHaveStyle({ width: '120px', height: '168px' })
+  })
+
   it('clicking a hand card in the regroup phase resources it (#6)', async () => {
     const user = userEvent.setup()
     await renderBoard()
