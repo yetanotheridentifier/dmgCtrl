@@ -11,7 +11,7 @@ export interface GameRecord {
   id: string
   playerDeckName: string
   opponentDeckName: string
-  winner: PlayerId
+  winner: PlayerId | 'draw'
   startedAt: number
   endedAt: number
   initialState: GameState

@@ -223,6 +223,19 @@ describe('resolve — attack', () => {
     expect(next.players.opponent.base.damage).toBe(31)
     expect(next.winner).toBe('player')
   })
+
+  it('is a draw when both bases are defeated by the same action (#323)', () => {
+    // The attacker's own base is already at lethal damage; the attack pushes the
+    // defender's base to lethal too, so both are defeated at once → draw.
+    const s = state({
+      players: {
+        player: player({ units: [unit('a1', 'TST_U3')], base: { cardId: 'TST_B', damage: 30 } }), // 5 power; own base already lethal
+        opponent: player({ base: { cardId: 'TST_B', damage: 29 } }), // +5 → 34 ≥ 30
+      },
+    })
+    const next = resolve(s, { type: 'attack', attackerId: 'a1', target: { kind: 'base' } })
+    expect(next.winner).toBe('draw')
+  })
 })
 
 describe('resolve — regroup choices', () => {

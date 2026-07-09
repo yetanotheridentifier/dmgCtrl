@@ -6,7 +6,9 @@ import type { GameState, PlayerId, UnitState } from '../engine/types'
 import type { Action } from '../engine/actions'
 import { describeAction } from '../utils/describeAction'
 import { orderUnits } from './boardLayout'
+import { outcomeBanner } from './outcome'
 import CardFace from './cardFace'
+import { CARD_WIDTH_PX } from './cardSizing'
 
 interface Props {
   deck: SavedDeck
@@ -89,15 +91,32 @@ function BaseCard({ state, side, onAttack }: {
 }) {
   const p = state.players[side]
   const baseCard = state.cards[p.base.cardId]
+  // Base HP comes from the card metadata (bases vary; never assume 30).
   const baseHp = baseCard?.hp ?? 0
+  // Damage taken, counting up to the base's HP — the SWU-standard display (#323).
+  // A future ticket makes counting down (remaining) a user preference (#324).
+  const damage = Math.min(p.base.damage, baseHp)
   const inner = (
     <div className="relative">
       <CardFace card={baseCard} fallbackName={p.base.cardId} />
+      {/* Damage overlaid on the card, PWA game-screen style: light weight,
+          accent glow + dark outline, ~50% of the card's height. Nudged up a
+          little since the base art sits low, so the number reads centred on it. */}
       <span
         data-testid={`${side}-base-hp`}
-        className="absolute bottom-0 right-0 m-1 rounded bg-black/70 px-1 font-mono text-xs text-ink"
+        aria-label={`${side === 'player' ? 'Your' : 'Opponent'} base damage: ${damage} of ${baseHp}`}
+        className="pointer-events-none absolute inset-0 flex items-center justify-center tabular-nums select-none"
+        style={{
+          fontSize: `${Math.round(CARD_WIDTH_PX * 0.5)}px`,
+          fontWeight: 300,
+          lineHeight: 1,
+          letterSpacing: '0.05em',
+          color: 'var(--color-ink)',
+          textShadow: '0 0 20px rgba(79, 195, 247, 0.4), 0 0 8px rgba(0, 0, 0, 1)',
+          transform: 'translateY(-2%)',
+        }}
       >
-        {baseHp - p.base.damage}/{baseHp}
+        {damage}
       </span>
     </div>
   )
@@ -349,8 +368,8 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
         {/* Game over or action menu */}
         {gameState.winner !== null ? (
           <section data-testid="game-over-banner" className="border-2 border-amber rounded-xl bg-surface p-6 text-center shadow-[0_0_12px_rgba(245,166,35,0.3)]">
-            <p className={`text-xl font-semibold ${gameState.winner === 'player' ? 'text-green' : 'text-red'}`}>
-              {gameState.winner === 'player' ? 'You won' : 'You lost'}
+            <p className={`text-xl font-semibold ${outcomeBanner(gameState.winner).tone}`}>
+              {outcomeBanner(gameState.winner).title}
             </p>
             <div className="mt-4 flex justify-center gap-3">
               <button data-testid="rematch-btn" onClick={rematch} className="px-5 py-2 text-sm border-2 border-green text-green rounded-xl shadow-[0_0_12px_rgba(34,197,94,0.3)] hover:bg-green/10">

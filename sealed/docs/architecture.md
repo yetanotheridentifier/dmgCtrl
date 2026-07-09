@@ -61,7 +61,8 @@ Design properties that matter for later epics:
 
 Rules verified against the full Comprehensive Rules v7.0: setup (§5.2 incl.
 mulligan), action phase/initiative (§1.15, §5.4), regroup (§5.5), attack timing
-(§6.3), empty deck (§8.6), Sealed deckbuilding (§10.2).
+(§6.3), empty deck (§8.6), Sealed deckbuilding (§10.2). `checkWin` evaluates both
+bases so a single action that defeats both is a **draw** (`winner: 'draw'`, §5.6.3).
 
 **Card behaviour** (epic #302): the ability framework (#303,
 `engine/abilities.ts` + `docs/ability-framework.md`) registers per-card effects
@@ -72,7 +73,7 @@ and Restore hook combat in the resolver. Combat and defeat checks go through
 `engine/stats.ts` (`effectivePower`/`effectiveHp`) so upgrades (#308) and
 lasting effects (#306) slot into one pipeline. **Still pending**: unit/leader
 abilities, events, upgrades (#306–#309), Ambush (#306), Shielded (#308),
-simultaneous-loss draw, concession.
+concession.
 
 ## Game flow at runtime
 
@@ -105,6 +106,10 @@ The board is drawn with art-dominant cards, not text rows:
   arbitrary value). The opponent half is bottom-anchored and your half top-anchored, so
   the two bases meet at the **battlefront** in the centre and units line up along it,
   stacking away as more are played. `boardLayout.orderUnits` keeps Sentinels at the front.
+  Each base shows the **damage it has taken** — counting up to the card's HP (dynamic,
+  never a hardcoded 30) — as a large number overlaid on the card (PWA game-screen style:
+  light weight, accent glow, ~50% of card height). Counting remaining down instead is a
+  future display preference (#324); it never touches game state or logs.
 
 ## Storage tiers
 
