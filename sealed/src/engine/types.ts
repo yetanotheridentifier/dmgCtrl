@@ -110,7 +110,8 @@ export interface GameState {
   rngSeed: number
   /** Sub-stage of the setup phase: mulligan decisions, then resource picks (CR 5.2.1e–f). */
   setupStage: 'mulligan' | 'resource'
-  winner: PlayerId | null
+  /** Terminal outcome: a winning player, `'draw'` (both bases fall at once), or null while live. */
+  winner: PlayerId | 'draw' | null
 }
 
 export function opponentOf(player: PlayerId): PlayerId {

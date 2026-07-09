@@ -43,7 +43,7 @@ Players alternate single actions. When both players pass consecutively, the roun
 
 ### Winning
 
-Reduce the opponent's base to 0 HP before they do the same to you. If your deck runs out, drawing deals 3 damage to your own base per missed card — don't dawdle.
+Deal damage to the opponent's base until it reaches its health before they do the same to you. Each base shows the **damage it has taken as a large number over the card**, counting up to its printed health (which varies from base to base). If a single action defeats **both** bases at once, the game is a **draw**. If your deck runs out, drawing deals 3 damage to your own base per missed card — don't dawdle.
 
 ### Current limitations
 

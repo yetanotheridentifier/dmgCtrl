@@ -10,7 +10,9 @@ import type { UseGameOptions } from '../hooks/useGame'
 const SWU_CARDS: SwuCard[] = [
   { Set: 'TST', Number: '001', Name: 'Test Leader', Type: 'Leader', Cost: '5', Power: '4', HP: '7' },
   { Set: 'TST', Number: '002', Name: 'Test Base', Type: 'Base', HP: '30' },
-  { Set: 'TST', Number: '900', Name: 'Big Test Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '0', Power: '30', HP: '30', FrontArt: 'https://cdn.swu-db.com/images/cards/TST/900.png' },
+  // 40 power vs a 30-HP base → a base attack overkills it, so remaining health
+  // would go negative without clamping (#323).
+  { Set: 'TST', Number: '900', Name: 'Big Test Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '0', Power: '40', HP: '30', FrontArt: 'https://cdn.swu-db.com/images/cards/TST/900.png' },
   { Set: 'TST', Number: '901', Name: 'Pricey Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '9', Power: '1', HP: '1' },
 ]
 
@@ -70,10 +72,10 @@ describe('GameScreen', () => {
     expect(screen.getByRole('button', { name: /keep hand/i })).toBeInTheDocument()
   })
 
-  it('displays base HP for both sides', async () => {
+  it('displays base damage counters, starting at 0', async () => {
     await renderBoard()
-    expect(screen.getByTestId('player-base-hp')).toHaveTextContent('30/30')
-    expect(screen.getByTestId('opponent-base-hp')).toHaveTextContent('30/30')
+    expect(screen.getByTestId('player-base-hp')).toHaveTextContent(/^0$/)
+    expect(screen.getByTestId('opponent-base-hp')).toHaveTextContent(/^0$/)
   })
 
   it('displays resources and the opponent hand as a count', async () => {
@@ -121,7 +123,7 @@ describe('GameScreen', () => {
     await user.click(screen.getByTestId('rematch-btn'))
     await waitFor(() => {
       expect(screen.queryByTestId('game-over-banner')).not.toBeInTheDocument()
-      expect(screen.getByTestId('player-base-hp')).toHaveTextContent('30/30')
+      expect(screen.getByTestId('player-base-hp')).toHaveTextContent(/^0$/) // fresh game: no damage
     })
   })
 
@@ -211,7 +213,7 @@ describe('GameScreen', () => {
 
     // The enemy base is now a highlighted target — click it to attack
     await user.click(screen.getByTestId('target-opponent-base'))
-    expect(screen.getByTestId('opponent-base-hp')).toHaveTextContent('0/30')
+    expect(screen.getByTestId('opponent-base-hp')).toHaveTextContent(/^30$/) // 40 dmg capped at the 30-HP base, not shown as 40
   })
 
   it('clicking a selected unit deselects it (#314)', async () => {

@@ -62,8 +62,8 @@ offload (T5.4) is only needed from MCTS onwards.
   Mulligan (§5.2.1e) implemented (#304): setup phase, initiative holder decides first,
   seeded in-state RNG keeps replays deterministic. Resourcing is player-chosen — each
   player picks which cards to bank one at a time, in setup (2) and each regroup (1);
-  the AI resources to preserve its early curve (`ai/setupAi.ts`). Still not modelled:
-  simultaneous-loss draw (§5.6.3), concession.
+  the AI resources to preserve its early curve (`ai/setupAi.ts`). A single action that
+  defeats both bases at once is a **draw** (§5.6.3, #323). Still not modelled: concession.
 - **MVP engine plays vanilla card *text***: ability text, events and upgrades are not
   executed yet (events/upgrades can still be resourced). **Keywords are executed** —
   Sentinel/Saboteur (attack targeting), Raid/Grit (power), Overwhelm/Restore (combat).

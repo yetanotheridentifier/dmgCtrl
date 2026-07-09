@@ -334,15 +334,21 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
   return checkWin(next)
 }
 
-/** Base with damage ≥ HP defeats its owner (CR 1.9.7, 3.2.5). */
+/**
+ * A base with damage ≥ HP defeats its owner (CR 1.9.7, 3.2.5). Both bases are
+ * evaluated so that if a single action defeats both at once the game is a draw
+ * rather than awarding the win to whichever was checked first (#323).
+ */
 function checkWin(state: GameState): GameState {
-  for (const id of ['player', 'opponent'] as const) {
+  const defeated = (id: PlayerId): boolean => {
     const base = state.players[id].base
-    const hp = state.cards[base.cardId]?.hp ?? 0
-    if (base.damage >= hp) {
-      return { ...state, winner: opponentOf(id) }
-    }
+    return base.damage >= (state.cards[base.cardId]?.hp ?? 0)
   }
+  const playerLost = defeated('player')
+  const opponentLost = defeated('opponent')
+  if (playerLost && opponentLost) return { ...state, winner: 'draw' }
+  if (playerLost) return { ...state, winner: 'opponent' }
+  if (opponentLost) return { ...state, winner: 'player' }
   return state
 }
 
