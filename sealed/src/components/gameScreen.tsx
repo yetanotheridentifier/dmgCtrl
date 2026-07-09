@@ -9,6 +9,7 @@ import { orderUnits } from './boardLayout'
 import { outcomeBanner } from './outcome'
 import CardFace from './cardFace'
 import { CARD_WIDTH_PX } from './cardSizing'
+import { tokenLayout, TOKEN_W, TOKEN_H } from './tokens'
 
 interface Props {
   deck: SavedDeck
@@ -27,35 +28,70 @@ export interface UnitInteraction {
   onClick?: () => void
 }
 
-function UnitLine({ state, unit, interact }: { state: GameState; unit: UnitState; interact: UnitInteraction }) {
+export function UnitLine({ state, unit, interact }: { state: GameState; unit: UnitState; interact: UnitInteraction }) {
   const card = state.cards[unit.cardId]
-  const hp = card?.hp ?? 0
   const clickable = (interact.actionable || interact.isTarget) && interact.onClick
-  const ring = interact.selected
-    ? 'ring-2 ring-accent'
+  const highlight: 'accent' | 'red' | 'accent-dim' | undefined = interact.selected
+    ? 'accent'
     : interact.isTarget
-      ? 'ring-2 ring-red'
+      ? 'red'
       : interact.actionable
-        ? 'ring-1 ring-accent/50'
-        : ''
+        ? 'accent-dim'
+        : undefined
   return (
-    <li
+    <div
       data-testid={`board-unit-${unit.instanceId}`}
       data-actionable={interact.actionable}
       data-selected={interact.selected}
       data-target={interact.isTarget}
       onClick={clickable ? interact.onClick : undefined}
-      className={`w-fit shrink-0 rounded-lg ${ring} ${clickable ? 'cursor-pointer' : ''}`}
+      className={`relative w-fit shrink-0 ${clickable ? 'cursor-pointer' : ''}`}
     >
-      <CardFace card={card} fallbackName={unit.cardId} deployed={unit.isLeader} exhausted={unit.exhausted} />
-      <div className="mt-0.5 flex items-center justify-between px-0.5 font-mono text-[10px] text-ink-dim">
-        <span>
-          {unit.isLeader && <span className="text-accent">♦ </span>}
-          {card?.power ?? 0}/{hp - unit.damage}
+      <CardFace card={card} fallbackName={unit.cardId} deployed={unit.isLeader} exhausted={unit.exhausted} highlight={highlight} />
+      <CardTokens unit={unit} />
+    </div>
+  )
+}
+
+/**
+ * Effect tokens (physical-token style) laid over a unit card on this
+ * non-rotating wrapper, so they stay upright when the card is exhausted. Damage
+ * is the first token; more effect types slot into the same 1–4 layout (#326).
+ */
+function CardTokens({ unit }: { unit: UnitState }) {
+  const tokens: { key: string; label: string; color: string; testid: string }[] = []
+  if (unit.damage > 0) {
+    tokens.push({ key: 'damage', label: String(unit.damage), color: 'var(--color-red)', testid: `board-unit-damage-${unit.instanceId}` })
+  }
+  if (tokens.length === 0) return null
+
+  const positions = tokenLayout(tokens.length, unit.exhausted ? 'landscape' : 'portrait')
+  return (
+    <div className="pointer-events-none absolute inset-0">
+      {tokens.map((t, i) => (
+        <span
+          key={t.key}
+          data-testid={t.testid}
+          className="absolute flex items-center justify-center select-none tabular-nums"
+          style={{
+            left: `${positions[i].left}%`,
+            top: `${positions[i].top}%`,
+            transform: 'translate(-50%, -50%)',
+            width: TOKEN_W,
+            height: TOKEN_H,
+            borderRadius: 6,
+            background: t.color,
+            color: '#fff',
+            fontSize: `${Math.round(TOKEN_H * 0.6)}px`,
+            fontWeight: 600,
+            lineHeight: 1,
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.7)',
+          }}
+        >
+          {t.label}
         </span>
-        {unit.damage > 0 && <span className="text-red">{unit.damage}dmg</span>}
-      </div>
-    </li>
+      ))}
+    </div>
   )
 }
 
@@ -98,7 +134,7 @@ function BaseCard({ state, side, onAttack }: {
   const damage = Math.min(p.base.damage, baseHp)
   const inner = (
     <div className="relative">
-      <CardFace card={baseCard} fallbackName={p.base.cardId} />
+      <CardFace card={baseCard} fallbackName={p.base.cardId} highlight={onAttack ? 'red' : undefined} />
       {/* Damage overlaid on the card, PWA game-screen style: light weight,
           accent glow + dark outline, ~50% of the card's height. Nudged up a
           little since the base art sits low, so the number reads centred on it. */}
@@ -126,7 +162,7 @@ function BaseCard({ state, side, onAttack }: {
         <button
           data-testid={`target-${side}-base`}
           onClick={onAttack}
-          className="block rounded-lg ring-2 ring-red cursor-pointer hover:bg-red/10"
+          className="block cursor-pointer"
         >
           {inner}
         </button>
@@ -346,9 +382,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
                       data-testid={`hand-card-${i}`}
                       data-playable={true}
                       onClick={() => actAndClear(action)}
-                      className="block w-fit shrink-0 rounded-lg ring-2 ring-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:ring-accent/70 cursor-pointer"
+                      className="block w-fit shrink-0 cursor-pointer"
                     >
-                      <CardFace card={card} fallbackName={cardId} />
+                      <CardFace card={card} fallbackName={cardId} highlight="accent" />
                     </button>
                   ) : (
                     <span

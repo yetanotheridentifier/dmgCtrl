@@ -101,6 +101,13 @@ The board is drawn with art-dominant cards, not text rows:
   leaders are landscape; a deployed leader shows its unit (back) side, portrait. Missing
   or failed art falls back to a text summary (cost/name/power-HP/keywords/abilities).
   Sizing constants live in `cardSizing.ts`; the roll-over zoom (#321) drives its `widthPx`.
+  Selection/target/actionable highlights are a 2px outline hugging the card edge (1px in /
+  1px out, `outline-offset: -1px`) via the `highlight` prop. Unit effects are drawn as
+  physical-style **tokens** (`tokens.ts` — `tokenLayout` places 1–4 over the middle of the
+  art: a 2×2 build-up when ready, a centred row when exhausted, keeping the cost/name,
+  ability text and power/HP visible) on the non-rotating wrapper, so they stay upright when
+  the card is exhausted. Damage is the first token — a deep-red rounded rectangle with a
+  white number (two digits fit); more effect types slot into the same layout (#326).
 - **Battlefield layout** (`Board`): a three-column grid — Ground | Leaders+Bases | Space —
   set with an inline `grid-template-columns` (Tailwind can't compile a `minmax(0,1fr)`
   arbitrary value). The opponent half is bottom-anchored and your half top-anchored, so
