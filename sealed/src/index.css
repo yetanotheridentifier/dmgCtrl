@@ -12,7 +12,7 @@
   --color-ink-faint: #6b7280;     /* --color-text-disabled */
   --color-accent: #4fc3f7;        /* --color-accent     */
   --color-amber: #f5a623;         /* --color-warning    */
-  --color-red: #ff6b6b;           /* --color-error      */
+  --color-red: #d42121;           /* --color-error / damage — deep, not rose */
   --color-green: #22c55e;         /* --color-success    */
 
   --font-sans: 'Segoe UI', Helvetica, Arial, sans-serif;

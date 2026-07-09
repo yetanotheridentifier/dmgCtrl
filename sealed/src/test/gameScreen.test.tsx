@@ -205,14 +205,18 @@ describe('GameScreen', () => {
     await user.click(screen.getByRole('button', { name: /^pass$/i }))
     await user.click(screen.getByRole('button', { name: /skip resourcing/i }))
 
-    // The ready unit is actionable — click it to select
+    // The ready unit is actionable — and its card (not the slot) carries the highlight (#326)
     const unitTile = screen.getByTestId('board-unit-u1')
+    expect(unitTile.tagName).toBe('DIV') // no <li> marker dots (#326)
     expect(unitTile).toHaveAttribute('data-actionable', 'true')
     await user.click(unitTile)
     expect(screen.getByTestId('board-unit-u1')).toHaveAttribute('data-selected', 'true')
+    expect(within(screen.getByTestId('board-unit-u1')).getByTestId('card-face')).toHaveAttribute('data-highlight', 'accent')
 
-    // The enemy base is now a highlighted target — click it to attack
-    await user.click(screen.getByTestId('target-opponent-base'))
+    // The enemy base is now a highlighted target — its card shows the red highlight
+    const baseTarget = screen.getByTestId('target-opponent-base')
+    expect(within(baseTarget).getByTestId('card-face')).toHaveAttribute('data-highlight', 'red')
+    await user.click(baseTarget)
     expect(screen.getByTestId('opponent-base-hp')).toHaveTextContent(/^30$/) // 40 dmg capped at the 30-HP base, not shown as 40
   })
 
