@@ -11,8 +11,10 @@ interface Props {
   deployed?: boolean
   /** Exhausted cards lie sideways (rotated 90° from their ready orientation) and dim. */
   exhausted?: boolean
-  /** A highlight that hugs the card edge (1px in / 1px out): selection, target, or actionable. */
-  highlight?: 'accent' | 'red' | 'accent-dim'
+  /** A highlight that hugs the card edge (1px in / 1px out): selection, target, playable, or resourcing (green). */
+  highlight?: 'accent' | 'red' | 'accent-dim' | 'green'
+  /** Frame the card tightly (its own art box, no square slot). For cards that never rotate, e.g. the hand. */
+  tight?: boolean
   /** Short-edge size in px. Defaults to 50% of full size; the zoom feature overrides it. */
   widthPx?: number
   /** Extra classes for positioning by the caller. */
@@ -49,6 +51,7 @@ export default function CardFace({
   deployed = false,
   exhausted = false,
   highlight,
+  tight = false,
   widthPx = CARD_WIDTH_PX,
   className,
 }: Props) {
@@ -76,9 +79,15 @@ export default function CardFace({
   // Highlight hugs the card: a 2px line straddling its edge (1px in, 1px out).
   const outline =
     highlight === 'accent' ? '2px solid var(--color-accent)'
+    : highlight === 'green' ? '2px solid var(--color-green)'
     : highlight === 'red' ? '2px solid var(--color-red)'
     : highlight === 'accent-dim' ? '2px solid rgba(79, 195, 247, 0.55)'
     : undefined
+
+  // Cards that never rotate (the hand) frame tightly to their art; others reserve
+  // the square slot so they can rotate when exhausted without overlapping.
+  const frameW = tight ? artW : slot
+  const frameH = tight ? artH : slot
 
   return (
     <div
@@ -86,7 +95,7 @@ export default function CardFace({
       data-art={showArt}
       data-orientation={orientation}
       data-highlight={highlight ?? undefined}
-      style={{ width: slot, height: slot }}
+      style={{ width: frameW, height: frameH }}
       className={['inline-flex items-center justify-center', className].filter(Boolean).join(' ')}
     >
       {/* Native-orientation art box, centred in the square slot. Exhausting
