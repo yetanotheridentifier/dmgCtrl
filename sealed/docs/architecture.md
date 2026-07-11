@@ -114,9 +114,30 @@ The board is drawn with art-dominant cards, not text rows:
   follow-up #331). Long-press suppresses the click so it doesn't also play/attack; holding **Alt**
   flips a dual-sided leader's face. Shift/Alt come from a shared `useModifierKeys` store (one set
   of listeners, not one per card). The zoom scale is `ZOOM_WIDTH_PX` (cardSizing.ts) — one place.
-- **Battlefield layout** (`Board`): a three-column grid — Ground | Leaders+Bases | Space —
+- **Screen layout** (#332): the game screen is full-bleed — a two-column grid
+  (`16rem 1fr`), no divider between them. Backgrounds follow one rule: the **play area,
+  the bars and the two headers use the core theme background** (transparent → the body
+  starfield), while the **log and the individual pile columns use `bg-surface`**. So the
+  **left column** header (the transparent **dmgCtrl icon = exit** with the **dmgCtrl**
+  wordmark, and the **? = help** aligned to the log's right edge) sits on the starfield
+  like the page header, above the **log** — a `bg-surface` panel filling the height. The
+  **right column** is the **play area**, edge-to-edge to the top and right and transparent,
+  so the opponent leader reads as joined with it. The frame (icon/help/log) renders even
+  while cards load or a load fails, so leaving/Help are always available.
+- **Bars** — a **bar** is a player's off-battlefield row of piles. Convention:
+  - **Player bar** (`PlayerBar`): Deck | Resources | Hand | Action | Discard. The **hand
+    flexes** to fill the width (the most important area); the **action** column is a fixed
+    width so its buttons don't shift the layout between phases. Small columns are `auto`.
+  - **Opponent bar** (`OpponentBar`): a `1fr auto 1fr` grid — discard + hand on the left,
+    **their leader centred** (so it lines up with the bases and the player leader below),
+    resources + deck on the right. The opponent leader lives here, not on the battlefield.
+  - Each pile sits in a `BarColumn`: a `bg-surface` column (the same background as the log)
+    with an accent all-caps label rotated 90° anticlockwise on its left. The opponent leader
+    has no column — it sits directly on the transparent play area, joined with the board.
+- **Battlefield layout** (`Board`): a three-column grid — **Space | Leaders+Bases | Ground** —
   set with an inline `grid-template-columns` (Tailwind can't compile a `minmax(0,1fr)`
-  arbitrary value). The opponent half is bottom-anchored and your half top-anchored, so
+  arbitrary value). It's transparent and grows to fill the play area's height, centring the
+  board vertically. The opponent half is bottom-anchored and your half top-anchored, so
   the two bases meet at the **battlefront** in the centre and units line up along it,
   stacking away as more are played. `boardLayout.orderUnits` keeps Sentinels at the front.
   Each base shows the **damage it has taken** — counting up to the card's HP (dynamic,

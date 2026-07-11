@@ -1,4 +1,6 @@
 import userGuideHtml from '../../docs/userGuide.md'
+import { BUILD_TAG } from '../buildTag'
+import { isDev } from '../env'
 
 interface Props {
   onBack: () => void
@@ -26,6 +28,12 @@ export default function HelpScreen({ onBack }: Props) {
         className="help-content mt-4 text-ink-body text-sm leading-relaxed space-y-3"
         dangerouslySetInnerHTML={{ __html: contentHtml }}
       />
+      {/* Build marker lives here in prod; in dev it's a corner badge (#332). */}
+      {!isDev() && (
+        <p data-testid="build-tag" className="mt-8 text-[10px] text-ink-faint">
+          {BUILD_TAG}
+        </p>
+      )}
     </div>
   )
 }

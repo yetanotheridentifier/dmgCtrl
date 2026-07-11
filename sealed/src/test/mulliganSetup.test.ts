@@ -173,9 +173,9 @@ describe('describeAction — setup labels', () => {
   it('redacts resource card names for the opponent (private information)', () => {
     const s = freshGame()
     expect(describeAction(s, 'opponent', { type: 'setupResource', handIndex: 2 }, { redact: true }))
-      .toBe('Resource a card (facedown)')
+      .toBe('Resource a card')
     expect(describeAction(s, 'opponent', { type: 'resourceCard', handIndex: 0 }, { redact: true }))
-      .toBe('Resource a card (facedown)')
+      .toBe('Resource a card')
     // non-private actions are never redacted
     expect(describeAction(s, 'opponent', { type: 'pass' }, { redact: true })).toBe('Pass')
   })

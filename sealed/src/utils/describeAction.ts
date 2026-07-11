@@ -39,18 +39,18 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
     case 'pass':
       return 'Pass'
     case 'resourceCard': {
-      if (opts.redact) return 'Resource a card (facedown)'
+      if (opts.redact) return 'Resource a card'
       const cardId = state.players[by].hand[action.handIndex]
       return `Resource ${cardId ? state.cards[cardId]?.name ?? cardId : 'a card'}`
     }
     case 'skipResource':
       return 'Skip resourcing'
     case 'mulligan':
-      return 'Mulligan (redraw 6)'
+      return 'Mulligan'
     case 'keepHand':
       return 'Keep hand'
     case 'setupResource': {
-      if (opts.redact) return 'Resource a card (facedown)'
+      if (opts.redact) return 'Resource a card'
       const cardId = state.players[by].hand[action.handIndex]
       return `Resource ${cardId ? state.cards[cardId]?.name ?? cardId : 'a card'}`
     }

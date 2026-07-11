@@ -1,24 +1,51 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
+import { saveDeck } from '../data/deckStore'
+import { db } from '../data/db'
 
 describe('App shell', () => {
+  beforeEach(async () => {
+    localStorage.clear()
+    await db.cards.clear()
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
   it('renders the app title', () => {
     render(<App />)
-    expect(screen.getByRole('heading', { name: /dmgctrl · sealed/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /dmgctrl/i })).toBeInTheDocument()
   })
 
-  it('shows the build tag so stale deployments are identifiable', () => {
+  it('shows the build tag (dev: fixed bottom-right badge), not in the header (#332)', () => {
     render(<App />)
-    expect(screen.getByTestId('build-tag')).toHaveTextContent(/b\d+/)
+    const tag = screen.getByTestId('build-tag')
+    expect(tag).toHaveTextContent(/b\d+/)
+    expect(tag).toHaveStyle({ position: 'fixed', right: '8px', bottom: '8px' })
+    // In dev the tag is a corner badge, no longer inside the header.
+    expect(within(screen.getByRole('banner')).queryByTestId('build-tag')).toBeNull()
   })
 
-  it('shows the dmgCtrl icon left of the title', () => {
+  it('exits the game via the dmgCtrl icon, returning to decks (#332)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network')))
+    const user = userEvent.setup()
+    saveDeck({ name: 'Ready Deck', leader: 'SOR_010', base: 'SOR_029', cards: [] })
+    render(<App />)
+
+    const row = within(screen.getByTestId('deck-list')).getByText('Ready Deck').closest('li')!
+    await user.click(within(row).getByRole('button', { name: /^play$/i }))
+
+    // On the game screen the dmgCtrl icon (in the log column header) is the exit
+    // control; clicking it returns to decks.
+    await user.click(screen.getByTestId('exit-btn'))
+    expect(screen.getByTestId('deck-select-screen')).toBeInTheDocument()
+  })
+
+  it('shows the transparent dmgCtrl icon left of the title', () => {
     render(<App />)
     const icon = screen.getByRole('img', { name: /dmgctrl/i })
     expect(icon).toBeInTheDocument()
-    expect(icon).toHaveAttribute('src', expect.stringContaining('dmgCtrl-icon-192.png'))
+    expect(icon).toHaveAttribute('src', expect.stringContaining('dmgCtrl-icon-transparent-192.png'))
   })
 
   it('shows the deck selection screen initially', () => {

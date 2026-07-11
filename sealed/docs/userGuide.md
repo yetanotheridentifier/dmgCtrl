@@ -25,18 +25,19 @@ The current AI opponent plays **random legal moves**. It exists to exercise the 
 
 ## Playing a game
 
-Press **Play** next to your deck. Cards hydrate, both players draw 6, and the board appears in the **setup step**: choose **Keep hand** or **Mulligan** (shuffle your hand back and draw a fresh 6 — once only; whoever holds the initiative decides first). Then **resource 2 cards, one pick at a time** — **click a hand card to resource it** (or use the action buttons), and you can also just avoid banking your early plays. Aim to keep a curve: something to play on turn 1 (cost ≤ 2), turn 2 (≤ 3), turn 3 (≤ 4). Once both players have resourced 2, round 1 begins. Resourcing is private: the log shows only that your opponent resourced, never which card.
+Press **Play** next to your deck. Cards hydrate, both players draw 6, and the board appears in the **setup step**: choose **Keep hand** or **Mulligan** (shuffle your hand back and draw a fresh 6 — once only; whoever holds the initiative decides first). Then **resource 2 cards, one pick at a time** — **click a hand card to resource it**, and you can also just avoid banking your early plays. Aim to keep a curve: something to play on turn 1 (cost ≤ 2), turn 2 (≤ 3), turn 3 (≤ 4). Once both players have resourced 2, round 1 begins. Resourcing is private: the log shows only that your opponent resourced, never which card.
 
 The AI opponent mulligans any hand without a turn-1 play and resources the pair of cards that best preserves its early curve.
 
 ### The board
 
-- **The battlefield** — laid out like the tabletop around a central **battlefront**. The **Ground** and **Space** lanes flank a central strip holding both bases and leaders: reading down the middle you'll find the opponent's leader, the opponent's base, your base, then your leader — so the two bases meet at the battlefront and the leaders are outermost. Units line up **along the battlefront** (level with the bases); as you play more, they stack **further back** — the opponent's toward the top, yours toward the bottom. **Sentinels** are held at the front, closest to the battlefront. Each player's **resources, leader status, hand size and pile counts** sit in a compact line above (opponent) and below (you).
+- **The battlefield** — laid out like the tabletop around a central **battlefront**. The **Space** (left) and **Ground** (right) lanes flank a central strip holding the bases and your leader: reading down the middle you'll find the opponent's base, your base, then your leader — so the two bases meet at the battlefront. Units line up **along the battlefront** (level with the bases); as you play more, they stack **further back** — the opponent's toward the top, yours toward the bottom. **Sentinels** are held at the front, closest to the battlefront.
+- **The bars** — each player's **resources, hand, deck and discard** sit in a **bar** across their side of the play area: the **opponent bar** above (with the **opponent's leader centred** above their base) and **your bar** below. Your bar also holds the **action** buttons; your hand is the widest area in it.
 - **Cards** — each card is shown as its **card art** (power and health are on the art itself). Any **damage** a unit has taken is shown as a **red token** (white number) over the middle of the card art, like a physical token; it stays upright even when the card is rotated, and keeps the card's name, ability text and stats visible. Cards are drawn at a fixed size in a uniform square slot and in their true orientation — units stand **portrait** when ready and rotate **landscape** (sideways, dimmed) when exhausted; a **deployed leader** shows its unit side. The square slots mean cards never overlap, even when rotated. A **highlight hugs the card edge** when it's selectable, a target, or your playable hand card. If a card's art can't be loaded, the card instead shows a **text summary** — cost, name, power/HP, keywords and abilities — so it's always readable.
 - **Zoom** — hold **Shift** and move the mouse over a card to enlarge it at full size for reading (or **long-press** on a touch screen); release, or move away, to dismiss. Zoom needs Shift so plain hovering doesn't get in the way of making a play. While zoomed, hold **Alt** over a **leader** to see its other (unit) side.
 - **Your hand** — clickable cards are highlighted: **blue** when a click will **play** the card (action phase), **green** when a click will **resource** it (setup/regroup). Cards you can't act on are dimmed. A card's shown cost includes any **aspect penalty** (+2 per aspect icon your leader and base don't provide).
-- **Your move** — click a **glowing unit** to select it, then click a highlighted target (enemy unit or their base) to attack. Every legal action also appears as a button below the board: play a card, attack, deploy your leader, take the initiative, or pass.
-- **Log** — a running record of every action, in a panel on the right of the board.
+- **Your move** — playing, resourcing and attacking are done **by clicking**: click a playable hand card to play it, or click a **glowing unit** then a highlighted target (enemy unit or their base) to attack. The remaining choices — **Mulligan, Keep hand, Take the initiative, Pass** (and skip resourcing / deploy) — are buttons in the **Action** column of your bar.
+- **Log** — a running record of every action, in a panel on the **left** of the screen.
 
 ### Turn structure
 
@@ -53,3 +54,7 @@ Deal damage to the opponent's base until it reaches its health before they do th
 ## After the game
 
 The result banner offers a **Rematch** (fresh shuffle, same decks) or **Back to decks**. Completed games are recorded on-device for future analysis.
+
+---
+
+*dmgCtrl is an unofficial fan site and is not produced by or endorsed by Fantasy Flight Games, Lucasfilm or Disney. The Star Wars Unlimited cards, logos and art used on the site are property of Disney and/or Fantasy Flight Games.*
