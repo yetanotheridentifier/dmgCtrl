@@ -359,7 +359,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
             {errorDetail}
           </p>
         )}
-        <button data-testid="exit-btn" onClick={onExit} className="mt-4 px-5 py-2 text-sm border-2 border-line/60 rounded-xl text-ink-dim hover:text-ink">
+        <button data-testid="error-back-btn" onClick={onExit} className="mt-4 px-5 py-2 text-sm border-2 border-line/60 rounded-xl text-ink-dim hover:text-ink">
           Back to decks
         </button>
       </div>
@@ -411,9 +411,6 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
           <span>Round <span className="font-mono text-ink">{gameState.round}</span></span>
           <span>Phase <span className="font-mono text-ink">{gameState.phase}</span></span>
           <span>Initiative <span className="font-mono text-ink">{gameState.initiative === 'player' ? 'you' : 'opponent'}</span></span>
-          <button data-testid="exit-btn" onClick={onExit} className="ml-auto px-3 py-1 text-xs border-2 border-line/60 rounded-lg text-ink-dim hover:text-ink">
-            Exit
-          </button>
         </div>
 
         <Board

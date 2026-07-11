@@ -287,12 +287,7 @@ describe('GameScreen', () => {
     expect(within(panel).getByTestId('game-log')).toBeInTheDocument()
   })
 
-  it('exit returns to deck selection', async () => {
-    const user = userEvent.setup()
-    const onExit = await renderBoard()
-    await user.click(screen.getByTestId('exit-btn'))
-    expect(onExit).toHaveBeenCalledTimes(1)
-  })
+  // Exit moved to the app header (#332) — covered in app.test.tsx.
 
   it('shows the diagnostic detail when card loading fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 502, json: () => Promise.resolve({}) }))

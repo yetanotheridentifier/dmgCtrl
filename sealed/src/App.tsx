@@ -3,14 +3,10 @@ import DeckSelectScreen from './components/deckSelectScreen'
 import GameScreen from './components/gameScreen'
 import HelpScreen from './components/helpScreen'
 import type { SavedDeck } from './data/deckStore'
+import { BUILD_TAG } from './buildTag'
+import { isDev } from './env'
 
 type Screen = 'decks' | 'game' | 'help'
-
-/**
- * Visible build marker — bump on every meaningful change so "which code is this
- * browser running?" is answerable at a glance (shown in the header, also logged).
- */
-export const BUILD_TAG = 'b38'
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('decks')
@@ -35,19 +31,27 @@ export default function App() {
           <h1 className="text-2xl font-extralight tracking-[0.15em] text-ink">
             dmgCtrl <span className="text-ink-dim">· Sealed</span>
           </h1>
-          <span data-testid="build-tag" className="self-end text-[10px] text-ink-faint font-mono pb-1">
-            {BUILD_TAG}
-          </span>
         </div>
-        {screen !== 'help' && (
-          <button
-            onClick={openHelp}
-            aria-label="Help"
-            className="w-9 h-9 flex items-center justify-center border-2 border-line rounded-lg text-ink-dim hover:text-ink shadow-[0_0_8px_rgba(156,163,175,0.2)]"
-          >
-            ?
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {screen === 'game' && (
+            <button
+              data-testid="exit-btn"
+              onClick={() => setScreen('decks')}
+              className="h-9 px-3 flex items-center justify-center border-2 border-line rounded-lg text-sm text-ink-dim hover:text-ink shadow-[0_0_8px_rgba(156,163,175,0.2)]"
+            >
+              Exit
+            </button>
+          )}
+          {screen !== 'help' && (
+            <button
+              onClick={openHelp}
+              aria-label="Help"
+              className="w-9 h-9 flex items-center justify-center border-2 border-line rounded-lg text-ink-dim hover:text-ink shadow-[0_0_8px_rgba(156,163,175,0.2)]"
+            >
+              ?
+            </button>
+          )}
+        </div>
       </header>
       <main className="px-6 py-4">
         {screen === 'decks' && (
@@ -64,6 +68,14 @@ export default function App() {
         )}
         {screen === 'help' && <HelpScreen onBack={() => setScreen(helpReturn)} />}
       </main>
+
+      {/* Dev-only build marker in the bottom-right corner (setup + game screens);
+          in prod it lives at the foot of the Help page instead (#332). */}
+      {isDev() && screen !== 'help' && (
+        <div data-testid="build-tag" className="fixed bottom-2 right-2 z-50 text-[10px] text-ink-faint">
+          {BUILD_TAG}
+        </div>
+      )}
     </div>
   )
 }
