@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, fireEvent } from '@testing-library/react'
 import { UnitLine } from '../components/gameScreen'
 import type { UnitInteraction } from '../components/gameScreen'
 import { state, unit, card, CARDS } from './helpers/engineFixtures'
@@ -30,6 +30,24 @@ describe('UnitLine — on-card damage overlay (#326)', () => {
     // The exhausted card face is rotated 90°; the damage number must not live inside it.
     expect(within(face).queryByTestId('board-unit-damage-u1')).toBeNull()
     expect(screen.getByTestId('board-unit-damage-u1')).toBeInTheDocument()
+  })
+
+  it('zooms the card to full size on Shift+hover, and removes it on leave (#321)', () => {
+    render(<UnitLine state={boardWith('TST_D')} unit={unit('u1', 'TST_D', { exhausted: true })} interact={noInteract} />)
+    const tile = screen.getByTestId('board-unit-u1')
+
+    fireEvent.pointerEnter(tile, { pointerType: 'mouse' })
+    expect(screen.queryByTestId('card-zoom')).toBeNull() // hover alone: no zoom
+
+    fireEvent.keyDown(window, { key: 'Shift', shiftKey: true })
+    const zoom = screen.getByTestId('card-zoom')
+    // Full size and upright even though the source unit is exhausted (rotated).
+    expect(within(zoom).getByTestId('card-face')).toHaveStyle({ width: '240px' })
+    expect(within(zoom).getByTestId('card-face')).toHaveAttribute('data-orientation', 'portrait')
+
+    fireEvent.pointerLeave(tile, { pointerType: 'mouse' })
+    expect(screen.queryByTestId('card-zoom')).toBeNull()
+    fireEvent.keyUp(window, { key: 'Shift', shiftKey: false })
   })
 
   it('does not render the old bottom power/health line for a unit with art-backed stats', () => {

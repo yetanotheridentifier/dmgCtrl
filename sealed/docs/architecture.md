@@ -108,6 +108,12 @@ The board is drawn with art-dominant cards, not text rows:
   ability text and power/HP visible) on the non-rotating wrapper, so they stay upright when
   the card is exhausted. Damage is the first token — a deep-red rounded rectangle with a
   white number (two digits fit); more effect types slot into the same layout (#326).
+- **Roll-over zoom** (`useCardZoom` + `CardZoomPopover`, #321): **Shift+hover** (mouse, so plain
+  hovering doesn't obscure play) or **touch-long-press** shows a full-size, upright
+  copy floating above the board (absolute, centred on the source; viewport-edge clamping is the
+  follow-up #331). Long-press suppresses the click so it doesn't also play/attack; holding **Alt**
+  flips a dual-sided leader's face. Shift/Alt come from a shared `useModifierKeys` store (one set
+  of listeners, not one per card). The zoom scale is `ZOOM_WIDTH_PX` (cardSizing.ts) — one place.
 - **Battlefield layout** (`Board`): a three-column grid — Ground | Leaders+Bases | Space —
   set with an inline `grid-template-columns` (Tailwind can't compile a `minmax(0,1fr)`
   arbitrary value). The opponent half is bottom-anchored and your half top-anchored, so

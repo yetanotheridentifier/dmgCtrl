@@ -236,7 +236,7 @@ describe('GameScreen', () => {
     expect(unitTile).toHaveAttribute('data-actionable', 'true')
     await user.click(unitTile)
     expect(screen.getByTestId('board-unit-u1')).toHaveAttribute('data-selected', 'true')
-    expect(within(screen.getByTestId('board-unit-u1')).getByTestId('card-face')).toHaveAttribute('data-highlight', 'accent')
+    expect(within(screen.getByTestId('board-unit-u1')).getAllByTestId('card-face')[0]).toHaveAttribute('data-highlight', 'accent')
 
     // The enemy base is now a highlighted target — its card shows the red highlight
     const baseTarget = screen.getByTestId('target-opponent-base')

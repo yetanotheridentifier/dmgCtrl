@@ -2,7 +2,7 @@ import { useState, type CSSProperties } from 'react'
 import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
 import type { SavedDeck } from '../data/deckStore'
-import type { GameState, PlayerId, UnitState } from '../engine/types'
+import type { EngineCard, GameState, PlayerId, UnitState } from '../engine/types'
 import type { Action } from '../engine/actions'
 import { describeAction } from '../utils/describeAction'
 import { orderUnits } from './boardLayout'
@@ -10,6 +10,8 @@ import { outcomeBanner } from './outcome'
 import CardFace from './cardFace'
 import { CARD_WIDTH_PX } from './cardSizing'
 import { tokenLayout, TOKEN_W, TOKEN_H } from './tokens'
+import { useCardZoom } from './useCardZoom'
+import { CardZoomPopover } from './cardZoom'
 
 interface Props {
   deck: SavedDeck
@@ -30,6 +32,7 @@ export interface UnitInteraction {
 
 export function UnitLine({ state, unit, interact }: { state: GameState; unit: UnitState; interact: UnitInteraction }) {
   const card = state.cards[unit.cardId]
+  const { zoomed, bind } = useCardZoom()
   const clickable = (interact.actionable || interact.isTarget) && interact.onClick
   const highlight: 'accent' | 'red' | 'accent-dim' | undefined = interact.selected
     ? 'accent'
@@ -45,10 +48,12 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
       data-selected={interact.selected}
       data-target={interact.isTarget}
       onClick={clickable ? interact.onClick : undefined}
+      {...bind}
       className={`relative w-fit shrink-0 ${clickable ? 'cursor-pointer' : ''}`}
     >
       <CardFace card={card} fallbackName={unit.cardId} deployed={unit.isLeader} exhausted={unit.exhausted} highlight={highlight} />
       <CardTokens unit={unit} />
+      {zoomed && <CardZoomPopover card={card} deployed={unit.isLeader} fallbackName={unit.cardId} />}
     </div>
   )
 }
@@ -127,6 +132,7 @@ function BaseCard({ state, side, onAttack }: {
 }) {
   const p = state.players[side]
   const baseCard = state.cards[p.base.cardId]
+  const { zoomed, bind } = useCardZoom()
   // Base HP comes from the card metadata (bases vary; never assume 30).
   const baseHp = baseCard?.hp ?? 0
   // Damage taken, counting up to the base's HP — the SWU-standard display (#323).
@@ -157,7 +163,7 @@ function BaseCard({ state, side, onAttack }: {
     </div>
   )
   return (
-    <div data-testid={`${side}-base-card`}>
+    <div data-testid={`${side}-base-card`} {...bind} className="relative">
       {onAttack ? (
         <button
           data-testid={`target-${side}-base`}
@@ -169,6 +175,7 @@ function BaseCard({ state, side, onAttack }: {
       ) : (
         inner
       )}
+      {zoomed && <CardZoomPopover card={baseCard} fallbackName={p.base.cardId} />}
     </div>
   )
 }
@@ -178,16 +185,67 @@ function LeaderCard({ state, side }: { state: GameState; side: PlayerId }) {
   const p = state.players[side]
   const leaderCard = state.cards[p.leader.cardId]
   const name = leaderCard?.name ?? p.leader.cardId
-  return (
-    <div data-testid={`${side}-leader-card`}>
-      {p.leader.deployed ? (
+  const { zoomed, bind } = useCardZoom()
+  if (p.leader.deployed) {
+    return (
+      <div data-testid={`${side}-leader-card`}>
         <div className="flex h-[72px] w-[120px] items-center justify-center rounded-lg border border-dashed border-line/40 px-1 text-center text-[10px] text-ink-faint">
           {name} · deployed
         </div>
-      ) : (
-        <CardFace card={leaderCard} fallbackName={p.leader.cardId} exhausted={p.leader.exhausted} />
-      )}
+      </div>
+    )
+  }
+  return (
+    <div data-testid={`${side}-leader-card`} {...bind} className="relative">
+      <CardFace card={leaderCard} fallbackName={p.leader.cardId} exhausted={p.leader.exhausted} />
+      {/* Undeployed leader: Shift while hovering shows its unit (back) side (#321). */}
+      {zoomed && <CardZoomPopover card={leaderCard} deployed={false} fallbackName={p.leader.cardId} />}
     </div>
+  )
+}
+
+/**
+ * A card in your hand. Clickable to play (blue) or resource (green); hover /
+ * focus / long-press zooms it (#321). Its own component so it can use the zoom hook.
+ */
+function HandCard({ card, cardId, index, action, onAct }: {
+  card: EngineCard | undefined
+  cardId: string
+  index: number
+  action: Action | undefined
+  onAct: (action: Action) => void
+}) {
+  const { zoomed, bind } = useCardZoom()
+  const isResource = action?.type === 'resourceCard' || action?.type === 'setupResource'
+  const popover = zoomed && <CardZoomPopover card={card} fallbackName={cardId} />
+  if (action) {
+    // Clickable shortcut for the matching action-menu button:
+    // "Play …" (action phase) or "Resource …" (setup/regroup).
+    return (
+      <button
+        data-testid={`hand-card-${index}`}
+        data-playable={true}
+        onClick={() => onAct(action)}
+        {...bind}
+        className="relative block w-fit shrink-0 cursor-pointer"
+      >
+        <CardFace card={card} fallbackName={cardId} tight highlight={isResource ? 'green' : 'accent'} />
+        {popover}
+      </button>
+    )
+  }
+  return (
+    <span
+      data-testid={`hand-card-${index}`}
+      data-playable={false}
+      {...bind}
+      className="relative block w-fit shrink-0"
+    >
+      {/* Dim the card (unplayable), but not the zoom popover — the opacity must
+          stay off the wrapper or it'd dim and trap the popover above (#321). */}
+      <CardFace card={card} fallbackName={cardId} tight className="opacity-60" />
+      {popover}
+    </span>
   )
 }
 
@@ -370,36 +428,17 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
           <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">Your hand</h3>
           <ul data-testid="player-hand" className="mt-2 flex flex-wrap gap-1">
             {hand.length === 0 && <li className="text-ink-faint text-xs italic">empty</li>}
-            {hand.map((cardId, i) => {
-              const card = gameState.cards[cardId]
-              const action = handAction.get(i)
-              // Resourcing (setup/regroup) highlights green; playing a card is blue (#328).
-              const isResource = action?.type === 'resourceCard' || action?.type === 'setupResource'
-              return (
-                <li key={`${cardId}-${i}`}>
-                  {action ? (
-                    // Clickable shortcut for the matching action-menu button:
-                    // "Play …" (action phase) or "Resource …" (setup/regroup).
-                    <button
-                      data-testid={`hand-card-${i}`}
-                      data-playable={true}
-                      onClick={() => actAndClear(action)}
-                      className="block w-fit shrink-0 cursor-pointer"
-                    >
-                      <CardFace card={card} fallbackName={cardId} tight highlight={isResource ? 'green' : 'accent'} />
-                    </button>
-                  ) : (
-                    <span
-                      data-testid={`hand-card-${i}`}
-                      data-playable={false}
-                      className="block w-fit shrink-0 opacity-60"
-                    >
-                      <CardFace card={card} fallbackName={cardId} tight />
-                    </span>
-                  )}
-                </li>
-              )
-            })}
+            {hand.map((cardId, i) => (
+              <li key={`${cardId}-${i}`}>
+                <HandCard
+                  card={gameState.cards[cardId]}
+                  cardId={cardId}
+                  index={i}
+                  action={handAction.get(i)}
+                  onAct={actAndClear}
+                />
+              </li>
+            ))}
           </ul>
         </section>
 
