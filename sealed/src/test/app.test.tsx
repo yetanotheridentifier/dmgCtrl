@@ -14,7 +14,7 @@ describe('App shell', () => {
 
   it('renders the app title', () => {
     render(<App />)
-    expect(screen.getByRole('heading', { name: /dmgctrl · sealed/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /dmgctrl/i })).toBeInTheDocument()
   })
 
   it('shows the build tag (dev: fixed bottom-right badge), not in the header (#332)', () => {
@@ -26,7 +26,7 @@ describe('App shell', () => {
     expect(within(screen.getByRole('banner')).queryByTestId('build-tag')).toBeNull()
   })
 
-  it('shows an Exit button in the header on the game screen that returns to decks (#332)', async () => {
+  it('exits the game via the dmgCtrl icon, returning to decks (#332)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network')))
     const user = userEvent.setup()
     saveDeck({ name: 'Ready Deck', leader: 'SOR_010', base: 'SOR_029', cards: [] })
@@ -35,17 +35,17 @@ describe('App shell', () => {
     const row = within(screen.getByTestId('deck-list')).getByText('Ready Deck').closest('li')!
     await user.click(within(row).getByRole('button', { name: /^play$/i }))
 
-    // Now on the game screen — the header shows Exit (next to Help); clicking it returns to decks.
-    const exit = within(screen.getByRole('banner')).getByTestId('exit-btn')
-    await user.click(exit)
+    // On the game screen the dmgCtrl icon (in the log column header) is the exit
+    // control; clicking it returns to decks.
+    await user.click(screen.getByTestId('exit-btn'))
     expect(screen.getByTestId('deck-select-screen')).toBeInTheDocument()
   })
 
-  it('shows the dmgCtrl icon left of the title', () => {
+  it('shows the transparent dmgCtrl icon left of the title', () => {
     render(<App />)
     const icon = screen.getByRole('img', { name: /dmgctrl/i })
     expect(icon).toBeInTheDocument()
-    expect(icon).toHaveAttribute('src', expect.stringContaining('dmgCtrl-icon-192.png'))
+    expect(icon).toHaveAttribute('src', expect.stringContaining('dmgCtrl-icon-transparent-192.png'))
   })
 
   it('shows the deck selection screen initially', () => {

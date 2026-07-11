@@ -46,7 +46,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
     case 'skipResource':
       return 'Skip resourcing'
     case 'mulligan':
-      return 'Mulligan (redraw 6)'
+      return 'Mulligan'
     case 'keepHand':
       return 'Keep hand'
     case 'setupResource': {

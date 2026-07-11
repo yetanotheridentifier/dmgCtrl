@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react'
+import { useState, type CSSProperties, type ReactNode } from 'react'
 import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
 import type { SavedDeck } from '../data/deckStore'
@@ -12,11 +12,15 @@ import { CARD_WIDTH_PX } from './cardSizing'
 import { tokenLayout, TOKEN_W, TOKEN_H } from './tokens'
 import { useCardZoom } from './useCardZoom'
 import { CardZoomPopover } from './cardZoom'
+import { DeckPile, ResourceStack, DiscardPile, OpponentHand, EmptySlot } from './mat'
 
 interface Props {
   deck: SavedDeck
   opponentDeck: SavedDeck
+  /** Leave the game — wired to the dmgCtrl icon in the game screen's header (#332). */
   onExit: () => void
+  /** Open the Help screen — wired to the ? button in the header (#332). */
+  onHelp: () => void
   /** Injectable for deterministic tests; defaults to real randomness. */
   gameOptions?: UseGameOptions
 }
@@ -176,25 +180,37 @@ function BaseCard({ state, side, onAttack }: {
   )
 }
 
-/** A leader in the central strip: its card while undeployed, a marker once deployed. */
-function LeaderCard({ state, side }: { state: GameState; side: PlayerId }) {
+/** A leader: its card while undeployed, a marker once deployed. `widthPx` scales
+ *  it down for the opponent's mat column; omitted, it renders at full size. */
+function LeaderCard({ state, side, widthPx }: { state: GameState; side: PlayerId; widthPx?: number }) {
   const p = state.players[side]
   const leaderCard = state.cards[p.leader.cardId]
-  const name = leaderCard?.name ?? p.leader.cardId
   const { zoomed, bind } = useCardZoom()
+  // Deployed → the leader is on the battlefield as a unit; the slot is an empty
+  // outline (whether it's deployed is self-evident). Keep it for alignment.
   if (p.leader.deployed) {
     return (
-      <div data-testid={`${side}-leader-card`}>
-        <div className="flex h-[72px] w-[120px] items-center justify-center rounded-lg border border-dashed border-line/40 px-1 text-center text-[10px] text-ink-faint">
-          {name} · deployed
-        </div>
+      <div data-testid={`${side}-leader-card`} className="w-fit">
+        <EmptySlot landscape widthPx={widthPx} />
       </div>
     )
   }
+  // Deployed once and defeated (its epic action is spent) — it can't redeploy.
+  const defeated = p.leader.epicActionUsed
   return (
-    <div data-testid={`${side}-leader-card`} {...bind} className="relative">
-      <CardFace card={leaderCard} fallbackName={p.leader.cardId} exhausted={p.leader.exhausted} />
-      {/* Undeployed leader: Shift while hovering shows its unit (back) side (#321). */}
+    <div data-testid={`${side}-leader-card`} {...bind} className="relative w-fit">
+      <CardFace card={leaderCard} fallbackName={p.leader.cardId} exhausted={p.leader.exhausted} widthPx={widthPx} />
+      {defeated && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <span
+            className="rounded bg-amber px-2 py-2 text-sm leading-none text-white"
+            style={{ boxShadow: '0 1px 3px rgba(0, 0, 0, 0.7)' }}
+          >
+            Deployed
+          </span>
+        </div>
+      )}
+      {/* Shift while hovering shows the leader's unit (back) side (#321). */}
       {zoomed && <CardZoomPopover card={leaderCard} deployed={false} fallbackName={p.leader.cardId} />}
     </div>
   )
@@ -245,33 +261,6 @@ function HandCard({ card, cardId, index, action, onAct }: {
   )
 }
 
-/** Compact info line for a player: resources, leader status, hand (opp), piles. */
-function InfoBar({ state, side }: { state: GameState; side: PlayerId }) {
-  const p = state.players[side]
-  const leaderCard = state.cards[p.leader.cardId]
-  const readyRes = p.resources.filter(r => !r.exhausted).length
-  const leaderStatus = p.leader.deployed
-    ? 'deployed'
-    : p.leader.epicActionUsed
-      ? 'epic action used'
-      : 'undeployed'
-  return (
-    <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
-      <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">{side === 'player' ? 'You' : 'Opponent'}</h3>
-      <span className="text-sm">
-        Resources <span data-testid={`${side}-resources`}>{readyRes}/{p.resources.length}</span>
-      </span>
-      <span className="text-sm text-ink-dim">{leaderCard?.name ?? 'Leader'} · {leaderStatus}</span>
-      {side === 'opponent' && (
-        <span className="text-sm">
-          Hand <span data-testid="opponent-hand-count">{p.hand.length}</span>
-        </span>
-      )}
-      <span className="text-sm text-ink-faint">Deck {p.deck.length} · Discard {p.discard.length}</span>
-    </div>
-  )
-}
-
 /**
  * The battlefield (#4): Ground and Space lanes flank a central strip holding both
  * players' bases and leaders. Reading down the centre — opponent leader, opponent
@@ -284,54 +273,125 @@ function Board({ state, playerInteraction, opponentInteraction, baseAttack }: {
   opponentInteraction: (unit: UnitState) => UnitInteraction
   baseAttack?: () => void
 }) {
-  // Ground | Leaders+Bases | Space. Set the template with an inline style rather
+  // Space | Leaders+Bases | Ground. Set the template with an inline style rather
   // than a Tailwind arbitrary value: the commas inside minmax() don't compile
-  // reliably as an arbitrary `grid-cols-[…]` value, which collapsed the grid.
+  // reliably as an arbitrary `grid-cols-[…]` value, which collapsed the grid. The
+  // battlefront (centre column) aligns with the opponent leader in the bar above.
   const cols: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)', columnGap: '1rem' }
   return (
-    <section data-testid="battlefield" className="rounded-xl bg-surface p-3 space-y-1.5">
-      <InfoBar state={state} side="opponent" />
-
+    // Transparent — the play-area container behind it supplies one continuous
+    // background across the opponent bar, battlefield and player bar (#332). It
+    // grows to fill the play area's height, centring the board vertically.
+    <section data-testid="battlefield" className="flex flex-1 flex-col justify-center gap-1.5 px-2">
       {/* Opponent half: everything anchored to the BOTTOM (the battlefront), so
           the opponent base and front-line units meet the centre; extra units
           stack upward, away from it. */}
       <div className="items-end" style={cols}>
-        <ArenaZone state={state} side="opponent" arena="ground" unitInteraction={opponentInteraction} anchor="bottom" />
+        <ArenaZone state={state} side="opponent" arena="space" unitInteraction={opponentInteraction} anchor="bottom" />
+        {/* Opponent leader lives in their bar's centre column (#332), so the strip
+            holds only their base here. */}
         <div className="flex flex-col items-center gap-2">
-          <LeaderCard state={state} side="opponent" />
           <BaseCard state={state} side="opponent" onAttack={baseAttack} />
         </div>
-        <ArenaZone state={state} side="opponent" arena="space" unitInteraction={opponentInteraction} anchor="bottom" />
+        <ArenaZone state={state} side="opponent" arena="ground" unitInteraction={opponentInteraction} anchor="bottom" />
       </div>
 
-      {/* Battlefront: Ground / Space labels (centred over their lanes) flank the
+      {/* Battlefront: Space / Ground labels (centred over their lanes) flank the
           game state, which sits between the two bases (#332). */}
       <div className="items-center" style={cols}>
-        <div className="text-ink-faint text-sm uppercase tracking-widest text-center">Ground</div>
-        <div data-testid="game-state" className="text-center text-sm text-ink leading-tight whitespace-nowrap">
-          <div><span className="text-accent">Round:</span> {state.round} - <span className="capitalize">{state.phase}</span></div>
-          <div><span className="text-accent">Initiative:</span> {state.initiative === 'player' ? 'You' : 'Opponent'}</div>
-        </div>
         <div className="text-ink-faint text-sm uppercase tracking-widest text-center">Space</div>
+        <div data-testid="game-state" className="text-center text-sm text-ink leading-tight whitespace-nowrap">
+          <div><span className="text-accent uppercase">Round:</span> {state.round} - <span className="capitalize">{state.phase}</span></div>
+          <div><span className="text-accent uppercase">Initiative:</span> {state.initiative === 'player' ? 'You' : 'Opponent'}</div>
+        </div>
+        <div className="text-ink-faint text-sm uppercase tracking-widest text-center">Ground</div>
       </div>
 
       {/* Player half: everything anchored to the TOP (the battlefront). Your base
           sits just below the opponent's, so the two bases meet at the centre. */}
       <div className="items-start" style={cols}>
-        <ArenaZone state={state} side="player" arena="ground" unitInteraction={playerInteraction} anchor="top" />
+        <ArenaZone state={state} side="player" arena="space" unitInteraction={playerInteraction} anchor="top" />
         <div className="flex flex-col items-center gap-2">
           <BaseCard state={state} side="player" />
           <LeaderCard state={state} side="player" />
         </div>
-        <ArenaZone state={state} side="player" arena="space" unitInteraction={playerInteraction} anchor="top" />
+        <ArenaZone state={state} side="player" arena="ground" unitInteraction={playerInteraction} anchor="top" />
       </div>
-
-      <InfoBar state={state} side="player" />
     </section>
   )
 }
 
-export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: Props) {
+/**
+ * A labelled column within a player bar (#332): its component with an accent
+ * all-caps label rotated 90° anticlockwise on the left (vertical-rl + rotate
+ * reads bottom-to-top on iOS, which lacks `sideways-lr`). A subtle background band
+ * separates it from its neighbours over the shared play-area background.
+ */
+function BarColumn({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 items-center gap-1.5 rounded-lg bg-surface px-1.5 py-1">
+      <span
+        className="shrink-0 text-accent text-[11px] uppercase tracking-[0.15em] font-light"
+        style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+      >
+        {label}
+      </span>
+      <div className="flex min-w-0 flex-1 items-center justify-center">{children}</div>
+    </div>
+  )
+}
+
+/**
+ * The opponent bar (#332): their leader in the centre so it lines up with the
+ * bases and the player leader below, flanked by discard + hand on the left and
+ * resources + deck on the right. Transparent, joined to the battlefield below.
+ */
+function OpponentBar({ state }: { state: GameState }) {
+  const p = state.players.opponent
+  const ready = p.resources.filter(r => !r.exhausted).length
+  const exhausted = p.resources.length - ready
+  const cols: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)', columnGap: '1.5rem', alignItems: 'stretch' }
+  return (
+    <div data-testid="opponent-mat" className="px-2 py-2" style={cols}>
+      {/* Left: discard, then the hand filling the space up to the leader. */}
+      <div className="grid min-w-0 items-stretch gap-2" style={{ gridTemplateColumns: 'auto minmax(0, 1fr)' }}>
+        <BarColumn label="Discard"><DiscardPile state={state} side="opponent" /></BarColumn>
+        <BarColumn label="Hand"><OpponentHand count={p.hand.length} /></BarColumn>
+      </div>
+      {/* Centre column: the leader, aligned to the bottom so it meets the base. */}
+      <div className="flex items-end justify-center">
+        <LeaderCard state={state} side="opponent" widthPx={CARD_WIDTH_PX} />
+      </div>
+      <div className="flex min-w-0 items-stretch justify-end gap-2">
+        <BarColumn label="Resources"><ResourceStack ready={ready} exhausted={exhausted} /></BarColumn>
+        <BarColumn label="Deck"><DeckPile count={p.deck.length} /></BarColumn>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The player bar (#332): Deck | Resources | Hand | Action | Discard, the hand
+ * flexing to fill the remaining width (the most important area). The action column
+ * is a fixed width so its buttons don't shift the layout between phases.
+ */
+function PlayerBar({ state, hand, action }: { state: GameState; hand: ReactNode; action: ReactNode }) {
+  const p = state.players.player
+  const ready = p.resources.filter(r => !r.exhausted).length
+  const exhausted = p.resources.length - ready
+  const cols: CSSProperties = { display: 'grid', gridTemplateColumns: 'auto auto minmax(0, 1fr) 10rem auto', columnGap: '0.5rem', alignItems: 'stretch' }
+  return (
+    <div data-testid="player-mat" className="px-2 py-2" style={cols}>
+      <BarColumn label="Deck"><DeckPile count={p.deck.length} /></BarColumn>
+      <BarColumn label="Resources"><ResourceStack ready={ready} exhausted={exhausted} /></BarColumn>
+      <BarColumn label="Hand">{hand}</BarColumn>
+      <BarColumn label="Action">{action}</BarColumn>
+      <BarColumn label="Discard"><DiscardPile state={state} side="player" /></BarColumn>
+    </div>
+  )
+}
+
+export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOptions }: Props) {
   const { status, errorDetail, gameState, legal, log, act, rematch } = useGame(deck, opponentDeck, gameOptions)
   // Board affordance (#314): click an actionable friendly unit to select it,
   // then click a highlighted target to attack. Any action clears the selection.
@@ -342,17 +402,19 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
     act(action)
   }
 
+  // The play area (right of the log) shows loading, an error, or the live board.
+  // The surrounding frame — icon (exit) + help + log — always renders, so leaving
+  // and Help stay available even while cards load or a load fails (#332).
+  let playContent: ReactNode
   if (status === 'loading') {
-    return (
-      <div data-testid="game-loading" className="text-ink-dim text-sm">
+    playContent = (
+      <div data-testid="game-loading" className="p-6 text-ink-dim text-sm">
         Hydrating cards…
       </div>
     )
-  }
-
-  if (status === 'error' || !gameState) {
-    return (
-      <div data-testid="game-error" className="max-w-xl">
+  } else if (status === 'error' || !gameState) {
+    playContent = (
+      <div data-testid="game-error" className="max-w-xl p-6">
         <p className="text-red text-sm">Couldn't load the cards for this deck — check your connection and try again.</p>
         {errorDetail && (
           <p data-testid="game-error-detail" className="mt-2 text-ink-dim text-xs font-mono">
@@ -364,102 +426,121 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
         </button>
       </div>
     )
-  }
+  } else {
+    // What clicking each hand card does, keyed by hand index: play it in the action
+    // phase, resource it in the setup or regroup phase (#6, #328). Derived from the
+    // legal moves so the hand affordance always matches what the engine allows.
+    const handAction = new Map<number, Action>()
+    for (const a of legal) {
+      if (a.type === 'playCard' || a.type === 'resourceCard' || a.type === 'setupResource') handAction.set(a.handIndex, a)
+    }
+    const hand = gameState.players.player.hand
 
-  // What clicking each hand card does, keyed by hand index: play it in the action
-  // phase, resource it in the setup or regroup phase (#6, #328). Derived from the
-  // legal moves so the hand affordance always matches what the engine allows.
-  const handAction = new Map<number, Action>()
-  for (const a of legal) {
-    if (a.type === 'playCard' || a.type === 'resourceCard' || a.type === 'setupResource') handAction.set(a.handIndex, a)
-  }
-  const hand = gameState.players.player.hand
+    const attacks = legal.filter(a => a.type === 'attack')
+    const attackerIds = new Set(attacks.map(a => a.attackerId))
+    const selectedAttacks = selectedAttacker ? attacks.filter(a => a.attackerId === selectedAttacker) : []
+    const targetUnitIds = new Set(
+      selectedAttacks.flatMap(a => (a.target.kind === 'unit' ? [a.target.instanceId] : [])),
+    )
+    const baseAttack = selectedAttacks.find(a => a.target.kind === 'base')
 
-  const attacks = legal.filter(a => a.type === 'attack')
-  const attackerIds = new Set(attacks.map(a => a.attackerId))
-  const selectedAttacks = selectedAttacker
-    ? attacks.filter(a => a.attackerId === selectedAttacker)
-    : []
-  const targetUnitIds = new Set(
-    selectedAttacks.flatMap(a => (a.target.kind === 'unit' ? [a.target.instanceId] : [])),
-  )
-  const baseAttack = selectedAttacks.find(a => a.target.kind === 'base')
+    const playerInteraction = (unit: { instanceId: string }): UnitInteraction => ({
+      actionable: attackerIds.has(unit.instanceId),
+      selected: selectedAttacker === unit.instanceId,
+      isTarget: false,
+      onClick: attackerIds.has(unit.instanceId)
+        ? () => setSelectedAttacker(prev => (prev === unit.instanceId ? null : unit.instanceId))
+        : undefined,
+    })
 
-  const playerInteraction = (unit: { instanceId: string }): UnitInteraction => ({
-    actionable: attackerIds.has(unit.instanceId),
-    selected: selectedAttacker === unit.instanceId,
-    isTarget: false,
-    onClick: attackerIds.has(unit.instanceId)
-      ? () => setSelectedAttacker(prev => (prev === unit.instanceId ? null : unit.instanceId))
-      : undefined,
-  })
+    const opponentInteraction = (unit: { instanceId: string }): UnitInteraction => ({
+      actionable: false,
+      selected: false,
+      isTarget: targetUnitIds.has(unit.instanceId),
+      onClick: targetUnitIds.has(unit.instanceId)
+        ? () => actAndClear({ type: 'attack', attackerId: selectedAttacker!, target: { kind: 'unit', instanceId: unit.instanceId } })
+        : undefined,
+    })
 
-  const opponentInteraction = (unit: { instanceId: string }): UnitInteraction => ({
-    actionable: false,
-    selected: false,
-    isTarget: targetUnitIds.has(unit.instanceId),
-    onClick: targetUnitIds.has(unit.instanceId)
-      ? () => actAndClear({ type: 'attack', attackerId: selectedAttacker!, target: { kind: 'unit', instanceId: unit.instanceId } })
-      : undefined,
-  })
+    const playerHand = (
+      <ul data-testid="player-hand" className="flex flex-wrap justify-center gap-1">
+        {hand.map((cardId, i) => (
+          <li key={`${cardId}-${i}`}>
+            <HandCard
+              card={gameState.cards[cardId]}
+              cardId={cardId}
+              index={i}
+              action={handAction.get(i)}
+              onAct={actAndClear}
+            />
+          </li>
+        ))}
+      </ul>
+    )
 
-  return (
-    <div data-testid="game-screen" className="w-full space-y-2">
-      <div data-testid="game-board" className="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-4 lg:items-start">
-        <div className="space-y-2 min-w-0">
+    // Playing, resourcing and attacking are driven by clicking a card or unit, so
+    // the menu holds only the remaining choices — mulligan, keep hand, take the
+    // initiative, pass (and skip/deploy). They live in the player bar's Action
+    // column (#332).
+    const CLICK_HANDLED: Action['type'][] = ['playCard', 'attack', 'resourceCard', 'setupResource']
+    const menuActions = gameState.winner === null ? legal.filter(a => !CLICK_HANDLED.includes(a.type)) : []
+    const actionColumn = (
+      <div className="flex flex-col items-stretch gap-1.5">
+        {menuActions.map((action, i) => (
+          <button
+            key={i}
+            data-testid={`action-btn-${i}`}
+            onClick={() => actAndClear(action)}
+            className="rounded-xl border-2 border-accent px-3 py-1.5 text-xs text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10"
+          >
+            {describeAction(gameState, 'player', action)}
+          </button>
+        ))}
+        {menuActions.length === 0 && legal.length === 0 && gameState.winner === null && (
+          <span className="text-center text-xs text-ink-faint">Opponent…</span>
+        )}
+      </div>
+    )
+
+    // The play area: one continuous background across the opponent bar, the
+    // battlefield, and the player bar — joined, edge-to-edge, filling the height.
+    playContent = (
+      <div data-testid="game-board" className="flex min-h-0 flex-1 flex-col">
+        <OpponentBar state={gameState} />
         <Board
           state={gameState}
           playerInteraction={playerInteraction}
           opponentInteraction={opponentInteraction}
           baseAttack={baseAttack ? () => actAndClear(baseAttack) : undefined}
         />
+        <PlayerBar state={gameState} hand={playerHand} action={actionColumn} />
+      </div>
+    )
+  }
 
-        {/* Your hand */}
-        <section className="rounded-xl bg-surface p-3">
-          <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">Your hand</h3>
-          <ul data-testid="player-hand" className="mt-2 flex flex-wrap gap-1">
-            {hand.length === 0 && <li className="text-ink-faint text-xs italic">empty</li>}
-            {hand.map((cardId, i) => (
-              <li key={`${cardId}-${i}`}>
-                <HandCard
-                  card={gameState.cards[cardId]}
-                  cardId={cardId}
-                  index={i}
-                  action={handAction.get(i)}
-                  onAct={actAndClear}
-                />
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* Action menu (hidden once the game is over — the outcome is a modal below). */}
-        {gameState.winner === null && (
-          <section data-testid="action-menu" className="rounded-xl bg-surface p-3">
-            <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">
-              {legal.length > 0 ? 'Your move' : 'Opponent is thinking…'}
-            </h3>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {legal.map((action, i) => (
-                <button
-                  key={i}
-                  data-testid={`action-btn-${i}`}
-                  onClick={() => actAndClear(action)}
-                  className="px-4 py-1.5 text-sm border-2 border-accent text-accent rounded-xl shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10"
-                >
-                  {describeAction(gameState, 'player', action)}
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
-
-        </div>
-
-        {/* Log — right-hand panel so the board keeps the width (#315) */}
-        <aside data-testid="game-log-panel" className="mt-2 lg:mt-0 lg:sticky lg:top-4 lg:self-start rounded-xl bg-surface p-3">
+  return (
+    <div data-testid="game-screen" className="grid h-screen w-full" style={{ gridTemplateColumns: '16rem 1fr' }}>
+      {/* Left column: the header (on the core theme background, like the page
+          header) above the log panel — no divider to the play area (#332). */}
+      <div className="flex min-h-0 flex-col">
+        <header className="flex items-center justify-between px-2 py-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <button data-testid="exit-btn" onClick={onExit} aria-label="Exit to decks" className="shrink-0 rounded-lg hover:opacity-80">
+              <img src={`${import.meta.env.BASE_URL}dmgCtrl-icon-transparent-192.png`} alt="dmgCtrl" className="h-9 w-9" />
+            </button>
+            <span className="truncate text-xl font-extralight tracking-[0.1em] text-ink">dmgCtrl</span>
+          </div>
+          <button
+            onClick={onHelp}
+            aria-label="Help"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-line text-ink-dim hover:text-ink shadow-[0_0_8px_rgba(156,163,175,0.2)]"
+          >
+            ?
+          </button>
+        </header>
+        <aside data-testid="game-log-panel" className="ml-2 mt-3 mb-2 min-h-0 flex-1 overflow-y-auto rounded-lg bg-surface p-3">
           <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">Log</h3>
-          <ol data-testid="game-log" className="mt-2 space-y-0.5 text-xs text-ink-dim max-h-48 lg:max-h-[70vh] overflow-y-auto">
+          <ol data-testid="game-log" className="mt-2 space-y-0.5 text-xs text-ink-dim">
             {log.map((entry, i) => (
               // Actor in its own fixed-width column so the actions line up (#332).
               <li key={i} className="flex gap-2">
@@ -473,12 +554,20 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
         </aside>
       </div>
 
+      {/* Right column: the play area, edge-to-edge to the top and right. It is
+          transparent (starfield); the bars carry the surface background, so the
+          battlefield between them shows the stars (#332). */}
+      <div className="flex min-h-0 flex-col">
+        {playContent}
+      </div>
+
       {/* Game over — a modal overlay over the whole screen (#332). */}
-      {gameState.winner !== null && (
+      {gameState && gameState.winner !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <section
             data-testid="game-over-banner"
-            className="rounded-xl border-2 border-amber bg-surface p-8 text-center shadow-[0_0_24px_rgba(245,166,35,0.35)]"
+            style={{ backgroundColor: '#0d1b2a' }}
+            className="rounded-xl border-2 border-amber p-8 text-center shadow-[0_0_24px_rgba(245,166,35,0.35)]"
           >
             <p className={`text-2xl font-semibold ${outcomeBanner(gameState.winner).tone}`}>
               {outcomeBanner(gameState.winner).title}
