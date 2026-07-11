@@ -25,7 +25,7 @@ The current AI opponent plays **random legal moves**. It exists to exercise the 
 
 ## Playing a game
 
-Press **Play** next to your deck. Cards hydrate, both players draw 6, and the board appears in the **setup step**: choose **Keep hand** or **Mulligan** (shuffle your hand back and draw a fresh 6 — once only; whoever holds the initiative decides first). Then **resource 2 cards, one pick at a time** — **click a hand card to resource it** (or use the action buttons), and you can also just avoid banking your early plays. Aim to keep a curve: something to play on turn 1 (cost ≤ 2), turn 2 (≤ 3), turn 3 (≤ 4). Once both players have resourced 2, round 1 begins. Resourcing is private: the log shows only that your opponent resourced, never which card.
+Press **Play** next to your deck. Cards hydrate, both players draw 6, and the board appears in the **setup step**: choose **Keep hand** or **Mulligan** (shuffle your hand back and draw a fresh 6 — once only; whoever holds the initiative decides first). Then **resource 2 cards, one pick at a time** — **click a hand card to resource it**, and you can also just avoid banking your early plays. Aim to keep a curve: something to play on turn 1 (cost ≤ 2), turn 2 (≤ 3), turn 3 (≤ 4). Once both players have resourced 2, round 1 begins. Resourcing is private: the log shows only that your opponent resourced, never which card.
 
 The AI opponent mulligans any hand without a turn-1 play and resources the pair of cards that best preserves its early curve.
 
