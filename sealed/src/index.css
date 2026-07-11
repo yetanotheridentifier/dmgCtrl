@@ -93,6 +93,7 @@ body {
   list-style: decimal;
 }
 .help-content li {
+  display: list-item;
   margin: 0.25rem 0;
 }
 .help-content strong {

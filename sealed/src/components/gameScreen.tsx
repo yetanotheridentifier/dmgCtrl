@@ -304,16 +304,15 @@ function Board({ state, playerInteraction, opponentInteraction, baseAttack }: {
         <ArenaZone state={state} side="opponent" arena="space" unitInteraction={opponentInteraction} anchor="bottom" />
       </div>
 
-      {/* Battlefront: Ground / Space labels flank the game state, which sits
-          between the two bases (#332). */}
+      {/* Battlefront: Ground / Space labels (centred over their lanes) flank the
+          game state, which sits between the two bases (#332). */}
       <div className="items-center" style={cols}>
-        <div className="text-ink-faint text-[10px] uppercase tracking-widest">Ground</div>
-        <div data-testid="game-state" className="text-center text-[10px] text-ink-dim leading-tight">
-          <div>Round <span className="text-ink">{state.round}</span></div>
-          <div className="capitalize">{state.phase}</div>
-          <div>init <span className="text-ink">{state.initiative === 'player' ? 'you' : 'opp'}</span></div>
+        <div className="text-ink-faint text-sm uppercase tracking-widest text-center">Ground</div>
+        <div data-testid="game-state" className="text-center text-sm text-ink leading-tight whitespace-nowrap">
+          <div><span className="text-accent">Round:</span> {state.round} - <span className="capitalize">{state.phase}</span></div>
+          <div><span className="text-accent">Initiative:</span> {state.initiative === 'player' ? 'You' : 'Opponent'}</div>
         </div>
-        <div className="text-ink-faint text-[10px] uppercase tracking-widest text-right">Space</div>
+        <div className="text-ink-faint text-sm uppercase tracking-widest text-center">Space</div>
       </div>
 
       {/* Player half: everything anchored to the TOP (the battlefront). Your base
@@ -434,22 +433,8 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
           </ul>
         </section>
 
-        {/* Game over or action menu */}
-        {gameState.winner !== null ? (
-          <section data-testid="game-over-banner" className="border-2 border-amber rounded-xl bg-surface p-6 text-center shadow-[0_0_12px_rgba(245,166,35,0.3)]">
-            <p className={`text-xl font-semibold ${outcomeBanner(gameState.winner).tone}`}>
-              {outcomeBanner(gameState.winner).title}
-            </p>
-            <div className="mt-4 flex justify-center gap-3">
-              <button data-testid="rematch-btn" onClick={rematch} className="px-5 py-2 text-sm border-2 border-green text-green rounded-xl shadow-[0_0_12px_rgba(34,197,94,0.3)] hover:bg-green/10">
-                Rematch
-              </button>
-              <button onClick={onExit} className="px-5 py-2 text-sm border-2 border-line/60 text-ink-dim rounded-xl hover:text-ink">
-                Back to decks
-              </button>
-            </div>
-          </section>
-        ) : (
+        {/* Action menu (hidden once the game is over — the outcome is a modal below). */}
+        {gameState.winner === null && (
           <section data-testid="action-menu" className="rounded-xl bg-surface p-3">
             <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">
               {legal.length > 0 ? 'Your move' : 'Opponent is thinking…'}
@@ -487,6 +472,28 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
           </ol>
         </aside>
       </div>
+
+      {/* Game over — a modal overlay over the whole screen (#332). */}
+      {gameState.winner !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <section
+            data-testid="game-over-banner"
+            className="rounded-xl border-2 border-amber bg-surface p-8 text-center shadow-[0_0_24px_rgba(245,166,35,0.35)]"
+          >
+            <p className={`text-2xl font-semibold ${outcomeBanner(gameState.winner).tone}`}>
+              {outcomeBanner(gameState.winner).title}
+            </p>
+            <div className="mt-6 flex justify-center gap-3">
+              <button data-testid="rematch-btn" onClick={rematch} className="px-5 py-2 text-sm border-2 border-green text-green rounded-xl shadow-[0_0_12px_rgba(34,197,94,0.3)] hover:bg-green/10">
+                Rematch
+              </button>
+              <button onClick={onExit} className="px-5 py-2 text-sm border-2 border-line/60 text-ink-dim rounded-xl hover:text-ink">
+                Back to decks
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   )
 }

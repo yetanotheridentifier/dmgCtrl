@@ -119,6 +119,8 @@ describe('GameScreen', () => {
 
     const banner = screen.getByTestId('game-over-banner')
     expect(banner).toHaveTextContent(/you won/i)
+    // The outcome is a modal overlay over the screen, not an in-flow section (#332).
+    expect(banner.parentElement).toHaveClass('fixed')
 
     await user.click(screen.getByTestId('rematch-btn'))
     await waitFor(() => {
