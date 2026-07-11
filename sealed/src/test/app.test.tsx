@@ -17,9 +17,11 @@ describe('App shell', () => {
     expect(screen.getByRole('heading', { name: /dmgctrl · sealed/i })).toBeInTheDocument()
   })
 
-  it('shows the build tag (dev: bottom-right badge), not in the header (#332)', () => {
+  it('shows the build tag (dev: fixed bottom-right badge), not in the header (#332)', () => {
     render(<App />)
-    expect(screen.getByTestId('build-tag')).toHaveTextContent(/b\d+/)
+    const tag = screen.getByTestId('build-tag')
+    expect(tag).toHaveTextContent(/b\d+/)
+    expect(tag).toHaveStyle({ position: 'fixed', right: '8px', bottom: '8px' })
     // In dev the tag is a corner badge, no longer inside the header.
     expect(within(screen.getByRole('banner')).queryByTestId('build-tag')).toBeNull()
   })

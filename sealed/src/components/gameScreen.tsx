@@ -263,12 +263,12 @@ function InfoBar({ state, side }: { state: GameState; side: PlayerId }) {
     <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
       <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">{side === 'player' ? 'You' : 'Opponent'}</h3>
       <span className="text-sm">
-        Resources <span data-testid={`${side}-resources`} className="font-mono">{readyRes}/{p.resources.length}</span>
+        Resources <span data-testid={`${side}-resources`}>{readyRes}/{p.resources.length}</span>
       </span>
       <span className="text-sm text-ink-dim">{leaderCard?.name ?? 'Leader'} · {leaderStatus}</span>
       {side === 'opponent' && (
         <span className="text-sm">
-          Hand <span data-testid="opponent-hand-count" className="font-mono">{p.hand.length}</span>
+          Hand <span data-testid="opponent-hand-count">{p.hand.length}</span>
         </span>
       )}
       <span className="text-sm text-ink-faint">Deck {p.deck.length} · Discard {p.discard.length}</span>
@@ -408,9 +408,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
       <div data-testid="game-board" className="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-4 lg:items-start">
         <div className="space-y-4 min-w-0">
         <div className="flex items-center gap-6 text-sm text-ink-dim">
-          <span>Round <span className="font-mono text-ink">{gameState.round}</span></span>
-          <span>Phase <span className="font-mono text-ink">{gameState.phase}</span></span>
-          <span>Initiative <span className="font-mono text-ink">{gameState.initiative === 'player' ? 'you' : 'opponent'}</span></span>
+          <span>Round <span className="text-ink">{gameState.round}</span></span>
+          <span>Phase <span className="text-ink">{gameState.phase}</span></span>
+          <span>Initiative <span className="text-ink">{gameState.initiative === 'player' ? 'you' : 'opponent'}</span></span>
         </div>
 
         <Board
@@ -479,7 +479,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
         {/* Log — right-hand panel so the board keeps the width (#315) */}
         <aside data-testid="game-log-panel" className="mt-4 lg:mt-0 lg:sticky lg:top-4 lg:self-start border-2 border-line/60 rounded-xl bg-surface p-4">
           <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">Log</h3>
-          <ol data-testid="game-log" className="mt-2 space-y-0.5 text-xs font-mono text-ink-dim max-h-48 lg:max-h-[70vh] overflow-y-auto">
+          <ol data-testid="game-log" className="mt-2 space-y-0.5 text-xs text-ink-dim max-h-48 lg:max-h-[70vh] overflow-y-auto">
             {log.map((entry, i) => (
               <li key={i}>
                 <span className={entry.by === 'player' ? 'text-accent' : 'text-amber'}>

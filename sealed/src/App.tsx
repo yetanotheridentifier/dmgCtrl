@@ -72,7 +72,11 @@ export default function App() {
       {/* Dev-only build marker in the bottom-right corner (setup + game screens);
           in prod it lives at the foot of the Help page instead (#332). */}
       {isDev() && screen !== 'help' && (
-        <div data-testid="build-tag" className="fixed bottom-2 right-2 z-50 text-[10px] text-ink-faint">
+        <div
+          data-testid="build-tag"
+          style={{ position: 'fixed', right: 8, bottom: 8, zIndex: 50 }}
+          className="text-[10px] text-ink-faint"
+        >
           {BUILD_TAG}
         </div>
       )}
