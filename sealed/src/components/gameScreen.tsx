@@ -115,11 +115,7 @@ function ArenaZone({ state, side, arena, unitInteraction, anchor }: {
   const units = orderUnits(state, state.players[side].units.filter(u => u.arena === arena), anchor)
   return (
     <div data-testid={`${side}-${arena}-units`} className="flex flex-wrap gap-2 justify-center">
-      {units.length === 0 ? (
-        <p className="text-ink-faint text-xs italic">empty</p>
-      ) : (
-        units.map(u => <UnitLine key={u.instanceId} state={state} unit={u} interact={unitInteraction(u)} />)
-      )}
+      {units.map(u => <UnitLine key={u.instanceId} state={state} unit={u} interact={unitInteraction(u)} />)}
     </div>
   )
 }
@@ -293,15 +289,8 @@ function Board({ state, playerInteraction, opponentInteraction, baseAttack }: {
   // reliably as an arbitrary `grid-cols-[…]` value, which collapsed the grid.
   const cols: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)', columnGap: '1rem' }
   return (
-    <section data-testid="battlefield" className="border-2 border-line/60 rounded-xl bg-surface p-4 space-y-2">
+    <section data-testid="battlefield" className="rounded-xl bg-surface p-3 space-y-1.5">
       <InfoBar state={state} side="opponent" />
-
-      {/* Lane labels, aligned to the same three columns as the battlefield. */}
-      <div style={cols}>
-        <div className="text-ink-faint text-[10px] uppercase tracking-widest">Ground</div>
-        <div />
-        <div className="text-ink-faint text-[10px] uppercase tracking-widest text-right">Space</div>
-      </div>
 
       {/* Opponent half: everything anchored to the BOTTOM (the battlefront), so
           the opponent base and front-line units meet the centre; extra units
@@ -313,6 +302,18 @@ function Board({ state, playerInteraction, opponentInteraction, baseAttack }: {
           <BaseCard state={state} side="opponent" onAttack={baseAttack} />
         </div>
         <ArenaZone state={state} side="opponent" arena="space" unitInteraction={opponentInteraction} anchor="bottom" />
+      </div>
+
+      {/* Battlefront: Ground / Space labels flank the game state, which sits
+          between the two bases (#332). */}
+      <div className="items-center" style={cols}>
+        <div className="text-ink-faint text-[10px] uppercase tracking-widest">Ground</div>
+        <div data-testid="game-state" className="text-center text-[10px] text-ink-dim leading-tight">
+          <div>Round <span className="text-ink">{state.round}</span></div>
+          <div className="capitalize">{state.phase}</div>
+          <div>init <span className="text-ink">{state.initiative === 'player' ? 'you' : 'opp'}</span></div>
+        </div>
+        <div className="text-ink-faint text-[10px] uppercase tracking-widest text-right">Space</div>
       </div>
 
       {/* Player half: everything anchored to the TOP (the battlefront). Your base
@@ -404,15 +405,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
   })
 
   return (
-    <div data-testid="game-screen" className="w-full space-y-4">
+    <div data-testid="game-screen" className="w-full space-y-2">
       <div data-testid="game-board" className="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-4 lg:items-start">
-        <div className="space-y-4 min-w-0">
-        <div className="flex items-center gap-6 text-sm text-ink-dim">
-          <span>Round <span className="text-ink">{gameState.round}</span></span>
-          <span>Phase <span className="text-ink">{gameState.phase}</span></span>
-          <span>Initiative <span className="text-ink">{gameState.initiative === 'player' ? 'you' : 'opponent'}</span></span>
-        </div>
-
+        <div className="space-y-2 min-w-0">
         <Board
           state={gameState}
           playerInteraction={playerInteraction}
@@ -421,7 +416,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
         />
 
         {/* Your hand */}
-        <section className="border-2 border-line/60 rounded-xl bg-surface p-4">
+        <section className="rounded-xl bg-surface p-3">
           <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">Your hand</h3>
           <ul data-testid="player-hand" className="mt-2 flex flex-wrap gap-1">
             {hand.length === 0 && <li className="text-ink-faint text-xs italic">empty</li>}
@@ -455,7 +450,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
             </div>
           </section>
         ) : (
-          <section data-testid="action-menu" className="border-2 border-line/60 rounded-xl bg-surface p-4">
+          <section data-testid="action-menu" className="rounded-xl bg-surface p-3">
             <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">
               {legal.length > 0 ? 'Your move' : 'Opponent is thinking…'}
             </h3>
@@ -477,15 +472,16 @@ export default function GameScreen({ deck, opponentDeck, onExit, gameOptions }: 
         </div>
 
         {/* Log — right-hand panel so the board keeps the width (#315) */}
-        <aside data-testid="game-log-panel" className="mt-4 lg:mt-0 lg:sticky lg:top-4 lg:self-start border-2 border-line/60 rounded-xl bg-surface p-4">
+        <aside data-testid="game-log-panel" className="mt-2 lg:mt-0 lg:sticky lg:top-4 lg:self-start rounded-xl bg-surface p-3">
           <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">Log</h3>
           <ol data-testid="game-log" className="mt-2 space-y-0.5 text-xs text-ink-dim max-h-48 lg:max-h-[70vh] overflow-y-auto">
             {log.map((entry, i) => (
-              <li key={i}>
-                <span className={entry.by === 'player' ? 'text-accent' : 'text-amber'}>
-                  {entry.by === 'player' ? 'you' : 'opp'}
-                </span>{' '}
-                {entry.text}
+              // Actor in its own fixed-width column so the actions line up (#332).
+              <li key={i} className="flex gap-2">
+                <span className={`w-8 shrink-0 ${entry.by === 'player' ? 'text-accent' : 'text-amber'}`}>
+                  {entry.by === 'player' ? 'You' : 'Opp'}
+                </span>
+                <span>{entry.text}</span>
               </li>
             ))}
           </ol>

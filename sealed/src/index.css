@@ -84,6 +84,14 @@ body {
   margin: 0.5rem 0;
   padding-left: 1.5rem;
 }
+/* Restore bullets/numbers — Tailwind's preflight strips list markers, which left
+   these reading as bald indented blocks (#332). */
+.help-content ul {
+  list-style: disc;
+}
+.help-content ol {
+  list-style: decimal;
+}
 .help-content li {
   margin: 0.25rem 0;
 }

@@ -287,6 +287,28 @@ describe('GameScreen', () => {
     expect(within(panel).getByTestId('game-log')).toBeInTheDocument()
   })
 
+  it('puts the game state (round/phase/initiative) between the bases in the battlefield (#332)', async () => {
+    await renderBoard()
+    const gameState = within(screen.getByTestId('battlefield')).getByTestId('game-state')
+    expect(gameState).toHaveTextContent(/round/i)
+    expect(gameState).toHaveTextContent(/action/i) // phase
+    expect(gameState).toHaveTextContent(/init/i)
+  })
+
+  it('does not label an empty arena "empty" (#332)', async () => {
+    await renderBoard()
+    expect(screen.getByTestId('player-space-units')).not.toHaveTextContent(/empty/i)
+  })
+
+  it('logs the actor as capitalised You/Opp in a separate column (#332)', async () => {
+    const user = userEvent.setup()
+    await renderBoard()
+    await user.click(screen.getAllByRole('button', { name: /play big test unit/i })[0])
+    const log = screen.getByTestId('game-log')
+    expect(within(log).getAllByText('You').length).toBeGreaterThan(0)
+    expect(within(log).getAllByText('Opp').length).toBeGreaterThan(0)
+  })
+
   // Exit moved to the app header (#332) — covered in app.test.tsx.
 
   it('shows the diagnostic detail when card loading fails', async () => {
