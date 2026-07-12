@@ -118,10 +118,35 @@ describe('normaliseCard', () => {
 })
 
 describe('buildCardDb', () => {
-  it('keys normalised cards by id', () => {
+  it('keys normalised cards by id (alongside the built-in token upgrades)', () => {
     const db = buildCardDb([VADER_UNIT, { ...VADER_UNIT, Number: '087', Name: 'Other' }])
-    expect(Object.keys(db).sort()).toEqual(['SOR_086', 'SOR_087'])
+    const deckIds = Object.keys(db).filter(id => !id.startsWith('TOKEN_'))
+    expect(deckIds.sort()).toEqual(['SOR_086', 'SOR_087'])
     expect(db['SOR_086'].name).toBe('Darth Vader')
+    // Token upgrades are always present so attached tokens resolve (#308).
+    expect(db['TOKEN_EXPERIENCE']).toBeDefined()
+  })
+})
+
+describe('upgrade stat overrides — temporary ASH data gap (#308)', () => {
+  it('fills in Power/HP the source omits (Bokken Saber ASH_180 → +1/+1)', () => {
+    const c = normaliseCard({ Set: 'ASH', Number: '180', Name: 'Bokken Saber', Type: 'Upgrade' })
+    expect([c.power, c.hp]).toEqual([1, 1])
+  })
+
+  it('captures a negative modifier (Nowhere to Hide ASH_198 → -2/0)', () => {
+    const c = normaliseCard({ Set: 'ASH', Number: '198', Name: 'Nowhere to Hide', Type: 'Upgrade' })
+    expect([c.power, c.hp]).toEqual([-2, 0])
+  })
+
+  it('does not override once the source provides stats (auto-drops out)', () => {
+    const c = normaliseCard({ Set: 'ASH', Number: '180', Name: 'Bokken Saber', Type: 'Upgrade', Power: '5', HP: '5' })
+    expect([c.power, c.hp]).toEqual([5, 5])
+  })
+
+  it('leaves a card with no override entry on its source stats', () => {
+    const c = normaliseCard({ Set: 'SOR', Number: '072', Name: 'Entrenched', Type: 'Upgrade', Power: '3', HP: '3' })
+    expect([c.power, c.hp]).toEqual([3, 3])
   })
 })
 

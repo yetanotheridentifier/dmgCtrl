@@ -6,7 +6,8 @@ import { effectiveCost } from './legalMoves'
 import { runTrigger } from './abilities'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
-import { hasKeyword, keywordValue } from './keywords'
+import { unitHasKeyword, unitKeywordValue } from './keywords'
+import { TOKEN_SHIELD, TOKEN_ADVANTAGE, removeFirst, hasToken } from './tokenUpgrades'
 
 /**
  * Action resolver (T2.5) — pure `(state, action) => state`.
@@ -24,6 +25,11 @@ export function resolve(state: GameState, action: Action): GameState {
     case 'playCard':
       return requirePhase(state, 'action', () => {
         const played = playCard(state, action.handIndex)
+        return played.winner !== null ? played : advanceTurn(resetPasses(played))
+      })
+    case 'playUpgrade':
+      return requirePhase(state, 'action', () => {
+        const played = playUpgrade(state, action.handIndex, action.targetInstanceId)
         return played.winner !== null ? played : advanceTurn(resetPasses(played))
       })
     case 'deployLeader':
@@ -193,6 +199,45 @@ function playCard(state: GameState, handIndex: number): GameState {
   return checkWin(next)
 }
 
+/**
+ * Play an upgrade from hand and attach it to a unit (#308). Any unit in play is a
+ * valid target by default; per-card restrictions are #337. Cost + aspect penalty
+ * apply as for units; the upgrade's power/HP and keywords then modify the unit
+ * (via the stats/keyword helpers).
+ */
+function playUpgrade(state: GameState, handIndex: number, targetInstanceId: string): GameState {
+  const playerId = state.activePlayer
+  const p = state.players[playerId]
+  const cardId = p.hand[handIndex]
+  const card = cardId ? state.cards[cardId] : undefined
+  if (!card || card.type !== 'upgrade') {
+    throw new Error(`playUpgrade: hand index ${handIndex} is not a playable upgrade`)
+  }
+
+  const targetOwner = (['player', 'opponent'] as PlayerId[]).find(id =>
+    state.players[id].units.some(u => u.instanceId === targetInstanceId),
+  )
+  if (!targetOwner) {
+    throw new Error(`playUpgrade: no unit ${targetInstanceId} to attach to`)
+  }
+
+  const paid = payCost(p, effectiveCost(state, playerId, card))
+  let next = updatePlayer(state, playerId, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
+  next = updatePlayer(next, targetOwner, {
+    units: next.players[targetOwner].units.map(u =>
+      u.instanceId === targetInstanceId ? { ...u, upgrades: [...u.upgrades, { cardId: card.id, owner: playerId }] } : u,
+    ),
+  })
+
+  // "When Played" abilities fire after the upgrade attaches (CR 6.2.0f).
+  next = runTrigger(next, 'whenPlayed', {
+    owner: playerId,
+    cardId: card.id,
+    sourceInstanceId: targetInstanceId,
+  })
+  return checkWin(next)
+}
+
 function deployLeader(state: GameState): GameState {
   const playerId = state.activePlayer
   const p = state.players[playerId]
@@ -249,9 +294,15 @@ function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<string,
   const defeated: UnitState[] = []
 
   for (const u of p.units) {
-    const extra = damaged.get(u.instanceId) ?? 0
+    let extra = damaged.get(u.instanceId) ?? 0
+    let upgrades = u.upgrades
+    // A shield token prevents one instance of incoming damage, then is removed (#308).
+    if (extra > 0 && hasToken(upgrades, TOKEN_SHIELD)) {
+      upgrades = removeFirst(upgrades, a => a.cardId === TOKEN_SHIELD)
+      extra = 0
+    }
     const total = u.damage + extra
-    const next = extra > 0 ? { ...u, damage: total } : u
+    const next = extra > 0 || upgrades !== u.upgrades ? { ...u, damage: total, upgrades } : u
     if (total >= effectiveHp(state, next)) {
       defeated.push(next)
     } else {
@@ -259,11 +310,28 @@ function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<string,
     }
   }
 
+  // Defeated card-upgrades return to their OWNER's discard, which may differ from
+  // the unit's controller when an upgrade was attached to an enemy unit (#308).
+  // Token upgrades (type `token`) simply cease to exist. Collect per owner.
+  const defeatedUpgrades = defeated
+    .flatMap(u => u.upgrades)
+    .filter(a => state.cards[a.cardId]?.type !== 'token')
+
+  // Non-leader defeated units go to their owner's discard pile (CR 1.5.5c).
   let result = updatePlayer(state, owner, {
     units: survivors,
-    // Non-leader defeated units go to their owner's discard pile (CR 1.5.5c).
-    discard: [...p.discard, ...defeated.filter(u => !u.isLeader).map(u => u.cardId)],
+    discard: [
+      ...p.discard,
+      ...defeated.filter(u => !u.isLeader).map(u => u.cardId),
+      ...defeatedUpgrades.filter(a => a.owner === owner).map(a => a.cardId),
+    ],
   })
+
+  const other = opponentOf(owner)
+  const othersUpgrades = defeatedUpgrades.filter(a => a.owner === other).map(a => a.cardId)
+  if (othersUpgrades.length > 0) {
+    result = updatePlayer(result, other, { discard: [...result.players[other].discard, ...othersUpgrades] })
+  }
 
   // A defeated Leader Unit returns to the base zone, exhausted, undeployed;
   // its epic action stays used so it cannot redeploy (CR 3.4.5).
@@ -275,6 +343,22 @@ function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<string,
   }
 
   return result
+}
+
+/**
+ * Advantage gives +1/0 until the unit next completes an attack or defence, then
+ * the token is removed (#308/#334). Called for the attacker and defender after
+ * combat; a no-op if the unit has no Advantage token (or was defeated).
+ */
+function consumeAdvantage(state: GameState, owner: PlayerId, instanceId: string): GameState {
+  const p = state.players[owner]
+  const unit = p.units.find(u => u.instanceId === instanceId)
+  if (!unit || !hasToken(unit.upgrades, TOKEN_ADVANTAGE)) return state
+  return updatePlayer(state, owner, {
+    units: p.units.map(u =>
+      u.instanceId === instanceId ? { ...u, upgrades: removeFirst(u.upgrades, a => a.cardId === TOKEN_ADVANTAGE) } : u,
+    ),
+  })
 }
 
 function attack(state: GameState, attackerId: string, target: AttackTarget): GameState {
@@ -297,7 +381,7 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
   })
 
   // Restore N: heals the attacking player's base when the unit attacks (CR 7.5).
-  const restore = keywordValue(next, attacker.cardId, 'Restore')
+  const restore = unitKeywordValue(next, attacker, 'Restore')
   if (restore > 0) {
     const own = next.players[playerId]
     next = updatePlayer(next, playerId, {
@@ -308,6 +392,7 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
   if (target.kind === 'base') {
     const enemy = next.players[enemyId]
     next = updatePlayer(next, enemyId, { base: { ...enemy.base, damage: enemy.base.damage + attackerPower } })
+    next = consumeAdvantage(next, playerId, attackerId) // the attack completed
     return checkWin(next)
   }
 
@@ -316,10 +401,11 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
 
   const counterPower = effectivePower(next, defender)
 
-  // Overwhelm: excess combat damage beyond the defender's remaining HP hits
-  // the defending player's base (CR 1.9.11).
+  // Overwhelm: excess combat damage beyond the defender's remaining HP hits the
+  // defending player's base (CR 1.9.11). A shielded defender takes no damage, so
+  // there is no excess to trample (#308).
   const remainingHp = effectiveHp(next, defender) - defender.damage
-  const overwhelmExcess = hasKeyword(next, attacker.cardId, 'Overwhelm')
+  const overwhelmExcess = unitHasKeyword(next, attacker, 'Overwhelm') && !hasToken(defender.upgrades, TOKEN_SHIELD)
     ? Math.max(0, attackerPower - remainingHp)
     : 0
 
@@ -331,6 +417,10 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
     const enemy = next.players[enemyId]
     next = updatePlayer(next, enemyId, { base: { ...enemy.base, damage: enemy.base.damage + overwhelmExcess } })
   }
+
+  // Both units completed a combat — spend any Advantage on the survivors (#308).
+  next = consumeAdvantage(next, playerId, attackerId)
+  next = consumeAdvantage(next, enemyId, defender.instanceId)
   return checkWin(next)
 }
 

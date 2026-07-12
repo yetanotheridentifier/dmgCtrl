@@ -134,7 +134,7 @@ describe('legalMoves — action phase', () => {
     expect(types(legalMoves(s))).not.toContain('playCard')
   })
 
-  it('does not offer playCard for events or upgrades (MVP: units only)', () => {
+  it('does not offer playCard for events (units only; upgrades use playUpgrade)', () => {
     const s = state({
       players: {
         player: player({ hand: ['TST_E1'], resources: ready(5) }),

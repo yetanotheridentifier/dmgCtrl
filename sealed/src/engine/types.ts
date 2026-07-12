@@ -45,6 +45,16 @@ export interface EngineCard {
 
 export type CardDb = Readonly<Record<string, EngineCard>>
 
+/**
+ * An upgrade attached to a unit (#308). `owner` is the player who played it —
+ * on defeat the upgrade returns to its owner's discard, which may differ from the
+ * unit's controller when an upgrade is attached to an enemy unit.
+ */
+export interface UpgradeAttachment {
+  cardId: string
+  owner: PlayerId
+}
+
 /** A unit in play. instanceId keeps duplicate copies of a card distinct. */
 export interface UnitState {
   instanceId: string
@@ -53,7 +63,12 @@ export interface UnitState {
   damage: number
   exhausted: boolean
   isLeader: boolean
-  upgrades: string[]
+  /**
+   * Attached upgrades. Card upgrades return to their owner's discard on defeat;
+   * token upgrades (cardId in TOKEN_CARDS, type `token`) never go to a discard —
+   * they cease to exist. Rendering them as tokens rather than cards is #336.
+   */
+  upgrades: UpgradeAttachment[]
 }
 
 export interface ResourceState {
