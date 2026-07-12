@@ -3,7 +3,7 @@ import type { GameState, PlayerId, PlayerState, UnitState } from './types'
 import { opponentOf } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, supportGrantedKeywords } from './legalMoves'
-import { runTrigger } from './abilities'
+import { runTrigger, runUnitTrigger } from './abilities'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue } from './keywords'
@@ -430,6 +430,13 @@ function consumeAdvantage(state: GameState, owner: PlayerId, instanceId: string)
   })
 }
 
+/** Fire "When Attack Ends" abilities on the attacker (card + upgrades), if it
+ *  survived the combat (#340). */
+function fireAttackEnd(state: GameState, owner: PlayerId, attackerId: string): GameState {
+  const attacker = state.players[owner].units.find(u => u.instanceId === attackerId)
+  return attacker ? runUnitTrigger(state, 'onAttackEnd', attacker, owner) : state
+}
+
 function attack(state: GameState, attackerId: string, target: AttackTarget): GameState {
   const playerId = state.activePlayer
   const enemyId = opponentOf(playerId)
@@ -462,6 +469,7 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
     const enemy = next.players[enemyId]
     next = updatePlayer(next, enemyId, { base: { ...enemy.base, damage: enemy.base.damage + attackerPower } })
     next = consumeAdvantage(next, playerId, attackerId) // the attack completed
+    next = fireAttackEnd(next, playerId, attackerId)
     return checkWin(next)
   }
 
@@ -490,6 +498,7 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
   // Both units completed a combat — spend any Advantage on the survivors (#308).
   next = consumeAdvantage(next, playerId, attackerId)
   next = consumeAdvantage(next, enemyId, defender.instanceId)
+  next = fireAttackEnd(next, playerId, attackerId)
   return checkWin(next)
 }
 
