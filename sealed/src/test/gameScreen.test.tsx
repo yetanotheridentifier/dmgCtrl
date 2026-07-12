@@ -350,6 +350,44 @@ describe('GameScreen', () => {
 
   // Exit moved to the app header (#332) — covered in app.test.tsx.
 
+  it('plays an upgrade from hand onto a unit via click-to-target (#336)', async () => {
+    // A deck with a cheap unit + a cheap upgrade; the opponent's deck is inert
+    // (all unaffordable) so the AI just passes and the turn comes back.
+    const UP_CARDS: SwuCard[] = [
+      { Set: 'TST', Number: '100', Name: 'Cheap Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '1', Power: '2', HP: '3' },
+      { Set: 'TST', Number: '200', Name: 'Test Upgrade', Type: 'Upgrade', Cost: '1', Power: '2', HP: '2' },
+      { Set: 'TST', Number: '300', Name: 'Filler', Type: 'Unit', Arenas: ['Ground'], Cost: '9', Power: '1', HP: '1' },
+    ]
+    for (const c of UP_CARDS) await db.cards.put({ id: `TST_${c.Number}`, json: c, fetchedAt: 1 })
+
+    // Deal order (identity): Cheap Unit, Upgrade, then Fillers.
+    const playerDeck: SavedDeck = { id: 'p', name: 'Up', leader: 'TST_001', base: 'TST_002', cards: [{ id: 'TST_100', count: 1 }, { id: 'TST_200', count: 1 }, { id: 'TST_300', count: 28 }], importedAt: 1 }
+    const inertDeck: SavedDeck = { id: 'o', name: 'Inert', leader: 'TST_001', base: 'TST_002', cards: [{ id: 'TST_300', count: 30 }], importedAt: 1 }
+
+    const user = userEvent.setup()
+    render(<GameScreen deck={playerDeck} opponentDeck={inertDeck} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
+    await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
+
+    // Setup: keep hand, resource two Fillers (index 2 twice), leaving Cheap Unit + Upgrade.
+    await user.click(screen.getByRole('button', { name: /keep hand/i }))
+    await user.click(screen.getByTestId('hand-card-2'))
+    await user.click(screen.getByTestId('hand-card-2'))
+
+    // Play the Cheap Unit (hand-card-0); the AI passes, turn returns to the player.
+    await user.click(screen.getByTestId('hand-card-0'))
+    expect(within(screen.getByTestId('player-ground-units')).getByTestId(/^board-unit-u\d+$/)).toBeInTheDocument()
+
+    // Click the Upgrade (now hand-card-0) → the friendly unit highlights as a target.
+    await user.click(screen.getByTestId('hand-card-0'))
+    const unitTile = within(screen.getByTestId('player-ground-units')).getByTestId(/^board-unit-u\d+$/)
+    expect(unitTile).toHaveAttribute('data-upgrade-target', 'true')
+
+    // Click the unit to attach; the log records it and the upgrade renders on the unit.
+    await user.click(unitTile)
+    expect(within(screen.getByTestId('game-log')).getByText(/test upgrade.*cheap unit/i)).toBeInTheDocument()
+    expect(within(screen.getByTestId('player-ground-units')).getByTestId(/^board-unit-upgrades-u\d+$/)).toBeInTheDocument()
+  })
+
   it('shows the diagnostic detail when card loading fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 502, json: () => Promise.resolve({}) }))
     const badDeck = { ...DECK, cards: [{ id: 'TST_404', count: 30 }] }

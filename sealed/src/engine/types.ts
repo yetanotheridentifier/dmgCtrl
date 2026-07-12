@@ -69,6 +69,18 @@ export interface UnitState {
    * they cease to exist. Rendering them as tokens rather than cards is #336.
    */
   upgrades: UpgradeAttachment[]
+  /**
+   * Hidden state (#334): the unit can't be attacked (unless it has Sentinel, which
+   * overrides Hidden); cleared at the next phase. Set on entry for units with the
+   * Hidden keyword, or when an ability grants it (#337).
+   */
+  hidden?: boolean
+  /**
+   * Keywords temporarily granted for a single attack (Support, #334). Set only
+   * during the resolution of a support attack and cleared immediately after, so a
+   * resting state never carries it. `unitHasKeyword`/`unitKeywordValue` include it.
+   */
+  grantedKeywords?: KeywordInstance[]
 }
 
 export interface ResourceState {
@@ -127,6 +139,12 @@ export interface GameState {
   setupStage: 'mulligan' | 'resource'
   /** Terminal outcome: a winning player, `'draw'` (both bases fall at once), or null while live. */
   winner: PlayerId | 'draw' | null
+  /**
+   * A pending on-play trigger (#334): after an Ambush/Support unit enters play, its
+   * controller resolves the optional attack before the turn passes. While set, the
+   * only legal moves are the trigger's attack(s) or `skipTrigger`.
+   */
+  pendingTrigger?: { kind: 'ambush' | 'support'; unitId: string }
 }
 
 export function opponentOf(player: PlayerId): PlayerId {

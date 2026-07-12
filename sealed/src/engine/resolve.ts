@@ -2,11 +2,11 @@ import type { Action, AttackTarget } from './actions'
 import type { GameState, PlayerId, PlayerState, UnitState } from './types'
 import { opponentOf } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
-import { effectiveCost } from './legalMoves'
+import { effectiveCost, enemyAttackTargets, supportGrantedKeywords } from './legalMoves'
 import { runTrigger } from './abilities'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
-import { unitHasKeyword, unitKeywordValue } from './keywords'
+import { hasKeyword, unitHasKeyword, unitKeywordValue } from './keywords'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, removeFirst, hasToken } from './tokenUpgrades'
 
 /**
@@ -25,7 +25,11 @@ export function resolve(state: GameState, action: Action): GameState {
     case 'playCard':
       return requirePhase(state, 'action', () => {
         const played = playCard(state, action.handIndex)
-        return played.winner !== null ? played : advanceTurn(resetPasses(played))
+        if (played.winner !== null) return played
+        // An on-play trigger (Ambush) keeps the turn with the active player to
+        // resolve it before passing (#334).
+        if (played.pendingTrigger) return resetPasses(played)
+        return advanceTurn(resetPasses(played))
       })
     case 'playUpgrade':
       return requirePhase(state, 'action', () => {
@@ -36,13 +40,20 @@ export function resolve(state: GameState, action: Action): GameState {
       return requirePhase(state, 'action', () => advanceTurn(resetPasses(deployLeader(state))))
     case 'attack':
       return requirePhase(state, 'action', () => {
-        const attacked = attack(state, action.attackerId, action.target)
+        // An attack resolves a pending trigger, if one is active (#334). Support
+        // lends its keywords to the chosen attacker for this one attack.
+        const trigger = state.pendingTrigger
+        const before = trigger?.kind === 'support' ? grantSupportKeywords(state, trigger.unitId, action.attackerId) : state
+        let attacked = attack(before, action.attackerId, action.target)
+        if (trigger) attacked = { ...clearGrantedKeywords(attacked), pendingTrigger: undefined }
         return attacked.winner !== null ? attacked : advanceTurn(resetPasses(attacked))
       })
     case 'takeInitiative':
       return requirePhase(state, 'action', () => takeInitiative(state))
     case 'pass':
       return requirePhase(state, 'action', () => pass(state))
+    case 'skipTrigger':
+      return requirePhase(state, 'action', () => advanceTurn(resetPasses(skipTrigger(state))))
     case 'resourceCard':
       return requirePhase(state, 'regroup', () => regroupChoice(state, action.handIndex))
     case 'skipResource':
@@ -172,14 +183,19 @@ function playCard(state: GameState, handIndex: number): GameState {
   }
 
   const paid = payCost(p, effectiveCost(state, playerId, card))
+  // Ambush: the unit may immediately attack an enemy unit, so it enters ready (#334).
+  const ambush = hasKeyword(state, card.id, 'Ambush')
   const newUnit: UnitState = {
     instanceId: `u${state.instanceCounter}`,
     cardId: card.id,
     arena: card.arena ?? 'ground',
     damage: 0,
-    exhausted: true, // units enter play exhausted (CR 1.5.4b)
+    exhausted: !ambush, // units normally enter exhausted (CR 1.5.4b); Ambush enters ready
     isLeader: false,
-    upgrades: [],
+    // Shielded: the unit enters play with a shield token (#334).
+    upgrades: hasKeyword(state, card.id, 'Shielded') ? [{ cardId: TOKEN_SHIELD, owner: playerId }] : [],
+    // Hidden: the unit enters play hidden — unattackable until the next phase (#334).
+    ...(hasKeyword(state, card.id, 'Hidden') ? { hidden: true } : {}),
   }
 
   let next = updatePlayer(state, playerId, {
@@ -189,6 +205,24 @@ function playCard(state: GameState, handIndex: number): GameState {
   })
   next = { ...next, instanceCounter: state.instanceCounter + 1 }
 
+  // Ambush: open the pending attack only if there's actually an enemy to hit;
+  // otherwise the unit just enters play exhausted, as normal (#334).
+  if (ambush) {
+    if (enemyAttackTargets(next, newUnit).targets.length > 0) {
+      next = { ...next, pendingTrigger: { kind: 'ambush', unitId: newUnit.instanceId } }
+    } else {
+      next = updatePlayer(next, playerId, {
+        units: next.players[playerId].units.map(u => (u.instanceId === newUnit.instanceId ? { ...u, exhausted: true } : u)),
+      })
+    }
+  } else if (hasKeyword(state, card.id, 'Support')) {
+    // Support: open the pending attack if there's another ready unit to attack with.
+    const others = next.players[playerId].units.filter(u => u.instanceId !== newUnit.instanceId && !u.exhausted)
+    if (others.length > 0) {
+      next = { ...next, pendingTrigger: { kind: 'support', unitId: newUnit.instanceId } }
+    }
+  }
+
   // "When Played" abilities fire after the card enters play (CR 6.2.0f);
   // their effects can defeat a base, so the win check runs afterwards.
   next = runTrigger(next, 'whenPlayed', {
@@ -197,6 +231,41 @@ function playCard(state: GameState, handIndex: number): GameState {
     sourceInstanceId: newUnit.instanceId,
   })
   return checkWin(next)
+}
+
+/** Lend a Support unit's keywords to the chosen attacker for one attack (#334). */
+function grantSupportKeywords(state: GameState, supportUnitId: string, attackerId: string): GameState {
+  const granted = supportGrantedKeywords(state, supportUnitId)
+  if (granted.length === 0) return state
+  const playerId = state.activePlayer
+  return updatePlayer(state, playerId, {
+    units: state.players[playerId].units.map(u => (u.instanceId === attackerId ? { ...u, grantedKeywords: granted } : u)),
+  })
+}
+
+/** Strip transient granted keywords from every unit after a support attack (#334). */
+function clearGrantedKeywords(state: GameState): GameState {
+  let next = state
+  for (const id of ['player', 'opponent'] as PlayerId[]) {
+    const units = next.players[id].units
+    if (units.some(u => u.grantedKeywords)) {
+      next = updatePlayer(next, id, { units: units.map(u => (u.grantedKeywords ? { ...u, grantedKeywords: undefined } : u)) })
+    }
+  }
+  return next
+}
+
+/** Decline a pending on-play trigger (#334). Ambush: the readied unit stays but
+ *  becomes exhausted (it entered play without attacking). Support: nothing changes. */
+function skipTrigger(state: GameState): GameState {
+  const trigger = state.pendingTrigger
+  if (!trigger) throw new Error('skipTrigger: no pending trigger')
+  const playerId = state.activePlayer
+  let next: GameState = { ...state, pendingTrigger: undefined }
+  next = updatePlayer(next, playerId, {
+    units: next.players[playerId].units.map(u => (u.instanceId === trigger.unitId ? { ...u, exhausted: true } : u)),
+  })
+  return next
 }
 
 /**
@@ -465,8 +534,20 @@ function drawForRegroup(state: GameState, id: PlayerId): GameState {
   })
 }
 
+/** Clear every unit's Hidden state — it lasts only until the next phase (#334). */
+function clearHidden(state: GameState): GameState {
+  let next = state
+  for (const id of ['player', 'opponent'] as PlayerId[]) {
+    const units = next.players[id].units
+    if (units.some(u => u.hidden)) {
+      next = updatePlayer(next, id, { units: units.map(u => (u.hidden ? { ...u, hidden: false } : u)) })
+    }
+  }
+  return next
+}
+
 function enterRegroup(state: GameState): GameState {
-  let next: GameState = { ...state, phase: 'regroup', consecutivePasses: 0 }
+  let next: GameState = clearHidden({ ...state, phase: 'regroup', consecutivePasses: 0 })
   next = drawForRegroup(next, 'player')
   next = drawForRegroup(next, 'opponent')
   next = checkWin(next)

@@ -54,6 +54,8 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       return 'Take the initiative'
     case 'pass':
       return 'Pass'
+    case 'skipTrigger':
+      return state.pendingTrigger ? `Skip ${state.pendingTrigger.kind}` : 'Skip'
     case 'resourceCard': {
       if (opts.redact) return 'Resource a card'
       const cardId = state.players[by].hand[action.handIndex]
