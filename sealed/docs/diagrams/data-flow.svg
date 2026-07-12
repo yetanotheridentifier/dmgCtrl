@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 500" font-family="'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5">
+  <defs>
+    <marker id="df-arw" markerWidth="11" markerHeight="11" refX="8" refY="3" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#607d8b"/>
+    </marker>
+    <style>
+      .sect { font-weight:700; font-size:12px; letter-spacing:.05em; }
+      .lbl { fill:#111827; text-anchor:middle; }
+      .sub { fill:#4b5563; font-size:10.5px; text-anchor:middle; }
+      .flw { stroke:#607d8b; stroke-width:1.7; fill:none; }
+      .flwd { stroke:#607d8b; stroke-width:1.7; fill:none; stroke-dasharray:5 4; }
+      .elbl { fill:#374151; font-size:11px; text-anchor:middle; }
+    </style>
+  </defs>
+
+  <!-- 1 · Hydration -->
+  <text class="sect" x="24" y="30" fill="#ef6c00">1 · Card hydration (game start — useGame.load)</text>
+  <g>
+    <rect x="24" y="46" width="120" height="48" rx="6" fill="#fff8e1" stroke="#ffb300"/><text class="lbl" x="84" y="68">decks</text><text class="sub" x="84" y="84">localStorage</text>
+    <rect x="184" y="46" width="222" height="48" rx="6" fill="#fff3e0" stroke="#fb8c00"/><text class="lbl" x="295" y="68">getCard (per unique card)</text><text class="sub" x="295" y="84">Dexie cache → SWUDB worker → swuapi</text>
+    <rect x="446" y="46" width="188" height="48" rx="6" fill="#e3f2fd" stroke="#42a5f5"/><text class="lbl" x="540" y="68">buildCardDb</text><text class="sub" x="540" y="84">+ token cards + stat overrides</text>
+    <rect x="674" y="46" width="110" height="48" rx="6" fill="#e3f2fd" stroke="#42a5f5"/><text class="lbl" x="729" y="68">initGame</text><text class="sub" x="729" y="84">shuffle · draw 6</text>
+    <rect x="824" y="46" width="94" height="48" rx="6" fill="#bbdefb" stroke="#1e88e5" stroke-width="2"/><text class="lbl" x="871" y="68" font-weight="600">Game</text><text class="lbl" x="871" y="84" font-weight="600">State</text>
+    <path class="flw" d="M144,70 L182,70" marker-end="url(#df-arw)"/>
+    <path class="flw" d="M406,70 L444,70" marker-end="url(#df-arw)"/>
+    <path class="flw" d="M634,70 L672,70" marker-end="url(#df-arw)"/>
+    <path class="flw" d="M784,70 L822,70" marker-end="url(#df-arw)"/>
+  </g>
+  <text class="sub" x="295" y="112" fill="#607d8b">cardDefinitions registered on import (side effect) → registry</text>
+
+  <!-- 2 · Action loop -->
+  <text class="sect" x="24" y="164" fill="#1565c0">2 · Action loop (runtime — pure (state, action) ⇒ state)</text>
+  <g>
+    <rect x="40" y="196" width="150" height="52" rx="7" fill="#bbdefb" stroke="#1e88e5" stroke-width="2"/><text class="lbl" x="115" y="220" font-weight="700">GameState</text><text class="sub" x="115" y="236">stored in useGame</text>
+    <rect x="238" y="196" width="150" height="52" rx="7" fill="#e3f2fd" stroke="#42a5f5"/><text class="lbl" x="313" y="220">legalMoves(state)</text><text class="sub" x="313" y="236">the only legality source</text>
+    <rect x="436" y="184" width="196" height="76" rx="7" fill="#e8f5e9" stroke="#66bb6a"/>
+    <text class="lbl" x="534" y="206" font-weight="600">choose an Action</text>
+    <text class="sub" x="534" y="224">Human: click card/unit → act()</text>
+    <text class="sub" x="534" y="240">AI: driveAi → setupAi / randomAi</text>
+    <rect x="680" y="196" width="150" height="52" rx="7" fill="#bbdefb" stroke="#1e88e5" stroke-width="2"/><text class="lbl" x="755" y="218" font-weight="700">resolve(state, action)</text><text class="sub" x="755" y="236">throws on invariant breaks</text>
+
+    <rect x="620" y="300" width="270" height="52" rx="7" fill="#e1f5fe" stroke="#039be5"/>
+    <text class="lbl" x="755" y="322">runTrigger · runUnitTrigger</text>
+    <text class="sub" x="755" y="338">ability registry → effects → checkWin</text>
+
+    <rect x="330" y="392" width="230" height="46" rx="7" fill="#fff3e0" stroke="#fb8c00"/>
+    <text class="lbl" x="445" y="413">GameRecord → Dexie</text><text class="sub" x="445" y="429">initialState + moves (replayable)</text>
+
+    <!-- flows -->
+    <path class="flw" d="M190,222 L236,222" marker-end="url(#df-arw)"/>
+    <text class="elbl" x="213" y="214">enumerate</text>
+    <path class="flw" d="M388,222 L434,222" marker-end="url(#df-arw)"/>
+    <path class="flw" d="M632,222 L678,222" marker-end="url(#df-arw)"/>
+    <path class="flw" d="M755,248 L755,298" marker-end="url(#df-arw)"/>
+    <!-- return: resolve output → new GameState -->
+    <path class="flw" d="M620,326 C300,326 115,300 115,250" marker-end="url(#df-arw)"/>
+    <text class="elbl" x="360" y="318" fill="#1565c0">new GameState → setState → re-render / driveAi loop</text>
+    <!-- winner → record -->
+    <path class="flwd" d="M700,352 C600,392 540,400 562,405" marker-end="url(#df-arw)"/>
+    <text class="elbl" x="612" y="382">winner ≠ null</text>
+  </g>
+</svg>

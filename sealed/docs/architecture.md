@@ -4,28 +4,15 @@ Standalone desktop web app for playing SWU Sealed against an AI opponent. Lives 
 `dmgctrl.app/sealed` (Vite `base: '/sealed/'`), deliberately separate from the dmgCtrl PWA.
 Build plan and epic breakdown: `docs/swu-ai-handoff.html` (repo root).
 
-## Layer map
+## Components &amp; integration
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│ UI (React)                                                   │
-│   App ── DeckSelectScreen ── GameScreen ── HelpScreen        │
-│              │                   │  └─ CardFace (art/text)    │
-│          useDecks            useGame ◄── randomAi (ai/)      │
-└──────────────│───────────────────│───────────────────────────┘
-               │                   │ pure calls
-┌──────────────▼───────────────────▼───────────────────────────┐
-│ Rules engine (src/engine/ — pure, no I/O, JSON-serialisable) │
-│   types → cardDb → initGame → legalMoves → resolve           │
-│   abilities (registry) · keywords · stats (computed power/hp) │
-└──────────────────────────────────────────────────────────────┘
-┌──────────────────────────────────────────────────────────────┐
-│ Data (src/data/)                                             │
-│   cards/thumbnails/catalogueSync → Dexie (IndexedDB)         │
-│   deckStore → localStorage · gameRecords → Dexie             │
-│   network: worker.dmgctrl.app → api.swu-db.com               │
-└──────────────────────────────────────────────────────────────┘
-```
+![Component and integration diagram: UI → hooks/AI → pure rules engine → data/network, with external card sources](diagrams/components.svg)
+
+Four layers, each depending only on the one below: **UI** (React) → **hooks &amp; AI** →
+a **pure rules engine** → **data/network**. The engine does no I/O and is fully
+JSON-serialisable; everything above calls into it and re-renders on the returned
+state. Card abilities live in a **module-level registry** beside the engine, keyed by
+card id, so `GameState` stays pure data.
 
 ## The rules engine
 
@@ -75,7 +62,22 @@ lasting effects (#306) slot into one pipeline. **Still pending**: unit/leader
 abilities, events, upgrades (#306–#309), Ambush (#306), Shielded (#308),
 concession.
 
+## Data model
+
+![Data model diagram: GameState composition (players, units, upgrades, cards) and the out-of-state ability registry](diagrams/data-model.svg)
+
+`GameState` is plain JSON — it round-trips through `JSON.stringify`, so a `GameRecord`
+(initial state + every action) replays bit-identically through `resolve`. The static
+card database (`cards: CardDb`) hangs off the state but is **shared by reference**
+between successive states, keeping cloning cheap for future tree search. Card zones
+(`hand`/`deck`/`discard`) hold card **ids**, resolved against `cards`. Token upgrades
+(Shield/Experience/Advantage) live inside `UnitState.upgrades` as `TOKEN_*` card ids.
+Ability code can't live on the state (functions don't serialise), so it sits in the
+module-level **ability registry** — `registerCard(cardId, …)` — consulted by the engine.
+
 ## Game flow at runtime
+
+![Data flow diagram: card hydration at game start, then the runtime action and AI loop](diagrams/data-flow.svg)
 
 `useGame` owns the loop:
 

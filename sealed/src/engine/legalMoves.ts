@@ -3,6 +3,8 @@ import type { EngineCard, GameState, KeywordInstance, PlayerId, UnitState } from
 import { opponentOf } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { unitHasKeyword } from './keywords'
+import { getCardDefinition } from './abilities'
+import './cardDefinitions' // side effect: registers all real card behaviours (#341+)
 
 /**
  * The enemy units `attacker` (a unit controlled by the active player) may attack,
@@ -25,7 +27,7 @@ export function enemyAttackTargets(state: GameState, attacker: UnitState): { tar
  * player's leader and base. Icons match as a multiset — a doubled icon on a
  * card needs two provided copies to avoid the penalty.
  */
-export function effectiveCost(state: GameState, playerId: PlayerId, card: EngineCard): number {
+export function effectiveCost(state: GameState, playerId: PlayerId, card: EngineCard, target?: UnitState): number {
   const p = state.players[playerId]
   const provided: string[] = [
     ...(state.cards[p.leader.cardId]?.aspects ?? []),
@@ -40,7 +42,9 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
       provided.splice(i, 1)
     }
   }
-  return card.cost + penalty
+  // Card-specific cost modifiers (e.g. −1 on an Imperial/Mandalorian unit) (#340).
+  const modifier = getCardDefinition(card.id)?.costModifier?.(state, playerId, target) ?? 0
+  return Math.max(0, card.cost + penalty + modifier)
 }
 
 /**
@@ -90,14 +94,17 @@ function actionPhaseMoves(state: GameState): Action[] {
     }
   })
 
-  // Play an Upgrade — attach to any unit in play (either player's). Card-specific
-  // target restrictions are #337; the default is any unit (#308).
+  // Play an Upgrade — attach to any unit in play (either player's) by default; a
+  // card's attachRestriction narrows that, and its cost may depend on the target
+  // (#308/#340).
   const allUnits = [...p.units, ...enemy.units]
   p.hand.forEach((cardId, handIndex) => {
     const card = state.cards[cardId]
     if (!card || card.type !== 'upgrade') return
-    if (!canAfford(p, effectiveCost(state, playerId, card))) return
+    const restriction = getCardDefinition(card.id)?.attachRestriction
     for (const target of allUnits) {
+      if (restriction && !restriction(state, target)) continue
+      if (!canAfford(p, effectiveCost(state, playerId, card, target))) continue
       moves.push({ type: 'playUpgrade', handIndex, targetInstanceId: target.instanceId })
     }
   })
