@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 620" font-family="'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5">
+  <defs>
+    <marker id="dm-arw" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#607d8b"/>
+    </marker>
+    <style>
+      .hdr { font-weight:700; fill:#ffffff; font-size:13px; }
+      .fld { fill:#1f2937; }
+      .ty  { fill:#6b7280; }
+      .rel { stroke:#607d8b; stroke-width:1.5; fill:none; }
+      .rlbl { fill:#374151; font-size:11px; }
+      .note { fill:#546e7a; font-size:11px; }
+    </style>
+  </defs>
+
+  <!-- GameState -->
+  <g>
+    <rect x="24" y="24" width="252" height="196" rx="7" fill="#eef4ff" stroke="#3b6bd6" stroke-width="1.5"/>
+    <rect x="24" y="24" width="252" height="24" rx="7" fill="#3b6bd6"/><rect x="24" y="40" width="252" height="8" fill="#3b6bd6"/>
+    <text class="hdr" x="36" y="41">GameState</text>
+    <text class="fld" x="36" y="66">cards <tspan class="ty">: CardDb</tspan></text>
+    <text class="fld" x="36" y="84">players <tspan class="ty">: Record&lt;PlayerId, PlayerState&gt;</tspan></text>
+    <text class="fld" x="36" y="102">phase <tspan class="ty">: setup|action|regroup</tspan></text>
+    <text class="fld" x="36" y="120">round · activePlayer · initiative</text>
+    <text class="fld" x="36" y="138">consecutivePasses · setupStage</text>
+    <text class="fld" x="36" y="156">pendingTrigger? <tspan class="ty">: {kind,unitId}</tspan></text>
+    <text class="fld" x="36" y="174">rngSeed <tspan class="ty">: number (seeded PRNG)</tspan></text>
+    <text class="fld" x="36" y="192">winner <tspan class="ty">: PlayerId|'draw'|null</tspan></text>
+    <text class="note" x="36" y="211">plain JSON · records replay through resolve</text>
+  </g>
+
+  <!-- PlayerState -->
+  <g>
+    <rect x="344" y="24" width="252" height="158" rx="7" fill="#eef4ff" stroke="#3b6bd6" stroke-width="1.5"/>
+    <rect x="344" y="24" width="252" height="24" rx="7" fill="#3b6bd6"/><rect x="344" y="40" width="252" height="8" fill="#3b6bd6"/>
+    <text class="hdr" x="356" y="41">PlayerState  <tspan font-weight="400" font-size="11">(player · opponent)</tspan></text>
+    <text class="fld" x="356" y="66">leader <tspan class="ty">: LeaderState</tspan></text>
+    <text class="fld" x="356" y="84">base <tspan class="ty">: BaseState</tspan></text>
+    <text class="fld" x="356" y="102">hand · deck · discard <tspan class="ty">: string[]</tspan></text>
+    <text class="fld" x="356" y="120">resources <tspan class="ty">: ResourceState[]</tspan></text>
+    <text class="fld" x="356" y="138">units <tspan class="ty">: UnitState[]</tspan></text>
+    <text class="note" x="356" y="164">card zones hold card ids → resolved via cards</text>
+  </g>
+
+  <!-- UnitState -->
+  <g>
+    <rect x="664" y="24" width="252" height="176" rx="7" fill="#eef4ff" stroke="#3b6bd6" stroke-width="1.5"/>
+    <rect x="664" y="24" width="252" height="24" rx="7" fill="#3b6bd6"/><rect x="664" y="40" width="252" height="8" fill="#3b6bd6"/>
+    <text class="hdr" x="676" y="41">UnitState</text>
+    <text class="fld" x="676" y="66">instanceId · cardId · arena</text>
+    <text class="fld" x="676" y="84">damage · exhausted · isLeader</text>
+    <text class="fld" x="676" y="102">upgrades <tspan class="ty">: UpgradeAttachment[]</tspan></text>
+    <text class="fld" x="676" y="120">hidden? <tspan class="ty">: boolean (#334)</tspan></text>
+    <text class="fld" x="676" y="138">grantedKeywords? <tspan class="ty">: KeywordInstance[]</tspan></text>
+    <text class="note" x="676" y="160">tokens (Shield/Experience/Advantage)</text>
+    <text class="note" x="676" y="176">live in upgrades as TOKEN_* card ids</text>
+  </g>
+
+  <!-- children of PlayerState -->
+  <g>
+    <rect x="344" y="250" width="120" height="52" rx="6" fill="#f5f8ff" stroke="#7ea0e0"/>
+    <rect x="344" y="250" width="120" height="20" rx="6" fill="#7ea0e0"/><rect x="344" y="264" width="120" height="6" fill="#7ea0e0"/>
+    <text class="hdr" x="352" y="264" font-size="11.5">LeaderState</text>
+    <text class="fld" x="352" y="286" font-size="11">deployed · exhausted</text>
+    <rect x="476" y="250" width="118" height="52" rx="6" fill="#f5f8ff" stroke="#7ea0e0"/>
+    <rect x="476" y="250" width="118" height="20" rx="6" fill="#7ea0e0"/><rect x="476" y="264" width="118" height="6" fill="#7ea0e0"/>
+    <text class="hdr" x="484" y="264" font-size="11.5">BaseState</text>
+    <text class="fld" x="484" y="286" font-size="11">cardId · damage</text>
+    <rect x="344" y="318" width="250" height="48" rx="6" fill="#f5f8ff" stroke="#7ea0e0"/>
+    <rect x="344" y="318" width="250" height="20" rx="6" fill="#7ea0e0"/><rect x="344" y="332" width="250" height="6" fill="#7ea0e0"/>
+    <text class="hdr" x="352" y="332" font-size="11.5">ResourceState</text>
+    <text class="fld" x="352" y="354" font-size="11">cardId · exhausted</text>
+  </g>
+
+  <!-- UpgradeAttachment + KeywordInstance -->
+  <g>
+    <rect x="664" y="250" width="252" height="52" rx="6" fill="#f5f8ff" stroke="#7ea0e0"/>
+    <rect x="664" y="250" width="252" height="20" rx="6" fill="#7ea0e0"/><rect x="664" y="264" width="252" height="6" fill="#7ea0e0"/>
+    <text class="hdr" x="672" y="264" font-size="11.5">UpgradeAttachment</text>
+    <text class="fld" x="672" y="286" font-size="11">cardId · owner <tspan class="ty">(returns to owner on defeat)</tspan></text>
+    <rect x="664" y="318" width="252" height="48" rx="6" fill="#f5f8ff" stroke="#7ea0e0"/>
+    <rect x="664" y="318" width="252" height="20" rx="6" fill="#7ea0e0"/><rect x="664" y="332" width="252" height="6" fill="#7ea0e0"/>
+    <text class="hdr" x="672" y="332" font-size="11.5">KeywordInstance</text>
+    <text class="fld" x="672" y="354" font-size="11">name · value? <tspan class="ty">(Raid 2, Restore 1 …)</tspan></text>
+  </g>
+
+  <!-- CardDb / EngineCard -->
+  <g>
+    <rect x="24" y="278" width="290" height="150" rx="7" fill="#fff6e6" stroke="#e39400" stroke-width="1.5"/>
+    <rect x="24" y="278" width="290" height="24" rx="7" fill="#e39400"/><rect x="24" y="294" width="290" height="8" fill="#e39400"/>
+    <text class="hdr" x="36" y="295">CardDb = Record&lt;id, EngineCard&gt;</text>
+    <text class="fld" x="36" y="320">EngineCard:</text>
+    <text class="fld" x="36" y="338">id · name · type · cost</text>
+    <text class="fld" x="36" y="356">power? · hp? · aspects · traits</text>
+    <text class="fld" x="36" y="374">keywords <tspan class="ty">: KeywordInstance[]</tspan></text>
+    <text class="fld" x="36" y="392">unique · frontArt · text …</text>
+    <text class="note" x="36" y="416">static, shared by reference across states</text>
+  </g>
+
+  <!-- Ability registry (out of state) -->
+  <g>
+    <rect x="24" y="470" width="892" height="122" rx="8" fill="none" stroke="#8e5bd0" stroke-width="1.6" stroke-dasharray="6 4"/>
+    <text x="40" y="492" font-weight="700" fill="#7b3fbf" font-size="13">Ability registry — module-level (engine/abilities.ts) · NOT part of GameState (functions can't serialise)</text>
+    <rect x="40" y="504" width="300" height="72" rx="6" fill="#f6ecfb" stroke="#ab6fdd"/>
+    <rect x="40" y="504" width="300" height="20" rx="6" fill="#ab6fdd"/><rect x="40" y="518" width="300" height="6" fill="#ab6fdd"/>
+    <text class="hdr" x="48" y="518" font-size="11.5">registerCard(cardId, CardDefinition)</text>
+    <text class="fld" x="48" y="540" font-size="11">abilities: {trigger, effect}[]</text>
+    <text class="fld" x="48" y="558" font-size="11">attachRestriction · costModifier</text>
+    <text class="fld" x="48" y="574" font-size="11">conditionalKeywords</text>
+    <text class="fld" x="366" y="528" font-size="11.5">effect: (state, ctx) → state</text>
+    <text class="note" x="366" y="548">ctx: {owner, cardId, sourceInstanceId}</text>
+    <text class="note" x="366" y="566">effects.ts: giveToken · drawCards · exhaustUnit …</text>
+    <text class="note" x="366" y="584">keyed by EngineCard.id · unregistered = vanilla</text>
+  </g>
+
+  <!-- relationships -->
+  <path class="rel" d="M276,80 L344,80" marker-end="url(#dm-arw)"/>
+  <text class="rlbl" x="284" y="74">players</text>
+  <path class="rel" d="M596,120 L664,120" marker-end="url(#dm-arw)"/>
+  <text class="rlbl" x="602" y="114">units[]</text>
+  <path class="rel" d="M790,200 L790,250" marker-end="url(#dm-arw)"/>
+  <text class="rlbl" x="796" y="228">upgrades[]</text>
+  <path class="rel" d="M420,182 L420,250" marker-end="url(#dm-arw)"/>
+  <path class="rel" d="M520,182 L534,250" marker-end="url(#dm-arw)"/>
+  <path class="rel" d="M470,182 L470,318" marker-end="url(#dm-arw)"/>
+  <path class="rel" d="M150,220 C150,250 169,250 169,278" marker-end="url(#dm-arw)"/>
+  <text class="rlbl" x="120" y="250">cards</text>
+  <path class="rel" d="M314,353 C500,353 560,353 664,343" marker-end="url(#dm-arw)"/>
+  <path class="rel" d="M169,428 L169,470" marker-end="url(#dm-arw)" stroke-dasharray="5 3"/>
+  <text class="rlbl" x="176" y="452">by id</text>
+</svg>

@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 560" font-family="'Segoe UI',Helvetica,Arial,sans-serif" font-size="13">
+  <defs>
+    <marker id="arw" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#78909c"/>
+    </marker>
+    <style>
+      .band { fill-opacity:.12; stroke-opacity:.55; }
+      .title { font-weight:700; font-size:12px; letter-spacing:.06em; }
+      .box { rx:6; ry:6; stroke-width:1.4; }
+      .lbl { fill:#111827; text-anchor:middle; }
+      .sub { fill:#4b5563; font-size:11px; text-anchor:middle; }
+      .flow { stroke:#78909c; stroke-width:1.6; fill:none; }
+      .pill { fill:#f4f4f6; stroke:#c7ccd1; stroke-width:1; rx:8; ry:8; }
+      .pt { fill:#374151; font-size:11px; text-anchor:middle; }
+    </style>
+  </defs>
+
+  <!-- UI band -->
+  <rect class="band" x="20" y="20" width="880" height="96" rx="10" fill="#2e7d32" stroke="#2e7d32"/>
+  <text class="title" x="34" y="40" fill="#2e7d32">UI · React (src/components, App.tsx)</text>
+  <g>
+    <rect class="box" x="34" y="52" width="120" height="30" fill="#e8f5e9" stroke="#66bb6a"/><text class="lbl" x="94" y="71">App (screens)</text>
+    <rect class="box" x="166" y="52" width="150" height="30" fill="#e8f5e9" stroke="#66bb6a"/><text class="lbl" x="241" y="71">DeckSelectScreen</text>
+    <rect class="box" x="328" y="52" width="300" height="52" fill="#e8f5e9" stroke="#66bb6a"/>
+    <text class="lbl" x="478" y="70" font-weight="600">GameScreen</text>
+    <text class="sub" x="478" y="88">OpponentBar · Board · PlayerBar · UnitLine · CardFace · zoom</text>
+    <rect class="box" x="640" y="52" width="110" height="30" fill="#e8f5e9" stroke="#66bb6a"/><text class="lbl" x="695" y="71">HelpScreen</text>
+    <rect class="box" x="762" y="52" width="126" height="30" fill="#e8f5e9" stroke="#66bb6a"/><text class="lbl" x="825" y="71">describeAction</text>
+  </g>
+
+  <!-- Hooks + AI band -->
+  <rect class="band" x="20" y="140" width="880" height="80" rx="10" fill="#00695c" stroke="#00695c"/>
+  <text class="title" x="34" y="160" fill="#00695c">Hooks &amp; AI (src/hooks, src/ai)</text>
+  <rect class="box" x="34" y="172" width="360" height="34" fill="#e0f2f1" stroke="#26a69a"/>
+  <text class="lbl" x="214" y="193" font-weight="600">useGame — owns the game loop &amp; driveAi</text>
+  <rect class="box" x="410" y="172" width="150" height="34" fill="#e0f2f1" stroke="#26a69a"/><text class="lbl" x="485" y="193">useDecks</text>
+  <rect class="box" x="700" y="172" width="188" height="34" fill="#f3e5f5" stroke="#ab47bc"/>
+  <text class="lbl" x="794" y="193">ai/ setupAi · randomAi</text>
+
+  <!-- Engine band -->
+  <rect class="band" x="20" y="244" width="880" height="118" rx="10" fill="#1565c0" stroke="#1565c0"/>
+  <text class="title" x="34" y="264" fill="#1565c0">Rules engine (src/engine) — pure, no I/O, JSON-serialisable</text>
+  <rect class="box" x="34" y="276" width="140" height="32" fill="#e3f2fd" stroke="#42a5f5"/><text class="lbl" x="104" y="296">initGame</text>
+  <rect class="box" x="186" y="276" width="150" height="32" fill="#e3f2fd" stroke="#42a5f5"/><text class="lbl" x="261" y="296">legalMoves</text>
+  <rect class="box" x="348" y="276" width="150" height="32" fill="#bbdefb" stroke="#1e88e5" stroke-width="2"/><text class="lbl" x="423" y="296" font-weight="700">resolve</text>
+  <rect class="box" x="510" y="276" width="150" height="32" fill="#e3f2fd" stroke="#42a5f5"/><text class="lbl" x="585" y="296">keywords · stats</text>
+  <rect class="box" x="672" y="276" width="216" height="32" fill="#e3f2fd" stroke="#42a5f5"/><text class="lbl" x="780" y="296">cardDb · tokenUpgrades · types</text>
+  <rect class="box" x="34" y="316" width="300" height="34" fill="#e1f5fe" stroke="#039be5"/>
+  <text class="lbl" x="184" y="337">abilities (registry) · effects · cardDefinitions</text>
+  <rect class="box" x="348" y="316" width="150" height="34" fill="#e1f5fe" stroke="#039be5"/><text class="lbl" x="423" y="337">resources · rng</text>
+  <rect class="box" x="672" y="316" width="216" height="34" fill="#eceff1" stroke="#90a4ae" stroke-dasharray="4 3"/>
+  <text class="lbl" x="780" y="337" fill="#546e7a">combat.ts (planned #342)</text>
+
+  <!-- Data band -->
+  <rect class="band" x="20" y="386" width="880" height="80" rx="10" fill="#f57f17" stroke="#f57f17"/>
+  <text class="title" x="34" y="406" fill="#ef6c00">Data (src/data)</text>
+  <rect class="box" x="34" y="418" width="170" height="34" fill="#fff8e1" stroke="#ffb300"/><text class="lbl" x="119" y="439">getCard (cache-first)</text>
+  <rect class="box" x="216" y="418" width="150" height="34" fill="#fff8e1" stroke="#ffb300"/><text class="lbl" x="291" y="439">deckStore</text>
+  <rect class="box" x="470" y="418" width="200" height="34" fill="#fff3e0" stroke="#fb8c00"/><text class="lbl" x="570" y="439">Dexie / IndexedDB</text>
+  <text class="sub" x="570" y="463">cards · thumbnails · games</text>
+  <rect class="box" x="686" y="418" width="202" height="34" fill="#fff3e0" stroke="#fb8c00"/><text class="lbl" x="787" y="439">localStorage (decks)</text>
+
+  <!-- External band -->
+  <rect class="band" x="20" y="490" width="880" height="56" rx="10" fill="#546e7a" stroke="#546e7a"/>
+  <text class="title" x="34" y="510" fill="#546e7a">External</text>
+  <rect class="box" x="120" y="504" width="330" height="32" fill="#eceff1" stroke="#90a4ae"/><text class="lbl" x="285" y="524">worker.dmgctrl.app → api.swu-db.com</text>
+  <rect class="box" x="470" y="504" width="240" height="32" fill="#eceff1" stroke="#90a4ae"/><text class="lbl" x="590" y="524">api.swuapi.com (fallback)</text>
+
+  <!-- integration flows (right side, top-down) -->
+  <path class="flow" d="M480,116 L480,138" marker-end="url(#arw)"/>
+  <rect class="pill" x="486" y="118" width="120" height="18"/><text class="pt" x="546" y="131">act(action) / render</text>
+
+  <path class="flow" d="M214,206 L214,242" marker-end="url(#arw)"/>
+  <rect class="pill" x="220" y="216" width="118" height="18"/><text class="pt" x="279" y="229">resolve · legalMoves</text>
+  <path class="flow" d="M794,206 C794,225 585,225 585,274" marker-end="url(#arw)"/>
+
+  <path class="flow" d="M104,384 L104,310" marker-end="url(#arw)"/>
+  <rect class="pill" x="110" y="340" width="132" height="18"/><text class="pt" x="176" y="353">buildCardDb → cards</text>
+
+  <path class="flow" d="M119,488 L119,454" marker-end="url(#arw)"/>
+  <path class="flow" d="M285,502 L285,454" marker-end="url(#arw)"/>
+  <rect class="pill" x="150" y="470" width="120" height="18"/><text class="pt" x="210" y="483">getCard fetch</text>
+</svg>
