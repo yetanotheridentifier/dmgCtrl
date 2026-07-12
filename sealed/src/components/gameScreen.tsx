@@ -31,32 +31,92 @@ export interface UnitInteraction {
   selected: boolean
   /** This enemy unit is a legal target of the selected attacker. */
   isTarget: boolean
+  /** Valid target for the upgrade currently being placed from hand (#336). */
+  isUpgradeTarget?: boolean
   onClick?: () => void
+}
+
+/** How far each attached upgrade protrudes below the one in front of it (#336). */
+const UPGRADE_STEP_PX = 34
+
+/**
+ * One attached upgrade, positioned behind the unit and protruding from the bottom.
+ * It carries its OWN Shift+hover / long-press zoom on its exposed strip, so you can
+ * read it there (hovering the unit card zooms the unit, not the upgrade). It stays
+ * upright when the unit is exhausted, dimming (opaque) along with it (#336).
+ */
+function AttachedUpgrade({ card, fallbackName, top, dim }: {
+  card: EngineCard | undefined
+  fallbackName: string
+  top: number
+  dim: boolean
+}) {
+  const { zoomed, bind } = useCardZoom()
+  return (
+    <div className="pointer-events-auto absolute left-1/2 -translate-x-1/2" style={{ top }} {...bind}>
+      <CardFace card={card} fallbackName={fallbackName} tight className={dim ? 'brightness-[0.55]' : ''} />
+      {zoomed && <CardZoomPopover card={card} fallbackName={fallbackName} />}
+    </div>
+  )
+}
+
+/**
+ * The stack of attached upgrades behind the unit, protruding downward. The
+ * first-played sits closest to the unit; each later one goes further back and
+ * further down so every stat modifier shows. Rendered back-to-front (reversed) so
+ * the fronts paint on top, all below the unit card in the tile (#336).
+ */
+function UpgradeStack({ state, unit }: { state: GameState; unit: UnitState }) {
+  if (unit.upgrades.length === 0) return null
+  return (
+    <div data-testid={`board-unit-upgrades-${unit.instanceId}`} className="pointer-events-none absolute inset-0">
+      {unit.upgrades
+        .map((up, i) => ({ up, i }))
+        .reverse()
+        .map(({ up, i }) => (
+          <AttachedUpgrade
+            key={i}
+            card={state.cards[up.cardId]}
+            fallbackName={up.cardId}
+            top={(i + 1) * UPGRADE_STEP_PX}
+            dim={unit.exhausted}
+          />
+        ))}
+    </div>
+  )
 }
 
 export function UnitLine({ state, unit, interact }: { state: GameState; unit: UnitState; interact: UnitInteraction }) {
   const card = state.cards[unit.cardId]
   const { zoomed, bind } = useCardZoom()
-  const clickable = (interact.actionable || interact.isTarget) && interact.onClick
-  const highlight: 'accent' | 'red' | 'accent-dim' | undefined = interact.selected
+  const clickable = (interact.actionable || interact.isTarget || interact.isUpgradeTarget) && interact.onClick
+  const highlight: 'accent' | 'red' | 'accent-dim' | 'green' | undefined = interact.selected
     ? 'accent'
     : interact.isTarget
       ? 'red'
-      : interact.actionable
-        ? 'accent-dim'
-        : undefined
+      : interact.isUpgradeTarget
+        ? 'green'
+        : interact.actionable
+          ? 'accent-dim'
+          : undefined
   return (
     <div
       data-testid={`board-unit-${unit.instanceId}`}
       data-actionable={interact.actionable}
       data-selected={interact.selected}
       data-target={interact.isTarget}
+      data-upgrade-target={Boolean(interact.isUpgradeTarget)}
       onClick={clickable ? interact.onClick : undefined}
-      {...bind}
       className={`relative w-fit shrink-0 ${clickable ? 'cursor-pointer' : ''}`}
+      style={{ paddingBottom: unit.upgrades.length * UPGRADE_STEP_PX }}
     >
-      <CardFace card={card} fallbackName={unit.cardId} deployed={unit.isLeader} exhausted={unit.exhausted} highlight={highlight} />
-      <CardTokens unit={unit} />
+      <UpgradeStack state={state} unit={unit} />
+      {/* The unit card carries the unit's own zoom — hover here, not the dead tile
+          padding; the upgrades zoom from their exposed strips instead (#336). */}
+      <div className="relative w-fit" {...bind}>
+        <CardFace card={card} fallbackName={unit.cardId} deployed={unit.isLeader} exhausted={unit.exhausted} highlight={highlight} />
+        <CardTokens unit={unit} />
+      </div>
       {zoomed && <CardZoomPopover card={card} deployed={unit.isLeader} fallbackName={unit.cardId} />}
     </div>
   )
@@ -220,12 +280,15 @@ function LeaderCard({ state, side, widthPx }: { state: GameState; side: PlayerId
  * A card in your hand. Clickable to play (blue) or resource (green); hover /
  * focus / long-press zooms it (#321). Its own component so it can use the zoom hook.
  */
-function HandCard({ card, cardId, index, action, onAct }: {
+function HandCard({ card, cardId, index, action, onAct, onSelect, selected }: {
   card: EngineCard | undefined
   cardId: string
   index: number
   action: Action | undefined
   onAct: (action: Action) => void
+  /** Set for an upgrade card: click selects it, then you click a unit to attach (#336). */
+  onSelect?: () => void
+  selected?: boolean
 }) {
   const { zoomed, bind } = useCardZoom()
   const isResource = action?.type === 'resourceCard' || action?.type === 'setupResource'
@@ -242,6 +305,23 @@ function HandCard({ card, cardId, index, action, onAct }: {
         className="relative block w-fit shrink-0 cursor-pointer"
       >
         <CardFace card={card} fallbackName={cardId} tight highlight={isResource ? 'green' : 'accent'} />
+        {popover}
+      </button>
+    )
+  }
+  if (onSelect) {
+    // An upgrade: clicking selects it (bright when selected), then a unit is clicked
+    // to attach it. Highlighted blue like a playable card (#336).
+    return (
+      <button
+        data-testid={`hand-card-${index}`}
+        data-playable={true}
+        data-selected={Boolean(selected)}
+        onClick={onSelect}
+        {...bind}
+        className="relative block w-fit shrink-0 cursor-pointer"
+      >
+        <CardFace card={card} fallbackName={cardId} tight highlight={selected ? 'accent' : 'accent-dim'} />
         {popover}
       </button>
     )
@@ -396,9 +476,13 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   // Board affordance (#314): click an actionable friendly unit to select it,
   // then click a highlighted target to attack. Any action clears the selection.
   const [selectedAttacker, setSelectedAttacker] = useState<string | null>(null)
+  // Placing an upgrade (#336): click an upgrade card in hand (its hand index is
+  // held here) to highlight valid target units, then click a unit to attach it.
+  const [selectedUpgrade, setSelectedUpgrade] = useState<number | null>(null)
 
   function actAndClear(action: Action) {
     setSelectedAttacker(null)
+    setSelectedUpgrade(null)
     act(action)
   }
 
@@ -444,23 +528,48 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     )
     const baseAttack = selectedAttacks.find(a => a.target.kind === 'base')
 
-    const playerInteraction = (unit: { instanceId: string }): UnitInteraction => ({
-      actionable: attackerIds.has(unit.instanceId),
-      selected: selectedAttacker === unit.instanceId,
-      isTarget: false,
-      onClick: attackerIds.has(unit.instanceId)
-        ? () => setSelectedAttacker(prev => (prev === unit.instanceId ? null : unit.instanceId))
-        : undefined,
-    })
+    // Placing an upgrade (#336): which hand cards are upgrades, and — once one is
+    // selected — which units it may attach to. While placing, unit clicks attach
+    // the upgrade rather than driving an attack.
+    const upgradeMoves = legal.filter(a => a.type === 'playUpgrade')
+    const upgradeHandIndices = new Set(upgradeMoves.map(a => a.handIndex))
+    const upgradeTargetIds = new Set(
+      selectedUpgrade !== null ? upgradeMoves.filter(a => a.handIndex === selectedUpgrade).map(a => a.targetInstanceId) : [],
+    )
+    const placing = selectedUpgrade !== null
 
-    const opponentInteraction = (unit: { instanceId: string }): UnitInteraction => ({
-      actionable: false,
-      selected: false,
-      isTarget: targetUnitIds.has(unit.instanceId),
-      onClick: targetUnitIds.has(unit.instanceId)
-        ? () => actAndClear({ type: 'attack', attackerId: selectedAttacker!, target: { kind: 'unit', instanceId: unit.instanceId } })
-        : undefined,
-    })
+    const upgradeInteraction = (instanceId: string): UnitInteraction | null =>
+      placing
+        ? {
+            actionable: false,
+            selected: false,
+            isTarget: false,
+            isUpgradeTarget: upgradeTargetIds.has(instanceId),
+            onClick: upgradeTargetIds.has(instanceId)
+              ? () => actAndClear({ type: 'playUpgrade', handIndex: selectedUpgrade, targetInstanceId: instanceId })
+              : undefined,
+          }
+        : null
+
+    const playerInteraction = (unit: { instanceId: string }): UnitInteraction =>
+      upgradeInteraction(unit.instanceId) ?? {
+        actionable: attackerIds.has(unit.instanceId),
+        selected: selectedAttacker === unit.instanceId,
+        isTarget: false,
+        onClick: attackerIds.has(unit.instanceId)
+          ? () => { setSelectedUpgrade(null); setSelectedAttacker(prev => (prev === unit.instanceId ? null : unit.instanceId)) }
+          : undefined,
+      }
+
+    const opponentInteraction = (unit: { instanceId: string }): UnitInteraction =>
+      upgradeInteraction(unit.instanceId) ?? {
+        actionable: false,
+        selected: false,
+        isTarget: targetUnitIds.has(unit.instanceId),
+        onClick: targetUnitIds.has(unit.instanceId)
+          ? () => actAndClear({ type: 'attack', attackerId: selectedAttacker!, target: { kind: 'unit', instanceId: unit.instanceId } })
+          : undefined,
+      }
 
     const playerHand = (
       <ul data-testid="player-hand" className="flex flex-wrap justify-center gap-1">
@@ -472,17 +581,22 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
               index={i}
               action={handAction.get(i)}
               onAct={actAndClear}
+              onSelect={
+                upgradeHandIndices.has(i)
+                  ? () => { setSelectedAttacker(null); setSelectedUpgrade(prev => (prev === i ? null : i)) }
+                  : undefined
+              }
+              selected={selectedUpgrade === i}
             />
           </li>
         ))}
       </ul>
     )
 
-    // Playing, resourcing and attacking are driven by clicking a card or unit, so
-    // the menu holds only the remaining choices — mulligan, keep hand, take the
-    // initiative, pass (and skip/deploy). They live in the player bar's Action
-    // column (#332).
-    const CLICK_HANDLED: Action['type'][] = ['playCard', 'attack', 'resourceCard', 'setupResource']
+    // Playing, resourcing, attacking and attaching upgrades are all driven by
+    // clicking a card or unit, so the menu holds only the remaining choices —
+    // mulligan, keep hand, take the initiative, pass (and skip/deploy) (#332/#336).
+    const CLICK_HANDLED: Action['type'][] = ['playCard', 'playUpgrade', 'attack', 'resourceCard', 'setupResource']
     const menuActions = gameState.winner === null ? legal.filter(a => !CLICK_HANDLED.includes(a.type)) : []
     const actionColumn = (
       <div className="flex flex-col items-stretch gap-1.5">

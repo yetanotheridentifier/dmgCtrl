@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen, within, fireEvent } from '@testing-library/react'
 import { UnitLine } from '../components/gameScreen'
 import type { UnitInteraction } from '../components/gameScreen'
@@ -32,11 +32,13 @@ describe('UnitLine — on-card damage overlay (#326)', () => {
     expect(screen.getByTestId('board-unit-damage-u1')).toBeInTheDocument()
   })
 
-  it('zooms the card to full size on Shift+hover, and removes it on leave (#321)', () => {
+  it('zooms the card to full size on Shift+hover of the unit card, and removes it on leave (#321)', () => {
     render(<UnitLine state={boardWith('TST_D')} unit={unit('u1', 'TST_D', { exhausted: true })} interact={noInteract} />)
-    const tile = screen.getByTestId('board-unit-u1')
+    // The zoom lives on the unit card itself, not the whole tile (dead padding
+    // under attached upgrades must not zoom) (#336).
+    const unitCard = within(screen.getByTestId('board-unit-u1')).getByTestId('card-face').parentElement!
 
-    fireEvent.pointerEnter(tile, { pointerType: 'mouse' })
+    fireEvent.pointerEnter(unitCard, { pointerType: 'mouse' })
     expect(screen.queryByTestId('card-zoom')).toBeNull() // hover alone: no zoom
 
     fireEvent.keyDown(window, { key: 'Shift', shiftKey: true })
@@ -45,7 +47,7 @@ describe('UnitLine — on-card damage overlay (#326)', () => {
     expect(within(zoom).getByTestId('card-face')).toHaveStyle({ width: '240px' })
     expect(within(zoom).getByTestId('card-face')).toHaveAttribute('data-orientation', 'portrait')
 
-    fireEvent.pointerLeave(tile, { pointerType: 'mouse' })
+    fireEvent.pointerLeave(unitCard, { pointerType: 'mouse' })
     expect(screen.queryByTestId('card-zoom')).toBeNull()
     fireEvent.keyUp(window, { key: 'Shift', shiftKey: false })
   })
@@ -56,5 +58,57 @@ describe('UnitLine — on-card damage overlay (#326)', () => {
     const s = state({ cards: { ...CARDS, TST_A: card({ id: 'TST_A', type: 'unit', power: 3, hp: 4, frontArt: 'https://cdn.swu-db.com/images/cards/TST/A.png' }) } })
     render(<UnitLine state={s} unit={unit('u1', 'TST_A', { damage: 0 })} interact={noInteract} />)
     expect(screen.getByTestId('board-unit-u1')).not.toHaveTextContent('3/4')
+  })
+})
+
+describe('UnitLine — attached upgrades (#336)', () => {
+  function boardWithUpgrade(): GameState {
+    return state({
+      cards: {
+        ...CARDS,
+        TST_U: card({ id: 'TST_U', type: 'unit', power: 3, hp: 4 }),
+        TST_UP: card({ id: 'TST_UP', type: 'upgrade', power: 2, hp: 2 }),
+      },
+    })
+  }
+  const up = (owner: 'player' | 'opponent' = 'player') => ({ cardId: 'TST_UP', owner })
+
+  it('renders a card face per attached upgrade, stacked behind the unit', () => {
+    const u = unit('u1', 'TST_U', { upgrades: [up(), up()] })
+    render(<UnitLine state={boardWithUpgrade()} unit={u} interact={noInteract} />)
+    const stack = screen.getByTestId('board-unit-upgrades-u1')
+    expect(within(stack).getAllByTestId('card-face')).toHaveLength(2)
+  })
+
+  it('renders no upgrade stack for a unit with no upgrades', () => {
+    render(<UnitLine state={boardWith('TST_D')} unit={unit('u1', 'TST_D')} interact={noInteract} />)
+    expect(screen.queryByTestId('board-unit-upgrades-u1')).toBeNull()
+  })
+
+  it('zooms an attached upgrade from its exposed strip on Shift+hover (#336)', () => {
+    const u = unit('u1', 'TST_U', { upgrades: [up()] })
+    render(<UnitLine state={boardWithUpgrade()} unit={u} interact={noInteract} />)
+    const stack = screen.getByTestId('board-unit-upgrades-u1')
+    const upgradeCard = within(stack).getByTestId('card-face').parentElement!
+    fireEvent.pointerEnter(upgradeCard, { pointerType: 'mouse' })
+    fireEvent.keyDown(window, { key: 'Shift', shiftKey: true })
+    expect(screen.getByTestId('card-zoom')).toBeInTheDocument()
+    fireEvent.keyUp(window, { key: 'Shift', shiftKey: false })
+  })
+
+  it('marks a unit as an upgrade target: green highlight and clickable', () => {
+    const onClick = vi.fn()
+    render(
+      <UnitLine
+        state={boardWith('TST_D')}
+        unit={unit('u1', 'TST_D')}
+        interact={{ actionable: false, selected: false, isTarget: false, isUpgradeTarget: true, onClick }}
+      />,
+    )
+    const tile = screen.getByTestId('board-unit-u1')
+    expect(tile).toHaveAttribute('data-upgrade-target', 'true')
+    expect(within(tile).getByTestId('card-face')).toHaveAttribute('data-highlight', 'green')
+    fireEvent.click(tile)
+    expect(onClick).toHaveBeenCalledTimes(1)
   })
 })

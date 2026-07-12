@@ -3,6 +3,7 @@ import { effectivePower, effectiveHp } from '../engine/stats'
 import { unitHasKeyword, unitKeywordValue } from '../engine/keywords'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
+import { normaliseCard } from '../engine/cardDb'
 import { card, state, unit, player, ready, CARDS } from './helpers/engineFixtures'
 import { TOKEN_EXPERIENCE, TOKEN_SHIELD, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import type { PlayerId, UpgradeAttachment } from '../engine/types'
@@ -45,6 +46,33 @@ describe('upgrade stat modifiers (#308)', () => {
     const s = withUpgrades()
     expect(effectivePower(s, unit('u1', 'TST_U1'))).toBe(3)
     expect(effectiveHp(s, unit('u1', 'TST_U1'))).toBe(4)
+  })
+
+  it('a power upgrade increases the damage the unit deals in an attack', () => {
+    const s = state({
+      cards: { ...CARDS, TST_UP: UPGRADE({ cost: 1, power: 2, hp: 0 }) },
+      players: {
+        player: player({ units: [unit('u1', 'TST_U1', { upgrades: [att('TST_UP')] })] }), // 3 power + 2
+        opponent: player(),
+      },
+    })
+    const next = resolve(s, { type: 'attack', attackerId: 'u1', target: { kind: 'base' } })
+    expect(next.players.opponent.base.damage).toBe(5)
+  })
+
+  it('a real normalised stat upgrade (Entrenched, Power 3) boosts attack via the data path', () => {
+    // Entrenched (SOR_072) is a real +3/+3 upgrade — proving the SWUDB→engine path
+    // applies the modifier, not just synthetic test cards.
+    const entrenched = normaliseCard({ Set: 'SOR', Number: '072', Name: 'Entrenched', Type: 'Upgrade', Power: '3', HP: '3' })
+    const s = state({
+      cards: { ...CARDS, SOR_072: entrenched },
+      players: {
+        player: player({ units: [unit('u1', 'TST_U1', { upgrades: [att('SOR_072')] })] }), // 3 base + 3
+        opponent: player(),
+      },
+    })
+    const next = resolve(s, { type: 'attack', attackerId: 'u1', target: { kind: 'base' } })
+    expect(next.players.opponent.base.damage).toBe(6)
   })
 })
 

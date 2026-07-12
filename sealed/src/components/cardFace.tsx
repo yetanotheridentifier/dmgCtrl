@@ -105,7 +105,10 @@ export default function CardFace({
         style={{ width: artW, height: artH, outline, outlineOffset: outline ? '-1px' : undefined }}
         className={[
           'relative overflow-hidden rounded-lg border border-line/60 bg-surface',
-          exhausted ? 'rotate-90 opacity-60' : '',
+          // Exhausted: rotate and DIM, but stay opaque (a brightness filter, not
+          // opacity) so anything behind the card — e.g. an upgrade — can't show
+          // through (#336).
+          exhausted ? 'rotate-90 brightness-[0.55]' : '',
         ]
           .filter(Boolean)
           .join(' ')}
