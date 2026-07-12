@@ -1,4 +1,5 @@
 import type { EngineCard, GameState, PlayerState, UnitState } from '../../engine/types'
+import { TOKEN_CARDS } from '../../engine/tokenUpgrades'
 
 export function card(partial: Partial<EngineCard> & { id: string }): EngineCard {
   return {
@@ -15,8 +16,9 @@ export function card(partial: Partial<EngineCard> & { id: string }): EngineCard 
   }
 }
 
-/** Small fixed card pool shared by engine tests. */
+/** Small fixed card pool shared by engine tests (incl. built-in token upgrades). */
 export const CARDS = {
+  ...TOKEN_CARDS,
   TST_L: card({ id: 'TST_L', type: 'leader', cost: 5, power: 4, hp: 7, aspects: ['Command', 'Heroism'] }),
   TST_B: card({ id: 'TST_B', type: 'base', hp: 30, aspects: ['Vigilance'] }),
   TST_U1: card({ id: 'TST_U1', type: 'unit', arena: 'ground', cost: 2, power: 3, hp: 4, aspects: ['Command'] }),

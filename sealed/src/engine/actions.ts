@@ -12,6 +12,9 @@ export type AttackTarget = { kind: 'base' } | { kind: 'unit'; instanceId: string
 
 export type Action =
   | { type: 'playCard'; handIndex: number }
+  // Play an upgrade card, attaching it to a unit in play. Any unit is a valid
+  // target by default; card-specific restrictions are #337 (#308).
+  | { type: 'playUpgrade'; handIndex: number; targetInstanceId: string }
   | { type: 'attack'; attackerId: string; target: AttackTarget }
   | { type: 'deployLeader' }
   | { type: 'takeInitiative' }

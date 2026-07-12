@@ -8,6 +8,15 @@ function unitName(state: GameState, owner: PlayerId, instanceId: string): string
   return unit ? state.cards[unit.cardId]?.name ?? unit.cardId : instanceId
 }
 
+/** Name a unit by instance id, whichever player controls it (upgrade targets). */
+function anyUnitName(state: GameState, instanceId: string): string | undefined {
+  for (const id of ['player', 'opponent'] as PlayerId[]) {
+    const u = state.players[id].units.find(u => u.instanceId === instanceId)
+    if (u) return state.cards[u.cardId]?.name ?? u.cardId
+  }
+  return undefined
+}
+
 export interface DescribeOptions {
   /**
    * Hide hidden information (CR 1.17): which card an opponent resources is
@@ -24,6 +33,13 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       const card = cardId ? state.cards[cardId] : undefined
       if (!card) return 'Play a card'
       return `Play ${card.name} (${effectiveCost(state, by, card)})`
+    }
+    case 'playUpgrade': {
+      const cardId = state.players[by].hand[action.handIndex]
+      const card = cardId ? state.cards[cardId] : undefined
+      if (!card) return 'Play an upgrade'
+      const target = anyUnitName(state, action.targetInstanceId)
+      return `Play ${card.name} (${effectiveCost(state, by, card)})${target ? ` on ${target}` : ''}`
     }
     case 'attack': {
       const attacker = unitName(state, by, action.attackerId)

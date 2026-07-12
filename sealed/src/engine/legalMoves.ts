@@ -2,7 +2,7 @@ import type { Action } from './actions'
 import type { EngineCard, GameState, PlayerId } from './types'
 import { opponentOf } from './types'
 import { canAfford, readyResourceCount } from './resources'
-import { hasKeyword } from './keywords'
+import { unitHasKeyword } from './keywords'
 
 /**
  * Effective cost of playing a card, including the aspect penalty (CR 8.1):
@@ -72,6 +72,18 @@ function actionPhaseMoves(state: GameState): Action[] {
     }
   })
 
+  // Play an Upgrade — attach to any unit in play (either player's). Card-specific
+  // target restrictions are #337; the default is any unit (#308).
+  const allUnits = [...p.units, ...enemy.units]
+  p.hand.forEach((cardId, handIndex) => {
+    const card = state.cards[cardId]
+    if (!card || card.type !== 'upgrade') return
+    if (!canAfford(p, effectiveCost(state, playerId, card))) return
+    for (const target of allUnits) {
+      moves.push({ type: 'playUpgrade', handIndex, targetInstanceId: target.instanceId })
+    }
+  })
+
   // Attack With a Unit — ready units; targets are enemy units in the same
   // arena, or the enemy base (CR 1.15.3, 3.2.3). Sentinel forces the attack
   // onto a Sentinel unit in that arena — even the base is off-limits — unless
@@ -80,8 +92,8 @@ function actionPhaseMoves(state: GameState): Action[] {
     if (unit.exhausted) continue
 
     const sameArena = enemy.units.filter(e => e.arena === unit.arena)
-    const sentinels = sameArena.filter(e => hasKeyword(state, e.cardId, 'Sentinel'))
-    const sentinelLocked = sentinels.length > 0 && !hasKeyword(state, unit.cardId, 'Saboteur')
+    const sentinels = sameArena.filter(e => unitHasKeyword(state, e, 'Sentinel'))
+    const sentinelLocked = sentinels.length > 0 && !unitHasKeyword(state, unit, 'Saboteur')
 
     const targets = sentinelLocked ? sentinels : sameArena
     for (const enemyUnit of targets) {

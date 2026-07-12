@@ -1,6 +1,7 @@
 import type { SwuCard } from '../data/cards'
 import { cardId } from '../data/cards'
 import type { CardDb, CardType, EngineCard, Arena, KeywordInstance } from './types'
+import { TOKEN_CARDS } from './tokenUpgrades'
 
 function toInt(value: string | undefined): number {
   const n = parseInt(value ?? '', 10)
@@ -58,7 +59,8 @@ export function normaliseCard(card: SwuCard): EngineCard {
 }
 
 export function buildCardDb(cards: SwuCard[]): CardDb {
-  const db: Record<string, EngineCard> = {}
+  // Built-in token upgrades are always present so attached tokens resolve (#308).
+  const db: Record<string, EngineCard> = { ...TOKEN_CARDS }
   for (const card of cards) {
     const normalised = normaliseCard(card)
     db[normalised.id] = normalised

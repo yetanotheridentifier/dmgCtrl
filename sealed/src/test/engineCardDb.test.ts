@@ -118,10 +118,13 @@ describe('normaliseCard', () => {
 })
 
 describe('buildCardDb', () => {
-  it('keys normalised cards by id', () => {
+  it('keys normalised cards by id (alongside the built-in token upgrades)', () => {
     const db = buildCardDb([VADER_UNIT, { ...VADER_UNIT, Number: '087', Name: 'Other' }])
-    expect(Object.keys(db).sort()).toEqual(['SOR_086', 'SOR_087'])
+    const deckIds = Object.keys(db).filter(id => !id.startsWith('TOKEN_'))
+    expect(deckIds.sort()).toEqual(['SOR_086', 'SOR_087'])
     expect(db['SOR_086'].name).toBe('Darth Vader')
+    // Token upgrades are always present so attached tokens resolve (#308).
+    expect(db['TOKEN_EXPERIENCE']).toBeDefined()
   })
 })
 
