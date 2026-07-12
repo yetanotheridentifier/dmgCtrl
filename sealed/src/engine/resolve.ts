@@ -3,7 +3,7 @@ import type { GameState, PlayerId, PlayerState, UnitState } from './types'
 import { opponentOf } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, supportGrantedKeywords } from './legalMoves'
-import { runTrigger, runUnitTrigger } from './abilities'
+import { runTrigger, runUnitTrigger, type TriggerPoint } from './abilities'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue } from './keywords'
@@ -289,8 +289,9 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
   if (!targetOwner) {
     throw new Error(`playUpgrade: no unit ${targetInstanceId} to attach to`)
   }
+  const targetUnit = state.players[targetOwner].units.find(u => u.instanceId === targetInstanceId)
 
-  const paid = payCost(p, effectiveCost(state, playerId, card))
+  const paid = payCost(p, effectiveCost(state, playerId, card, targetUnit))
   let next = updatePlayer(state, playerId, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
   next = updatePlayer(next, targetOwner, {
     units: next.players[targetOwner].units.map(u =>
@@ -437,6 +438,19 @@ function fireAttackEnd(state: GameState, owner: PlayerId, attackerId: string): G
   return attacker ? runUnitTrigger(state, 'onAttackEnd', attacker, owner) : state
 }
 
+/** Fire a trigger for every unit in play (both sides), re-finding each in case an
+ *  earlier ability changed it. Used for board-wide events like regroup start (#340). */
+function fireForAllUnits(state: GameState, point: TriggerPoint): GameState {
+  let next = state
+  for (const owner of ['player', 'opponent'] as PlayerId[]) {
+    for (const id of next.players[owner].units.map(u => u.instanceId)) {
+      const unit = next.players[owner].units.find(u => u.instanceId === id)
+      if (unit) next = runUnitTrigger(next, point, unit, owner)
+    }
+  }
+  return next
+}
+
 function attack(state: GameState, attackerId: string, target: AttackTarget): GameState {
   const playerId = state.activePlayer
   const enemyId = opponentOf(playerId)
@@ -560,6 +574,9 @@ function enterRegroup(state: GameState): GameState {
   next = drawForRegroup(next, 'player')
   next = drawForRegroup(next, 'opponent')
   next = checkWin(next)
+  if (next.winner !== null) return next
+  // "When the regroup phase starts" abilities (e.g. Heightened Awareness) (#340).
+  next = checkWin(fireForAllUnits(next, 'whenRegroupStarts'))
   if (next.winner !== null) return next
   return {
     ...next,

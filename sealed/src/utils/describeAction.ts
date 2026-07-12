@@ -38,8 +38,9 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       const cardId = state.players[by].hand[action.handIndex]
       const card = cardId ? state.cards[cardId] : undefined
       if (!card) return 'Play an upgrade'
+      const targetUnit = [...state.players.player.units, ...state.players.opponent.units].find(u => u.instanceId === action.targetInstanceId)
       const target = anyUnitName(state, action.targetInstanceId)
-      return `Play ${card.name} (${effectiveCost(state, by, card)})${target ? ` on ${target}` : ''}`
+      return `Play ${card.name} (${effectiveCost(state, by, card, targetUnit)})${target ? ` on ${target}` : ''}`
     }
     case 'attack': {
       const attacker = unitName(state, by, action.attackerId)
