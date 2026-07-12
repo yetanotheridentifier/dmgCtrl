@@ -31,7 +31,10 @@ function toArena(arenas: string[] | undefined): Arena | undefined {
  */
 function toKeywords(card: SwuCard): KeywordInstance[] {
   const text = `${card.FrontText ?? ''}\n${card.BackText ?? ''}`
-  return (card.Keywords ?? []).map(name => {
+  return (card.Keywords ?? []).map(raw => {
+    // Trim: the source data ships some keywords with stray whitespace (e.g. two
+    // "Shielded" variants), which would otherwise miss `hasKeyword` matches (#334).
+    const name = raw.trim()
     const match = text.match(new RegExp(`${name}\\s+(\\d+)`, 'i'))
     return match ? { name, value: parseInt(match[1], 10) } : { name }
   })

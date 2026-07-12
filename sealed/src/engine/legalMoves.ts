@@ -1,8 +1,23 @@
 import type { Action } from './actions'
-import type { EngineCard, GameState, PlayerId } from './types'
+import type { EngineCard, GameState, KeywordInstance, PlayerId, UnitState } from './types'
 import { opponentOf } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { unitHasKeyword } from './keywords'
+
+/**
+ * The enemy units `attacker` (a unit controlled by the active player) may attack,
+ * and whether Sentinel locks the attack onto them (so the base is off-limits).
+ * Sentinel forces the attack; Hidden removes a unit as a target unless it also has
+ * Sentinel; Saboteur ignores Sentinel (#334).
+ */
+export function enemyAttackTargets(state: GameState, attacker: UnitState): { targets: UnitState[]; sentinelLocked: boolean } {
+  const enemy = state.players[opponentOf(state.activePlayer)]
+  const sameArena = enemy.units.filter(e => e.arena === attacker.arena)
+  const attackable = sameArena.filter(e => !e.hidden || unitHasKeyword(state, e, 'Sentinel'))
+  const sentinels = attackable.filter(e => unitHasKeyword(state, e, 'Sentinel'))
+  const sentinelLocked = sentinels.length > 0 && !unitHasKeyword(state, attacker, 'Saboteur')
+  return { targets: sentinelLocked ? sentinels : attackable, sentinelLocked }
+}
 
 /**
  * Effective cost of playing a card, including the aspect penalty (CR 8.1):
@@ -58,6 +73,9 @@ function setupMoves(state: GameState): Action[] {
 }
 
 function actionPhaseMoves(state: GameState): Action[] {
+  // A pending on-play trigger (Ambush) overrides the normal moves: resolve it first.
+  if (state.pendingTrigger) return triggerMoves(state)
+
   const moves: Action[] = []
   const playerId = state.activePlayer
   const p = state.players[playerId]
@@ -91,11 +109,7 @@ function actionPhaseMoves(state: GameState): Action[] {
   for (const unit of p.units) {
     if (unit.exhausted) continue
 
-    const sameArena = enemy.units.filter(e => e.arena === unit.arena)
-    const sentinels = sameArena.filter(e => unitHasKeyword(state, e, 'Sentinel'))
-    const sentinelLocked = sentinels.length > 0 && !unitHasKeyword(state, unit, 'Saboteur')
-
-    const targets = sentinelLocked ? sentinels : sameArena
+    const { targets, sentinelLocked } = enemyAttackTargets(state, unit)
     for (const enemyUnit of targets) {
       moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'unit', instanceId: enemyUnit.instanceId } })
     }
@@ -122,6 +136,56 @@ function actionPhaseMoves(state: GameState): Action[] {
   }
 
   moves.push({ type: 'pass' })
+  return moves
+}
+
+/**
+ * The keywords a Support unit lends to another attacker for one attack — its card's
+ * and upgrades' keywords, excluding Support itself (no chaining) (#334).
+ */
+export function supportGrantedKeywords(state: GameState, supportUnitId: string): KeywordInstance[] {
+  const su = state.players[state.activePlayer].units.find(u => u.instanceId === supportUnitId)
+  if (!su) return []
+  const kws = [
+    ...(state.cards[su.cardId]?.keywords ?? []),
+    ...su.upgrades.flatMap(a => state.cards[a.cardId]?.keywords ?? []),
+  ]
+  return kws.filter(k => k.name !== 'Support')
+}
+
+/**
+ * Moves while a pending on-play trigger is unresolved (#334). Ambush: the played
+ * unit may attack an enemy unit (never the base). Support: any OTHER ready unit may
+ * attack (unit or base), gaining the support unit's keywords. Either can be skipped.
+ */
+function triggerMoves(state: GameState): Action[] {
+  const trigger = state.pendingTrigger!
+  const p = state.players[state.activePlayer]
+  const moves: Action[] = []
+
+  if (trigger.kind === 'ambush') {
+    const unit = p.units.find(u => u.instanceId === trigger.unitId)
+    if (unit) {
+      for (const e of enemyAttackTargets(state, unit).targets) {
+        moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
+      }
+    }
+  } else {
+    // Support: each other ready unit may attack, seeing the granted keywords (e.g.
+    // a granted Saboteur ignoring Sentinel). Support attacks may hit the base too.
+    const granted = supportGrantedKeywords(state, trigger.unitId)
+    for (const candidate of p.units) {
+      if (candidate.exhausted || candidate.instanceId === trigger.unitId) continue
+      const attacker = granted.length ? { ...candidate, grantedKeywords: granted } : candidate
+      const { targets, sentinelLocked } = enemyAttackTargets(state, attacker)
+      for (const e of targets) {
+        moves.push({ type: 'attack', attackerId: candidate.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
+      }
+      if (!sentinelLocked) moves.push({ type: 'attack', attackerId: candidate.instanceId, target: { kind: 'base' } })
+    }
+  }
+
+  moves.push({ type: 'skipTrigger' })
   return moves
 }
 

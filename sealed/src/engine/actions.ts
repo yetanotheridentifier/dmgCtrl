@@ -19,6 +19,9 @@ export type Action =
   | { type: 'deployLeader' }
   | { type: 'takeInitiative' }
   | { type: 'pass' }
+  // Decline a pending on-play trigger (Ambush/Support) offered after a unit enters
+  // play — the optional attack is not taken (#334).
+  | { type: 'skipTrigger' }
   | { type: 'resourceCard'; handIndex: number }
   | { type: 'skipResource' }
   // Setup phase (CR 5.2.1e–f): each player may mulligan once (initiative holder

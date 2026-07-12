@@ -2,7 +2,7 @@ import { useState, type CSSProperties, type ReactNode } from 'react'
 import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
 import type { SavedDeck } from '../data/deckStore'
-import type { EngineCard, GameState, PlayerId, UnitState } from '../engine/types'
+import type { EngineCard, GameState, PlayerId, UnitState, UpgradeAttachment } from '../engine/types'
 import type { Action } from '../engine/actions'
 import { describeAction } from '../utils/describeAction'
 import { orderUnits } from './boardLayout'
@@ -10,6 +10,8 @@ import { outcomeBanner } from './outcome'
 import CardFace from './cardFace'
 import { CARD_WIDTH_PX } from './cardSizing'
 import { tokenLayout, TOKEN_W, TOKEN_H } from './tokens'
+import { TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
+import { unitHasKeyword } from '../engine/keywords'
 import { useCardZoom } from './useCardZoom'
 import { CardZoomPopover } from './cardZoom'
 import { DeckPile, ResourceStack, DiscardPile, OpponentHand, EmptySlot } from './mat'
@@ -66,11 +68,16 @@ function AttachedUpgrade({ card, fallbackName, top, dim }: {
  * further down so every stat modifier shows. Rendered back-to-front (reversed) so
  * the fronts paint on top, all below the unit card in the tile (#336).
  */
-function UpgradeStack({ state, unit }: { state: GameState; unit: UnitState }) {
-  if (unit.upgrades.length === 0) return null
+function UpgradeStack({ state, upgrades, instanceId, exhausted }: {
+  state: GameState
+  upgrades: UpgradeAttachment[]
+  instanceId: string
+  exhausted: boolean
+}) {
+  if (upgrades.length === 0) return null
   return (
-    <div data-testid={`board-unit-upgrades-${unit.instanceId}`} className="pointer-events-none absolute inset-0">
-      {unit.upgrades
+    <div data-testid={`board-unit-upgrades-${instanceId}`} className="pointer-events-none absolute inset-0">
+      {upgrades
         .map((up, i) => ({ up, i }))
         .reverse()
         .map(({ up, i }) => (
@@ -79,7 +86,7 @@ function UpgradeStack({ state, unit }: { state: GameState; unit: UnitState }) {
             card={state.cards[up.cardId]}
             fallbackName={up.cardId}
             top={(i + 1) * UPGRADE_STEP_PX}
-            dim={unit.exhausted}
+            dim={exhausted}
           />
         ))}
     </div>
@@ -89,6 +96,9 @@ function UpgradeStack({ state, unit }: { state: GameState; unit: UnitState }) {
 export function UnitLine({ state, unit, interact }: { state: GameState; unit: UnitState; interact: UnitInteraction }) {
   const card = state.cards[unit.cardId]
   const { zoomed, bind } = useCardZoom()
+  // Only card upgrades stack behind the unit; token upgrades render as on-card
+  // tokens via CardTokens instead (#334).
+  const cardUpgrades = unit.upgrades.filter(u => state.cards[u.cardId]?.type !== 'token')
   const clickable = (interact.actionable || interact.isTarget || interact.isUpgradeTarget) && interact.onClick
   const highlight: 'accent' | 'red' | 'accent-dim' | 'green' | undefined = interact.selected
     ? 'accent'
@@ -108,14 +118,29 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
       data-upgrade-target={Boolean(interact.isUpgradeTarget)}
       onClick={clickable ? interact.onClick : undefined}
       className={`relative w-fit shrink-0 ${clickable ? 'cursor-pointer' : ''}`}
-      style={{ paddingBottom: unit.upgrades.length * UPGRADE_STEP_PX }}
+      style={{ paddingBottom: cardUpgrades.length * UPGRADE_STEP_PX }}
     >
-      <UpgradeStack state={state} unit={unit} />
+      <UpgradeStack state={state} upgrades={cardUpgrades} instanceId={unit.instanceId} exhausted={unit.exhausted} />
       {/* The unit card carries the unit's own zoom — hover here, not the dead tile
           padding; the upgrades zoom from their exposed strips instead (#336). */}
       <div className="relative w-fit" {...bind}>
         <CardFace card={card} fallbackName={unit.cardId} deployed={unit.isLeader} exhausted={unit.exhausted} highlight={highlight} />
         <CardTokens unit={unit} />
+        {/* Keyword badges (#334): Hidden (temporary, until next phase) and Sentinel
+            (a keyword — shown while the unit has it, gone if it loses it/defeated).
+            Stacked so both can show. */}
+        <div className="pointer-events-none absolute inset-x-0 top-1 flex flex-col items-center gap-0.5">
+          {unit.hidden && (
+            <span data-testid={`board-unit-hidden-${unit.instanceId}`} className="rounded bg-black/75 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-ink shadow-[0_1px_3px_rgba(0,0,0,0.7)]">
+              Hidden
+            </span>
+          )}
+          {unitHasKeyword(state, unit, 'Sentinel') && (
+            <span data-testid={`board-unit-sentinel-${unit.instanceId}`} className="rounded bg-black/75 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-ink shadow-[0_1px_3px_rgba(0,0,0,0.7)]">
+              Sentinel
+            </span>
+          )}
+        </div>
       </div>
       {zoomed && <CardZoomPopover card={card} deployed={unit.isLeader} fallbackName={unit.cardId} />}
     </div>
@@ -128,9 +153,24 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
  * is the first token; more effect types slot into the same 1–4 layout (#326).
  */
 function CardTokens({ unit }: { unit: UnitState }) {
+  const countToken = (id: string) => unit.upgrades.filter(u => u.cardId === id).length
   const tokens: { key: string; label: string; color: string; testid: string }[] = []
   if (unit.damage > 0) {
     tokens.push({ key: 'damage', label: String(unit.damage), color: 'var(--color-red)', testid: `board-unit-damage-${unit.instanceId}` })
+  }
+  // Token upgrades render as on-card tokens (not cards behind the unit) (#334):
+  // Shield = blue, Experience = amber (+1/+1), Advantage = green (+1/0 next combat).
+  const shields = countToken(TOKEN_SHIELD)
+  if (shields > 0) {
+    tokens.push({ key: 'shield', label: String(shields), color: '#3b82f6', testid: `board-unit-shield-${unit.instanceId}` })
+  }
+  const experience = countToken(TOKEN_EXPERIENCE)
+  if (experience > 0) {
+    tokens.push({ key: 'experience', label: String(experience), color: 'var(--color-amber)', testid: `board-unit-experience-${unit.instanceId}` })
+  }
+  const advantage = countToken(TOKEN_ADVANTAGE)
+  if (advantage > 0) {
+    tokens.push({ key: 'advantage', label: String(advantage), color: 'var(--color-green)', testid: `board-unit-advantage-${unit.instanceId}` })
   }
   if (tokens.length === 0) return null
 

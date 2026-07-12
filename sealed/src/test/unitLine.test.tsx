@@ -3,6 +3,7 @@ import { render, screen, within, fireEvent } from '@testing-library/react'
 import { UnitLine } from '../components/gameScreen'
 import type { UnitInteraction } from '../components/gameScreen'
 import { state, unit, card, CARDS } from './helpers/engineFixtures'
+import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import type { GameState } from '../engine/types'
 
 const noInteract: UnitInteraction = { actionable: false, selected: false, isTarget: false }
@@ -94,6 +95,27 @@ describe('UnitLine — attached upgrades (#336)', () => {
     fireEvent.keyDown(window, { key: 'Shift', shiftKey: true })
     expect(screen.getByTestId('card-zoom')).toBeInTheDocument()
     fireEvent.keyUp(window, { key: 'Shift', shiftKey: false })
+  })
+
+  it('shows a Hidden badge on a hidden unit (#334)', () => {
+    render(<UnitLine state={boardWith('TST_D')} unit={unit('u1', 'TST_D', { hidden: true })} interact={noInteract} />)
+    expect(screen.getByTestId('board-unit-hidden-u1')).toHaveTextContent(/hidden/i)
+  })
+
+  it('shows a Sentinel badge on a unit with the Sentinel keyword, and none without (#334)', () => {
+    const s = state({ cards: { ...CARDS, TST_S: card({ id: 'TST_S', type: 'unit', power: 2, hp: 2, keywords: [{ name: 'Sentinel' }] }) } })
+    render(<UnitLine state={s} unit={unit('u1', 'TST_S')} interact={noInteract} />)
+    expect(screen.getByTestId('board-unit-sentinel-u1')).toHaveTextContent(/sentinel/i)
+
+    render(<UnitLine state={boardWith('TST_D')} unit={unit('u2', 'TST_D')} interact={noInteract} />)
+    expect(screen.queryByTestId('board-unit-sentinel-u2')).toBeNull()
+  })
+
+  it('renders a shield token as an on-card overlay, not a behind-card upgrade (#334)', () => {
+    const u = unit('u1', 'TST_D', { upgrades: [{ cardId: TOKEN_SHIELD, owner: 'player' }] })
+    render(<UnitLine state={boardWith('TST_D')} unit={u} interact={noInteract} />)
+    expect(screen.getByTestId('board-unit-shield-u1')).toBeInTheDocument()
+    expect(screen.queryByTestId('board-unit-upgrades-u1')).toBeNull() // tokens aren't stacked as cards
   })
 
   it('marks a unit as an upgrade target: green highlight and clickable', () => {
