@@ -33,6 +33,12 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
     ...(state.cards[p.leader.cardId]?.aspects ?? []),
     ...(state.cards[p.base.cardId]?.aspects ?? []),
   ]
+  // A unit may provide its aspect icons while its controller pays costs — The Darksaber (#343).
+  for (const u of p.units) {
+    for (const cardId of [u.cardId, ...u.upgrades.map(x => x.cardId)]) {
+      provided.push(...(getCardDefinition(cardId)?.providesAspects?.(state, u) ?? []))
+    }
+  }
   let penalty = 0
   for (const icon of card.aspects) {
     const i = provided.indexOf(icon)

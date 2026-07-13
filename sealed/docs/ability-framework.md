@@ -240,11 +240,20 @@ and `runUnitTrigger`; cleared with `grantedKeywords` after the attack). UI: mult
 `SearchRevealOverlay` for the pick; `mayAttack` surfaces as normal board attacks + a
 "Don't attack" button. Tests in `pendingChoices.test.ts` + `searchOverlay.test.tsx`.
 
-**Remaining — The Darksaber (135):** attach to a unique (`EngineCard.unique`) non-Vehicle
-unit; static hooks: grant the Mandalorian trait (new `grantedTraits` hook), make the host
-a leader unit (an `isLeaderUnit` override folded into defeat routing / rendering), and
-provide its aspect icons while paying costs (extend `effectiveCost`'s provided-aspect set
-with such units' aspects). Then **#343 is complete.**
+**DONE — The Darksaber (135):** attach restriction `unique && !Vehicle`; hooks
+`grantedTraits: () => ['Mandalorian']` (folded into `unitTraits`/`unitHasTrait`, which
+the trait-based cost mods now use so a granted trait counts), `makesLeaderUnit: () =>
+true` (exposed via `isLeaderUnit`), and `providesAspects: (s,u) => host aspects` (folded
+into `effectiveCost`'s provided-aspect set, so the host's icons reduce the aspect
+penalty on the controller's plays). Tests: `src/test/darksaber.test.ts`.
+
+**Note on "is a leader unit":** `isLeaderUnit` reports the status, but it is deliberately
+NOT wired into defeat routing — the host is a *unit* card, so it still goes to discard on
+defeat (routing a non-leader through the leader-return path would wrongly touch the
+player's actual leader). No card in the set reads leader-unit status yet, so it is a
+faithful status flag with no combat consumer today.
+
+**#343 Tier 3 is complete — and with it every ASH upgrade effect (#340–#343).**
 
 **UI:** the new choices must surface (Ambush/Support already render as board
 attack + skip). `acceptChoice` needs a `describeAction` label and a button/board

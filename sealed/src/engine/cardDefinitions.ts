@@ -4,6 +4,7 @@ import { dealDamageToUnit } from './combat'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
 import { opponentOf, pushChoice } from './types'
+import { unitHasTrait } from './keywords'
 import type { EngineCard, GameState, UnitState } from './types'
 
 /**
@@ -16,10 +17,9 @@ import type { EngineCard, GameState, UnitState } from './types'
  * their attach restriction here; their abilities land with Tier 2/3.
  */
 
-const trait = (card: EngineCard | undefined, name: string): boolean =>
-  (card?.traits ?? []).some(t => t.toLowerCase() === name.toLowerCase())
 const cardOf = (state: GameState, unit: UnitState): EngineCard | undefined => state.cards[unit.cardId]
-const nonVehicle = (state: GameState, target: UnitState): boolean => !trait(cardOf(state, target), 'Vehicle')
+// Trait checks go through `unitHasTrait` so granted traits count (The Darksaber → Mandalorian, #343).
+const nonVehicle = (state: GameState, target: UnitState): boolean => !unitHasTrait(state, target, 'Vehicle')
 
 // ── Stat / damage modifiers ─────────────────────────────────────────────────
 registerCard('ASH_054', { statModifier: (_s, _u, ctx) => (ctx.attackingBase ? { power: -3 } : {}) }) // Pointless to Resist — −3 power attacking a base
@@ -29,8 +29,8 @@ registerCard('ASH_150', { // Deadly Vulnerability — takes double damage; attac
 })
 
 // ── Cost modifiers ──────────────────────────────────────────────────────────
-registerCard('ASH_262', { costModifier: (s, _p, target) => (target && trait(cardOf(s, target), 'Imperial') ? -1 : 0) }) // Faith in the Empire
-registerCard('ASH_263', { costModifier: (s, _p, target) => (target && trait(cardOf(s, target), 'Mandalorian') ? -1 : 0) }) // The Way of the Mand'alor
+registerCard('ASH_262', { costModifier: (s, _p, target) => (target && unitHasTrait(s, target, 'Imperial') ? -1 : 0) }) // Faith in the Empire
+registerCard('ASH_263', { costModifier: (s, _p, target) => (target && unitHasTrait(s, target, 'Mandalorian') ? -1 : 0) }) // The Way of the Mand'alor
 
 // ── Attach restrictions + conditional keywords ─────────────────────────────
 registerCard('ASH_066', { // Luke's Jedi Lightsaber — Sentinel if attached to Luke Skywalker
@@ -39,11 +39,17 @@ registerCard('ASH_066', { // Luke's Jedi Lightsaber — Sentinel if attached to 
 })
 registerCard('ASH_114', { // Sabine's Lightsaber — Restore 2 if Sabine Wren or a Force unit
   attachRestriction: nonVehicle,
-  conditionalKeywords: (s, u) => (cardOf(s, u)?.name === 'Sabine Wren' || trait(cardOf(s, u), 'Force') ? [{ name: 'Restore', value: 2 }] : []),
+  conditionalKeywords: (s, u) => (cardOf(s, u)?.name === 'Sabine Wren' || unitHasTrait(s, u, 'Force') ? [{ name: 'Restore', value: 2 }] : []),
 })
 registerCard('ASH_181', { attachRestriction: (_s, t) => t.damage > 0 }) // Mark My Words — attach to a damaged unit (Overwhelm from keyword data)
 registerCard('ASH_198', { conditionalKeywords: () => [{ name: 'Sentinel' }] }) // Nowhere to Hide — attached unit gains Sentinel
 registerCard('ASH_084', { searchModifier: () => 2 }) // Arcana Star Map — searches look at twice as many cards
+registerCard('ASH_135', { // The Darksaber — attach to a unique non-Vehicle unit
+  attachRestriction: (s, t) => Boolean(cardOf(s, t)?.unique) && !unitHasTrait(s, t, 'Vehicle'),
+  grantedTraits: () => ['Mandalorian'], // attached unit gains the Mandalorian trait
+  makesLeaderUnit: () => true, // attached unit is a leader unit
+  providesAspects: (s, u) => cardOf(s, u)?.aspects ?? [], // provides its aspect icons while paying costs
+})
 registerCard('ASH_230', { // Improvised Identity — attach to a ground unit
   attachRestriction: (_s, t) => t.arena === 'ground',
   actionAbilities: [{
@@ -138,7 +144,7 @@ registerCard('ASH_055', { // Blade of Talzin — return from discard to hand if 
     description: 'If this was on a friendly Night unit, return it from your discard to your hand.',
     effect: (s, ctx) => {
       const host = ctx.defeatedUnit
-      if (!host || !trait(s.cards[host.cardId], 'Night')) return s
+      if (!host || !unitHasTrait(s, host, 'Night')) return s
       // "Your" discard = the upgrade's owner; only return if it was friendly (host controlled by that owner).
       const owner = host.upgrades.find(u => u.cardId === ctx.cardId)?.owner ?? ctx.owner
       if (owner !== ctx.owner) return s

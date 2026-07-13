@@ -79,6 +79,12 @@ export interface CardDefinition {
   actionAbilities?: ActionAbilityDef[]
   /** Multiplier on how many cards this unit's searches look at — Arcana Star Map ×2 (#343). */
   searchModifier?: (state: GameState, unit: UnitState) => number
+  /** Extra traits this card grants a unit — The Darksaber grants Mandalorian (#343). */
+  grantedTraits?: (state: GameState, unit: UnitState) => string[]
+  /** True if this card makes its unit a leader unit — The Darksaber (#343). */
+  makesLeaderUnit?: (state: GameState, unit: UnitState) => boolean
+  /** Aspect icons this unit provides while its controller pays costs — The Darksaber (#343). */
+  providesAspects?: (state: GameState, unit: UnitState) => string[]
 }
 
 /** An activated ability a unit may use as its action (CR 2.4); e.g. Improvised Identity. */
