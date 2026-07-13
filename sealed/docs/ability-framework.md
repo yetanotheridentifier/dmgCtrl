@@ -164,18 +164,52 @@ Tests: `src/test/ashUpgrades.test.ts` + `src/test/combat.test.ts`. Card text is
 authoritative from the worker API (`worker.dmgctrl.app/cards/{SET}/{NUM}` serves
 `FrontText`); only Power/HP are missing for ASH upgrades (`upgradeStatOverrides.ts`).
 
-### The `pendingChoice` mechanism (design §1)
-Still the next big piece. The Ambush/Support **`pendingTrigger`**
-(`GameState.pendingTrigger`) is the working precursor; #342 group B generalises it
-into a pending-ability-choice for optional "may…" abilities.
+### The `pendingChoice` queue (design §1) — DONE (1a)
+`GameState.pendingChoices: PendingChoice[]` (`types.ts`) is a queue of pending
+decisions; `activeChoice(state)` = head, `popChoice(state)` drops it. Ambush/Support
+migrated onto it unchanged (a single-element queue), keeping `activePlayer` at
+`choice.controller` so the right side decides. `legalMoves` returns the head choice's
+options (or `skipTrigger`) while one is pending. Optional "may…" abilities push their
+own entries; simultaneous `whenReadies` triggers push one per unit.
 
-## Resumption plan (next chunks)
+## Resumption plan — #342 group B, phase 1 (design settled)
 
-1. **#342 group B — pending-choice mechanism** (design §1) + wiring `whenReadies`
-   and `onDefense`. Then: The Conflict Within (088, `whenReadies`: may pay 3 else
-   exhaust), DDC Defender (210, `onDefense`: may deal 1 + exhaust a unit), Camtono
-   (229, `onAttackEnd`: may play a ≤2-cost top card free). Touches state shape,
-   `legalMoves`, `resolve`, the AI driver and the UI — worth a design pass first.
+**Decisions locked in with the user:**
+- **Choice-resolution action:** keep `skipTrigger` as the universal "decline"; add
+  one generic **`acceptChoice`** action carrying an optional `targetInstanceId` (for
+  choices needing a target, e.g. an upgrade's attach target or DDC Defender's victim).
+  No per-card action types.
+- **`PendingChoice`** gains `payOrExhaust` (Conflict Within) and `mayPlayTopFree`
+  (Camtono) members alongside `ambush`/`support`.
+- **Queue drain across controllers:** after `acceptChoice`/`skipTrigger` pops the
+  head, if the queue is non-empty set `activePlayer = newHead.controller` (don't
+  advance the turn); when it empties, resume normal flow. The one wrinkle to handle:
+  a round-start `whenReadies` drain must end with `activePlayer = initiative` (start
+  of the action phase), not an `advanceTurn` from the last decider — thread the
+  intended post-drain player through.
+
+**Cards (phase 1):**
+- **Camtono (229)** — `onAttackEnd`: if the top deck card costs ≤2, push a
+  `mayPlayTopFree` choice. On accept: **unit** → enters play free; **upgrade** →
+  attaches free (`acceptChoice.targetInstanceId` picks the unit; `legalMoves` offers
+  one per valid target); **event** → temporary rule: discard it with no effect (same
+  decision point, stub resolution) — agreed with the user until events are built.
+  Extract `playCard`'s unit-creation core into a reusable `enterUnit(state, owner,
+  cardId, { free })` so free-play reuses Shielded/Hidden/Ambush/Support + whenPlayed.
+- **The Conflict Within (088)** — wire `whenReadies` (fire in `readyEverything` for
+  each unit that goes exhausted→ready, both players at `startNextRound`). Push a
+  `payOrExhaust` choice per unit: `acceptChoice` pays 3 (only offered if affordable)
+  and leaves it ready; `skipTrigger` (or unaffordable) exhausts it.
+
+**UI:** the new choices must surface (Ambush/Support already render as board
+attack + skip). `acceptChoice` needs a `describeAction` label and a button/board
+affordance (pay 3 / play card / attach target / discard event). Hand to the user for
+manual testing after the engine side is green.
+
+## Resumption plan — phase 2 & Tier 3
+1. **DDC Defender (210)** — `onDefense`, the **mid-combat** case: split `attack()`
+   into declare → defender may act (`acceptChoice` with a target) → deal damage, so
+   the resolver suspends inside combat and resumes. The hard/risky part; kept separate.
 2. **#343 Tier 3** — Improvised Identity (230), The Darksaber (135, leader-unit
    transform + aspect provision), Arcana Star Map (084) — the last needs a
    deck-search mechanic (also unblocks the search-doubling clause).

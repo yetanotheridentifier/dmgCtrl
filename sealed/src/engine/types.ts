@@ -140,11 +140,29 @@ export interface GameState {
   /** Terminal outcome: a winning player, `'draw'` (both bases fall at once), or null while live. */
   winner: PlayerId | 'draw' | null
   /**
-   * A pending on-play trigger (#334): after an Ambush/Support unit enters play, its
-   * controller resolves the optional attack before the turn passes. While set, the
-   * only legal moves are the trigger's attack(s) or `skipTrigger`.
+   * Queue of pending mid-resolution choices (#334/#342). While the head is set, the
+   * only legal moves are that choice's options (or `skipTrigger` to decline), and
+   * `activePlayer` is held at the choice's `controller` so the right side decides.
+   * Ambush/Support use it (a single-element queue); optional "may…" abilities and
+   * simultaneous `whenReadies` triggers push one entry per decision.
    */
-  pendingTrigger?: { kind: 'ambush' | 'support'; unitId: string }
+  pendingChoices?: PendingChoice[]
+}
+
+/** A decision the resolver pauses on until its `controller` picks an option or skips. */
+export type PendingChoice =
+  | { kind: 'ambush'; controller: PlayerId; unitId: string }
+  | { kind: 'support'; controller: PlayerId; unitId: string }
+
+/** The choice currently awaiting a decision (head of the queue), if any. */
+export function activeChoice(state: GameState): PendingChoice | undefined {
+  return state.pendingChoices?.[0]
+}
+
+/** Remove the resolved head choice; the queue becomes `undefined` when it empties. */
+export function popChoice(state: GameState): GameState {
+  const rest = (state.pendingChoices ?? []).slice(1)
+  return { ...state, pendingChoices: rest.length > 0 ? rest : undefined }
 }
 
 export function opponentOf(player: PlayerId): PlayerId {

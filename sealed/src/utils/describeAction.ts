@@ -1,6 +1,6 @@
 import type { Action } from '../engine/actions'
 import type { GameState, PlayerId } from '../engine/types'
-import { opponentOf } from '../engine/types'
+import { opponentOf, activeChoice } from '../engine/types'
 import { effectiveCost } from '../engine/legalMoves'
 
 function unitName(state: GameState, owner: PlayerId, instanceId: string): string {
@@ -55,8 +55,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       return 'Take the initiative'
     case 'pass':
       return 'Pass'
-    case 'skipTrigger':
-      return state.pendingTrigger ? `Skip ${state.pendingTrigger.kind}` : 'Skip'
+    case 'skipTrigger': {
+      const choice = activeChoice(state)
+      return choice ? `Skip ${choice.kind}` : 'Skip'
+    }
     case 'resourceCard': {
       if (opts.redact) return 'Resource a card'
       const cardId = state.players[by].hand[action.handIndex]

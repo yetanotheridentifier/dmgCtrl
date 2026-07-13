@@ -125,7 +125,7 @@ describe('Ambush keyword (#334)', () => {
 
   it('playing an Ambush unit with a target enters a pending ambush and readies the unit', () => {
     const next = resolve(beforePlay(), { type: 'playCard', handIndex: 0 })
-    expect(next.pendingTrigger).toEqual({ kind: 'ambush', unitId: expect.any(String) })
+    expect(next.pendingChoices?.[0]).toEqual({ kind: 'ambush', controller: 'player', unitId: expect.any(String) })
     const amb = next.players.player.units.find(u => u.cardId === 'TST_AMB')!
     expect(amb.exhausted).toBe(false) // readied for the ambush attack
     expect(next.activePlayer).toBe('player') // turn does NOT pass yet
@@ -143,9 +143,9 @@ describe('Ambush keyword (#334)', () => {
 
   it('resolving the ambush attack fights the enemy unit, clears the pending trigger, and passes the turn', () => {
     const s = resolve(beforePlay(), { type: 'playCard', handIndex: 0 })
-    const ambId = s.pendingTrigger!.unitId
+    const ambId = s.pendingChoices![0].unitId
     const next = resolve(s, { type: 'attack', attackerId: ambId, target: { kind: 'unit', instanceId: 'e1' } })
-    expect(next.pendingTrigger).toBeUndefined()
+    expect(next.pendingChoices).toBeUndefined()
     expect(next.activePlayer).toBe('opponent')
     // 3/3 ambusher vs 3/4 defender: defender took 3 (survives at 3 dmg), ambusher took 3 (survives)
     expect(next.players.opponent.units.find(u => u.instanceId === 'e1')!.damage).toBe(3)
@@ -154,14 +154,14 @@ describe('Ambush keyword (#334)', () => {
   it('skipping the ambush exhausts the unit and passes the turn', () => {
     const s = resolve(beforePlay(), { type: 'playCard', handIndex: 0 })
     const next = resolve(s, { type: 'skipTrigger' })
-    expect(next.pendingTrigger).toBeUndefined()
+    expect(next.pendingChoices).toBeUndefined()
     expect(next.players.player.units.find(u => u.cardId === 'TST_AMB')!.exhausted).toBe(true)
     expect(next.activePlayer).toBe('opponent')
   })
 
   it('an Ambush unit with no valid target just enters play (no pending trigger, exhausted)', () => {
     const next = resolve(beforePlay([]), { type: 'playCard', handIndex: 0 }) // no enemy units
-    expect(next.pendingTrigger).toBeUndefined()
+    expect(next.pendingChoices).toBeUndefined()
     expect(next.players.player.units.find(u => u.cardId === 'TST_AMB')!.exhausted).toBe(true)
     expect(next.activePlayer).toBe('opponent')
   })
@@ -184,7 +184,7 @@ describe('Support keyword (#334)', () => {
 
   it('playing a Support unit with another ready unit opens a pending support attack', () => {
     const next = resolve(beforePlay(), { type: 'playCard', handIndex: 0 })
-    expect(next.pendingTrigger).toEqual({ kind: 'support', unitId: expect.any(String) })
+    expect(next.pendingChoices?.[0]).toEqual({ kind: 'support', controller: 'player', unitId: expect.any(String) })
     expect(next.activePlayer).toBe('player') // resolve the support before passing
   })
 
@@ -198,7 +198,7 @@ describe('Support keyword (#334)', () => {
   it('the support attacker gains the support unit’s keywords for the attack (Overwhelm → base)', () => {
     const s = resolve(beforePlay(), { type: 'playCard', handIndex: 0 })
     const next = resolve(s, { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' } })
-    expect(next.pendingTrigger).toBeUndefined()
+    expect(next.pendingChoices).toBeUndefined()
     // 5 power vs a 1-HP unit → 4 excess trampled to the base via GRANTED Overwhelm.
     expect(next.players.opponent.base.damage).toBe(4)
     // The grant is transient — not left on the attacker afterward.
@@ -209,13 +209,13 @@ describe('Support keyword (#334)', () => {
   it('skipping the support leaves the board and passes the turn', () => {
     const s = resolve(beforePlay(), { type: 'playCard', handIndex: 0 })
     const next = resolve(s, { type: 'skipTrigger' })
-    expect(next.pendingTrigger).toBeUndefined()
+    expect(next.pendingChoices).toBeUndefined()
     expect(next.activePlayer).toBe('opponent')
   })
 
   it('a Support unit with no other ready unit just enters play (no pending trigger)', () => {
     const next = resolve(beforePlay([]), { type: 'playCard', handIndex: 0 }) // no other friendly units
-    expect(next.pendingTrigger).toBeUndefined()
+    expect(next.pendingChoices).toBeUndefined()
     expect(next.activePlayer).toBe('opponent')
   })
 })

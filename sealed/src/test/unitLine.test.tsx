@@ -3,7 +3,7 @@ import { render, screen, within, fireEvent } from '@testing-library/react'
 import { UnitLine } from '../components/gameScreen'
 import type { UnitInteraction } from '../components/gameScreen'
 import { state, unit, card, CARDS } from './helpers/engineFixtures'
-import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
+import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import type { GameState } from '../engine/types'
 
 const noInteract: UnitInteraction = { actionable: false, selected: false, isTarget: false }
@@ -51,6 +51,14 @@ describe('UnitLine — on-card damage overlay (#326)', () => {
     fireEvent.pointerLeave(unitCard, { pointerType: 'mouse' })
     expect(screen.queryByTestId('card-zoom')).toBeNull()
     fireEvent.keyUp(window, { key: 'Shift', shiftKey: false })
+  })
+
+  it('labels an Advantage token "adv. N" with the token count', () => {
+    const u = unit('u1', 'TST_D', { upgrades: [{ cardId: TOKEN_ADVANTAGE, owner: 'player' }, { cardId: TOKEN_ADVANTAGE, owner: 'player' }] })
+    render(<UnitLine state={boardWith('TST_D')} unit={u} interact={noInteract} />)
+    const token = screen.getByTestId('board-unit-advantage-u1')
+    expect(token).toHaveTextContent(/adv\./i)
+    expect(token).toHaveTextContent('2')
   })
 
   it('does not render the old bottom power/health line for a unit with art-backed stats', () => {

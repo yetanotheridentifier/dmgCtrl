@@ -1,6 +1,6 @@
 import type { Action } from './actions'
 import type { EngineCard, GameState, KeywordInstance, PlayerId, UnitState } from './types'
-import { opponentOf } from './types'
+import { opponentOf, activeChoice } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { unitHasKeyword } from './keywords'
 import { getCardDefinition } from './abilities'
@@ -77,8 +77,8 @@ function setupMoves(state: GameState): Action[] {
 }
 
 function actionPhaseMoves(state: GameState): Action[] {
-  // A pending on-play trigger (Ambush) overrides the normal moves: resolve it first.
-  if (state.pendingTrigger) return triggerMoves(state)
+  // A pending choice (Ambush/Support …) overrides the normal moves: resolve it first.
+  if (activeChoice(state)) return triggerMoves(state)
 
   const moves: Action[] = []
   const playerId = state.activePlayer
@@ -166,12 +166,12 @@ export function supportGrantedKeywords(state: GameState, supportUnitId: string):
  * attack (unit or base), gaining the support unit's keywords. Either can be skipped.
  */
 function triggerMoves(state: GameState): Action[] {
-  const trigger = state.pendingTrigger!
+  const choice = activeChoice(state)!
   const p = state.players[state.activePlayer]
   const moves: Action[] = []
 
-  if (trigger.kind === 'ambush') {
-    const unit = p.units.find(u => u.instanceId === trigger.unitId)
+  if (choice.kind === 'ambush') {
+    const unit = p.units.find(u => u.instanceId === choice.unitId)
     if (unit) {
       for (const e of enemyAttackTargets(state, unit).targets) {
         moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
@@ -180,9 +180,9 @@ function triggerMoves(state: GameState): Action[] {
   } else {
     // Support: each other ready unit may attack, seeing the granted keywords (e.g.
     // a granted Saboteur ignoring Sentinel). Support attacks may hit the base too.
-    const granted = supportGrantedKeywords(state, trigger.unitId)
+    const granted = supportGrantedKeywords(state, choice.unitId)
     for (const candidate of p.units) {
-      if (candidate.exhausted || candidate.instanceId === trigger.unitId) continue
+      if (candidate.exhausted || candidate.instanceId === choice.unitId) continue
       const attacker = granted.length ? { ...candidate, grantedKeywords: granted } : candidate
       const { targets, sentinelLocked } = enemyAttackTargets(state, attacker)
       for (const e of targets) {

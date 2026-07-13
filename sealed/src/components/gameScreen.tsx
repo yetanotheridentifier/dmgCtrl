@@ -152,14 +152,25 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
  * non-rotating wrapper, so they stay upright when the card is exhausted. Damage
  * is the first token; more effect types slot into the same 1–4 layout (#326).
  */
+interface CardToken {
+  key: string
+  label: string
+  color: string
+  testid: string
+  /** Small caption above the count (e.g. "adv." on the Advantage token). */
+  sub?: string
+  /** Text colour; defaults to white. Dark on the light gold Advantage token. */
+  textColor?: string
+}
+
 function CardTokens({ unit }: { unit: UnitState }) {
   const countToken = (id: string) => unit.upgrades.filter(u => u.cardId === id).length
-  const tokens: { key: string; label: string; color: string; testid: string }[] = []
+  const tokens: CardToken[] = []
   if (unit.damage > 0) {
     tokens.push({ key: 'damage', label: String(unit.damage), color: 'var(--color-red)', testid: `board-unit-damage-${unit.instanceId}` })
   }
   // Token upgrades render as on-card tokens (not cards behind the unit) (#334):
-  // Shield = blue, Experience = amber (+1/+1), Advantage = green (+1/0 next combat).
+  // Shield = blue, Experience = amber (+1/+1), Advantage = gold "adv." (+1/0 next combat).
   const shields = countToken(TOKEN_SHIELD)
   if (shields > 0) {
     tokens.push({ key: 'shield', label: String(shields), color: '#3b82f6', testid: `board-unit-shield-${unit.instanceId}` })
@@ -170,7 +181,7 @@ function CardTokens({ unit }: { unit: UnitState }) {
   }
   const advantage = countToken(TOKEN_ADVANTAGE)
   if (advantage > 0) {
-    tokens.push({ key: 'advantage', label: String(advantage), color: 'var(--color-green)', testid: `board-unit-advantage-${unit.instanceId}` })
+    tokens.push({ key: 'advantage', label: String(advantage), color: '#f5c518', sub: 'adv.', textColor: '#1a1200', testid: `board-unit-advantage-${unit.instanceId}` })
   }
   if (tokens.length === 0) return null
 
@@ -181,7 +192,7 @@ function CardTokens({ unit }: { unit: UnitState }) {
         <span
           key={t.key}
           data-testid={t.testid}
-          className="absolute flex items-center justify-center select-none tabular-nums"
+          className="absolute flex flex-col items-center justify-center select-none tabular-nums"
           style={{
             left: `${positions[i].left}%`,
             top: `${positions[i].top}%`,
@@ -190,13 +201,14 @@ function CardTokens({ unit }: { unit: UnitState }) {
             height: TOKEN_H,
             borderRadius: 6,
             background: t.color,
-            color: '#fff',
+            color: t.textColor ?? '#fff',
             fontSize: `${Math.round(TOKEN_H * 0.6)}px`,
             fontWeight: 600,
             lineHeight: 1,
             boxShadow: '0 1px 3px rgba(0, 0, 0, 0.7)',
           }}
         >
+          {t.sub && <span style={{ fontSize: `${Math.round(TOKEN_H * 0.26)}px`, fontWeight: 700, opacity: 0.85 }}>{t.sub}</span>}
           {t.label}
         </span>
       ))}
