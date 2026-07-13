@@ -1,5 +1,5 @@
 import { registerCard } from './abilities'
-import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit } from './effects'
+import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount } from './effects'
 import { dealDamageToUnit } from './combat'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
@@ -43,7 +43,26 @@ registerCard('ASH_114', { // Sabine's Lightsaber — Restore 2 if Sabine Wren or
 })
 registerCard('ASH_181', { attachRestriction: (_s, t) => t.damage > 0 }) // Mark My Words — attach to a damaged unit (Overwhelm from keyword data)
 registerCard('ASH_198', { conditionalKeywords: () => [{ name: 'Sentinel' }] }) // Nowhere to Hide — attached unit gains Sentinel
-registerCard('ASH_230', { attachRestriction: (_s, t) => t.arena === 'ground' }) // Improvised Identity — ground unit (ability: #343)
+registerCard('ASH_084', { searchModifier: () => 2 }) // Arcana Star Map — searches look at twice as many cards
+registerCard('ASH_230', { // Improvised Identity — attach to a ground unit
+  attachRestriction: (_s, t) => t.arena === 'ground',
+  actionAbilities: [{
+    description: 'Search the top 3 of your deck for a ground unit and discard it; then you may attack with this unit, gaining that unit’s abilities for the attack.',
+    oncePerRound: true,
+    effect: (s, ctx) => {
+      const found = findUnit(s, ctx.sourceInstanceId!)
+      if (!found) return s
+      const owner = ctx.owner
+      const revealed = s.players[owner].deck.slice(0, searchCount(s, found.unit, 3))
+      const groundUnit = (cardId: string) => { const c = s.cards[cardId]; return c?.type === 'unit' && c.arena === 'ground' }
+      // No ground unit revealed → skip the discard, straight to the optional attack (no grant).
+      if (!revealed.some(groundUnit)) {
+        return pushChoice(s, { kind: 'mayAttack', id: ctx.sourceInstanceId!, controller: owner, unitId: ctx.sourceInstanceId! })
+      }
+      return pushChoice(s, { kind: 'search', id: ctx.sourceInstanceId!, controller: owner, unitId: ctx.sourceInstanceId!, revealed })
+    },
+  }],
+})
 
 // ── whenPlayed effects ──────────────────────────────────────────────────────
 registerCard('ASH_086', { // Durasteel Plating — no attach restriction

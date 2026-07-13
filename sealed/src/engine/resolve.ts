@@ -45,10 +45,15 @@ export function resolve(state: GameState, action: Action): GameState {
       return requirePhase(state, 'action', () => useAbility(state, action.instanceId, action.cardId, action.index))
     case 'attack':
       return requirePhase(state, 'action', () => {
-        // An attack resolves a pending choice, if one is active (#334). Support
-        // lends its keywords to the chosen attacker for this one attack.
+        // An attack resolves a pending choice, if one is active (#334/#343). Support
+        // lends its keywords to the chosen attacker; Improvised Identity's mayAttack
+        // lends the discarded unit's full abilities.
         const choice = activeChoice(state)
-        const before = choice?.kind === 'support' ? grantSupportKeywords(state, choice.unitId, action.attackerId) : state
+        const before = choice?.kind === 'support'
+          ? grantSupportKeywords(state, choice.unitId, action.attackerId)
+          : choice?.kind === 'mayAttack' && choice.grantCardId
+            ? grantAbilityCard(state, action.attackerId, choice.grantCardId)
+            : state
         let attacked = attack(before, action.attackerId, action.target)
         // Consume the ambush/support choice this attack resolved. Support-granted
         // keywords are cleared inside completeAttack (after they're used), so they
@@ -64,7 +69,7 @@ export function resolve(state: GameState, action: Action): GameState {
     case 'skipTrigger':
       return requirePhase(state, 'action', () => resolveSkip(state, action.choiceId))
     case 'acceptChoice':
-      return requirePhase(state, 'action', () => resolveAccept(state, action.choiceId, action.targetInstanceId))
+      return requirePhase(state, 'action', () => resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex))
     case 'resourceCard':
       return requirePhase(state, 'regroup', () => regroupChoice(state, action.handIndex))
     case 'skipResource':
@@ -251,16 +256,28 @@ function grantSupportKeywords(state: GameState, supportUnitId: string, attackerI
   })
 }
 
-/** Strip transient granted keywords from every unit after a support attack (#334). */
+/** Strip transient per-attack grants (Support keywords #334, Improvised Identity
+ *  granted abilities #343) from every unit once the attack that used them is done. */
 function clearGrantedKeywords(state: GameState): GameState {
   let next = state
   for (const id of ['player', 'opponent'] as PlayerId[]) {
     const units = next.players[id].units
-    if (units.some(u => u.grantedKeywords)) {
-      next = updatePlayer(next, id, { units: units.map(u => (u.grantedKeywords ? { ...u, grantedKeywords: undefined } : u)) })
+    if (units.some(u => u.grantedKeywords || u.grantedAbilityCardIds)) {
+      next = updatePlayer(next, id, {
+        units: units.map(u => (u.grantedKeywords || u.grantedAbilityCardIds ? { ...u, grantedKeywords: undefined, grantedAbilityCardIds: undefined } : u)),
+      })
     }
   }
   return next
+}
+
+/** Grant a unit the full abilities (keywords + triggered) of `cardId` for one attack
+ *  (Improvised Identity, #343). Cleared by `clearGrantedKeywords` after the attack. */
+function grantAbilityCard(state: GameState, attackerId: string, cardId: string): GameState {
+  const playerId = state.activePlayer
+  return updatePlayer(state, playerId, {
+    units: state.players[playerId].units.map(u => (u.instanceId === attackerId ? { ...u, grantedAbilityCardIds: [cardId] } : u)),
+  })
 }
 
 /**
@@ -306,8 +323,8 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
   return resumeAfterChoice(next, choice)
 }
 
-/** Accept a pending "may…" choice — pay the cost / play the card (#342). */
-function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: string): GameState {
+/** Accept a pending "may…" choice — pay the cost / play the card / search (#342/#343). */
+function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: string, deckIndex?: number): GameState {
   const choice = findChoice(state, choiceId)
   if (!choice) throw new Error(`acceptChoice: no choice ${choiceId}`)
   let next = removeChoice(state, choice.id)
@@ -329,6 +346,21 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         next = exhaustUnit(next, targetInstanceId)
         next = checkWin(next)
         if (next.winner !== null) return next
+      }
+      break
+    case 'search':
+      // Improvised Identity: discard the chosen revealed ground unit, then offer the
+      // follow-up attack that grants its abilities.
+      if (deckIndex !== undefined) {
+        const owner = choice.controller
+        const discarded = next.players[owner].deck[deckIndex]
+        if (discarded !== undefined) {
+          next = updatePlayer(next, owner, {
+            deck: next.players[owner].deck.filter((_, i) => i !== deckIndex),
+            discard: [...next.players[owner].discard, discarded],
+          })
+          next = pushChoice(next, { kind: 'mayAttack', id: choice.unitId, controller: owner, unitId: choice.unitId, grantCardId: discarded })
+        }
       }
       break
     default:

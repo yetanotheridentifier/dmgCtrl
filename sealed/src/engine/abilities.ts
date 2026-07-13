@@ -169,7 +169,9 @@ export function runUnitTrigger(
   extra?: Partial<EffectContext>,
 ): GameState {
   let next = state
-  const cardIds = [unit.cardId, ...unit.upgrades.map(u => u.cardId)]
+  // The unit's own card, its upgrades, and any cards whose abilities are granted for
+  // this attack (Improvised Identity, #343).
+  const cardIds = [unit.cardId, ...unit.upgrades.map(u => u.cardId), ...(unit.grantedAbilityCardIds ?? [])]
   for (const cardId of cardIds) {
     for (const ability of getAbilities(cardId)) {
       if (ability.trigger === point) {

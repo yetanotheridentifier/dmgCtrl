@@ -27,9 +27,10 @@ export type Action =
   // several are pending simultaneously (#334/#342).
   | { type: 'skipTrigger'; choiceId?: string }
   // Accept a pending "may…" choice by id — pay the cost / play the card / take the
-  // action. `targetInstanceId` supplies a target when the choice needs one (e.g. an
-  // upgrade's attach target) (#342).
-  | { type: 'acceptChoice'; choiceId: string; targetInstanceId?: string }
+  // action. `targetInstanceId` supplies a unit target when the choice needs one (an
+  // upgrade's attach target, a damage victim); `deckIndex` picks a revealed card in a
+  // search (#342/#343).
+  | { type: 'acceptChoice'; choiceId: string; targetInstanceId?: string; deckIndex?: number }
   | { type: 'resourceCard'; handIndex: number }
   | { type: 'skipResource' }
   // Setup phase (CR 5.2.1e–f): each player may mulligan once (initiative holder

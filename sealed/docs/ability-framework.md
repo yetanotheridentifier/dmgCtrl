@@ -222,31 +222,29 @@ lands (then settle active-orders-all vs APNAP and generalise `runUnitTrigger`/co
 **Order (agreed with user):** search foundation → Arcana Star Map → Improvised Identity
 (keywords **+ triggered abilities**) → The Darksaber.
 
-**DONE — action-ability infrastructure** (needed by Improvised Identity, reusable):
-`CardDefinition.actionAbilities?: ActionAbilityDef[]` (`{ description, oncePerRound?,
-usable?, effect }`); `unitActionAbilities(unit)` flattens a unit's card + upgrades'
-action abilities with `{ cardId, index }`; `actionAbilityKey`. New action
-`useAbility { instanceId, cardId, index }` — `legalMoves` offers each usable one;
-`resolve.useAbility` marks a once-per-round ability spent (on `UnitState.usedAbilities`,
-cleared in `readyEverything`) then runs the effect, keeping the turn if the effect
-raised a pending choice. Tests: `src/test/actionAbilities.test.ts`.
+**DONE — action-ability infrastructure:** `CardDefinition.actionAbilities?:
+ActionAbilityDef[]`; `unitActionAbilities`/`actionAbilityKey`; action `useAbility`;
+once-per-round on `UnitState.usedAbilities` (cleared in `readyEverything`);
+`resolve.useAbility` keeps the turn if the effect raised a choice. `actionAbilities.test.ts`.
 
-**Remaining:**
-1. **Deck search** — a `search` pending choice: reveal top N (N via a `searchCount`
-   helper applying the `searchModifier` hook), the controller picks a matching card,
-   act on it. Reuse/extend `CardChoiceOverlay` for a multi-card pick (private "look at").
-   `acceptChoice` needs to carry the chosen card (add a field). Then **Arcana Star Map
-   (084)** = `searchModifier: () => 2`.
-2. **Improvised Identity (230)** — `actionAbilities: [{ oncePerRound, effect: search
-   top 3 for a ground unit → discard → push a mayAttack choice }]`; the follow-up
-   attack grants the discarded unit's **keywords + triggered abilities** for that attack
-   (extend `grantedKeywords` with a transient granted-ability list on `UnitState`, read
-   by `runUnitTrigger`/`unitKeywords`).
-3. **The Darksaber (135)** — attach to a unique (`EngineCard.unique`) non-Vehicle unit;
-   static hooks: grant the Mandalorian trait (new `grantedTraits` hook), make the host a
-   leader unit (an `isLeaderUnit` override folded into defeat routing/rendering), and
-   provide its aspect icons while paying costs (extend `effectiveCost`'s provided-aspect
-   set with such units' aspects).
+**DONE — deck search + Arcana Star Map (084):** `searchCount(state, unit, baseN)`
+(`effects.ts`) applies the `searchModifier` hook; **Arcana Star Map = `searchModifier:
+() => 2`**. `deckSearch.test.ts`.
+
+**DONE — Improvised Identity (230):** `actionAbilities` (once/round) → reveal top
+`searchCount(3)`; if a ground unit is present, push a `search` choice (pick which to
+discard by `acceptChoice.deckIndex`), else straight to `mayAttack`. On discard, push a
+`mayAttack { grantCardId }`; taking that attack grants the discarded card's **keywords +
+triggered abilities** via `UnitState.grantedAbilityCardIds` (folded into `unitKeywords`
+and `runUnitTrigger`; cleared with `grantedKeywords` after the attack). UI: multi-card
+`SearchRevealOverlay` for the pick; `mayAttack` surfaces as normal board attacks + a
+"Don't attack" button. Tests in `pendingChoices.test.ts` + `searchOverlay.test.tsx`.
+
+**Remaining — The Darksaber (135):** attach to a unique (`EngineCard.unique`) non-Vehicle
+unit; static hooks: grant the Mandalorian trait (new `grantedTraits` hook), make the host
+a leader unit (an `isLeaderUnit` override folded into defeat routing / rendering), and
+provide its aspect icons while paying costs (extend `effectiveCost`'s provided-aspect set
+with such units' aspects). Then **#343 is complete.**
 
 **UI:** the new choices must surface (Ambush/Support already render as board
 attack + skip). `acceptChoice` needs a `describeAction` label and a button/board

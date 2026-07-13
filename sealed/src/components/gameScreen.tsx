@@ -240,6 +240,43 @@ export function CardChoiceOverlay({ card, cardId, prompt, children }: {
 }
 
 /**
+ * A "search" reveal overlay (#343) — the private "look at the top N" for Improvised
+ * Identity. Shows each revealed card; a ground unit gets a Discard button. Reuses the
+ * same centre-screen shell as `CardChoiceOverlay`; serves any future search effect.
+ */
+export function SearchRevealOverlay({ state, choice, onPick }: {
+  state: GameState
+  choice: Extract<PendingChoice, { kind: 'search' }>
+  onPick: (deckIndex: number) => void
+}) {
+  return (
+    <div data-testid="search-overlay" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/75 p-4">
+      <p className="text-xs uppercase tracking-[0.14em] text-ink-dim">Look at the top {choice.revealed.length} — discard a ground unit</p>
+      <div className="flex flex-wrap justify-center gap-4">
+        {choice.revealed.map((cardId, i) => {
+          const c = state.cards[cardId]
+          const ground = c?.type === 'unit' && c.arena === 'ground'
+          return (
+            <div key={i} className="flex flex-col items-center gap-2">
+              <CardFace card={c} fallbackName={cardId} widthPx={Math.round(ZOOM_WIDTH_PX * 0.6)} tight className={ground ? '' : 'brightness-[0.45]'} />
+              {ground && (
+                <button
+                  data-testid={`search-pick-${i}`}
+                  onClick={() => onPick(i)}
+                  className="rounded-xl border-2 border-accent px-3 py-1.5 text-xs text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10"
+                >
+                  Discard
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+/**
  * One player's units in one arena, anchored to the battlefront. The grid cell's
  * alignment (items-end for the opponent, items-start for you) pins the lane to
  * the centre line; extra units wrap *away* from it. Keeps `{side}-{arena}-units`.
@@ -680,12 +717,19 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === lookChoice.id)
       : []
 
+    // A "search" reveal (Improvised Identity, #343): its discard picks live in the
+    // centre-screen overlay, not the action menu.
+    const searchChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'search' }> => c.kind === 'search' && c.controller === 'player',
+    )
+    const searchActions = searchChoice ? legal.filter(a => a.type === 'acceptChoice' && a.choiceId === searchChoice.id) : []
+
     // Playing, resourcing, attacking and attaching upgrades are all driven by
     // clicking a card or unit, so the menu holds only the remaining choices —
     // mulligan, keep hand, take the initiative, pass (and skip/deploy) (#332/#336).
     const CLICK_HANDLED: Action['type'][] = ['playCard', 'playUpgrade', 'attack', 'resourceCard', 'setupResource']
     const menuActions = gameState.winner === null
-      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a))
+      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a))
       : []
     const actionColumn = (
       <div className="flex flex-col items-stretch gap-1.5">
@@ -719,6 +763,14 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             </button>
           ))}
         </CardChoiceOverlay>
+      )
+    } else if (searchChoice) {
+      choiceOverlay = (
+        <SearchRevealOverlay
+          state={gameState}
+          choice={searchChoice}
+          onPick={deckIndex => actAndClear({ type: 'acceptChoice', choiceId: searchChoice.id, deckIndex })}
+        />
       )
     }
 

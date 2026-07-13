@@ -84,6 +84,13 @@ export interface UnitState {
    */
   grantedKeywords?: KeywordInstance[]
   /**
+   * Card ids whose full abilities (keywords + triggered) this unit has been granted
+   * for a single attack (Improvised Identity, #343). Like `grantedKeywords`, set only
+   * during that attack and cleared immediately after. `unitKeywords`/`runUnitTrigger`
+   * include them.
+   */
+  grantedAbilityCardIds?: string[]
+  /**
    * Keys of once-per-round action abilities this unit has already used this round
    * (`${cardId}#${index}`); cleared at round start (#343).
    */
@@ -175,6 +182,11 @@ export type PendingChoice =
   | { kind: 'payOrExhaust'; id: string; controller: PlayerId; unitId: string; cost: number; resumeAtInitiative?: boolean }
   | { kind: 'mayPlayTopFree'; id: string; controller: PlayerId; unitId: string; cardId: string }
   | { kind: 'mayDamageExhaust'; id: string; controller: PlayerId; unitId: string; arena: Arena }
+  // Improvised Identity (#343): search the revealed top cards for a ground unit to
+  // discard (`revealed` are the top-of-deck ids, pickable by deck index), then a
+  // `mayAttack` follows, granting the discarded card's abilities for that attack.
+  | { kind: 'search'; id: string; controller: PlayerId; unitId: string; revealed: string[] }
+  | { kind: 'mayAttack'; id: string; controller: PlayerId; unitId: string; grantCardId?: string }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */
 export function activeChoice(state: GameState): PendingChoice | undefined {

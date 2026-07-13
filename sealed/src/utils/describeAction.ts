@@ -63,6 +63,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'payOrExhaust') return "Don't pay (exhaust)"
       if (choice.kind === 'mayPlayTopFree') return "Don't play"
       if (choice.kind === 'mayDamageExhaust') return 'Decline'
+      if (choice.kind === 'mayAttack') return "Don't attack"
       return `Skip ${choice.kind}`
     }
     case 'acceptChoice': {
@@ -77,6 +78,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayDamageExhaust') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Deal 1 & exhaust${target ? ` ${target}` : ''}`
+      }
+      if (choice.kind === 'search' && action.deckIndex !== undefined) {
+        const cardId = choice.revealed[action.deckIndex]
+        return `Discard ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
       }
       return 'Accept'
     }

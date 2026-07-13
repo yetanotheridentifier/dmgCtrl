@@ -238,6 +238,28 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'search': {
+        // Improvised Identity: pick which revealed ground unit to discard (mandatory —
+        // the choice is only raised when at least one is present).
+        choice.revealed.forEach((cid, i) => {
+          const c = state.cards[cid]
+          if (c?.type === 'unit' && c.arena === 'ground') moves.push({ type: 'acceptChoice', choiceId: choice.id, deckIndex: i })
+        })
+        break
+      }
+      case 'mayAttack': {
+        // Improvised Identity's optional follow-up attack, with the discarded unit's
+        // abilities granted (so granted Saboteur etc. shape the legal targets).
+        const u = p.units.find(x => x.instanceId === choice.unitId)
+        if (u && !u.exhausted) {
+          const attacker = choice.grantCardId ? { ...u, grantedAbilityCardIds: [choice.grantCardId] } : u
+          const { targets, sentinelLocked } = enemyAttackTargets(state, attacker)
+          for (const e of targets) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
+          if (!sentinelLocked) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'base' } })
+        }
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
     }
   }
   return moves

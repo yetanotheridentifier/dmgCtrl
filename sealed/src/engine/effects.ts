@@ -1,5 +1,19 @@
 import type { GameState, PlayerId, UnitState } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
+import { getCardDefinition } from './abilities'
+
+/**
+ * How many cards a search by `unit` looks at (#343): the base count times every
+ * `searchModifier` its card and upgrades contribute (Arcana Star Map ×2). Kept here
+ * so any future search effect sizes consistently.
+ */
+export function searchCount(state: GameState, unit: UnitState, baseCount: number): number {
+  let n = baseCount
+  for (const cardId of [unit.cardId, ...unit.upgrades.map(u => u.cardId)]) {
+    n *= getCardDefinition(cardId)?.searchModifier?.(state, unit) ?? 1
+  }
+  return n
+}
 
 /**
  * Effect primitives (#340): pure `(state, …) => state` building blocks that card

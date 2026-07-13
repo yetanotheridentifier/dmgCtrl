@@ -1,6 +1,9 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
+import { registerCard, unregisterAbility } from '../engine/abilities'
+import { giveToken } from '../engine/effects'
+import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 import type { EngineCard } from '../engine/types'
 
@@ -199,5 +202,73 @@ describe('DDC Defender (ASH_210) — onDefense mid-combat (#342 phase 2)', () =>
     const next = resolve(s, { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' } })
     expect(next.pendingChoices).toBeUndefined() // e1 has no DDC; e2 isn't the defender
     expect(next.players.opponent.units.find(u => u.instanceId === 'e1')!.damage).toBe(3)
+  })
+})
+
+describe('Improvised Identity (ASH_230) — action: search, discard, may attack (#343)', () => {
+  afterEach(() => unregisterAbility('GRD_TRIG'))
+
+  function board(deck: string[], extraCards = {}) {
+    return state({
+      cards: {
+        ...CARDS,
+        ASH_230: card({ id: 'ASH_230', type: 'upgrade', power: 0, hp: 0 }),
+        GRD: card({ id: 'GRD', type: 'unit', arena: 'ground', power: 2, hp: 2, keywords: [{ name: 'Raid', value: 2 }] }),
+        EV: card({ id: 'EV', type: 'event', cost: 1 }),
+        ...extraCards,
+      },
+      players: {
+        player: player({ deck, units: [unit('u1', 'TST_U1', { upgrades: [{ cardId: 'ASH_230', owner: 'player' }] })] }), // u1 power 3
+        opponent: player(),
+      },
+    })
+  }
+  const use = { type: 'useAbility', instanceId: 'u1', cardId: 'ASH_230', index: 0 } as const
+
+  it('reveals the top 3 and offers only ground units to discard', () => {
+    const next = resolve(board(['GRD', 'EV', 'EV', 'GRD']), use)
+    expect(next.pendingChoices?.[0]).toMatchObject({ kind: 'search', unitId: 'u1', revealed: ['GRD', 'EV', 'EV'] })
+    expect(legalMoves(next).filter(a => a.type === 'acceptChoice').map(a => a.deckIndex)).toEqual([0]) // only the ground unit
+    expect(next.players.player.units[0].usedAbilities).toContain('ASH_230#0')
+  })
+
+  it('discarding removes the card and opens the may-attack step', () => {
+    const searching = resolve(board(['GRD', 'EV', 'EV']), use)
+    const next = resolve(searching, { type: 'acceptChoice', choiceId: searching.pendingChoices![0].id, deckIndex: 0 })
+    expect(next.players.player.discard).toContain('GRD')
+    expect(next.players.player.deck).toEqual(['EV', 'EV'])
+    expect(next.pendingChoices?.[0]).toMatchObject({ kind: 'mayAttack', unitId: 'u1', grantCardId: 'GRD' })
+  })
+
+  it('the follow-up attack gains the discarded unit’s keywords (Raid 2)', () => {
+    const searching = resolve(board(['GRD', 'EV', 'EV']), use)
+    const afterDiscard = resolve(searching, { type: 'acceptChoice', choiceId: searching.pendingChoices![0].id, deckIndex: 0 })
+    const attacked = resolve(afterDiscard, { type: 'attack', attackerId: 'u1', target: { kind: 'base' } })
+    expect(attacked.players.opponent.base.damage).toBe(5) // 3 power + granted Raid 2
+    expect(attacked.players.player.units[0].grantedAbilityCardIds).toBeUndefined() // grant cleared after the attack
+    expect(attacked.activePlayer).toBe('opponent')
+  })
+
+  it('grants the discarded unit’s triggered abilities for the attack', () => {
+    registerCard('GRD_TRIG', { abilities: [{ trigger: 'onAttackEnd', description: 'advantage', effect: (s, ctx) => giveToken(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE) }] })
+    const searching = resolve(board(['GRD_TRIG', 'EV', 'EV'], { GRD_TRIG: card({ id: 'GRD_TRIG', type: 'unit', arena: 'ground', power: 1, hp: 1 }) }), use)
+    const afterDiscard = resolve(searching, { type: 'acceptChoice', choiceId: searching.pendingChoices![0].id, deckIndex: 0 })
+    const attacked = resolve(afterDiscard, { type: 'attack', attackerId: 'u1', target: { kind: 'base' } })
+    expect(attacked.players.player.units[0].upgrades.some(a => a.cardId === TOKEN_ADVANTAGE)).toBe(true) // granted onAttackEnd fired
+  })
+
+  it('declining the attack still leaves the discard done and passes the turn', () => {
+    const searching = resolve(board(['GRD', 'EV', 'EV']), use)
+    const afterDiscard = resolve(searching, { type: 'acceptChoice', choiceId: searching.pendingChoices![0].id, deckIndex: 0 })
+    const declined = resolve(afterDiscard, { type: 'skipTrigger', choiceId: afterDiscard.pendingChoices![0].id })
+    expect(declined.pendingChoices).toBeUndefined()
+    expect(declined.players.player.discard).toContain('GRD') // discard was mandatory
+    expect(declined.activePlayer).toBe('opponent')
+  })
+
+  it('skips straight to may-attack (no grant) when no ground unit is revealed', () => {
+    const next = resolve(board(['EV', 'EV', 'EV']), use)
+    expect(next.pendingChoices?.[0]).toMatchObject({ kind: 'mayAttack', unitId: 'u1' })
+    expect(next.pendingChoices?.[0]).not.toHaveProperty('grantCardId', expect.anything())
   })
 })

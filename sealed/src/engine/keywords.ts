@@ -35,6 +35,10 @@ export function unitKeywords(state: GameState, unit: UnitState): KeywordInstance
   for (const { cardId } of unit.upgrades) {
     out.push(...(state.cards[cardId]?.keywords ?? []), ...conditionalKeywordsOf(state, cardId, unit))
   }
+  // Cards whose full abilities are granted for one attack (Improvised Identity, #343).
+  for (const cardId of unit.grantedAbilityCardIds ?? []) {
+    out.push(...(state.cards[cardId]?.keywords ?? []))
+  }
   out.push(...(unit.grantedKeywords ?? []))
   return out
 }
