@@ -1,6 +1,6 @@
 import type { Action } from '../engine/actions'
 import type { GameState, PlayerId } from '../engine/types'
-import { opponentOf, activeChoice } from '../engine/types'
+import { opponentOf, activeChoice, findChoice } from '../engine/types'
 import { effectiveCost } from '../engine/legalMoves'
 
 function unitName(state: GameState, owner: PlayerId, instanceId: string): string {
@@ -56,8 +56,18 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
     case 'pass':
       return 'Pass'
     case 'skipTrigger': {
-      const choice = activeChoice(state)
-      return choice ? `Skip ${choice.kind}` : 'Skip'
+      const choice = action.choiceId ? findChoice(state, action.choiceId) : activeChoice(state)
+      if (!choice) return 'Skip'
+      if (choice.kind === 'payOrExhaust') return "Don't pay (exhaust)"
+      if (choice.kind === 'mayPlayTopFree') return "Don't play"
+      return `Skip ${choice.kind}`
+    }
+    case 'acceptChoice': {
+      const choice = findChoice(state, action.choiceId)
+      if (!choice) return 'Accept'
+      if (choice.kind === 'payOrExhaust') return `Pay ${choice.cost}`
+      if (choice.kind === 'mayPlayTopFree') return `Play ${state.cards[choice.cardId]?.name ?? 'card'} free`
+      return 'Accept'
     }
     case 'resourceCard': {
       if (opts.redact) return 'Resource a card'

@@ -125,7 +125,7 @@ describe('Ambush keyword (#334)', () => {
 
   it('playing an Ambush unit with a target enters a pending ambush and readies the unit', () => {
     const next = resolve(beforePlay(), { type: 'playCard', handIndex: 0 })
-    expect(next.pendingChoices?.[0]).toEqual({ kind: 'ambush', controller: 'player', unitId: expect.any(String) })
+    expect(next.pendingChoices?.[0]).toMatchObject({ kind: 'ambush', controller: 'player', unitId: expect.any(String) })
     const amb = next.players.player.units.find(u => u.cardId === 'TST_AMB')!
     expect(amb.exhausted).toBe(false) // readied for the ambush attack
     expect(next.activePlayer).toBe('player') // turn does NOT pass yet
@@ -184,7 +184,7 @@ describe('Support keyword (#334)', () => {
 
   it('playing a Support unit with another ready unit opens a pending support attack', () => {
     const next = resolve(beforePlay(), { type: 'playCard', handIndex: 0 })
-    expect(next.pendingChoices?.[0]).toEqual({ kind: 'support', controller: 'player', unitId: expect.any(String) })
+    expect(next.pendingChoices?.[0]).toMatchObject({ kind: 'support', controller: 'player', unitId: expect.any(String) })
     expect(next.activePlayer).toBe('player') // resolve the support before passing
   })
 

@@ -3,7 +3,7 @@ import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpg
 import { dealDamageToUnit } from './combat'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
-import { opponentOf } from './types'
+import { opponentOf, pushChoice } from './types'
 import type { EngineCard, GameState, UnitState } from './types'
 
 /**
@@ -125,6 +125,17 @@ registerCard('ASH_055', { // Blade of Talzin — return from discard to hand if 
       if (owner !== ctx.owner) return s
       return returnUpgradeFromDiscardToHand(s, owner, ctx.cardId)
     },
+  }],
+})
+
+// ── whenReadies optional cost (#342 group B) ────────────────────────────────
+registerCard('ASH_088', { // The Conflict Within — "When this unit readies: you may pay 3, else exhaust it."
+  abilities: [{
+    trigger: 'whenReadies',
+    description: 'You may pay 3, otherwise exhaust this unit.',
+    effect: (s, ctx) => pushChoice(s, {
+      kind: 'payOrExhaust', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, cost: 3, resumeAtInitiative: true,
+    }),
   }],
 })
 

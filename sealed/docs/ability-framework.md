@@ -118,8 +118,9 @@ The #303 design above is largely realised. Concrete state:
   Registered via **`registerCard(cardId, def)`** (merges: abilities append, hooks
   overwrite). `getCardDefinition(cardId)` exposes the hooks; `getAbilities` unchanged.
 - **Trigger points live:** `whenPlayed`, `onAttackEnd`, `whenRegroupStarts`,
-  `whenDefeated` (`onAttack`/`whenReadies`/`onDefense` declared but not yet fired —
-  `whenReadies`/`onDefense` land with the pending-choice work, see plan).
+  `whenDefeated`, `whenReadies` (fired in `readyEverything` for each unit that goes
+  exhausted→ready at round start). `onAttack`/`onDefense` declared; `onDefense` lands
+  with DDC Defender in phase 2 (mid-combat).
 - **`runUnitTrigger(state, point, unit, owner, extra?)`** — the key dispatch: fires
   the unit's OWN card abilities **and each attached upgrade's** abilities. `extra`
   merges into the `EffectContext` — used to thread the attack outcome into
@@ -164,42 +165,43 @@ Tests: `src/test/ashUpgrades.test.ts` + `src/test/combat.test.ts`. Card text is
 authoritative from the worker API (`worker.dmgctrl.app/cards/{SET}/{NUM}` serves
 `FrontText`); only Power/HP are missing for ASH upgrades (`upgradeStatOverrides.ts`).
 
-### The `pendingChoice` queue (design §1) — DONE (1a)
-`GameState.pendingChoices: PendingChoice[]` (`types.ts`) is a queue of pending
-decisions; `activeChoice(state)` = head, `popChoice(state)` drops it. Ambush/Support
-migrated onto it unchanged (a single-element queue), keeping `activePlayer` at
-`choice.controller` so the right side decides. `legalMoves` returns the head choice's
-options (or `skipTrigger`) while one is pending. Optional "may…" abilities push their
-own entries; simultaneous `whenReadies` triggers push one per unit.
+### The `pendingChoice` queue (design §1) — DONE (1a + mechanism + Conflict Within)
+`GameState.pendingChoices: PendingChoice[]` (`types.ts`) is an id-addressed queue;
+helpers `activeChoice`/`findChoice`/`hasPendingChoices`/`popChoice`/`removeChoice`/
+`pushChoice`. Kinds: `ambush`, `support`, `payOrExhaust` (Conflict Within),
+`mayPlayTopFree` (Camtono — declared, wired in 1b). Resolution:
+- `legalMoves` → `choiceMoves` offers, for **every** pending choice controlled by the
+  active player, its options — so the active player resolves simultaneous choices in
+  any order (honours active-player trigger ordering, CR).
+- Generic **`acceptChoice { choiceId, targetInstanceId? }`** takes the positive option;
+  **`skipTrigger { choiceId? }`** declines (no id = head, for Ambush/Support).
+- `resumeAfterChoice`: while choices remain, the active player finishes theirs first,
+  then control passes to the other side; when the queue drains, round-start
+  (`resumeAtInitiative`) choices begin the action phase with the initiative holder,
+  mid-turn choices `advanceTurn`.
 
-## Resumption plan — #342 group B, phase 1 (design settled)
+**Conflict Within (088)** is live: `whenReadies` pushes a `payOrExhaust`; accept pays 3
+(offered only if affordable) and the unit stays ready, decline exhausts it. Tests in
+`src/test/pendingChoices.test.ts`.
 
-**Decisions locked in with the user:**
-- **Choice-resolution action:** keep `skipTrigger` as the universal "decline"; add
-  one generic **`acceptChoice`** action carrying an optional `targetInstanceId` (for
-  choices needing a target, e.g. an upgrade's attach target or DDC Defender's victim).
-  No per-card action types.
-- **`PendingChoice`** gains `payOrExhaust` (Conflict Within) and `mayPlayTopFree`
-  (Camtono) members alongside `ambush`/`support`.
-- **Queue drain across controllers:** after `acceptChoice`/`skipTrigger` pops the
-  head, if the queue is non-empty set `activePlayer = newHead.controller` (don't
-  advance the turn); when it empties, resume normal flow. The one wrinkle to handle:
-  a round-start `whenReadies` drain must end with `activePlayer = initiative` (start
-  of the action phase), not an `advanceTurn` from the last decider — thread the
-  intended post-drain player through.
+## Resumption plan — #342 group B, phase 1 remaining
 
-**Cards (phase 1):**
+The mechanism + The Conflict Within (088) are **done** (see above). Remaining:
+
 - **Camtono (229)** — `onAttackEnd`: if the top deck card costs ≤2, push a
-  `mayPlayTopFree` choice. On accept: **unit** → enters play free; **upgrade** →
-  attaches free (`acceptChoice.targetInstanceId` picks the unit; `legalMoves` offers
-  one per valid target); **event** → temporary rule: discard it with no effect (same
-  decision point, stub resolution) — agreed with the user until events are built.
-  Extract `playCard`'s unit-creation core into a reusable `enterUnit(state, owner,
-  cardId, { free })` so free-play reuses Shielded/Hidden/Ambush/Support + whenPlayed.
-- **The Conflict Within (088)** — wire `whenReadies` (fire in `readyEverything` for
-  each unit that goes exhausted→ready, both players at `startNextRound`). Push a
-  `payOrExhaust` choice per unit: `acceptChoice` pays 3 (only offered if affordable)
-  and leaves it ready; `skipTrigger` (or unaffordable) exhausts it.
+  `mayPlayTopFree` choice (kind already in the union; `resolveAccept` re-adds a
+  `targetInstanceId` param). On accept: **unit** → enters play free; **upgrade** →
+  attaches free (`acceptChoice.targetInstanceId` picks the unit; `choiceMoves` offers
+  one per valid target); **event** → temporary rule: discard with no effect (same
+  decision point) — agreed with the user until events are built. Extract `playCard`'s
+  unit-creation core into a reusable `enterUnit(state, owner, cardId)` so free-play
+  reuses Shielded/Hidden/Ambush/Support + whenPlayed. `mayPlayTopFree` resolves
+  mid-turn, so `resumeAfterChoice` → `advanceTurn`.
+- **UI for pending choices** — `acceptChoice`/`skipTrigger{choiceId}` need an
+  affordance (buttons: "Pay 3" / "Don't pay"; "Play X free" / "Don't play"; for an
+  upgrade, board target selection like `playUpgrade`). `describeAction` labels are
+  done. Ambush/Support already surface (board attack + skip); the pay/play choices
+  need a button surface. Hand to the user for manual testing after wiring.
 
 **UI:** the new choices must surface (Ambush/Support already render as board
 attack + skip). `acceptChoice` needs a `describeAction` label and a button/board

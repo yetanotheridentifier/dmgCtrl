@@ -149,20 +149,49 @@ export interface GameState {
   pendingChoices?: PendingChoice[]
 }
 
-/** A decision the resolver pauses on until its `controller` picks an option or skips. */
+/**
+ * A decision the resolver pauses on until its `controller` picks an option or skips.
+ * `id` addresses the choice so the controller can resolve several simultaneous ones
+ * in an order of their choosing (CR: the active player orders simultaneous triggers).
+ * `resumeAtInitiative` marks choices raised at round-start readying (`whenReadies`) —
+ * once the queue drains, play resumes with the initiative holder, not `advanceTurn`.
+ */
 export type PendingChoice =
-  | { kind: 'ambush'; controller: PlayerId; unitId: string }
-  | { kind: 'support'; controller: PlayerId; unitId: string }
+  | { kind: 'ambush'; id: string; controller: PlayerId; unitId: string }
+  | { kind: 'support'; id: string; controller: PlayerId; unitId: string }
+  | { kind: 'payOrExhaust'; id: string; controller: PlayerId; unitId: string; cost: number; resumeAtInitiative?: boolean }
+  | { kind: 'mayPlayTopFree'; id: string; controller: PlayerId; unitId: string; cardId: string }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */
 export function activeChoice(state: GameState): PendingChoice | undefined {
   return state.pendingChoices?.[0]
 }
 
-/** Remove the resolved head choice; the queue becomes `undefined` when it empties. */
+/** True while any choice is pending (normal moves are suppressed). */
+export function hasPendingChoices(state: GameState): boolean {
+  return (state.pendingChoices?.length ?? 0) > 0
+}
+
+/** Find a pending choice by id. */
+export function findChoice(state: GameState, id: string): PendingChoice | undefined {
+  return state.pendingChoices?.find(c => c.id === id)
+}
+
+/** Remove the head choice; the queue becomes `undefined` when it empties. */
 export function popChoice(state: GameState): GameState {
   const rest = (state.pendingChoices ?? []).slice(1)
   return { ...state, pendingChoices: rest.length > 0 ? rest : undefined }
+}
+
+/** Remove a specific choice by id; the queue becomes `undefined` when it empties. */
+export function removeChoice(state: GameState, id: string): GameState {
+  const rest = (state.pendingChoices ?? []).filter(c => c.id !== id)
+  return { ...state, pendingChoices: rest.length > 0 ? rest : undefined }
+}
+
+/** Append a choice to the pending queue (order = trigger order; the controller reorders). */
+export function pushChoice(state: GameState, choice: PendingChoice): GameState {
+  return { ...state, pendingChoices: [...(state.pendingChoices ?? []), choice] }
 }
 
 export function opponentOf(player: PlayerId): PlayerId {

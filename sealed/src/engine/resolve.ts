@@ -1,6 +1,7 @@
 import type { Action, AttackTarget } from './actions'
 import type { GameState, PlayerId, UnitState } from './types'
-import { opponentOf, updatePlayer, activeChoice, popChoice } from './types'
+import type { PendingChoice } from './types'
+import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeChoice, hasPendingChoices } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, supportGrantedKeywords } from './legalMoves'
 import { runTrigger, runUnitTrigger, type TriggerPoint, type EffectContext } from './abilities'
@@ -47,14 +48,17 @@ export function resolve(state: GameState, action: Action): GameState {
         const before = choice?.kind === 'support' ? grantSupportKeywords(state, choice.unitId, action.attackerId) : state
         let attacked = attack(before, action.attackerId, action.target)
         if (choice) attacked = popChoice(clearGrantedKeywords(attacked))
-        return attacked.winner !== null ? attacked : advanceTurn(resetPasses(attacked))
+        // A choice the attack itself raised (e.g. Camtono onAttackEnd) keeps the turn.
+        return attacked.winner !== null || hasPendingChoices(attacked) ? attacked : advanceTurn(resetPasses(attacked))
       })
     case 'takeInitiative':
       return requirePhase(state, 'action', () => takeInitiative(state))
     case 'pass':
       return requirePhase(state, 'action', () => pass(state))
     case 'skipTrigger':
-      return requirePhase(state, 'action', () => advanceTurn(resetPasses(skipTrigger(state))))
+      return requirePhase(state, 'action', () => resolveSkip(state, action.choiceId))
+    case 'acceptChoice':
+      return requirePhase(state, 'action', () => resolveAccept(state, action.choiceId))
     case 'resourceCard':
       return requirePhase(state, 'regroup', () => regroupChoice(state, action.handIndex))
     case 'skipResource':
@@ -203,7 +207,7 @@ function playCard(state: GameState, handIndex: number): GameState {
   // otherwise the unit just enters play exhausted, as normal (#334).
   if (ambush) {
     if (enemyAttackTargets(next, newUnit).targets.length > 0) {
-      next = { ...next, pendingChoices: [{ kind: 'ambush', controller: playerId, unitId: newUnit.instanceId }] }
+      next = { ...next, pendingChoices: [{ kind: 'ambush', id: newUnit.instanceId, controller: playerId, unitId: newUnit.instanceId }] }
     } else {
       next = updatePlayer(next, playerId, {
         units: next.players[playerId].units.map(u => (u.instanceId === newUnit.instanceId ? { ...u, exhausted: true } : u)),
@@ -213,7 +217,7 @@ function playCard(state: GameState, handIndex: number): GameState {
     // Support: open the pending attack if there's another ready unit to attack with.
     const others = next.players[playerId].units.filter(u => u.instanceId !== newUnit.instanceId && !u.exhausted)
     if (others.length > 0) {
-      next = { ...next, pendingChoices: [{ kind: 'support', controller: playerId, unitId: newUnit.instanceId }] }
+      next = { ...next, pendingChoices: [{ kind: 'support', id: newUnit.instanceId, controller: playerId, unitId: newUnit.instanceId }] }
     }
   }
 
@@ -249,19 +253,52 @@ function clearGrantedKeywords(state: GameState): GameState {
   return next
 }
 
-/** Decline a pending on-play trigger (#334). Ambush: the readied unit stays but
- *  becomes exhausted (it entered play without attacking). Support: nothing changes. */
-function skipTrigger(state: GameState): GameState {
-  const choice = activeChoice(state)
+/**
+ * Resume once a choice resolves (#342). While others remain, hand to the right
+ * decider — the active player finishes their own simultaneous choices first (they
+ * order them), then control passes to the other side. When the queue drains,
+ * round-start `whenReadies` choices resume the action phase with the initiative
+ * holder; mid-turn choices pass the turn as normal.
+ */
+function resumeAfterChoice(state: GameState, resolved: PendingChoice): GameState {
+  if (hasPendingChoices(state)) {
+    const activeHasMore = state.pendingChoices!.some(c => c.controller === state.activePlayer)
+    return activeHasMore ? state : { ...state, activePlayer: opponentOf(state.activePlayer) }
+  }
+  if (resolved.kind === 'payOrExhaust' && resolved.resumeAtInitiative) {
+    return { ...state, activePlayer: state.initiative }
+  }
+  return advanceTurn(resetPasses(state))
+}
+
+/** Decline a pending choice (#334/#342). Ambush and pay-or-exhaust leave the unit
+ *  exhausted; Support and may-play do nothing. `choiceId` picks one of several. */
+function resolveSkip(state: GameState, choiceId?: string): GameState {
+  const choice = choiceId ? findChoice(state, choiceId) : activeChoice(state)
   if (!choice) throw new Error('skipTrigger: no pending choice')
-  let next = popChoice(state)
-  // Ambush: the readied unit stays but becomes exhausted (it entered without attacking).
-  if (choice.kind === 'ambush') {
+  let next = removeChoice(state, choice.id)
+  if (choice.kind === 'ambush' || choice.kind === 'payOrExhaust') {
     next = updatePlayer(next, choice.controller, {
       units: next.players[choice.controller].units.map(u => (u.instanceId === choice.unitId ? { ...u, exhausted: true } : u)),
     })
   }
-  return next
+  return resumeAfterChoice(next, choice)
+}
+
+/** Accept a pending "may…" choice — pay the cost / play the card (#342). */
+function resolveAccept(state: GameState, choiceId: string): GameState {
+  const choice = findChoice(state, choiceId)
+  if (!choice) throw new Error(`acceptChoice: no choice ${choiceId}`)
+  let next = removeChoice(state, choice.id)
+  switch (choice.kind) {
+    case 'payOrExhaust':
+      // Pay the cost; the unit simply stays ready (no exhaust).
+      next = updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost))
+      break
+    default:
+      throw new Error(`acceptChoice: ${choice.kind} is not acceptable`)
+  }
+  return resumeAfterChoice(next, choice)
 }
 
 /**
@@ -548,11 +585,26 @@ function regroupChoice(state: GameState, handIndex: number | null): GameState {
 function readyEverything(state: GameState, id: PlayerId): GameState {
   const p = state.players[id]
   const readied = readyAllResources(p)
-  return updatePlayer(state, id, {
+  const justReadied = p.units.filter(u => u.exhausted).map(u => u.instanceId)
+  let next = updatePlayer(state, id, {
     resources: readied.resources,
     units: p.units.map(u => (u.exhausted ? { ...u, exhausted: false } : u)),
     leader: p.leader.exhausted ? { ...p.leader, exhausted: false } : p.leader,
   })
+  // "When this unit readies" abilities fire for each unit that just readied (#342).
+  for (const instanceId of justReadied) {
+    const unit = next.players[id].units.find(u => u.instanceId === instanceId)
+    if (unit) next = runUnitTrigger(next, 'whenReadies', unit, id)
+  }
+  return next
+}
+
+/** Whoever decides the first pending choice — the initiative holder if they have one
+ *  (they resolve first), else the other player; the initiative holder otherwise. */
+function firstDecider(state: GameState, initiative: PlayerId): PlayerId {
+  const choices = state.pendingChoices ?? []
+  if (choices.length === 0) return initiative
+  return choices.some(c => c.controller === initiative) ? initiative : opponentOf(initiative)
 }
 
 function startNextRound(state: GameState): GameState {
@@ -564,7 +616,8 @@ function startNextRound(state: GameState): GameState {
     consecutivePasses: 0,
     initiativeTakenBy: null, // counter flips back to available (CR 1.12.2b)
     regroupResourced: { player: false, opponent: false },
-    activePlayer: next.initiative,
+    // A whenReadies choice (e.g. The Conflict Within) is resolved before play begins.
+    activePlayer: firstDecider(next, next.initiative),
   }
   return next
 }

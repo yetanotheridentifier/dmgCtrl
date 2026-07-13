@@ -1,6 +1,6 @@
 import type { Action } from './actions'
 import type { EngineCard, GameState, KeywordInstance, PlayerId, UnitState } from './types'
-import { opponentOf, activeChoice } from './types'
+import { opponentOf, hasPendingChoices } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { unitHasKeyword } from './keywords'
 import { getCardDefinition } from './abilities'
@@ -77,8 +77,8 @@ function setupMoves(state: GameState): Action[] {
 }
 
 function actionPhaseMoves(state: GameState): Action[] {
-  // A pending choice (Ambush/Support …) overrides the normal moves: resolve it first.
-  if (activeChoice(state)) return triggerMoves(state)
+  // A pending choice (Ambush/Support/pay-or-exhaust …) overrides the normal moves.
+  if (hasPendingChoices(state)) return choiceMoves(state)
 
   const moves: Action[] = []
   const playerId = state.activePlayer
@@ -161,38 +161,53 @@ export function supportGrantedKeywords(state: GameState, supportUnitId: string):
 }
 
 /**
- * Moves while a pending on-play trigger is unresolved (#334). Ambush: the played
- * unit may attack an enemy unit (never the base). Support: any OTHER ready unit may
- * attack (unit or base), gaining the support unit's keywords. Either can be skipped.
+ * Moves while choices are pending (#334/#342). The active player resolves their own
+ * simultaneous choices in any order (each is addressable by id, honouring active-player
+ * trigger ordering). Ambush: the played unit may attack an enemy unit (never the base).
+ * Support: any OTHER ready unit may attack (unit or base), gaining the support unit's
+ * keywords. Pay-or-exhaust (The Conflict Within): pay if affordable, or decline. Any
+ * choice can be skipped.
  */
-function triggerMoves(state: GameState): Action[] {
-  const choice = activeChoice(state)!
+function choiceMoves(state: GameState): Action[] {
   const p = state.players[state.activePlayer]
   const moves: Action[] = []
 
-  if (choice.kind === 'ambush') {
-    const unit = p.units.find(u => u.instanceId === choice.unitId)
-    if (unit) {
-      for (const e of enemyAttackTargets(state, unit).targets) {
-        moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
+  for (const choice of state.pendingChoices ?? []) {
+    if (choice.controller !== state.activePlayer) continue
+    switch (choice.kind) {
+      case 'ambush': {
+        const unit = p.units.find(u => u.instanceId === choice.unitId)
+        if (unit) {
+          for (const e of enemyAttackTargets(state, unit).targets) {
+            moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
+          }
+        }
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
       }
-    }
-  } else {
-    // Support: each other ready unit may attack, seeing the granted keywords (e.g.
-    // a granted Saboteur ignoring Sentinel). Support attacks may hit the base too.
-    const granted = supportGrantedKeywords(state, choice.unitId)
-    for (const candidate of p.units) {
-      if (candidate.exhausted || candidate.instanceId === choice.unitId) continue
-      const attacker = granted.length ? { ...candidate, grantedKeywords: granted } : candidate
-      const { targets, sentinelLocked } = enemyAttackTargets(state, attacker)
-      for (const e of targets) {
-        moves.push({ type: 'attack', attackerId: candidate.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
+      case 'support': {
+        const granted = supportGrantedKeywords(state, choice.unitId)
+        for (const candidate of p.units) {
+          if (candidate.exhausted || candidate.instanceId === choice.unitId) continue
+          const attacker = granted.length ? { ...candidate, grantedKeywords: granted } : candidate
+          const { targets, sentinelLocked } = enemyAttackTargets(state, attacker)
+          for (const e of targets) {
+            moves.push({ type: 'attack', attackerId: candidate.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
+          }
+          if (!sentinelLocked) moves.push({ type: 'attack', attackerId: candidate.instanceId, target: { kind: 'base' } })
+        }
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
       }
-      if (!sentinelLocked) moves.push({ type: 'attack', attackerId: candidate.instanceId, target: { kind: 'base' } })
+      case 'payOrExhaust': {
+        if (readyResourceCount(p) >= choice.cost) moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'mayPlayTopFree':
+        break // wired with Camtono (#342 1b)
     }
   }
-
-  moves.push({ type: 'skipTrigger' })
   return moves
 }
 

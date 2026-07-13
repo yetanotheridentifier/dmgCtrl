@@ -19,9 +19,14 @@ export type Action =
   | { type: 'deployLeader' }
   | { type: 'takeInitiative' }
   | { type: 'pass' }
-  // Decline a pending on-play trigger (Ambush/Support) offered after a unit enters
-  // play — the optional attack is not taken (#334).
-  | { type: 'skipTrigger' }
+  // Decline a pending choice (Ambush/Support/pay-or-exhaust/may-play …). With no
+  // `choiceId` it declines the head; a `choiceId` declines that specific one when
+  // several are pending simultaneously (#334/#342).
+  | { type: 'skipTrigger'; choiceId?: string }
+  // Accept a pending "may…" choice by id — pay the cost / play the card / take the
+  // action. `targetInstanceId` supplies a target when the choice needs one (e.g. an
+  // upgrade's attach target) (#342).
+  | { type: 'acceptChoice'; choiceId: string; targetInstanceId?: string }
   | { type: 'resourceCard'; handIndex: number }
   | { type: 'skipResource' }
   // Setup phase (CR 5.2.1e–f): each player may mulligan once (initiative holder
