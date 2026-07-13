@@ -5,7 +5,8 @@ import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeCh
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, supportGrantedKeywords } from './legalMoves'
 import { runTrigger, runUnitTrigger, type TriggerPoint, type EffectContext } from './abilities'
-import { applyUnitDamage } from './combat'
+import { applyUnitDamage, dealDamageToUnit } from './combat'
+import { exhaustUnit } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
@@ -47,8 +48,11 @@ export function resolve(state: GameState, action: Action): GameState {
         const choice = activeChoice(state)
         const before = choice?.kind === 'support' ? grantSupportKeywords(state, choice.unitId, action.attackerId) : state
         let attacked = attack(before, action.attackerId, action.target)
-        if (choice) attacked = popChoice(clearGrantedKeywords(attacked))
-        // A choice the attack itself raised (e.g. Camtono onAttackEnd) keeps the turn.
+        // Consume the ambush/support choice this attack resolved. Support-granted
+        // keywords are cleared inside completeAttack (after they're used), so they
+        // survive a mid-combat On Defense suspension.
+        if (choice) attacked = popChoice(attacked)
+        // A choice the attack raised (Camtono onAttackEnd, On Defense) keeps the turn.
         return attacked.winner !== null || hasPendingChoices(attacked) ? attacked : advanceTurn(resetPasses(attacked))
       })
     case 'takeInitiative':
@@ -269,10 +273,21 @@ function resumeAfterChoice(state: GameState, resolved: PendingChoice): GameState
     const activeHasMore = state.pendingChoices!.some(c => c.controller === state.activePlayer)
     return activeHasMore ? state : { ...state, activePlayer: opponentOf(state.activePlayer) }
   }
+  // A combat suspended for an On Defense choice resumes once the queue drains (#342).
+  if (state.pendingAttack) return resumePendingAttack(state)
   if (resolved.kind === 'payOrExhaust' && resolved.resumeAtInitiative) {
     return { ...state, activePlayer: state.initiative }
   }
   return advanceTurn(resetPasses(state))
+}
+
+/** Finish a combat suspended by an On Defense ability (#342): deal the combat damage
+ *  (from the post-choice board) as the original attacker, then pass the turn. */
+function resumePendingAttack(state: GameState): GameState {
+  const pa = state.pendingAttack!
+  let next: GameState = { ...state, pendingAttack: undefined, activePlayer: pa.activePlayer }
+  next = completeAttack(next, pa.attackerId, pa.target)
+  return next.winner !== null ? next : advanceTurn(resetPasses(next))
 }
 
 /** Decline a pending choice (#334/#342). Ambush and pay-or-exhaust leave the unit
@@ -305,6 +320,15 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       if (next.winner !== null) return next
       break
     }
+    case 'mayDamageExhaust':
+      // DDC Defender: deal 1 to a chosen unit in the arena and exhaust it.
+      if (targetInstanceId) {
+        next = dealDamageToUnit(next, targetInstanceId, 1)
+        next = exhaustUnit(next, targetInstanceId)
+        next = checkWin(next)
+        if (next.winner !== null) return next
+      }
+      break
     default:
       throw new Error(`acceptChoice: ${choice.kind} is not acceptable`)
   }
@@ -466,17 +490,18 @@ function fireForAllUnits(state: GameState, point: TriggerPoint): GameState {
   return next
 }
 
+/**
+ * Begin an attack (#342): exhaust the attacker and apply Restore, then either finish
+ * inline or — if the defender has an "On Defense" ability that raises a choice —
+ * suspend the combat before damage and hand control to the defender. Combat damage
+ * itself is dealt by `completeAttack` (immediately, or on resume after the choice).
+ */
 function attack(state: GameState, attackerId: string, target: AttackTarget): GameState {
   const playerId = state.activePlayer
   const enemyId = opponentOf(playerId)
   const attacker = state.players[playerId].units.find(u => u.instanceId === attackerId)
   if (!attacker) throw new Error(`attack: no friendly unit ${attackerId}`)
   if (attacker.exhausted) throw new Error(`attack: unit ${attackerId} is exhausted`)
-
-  // Combat damage is CALCULATED before it is dealt (CR 6.3.4): both amounts
-  // come from the pre-damage state, so e.g. a Grit defender's counter uses its
-  // pre-attack damage.
-  const attackerPower = effectivePower(state, attacker, { attacking: true, attackingBase: target.kind === 'base' })
 
   // Attacking exhausts the attacker (CR 1.5.4d).
   let next = updatePlayer(state, playerId, {
@@ -494,31 +519,67 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
     })
   }
 
-  if (target.kind === 'base') {
-    const enemy = next.players[enemyId]
-    next = updatePlayer(next, enemyId, { base: { ...enemy.base, damage: enemy.base.damage + attackerPower } })
-    next = consumeAdvantage(next, playerId, attackerId) // the attack completed
-    next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, dealtDamageToBase: attackerPower > 0 })
-    return checkWin(next)
-  }
+  // A base has no defender and no "On Defense" step.
+  if (target.kind === 'base') return completeAttack(next, attackerId, target)
 
   const defender = next.players[enemyId].units.find(u => u.instanceId === target.instanceId)
   if (!defender) throw new Error(`attack: no enemy unit ${target.instanceId}`)
 
-  const counterPower = effectivePower(next, defender)
+  // "On Defense" abilities may act before combat damage (#342). If one raises a
+  // choice, suspend the attack and hand control to the defender to resolve it.
+  const beforeChoices = next.pendingChoices?.length ?? 0
+  next = runUnitTrigger(next, 'onDefense', defender, enemyId)
+  if ((next.pendingChoices?.length ?? 0) > beforeChoices) {
+    return { ...next, pendingAttack: { attackerId, target, activePlayer: playerId }, activePlayer: enemyId }
+  }
+  return completeAttack(next, attackerId, target)
+}
+
+/**
+ * Deal the combat damage (#342) — calculated from the *current* (post-"On Defense")
+ * state, per CR 6.3.4. The attacker or defender may have been defeated by an On
+ * Defense ability, in which case the attack fizzles. Clears any transient
+ * Support-granted keywords once the calculation that used them is done.
+ */
+function completeAttack(state: GameState, attackerId: string, target: AttackTarget): GameState {
+  const playerId = state.activePlayer
+  const enemyId = opponentOf(playerId)
+  const attacker = state.players[playerId].units.find(u => u.instanceId === attackerId)
+  // The attacker may have been defeated before damage (e.g. an On Defense ping).
+  if (!attacker) return clearGrantedKeywords(checkWin(state))
+
+  const attackerPower = effectivePower(state, attacker, { attacking: true, attackingBase: target.kind === 'base' })
+
+  if (target.kind === 'base') {
+    const enemy = state.players[enemyId]
+    let next = updatePlayer(state, enemyId, { base: { ...enemy.base, damage: enemy.base.damage + attackerPower } })
+    next = consumeAdvantage(next, playerId, attackerId) // the attack completed
+    next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, dealtDamageToBase: attackerPower > 0 })
+    return clearGrantedKeywords(checkWin(next))
+  }
+
+  const defender = state.players[enemyId].units.find(u => u.instanceId === target.instanceId)
+  // The defender may have been defeated before damage → the attack fizzles.
+  if (!defender) {
+    let next = consumeAdvantage(state, playerId, attackerId)
+    next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, dealtDamageToBase: false })
+    return clearGrantedKeywords(checkWin(next))
+  }
+
+  const counterPower = effectivePower(state, defender)
 
   // Overwhelm: excess combat damage beyond the defender's remaining HP hits the
   // defending player's base (CR 1.9.11). A shielded defender takes no damage, so
   // there is no excess to trample (#308).
-  const remainingHp = effectiveHp(next, defender) - defender.damage
-  const overwhelmExcess = unitHasKeyword(next, attacker, 'Overwhelm')
+  const remainingHp = effectiveHp(state, defender) - defender.damage
+  const overwhelmExcess = unitHasKeyword(state, attacker, 'Overwhelm')
     && !hasToken(defender.upgrades, TOKEN_SHIELD)
-    && !unitNegatesOverwhelm(next, defender)
+    && !unitNegatesOverwhelm(state, defender)
     ? Math.max(0, attackerPower - remainingHp)
     : 0
 
   // Simultaneous combat damage (CR 1.9.10).
-  next = applyUnitDamage(next, enemyId, new Map([[defender.instanceId, attackerPower]]))
+  let next = applyUnitDamage(state, enemyId, new Map([[defender.instanceId, attackerPower]]))
   next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, counterPower]]))
 
   if (overwhelmExcess > 0) {
@@ -530,7 +591,7 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
   next = consumeAdvantage(next, playerId, attackerId)
   next = consumeAdvantage(next, enemyId, defender.instanceId)
   next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, dealtDamageToBase: overwhelmExcess > 0 })
-  return checkWin(next)
+  return clearGrantedKeywords(checkWin(next))
 }
 
 /**

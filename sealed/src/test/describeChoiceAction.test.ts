@@ -34,4 +34,10 @@ describe('describeAction — pending choice labels (#342)', () => {
     )
     expect(describeAction(s, 'player', { type: 'acceptChoice', choiceId: 'x', targetInstanceId: 'u1' })).toBe('Play Blaster free on TST_U1')
   })
+
+  it('labels the DDC Defender damage-and-exhaust choice', () => {
+    const s = withChoice({ kind: 'mayDamageExhaust', id: 'x', controller: 'player', unitId: 'u1', arena: 'ground' })
+    expect(describeAction(s, 'player', { type: 'acceptChoice', choiceId: 'x', targetInstanceId: 'u1' })).toBe('Deal 1 & exhaust TST_U1')
+    expect(describeAction(s, 'player', { type: 'skipTrigger', choiceId: 'x' })).toBe('Decline')
+  })
 })

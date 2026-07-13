@@ -220,6 +220,14 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'mayDamageExhaust': {
+        // DDC Defender: pick any unit in this unit's arena to deal 1 + exhaust, or decline.
+        for (const t of [...state.players.player.units, ...state.players.opponent.units]) {
+          if (t.arena === choice.arena) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: t.instanceId })
+        }
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
     }
   }
   return moves

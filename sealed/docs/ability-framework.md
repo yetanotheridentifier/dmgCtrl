@@ -118,9 +118,9 @@ The #303 design above is largely realised. Concrete state:
   Registered via **`registerCard(cardId, def)`** (merges: abilities append, hooks
   overwrite). `getCardDefinition(cardId)` exposes the hooks; `getAbilities` unchanged.
 - **Trigger points live:** `whenPlayed`, `onAttackEnd`, `whenRegroupStarts`,
-  `whenDefeated`, `whenReadies` (fired in `readyEverything` for each unit that goes
-  exhausted→ready at round start). `onAttack`/`onDefense` declared; `onDefense` lands
-  with DDC Defender in phase 2 (mid-combat).
+  `whenDefeated`, `whenReadies` (round-start readying), `onDefense` (fired in
+  `beginAttack` for the defender, before combat damage; can suspend combat). `onAttack`
+  declared but not yet fired (no card uses it).
 - **`runUnitTrigger(state, point, unit, owner, extra?)`** — the key dispatch: fires
   the unit's OWN card abilities **and each attached upgrade's** abilities. `extra`
   merges into the `EffectContext` — used to thread the attack outcome into
@@ -202,37 +202,32 @@ reuses this shell — not built yet as no card reveals; the component takes a pr
 buttons so a reveal variant just passes a public prompt and a confirm action. Reusable
 for search effects. Tests: `src/test/cardChoiceOverlay.test.tsx`.
 
-## Resumption plan — #342 phase 2 & #343
+**DDC Defender (210)** is live — the mid-combat `onDefense`: `attack()` split into
+`beginAttack` (exhaust + Restore; fire `onDefense`; suspend via `GameState.pendingAttack`
+if a choice is raised, handing control to the defender) and `completeAttack` (damage
+step, recomputed on the post-choice board per CR 6.3.4; re-finds attacker/defender so a
+ping that defeats either fizzles gracefully; clears Support-granted keywords last so
+they survive the suspension). `resumeAfterChoice` resumes the stored attack once the
+queue drains. Choice kind `mayDamageExhaust`; tests in `src/test/pendingChoices.test.ts`.
+The choice surfaces to a human defender through the normal action menu (`acceptChoice`
+per arena unit + "Decline"); the AI resolves its own via `driveAi`.
 
-#342 group B **phase 1 is done** (both cards + UI, engine-tested; awaiting the user's
-manual test). Remaining:
+**#342 is complete** — every ASH upgrade effect is implemented except the three Tier-3
+cards below. Trigger-ordering note stands: the user's "active player orders simultaneous
+triggers" rule isn't exercisable yet (no `onAttack` card), so it's deferred until one
+lands (then settle active-orders-all vs APNAP and generalise `runUnitTrigger`/combat).
 
-1. **DDC Defender (210) — phase 2.** `onDefense` = "You may deal 1 damage to a unit in
-   this unit's arena and exhaust it," resolving **before combat damage**. Concrete design:
-   - Split `attack()` into `beginAttack` (exhaust attacker, restore heal; base attacks
-     finish inline — a base doesn't defend) and `completeAttack` (the damage step:
-     recompute powers on the *post-onDefense* board per CR 6.3.4, apply combat damage,
-     overwhelm, consume Advantage, fire `onAttackEnd`, check win).
-   - In `beginAttack`, for a unit target, fire `runUnitTrigger('onDefense', defender,
-     defenderOwner)`. If it pushed a choice, **suspend**: set
-     `GameState.pendingAttack = { attackerId, target, activePlayer }` and hand
-     `activePlayer` to the defender's controller. Otherwise fall straight into
-     `completeAttack`.
-   - New `PendingChoice` kind `mayDamageExhaust { arena }`; `choiceMoves` offers one
-     `acceptChoice{targetInstanceId}` per unit in that arena + skip; `resolveAccept`
-     deals 1 (`dealDamageToUnit`) then exhausts the target.
-   - `resumeAfterChoice`: when the queue drains **and `pendingAttack` is set**, restore
-     `activePlayer` to the stored attacker, run `completeAttack`, then `advanceTurn`.
-   - Edge cases: the ping can defeat the attacker (→ no combat damage) or the defender
-     (→ attack fizzles); `completeAttack` must re-find both and no-op gracefully.
-   - **Trigger ordering:** the user's rule (active player orders simultaneous
-     on-attack/on-defense) isn't exercisable yet — DDC Defender is the only
-     onAttack/onDefense card, so there's never a second simultaneous trigger. Build
-     DDC Defender's single onDefense now; generalise ordering (and settle
-     active-orders-all vs APNAP) when an onAttack card first creates the conflict.
-2. **#343 Tier 3** — Improvised Identity (230), The Darksaber (135, leader-unit
-   transform + aspect provision), Arcana Star Map (084) — the last needs a
-   deck-search mechanic (also unblocks the search-doubling clause).
+## Resumption plan — #343 Tier 3
+
+- **Improvised Identity (230)** — currently attach-restriction only. Action ability:
+  search top 3 for a ground unit, discard it, then attack with this unit gaining the
+  discarded unit's abilities for the attack. Needs the deck-search mechanic + a
+  temporary-ability-grant.
+- **The Darksaber (135)** — attach to a unique non-Vehicle unit; it becomes a leader
+  unit, gains Mandalorian, and provides its aspect icons while paying costs. Needs
+  leader-unit transform + cost-time aspect provision.
+- **Arcana Star Map (084)** — grants "if you would search N cards, search 2N"; needs the
+  deck-search mechanic to exist first (shares it with Improvised Identity).
 
 **UI:** the new choices must surface (Ambush/Support already render as board
 attack + skip). `acceptChoice` needs a `describeAction` label and a button/board

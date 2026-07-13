@@ -10,6 +10,8 @@
  * with vanilla stats first; abilities layer in post-M1.
  */
 
+import type { AttackTarget } from './actions'
+
 export type PlayerId = 'player' | 'opponent'
 export type Arena = 'ground' | 'space'
 export type Phase = 'setup' | 'action' | 'regroup'
@@ -147,6 +149,12 @@ export interface GameState {
    * simultaneous `whenReadies` triggers push one entry per decision.
    */
   pendingChoices?: PendingChoice[]
+  /**
+   * A combat suspended mid-resolution (#342): an "On Defense" ability raised a choice
+   * before combat damage. Holds what's needed to resume (`completeAttack`) once the
+   * choice(s) drain, plus the attacker's `activePlayer` to restore for the turn pass.
+   */
+  pendingAttack?: { attackerId: string; target: AttackTarget; activePlayer: PlayerId }
 }
 
 /**
@@ -161,6 +169,7 @@ export type PendingChoice =
   | { kind: 'support'; id: string; controller: PlayerId; unitId: string }
   | { kind: 'payOrExhaust'; id: string; controller: PlayerId; unitId: string; cost: number; resumeAtInitiative?: boolean }
   | { kind: 'mayPlayTopFree'; id: string; controller: PlayerId; unitId: string; cardId: string }
+  | { kind: 'mayDamageExhaust'; id: string; controller: PlayerId; unitId: string; arena: Arena }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */
 export function activeChoice(state: GameState): PendingChoice | undefined {

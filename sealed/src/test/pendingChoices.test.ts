@@ -139,3 +139,65 @@ describe('Camtono (ASH_229) — onAttackEnd may play top card free (#342)', () =
     expect(declined.activePlayer).toBe('opponent')
   })
 })
+
+describe('DDC Defender (ASH_210) — onDefense mid-combat (#342 phase 2)', () => {
+  function board(defenderUnits: ReturnType<typeof unit>[], attackerCard = 'TST_U1') {
+    return state({
+      cards: { ...CARDS, ASH_210: card({ id: 'ASH_210', type: 'upgrade', power: 0, hp: 0 }) },
+      players: {
+        player: player({ units: [unit('u1', attackerCard)] }), // active attacker
+        opponent: player({ units: defenderUnits }),
+      },
+    })
+  }
+  const ddc = { cardId: 'ASH_210', owner: 'opponent' as const }
+  const attackE1 = { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' } } as const
+
+  it('suspends the attack before damage and hands the choice to the defender', () => {
+    const next = resolve(board([unit('e1', 'TST_U1', { upgrades: [ddc] })]), attackE1)
+    expect(next.pendingChoices?.[0]).toMatchObject({ kind: 'mayDamageExhaust', controller: 'opponent', unitId: 'e1' })
+    expect(next.activePlayer).toBe('opponent')
+    expect(next.pendingAttack).toMatchObject({ attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' } })
+    expect(next.players.opponent.units[0].damage).toBe(0) // combat not yet applied
+    expect(next.players.player.units.find(u => u.instanceId === 'u1')!.exhausted).toBe(true) // attacker already exhausted
+  })
+
+  it('accept deals 1 + exhausts the chosen unit, then resolves combat', () => {
+    // attacker TST_U4 (1/9) survives the counter; ping a bystander t1.
+    const next = resolve(board([unit('e1', 'TST_U1', { upgrades: [ddc] }), unit('t1', 'TST_U4')], 'TST_U4'), attackE1)
+    const done = resolve(next, { type: 'acceptChoice', choiceId: next.pendingChoices![0].id, targetInstanceId: 't1' })
+    expect(done.pendingChoices).toBeUndefined()
+    expect(done.pendingAttack).toBeUndefined()
+    expect(done.players.opponent.units.find(u => u.instanceId === 't1')!.damage).toBe(1) // pinged
+    expect(done.players.opponent.units.find(u => u.instanceId === 't1')!.exhausted).toBe(true)
+    expect(done.players.opponent.units.find(u => u.instanceId === 'e1')!.damage).toBe(1) // combat: attacker power 1
+    expect(done.players.player.units.find(u => u.instanceId === 'u1')!.damage).toBe(3) // counter: e1 power 3
+    expect(done.activePlayer).toBe('opponent') // player's attack completed, turn passed
+  })
+
+  it('a ping that defeats the attacker cancels the combat damage', () => {
+    const next = resolve(board([unit('e1', 'TST_U1', { upgrades: [ddc] })], 'TST_U3'), attackE1) // TST_U3 = 5/1
+    const done = resolve(next, { type: 'acceptChoice', choiceId: next.pendingChoices![0].id, targetInstanceId: 'u1' }) // ping the attacker
+    expect(done.players.player.units.find(u => u.instanceId === 'u1')).toBeUndefined() // attacker defeated
+    expect(done.players.opponent.units.find(u => u.instanceId === 'e1')!.damage).toBe(0) // no combat back
+    expect(done.players.player.discard).toContain('TST_U3')
+    expect(done.activePlayer).toBe('opponent')
+  })
+
+  it('declining proceeds to normal combat', () => {
+    const next = resolve(board([unit('e1', 'TST_U1', { upgrades: [ddc] })]), attackE1)
+    const done = resolve(next, { type: 'skipTrigger', choiceId: next.pendingChoices![0].id })
+    expect(done.pendingChoices).toBeUndefined()
+    expect(done.pendingAttack).toBeUndefined()
+    expect(done.players.opponent.units.find(u => u.instanceId === 'e1')!.damage).toBe(3) // u1 power 3
+    expect(done.players.player.units.find(u => u.instanceId === 'u1')!.damage).toBe(3) // e1 power 3
+    expect(done.activePlayer).toBe('opponent')
+  })
+
+  it('does not trigger when a different (non-DDC) unit is attacked', () => {
+    const s = board([unit('e1', 'TST_U1'), unit('e2', 'TST_U1', { upgrades: [ddc] })])
+    const next = resolve(s, { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' } })
+    expect(next.pendingChoices).toBeUndefined() // e1 has no DDC; e2 isn't the defender
+    expect(next.players.opponent.units.find(u => u.instanceId === 'e1')!.damage).toBe(3)
+  })
+})

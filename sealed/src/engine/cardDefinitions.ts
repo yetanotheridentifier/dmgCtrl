@@ -153,5 +153,16 @@ registerCard('ASH_229', { // Camtono — "When Attack Ends: look at top card; if
   }],
 })
 
-// ── Attach restriction only (abilities land with Tier 2/3) ─────────────────
-registerCard('ASH_210', { attachRestriction: nonVehicle }) // DDC Defender (onDefense "may" — Tier 2)
+// ── onDefense mid-combat optional (#342 phase 2) ────────────────────────────
+registerCard('ASH_210', { // DDC Defender — "On Defense: you may deal 1 to a unit in this arena and exhaust it."
+  attachRestriction: nonVehicle,
+  abilities: [{
+    trigger: 'onDefense',
+    description: 'You may deal 1 damage to a unit in this arena and exhaust it.',
+    effect: (s, ctx) => {
+      const found = findUnit(s, ctx.sourceInstanceId!)
+      if (!found) return s
+      return pushChoice(s, { kind: 'mayDamageExhaust', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, arena: found.unit.arena })
+    },
+  }],
+})
