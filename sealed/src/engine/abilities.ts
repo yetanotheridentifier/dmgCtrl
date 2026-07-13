@@ -75,6 +75,36 @@ export interface CardDefinition {
   damageMultiplier?: (state: GameState, unit: UnitState) => number
   /** Defender-side: while this unit defends, the attacker loses Overwhelm (#342). */
   negatesOverwhelm?: (state: GameState, unit: UnitState) => boolean
+  /** Activated "Action:" abilities usable on the controller's turn (#343). */
+  actionAbilities?: ActionAbilityDef[]
+  /** Multiplier on how many cards this unit's searches look at — Arcana Star Map ×2 (#343). */
+  searchModifier?: (state: GameState, unit: UnitState) => number
+}
+
+/** An activated ability a unit may use as its action (CR 2.4); e.g. Improvised Identity. */
+export interface ActionAbilityDef {
+  description: string
+  /** May be used only once per round by a given unit (tracked on `UnitState.usedAbilities`). */
+  oncePerRound?: boolean
+  /** Extra gate beyond once-per-round (defaults usable). */
+  usable?: (state: GameState, unit: UnitState) => boolean
+  effect: (state: GameState, ctx: EffectContext) => GameState
+}
+
+/** A unit's action abilities, from its own card and each attached upgrade, with the
+ *  source card id and per-card index so callers can address and track each one (#343). */
+export function unitActionAbilities(unit: UnitState): { cardId: string; index: number; ability: ActionAbilityDef }[] {
+  const out: { cardId: string; index: number; ability: ActionAbilityDef }[] = []
+  for (const cardId of [unit.cardId, ...unit.upgrades.map(u => u.cardId)]) {
+    const defs = registry.get(cardId)?.actionAbilities ?? []
+    defs.forEach((ability, index) => out.push({ cardId, index, ability }))
+  }
+  return out
+}
+
+/** Stable key for once-per-round tracking of a specific action ability instance. */
+export function actionAbilityKey(cardId: string, index: number): string {
+  return `${cardId}#${index}`
 }
 
 /** Combat context passed to `statModifier` (mirrors `stats.StatContext`). */

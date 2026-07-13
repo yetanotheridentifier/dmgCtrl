@@ -17,6 +17,9 @@ export type Action =
   | { type: 'playUpgrade'; handIndex: number; targetInstanceId: string }
   | { type: 'attack'; attackerId: string; target: AttackTarget }
   | { type: 'deployLeader' }
+  // Use a unit's activated "Action:" ability (#343). `cardId`+`index` address the
+  // ability among the unit's own and its upgrades' action abilities.
+  | { type: 'useAbility'; instanceId: string; cardId: string; index: number }
   | { type: 'takeInitiative' }
   | { type: 'pass' }
   // Decline a pending choice (Ambush/Support/pay-or-exhaust/may-play …). With no

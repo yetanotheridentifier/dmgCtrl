@@ -3,7 +3,7 @@ import type { EngineCard, GameState, KeywordInstance, PlayerId, UnitState } from
 import { opponentOf, hasPendingChoices } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { unitHasKeyword } from './keywords'
-import { getCardDefinition } from './abilities'
+import { getCardDefinition, unitActionAbilities, actionAbilityKey } from './abilities'
 import './cardDefinitions' // side effect: registers all real card behaviours (#341+)
 
 /**
@@ -135,6 +135,16 @@ function actionPhaseMoves(state: GameState): Action[] {
     p.resources.length >= leaderCard.cost
   ) {
     moves.push({ type: 'deployLeader' })
+  }
+
+  // Use a unit's activated "Action:" ability (#343) — e.g. Improvised Identity. Each
+  // is addressed by its source card + index; once-per-round ones drop once used.
+  for (const u of p.units) {
+    for (const { cardId, index, ability } of unitActionAbilities(u)) {
+      if (ability.oncePerRound && u.usedAbilities?.includes(actionAbilityKey(cardId, index))) continue
+      if (ability.usable && !ability.usable(state, u)) continue
+      moves.push({ type: 'useAbility', instanceId: u.instanceId, cardId, index })
+    }
   }
 
   // Take the Initiative — once per round across both players (CR 1.15.5a).

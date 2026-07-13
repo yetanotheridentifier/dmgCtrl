@@ -4,9 +4,9 @@ import type { PendingChoice } from './types'
 import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeChoice, hasPendingChoices, pushChoice } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, supportGrantedKeywords } from './legalMoves'
-import { runTrigger, runUnitTrigger, type TriggerPoint, type EffectContext } from './abilities'
+import { runTrigger, runUnitTrigger, getCardDefinition, actionAbilityKey, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit } from './combat'
-import { exhaustUnit } from './effects'
+import { exhaustUnit, findUnit } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
@@ -41,6 +41,8 @@ export function resolve(state: GameState, action: Action): GameState {
       })
     case 'deployLeader':
       return requirePhase(state, 'action', () => advanceTurn(resetPasses(deployLeader(state))))
+    case 'useAbility':
+      return requirePhase(state, 'action', () => useAbility(state, action.instanceId, action.cardId, action.index))
     case 'attack':
       return requirePhase(state, 'action', () => {
         // An attack resolves a pending choice, if one is active (#334). Support
@@ -404,6 +406,34 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
   return checkWin(next)
 }
 
+/**
+ * Use a unit's activated "Action:" ability (#343). A once-per-round ability is marked
+ * spent before its effect runs (so effects that raise a choice carry the mark), then
+ * the turn passes — unless the ability raised a pending choice (e.g. a search), which
+ * keeps the turn with the active player to resolve it.
+ */
+function useAbility(state: GameState, instanceId: string, cardId: string, index: number): GameState {
+  const found = findUnit(state, instanceId)
+  if (!found) throw new Error(`useAbility: no unit ${instanceId}`)
+  const ability = getCardDefinition(cardId)?.actionAbilities?.[index]
+  if (!ability) throw new Error(`useAbility: no ability ${cardId}#${index}`)
+  const owner = found.owner
+
+  let next = state
+  if (ability.oncePerRound) {
+    const key = actionAbilityKey(cardId, index)
+    next = updatePlayer(next, owner, {
+      units: next.players[owner].units.map(u =>
+        u.instanceId === instanceId ? { ...u, usedAbilities: [...(u.usedAbilities ?? []), key] } : u,
+      ),
+    })
+  }
+  next = ability.effect(next, { owner, cardId, sourceInstanceId: instanceId })
+  next = checkWin(next)
+  if (next.winner !== null) return next
+  return hasPendingChoices(next) ? next : advanceTurn(resetPasses(next))
+}
+
 function deployLeader(state: GameState): GameState {
   const playerId = state.activePlayer
   const p = state.players[playerId]
@@ -688,7 +718,8 @@ function readyEverything(state: GameState, id: PlayerId): GameState {
   const justReadied = p.units.filter(u => u.exhausted).map(u => u.instanceId)
   let next = updatePlayer(state, id, {
     resources: readied.resources,
-    units: p.units.map(u => (u.exhausted ? { ...u, exhausted: false } : u)),
+    // Ready units and clear their once-per-round action-ability usage (#343).
+    units: p.units.map(u => (u.exhausted || u.usedAbilities ? { ...u, exhausted: false, usedAbilities: undefined } : u)),
     leader: p.leader.exhausted ? { ...p.leader, exhausted: false } : p.leader,
   })
   // "When this unit readies" abilities fire for each unit that just readied (#342).

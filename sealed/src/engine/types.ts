@@ -83,6 +83,11 @@ export interface UnitState {
    * resting state never carries it. `unitHasKeyword`/`unitKeywordValue` include it.
    */
   grantedKeywords?: KeywordInstance[]
+  /**
+   * Keys of once-per-round action abilities this unit has already used this round
+   * (`${cardId}#${index}`); cleared at round start (#343).
+   */
+  usedAbilities?: string[]
 }
 
 export interface ResourceState {

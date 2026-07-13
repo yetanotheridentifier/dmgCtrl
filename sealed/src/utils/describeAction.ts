@@ -51,6 +51,8 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       const name = state.cards[state.players[by].leader.cardId]?.name ?? 'leader'
       return `Deploy ${name}`
     }
+    case 'useAbility':
+      return `Use ${state.cards[action.cardId]?.name ?? 'ability'}`
     case 'takeInitiative':
       return 'Take the initiative'
     case 'pass':
