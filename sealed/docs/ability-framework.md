@@ -108,57 +108,74 @@ the registry clean. The framework itself is covered in
 
 ---
 
-## Implemented status (#340 framework, #341 Tier-1 upgrades)
+## Implemented status (#340 framework, #341 Tier-1, #342 group A)
 
 The #303 design above is largely realised. Concrete state:
 
 ### Registry — `engine/abilities.ts`
-- **`CardDefinition`** = `{ abilities?, attachRestriction?, costModifier?, conditionalKeywords? }`.
+- **`CardDefinition`** = `{ abilities?, attachRestriction?, costModifier?,
+  conditionalKeywords?, statModifier?, damageMultiplier?, negatesOverwhelm? }`.
   Registered via **`registerCard(cardId, def)`** (merges: abilities append, hooks
-  overwrite). `registerAbility` is kept as a convenience. `getCardDefinition(cardId)`
-  exposes the hooks; `getAbilities` unchanged.
-- **Trigger points live:** `whenPlayed`, `onAttackEnd`, `whenRegroupStarts`
-  (`onAttack`/`whenReadies`/`whenDefeated`/`onDefense` declared; `whenDefeated`/
-  `whenReadies` not yet fired — see plan).
-- **`runUnitTrigger(state, point, unit, owner)`** — the key dispatch: fires the
-  unit's OWN card abilities **and each attached upgrade's** abilities (so an
-  upgrade's "When Attack Ends: …" fires on the attached unit). `resolve` calls it
-  after combat (`onAttackEnd`) and for all units at regroup start.
+  overwrite). `getCardDefinition(cardId)` exposes the hooks; `getAbilities` unchanged.
+- **Trigger points live:** `whenPlayed`, `onAttackEnd`, `whenRegroupStarts`,
+  `whenDefeated` (`onAttack`/`whenReadies`/`onDefense` declared but not yet fired —
+  `whenReadies`/`onDefense` land with the pending-choice work, see plan).
+- **`runUnitTrigger(state, point, unit, owner, extra?)`** — the key dispatch: fires
+  the unit's OWN card abilities **and each attached upgrade's** abilities. `extra`
+  merges into the `EffectContext` — used to thread the attack outcome into
+  `onAttackEnd` (`attackTarget`, `dealtDamageToBase`) and the captured unit into
+  `whenDefeated` (`defeatedUnit`, since the unit has left play by then).
 
 ### Static hooks (card-type-agnostic)
-- `costModifier(state, playerId, target?)` → cost delta, in `effectiveCost`
-  (now takes an optional `target` — upgrades pass the attach target).
+- `costModifier(state, playerId, target?)` → cost delta, in `effectiveCost`.
 - `attachRestriction(state, target)` → in `legalMoves` `playUpgrade`.
-- `conditionalKeywords(state, unit)` → folded into `keywords.unitKeywords`
-  (e.g. Luke's Lightsaber → Sentinel only on Luke).
+- `conditionalKeywords(state, unit)` → folded into `keywords.unitKeywords`.
+- `statModifier(state, unit, ctx)` → `{power?, hp?}` deltas, folded into
+  `stats.effectivePower`/`effectiveHp`; `ctx` carries `attacking`/`attackingBase`
+  (Pointless to Resist: −3 power attacking a base).
+- `damageMultiplier(state, unit)` → scales each incoming damage instance in
+  `combat.applyUnitDamage` (Deadly Vulnerability ×2); card + upgrades compound.
+- `negatesOverwhelm(state, unit)` → defender-side; in `resolve`'s Overwhelm calc via
+  `keywords.unitNegatesOverwhelm` (Deadly Vulnerability).
+
+### Combat — `engine/combat.ts` (extracted from `resolve.ts`)
+`applyUnitDamage` (shield → damage-multiplier → defeat → route to owner's discard,
+token units vanish → fire `whenDefeated`) and the **`dealDamageToUnit`** primitive
+for ability damage outside the attack flow. Extracting it broke the
+`effects`/`cardDefinitions` ↔ `resolve` cycle. `updatePlayer` now lives in `types.ts`.
 
 ### Effect primitives — `engine/effects.ts`
-`giveToken`, `exhaustUnit`, `drawCards`, `returnOtherUpgradesToHand`, `findUnit`
-(owner-less unit lookup by instance id). Pure `(state, …) => state`.
+`giveToken`, `exhaustUnit`, `drawCards`, `returnOtherUpgradesToHand`,
+`returnUpgradeFromDiscardToHand`, `defeatUpgrade`, `createTokenUnit`, `findUnit`.
+Token units live in `engine/tokenUnits.ts` (`TOKEN_MANDALORIAN`, merged into the
+card db like the token upgrades; `isTokenCard` keys off the shared `TOKEN_` prefix).
 
 ### Real cards — `engine/cardDefinitions.ts`
-Side-effect module (imported by `legalMoves.ts`) registering real behaviours.
-~15 ASH upgrades done (cost mods, attach restrictions, conditional keywords,
-`whenPlayed` effects, granted `onAttackEnd`/`whenRegroupStarts`); tests in
-`src/test/ashUpgrades.test.ts`.
+Side-effect module (imported by `legalMoves.ts`) registering real behaviours. Done:
+- **#341 Tier-1** — cost mods, attach restrictions, conditional keywords,
+  `whenPlayed` effects, granted `onAttackEnd`/`whenRegroupStarts`.
+- **#342 group A** — Pointless to Resist (054), Blade of Talzin (055), Grav Charge
+  (085), Warrior's Legacy (134), Deadly Vulnerability (150), Whistling Birds (183),
+  Nowhere to Hide (198, Sentinel grant). Also fixed two #341 slips found by
+  cross-checking the card API: ASH_086 had a bogus `nonVehicle` restriction; ASH_198
+  was unimplemented.
+
+Tests: `src/test/ashUpgrades.test.ts` + `src/test/combat.test.ts`. Card text is
+authoritative from the worker API (`worker.dmgctrl.app/cards/{SET}/{NUM}` serves
+`FrontText`); only Power/HP are missing for ASH upgrades (`upgradeStatOverrides.ts`).
 
 ### The `pendingChoice` mechanism (design §1)
-Not built yet. The Ambush/Support **`pendingTrigger`** (`engine/resolve.ts`,
-`GameState.pendingTrigger`) is the working precursor; #342 generalises it into a
-pending-ability-choice for optional "may…" abilities.
+Still the next big piece. The Ambush/Support **`pendingTrigger`**
+(`GameState.pendingTrigger`) is the working precursor; #342 group B generalises it
+into a pending-ability-choice for optional "may…" abilities.
 
 ## Resumption plan (next chunks)
 
-1. **Combat extraction + `whenDefeated`** (unblocks 4 Tier-1 cards): move
-   `applyUnitDamage` from `resolve.ts` into a new **`engine/combat.ts`** (breaks the
-   `effects` ↔ `resolve` import cycle so abilities can deal damage); add a
-   `dealDamageToUnit` primitive; fire `runUnitTrigger(state, 'whenDefeated', unit,
-   owner)` for each defeated unit (pass the captured unit). Then implement Grav
-   Charge (ASH_085), Blade of Talzin (ASH_055). Whistling Birds (ASH_183) also needs
-   the attack target threaded into `onAttackEnd`; Warrior's Legacy (ASH_134) needs a
-   create-token-unit primitive + a Mandalorian token card.
-2. **Contextual stats** — a `statModifier` / damage-replacement hook for Pointless
-   to Resist (ASH_054, −3/−0 vs a base) and Deadly Vulnerability (ASH_150).
-3. **#342 Tier 2** — the pending-choice mechanism, then The Conflict Within, DDC
-   Defender, Camtono.
-4. **#343 Tier 3** — Improvised Identity, The Darksaber, Arcana Star Map.
+1. **#342 group B — pending-choice mechanism** (design §1) + wiring `whenReadies`
+   and `onDefense`. Then: The Conflict Within (088, `whenReadies`: may pay 3 else
+   exhaust), DDC Defender (210, `onDefense`: may deal 1 + exhaust a unit), Camtono
+   (229, `onAttackEnd`: may play a ≤2-cost top card free). Touches state shape,
+   `legalMoves`, `resolve`, the AI driver and the UI — worth a design pass first.
+2. **#343 Tier 3** — Improvised Identity (230), The Darksaber (135, leader-unit
+   transform + aspect provision), Arcana Star Map (084) — the last needs a
+   deck-search mechanic (also unblocks the search-doubling clause).

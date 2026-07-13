@@ -1,12 +1,13 @@
 import type { Action, AttackTarget } from './actions'
-import type { GameState, PlayerId, PlayerState, UnitState } from './types'
-import { opponentOf } from './types'
+import type { GameState, PlayerId, UnitState } from './types'
+import { opponentOf, updatePlayer } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, supportGrantedKeywords } from './legalMoves'
-import { runTrigger, runUnitTrigger, type TriggerPoint } from './abilities'
+import { runTrigger, runUnitTrigger, type TriggerPoint, type EffectContext } from './abilities'
+import { applyUnitDamage } from './combat'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
-import { hasKeyword, unitHasKeyword, unitKeywordValue } from './keywords'
+import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, removeFirst, hasToken } from './tokenUpgrades'
 
 /**
@@ -77,13 +78,6 @@ function requirePhase(state: GameState, phase: GameState['phase'], fn: () => Gam
 // ---------------------------------------------------------------------------
 // Shared state helpers
 // ---------------------------------------------------------------------------
-
-function updatePlayer(state: GameState, id: PlayerId, patch: Partial<PlayerState>): GameState {
-  return {
-    ...state,
-    players: { ...state.players, [id]: { ...state.players[id], ...patch } },
-  }
-}
 
 function resetPasses(state: GameState): GameState {
   return state.consecutivePasses === 0 ? state : { ...state, consecutivePasses: 0 }
@@ -357,64 +351,6 @@ function pass(state: GameState): GameState {
 // Combat (basic resolution — T2.5/T3.2/T3.3)
 // ---------------------------------------------------------------------------
 
-/** Apply damage to a player's units, defeating any with damage ≥ HP (CR 1.9.6). */
-function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<string, number>): GameState {
-  const p = state.players[owner]
-  const survivors: UnitState[] = []
-  const defeated: UnitState[] = []
-
-  for (const u of p.units) {
-    let extra = damaged.get(u.instanceId) ?? 0
-    let upgrades = u.upgrades
-    // A shield token prevents one instance of incoming damage, then is removed (#308).
-    if (extra > 0 && hasToken(upgrades, TOKEN_SHIELD)) {
-      upgrades = removeFirst(upgrades, a => a.cardId === TOKEN_SHIELD)
-      extra = 0
-    }
-    const total = u.damage + extra
-    const next = extra > 0 || upgrades !== u.upgrades ? { ...u, damage: total, upgrades } : u
-    if (total >= effectiveHp(state, next)) {
-      defeated.push(next)
-    } else {
-      survivors.push(next)
-    }
-  }
-
-  // Defeated card-upgrades return to their OWNER's discard, which may differ from
-  // the unit's controller when an upgrade was attached to an enemy unit (#308).
-  // Token upgrades (type `token`) simply cease to exist. Collect per owner.
-  const defeatedUpgrades = defeated
-    .flatMap(u => u.upgrades)
-    .filter(a => state.cards[a.cardId]?.type !== 'token')
-
-  // Non-leader defeated units go to their owner's discard pile (CR 1.5.5c).
-  let result = updatePlayer(state, owner, {
-    units: survivors,
-    discard: [
-      ...p.discard,
-      ...defeated.filter(u => !u.isLeader).map(u => u.cardId),
-      ...defeatedUpgrades.filter(a => a.owner === owner).map(a => a.cardId),
-    ],
-  })
-
-  const other = opponentOf(owner)
-  const othersUpgrades = defeatedUpgrades.filter(a => a.owner === other).map(a => a.cardId)
-  if (othersUpgrades.length > 0) {
-    result = updatePlayer(result, other, { discard: [...result.players[other].discard, ...othersUpgrades] })
-  }
-
-  // A defeated Leader Unit returns to the base zone, exhausted, undeployed;
-  // its epic action stays used so it cannot redeploy (CR 3.4.5).
-  if (defeated.some(u => u.isLeader)) {
-    const owner2 = result.players[owner]
-    result = updatePlayer(result, owner, {
-      leader: { ...owner2.leader, deployed: false, exhausted: true },
-    })
-  }
-
-  return result
-}
-
 /**
  * Advantage gives +1/0 until the unit next completes an attack or defence, then
  * the token is removed (#308/#334). Called for the attacker and defender after
@@ -432,10 +368,11 @@ function consumeAdvantage(state: GameState, owner: PlayerId, instanceId: string)
 }
 
 /** Fire "When Attack Ends" abilities on the attacker (card + upgrades), if it
- *  survived the combat (#340). */
-function fireAttackEnd(state: GameState, owner: PlayerId, attackerId: string): GameState {
+ *  survived the combat (#340). `ctx` carries what the attack did (target, whether
+ *  it damaged the base) for abilities like Whistling Birds (#342). */
+function fireAttackEnd(state: GameState, owner: PlayerId, attackerId: string, ctx: Partial<EffectContext>): GameState {
   const attacker = state.players[owner].units.find(u => u.instanceId === attackerId)
-  return attacker ? runUnitTrigger(state, 'onAttackEnd', attacker, owner) : state
+  return attacker ? runUnitTrigger(state, 'onAttackEnd', attacker, owner, ctx) : state
 }
 
 /** Fire a trigger for every unit in play (both sides), re-finding each in case an
@@ -461,7 +398,7 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
   // Combat damage is CALCULATED before it is dealt (CR 6.3.4): both amounts
   // come from the pre-damage state, so e.g. a Grit defender's counter uses its
   // pre-attack damage.
-  const attackerPower = effectivePower(state, attacker, { attacking: true })
+  const attackerPower = effectivePower(state, attacker, { attacking: true, attackingBase: target.kind === 'base' })
 
   // Attacking exhausts the attacker (CR 1.5.4d).
   let next = updatePlayer(state, playerId, {
@@ -483,7 +420,7 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
     const enemy = next.players[enemyId]
     next = updatePlayer(next, enemyId, { base: { ...enemy.base, damage: enemy.base.damage + attackerPower } })
     next = consumeAdvantage(next, playerId, attackerId) // the attack completed
-    next = fireAttackEnd(next, playerId, attackerId)
+    next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, dealtDamageToBase: attackerPower > 0 })
     return checkWin(next)
   }
 
@@ -496,7 +433,9 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
   // defending player's base (CR 1.9.11). A shielded defender takes no damage, so
   // there is no excess to trample (#308).
   const remainingHp = effectiveHp(next, defender) - defender.damage
-  const overwhelmExcess = unitHasKeyword(next, attacker, 'Overwhelm') && !hasToken(defender.upgrades, TOKEN_SHIELD)
+  const overwhelmExcess = unitHasKeyword(next, attacker, 'Overwhelm')
+    && !hasToken(defender.upgrades, TOKEN_SHIELD)
+    && !unitNegatesOverwhelm(next, defender)
     ? Math.max(0, attackerPower - remainingHp)
     : 0
 
@@ -512,7 +451,7 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
   // Both units completed a combat — spend any Advantage on the survivors (#308).
   next = consumeAdvantage(next, playerId, attackerId)
   next = consumeAdvantage(next, enemyId, defender.instanceId)
-  next = fireAttackEnd(next, playerId, attackerId)
+  next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, dealtDamageToBase: overwhelmExcess > 0 })
   return checkWin(next)
 }
 

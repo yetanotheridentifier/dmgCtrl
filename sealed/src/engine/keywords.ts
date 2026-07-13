@@ -47,3 +47,8 @@ export function unitHasKeyword(state: GameState, unit: UnitState, name: string):
 export function unitKeywordValue(state: GameState, unit: UnitState, name: string): number {
   return unitKeywords(state, unit).reduce((sum, k) => (k.name === name ? sum + (k.value ?? 0) : sum), 0)
 }
+
+/** True if this unit (its card or an upgrade) makes an attacker lose Overwhelm while it defends (#342). */
+export function unitNegatesOverwhelm(state: GameState, unit: UnitState): boolean {
+  return [unit.cardId, ...unit.upgrades.map(u => u.cardId)].some(id => getCardDefinition(id)?.negatesOverwhelm?.(state, unit) ?? false)
+}

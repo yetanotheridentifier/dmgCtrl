@@ -2,6 +2,7 @@ import type { SwuCard } from '../data/cards'
 import { cardId } from '../data/cards'
 import type { CardDb, CardType, EngineCard, Arena, KeywordInstance } from './types'
 import { TOKEN_CARDS } from './tokenUpgrades'
+import { TOKEN_UNIT_CARDS } from './tokenUnits'
 import { UPGRADE_STAT_OVERRIDES } from './upgradeStatOverrides'
 
 function toInt(value: string | undefined): number {
@@ -68,8 +69,8 @@ export function normaliseCard(card: SwuCard): EngineCard {
 }
 
 export function buildCardDb(cards: SwuCard[]): CardDb {
-  // Built-in token upgrades are always present so attached tokens resolve (#308).
-  const db: Record<string, EngineCard> = { ...TOKEN_CARDS }
+  // Built-in token upgrades and token units are always present so tokens resolve (#308/#342).
+  const db: Record<string, EngineCard> = { ...TOKEN_CARDS, ...TOKEN_UNIT_CARDS }
   for (const card of cards) {
     const normalised = normaliseCard(card)
     db[normalised.id] = normalised

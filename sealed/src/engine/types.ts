@@ -150,3 +150,11 @@ export interface GameState {
 export function opponentOf(player: PlayerId): PlayerId {
   return player === 'player' ? 'opponent' : 'player'
 }
+
+/** Immutably patch one player's state, returning a new GameState. */
+export function updatePlayer(state: GameState, id: PlayerId, patch: Partial<PlayerState>): GameState {
+  return {
+    ...state,
+    players: { ...state.players, [id]: { ...state.players[id], ...patch } },
+  }
+}

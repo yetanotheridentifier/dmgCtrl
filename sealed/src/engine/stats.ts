@@ -1,5 +1,6 @@
 import type { GameState, UnitState } from './types'
 import { unitHasKeyword, unitKeywordValue } from './keywords'
+import { getCardDefinition } from './abilities'
 
 /**
  * Computed unit stats (#305). All combat and defeat checks go through these
@@ -11,12 +12,26 @@ import { unitHasKeyword, unitKeywordValue } from './keywords'
 export interface StatContext {
   /** True while the unit is the attacker in an attack (Raid applies). */
   attacking?: boolean
+  /** True while the unit is attacking the enemy base (not a unit). */
+  attackingBase?: boolean
 }
 
 /** Sum a stat across the unit's card and every attached upgrade (#308). */
 function withUpgrades(state: GameState, unit: UnitState, stat: 'power' | 'hp'): number {
   let total = state.cards[unit.cardId]?.[stat] ?? 0
   for (const { cardId } of unit.upgrades) total += state.cards[cardId]?.[stat] ?? 0
+  return total
+}
+
+/**
+ * Conditional stat deltas from the unit's own card definition and each attached
+ * upgrade's (#342) — e.g. Pointless to Resist's −3 power while attacking a base.
+ */
+function statModifiers(state: GameState, unit: UnitState, ctx: StatContext, stat: 'power' | 'hp'): number {
+  let total = 0
+  for (const cardId of [unit.cardId, ...unit.upgrades.map(u => u.cardId)]) {
+    total += getCardDefinition(cardId)?.statModifier?.(state, unit, ctx)?.[stat] ?? 0
+  }
   return total
 }
 
@@ -28,9 +43,10 @@ export function effectivePower(state: GameState, unit: UnitState, ctx: StatConte
   if (unitHasKeyword(state, unit, 'Grit')) {
     power += unit.damage
   }
+  power += statModifiers(state, unit, ctx, 'power')
   return Math.max(0, power)
 }
 
-export function effectiveHp(state: GameState, unit: UnitState): number {
-  return Math.max(0, withUpgrades(state, unit, 'hp'))
+export function effectiveHp(state: GameState, unit: UnitState, ctx: StatContext = {}): number {
+  return Math.max(0, withUpgrades(state, unit, 'hp') + statModifiers(state, unit, ctx, 'hp'))
 }
