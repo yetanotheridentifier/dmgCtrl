@@ -180,28 +180,34 @@ helpers `activeChoice`/`findChoice`/`hasPendingChoices`/`popChoice`/`removeChoic
   (`resumeAtInitiative`) choices begin the action phase with the initiative holder,
   mid-turn choices `advanceTurn`.
 
-**Conflict Within (088)** is live: `whenReadies` pushes a `payOrExhaust`; accept pays 3
-(offered only if affordable) and the unit stays ready, decline exhausts it. Tests in
+**Conflict Within (088)** and **Camtono (229)** are live. Camtono: `onAttackEnd` reveals
+the top deck card; if it costs ≤2 it pushes a `mayPlayTopFree` choice. Accept → a unit
+enters play free (via `enterUnit`, extracted from `playCard`), an upgrade attaches free
+(`acceptChoice.targetInstanceId`; `choiceMoves` offers one accept per valid target), an
+event is discarded with no effect (temporary rule until events exist). Tests in
 `src/test/pendingChoices.test.ts`.
 
-## Resumption plan — #342 group B, phase 1 remaining
+**Choice UI:** `acceptChoice`/`skipTrigger` aren't in `CLICK_HANDLED`, so they render as
+labelled buttons in the action column (like Pass/Deploy/Skip) — "Pay 3" / "Don't pay",
+"Play X free [on <unit>]" / "Don't play". `describeAction` names the attach target so
+the per-target upgrade buttons are distinguishable (`src/test/describeChoiceAction.test.ts`).
+Ambush/Support attacks still surface as board clicks.
 
-The mechanism + The Conflict Within (088) are **done** (see above). Remaining:
+## Resumption plan — #342 phase 2 & #343
 
-- **Camtono (229)** — `onAttackEnd`: if the top deck card costs ≤2, push a
-  `mayPlayTopFree` choice (kind already in the union; `resolveAccept` re-adds a
-  `targetInstanceId` param). On accept: **unit** → enters play free; **upgrade** →
-  attaches free (`acceptChoice.targetInstanceId` picks the unit; `choiceMoves` offers
-  one per valid target); **event** → temporary rule: discard with no effect (same
-  decision point) — agreed with the user until events are built. Extract `playCard`'s
-  unit-creation core into a reusable `enterUnit(state, owner, cardId)` so free-play
-  reuses Shielded/Hidden/Ambush/Support + whenPlayed. `mayPlayTopFree` resolves
-  mid-turn, so `resumeAfterChoice` → `advanceTurn`.
-- **UI for pending choices** — `acceptChoice`/`skipTrigger{choiceId}` need an
-  affordance (buttons: "Pay 3" / "Don't pay"; "Play X free" / "Don't play"; for an
-  upgrade, board target selection like `playUpgrade`). `describeAction` labels are
-  done. Ambush/Support already surface (board attack + skip); the pay/play choices
-  need a button surface. Hand to the user for manual testing after wiring.
+#342 group B **phase 1 is done** (both cards + UI, engine-tested; awaiting the user's
+manual test). Remaining:
+
+1. **DDC Defender (210) — phase 2.** `onDefense`, the **mid-combat** case: split
+   `attack()` into declare → defender may act (an `acceptChoice` with a target: deal 1 +
+   exhaust a unit in the arena) → deal damage, so the resolver suspends inside combat
+   and resumes. This is also where the **cross-player / mandatory trigger-ordering**
+   rule first bites (active player orders on-attack vs on-defense) — settle the
+   interpretation (active-orders-all vs APNAP) with the user, and generalise
+   `runUnitTrigger`/combat ordering beyond the interactive queue.
+2. **#343 Tier 3** — Improvised Identity (230), The Darksaber (135, leader-unit
+   transform + aspect provision), Arcana Star Map (084) — the last needs a
+   deck-search mechanic (also unblocks the search-doubling clause).
 
 **UI:** the new choices must surface (Ambush/Support already render as board
 attack + skip). `acceptChoice` needs a `describeAction` label and a button/board

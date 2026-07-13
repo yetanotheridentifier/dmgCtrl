@@ -66,7 +66,11 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       const choice = findChoice(state, action.choiceId)
       if (!choice) return 'Accept'
       if (choice.kind === 'payOrExhaust') return `Pay ${choice.cost}`
-      if (choice.kind === 'mayPlayTopFree') return `Play ${state.cards[choice.cardId]?.name ?? 'card'} free`
+      if (choice.kind === 'mayPlayTopFree') {
+        const name = state.cards[choice.cardId]?.name ?? 'card'
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Play ${name} free${target ? ` on ${target}` : ''}`
+      }
       return 'Accept'
     }
     case 'resourceCard': {

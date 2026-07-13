@@ -139,5 +139,19 @@ registerCard('ASH_088', { // The Conflict Within — "When this unit readies: yo
   }],
 })
 
+// ── onAttackEnd optional free play (#342 group B) ───────────────────────────
+registerCard('ASH_229', { // Camtono — "When Attack Ends: look at top card; if it costs ≤2 you may play it free."
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: 'Look at the top card of your deck; if it costs 2 or less you may play it for free.',
+    effect: (s, ctx) => {
+      const topId = s.players[ctx.owner].deck[0]
+      const top = topId ? s.cards[topId] : undefined
+      if (!top || top.cost > 2) return s
+      return pushChoice(s, { kind: 'mayPlayTopFree', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, cardId: topId })
+    },
+  }],
+})
+
 // ── Attach restriction only (abilities land with Tier 2/3) ─────────────────
 registerCard('ASH_210', { attachRestriction: nonVehicle }) // DDC Defender (onDefense "may" — Tier 2)

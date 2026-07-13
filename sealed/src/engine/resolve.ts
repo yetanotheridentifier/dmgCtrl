@@ -1,7 +1,7 @@
 import type { Action, AttackTarget } from './actions'
 import type { GameState, PlayerId, UnitState } from './types'
 import type { PendingChoice } from './types'
-import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeChoice, hasPendingChoices } from './types'
+import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeChoice, hasPendingChoices, pushChoice } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, supportGrantedKeywords } from './legalMoves'
 import { runTrigger, runUnitTrigger, type TriggerPoint, type EffectContext } from './abilities'
@@ -58,7 +58,7 @@ export function resolve(state: GameState, action: Action): GameState {
     case 'skipTrigger':
       return requirePhase(state, 'action', () => resolveSkip(state, action.choiceId))
     case 'acceptChoice':
-      return requirePhase(state, 'action', () => resolveAccept(state, action.choiceId))
+      return requirePhase(state, 'action', () => resolveAccept(state, action.choiceId, action.targetInstanceId))
     case 'resourceCard':
       return requirePhase(state, 'regroup', () => regroupChoice(state, action.handIndex))
     case 'skipResource':
@@ -171,6 +171,55 @@ function setupResourceChoice(state: GameState, handIndex: number): GameState {
 // Action phase
 // ---------------------------------------------------------------------------
 
+/**
+ * Bring a unit `cardId` into play under `owner` (#342). Shared by playing a unit from
+ * hand and free-play effects (e.g. Camtono). Handles Shielded/Hidden on entry, opens
+ * the Ambush/Support pending choice, and fires "When Played". The caller is
+ * responsible for spending cost / removing the card from its source zone, and for the
+ * win check afterwards.
+ */
+function enterUnit(state: GameState, owner: PlayerId, cardId: string): GameState {
+  const card = state.cards[cardId]
+  // Ambush: the unit may immediately attack an enemy unit, so it enters ready (#334).
+  const ambush = hasKeyword(state, cardId, 'Ambush')
+  const newUnit: UnitState = {
+    instanceId: `u${state.instanceCounter}`,
+    cardId,
+    arena: card?.arena ?? 'ground',
+    damage: 0,
+    exhausted: !ambush, // units normally enter exhausted (CR 1.5.4b); Ambush enters ready
+    isLeader: false,
+    // Shielded: the unit enters play with a shield token (#334).
+    upgrades: hasKeyword(state, cardId, 'Shielded') ? [{ cardId: TOKEN_SHIELD, owner }] : [],
+    // Hidden: the unit enters play hidden — unattackable until the next phase (#334).
+    ...(hasKeyword(state, cardId, 'Hidden') ? { hidden: true } : {}),
+  }
+
+  let next = updatePlayer(state, owner, { units: [...state.players[owner].units, newUnit] })
+  next = { ...next, instanceCounter: state.instanceCounter + 1 }
+
+  // Ambush: open the pending attack only if there's actually an enemy to hit;
+  // otherwise the unit just enters play exhausted, as normal (#334).
+  if (ambush) {
+    if (enemyAttackTargets(next, newUnit).targets.length > 0) {
+      next = pushChoice(next, { kind: 'ambush', id: newUnit.instanceId, controller: owner, unitId: newUnit.instanceId })
+    } else {
+      next = updatePlayer(next, owner, {
+        units: next.players[owner].units.map(u => (u.instanceId === newUnit.instanceId ? { ...u, exhausted: true } : u)),
+      })
+    }
+  } else if (hasKeyword(state, cardId, 'Support')) {
+    // Support: open the pending attack if there's another ready unit to attack with.
+    const others = next.players[owner].units.filter(u => u.instanceId !== newUnit.instanceId && !u.exhausted)
+    if (others.length > 0) {
+      next = pushChoice(next, { kind: 'support', id: newUnit.instanceId, controller: owner, unitId: newUnit.instanceId })
+    }
+  }
+
+  // "When Played" abilities fire after the card enters play (CR 6.2.0f).
+  return runTrigger(next, 'whenPlayed', { owner, cardId, sourceInstanceId: newUnit.instanceId })
+}
+
 function playCard(state: GameState, handIndex: number): GameState {
   const playerId = state.activePlayer
   const p = state.players[playerId]
@@ -181,54 +230,9 @@ function playCard(state: GameState, handIndex: number): GameState {
   }
 
   const paid = payCost(p, effectiveCost(state, playerId, card))
-  // Ambush: the unit may immediately attack an enemy unit, so it enters ready (#334).
-  const ambush = hasKeyword(state, card.id, 'Ambush')
-  const newUnit: UnitState = {
-    instanceId: `u${state.instanceCounter}`,
-    cardId: card.id,
-    arena: card.arena ?? 'ground',
-    damage: 0,
-    exhausted: !ambush, // units normally enter exhausted (CR 1.5.4b); Ambush enters ready
-    isLeader: false,
-    // Shielded: the unit enters play with a shield token (#334).
-    upgrades: hasKeyword(state, card.id, 'Shielded') ? [{ cardId: TOKEN_SHIELD, owner: playerId }] : [],
-    // Hidden: the unit enters play hidden — unattackable until the next phase (#334).
-    ...(hasKeyword(state, card.id, 'Hidden') ? { hidden: true } : {}),
-  }
-
-  let next = updatePlayer(state, playerId, {
-    ...paid,
-    hand: paid.hand.filter((_, i) => i !== handIndex),
-    units: [...paid.units, newUnit],
-  })
-  next = { ...next, instanceCounter: state.instanceCounter + 1 }
-
-  // Ambush: open the pending attack only if there's actually an enemy to hit;
-  // otherwise the unit just enters play exhausted, as normal (#334).
-  if (ambush) {
-    if (enemyAttackTargets(next, newUnit).targets.length > 0) {
-      next = { ...next, pendingChoices: [{ kind: 'ambush', id: newUnit.instanceId, controller: playerId, unitId: newUnit.instanceId }] }
-    } else {
-      next = updatePlayer(next, playerId, {
-        units: next.players[playerId].units.map(u => (u.instanceId === newUnit.instanceId ? { ...u, exhausted: true } : u)),
-      })
-    }
-  } else if (hasKeyword(state, card.id, 'Support')) {
-    // Support: open the pending attack if there's another ready unit to attack with.
-    const others = next.players[playerId].units.filter(u => u.instanceId !== newUnit.instanceId && !u.exhausted)
-    if (others.length > 0) {
-      next = { ...next, pendingChoices: [{ kind: 'support', id: newUnit.instanceId, controller: playerId, unitId: newUnit.instanceId }] }
-    }
-  }
-
-  // "When Played" abilities fire after the card enters play (CR 6.2.0f);
-  // their effects can defeat a base, so the win check runs afterwards.
-  next = runTrigger(next, 'whenPlayed', {
-    owner: playerId,
-    cardId: card.id,
-    sourceInstanceId: newUnit.instanceId,
-  })
-  return checkWin(next)
+  const next = updatePlayer(state, playerId, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
+  // whenPlayed effects can defeat a base, so the win check runs afterwards.
+  return checkWin(enterUnit(next, playerId, card.id))
 }
 
 /** Lend a Support unit's keywords to the chosen attacker for one attack (#334). */
@@ -286,7 +290,7 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
 }
 
 /** Accept a pending "may…" choice — pay the cost / play the card (#342). */
-function resolveAccept(state: GameState, choiceId: string): GameState {
+function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: string): GameState {
   const choice = findChoice(state, choiceId)
   if (!choice) throw new Error(`acceptChoice: no choice ${choiceId}`)
   let next = removeChoice(state, choice.id)
@@ -295,10 +299,45 @@ function resolveAccept(state: GameState, choiceId: string): GameState {
       // Pay the cost; the unit simply stays ready (no exhaust).
       next = updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost))
       break
+    case 'mayPlayTopFree': {
+      next = playTopCardFree(next, choice.controller, choice.cardId, targetInstanceId)
+      next = checkWin(next)
+      if (next.winner !== null) return next
+      break
+    }
     default:
       throw new Error(`acceptChoice: ${choice.kind} is not acceptable`)
   }
   return resumeAfterChoice(next, choice)
+}
+
+/**
+ * Play the revealed top-of-deck card for free (Camtono, #342). Unit → enters play;
+ * upgrade → attaches to `targetInstanceId`; event → a temporary rule discards it with
+ * no effect (until events are built). A no-op if the top card moved.
+ */
+function playTopCardFree(state: GameState, owner: PlayerId, cardId: string, targetInstanceId?: string): GameState {
+  if (state.players[owner].deck[0] !== cardId) return state // top card changed; abort safely
+  const type = state.cards[cardId]?.type
+  let next = updatePlayer(state, owner, { deck: state.players[owner].deck.slice(1) }) // remove from deck
+
+  if (type === 'unit') {
+    return enterUnit(next, owner, cardId)
+  }
+  if (type === 'upgrade' && targetInstanceId) {
+    const targetOwner = (['player', 'opponent'] as PlayerId[]).find(id =>
+      next.players[id].units.some(u => u.instanceId === targetInstanceId),
+    )
+    if (!targetOwner) return next // target gone
+    next = updatePlayer(next, targetOwner, {
+      units: next.players[targetOwner].units.map(u =>
+        u.instanceId === targetInstanceId ? { ...u, upgrades: [...u.upgrades, { cardId, owner }] } : u,
+      ),
+    })
+    return runTrigger(next, 'whenPlayed', { owner, cardId, sourceInstanceId: targetInstanceId })
+  }
+  // Event (or an upgrade with no target): temporary stub — discard with no effect.
+  return updatePlayer(next, owner, { discard: [...next.players[owner].discard, cardId] })
 }
 
 /**
