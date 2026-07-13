@@ -188,23 +188,48 @@ event is discarded with no effect (temporary rule until events exist). Tests in
 `src/test/pendingChoices.test.ts`.
 
 **Choice UI:** `acceptChoice`/`skipTrigger` aren't in `CLICK_HANDLED`, so they render as
-labelled buttons in the action column (like Pass/Deploy/Skip) — "Pay 3" / "Don't pay",
-"Play X free [on <unit>]" / "Don't play". `describeAction` names the attach target so
-the per-target upgrade buttons are distinguishable (`src/test/describeChoiceAction.test.ts`).
-Ambush/Support attacks still surface as board clicks.
+labelled buttons — "Pay 3" / "Don't pay", "Play X free [on <unit>]" / "Don't play"
+(`describeAction` names the attach target so per-target upgrade buttons differ). Ambush/
+Support attacks still surface as board clicks.
+
+**"Look at a card" overlay** (`CardChoiceOverlay`, exported from `gameScreen.tsx`): a
+reusable centre-screen zoomed-card overlay for Camtono's `mayPlayTopFree` — the human
+sees the card + the Play/Don't-play buttons over a dark backdrop. Terminology matters:
+**"look at" is PRIVATE** (only the acting player sees it, so the overlay renders solely
+for the human's own choice; the AI's look-at never surfaces to the human, preserving
+hidden information). A future **"reveal"** (PUBLIC, both players confirm they've seen it)
+reuses this shell — not built yet as no card reveals; the component takes a prompt +
+buttons so a reveal variant just passes a public prompt and a confirm action. Reusable
+for search effects. Tests: `src/test/cardChoiceOverlay.test.tsx`.
 
 ## Resumption plan — #342 phase 2 & #343
 
 #342 group B **phase 1 is done** (both cards + UI, engine-tested; awaiting the user's
 manual test). Remaining:
 
-1. **DDC Defender (210) — phase 2.** `onDefense`, the **mid-combat** case: split
-   `attack()` into declare → defender may act (an `acceptChoice` with a target: deal 1 +
-   exhaust a unit in the arena) → deal damage, so the resolver suspends inside combat
-   and resumes. This is also where the **cross-player / mandatory trigger-ordering**
-   rule first bites (active player orders on-attack vs on-defense) — settle the
-   interpretation (active-orders-all vs APNAP) with the user, and generalise
-   `runUnitTrigger`/combat ordering beyond the interactive queue.
+1. **DDC Defender (210) — phase 2.** `onDefense` = "You may deal 1 damage to a unit in
+   this unit's arena and exhaust it," resolving **before combat damage**. Concrete design:
+   - Split `attack()` into `beginAttack` (exhaust attacker, restore heal; base attacks
+     finish inline — a base doesn't defend) and `completeAttack` (the damage step:
+     recompute powers on the *post-onDefense* board per CR 6.3.4, apply combat damage,
+     overwhelm, consume Advantage, fire `onAttackEnd`, check win).
+   - In `beginAttack`, for a unit target, fire `runUnitTrigger('onDefense', defender,
+     defenderOwner)`. If it pushed a choice, **suspend**: set
+     `GameState.pendingAttack = { attackerId, target, activePlayer }` and hand
+     `activePlayer` to the defender's controller. Otherwise fall straight into
+     `completeAttack`.
+   - New `PendingChoice` kind `mayDamageExhaust { arena }`; `choiceMoves` offers one
+     `acceptChoice{targetInstanceId}` per unit in that arena + skip; `resolveAccept`
+     deals 1 (`dealDamageToUnit`) then exhausts the target.
+   - `resumeAfterChoice`: when the queue drains **and `pendingAttack` is set**, restore
+     `activePlayer` to the stored attacker, run `completeAttack`, then `advanceTurn`.
+   - Edge cases: the ping can defeat the attacker (→ no combat damage) or the defender
+     (→ attack fizzles); `completeAttack` must re-find both and no-op gracefully.
+   - **Trigger ordering:** the user's rule (active player orders simultaneous
+     on-attack/on-defense) isn't exercisable yet — DDC Defender is the only
+     onAttack/onDefense card, so there's never a second simultaneous trigger. Build
+     DDC Defender's single onDefense now; generalise ordering (and settle
+     active-orders-all vs APNAP) when an onAttack card first creates the conflict.
 2. **#343 Tier 3** — Improvised Identity (230), The Darksaber (135, leader-unit
    transform + aspect provision), Arcana Star Map (084) — the last needs a
    deck-search mechanic (also unblocks the search-doubling clause).

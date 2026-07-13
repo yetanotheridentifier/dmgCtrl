@@ -2,13 +2,13 @@ import { useState, type CSSProperties, type ReactNode } from 'react'
 import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
 import type { SavedDeck } from '../data/deckStore'
-import type { EngineCard, GameState, PlayerId, UnitState, UpgradeAttachment } from '../engine/types'
+import type { EngineCard, GameState, PendingChoice, PlayerId, UnitState, UpgradeAttachment } from '../engine/types'
 import type { Action } from '../engine/actions'
 import { describeAction } from '../utils/describeAction'
 import { orderUnits } from './boardLayout'
 import { outcomeBanner } from './outcome'
 import CardFace from './cardFace'
-import { CARD_WIDTH_PX } from './cardSizing'
+import { CARD_WIDTH_PX, ZOOM_WIDTH_PX } from './cardSizing'
 import { tokenLayout, TOKEN_W, TOKEN_H } from './tokens'
 import { TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { unitHasKeyword } from '../engine/keywords'
@@ -212,6 +212,29 @@ function CardTokens({ unit }: { unit: UnitState }) {
           {t.label}
         </span>
       ))}
+    </div>
+  )
+}
+
+/**
+ * A centred, zoomed card overlay for "look at" / "reveal" flows (#342). Shows a card
+ * over a dark backdrop with a prompt and the caller's action buttons. "Look at" is
+ * PRIVATE — only the acting player sees the card (so it's rendered solely for the
+ * human's own choices; the opponent/AI never surfaces it). A future "reveal" (public,
+ * both players confirm they've seen it) reuses this shell. Built to serve search
+ * effects too.
+ */
+export function CardChoiceOverlay({ card, cardId, prompt, children }: {
+  card: EngineCard | undefined
+  cardId: string
+  prompt: string
+  children: ReactNode
+}) {
+  return (
+    <div data-testid="card-choice-overlay" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/75 p-4">
+      <p data-testid="card-choice-prompt" className="text-xs uppercase tracking-[0.14em] text-ink-dim">{prompt}</p>
+      <CardFace card={card} fallbackName={cardId} widthPx={ZOOM_WIDTH_PX} tight />
+      <div className="flex flex-wrap justify-center gap-2">{children}</div>
     </div>
   )
 }
@@ -542,6 +565,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   // The surrounding frame — icon (exit) + help + log — always renders, so leaving
   // and Help stay available even while cards load or a load fails (#332).
   let playContent: ReactNode
+  // A "look at a card" overlay (Camtono, #342): shown centre-screen while the human
+  // resolves a mayPlayTopFree choice. Rendered over everything in the main return.
+  let choiceOverlay: ReactNode = null
   if (status === 'loading') {
     playContent = (
       <div data-testid="game-loading" className="p-6 text-ink-dim text-sm">
@@ -645,11 +671,22 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       </ul>
     )
 
+    // A "look at the top card" choice (Camtono, #342): its accept/decline moves are
+    // shown inside the centre-screen overlay next to the card, not in the action menu.
+    const lookChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'mayPlayTopFree' }> => c.kind === 'mayPlayTopFree' && c.controller === 'player',
+    )
+    const lookActions = lookChoice
+      ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === lookChoice.id)
+      : []
+
     // Playing, resourcing, attacking and attaching upgrades are all driven by
     // clicking a card or unit, so the menu holds only the remaining choices —
     // mulligan, keep hand, take the initiative, pass (and skip/deploy) (#332/#336).
     const CLICK_HANDLED: Action['type'][] = ['playCard', 'playUpgrade', 'attack', 'resourceCard', 'setupResource']
-    const menuActions = gameState.winner === null ? legal.filter(a => !CLICK_HANDLED.includes(a.type)) : []
+    const menuActions = gameState.winner === null
+      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a))
+      : []
     const actionColumn = (
       <div className="flex flex-col items-stretch gap-1.5">
         {menuActions.map((action, i) => (
@@ -667,6 +704,23 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         )}
       </div>
     )
+
+    if (lookChoice) {
+      choiceOverlay = (
+        <CardChoiceOverlay card={gameState.cards[lookChoice.cardId]} cardId={lookChoice.cardId} prompt="Look at the top card of your deck">
+          {lookActions.map((action, i) => (
+            <button
+              key={i}
+              data-testid={`choice-btn-${i}`}
+              onClick={() => actAndClear(action)}
+              className="rounded-xl border-2 border-accent px-4 py-2 text-sm text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10"
+            >
+              {describeAction(gameState, 'player', action)}
+            </button>
+          ))}
+        </CardChoiceOverlay>
+      )
+    }
 
     // The play area: one continuous background across the opponent bar, the
     // battlefield, and the player bar — joined, edge-to-edge, filling the height.
@@ -726,6 +780,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       <div className="flex min-h-0 flex-col">
         {playContent}
       </div>
+
+      {/* "Look at a card" overlay (Camtono, #342) — centre-screen, over the board. */}
+      {choiceOverlay}
 
       {/* Game over — a modal overlay over the whole screen (#332). */}
       {gameState && gameState.winner !== null && (
