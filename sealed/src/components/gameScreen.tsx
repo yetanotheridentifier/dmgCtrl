@@ -2,13 +2,13 @@ import { useState, type CSSProperties, type ReactNode } from 'react'
 import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
 import type { SavedDeck } from '../data/deckStore'
-import type { EngineCard, GameState, PlayerId, UnitState, UpgradeAttachment } from '../engine/types'
+import type { EngineCard, GameState, PendingChoice, PlayerId, UnitState, UpgradeAttachment } from '../engine/types'
 import type { Action } from '../engine/actions'
 import { describeAction } from '../utils/describeAction'
 import { orderUnits } from './boardLayout'
 import { outcomeBanner } from './outcome'
 import CardFace from './cardFace'
-import { CARD_WIDTH_PX } from './cardSizing'
+import { CARD_WIDTH_PX, ZOOM_WIDTH_PX } from './cardSizing'
 import { tokenLayout, TOKEN_W, TOKEN_H } from './tokens'
 import { TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { unitHasKeyword } from '../engine/keywords'
@@ -152,14 +152,25 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
  * non-rotating wrapper, so they stay upright when the card is exhausted. Damage
  * is the first token; more effect types slot into the same 1–4 layout (#326).
  */
+interface CardToken {
+  key: string
+  label: string
+  color: string
+  testid: string
+  /** Small caption above the count (e.g. "adv." on the Advantage token). */
+  sub?: string
+  /** Text colour; defaults to white. Dark on the light gold Advantage token. */
+  textColor?: string
+}
+
 function CardTokens({ unit }: { unit: UnitState }) {
   const countToken = (id: string) => unit.upgrades.filter(u => u.cardId === id).length
-  const tokens: { key: string; label: string; color: string; testid: string }[] = []
+  const tokens: CardToken[] = []
   if (unit.damage > 0) {
     tokens.push({ key: 'damage', label: String(unit.damage), color: 'var(--color-red)', testid: `board-unit-damage-${unit.instanceId}` })
   }
   // Token upgrades render as on-card tokens (not cards behind the unit) (#334):
-  // Shield = blue, Experience = amber (+1/+1), Advantage = green (+1/0 next combat).
+  // Shield = blue, Experience = amber (+1/+1), Advantage = gold "adv." (+1/0 next combat).
   const shields = countToken(TOKEN_SHIELD)
   if (shields > 0) {
     tokens.push({ key: 'shield', label: String(shields), color: '#3b82f6', testid: `board-unit-shield-${unit.instanceId}` })
@@ -170,7 +181,7 @@ function CardTokens({ unit }: { unit: UnitState }) {
   }
   const advantage = countToken(TOKEN_ADVANTAGE)
   if (advantage > 0) {
-    tokens.push({ key: 'advantage', label: String(advantage), color: 'var(--color-green)', testid: `board-unit-advantage-${unit.instanceId}` })
+    tokens.push({ key: 'advantage', label: String(advantage), color: '#f5c518', sub: 'adv.', textColor: '#1a1200', testid: `board-unit-advantage-${unit.instanceId}` })
   }
   if (tokens.length === 0) return null
 
@@ -181,7 +192,7 @@ function CardTokens({ unit }: { unit: UnitState }) {
         <span
           key={t.key}
           data-testid={t.testid}
-          className="absolute flex items-center justify-center select-none tabular-nums"
+          className="absolute flex flex-col items-center justify-center select-none tabular-nums"
           style={{
             left: `${positions[i].left}%`,
             top: `${positions[i].top}%`,
@@ -190,16 +201,77 @@ function CardTokens({ unit }: { unit: UnitState }) {
             height: TOKEN_H,
             borderRadius: 6,
             background: t.color,
-            color: '#fff',
+            color: t.textColor ?? '#fff',
             fontSize: `${Math.round(TOKEN_H * 0.6)}px`,
             fontWeight: 600,
             lineHeight: 1,
             boxShadow: '0 1px 3px rgba(0, 0, 0, 0.7)',
           }}
         >
+          {t.sub && <span style={{ fontSize: `${Math.round(TOKEN_H * 0.26)}px`, fontWeight: 700, opacity: 0.85 }}>{t.sub}</span>}
           {t.label}
         </span>
       ))}
+    </div>
+  )
+}
+
+/**
+ * A centred, zoomed card overlay for "look at" / "reveal" flows (#342). Shows a card
+ * over a dark backdrop with a prompt and the caller's action buttons. "Look at" is
+ * PRIVATE — only the acting player sees the card (so it's rendered solely for the
+ * human's own choices; the opponent/AI never surfaces it). A future "reveal" (public,
+ * both players confirm they've seen it) reuses this shell. Built to serve search
+ * effects too.
+ */
+export function CardChoiceOverlay({ card, cardId, prompt, children }: {
+  card: EngineCard | undefined
+  cardId: string
+  prompt: string
+  children: ReactNode
+}) {
+  return (
+    <div data-testid="card-choice-overlay" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/75 p-4">
+      <p data-testid="card-choice-prompt" className="text-xs uppercase tracking-[0.14em] text-ink-dim">{prompt}</p>
+      <CardFace card={card} fallbackName={cardId} widthPx={ZOOM_WIDTH_PX} tight />
+      <div className="flex flex-wrap justify-center gap-2">{children}</div>
+    </div>
+  )
+}
+
+/**
+ * A "search" reveal overlay (#343) — the private "look at the top N" for Improvised
+ * Identity. Shows each revealed card; a ground unit gets a Discard button. Reuses the
+ * same centre-screen shell as `CardChoiceOverlay`; serves any future search effect.
+ */
+export function SearchRevealOverlay({ state, choice, onPick }: {
+  state: GameState
+  choice: Extract<PendingChoice, { kind: 'search' }>
+  onPick: (deckIndex: number) => void
+}) {
+  return (
+    <div data-testid="search-overlay" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/75 p-4">
+      <p className="text-xs uppercase tracking-[0.14em] text-ink-dim">Look at the top {choice.revealed.length} — discard a ground unit</p>
+      <div className="flex flex-wrap justify-center gap-4">
+        {choice.revealed.map((cardId, i) => {
+          const c = state.cards[cardId]
+          const ground = c?.type === 'unit' && c.arena === 'ground'
+          return (
+            <div key={i} className="flex flex-col items-center gap-2">
+              <CardFace card={c} fallbackName={cardId} widthPx={Math.round(ZOOM_WIDTH_PX * 0.6)} tight className={ground ? '' : 'brightness-[0.45]'} />
+              {ground && (
+                <button
+                  data-testid={`search-pick-${i}`}
+                  onClick={() => onPick(i)}
+                  className="rounded-xl border-2 border-accent px-3 py-1.5 text-xs text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10"
+                >
+                  Discard
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -530,6 +602,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   // The surrounding frame — icon (exit) + help + log — always renders, so leaving
   // and Help stay available even while cards load or a load fails (#332).
   let playContent: ReactNode
+  // A "look at a card" overlay (Camtono, #342): shown centre-screen while the human
+  // resolves a mayPlayTopFree choice. Rendered over everything in the main return.
+  let choiceOverlay: ReactNode = null
   if (status === 'loading') {
     playContent = (
       <div data-testid="game-loading" className="p-6 text-ink-dim text-sm">
@@ -633,11 +708,29 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       </ul>
     )
 
+    // A "look at the top card" choice (Camtono, #342): its accept/decline moves are
+    // shown inside the centre-screen overlay next to the card, not in the action menu.
+    const lookChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'mayPlayTopFree' }> => c.kind === 'mayPlayTopFree' && c.controller === 'player',
+    )
+    const lookActions = lookChoice
+      ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === lookChoice.id)
+      : []
+
+    // A "search" reveal (Improvised Identity, #343): its discard picks live in the
+    // centre-screen overlay, not the action menu.
+    const searchChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'search' }> => c.kind === 'search' && c.controller === 'player',
+    )
+    const searchActions = searchChoice ? legal.filter(a => a.type === 'acceptChoice' && a.choiceId === searchChoice.id) : []
+
     // Playing, resourcing, attacking and attaching upgrades are all driven by
     // clicking a card or unit, so the menu holds only the remaining choices —
     // mulligan, keep hand, take the initiative, pass (and skip/deploy) (#332/#336).
     const CLICK_HANDLED: Action['type'][] = ['playCard', 'playUpgrade', 'attack', 'resourceCard', 'setupResource']
-    const menuActions = gameState.winner === null ? legal.filter(a => !CLICK_HANDLED.includes(a.type)) : []
+    const menuActions = gameState.winner === null
+      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a))
+      : []
     const actionColumn = (
       <div className="flex flex-col items-stretch gap-1.5">
         {menuActions.map((action, i) => (
@@ -655,6 +748,31 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         )}
       </div>
     )
+
+    if (lookChoice) {
+      choiceOverlay = (
+        <CardChoiceOverlay card={gameState.cards[lookChoice.cardId]} cardId={lookChoice.cardId} prompt="Look at the top card of your deck">
+          {lookActions.map((action, i) => (
+            <button
+              key={i}
+              data-testid={`choice-btn-${i}`}
+              onClick={() => actAndClear(action)}
+              className="rounded-xl border-2 border-accent px-4 py-2 text-sm text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10"
+            >
+              {describeAction(gameState, 'player', action)}
+            </button>
+          ))}
+        </CardChoiceOverlay>
+      )
+    } else if (searchChoice) {
+      choiceOverlay = (
+        <SearchRevealOverlay
+          state={gameState}
+          choice={searchChoice}
+          onPick={deckIndex => actAndClear({ type: 'acceptChoice', choiceId: searchChoice.id, deckIndex })}
+        />
+      )
+    }
 
     // The play area: one continuous background across the opponent bar, the
     // battlefield, and the player bar — joined, edge-to-edge, filling the height.
@@ -714,6 +832,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       <div className="flex min-h-0 flex-col">
         {playContent}
       </div>
+
+      {/* "Look at a card" overlay (Camtono, #342) — centre-screen, over the board. */}
+      {choiceOverlay}
 
       {/* Game over — a modal overlay over the whole screen (#332). */}
       {gameState && gameState.winner !== null && (

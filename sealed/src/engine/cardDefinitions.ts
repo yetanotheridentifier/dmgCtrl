@@ -1,6 +1,10 @@
 import { registerCard } from './abilities'
-import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, findUnit } from './effects'
+import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount } from './effects'
+import { dealDamageToUnit } from './combat'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
+import { TOKEN_MANDALORIAN } from './tokenUnits'
+import { opponentOf, pushChoice } from './types'
+import { unitHasTrait } from './keywords'
 import type { EngineCard, GameState, UnitState } from './types'
 
 /**
@@ -13,14 +17,20 @@ import type { EngineCard, GameState, UnitState } from './types'
  * their attach restriction here; their abilities land with Tier 2/3.
  */
 
-const trait = (card: EngineCard | undefined, name: string): boolean =>
-  (card?.traits ?? []).some(t => t.toLowerCase() === name.toLowerCase())
 const cardOf = (state: GameState, unit: UnitState): EngineCard | undefined => state.cards[unit.cardId]
-const nonVehicle = (state: GameState, target: UnitState): boolean => !trait(cardOf(state, target), 'Vehicle')
+// Trait checks go through `unitHasTrait` so granted traits count (The Darksaber → Mandalorian, #343).
+const nonVehicle = (state: GameState, target: UnitState): boolean => !unitHasTrait(state, target, 'Vehicle')
+
+// ── Stat / damage modifiers ─────────────────────────────────────────────────
+registerCard('ASH_054', { statModifier: (_s, _u, ctx) => (ctx.attackingBase ? { power: -3 } : {}) }) // Pointless to Resist — −3 power attacking a base
+registerCard('ASH_150', { // Deadly Vulnerability — takes double damage; attacker loses Overwhelm while it defends
+  damageMultiplier: () => 2,
+  negatesOverwhelm: () => true,
+})
 
 // ── Cost modifiers ──────────────────────────────────────────────────────────
-registerCard('ASH_262', { costModifier: (s, _p, target) => (target && trait(cardOf(s, target), 'Imperial') ? -1 : 0) }) // Faith in the Empire
-registerCard('ASH_263', { costModifier: (s, _p, target) => (target && trait(cardOf(s, target), 'Mandalorian') ? -1 : 0) }) // The Way of the Mand'alor
+registerCard('ASH_262', { costModifier: (s, _p, target) => (target && unitHasTrait(s, target, 'Imperial') ? -1 : 0) }) // Faith in the Empire
+registerCard('ASH_263', { costModifier: (s, _p, target) => (target && unitHasTrait(s, target, 'Mandalorian') ? -1 : 0) }) // The Way of the Mand'alor
 
 // ── Attach restrictions + conditional keywords ─────────────────────────────
 registerCard('ASH_066', { // Luke's Jedi Lightsaber — Sentinel if attached to Luke Skywalker
@@ -29,14 +39,39 @@ registerCard('ASH_066', { // Luke's Jedi Lightsaber — Sentinel if attached to 
 })
 registerCard('ASH_114', { // Sabine's Lightsaber — Restore 2 if Sabine Wren or a Force unit
   attachRestriction: nonVehicle,
-  conditionalKeywords: (s, u) => (cardOf(s, u)?.name === 'Sabine Wren' || trait(cardOf(s, u), 'Force') ? [{ name: 'Restore', value: 2 }] : []),
+  conditionalKeywords: (s, u) => (cardOf(s, u)?.name === 'Sabine Wren' || unitHasTrait(s, u, 'Force') ? [{ name: 'Restore', value: 2 }] : []),
 })
 registerCard('ASH_181', { attachRestriction: (_s, t) => t.damage > 0 }) // Mark My Words — attach to a damaged unit (Overwhelm from keyword data)
-registerCard('ASH_230', { attachRestriction: (_s, t) => t.arena === 'ground' }) // Improvised Identity — ground unit (ability: #343)
+registerCard('ASH_198', { conditionalKeywords: () => [{ name: 'Sentinel' }] }) // Nowhere to Hide — attached unit gains Sentinel
+registerCard('ASH_084', { searchModifier: () => 2 }) // Arcana Star Map — searches look at twice as many cards
+registerCard('ASH_135', { // The Darksaber — attach to a unique non-Vehicle unit
+  attachRestriction: (s, t) => Boolean(cardOf(s, t)?.unique) && !unitHasTrait(s, t, 'Vehicle'),
+  grantedTraits: () => ['Mandalorian'], // attached unit gains the Mandalorian trait
+  makesLeaderUnit: () => true, // attached unit is a leader unit
+  providesAspects: (s, u) => cardOf(s, u)?.aspects ?? [], // provides its aspect icons while paying costs
+})
+registerCard('ASH_230', { // Improvised Identity — attach to a ground unit
+  attachRestriction: (_s, t) => t.arena === 'ground',
+  actionAbilities: [{
+    description: 'Search the top 3 of your deck for a ground unit and discard it; then you may attack with this unit, gaining that unit’s abilities for the attack.',
+    oncePerRound: true,
+    effect: (s, ctx) => {
+      const found = findUnit(s, ctx.sourceInstanceId!)
+      if (!found) return s
+      const owner = ctx.owner
+      const revealed = s.players[owner].deck.slice(0, searchCount(s, found.unit, 3))
+      const groundUnit = (cardId: string) => { const c = s.cards[cardId]; return c?.type === 'unit' && c.arena === 'ground' }
+      // No ground unit revealed → skip the discard, straight to the optional attack (no grant).
+      if (!revealed.some(groundUnit)) {
+        return pushChoice(s, { kind: 'mayAttack', id: ctx.sourceInstanceId!, controller: owner, unitId: ctx.sourceInstanceId! })
+      }
+      return pushChoice(s, { kind: 'search', id: ctx.sourceInstanceId!, controller: owner, unitId: ctx.sourceInstanceId!, revealed })
+    },
+  }],
+})
 
 // ── whenPlayed effects ──────────────────────────────────────────────────────
-registerCard('ASH_086', { // Durasteel Plating
-  attachRestriction: nonVehicle,
+registerCard('ASH_086', { // Durasteel Plating — no attach restriction
   abilities: [{ trigger: 'whenPlayed', description: 'Give a Shield token to attached unit.', effect: (s, ctx) => giveToken(s, ctx.sourceInstanceId!, TOKEN_SHIELD) }],
 })
 registerCard('ASH_087', { // Cybernetic Enhancements
@@ -72,7 +107,87 @@ registerCard('ASH_227', { // Heightened Awareness — Advantage token when the r
   abilities: [{ trigger: 'whenRegroupStarts', description: 'Give an Advantage token to this unit.', effect: (s, ctx) => giveToken(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE) }],
 })
 
-// ── Attach restriction only (abilities land with Tier 2/3) ─────────────────
-registerCard('ASH_055', { attachRestriction: nonVehicle }) // Blade of Talzin (whenDefeated return — needs whenDefeated wiring)
-registerCard('ASH_183', { attachRestriction: nonVehicle }) // Whistling Birds (onAttackEnd damage — needs damage primitive)
-registerCard('ASH_210', { attachRestriction: nonVehicle }) // DDC Defender (onDefense "may" — Tier 2)
+// ── onAttackEnd combat effects (#342) ───────────────────────────────────────
+registerCard('ASH_085', { // Grav Charge — deal 4 to attached unit, then defeat this upgrade
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: "Deal 4 damage to attached unit and defeat this upgrade.",
+    effect: (s, ctx) => defeatUpgrade(dealDamageToUnit(s, ctx.sourceInstanceId!, 4), ctx.sourceInstanceId!, ctx.cardId),
+  }],
+})
+registerCard('ASH_183', { // Whistling Birds — on a base hit, 2 damage to each enemy unit in this arena
+  attachRestriction: nonVehicle,
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: "If this unit damaged the opponent's base, deal 2 to each enemy unit in its arena.",
+    effect: (s, ctx) => {
+      if (!ctx.dealtDamageToBase) return s
+      const found = findUnit(s, ctx.sourceInstanceId!)
+      if (!found) return s
+      const enemy = opponentOf(ctx.owner)
+      const targets = s.players[enemy].units.filter(u => u.arena === found.unit.arena).map(u => u.instanceId)
+      return targets.reduce((acc, id) => dealDamageToUnit(acc, id, 2), s)
+    },
+  }],
+})
+
+// ── whenDefeated token creation (#342) ──────────────────────────────────────
+registerCard('ASH_134', { // Warrior's Legacy — attached unit gains "When Defeated: Create a Mandalorian token."
+  abilities: [{ trigger: 'whenDefeated', description: 'Create a Mandalorian token.', effect: (s, ctx) => createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN) }],
+})
+
+// ── whenDefeated self-return (#342) ─────────────────────────────────────────
+registerCard('ASH_055', { // Blade of Talzin — return from discard to hand if it was on a friendly Night unit
+  attachRestriction: nonVehicle,
+  abilities: [{
+    trigger: 'whenDefeated',
+    description: 'If this was on a friendly Night unit, return it from your discard to your hand.',
+    effect: (s, ctx) => {
+      const host = ctx.defeatedUnit
+      if (!host || !unitHasTrait(s, host, 'Night')) return s
+      // "Your" discard = the upgrade's owner; only return if it was friendly (host controlled by that owner).
+      const owner = host.upgrades.find(u => u.cardId === ctx.cardId)?.owner ?? ctx.owner
+      if (owner !== ctx.owner) return s
+      return returnUpgradeFromDiscardToHand(s, owner, ctx.cardId)
+    },
+  }],
+})
+
+// ── whenReadies optional cost (#342 group B) ────────────────────────────────
+registerCard('ASH_088', { // The Conflict Within — "When this unit readies: you may pay 3, else exhaust it."
+  abilities: [{
+    trigger: 'whenReadies',
+    description: 'You may pay 3, otherwise exhaust this unit.',
+    effect: (s, ctx) => pushChoice(s, {
+      kind: 'payOrExhaust', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, cost: 3, resumeAtInitiative: true,
+    }),
+  }],
+})
+
+// ── onAttackEnd optional free play (#342 group B) ───────────────────────────
+registerCard('ASH_229', { // Camtono — "When Attack Ends: look at top card; if it costs ≤2 you may play it free."
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: 'Look at the top card of your deck; if it costs 2 or less you may play it for free.',
+    effect: (s, ctx) => {
+      const topId = s.players[ctx.owner].deck[0]
+      const top = topId ? s.cards[topId] : undefined
+      if (!top || top.cost > 2) return s
+      return pushChoice(s, { kind: 'mayPlayTopFree', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, cardId: topId })
+    },
+  }],
+})
+
+// ── onDefense mid-combat optional (#342 phase 2) ────────────────────────────
+registerCard('ASH_210', { // DDC Defender — "On Defense: you may deal 1 to a unit in this arena and exhaust it."
+  attachRestriction: nonVehicle,
+  abilities: [{
+    trigger: 'onDefense',
+    description: 'You may deal 1 damage to a unit in this arena and exhaust it.',
+    effect: (s, ctx) => {
+      const found = findUnit(s, ctx.sourceInstanceId!)
+      if (!found) return s
+      return pushChoice(s, { kind: 'mayDamageExhaust', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, arena: found.unit.arena })
+    },
+  }],
+})

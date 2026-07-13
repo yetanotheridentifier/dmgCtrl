@@ -1,6 +1,6 @@
 import type { Action } from '../engine/actions'
 import type { GameState, PlayerId } from '../engine/types'
-import { opponentOf } from '../engine/types'
+import { opponentOf, activeChoice, findChoice } from '../engine/types'
 import { effectiveCost } from '../engine/legalMoves'
 
 function unitName(state: GameState, owner: PlayerId, instanceId: string): string {
@@ -51,12 +51,40 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       const name = state.cards[state.players[by].leader.cardId]?.name ?? 'leader'
       return `Deploy ${name}`
     }
+    case 'useAbility':
+      return `Use ${state.cards[action.cardId]?.name ?? 'ability'}`
     case 'takeInitiative':
       return 'Take the initiative'
     case 'pass':
       return 'Pass'
-    case 'skipTrigger':
-      return state.pendingTrigger ? `Skip ${state.pendingTrigger.kind}` : 'Skip'
+    case 'skipTrigger': {
+      const choice = action.choiceId ? findChoice(state, action.choiceId) : activeChoice(state)
+      if (!choice) return 'Skip'
+      if (choice.kind === 'payOrExhaust') return "Don't pay (exhaust)"
+      if (choice.kind === 'mayPlayTopFree') return "Don't play"
+      if (choice.kind === 'mayDamageExhaust') return 'Decline'
+      if (choice.kind === 'mayAttack') return "Don't attack"
+      return `Skip ${choice.kind}`
+    }
+    case 'acceptChoice': {
+      const choice = findChoice(state, action.choiceId)
+      if (!choice) return 'Accept'
+      if (choice.kind === 'payOrExhaust') return `Pay ${choice.cost}`
+      if (choice.kind === 'mayPlayTopFree') {
+        const name = state.cards[choice.cardId]?.name ?? 'card'
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Play ${name} free${target ? ` on ${target}` : ''}`
+      }
+      if (choice.kind === 'mayDamageExhaust') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Deal 1 & exhaust${target ? ` ${target}` : ''}`
+      }
+      if (choice.kind === 'search' && action.deckIndex !== undefined) {
+        const cardId = choice.revealed[action.deckIndex]
+        return `Discard ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
+      }
+      return 'Accept'
+    }
     case 'resourceCard': {
       if (opts.redact) return 'Resource a card'
       const cardId = state.players[by].hand[action.handIndex]

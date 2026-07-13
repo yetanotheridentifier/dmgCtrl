@@ -1,4 +1,5 @@
 import type { GameState, KeywordInstance, PlayerId, UnitState } from './types'
+import type { AttackTarget } from './actions'
 
 /**
  * Card ability framework (#303 spike → #340). Card-type-agnostic: units, leaders,
@@ -31,6 +32,12 @@ export interface EffectContext {
   cardId: string
   /** In-play instance the ability belongs to, when one exists. */
   sourceInstanceId?: string
+  /** `onAttackEnd` only: the target of the attack that just ended. */
+  attackTarget?: AttackTarget
+  /** `onAttackEnd` only: whether that attack dealt combat damage to the opponent's base. */
+  dealtDamageToBase?: boolean
+  /** `whenDefeated` only: the unit as captured at the moment of defeat (it has left play). */
+  defeatedUnit?: UnitState
 }
 
 export type EffectFn = (state: GameState, ctx: EffectContext) => GameState
@@ -54,6 +61,62 @@ export interface CardDefinition {
   costModifier?: (state: GameState, playerId: PlayerId, target?: UnitState) => number
   /** Extra keywords this card grants a unit (e.g. an upgrade granting a conditional keyword). */
   conditionalKeywords?: (state: GameState, unit: UnitState) => KeywordInstance[]
+  /**
+   * Conditional power/HP delta this card contributes to its unit (the unit's own
+   * card, or an upgrade modifying its host). Folded into `effectivePower`/`effectiveHp`;
+   * `ctx` carries the combat situation (e.g. attacking a base). Omitted stats = 0.
+   */
+  statModifier?: (state: GameState, unit: UnitState, ctx: StatModContext) => { power?: number; hp?: number }
+  /**
+   * Multiplier applied to each instance of damage this unit takes (the unit's own
+   * card, or an upgrade) — e.g. Deadly Vulnerability's ×2. Multipliers from the card
+   * and its upgrades compound. Default (no hook) = ×1.
+   */
+  damageMultiplier?: (state: GameState, unit: UnitState) => number
+  /** Defender-side: while this unit defends, the attacker loses Overwhelm (#342). */
+  negatesOverwhelm?: (state: GameState, unit: UnitState) => boolean
+  /** Activated "Action:" abilities usable on the controller's turn (#343). */
+  actionAbilities?: ActionAbilityDef[]
+  /** Multiplier on how many cards this unit's searches look at — Arcana Star Map ×2 (#343). */
+  searchModifier?: (state: GameState, unit: UnitState) => number
+  /** Extra traits this card grants a unit — The Darksaber grants Mandalorian (#343). */
+  grantedTraits?: (state: GameState, unit: UnitState) => string[]
+  /** True if this card makes its unit a leader unit — The Darksaber (#343). */
+  makesLeaderUnit?: (state: GameState, unit: UnitState) => boolean
+  /** Aspect icons this unit provides while its controller pays costs — The Darksaber (#343). */
+  providesAspects?: (state: GameState, unit: UnitState) => string[]
+}
+
+/** An activated ability a unit may use as its action (CR 2.4); e.g. Improvised Identity. */
+export interface ActionAbilityDef {
+  description: string
+  /** May be used only once per round by a given unit (tracked on `UnitState.usedAbilities`). */
+  oncePerRound?: boolean
+  /** Extra gate beyond once-per-round (defaults usable). */
+  usable?: (state: GameState, unit: UnitState) => boolean
+  effect: (state: GameState, ctx: EffectContext) => GameState
+}
+
+/** A unit's action abilities, from its own card and each attached upgrade, with the
+ *  source card id and per-card index so callers can address and track each one (#343). */
+export function unitActionAbilities(unit: UnitState): { cardId: string; index: number; ability: ActionAbilityDef }[] {
+  const out: { cardId: string; index: number; ability: ActionAbilityDef }[] = []
+  for (const cardId of [unit.cardId, ...unit.upgrades.map(u => u.cardId)]) {
+    const defs = registry.get(cardId)?.actionAbilities ?? []
+    defs.forEach((ability, index) => out.push({ cardId, index, ability }))
+  }
+  return out
+}
+
+/** Stable key for once-per-round tracking of a specific action ability instance. */
+export function actionAbilityKey(cardId: string, index: number): string {
+  return `${cardId}#${index}`
+}
+
+/** Combat context passed to `statModifier` (mirrors `stats.StatContext`). */
+export interface StatModContext {
+  attacking?: boolean
+  attackingBase?: boolean
 }
 
 const registry = new Map<string, CardDefinition>()
@@ -104,13 +167,21 @@ export function runTrigger(state: GameState, point: TriggerPoint, ctx: EffectCon
  * attached upgrade's abilities, so an upgrade's "When Attack Ends: …" fires when
  * the attached unit's attack ends. `owner` controls the unit.
  */
-export function runUnitTrigger(state: GameState, point: TriggerPoint, unit: UnitState, owner: PlayerId): GameState {
+export function runUnitTrigger(
+  state: GameState,
+  point: TriggerPoint,
+  unit: UnitState,
+  owner: PlayerId,
+  extra?: Partial<EffectContext>,
+): GameState {
   let next = state
-  const cardIds = [unit.cardId, ...unit.upgrades.map(u => u.cardId)]
+  // The unit's own card, its upgrades, and any cards whose abilities are granted for
+  // this attack (Improvised Identity, #343).
+  const cardIds = [unit.cardId, ...unit.upgrades.map(u => u.cardId), ...(unit.grantedAbilityCardIds ?? [])]
   for (const cardId of cardIds) {
     for (const ability of getAbilities(cardId)) {
       if (ability.trigger === point) {
-        next = ability.effect(next, { owner, cardId, sourceInstanceId: unit.instanceId })
+        next = ability.effect(next, { owner, cardId, sourceInstanceId: unit.instanceId, ...extra })
       }
     }
   }

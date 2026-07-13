@@ -17,11 +17,20 @@ export type Action =
   | { type: 'playUpgrade'; handIndex: number; targetInstanceId: string }
   | { type: 'attack'; attackerId: string; target: AttackTarget }
   | { type: 'deployLeader' }
+  // Use a unit's activated "Action:" ability (#343). `cardId`+`index` address the
+  // ability among the unit's own and its upgrades' action abilities.
+  | { type: 'useAbility'; instanceId: string; cardId: string; index: number }
   | { type: 'takeInitiative' }
   | { type: 'pass' }
-  // Decline a pending on-play trigger (Ambush/Support) offered after a unit enters
-  // play — the optional attack is not taken (#334).
-  | { type: 'skipTrigger' }
+  // Decline a pending choice (Ambush/Support/pay-or-exhaust/may-play …). With no
+  // `choiceId` it declines the head; a `choiceId` declines that specific one when
+  // several are pending simultaneously (#334/#342).
+  | { type: 'skipTrigger'; choiceId?: string }
+  // Accept a pending "may…" choice by id — pay the cost / play the card / take the
+  // action. `targetInstanceId` supplies a unit target when the choice needs one (an
+  // upgrade's attach target, a damage victim); `deckIndex` picks a revealed card in a
+  // search (#342/#343).
+  | { type: 'acceptChoice'; choiceId: string; targetInstanceId?: string; deckIndex?: number }
   | { type: 'resourceCard'; handIndex: number }
   | { type: 'skipResource' }
   // Setup phase (CR 5.2.1e–f): each player may mulligan once (initiative holder

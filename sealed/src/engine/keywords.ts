@@ -35,6 +35,10 @@ export function unitKeywords(state: GameState, unit: UnitState): KeywordInstance
   for (const { cardId } of unit.upgrades) {
     out.push(...(state.cards[cardId]?.keywords ?? []), ...conditionalKeywordsOf(state, cardId, unit))
   }
+  // Cards whose full abilities are granted for one attack (Improvised Identity, #343).
+  for (const cardId of unit.grantedAbilityCardIds ?? []) {
+    out.push(...(state.cards[cardId]?.keywords ?? []))
+  }
   out.push(...(unit.grantedKeywords ?? []))
   return out
 }
@@ -46,4 +50,29 @@ export function unitHasKeyword(state: GameState, unit: UnitState, name: string):
 /** A unit's total keyword numeral — values stack across every source. */
 export function unitKeywordValue(state: GameState, unit: UnitState, name: string): number {
   return unitKeywords(state, unit).reduce((sum, k) => (k.name === name ? sum + (k.value ?? 0) : sum), 0)
+}
+
+/** True if this unit (its card or an upgrade) makes an attacker lose Overwhelm while it defends (#342). */
+export function unitNegatesOverwhelm(state: GameState, unit: UnitState): boolean {
+  return [unit.cardId, ...unit.upgrades.map(u => u.cardId)].some(id => getCardDefinition(id)?.negatesOverwhelm?.(state, unit) ?? false)
+}
+
+/** A unit's traits — its card's plus any granted by an upgrade (The Darksaber → Mandalorian, #343). */
+export function unitTraits(state: GameState, unit: UnitState): string[] {
+  const out = [...(state.cards[unit.cardId]?.traits ?? [])]
+  for (const cardId of [unit.cardId, ...unit.upgrades.map(u => u.cardId)]) {
+    out.push(...(getCardDefinition(cardId)?.grantedTraits?.(state, unit) ?? []))
+  }
+  return out
+}
+
+/** Case-insensitive trait test that includes granted traits (#343). */
+export function unitHasTrait(state: GameState, unit: UnitState, name: string): boolean {
+  return unitTraits(state, unit).some(t => t.toLowerCase() === name.toLowerCase())
+}
+
+/** True if this unit is a leader unit — natively, or made one by an upgrade (The Darksaber, #343). */
+export function isLeaderUnit(state: GameState, unit: UnitState): boolean {
+  if (unit.isLeader) return true
+  return [unit.cardId, ...unit.upgrades.map(u => u.cardId)].some(id => getCardDefinition(id)?.makesLeaderUnit?.(state, unit) ?? false)
 }

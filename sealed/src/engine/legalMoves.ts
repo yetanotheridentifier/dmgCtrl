@@ -1,9 +1,9 @@
 import type { Action } from './actions'
 import type { EngineCard, GameState, KeywordInstance, PlayerId, UnitState } from './types'
-import { opponentOf } from './types'
+import { opponentOf, hasPendingChoices } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { unitHasKeyword } from './keywords'
-import { getCardDefinition } from './abilities'
+import { getCardDefinition, unitActionAbilities, actionAbilityKey } from './abilities'
 import './cardDefinitions' // side effect: registers all real card behaviours (#341+)
 
 /**
@@ -33,6 +33,12 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
     ...(state.cards[p.leader.cardId]?.aspects ?? []),
     ...(state.cards[p.base.cardId]?.aspects ?? []),
   ]
+  // A unit may provide its aspect icons while its controller pays costs — The Darksaber (#343).
+  for (const u of p.units) {
+    for (const cardId of [u.cardId, ...u.upgrades.map(x => x.cardId)]) {
+      provided.push(...(getCardDefinition(cardId)?.providesAspects?.(state, u) ?? []))
+    }
+  }
   let penalty = 0
   for (const icon of card.aspects) {
     const i = provided.indexOf(icon)
@@ -77,8 +83,8 @@ function setupMoves(state: GameState): Action[] {
 }
 
 function actionPhaseMoves(state: GameState): Action[] {
-  // A pending on-play trigger (Ambush) overrides the normal moves: resolve it first.
-  if (state.pendingTrigger) return triggerMoves(state)
+  // A pending choice (Ambush/Support/pay-or-exhaust …) overrides the normal moves.
+  if (hasPendingChoices(state)) return choiceMoves(state)
 
   const moves: Action[] = []
   const playerId = state.activePlayer
@@ -137,6 +143,16 @@ function actionPhaseMoves(state: GameState): Action[] {
     moves.push({ type: 'deployLeader' })
   }
 
+  // Use a unit's activated "Action:" ability (#343) — e.g. Improvised Identity. Each
+  // is addressed by its source card + index; once-per-round ones drop once used.
+  for (const u of p.units) {
+    for (const { cardId, index, ability } of unitActionAbilities(u)) {
+      if (ability.oncePerRound && u.usedAbilities?.includes(actionAbilityKey(cardId, index))) continue
+      if (ability.usable && !ability.usable(state, u)) continue
+      moves.push({ type: 'useAbility', instanceId: u.instanceId, cardId, index })
+    }
+  }
+
   // Take the Initiative — once per round across both players (CR 1.15.5a).
   if (state.initiativeTakenBy === null) {
     moves.push({ type: 'takeInitiative' })
@@ -161,38 +177,97 @@ export function supportGrantedKeywords(state: GameState, supportUnitId: string):
 }
 
 /**
- * Moves while a pending on-play trigger is unresolved (#334). Ambush: the played
- * unit may attack an enemy unit (never the base). Support: any OTHER ready unit may
- * attack (unit or base), gaining the support unit's keywords. Either can be skipped.
+ * Moves while choices are pending (#334/#342). The active player resolves their own
+ * simultaneous choices in any order (each is addressable by id, honouring active-player
+ * trigger ordering). Ambush: the played unit may attack an enemy unit (never the base).
+ * Support: any OTHER ready unit may attack (unit or base), gaining the support unit's
+ * keywords. Pay-or-exhaust (The Conflict Within): pay if affordable, or decline. Any
+ * choice can be skipped.
  */
-function triggerMoves(state: GameState): Action[] {
-  const trigger = state.pendingTrigger!
+function choiceMoves(state: GameState): Action[] {
   const p = state.players[state.activePlayer]
   const moves: Action[] = []
 
-  if (trigger.kind === 'ambush') {
-    const unit = p.units.find(u => u.instanceId === trigger.unitId)
-    if (unit) {
-      for (const e of enemyAttackTargets(state, unit).targets) {
-        moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
+  for (const choice of state.pendingChoices ?? []) {
+    if (choice.controller !== state.activePlayer) continue
+    switch (choice.kind) {
+      case 'ambush': {
+        const unit = p.units.find(u => u.instanceId === choice.unitId)
+        if (unit) {
+          for (const e of enemyAttackTargets(state, unit).targets) {
+            moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
+          }
+        }
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
       }
-    }
-  } else {
-    // Support: each other ready unit may attack, seeing the granted keywords (e.g.
-    // a granted Saboteur ignoring Sentinel). Support attacks may hit the base too.
-    const granted = supportGrantedKeywords(state, trigger.unitId)
-    for (const candidate of p.units) {
-      if (candidate.exhausted || candidate.instanceId === trigger.unitId) continue
-      const attacker = granted.length ? { ...candidate, grantedKeywords: granted } : candidate
-      const { targets, sentinelLocked } = enemyAttackTargets(state, attacker)
-      for (const e of targets) {
-        moves.push({ type: 'attack', attackerId: candidate.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
+      case 'support': {
+        const granted = supportGrantedKeywords(state, choice.unitId)
+        for (const candidate of p.units) {
+          if (candidate.exhausted || candidate.instanceId === choice.unitId) continue
+          const attacker = granted.length ? { ...candidate, grantedKeywords: granted } : candidate
+          const { targets, sentinelLocked } = enemyAttackTargets(state, attacker)
+          for (const e of targets) {
+            moves.push({ type: 'attack', attackerId: candidate.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
+          }
+          if (!sentinelLocked) moves.push({ type: 'attack', attackerId: candidate.instanceId, target: { kind: 'base' } })
+        }
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
       }
-      if (!sentinelLocked) moves.push({ type: 'attack', attackerId: candidate.instanceId, target: { kind: 'base' } })
+      case 'payOrExhaust': {
+        if (readyResourceCount(p) >= choice.cost) moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'mayPlayTopFree': {
+        // Play the revealed top card free: a unit/event needs no target; an upgrade
+        // offers one accept per valid attach target (like playUpgrade).
+        const top = state.cards[choice.cardId]
+        if (top?.type === 'upgrade') {
+          const restriction = getCardDefinition(top.id)?.attachRestriction
+          for (const t of [...state.players.player.units, ...state.players.opponent.units]) {
+            if (restriction && !restriction(state, t)) continue
+            moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: t.instanceId })
+          }
+        } else {
+          moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        }
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'mayDamageExhaust': {
+        // DDC Defender: pick any unit in this unit's arena to deal 1 + exhaust, or decline.
+        for (const t of [...state.players.player.units, ...state.players.opponent.units]) {
+          if (t.arena === choice.arena) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: t.instanceId })
+        }
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'search': {
+        // Improvised Identity: pick which revealed ground unit to discard (mandatory —
+        // the choice is only raised when at least one is present).
+        choice.revealed.forEach((cid, i) => {
+          const c = state.cards[cid]
+          if (c?.type === 'unit' && c.arena === 'ground') moves.push({ type: 'acceptChoice', choiceId: choice.id, deckIndex: i })
+        })
+        break
+      }
+      case 'mayAttack': {
+        // Improvised Identity's optional follow-up attack, with the discarded unit's
+        // abilities granted (so granted Saboteur etc. shape the legal targets).
+        const u = p.units.find(x => x.instanceId === choice.unitId)
+        if (u && !u.exhausted) {
+          const attacker = choice.grantCardId ? { ...u, grantedAbilityCardIds: [choice.grantCardId] } : u
+          const { targets, sentinelLocked } = enemyAttackTargets(state, attacker)
+          for (const e of targets) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
+          if (!sentinelLocked) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'base' } })
+        }
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
     }
   }
-
-  moves.push({ type: 'skipTrigger' })
   return moves
 }
 

@@ -10,6 +10,8 @@
  * with vanilla stats first; abilities layer in post-M1.
  */
 
+import type { AttackTarget } from './actions'
+
 export type PlayerId = 'player' | 'opponent'
 export type Arena = 'ground' | 'space'
 export type Phase = 'setup' | 'action' | 'regroup'
@@ -81,6 +83,18 @@ export interface UnitState {
    * resting state never carries it. `unitHasKeyword`/`unitKeywordValue` include it.
    */
   grantedKeywords?: KeywordInstance[]
+  /**
+   * Card ids whose full abilities (keywords + triggered) this unit has been granted
+   * for a single attack (Improvised Identity, #343). Like `grantedKeywords`, set only
+   * during that attack and cleared immediately after. `unitKeywords`/`runUnitTrigger`
+   * include them.
+   */
+  grantedAbilityCardIds?: string[]
+  /**
+   * Keys of once-per-round action abilities this unit has already used this round
+   * (`${cardId}#${index}`); cleared at round start (#343).
+   */
+  usedAbilities?: string[]
 }
 
 export interface ResourceState {
@@ -140,13 +154,80 @@ export interface GameState {
   /** Terminal outcome: a winning player, `'draw'` (both bases fall at once), or null while live. */
   winner: PlayerId | 'draw' | null
   /**
-   * A pending on-play trigger (#334): after an Ambush/Support unit enters play, its
-   * controller resolves the optional attack before the turn passes. While set, the
-   * only legal moves are the trigger's attack(s) or `skipTrigger`.
+   * Queue of pending mid-resolution choices (#334/#342). While the head is set, the
+   * only legal moves are that choice's options (or `skipTrigger` to decline), and
+   * `activePlayer` is held at the choice's `controller` so the right side decides.
+   * Ambush/Support use it (a single-element queue); optional "may…" abilities and
+   * simultaneous `whenReadies` triggers push one entry per decision.
    */
-  pendingTrigger?: { kind: 'ambush' | 'support'; unitId: string }
+  pendingChoices?: PendingChoice[]
+  /**
+   * A combat suspended mid-resolution (#342): an "On Defense" ability raised a choice
+   * before combat damage. Holds what's needed to resume (`completeAttack`) once the
+   * choice(s) drain, plus the attacker's `activePlayer` to restore for the turn pass.
+   */
+  pendingAttack?: { attackerId: string; target: AttackTarget; activePlayer: PlayerId }
+}
+
+/**
+ * A decision the resolver pauses on until its `controller` picks an option or skips.
+ * `id` addresses the choice so the controller can resolve several simultaneous ones
+ * in an order of their choosing (CR: the active player orders simultaneous triggers).
+ * `resumeAtInitiative` marks choices raised at round-start readying (`whenReadies`) —
+ * once the queue drains, play resumes with the initiative holder, not `advanceTurn`.
+ */
+export type PendingChoice =
+  | { kind: 'ambush'; id: string; controller: PlayerId; unitId: string }
+  | { kind: 'support'; id: string; controller: PlayerId; unitId: string }
+  | { kind: 'payOrExhaust'; id: string; controller: PlayerId; unitId: string; cost: number; resumeAtInitiative?: boolean }
+  | { kind: 'mayPlayTopFree'; id: string; controller: PlayerId; unitId: string; cardId: string }
+  | { kind: 'mayDamageExhaust'; id: string; controller: PlayerId; unitId: string; arena: Arena }
+  // Improvised Identity (#343): search the revealed top cards for a ground unit to
+  // discard (`revealed` are the top-of-deck ids, pickable by deck index), then a
+  // `mayAttack` follows, granting the discarded card's abilities for that attack.
+  | { kind: 'search'; id: string; controller: PlayerId; unitId: string; revealed: string[] }
+  | { kind: 'mayAttack'; id: string; controller: PlayerId; unitId: string; grantCardId?: string }
+
+/** The choice currently awaiting a decision (head of the queue), if any. */
+export function activeChoice(state: GameState): PendingChoice | undefined {
+  return state.pendingChoices?.[0]
+}
+
+/** True while any choice is pending (normal moves are suppressed). */
+export function hasPendingChoices(state: GameState): boolean {
+  return (state.pendingChoices?.length ?? 0) > 0
+}
+
+/** Find a pending choice by id. */
+export function findChoice(state: GameState, id: string): PendingChoice | undefined {
+  return state.pendingChoices?.find(c => c.id === id)
+}
+
+/** Remove the head choice; the queue becomes `undefined` when it empties. */
+export function popChoice(state: GameState): GameState {
+  const rest = (state.pendingChoices ?? []).slice(1)
+  return { ...state, pendingChoices: rest.length > 0 ? rest : undefined }
+}
+
+/** Remove a specific choice by id; the queue becomes `undefined` when it empties. */
+export function removeChoice(state: GameState, id: string): GameState {
+  const rest = (state.pendingChoices ?? []).filter(c => c.id !== id)
+  return { ...state, pendingChoices: rest.length > 0 ? rest : undefined }
+}
+
+/** Append a choice to the pending queue (order = trigger order; the controller reorders). */
+export function pushChoice(state: GameState, choice: PendingChoice): GameState {
+  return { ...state, pendingChoices: [...(state.pendingChoices ?? []), choice] }
 }
 
 export function opponentOf(player: PlayerId): PlayerId {
   return player === 'player' ? 'opponent' : 'player'
+}
+
+/** Immutably patch one player's state, returning a new GameState. */
+export function updatePlayer(state: GameState, id: PlayerId, patch: Partial<PlayerState>): GameState {
+  return {
+    ...state,
+    players: { ...state.players, [id]: { ...state.players[id], ...patch } },
+  }
 }

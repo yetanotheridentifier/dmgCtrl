@@ -1,4 +1,19 @@
 import type { GameState, PlayerId, UnitState } from './types'
+import { TOKEN_SHIELD } from './tokenUpgrades'
+import { getCardDefinition } from './abilities'
+
+/**
+ * How many cards a search by `unit` looks at (#343): the base count times every
+ * `searchModifier` its card and upgrades contribute (Arcana Star Map ×2). Kept here
+ * so any future search effect sizes consistently.
+ */
+export function searchCount(state: GameState, unit: UnitState, baseCount: number): number {
+  let n = baseCount
+  for (const cardId of [unit.cardId, ...unit.upgrades.map(u => u.cardId)]) {
+    n *= getCardDefinition(cardId)?.searchModifier?.(state, unit) ?? 1
+  }
+  return n
+}
 
 /**
  * Effect primitives (#340): pure `(state, …) => state` building blocks that card
@@ -38,6 +53,31 @@ export function exhaustUnit(state: GameState, instanceId: string): GameState {
   return patchUnit(state, found.owner, instanceId, u => ({ ...u, exhausted: true }))
 }
 
+/**
+ * Create a token unit for `owner` (#342) — a fresh in-play unit from a built-in
+ * token card (e.g. the Mandalorian). A Shielded token enters play with a shield
+ * token, per its keyword. Consumes one instance id.
+ */
+export function createTokenUnit(state: GameState, owner: PlayerId, tokenCardId: string): GameState {
+  const tokenCard = state.cards[tokenCardId]
+  const shielded = (tokenCard?.keywords ?? []).some(k => k.name === 'Shielded')
+  const token: UnitState = {
+    instanceId: `u${state.instanceCounter}`,
+    cardId: tokenCardId,
+    arena: tokenCard?.arena ?? 'ground',
+    damage: 0,
+    exhausted: false,
+    isLeader: false,
+    upgrades: shielded ? [{ cardId: TOKEN_SHIELD, owner }] : [],
+  }
+  const p = state.players[owner]
+  return {
+    ...state,
+    instanceCounter: state.instanceCounter + 1,
+    players: { ...state.players, [owner]: { ...p, units: [...p.units, token] } },
+  }
+}
+
 /** Draw `n` cards for a player (takes what's there if the deck is short). */
 export function drawCards(state: GameState, owner: PlayerId, n: number): GameState {
   const p = state.players[owner]
@@ -46,6 +86,41 @@ export function drawCards(state: GameState, owner: PlayerId, n: number): GameSta
   return {
     ...state,
     players: { ...state.players, [owner]: { ...p, hand: [...p.hand, ...drawn], deck: p.deck.slice(drawn.length) } },
+  }
+}
+
+/**
+ * Defeat the first upgrade with `cardId` on a unit (#342): remove it from the unit;
+ * a card-upgrade goes to its OWNER's discard, a token simply ceases to exist. A no-op
+ * if the unit or upgrade is gone (e.g. the host was already defeated). Used by
+ * self-sacrificing upgrades like Grav Charge.
+ */
+export function defeatUpgrade(state: GameState, instanceId: string, cardId: string): GameState {
+  const found = findUnit(state, instanceId)
+  if (!found) return state
+  const idx = found.unit.upgrades.findIndex(a => a.cardId === cardId)
+  if (idx === -1) return state
+  const removed = found.unit.upgrades[idx]
+
+  let next = patchUnit(state, found.owner, instanceId, u => ({ ...u, upgrades: u.upgrades.filter((_, i) => i !== idx) }))
+  if (state.cards[cardId]?.type !== 'token') {
+    const op = next.players[removed.owner]
+    next = { ...next, players: { ...next.players, [removed.owner]: { ...op, discard: [...op.discard, cardId] } } }
+  }
+  return next
+}
+
+/**
+ * Move one copy of `cardId` from a player's discard pile to their hand (#342).
+ * A no-op if it isn't there. Used by Blade of Talzin's self-return.
+ */
+export function returnUpgradeFromDiscardToHand(state: GameState, owner: PlayerId, cardId: string): GameState {
+  const p = state.players[owner]
+  const idx = p.discard.indexOf(cardId)
+  if (idx === -1) return state
+  return {
+    ...state,
+    players: { ...state.players, [owner]: { ...p, discard: p.discard.filter((_, i) => i !== idx), hand: [...p.hand, cardId] } },
   }
 }
 

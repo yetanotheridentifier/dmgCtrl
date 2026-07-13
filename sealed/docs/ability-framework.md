@@ -108,57 +108,162 @@ the registry clean. The framework itself is covered in
 
 ---
 
-## Implemented status (#340 framework, #341 Tier-1 upgrades)
+## Implemented status (#340 framework, #341 Tier-1, #342 group A)
 
 The #303 design above is largely realised. Concrete state:
 
 ### Registry — `engine/abilities.ts`
-- **`CardDefinition`** = `{ abilities?, attachRestriction?, costModifier?, conditionalKeywords? }`.
+- **`CardDefinition`** = `{ abilities?, attachRestriction?, costModifier?,
+  conditionalKeywords?, statModifier?, damageMultiplier?, negatesOverwhelm? }`.
   Registered via **`registerCard(cardId, def)`** (merges: abilities append, hooks
-  overwrite). `registerAbility` is kept as a convenience. `getCardDefinition(cardId)`
-  exposes the hooks; `getAbilities` unchanged.
-- **Trigger points live:** `whenPlayed`, `onAttackEnd`, `whenRegroupStarts`
-  (`onAttack`/`whenReadies`/`whenDefeated`/`onDefense` declared; `whenDefeated`/
-  `whenReadies` not yet fired — see plan).
-- **`runUnitTrigger(state, point, unit, owner)`** — the key dispatch: fires the
-  unit's OWN card abilities **and each attached upgrade's** abilities (so an
-  upgrade's "When Attack Ends: …" fires on the attached unit). `resolve` calls it
-  after combat (`onAttackEnd`) and for all units at regroup start.
+  overwrite). `getCardDefinition(cardId)` exposes the hooks; `getAbilities` unchanged.
+- **Trigger points live:** `whenPlayed`, `onAttackEnd`, `whenRegroupStarts`,
+  `whenDefeated`, `whenReadies` (round-start readying), `onDefense` (fired in
+  `beginAttack` for the defender, before combat damage; can suspend combat). `onAttack`
+  declared but not yet fired (no card uses it).
+- **`runUnitTrigger(state, point, unit, owner, extra?)`** — the key dispatch: fires
+  the unit's OWN card abilities **and each attached upgrade's** abilities. `extra`
+  merges into the `EffectContext` — used to thread the attack outcome into
+  `onAttackEnd` (`attackTarget`, `dealtDamageToBase`) and the captured unit into
+  `whenDefeated` (`defeatedUnit`, since the unit has left play by then).
 
 ### Static hooks (card-type-agnostic)
-- `costModifier(state, playerId, target?)` → cost delta, in `effectiveCost`
-  (now takes an optional `target` — upgrades pass the attach target).
+- `costModifier(state, playerId, target?)` → cost delta, in `effectiveCost`.
 - `attachRestriction(state, target)` → in `legalMoves` `playUpgrade`.
-- `conditionalKeywords(state, unit)` → folded into `keywords.unitKeywords`
-  (e.g. Luke's Lightsaber → Sentinel only on Luke).
+- `conditionalKeywords(state, unit)` → folded into `keywords.unitKeywords`.
+- `statModifier(state, unit, ctx)` → `{power?, hp?}` deltas, folded into
+  `stats.effectivePower`/`effectiveHp`; `ctx` carries `attacking`/`attackingBase`
+  (Pointless to Resist: −3 power attacking a base).
+- `damageMultiplier(state, unit)` → scales each incoming damage instance in
+  `combat.applyUnitDamage` (Deadly Vulnerability ×2); card + upgrades compound.
+- `negatesOverwhelm(state, unit)` → defender-side; in `resolve`'s Overwhelm calc via
+  `keywords.unitNegatesOverwhelm` (Deadly Vulnerability).
+
+### Combat — `engine/combat.ts` (extracted from `resolve.ts`)
+`applyUnitDamage` (shield → damage-multiplier → defeat → route to owner's discard,
+token units vanish → fire `whenDefeated`) and the **`dealDamageToUnit`** primitive
+for ability damage outside the attack flow. Extracting it broke the
+`effects`/`cardDefinitions` ↔ `resolve` cycle. `updatePlayer` now lives in `types.ts`.
 
 ### Effect primitives — `engine/effects.ts`
-`giveToken`, `exhaustUnit`, `drawCards`, `returnOtherUpgradesToHand`, `findUnit`
-(owner-less unit lookup by instance id). Pure `(state, …) => state`.
+`giveToken`, `exhaustUnit`, `drawCards`, `returnOtherUpgradesToHand`,
+`returnUpgradeFromDiscardToHand`, `defeatUpgrade`, `createTokenUnit`, `findUnit`.
+Token units live in `engine/tokenUnits.ts` (`TOKEN_MANDALORIAN`, merged into the
+card db like the token upgrades; `isTokenCard` keys off the shared `TOKEN_` prefix).
 
 ### Real cards — `engine/cardDefinitions.ts`
-Side-effect module (imported by `legalMoves.ts`) registering real behaviours.
-~15 ASH upgrades done (cost mods, attach restrictions, conditional keywords,
-`whenPlayed` effects, granted `onAttackEnd`/`whenRegroupStarts`); tests in
-`src/test/ashUpgrades.test.ts`.
+Side-effect module (imported by `legalMoves.ts`) registering real behaviours. Done:
+- **#341 Tier-1** — cost mods, attach restrictions, conditional keywords,
+  `whenPlayed` effects, granted `onAttackEnd`/`whenRegroupStarts`.
+- **#342 group A** — Pointless to Resist (054), Blade of Talzin (055), Grav Charge
+  (085), Warrior's Legacy (134), Deadly Vulnerability (150), Whistling Birds (183),
+  Nowhere to Hide (198, Sentinel grant). Also fixed two #341 slips found by
+  cross-checking the card API: ASH_086 had a bogus `nonVehicle` restriction; ASH_198
+  was unimplemented.
 
-### The `pendingChoice` mechanism (design §1)
-Not built yet. The Ambush/Support **`pendingTrigger`** (`engine/resolve.ts`,
-`GameState.pendingTrigger`) is the working precursor; #342 generalises it into a
-pending-ability-choice for optional "may…" abilities.
+Tests: `src/test/ashUpgrades.test.ts` + `src/test/combat.test.ts`. Card text is
+authoritative from the worker API (`worker.dmgctrl.app/cards/{SET}/{NUM}` serves
+`FrontText`); only Power/HP are missing for ASH upgrades (`upgradeStatOverrides.ts`).
 
-## Resumption plan (next chunks)
+### The `pendingChoice` queue (design §1) — DONE (1a + mechanism + Conflict Within)
+`GameState.pendingChoices: PendingChoice[]` (`types.ts`) is an id-addressed queue;
+helpers `activeChoice`/`findChoice`/`hasPendingChoices`/`popChoice`/`removeChoice`/
+`pushChoice`. Kinds: `ambush`, `support`, `payOrExhaust` (Conflict Within),
+`mayPlayTopFree` (Camtono — declared, wired in 1b). Resolution:
+- `legalMoves` → `choiceMoves` offers, for **every** pending choice controlled by the
+  active player, its options — so the active player resolves simultaneous choices in
+  any order (honours active-player trigger ordering, CR).
+- Generic **`acceptChoice { choiceId, targetInstanceId? }`** takes the positive option;
+  **`skipTrigger { choiceId? }`** declines (no id = head, for Ambush/Support).
+- `resumeAfterChoice`: while choices remain, the active player finishes theirs first,
+  then control passes to the other side; when the queue drains, round-start
+  (`resumeAtInitiative`) choices begin the action phase with the initiative holder,
+  mid-turn choices `advanceTurn`.
 
-1. **Combat extraction + `whenDefeated`** (unblocks 4 Tier-1 cards): move
-   `applyUnitDamage` from `resolve.ts` into a new **`engine/combat.ts`** (breaks the
-   `effects` ↔ `resolve` import cycle so abilities can deal damage); add a
-   `dealDamageToUnit` primitive; fire `runUnitTrigger(state, 'whenDefeated', unit,
-   owner)` for each defeated unit (pass the captured unit). Then implement Grav
-   Charge (ASH_085), Blade of Talzin (ASH_055). Whistling Birds (ASH_183) also needs
-   the attack target threaded into `onAttackEnd`; Warrior's Legacy (ASH_134) needs a
-   create-token-unit primitive + a Mandalorian token card.
-2. **Contextual stats** — a `statModifier` / damage-replacement hook for Pointless
-   to Resist (ASH_054, −3/−0 vs a base) and Deadly Vulnerability (ASH_150).
-3. **#342 Tier 2** — the pending-choice mechanism, then The Conflict Within, DDC
-   Defender, Camtono.
-4. **#343 Tier 3** — Improvised Identity, The Darksaber, Arcana Star Map.
+**Conflict Within (088)** and **Camtono (229)** are live. Camtono: `onAttackEnd` reveals
+the top deck card; if it costs ≤2 it pushes a `mayPlayTopFree` choice. Accept → a unit
+enters play free (via `enterUnit`, extracted from `playCard`), an upgrade attaches free
+(`acceptChoice.targetInstanceId`; `choiceMoves` offers one accept per valid target), an
+event is discarded with no effect (temporary rule until events exist). Tests in
+`src/test/pendingChoices.test.ts`.
+
+**Choice UI:** `acceptChoice`/`skipTrigger` aren't in `CLICK_HANDLED`, so they render as
+labelled buttons — "Pay 3" / "Don't pay", "Play X free [on <unit>]" / "Don't play"
+(`describeAction` names the attach target so per-target upgrade buttons differ). Ambush/
+Support attacks still surface as board clicks.
+
+**"Look at a card" overlay** (`CardChoiceOverlay`, exported from `gameScreen.tsx`): a
+reusable centre-screen zoomed-card overlay for Camtono's `mayPlayTopFree` — the human
+sees the card + the Play/Don't-play buttons over a dark backdrop. Terminology matters:
+**"look at" is PRIVATE** (only the acting player sees it, so the overlay renders solely
+for the human's own choice; the AI's look-at never surfaces to the human, preserving
+hidden information). A future **"reveal"** (PUBLIC, both players confirm they've seen it)
+reuses this shell — not built yet as no card reveals; the component takes a prompt +
+buttons so a reveal variant just passes a public prompt and a confirm action. Reusable
+for search effects. Tests: `src/test/cardChoiceOverlay.test.tsx`.
+
+**DDC Defender (210)** is live — the mid-combat `onDefense`: `attack()` split into
+`beginAttack` (exhaust + Restore; fire `onDefense`; suspend via `GameState.pendingAttack`
+if a choice is raised, handing control to the defender) and `completeAttack` (damage
+step, recomputed on the post-choice board per CR 6.3.4; re-finds attacker/defender so a
+ping that defeats either fizzles gracefully; clears Support-granted keywords last so
+they survive the suspension). `resumeAfterChoice` resumes the stored attack once the
+queue drains. Choice kind `mayDamageExhaust`; tests in `src/test/pendingChoices.test.ts`.
+The choice surfaces to a human defender through the normal action menu (`acceptChoice`
+per arena unit + "Decline"); the AI resolves its own via `driveAi`.
+
+**#342 is complete** — every ASH upgrade effect is implemented except the three Tier-3
+cards below. Trigger-ordering note stands: the user's "active player orders simultaneous
+triggers" rule isn't exercisable yet (no `onAttack` card), so it's deferred until one
+lands (then settle active-orders-all vs APNAP and generalise `runUnitTrigger`/combat).
+
+## Resumption plan — #343 Tier 3
+
+**Order (agreed with user):** search foundation → Arcana Star Map → Improvised Identity
+(keywords **+ triggered abilities**) → The Darksaber.
+
+**DONE — action-ability infrastructure:** `CardDefinition.actionAbilities?:
+ActionAbilityDef[]`; `unitActionAbilities`/`actionAbilityKey`; action `useAbility`;
+once-per-round on `UnitState.usedAbilities` (cleared in `readyEverything`);
+`resolve.useAbility` keeps the turn if the effect raised a choice. `actionAbilities.test.ts`.
+
+**DONE — deck search + Arcana Star Map (084):** `searchCount(state, unit, baseN)`
+(`effects.ts`) applies the `searchModifier` hook; **Arcana Star Map = `searchModifier:
+() => 2`**. `deckSearch.test.ts`.
+
+**DONE — Improvised Identity (230):** `actionAbilities` (once/round) → reveal top
+`searchCount(3)`; if a ground unit is present, push a `search` choice (pick which to
+discard by `acceptChoice.deckIndex`), else straight to `mayAttack`. On discard, push a
+`mayAttack { grantCardId }`; taking that attack grants the discarded card's **keywords +
+triggered abilities** via `UnitState.grantedAbilityCardIds` (folded into `unitKeywords`
+and `runUnitTrigger`; cleared with `grantedKeywords` after the attack). UI: multi-card
+`SearchRevealOverlay` for the pick; `mayAttack` surfaces as normal board attacks + a
+"Don't attack" button. Tests in `pendingChoices.test.ts` + `searchOverlay.test.tsx`.
+
+**DONE — The Darksaber (135):** attach restriction `unique && !Vehicle`; hooks
+`grantedTraits: () => ['Mandalorian']` (folded into `unitTraits`/`unitHasTrait`, which
+the trait-based cost mods now use so a granted trait counts), `makesLeaderUnit: () =>
+true` (exposed via `isLeaderUnit`), and `providesAspects: (s,u) => host aspects` (folded
+into `effectiveCost`'s provided-aspect set, so the host's icons reduce the aspect
+penalty on the controller's plays). Tests: `src/test/darksaber.test.ts`.
+
+**Note on "is a leader unit":** `isLeaderUnit` reports the status, but it is deliberately
+NOT wired into defeat routing — the host is a *unit* card, so it still goes to discard on
+defeat (routing a non-leader through the leader-return path would wrongly touch the
+player's actual leader). No card in the set reads leader-unit status yet, so it is a
+faithful status flag with no combat consumer today.
+
+**#343 Tier 3 is complete — and with it every ASH upgrade effect (#340–#343).**
+
+**UI:** the new choices must surface (Ambush/Support already render as board
+attack + skip). `acceptChoice` needs a `describeAction` label and a button/board
+affordance (pay 3 / play card / attach target / discard event). Hand to the user for
+manual testing after the engine side is green.
+
+## Resumption plan — phase 2 & Tier 3
+1. **DDC Defender (210)** — `onDefense`, the **mid-combat** case: split `attack()`
+   into declare → defender may act (`acceptChoice` with a target) → deal damage, so
+   the resolver suspends inside combat and resumes. The hard/risky part; kept separate.
+2. **#343 Tier 3** — Improvised Identity (230), The Darksaber (135, leader-unit
+   transform + aspect provision), Arcana Star Map (084) — the last needs a
+   deck-search mechanic (also unblocks the search-doubling clause).

@@ -51,16 +51,26 @@ mulligan), action phase/initiative (§1.15, §5.4), regroup (§5.5), attack timi
 (§6.3), empty deck (§8.6), Sealed deckbuilding (§10.2). `checkWin` evaluates both
 bases so a single action that defeats both is a **draw** (`winner: 'draw'`, §5.6.3).
 
-**Card behaviour** (epic #302): the ability framework (#303,
-`engine/abilities.ts` + `docs/ability-framework.md`) registers per-card effects
-by id — unregistered cards play vanilla. Keywords (#305) are data-driven from
-SWUDB `Keywords[]` (numerals extracted from rules text): Sentinel and Saboteur
-shape legal attack targets; Raid/Grit flow through `effectivePower`, Overwhelm
-and Restore hook combat in the resolver. Combat and defeat checks go through
-`engine/stats.ts` (`effectivePower`/`effectiveHp`) so upgrades (#308) and
-lasting effects (#306) slot into one pipeline. **Still pending**: unit/leader
-abilities, events, upgrades (#306–#309), Ambush (#306), Shielded (#308),
-concession.
+**Card behaviour** (epics #302 / #337): the ability framework (#340,
+`engine/abilities.ts` + `docs/ability-framework.md`) registers per-card effects by id
+— unregistered cards play vanilla. A `CardDefinition` carries **triggered abilities**
+(fired at `whenPlayed` / `onAttackEnd` / `whenDefeated` / `whenReadies` / `onDefense` /
+`whenRegroupStarts`), **activated `actionAbilities`**, and **static hooks**
+(`attachRestriction`, `costModifier`, `conditionalKeywords`, `statModifier`,
+`damageMultiplier`, `negatesOverwhelm`, `grantedTraits`, `makesLeaderUnit`,
+`providesAspects`, `searchModifier`). Keywords (#305/#334) are data-driven from SWUDB
+`Keywords[]`: Sentinel/Saboteur/Hidden shape legal attack targets; Raid/Grit flow
+through `effectivePower`; Overwhelm/Restore/Shielded/Ambush/Support hook play and
+combat in the resolver. Combat and defeat go through `engine/stats.ts`
+(`effectivePower`/`effectiveHp`) and **`engine/combat.ts`** (`applyUnitDamage` /
+`dealDamageToUnit`, extracted so abilities can deal damage without a resolver cycle).
+Upgrades (#308) attach into `unit.upgrades` — a card upgrade routes to its **owner's**
+discard on defeat; token upgrades (Shield/Experience/Advantage) and token units live
+there too. Optional "may…" decisions and simultaneous triggers resolve through a
+**pending-choice queue** (`pendingChoices`), including a mid-combat suspend/resume
+(`pendingAttack`) for On Defense. All 25 ASH upgrades (#340–#343) are implemented.
+**Still pending**: events, non-keyword abilities on non-upgrade cards, concession, and
+active-player ordering of simultaneous cross-player triggers (no card exercises it yet).
 
 ## Data model
 
@@ -70,10 +80,15 @@ concession.
 (initial state + every action) replays bit-identically through `resolve`. The static
 card database (`cards: CardDb`) hangs off the state but is **shared by reference**
 between successive states, keeping cloning cheap for future tree search. Card zones
-(`hand`/`deck`/`discard`) hold card **ids**, resolved against `cards`. Token upgrades
-(Shield/Experience/Advantage) live inside `UnitState.upgrades` as `TOKEN_*` card ids.
-Ability code can't live on the state (functions don't serialise), so it sits in the
-module-level **ability registry** — `registerCard(cardId, …)` — consulted by the engine.
+(`hand`/`deck`/`discard`) hold card **ids**, resolved against `cards`. An
+`UpgradeAttachment` (`{ cardId, owner }`) records who owns each attached upgrade so it
+routes to the right discard on defeat; token upgrades (Shield/Experience/Advantage) and
+token units (`TOKEN_*` ids) live in the card db as built-ins. Transient per-attack
+grants (`grantedKeywords`, `grantedAbilityCardIds`), once-per-round action usage
+(`usedAbilities`), the **pending-choice queue** (`pendingChoices`), and a suspended-combat
+record (`pendingAttack`) all live on the state, JSON-serialisable. Ability *code* can't
+(functions don't serialise), so it sits in the module-level **ability registry** —
+`registerCard(cardId, …)` — consulted by the engine.
 
 ## Game flow at runtime
 
@@ -83,7 +98,8 @@ module-level **ability registry** — `registerCard(cardId, …)` — consulted 
 
 1. Hydrate every unique card in both decks (`getCard` — cache-first, network fallback).
 2. `buildCardDb` → `initGame` → store state; snapshot the initial state for the record.
-3. Human acts via the action-menu buttons → `resolve`.
+3. Human acts by clicking cards/units, the action-menu buttons, or a pending-choice
+   prompt (pay/play/discard, the "look at a card" / search overlays) → `resolve`.
 4. `driveAi` loop: while the AI is active and the game is live, `randomAi` picks from
    `legalMoves`, resolves, and logs — through action *and* regroup phases (capped at
    500 steps as a hang guard).
@@ -177,7 +193,7 @@ leaves CORS-friendly hosts (cdn.starwarsunlimited.com) untouched.
 
 ## Testing
 
-Strict TDD; ~285 tests at the time of writing. Engine tests use hand-built fixture
+Strict TDD; ~460 tests at the time of writing. Engine tests use hand-built fixture
 states (`src/test/helpers/engineFixtures.ts`); data-layer tests run against
 fake-indexeddb; screen tests drive the real hook + engine with seeded caches,
 deterministic shuffles, and a "passive" AI rng (near-1 → always picks pass, the
