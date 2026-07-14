@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
+import { describeAction } from '../utils/describeAction'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import type { LeaderState } from '../engine/types'
@@ -189,6 +190,28 @@ describe('Greef Karga (ASH_017) — when you play a unit, Advantage (#309)', () 
     expect(played.pendingChoices).toBeUndefined()
     expect(played.players.player.units.find(u => u.cardId === 'TST_U1')!.upgrades.some(a => a.cardId === TOKEN_ADVANTAGE)).toBe(true)
     expect(played.activePlayer).toBe('opponent')
+  })
+})
+
+describe('choice-id collisions (#309 regression)', () => {
+  it('a Support choice and Greef Karga’s trigger on the same played unit get distinct ids and labels', () => {
+    const s = state({
+      cards: { ...CARDS, ASH_017: card({ id: 'ASH_017', type: 'leader' }), SUP: card({ id: 'SUP', type: 'unit', arena: 'ground', cost: 0, keywords: [{ name: 'Support' }] }) },
+      players: {
+        player: player({ leader: undeployed('ASH_017'), hand: ['SUP'], resources: ready(4), units: [unit('u1', 'TST_U1')] }),
+        opponent: player({ units: [unit('e1', 'TST_U1')] }),
+      },
+    })
+    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const kinds = played.pendingChoices!.map(c => c.kind)
+    expect(kinds).toContain('support')
+    expect(kinds).toContain('mayExhaustLeaderForAdvantage')
+    const ids = played.pendingChoices!.map(c => c.id)
+    expect(new Set(ids).size).toBe(ids.length) // ids are unique
+
+    // No duplicate "Skip support" — each skip resolves to its own choice.
+    const skipLabels = legalMoves(played).filter(a => a.type === 'skipTrigger').map(a => describeAction(played, 'player', a))
+    expect(skipLabels.filter(l => l === 'Skip support')).toHaveLength(1)
   })
 })
 

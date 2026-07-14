@@ -226,7 +226,13 @@ export function removeChoice(state: GameState, id: string): GameState {
 
 /** Append a choice to the pending queue (order = trigger order; the controller reorders). */
 export function pushChoice(state: GameState, choice: PendingChoice): GameState {
-  return { ...state, pendingChoices: [...(state.pendingChoices ?? []), choice] }
+  // Guarantee a unique id among pending choices — different triggers on the same played
+  // unit (e.g. Support + Greef Karga) would otherwise collide and mislabel each other.
+  const existing = state.pendingChoices ?? []
+  let id = choice.id
+  let n = 1
+  while (existing.some(c => c.id === id)) id = `${choice.id}#${n++}`
+  return { ...state, pendingChoices: [...existing, id === choice.id ? choice : { ...choice, id }] }
 }
 
 export function opponentOf(player: PlayerId): PlayerId {

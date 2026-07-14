@@ -296,3 +296,18 @@ Greef Karga (017); Bo-Katan (010) deploy gate only. New primitives `dealDamageTo
 `mayDefeatUpgradeForBase`, `mayExhaustLeaderForAdvantage`. Tests: `leaderAbilities.test.ts`.
 Simplification: Vane's "a base" is the enemy base for now. Remaining 12 leaders (Tiers
 B/C) need the #346 aura, #347 lasting-effect/tracking, and #348 primitive tickets.
+
+**Invariants / fixes (from playtesting):**
+- **`pushChoice` guarantees unique choice ids** — different triggers on the same played
+  unit (e.g. a Support choice + Greef Karga's `mayExhaustLeaderForAdvantage`, both keyed
+  by the played unit's instance id) would otherwise collide, so `findChoice` mislabelled
+  both. It now appends `#n` on collision.
+- **"When Attack Ends" fires for a defeated attacker** (CR 1258): `fireAttackEnd` takes
+  the pre-combat attacker as a fallback and fires `onAttackEnd` on its last-known state
+  (with its upgrades) when the live unit is gone — so e.g. Camtono resolves even if the
+  attacker traded and died.
+- **Created token units enter exhausted** (CR 1.5.4b) unless an ability says otherwise.
+- **Advantage tokens are all removed** on the unit's first attack/defence (each gave +1/0).
+- **Trigger ordering** (CR 7.6.9): simultaneous triggers a player controls are theirs to
+  order — the engine currently uses a fixed default (e.g. `whenDefeated` before
+  `onAttackEnd`); interactive ordering is the parked #309-adjacent feature.
