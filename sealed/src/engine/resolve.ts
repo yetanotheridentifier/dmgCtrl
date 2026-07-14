@@ -10,7 +10,7 @@ import { exhaustUnit, findUnit, giveToken, defeatUpgrade, dealDamageToBase, firs
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
-import { TOKEN_SHIELD, TOKEN_ADVANTAGE, removeFirst, hasToken } from './tokenUpgrades'
+import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
 
 /**
  * Action resolver (T2.5) — pure `(state, action) => state`.
@@ -596,9 +596,11 @@ function consumeAdvantage(state: GameState, owner: PlayerId, instanceId: string)
   const p = state.players[owner]
   const unit = p.units.find(u => u.instanceId === instanceId)
   if (!unit || !hasToken(unit.upgrades, TOKEN_ADVANTAGE)) return state
+  // A unit's next attack/defence removes ALL its Advantage tokens (each gave +1/0), unless
+  // another ability says otherwise.
   return updatePlayer(state, owner, {
     units: p.units.map(u =>
-      u.instanceId === instanceId ? { ...u, upgrades: removeFirst(u.upgrades, a => a.cardId === TOKEN_ADVANTAGE) } : u,
+      u.instanceId === instanceId ? { ...u, upgrades: u.upgrades.filter(a => a.cardId !== TOKEN_ADVANTAGE) } : u,
     ),
   })
 }
@@ -606,8 +608,10 @@ function consumeAdvantage(state: GameState, owner: PlayerId, instanceId: string)
 /** Fire "When Attack Ends" abilities on the attacker (card + upgrades), if it
  *  survived the combat (#340). `ctx` carries what the attack did (target, whether
  *  it damaged the base) for abilities like Whistling Birds (#342). */
-function fireAttackEnd(state: GameState, owner: PlayerId, attackerId: string, ctx: Partial<EffectContext>): GameState {
-  const attacker = state.players[owner].units.find(u => u.instanceId === attackerId)
+function fireAttackEnd(state: GameState, owner: PlayerId, attackerId: string, ctx: Partial<EffectContext>, captured?: UnitState): GameState {
+  // "When Attack Ends" abilities still trigger if the attacker was defeated by combat
+  // damage (CR 7.6 / 1258) — fall back to its last-known state (with its upgrades).
+  const attacker = state.players[owner].units.find(u => u.instanceId === attackerId) ?? captured
   return attacker ? runUnitTrigger(state, 'onAttackEnd', attacker, owner, ctx) : state
 }
 
@@ -742,7 +746,8 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   // Both units completed a combat — spend any Advantage on the survivors (#308).
   next = consumeAdvantage(next, playerId, attackerId)
   next = consumeAdvantage(next, enemyId, defender.instanceId)
-  next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, dealtDamageToBase: overwhelmExcess > 0 })
+  // Pass the pre-combat attacker so its "When Attack Ends" fires even if it was defeated.
+  next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, dealtDamageToBase: overwhelmExcess > 0 }, attacker)
   return clearGrantedKeywords(checkWin(next))
 }
 

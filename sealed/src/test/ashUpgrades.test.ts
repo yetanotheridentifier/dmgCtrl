@@ -268,6 +268,7 @@ describe('ASH upgrades — token-unit creation (#342)', () => {
     expect(token).toBeDefined()
     expect(next.cards['TOKEN_MANDALORIAN'].power).toBe(2)
     expect(has(token!, TOKEN_SHIELD)).toBe(true) // Shielded: created with a shield token
+    expect(token!.exhausted).toBe(true) // created units enter exhausted
     expect(next.players.player.units.find(u => u.instanceId === 'u1')).toBeUndefined() // original defeated
   })
 

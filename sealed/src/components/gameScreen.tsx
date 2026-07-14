@@ -354,7 +354,7 @@ function BaseCard({ state, side, onAttack }: {
 
 /** A leader: its card while undeployed, a marker once deployed. `widthPx` scales
  *  it down for the opponent's mat column; omitted, it renders at full size. */
-function LeaderCard({ state, side, widthPx }: { state: GameState; side: PlayerId; widthPx?: number }) {
+export function LeaderCard({ state, side, widthPx, interact }: { state: GameState; side: PlayerId; widthPx?: number; interact?: UnitInteraction }) {
   const p = state.players[side]
   const leaderCard = state.cards[p.leader.cardId]
   const { zoomed, bind } = useCardZoom()
@@ -369,9 +369,19 @@ function LeaderCard({ state, side, widthPx }: { state: GameState; side: PlayerId
   }
   // Deployed once and defeated (its epic action is spent) — it can't redeploy.
   const defeated = p.leader.epicActionUsed
+  // An undeployed leader with an available activated ability is clickable (#309).
+  const clickable = Boolean(interact?.actionable && interact.onClick)
+  const highlight = interact?.selected ? 'accent' : interact?.actionable ? 'accent-dim' : undefined
   return (
-    <div data-testid={`${side}-leader-card`} {...bind} className="relative w-fit">
-      <CardFace card={leaderCard} fallbackName={p.leader.cardId} exhausted={p.leader.exhausted} widthPx={widthPx} />
+    <div
+      data-testid={`${side}-leader-card`}
+      {...bind}
+      data-actionable={interact?.actionable}
+      data-selected={interact?.selected}
+      onClick={clickable ? interact!.onClick : undefined}
+      className={`relative w-fit ${clickable ? 'cursor-pointer' : ''}`}
+    >
+      <CardFace card={leaderCard} fallbackName={p.leader.cardId} exhausted={p.leader.exhausted} widthPx={widthPx} highlight={highlight} />
       {defeated && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <span
@@ -459,11 +469,12 @@ function HandCard({ card, cardId, index, action, onAct, onSelect, selected }: {
  * base, your base, your leader — so the bases sit closest together and the leaders
  * are outermost. Each grid row is one player, aligning their lanes with their cards.
  */
-function Board({ state, playerInteraction, opponentInteraction, baseAttack }: {
+function Board({ state, playerInteraction, opponentInteraction, baseAttack, leaderInteract }: {
   state: GameState
   playerInteraction: (unit: UnitState) => UnitInteraction
   opponentInteraction: (unit: UnitState) => UnitInteraction
   baseAttack?: () => void
+  leaderInteract?: UnitInteraction
 }) {
   // Space | Leaders+Bases | Ground. Set the template with an inline style rather
   // than a Tailwind arbitrary value: the commas inside minmax() don't compile
@@ -505,7 +516,7 @@ function Board({ state, playerInteraction, opponentInteraction, baseAttack }: {
         <ArenaZone state={state} side="player" arena="space" unitInteraction={playerInteraction} anchor="top" />
         <div className="flex flex-col items-center gap-2">
           <BaseCard state={state} side="player" />
-          <LeaderCard state={state} side="player" />
+          <LeaderCard state={state} side="player" interact={leaderInteract} />
         </div>
         <ArenaZone state={state} side="player" arena="ground" unitInteraction={playerInteraction} anchor="top" />
       </div>
@@ -591,10 +602,14 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   // Placing an upgrade (#336): click an upgrade card in hand (its hand index is
   // held here) to highlight valid target units, then click a unit to attach it.
   const [selectedUpgrade, setSelectedUpgrade] = useState<number | null>(null)
+  // Using an undeployed leader's activated ability (#309): click the leader to select
+  // it, then click a highlighted target unit.
+  const [leaderSelected, setLeaderSelected] = useState(false)
 
   function actAndClear(action: Action) {
     setSelectedAttacker(null)
     setSelectedUpgrade(null)
+    setLeaderSelected(false)
     act(action)
   }
 
@@ -653,6 +668,35 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     )
     const placing = selectedUpgrade !== null
 
+    // Undeployed-leader activated abilities (#309): click the leader to use a target-less
+    // one, or to highlight its target units and then click one.
+    const leaderAbilityMoves = legal.filter((a): a is Extract<Action, { type: 'useLeaderAbility' }> => a.type === 'useLeaderAbility')
+    const leaderTargetlessMove = leaderAbilityMoves.find(a => a.targetInstanceId === undefined)
+    const leaderTargetIds = new Map<string, Action>()
+    if (leaderSelected) for (const a of leaderAbilityMoves) if (a.targetInstanceId) leaderTargetIds.set(a.targetInstanceId, a)
+    const leaderInteract: UnitInteraction | undefined = leaderAbilityMoves.length > 0
+      ? {
+          actionable: true,
+          selected: leaderSelected,
+          isTarget: false,
+          onClick: () => {
+            if (leaderTargetlessMove) { actAndClear(leaderTargetlessMove); return }
+            setSelectedAttacker(null)
+            setSelectedUpgrade(null)
+            setLeaderSelected(v => !v)
+          },
+        }
+      : undefined
+
+    // Optional targeted pending choices (#309/#342) — resolved by clicking a highlighted
+    // board unit plus a Decline button, rather than one menu button per target.
+    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDefeatUpgradeForBase', 'mayDamageExhaust']
+    const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && boardTargetKinds.includes(c.kind))
+    const choiceTargetIds = new Map<string, Action>()
+    if (targetChoice) for (const a of legal) if (a.type === 'acceptChoice' && a.choiceId === targetChoice.id && a.targetInstanceId) choiceTargetIds.set(a.targetInstanceId, a)
+    const declineChoice = targetChoice ? legal.find(a => a.type === 'skipTrigger' && a.choiceId === targetChoice.id) : undefined
+    const boardTargetAction = (instanceId: string): Action | undefined => leaderTargetIds.get(instanceId) ?? choiceTargetIds.get(instanceId)
+
     const upgradeInteraction = (instanceId: string): UnitInteraction | null =>
       placing
         ? {
@@ -666,18 +710,24 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           }
         : null
 
+    // A unit that is a target of the selected leader ability or an active choice.
+    const asBoardTarget = (instanceId: string): UnitInteraction | null => {
+      const action = boardTargetAction(instanceId)
+      return action ? { actionable: false, selected: false, isTarget: true, onClick: () => actAndClear(action) } : null
+    }
+
     const playerInteraction = (unit: { instanceId: string }): UnitInteraction =>
-      upgradeInteraction(unit.instanceId) ?? {
+      upgradeInteraction(unit.instanceId) ?? asBoardTarget(unit.instanceId) ?? {
         actionable: attackerIds.has(unit.instanceId),
         selected: selectedAttacker === unit.instanceId,
         isTarget: false,
         onClick: attackerIds.has(unit.instanceId)
-          ? () => { setSelectedUpgrade(null); setSelectedAttacker(prev => (prev === unit.instanceId ? null : unit.instanceId)) }
+          ? () => { setSelectedUpgrade(null); setLeaderSelected(false); setSelectedAttacker(prev => (prev === unit.instanceId ? null : unit.instanceId)) }
           : undefined,
       }
 
     const opponentInteraction = (unit: { instanceId: string }): UnitInteraction =>
-      upgradeInteraction(unit.instanceId) ?? {
+      upgradeInteraction(unit.instanceId) ?? asBoardTarget(unit.instanceId) ?? {
         actionable: false,
         selected: false,
         isTarget: targetUnitIds.has(unit.instanceId),
@@ -727,12 +777,24 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // Playing, resourcing, attacking and attaching upgrades are all driven by
     // clicking a card or unit, so the menu holds only the remaining choices —
     // mulligan, keep hand, take the initiative, pass (and skip/deploy) (#332/#336).
-    const CLICK_HANDLED: Action['type'][] = ['playCard', 'playUpgrade', 'attack', 'resourceCard', 'setupResource']
+    // Leader abilities are driven from the leader card; a board-target choice is driven
+    // from the board + a single Decline button — neither belongs in the action menu (#309).
+    const CLICK_HANDLED: Action['type'][] = ['playCard', 'playUpgrade', 'attack', 'resourceCard', 'setupResource', 'useLeaderAbility']
+    const choiceBoardActions = targetChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === targetChoice.id) : []
     const menuActions = gameState.winner === null
-      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a))
+      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a) && !choiceBoardActions.includes(a))
       : []
     const actionColumn = (
       <div className="flex flex-col items-stretch gap-1.5">
+        {declineChoice && (
+          <button
+            data-testid="decline-choice-btn"
+            onClick={() => actAndClear(declineChoice)}
+            className="rounded-xl border-2 border-line/60 px-3 py-1.5 text-xs text-ink-dim hover:text-ink"
+          >
+            Decline
+          </button>
+        )}
         {menuActions.map((action, i) => (
           <button
             key={i}
@@ -743,7 +805,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             {describeAction(gameState, 'player', action)}
           </button>
         ))}
-        {menuActions.length === 0 && legal.length === 0 && gameState.winner === null && (
+        {declineChoice === undefined && menuActions.length === 0 && legal.length === 0 && gameState.winner === null && (
           <span className="text-center text-xs text-ink-faint">Opponent…</span>
         )}
       </div>
@@ -784,6 +846,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           playerInteraction={playerInteraction}
           opponentInteraction={opponentInteraction}
           baseAttack={baseAttack ? () => actAndClear(baseAttack) : undefined}
+          leaderInteract={leaderInteract}
         />
         <PlayerBar state={gameState} hand={playerHand} action={actionColumn} />
       </div>

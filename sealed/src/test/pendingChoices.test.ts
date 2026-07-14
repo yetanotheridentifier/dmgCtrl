@@ -103,10 +103,14 @@ describe('Camtono (ASH_229) — onAttackEnd may play top card free (#342)', () =
     expect(next.activePlayer).toBe('player')
   })
 
-  it('does not offer when the top card costs more than 2', () => {
+  it('reveals a >2-cost top card but offers no play — only decline', () => {
     const next = resolve(camtonoBoard({ id: 'TOPBIG', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 2 }), attackBase)
-    expect(next.pendingChoices).toBeUndefined()
-    expect(next.activePlayer).toBe('opponent') // normal turn pass
+    expect(next.pendingChoices?.[0]).toMatchObject({ kind: 'mayPlayTopFree', cardId: 'TOPBIG' }) // still shown ("look at")
+    expect(next.activePlayer).toBe('player') // held so you can see it
+    const types = legalMoves(next).map(a => a.type)
+    expect(types).not.toContain('acceptChoice') // can't play a >2-cost card
+    expect(types).toContain('skipTrigger')
+    expect(resolve(next, { type: 'skipTrigger', choiceId: next.pendingChoices![0].id }).activePlayer).toBe('opponent')
   })
 
   it('playing a unit free brings it into play and passes the turn', () => {

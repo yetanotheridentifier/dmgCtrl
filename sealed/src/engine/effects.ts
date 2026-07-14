@@ -77,7 +77,7 @@ export function createTokenUnit(state: GameState, owner: PlayerId, tokenCardId: 
     cardId: tokenCardId,
     arena: tokenCard?.arena ?? 'ground',
     damage: 0,
-    exhausted: false,
+    exhausted: true, // created units enter exhausted (CR 1.5.4b) unless an ability says otherwise
     isLeader: false,
     upgrades: shielded ? [{ cardId: TOKEN_SHIELD, owner }] : [],
   }

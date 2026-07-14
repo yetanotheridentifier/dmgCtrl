@@ -235,17 +235,20 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'mayPlayTopFree': {
-        // Play the revealed top card free: a unit/event needs no target; an upgrade
-        // offers one accept per valid attach target (like playUpgrade).
+        // The card is always revealed (a "look at"); it can only be PLAYED free if it costs
+        // ≤ 2. A unit/event needs no target; an upgrade offers one accept per valid attach
+        // target (like playUpgrade).
         const top = state.cards[choice.cardId]
-        if (top?.type === 'upgrade') {
-          const restriction = getCardDefinition(top.id)?.attachRestriction
-          for (const t of [...state.players.player.units, ...state.players.opponent.units]) {
-            if (restriction && !restriction(state, t)) continue
-            moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: t.instanceId })
+        if (top && top.cost <= 2) {
+          if (top.type === 'upgrade') {
+            const restriction = getCardDefinition(top.id)?.attachRestriction
+            for (const t of [...state.players.player.units, ...state.players.opponent.units]) {
+              if (restriction && !restriction(state, t)) continue
+              moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: t.instanceId })
+            }
+          } else {
+            moves.push({ type: 'acceptChoice', choiceId: choice.id })
           }
-        } else {
-          moves.push({ type: 'acceptChoice', choiceId: choice.id })
         }
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
