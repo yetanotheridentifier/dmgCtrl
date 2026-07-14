@@ -166,7 +166,7 @@ export interface GameState {
    * before combat damage. Holds what's needed to resume (`completeAttack`) once the
    * choice(s) drain, plus the attacker's `activePlayer` to restore for the turn pass.
    */
-  pendingAttack?: { attackerId: string; target: AttackTarget; activePlayer: PlayerId }
+  pendingAttack?: { attackerId: string; target: AttackTarget; activePlayer: PlayerId; stage: 'onDefense' | 'damage' }
 }
 
 /**
@@ -187,6 +187,15 @@ export type PendingChoice =
   // `mayAttack` follows, granting the discarded card's abilities for that attack.
   | { kind: 'search'; id: string; controller: PlayerId; unitId: string; revealed: string[] }
   | { kind: 'mayAttack'; id: string; controller: PlayerId; unitId: string; grantCardId?: string }
+  // Optional targeted effects, e.g. from an On Attack ability (#309): `targets` are the
+  // eligible unit instance ids; the controller picks one or declines.
+  | { kind: 'mayDamage'; id: string; controller: PlayerId; unitId: string; targets: string[]; amount: number }
+  | { kind: 'mayAdvantageEach'; id: string; controller: PlayerId; unitId: string; targets: string[] }
+  // Vane (#309): optionally defeat a friendly upgrade (on the chosen unit) to deal 2 to the enemy base.
+  | { kind: 'mayDefeatUpgradeForBase'; id: string; controller: PlayerId; unitId: string; targets: string[] }
+  // Greef Karga front (#309): on playing a unit, may exhaust the leader to give it an Advantage token.
+  // `unitId` is the just-played unit to receive the token.
+  | { kind: 'mayExhaustLeaderForAdvantage'; id: string; controller: PlayerId; unitId: string }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */
 export function activeChoice(state: GameState): PendingChoice | undefined {
@@ -217,7 +226,13 @@ export function removeChoice(state: GameState, id: string): GameState {
 
 /** Append a choice to the pending queue (order = trigger order; the controller reorders). */
 export function pushChoice(state: GameState, choice: PendingChoice): GameState {
-  return { ...state, pendingChoices: [...(state.pendingChoices ?? []), choice] }
+  // Guarantee a unique id among pending choices — different triggers on the same played
+  // unit (e.g. Support + Greef Karga) would otherwise collide and mislabel each other.
+  const existing = state.pendingChoices ?? []
+  let id = choice.id
+  let n = 1
+  while (existing.some(c => c.id === id)) id = `${choice.id}#${n++}`
+  return { ...state, pendingChoices: [...existing, id === choice.id ? choice : { ...choice, id }] }
 }
 
 export function opponentOf(player: PlayerId): PlayerId {

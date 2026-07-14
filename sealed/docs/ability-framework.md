@@ -260,10 +260,54 @@ attack + skip). `acceptChoice` needs a `describeAction` label and a button/board
 affordance (pay 3 / play card / attach target / discard event). Hand to the user for
 manual testing after the engine side is green.
 
-## Resumption plan — phase 2 & Tier 3
-1. **DDC Defender (210)** — `onDefense`, the **mid-combat** case: split `attack()`
-   into declare → defender may act (`acceptChoice` with a target) → deal damage, so
-   the resolver suspends inside combat and resumes. The hard/risky part; kept separate.
-2. **#343 Tier 3** — Improvised Identity (230), The Darksaber (135, leader-unit
-   transform + aspect provision), Arcana Star Map (084) — the last needs a
-   deck-search mechanic (also unblocks the search-doubling clause).
+## Leader abilities (#309)
+
+A leader is two cards in one: an **undeployed** side (`PlayerState.leader`, not a unit)
+and a **deployed** side (a leader *unit* in `units[]`). The two ability sets share one
+`cardId` but are kept separate and gated by deploy state:
+
+- **`CardDefinition.leaderAbilities`** — the undeployed side: `actions` (activated
+  "Action: [Exhaust] …") and `abilities` (undeployed triggers). While undeployed the
+  leader isn't a unit, so the normal `abilities`/keywords never fire on it.
+- The normal **`abilities`/`actionAbilities`/keywords** are the deployed unit side —
+  they fire via `runUnitTrigger` only once the leader is a unit. (Deployed keywords like
+  Saboteur/Restore/Overwhelm come straight from the card DB.)
+
+Dispatch:
+- **`useLeaderAbility { index, targetInstanceId? }`** — uses an undeployed leader action:
+  pays `cost`, **exhausts the leader** (its once-per-round limit until it readies at
+  regroup), runs the effect. `legalMoves` enumerates one move per valid target (a
+  `LeaderActionAbilityDef.targets` returning empty = not usable); target-less ones use
+  `usable`. `runLeaderTrigger` fires the undeployed leader's triggered abilities.
+- **`onAttack`** now fires before combat damage via a staged pipeline
+  (`runAttackStages` + `pendingAttack.stage` of `onDefense`/`damage`): an On Attack (or
+  On Defense) choice **suspends** the attack and resumes at the right stage. Reuses the
+  #342 suspend/resume machinery.
+- **`whenPlayOrCreateUnit`** fires in `enterUnit` for the controller's undeployed leader
+  and its other units, targeting the just-played unit (`ctx.targetInstanceId`). *(Token
+  **creation** firing is a follow-up.)*
+- **`deployCondition(state, owner)`** overrides the default `resources ≥ cost` deploy
+  gate — Bo-Katan (resources + friendly Mandalorian units ≥ 10). Grogu's *triggered*
+  deploy is a different mechanism, deferred to her/his full build.
+
+**Leaders done (both sides):** Cad Bane (011), Emperor Palpatine (015), Vane (012),
+Greef Karga (017); Bo-Katan (010) deploy gate only. New primitives `dealDamageToBase`,
+`firstCardUpgrade`; new optional-choice kinds `mayDamage`, `mayAdvantageEach`,
+`mayDefeatUpgradeForBase`, `mayExhaustLeaderForAdvantage`. Tests: `leaderAbilities.test.ts`.
+Simplification: Vane's "a base" is the enemy base for now. Remaining 12 leaders (Tiers
+B/C) need the #346 aura, #347 lasting-effect/tracking, and #348 primitive tickets.
+
+**Invariants / fixes (from playtesting):**
+- **`pushChoice` guarantees unique choice ids** — different triggers on the same played
+  unit (e.g. a Support choice + Greef Karga's `mayExhaustLeaderForAdvantage`, both keyed
+  by the played unit's instance id) would otherwise collide, so `findChoice` mislabelled
+  both. It now appends `#n` on collision.
+- **"When Attack Ends" fires for a defeated attacker** (CR 1258): `fireAttackEnd` takes
+  the pre-combat attacker as a fallback and fires `onAttackEnd` on its last-known state
+  (with its upgrades) when the live unit is gone — so e.g. Camtono resolves even if the
+  attacker traded and died.
+- **Created token units enter exhausted** (CR 1.5.4b) unless an ability says otherwise.
+- **Advantage tokens are all removed** on the unit's first attack/defence (each gave +1/0).
+- **Trigger ordering** (CR 7.6.9): simultaneous triggers a player controls are theirs to
+  order — the engine currently uses a fixed default (e.g. `whenDefeated` before
+  `onAttackEnd`); interactive ordering is the parked #309-adjacent feature.

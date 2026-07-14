@@ -236,6 +236,18 @@ describe('token upgrades (#308)', () => {
     expect(hasUpgrade(next.players.player.units[0], TOKEN_ADVANTAGE)).toBe(false)
   })
 
+  it('removes ALL Advantage tokens on the unit’s first attack (each gave +1/0)', () => {
+    const s = state({
+      players: {
+        player: player({ units: [unit('u1', 'TST_U2', { upgrades: [att(TOKEN_ADVANTAGE), att(TOKEN_ADVANTAGE)] })] }), // 2/2 + 2 adv
+        opponent: player(),
+      },
+    })
+    const next = resolve(s, { type: 'attack', attackerId: 'u1', target: { kind: 'base' } })
+    expect(next.players.opponent.base.damage).toBe(4) // 2 power + 2 advantage
+    expect(next.players.player.units[0].upgrades.filter(a => a.cardId === TOKEN_ADVANTAGE)).toHaveLength(0) // both removed
+  })
+
   it('Advantage boosts a defending unit’s counterattack, then is removed', () => {
     const s = state({
       players: {

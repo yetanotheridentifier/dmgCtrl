@@ -53,6 +53,11 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
     }
     case 'useAbility':
       return `Use ${state.cards[action.cardId]?.name ?? 'ability'}`
+    case 'useLeaderAbility': {
+      const name = state.cards[state.players[by].leader.cardId]?.name ?? 'leader'
+      const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+      return `${name} ability${target ? ` → ${target}` : ''}`
+    }
     case 'takeInitiative':
       return 'Take the initiative'
     case 'pass':
@@ -64,6 +69,8 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayPlayTopFree') return "Don't play"
       if (choice.kind === 'mayDamageExhaust') return 'Decline'
       if (choice.kind === 'mayAttack') return "Don't attack"
+      if (choice.kind === 'mayDamage' || choice.kind === 'mayAdvantageEach' || choice.kind === 'mayDefeatUpgradeForBase') return 'Decline'
+      if (choice.kind === 'mayExhaustLeaderForAdvantage') return "Don't"
       return `Skip ${choice.kind}`
     }
     case 'acceptChoice': {
@@ -83,6 +90,19 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const cardId = choice.revealed[action.deckIndex]
         return `Discard ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
       }
+      if (choice.kind === 'mayDamage') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Deal ${choice.amount}${target ? ` to ${target}` : ''}`
+      }
+      if (choice.kind === 'mayAdvantageEach') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Advantage${target ? ` to ${target}` : ''}`
+      }
+      if (choice.kind === 'mayDefeatUpgradeForBase') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Defeat ${target ? `${target}'s ` : ''}upgrade → 2 to base`
+      }
+      if (choice.kind === 'mayExhaustLeaderForAdvantage') return `Exhaust leader → Advantage to ${anyUnitName(state, choice.unitId) ?? 'unit'}`
       return 'Accept'
     }
     case 'resourceCard': {

@@ -5,7 +5,30 @@ import { resolve } from '../engine/resolve'
 import { state, player, unit, card, CARDS } from './helpers/engineFixtures'
 
 afterEach(() => {
-  for (const id of ['TST_DEATH_UNIT', 'TST_DEATH_UP', 'TST_FRAGILE']) unregisterAbility(id)
+  for (const id of ['TST_DEATH_UNIT', 'TST_DEATH_UP', 'TST_FRAGILE', 'TST_AEND']) unregisterAbility(id)
+})
+
+/** CR 7.6 / 1258: a defeated attacker's "When Attack Ends" abilities still trigger. */
+describe('When Attack Ends after the attacker is defeated (#309)', () => {
+  it("fires the attacker's onAttackEnd even when combat damage defeats it", () => {
+    registerCard('TST_AEND', {
+      abilities: [{ trigger: 'onAttackEnd', description: 'Deal 3 to enemy base', effect: (s, ctx) => {
+        const enemy = ctx.owner === 'player' ? 'opponent' : 'player'
+        const b = s.players[enemy].base
+        return { ...s, players: { ...s.players, [enemy]: { ...s.players[enemy], base: { ...b, damage: b.damage + 3 } } } }
+      } }],
+    })
+    const s = state({
+      cards: { ...CARDS, TST_AEND: card({ id: 'TST_AEND', type: 'unit', arena: 'ground', power: 2, hp: 1 }) },
+      players: {
+        player: player({ units: [unit('u1', 'TST_AEND')] }),
+        opponent: player({ units: [unit('e1', 'TST_U3')] }), // power 5 → kills u1 on the counter
+      },
+    })
+    const next = resolve(s, { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' } })
+    expect(next.players.player.units.find(u => u.instanceId === 'u1')).toBeUndefined() // attacker defeated
+    expect(next.players.opponent.base.damage).toBe(3) // When Attack Ends still fired
+  })
 })
 
 /**
