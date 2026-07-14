@@ -125,6 +125,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Exhaust ${target ?? 'unit'}`
       }
+      if (choice.kind === 'chooseOne') return choice.options[action.optionIndex ?? 0]?.label ?? 'Choose'
       return 'Accept'
     }
     case 'resourceCard': {

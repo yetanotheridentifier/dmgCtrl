@@ -72,7 +72,7 @@ export function resolve(state: GameState, action: Action): GameState {
     case 'skipTrigger':
       return requirePhase(state, 'action', () => resolveSkip(state, action.choiceId))
     case 'acceptChoice':
-      return requirePhase(state, 'action', () => resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex))
+      return requirePhase(state, 'action', () => resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex))
     case 'resourceCard':
       return requirePhase(state, 'regroup', () => regroupChoice(state, action.handIndex))
     case 'skipResource':
@@ -342,7 +342,7 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
 }
 
 /** Accept a pending "may…" choice — pay the cost / play the card / search (#342/#343). */
-function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: string, deckIndex?: number): GameState {
+function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: string, deckIndex?: number, optionIndex?: number): GameState {
   const choice = findChoice(state, choiceId)
   if (!choice) throw new Error(`acceptChoice: no choice ${choiceId}`)
   let next = removeChoice(state, choice.id)
@@ -425,6 +425,18 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         if (choice.markUsed) next = markAbilityUsed(next, choice.controller, choice.markUsed.instanceId, choice.markUsed.key)
       }
       break
+    case 'chooseOne': {
+      // Choose-one/modal (#348): apply the picked option's effect (Sloane's arena buff).
+      const opt = choice.options[optionIndex ?? 0]
+      if (opt?.kind === 'arenaLastingBuff') {
+        for (const owner of ['player', 'opponent'] as PlayerId[]) {
+          for (const u of next.players[owner].units) {
+            if (u.arena === opt.arena) next = addLastingEffect(next, { targetInstanceId: u.instanceId, power: opt.power, hp: opt.hp, keywords: opt.keywords })
+          }
+        }
+      }
+      break
+    }
     case 'mayDefeatUpgradeForBase': {
       // Vane: defeat a card upgrade on the chosen friendly unit, then deal 2 to the enemy base (#309).
       const host = targetInstanceId ? next.players[choice.controller].units.find(u => u.instanceId === targetInstanceId) : undefined

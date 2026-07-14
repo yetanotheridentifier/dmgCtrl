@@ -181,6 +181,20 @@ export interface GameState {
   phaseEvents?: PhaseEvents
 }
 
+/**
+ * One option of a choose-one/modal ability (#348). A small serialisable effect descriptor,
+ * resolved by the engine when the option is picked. New variants extend the `kind` union.
+ * `arenaLastingBuff`: grant every unit in `arena` (both players) the given "this phase" buff.
+ */
+export interface ChooseOption {
+  label: string
+  kind: 'arenaLastingBuff'
+  arena: Arena
+  power?: number
+  hp?: number
+  keywords?: KeywordInstance[]
+}
+
 /** A "this phase" modifier targeting a single unit (#347). Omitted stats = 0. */
 export interface LastingEffect {
   targetInstanceId: string
@@ -237,6 +251,9 @@ export type PendingChoice =
   // Shin Hati deployed (#347): may exhaust one of `targets`, or decline (no leader-exhaust cost).
   // `markUsed`, when set, marks a once-per-round triggered ability as spent on acceptance.
   | { kind: 'mayExhaustUnit'; id: string; controller: PlayerId; targets: string[]; markUsed?: { instanceId: string; key: string } }
+  // Choose-one / modal (#348): pick exactly one of `options` (Sloane). Each option is a small
+  // serialisable effect descriptor, resolved by index; mandatory (no decline).
+  | { kind: 'chooseOne'; id: string; controller: PlayerId; options: ChooseOption[] }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */
 export function activeChoice(state: GameState): PendingChoice | undefined {

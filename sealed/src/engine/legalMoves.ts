@@ -283,6 +283,11 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'chooseOne': {
+        // Choose-one/modal (#348): one move per option, no decline (mandatory).
+        choice.options.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
+        break
+      }
       case 'mayExhaustLeaderForAdvantage': {
         // Greef Karga front: a yes/no — the target unit is fixed (#309).
         moves.push({ type: 'acceptChoice', choiceId: choice.id })

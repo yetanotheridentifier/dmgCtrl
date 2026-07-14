@@ -281,14 +281,48 @@ registerCard('ASH_017', { // Greef Karga — front (undeployed, optional) + depl
   }],
 })
 
-registerCard('ASH_010', { // Bo-Katan Kryze — deploy gate + deployed aura (front create-token is #309/#348)
+const controlsUnitInEachArena = (s: GameState, owner: PlayerId): boolean =>
+  s.players[owner].units.some(u => u.arena === 'ground') && s.players[owner].units.some(u => u.arena === 'space')
+
+registerCard('ASH_010', { // Bo-Katan Kryze — front/back create a Mandalorian token (#348) + deploy gate (#309) + aura (#346)
   deployCondition: (s, owner) =>
     s.players[owner].resources.length + s.players[owner].units.filter(u => unitHasTrait(s, u, 'Mandalorian')).length >= 10,
+  leaderAbilities: {
+    actions: [{
+      description: 'If you control a unit in each arena, create a Mandalorian token.',
+      cost: 2,
+      usable: (s, owner) => controlsUnitInEachArena(s, owner),
+      effect: (s, ctx) => createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN),
+    }],
+  },
+  // Deployed: On Attack, create a token under the same condition (mandatory).
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'If you control a unit in each arena, create a Mandalorian token.',
+    effect: (s, ctx) => (controlsUnitInEachArena(s, ctx.owner) ? createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN) : s),
+  }],
   // Deployed: other friendly Mandalorian units get +1/+0 (#346).
   aura: (s, src, tgt, friendly) => (friendly && tgt.instanceId !== src.instanceId && unitHasTrait(s, tgt, 'Mandalorian') ? { power: 1 } : undefined),
 })
 
-registerCard('ASH_007', { // Grand Admiral Sloane — deployed aura (front choose-one is #347/#348)
+const SLOANE_KEYWORDS = [{ name: 'Sentinel' }, { name: 'Overwhelm' }]
+registerCard('ASH_007', { // Grand Admiral Sloane — front Choose One arena buff (#348) + deployed aura (#346)
+  leaderAbilities: {
+    actions: [{
+      // "Give each ground/space unit Sentinel and Overwhelm for this phase" — every unit in the
+      // chosen arena, both players' (the card says "each ... unit", not "friendly").
+      description: 'Choose one: give each ground unit, or each space unit, Sentinel and Overwhelm for this phase.',
+      effect: (s, ctx) => pushChoice(s, {
+        kind: 'chooseOne',
+        id: `${ctx.cardId}-arena`,
+        controller: ctx.owner,
+        options: [
+          { label: 'Ground units: Sentinel + Overwhelm', kind: 'arenaLastingBuff', arena: 'ground', keywords: SLOANE_KEYWORDS },
+          { label: 'Space units: Sentinel + Overwhelm', kind: 'arenaLastingBuff', arena: 'space', keywords: SLOANE_KEYWORDS },
+        ],
+      }),
+    }],
+  },
   // Deployed: each other friendly unit gains Overwhelm and Sentinel (#346).
   aura: (_s, src, tgt, friendly) => (friendly && tgt.instanceId !== src.instanceId ? { keywords: [{ name: 'Overwhelm' }, { name: 'Sentinel' }] } : undefined),
 })

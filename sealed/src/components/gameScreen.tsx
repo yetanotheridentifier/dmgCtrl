@@ -11,7 +11,7 @@ import CardFace from './cardFace'
 import { CARD_WIDTH_PX, ZOOM_WIDTH_PX } from './cardSizing'
 import { tokenLayout, TOKEN_W, TOKEN_H } from './tokens'
 import { TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
-import { unitHasKeyword } from '../engine/keywords'
+import { unitHasKeyword, auraContributions } from '../engine/keywords'
 import { lastingEffectTotals } from '../engine/types'
 import { useCardZoom } from './useCardZoom'
 import { CardZoomPopover } from './cardZoom'
@@ -131,7 +131,7 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
             (a keyword — shown while the unit has it, gone if it loses it/defeated).
             Stacked so both can show. */}
         <div className="pointer-events-none absolute inset-x-0 top-1 flex flex-col items-center gap-0.5">
-          {unit.hidden && (
+          {unit.hidden && !unitHasKeyword(state, unit, 'Sentinel') && (
             <span data-testid={`board-unit-hidden-${unit.instanceId}`} className="rounded bg-black/75 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-ink shadow-[0_1px_3px_rgba(0,0,0,0.7)]">
               Hidden
             </span>
@@ -179,9 +179,12 @@ function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
   if (unit.damage > 0) {
     tokens.push({ key: 'damage', label: String(unit.damage), color: 'var(--color-red)', testid: `board-unit-damage-${unit.instanceId}` })
   }
-  // "This phase" stat modifiers (Baylan/Ahsoka, #347): a white token with red +X (power)
-  // over blue +Y (HP), mirroring the physical token; cleared with the effects at phase end.
-  const mods = lastingEffectTotals(state, unit.instanceId)
+  // Floating stat modifiers not printed on the card art — "this phase" buffs (Baylan/Ahsoka,
+  // #347) plus constant auras (Bo-Katan, #346/#348): a white token with red +X (power) over
+  // blue +Y (HP), mirroring the physical token. (Upgrade stats already show on the card.)
+  const lasting = lastingEffectTotals(state, unit.instanceId)
+  const aura = auraContributions(state, unit)
+  const mods = { power: lasting.power + aura.power, hp: lasting.hp + aura.hp }
   if (mods.power !== 0 || mods.hp !== 0) {
     tokens.push({
       key: 'mod',

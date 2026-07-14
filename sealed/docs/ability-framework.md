@@ -391,11 +391,13 @@ passes `markUsed: { instanceId, key }` in its choice so the mark lands on **acce
 doesn't spend it). Same `usedAbilities` list the activated-ability path (#343) uses, so it clears at
 regroup for free.
 
-**UI — +X/+Y modifier token:** a unit carrying lasting-effect stats shows a white token with the
-power delta (red) top-left and the HP delta (blue) bottom-right — diagonally opposed like the
-physical token (`board-unit-mod-<id>`);
-it appears/updates from `lastingEffectTotals` and disappears when the effects clear at phase end.
-Reusable for any future source of transient stat deltas. (`CardTokens` in `gameScreen.tsx`.)
+**UI — +X/+Y modifier token:** a unit whose stats are modified by something **not printed on its
+card** shows a white token with the power delta (red) top-left and the HP delta (blue) bottom-right
+— diagonally opposed like the physical token (`board-unit-mod-<id>`). It sums `lastingEffectTotals`
+("this phase" buffs, #347) **and** `auraContributions` power/HP (constant auras like Bo-Katan's
++1/0, #346/#348); upgrade stats are excluded (those already show on the card art). Phase buffs clear
+the token at phase end; an aura's contribution shows while its source is in play. (`CardTokens` in
+`gameScreen.tsx`.)
 
 **Consumers landing with #348** (need its play-from-resources / play-from-hand primitives): The
 Armorer (001) reads `enteredPlayThisPhase`; Moff Gideon (008) reads `defeatedThisPhase` for a
@@ -403,3 +405,30 @@ friendly Imperial. The tracking mechanism is built and tested here; those leader
 
 **Deferred deployed backs:** Luke (005) both sides need #348's heal (heal that unit / your base).
 Ahsoka's deployed back awaits its own build.
+
+## New primitives + UI (#348)
+
+Phased into independently-deployable chunks; each groups a primitive with the leaders it unlocks.
+
+### Chunk C — choose-one/modal + create-token (DONE)
+
+- **Choose-one / modal** — a `chooseOne` pending choice carrying serialisable `ChooseOption[]`;
+  `acceptChoice.optionIndex` picks one (mandatory — no decline). Rendered as menu buttons
+  (`describeAction` labels each option). The first option variant is `arenaLastingBuff` (grant every
+  unit in an arena a "this phase" buff). Wired: **Grand Admiral Sloane (007)** front "Choose One:
+  give each ground / each space unit Sentinel + Overwhelm this phase" — applies to **both players'**
+  units in the chosen arena ("each … unit", reusing #347 lasting effects). New `ChooseOption`
+  variants extend the modal to other effects later.
+- **Create-token action** — Bo-Katan uses the existing `createTokenUnit` primitive. Wired:
+  **Bo-Katan Kryze (010)** front leader action (C=2, `usable` = a unit in each arena → create a
+  Mandalorian token) and her deployed **back** On Attack (same condition, mandatory).
+  `controlsUnitInEachArena` helper. Note: `createTokenUnit` still doesn't fire `whenPlayOrCreateUnit`
+  (the token-creation trigger path stays deferred) — moot for leaders, since only one leader is ever
+  in play (Greef, the only such reactor, can't coexist with Bo-Katan). Tests in `leaderAbilities.test.ts`.
+
+### Remaining chunks (planned)
+
+A — heal (Luke); B — play-a-unit-from-hand ready/cost-reduced (Fennec, Moff Gideon); D —
+play-upgrade-from-resources + a private resource overlay (The Armorer); E — opponent-makes-a-choice
++ "next unit you play this phase" grant (Sabine); F — take-initiative trigger (Mandalorian),
+attack-with-a-unit ability (Thrawn), Grogu's triggered deploy + combat-conditional aura.

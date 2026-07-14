@@ -6,6 +6,7 @@ import { effectivePower, effectiveHp } from '../engine/stats'
 import { unitHasKeyword } from '../engine/keywords'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
+import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
 import type { LeaderState } from '../engine/types'
 
 /** Undeployed-leader activated abilities (#309). */
@@ -416,6 +417,77 @@ describe('Shin Hati (ASH_016) — deployed: exhaust a cheaper unit, once each ro
     // A second friendly attack this round finds a valid target (e2) but the ability is spent.
     const atk2 = resolve({ ...done, activePlayer: 'player' }, { type: 'attack', attackerId: 'a2', target: { kind: 'base' } })
     expect(atk2.pendingChoices).toBeUndefined()
+  })
+})
+
+describe('Grand Admiral Sloane (ASH_007) — front: Choose One arena buff (#348)', () => {
+  const cards = { ...CARDS, ASH_007: card({ id: 'ASH_007', type: 'leader', cost: 5, power: 4, hp: 5 }) }
+  const board = () => state({
+    cards,
+    players: {
+      player: player({ leader: undeployed('ASH_007'), units: [unit('fg', 'TST_U1'), unit('fs', 'TST_U2')] }), // fg ground, fs space
+      opponent: player({ units: [unit('eg', 'TST_U1')] }), // eg ground
+    },
+  })
+
+  it('offers a two-option modal and applies Sentinel + Overwhelm to every unit in the chosen arena', () => {
+    const s = board()
+    const opts = legalMoves(s).filter(a => a.type === 'useLeaderAbility')
+    expect(opts).toHaveLength(1) // one target-less action
+    const raised = resolve(s, { type: 'useLeaderAbility', index: 0 })
+    expect(raised.pendingChoices?.[0]).toMatchObject({ kind: 'chooseOne' })
+    expect(raised.players.player.leader.exhausted).toBe(true)
+    const choiceMoves = legalMoves(raised).filter(a => a.type === 'acceptChoice')
+    expect(choiceMoves.map(a => a.optionIndex)).toEqual([0, 1]) // ground / space
+
+    // Choose ground (option 0): each ground unit — friendly AND enemy — gains the keywords.
+    const done = resolve(raised, { type: 'acceptChoice', choiceId: raised.pendingChoices![0].id, optionIndex: 0 })
+    expect(unitHasKeyword(done, done.players.player.units.find(u => u.instanceId === 'fg')!, 'Sentinel')).toBe(true)
+    expect(unitHasKeyword(done, done.players.player.units.find(u => u.instanceId === 'fg')!, 'Overwhelm')).toBe(true)
+    expect(unitHasKeyword(done, done.players.opponent.units.find(u => u.instanceId === 'eg')!, 'Sentinel')).toBe(true)
+    expect(unitHasKeyword(done, done.players.player.units.find(u => u.instanceId === 'fs')!, 'Sentinel')).toBe(false) // space untouched
+    expect(done.activePlayer).toBe('opponent')
+  })
+})
+
+describe('Bo-Katan Kryze (ASH_010) — front: create a Mandalorian token (#348)', () => {
+  const cards = { ...CARDS, ASH_010: card({ id: 'ASH_010', type: 'leader', cost: 10 }) }
+  const withArenas = (ground: boolean, space: boolean, resources = 2) =>
+    state({
+      cards,
+      players: {
+        player: player({
+          leader: undeployed('ASH_010'),
+          resources: ready(resources),
+          units: [...(ground ? [unit('g', 'TST_U1')] : []), ...(space ? [unit('s', 'TST_U2')] : [])],
+        }),
+        opponent: player(),
+      },
+    })
+
+  it('is offered only with a unit in each arena and 2 resources, and creates an exhausted token', () => {
+    expect(legalMoves(withArenas(true, true)).some(a => a.type === 'useLeaderAbility')).toBe(true)
+    expect(legalMoves(withArenas(true, false)).some(a => a.type === 'useLeaderAbility')).toBe(false) // no space unit
+    expect(legalMoves(withArenas(true, true, 1)).some(a => a.type === 'useLeaderAbility')).toBe(false) // can't pay 2
+
+    const next = resolve(withArenas(true, true), { type: 'useLeaderAbility', index: 0 })
+    const tokens = next.players.player.units.filter(u => u.cardId === TOKEN_MANDALORIAN)
+    expect(tokens).toHaveLength(1)
+    expect(tokens[0].exhausted).toBe(true)
+    expect(next.players.player.resources.filter(r => !r.exhausted)).toHaveLength(0) // paid 2
+    expect(next.players.player.leader.exhausted).toBe(true)
+  })
+
+  it('deployed back: On Attack creates a token when you control a unit in each arena', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ leader: deployed('ASH_010'), units: [unit('L', 'ASH_010', { isLeader: true }), unit('s', 'TST_U2')] }),
+        opponent: player(),
+      },
+    })
+    const after = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
+    expect(after.players.player.units.filter(u => u.cardId === TOKEN_MANDALORIAN)).toHaveLength(1)
   })
 })
 
