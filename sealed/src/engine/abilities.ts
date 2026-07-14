@@ -96,6 +96,21 @@ export interface CardDefinition {
   leaderAbilities?: LeaderAbilities
   /** Custom epic-action deploy gate (#309); default is `resources ≥ leader.cost`. */
   deployCondition?: (state: GameState, owner: PlayerId) => boolean
+  /**
+   * Constant/aura ability (#346): while `source` (a unit with this card, or an upgrade)
+   * is in play, it contributes power/HP and/or keywords to OTHER units. Called for each
+   * in-play `target`; return `undefined` when it doesn't affect that target. `sameController`
+   * is true when source and target share a controller (friendly). Must NOT read the target's
+   * computed keywords/power (that recurses through the aura pass) — inspect card data/traits.
+   */
+  aura?: (state: GameState, source: UnitState, target: UnitState, sameController: boolean) => AuraContribution | undefined
+}
+
+/** What an aura contributes to one affected unit (#346). */
+export interface AuraContribution {
+  power?: number
+  hp?: number
+  keywords?: KeywordInstance[]
 }
 
 /**

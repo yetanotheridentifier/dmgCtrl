@@ -873,19 +873,24 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             ?
           </button>
         </header>
-        <aside data-testid="game-log-panel" className="ml-2 mt-3 mb-2 min-h-0 flex-1 overflow-y-auto rounded-lg bg-surface p-3">
-          <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">Log</h3>
-          <ol data-testid="game-log" className="mt-2 space-y-0.5 text-xs text-ink-dim">
-            {log.map((entry, i) => (
-              // Actor in its own fixed-width column so the actions line up (#332).
-              <li key={i} className="flex gap-2">
-                <span className={`w-8 shrink-0 ${entry.by === 'player' ? 'text-accent' : 'text-amber'}`}>
-                  {entry.by === 'player' ? 'You' : 'Opp'}
-                </span>
-                <span>{entry.text}</span>
-              </li>
-            ))}
-          </ol>
+        {/* `dir=rtl` on the scroll container puts the scrollbar on the LEFT; the inner
+            wrapper restores `dir=ltr` so the text reads normally. Newest entries render
+            at the TOP (reverse the list; keys stay the original append index). */}
+        <aside dir="rtl" data-testid="game-log-panel" className="ml-2 mt-3 mb-2 min-h-0 flex-1 overflow-y-auto rounded-lg bg-surface p-3">
+          <div dir="ltr">
+            <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">Log</h3>
+            <ol data-testid="game-log" className="mt-2 space-y-0.5 text-xs text-ink-dim">
+              {log.map((entry, i) => (
+                // Actor in its own fixed-width column so the actions line up (#332).
+                <li key={i} className="flex gap-2">
+                  <span className={`w-8 shrink-0 ${entry.by === 'player' ? 'text-accent' : 'text-amber'}`}>
+                    {entry.by === 'player' ? 'You' : 'Opp'}
+                  </span>
+                  <span>{entry.text}</span>
+                </li>
+              )).reverse()}
+            </ol>
+          </div>
         </aside>
       </div>
 

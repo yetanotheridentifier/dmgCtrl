@@ -311,3 +311,24 @@ B/C) need the #346 aura, #347 lasting-effect/tracking, and #348 primitive ticket
 - **Trigger ordering** (CR 7.6.9): simultaneous triggers a player controls are theirs to
   order — the engine currently uses a fixed default (e.g. `whenDefeated` before
   `onAttackEnd`); interactive ordering is the parked #309-adjacent feature.
+
+## Constant / aura effects (#346)
+
+`CardDefinition.aura?: (state, source, target, sameController) => { power?, hp?, keywords? } | undefined`
+— while a unit (its card, or an attached upgrade) is in play, it contributes power/HP and/or
+keywords to **other** units. Aggregated by `keywords.auraContributions(state, target)`, which
+scans every in-play unit's aura and sums the contributions for `target`; folded into
+`stats.effectivePower`/`effectiveHp` (power/HP) and `keywords.unitKeywords` (keywords). So a
+Sentinel granted by an aura shapes attack targeting for free.
+
+**Constraint:** an aura function must not read the target's *computed* keywords/power (that
+recurses through the aura pass) — inspect card data / traits (`unitHasTrait` is safe).
+
+**Wired (deployed sides):** Bo-Katan (010) — other friendly Mandalorian units +1/0;
+Grand Admiral Sloane (007) — each other friendly unit gains Overwhelm + Sentinel.
+Tests: `src/test/auras.test.ts`.
+
+**Deferred:** Grogu (018)'s aura is combat-conditional ("while another friendly unit is
+defending, +1/0; while attacking, the defender gets −1/0") — needs the attack context
+(attacking/defending) threaded into the aura call, so it lands with Grogu's full build
+(alongside #347's combat/phase tracking).

@@ -281,8 +281,14 @@ registerCard('ASH_017', { // Greef Karga — front (undeployed, optional) + depl
   }],
 })
 
-registerCard('ASH_010', { // Bo-Katan Kryze — deploy if resources + friendly Mandalorian units ≥ 10
-  // (Her front/deployed abilities — create-token + Mandalorian aura — land with #346/#347.)
+registerCard('ASH_010', { // Bo-Katan Kryze — deploy gate + deployed aura (front create-token is #309/#348)
   deployCondition: (s, owner) =>
     s.players[owner].resources.length + s.players[owner].units.filter(u => unitHasTrait(s, u, 'Mandalorian')).length >= 10,
+  // Deployed: other friendly Mandalorian units get +1/+0 (#346).
+  aura: (s, src, tgt, friendly) => (friendly && tgt.instanceId !== src.instanceId && unitHasTrait(s, tgt, 'Mandalorian') ? { power: 1 } : undefined),
+})
+
+registerCard('ASH_007', { // Grand Admiral Sloane — deployed aura (front choose-one is #347/#348)
+  // Deployed: each other friendly unit gains Overwhelm and Sentinel (#346).
+  aura: (_s, src, tgt, friendly) => (friendly && tgt.instanceId !== src.instanceId ? { keywords: [{ name: 'Overwhelm' }, { name: 'Sentinel' }] } : undefined),
 })
