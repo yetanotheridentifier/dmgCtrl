@@ -6,6 +6,7 @@ import type { ParseDeckError, ParsedDeck } from '../utils/parseProtectThePod'
 import { syncCatalogue } from '../data/catalogueSync'
 import { importSet } from '../data/setImport'
 import type { CardRef } from '../data/catalogueSync'
+import { IMPLEMENTED_LEADERS, IMPLEMENTED_UPGRADES } from '../data/implementedCards'
 
 interface Props {
   onPlay: (deck: SavedDeck, opponentDeck: SavedDeck) => void
@@ -33,6 +34,60 @@ function cardCount(deck: SavedDeck): number {
 function pickOpponent(decks: SavedDeck[], choice: string, fallback: SavedDeck): SavedDeck {
   if (choice !== 'random') return decks.find(d => d.id === choice) ?? fallback
   return decks[Math.floor(Math.random() * decks.length)]
+}
+
+/** Yes/No glyph for an implemented card side. */
+function Flag({ on }: { on: boolean }) {
+  return on
+    ? <span className="text-accent" aria-label="implemented">✓</span>
+    : <span className="text-ink-faint" aria-label="not yet">·</span>
+}
+
+/**
+ * Reference panel (RHS of the setup screen): which cards' abilities are built into the engine —
+ * leaders by side (front = undeployed, back = deployed) and the implemented upgrades. Sourced
+ * from the manifest in `data/implementedCards`, which a test pins to the ability registry.
+ */
+function ImplementationStatus() {
+  return (
+    <aside data-testid="implemented-cards" className="w-full lg:w-72 shrink-0 lg:mt-0 mt-4">
+      <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Implemented cards</h2>
+      <p className="mt-1 text-ink-faint text-xs">
+        Which card abilities are built in. Others still play as vanilla stats / resources.
+      </p>
+
+      <h3 className="mt-4 text-accent text-xs uppercase tracking-[0.12em] font-light">
+        Leaders <span className="text-ink-faint normal-case tracking-normal">(front / back)</span>
+      </h3>
+      <table data-testid="implemented-leaders" className="mt-2 w-full text-sm border-2 border-line/60 rounded-xl bg-surface overflow-hidden">
+        <thead>
+          <tr className="text-ink-faint text-[0.65rem] uppercase tracking-[0.1em]">
+            <th className="text-left font-light px-3 py-1.5">Leader</th>
+            <th className="font-light px-2 py-1.5">Front</th>
+            <th className="font-light px-2 py-1.5">Back</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line/30">
+          {IMPLEMENTED_LEADERS.map(l => (
+            <tr key={l.id}>
+              <td className="px-3 py-1.5 truncate">{l.name}</td>
+              <td className="px-2 py-1.5 text-center"><Flag on={l.front} /></td>
+              <td className="px-2 py-1.5 text-center"><Flag on={l.back} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <h3 className="mt-5 text-accent text-xs uppercase tracking-[0.12em] font-light">
+        Upgrades <span className="text-ink-faint normal-case tracking-normal">({IMPLEMENTED_UPGRADES.length})</span>
+      </h3>
+      <ul data-testid="implemented-upgrades" className="mt-2 border-2 border-line/60 rounded-xl bg-surface divide-y divide-line/30 text-sm">
+        {IMPLEMENTED_UPGRADES.map(u => (
+          <li key={u.id} className="px-3 py-1 truncate">{u.name}</li>
+        ))}
+      </ul>
+    </aside>
+  )
 }
 
 export default function DeckSelectScreen({ onPlay }: Props) {
@@ -75,7 +130,8 @@ export default function DeckSelectScreen({ onPlay }: Props) {
   }
 
   return (
-    <div data-testid="deck-select-screen" className="max-w-2xl">
+    <div data-testid="deck-select-screen" className="flex flex-col lg:flex-row gap-8 items-start">
+      <div className="max-w-2xl w-full min-w-0">
       <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Deck selection</h2>
 
       {decks.length === 0 ? (
@@ -185,6 +241,9 @@ export default function DeckSelectScreen({ onPlay }: Props) {
           )}
         </div>
       </div>
+      </div>
+
+      <ImplementationStatus />
     </div>
   )
 }

@@ -167,6 +167,33 @@ export interface GameState {
    * choice(s) drain, plus the attacker's `activePlayer` to restore for the turn pass.
    */
   pendingAttack?: { attackerId: string; target: AttackTarget; activePlayer: PlayerId; stage: 'onDefense' | 'damage' }
+  /**
+   * Transient "this phase" stat/keyword modifiers (#306/#347), each aimed at a unit.
+   * Folded into `effectivePower`/`effectiveHp`/`unitKeywords`; cleared at the start of
+   * the regroup phase so a unit defeated during regroup uses its base stats.
+   */
+  lastingEffects?: LastingEffect[]
+  /**
+   * Events the engine tracks within a boundary so abilities can query them (#347):
+   * which units entered play this phase and which cards were defeated this phase
+   * (per controller). Reset whenever the phase changes.
+   */
+  phaseEvents?: PhaseEvents
+}
+
+/** A "this phase" modifier targeting a single unit (#347). Omitted stats = 0. */
+export interface LastingEffect {
+  targetInstanceId: string
+  power?: number
+  hp?: number
+  keywords?: KeywordInstance[]
+}
+
+/** Per-phase event counters (#347). `enteredPlay` holds instance ids (still-in-play
+ *  units), `defeated` holds card ids (so trait conditions like "Imperial" can check). */
+export interface PhaseEvents {
+  enteredPlay: Record<PlayerId, string[]>
+  defeated: Record<PlayerId, string[]>
 }
 
 /**
@@ -196,6 +223,20 @@ export type PendingChoice =
   // Greef Karga front (#309): on playing a unit, may exhaust the leader to give it an Advantage token.
   // `unitId` is the just-played unit to receive the token.
   | { kind: 'mayExhaustLeaderForAdvantage'; id: string; controller: PlayerId; unitId: string }
+  // Optional "this phase" buff (#347), e.g. Baylan's On Attack: pick a unit among `targets`
+  // and grant it the given power/HP/keywords for the phase, or decline.
+  | { kind: 'mayLastingBuff'; id: string; controller: PlayerId; targets: string[]; power?: number; hp?: number; keywords?: KeywordInstance[] }
+  // Ezra front (#347): on a friendly attack ending, may exhaust the leader to give an Advantage
+  // token to one of `targets` (a unit other than the attacker), or decline.
+  | { kind: 'mayExhaustLeaderGiveAdvantage'; id: string; controller: PlayerId; targets: string[] }
+  // Ezra deployed (#347): may give an Advantage token to one of `targets`, or decline (no cost).
+  | { kind: 'mayGiveAdvantage'; id: string; controller: PlayerId; targets: string[] }
+  // Shin Hati front (#347): on a friendly attack ending, may exhaust the leader to exhaust one of
+  // `targets` (a ready unit cheaper than the base damage dealt), or decline.
+  | { kind: 'mayExhaustLeaderExhaustUnit'; id: string; controller: PlayerId; targets: string[] }
+  // Shin Hati deployed (#347): may exhaust one of `targets`, or decline (no leader-exhaust cost).
+  // `markUsed`, when set, marks a once-per-round triggered ability as spent on acceptance.
+  | { kind: 'mayExhaustUnit'; id: string; controller: PlayerId; targets: string[]; markUsed?: { instanceId: string; key: string } }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */
 export function activeChoice(state: GameState): PendingChoice | undefined {
@@ -233,6 +274,77 @@ export function pushChoice(state: GameState, choice: PendingChoice): GameState {
   let n = 1
   while (existing.some(c => c.id === id)) id = `${choice.id}#${n++}`
   return { ...state, pendingChoices: [...existing, id === choice.id ? choice : { ...choice, id }] }
+}
+
+// ---------------------------------------------------------------------------
+// Lasting effects + phase-event tracking (#306/#347)
+// ---------------------------------------------------------------------------
+
+/** Add a "this phase" modifier aimed at a unit. */
+export function addLastingEffect(state: GameState, effect: LastingEffect): GameState {
+  return { ...state, lastingEffects: [...(state.lastingEffects ?? []), effect] }
+}
+
+/** Drop every lasting effect (called at the start of the regroup phase). */
+export function clearLastingEffects(state: GameState): GameState {
+  return state.lastingEffects ? { ...state, lastingEffects: undefined } : state
+}
+
+function emptyPhaseEvents(): PhaseEvents {
+  return { enteredPlay: { player: [], opponent: [] }, defeated: { player: [], opponent: [] } }
+}
+
+/** Clear the tracked per-phase events (called whenever the phase changes). */
+export function resetPhaseEvents(state: GameState): GameState {
+  return state.phaseEvents ? { ...state, phaseEvents: undefined } : state
+}
+
+/** Note that `instanceId` entered play under `owner` this phase. */
+export function recordUnitEntered(state: GameState, owner: PlayerId, instanceId: string): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  return { ...state, phaseEvents: { ...events, enteredPlay: { ...events.enteredPlay, [owner]: [...events.enteredPlay[owner], instanceId] } } }
+}
+
+/** Note that a unit with card id `cardId` was defeated under `owner` this phase. */
+export function recordUnitDefeated(state: GameState, owner: PlayerId, cardId: string): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  return { ...state, phaseEvents: { ...events, defeated: { ...events.defeated, [owner]: [...events.defeated[owner], cardId] } } }
+}
+
+/** Instance ids of units that entered play under `owner` this phase. */
+export function enteredPlayThisPhase(state: GameState, owner: PlayerId): string[] {
+  return state.phaseEvents?.enteredPlay[owner] ?? []
+}
+
+/** Card ids of units defeated under `owner` this phase. */
+export function defeatedThisPhase(state: GameState, owner: PlayerId): string[] {
+  return state.phaseEvents?.defeated[owner] ?? []
+}
+
+/** Mark a once-per-round ability (`key`) as spent on the unit `instanceId` under `owner`.
+ *  Cleared when the unit readies at regroup (shared with activated abilities, #343). */
+export function markAbilityUsed(state: GameState, owner: PlayerId, instanceId: string, key: string): GameState {
+  return updatePlayer(state, owner, {
+    units: state.players[owner].units.map(u =>
+      u.instanceId === instanceId && !(u.usedAbilities ?? []).includes(key)
+        ? { ...u, usedAbilities: [...(u.usedAbilities ?? []), key] }
+        : u,
+    ),
+  })
+}
+
+/** Total power/HP and keywords a unit gains from all lasting effects aimed at it. */
+export function lastingEffectTotals(state: GameState, instanceId: string): { power: number; hp: number; keywords: KeywordInstance[] } {
+  let power = 0
+  let hp = 0
+  const keywords: KeywordInstance[] = []
+  for (const e of state.lastingEffects ?? []) {
+    if (e.targetInstanceId !== instanceId) continue
+    power += e.power ?? 0
+    hp += e.hp ?? 0
+    if (e.keywords) keywords.push(...e.keywords)
+  }
+  return { power, hp, keywords }
 }
 
 export function opponentOf(player: PlayerId): PlayerId {

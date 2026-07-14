@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
 import { describeAction } from '../utils/describeAction'
+import { effectivePower, effectiveHp } from '../engine/stats'
+import { unitHasKeyword } from '../engine/keywords'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import type { LeaderState } from '../engine/types'
@@ -212,6 +214,208 @@ describe('choice-id collisions (#309 regression)', () => {
     // No duplicate "Skip support" — each skip resolves to its own choice.
     const skipLabels = legalMoves(played).filter(a => a.type === 'skipTrigger').map(a => describeAction(played, 'player', a))
     expect(skipLabels.filter(l => l === 'Skip support')).toHaveLength(1)
+  })
+})
+
+describe('Baylan Skoll (ASH_003) — +2/+2 this phase to a lone unit (#347)', () => {
+  const cards = { ...CARDS, ASH_003: card({ id: 'ASH_003', type: 'leader', cost: 5, power: 4, hp: 6 }) }
+
+  it('front: offers only a unit that is alone in its arena, and gives it +2/+2 for the phase', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ leader: undeployed('ASH_003'), resources: ready(1), units: [unit('g1', 'TST_U1'), unit('s1', 'TST_U2')] }),
+        opponent: player(),
+      },
+    })
+    // g1 (ground) and s1 (space) are each alone in their arena → both offered.
+    expect(legalMoves(s).filter(a => a.type === 'useLeaderAbility').map(a => a.targetInstanceId).sort()).toEqual(['g1', 's1'])
+    const next = resolve(s, { type: 'useLeaderAbility', index: 0, targetInstanceId: 'g1' })
+    expect(effectivePower(next, next.players.player.units.find(u => u.instanceId === 'g1')!)).toBe(5) // 3 + 2
+    expect(effectiveHp(next, next.players.player.units.find(u => u.instanceId === 'g1')!)).toBe(6) // 4 + 2
+    expect(next.players.player.leader.exhausted).toBe(true)
+  })
+
+  it('front: is not offered when no arena has a lone friendly unit', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ leader: undeployed('ASH_003'), resources: ready(1), units: [unit('g1', 'TST_U1'), unit('g2', 'TST_U1')] }),
+        opponent: player(),
+      },
+    })
+    expect(legalMoves(s).some(a => a.type === 'useLeaderAbility')).toBe(false)
+  })
+
+  it('deployed: On Attack targets only a lone NON-leader unit — not Baylan himself', () => {
+    const s = state({
+      cards,
+      // L (Baylan, ground leader unit) + u2 (lone non-leader ground) + s2 (lone non-leader space).
+      players: {
+        player: player({ leader: deployed('ASH_003'), units: [unit('L', 'ASH_003', { isLeader: true }), unit('u2', 'TST_U1'), unit('s2', 'TST_U2')] }),
+        opponent: player(),
+      },
+    })
+    const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
+    // Baylan (leader unit) is excluded even though he shares the ground arena with u2.
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayLastingBuff', power: 2, hp: 2, targets: ['u2', 's2'] })
+    const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'u2' })
+    expect(effectivePower(done, done.players.player.units.find(u => u.instanceId === 'u2')!)).toBe(5)
+    expect(unitHasKeyword(done, done.players.player.units.find(u => u.instanceId === 'u2')!, 'Sentinel')).toBe(true)
+    expect(done.activePlayer).toBe('opponent')
+  })
+
+  it('deployed: On Attack offers nothing when no arena has a lone non-leader unit', () => {
+    const s = state({
+      cards,
+      // Two non-leader ground units → neither is the only non-leader unit in ground.
+      players: {
+        player: player({ leader: deployed('ASH_003'), units: [unit('L', 'ASH_003', { isLeader: true }), unit('u2', 'TST_U1'), unit('u3', 'TST_U1')] }),
+        opponent: player(),
+      },
+    })
+    const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
+    expect(atk.pendingChoices).toBeUndefined()
+    expect(atk.activePlayer).toBe('opponent')
+  })
+})
+
+describe('Ahsoka Tano (ASH_009) — +2/+0 this phase to a weaker unit (#347)', () => {
+  const cards = { ...CARDS, ASH_009: card({ id: 'ASH_009', type: 'leader', cost: 6, power: 5, hp: 6 }) }
+
+  it('front: offers any unit with less power than a friendly unit and gives it +2/+0', () => {
+    const s = state({
+      cards,
+      players: {
+        // strong friendly (power 5) sets the bar; weak friendly (3) qualifies; strong one does not.
+        player: player({ leader: undeployed('ASH_009'), units: [unit('strong', 'TST_U3'), unit('weak', 'TST_U1')] }),
+        opponent: player({ units: [unit('e1', 'TST_U1')] }), // power 3 → also qualifies
+      },
+    })
+    const targets = legalMoves(s).filter(a => a.type === 'useLeaderAbility').map(a => a.targetInstanceId).sort()
+    expect(targets).toEqual(['e1', 'weak']) // 'strong' (power 5) is not < any friendly power
+    const next = resolve(s, { type: 'useLeaderAbility', index: 0, targetInstanceId: 'weak' })
+    expect(effectivePower(next, next.players.player.units.find(u => u.instanceId === 'weak')!)).toBe(5) // 3 + 2
+    expect(effectiveHp(next, next.players.player.units.find(u => u.instanceId === 'weak')!)).toBe(4) // hp unchanged
+  })
+})
+
+describe('Ezra Bridger (ASH_013) — attack-end Advantage if 3+ dealt to a base (#347)', () => {
+  const cards = { ...CARDS, ASH_013: card({ id: 'ASH_013', type: 'leader', cost: 5, power: 3, hp: 6 }) }
+  const board = () => state({
+    cards,
+    players: {
+      player: player({ leader: undeployed('ASH_013'), units: [unit('a1', 'TST_U3'), unit('a2', 'TST_U1')] }), // a1 power 5
+      opponent: player(),
+    },
+  })
+
+  it('offers to exhaust the leader for an Advantage on a different unit after a 3+ base hit', () => {
+    const atk = resolve(board(), { type: 'attack', attackerId: 'a1', target: { kind: 'base' } })
+    expect(atk.players.opponent.base.damage).toBe(5)
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayExhaustLeaderGiveAdvantage', targets: ['a2'] }) // attacker excluded
+    const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'a2' })
+    expect(done.players.player.leader.exhausted).toBe(true)
+    expect(done.players.player.units.find(u => u.instanceId === 'a2')!.upgrades.some(a => a.cardId === TOKEN_ADVANTAGE)).toBe(true)
+    expect(done.activePlayer).toBe('opponent')
+  })
+
+  it('does not trigger when fewer than 3 damage reaches a base', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ leader: undeployed('ASH_013'), units: [unit('a1', 'TST_U4'), unit('a2', 'TST_U1')] }), // a1 power 1
+        opponent: player(),
+      },
+    })
+    const atk = resolve(s, { type: 'attack', attackerId: 'a1', target: { kind: 'base' } })
+    expect(atk.players.opponent.base.damage).toBe(1)
+    expect(atk.pendingChoices).toBeUndefined()
+    expect(atk.activePlayer).toBe('opponent')
+  })
+
+  it('declining leaves the leader ready', () => {
+    const atk = resolve(board(), { type: 'attack', attackerId: 'a1', target: { kind: 'base' } })
+    const done = resolve(atk, { type: 'skipTrigger', choiceId: atk.pendingChoices![0].id })
+    expect(done.players.player.leader.exhausted).toBe(false)
+    expect(done.players.player.units.find(u => u.instanceId === 'a2')!.upgrades.some(a => a.cardId === TOKEN_ADVANTAGE)).toBe(false)
+    expect(done.activePlayer).toBe('opponent')
+  })
+})
+
+describe('Ezra Bridger (ASH_013) — deployed: reacts to ANY friendly attack ending (#347)', () => {
+  const cards = { ...CARDS, ASH_013: card({ id: 'ASH_013', type: 'leader', power: 3, hp: 6 }) }
+  const board = (attacker: string) => state({
+    cards,
+    players: {
+      player: player({ leader: deployed('ASH_013'), units: [unit('L', 'ASH_013', { isLeader: true }), unit('a1', attacker)] }),
+      opponent: player(),
+    },
+  })
+
+  it('offers Advantage to a different unit when another friendly unit deals 3+ to a base — no leader exhaust', () => {
+    const atk = resolve(board('TST_U3'), { type: 'attack', attackerId: 'a1', target: { kind: 'base' } }) // a1 power 5
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayGiveAdvantage', targets: ['L'] }) // the attacker a1 is excluded
+    const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'L' })
+    expect(done.players.player.units.find(u => u.instanceId === 'L')!.upgrades.some(a => a.cardId === TOKEN_ADVANTAGE)).toBe(true)
+    expect(done.activePlayer).toBe('opponent')
+  })
+
+  it('does not trigger on a sub-3 base hit', () => {
+    const atk = resolve(board('TST_U4'), { type: 'attack', attackerId: 'a1', target: { kind: 'base' } }) // a1 power 1
+    expect(atk.pendingChoices).toBeUndefined()
+    expect(atk.activePlayer).toBe('opponent')
+  })
+})
+
+describe('Shin Hati (ASH_016) — attack-end exhaust a cheaper unit (#347)', () => {
+  const cards = {
+    ...CARDS,
+    ASH_016: card({ id: 'ASH_016', type: 'leader', cost: 6, power: 4, hp: 6 }),
+    BIG: card({ id: 'BIG', type: 'unit', arena: 'ground', cost: 6, power: 1, hp: 9 }),
+  }
+
+  it('offers to exhaust the leader to exhaust a ready unit costing less than the base damage', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ leader: undeployed('ASH_016'), units: [unit('a1', 'TST_U3')] }), // power 5 → 5 to base
+        opponent: player({ units: [unit('e1', 'TST_U1'), unit('e2', 'BIG')] }),
+      },
+    })
+    // e1 cost 2 < 5 → target; e2 (cost 6) is not.
+    const atk = resolve(s, { type: 'attack', attackerId: 'a1', target: { kind: 'base' } })
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayExhaustLeaderExhaustUnit', targets: ['e1'] })
+    const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'e1' })
+    expect(done.players.player.leader.exhausted).toBe(true)
+    expect(done.players.opponent.units.find(u => u.instanceId === 'e1')!.exhausted).toBe(true)
+    expect(done.activePlayer).toBe('opponent')
+  })
+})
+
+describe('Shin Hati (ASH_016) — deployed: exhaust a cheaper unit, once each round (#347)', () => {
+  const cards = {
+    ...CARDS,
+    ASH_016: card({ id: 'ASH_016', type: 'leader', cost: 6, power: 4, hp: 6 }),
+  }
+  const board = () => state({
+    cards,
+    players: {
+      player: player({ leader: deployed('ASH_016'), units: [unit('L', 'ASH_016', { isLeader: true }), unit('a1', 'TST_U3'), unit('a2', 'TST_U3')] }),
+      opponent: player({ units: [unit('e1', 'TST_U1'), unit('e2', 'TST_U1')] }),
+    },
+  })
+
+  it('reacts to a friendly base hit with no leader-exhaust cost, then is spent for the round', () => {
+    const atk = resolve(board(), { type: 'attack', attackerId: 'a1', target: { kind: 'base' } }) // 5 to base
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayExhaustUnit' })
+    const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'e1' })
+    expect(done.players.opponent.units.find(u => u.instanceId === 'e1')!.exhausted).toBe(true)
+    expect(done.players.player.leader.exhausted).toBe(false) // deployed side does not exhaust the leader
+
+    // A second friendly attack this round finds a valid target (e2) but the ability is spent.
+    const atk2 = resolve({ ...done, activePlayer: 'player' }, { type: 'attack', attackerId: 'a2', target: { kind: 'base' } })
+    expect(atk2.pendingChoices).toBeUndefined()
   })
 })
 

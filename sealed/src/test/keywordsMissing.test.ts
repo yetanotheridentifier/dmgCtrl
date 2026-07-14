@@ -143,7 +143,8 @@ describe('Ambush keyword (#334)', () => {
 
   it('resolving the ambush attack fights the enemy unit, clears the pending trigger, and passes the turn', () => {
     const s = resolve(beforePlay(), { type: 'playCard', handIndex: 0 })
-    const ambId = s.pendingChoices![0].unitId
+    const ambush = s.pendingChoices![0]
+    const ambId = ambush.kind === 'ambush' ? ambush.unitId : ''
     const next = resolve(s, { type: 'attack', attackerId: ambId, target: { kind: 'unit', instanceId: 'e1' } })
     expect(next.pendingChoices).toBeUndefined()
     expect(next.activePlayer).toBe('opponent')

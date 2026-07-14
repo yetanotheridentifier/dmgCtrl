@@ -4,6 +4,7 @@ import { UnitLine } from '../components/gameScreen'
 import type { UnitInteraction } from '../components/gameScreen'
 import { state, unit, card, CARDS } from './helpers/engineFixtures'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
+import { addLastingEffect } from '../engine/types'
 import type { GameState } from '../engine/types'
 
 const noInteract: UnitInteraction = { actionable: false, selected: false, isTarget: false }
@@ -59,6 +60,29 @@ describe('UnitLine — on-card damage overlay (#326)', () => {
     const token = screen.getByTestId('board-unit-advantage-u1')
     expect(token).toHaveTextContent(/adv\./i)
     expect(token).toHaveTextContent('2')
+  })
+
+  it('shows a +X/+Y modifier token for a unit with a "this phase" buff (#347)', () => {
+    let s = boardWith('TST_D')
+    s = addLastingEffect(s, { targetInstanceId: 'u1', power: 2, hp: 2 })
+    render(<UnitLine state={s} unit={unit('u1', 'TST_D')} interact={noInteract} />)
+    const token = screen.getByTestId('board-unit-mod-u1')
+    expect(token).toHaveTextContent('+2+2')
+    // Power delta in red, HP delta in blue (mirrors the physical token).
+    const parts = within(token).getAllByText(/\+2/)
+    expect(parts).toHaveLength(2)
+    expect(parts[0]).toHaveStyle({ color: 'var(--color-red)' })
+    expect(parts[1]).toHaveStyle({ color: '#2563eb' })
+  })
+
+  it('shows +2/+0 when only power is buffed, and no token with no modifier (#347)', () => {
+    let s = boardWith('TST_D')
+    s = addLastingEffect(s, { targetInstanceId: 'u1', power: 2 })
+    const { rerender } = render(<UnitLine state={s} unit={unit('u1', 'TST_D')} interact={noInteract} />)
+    expect(screen.getByTestId('board-unit-mod-u1')).toHaveTextContent('+2+0')
+
+    rerender(<UnitLine state={boardWith('TST_D')} unit={unit('u2', 'TST_D')} interact={noInteract} />)
+    expect(screen.queryByTestId('board-unit-mod-u2')).toBeNull()
   })
 
   it('does not render the old bottom power/health line for a unit with art-backed stats', () => {
