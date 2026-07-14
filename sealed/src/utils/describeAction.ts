@@ -70,6 +70,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayDamageExhaust') return 'Decline'
       if (choice.kind === 'mayAttack') return "Don't attack"
       if (choice.kind === 'mayDamage' || choice.kind === 'mayAdvantageEach' || choice.kind === 'mayDefeatUpgradeForBase') return 'Decline'
+      if (choice.kind === 'mayLastingBuff' || choice.kind === 'mayGiveAdvantage' || choice.kind === 'mayExhaustLeaderGiveAdvantage' || choice.kind === 'mayExhaustLeaderExhaustUnit') return 'Decline'
       if (choice.kind === 'mayExhaustLeaderForAdvantage') return "Don't"
       return `Skip ${choice.kind}`
     }
@@ -103,6 +104,23 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         return `Defeat ${target ? `${target}'s ` : ''}upgrade → 2 to base`
       }
       if (choice.kind === 'mayExhaustLeaderForAdvantage') return `Exhaust leader → Advantage to ${anyUnitName(state, choice.unitId) ?? 'unit'}`
+      if (choice.kind === 'mayLastingBuff') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        const buff = [choice.power || choice.hp ? `+${choice.power ?? 0}/+${choice.hp ?? 0}` : '', ...(choice.keywords ?? []).map(k => k.name)].filter(Boolean).join(' & ')
+        return `Give ${target ?? 'unit'} ${buff} this phase`
+      }
+      if (choice.kind === 'mayGiveAdvantage') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Advantage${target ? ` to ${target}` : ''}`
+      }
+      if (choice.kind === 'mayExhaustLeaderGiveAdvantage') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Exhaust leader → Advantage to ${target ?? 'unit'}`
+      }
+      if (choice.kind === 'mayExhaustLeaderExhaustUnit') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Exhaust leader → exhaust ${target ?? 'unit'}`
+      }
       return 'Accept'
     }
     case 'resourceCard': {

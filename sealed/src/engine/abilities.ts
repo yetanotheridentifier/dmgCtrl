@@ -20,6 +20,10 @@ export type TriggerPoint =
   | 'whenPlayed'
   | 'onAttack'
   | 'onAttackEnd'
+  // "When a friendly unit's attack ends" (#347): fires for every unit the attacker's
+  // controller has (and their undeployed leader), not just the attacker — distinct from
+  // `onAttackEnd` ("when THIS unit's attack ends", the attacker only).
+  | 'whenFriendlyAttackEnds'
   | 'whenReadies'
   | 'whenRegroupStarts'
   | 'whenDefeated'
@@ -35,8 +39,10 @@ export interface EffectContext {
   sourceInstanceId?: string
   /** `onAttackEnd` only: the target of the attack that just ended. */
   attackTarget?: AttackTarget
-  /** `onAttackEnd` only: whether that attack dealt combat damage to the opponent's base. */
-  dealtDamageToBase?: boolean
+  /** `onAttackEnd` only: the instance id of the unit that made the attack. */
+  attackerInstanceId?: string
+  /** `onAttackEnd` only: combat damage dealt to the opponent's base this attack (0 if none). */
+  combatDamageToBase?: number
   /** `whenDefeated` only: the unit as captured at the moment of defeat (it has left play). */
   defeatedUnit?: UnitState
   /** A chosen target unit's instance id, when the ability picks one (#309). */

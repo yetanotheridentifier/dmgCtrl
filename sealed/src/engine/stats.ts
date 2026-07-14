@@ -1,4 +1,5 @@
 import type { GameState, UnitState } from './types'
+import { lastingEffectTotals } from './types'
 import { unitHasKeyword, unitKeywordValue, auraContributions } from './keywords'
 import { getCardDefinition } from './abilities'
 
@@ -45,9 +46,13 @@ export function effectivePower(state: GameState, unit: UnitState, ctx: StatConte
   }
   power += statModifiers(state, unit, ctx, 'power')
   power += auraContributions(state, unit).power // other units' auras (#346)
+  power += lastingEffectTotals(state, unit.instanceId).power // "this phase" buffs (#347)
   return Math.max(0, power)
 }
 
 export function effectiveHp(state: GameState, unit: UnitState, ctx: StatContext = {}): number {
-  return Math.max(0, withUpgrades(state, unit, 'hp') + statModifiers(state, unit, ctx, 'hp') + auraContributions(state, unit).hp)
+  return Math.max(
+    0,
+    withUpgrades(state, unit, 'hp') + statModifiers(state, unit, ctx, 'hp') + auraContributions(state, unit).hp + lastingEffectTotals(state, unit.instanceId).hp,
+  )
 }

@@ -1,4 +1,5 @@
 import type { GameState, KeywordInstance, UnitState } from './types'
+import { lastingEffectTotals } from './types'
 import { getCardDefinition } from './abilities'
 
 /** Keyword lookups against the static card db (#305). */
@@ -42,6 +43,8 @@ export function unitKeywords(state: GameState, unit: UnitState): KeywordInstance
   out.push(...(unit.grantedKeywords ?? []))
   // Keywords granted by other units' auras (Sloane → Overwhelm/Sentinel, #346).
   out.push(...auraContributions(state, unit).keywords)
+  // Keywords granted by "this phase" lasting effects (Baylan → Sentinel, #347).
+  out.push(...lastingEffectTotals(state, unit.instanceId).keywords)
   return out
 }
 

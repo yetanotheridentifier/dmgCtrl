@@ -272,8 +272,12 @@ function choiceMoves(state: GameState): Action[] {
       }
       case 'mayDamage':
       case 'mayAdvantageEach':
-      case 'mayDefeatUpgradeForBase': {
-        // Optional targeted effects (#309): pick an eligible target, or decline.
+      case 'mayDefeatUpgradeForBase':
+      case 'mayLastingBuff':
+      case 'mayGiveAdvantage':
+      case 'mayExhaustLeaderGiveAdvantage':
+      case 'mayExhaustLeaderExhaustUnit': {
+        // Optional targeted effects (#309/#347): pick an eligible target, or decline.
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break

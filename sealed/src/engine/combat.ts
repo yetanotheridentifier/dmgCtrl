@@ -1,5 +1,5 @@
 import type { GameState, PlayerId, UnitState } from './types'
-import { opponentOf, updatePlayer } from './types'
+import { opponentOf, updatePlayer, recordUnitDefeated } from './types'
 import { effectiveHp } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
@@ -87,6 +87,7 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
   // units were defeated. The captured unit is passed so its (and its upgrades')
   // abilities can still reference it even though it is no longer on the board.
   for (const dead of defeated) {
+    result = recordUnitDefeated(result, owner, dead.cardId) // "defeated this phase" tracking (#347)
     result = runUnitTrigger(result, 'whenDefeated', dead, owner, { defeatedUnit: dead })
   }
 

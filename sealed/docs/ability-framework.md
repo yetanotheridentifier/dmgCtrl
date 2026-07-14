@@ -124,7 +124,7 @@ The #303 design above is largely realised. Concrete state:
 - **`runUnitTrigger(state, point, unit, owner, extra?)`** — the key dispatch: fires
   the unit's OWN card abilities **and each attached upgrade's** abilities. `extra`
   merges into the `EffectContext` — used to thread the attack outcome into
-  `onAttackEnd` (`attackTarget`, `dealtDamageToBase`) and the captured unit into
+  `onAttackEnd` (`attackTarget`, `combatDamageToBase`, `attackerInstanceId`) and the captured unit into
   `whenDefeated` (`defeatedUnit`, since the unit has left play by then).
 
 ### Static hooks (card-type-agnostic)
@@ -332,3 +332,54 @@ Tests: `src/test/auras.test.ts`.
 defending, +1/0; while attacking, the defender gets −1/0") — needs the attack context
 (attacking/defending) threaded into the aura call, so it lands with Grogu's full build
 (alongside #347's combat/phase tracking).
+
+## Lasting effects + phase/attack tracking (#306/#347)
+
+Two reusable capabilities, both card-type-agnostic. State + helpers live in `engine/types.ts`.
+
+### "This phase" lasting effects
+
+`GameState.lastingEffects?: LastingEffect[]`, each `{ targetInstanceId, power?, hp?, keywords? }`.
+`addLastingEffect(state, effect)` appends one; `lastingEffectTotals(state, instanceId)` sums the
+power/HP/keywords aimed at a unit. Folded into `stats.effectivePower`/`effectiveHp` and
+`keywords.unitKeywords` exactly like auras — a Sentinel granted "this phase" shapes targeting
+for free. **Cleared at the start of the regroup phase** (`clearLastingEffects` in `enterRegroup`),
+so a unit defeated *during* regroup uses its base stats (critical for Baylan). Broader than the
+per-attack `grantedKeywords`/`grantedAbilityCardIds`, which clear after a single attack.
+
+`mayLastingBuff` is a reusable optional-buff pending choice: `{ targets, power?, hp?, keywords? }`
+→ pick a target and grant it the buff for the phase, or decline (Baylan's deployed On Attack).
+
+### Phase / attack event tracking
+
+- **Per-attack base damage:** the attack-end context now carries `combatDamageToBase?: number`
+  (the amount dealt to the enemy base this attack, 0 if none — replaced the old boolean
+  `dealtDamageToBase`) plus `attackerInstanceId`. Consumed by Ezra (≥3) and Shin Hati (cost <
+  amount).
+- **Two attack-end trigger points** (they read the same phrasing on cards but mean different
+  things): `onAttackEnd` fires for the **attacker only** ("when *this* unit's attack ends" —
+  Camtono, Whistling Birds); `whenFriendlyAttackEnds` fires for **every unit the attacker's
+  controller has, plus their undeployed leader** ("when a *friendly* unit's attack ends" — Ezra,
+  Shin Hati, and later Luke). Both are dispatched from `fireAttackEnd`; conflating them would make
+  a Whistling-Birds unit fire on *other* units' attacks.
+- **Per-phase counters:** `GameState.phaseEvents?: { enteredPlay, defeated }` (per controller).
+  `recordUnitEntered` (in `enterUnit`) logs instance ids; `recordUnitDefeated` (in
+  `combat.applyUnitDamage`) logs defeated card ids (so trait conditions like "Imperial" can check).
+  Queried via `enteredPlayThisPhase` / `defeatedThisPhase`; reset whenever the phase changes
+  (`resetPhaseEvents` in `enterRegroup` and `startNextRound`).
+
+**Wired leaders (#347):** Baylan (003) front +2/+2 to a lone-in-arena unit + deployed On Attack
++2/+2 & Sentinel; Ahsoka (009) front +2/+0 to a unit weaker than a friendly one; Ezra (013)
+**front and deployed** — on a friendly 3+ base hit, Advantage to a different unit (front exhausts
+the leader as an added cost, deployed does not); Shin Hati (016) front attack-end → exhaust a ready
+unit cheaper than the base damage. New pending choices `mayLastingBuff`, `mayGiveAdvantage`,
+`mayExhaustLeaderGiveAdvantage`, `mayExhaustLeaderExhaustUnit` (all board-target + Decline in the UI).
+Tests: `src/test/lastingEffects.test.ts`, `src/test/leaderAbilities.test.ts`.
+
+**Consumers landing with #348** (need its play-from-resources / play-from-hand primitives): The
+Armorer (001) reads `enteredPlayThisPhase`; Moff Gideon (008) reads `defeatedThisPhase` for a
+friendly Imperial. The tracking mechanism is built and tested here; those leaders wire up in #348.
+
+**Deferred deployed backs:** Shin Hati's deployed back is "once each round" — needs once-per-round
+support for *triggered* abilities (only activated abilities track it today). Luke (005) both sides
+need #348's heal. Ahsoka's deployed back also awaits its own build.

@@ -1,12 +1,12 @@
 import { registerCard } from './abilities'
 import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount, dealDamageToBase, firstCardUpgrade } from './effects'
 import { dealDamageToUnit } from './combat'
-import { effectiveHp } from './stats'
+import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
-import { opponentOf, pushChoice } from './types'
+import { opponentOf, pushChoice, addLastingEffect } from './types'
 import { unitHasTrait } from './keywords'
-import type { EngineCard, GameState, UnitState } from './types'
+import type { EngineCard, GameState, PlayerId, UnitState } from './types'
 
 /**
  * Real card definitions (#341+). Side-effect module: importing it registers every
@@ -122,7 +122,7 @@ registerCard('ASH_183', { // Whistling Birds — on a base hit, 2 damage to each
     trigger: 'onAttackEnd',
     description: "If this unit damaged the opponent's base, deal 2 to each enemy unit in its arena.",
     effect: (s, ctx) => {
-      if (!ctx.dealtDamageToBase) return s
+      if (!ctx.combatDamageToBase) return s
       const found = findUnit(s, ctx.sourceInstanceId!)
       if (!found) return s
       const enemy = opponentOf(ctx.owner)
@@ -291,4 +291,85 @@ registerCard('ASH_010', { // Bo-Katan Kryze — deploy gate + deployed aura (fro
 registerCard('ASH_007', { // Grand Admiral Sloane — deployed aura (front choose-one is #347/#348)
   // Deployed: each other friendly unit gains Overwhelm and Sentinel (#346).
   aura: (_s, src, tgt, friendly) => (friendly && tgt.instanceId !== src.instanceId ? { keywords: [{ name: 'Overwhelm' }, { name: 'Sentinel' }] } : undefined),
+})
+
+// A friendly unit that is the only one you control in its arena (Baylan's condition).
+const aloneInArena = (s: GameState, owner: PlayerId, u: UnitState): boolean =>
+  s.players[owner].units.filter(x => x.arena === u.arena).length === 1
+
+registerCard('ASH_003', { // Baylan Skoll — front +2/+2 this phase to a lone unit; deployed On Attack +2/+2 & Sentinel (#347)
+  leaderAbilities: {
+    actions: [{
+      description: 'Give a friendly unit +2/+2 for this phase if it is the only unit you control in its arena.',
+      cost: 1,
+      targets: (s, owner) => s.players[owner].units.filter(u => aloneInArena(s, owner, u)).map(u => u.instanceId),
+      effect: (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, power: 2, hp: 2 }),
+    }],
+  },
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'You may give a friendly unit +2/+2 and Sentinel for this phase.',
+    effect: (s, ctx) => {
+      const targets = s.players[ctx.owner].units.map(u => u.instanceId)
+      return targets.length === 0 ? s : pushChoice(s, { kind: 'mayLastingBuff', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, power: 2, hp: 2, keywords: [{ name: 'Sentinel' }] })
+    },
+  }],
+})
+
+registerCard('ASH_009', { // Ahsoka Tano — front +2/+0 this phase to a unit weaker than a friendly one (#347)
+  leaderAbilities: {
+    actions: [{
+      description: 'Choose a unit with less power than a friendly unit; it gets +2/+0 for this phase.',
+      targets: (s, owner) => {
+        const friendlyPowers = s.players[owner].units.map(u => effectivePower(s, u))
+        return allUnits(s).filter(u => friendlyPowers.some(p => p > effectivePower(s, u))).map(u => u.instanceId)
+      },
+      effect: (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, power: 2 }),
+    }],
+  },
+})
+
+// Units other than the just-ended attacker — Ezra's "a different unit" (#347).
+const unitsOtherThanAttacker = (s: GameState, attackerId?: string): string[] =>
+  allUnits(s).filter(u => u.instanceId !== attackerId).map(u => u.instanceId)
+
+registerCard('ASH_013', { // Ezra Bridger — on a friendly 3+ base hit, Advantage to a different unit (#347)
+  // Front (undeployed): exhaust the leader as an additional cost.
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenFriendlyAttackEnds',
+      description: 'If that attack dealt 3+ combat damage to a base, you may exhaust this leader to give an Advantage token to a different unit.',
+      effect: (s, ctx) => {
+        if ((ctx.combatDamageToBase ?? 0) < 3 || s.players[ctx.owner].leader.exhausted) return s
+        const targets = unitsOtherThanAttacker(s, ctx.attackerInstanceId)
+        return targets.length === 0 ? s : pushChoice(s, { kind: 'mayExhaustLeaderGiveAdvantage', id: `${ctx.cardId}-attackEnd`, controller: ctx.owner, targets })
+      },
+    }],
+  },
+  // Deployed (back): no leader-exhaust cost — just the optional token.
+  abilities: [{
+    trigger: 'whenFriendlyAttackEnds',
+    description: 'If that attack dealt 3+ combat damage to a base, you may give an Advantage token to a different unit.',
+    effect: (s, ctx) => {
+      if ((ctx.combatDamageToBase ?? 0) < 3) return s
+      const targets = unitsOtherThanAttacker(s, ctx.attackerInstanceId)
+      return targets.length === 0 ? s : pushChoice(s, { kind: 'mayGiveAdvantage', id: `${ctx.cardId}-attackEnd`, controller: ctx.owner, targets })
+    },
+  }],
+})
+
+registerCard('ASH_016', { // Shin Hati — front: on a friendly base hit, may exhaust leader → exhaust a cheaper unit (#347)
+  // Deployed (back) adds "once per round" — deferred until triggered abilities support that.
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenFriendlyAttackEnds',
+      description: 'You may exhaust this leader to exhaust a unit that costs less than the combat damage dealt to a base this attack.',
+      effect: (s, ctx) => {
+        const dmg = ctx.combatDamageToBase ?? 0
+        if (dmg <= 0 || s.players[ctx.owner].leader.exhausted) return s
+        const targets = allUnits(s).filter(u => !u.exhausted && (s.cards[u.cardId]?.cost ?? 0) < dmg).map(u => u.instanceId)
+        return targets.length === 0 ? s : pushChoice(s, { kind: 'mayExhaustLeaderExhaustUnit', id: `${ctx.cardId}-attackEnd`, controller: ctx.owner, targets })
+      },
+    }],
+  },
 })

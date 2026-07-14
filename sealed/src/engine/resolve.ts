@@ -2,6 +2,7 @@ import type { Action, AttackTarget } from './actions'
 import type { GameState, PlayerId, UnitState } from './types'
 import type { PendingChoice } from './types'
 import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeChoice, hasPendingChoices, pushChoice } from './types'
+import { addLastingEffect, clearLastingEffects, resetPhaseEvents, recordUnitEntered } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, supportGrantedKeywords } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
@@ -210,6 +211,7 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string): GameState
 
   let next = updatePlayer(state, owner, { units: [...state.players[owner].units, newUnit] })
   next = { ...next, instanceCounter: state.instanceCounter + 1 }
+  next = recordUnitEntered(next, owner, newUnit.instanceId) // "entered play this phase" (#347)
 
   // Ambush: open the pending attack only if there's actually an enemy to hit;
   // otherwise the unit just enters play exhausted, as normal (#334).
@@ -385,6 +387,34 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       if (!p.leader.exhausted) {
         next = updatePlayer(next, choice.controller, { leader: { ...p.leader, exhausted: true } })
         next = giveToken(next, choice.unitId, TOKEN_ADVANTAGE)
+      }
+      break
+    }
+    case 'mayLastingBuff':
+      // Optional "this phase" buff, e.g. Baylan's On Attack: grant the chosen unit the buff (#347).
+      if (targetInstanceId) {
+        next = addLastingEffect(next, { targetInstanceId, power: choice.power, hp: choice.hp, keywords: choice.keywords })
+      }
+      break
+    case 'mayGiveAdvantage':
+      // Ezra deployed: give the chosen unit an Advantage token, no cost (#347).
+      if (targetInstanceId) next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+      break
+    case 'mayExhaustLeaderGiveAdvantage': {
+      // Ezra front: exhaust the (undeployed) leader to give the chosen unit an Advantage token (#347).
+      const p = next.players[choice.controller]
+      if (targetInstanceId && !p.leader.exhausted) {
+        next = updatePlayer(next, choice.controller, { leader: { ...p.leader, exhausted: true } })
+        next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+      }
+      break
+    }
+    case 'mayExhaustLeaderExhaustUnit': {
+      // Shin Hati: exhaust the (undeployed) leader to exhaust the chosen unit (#347).
+      const p = next.players[choice.controller]
+      if (targetInstanceId && !p.leader.exhausted) {
+        next = updatePlayer(next, choice.controller, { leader: { ...p.leader, exhausted: true } })
+        next = exhaustUnit(next, targetInstanceId)
       }
       break
     }
@@ -609,10 +639,20 @@ function consumeAdvantage(state: GameState, owner: PlayerId, instanceId: string)
  *  survived the combat (#340). `ctx` carries what the attack did (target, whether
  *  it damaged the base) for abilities like Whistling Birds (#342). */
 function fireAttackEnd(state: GameState, owner: PlayerId, attackerId: string, ctx: Partial<EffectContext>, captured?: UnitState): GameState {
-  // "When Attack Ends" abilities still trigger if the attacker was defeated by combat
-  // damage (CR 7.6 / 1258) — fall back to its last-known state (with its upgrades).
+  const fullCtx = { ...ctx, attackerInstanceId: attackerId }
+  // "When THIS unit's attack ends" — the attacker only (Camtono, Whistling Birds). Still
+  // triggers if the attacker was defeated by combat damage (CR 7.6 / 1258) — fall back to
+  // its last-known state (with its upgrades).
   const attacker = state.players[owner].units.find(u => u.instanceId === attackerId) ?? captured
-  return attacker ? runUnitTrigger(state, 'onAttackEnd', attacker, owner, ctx) : state
+  let next = attacker ? runUnitTrigger(state, 'onAttackEnd', attacker, owner, fullCtx) : state
+  // "When a friendly unit's attack ends" — every unit the attacker's controller has (re-found
+  // in case an earlier reactor changed the board), plus their undeployed leader (#347).
+  for (const id of next.players[owner].units.map(u => u.instanceId)) {
+    const reactor = next.players[owner].units.find(u => u.instanceId === id)
+    if (reactor) next = runUnitTrigger(next, 'whenFriendlyAttackEnds', reactor, owner, fullCtx)
+  }
+  next = runLeaderTrigger(next, 'whenFriendlyAttackEnds', owner, fullCtx)
+  return next
 }
 
 /** Fire a trigger for every unit in play (both sides), re-finding each in case an
@@ -710,7 +750,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
     const enemy = state.players[enemyId]
     let next = updatePlayer(state, enemyId, { base: { ...enemy.base, damage: enemy.base.damage + attackerPower } })
     next = consumeAdvantage(next, playerId, attackerId) // the attack completed
-    next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, dealtDamageToBase: attackerPower > 0 })
+    next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: attackerPower })
     return clearGrantedKeywords(checkWin(next))
   }
 
@@ -718,7 +758,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   // The defender may have been defeated before damage → the attack fizzles.
   if (!defender) {
     let next = consumeAdvantage(state, playerId, attackerId)
-    next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, dealtDamageToBase: false })
+    next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: 0 })
     return clearGrantedKeywords(checkWin(next))
   }
 
@@ -747,7 +787,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   next = consumeAdvantage(next, playerId, attackerId)
   next = consumeAdvantage(next, enemyId, defender.instanceId)
   // Pass the pre-combat attacker so its "When Attack Ends" fires even if it was defeated.
-  next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, dealtDamageToBase: overwhelmExcess > 0 }, attacker)
+  next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: overwhelmExcess }, attacker)
   return clearGrantedKeywords(checkWin(next))
 }
 
@@ -805,7 +845,8 @@ function clearHidden(state: GameState): GameState {
 }
 
 function enterRegroup(state: GameState): GameState {
-  let next: GameState = clearHidden({ ...state, phase: 'regroup', consecutivePasses: 0 })
+  // "This phase" buffs expire and per-phase tracking resets as the phase changes (#347).
+  let next: GameState = resetPhaseEvents(clearLastingEffects(clearHidden({ ...state, phase: 'regroup', consecutivePasses: 0 })))
   next = drawForRegroup(next, 'player')
   next = drawForRegroup(next, 'opponent')
   next = checkWin(next)
@@ -867,6 +908,7 @@ function firstDecider(state: GameState, initiative: PlayerId): PlayerId {
 
 function startNextRound(state: GameState): GameState {
   let next = readyEverything(readyEverything(state, 'player'), 'opponent')
+  next = resetPhaseEvents(next) // a fresh action phase begins (#347)
   next = {
     ...next,
     phase: 'action',
