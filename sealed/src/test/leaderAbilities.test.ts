@@ -377,6 +377,32 @@ describe('Shin Hati (ASH_016) — attack-end exhaust a cheaper unit (#347)', () 
   })
 })
 
+describe('Shin Hati (ASH_016) — deployed: exhaust a cheaper unit, once each round (#347)', () => {
+  const cards = {
+    ...CARDS,
+    ASH_016: card({ id: 'ASH_016', type: 'leader', cost: 6, power: 4, hp: 6 }),
+  }
+  const board = () => state({
+    cards,
+    players: {
+      player: player({ leader: deployed('ASH_016'), units: [unit('L', 'ASH_016', { isLeader: true }), unit('a1', 'TST_U3'), unit('a2', 'TST_U3')] }),
+      opponent: player({ units: [unit('e1', 'TST_U1'), unit('e2', 'TST_U1')] }),
+    },
+  })
+
+  it('reacts to a friendly base hit with no leader-exhaust cost, then is spent for the round', () => {
+    const atk = resolve(board(), { type: 'attack', attackerId: 'a1', target: { kind: 'base' } }) // 5 to base
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayExhaustUnit' })
+    const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'e1' })
+    expect(done.players.opponent.units.find(u => u.instanceId === 'e1')!.exhausted).toBe(true)
+    expect(done.players.player.leader.exhausted).toBe(false) // deployed side does not exhaust the leader
+
+    // A second friendly attack this round finds a valid target (e2) but the ability is spent.
+    const atk2 = resolve({ ...done, activePlayer: 'player' }, { type: 'attack', attackerId: 'a2', target: { kind: 'base' } })
+    expect(atk2.pendingChoices).toBeUndefined()
+  })
+})
+
 describe('Bo-Katan Kryze (ASH_010) — custom deploy condition (#309)', () => {
   const cards = { ...CARDS, ASH_010: card({ id: 'ASH_010', type: 'leader', cost: 10 }), MANDO: card({ id: 'MANDO', type: 'unit', arena: 'ground', traits: ['Mandalorian'] }) }
   const withResourcesAndMandos = (n: number, mandos: number) =>

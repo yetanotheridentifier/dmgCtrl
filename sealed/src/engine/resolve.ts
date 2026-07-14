@@ -2,7 +2,7 @@ import type { Action, AttackTarget } from './actions'
 import type { GameState, PlayerId, UnitState } from './types'
 import type { PendingChoice } from './types'
 import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeChoice, hasPendingChoices, pushChoice } from './types'
-import { addLastingEffect, clearLastingEffects, resetPhaseEvents, recordUnitEntered } from './types'
+import { addLastingEffect, clearLastingEffects, resetPhaseEvents, recordUnitEntered, markAbilityUsed } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, supportGrantedKeywords } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
@@ -410,7 +410,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       break
     }
     case 'mayExhaustLeaderExhaustUnit': {
-      // Shin Hati: exhaust the (undeployed) leader to exhaust the chosen unit (#347).
+      // Shin Hati front: exhaust the (undeployed) leader to exhaust the chosen unit (#347).
       const p = next.players[choice.controller]
       if (targetInstanceId && !p.leader.exhausted) {
         next = updatePlayer(next, choice.controller, { leader: { ...p.leader, exhausted: true } })
@@ -418,6 +418,13 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       break
     }
+    case 'mayExhaustUnit':
+      // Shin Hati deployed: exhaust the chosen unit (no leader cost); mark the once-per-round use (#347).
+      if (targetInstanceId) {
+        next = exhaustUnit(next, targetInstanceId)
+        if (choice.markUsed) next = markAbilityUsed(next, choice.controller, choice.markUsed.instanceId, choice.markUsed.key)
+      }
+      break
     case 'mayDefeatUpgradeForBase': {
       // Vane: defeat a card upgrade on the chosen friendly unit, then deal 2 to the enemy base (#309).
       const host = targetInstanceId ? next.players[choice.controller].units.find(u => u.instanceId === targetInstanceId) : undefined

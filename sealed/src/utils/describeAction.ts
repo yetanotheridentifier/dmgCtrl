@@ -70,7 +70,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayDamageExhaust') return 'Decline'
       if (choice.kind === 'mayAttack') return "Don't attack"
       if (choice.kind === 'mayDamage' || choice.kind === 'mayAdvantageEach' || choice.kind === 'mayDefeatUpgradeForBase') return 'Decline'
-      if (choice.kind === 'mayLastingBuff' || choice.kind === 'mayGiveAdvantage' || choice.kind === 'mayExhaustLeaderGiveAdvantage' || choice.kind === 'mayExhaustLeaderExhaustUnit') return 'Decline'
+      if (choice.kind === 'mayLastingBuff' || choice.kind === 'mayGiveAdvantage' || choice.kind === 'mayExhaustLeaderGiveAdvantage' || choice.kind === 'mayExhaustLeaderExhaustUnit' || choice.kind === 'mayExhaustUnit') return 'Decline'
       if (choice.kind === 'mayExhaustLeaderForAdvantage') return "Don't"
       return `Skip ${choice.kind}`
     }
@@ -120,6 +120,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayExhaustLeaderExhaustUnit') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Exhaust leader → exhaust ${target ?? 'unit'}`
+      }
+      if (choice.kind === 'mayExhaustUnit') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Exhaust ${target ?? 'unit'}`
       }
       return 'Accept'
     }

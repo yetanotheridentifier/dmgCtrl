@@ -372,14 +372,26 @@ per-attack `grantedKeywords`/`grantedAbilityCardIds`, which clear after a single
 +2/+2 & Sentinel; Ahsoka (009) front +2/+0 to a unit weaker than a friendly one; Ezra (013)
 **front and deployed** — on a friendly 3+ base hit, Advantage to a different unit (front exhausts
 the leader as an added cost, deployed does not); Shin Hati (016) front attack-end → exhaust a ready
-unit cheaper than the base damage. New pending choices `mayLastingBuff`, `mayGiveAdvantage`,
-`mayExhaustLeaderGiveAdvantage`, `mayExhaustLeaderExhaustUnit` (all board-target + Decline in the UI).
-Tests: `src/test/lastingEffects.test.ts`, `src/test/leaderAbilities.test.ts`.
+unit cheaper than the base damage — **front and deployed** (deployed has no leader-exhaust cost
+but is **once each round**, tracked via the shared `usedAbilities` marker — `markAbilityUsed`,
+cleared when the unit readies at regroup). New pending choices `mayLastingBuff`, `mayGiveAdvantage`,
+`mayExhaustLeaderGiveAdvantage`, `mayExhaustLeaderExhaustUnit`, `mayExhaustUnit` (all board-target +
+Decline in the UI). Tests: `src/test/lastingEffects.test.ts`, `src/test/leaderAbilities.test.ts`.
+
+**Once-per-round for *triggered* abilities:** `markAbilityUsed(state, owner, instanceId, key)` sets a
+key on the unit's `usedAbilities`; a triggered ability guards on `usedAbilities.includes(key)` and
+passes `markUsed: { instanceId, key }` in its choice so the mark lands on **acceptance** (declining
+doesn't spend it). Same `usedAbilities` list the activated-ability path (#343) uses, so it clears at
+regroup for free.
+
+**UI — +X/+Y modifier token:** a unit carrying lasting-effect stats shows a white token with the
+power delta in red over the HP delta in blue (`board-unit-mod-<id>`), mirroring the physical token;
+it appears/updates from `lastingEffectTotals` and disappears when the effects clear at phase end.
+Reusable for any future source of transient stat deltas. (`CardTokens` in `gameScreen.tsx`.)
 
 **Consumers landing with #348** (need its play-from-resources / play-from-hand primitives): The
 Armorer (001) reads `enteredPlayThisPhase`; Moff Gideon (008) reads `defeatedThisPhase` for a
 friendly Imperial. The tracking mechanism is built and tested here; those leaders wire up in #348.
 
-**Deferred deployed backs:** Shin Hati's deployed back is "once each round" — needs once-per-round
-support for *triggered* abilities (only activated abilities track it today). Luke (005) both sides
-need #348's heal. Ahsoka's deployed back also awaits its own build.
+**Deferred deployed backs:** Luke (005) both sides need #348's heal (heal that unit / your base).
+Ahsoka's deployed back awaits its own build.

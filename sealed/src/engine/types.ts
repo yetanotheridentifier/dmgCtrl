@@ -231,9 +231,12 @@ export type PendingChoice =
   | { kind: 'mayExhaustLeaderGiveAdvantage'; id: string; controller: PlayerId; targets: string[] }
   // Ezra deployed (#347): may give an Advantage token to one of `targets`, or decline (no cost).
   | { kind: 'mayGiveAdvantage'; id: string; controller: PlayerId; targets: string[] }
-  // Shin Hati (#347): on a friendly attack ending, may exhaust the leader to exhaust one of
+  // Shin Hati front (#347): on a friendly attack ending, may exhaust the leader to exhaust one of
   // `targets` (a ready unit cheaper than the base damage dealt), or decline.
   | { kind: 'mayExhaustLeaderExhaustUnit'; id: string; controller: PlayerId; targets: string[] }
+  // Shin Hati deployed (#347): may exhaust one of `targets`, or decline (no leader-exhaust cost).
+  // `markUsed`, when set, marks a once-per-round triggered ability as spent on acceptance.
+  | { kind: 'mayExhaustUnit'; id: string; controller: PlayerId; targets: string[]; markUsed?: { instanceId: string; key: string } }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */
 export function activeChoice(state: GameState): PendingChoice | undefined {
@@ -316,6 +319,18 @@ export function enteredPlayThisPhase(state: GameState, owner: PlayerId): string[
 /** Card ids of units defeated under `owner` this phase. */
 export function defeatedThisPhase(state: GameState, owner: PlayerId): string[] {
   return state.phaseEvents?.defeated[owner] ?? []
+}
+
+/** Mark a once-per-round ability (`key`) as spent on the unit `instanceId` under `owner`.
+ *  Cleared when the unit readies at regroup (shared with activated abilities, #343). */
+export function markAbilityUsed(state: GameState, owner: PlayerId, instanceId: string, key: string): GameState {
+  return updatePlayer(state, owner, {
+    units: state.players[owner].units.map(u =>
+      u.instanceId === instanceId && !(u.usedAbilities ?? []).includes(key)
+        ? { ...u, usedAbilities: [...(u.usedAbilities ?? []), key] }
+        : u,
+    ),
+  })
 }
 
 /** Total power/HP and keywords a unit gains from all lasting effects aimed at it. */

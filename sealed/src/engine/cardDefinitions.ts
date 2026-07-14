@@ -358,8 +358,14 @@ registerCard('ASH_013', { // Ezra Bridger — on a friendly 3+ base hit, Advanta
   }],
 })
 
-registerCard('ASH_016', { // Shin Hati — front: on a friendly base hit, may exhaust leader → exhaust a cheaper unit (#347)
-  // Deployed (back) adds "once per round" — deferred until triggered abilities support that.
+// Ready units cheaper than the base damage dealt this attack — Shin Hati's targets (#347).
+const cheaperReadyUnits = (s: GameState, dmg: number): string[] =>
+  allUnits(s).filter(u => !u.exhausted && (s.cards[u.cardId]?.cost ?? 0) < dmg).map(u => u.instanceId)
+
+const SHIN_ROUND_KEY = 'ASH_016#friendlyAttackEnd' // deployed Shin's "once each round" marker
+
+registerCard('ASH_016', { // Shin Hati — on a friendly base hit, exhaust a cheaper unit (#347)
+  // Front (undeployed): exhaust the leader as the additional cost; no round limit.
   leaderAbilities: {
     abilities: [{
       trigger: 'whenFriendlyAttackEnds',
@@ -367,9 +373,21 @@ registerCard('ASH_016', { // Shin Hati — front: on a friendly base hit, may ex
       effect: (s, ctx) => {
         const dmg = ctx.combatDamageToBase ?? 0
         if (dmg <= 0 || s.players[ctx.owner].leader.exhausted) return s
-        const targets = allUnits(s).filter(u => !u.exhausted && (s.cards[u.cardId]?.cost ?? 0) < dmg).map(u => u.instanceId)
+        const targets = cheaperReadyUnits(s, dmg)
         return targets.length === 0 ? s : pushChoice(s, { kind: 'mayExhaustLeaderExhaustUnit', id: `${ctx.cardId}-attackEnd`, controller: ctx.owner, targets })
       },
     }],
   },
+  // Deployed (back): no leader-exhaust cost, but usable only once each round.
+  abilities: [{
+    trigger: 'whenFriendlyAttackEnds',
+    description: 'You may exhaust a unit that costs less than the combat damage dealt to a base this attack. Once each round.',
+    effect: (s, ctx) => {
+      const dmg = ctx.combatDamageToBase ?? 0
+      const self = allUnits(s).find(u => u.instanceId === ctx.sourceInstanceId)
+      if (dmg <= 0 || !self || (self.usedAbilities ?? []).includes(SHIN_ROUND_KEY)) return s
+      const targets = cheaperReadyUnits(s, dmg)
+      return targets.length === 0 ? s : pushChoice(s, { kind: 'mayExhaustUnit', id: `${ctx.cardId}-attackEnd`, controller: ctx.owner, targets, markUsed: { instanceId: ctx.sourceInstanceId!, key: SHIN_ROUND_KEY } })
+    },
+  }],
 })

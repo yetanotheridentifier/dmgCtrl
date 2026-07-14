@@ -12,6 +12,7 @@ import { CARD_WIDTH_PX, ZOOM_WIDTH_PX } from './cardSizing'
 import { tokenLayout, TOKEN_W, TOKEN_H } from './tokens'
 import { TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { unitHasKeyword } from '../engine/keywords'
+import { lastingEffectTotals } from '../engine/types'
 import { useCardZoom } from './useCardZoom'
 import { CardZoomPopover } from './cardZoom'
 import { DeckPile, ResourceStack, DiscardPile, OpponentHand, EmptySlot } from './mat'
@@ -125,7 +126,7 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
           padding; the upgrades zoom from their exposed strips instead (#336). */}
       <div className="relative w-fit" {...bind}>
         <CardFace card={card} fallbackName={unit.cardId} deployed={unit.isLeader} exhausted={unit.exhausted} highlight={highlight} />
-        <CardTokens unit={unit} />
+        <CardTokens state={state} unit={unit} />
         {/* Keyword badges (#334): Hidden (temporary, until next phase) and Sentinel
             (a keyword — shown while the unit has it, gone if it loses it/defeated).
             Stacked so both can show. */}
@@ -161,13 +162,40 @@ interface CardToken {
   sub?: string
   /** Text colour; defaults to white. Dark on the light gold Advantage token. */
   textColor?: string
+  /** Rich content shown in place of `label` (e.g. the two-tone +X/+Y modifier token). */
+  node?: React.ReactNode
+  /** Border (used for the light modifier token so it reads on pale card art). */
+  border?: string
 }
 
-function CardTokens({ unit }: { unit: UnitState }) {
+/** Signed delta, e.g. 2 → "+2", -1 → "-1", 0 → "+0" (matches the physical +X/+Y token). */
+function signed(n: number): string {
+  return n >= 0 ? `+${n}` : `${n}`
+}
+
+function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
   const countToken = (id: string) => unit.upgrades.filter(u => u.cardId === id).length
   const tokens: CardToken[] = []
   if (unit.damage > 0) {
     tokens.push({ key: 'damage', label: String(unit.damage), color: 'var(--color-red)', testid: `board-unit-damage-${unit.instanceId}` })
+  }
+  // "This phase" stat modifiers (Baylan/Ahsoka, #347): a white token with red +X (power)
+  // over blue +Y (HP), mirroring the physical token; cleared with the effects at phase end.
+  const mods = lastingEffectTotals(state, unit.instanceId)
+  if (mods.power !== 0 || mods.hp !== 0) {
+    tokens.push({
+      key: 'mod',
+      label: `${signed(mods.power)}/${signed(mods.hp)}`,
+      color: '#f8fafc',
+      border: '1px solid rgba(0,0,0,0.35)',
+      testid: `board-unit-mod-${unit.instanceId}`,
+      node: (
+        <span className="flex flex-col items-center leading-none" style={{ fontSize: `${Math.round(TOKEN_H * 0.4)}px`, fontWeight: 800 }}>
+          <span style={{ color: 'var(--color-red)' }}>{signed(mods.power)}</span>
+          <span style={{ color: '#2563eb' }}>{signed(mods.hp)}</span>
+        </span>
+      ),
+    })
   }
   // Token upgrades render as on-card tokens (not cards behind the unit) (#334):
   // Shield = blue, Experience = amber (+1/+1), Advantage = gold "adv." (+1/0 next combat).
@@ -205,11 +233,16 @@ function CardTokens({ unit }: { unit: UnitState }) {
             fontSize: `${Math.round(TOKEN_H * 0.6)}px`,
             fontWeight: 600,
             lineHeight: 1,
+            border: t.border,
             boxShadow: '0 1px 3px rgba(0, 0, 0, 0.7)',
           }}
         >
-          {t.sub && <span style={{ fontSize: `${Math.round(TOKEN_H * 0.26)}px`, fontWeight: 700, opacity: 0.85 }}>{t.sub}</span>}
-          {t.label}
+          {t.node ?? (
+            <>
+              {t.sub && <span style={{ fontSize: `${Math.round(TOKEN_H * 0.26)}px`, fontWeight: 700, opacity: 0.85 }}>{t.sub}</span>}
+              {t.label}
+            </>
+          )}
         </span>
       ))}
     </div>
@@ -690,7 +723,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
 
     // Optional targeted pending choices (#309/#342) — resolved by clicking a highlighted
     // board unit plus a Decline button, rather than one menu button per target.
-    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDefeatUpgradeForBase', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage', 'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit']
+    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDefeatUpgradeForBase', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage', 'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit', 'mayExhaustUnit']
     const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && boardTargetKinds.includes(c.kind))
     const choiceTargetIds = new Map<string, Action>()
     if (targetChoice) for (const a of legal) if (a.type === 'acceptChoice' && a.choiceId === targetChoice.id && a.targetInstanceId) choiceTargetIds.set(a.targetInstanceId, a)
