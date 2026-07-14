@@ -1,6 +1,7 @@
 import { registerCard } from './abilities'
-import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount } from './effects'
+import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount, dealDamageToBase, firstCardUpgrade } from './effects'
 import { dealDamageToUnit } from './combat'
+import { effectiveHp } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
 import { opponentOf, pushChoice } from './types'
@@ -190,4 +191,97 @@ registerCard('ASH_210', { // DDC Defender — "On Defense: you may deal 1 to a u
       return pushChoice(s, { kind: 'mayDamageExhaust', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, arena: found.unit.arena })
     },
   }],
+})
+
+// ── Leaders (#309) ──────────────────────────────────────────────────────────
+const allUnits = (s: GameState): UnitState[] => [...s.players.player.units, ...s.players.opponent.units]
+const remainingHp = (s: GameState, u: UnitState): number => effectiveHp(s, u) - u.damage
+
+registerCard('ASH_011', { // Cad Bane — front (undeployed) + deployed (Overwhelm from data + On Attack)
+  leaderAbilities: {
+    actions: [{
+      description: 'Deal 1 damage to a unit with 2 or more remaining HP.',
+      targets: s => allUnits(s).filter(u => remainingHp(s, u) >= 2).map(u => u.instanceId),
+      effect: (s, ctx) => dealDamageToUnit(s, ctx.targetInstanceId!, 1),
+    }],
+  },
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'You may deal 1 damage to a unit with 2 or more remaining HP.',
+    effect: (s, ctx) => {
+      const targets = allUnits(s).filter(u => remainingHp(s, u) >= 2).map(u => u.instanceId)
+      return targets.length === 0 ? s : pushChoice(s, { kind: 'mayDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount: 1 })
+    },
+  }],
+})
+
+registerCard('ASH_015', { // Emperor Palpatine — front (undeployed) + deployed (On Attack)
+  leaderAbilities: {
+    actions: [{
+      description: 'Choose an exhausted friendly unit; give it an Advantage token for each other friendly unit.',
+      targets: (s, owner) => s.players[owner].units.filter(u => u.exhausted).map(u => u.instanceId),
+      effect: (s, ctx) => {
+        const others = s.players[ctx.owner].units.filter(u => u.instanceId !== ctx.targetInstanceId).length
+        let next = s
+        for (let i = 0; i < others; i++) next = giveToken(next, ctx.targetInstanceId!, TOKEN_ADVANTAGE)
+        return next
+      },
+    }],
+  },
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'You may choose another exhausted friendly unit; give it an Advantage token for each other friendly unit.',
+    effect: (s, ctx) => {
+      const targets = s.players[ctx.owner].units.filter(u => u.exhausted && u.instanceId !== ctx.sourceInstanceId).map(u => u.instanceId)
+      return targets.length === 0 ? s : pushChoice(s, { kind: 'mayAdvantageEach', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets })
+    },
+  }],
+})
+
+registerCard('ASH_012', { // Vane — front (undeployed) + deployed (On Attack)
+  // NOTE: "Deal 2 to a base" / "...to the defending unit or a base" are simplified to the
+  // enemy base for now (the sensible default); the full target choice can be added later.
+  leaderAbilities: {
+    actions: [{
+      description: 'Defeat a friendly upgrade; deal 2 damage to the enemy base.',
+      targets: (s, owner) => s.players[owner].units.filter(u => firstCardUpgrade(s, u)).map(u => u.instanceId),
+      effect: (s, ctx) => {
+        const host = s.players[ctx.owner].units.find(u => u.instanceId === ctx.targetInstanceId)!
+        const next = defeatUpgrade(s, host.instanceId, firstCardUpgrade(s, host)!)
+        return dealDamageToBase(next, opponentOf(ctx.owner), 2)
+      },
+    }],
+  },
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'You may defeat a friendly upgrade to deal 2 to the enemy base.',
+    effect: (s, ctx) => {
+      const targets = s.players[ctx.owner].units.filter(u => firstCardUpgrade(s, u)).map(u => u.instanceId)
+      return targets.length === 0 ? s : pushChoice(s, { kind: 'mayDefeatUpgradeForBase', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets })
+    },
+  }],
+})
+
+registerCard('ASH_017', { // Greef Karga — front (undeployed, optional) + deployed (mandatory)
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenPlayOrCreateUnit',
+      description: 'You may exhaust this leader to give the played unit an Advantage token.',
+      effect: (s, ctx) =>
+        s.players[ctx.owner].leader.exhausted
+          ? s
+          : pushChoice(s, { kind: 'mayExhaustLeaderForAdvantage', id: ctx.targetInstanceId!, controller: ctx.owner, unitId: ctx.targetInstanceId! }),
+    }],
+  },
+  abilities: [{
+    trigger: 'whenPlayOrCreateUnit',
+    description: 'Give the played unit an Advantage token.',
+    effect: (s, ctx) => giveToken(s, ctx.targetInstanceId!, TOKEN_ADVANTAGE),
+  }],
+})
+
+registerCard('ASH_010', { // Bo-Katan Kryze — deploy if resources + friendly Mandalorian units ≥ 10
+  // (Her front/deployed abilities — create-token + Mandalorian aura — land with #346/#347.)
+  deployCondition: (s, owner) =>
+    s.players[owner].resources.length + s.players[owner].units.filter(u => unitHasTrait(s, u, 'Mandalorian')).length >= 10,
 })

@@ -3,7 +3,7 @@ import type { EngineCard, GameState, KeywordInstance, PlayerId, UnitState } from
 import { opponentOf, hasPendingChoices } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { unitHasKeyword } from './keywords'
-import { getCardDefinition, unitActionAbilities, actionAbilityKey } from './abilities'
+import { getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions } from './abilities'
 import './cardDefinitions' // side effect: registers all real card behaviours (#341+)
 
 /**
@@ -131,16 +131,14 @@ function actionPhaseMoves(state: GameState): Action[] {
     }
   }
 
-  // Deploy Leader — epic action; requires CONTROLLING resources equal to the
-  // leader's cost (CR 2.6.1 — controlled, not spent; exhausted ones count).
+  // Deploy Leader — epic action; requires CONTROLLING resources equal to the leader's
+  // cost (CR 2.6.1 — controlled, not spent; exhausted ones count), unless the leader
+  // supplies a custom deploy condition (e.g. Bo-Katan) (#309).
   const leaderCard = state.cards[p.leader.cardId]
-  if (
-    leaderCard &&
-    !p.leader.deployed &&
-    !p.leader.epicActionUsed &&
-    p.resources.length >= leaderCard.cost
-  ) {
-    moves.push({ type: 'deployLeader' })
+  if (leaderCard && !p.leader.deployed && !p.leader.epicActionUsed) {
+    const condition = getCardDefinition(p.leader.cardId)?.deployCondition
+    const canDeploy = condition ? condition(state, playerId) : p.resources.length >= leaderCard.cost
+    if (canDeploy) moves.push({ type: 'deployLeader' })
   }
 
   // Use a unit's activated "Action:" ability (#343) — e.g. Improvised Identity. Each
@@ -151,6 +149,22 @@ function actionPhaseMoves(state: GameState): Action[] {
       if (ability.usable && !ability.usable(state, u)) continue
       moves.push({ type: 'useAbility', instanceId: u.instanceId, cardId, index })
     }
+  }
+
+  // Use an undeployed leader's activated "Action:" ability (#309). A targeted ability
+  // yields one move per valid target (none = not usable); a target-less one is gated by
+  // `usable` and affordability.
+  if (!p.leader.deployed && !p.leader.exhausted) {
+    leaderActions(p.leader.cardId).forEach((ability, index) => {
+      if (!canAfford(p, ability.cost ?? 0)) return
+      if (ability.targets) {
+        for (const targetInstanceId of ability.targets(state, playerId)) {
+          moves.push({ type: 'useLeaderAbility', index, targetInstanceId })
+        }
+      } else if (!ability.usable || ability.usable(state, playerId)) {
+        moves.push({ type: 'useLeaderAbility', index })
+      }
+    })
   }
 
   // Take the Initiative — once per round across both players (CR 1.15.5a).
@@ -251,6 +265,20 @@ function choiceMoves(state: GameState): Action[] {
           const c = state.cards[cid]
           if (c?.type === 'unit' && c.arena === 'ground') moves.push({ type: 'acceptChoice', choiceId: choice.id, deckIndex: i })
         })
+        break
+      }
+      case 'mayDamage':
+      case 'mayAdvantageEach':
+      case 'mayDefeatUpgradeForBase': {
+        // Optional targeted effects (#309): pick an eligible target, or decline.
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'mayExhaustLeaderForAdvantage': {
+        // Greef Karga front: a yes/no — the target unit is fixed (#309).
+        moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'mayAttack': {

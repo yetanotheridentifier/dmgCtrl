@@ -20,6 +20,9 @@ export type Action =
   // Use a unit's activated "Action:" ability (#343). `cardId`+`index` address the
   // ability among the unit's own and its upgrades' action abilities.
   | { type: 'useAbility'; instanceId: string; cardId: string; index: number }
+  // Use an undeployed leader's activated "Action:" ability (#309); `index` addresses it,
+  // `targetInstanceId` supplies the chosen target unit when the ability needs one.
+  | { type: 'useLeaderAbility'; index: number; targetInstanceId?: string }
   | { type: 'takeInitiative' }
   | { type: 'pass' }
   // Decline a pending choice (Ambush/Support/pay-or-exhaust/may-play …). With no

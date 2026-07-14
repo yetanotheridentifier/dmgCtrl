@@ -24,6 +24,7 @@ export type TriggerPoint =
   | 'whenRegroupStarts'
   | 'whenDefeated'
   | 'onDefense'
+  | 'whenPlayOrCreateUnit'
 
 export interface EffectContext {
   /** Controller of the ability's source card. */
@@ -38,6 +39,8 @@ export interface EffectContext {
   dealtDamageToBase?: boolean
   /** `whenDefeated` only: the unit as captured at the moment of defeat (it has left play). */
   defeatedUnit?: UnitState
+  /** A chosen target unit's instance id, when the ability picks one (#309). */
+  targetInstanceId?: string
 }
 
 export type EffectFn = (state: GameState, ctx: EffectContext) => GameState
@@ -85,6 +88,49 @@ export interface CardDefinition {
   makesLeaderUnit?: (state: GameState, unit: UnitState) => boolean
   /** Aspect icons this unit provides while its controller pays costs — The Darksaber (#343). */
   providesAspects?: (state: GameState, unit: UnitState) => string[]
+  /**
+   * Undeployed-leader (front-side) behaviour (#309), kept separate from the deployed
+   * unit-side (`abilities`/`actionAbilities`/keywords): while a leader is undeployed it
+   * isn't a unit, so those never fire on it; once deployed it's a unit and these don't.
+   */
+  leaderAbilities?: LeaderAbilities
+  /** Custom epic-action deploy gate (#309); default is `resources ≥ leader.cost`. */
+  deployCondition?: (state: GameState, owner: PlayerId) => boolean
+}
+
+/**
+ * Custom epic-action deploy condition (#309), overriding the default "control resources ≥
+ * the leader's cost" — e.g. Bo-Katan (resources + friendly Mandalorian units ≥ 10).
+ */
+// (declared on CardDefinition above via `deployCondition`.)
+
+/** A leader's undeployed-side abilities (#309). */
+export interface LeaderAbilities {
+  /** Activated "Action: [Exhaust] …" abilities usable while undeployed. */
+  actions?: LeaderActionAbilityDef[]
+  /** Triggered "When …" abilities that fire while undeployed (wired later). */
+  abilities?: AbilityDef[]
+}
+
+/**
+ * An activated leader-side action (#309). Uses exhaust the leader (and pay any `cost`).
+ * `targets` enumerates valid target-unit instance ids when the ability picks one — an
+ * empty list means it can't be used right now; `usable` gates target-less abilities.
+ */
+export interface LeaderActionAbilityDef {
+  description: string
+  /** Resource cost paid on use (default 0). */
+  cost?: number
+  /** Valid target-unit instance ids; omit for a target-less ability. */
+  targets?: (state: GameState, owner: PlayerId) => string[]
+  /** Gate for a target-less ability (defaults usable). */
+  usable?: (state: GameState, owner: PlayerId) => boolean
+  effect: (state: GameState, ctx: EffectContext) => GameState
+}
+
+/** A leader's undeployed action abilities (empty unless registered). */
+export function leaderActions(cardId: string): LeaderActionAbilityDef[] {
+  return registry.get(cardId)?.leaderAbilities?.actions ?? []
 }
 
 /** An activated ability a unit may use as its action (CR 2.4); e.g. Improvised Identity. */
@@ -158,6 +204,21 @@ export function runTrigger(state: GameState, point: TriggerPoint, ctx: EffectCon
     if (ability.trigger === point) {
       next = ability.effect(next, ctx)
     }
+  }
+  return next
+}
+
+/**
+ * Fire an undeployed leader's front-side triggered abilities at `point` (#309). A
+ * deployed leader reacts via its unit (through `runUnitTrigger`), so this only fires
+ * while the leader is in the base zone.
+ */
+export function runLeaderTrigger(state: GameState, point: TriggerPoint, owner: PlayerId, extra?: Partial<EffectContext>): GameState {
+  const leader = state.players[owner].leader
+  if (leader.deployed) return state
+  let next = state
+  for (const ability of registry.get(leader.cardId)?.leaderAbilities?.abilities ?? []) {
+    if (ability.trigger === point) next = ability.effect(next, { owner, cardId: leader.cardId, ...extra })
   }
   return next
 }

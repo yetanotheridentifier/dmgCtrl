@@ -4,9 +4,9 @@ import type { PendingChoice } from './types'
 import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeChoice, hasPendingChoices, pushChoice } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, supportGrantedKeywords } from './legalMoves'
-import { runTrigger, runUnitTrigger, getCardDefinition, actionAbilityKey, type TriggerPoint, type EffectContext } from './abilities'
+import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit } from './combat'
-import { exhaustUnit, findUnit } from './effects'
+import { exhaustUnit, findUnit, giveToken, defeatUpgrade, dealDamageToBase, firstCardUpgrade } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
@@ -43,6 +43,8 @@ export function resolve(state: GameState, action: Action): GameState {
       return requirePhase(state, 'action', () => advanceTurn(resetPasses(deployLeader(state))))
     case 'useAbility':
       return requirePhase(state, 'action', () => useAbility(state, action.instanceId, action.cardId, action.index))
+    case 'useLeaderAbility':
+      return requirePhase(state, 'action', () => useLeaderAbility(state, action.index, action.targetInstanceId))
     case 'attack':
       return requirePhase(state, 'action', () => {
         // An attack resolves a pending choice, if one is active (#334/#343). Support
@@ -228,7 +230,21 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string): GameState
   }
 
   // "When Played" abilities fire after the card enters play (CR 6.2.0f).
-  return runTrigger(next, 'whenPlayed', { owner, cardId, sourceInstanceId: newUnit.instanceId })
+  next = runTrigger(next, 'whenPlayed', { owner, cardId, sourceInstanceId: newUnit.instanceId })
+  // "When you play or create a unit" reacts on the controller's other cards (#309).
+  return fireEntersPlay(next, owner, newUnit.instanceId)
+}
+
+/** Fire "When you play or create a unit" (#309) on the owner's undeployed leader and its
+ *  other units, targeting the newly-entered unit. (Token *creation* firing is a follow-up.) */
+function fireEntersPlay(state: GameState, owner: PlayerId, newUnitId: string): GameState {
+  let next = runLeaderTrigger(state, 'whenPlayOrCreateUnit', owner, { targetInstanceId: newUnitId })
+  for (const id of state.players[owner].units.map(u => u.instanceId)) {
+    if (id === newUnitId) continue
+    const reactor = next.players[owner].units.find(u => u.instanceId === id)
+    if (reactor) next = runUnitTrigger(next, 'whenPlayOrCreateUnit', reactor, owner, { targetInstanceId: newUnitId })
+  }
+  return next
 }
 
 function playCard(state: GameState, handIndex: number): GameState {
@@ -300,13 +316,13 @@ function resumeAfterChoice(state: GameState, resolved: PendingChoice): GameState
   return advanceTurn(resetPasses(state))
 }
 
-/** Finish a combat suspended by an On Defense ability (#342): deal the combat damage
- *  (from the post-choice board) as the original attacker, then pass the turn. */
+/** Resume a combat suspended by an On Attack / On Defense choice (#342/#309): restore the
+ *  attacker as active, run the remaining stages from where it paused, then pass the turn
+ *  (unless a later stage suspended again or won the game). */
 function resumePendingAttack(state: GameState): GameState {
   const pa = state.pendingAttack!
-  let next: GameState = { ...state, pendingAttack: undefined, activePlayer: pa.activePlayer }
-  next = completeAttack(next, pa.attackerId, pa.target)
-  return next.winner !== null ? next : advanceTurn(resetPasses(next))
+  const next = runAttackStages({ ...state, pendingAttack: undefined, activePlayer: pa.activePlayer }, pa.attackerId, pa.target, pa.stage)
+  return next.winner !== null || hasPendingChoices(next) ? next : advanceTurn(resetPasses(next))
 }
 
 /** Decline a pending choice (#334/#342). Ambush and pay-or-exhaust leave the unit
@@ -348,6 +364,42 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         if (next.winner !== null) return next
       }
       break
+    case 'mayDamage':
+      // Optional targeted damage, e.g. Cad Bane's On Attack (#309).
+      if (targetInstanceId) {
+        next = dealDamageToUnit(next, targetInstanceId, choice.amount)
+        next = checkWin(next)
+        if (next.winner !== null) return next
+      }
+      break
+    case 'mayAdvantageEach':
+      // Emperor Palpatine: give the chosen unit an Advantage token per other friendly unit (#309).
+      if (targetInstanceId) {
+        const others = next.players[choice.controller].units.filter(u => u.instanceId !== targetInstanceId).length
+        for (let i = 0; i < others; i++) next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+      }
+      break
+    case 'mayExhaustLeaderForAdvantage': {
+      // Greef Karga front: exhaust the leader to give the just-played unit an Advantage token (#309).
+      const p = next.players[choice.controller]
+      if (!p.leader.exhausted) {
+        next = updatePlayer(next, choice.controller, { leader: { ...p.leader, exhausted: true } })
+        next = giveToken(next, choice.unitId, TOKEN_ADVANTAGE)
+      }
+      break
+    }
+    case 'mayDefeatUpgradeForBase': {
+      // Vane: defeat a card upgrade on the chosen friendly unit, then deal 2 to the enemy base (#309).
+      const host = targetInstanceId ? next.players[choice.controller].units.find(u => u.instanceId === targetInstanceId) : undefined
+      const upgrade = host && firstCardUpgrade(next, host)
+      if (host && upgrade) {
+        next = defeatUpgrade(next, host.instanceId, upgrade)
+        next = dealDamageToBase(next, opponentOf(choice.controller), 2)
+        next = checkWin(next)
+        if (next.winner !== null) return next
+      }
+      break
+    }
     case 'search':
       // Improvised Identity: discard the chosen revealed ground unit, then offer the
       // follow-up attack that grants its abilities.
@@ -466,6 +518,26 @@ function useAbility(state: GameState, instanceId: string, cardId: string, index:
   return hasPendingChoices(next) ? next : advanceTurn(resetPasses(next))
 }
 
+/**
+ * Use an undeployed leader's activated "Action:" ability (#309): pay its cost, exhaust
+ * the leader (so it's once per round until it readies at regroup), run the effect with
+ * the chosen target, then pass the turn — unless the effect raised a pending choice.
+ */
+function useLeaderAbility(state: GameState, index: number, targetInstanceId?: string): GameState {
+  const owner = state.activePlayer
+  const p = state.players[owner]
+  if (p.leader.deployed || p.leader.exhausted) throw new Error('useLeaderAbility: leader unavailable')
+  const ability = leaderActions(p.leader.cardId)[index]
+  if (!ability) throw new Error(`useLeaderAbility: no leader action ${index}`)
+
+  const paid = ability.cost ? payCost(p, ability.cost) : p
+  let next = updatePlayer(state, owner, { ...paid, leader: { ...p.leader, exhausted: true } })
+  next = ability.effect(next, { owner, cardId: p.leader.cardId, targetInstanceId })
+  next = checkWin(next)
+  if (next.winner !== null) return next
+  return hasPendingChoices(next) ? next : advanceTurn(resetPasses(next))
+}
+
 function deployLeader(state: GameState): GameState {
   const playerId = state.activePlayer
   const p = state.players[playerId]
@@ -560,7 +632,6 @@ function fireForAllUnits(state: GameState, point: TriggerPoint): GameState {
  */
 function attack(state: GameState, attackerId: string, target: AttackTarget): GameState {
   const playerId = state.activePlayer
-  const enemyId = opponentOf(playerId)
   const attacker = state.players[playerId].units.find(u => u.instanceId === attackerId)
   if (!attacker) throw new Error(`attack: no friendly unit ${attackerId}`)
   if (attacker.exhausted) throw new Error(`attack: unit ${attackerId} is exhausted`)
@@ -581,20 +652,39 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
     })
   }
 
-  // A base has no defender and no "On Defense" step.
-  if (target.kind === 'base') return completeAttack(next, attackerId, target)
-
-  const defender = next.players[enemyId].units.find(u => u.instanceId === target.instanceId)
-  if (!defender) throw new Error(`attack: no enemy unit ${target.instanceId}`)
-
-  // "On Defense" abilities may act before combat damage (#342). If one raises a
-  // choice, suspend the attack and hand control to the defender to resolve it.
-  const beforeChoices = next.pendingChoices?.length ?? 0
-  next = runUnitTrigger(next, 'onDefense', defender, enemyId)
-  if ((next.pendingChoices?.length ?? 0) > beforeChoices) {
-    return { ...next, pendingAttack: { attackerId, target, activePlayer: playerId }, activePlayer: enemyId }
+  // "On Attack" abilities fire before combat damage (#309); a raised choice suspends
+  // the attack with the attacker keeping control, resuming at the On Defense stage.
+  const before = next.pendingChoices?.length ?? 0
+  const attackerNow = next.players[playerId].units.find(u => u.instanceId === attackerId)!
+  next = runUnitTrigger(next, 'onAttack', attackerNow, playerId, { attackTarget: target })
+  if ((next.pendingChoices?.length ?? 0) > before) {
+    return { ...next, pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'onDefense' } }
   }
-  return completeAttack(next, attackerId, target)
+  return runAttackStages(next, attackerId, target, 'onDefense')
+}
+
+/**
+ * Run the pre-combat stages from `stage` onward and then deal the damage (#342/#309).
+ * The On Defense stage may suspend (handing control to the defender); resumption picks
+ * up from the stored stage. `state.activePlayer` is the attacker's controller here.
+ */
+function runAttackStages(state: GameState, attackerId: string, target: AttackTarget, stage: 'onDefense' | 'damage'): GameState {
+  const playerId = state.activePlayer
+  const enemyId = opponentOf(playerId)
+
+  if (stage === 'onDefense' && target.kind === 'unit') {
+    const defender = state.players[enemyId].units.find(u => u.instanceId === target.instanceId)
+    if (defender) {
+      const before = state.pendingChoices?.length ?? 0
+      const afterDefense = runUnitTrigger(state, 'onDefense', defender, enemyId)
+      if ((afterDefense.pendingChoices?.length ?? 0) > before) {
+        // Hand control to the defender; resume at the damage stage.
+        return { ...afterDefense, pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'damage' }, activePlayer: enemyId }
+      }
+      return completeAttack(afterDefense, attackerId, target)
+    }
+  }
+  return completeAttack(state, attackerId, target)
 }
 
 /**

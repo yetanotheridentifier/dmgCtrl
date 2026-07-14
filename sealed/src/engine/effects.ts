@@ -46,6 +46,17 @@ export function giveToken(state: GameState, instanceId: string, tokenId: string)
   return patchUnit(state, found.owner, instanceId, u => ({ ...u, upgrades: [...u.upgrades, { cardId: tokenId, owner: found.owner }] }))
 }
 
+/** Deal `amount` damage to a player's base (#309). The caller runs the win check. */
+export function dealDamageToBase(state: GameState, player: PlayerId, amount: number): GameState {
+  const p = state.players[player]
+  return { ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: p.base.damage + amount } } } }
+}
+
+/** The first non-token (card) upgrade on a unit, if any — used by "defeat a friendly upgrade" costs (#309). */
+export function firstCardUpgrade(state: GameState, unit: UnitState): string | undefined {
+  return unit.upgrades.find(a => state.cards[a.cardId]?.type !== 'token')?.cardId
+}
+
 /** Exhaust a unit (no-op if already exhausted or absent). */
 export function exhaustUnit(state: GameState, instanceId: string): GameState {
   const found = findUnit(state, instanceId)
