@@ -40,6 +40,8 @@ export function unitKeywords(state: GameState, unit: UnitState): KeywordInstance
     out.push(...(state.cards[cardId]?.keywords ?? []))
   }
   out.push(...(unit.grantedKeywords ?? []))
+  // Keywords granted by other units' auras (Sloane → Overwhelm/Sentinel, #346).
+  out.push(...auraContributions(state, unit).keywords)
   return out
 }
 
@@ -69,6 +71,33 @@ export function unitTraits(state: GameState, unit: UnitState): string[] {
 /** Case-insensitive trait test that includes granted traits (#343). */
 export function unitHasTrait(state: GameState, unit: UnitState, name: string): boolean {
   return unitTraits(state, unit).some(t => t.toLowerCase() === name.toLowerCase())
+}
+
+/**
+ * Aura contributions to `target` from every in-play unit's constant abilities (#346).
+ * Sums power/HP and collects granted keywords. A source affects a target via its card's
+ * (or an upgrade's) `aura` hook; `sameController` = source and target share a controller.
+ */
+export function auraContributions(state: GameState, target: UnitState): { power: number; hp: number; keywords: KeywordInstance[] } {
+  const targetOwner = (['player', 'opponent'] as const).find(o => state.players[o].units.some(u => u.instanceId === target.instanceId))
+  if (!targetOwner) return { power: 0, hp: 0, keywords: [] }
+  let power = 0
+  let hp = 0
+  const keywords: KeywordInstance[] = []
+  for (const owner of ['player', 'opponent'] as const) {
+    const sameController = owner === targetOwner
+    for (const source of state.players[owner].units) {
+      for (const cardId of [source.cardId, ...source.upgrades.map(u => u.cardId)]) {
+        const contrib = getCardDefinition(cardId)?.aura?.(state, source, target, sameController)
+        if (contrib) {
+          power += contrib.power ?? 0
+          hp += contrib.hp ?? 0
+          if (contrib.keywords) keywords.push(...contrib.keywords)
+        }
+      }
+    }
+  }
+  return { power, hp, keywords }
 }
 
 /** True if this unit is a leader unit — natively, or made one by an upgrade (The Darksaber, #343). */
