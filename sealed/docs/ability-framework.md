@@ -347,6 +347,11 @@ for free. **Cleared at the start of the regroup phase** (`clearLastingEffects` i
 so a unit defeated *during* regroup uses its base stats (critical for Baylan). Broader than the
 per-attack `grantedKeywords`/`grantedAbilityCardIds`, which clear after a single attack.
 
+Immediately after the buffs clear, `sweepUnitDefeats` runs a **state-based defeat check** (each
+side through `applyUnitDamage` with no new damage) so a unit that only the expired +HP buff kept
+alive — damage now ≥ HP — is defeated then, routing through the normal discard / leader-return /
+`whenDefeated` path.
+
 `mayLastingBuff` is a reusable optional-buff pending choice: `{ targets, power?, hp?, keywords? }`
 → pick a target and grant it the buff for the phase, or decline (Baylan's deployed On Attack).
 
@@ -368,8 +373,10 @@ per-attack `grantedKeywords`/`grantedAbilityCardIds`, which clear after a single
   Queried via `enteredPlayThisPhase` / `defeatedThisPhase`; reset whenever the phase changes
   (`resetPhaseEvents` in `enterRegroup` and `startNextRound`).
 
-**Wired leaders (#347):** Baylan (003) front +2/+2 to a lone-in-arena unit + deployed On Attack
-+2/+2 & Sentinel; Ahsoka (009) front +2/+0 to a unit weaker than a friendly one; Ezra (013)
+**Wired leaders (#347):** Baylan (003) front +2/+2 to the only unit you control in its arena +
+deployed On Attack +2/+2 & Sentinel to the only **non-leader** unit in its arena (shared
+`soleNonLeaderInArena` helper via `isLeaderUnit`, so Baylan can't buff himself and a Darksaber'd
+leader unit is excluded too); Ahsoka (009) front +2/+0 to a unit weaker than a friendly one; Ezra (013)
 **front and deployed** — on a friendly 3+ base hit, Advantage to a different unit (front exhausts
 the leader as an added cost, deployed does not); Shin Hati (016) front attack-end → exhaust a ready
 unit cheaper than the base damage — **front and deployed** (deployed has no leader-exhaust cost
@@ -385,7 +392,8 @@ doesn't spend it). Same `usedAbilities` list the activated-ability path (#343) u
 regroup for free.
 
 **UI — +X/+Y modifier token:** a unit carrying lasting-effect stats shows a white token with the
-power delta in red over the HP delta in blue (`board-unit-mod-<id>`), mirroring the physical token;
+power delta (red) top-left and the HP delta (blue) bottom-right — diagonally opposed like the
+physical token (`board-unit-mod-<id>`);
 it appears/updates from `lastingEffectTotals` and disappears when the effects clear at phase end.
 Reusable for any future source of transient stat deltas. (`CardTokens` in `gameScreen.tsx`.)
 

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import DeckSelectScreen from '../components/deckSelectScreen'
+import { IMPLEMENTED_LEADERS, IMPLEMENTED_UPGRADES } from '../data/implementedCards'
 import { saveDeck } from '../data/deckStore'
 import { syncCatalogue } from '../data/catalogueSync'
 import { importSet } from '../data/setImport'
@@ -33,6 +34,23 @@ describe('DeckSelectScreen', () => {
   it('shows an empty state when no decks are saved', () => {
     render(<DeckSelectScreen onPlay={vi.fn()} />)
     expect(screen.getByTestId('deck-empty-state')).toBeInTheDocument()
+  })
+
+  it('shows the implemented-cards reference: leaders with front/back and every upgrade', () => {
+    render(<DeckSelectScreen onPlay={vi.fn()} />)
+    const leaders = screen.getByTestId('implemented-leaders')
+    // A fully-implemented leader shows ✓ for both sides; a partial one shows ✓ and ·.
+    const cadBane = within(leaders).getByText('Cad Bane').closest('tr')!
+    expect(within(cadBane).getAllByLabelText('implemented')).toHaveLength(2) // front + back
+    const ahsoka = within(leaders).getByText('Ahsoka Tano').closest('tr')!
+    expect(within(ahsoka).getByLabelText('implemented')).toBeInTheDocument() // front
+    expect(within(ahsoka).getByLabelText('not yet')).toBeInTheDocument() // back pending
+
+    const upgrades = screen.getByTestId('implemented-upgrades')
+    expect(within(upgrades).getAllByRole('listitem')).toHaveLength(IMPLEMENTED_UPGRADES.length)
+    expect(within(upgrades).getByText('Camtono')).toBeInTheDocument()
+    // Spot-check a leader name renders too.
+    expect(IMPLEMENTED_LEADERS.some(l => l.name === 'Baylan Skoll')).toBe(true)
   })
 
   it('imports a pasted deck and lists it', async () => {

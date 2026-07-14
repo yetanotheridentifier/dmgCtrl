@@ -5,7 +5,7 @@ import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
 import { opponentOf, pushChoice, addLastingEffect } from './types'
-import { unitHasTrait } from './keywords'
+import { unitHasTrait, isLeaderUnit } from './keywords'
 import type { EngineCard, GameState, PlayerId, UnitState } from './types'
 
 /**
@@ -293,24 +293,31 @@ registerCard('ASH_007', { // Grand Admiral Sloane — deployed aura (front choos
   aura: (_s, src, tgt, friendly) => (friendly && tgt.instanceId !== src.instanceId ? { keywords: [{ name: 'Overwhelm' }, { name: 'Sentinel' }] } : undefined),
 })
 
-// A friendly unit that is the only one you control in its arena (Baylan's condition).
-const aloneInArena = (s: GameState, owner: PlayerId, u: UnitState): boolean =>
-  s.players[owner].units.filter(x => x.arena === u.arena).length === 1
+// A friendly NON-leader unit that is the only non-leader unit you control in its arena
+// (Baylan's condition). The front says "the only unit", the deployed back "the only non-leader
+// unit" — but the front is used while undeployed (no leader unit is on the board), so the
+// non-leader test is equivalent there and correct for both. `isLeaderUnit` also excludes a unit
+// made a leader by The Darksaber (#343).
+const soleNonLeaderInArena = (s: GameState, owner: PlayerId, u: UnitState): boolean =>
+  !isLeaderUnit(s, u) && s.players[owner].units.filter(x => x.arena === u.arena && !isLeaderUnit(s, x)).length === 1
+
+const baylanTargets = (s: GameState, owner: PlayerId): string[] =>
+  s.players[owner].units.filter(u => soleNonLeaderInArena(s, owner, u)).map(u => u.instanceId)
 
 registerCard('ASH_003', { // Baylan Skoll — front +2/+2 this phase to a lone unit; deployed On Attack +2/+2 & Sentinel (#347)
   leaderAbilities: {
     actions: [{
       description: 'Give a friendly unit +2/+2 for this phase if it is the only unit you control in its arena.',
       cost: 1,
-      targets: (s, owner) => s.players[owner].units.filter(u => aloneInArena(s, owner, u)).map(u => u.instanceId),
+      targets: (s, owner) => baylanTargets(s, owner),
       effect: (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, power: 2, hp: 2 }),
     }],
   },
   abilities: [{
     trigger: 'onAttack',
-    description: 'You may give a friendly unit +2/+2 and Sentinel for this phase.',
+    description: 'You may give a friendly non-leader unit +2/+2 and Sentinel for this phase if it is the only non-leader unit you control in its arena.',
     effect: (s, ctx) => {
-      const targets = s.players[ctx.owner].units.map(u => u.instanceId)
+      const targets = baylanTargets(s, ctx.owner)
       return targets.length === 0 ? s : pushChoice(s, { kind: 'mayLastingBuff', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, power: 2, hp: 2, keywords: [{ name: 'Sentinel' }] })
     },
   }],

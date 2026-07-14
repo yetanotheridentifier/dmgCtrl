@@ -247,20 +247,36 @@ describe('Baylan Skoll (ASH_003) — +2/+2 this phase to a lone unit (#347)', ()
     expect(legalMoves(s).some(a => a.type === 'useLeaderAbility')).toBe(false)
   })
 
-  it('deployed: On Attack may give a friendly unit +2/+2 and Sentinel for the phase', () => {
+  it('deployed: On Attack targets only a lone NON-leader unit — not Baylan himself', () => {
     const s = state({
       cards,
+      // L (Baylan, ground leader unit) + u2 (lone non-leader ground) + s2 (lone non-leader space).
       players: {
-        player: player({ leader: deployed('ASH_003'), units: [unit('L', 'ASH_003', { isLeader: true }), unit('u2', 'TST_U1')] }),
+        player: player({ leader: deployed('ASH_003'), units: [unit('L', 'ASH_003', { isLeader: true }), unit('u2', 'TST_U1'), unit('s2', 'TST_U2')] }),
         opponent: player(),
       },
     })
     const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
-    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayLastingBuff', power: 2, hp: 2 })
+    // Baylan (leader unit) is excluded even though he shares the ground arena with u2.
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayLastingBuff', power: 2, hp: 2, targets: ['u2', 's2'] })
     const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'u2' })
     expect(effectivePower(done, done.players.player.units.find(u => u.instanceId === 'u2')!)).toBe(5)
     expect(unitHasKeyword(done, done.players.player.units.find(u => u.instanceId === 'u2')!, 'Sentinel')).toBe(true)
     expect(done.activePlayer).toBe('opponent')
+  })
+
+  it('deployed: On Attack offers nothing when no arena has a lone non-leader unit', () => {
+    const s = state({
+      cards,
+      // Two non-leader ground units → neither is the only non-leader unit in ground.
+      players: {
+        player: player({ leader: deployed('ASH_003'), units: [unit('L', 'ASH_003', { isLeader: true }), unit('u2', 'TST_U1'), unit('u3', 'TST_U1')] }),
+        opponent: player(),
+      },
+    })
+    const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
+    expect(atk.pendingChoices).toBeUndefined()
+    expect(atk.activePlayer).toBe('opponent')
   })
 })
 

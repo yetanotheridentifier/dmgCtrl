@@ -54,6 +54,21 @@ describe('lasting effects mechanism (#347)', () => {
     expect(effectivePower(s, find(s, 'u1'))).toBe(3)
   })
 
+  it('defeats a unit kept alive only by a this-phase HP buff when the buff expires at regroup', () => {
+    let s = state({
+      players: {
+        player: player({ units: [unit('u1', 'TST_U1', { damage: 4 })] }), // TST_U1 base HP 4
+        opponent: player(),
+      },
+    })
+    s = addLastingEffect(s, { targetInstanceId: 'u1', hp: 2 }) // effective HP 6 → survives at 4 damage
+    expect(effectiveHp(s, s.players.player.units[0])).toBe(6)
+    s = resolve(s, { type: 'pass' })
+    s = resolve(s, { type: 'pass' }) // → regroup: the buff expires, u1 now has 4 damage vs 4 HP
+    expect(s.players.player.units.find(u => u.instanceId === 'u1')).toBeUndefined() // defeated
+    expect(s.players.player.discard).toContain('TST_U1')
+  })
+
   it('expires at the start of the regroup phase (both players pass)', () => {
     let s = addLastingEffect(
       state({ players: { player: player({ units: [unit('u1', 'TST_U1')] }), opponent: player() } }),

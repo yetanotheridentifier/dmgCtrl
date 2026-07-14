@@ -211,6 +211,11 @@ export function getCardDefinition(cardId: string): CardDefinition | undefined {
   return registry.get(cardId)
 }
 
+/** Every card id with a registered definition — the set of cards whose abilities are built. */
+export function registeredCardIds(): string[] {
+  return [...registry.keys()]
+}
+
 export function getAbilities(cardId: string): AbilityDef[] {
   return registry.get(cardId)?.abilities ?? []
 }

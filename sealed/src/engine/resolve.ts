@@ -851,9 +851,23 @@ function clearHidden(state: GameState): GameState {
   return next
 }
 
+/**
+ * State-based unit defeats (#347): defeat any unit whose damage now meets its HP — e.g. after a
+ * "this phase" HP buff expires at regroup, a unit only that buff kept alive dies. Runs each side
+ * through the normal defeat path (`applyUnitDamage` with no new damage), so discards, leader
+ * return and `whenDefeated` all fire.
+ */
+function sweepUnitDefeats(state: GameState): GameState {
+  let next = applyUnitDamage(state, 'player', new Map())
+  next = applyUnitDamage(next, 'opponent', new Map())
+  return next
+}
+
 function enterRegroup(state: GameState): GameState {
-  // "This phase" buffs expire and per-phase tracking resets as the phase changes (#347).
+  // "This phase" buffs expire and per-phase tracking resets as the phase changes (#347); a unit
+  // that the expired buff was keeping alive is then defeated as a state-based check.
   let next: GameState = resetPhaseEvents(clearLastingEffects(clearHidden({ ...state, phase: 'regroup', consecutivePasses: 0 })))
+  next = sweepUnitDefeats(next)
   next = drawForRegroup(next, 'player')
   next = drawForRegroup(next, 'opponent')
   next = checkWin(next)

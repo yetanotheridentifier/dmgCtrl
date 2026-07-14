@@ -189,10 +189,12 @@ function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
       color: '#f8fafc',
       border: '1px solid rgba(0,0,0,0.35)',
       testid: `board-unit-mod-${unit.instanceId}`,
+      // +X (power, red) sits top-left, +Y (HP, blue) bottom-right — diagonally opposed, like the
+      // physical token, so each reads clearly at a larger size.
       node: (
-        <span className="flex flex-col items-center leading-none" style={{ fontSize: `${Math.round(TOKEN_H * 0.4)}px`, fontWeight: 800 }}>
-          <span style={{ color: 'var(--color-red)' }}>{signed(mods.power)}</span>
-          <span style={{ color: '#2563eb' }}>{signed(mods.hp)}</span>
+        <span className="absolute inset-0" style={{ fontSize: `${Math.round(TOKEN_H * 0.42)}px`, fontWeight: 800, lineHeight: 1 }}>
+          <span style={{ position: 'absolute', top: 2, left: 3, color: 'var(--color-red)' }}>{signed(mods.power)}</span>
+          <span style={{ position: 'absolute', bottom: 2, right: 3, color: '#2563eb' }}>{signed(mods.hp)}</span>
         </span>
       ),
     })
