@@ -496,7 +496,7 @@ registerCard('ASH_003', { // Baylan Skoll — front +2/+2 this phase to a lone u
   }],
 })
 
-registerCard('ASH_009', { // Ahsoka Tano — front +2/+0 this phase to a unit weaker than a friendly one (#347)
+registerCard('ASH_009', { // Ahsoka Tano — front +2/+0 to a unit weaker than a friendly one; deployed On Attack +2/+0 (#347/#348)
   leaderAbilities: {
     actions: [{
       description: 'Choose a unit with less power than a friendly unit; it gets +2/+0 for this phase.',
@@ -507,6 +507,18 @@ registerCard('ASH_009', { // Ahsoka Tano — front +2/+0 this phase to a unit we
       effect: (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, power: 2 }),
     }],
   },
+  // Deployed (back): On Attack, may give a unit with less power than THIS unit +2/+0 for the phase.
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'You may give a unit with less power than this unit +2/+0 for this phase.',
+    effect: (s, ctx) => {
+      const self = allUnits(s).find(u => u.instanceId === ctx.sourceInstanceId)
+      if (!self) return s
+      const selfPower = effectivePower(s, self)
+      const targets = allUnits(s).filter(u => effectivePower(s, u) < selfPower).map(u => u.instanceId)
+      return targets.length === 0 ? s : pushChoice(s, { kind: 'mayLastingBuff', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, power: 2, hp: 0 })
+    },
+  }],
 })
 
 // Units other than the just-ended attacker — Ezra's "a different unit" (#347).

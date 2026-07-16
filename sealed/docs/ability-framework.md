@@ -518,9 +518,9 @@ triggered), not just keywords — the chosen attacker gets `grantedAbilityCardId
 same path Improvised Identity uses), so it fires the source's combat abilities for that attack.
 `openSupportChoice` is shared by playing a Support unit **and deploying a Support leader**
 (`deployLeader`; its dispatch now holds the turn while the support attack resolves). This unblocks
-the Mandalorian's and Ahsoka's Support. (Ahsoka's back also has a separate On-Attack +2/0 — still
-its own pass; and the granted card includes the harmless Support keyword, which never re-triggers
-mid-attack.)
+the Mandalorian's and Ahsoka's Support. (The granted card includes the harmless Support keyword,
+which never re-triggers mid-attack.) **Ahsoka (009)** deployed back is now complete — its On-Attack
+"give a unit with less power than this unit +2/0 this phase" reuses `mayLastingBuff` (as Baylan's does).
 
 ### Remaining chunks (planned)
 

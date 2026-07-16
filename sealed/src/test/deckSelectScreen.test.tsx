@@ -42,9 +42,9 @@ describe('DeckSelectScreen', () => {
     // A fully-implemented leader shows ✓ for both sides; a partial one shows ✓ and ·.
     const cadBane = within(leaders).getByText('Cad Bane').closest('tr')!
     expect(within(cadBane).getAllByLabelText('implemented')).toHaveLength(2) // front + back
-    const ahsoka = within(leaders).getByText('Ahsoka Tano').closest('tr')!
-    expect(within(ahsoka).getByLabelText('implemented')).toBeInTheDocument() // front
-    expect(within(ahsoka).getByLabelText('not yet')).toBeInTheDocument() // back pending
+    const partial = within(leaders).getByText('Fennec Shand').closest('tr')! // front done, back pending
+    expect(within(partial).getByLabelText('implemented')).toBeInTheDocument() // front
+    expect(within(partial).getByLabelText('not yet')).toBeInTheDocument() // back pending
 
     const upgrades = screen.getByTestId('implemented-upgrades')
     expect(within(upgrades).getAllByRole('listitem')).toHaveLength(IMPLEMENTED_UPGRADES.length)

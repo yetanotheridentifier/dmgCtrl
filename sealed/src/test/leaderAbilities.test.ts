@@ -385,6 +385,23 @@ describe('Ahsoka Tano (ASH_009) — +2/+0 this phase to a weaker unit (#347)', (
     expect(effectivePower(next, next.players.player.units.find(u => u.instanceId === 'weak')!)).toBe(5) // 3 + 2
     expect(effectiveHp(next, next.players.player.units.find(u => u.instanceId === 'weak')!)).toBe(4) // hp unchanged
   })
+
+  it('deployed: On Attack may give a unit with less power than Ahsoka +2/+0 for the phase', () => {
+    const s = state({
+      cards, // Ahsoka leader-unit power 5
+      players: {
+        player: player({ leader: deployed('ASH_009'), units: [unit('L', 'ASH_009', { isLeader: true }), unit('u2', 'TST_U1')] }), // u2 power 3
+        opponent: player({ units: [unit('strong', 'TST_U3')] }), // power 5 — not < 5
+      },
+    })
+    const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
+    // Only units weaker than Ahsoka (power 5) are offered — u2 (3); L and 'strong' (both 5) are not.
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayLastingBuff', power: 2, hp: 0, targets: ['u2'] })
+    const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'u2' })
+    expect(effectivePower(done, done.players.player.units.find(u => u.instanceId === 'u2')!)).toBe(5) // 3 + 2
+    expect(effectiveHp(done, done.players.player.units.find(u => u.instanceId === 'u2')!)).toBe(4) // hp unchanged
+    expect(done.activePlayer).toBe('opponent')
+  })
 })
 
 describe('Ezra Bridger (ASH_013) — attack-end Advantage if 3+ dealt to a base (#347)', () => {
