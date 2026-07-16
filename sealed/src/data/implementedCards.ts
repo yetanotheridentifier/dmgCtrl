@@ -26,6 +26,7 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'ASH_011', name: 'Cad Bane', front: true, back: true },
   { id: 'ASH_015', name: 'Emperor Palpatine', front: true, back: true },
   { id: 'ASH_013', name: 'Ezra Bridger', front: true, back: true },
+  { id: 'ASH_005', name: 'Luke Skywalker', front: true, back: true },
   { id: 'ASH_007', name: 'Grand Admiral Sloane', front: true, back: true },
   { id: 'ASH_017', name: 'Greef Karga', front: true, back: true },
   { id: 'ASH_016', name: 'Shin Hati', front: true, back: true },

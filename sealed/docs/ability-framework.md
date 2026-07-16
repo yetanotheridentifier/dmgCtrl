@@ -403,8 +403,7 @@ the token at phase end; an aura's contribution shows while its source is in play
 Armorer (001) reads `enteredPlayThisPhase`; Moff Gideon (008) reads `defeatedThisPhase` for a
 friendly Imperial. The tracking mechanism is built and tested here; those leaders wire up in #348.
 
-**Deferred deployed backs:** Luke (005) both sides need #348's heal (heal that unit / your base).
-Ahsoka's deployed back awaits its own build.
+**Deferred deployed backs:** Ahsoka's deployed back awaits its own build. (Luke's heal landed in #348-A.)
 
 ## New primitives + UI (#348)
 
@@ -455,9 +454,20 @@ Phased into independently-deployable chunks; each groups a primitive with the le
   `ASH/T02`, Experience `SOR/T01`, Shield `LOF/T02` (served via the `artUrl` proxy). The on-board
   Mandalorian token now shows its art too.
 
+### Chunk A — heal (Luke) (DONE)
+
+- **Heal primitives** (`effects.ts`): `healUnit(state, id, amount)` and `healBase(state, player, amount)`
+  — remove that much damage, never below 0.
+- **Luke (005)** front (undeployed): `whenFriendlyAttackEnds` → `mayExhaustLeaderHealUnit` (a yes/no —
+  may exhaust the leader to heal 1 from the attacker; offered only when the attacker is in play with
+  damage and the leader is ready). Deployed back: `whenFriendlyAttackEnds` → `selectHealTarget`
+  (mandatory: heal 2 from the attacking unit or your base — only damaged targets are offered; nothing
+  raised if neither has damage). `selectHealTarget` shares `selectDamageTarget`'s board wiring (in
+  `boardTargetKinds`, `acceptChoice.baseTarget` picks a base) — the same highlight-unit-or-base picker.
+
 ### Remaining chunks (planned)
 
-A — heal (Luke); B — play-a-unit-from-hand ready/cost-reduced (Fennec, Moff Gideon); D —
-play-upgrade-from-resources + a private resource overlay (The Armorer, can reuse `CardSelectOverlay`);
-E — opponent-makes-a-choice + "next unit you play this phase" grant (Sabine); F — take-initiative
-trigger (Mandalorian), attack-with-a-unit ability (Thrawn), Grogu's triggered deploy + aura.
+B — play-a-unit-from-hand ready/cost-reduced (Fennec, Moff Gideon); D — play-upgrade-from-resources +
+a private resource overlay (The Armorer, can reuse `CardSelectOverlay`); E — opponent-makes-a-choice +
+"next unit you play this phase" grant (Sabine); F — take-initiative trigger (Mandalorian),
+attack-with-a-unit ability (Thrawn), Grogu's triggered deploy + aura.

@@ -595,3 +595,61 @@ describe('Bo-Katan Kryze (ASH_010) — custom deploy condition (#309)', () => {
     expect(legalMoves(withResourcesAndMandos(6, 3)).some(a => a.type === 'deployLeader')).toBe(false) // 6 + 3 = 9
   })
 })
+
+describe('Luke Skywalker (ASH_005) — heal on a friendly attack ending (#348)', () => {
+  const cards = { ...CARDS, ASH_005: card({ id: 'ASH_005', type: 'leader', cost: 7, power: 6, hp: 7 }) }
+  // a1 (TST_U4: power 1, hp 9) attacks e1 (TST_U1: power 3, hp 4): a1 survives with 3 counter damage.
+  const boardFront = () => state({
+    cards,
+    players: {
+      player: player({ leader: undeployed('ASH_005'), units: [unit('a1', 'TST_U4')] }),
+      opponent: player({ units: [unit('e1', 'TST_U1')] }),
+    },
+  })
+
+  it('front: after a friendly attack, may exhaust the leader to heal 1 from the attacker', () => {
+    const atk = resolve(boardFront(), { type: 'attack', attackerId: 'a1', target: { kind: 'unit', instanceId: 'e1' } })
+    expect(atk.players.player.units.find(u => u.instanceId === 'a1')!.damage).toBe(3) // counter damage
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayExhaustLeaderHealUnit', unitId: 'a1', amount: 1 })
+    const healed = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id })
+    expect(healed.players.player.units.find(u => u.instanceId === 'a1')!.damage).toBe(2) // 3 − 1
+    expect(healed.players.player.leader.exhausted).toBe(true)
+    expect(healed.activePlayer).toBe('opponent')
+  })
+
+  it('front: declining leaves the leader ready and the unit still damaged', () => {
+    const atk = resolve(boardFront(), { type: 'attack', attackerId: 'a1', target: { kind: 'unit', instanceId: 'e1' } })
+    const done = resolve(atk, { type: 'skipTrigger', choiceId: atk.pendingChoices![0].id })
+    expect(done.players.player.units.find(u => u.instanceId === 'a1')!.damage).toBe(3)
+    expect(done.players.player.leader.exhausted).toBe(false)
+  })
+
+  it('front: no offer when the attacker took no damage (attacked the base)', () => {
+    const s = state({
+      cards,
+      players: { player: player({ leader: undeployed('ASH_005'), units: [unit('a1', 'TST_U4')] }), opponent: player() },
+    })
+    const atk = resolve(s, { type: 'attack', attackerId: 'a1', target: { kind: 'base' } })
+    expect(atk.pendingChoices).toBeUndefined()
+    expect(atk.activePlayer).toBe('opponent')
+  })
+
+  it('deployed: heal 2 from the attacker or your base — mandatory, player chooses', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ leader: deployed('ASH_005'), base: { cardId: 'TST_B', damage: 5 }, units: [unit('L', 'ASH_005', { isLeader: true }), unit('a1', 'TST_U4')] }),
+        opponent: player({ units: [unit('e1', 'TST_U1')] }),
+      },
+    })
+    const atk = resolve(s, { type: 'attack', attackerId: 'a1', target: { kind: 'unit', instanceId: 'e1' } })
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'selectHealTarget', amount: 2, unitTargets: ['a1'], baseTargets: ['player'] })
+    expect(legalMoves(atk).some(a => a.type === 'skipTrigger')).toBe(false) // mandatory
+    // Heal the base.
+    const healedBase = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, baseTarget: 'player' })
+    expect(healedBase.players.player.base.damage).toBe(3) // 5 − 2
+    // …or heal the unit instead.
+    const healedUnit = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'a1' })
+    expect(healedUnit.players.player.units.find(u => u.instanceId === 'a1')!.damage).toBe(1) // 3 − 2
+  })
+})

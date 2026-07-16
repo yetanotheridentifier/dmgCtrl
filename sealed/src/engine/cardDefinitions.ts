@@ -283,6 +283,34 @@ registerCard('ASH_012', { // Vane — front (undeployed) + deployed (On Attack) 
   }],
 })
 
+registerCard('ASH_005', { // Luke Skywalker — front/back heal on a friendly attack ending (#348)
+  // Front (undeployed): may exhaust the leader to heal 1 from the attacker.
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenFriendlyAttackEnds',
+      description: 'You may exhaust this leader to heal 1 damage from the attacking unit.',
+      effect: (s, ctx) => {
+        const attacker = s.players[ctx.owner].units.find(u => u.instanceId === ctx.attackerInstanceId)
+        if (s.players[ctx.owner].leader.exhausted || !attacker || attacker.damage === 0) return s
+        return pushChoice(s, { kind: 'mayExhaustLeaderHealUnit', id: `${ctx.cardId}-heal`, controller: ctx.owner, unitId: ctx.attackerInstanceId!, amount: 1 })
+      },
+    }],
+  },
+  // Deployed (back): heal 2 from the attacking unit or your base (mandatory — pick a damaged target).
+  abilities: [{
+    trigger: 'whenFriendlyAttackEnds',
+    description: 'Heal 2 damage from the attacking unit or from your base.',
+    effect: (s, ctx) => {
+      const attacker = s.players[ctx.owner].units.find(u => u.instanceId === ctx.attackerInstanceId)
+      const unitTargets = attacker && attacker.damage > 0 ? [attacker.instanceId] : []
+      const baseTargets = s.players[ctx.owner].base.damage > 0 ? [ctx.owner] : []
+      return unitTargets.length === 0 && baseTargets.length === 0
+        ? s
+        : pushChoice(s, { kind: 'selectHealTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 2, unitTargets, baseTargets })
+    },
+  }],
+})
+
 registerCard('ASH_017', { // Greef Karga — front (undeployed, optional) + deployed (mandatory)
   leaderAbilities: {
     abilities: [{

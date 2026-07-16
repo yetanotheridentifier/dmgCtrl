@@ -72,7 +72,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayDamage' || choice.kind === 'mayAdvantageEach') return 'Decline'
       if (choice.kind === 'selectUpgradeToDefeat') return 'Cancel'
       if (choice.kind === 'mayLastingBuff' || choice.kind === 'mayGiveAdvantage' || choice.kind === 'mayExhaustLeaderGiveAdvantage' || choice.kind === 'mayExhaustLeaderExhaustUnit' || choice.kind === 'mayExhaustUnit') return 'Decline'
-      if (choice.kind === 'mayExhaustLeaderForAdvantage') return "Don't"
+      if (choice.kind === 'mayExhaustLeaderForAdvantage' || choice.kind === 'mayExhaustLeaderHealUnit') return "Don't"
       return `Skip ${choice.kind}`
     }
     case 'acceptChoice': {
@@ -110,6 +110,12 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Deal ${choice.amount} to ${target ?? 'unit'}`
       }
+      if (choice.kind === 'selectHealTarget') {
+        if (action.baseTarget) return `Heal ${choice.amount} from ${action.baseTarget === by ? 'your base' : "opponent's base"}`
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Heal ${choice.amount} from ${target ?? 'unit'}`
+      }
+      if (choice.kind === 'mayExhaustLeaderHealUnit') return `Exhaust leader → heal ${choice.amount} from ${anyUnitName(state, choice.unitId) ?? 'unit'}`
       if (choice.kind === 'mayExhaustLeaderForAdvantage') return `Exhaust leader → Advantage to ${anyUnitName(state, choice.unitId) ?? 'unit'}`
       if (choice.kind === 'mayLastingBuff') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined

@@ -275,6 +275,10 @@ export type PendingChoice =
   // Choose-one / modal (#348): pick exactly one of `options` (Sloane). Each option is a small
   // serialisable effect descriptor, resolved by index; mandatory (no decline).
   | { kind: 'chooseOne'; id: string; controller: PlayerId; options: ChooseOption[] }
+  // Luke front (#348): may exhaust the (undeployed) leader to heal `amount` from `unitId`, or decline.
+  | { kind: 'mayExhaustLeaderHealUnit'; id: string; controller: PlayerId; unitId: string; amount: number }
+  // Luke deployed (#348): heal `amount` from a chosen unit (`unitTargets`) or base (`baseTargets`). Mandatory.
+  | { kind: 'selectHealTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[] }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */
 export function activeChoice(state: GameState): PendingChoice | undefined {

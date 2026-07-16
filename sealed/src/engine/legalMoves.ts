@@ -293,10 +293,17 @@ function choiceMoves(state: GameState): Action[] {
         if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
-      case 'selectDamageTarget': {
-        // Deal N to a chosen unit or base (#348) — mandatory (the damage must land).
+      case 'selectDamageTarget':
+      case 'selectHealTarget': {
+        // Deal/heal N to a chosen unit or base (#348) — mandatory (a target must be picked).
         for (const id of choice.unitTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         for (const bp of choice.baseTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, baseTarget: bp })
+        break
+      }
+      case 'mayExhaustLeaderHealUnit': {
+        // Luke front: a yes/no — the healed unit is fixed (the attacker).
+        moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'mayExhaustLeaderForAdvantage': {

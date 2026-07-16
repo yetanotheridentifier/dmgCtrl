@@ -52,6 +52,20 @@ export function dealDamageToBase(state: GameState, player: PlayerId, amount: num
   return { ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: p.base.damage + amount } } } }
 }
 
+/** Heal `amount` damage from a unit — remove that much damage, never below 0 (#348). No-op if absent. */
+export function healUnit(state: GameState, instanceId: string, amount: number): GameState {
+  const found = findUnit(state, instanceId)
+  if (!found || found.unit.damage === 0) return state
+  return patchUnit(state, found.owner, instanceId, u => ({ ...u, damage: Math.max(0, u.damage - amount) }))
+}
+
+/** Heal `amount` damage from a player's base — never below 0 (#348). */
+export function healBase(state: GameState, player: PlayerId, amount: number): GameState {
+  const p = state.players[player]
+  if (p.base.damage === 0) return state
+  return { ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: Math.max(0, p.base.damage - amount) } } } }
+}
+
 /** Exhaust a unit (no-op if already exhausted or absent). */
 export function exhaustUnit(state: GameState, instanceId: string): GameState {
   const found = findUnit(state, instanceId)

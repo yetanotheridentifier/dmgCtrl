@@ -7,7 +7,7 @@ import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, supportGrantedKeywords } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit } from './combat'
-import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt } from './effects'
+import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
@@ -464,6 +464,20 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       if (next.winner !== null) return next
       break
     }
+    case 'mayExhaustLeaderHealUnit': {
+      // Luke front: exhaust the (undeployed) leader to heal the attacker (#348).
+      const p = next.players[choice.controller]
+      if (!p.leader.exhausted) {
+        next = updatePlayer(next, choice.controller, { leader: { ...p.leader, exhausted: true } })
+        next = healUnit(next, choice.unitId, choice.amount)
+      }
+      break
+    }
+    case 'selectHealTarget':
+      // Luke deployed: heal the chosen unit or your base (#348).
+      if (baseTarget) next = healBase(next, baseTarget, choice.amount)
+      else if (targetInstanceId) next = healUnit(next, targetInstanceId, choice.amount)
+      break
     case 'search':
       // Improvised Identity: discard the chosen revealed ground unit, then offer the
       // follow-up attack that grants its abilities.
