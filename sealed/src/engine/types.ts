@@ -168,6 +168,12 @@ export interface GameState {
    */
   pendingAttack?: { attackerId: string; target: AttackTarget; activePlayer: PlayerId; stage: 'onDefense' | 'damage' }
   /**
+   * A "take the initiative" whose "When you take the initiative" trigger raised a choice (#348):
+   * the turn transition (end the phase, or pass to the opponent) is deferred until the choice
+   * drains. `true` = taking the initiative also ended the action phase (CR 1.15.5c).
+   */
+  pendingInitiativeEndsPhase?: boolean
+  /**
    * Transient "this phase" stat/keyword modifiers (#306/#347), each aimed at a unit.
    * Folded into `effectivePower`/`effectiveHp`/`unitKeywords`; cleared at the start of
    * the regroup phase so a unit defeated during regroup uses its base stats.
@@ -316,6 +322,8 @@ export type PendingChoice =
   | { kind: 'selectResourceUpgrade'; id: string; controller: PlayerId; candidates: ResourceUpgradeRef[]; optional: boolean; then: PlayResourceUpgradeSpec }
   // Follow-up: attach the chosen resource upgrade to one of `targets` (#348). Mandatory.
   | { kind: 'attachResourceUpgrade'; id: string; controller: PlayerId; resourceIndex: number; cardId: string; targets: string[]; payCost: boolean }
+  // Optionally pay `cost` to draw `draw` cards (#348, Mandalorian). `cost` 0 = a free "may draw".
+  | { kind: 'mayPayToDraw'; id: string; controller: PlayerId; cost: number; draw: number }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */
 export function activeChoice(state: GameState): PendingChoice | undefined {

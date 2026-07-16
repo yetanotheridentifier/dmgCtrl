@@ -502,7 +502,24 @@ abilities to support a resource cost + the exhaust-a-unit additional cost — no
   (a private reveal, reusable for other select-a-resource effects). `attachResourceUpgrade` rides the
   board-target mechanism (`boardTargetKinds`); either base/unit highlight machinery already exists.
 
+### Chunk F1 — The Mandalorian (DONE)
+
+- **New `whenTakeInitiative` trigger point** — fired in `takeInitiative` for the taker's undeployed
+  leader. If the trigger raises a choice, the turn transition is **deferred**: `takeInitiative`
+  records `GameState.pendingInitiativeEndsPhase` (whether taking also ended the phase, CR 1.15.5c),
+  holds with the taker, and `resumeAfterChoice` completes it (→ `enterRegroup` or pass to opponent)
+  once the choice drains.
+- **`mayPayToDraw`** choice (`{cost, draw}`) — optional pay-then-draw; `cost` 0 = a free "may draw".
+- **The Mandalorian (014)** front: `whenTakeInitiative` → may pay 1, draw 1. Deployed back: `onAttack`
+  → if you have the initiative, may draw 1 (free). (Support keyword comes from the card DB.)
+
+**Deferred (shared sub-mechanic):** **Support-on-deploy** — "When you deploy this leader, you may
+attack with another unit; it gains this unit's other abilities." Support-on-*play* only lends
+keywords (`grantSupportKeywords`); a leader's "other abilities" need full-ability granting on the
+deploy path. Affects the Mandalorian's and **Ahsoka's** deployed backs.
+
 ### Remaining chunks (planned)
 
-E — opponent-makes-a-choice + "next unit you play this phase" grant (Sabine); F — take-initiative
-trigger (Mandalorian), attack-with-a-unit ability (Thrawn), Grogu's triggered deploy + aura.
+E — opponent-makes-a-choice + "next unit you play this phase" grant (Sabine); F2 —
+attack-with-a-unit ability + conditional Restore (Thrawn); F3 — Grogu's triggered deploy +
+combat-conditional aura (needs attack context threaded into `aura`).

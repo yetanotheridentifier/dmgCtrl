@@ -26,6 +26,8 @@ export type TriggerPoint =
   | 'whenFriendlyAttackEnds'
   | 'whenReadies'
   | 'whenRegroupStarts'
+  // "When you take the initiative" (#348, Mandalorian) — fires for the taker's undeployed leader.
+  | 'whenTakeInitiative'
   | 'whenDefeated'
   | 'onDefense'
   | 'whenPlayOrCreateUnit'

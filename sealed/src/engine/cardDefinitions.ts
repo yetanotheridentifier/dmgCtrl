@@ -240,6 +240,27 @@ registerCard('ASH_015', { // Emperor Palpatine — front (undeployed) + deployed
   }],
 })
 
+registerCard('ASH_014', { // The Mandalorian — front take-initiative draw; deployed on-attack draw (#348)
+  // Front (undeployed): when you take the initiative, may pay 1 to draw.
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenTakeInitiative',
+      description: 'You may pay 1 to draw a card.',
+      effect: (s, ctx) =>
+        s.players[ctx.owner].resources.some(r => !r.exhausted)
+          ? pushChoice(s, { kind: 'mayPayToDraw', id: `${ctx.cardId}-init`, controller: ctx.owner, cost: 1, draw: 1 })
+          : s,
+    }],
+  },
+  // Deployed (back): On Attack, if you have the initiative, may draw a card (free). Support keyword
+  // comes from the card DB; Support-on-deploy (attack with another unit) is deferred — shared with Ahsoka.
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'If you have the initiative, you may draw a card.',
+    effect: (s, ctx) => (s.initiative === ctx.owner ? pushChoice(s, { kind: 'mayPayToDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, draw: 1 }) : s),
+  }],
+})
+
 // Every upgrade the player controls — card upgrades AND tokens — as defeatable candidates (#348).
 const friendlyUpgradeCandidates = (s: GameState, owner: PlayerId): UpgradeRef[] =>
   s.players[owner].units.flatMap(u => u.upgrades.map((up, i) => ({ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId })))

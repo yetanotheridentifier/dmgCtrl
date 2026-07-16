@@ -33,6 +33,7 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'ASH_017', name: 'Greef Karga', front: true, back: true },
   { id: 'ASH_008', name: 'Moff Gideon', front: true, back: false },
   { id: 'ASH_016', name: 'Shin Hati', front: true, back: true },
+  { id: 'ASH_014', name: 'The Mandalorian', front: true, back: true },
   { id: 'ASH_012', name: 'Vane', front: true, back: true },
 ]
 

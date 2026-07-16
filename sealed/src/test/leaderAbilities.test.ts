@@ -728,6 +728,85 @@ describe('The Armorer (ASH_001) — play an upgrade from your resources (#348)',
   })
 })
 
+describe('The Mandalorian (ASH_014) — draw on initiative / on attack (#348)', () => {
+  const cards = { ...CARDS, ASH_014: card({ id: 'ASH_014', type: 'leader', cost: 6, power: 4, hp: 6 }) }
+
+  it('front: taking the initiative offers to pay 1 and draw, then passes the turn', () => {
+    const s = state({
+      cards,
+      players: { player: player({ leader: undeployed('ASH_014'), resources: ready(2), deck: ['TST_U1', 'TST_U2'] }), opponent: player() },
+    })
+    const taken = resolve(s, { type: 'takeInitiative' })
+    expect(taken.initiative).toBe('player')
+    expect(taken.pendingChoices?.[0]).toMatchObject({ kind: 'mayPayToDraw', cost: 1, draw: 1 })
+    expect(taken.activePlayer).toBe('player') // holds for the choice
+
+    const drew = resolve(taken, { type: 'acceptChoice', choiceId: taken.pendingChoices![0].id })
+    expect(drew.players.player.hand).toEqual(['TST_U1']) // drew the top card
+    expect(drew.players.player.resources.filter(r => !r.exhausted)).toHaveLength(1) // paid 1
+    expect(drew.activePlayer).toBe('opponent') // transition completed after the choice
+  })
+
+  it('front: declining draws nothing, keeps resources, and still passes the turn', () => {
+    const s = state({
+      cards,
+      players: { player: player({ leader: undeployed('ASH_014'), resources: ready(2), deck: ['TST_U1'] }), opponent: player() },
+    })
+    const taken = resolve(s, { type: 'takeInitiative' })
+    const declined = resolve(taken, { type: 'skipTrigger', choiceId: taken.pendingChoices![0].id })
+    expect(declined.players.player.hand).toEqual([])
+    expect(declined.players.player.resources.filter(r => !r.exhausted)).toHaveLength(2)
+    expect(declined.activePlayer).toBe('opponent')
+  })
+
+  it('front: taking initiative right after a pass still ends the phase once the choice resolves', () => {
+    const s = state({
+      cards,
+      consecutivePasses: 1, // opponent just passed
+      players: { player: player({ leader: undeployed('ASH_014'), resources: ready(2), deck: ['TST_U1', 'TST_U2', 'TST_U1'] }), opponent: player() },
+    })
+    const taken = resolve(s, { type: 'takeInitiative' })
+    expect(taken.phase).toBe('action') // still action while the choice is pending
+    const done = resolve(taken, { type: 'skipTrigger', choiceId: taken.pendingChoices![0].id })
+    expect(done.phase).toBe('regroup') // CR 1.15.5c — the phase ends
+  })
+
+  it('front: no offer with no ready resources, or when the leader is deployed', () => {
+    const broke = state({ cards, players: { player: player({ leader: undeployed('ASH_014'), resources: [], deck: ['TST_U1'] }), opponent: player() } })
+    expect(resolve(broke, { type: 'takeInitiative' }).pendingChoices).toBeUndefined()
+    const deployedLeader = state({
+      cards,
+      players: { player: player({ leader: deployed('ASH_014'), resources: ready(2), units: [unit('L', 'ASH_014', { isLeader: true })] }), opponent: player() },
+    })
+    expect(resolve(deployedLeader, { type: 'takeInitiative' }).pendingChoices).toBeUndefined()
+  })
+
+  it('deployed: On Attack with the initiative, may draw a card for free', () => {
+    const s = state({
+      cards,
+      initiative: 'player',
+      players: { player: player({ leader: deployed('ASH_014'), units: [unit('L', 'ASH_014', { isLeader: true })], deck: ['TST_U1'] }), opponent: player() },
+    })
+    const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayPayToDraw', cost: 0, draw: 1 })
+    const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id })
+    expect(done.players.player.hand).toEqual(['TST_U1']) // free draw
+    expect(done.players.opponent.base.damage).toBe(4) // combat continued (L power 4)
+    expect(done.activePlayer).toBe('opponent')
+  })
+
+  it('deployed: no draw offered without the initiative', () => {
+    const s = state({
+      cards,
+      initiative: 'opponent',
+      players: { player: player({ leader: deployed('ASH_014'), units: [unit('L', 'ASH_014', { isLeader: true })], deck: ['TST_U1'] }), opponent: player() },
+    })
+    const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
+    expect(atk.pendingChoices).toBeUndefined()
+    expect(atk.players.opponent.base.damage).toBe(4)
+  })
+})
+
 describe('Moff Gideon (ASH_008) — front: play a unit costing 1 less (#348)', () => {
   const cards = {
     ...CARDS,

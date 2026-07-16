@@ -7,7 +7,7 @@ import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, supportGrantedKeywords, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit } from './combat'
-import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck } from './effects'
+import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
@@ -313,6 +313,11 @@ function resumeAfterChoice(state: GameState, resolved: PendingChoice): GameState
   }
   // A combat suspended for an On Defense choice resumes once the queue drains (#342).
   if (state.pendingAttack) return resumePendingAttack(state)
+  // A "when you take the initiative" choice (#348): complete the deferred turn transition.
+  if (state.pendingInitiativeEndsPhase !== undefined) {
+    const cleared = { ...state, pendingInitiativeEndsPhase: undefined }
+    return state.pendingInitiativeEndsPhase ? enterRegroup(cleared) : advanceTurn(resetPasses(cleared))
+  }
   if (resolved.kind === 'payOrExhaust' && resolved.resumeAtInitiative) {
     return { ...state, activePlayer: state.initiative }
   }
@@ -488,6 +493,11 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
           next = pushChoice(next, { kind: 'playUnitFromHand', id: `${choice.id}-play`, controller: choice.controller, candidates, costDelta: choice.then.costDelta, entersReady: choice.then.entersReady })
         }
       }
+      break
+    case 'mayPayToDraw':
+      // Mandalorian (#348): optionally pay the cost, then draw. `cost` 0 = a free "may draw".
+      next = updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost))
+      next = drawCards(next, choice.controller, choice.draw)
       break
     case 'selectResourceUpgrade': {
       // The Armorer (#348): the chosen resource upgrade → pick where to attach it.
@@ -700,15 +710,17 @@ function deployLeader(state: GameState): GameState {
 
 function takeInitiative(state: GameState): GameState {
   const playerId = state.activePlayer
-  const taken: GameState = {
-    ...state,
-    initiative: playerId,
-    initiativeTakenBy: playerId,
+  // Taking the initiative immediately after an opponent's pass ends the action phase (CR 1.15.5c).
+  const endsPhase = state.consecutivePasses >= 1
+  let taken: GameState = { ...state, initiative: playerId, initiativeTakenBy: playerId }
+  // "When you take the initiative" (#348, Mandalorian): fire before the turn transition. If it raises
+  // a choice, hold with the taker and finish the transition once the choice drains (resumeAfterChoice).
+  const before = taken.pendingChoices?.length ?? 0
+  taken = runLeaderTrigger(taken, 'whenTakeInitiative', playerId)
+  if ((taken.pendingChoices?.length ?? 0) > before) {
+    return { ...taken, pendingInitiativeEndsPhase: endsPhase }
   }
-  // Taking the initiative immediately after an opponent's pass ends the
-  // action phase (CR 1.15.5c).
-  if (state.consecutivePasses >= 1) return enterRegroup(taken)
-  return { ...taken, activePlayer: opponentOf(playerId) }
+  return endsPhase ? enterRegroup(taken) : { ...taken, activePlayer: opponentOf(playerId) }
 }
 
 function pass(state: GameState): GameState {

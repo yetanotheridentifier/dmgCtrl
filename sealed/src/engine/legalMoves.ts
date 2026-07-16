@@ -380,6 +380,12 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'mayPayToDraw': {
+        // Mandalorian (#348): a yes/no — accept only if the cost is affordable.
+        if (readyResourceCount(p) >= choice.cost) moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
       case 'mayAttack': {
         // Improvised Identity's optional follow-up attack, with the discarded unit's
         // abilities granted (so granted Saboteur etc. shape the legal targets).
