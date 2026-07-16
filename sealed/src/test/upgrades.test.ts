@@ -260,3 +260,55 @@ describe('token upgrades (#308)', () => {
     expect(hasUpgrade(next.players.opponent.units.find(u => u.instanceId === 'e1')!, TOKEN_ADVANTAGE)).toBe(false)
   })
 })
+
+describe('unique upgrade rule (#348)', () => {
+  const cards = {
+    ...CARDS,
+    UNIQ: card({ id: 'UNIQ', type: 'upgrade', cost: 1, power: 1, hp: 1, unique: true }),
+    COMMON: card({ id: 'COMMON', type: 'upgrade', cost: 1, power: 1, hp: 1, unique: false }),
+  }
+
+  it('playing a second copy of a unique upgrade forces you to defeat one (your choice)', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ hand: ['UNIQ'], resources: ready(2), units: [unit('u1', 'TST_U1', { upgrades: [{ cardId: 'UNIQ', owner: 'player' }] })] }),
+        opponent: player(),
+      },
+    })
+    const played = resolve(s, { type: 'playUpgrade', handIndex: 0, targetInstanceId: 'u1' })
+    expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'selectUniqueToDefeat', cardId: 'UNIQ' })
+    expect(played.pendingChoices![0]).toHaveProperty('candidates')
+    expect(played.activePlayer).toBe('player') // holds for the choice — no skip
+    expect(legalMoves(played).some(a => a.type === 'skipTrigger')).toBe(false)
+
+    const done = resolve(played, { type: 'acceptChoice', choiceId: played.pendingChoices![0].id, optionIndex: 0 })
+    expect(done.players.player.units.find(u => u.instanceId === 'u1')!.upgrades.filter(a => a.cardId === 'UNIQ')).toHaveLength(1)
+    expect(done.players.player.discard).toContain('UNIQ')
+    expect(done.pendingChoices).toBeUndefined()
+    expect(done.activePlayer).toBe('opponent')
+  })
+
+  it('no conflict for a non-unique upgrade, or a first copy', () => {
+    const nonUnique = state({
+      cards,
+      players: { player: player({ hand: ['COMMON'], resources: ready(2), units: [unit('u1', 'TST_U1', { upgrades: [{ cardId: 'COMMON', owner: 'player' }] })] }), opponent: player() },
+    })
+    expect(resolve(nonUnique, { type: 'playUpgrade', handIndex: 0, targetInstanceId: 'u1' }).pendingChoices).toBeUndefined()
+
+    const first = state({ cards, players: { player: player({ hand: ['UNIQ'], resources: ready(2), units: [unit('u1', 'TST_U1')] }), opponent: player() } })
+    expect(resolve(first, { type: 'playUpgrade', handIndex: 0, targetInstanceId: 'u1' }).pendingChoices).toBeUndefined()
+  })
+
+  it('the rule is per-player — the opponent controlling a copy does not conflict with yours', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ hand: ['UNIQ'], resources: ready(2), units: [unit('u1', 'TST_U1')] }),
+        opponent: player({ units: [unit('e1', 'TST_U1', { upgrades: [{ cardId: 'UNIQ', owner: 'opponent' }] })] }),
+      },
+    })
+    const played = resolve(s, { type: 'playUpgrade', handIndex: 0, targetInstanceId: 'u1' })
+    expect(played.pendingChoices).toBeUndefined() // each player controls one copy — fine
+  })
+})

@@ -1,6 +1,6 @@
 import type { Action, AttackTarget } from './actions'
 import type { GameState, PlayerId, UnitState } from './types'
-import type { PendingChoice } from './types'
+import type { PendingChoice, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeChoice, hasPendingChoices, pushChoice } from './types'
 import { addLastingEffect, clearLastingEffects, resetPhaseEvents, recordUnitEntered, markAbilityUsed } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
@@ -38,6 +38,8 @@ export function resolve(state: GameState, action: Action): GameState {
     case 'playUpgrade':
       return requirePhase(state, 'action', () => {
         const played = playUpgrade(state, action.handIndex, action.targetInstanceId)
+        // A raised choice (Camtono's look-at, the unique-rule defeat) keeps the turn (#342/#348).
+        if (played.winner === null && activeChoice(played)) return resetPasses(played)
         return played.winner !== null ? played : advanceTurn(resetPasses(played))
       })
     case 'deployLeader':
@@ -500,6 +502,20 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       next = updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost))
       next = drawCards(next, choice.controller, choice.draw)
       break
+    case 'selectUniqueToDefeat': {
+      // Unique rule (#348): defeat the chosen duplicate upgrade, then re-check (3+ copies → repeat).
+      const pick = choice.candidates[optionIndex ?? 0]
+      if (pick) {
+        next = defeatUpgradeAt(next, pick.unitId, pick.upgradeIndex)
+        next = uniqueUpgradeCheck(next, choice.controller)
+      }
+      break
+    }
+    case 'mayDeployLeader':
+      // Grogu (#348): deploy via the triggered epic action — not once-per-game, so it doesn't burn
+      // the epic action (`epicUsed: false`), letting Grogu redeploy after being defeated + readying.
+      next = deployLeader(next, false)
+      break
     case 'selectResourceUpgrade': {
       // The Armorer (#348): the chosen resource upgrade → pick where to attach it.
       const pick = choice.candidates[optionIndex ?? 0]
@@ -525,6 +541,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         next = updatePlayer(next, owner, pl)
         next = resourceTopOfDeck(next, owner) // "If you do, resource the top card of your deck."
         next = runTrigger(next, 'whenPlayed', { owner, cardId: choice.cardId, sourceInstanceId: targetInstanceId })
+        next = uniqueUpgradeCheck(next, owner) // unique rule (#348)
         next = checkWin(next)
         if (next.winner !== null) return next
       }
@@ -589,10 +606,32 @@ function playTopCardFree(state: GameState, owner: PlayerId, cardId: string, targ
         u.instanceId === targetInstanceId ? { ...u, upgrades: [...u.upgrades, { cardId, owner }] } : u,
       ),
     })
-    return runTrigger(next, 'whenPlayed', { owner, cardId, sourceInstanceId: targetInstanceId })
+    next = runTrigger(next, 'whenPlayed', { owner, cardId, sourceInstanceId: targetInstanceId })
+    return uniqueUpgradeCheck(next, owner) // unique rule (#348)
   }
   // Event (or an upgrade with no target): temporary stub — discard with no effect.
   return updatePlayer(next, owner, { discard: [...next.players[owner].discard, cardId] })
+}
+
+/**
+ * Unique rule (CR): a player can't control two upgrades with the same title. After an upgrade
+ * attaches, if `owner` now controls ≥2 unique upgrades of one card id, raise a choice to defeat one
+ * (their pick). Re-run after each defeat so 3+ copies resolve down to one. Titles are keyed by card
+ * id (a deck's duplicates share it). (The unit-side unique rule is a follow-up.)
+ */
+function uniqueUpgradeCheck(state: GameState, owner: PlayerId): GameState {
+  const instances: UpgradeRef[] = []
+  for (const pid of ['player', 'opponent'] as PlayerId[]) {
+    for (const u of state.players[pid].units) {
+      u.upgrades.forEach((up, i) => {
+        if (up.owner === owner && state.cards[up.cardId]?.unique) instances.push({ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId })
+      })
+    }
+  }
+  const dupCardId = instances.map(r => r.cardId).find((id, i, arr) => arr.indexOf(id) !== i)
+  if (!dupCardId) return state
+  const candidates = instances.filter(r => r.cardId === dupCardId)
+  return pushChoice(state, { kind: 'selectUniqueToDefeat', id: `unique-${dupCardId}`, controller: owner, cardId: dupCardId, candidates })
 }
 
 /**
@@ -632,6 +671,7 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
     cardId: card.id,
     sourceInstanceId: targetInstanceId,
   })
+  next = uniqueUpgradeCheck(next, playerId) // two upgrades with the same title → defeat one
   return checkWin(next)
 }
 
@@ -683,10 +723,16 @@ function useLeaderAbility(state: GameState, index: number, targetInstanceId?: st
   return hasPendingChoices(next) ? next : advanceTurn(resetPasses(next))
 }
 
-function deployLeader(state: GameState): GameState {
+/**
+ * Deploy the active player's leader. The normal epic action sets `epicActionUsed` so it can't be
+ * used again (and a defeated leader can't redeploy, CR 3.4.5). Grogu's *triggered* deploy (#348)
+ * passes `epicUsed: false` — it's gated on "if this leader is ready", not once-per-game, so he can
+ * redeploy after being defeated once he readies at regroup.
+ */
+function deployLeader(state: GameState, epicUsed = true): GameState {
   const playerId = state.activePlayer
   const p = state.players[playerId]
-  if (p.leader.deployed || p.leader.epicActionUsed) {
+  if (p.leader.deployed || (epicUsed && p.leader.epicActionUsed)) {
     throw new Error('deployLeader: leader cannot deploy')
   }
 
@@ -703,7 +749,7 @@ function deployLeader(state: GameState): GameState {
   }
 
   let next = updatePlayer(state, playerId, {
-    leader: { ...p.leader, deployed: true, epicActionUsed: true },
+    leader: { ...p.leader, deployed: true, epicActionUsed: epicUsed ? true : p.leader.epicActionUsed },
     units: [...p.units, leaderUnit],
   })
   next = { ...next, instanceCounter: state.instanceCounter + 1 }
@@ -896,12 +942,14 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
     : state
   const defender = preCombat.players[enemyId].units.find(u => u.instanceId === target.instanceId)!
 
-  const counterPower = effectivePower(preCombat, defender)
+  // Combat-conditional auras (Grogu, #348) apply to the defender during damage resolution.
+  const combat = { attackerInstanceId: attackerId, defenderInstanceId: defender.instanceId }
+  const counterPower = effectivePower(preCombat, defender, { combat })
 
   // Overwhelm: excess combat damage beyond the defender's remaining HP hits the
   // defending player's base (CR 1.9.11). A shielded defender takes no damage, so
   // there is no excess to trample (#308).
-  const remainingHp = effectiveHp(preCombat, defender) - defender.damage
+  const remainingHp = effectiveHp(preCombat, defender, { combat }) - defender.damage
   const overwhelmExcess = unitHasKeyword(preCombat, attacker, 'Overwhelm')
     && !hasToken(defender.upgrades, TOKEN_SHIELD)
     && !unitNegatesOverwhelm(preCombat, defender)

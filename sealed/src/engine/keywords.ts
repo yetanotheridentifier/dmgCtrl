@@ -1,4 +1,4 @@
-import type { GameState, KeywordInstance, UnitState } from './types'
+import type { GameState, KeywordInstance, UnitState, CombatContext } from './types'
 import { lastingEffectTotals } from './types'
 import { getCardDefinition } from './abilities'
 
@@ -81,7 +81,7 @@ export function unitHasTrait(state: GameState, unit: UnitState, name: string): b
  * Sums power/HP and collects granted keywords. A source affects a target via its card's
  * (or an upgrade's) `aura` hook; `sameController` = source and target share a controller.
  */
-export function auraContributions(state: GameState, target: UnitState): { power: number; hp: number; keywords: KeywordInstance[] } {
+export function auraContributions(state: GameState, target: UnitState, combat?: CombatContext): { power: number; hp: number; keywords: KeywordInstance[] } {
   const targetOwner = (['player', 'opponent'] as const).find(o => state.players[o].units.some(u => u.instanceId === target.instanceId))
   if (!targetOwner) return { power: 0, hp: 0, keywords: [] }
   let power = 0
@@ -91,7 +91,7 @@ export function auraContributions(state: GameState, target: UnitState): { power:
     const sameController = owner === targetOwner
     for (const source of state.players[owner].units) {
       for (const cardId of [source.cardId, ...source.upgrades.map(u => u.cardId)]) {
-        const contrib = getCardDefinition(cardId)?.aura?.(state, source, target, sameController)
+        const contrib = getCardDefinition(cardId)?.aura?.(state, source, target, sameController, combat)
         if (contrib) {
           power += contrib.power ?? 0
           hp += contrib.hp ?? 0

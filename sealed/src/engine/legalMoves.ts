@@ -374,6 +374,17 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'mayDeployLeader': {
+        // Grogu (#348): a yes/no to deploy via the triggered epic action.
+        moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'selectUniqueToDefeat': {
+        // Unique rule (#348): pick which duplicate to defeat. Mandatory (must reduce to one).
+        choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
+        break
+      }
       case 'mayAttack': {
         // Improvised Identity's optional follow-up attack, with the discarded unit's
         // abilities granted (so granted Saboteur etc. shape the legal targets).

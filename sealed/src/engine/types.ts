@@ -199,6 +199,13 @@ export interface UpgradeRef {
   cardId: string
 }
 
+/** The current combat's roles, so combat-conditional auras (Grogu, #348) can react to who is
+ *  attacking / defending. Threaded through `StatContext` into the aura pass during damage resolution. */
+export interface CombatContext {
+  attackerInstanceId: string
+  defenderInstanceId: string
+}
+
 /** A hand card offered for play by an ability — its hand position + card id (#348). */
 export interface HandCardRef {
   handIndex: number
@@ -324,6 +331,11 @@ export type PendingChoice =
   | { kind: 'attachResourceUpgrade'; id: string; controller: PlayerId; resourceIndex: number; cardId: string; targets: string[]; payCost: boolean }
   // Optionally pay `cost` to draw `draw` cards (#348, Mandalorian). `cost` 0 = a free "may draw".
   | { kind: 'mayPayToDraw'; id: string; controller: PlayerId; cost: number; draw: number }
+  // Optionally deploy your leader via a triggered epic action (#348, Grogu). A yes/no.
+  | { kind: 'mayDeployLeader'; id: string; controller: PlayerId }
+  // Unique rule (CR): a player controlling two upgrades with the same title defeats one (their
+  // choice). `candidates` are the duplicate instances; picking one defeats it. Mandatory.
+  | { kind: 'selectUniqueToDefeat'; id: string; controller: PlayerId; cardId: string; candidates: UpgradeRef[] }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */
 export function activeChoice(state: GameState): PendingChoice | undefined {

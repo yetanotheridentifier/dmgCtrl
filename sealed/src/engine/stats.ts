@@ -1,4 +1,4 @@
-import type { GameState, UnitState } from './types'
+import type { GameState, UnitState, CombatContext } from './types'
 import { lastingEffectTotals } from './types'
 import { unitHasKeyword, unitKeywordValue, auraContributions } from './keywords'
 import { getCardDefinition } from './abilities'
@@ -15,6 +15,8 @@ export interface StatContext {
   attacking?: boolean
   /** True while the unit is attacking the enemy base (not a unit). */
   attackingBase?: boolean
+  /** The current combat's roles, for combat-conditional auras (Grogu, #348). */
+  combat?: CombatContext
 }
 
 /** Sum a stat across the unit's card and every attached upgrade (#308). */
@@ -45,7 +47,7 @@ export function effectivePower(state: GameState, unit: UnitState, ctx: StatConte
     power += unit.damage
   }
   power += statModifiers(state, unit, ctx, 'power')
-  power += auraContributions(state, unit).power // other units' auras (#346)
+  power += auraContributions(state, unit, ctx.combat).power // other units' auras (#346/#348)
   power += lastingEffectTotals(state, unit.instanceId).power // "this phase" buffs (#347)
   return Math.max(0, power)
 }
@@ -53,6 +55,6 @@ export function effectivePower(state: GameState, unit: UnitState, ctx: StatConte
 export function effectiveHp(state: GameState, unit: UnitState, ctx: StatContext = {}): number {
   return Math.max(
     0,
-    withUpgrades(state, unit, 'hp') + statModifiers(state, unit, ctx, 'hp') + auraContributions(state, unit).hp + lastingEffectTotals(state, unit.instanceId).hp,
+    withUpgrades(state, unit, 'hp') + statModifiers(state, unit, ctx, 'hp') + auraContributions(state, unit, ctx.combat).hp + lastingEffectTotals(state, unit.instanceId).hp,
   )
 }

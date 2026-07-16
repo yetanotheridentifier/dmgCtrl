@@ -72,7 +72,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayDamage' || choice.kind === 'mayAdvantageEach') return 'Decline'
       if (choice.kind === 'selectUpgradeToDefeat' || choice.kind === 'selectResourceUpgrade') return 'Cancel'
       if (choice.kind === 'mayLastingBuff' || choice.kind === 'mayGiveAdvantage' || choice.kind === 'mayExhaustLeaderGiveAdvantage' || choice.kind === 'mayExhaustLeaderExhaustUnit' || choice.kind === 'mayExhaustUnit') return 'Decline'
-      if (choice.kind === 'mayExhaustLeaderForAdvantage' || choice.kind === 'mayExhaustLeaderHealUnit' || choice.kind === 'mayPayToDraw') return "Don't"
+      if (choice.kind === 'mayExhaustLeaderForAdvantage' || choice.kind === 'mayExhaustLeaderHealUnit' || choice.kind === 'mayPayToDraw' || choice.kind === 'mayDeployLeader') return "Don't"
       return `Skip ${choice.kind}`
     }
     case 'acceptChoice': {
@@ -136,6 +136,12 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayPayToDraw') {
         const cards = choice.draw === 1 ? 'a card' : `${choice.draw} cards`
         return choice.cost > 0 ? `Pay ${choice.cost}, draw ${cards}` : `Draw ${cards}`
+      }
+      if (choice.kind === 'mayDeployLeader') return `Deploy ${state.cards[state.players[by].leader.cardId]?.name ?? 'leader'}`
+      if (choice.kind === 'selectUniqueToDefeat') {
+        const pick = choice.candidates[action.optionIndex ?? 0]
+        const host = pick ? anyUnitName(state, pick.unitId) : undefined
+        return `Defeat the copy${host ? ` on ${host}` : ''}`
       }
       if (choice.kind === 'mayLastingBuff') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined

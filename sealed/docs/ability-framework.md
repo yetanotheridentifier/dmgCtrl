@@ -328,10 +328,7 @@ recurses through the aura pass) — inspect card data / traits (`unitHasTrait` i
 Grand Admiral Sloane (007) — each other friendly unit gains Overwhelm + Sentinel.
 Tests: `src/test/auras.test.ts`.
 
-**Deferred:** Grogu (018)'s aura is combat-conditional ("while another friendly unit is
-defending, +1/0; while attacking, the defender gets −1/0") — needs the attack context
-(attacking/defending) threaded into the aura call, so it lands with Grogu's full build
-(alongside #347's combat/phase tracking).
+Grogu (018)'s aura is combat-conditional — see #348-F3, which threaded combat roles into the aura call.
 
 ## Lasting effects + phase/attack tracking (#306/#347)
 
@@ -522,8 +519,35 @@ the Mandalorian's and Ahsoka's Support. (The granted card includes the harmless 
 which never re-triggers mid-attack.) **Ahsoka (009)** deployed back is now complete — its On-Attack
 "give a unit with less power than this unit +2/0 this phase" reuses `mayLastingBuff` (as Baylan's does).
 
+### Chunk F3 — Grogu (DONE)
+
+- **Combat context threaded into auras** — new `CombatContext { attackerInstanceId, defenderInstanceId }`
+  on `StatContext.combat`, passed through `auraContributions` into the `aura` hook's 5th param.
+  `completeAttack` sets it on the **defender's** `effectivePower`/`effectiveHp` during damage
+  resolution, so an aura can react to who is attacking/defending (the piece deferred in #346).
+- **`mayDeployLeader`** choice — a triggered epic-action deploy (yes/no → `deployLeader`).
+- **Grogu (018)** — `deployCondition: () => false` (never deploys via the normal epic action); a
+  `whenPlayOrCreateUnit` leader trigger offers `mayDeployLeader` when you play a **Unique unit costing
+  4+** and Grogu is **ready** (undeployed + not exhausted). Deployed aura on the current combat's
+  **defender**: a friendly non-Grogu defender gets **+1/0**; the enemy defender gets **−1/0** while
+  another friendly unit (not Grogu) attacks — so it only shifts counter-attack damage.
+- **Grogu redeploys** (his triggered deploy isn't once-per-game): `deployLeader(state, epicUsed)` —
+  the normal epic action passes `epicUsed: true` (burns the epic action so a defeated leader can't
+  redeploy, CR 3.4.5); `mayDeployLeader` passes `false`, so a defeated-then-readied Grogu can deploy
+  again. His trigger gates on `!leader.exhausted`, so he can't redeploy until he readies at regroup.
+
+### Unique rule for upgrades (#348)
+
+A player can't control two upgrades with the same title. `uniqueUpgradeCheck(state, owner)` runs
+after every upgrade attach (`playUpgrade`, `attachResourceUpgrade`, `playTopCardFree`): if the owner
+now controls ≥2 unique upgrades of one card id, it raises `selectUniqueToDefeat` (candidates = the
+duplicate `UpgradeRef`s) — the player picks one to defeat (mandatory, no cancel; centre-screen
+`CardSelectOverlay`), then it re-checks so 3+ copies resolve down to one. Per-**controller** (an
+upgrade's `owner`), so the opponent's copy of the same card doesn't conflict. `playUpgrade`'s
+dispatch now holds the turn while such a choice (or Camtono's look-at) resolves. (The unit-side
+unique rule is a follow-up.)
+
 ### Remaining chunks (planned)
 
 E — opponent-makes-a-choice + "next unit you play this phase" grant (Sabine); F2 —
-attack-with-a-unit ability + conditional Restore (Thrawn); F3 — Grogu's triggered deploy +
-combat-conditional aura (needs attack context threaded into `aura`).
+attack-with-a-unit ability + conditional Restore (Thrawn).

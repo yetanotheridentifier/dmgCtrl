@@ -30,6 +30,7 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'ASH_013', name: 'Ezra Bridger', front: true, back: true },
   { id: 'ASH_005', name: 'Luke Skywalker', front: true, back: true },
   { id: 'ASH_007', name: 'Grand Admiral Sloane', front: true, back: true },
+  { id: 'ASH_018', name: 'Grogu', front: true, back: true },
   { id: 'ASH_017', name: 'Greef Karga', front: true, back: true },
   { id: 'ASH_008', name: 'Moff Gideon', front: true, back: false },
   { id: 'ASH_016', name: 'Shin Hati', front: true, back: true },

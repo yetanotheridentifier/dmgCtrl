@@ -444,6 +444,32 @@ registerCard('ASH_010', { // Bo-Katan Kryze — front/back create a Mandalorian 
   aura: (s, src, tgt, friendly) => (friendly && tgt.instanceId !== src.instanceId && unitHasTrait(s, tgt, 'Mandalorian') ? { power: 1 } : undefined),
 })
 
+registerCard('ASH_018', { // Grogu — triggered deploy on a Unique 4+ unit; combat-conditional aura (#346/#348)
+  deployCondition: () => false, // never deploys via the normal epic action — only via the trigger below
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenPlayOrCreateUnit',
+      description: 'When you play a Unique unit costing 4 or more, if Grogu is ready you may deploy him.',
+      effect: (s, ctx) => {
+        const played = allUnits(s).find(u => u.instanceId === ctx.targetInstanceId)
+        const card = played ? s.cards[played.cardId] : undefined
+        const leader = s.players[ctx.owner].leader
+        // "If this leader is ready" — deployable while undeployed and not exhausted. Grogu's deploy
+        // isn't the once-per-game epic action, so a defeated-then-readied Grogu can deploy again.
+        if (!card || !card.unique || card.cost < 4 || leader.deployed || leader.exhausted) return s
+        return pushChoice(s, { kind: 'mayDeployLeader', id: `${ctx.cardId}-deploy`, controller: ctx.owner })
+      },
+    }],
+  },
+  // Deployed: the current combat's defender gets +1/0 if it's another friendly unit (defending), or
+  // -1/0 if it's the enemy defender while another friendly unit (not Grogu) attacks.
+  aura: (_s, src, tgt, sameController, combat) => {
+    if (!combat || tgt.instanceId !== combat.defenderInstanceId) return undefined
+    if (sameController) return tgt.instanceId !== src.instanceId ? { power: 1 } : undefined
+    return combat.attackerInstanceId !== src.instanceId ? { power: -1 } : undefined
+  },
+})
+
 const SLOANE_KEYWORDS = [{ name: 'Sentinel' }, { name: 'Overwhelm' }]
 registerCard('ASH_007', { // Grand Admiral Sloane — front Choose One arena buff (#348) + deployed aura (#346)
   leaderAbilities: {

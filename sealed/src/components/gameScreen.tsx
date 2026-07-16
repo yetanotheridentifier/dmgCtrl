@@ -891,6 +891,12 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === resourceUpgradeChoice.id)
       : []
 
+    // Unique rule (#348): pick which duplicate upgrade to defeat (mandatory) — a centre-screen picker.
+    const uniqueChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'selectUniqueToDefeat' }> => c.kind === 'selectUniqueToDefeat' && c.controller === 'player',
+    )
+    const uniqueActions = uniqueChoice ? legal.filter(a => a.type === 'acceptChoice' && a.choiceId === uniqueChoice.id) : []
+
     // Playing, resourcing, attacking and attaching upgrades are all driven by
     // clicking a card or unit, so the menu holds only the remaining choices —
     // mulligan, keep hand, take the initiative, pass (and skip/deploy) (#332/#336).
@@ -901,7 +907,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // "Play a unit from hand" accepts (#348) are clicked on the hand card, not the menu.
     const isHandPlay = (a: Action) => a.type === 'acceptChoice' && a.handIndex !== undefined
     const menuActions = gameState.winner === null
-      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !isHandPlay(a))
+      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a))
       : []
     const actionColumn = (
       <div className="flex flex-col items-stretch gap-1.5">
@@ -978,6 +984,16 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           items={items}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: resourceUpgradeChoice.id, optionIndex })}
           onCancel={cancel ? () => actAndClear(cancel) : undefined}
+        />
+      )
+    } else if (uniqueChoice) {
+      // Unique rule: two copies of the same upgrade — pick which to defeat (mandatory, no cancel).
+      choiceOverlay = (
+        <CardSelectOverlay
+          state={gameState}
+          prompt={`You control two ${gameState.cards[uniqueChoice.cardId]?.name ?? 'copies'} — defeat one`}
+          items={uniqueChoice.candidates.map((c, i) => ({ cardId: c.cardId, optionIndex: i, hostId: c.unitId, key: i }))}
+          onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: uniqueChoice.id, optionIndex })}
         />
       )
     }

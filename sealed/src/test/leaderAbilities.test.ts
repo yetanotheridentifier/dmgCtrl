@@ -745,6 +745,114 @@ describe('The Armorer (ASH_001) — play an upgrade from your resources (#348)',
   })
 })
 
+describe('Grogu (ASH_018) — triggered deploy + combat-conditional aura (#348)', () => {
+  const cards = {
+    ...CARDS,
+    ASH_018: card({ id: 'ASH_018', type: 'leader', cost: 4, power: 0, hp: 3, unique: true }),
+    BIG: card({ id: 'BIG', type: 'unit', arena: 'ground', cost: 4, power: 3, hp: 3, unique: true }),
+    SMALL: card({ id: 'SMALL', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 2, unique: true }),
+    COMMON: card({ id: 'COMMON', type: 'unit', arena: 'ground', cost: 5, power: 3, hp: 3, unique: false }),
+  }
+  const playing = (hand: string) => state({
+    cards,
+    players: { player: player({ leader: undeployed('ASH_018'), hand: [hand], resources: ready(5) }), opponent: player() },
+  })
+
+  it('offers to deploy Grogu when you play a Unique unit costing 4+, without burning the epic action', () => {
+    const played = resolve(playing('BIG'), { type: 'playCard', handIndex: 0 })
+    expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'mayDeployLeader' })
+    const deployed = resolve(played, { type: 'acceptChoice', choiceId: played.pendingChoices![0].id })
+    expect(deployed.players.player.leader.deployed).toBe(true)
+    expect(deployed.players.player.units.some(u => u.cardId === 'ASH_018' && u.isLeader)).toBe(true)
+    expect(deployed.players.player.leader.epicActionUsed).toBe(false) // not once-per-game → can redeploy
+  })
+
+  it('can redeploy after being defeated (undeployed + ready, even though the epic action was marked used)', () => {
+    const s = state({
+      cards,
+      players: { player: player({ leader: { cardId: 'ASH_018', deployed: false, epicActionUsed: true, exhausted: false }, hand: ['BIG'], resources: ready(5) }), opponent: player() },
+    })
+    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'mayDeployLeader' }) // offered despite epicActionUsed
+    expect(resolve(played, { type: 'acceptChoice', choiceId: played.pendingChoices![0].id }).players.player.leader.deployed).toBe(true)
+  })
+
+  it('does not offer redeploy while exhausted (just-defeated, before it readies at regroup)', () => {
+    const s = state({
+      cards,
+      players: { player: player({ leader: { cardId: 'ASH_018', deployed: false, epicActionUsed: false, exhausted: true }, hand: ['BIG'], resources: ready(5) }), opponent: player() },
+    })
+    expect(resolve(s, { type: 'playCard', handIndex: 0 }).pendingChoices).toBeUndefined()
+  })
+
+  it('does not offer for a non-Unique unit, or a Unique unit costing under 4', () => {
+    expect(resolve(playing('COMMON'), { type: 'playCard', handIndex: 0 }).pendingChoices).toBeUndefined() // not Unique
+    expect(resolve(playing('SMALL'), { type: 'playCard', handIndex: 0 }).pendingChoices).toBeUndefined() // cost 3
+  })
+
+  it('offers for Unique units costing MORE than 4, not just exactly 4', () => {
+    const big5 = { ...cards, BIG5: card({ id: 'BIG5', type: 'unit', arena: 'ground', cost: 5, power: 3, hp: 3, unique: true }) }
+    const s5 = state({ cards: big5, players: { player: player({ leader: undeployed('ASH_018'), hand: ['BIG5'], resources: ready(5) }), opponent: player() } })
+    expect(resolve(s5, { type: 'playCard', handIndex: 0 }).pendingChoices?.[0]).toMatchObject({ kind: 'mayDeployLeader' })
+
+    const big7 = { ...cards, BIG7: card({ id: 'BIG7', type: 'unit', arena: 'ground', cost: 7, power: 5, hp: 5, unique: true }) }
+    const s7 = state({ cards: big7, players: { player: player({ leader: undeployed('ASH_018'), hand: ['BIG7'], resources: ready(7) }), opponent: player() } })
+    expect(resolve(s7, { type: 'playCard', handIndex: 0 }).pendingChoices?.[0]).toMatchObject({ kind: 'mayDeployLeader' })
+  })
+
+  it('declining leaves Grogu undeployed', () => {
+    const played = resolve(playing('BIG'), { type: 'playCard', handIndex: 0 })
+    const declined = resolve(played, { type: 'skipTrigger', choiceId: played.pendingChoices![0].id })
+    expect(declined.players.player.leader.deployed).toBe(false)
+  })
+
+  it('never offers the normal (resource-cost) deploy', () => {
+    const s = state({ cards, players: { player: player({ leader: undeployed('ASH_018'), resources: ready(10) }), opponent: player() } })
+    expect(legalMoves(s).some(a => a.type === 'deployLeader')).toBe(false)
+  })
+
+  const deployedGrogu = () => ({ cardId: 'ASH_018', deployed: true, epicActionUsed: true, exhausted: false } as LeaderState)
+
+  it('deployed: a friendly unit DEFENDING gets +1/0 (stronger counter-attack)', () => {
+    const s = state({
+      cards,
+      activePlayer: 'opponent',
+      players: {
+        player: player({ leader: deployedGrogu(), units: [unit('L', 'ASH_018', { isLeader: true }), unit('u2', 'TST_U1')] }), // u2 power 3
+        opponent: player({ units: [unit('e1', 'TST_U4')] }), // hp 9 attacker
+      },
+    })
+    const after = resolve(s, { type: 'attack', attackerId: 'e1', target: { kind: 'unit', instanceId: 'u2' } })
+    expect(after.players.opponent.units.find(u => u.instanceId === 'e1')!.damage).toBe(4) // u2 counter 3 + 1
+  })
+
+  it('deployed: while a friendly unit attacks, the enemy DEFENDER gets -1/0 (weaker counter)', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ leader: deployedGrogu(), units: [unit('L', 'ASH_018', { isLeader: true }), unit('u2', 'TST_U4')] }), // u2 power 1, hp 9
+        opponent: player({ units: [unit('e1', 'TST_U1')] }), // power 3, hp 4
+      },
+    })
+    const after = resolve(s, { type: 'attack', attackerId: 'u2', target: { kind: 'unit', instanceId: 'e1' } })
+    expect(after.players.player.units.find(u => u.instanceId === 'u2')!.damage).toBe(2) // e1 counter 3 − 1
+  })
+
+  it('deployed: Grogu attacking himself does not apply the -1 (only ANOTHER friendly unit)', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ leader: deployedGrogu(), units: [unit('L', 'ASH_018', { isLeader: true, cardId: 'ASH_018' })] }),
+        opponent: player({ units: [unit('e1', 'TST_U1')] }), // power 3
+      },
+    })
+    // Give L some power so it can attack meaningfully.
+    const withPower = { ...s, cards: { ...s.cards, ASH_018: card({ id: 'ASH_018', type: 'leader', power: 4, hp: 6, unique: true }) } }
+    const after = resolve(withPower, { type: 'attack', attackerId: 'L', target: { kind: 'unit', instanceId: 'e1' } })
+    expect(after.players.player.units.find(u => u.instanceId === 'L')!.damage).toBe(3) // e1 counter full 3 (no -1)
+  })
+})
+
 describe('The Mandalorian (ASH_014) — draw on initiative / on attack (#348)', () => {
   const cards = { ...CARDS, ASH_014: card({ id: 'ASH_014', type: 'leader', cost: 6, power: 4, hp: 6 }) }
 
