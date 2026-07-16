@@ -205,6 +205,20 @@ export interface PlayFromHandSpec {
   entersReady: boolean
 }
 
+/** An upgrade sitting in the resource zone, offered for play (#348) — its position + card id. */
+export interface ResourceUpgradeRef {
+  resourceIndex: number
+  cardId: string
+}
+
+/** Parameters for a "play an upgrade from your resources" step (#348). */
+export interface PlayResourceUpgradeSpec {
+  /** Front pays the upgrade's cost from remaining resources; the deployed back plays it free. */
+  payCost: boolean
+  /** Eligible target unit instance ids (front: entered this phase; back: any friendly). */
+  targetUnits: string[]
+}
+
 /** A follow-up "deal N damage to a unit or a base" selection (#348). */
 export interface DamageTargetSpec {
   amount: number
@@ -297,6 +311,11 @@ export type PendingChoice =
   // Additional cost "exhaust a friendly unit" (#348): pick one of `targets` to exhaust, then the
   // `then` play-from-hand step follows (Fennec). Mandatory.
   | { kind: 'selectUnitToExhaust'; id: string; controller: PlayerId; targets: string[]; then: PlayFromHandSpec }
+  // The Armorer (#348): look at your resources and pick an upgrade to play (by candidate index); the
+  // `then` spec carries how it plays. `optional` = the deployed "may" version (a Cancel is offered).
+  | { kind: 'selectResourceUpgrade'; id: string; controller: PlayerId; candidates: ResourceUpgradeRef[]; optional: boolean; then: PlayResourceUpgradeSpec }
+  // Follow-up: attach the chosen resource upgrade to one of `targets` (#348). Mandatory.
+  | { kind: 'attachResourceUpgrade'; id: string; controller: PlayerId; resourceIndex: number; cardId: string; targets: string[]; payCost: boolean }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */
 export function activeChoice(state: GameState): PendingChoice | undefined {

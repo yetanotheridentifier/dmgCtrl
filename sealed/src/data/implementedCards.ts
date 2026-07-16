@@ -20,6 +20,7 @@ export interface UpgradeStatus {
 }
 
 export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
+  { id: 'ASH_001', name: 'The Armorer', front: true, back: true },
   { id: 'ASH_009', name: 'Ahsoka Tano', front: true, back: false },
   { id: 'ASH_003', name: 'Baylan Skoll', front: true, back: true },
   { id: 'ASH_002', name: 'Fennec Shand', front: true, back: false },

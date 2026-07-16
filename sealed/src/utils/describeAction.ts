@@ -70,7 +70,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayDamageExhaust') return 'Decline'
       if (choice.kind === 'mayAttack') return "Don't attack"
       if (choice.kind === 'mayDamage' || choice.kind === 'mayAdvantageEach') return 'Decline'
-      if (choice.kind === 'selectUpgradeToDefeat') return 'Cancel'
+      if (choice.kind === 'selectUpgradeToDefeat' || choice.kind === 'selectResourceUpgrade') return 'Cancel'
       if (choice.kind === 'mayLastingBuff' || choice.kind === 'mayGiveAdvantage' || choice.kind === 'mayExhaustLeaderGiveAdvantage' || choice.kind === 'mayExhaustLeaderExhaustUnit' || choice.kind === 'mayExhaustUnit') return 'Decline'
       if (choice.kind === 'mayExhaustLeaderForAdvantage' || choice.kind === 'mayExhaustLeaderHealUnit') return "Don't"
       return `Skip ${choice.kind}`
@@ -123,6 +123,14 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'selectUnitToExhaust') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Exhaust ${target ?? 'unit'}`
+      }
+      if (choice.kind === 'selectResourceUpgrade') {
+        const pick = choice.candidates[action.optionIndex ?? 0]
+        return `Play ${pick ? state.cards[pick.cardId]?.name ?? pick.cardId : 'upgrade'}`
+      }
+      if (choice.kind === 'attachResourceUpgrade') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Attach ${state.cards[choice.cardId]?.name ?? choice.cardId} to ${target ?? 'unit'}`
       }
       if (choice.kind === 'mayExhaustLeaderForAdvantage') return `Exhaust leader → Advantage to ${anyUnitName(state, choice.unitId) ?? 'unit'}`
       if (choice.kind === 'mayLastingBuff') {

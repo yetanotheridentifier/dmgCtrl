@@ -4,8 +4,8 @@ import { dealDamageToUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
-import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase } from './types'
-import { affordableHandUnits } from './legalMoves'
+import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, enteredPlayThisPhase } from './types'
+import { affordableHandUnits, resourceUpgradeCandidates } from './legalMoves'
 import { unitHasTrait, isLeaderUnit } from './keywords'
 import type { EngineCard, GameState, PlayerId, UnitState, UpgradeRef } from './types'
 
@@ -280,6 +280,37 @@ registerCard('ASH_012', { // Vane — front (undeployed) + deployed (On Attack) 
         optional: true,
         then: { amount: 2, unitTargets, baseTargets: BOTH_BASES },
       })
+    },
+  }],
+})
+
+registerCard('ASH_001', { // The Armorer — play an upgrade from your resources, then resource the top of your deck (#348)
+  // Front (undeployed): pay the upgrade's cost, target a unit that entered play this phase.
+  leaderAbilities: {
+    actions: [{
+      description: 'Play an upgrade from your resources on a unit that entered play this phase (paying its cost); resource the top of your deck.',
+      usable: (s, owner) => resourceUpgradeCandidates(s, owner, true, enteredPlayThisPhase(s, owner)).length > 0,
+      effect: (s, ctx) => pushChoice(s, {
+        kind: 'selectResourceUpgrade',
+        id: `${ctx.cardId}-resUpgrade`,
+        controller: ctx.owner,
+        candidates: resourceUpgradeCandidates(s, ctx.owner, true, enteredPlayThisPhase(s, ctx.owner)),
+        optional: false,
+        then: { payCost: true, targetUnits: enteredPlayThisPhase(s, ctx.owner) },
+      }),
+    }],
+  },
+  // Deployed (back): When Attack Ends, may play an upgrade from resources on any friendly unit,
+  // paying its cost (the default — a free play would be spelled out on the card).
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: 'You may play an upgrade from your resources (paying its cost) on a friendly unit; resource the top of your deck.',
+    effect: (s, ctx) => {
+      const friendly = s.players[ctx.owner].units.map(u => u.instanceId)
+      const candidates = resourceUpgradeCandidates(s, ctx.owner, true, friendly)
+      return candidates.length === 0
+        ? s
+        : pushChoice(s, { kind: 'selectResourceUpgrade', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true, then: { payCost: true, targetUnits: friendly } })
     },
   }],
 })

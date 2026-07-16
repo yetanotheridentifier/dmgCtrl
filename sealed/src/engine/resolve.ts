@@ -4,10 +4,10 @@ import type { PendingChoice } from './types'
 import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeChoice, hasPendingChoices, pushChoice } from './types'
 import { addLastingEffect, clearLastingEffects, resetPhaseEvents, recordUnitEntered, markAbilityUsed } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
-import { effectiveCost, enemyAttackTargets, supportGrantedKeywords, affordableHandUnits } from './legalMoves'
+import { effectiveCost, enemyAttackTargets, supportGrantedKeywords, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit } from './combat'
-import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase } from './effects'
+import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
@@ -489,6 +489,36 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         }
       }
       break
+    case 'selectResourceUpgrade': {
+      // The Armorer (#348): the chosen resource upgrade → pick where to attach it.
+      const pick = choice.candidates[optionIndex ?? 0]
+      if (pick) {
+        const targets = validUpgradeTargets(next, choice.controller, pick.resourceIndex, pick.cardId, choice.then.payCost, choice.then.targetUnits)
+        if (targets.length > 0) {
+          next = pushChoice(next, { kind: 'attachResourceUpgrade', id: `${choice.id}-attach`, controller: choice.controller, resourceIndex: pick.resourceIndex, cardId: pick.cardId, targets, payCost: choice.then.payCost })
+        }
+      }
+      break
+    }
+    case 'attachResourceUpgrade': {
+      // Play the upgrade from resources onto the chosen unit, then resource the top of the deck (#348).
+      const owner = choice.controller
+      const p = next.players[owner]
+      const resource = p.resources[choice.resourceIndex]
+      const card = next.cards[choice.cardId]
+      const targetUnit = targetInstanceId ? [...next.players.player.units, ...next.players.opponent.units].find(u => u.instanceId === targetInstanceId) : undefined
+      if (resource?.cardId === choice.cardId && card?.type === 'upgrade' && targetUnit) {
+        let pl = { ...p, resources: p.resources.filter((_, i) => i !== choice.resourceIndex) }
+        if (choice.payCost) pl = payCost(pl, effectiveCost(next, owner, card, targetUnit)) // front pays; back is free
+        pl = { ...pl, units: pl.units.map(u => (u.instanceId === targetInstanceId ? { ...u, upgrades: [...u.upgrades, { cardId: choice.cardId, owner }] } : u)) }
+        next = updatePlayer(next, owner, pl)
+        next = resourceTopOfDeck(next, owner) // "If you do, resource the top card of your deck."
+        next = runTrigger(next, 'whenPlayed', { owner, cardId: choice.cardId, sourceInstanceId: targetInstanceId })
+        next = checkWin(next)
+        if (next.winner !== null) return next
+      }
+      break
+    }
     case 'playUnitFromHand': {
       // Play the chosen hand unit, paying its cost + costDelta, entering ready if the ability says so (#348).
       const p = next.players[choice.controller]

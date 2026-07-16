@@ -31,4 +31,19 @@ describe('CardSelectOverlay', () => {
     rerender(<CardSelectOverlay state={s} prompt="Choose" items={items} onPick={vi.fn()} />)
     expect(screen.queryByTestId('card-select-cancel')).toBeNull()
   })
+
+  it('reveals disabled items (dimmed, not clickable) — the Armorer "look at your resources" case', () => {
+    const onPick = vi.fn()
+    // key identifies each item (resource index); a non-upgrade resource is revealed but disabled.
+    const revealItems = [
+      { cardId: 'TST_U1', optionIndex: 0, key: 0 },
+      { cardId: 'TST_U2', optionIndex: -1, disabled: true, key: 1 },
+    ]
+    render(<CardSelectOverlay state={s} prompt="Play an upgrade from your resources" items={revealItems} onPick={onPick} />)
+    expect(screen.getByTestId('card-select-1')).toBeDisabled() // revealed but not selectable
+    fireEvent.click(screen.getByTestId('card-select-1'))
+    expect(onPick).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByTestId('card-select-0'))
+    expect(onPick).toHaveBeenCalledWith(0)
+  })
 })

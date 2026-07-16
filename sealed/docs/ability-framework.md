@@ -486,9 +486,23 @@ Phased into independently-deployable chunks; each groups a primitive with the le
 abilities to support a resource cost + the exhaust-a-unit additional cost — not built yet. Moff's
 **back** is a separate keyword-grant-from-discard mechanic (not play-from-hand).
 
+### Chunk D — play an upgrade from your resources (The Armorer) (DONE)
+
+- **Two-step flow, both sides share it:** `selectResourceUpgrade` (pick an upgrade from your resource
+  zone — overlay) → `attachResourceUpgrade` (pick the target unit — board). On resolve: remove the
+  upgrade from `resources`, pay its cost (both sides — paying is the default), attach it, then
+  **resource the top of the deck** (`resourceTopOfDeck`), and fire `whenPlayed`. Helpers in `legalMoves.ts`:
+  `resourceUpgradeCandidates` and `validUpgradeTargets` (honour `attachRestriction` and — when
+  paying — affordability from the ready resources left after the upgrade itself leaves the pool).
+- **The Armorer (001)** front (undeployed): mandatory action, **pays** the cost, targets a unit that
+  **entered play this phase** (`enteredPlayThisPhase`, the #347 tracking). Deployed **back**:
+  `onAttackEnd` (this unit's attack), **optional**, also pays the cost, targets any friendly unit.
+- **UI — "look at your resources":** the `CardSelectOverlay` gained `disabled` + `key` per item, so
+  the overlay **reveals every resource** with the playable upgrades selectable and the rest dimmed
+  (a private reveal, reusable for other select-a-resource effects). `attachResourceUpgrade` rides the
+  board-target mechanism (`boardTargetKinds`); either base/unit highlight machinery already exists.
+
 ### Remaining chunks (planned)
 
-D — play-upgrade-from-resources + a private resource overlay (The Armorer, can reuse
-`CardSelectOverlay`); E — opponent-makes-a-choice + "next unit you play this phase" grant (Sabine);
-F — take-initiative trigger (Mandalorian), attack-with-a-unit ability (Thrawn), Grogu's triggered
-deploy + aura.
+E — opponent-makes-a-choice + "next unit you play this phase" grant (Sabine); F — take-initiative
+trigger (Mandalorian), attack-with-a-unit ability (Thrawn), Grogu's triggered deploy + aura.

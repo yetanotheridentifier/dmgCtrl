@@ -1,5 +1,5 @@
 import type { Action } from './actions'
-import type { EngineCard, GameState, HandCardRef, KeywordInstance, PlayerId, UnitState } from './types'
+import type { EngineCard, GameState, HandCardRef, KeywordInstance, PlayerId, ResourceUpgradeRef, UnitState } from './types'
 import { opponentOf, hasPendingChoices } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { unitHasKeyword } from './keywords'
@@ -66,6 +66,36 @@ export function affordableHandUnits(state: GameState, owner: PlayerId, extraReso
     const card = state.cards[cardId]
     if (card?.type !== 'unit') return
     if (Math.max(0, effectiveCost(state, owner, card) + costDelta) <= budget) out.push({ handIndex, cardId })
+  })
+  return out
+}
+
+/**
+ * Valid targets for playing the resource upgrade at `resourceIndex` (#348): units from `targetUnits`
+ * that pass the upgrade's attach restriction and — when `payCost` — are affordable from the ready
+ * resources left after the upgrade itself leaves the resource pool.
+ */
+export function validUpgradeTargets(state: GameState, owner: PlayerId, resourceIndex: number, cardId: string, payCost: boolean, targetUnits: string[]): string[] {
+  const p = state.players[owner]
+  const resource = p.resources[resourceIndex]
+  const card = state.cards[cardId]
+  if (!resource || resource.cardId !== cardId || card?.type !== 'upgrade') return []
+  const available = readyResourceCount(p) - (resource.exhausted ? 0 : 1)
+  const restriction = getCardDefinition(cardId)?.attachRestriction
+  const inPlay = [...state.players.player.units, ...state.players.opponent.units]
+  return targetUnits.filter(id => {
+    const tu = inPlay.find(u => u.instanceId === id)
+    if (!tu || (restriction && !restriction(state, tu))) return false
+    return !payCost || effectiveCost(state, owner, card, tu) <= available
+  })
+}
+
+/** Upgrades in `owner`'s resource zone that can be played on at least one of `targetUnits` (#348). */
+export function resourceUpgradeCandidates(state: GameState, owner: PlayerId, payCost: boolean, targetUnits: string[]): ResourceUpgradeRef[] {
+  const out: ResourceUpgradeRef[] = []
+  state.players[owner].resources.forEach((r, resourceIndex) => {
+    if (state.cards[r.cardId]?.type !== 'upgrade') return
+    if (validUpgradeTargets(state, owner, resourceIndex, r.cardId, payCost, targetUnits).length > 0) out.push({ resourceIndex, cardId: r.cardId })
   })
   return out
 }
@@ -330,6 +360,17 @@ function choiceMoves(state: GameState): Action[] {
       }
       case 'selectUnitToExhaust': {
         // Fennec's "exhaust a friendly unit" additional cost (#348) — pick one. Mandatory.
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        break
+      }
+      case 'selectResourceUpgrade': {
+        // The Armorer (#348): pick a resource upgrade to play; Cancel only on the optional (deployed) form.
+        choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'attachResourceUpgrade': {
+        // Attach the chosen resource upgrade to a valid unit (#348). Mandatory.
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         break
       }

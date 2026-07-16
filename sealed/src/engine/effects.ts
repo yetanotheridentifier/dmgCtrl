@@ -59,6 +59,13 @@ export function healUnit(state: GameState, instanceId: string, amount: number): 
   return patchUnit(state, found.owner, instanceId, u => ({ ...u, damage: Math.max(0, u.damage - amount) }))
 }
 
+/** Resource the top card of a player's deck (#348): move deck[0] into resources, ready. No-op if empty. */
+export function resourceTopOfDeck(state: GameState, owner: PlayerId): GameState {
+  const p = state.players[owner]
+  if (p.deck.length === 0) return state
+  return { ...state, players: { ...state.players, [owner]: { ...p, resources: [...p.resources, { cardId: p.deck[0], exhausted: false }], deck: p.deck.slice(1) } } }
+}
+
 /** Heal `amount` damage from a player's base — never below 0 (#348). */
 export function healBase(state: GameState, player: PlayerId, amount: number): GameState {
   const p = state.players[player]

@@ -7,7 +7,7 @@ import { unitHasKeyword } from '../engine/keywords'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
-import { recordUnitDefeated } from '../engine/types'
+import { recordUnitDefeated, recordUnitEntered } from '../engine/types'
 import type { LeaderState } from '../engine/types'
 
 /** Undeployed-leader activated abilities (#309). */
@@ -652,6 +652,79 @@ describe('Luke Skywalker (ASH_005) — heal on a friendly attack ending (#348)',
     // …or heal the unit instead.
     const healedUnit = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'a1' })
     expect(healedUnit.players.player.units.find(u => u.instanceId === 'a1')!.damage).toBe(1) // 3 − 2
+  })
+})
+
+describe('The Armorer (ASH_001) — play an upgrade from your resources (#348)', () => {
+  const cards = {
+    ...CARDS,
+    ASH_001: card({ id: 'ASH_001', type: 'leader', cost: 5, power: 4, hp: 6 }),
+    UP: card({ id: 'UP', type: 'upgrade', cost: 1, power: 2, hp: 2 }),
+  }
+
+  it('front: reveals a resource upgrade, plays it (paying cost) on a unit that entered this phase, and resources the top of the deck', () => {
+    let s = state({
+      cards,
+      players: {
+        player: player({
+          leader: undeployed('ASH_001'),
+          resources: [{ cardId: 'UP', exhausted: false }, { cardId: 'R0', exhausted: false }], // UP (upgrade) + 1 payer
+          units: [unit('u1', 'TST_U1')],
+          deck: ['TST_U2', 'TST_U1'],
+        }),
+        opponent: player(),
+      },
+    })
+    s = recordUnitEntered(s, 'player', 'u1') // u1 entered play this phase
+
+    expect(legalMoves(s).some(a => a.type === 'useLeaderAbility')).toBe(true)
+    const raised = resolve(s, { type: 'useLeaderAbility', index: 0 })
+    expect(raised.pendingChoices?.[0]).toMatchObject({ kind: 'selectResourceUpgrade', optional: false, candidates: [{ resourceIndex: 0, cardId: 'UP' }] })
+
+    const targeting = resolve(raised, { type: 'acceptChoice', choiceId: raised.pendingChoices![0].id, optionIndex: 0 })
+    expect(targeting.pendingChoices?.[0]).toMatchObject({ kind: 'attachResourceUpgrade', cardId: 'UP', targets: ['u1'], payCost: true })
+
+    const done = resolve(targeting, { type: 'acceptChoice', choiceId: targeting.pendingChoices![0].id, targetInstanceId: 'u1' })
+    const u1 = done.players.player.units.find(u => u.instanceId === 'u1')!
+    expect(u1.upgrades.some(a => a.cardId === 'UP')).toBe(true) // attached
+    // Resources: UP left the pool, R0 paid the cost (exhausted), the deck top (TST_U2) is now a ready resource.
+    expect(done.players.player.resources).toEqual([{ cardId: 'R0', exhausted: true }, { cardId: 'TST_U2', exhausted: false }])
+    expect(done.players.player.deck).toEqual(['TST_U1']) // top card moved to resources
+    expect(done.players.player.leader.exhausted).toBe(true)
+    expect(done.activePlayer).toBe('opponent')
+  })
+
+  it('front: is not offered without a unit that entered this phase', () => {
+    const s = state({
+      cards,
+      players: { player: player({ leader: undeployed('ASH_001'), resources: [{ cardId: 'UP', exhausted: false }, { cardId: 'R0', exhausted: false }], units: [unit('u1', 'TST_U1')] }), opponent: player() },
+    })
+    // u1 did NOT enter this phase → no legal target.
+    expect(legalMoves(s).some(a => a.type === 'useLeaderAbility')).toBe(false)
+  })
+
+  it('deployed back: on attack end, may play an upgrade from resources (paying its cost) on a friendly unit', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({
+          leader: deployed('ASH_001'),
+          resources: [{ cardId: 'UP', exhausted: false }, { cardId: 'R0', exhausted: false }],
+          units: [unit('L', 'ASH_001', { isLeader: true }), unit('u1', 'TST_U1')],
+          deck: ['TST_U2'],
+        }),
+        opponent: player(),
+      },
+    })
+    const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'selectResourceUpgrade', optional: true })
+    expect(legalMoves(atk).some(a => a.type === 'skipTrigger')).toBe(true) // may (Cancel)
+    const targeting = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, optionIndex: 0 })
+    expect(targeting.pendingChoices?.[0]).toMatchObject({ kind: 'attachResourceUpgrade', payCost: true, targets: ['L', 'u1'] })
+    const done = resolve(targeting, { type: 'acceptChoice', choiceId: targeting.pendingChoices![0].id, targetInstanceId: 'u1' })
+    expect(done.players.player.units.find(u => u.instanceId === 'u1')!.upgrades.some(a => a.cardId === 'UP')).toBe(true)
+    // Cost paid: R0 is exhausted; UP left the pool; the deck top became a ready resource.
+    expect(done.players.player.resources).toEqual([{ cardId: 'R0', exhausted: true }, { cardId: 'TST_U2', exhausted: false }])
   })
 })
 

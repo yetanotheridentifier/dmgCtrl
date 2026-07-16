@@ -286,7 +286,9 @@ export function CardChoiceOverlay({ card, cardId, prompt, children }: {
 export function CardSelectOverlay({ state, prompt, items, onPick, onCancel }: {
   state: GameState
   prompt: string
-  items: { cardId: string; optionIndex: number; hostId?: string }[]
+  /** `disabled` items are revealed but not selectable (e.g. non-upgrade resources in the Armorer's
+   *  "look at your resources"). `key` gives a stable identity when optionIndex isn't unique. */
+  items: { cardId: string; optionIndex: number; hostId?: string; disabled?: boolean; key?: string | number }[]
   onPick: (optionIndex: number) => void
   onCancel?: () => void
 }) {
@@ -297,11 +299,18 @@ export function CardSelectOverlay({ state, prompt, items, onPick, onCancel }: {
       <div className="flex flex-wrap justify-center gap-4">
         {items.map(item => {
           const host = state.cards[hostName(item.hostId) ?? '']?.name
+          const key = item.key ?? item.optionIndex
           return (
-            <div key={item.optionIndex} className="flex flex-col items-center gap-2">
-              {/* Click the (highlighted) card itself to select it — no separate button. */}
-              <button data-testid={`card-select-${item.optionIndex}`} onClick={() => onPick(item.optionIndex)} className="block cursor-pointer">
-                <CardFace card={state.cards[item.cardId]} fallbackName={item.cardId} widthPx={Math.round(ZOOM_WIDTH_PX * 0.6)} tight highlight="accent" />
+            <div key={key} className="flex flex-col items-center gap-2">
+              {/* Click the (highlighted) card itself to select it — no separate button. Disabled
+                  cards are shown (revealed) but dimmed and not clickable. */}
+              <button
+                data-testid={`card-select-${key}`}
+                onClick={() => onPick(item.optionIndex)}
+                disabled={item.disabled}
+                className={item.disabled ? 'block cursor-default opacity-40' : 'block cursor-pointer'}
+              >
+                <CardFace card={state.cards[item.cardId]} fallbackName={item.cardId} widthPx={Math.round(ZOOM_WIDTH_PX * 0.6)} tight highlight={item.disabled ? undefined : 'accent'} />
               </button>
               {host && <span className="text-[10px] text-ink-faint">on {host}</span>}
             </div>
@@ -775,7 +784,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
 
     // Optional targeted pending choices (#309/#342) — resolved by clicking a highlighted
     // board unit plus a Decline button, rather than one menu button per target.
-    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage', 'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit', 'mayExhaustUnit', 'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust']
+    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage', 'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit', 'mayExhaustUnit', 'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust', 'attachResourceUpgrade']
     const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && boardTargetKinds.includes(c.kind))
     const choiceTargetIds = new Map<string, Action>()
     // Base targets (selectDamageTarget, #348): pick a player's base to take the damage.
@@ -873,6 +882,15 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === selectUpgradeChoice.id)
       : []
 
+    // The Armorer (#348): "look at your resources" — a card picker over the player's resources,
+    // upgrades selectable, the rest revealed but dimmed. Resolved in the overlay, not the menu.
+    const resourceUpgradeChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'selectResourceUpgrade' }> => c.kind === 'selectResourceUpgrade' && c.controller === 'player',
+    )
+    const resourceUpgradeActions = resourceUpgradeChoice
+      ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === resourceUpgradeChoice.id)
+      : []
+
     // Playing, resourcing, attacking and attaching upgrades are all driven by
     // clicking a card or unit, so the menu holds only the remaining choices —
     // mulligan, keep hand, take the initiative, pass (and skip/deploy) (#332/#336).
@@ -883,7 +901,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // "Play a unit from hand" accepts (#348) are clicked on the hand card, not the menu.
     const isHandPlay = (a: Action) => a.type === 'acceptChoice' && a.handIndex !== undefined
     const menuActions = gameState.winner === null
-      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !isHandPlay(a))
+      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !isHandPlay(a))
       : []
     const actionColumn = (
       <div className="flex flex-col items-stretch gap-1.5">
@@ -943,6 +961,22 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           prompt="Choose an upgrade to defeat"
           items={selectUpgradeChoice.candidates.map((c, i) => ({ cardId: c.cardId, optionIndex: i, hostId: c.unitId }))}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: selectUpgradeChoice.id, optionIndex })}
+          onCancel={cancel ? () => actAndClear(cancel) : undefined}
+        />
+      )
+    } else if (resourceUpgradeChoice) {
+      // Reveal every resource; upgrades that can be played are selectable, the rest are dimmed.
+      const cancel = resourceUpgradeActions.find(a => a.type === 'skipTrigger')
+      const items = gameState.players.player.resources.map((r, resIdx) => {
+        const optionIndex = resourceUpgradeChoice.candidates.findIndex(c => c.resourceIndex === resIdx)
+        return { cardId: r.cardId, optionIndex, disabled: optionIndex === -1, key: resIdx }
+      })
+      choiceOverlay = (
+        <CardSelectOverlay
+          state={gameState}
+          prompt="Play an upgrade from your resources"
+          items={items}
+          onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: resourceUpgradeChoice.id, optionIndex })}
           onCancel={cancel ? () => actAndClear(cancel) : undefined}
         />
       )
