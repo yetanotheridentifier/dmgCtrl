@@ -116,6 +116,14 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         return `Heal ${choice.amount} from ${target ?? 'unit'}`
       }
       if (choice.kind === 'mayExhaustLeaderHealUnit') return `Exhaust leader → heal ${choice.amount} from ${anyUnitName(state, choice.unitId) ?? 'unit'}`
+      if (choice.kind === 'playUnitFromHand') {
+        const cardId = action.handIndex !== undefined ? state.players[by].hand[action.handIndex] : undefined
+        return `Play ${cardId ? state.cards[cardId]?.name ?? cardId : 'unit'}`
+      }
+      if (choice.kind === 'selectUnitToExhaust') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Exhaust ${target ?? 'unit'}`
+      }
       if (choice.kind === 'mayExhaustLeaderForAdvantage') return `Exhaust leader → Advantage to ${anyUnitName(state, choice.unitId) ?? 'unit'}`
       if (choice.kind === 'mayLastingBuff') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined

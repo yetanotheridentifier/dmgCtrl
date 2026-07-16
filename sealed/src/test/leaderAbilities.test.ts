@@ -7,6 +7,7 @@ import { unitHasKeyword } from '../engine/keywords'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
+import { recordUnitDefeated } from '../engine/types'
 import type { LeaderState } from '../engine/types'
 
 /** Undeployed-leader activated abilities (#309). */
@@ -651,5 +652,80 @@ describe('Luke Skywalker (ASH_005) — heal on a friendly attack ending (#348)',
     // …or heal the unit instead.
     const healedUnit = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'a1' })
     expect(healedUnit.players.player.units.find(u => u.instanceId === 'a1')!.damage).toBe(1) // 3 − 2
+  })
+})
+
+describe('Moff Gideon (ASH_008) — front: play a unit costing 1 less (#348)', () => {
+  const cards = {
+    ...CARDS,
+    ASH_008: card({ id: 'ASH_008', type: 'leader', cost: 7, power: 5, hp: 8 }),
+    IMP: card({ id: 'IMP', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 2, traits: ['Imperial'] }),
+    GRUNT: card({ id: 'GRUNT', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 2 }),
+  }
+  const withImperialDefeated = () => recordUnitDefeated(
+    state({ cards, players: { player: player({ leader: undeployed('ASH_008'), hand: ['GRUNT'], resources: ready(2) }), opponent: player() } }),
+    'player',
+    'IMP',
+  )
+
+  it('is offered only when a friendly Imperial died this phase, and plays the unit at −1 cost', () => {
+    const s = withImperialDefeated()
+    expect(legalMoves(s).some(a => a.type === 'useLeaderAbility')).toBe(true)
+    const raised = resolve(s, { type: 'useLeaderAbility', index: 0 })
+    expect(raised.pendingChoices?.[0]).toMatchObject({ kind: 'playUnitFromHand', costDelta: -1, entersReady: false, candidates: [{ handIndex: 0, cardId: 'GRUNT' }] })
+    const done = resolve(raised, { type: 'acceptChoice', choiceId: raised.pendingChoices![0].id, handIndex: 0 })
+    const grunt = done.players.player.units.find(u => u.cardId === 'GRUNT')!
+    expect(grunt.exhausted).toBe(true) // enters exhausted (not Fennec's ready)
+    expect(done.players.player.hand).toEqual([])
+    expect(done.players.player.resources.filter(r => !r.exhausted)).toHaveLength(0) // paid 3 − 1 = 2
+    expect(done.players.player.leader.exhausted).toBe(true)
+    expect(done.activePlayer).toBe('opponent')
+  })
+
+  it('is not offered when no friendly Imperial was defeated this phase', () => {
+    const s = state({ cards, players: { player: player({ leader: undeployed('ASH_008'), hand: ['GRUNT'], resources: ready(2) }), opponent: player() } })
+    expect(legalMoves(s).some(a => a.type === 'useLeaderAbility')).toBe(false)
+  })
+})
+
+describe('Fennec Shand (ASH_002) — front: exhaust a friendly unit + C=1 → play a unit ready (#348)', () => {
+  const cards = {
+    ...CARDS,
+    ASH_002: card({ id: 'ASH_002', type: 'leader', cost: 4, power: 3, hp: 4 }),
+    GRUNT: card({ id: 'GRUNT', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 2 }),
+  }
+  const board = (resources = 3) => state({
+    cards,
+    players: { player: player({ leader: undeployed('ASH_002'), hand: ['GRUNT'], resources: ready(resources), units: [unit('x1', 'TST_U1')] }), opponent: player() },
+  })
+
+  it('exhausts the chosen friendly unit, pays 1, and plays the hand unit entering READY', () => {
+    const s = board()
+    expect(legalMoves(s).some(a => a.type === 'useLeaderAbility')).toBe(true)
+    // Step 1: use the ability → pay C=1, exhaust leader, choose a friendly unit to exhaust.
+    const raised = resolve(s, { type: 'useLeaderAbility', index: 0 })
+    expect(raised.pendingChoices?.[0]).toMatchObject({ kind: 'selectUnitToExhaust', targets: ['x1'] })
+    expect(raised.players.player.leader.exhausted).toBe(true)
+    expect(raised.players.player.resources.filter(r => !r.exhausted)).toHaveLength(2) // paid the C=1
+    // Step 2: exhaust x1 → the play-from-hand choice appears.
+    const exhausted = resolve(raised, { type: 'acceptChoice', choiceId: raised.pendingChoices![0].id, targetInstanceId: 'x1' })
+    expect(exhausted.players.player.units.find(u => u.instanceId === 'x1')!.exhausted).toBe(true)
+    expect(exhausted.pendingChoices?.[0]).toMatchObject({ kind: 'playUnitFromHand', entersReady: true, candidates: [{ handIndex: 0, cardId: 'GRUNT' }] })
+    // Step 3: play GRUNT → enters ready, cost 2 paid.
+    const done = resolve(exhausted, { type: 'acceptChoice', choiceId: exhausted.pendingChoices![0].id, handIndex: 0 })
+    expect(done.players.player.units.find(u => u.cardId === 'GRUNT')!.exhausted).toBe(false) // READY
+    expect(done.players.player.hand).toEqual([])
+    expect(done.players.player.resources.filter(r => !r.exhausted)).toHaveLength(0) // 3 − 1 (C) − 2 (GRUNT)
+    expect(done.activePlayer).toBe('opponent')
+  })
+
+  it('is not offered without a ready friendly unit to exhaust, or when the hand unit is unaffordable', () => {
+    const noReadyUnit = state({
+      cards,
+      players: { player: player({ leader: undeployed('ASH_002'), hand: ['GRUNT'], resources: ready(3), units: [unit('x1', 'TST_U1', { exhausted: true })] }), opponent: player() },
+    })
+    expect(legalMoves(noReadyUnit).some(a => a.type === 'useLeaderAbility')).toBe(false)
+    // Only 2 resources: 1 for C=1 leaves 1, but GRUNT costs 2 → unaffordable.
+    expect(legalMoves(board(2)).some(a => a.type === 'useLeaderAbility')).toBe(false)
   })
 })

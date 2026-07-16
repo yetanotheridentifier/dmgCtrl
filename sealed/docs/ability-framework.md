@@ -465,9 +465,30 @@ Phased into independently-deployable chunks; each groups a primitive with the le
   raised if neither has damage). `selectHealTarget` shares `selectDamageTarget`'s board wiring (in
   `boardTargetKinds`, `acceptChoice.baseTarget` picks a base) — the same highlight-unit-or-base picker.
 
+### Chunk B — play a unit from hand (Fennec, Moff Gideon) (DONE)
+
+- **`playUnitFromHand`** choice: pick one of `candidates` (affordable hand units) → pay its
+  `effectiveCost + costDelta` (floored at 0), remove from hand, `enterUnit` with an `entersReady`
+  override. `acceptChoice.handIndex` carries the pick; `affordableHandUnits(state, owner,
+  extraResourceCost, costDelta)` (in `legalMoves.ts`) builds candidates and gates the ability.
+  `enterUnit` gained a `ready?` param (forces the unit in ready, past the normal exhausted-on-entry).
+- **Moff Gideon (008)** front: leader action gated on `defeatedThisPhase` containing a friendly
+  Imperial (the #347 tracking) → play a hand unit at **−1** cost (enters exhausted).
+- **Fennec Shand (002)** front: additional cost "**exhaust a friendly unit**" modelled as a preceding
+  `selectUnitToExhaust` choice (`then: PlayFromHandSpec`); on accept it exhausts the picked unit and
+  raises `playUnitFromHand` (enters **ready**). `usable` requires C=1 affordable, a ready friendly
+  unit, and a hand unit affordable after the C=1.
+- **UI:** the affordable hand cards become clickable (their `acceptChoice` moves fold into the
+  `handAction` map, reusing the normal `HandCard` play affordance; excluded from the action menu);
+  `selectUnitToExhaust` rides the board-target mechanism (`boardTargetKinds`).
+
+**Deferred:** Fennec's deployed **back** (same effect as a leader-unit action) needs unit action
+abilities to support a resource cost + the exhaust-a-unit additional cost — not built yet. Moff's
+**back** is a separate keyword-grant-from-discard mechanic (not play-from-hand).
+
 ### Remaining chunks (planned)
 
-B — play-a-unit-from-hand ready/cost-reduced (Fennec, Moff Gideon); D — play-upgrade-from-resources +
-a private resource overlay (The Armorer, can reuse `CardSelectOverlay`); E — opponent-makes-a-choice +
-"next unit you play this phase" grant (Sabine); F — take-initiative trigger (Mandalorian),
-attack-with-a-unit ability (Thrawn), Grogu's triggered deploy + aura.
+D — play-upgrade-from-resources + a private resource overlay (The Armorer, can reuse
+`CardSelectOverlay`); E — opponent-makes-a-choice + "next unit you play this phase" grant (Sabine);
+F — take-initiative trigger (Mandalorian), attack-with-a-unit ability (Thrawn), Grogu's triggered
+deploy + aura.

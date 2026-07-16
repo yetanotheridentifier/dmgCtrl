@@ -4,7 +4,8 @@ import { dealDamageToUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
-import { opponentOf, pushChoice, addLastingEffect } from './types'
+import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase } from './types'
+import { affordableHandUnits } from './legalMoves'
 import { unitHasTrait, isLeaderUnit } from './keywords'
 import type { EngineCard, GameState, PlayerId, UnitState, UpgradeRef } from './types'
 
@@ -281,6 +282,44 @@ registerCard('ASH_012', { // Vane — front (undeployed) + deployed (On Attack) 
       })
     },
   }],
+})
+
+const imperialDefeatedThisPhase = (s: GameState, owner: PlayerId): boolean =>
+  defeatedThisPhase(s, owner).some(id => (s.cards[id]?.traits ?? []).some(t => t.toLowerCase() === 'imperial'))
+
+registerCard('ASH_008', { // Moff Gideon — front: play a unit costing 1 less if a friendly Imperial died this phase (#348)
+  leaderAbilities: {
+    actions: [{
+      description: 'If a friendly Imperial unit was defeated this phase, play a unit from your hand costing 1 less.',
+      usable: (s, owner) => imperialDefeatedThisPhase(s, owner) && affordableHandUnits(s, owner, 0, -1).length > 0,
+      effect: (s, ctx) => pushChoice(s, {
+        kind: 'playUnitFromHand',
+        id: `${ctx.cardId}-play`,
+        controller: ctx.owner,
+        candidates: affordableHandUnits(s, ctx.owner, 0, -1),
+        costDelta: -1,
+        entersReady: false,
+      }),
+    }],
+  },
+})
+
+registerCard('ASH_002', { // Fennec Shand — front: C=1 + exhaust a friendly unit → play a unit from hand ready (#348)
+  leaderAbilities: {
+    actions: [{
+      description: 'Exhaust a friendly unit and pay 1: play a unit from your hand; it enters ready.',
+      cost: 1,
+      // Needs a ready friendly unit to exhaust and a hand unit affordable after paying the C=1.
+      usable: (s, owner) => s.players[owner].units.some(u => !u.exhausted) && affordableHandUnits(s, owner, 1, 0).length > 0,
+      effect: (s, ctx) => pushChoice(s, {
+        kind: 'selectUnitToExhaust',
+        id: `${ctx.cardId}-exhaust`,
+        controller: ctx.owner,
+        targets: s.players[ctx.owner].units.filter(u => !u.exhausted).map(u => u.instanceId),
+        then: { costDelta: 0, entersReady: true },
+      }),
+    }],
+  },
 })
 
 registerCard('ASH_005', { // Luke Skywalker — front/back heal on a friendly attack ending (#348)

@@ -35,8 +35,8 @@ export type Action =
   // action. `targetInstanceId` supplies a unit target when the choice needs one (an
   // upgrade's attach target, a damage victim); `deckIndex` picks a revealed card in a
   // search (#342/#343); `optionIndex` picks a choose-one/modal option; `baseTarget` picks a
-  // player's base as the target of a damage choice (#348).
-  | { type: 'acceptChoice'; choiceId: string; targetInstanceId?: string; deckIndex?: number; optionIndex?: number; baseTarget?: PlayerId }
+  // player's base as the target of a damage choice; `handIndex` picks a hand card to play (#348).
+  | { type: 'acceptChoice'; choiceId: string; targetInstanceId?: string; deckIndex?: number; optionIndex?: number; baseTarget?: PlayerId; handIndex?: number }
   | { type: 'resourceCard'; handIndex: number }
   | { type: 'skipResource' }
   // Setup phase (CR 5.2.1e–f): each player may mulligan once (initiative holder

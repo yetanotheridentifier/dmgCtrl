@@ -193,6 +193,18 @@ export interface UpgradeRef {
   cardId: string
 }
 
+/** A hand card offered for play by an ability — its hand position + card id (#348). */
+export interface HandCardRef {
+  handIndex: number
+  cardId: string
+}
+
+/** Parameters for a "play a unit from hand" step (#348): cost delta and whether it enters ready. */
+export interface PlayFromHandSpec {
+  costDelta: number
+  entersReady: boolean
+}
+
 /** A follow-up "deal N damage to a unit or a base" selection (#348). */
 export interface DamageTargetSpec {
   amount: number
@@ -279,6 +291,12 @@ export type PendingChoice =
   | { kind: 'mayExhaustLeaderHealUnit'; id: string; controller: PlayerId; unitId: string; amount: number }
   // Luke deployed (#348): heal `amount` from a chosen unit (`unitTargets`) or base (`baseTargets`). Mandatory.
   | { kind: 'selectHealTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[] }
+  // Play a unit from hand as part of an ability (#348): pick one of `candidates` (affordable hand
+  // units), paying its cost + `costDelta`, entering ready if `entersReady` (Fennec, Moff Gideon).
+  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean }
+  // Additional cost "exhaust a friendly unit" (#348): pick one of `targets` to exhaust, then the
+  // `then` play-from-hand step follows (Fennec). Mandatory.
+  | { kind: 'selectUnitToExhaust'; id: string; controller: PlayerId; targets: string[]; then: PlayFromHandSpec }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */
 export function activeChoice(state: GameState): PendingChoice | undefined {

@@ -1,5 +1,5 @@
 import type { Action } from './actions'
-import type { EngineCard, GameState, KeywordInstance, PlayerId, UnitState } from './types'
+import type { EngineCard, GameState, HandCardRef, KeywordInstance, PlayerId, UnitState } from './types'
 import { opponentOf, hasPendingChoices } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { unitHasKeyword } from './keywords'
@@ -51,6 +51,23 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   // Card-specific cost modifiers (e.g. −1 on an Imperial/Mandalorian unit) (#340).
   const modifier = getCardDefinition(card.id)?.costModifier?.(state, playerId, target) ?? 0
   return Math.max(0, card.cost + penalty + modifier)
+}
+
+/**
+ * Hand units `owner` can afford to play via an ability (#348): each unit card whose effective cost
+ * (plus `costDelta`, floored at 0) fits the ready resources left after `extraResourceCost` (the
+ * ability's own C=… cost). Used both to gate the ability (`usable`) and to build the play choice.
+ */
+export function affordableHandUnits(state: GameState, owner: PlayerId, extraResourceCost: number, costDelta: number): HandCardRef[] {
+  const p = state.players[owner]
+  const budget = readyResourceCount(p) - extraResourceCost
+  const out: HandCardRef[] = []
+  p.hand.forEach((cardId, handIndex) => {
+    const card = state.cards[cardId]
+    if (card?.type !== 'unit') return
+    if (Math.max(0, effectiveCost(state, owner, card) + costDelta) <= budget) out.push({ handIndex, cardId })
+  })
+  return out
 }
 
 /**
@@ -304,6 +321,16 @@ function choiceMoves(state: GameState): Action[] {
         // Luke front: a yes/no — the healed unit is fixed (the attacker).
         moves.push({ type: 'acceptChoice', choiceId: choice.id })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'playUnitFromHand': {
+        // Play a chosen hand unit (#348) — one move per affordable candidate. Mandatory.
+        for (const { handIndex } of choice.candidates) moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex })
+        break
+      }
+      case 'selectUnitToExhaust': {
+        // Fennec's "exhaust a friendly unit" additional cost (#348) — pick one. Mandatory.
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         break
       }
       case 'mayExhaustLeaderForAdvantage': {

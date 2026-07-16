@@ -22,6 +22,7 @@ export interface UpgradeStatus {
 export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'ASH_009', name: 'Ahsoka Tano', front: true, back: false },
   { id: 'ASH_003', name: 'Baylan Skoll', front: true, back: true },
+  { id: 'ASH_002', name: 'Fennec Shand', front: true, back: false },
   { id: 'ASH_010', name: 'Bo-Katan Kryze', front: true, back: true },
   { id: 'ASH_011', name: 'Cad Bane', front: true, back: true },
   { id: 'ASH_015', name: 'Emperor Palpatine', front: true, back: true },
@@ -29,6 +30,7 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'ASH_005', name: 'Luke Skywalker', front: true, back: true },
   { id: 'ASH_007', name: 'Grand Admiral Sloane', front: true, back: true },
   { id: 'ASH_017', name: 'Greef Karga', front: true, back: true },
+  { id: 'ASH_008', name: 'Moff Gideon', front: true, back: false },
   { id: 'ASH_016', name: 'Shin Hati', front: true, back: true },
   { id: 'ASH_012', name: 'Vane', front: true, back: true },
 ]

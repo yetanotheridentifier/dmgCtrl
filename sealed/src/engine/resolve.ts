@@ -4,7 +4,7 @@ import type { PendingChoice } from './types'
 import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeChoice, hasPendingChoices, pushChoice } from './types'
 import { addLastingEffect, clearLastingEffects, resetPhaseEvents, recordUnitEntered, markAbilityUsed } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
-import { effectiveCost, enemyAttackTargets, supportGrantedKeywords } from './legalMoves'
+import { effectiveCost, enemyAttackTargets, supportGrantedKeywords, affordableHandUnits } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit } from './combat'
 import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase } from './effects'
@@ -72,7 +72,7 @@ export function resolve(state: GameState, action: Action): GameState {
     case 'skipTrigger':
       return requirePhase(state, 'action', () => resolveSkip(state, action.choiceId))
     case 'acceptChoice':
-      return requirePhase(state, 'action', () => resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex, action.baseTarget))
+      return requirePhase(state, 'action', () => resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex, action.baseTarget, action.handIndex))
     case 'resourceCard':
       return requirePhase(state, 'regroup', () => regroupChoice(state, action.handIndex))
     case 'skipResource':
@@ -192,7 +192,7 @@ function setupResourceChoice(state: GameState, handIndex: number): GameState {
  * responsible for spending cost / removing the card from its source zone, and for the
  * win check afterwards.
  */
-function enterUnit(state: GameState, owner: PlayerId, cardId: string): GameState {
+function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: boolean): GameState {
   const card = state.cards[cardId]
   // Ambush: the unit may immediately attack an enemy unit, so it enters ready (#334).
   const ambush = hasKeyword(state, cardId, 'Ambush')
@@ -201,7 +201,8 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string): GameState
     cardId,
     arena: card?.arena ?? 'ground',
     damage: 0,
-    exhausted: !ambush, // units normally enter exhausted (CR 1.5.4b); Ambush enters ready
+    // Units normally enter exhausted (CR 1.5.4b); Ambush — or an ability (Fennec, #348) — enters ready.
+    exhausted: ready === true ? false : !ambush,
     isLeader: false,
     // Shielded: the unit enters play with a shield token (#334).
     upgrades: hasKeyword(state, cardId, 'Shielded') ? [{ cardId: TOKEN_SHIELD, owner }] : [],
@@ -342,7 +343,7 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
 }
 
 /** Accept a pending "may…" choice — pay the cost / play the card / search (#342/#343). */
-function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: string, deckIndex?: number, optionIndex?: number, baseTarget?: PlayerId): GameState {
+function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: string, deckIndex?: number, optionIndex?: number, baseTarget?: PlayerId, handIndex?: number): GameState {
   const choice = findChoice(state, choiceId)
   if (!choice) throw new Error(`acceptChoice: no choice ${choiceId}`)
   let next = removeChoice(state, choice.id)
@@ -478,6 +479,31 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       if (baseTarget) next = healBase(next, baseTarget, choice.amount)
       else if (targetInstanceId) next = healUnit(next, targetInstanceId, choice.amount)
       break
+    case 'selectUnitToExhaust':
+      // Fennec's additional cost (#348): exhaust the chosen unit, then the play-from-hand step.
+      if (targetInstanceId) {
+        next = exhaustUnit(next, targetInstanceId)
+        const candidates = affordableHandUnits(next, choice.controller, 0, choice.then.costDelta)
+        if (candidates.length > 0) {
+          next = pushChoice(next, { kind: 'playUnitFromHand', id: `${choice.id}-play`, controller: choice.controller, candidates, costDelta: choice.then.costDelta, entersReady: choice.then.entersReady })
+        }
+      }
+      break
+    case 'playUnitFromHand': {
+      // Play the chosen hand unit, paying its cost + costDelta, entering ready if the ability says so (#348).
+      const p = next.players[choice.controller]
+      const cardId = handIndex !== undefined ? p.hand[handIndex] : undefined
+      const card = cardId ? next.cards[cardId] : undefined
+      if (handIndex !== undefined && card?.type === 'unit') {
+        const cost = Math.max(0, effectiveCost(next, choice.controller, card) + choice.costDelta)
+        const paid = payCost(p, cost)
+        next = updatePlayer(next, choice.controller, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
+        next = enterUnit(next, choice.controller, cardId!, choice.entersReady)
+        next = checkWin(next)
+        if (next.winner !== null) return next
+      }
+      break
+    }
     case 'search':
       // Improvised Identity: discard the chosen revealed ground unit, then offer the
       // follow-up attack that grants its abilities.
@@ -802,28 +828,39 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
     return clearGrantedKeywords(checkWin(next))
   }
 
-  const defender = state.players[enemyId].units.find(u => u.instanceId === target.instanceId)
+  const defenderBefore = state.players[enemyId].units.find(u => u.instanceId === target.instanceId)
   // The defender may have been defeated before damage → the attack fizzles.
-  if (!defender) {
+  if (!defenderBefore) {
     let next = consumeAdvantage(state, playerId, attackerId)
     next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: 0 })
     return clearGrantedKeywords(checkWin(next))
   }
 
-  const counterPower = effectivePower(state, defender)
+  // Saboteur: when this unit attacks, defeat the defending unit's Shields before combat damage
+  // (CR 6.3.2b) — not optional, so a shield can't soak the hit. (Sentinel-ignoring is in legalMoves.)
+  const preCombat = unitHasKeyword(state, attacker, 'Saboteur') && hasToken(defenderBefore.upgrades, TOKEN_SHIELD)
+    ? updatePlayer(state, enemyId, {
+        units: state.players[enemyId].units.map(u =>
+          u.instanceId === defenderBefore.instanceId ? { ...u, upgrades: u.upgrades.filter(a => a.cardId !== TOKEN_SHIELD) } : u,
+        ),
+      })
+    : state
+  const defender = preCombat.players[enemyId].units.find(u => u.instanceId === target.instanceId)!
+
+  const counterPower = effectivePower(preCombat, defender)
 
   // Overwhelm: excess combat damage beyond the defender's remaining HP hits the
   // defending player's base (CR 1.9.11). A shielded defender takes no damage, so
   // there is no excess to trample (#308).
-  const remainingHp = effectiveHp(state, defender) - defender.damage
-  const overwhelmExcess = unitHasKeyword(state, attacker, 'Overwhelm')
+  const remainingHp = effectiveHp(preCombat, defender) - defender.damage
+  const overwhelmExcess = unitHasKeyword(preCombat, attacker, 'Overwhelm')
     && !hasToken(defender.upgrades, TOKEN_SHIELD)
-    && !unitNegatesOverwhelm(state, defender)
+    && !unitNegatesOverwhelm(preCombat, defender)
     ? Math.max(0, attackerPower - remainingHp)
     : 0
 
   // Simultaneous combat damage (CR 1.9.10).
-  let next = applyUnitDamage(state, enemyId, new Map([[defender.instanceId, attackerPower]]))
+  let next = applyUnitDamage(preCombat, enemyId, new Map([[defender.instanceId, attackerPower]]))
   next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, counterPower]]))
 
   if (overwhelmExcess > 0) {
