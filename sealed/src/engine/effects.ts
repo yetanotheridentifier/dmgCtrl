@@ -52,11 +52,6 @@ export function dealDamageToBase(state: GameState, player: PlayerId, amount: num
   return { ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: p.base.damage + amount } } } }
 }
 
-/** The first non-token (card) upgrade on a unit, if any — used by "defeat a friendly upgrade" costs (#309). */
-export function firstCardUpgrade(state: GameState, unit: UnitState): string | undefined {
-  return unit.upgrades.find(a => state.cards[a.cardId]?.type !== 'token')?.cardId
-}
-
 /** Exhaust a unit (no-op if already exhausted or absent). */
 export function exhaustUnit(state: GameState, instanceId: string): GameState {
   const found = findUnit(state, instanceId)
@@ -117,6 +112,24 @@ export function defeatUpgrade(state: GameState, instanceId: string, cardId: stri
   if (state.cards[cardId]?.type !== 'token') {
     const op = next.players[removed.owner]
     next = { ...next, players: { ...next.players, [removed.owner]: { ...op, discard: [...op.discard, cardId] } } }
+  }
+  return next
+}
+
+/**
+ * Defeat the upgrade at position `index` on a unit (#348) — the precise-instance form of
+ * `defeatUpgrade`, so a chosen upgrade (e.g. one of two identical Advantage tokens) is removed
+ * exactly. A card-upgrade goes to its owner's discard; a token ceases to exist. No-op if the
+ * unit or index is gone.
+ */
+export function defeatUpgradeAt(state: GameState, instanceId: string, index: number): GameState {
+  const found = findUnit(state, instanceId)
+  const removed = found?.unit.upgrades[index]
+  if (!found || !removed) return state
+  let next = patchUnit(state, found.owner, instanceId, u => ({ ...u, upgrades: u.upgrades.filter((_, i) => i !== index) }))
+  if (state.cards[removed.cardId]?.type !== 'token') {
+    const op = next.players[removed.owner]
+    next = { ...next, players: { ...next.players, [removed.owner]: { ...op, discard: [...op.discard, removed.cardId] } } }
   }
   return next
 }

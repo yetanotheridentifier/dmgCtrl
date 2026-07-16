@@ -7,7 +7,7 @@ import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, supportGrantedKeywords } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit } from './combat'
-import { exhaustUnit, findUnit, giveToken, defeatUpgrade, dealDamageToBase, firstCardUpgrade } from './effects'
+import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
@@ -72,7 +72,7 @@ export function resolve(state: GameState, action: Action): GameState {
     case 'skipTrigger':
       return requirePhase(state, 'action', () => resolveSkip(state, action.choiceId))
     case 'acceptChoice':
-      return requirePhase(state, 'action', () => resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex))
+      return requirePhase(state, 'action', () => resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex, action.baseTarget))
     case 'resourceCard':
       return requirePhase(state, 'regroup', () => regroupChoice(state, action.handIndex))
     case 'skipResource':
@@ -342,7 +342,7 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
 }
 
 /** Accept a pending "may…" choice — pay the cost / play the card / search (#342/#343). */
-function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: string, deckIndex?: number, optionIndex?: number): GameState {
+function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: string, deckIndex?: number, optionIndex?: number, baseTarget?: PlayerId): GameState {
   const choice = findChoice(state, choiceId)
   if (!choice) throw new Error(`acceptChoice: no choice ${choiceId}`)
   let next = removeChoice(state, choice.id)
@@ -437,16 +437,31 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       break
     }
-    case 'mayDefeatUpgradeForBase': {
-      // Vane: defeat a card upgrade on the chosen friendly unit, then deal 2 to the enemy base (#309).
-      const host = targetInstanceId ? next.players[choice.controller].units.find(u => u.instanceId === targetInstanceId) : undefined
-      const upgrade = host && firstCardUpgrade(next, host)
-      if (host && upgrade) {
-        next = defeatUpgrade(next, host.instanceId, upgrade)
-        next = dealDamageToBase(next, opponentOf(choice.controller), 2)
-        next = checkWin(next)
-        if (next.winner !== null) return next
+    case 'selectUpgradeToDefeat': {
+      // Vane (#309/#348): defeat the chosen friendly upgrade (card or token), then choose where the
+      // 2 damage lands (a base — or, deployed, the defending unit or a base).
+      const pick = choice.candidates[optionIndex ?? 0]
+      if (pick) {
+        next = defeatUpgradeAt(next, pick.unitId, pick.upgradeIndex)
+        const inPlay = new Set([...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId))
+        const spec = choice.then
+        next = pushChoice(next, {
+          kind: 'selectDamageTarget',
+          id: `${choice.id}-dmg`,
+          controller: choice.controller,
+          amount: spec.amount,
+          unitTargets: spec.unitTargets.filter(id => inPlay.has(id)), // a target may have left play
+          baseTargets: spec.baseTargets,
+        })
       }
+      break
+    }
+    case 'selectDamageTarget': {
+      // Deal the chosen amount to the picked base or unit (#348).
+      if (baseTarget) next = dealDamageToBase(next, baseTarget, choice.amount)
+      else if (targetInstanceId) next = dealDamageToUnit(next, targetInstanceId, choice.amount)
+      next = checkWin(next)
+      if (next.winner !== null) return next
       break
     }
     case 'search':

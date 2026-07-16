@@ -25,6 +25,7 @@ export const TOKEN_UNIT_CARDS: Record<string, EngineCard> = {
     traits: ['Mandalorian'],
     keywords: [{ name: 'Shielded' }],
     unique: false,
+    frontArt: 'https://cdn.swu-db.com/images/cards/ASH/T01.png',
   },
 }
 

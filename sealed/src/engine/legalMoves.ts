@@ -272,7 +272,6 @@ function choiceMoves(state: GameState): Action[] {
       }
       case 'mayDamage':
       case 'mayAdvantageEach':
-      case 'mayDefeatUpgradeForBase':
       case 'mayLastingBuff':
       case 'mayGiveAdvantage':
       case 'mayExhaustLeaderGiveAdvantage':
@@ -286,6 +285,18 @@ function choiceMoves(state: GameState): Action[] {
       case 'chooseOne': {
         // Choose-one/modal (#348): one move per option, no decline (mandatory).
         choice.options.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
+        break
+      }
+      case 'selectUpgradeToDefeat': {
+        // Vane (#348): pick a candidate upgrade to defeat; Cancel only on the optional (deployed) form.
+        choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'selectDamageTarget': {
+        // Deal N to a chosen unit or base (#348) — mandatory (the damage must land).
+        for (const id of choice.unitTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        for (const bp of choice.baseTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, baseTarget: bp })
         break
       }
       case 'mayExhaustLeaderForAdvantage': {

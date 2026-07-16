@@ -186,6 +186,22 @@ export interface GameState {
  * resolved by the engine when the option is picked. New variants extend the `kind` union.
  * `arenaLastingBuff`: grant every unit in `arena` (both players) the given "this phase" buff.
  */
+/** Reference to a specific attached upgrade (its host unit + position), for card-select choices (#348). */
+export interface UpgradeRef {
+  unitId: string
+  upgradeIndex: number
+  cardId: string
+}
+
+/** A follow-up "deal N damage to a unit or a base" selection (#348). */
+export interface DamageTargetSpec {
+  amount: number
+  /** Instance ids of units that may take the damage. */
+  unitTargets: string[]
+  /** Owners whose base may take the damage. */
+  baseTargets: PlayerId[]
+}
+
 export interface ChooseOption {
   label: string
   kind: 'arenaLastingBuff'
@@ -232,8 +248,13 @@ export type PendingChoice =
   // eligible unit instance ids; the controller picks one or declines.
   | { kind: 'mayDamage'; id: string; controller: PlayerId; unitId: string; targets: string[]; amount: number }
   | { kind: 'mayAdvantageEach'; id: string; controller: PlayerId; unitId: string; targets: string[] }
-  // Vane (#309): optionally defeat a friendly upgrade (on the chosen unit) to deal 2 to the enemy base.
-  | { kind: 'mayDefeatUpgradeForBase'; id: string; controller: PlayerId; unitId: string; targets: string[] }
+  // Vane (#309/#348): defeat a friendly upgrade (chosen from `candidates`, cards or tokens); then the
+  // `then` damage-target selection follows. `optional` = the deployed "may" version (a Cancel is
+  // offered); the front action is mandatory. Each candidate is the exact upgrade (unit + index).
+  | { kind: 'selectUpgradeToDefeat'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional: boolean; then: DamageTargetSpec }
+  // Choose where to deal a fixed amount of damage (#348): a unit (`unitTargets`) or a base
+  // (`baseTargets`, by owner). Mandatory. Vane's "deal 2 to a base / the defending unit or a base".
+  | { kind: 'selectDamageTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[] }
   // Greef Karga front (#309): on playing a unit, may exhaust the leader to give it an Advantage token.
   // `unitId` is the just-played unit to receive the token.
   | { kind: 'mayExhaustLeaderForAdvantage'; id: string; controller: PlayerId; unitId: string }

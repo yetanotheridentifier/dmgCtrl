@@ -16,15 +16,18 @@ export const TOKEN_EXPERIENCE = 'TOKEN_EXPERIENCE'
 export const TOKEN_SHIELD = 'TOKEN_SHIELD'
 export const TOKEN_ADVANTAGE = 'TOKEN_ADVANTAGE'
 
-function tokenCard(id: string, name: string, power: number, hp: number): EngineCard {
-  return { id, name, type: 'token', cost: 0, power, hp, aspects: [], traits: [], keywords: [], unique: false }
+function tokenCard(id: string, name: string, power: number, hp: number, frontArt: string): EngineCard {
+  return { id, name, type: 'token', cost: 0, power, hp, aspects: [], traits: [], keywords: [], unique: false, frontArt }
 }
+
+// Official token card art (cdn.swu-db.com) — routed through the art proxy by `artUrl`.
+const CDN = 'https://cdn.swu-db.com/images/cards'
 
 /** Built-in token upgrades, merged into every card db (#308). */
 export const TOKEN_CARDS: Record<string, EngineCard> = {
-  [TOKEN_EXPERIENCE]: tokenCard(TOKEN_EXPERIENCE, 'Experience', 1, 1),
-  [TOKEN_SHIELD]: tokenCard(TOKEN_SHIELD, 'Shield', 0, 0),
-  [TOKEN_ADVANTAGE]: tokenCard(TOKEN_ADVANTAGE, 'Advantage', 1, 0),
+  [TOKEN_EXPERIENCE]: tokenCard(TOKEN_EXPERIENCE, 'Experience', 1, 1, `${CDN}/SOR/T01.png`),
+  [TOKEN_SHIELD]: tokenCard(TOKEN_SHIELD, 'Shield', 0, 0, `${CDN}/LOF/T02.png`),
+  [TOKEN_ADVANTAGE]: tokenCard(TOKEN_ADVANTAGE, 'Advantage', 1, 0, `${CDN}/ASH/T02.png`),
 }
 
 /** Remove the first element matching `pred` (one token); same ref if none match. */

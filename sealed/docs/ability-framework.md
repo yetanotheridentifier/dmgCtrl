@@ -426,9 +426,38 @@ Phased into independently-deployable chunks; each groups a primitive with the le
   (the token-creation trigger path stays deferred) — moot for leaders, since only one leader is ever
   in play (Greef, the only such reactor, can't coexist with Bo-Katan). Tests in `leaderAbilities.test.ts`.
 
+### Chunk G — select-a-card overlay + Vane's choose-an-upgrade (DONE)
+
+- **`selectUpgradeToDefeat`** pending choice: `candidates: UpgradeRef[]` (`{unitId, upgradeIndex, cardId}`
+  for **every** upgrade the controller has — card **and** token), plus `optional`. Resolved by
+  `acceptChoice.optionIndex`; `defeatUpgradeAt(state, unitId, index)` removes the exact upgrade
+  (precise-instance form of `defeatUpgrade`, so one of two identical tokens goes), then 2 to the
+  enemy base. Fixes two Vane defects: token upgrades (Shield/Advantage/Experience) are now
+  selectable, and the player **chooses which** upgrade rather than auto-defeating the first card one.
+- **Two-step target selection.** After defeating the upgrade, a `selectDamageTarget` choice follows
+  (carried on `selectUpgradeToDefeat.then: DamageTargetSpec`): the 2 damage goes to a chosen **unit
+  or base**, not a hardcoded enemy base. `acceptChoice.baseTarget: PlayerId` picks a base;
+  `targetInstanceId` picks a unit. Vane **front** = "a base" (either); deployed **back** = "the
+  defending unit or a base" (the defender is the attack's target when it's a unit). Mandatory.
+- **Vane** front is a target-less `usable`-gated action (offered when ≥1 upgrade) raising the upgrade
+  choice **mandatory** (`optional:false`, no Cancel — the action's already committed); the deployed
+  back's On Attack raises it **optional** (`optional:true`, Cancel = decline). Retired the old
+  board-select `mayDefeatUpgradeForBase` choice and the `firstCardUpgrade` helper.
+- **`CardSelectOverlay`** (`gameScreen.tsx`) — a reusable centre-screen card picker: **click the
+  (highlighted) card itself** to select it, plus a Cancel shown only when `onCancel` is given (the
+  optional case). Token art included. Extensible for any future "select a card / card type" effect.
+  Its accept/skip moves are pulled out of the action menu like the look/search overlays.
+- **Base targeting on the board.** `BaseCard` takes a click handler per side via `Board`'s
+  `baseAction(side)`, so **either** base highlights + is clickable when it's a valid damage target
+  (previously only the opponent base, for attacks). `selectDamageTarget`'s unit targets ride the
+  existing board-target mechanism (`boardTargetKinds`).
+- **Token card art:** `frontArt` added to the four token cards — Mandalorian `ASH/T01`, Advantage
+  `ASH/T02`, Experience `SOR/T01`, Shield `LOF/T02` (served via the `artUrl` proxy). The on-board
+  Mandalorian token now shows its art too.
+
 ### Remaining chunks (planned)
 
 A — heal (Luke); B — play-a-unit-from-hand ready/cost-reduced (Fennec, Moff Gideon); D —
-play-upgrade-from-resources + a private resource overlay (The Armorer); E — opponent-makes-a-choice
-+ "next unit you play this phase" grant (Sabine); F — take-initiative trigger (Mandalorian),
-attack-with-a-unit ability (Thrawn), Grogu's triggered deploy + combat-conditional aura.
+play-upgrade-from-resources + a private resource overlay (The Armorer, can reuse `CardSelectOverlay`);
+E — opponent-makes-a-choice + "next unit you play this phase" grant (Sabine); F — take-initiative
+trigger (Mandalorian), attack-with-a-unit ability (Thrawn), Grogu's triggered deploy + aura.

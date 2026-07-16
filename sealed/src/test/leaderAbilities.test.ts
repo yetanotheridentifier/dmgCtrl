@@ -115,26 +115,73 @@ describe('Emperor Palpatine (ASH_015) — deployed: On Attack may give Advantage
   })
 })
 
-describe('Vane (ASH_012) — defeat a friendly upgrade → 2 to base (#309)', () => {
+describe('Vane (ASH_012) — defeat a friendly upgrade → 2 to base (#309/#348)', () => {
   const cards = { ...CARDS, ASH_012: card({ id: 'ASH_012', type: 'leader', power: 2, hp: 5 }), UP: card({ id: 'UP', type: 'upgrade' }) }
 
-  it('front: defeats the chosen unit’s upgrade and deals 2 to the enemy base', () => {
+  it('front: offers every friendly upgrade — card AND token — to choose from, and is mandatory', () => {
     const s = state({
       cards,
       players: {
-        player: player({ leader: undeployed('ASH_012'), units: [unit('u1', 'TST_U1', { upgrades: [{ cardId: 'UP', owner: 'player' }] }), unit('u2', 'TST_U1')] }),
+        player: player({
+          leader: undeployed('ASH_012'),
+          units: [unit('u1', 'TST_U1', { upgrades: [{ cardId: 'UP', owner: 'player' }] }), unit('u2', 'TST_U1', { upgrades: [{ cardId: TOKEN_ADVANTAGE, owner: 'player' }] })],
+        }),
         opponent: player(),
       },
     })
-    expect(legalMoves(s).filter(a => a.type === 'useLeaderAbility').map(a => a.targetInstanceId)).toEqual(['u1']) // only the unit with an upgrade
-    const next = resolve(s, { type: 'useLeaderAbility', index: 0, targetInstanceId: 'u1' })
-    expect(next.players.player.units.find(u => u.instanceId === 'u1')!.upgrades.some(a => a.cardId === 'UP')).toBe(false)
-    expect(next.players.player.discard).toContain('UP')
-    expect(next.players.opponent.base.damage).toBe(2)
-    expect(next.players.player.leader.exhausted).toBe(true)
+    // Target-less action (chosen in the overlay), offered because ≥1 upgrade exists.
+    expect(legalMoves(s).filter(a => a.type === 'useLeaderAbility')).toHaveLength(1)
+    const raised = resolve(s, { type: 'useLeaderAbility', index: 0 })
+    expect(raised.pendingChoices?.[0]).toMatchObject({
+      kind: 'selectUpgradeToDefeat',
+      optional: false,
+      candidates: [
+        { unitId: 'u1', upgradeIndex: 0, cardId: 'UP' },
+        { unitId: 'u2', upgradeIndex: 0, cardId: TOKEN_ADVANTAGE }, // token upgrade IS selectable
+      ],
+    })
+    // Mandatory: two picks, no Cancel.
+    const moves = legalMoves(raised)
+    expect(moves.filter(a => a.type === 'acceptChoice')).toHaveLength(2)
+    expect(moves.some(a => a.type === 'skipTrigger')).toBe(false)
+
+    // Defeat the token (option 1): removed, then a damage-target choice for "a base" (either).
+    const afterDefeat = resolve(raised, { type: 'acceptChoice', choiceId: raised.pendingChoices![0].id, optionIndex: 1 })
+    expect(afterDefeat.players.player.units.find(u => u.instanceId === 'u2')!.upgrades).toHaveLength(0)
+    expect(afterDefeat.players.player.units.find(u => u.instanceId === 'u1')!.upgrades.some(a => a.cardId === 'UP')).toBe(true) // untouched
+    expect(afterDefeat.pendingChoices?.[0]).toMatchObject({ kind: 'selectDamageTarget', amount: 2, unitTargets: [], baseTargets: ['player', 'opponent'] })
+    // Both bases are selectable; choose the enemy base.
+    const baseChoices = legalMoves(afterDefeat).flatMap(a => (a.type === 'acceptChoice' && a.baseTarget ? [a.baseTarget] : []))
+    expect(baseChoices.sort()).toEqual(['opponent', 'player'])
+    const done = resolve(afterDefeat, { type: 'acceptChoice', choiceId: afterDefeat.pendingChoices![0].id, baseTarget: 'opponent' })
+    expect(done.players.opponent.base.damage).toBe(2)
+    expect(done.players.player.leader.exhausted).toBe(true)
+    expect(done.activePlayer).toBe('opponent')
   })
 
-  it('deployed: On Attack may defeat a friendly upgrade to deal 2 to the base', () => {
+  it('front: can aim the 2 damage at your OWN base ("a base")', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ leader: undeployed('ASH_012'), units: [unit('u1', 'TST_U1', { upgrades: [{ cardId: 'UP', owner: 'player' }] })] }),
+        opponent: player(),
+      },
+    })
+    const afterDefeat = resolve(resolve(s, { type: 'useLeaderAbility', index: 0 }), { type: 'acceptChoice', choiceId: 'ASH_012-defeatUpgrade', optionIndex: 0 })
+    const done = resolve(afterDefeat, { type: 'acceptChoice', choiceId: afterDefeat.pendingChoices![0].id, baseTarget: 'player' })
+    expect(done.players.player.base.damage).toBe(2)
+    expect(done.players.opponent.base.damage).toBe(0)
+  })
+
+  it('front: is not offered when the player controls no upgrades', () => {
+    const s = state({
+      cards,
+      players: { player: player({ leader: undeployed('ASH_012'), units: [unit('u1', 'TST_U1')] }), opponent: player() },
+    })
+    expect(legalMoves(s).some(a => a.type === 'useLeaderAbility')).toBe(false)
+  })
+
+  it('deployed: On Attack (vs a base) is optional, then defeats the upgrade and hits the chosen base', () => {
     const s = state({
       cards,
       players: {
@@ -143,10 +190,48 @@ describe('Vane (ASH_012) — defeat a friendly upgrade → 2 to base (#309)', ()
       },
     })
     const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
-    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayDefeatUpgradeForBase', targets: ['L'] })
-    const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'L' })
-    expect(done.players.player.discard).toContain('UP')
-    expect(done.players.opponent.base.damage).toBe(4) // 2 (ability) + 2 (combat, L power 2)
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'selectUpgradeToDefeat', optional: true, candidates: [{ unitId: 'L', cardId: 'UP' }] })
+    expect(legalMoves(atk).some(a => a.type === 'skipTrigger')).toBe(true) // Cancel offered
+    const afterDefeat = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, optionIndex: 0 })
+    expect(afterDefeat.players.player.discard).toContain('UP')
+    // No defending unit (attacked the base) → only bases are targets.
+    expect(afterDefeat.pendingChoices?.[0]).toMatchObject({ kind: 'selectDamageTarget', unitTargets: [], baseTargets: ['player', 'opponent'] })
+    const done = resolve(afterDefeat, { type: 'acceptChoice', choiceId: afterDefeat.pendingChoices![0].id, baseTarget: 'opponent' })
+    expect(done.players.opponent.base.damage).toBe(4) // 2 (ability) + 2 (combat, L power 2 after UP defeated)
+    expect(done.activePlayer).toBe('opponent')
+  })
+
+  it('deployed: On Attack vs a unit offers the defending unit as a damage target', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ leader: deployed('ASH_012'), units: [unit('L', 'ASH_012', { isLeader: true, upgrades: [{ cardId: 'UP', owner: 'player' }] })] }),
+        opponent: player({ units: [unit('e1', 'TST_U4')] }), // hp 9 — survives to be targeted
+      },
+    })
+    const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'unit', instanceId: 'e1' } })
+    const afterDefeat = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, optionIndex: 0 })
+    // The defending unit is a target alongside both bases.
+    expect(afterDefeat.pendingChoices?.[0]).toMatchObject({ kind: 'selectDamageTarget', unitTargets: ['e1'], baseTargets: ['player', 'opponent'] })
+    const done = resolve(afterDefeat, { type: 'acceptChoice', choiceId: afterDefeat.pendingChoices![0].id, targetInstanceId: 'e1' })
+    // e1 took 2 (ability) then combat damage from L (power 2, UP defeated) = 4 total.
+    expect(done.players.opponent.units.find(u => u.instanceId === 'e1')!.damage).toBe(4)
+    expect(done.activePlayer).toBe('opponent')
+  })
+
+  it('deployed: cancelling the On Attack leaves upgrades intact and proceeds to combat', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ leader: deployed('ASH_012'), units: [unit('L', 'ASH_012', { isLeader: true, upgrades: [{ cardId: 'UP', owner: 'player' }] })] }),
+        opponent: player(),
+      },
+    })
+    const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
+    const done = resolve(atk, { type: 'skipTrigger', choiceId: atk.pendingChoices![0].id })
+    expect(done.players.player.units.find(u => u.instanceId === 'L')!.upgrades.some(a => a.cardId === 'UP')).toBe(true)
+    // Combat only, no ability: L power 2 + UP's +1 = 3 (the upgrade survives since nothing defeated it).
+    expect(done.players.opponent.base.damage).toBe(3)
     expect(done.activePlayer).toBe('opponent')
   })
 })

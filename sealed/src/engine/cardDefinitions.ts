@@ -1,12 +1,12 @@
 import { registerCard } from './abilities'
-import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount, dealDamageToBase, firstCardUpgrade } from './effects'
+import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount } from './effects'
 import { dealDamageToUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
 import { opponentOf, pushChoice, addLastingEffect } from './types'
 import { unitHasTrait, isLeaderUnit } from './keywords'
-import type { EngineCard, GameState, PlayerId, UnitState } from './types'
+import type { EngineCard, GameState, PlayerId, UnitState, UpgradeRef } from './types'
 
 /**
  * Real card definitions (#341+). Side-effect module: importing it registers every
@@ -239,26 +239,46 @@ registerCard('ASH_015', { // Emperor Palpatine — front (undeployed) + deployed
   }],
 })
 
-registerCard('ASH_012', { // Vane — front (undeployed) + deployed (On Attack)
-  // NOTE: "Deal 2 to a base" / "...to the defending unit or a base" are simplified to the
-  // enemy base for now (the sensible default); the full target choice can be added later.
+// Every upgrade the player controls — card upgrades AND tokens — as defeatable candidates (#348).
+const friendlyUpgradeCandidates = (s: GameState, owner: PlayerId): UpgradeRef[] =>
+  s.players[owner].units.flatMap(u => u.upgrades.map((up, i) => ({ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId })))
+
+const BOTH_BASES: PlayerId[] = ['player', 'opponent']
+
+registerCard('ASH_012', { // Vane — front (undeployed) + deployed (On Attack) (#348)
+  // The player chooses which upgrade to defeat (any upgrade, token or card), then where the 2 damage
+  // lands: front = "a base" (either); deployed = "the defending unit or a base".
   leaderAbilities: {
     actions: [{
-      description: 'Defeat a friendly upgrade; deal 2 damage to the enemy base.',
-      targets: (s, owner) => s.players[owner].units.filter(u => firstCardUpgrade(s, u)).map(u => u.instanceId),
-      effect: (s, ctx) => {
-        const host = s.players[ctx.owner].units.find(u => u.instanceId === ctx.targetInstanceId)!
-        const next = defeatUpgrade(s, host.instanceId, firstCardUpgrade(s, host)!)
-        return dealDamageToBase(next, opponentOf(ctx.owner), 2)
-      },
+      description: 'Defeat a friendly upgrade; deal 2 damage to a base.',
+      usable: (s, owner) => friendlyUpgradeCandidates(s, owner).length > 0,
+      effect: (s, ctx) =>
+        pushChoice(s, {
+          kind: 'selectUpgradeToDefeat',
+          id: `${ctx.cardId}-defeatUpgrade`,
+          controller: ctx.owner,
+          candidates: friendlyUpgradeCandidates(s, ctx.owner),
+          optional: false,
+          then: { amount: 2, unitTargets: [], baseTargets: BOTH_BASES },
+        }),
     }],
   },
   abilities: [{
     trigger: 'onAttack',
-    description: 'You may defeat a friendly upgrade to deal 2 to the enemy base.',
+    description: 'You may defeat a friendly upgrade to deal 2 to the defending unit or a base.',
     effect: (s, ctx) => {
-      const targets = s.players[ctx.owner].units.filter(u => firstCardUpgrade(s, u)).map(u => u.instanceId)
-      return targets.length === 0 ? s : pushChoice(s, { kind: 'mayDefeatUpgradeForBase', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets })
+      const candidates = friendlyUpgradeCandidates(s, ctx.owner)
+      if (candidates.length === 0) return s
+      // "The defending unit or a base" — the defender is the attack's target when it's a unit.
+      const unitTargets = ctx.attackTarget?.kind === 'unit' ? [ctx.attackTarget.instanceId] : []
+      return pushChoice(s, {
+        kind: 'selectUpgradeToDefeat',
+        id: ctx.sourceInstanceId!,
+        controller: ctx.owner,
+        candidates,
+        optional: true,
+        then: { amount: 2, unitTargets, baseTargets: BOTH_BASES },
+      })
     },
   }],
 })

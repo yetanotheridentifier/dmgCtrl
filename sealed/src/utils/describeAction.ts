@@ -69,7 +69,8 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayPlayTopFree') return "Don't play"
       if (choice.kind === 'mayDamageExhaust') return 'Decline'
       if (choice.kind === 'mayAttack') return "Don't attack"
-      if (choice.kind === 'mayDamage' || choice.kind === 'mayAdvantageEach' || choice.kind === 'mayDefeatUpgradeForBase') return 'Decline'
+      if (choice.kind === 'mayDamage' || choice.kind === 'mayAdvantageEach') return 'Decline'
+      if (choice.kind === 'selectUpgradeToDefeat') return 'Cancel'
       if (choice.kind === 'mayLastingBuff' || choice.kind === 'mayGiveAdvantage' || choice.kind === 'mayExhaustLeaderGiveAdvantage' || choice.kind === 'mayExhaustLeaderExhaustUnit' || choice.kind === 'mayExhaustUnit') return 'Decline'
       if (choice.kind === 'mayExhaustLeaderForAdvantage') return "Don't"
       return `Skip ${choice.kind}`
@@ -99,9 +100,15 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Advantage${target ? ` to ${target}` : ''}`
       }
-      if (choice.kind === 'mayDefeatUpgradeForBase') {
+      if (choice.kind === 'selectUpgradeToDefeat') {
+        const pick = choice.candidates[action.optionIndex ?? 0]
+        const name = pick ? state.cards[pick.cardId]?.name ?? pick.cardId : 'upgrade'
+        return `Defeat ${name}`
+      }
+      if (choice.kind === 'selectDamageTarget') {
+        if (action.baseTarget) return `Deal ${choice.amount} to ${action.baseTarget === by ? 'your base' : "opponent's base"}`
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
-        return `Defeat ${target ? `${target}'s ` : ''}upgrade → 2 to base`
+        return `Deal ${choice.amount} to ${target ?? 'unit'}`
       }
       if (choice.kind === 'mayExhaustLeaderForAdvantage') return `Exhaust leader → Advantage to ${anyUnitName(state, choice.unitId) ?? 'unit'}`
       if (choice.kind === 'mayLastingBuff') {
