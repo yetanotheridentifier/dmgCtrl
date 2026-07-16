@@ -4,7 +4,7 @@ import type { PendingChoice } from './types'
 import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeChoice, hasPendingChoices, pushChoice } from './types'
 import { addLastingEffect, clearLastingEffects, resetPhaseEvents, recordUnitEntered, markAbilityUsed } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
-import { effectiveCost, enemyAttackTargets, supportGrantedKeywords, affordableHandUnits, validUpgradeTargets } from './legalMoves'
+import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit } from './combat'
 import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards } from './effects'
@@ -41,22 +41,25 @@ export function resolve(state: GameState, action: Action): GameState {
         return played.winner !== null ? played : advanceTurn(resetPasses(played))
       })
     case 'deployLeader':
-      return requirePhase(state, 'action', () => advanceTurn(resetPasses(deployLeader(state))))
+      return requirePhase(state, 'action', () => {
+        // Deploying a Support leader opens a support attack — hold the turn to resolve it (#348).
+        const deployed = deployLeader(state)
+        return activeChoice(deployed) ? resetPasses(deployed) : advanceTurn(resetPasses(deployed))
+      })
     case 'useAbility':
       return requirePhase(state, 'action', () => useAbility(state, action.instanceId, action.cardId, action.index))
     case 'useLeaderAbility':
       return requirePhase(state, 'action', () => useLeaderAbility(state, action.index, action.targetInstanceId))
     case 'attack':
       return requirePhase(state, 'action', () => {
-        // An attack resolves a pending choice, if one is active (#334/#343). Support
-        // lends its keywords to the chosen attacker; Improvised Identity's mayAttack
-        // lends the discarded unit's full abilities.
+        // An attack resolves a pending choice, if one is active (#334/#343/#348). Both Support
+        // ("gains this unit's other abilities") and Improvised Identity's mayAttack lend a source
+        // card's full abilities (keywords + triggered) to the chosen attacker for this attack.
         const choice = activeChoice(state)
-        const before = choice?.kind === 'support'
-          ? grantSupportKeywords(state, choice.unitId, action.attackerId)
-          : choice?.kind === 'mayAttack' && choice.grantCardId
-            ? grantAbilityCard(state, action.attackerId, choice.grantCardId)
-            : state
+        const grantCardId = choice?.kind === 'support'
+          ? state.players[state.activePlayer].units.find(u => u.instanceId === choice.unitId)?.cardId
+          : choice?.kind === 'mayAttack' ? choice.grantCardId : undefined
+        const before = grantCardId ? grantAbilityCard(state, action.attackerId, grantCardId) : state
         let attacked = attack(before, action.attackerId, action.target)
         // Consume the ambush/support choice this attack resolved. Support-granted
         // keywords are cleared inside completeAttack (after they're used), so they
@@ -225,11 +228,7 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
       })
     }
   } else if (hasKeyword(state, cardId, 'Support')) {
-    // Support: open the pending attack if there's another ready unit to attack with.
-    const others = next.players[owner].units.filter(u => u.instanceId !== newUnit.instanceId && !u.exhausted)
-    if (others.length > 0) {
-      next = pushChoice(next, { kind: 'support', id: newUnit.instanceId, controller: owner, unitId: newUnit.instanceId })
-    }
+    next = openSupportChoice(next, owner, newUnit.instanceId)
   }
 
   // "When Played" abilities fire after the card enters play (CR 6.2.0f).
@@ -265,14 +264,16 @@ function playCard(state: GameState, handIndex: number): GameState {
   return checkWin(enterUnit(next, playerId, card.id))
 }
 
-/** Lend a Support unit's keywords to the chosen attacker for one attack (#334). */
-function grantSupportKeywords(state: GameState, supportUnitId: string, attackerId: string): GameState {
-  const granted = supportGrantedKeywords(state, supportUnitId)
-  if (granted.length === 0) return state
-  const playerId = state.activePlayer
-  return updatePlayer(state, playerId, {
-    units: state.players[playerId].units.map(u => (u.instanceId === attackerId ? { ...u, grantedKeywords: granted } : u)),
-  })
+/**
+ * Open the Support pending choice (#334/#348): another ready unit may attack, gaining the Support
+ * source's abilities for that attack (see the `support` case in the attack dispatcher). No choice
+ * if there's no other ready unit. Shared by playing a Support unit and deploying a Support leader.
+ */
+function openSupportChoice(state: GameState, owner: PlayerId, sourceInstanceId: string): GameState {
+  const others = state.players[owner].units.filter(u => u.instanceId !== sourceInstanceId && !u.exhausted)
+  return others.length > 0
+    ? pushChoice(state, { kind: 'support', id: sourceInstanceId, controller: owner, unitId: sourceInstanceId })
+    : state
 }
 
 /** Strip transient per-attack grants (Support keywords #334, Improvised Identity
@@ -701,11 +702,17 @@ function deployLeader(state: GameState): GameState {
     upgrades: [],
   }
 
-  const next = updatePlayer(state, playerId, {
+  let next = updatePlayer(state, playerId, {
     leader: { ...p.leader, deployed: true, epicActionUsed: true },
     units: [...p.units, leaderUnit],
   })
-  return { ...next, instanceCounter: state.instanceCounter + 1 }
+  next = { ...next, instanceCounter: state.instanceCounter + 1 }
+  // Support (a leader keyword): on deploy, another ready unit may attack gaining this leader's
+  // abilities for the attack (#348) — same choice as playing a Support unit.
+  if (hasKeyword(next, p.leader.cardId, 'Support')) {
+    next = openSupportChoice(next, playerId, leaderUnit.instanceId)
+  }
+  return next
 }
 
 function takeInitiative(state: GameState): GameState {

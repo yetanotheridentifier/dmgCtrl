@@ -1,5 +1,5 @@
 import type { Action } from './actions'
-import type { EngineCard, GameState, HandCardRef, KeywordInstance, PlayerId, ResourceUpgradeRef, UnitState } from './types'
+import type { EngineCard, GameState, HandCardRef, PlayerId, ResourceUpgradeRef, UnitState } from './types'
 import { opponentOf, hasPendingChoices } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { unitHasKeyword } from './keywords'
@@ -224,20 +224,6 @@ function actionPhaseMoves(state: GameState): Action[] {
 }
 
 /**
- * The keywords a Support unit lends to another attacker for one attack — its card's
- * and upgrades' keywords, excluding Support itself (no chaining) (#334).
- */
-export function supportGrantedKeywords(state: GameState, supportUnitId: string): KeywordInstance[] {
-  const su = state.players[state.activePlayer].units.find(u => u.instanceId === supportUnitId)
-  if (!su) return []
-  const kws = [
-    ...(state.cards[su.cardId]?.keywords ?? []),
-    ...su.upgrades.flatMap(a => state.cards[a.cardId]?.keywords ?? []),
-  ]
-  return kws.filter(k => k.name !== 'Support')
-}
-
-/**
  * Moves while choices are pending (#334/#342). The active player resolves their own
  * simultaneous choices in any order (each is addressable by id, honouring active-player
  * trigger ordering). Ambush: the played unit may attack an enemy unit (never the base).
@@ -263,10 +249,12 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'support': {
-        const granted = supportGrantedKeywords(state, choice.unitId)
+        // The chosen attacker gains the Support source's full abilities for the attack (#348), so
+        // its granted keywords (Saboteur, Sentinel-ignoring…) shape the legal targets here too.
+        const sourceCardId = p.units.find(u => u.instanceId === choice.unitId)?.cardId
         for (const candidate of p.units) {
           if (candidate.exhausted || candidate.instanceId === choice.unitId) continue
-          const attacker = granted.length ? { ...candidate, grantedKeywords: granted } : candidate
+          const attacker = sourceCardId ? { ...candidate, grantedAbilityCardIds: [sourceCardId] } : candidate
           const { targets, sentinelLocked } = enemyAttackTargets(state, attacker)
           for (const e of targets) {
             moves.push({ type: 'attack', attackerId: candidate.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })

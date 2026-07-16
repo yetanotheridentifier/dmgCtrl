@@ -513,10 +513,14 @@ abilities to support a resource cost + the exhaust-a-unit additional cost — no
 - **The Mandalorian (014)** front: `whenTakeInitiative` → may pay 1, draw 1. Deployed back: `onAttack`
   → if you have the initiative, may draw 1 (free). (Support keyword comes from the card DB.)
 
-**Deferred (shared sub-mechanic):** **Support-on-deploy** — "When you deploy this leader, you may
-attack with another unit; it gains this unit's other abilities." Support-on-*play* only lends
-keywords (`grantSupportKeywords`); a leader's "other abilities" need full-ability granting on the
-deploy path. Affects the Mandalorian's and **Ahsoka's** deployed backs.
+**Support generalized (#348):** Support now lends the source's **full abilities** (keywords +
+triggered), not just keywords — the chosen attacker gets `grantedAbilityCardIds: [sourceCardId]` (the
+same path Improvised Identity uses), so it fires the source's combat abilities for that attack.
+`openSupportChoice` is shared by playing a Support unit **and deploying a Support leader**
+(`deployLeader`; its dispatch now holds the turn while the support attack resolves). This unblocks
+the Mandalorian's and Ahsoka's Support. (Ahsoka's back also has a separate On-Attack +2/0 — still
+its own pass; and the granted card includes the harmless Support keyword, which never re-triggers
+mid-attack.)
 
 ### Remaining chunks (planned)
 
