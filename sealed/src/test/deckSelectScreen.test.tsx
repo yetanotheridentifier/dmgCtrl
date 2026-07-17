@@ -75,15 +75,15 @@ describe('DeckSelectScreen', () => {
     expect(upgradesDetails.open).toBe(false)
   })
 
-  it('shows unit work-groups as collapsible sections, expanding the in-progress one by default', () => {
+  it('shows unit work-groups as collapsible sections, expanding the first not-yet-done group', () => {
     render(<DeckSelectScreen onPlay={vi.fn()} />)
     const groups = screen.getByTestId('implemented-unit-groups')
-    const groupA = within(groups).getByTestId('unit-group-A') as HTMLDetailsElement // Group A = in progress
-    const groupB = within(groups).getByTestId('unit-group-B') as HTMLDetailsElement // Group B = planned
-    expect(groupA.open).toBe(true)
-    expect(groupB.open).toBe(false)
+    const groupA = within(groups).getByTestId('unit-group-A') as HTMLDetailsElement // Group A = done
+    const groupB = within(groups).getByTestId('unit-group-B') as HTMLDetailsElement // Group B = first not-done
+    expect(groupA.open).toBe(false) // done → collapsed
+    expect(groupB.open).toBe(true) // next up → expanded
     // Development status is shown for the groups (same treatment as leaders/upgrades).
-    expect(within(groupA).getByText(/in progress/i)).toBeInTheDocument()
+    expect(within(groupA).getByText(/done/i)).toBeInTheDocument()
     expect(within(groupB).getByText(/planned/i)).toBeInTheDocument()
     // Each group lists its specific units.
     expect(within(groupB).getByText('Bo-Katan Kryze')).toBeInTheDocument()

@@ -40,8 +40,8 @@ export const UNIT_GROUPS: UnitGroup[] = [
   {
     id: 'A',
     name: 'No engine work (vanilla + keyword-only)',
-    status: 'in progress',
-    note: 'Vanilla + keyword-only. Every keyword in the set is already implemented, so these play correctly as printed — we’re adding tests to confirm it.',
+    status: 'done',
+    note: 'Vanilla + keyword-only. Every keyword in the set is already implemented, so these play correctly as printed — validated by groupAUnits.test.ts.',
     units: [
       'Alamite Hunter', 'Blurrg', 'Covert Veteran', 'Death Trooper Squad', 'Defenders of the Forest', 'Dinosaur Turtle',
       'Emperor\'s Champion', 'Ewok Warrior', 'Fang Fighter Squadron', 'Fennec Shand', 'Flanking TIE Interceptor', 'Forest Patroller',

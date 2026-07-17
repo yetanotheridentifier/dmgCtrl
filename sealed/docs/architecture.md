@@ -198,8 +198,10 @@ leaves CORS-friendly hosts (cdn.starwarsunlimited.com) untouched.
 
 ## Testing
 
-Strict TDD; ~460 tests at the time of writing. Engine tests use hand-built fixture
-states (`src/test/helpers/engineFixtures.ts`); data-layer tests run against
-fake-indexeddb; screen tests drive the real hook + engine with seeded caches,
-deterministic shuffles, and a "passive" AI rng (near-1 → always picks pass, the
-last-ordered legal move). `npm test` at the repo root runs main + proxy + sealed.
+Strict TDD; 600+ tests. Engine tests use hand-built fixture states
+(`src/test/helpers/engineFixtures.ts`); a few validation/behaviour tests run against a trimmed
+snapshot of the real ASH card data (`src/test/fixtures/ashSet.json` — 264 cards, refreshed from
+`worker.dmgctrl.app/cards/search?q=set:ASH`), e.g. `groupAUnits.test.ts` proving the keyword-only
+units need no engine work. Data-layer tests run against fake-indexeddb; screen tests drive the real
+hook + engine with seeded caches, deterministic shuffles, and a "passive" AI rng (near-1 → always
+picks pass, the last-ordered legal move). `npm test` at the repo root runs main + proxy + sealed.

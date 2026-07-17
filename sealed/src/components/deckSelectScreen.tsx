@@ -97,8 +97,10 @@ function Section({ title, status, defaultOpen, testId, children }: {
  * (leaders/upgrades pinned to the ability registry by a test).
  */
 function ImplementationStatus() {
+  // Expand the first group that isn't done yet — the one currently being (or next to be) worked on.
+  const nextGroupId = UNIT_GROUPS.find(g => g.status !== 'done')?.id
   return (
-    <aside data-testid="implemented-cards" className="w-full lg:w-72 shrink-0 lg:mt-0 mt-4">
+    <aside data-testid="implemented-cards" className="w-full lg:w-[27rem] shrink-0 lg:mt-0 mt-4">
       <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Implemented cards</h2>
       <p className="mt-1 text-ink-faint text-xs">
         Which card abilities are built in. Others still play as vanilla stats / resources.
@@ -140,7 +142,7 @@ function ImplementationStatus() {
       </h3>
       <div data-testid="implemented-unit-groups">
         {UNIT_GROUPS.map(g => (
-          <details key={g.id} data-testid={`unit-group-${g.id}`} open={g.status === 'in progress'} className="mt-2 border-2 border-line/60 rounded-xl bg-surface overflow-hidden">
+          <details key={g.id} data-testid={`unit-group-${g.id}`} open={g.id === nextGroupId} className="mt-2 border-2 border-line/60 rounded-xl bg-surface overflow-hidden">
             <summary className="flex items-center justify-between gap-2 px-3 py-1.5 cursor-pointer select-none text-xs">
               <span className="truncate text-accent uppercase tracking-[0.1em] font-light">{g.name} <span className="text-ink-faint normal-case tracking-normal">({g.units.length})</span></span>
               <StatusChip status={g.status} />
