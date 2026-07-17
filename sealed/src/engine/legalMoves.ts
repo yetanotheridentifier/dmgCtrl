@@ -385,6 +385,22 @@ function choiceMoves(state: GameState): Action[] {
         choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
         break
       }
+      case 'attackWithRestore': {
+        // Thrawn front (#348): attack with any ready unit (the Restore grant is applied on resolve).
+        for (const u of p.units) {
+          if (u.exhausted) continue
+          const { targets, sentinelLocked } = enemyAttackTargets(state, u)
+          for (const e of targets) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
+          if (!sentinelLocked) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'base' } })
+        }
+        break
+      }
+      case 'mayDefeatEnemyUnit': {
+        // Thrawn deployed (#348): pick a non-leader enemy unit to defeat, or decline.
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
       case 'mayAttack': {
         // Improvised Identity's optional follow-up attack, with the discarded unit's
         // abilities granted (so granted Saboteur etc. shape the legal targets).

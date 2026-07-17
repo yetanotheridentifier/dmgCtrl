@@ -139,6 +139,11 @@ describe('upgrade stat overrides — temporary ASH data gap (#308)', () => {
     expect([c.power, c.hp]).toEqual([-2, 0])
   })
 
+  it('The Way of the Mand\'alor (ASH_263) is +2/+0 — grants no HP', () => {
+    const c = normaliseCard({ Set: 'ASH', Number: '263', Name: "The Way of the Mand'alor", Type: 'Upgrade' })
+    expect([c.power, c.hp]).toEqual([2, 0])
+  })
+
   it('does not override once the source provides stats (auto-drops out)', () => {
     const c = normaliseCard({ Set: 'ASH', Number: '180', Name: 'Bokken Saber', Type: 'Upgrade', Power: '5', HP: '5' })
     expect([c.power, c.hp]).toEqual([5, 5])

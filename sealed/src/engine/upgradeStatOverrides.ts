@@ -35,5 +35,5 @@ export const UPGRADE_STAT_OVERRIDES: Record<string, { power: number; hp: number 
   ASH_229: { power: 0, hp: 0 }, // Camtono
   ASH_230: { power: 0, hp: 3 }, // Improvised Identity
   ASH_262: { power: 1, hp: 2 }, // Faith in the Empire
-  ASH_263: { power: 2, hp: 2 }, // The Way of the Mand'alor
+  ASH_263: { power: 2, hp: 0 }, // The Way of the Mand'alor (+2/+0 — cost-reduction only, no HP)
 }

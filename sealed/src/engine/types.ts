@@ -336,6 +336,11 @@ export type PendingChoice =
   // Unique rule (CR): a player controlling two upgrades with the same title defeats one (their
   // choice). `candidates` are the duplicate instances; picking one defeats it. Mandatory.
   | { kind: 'selectUniqueToDefeat'; id: string; controller: PlayerId; cardId: string; candidates: UpgradeRef[] }
+  // Thrawn front (#348): attack with any ready unit; it gains Restore `restore` for that attack
+  // (0 when the condition didn't hold). Mandatory — the attack is made on the board.
+  | { kind: 'attackWithRestore'; id: string; controller: PlayerId; restore: number }
+  // Thrawn deployed (#348): On Attack, may defeat one of `targets` (a non-leader enemy unit), or decline.
+  | { kind: 'mayDefeatEnemyUnit'; id: string; controller: PlayerId; targets: string[] }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */
 export function activeChoice(state: GameState): PendingChoice | undefined {

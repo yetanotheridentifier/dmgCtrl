@@ -547,7 +547,21 @@ upgrade's `owner`), so the opponent's copy of the same card doesn't conflict. `p
 dispatch now holds the turn while such a choice (or Camtono's look-at) resolves. (The unit-side
 unique rule is a follow-up.)
 
+### Chunk F2 — Grand Admiral Thrawn (DONE)
+
+- **`defeatUnit(state, id)`** (`combat.ts`) — a targeted *defeat* that **bypasses Shields** (those
+  prevent damage, not defeat). `applyUnitDamage`'s defeat handling was extracted into a shared
+  `finishDefeats(state, owner, survivors, defeated)` so both damage-defeats and direct defeats route
+  through the same discard / leader-return / `whenDefeated` path.
+- **`attackWithRestore`** choice (Thrawn front) — attack with **any** ready unit (its `attack` moves
+  come from `enemyAttackTargets` for every ready unit; mandatory, no skip). The chosen attacker gains
+  `Restore restore` for the attack via `grantedKeywords` (cleared after, like Support used to). The
+  condition ("as many units as the defending player") is evaluated when the leader action is used and
+  baked into `restore` (2 or 0).
+- **`mayDefeatEnemyUnit`** choice (Thrawn deployed) — `onAttack`, if you control **more** units than
+  the enemy, may defeat one of their **non-leader** units (`isLeaderUnit` excludes leaders;
+  board-target + Decline).
+
 ### Remaining chunks (planned)
 
-E — opponent-makes-a-choice + "next unit you play this phase" grant (Sabine); F2 —
-attack-with-a-unit ability + conditional Restore (Thrawn).
+E — opponent-makes-a-choice + "next unit you play this phase" grant (Sabine).

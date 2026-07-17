@@ -5,7 +5,7 @@ import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
 import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, enteredPlayThisPhase } from './types'
-import { affordableHandUnits, resourceUpgradeCandidates } from './legalMoves'
+import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets } from './legalMoves'
 import { unitHasTrait, isLeaderUnit } from './keywords'
 import type { EngineCard, GameState, PlayerId, UnitState, UpgradeRef } from './types'
 
@@ -442,6 +442,37 @@ registerCard('ASH_010', { // Bo-Katan Kryze — front/back create a Mandalorian 
   }],
   // Deployed: other friendly Mandalorian units get +1/+0 (#346).
   aura: (s, src, tgt, friendly) => (friendly && tgt.instanceId !== src.instanceId && unitHasTrait(s, tgt, 'Mandalorian') ? { power: 1 } : undefined),
+})
+
+const canAnyUnitAttack = (s: GameState, owner: PlayerId): boolean =>
+  s.players[owner].units.some(u => {
+    if (u.exhausted) return false
+    const { targets, sentinelLocked } = enemyAttackTargets(s, u)
+    return targets.length > 0 || !sentinelLocked
+  })
+
+registerCard('ASH_004', { // Grand Admiral Thrawn — front attack + conditional Restore; deployed On Attack conditional defeat (#348)
+  leaderAbilities: {
+    actions: [{
+      description: 'Attack with a unit; it gains Restore 2 for this attack if you control as many units as the defending player.',
+      usable: (s, owner) => canAnyUnitAttack(s, owner),
+      effect: (s, ctx) => {
+        const restore = s.players[ctx.owner].units.length === s.players[opponentOf(ctx.owner)].units.length ? 2 : 0
+        return pushChoice(s, { kind: 'attackWithRestore', id: `${ctx.cardId}-attack`, controller: ctx.owner, restore })
+      },
+    }],
+  },
+  // Deployed: On Attack, if you control more units than the defending player, may defeat a non-leader enemy unit.
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'If you control more units than the defending player, you may defeat a non-leader unit they control.',
+    effect: (s, ctx) => {
+      const enemy = opponentOf(ctx.owner)
+      if (s.players[ctx.owner].units.length <= s.players[enemy].units.length) return s
+      const targets = s.players[enemy].units.filter(u => !isLeaderUnit(s, u)).map(u => u.instanceId)
+      return targets.length === 0 ? s : pushChoice(s, { kind: 'mayDefeatEnemyUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets })
+    },
+  }],
 })
 
 registerCard('ASH_018', { // Grogu — triggered deploy on a Unique 4+ unit; combat-conditional aura (#346/#348)

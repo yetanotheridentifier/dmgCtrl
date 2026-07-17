@@ -50,15 +50,20 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
     }
   }
 
-  // Defeated card-upgrades return to their OWNER's discard, which may differ from
-  // the unit's controller when an upgrade was attached to an enemy unit (#308).
-  // Token upgrades (type `token`) simply cease to exist. Collect per owner.
-  const defeatedUpgrades = defeated
-    .flatMap(u => u.upgrades)
-    .filter(a => state.cards[a.cardId]?.type !== 'token')
+  return finishDefeats(state, owner, survivors, defeated)
+}
 
-  // Non-leader defeated units go to their owner's discard pile (CR 1.5.5c); token
-  // units cease to exist instead (#342).
+/**
+ * Remove `defeated` units belonging to `owner` and settle the consequences (#342): non-leader
+ * cards to the owner's discard (tokens cease to exist); attached card-upgrades to their own owner's
+ * discard; a defeated leader unit back to the base zone exhausted (CR 3.4.5); then fire each unit's
+ * `whenDefeated`. Shared by combat damage and direct defeats (`defeatUnit`).
+ */
+function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[], defeated: UnitState[]): GameState {
+  // Always write `survivors` back — they carry the damage just applied (defeated may be empty).
+  const p = state.players[owner]
+  const defeatedUpgrades = defeated.flatMap(u => u.upgrades).filter(a => state.cards[a.cardId]?.type !== 'token')
+
   let result = updatePlayer(state, owner, {
     units: survivors,
     discard: [
@@ -74,24 +79,26 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
     result = updatePlayer(result, other, { discard: [...result.players[other].discard, ...othersUpgrades] })
   }
 
-  // A defeated Leader Unit returns to the base zone, exhausted, undeployed;
-  // its epic action stays used so it cannot redeploy (CR 3.4.5).
   if (defeated.some(u => u.isLeader)) {
     const owner2 = result.players[owner]
-    result = updatePlayer(result, owner, {
-      leader: { ...owner2.leader, deployed: false, exhausted: true },
-    })
+    result = updatePlayer(result, owner, { leader: { ...owner2.leader, deployed: false, exhausted: true } })
   }
 
-  // "When Defeated" abilities fire after the unit has left play, in the order the
-  // units were defeated. The captured unit is passed so its (and its upgrades')
-  // abilities can still reference it even though it is no longer on the board.
   for (const dead of defeated) {
     result = recordUnitDefeated(result, owner, dead.cardId) // "defeated this phase" tracking (#347)
     result = runUnitTrigger(result, 'whenDefeated', dead, owner, { defeatedUnit: dead })
   }
-
   return result
+}
+
+/** Defeat a unit outright (#348) — a targeted "defeat" (Thrawn), which bypasses Shields (those
+ *  prevent damage, not defeat). No-op if the unit isn't in play. */
+export function defeatUnit(state: GameState, instanceId: string): GameState {
+  for (const owner of ['player', 'opponent'] as PlayerId[]) {
+    const target = state.players[owner].units.find(u => u.instanceId === instanceId)
+    if (target) return finishDefeats(state, owner, state.players[owner].units.filter(u => u.instanceId !== instanceId), [target])
+  }
+  return state
 }
 
 /**

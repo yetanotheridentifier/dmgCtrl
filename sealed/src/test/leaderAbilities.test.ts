@@ -5,7 +5,7 @@ import { describeAction } from '../utils/describeAction'
 import { effectivePower, effectiveHp } from '../engine/stats'
 import { unitHasKeyword } from '../engine/keywords'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
-import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
+import { TOKEN_ADVANTAGE, TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
 import { recordUnitDefeated, recordUnitEntered } from '../engine/types'
 import type { LeaderState } from '../engine/types'
@@ -742,6 +742,124 @@ describe('The Armorer (ASH_001) — play an upgrade from your resources (#348)',
     expect(done.players.player.units.find(u => u.instanceId === 'u1')!.upgrades.some(a => a.cardId === 'UP')).toBe(true)
     // Cost paid: R0 is exhausted; UP left the pool; the deck top became a ready resource.
     expect(done.players.player.resources).toEqual([{ cardId: 'R0', exhausted: true }, { cardId: 'TST_U2', exhausted: false }])
+  })
+})
+
+describe('Grand Admiral Thrawn (ASH_004) — front: attack with a unit, conditional Restore 2 (#348)', () => {
+  const cards = { ...CARDS, ASH_004: card({ id: 'ASH_004', type: 'leader', cost: 8, power: 5, hp: 8 }) }
+  // player controls 2 units (u1 power 3); the enemy controls `enemyUnits`.
+  const board = (enemyUnits: number) => state({
+    cards,
+    players: {
+      player: player({ leader: undeployed('ASH_004'), base: { cardId: 'TST_B', damage: 5 }, units: [unit('u1', 'TST_U1'), unit('u2', 'TST_U1')] }),
+      opponent: player({ units: Array.from({ length: enemyUnits }, (_, i) => unit(`e${i}`, 'TST_U1')) }),
+    },
+  })
+
+  it('grants Restore 2 to the attacker when unit counts are equal (heals your base on attack)', () => {
+    const raised = resolve(board(2), { type: 'useLeaderAbility', index: 0 })
+    expect(raised.pendingChoices?.[0]).toMatchObject({ kind: 'attackWithRestore', restore: 2 })
+    const done = resolve(raised, { type: 'attack', attackerId: 'u1', target: { kind: 'base' } })
+    expect(done.players.player.base.damage).toBe(3) // 5 healed by Restore 2
+    expect(done.players.opponent.base.damage).toBe(3) // u1 power 3 to the enemy base
+    expect(done.players.player.leader.exhausted).toBe(true)
+    expect(done.activePlayer).toBe('opponent')
+  })
+
+  it('grants no Restore when unit counts differ', () => {
+    const raised = resolve(board(3), { type: 'useLeaderAbility', index: 0 }) // 2 vs 3
+    expect(raised.pendingChoices?.[0]).toMatchObject({ kind: 'attackWithRestore', restore: 0 })
+    const done = resolve(raised, { type: 'attack', attackerId: 'u1', target: { kind: 'base' } })
+    expect(done.players.player.base.damage).toBe(5) // no heal
+  })
+})
+
+describe('Grand Admiral Thrawn (ASH_004) — deployed: On Attack may defeat a non-leader enemy unit (#348)', () => {
+  const cards = { ...CARDS, ASH_004: card({ id: 'ASH_004', type: 'leader', power: 5, hp: 8 }) }
+
+  it('offers to defeat a non-leader enemy unit when you control more units, and defeats the pick', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ leader: deployed('ASH_004'), units: [unit('L', 'ASH_004', { isLeader: true }), unit('u1', 'TST_U1')] }), // 2
+        opponent: player({ units: [unit('e1', 'TST_U1')] }), // 1
+      },
+    })
+    const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayDefeatEnemyUnit', targets: ['e1'] })
+    const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'e1' })
+    expect(done.players.opponent.units.find(u => u.instanceId === 'e1')).toBeUndefined()
+    expect(done.players.opponent.discard).toContain('TST_U1')
+    expect(done.activePlayer).toBe('opponent')
+  })
+
+  it('excludes enemy leader units from the targets', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ leader: deployed('ASH_004'), units: [unit('L', 'ASH_004', { isLeader: true }), unit('u1', 'TST_U1'), unit('u2', 'TST_U1')] }), // 3
+        opponent: player({ leader: { cardId: 'TST_L', deployed: true, epicActionUsed: true, exhausted: false }, units: [unit('eL', 'TST_L', { isLeader: true }), unit('e1', 'TST_U1')] }), // 2
+      },
+    })
+    const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayDefeatEnemyUnit', targets: ['e1'] }) // eL excluded
+  })
+
+  it('is not offered without a unit lead, and declining defeats nothing', () => {
+    const equal = state({
+      cards,
+      players: {
+        player: player({ leader: deployed('ASH_004'), units: [unit('L', 'ASH_004', { isLeader: true })] }), // 1
+        opponent: player({ units: [unit('e1', 'TST_U1')] }), // 1
+      },
+    })
+    expect(resolve(equal, { type: 'attack', attackerId: 'L', target: { kind: 'base' } }).pendingChoices).toBeUndefined()
+  })
+
+  it('the attacked unit still dies from combat when the ability defeats a DIFFERENT unit', () => {
+    const s = state({
+      cards: { ...cards, DEF: card({ id: 'DEF', type: 'unit', arena: 'ground', power: 2, hp: 5 }) },
+      players: {
+        player: player({ leader: deployed('ASH_004'), units: [unit('L', 'ASH_004', { isLeader: true }), unit('u1', 'TST_U1'), unit('u2', 'TST_U1')] }), // 3
+        opponent: player({ units: [unit('e1', 'DEF'), unit('e2', 'TST_U1')] }), // 2 → Thrawn has the lead
+      },
+    })
+    // Thrawn (power 5) attacks e1 (hp 5) — lethal. On Attack, defeat a DIFFERENT unit (e2).
+    const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'unit', instanceId: 'e1' } })
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayDefeatEnemyUnit' })
+    const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'e2' })
+    expect(done.players.opponent.units.find(u => u.instanceId === 'e2')).toBeUndefined() // ability defeat
+    expect(done.players.opponent.units.find(u => u.instanceId === 'e1')).toBeUndefined() // combat: 5 dmg ≥ 5 hp
+  })
+
+  it('the attacked unit still dies when it ALSO has an On Defense ability (double suspend)', () => {
+    const s = state({
+      cards: { ...cards, DEF: card({ id: 'DEF', type: 'unit', arena: 'ground', power: 2, hp: 5 }) },
+      players: {
+        player: player({ leader: deployed('ASH_004'), units: [unit('L', 'ASH_004', { isLeader: true }), unit('u1', 'TST_U1'), unit('u2', 'TST_U1')] }),
+        opponent: player({ units: [unit('e1', 'DEF', { upgrades: [{ cardId: 'ASH_210', owner: 'opponent' }] }), unit('e2', 'TST_U1')] }), // e1 has DDC Defender (On Defense)
+      },
+    })
+    const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'unit', instanceId: 'e1' } })
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayDefeatEnemyUnit' })
+    // 1) defeat a different unit (e2); 2) the defender's On Defense fires; decline it.
+    const afterDefeat = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'e2' })
+    expect(afterDefeat.pendingChoices?.[0]).toMatchObject({ kind: 'mayDamageExhaust' }) // e1's On Defense
+    const done = resolve(afterDefeat, { type: 'skipTrigger', choiceId: afterDefeat.pendingChoices![0].id })
+    expect(done.players.opponent.units.find(u => u.instanceId === 'e1')).toBeUndefined() // still defeated by combat
+  })
+
+  it('defeats a shielded enemy unit (a defeat bypasses Shields)', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ leader: deployed('ASH_004'), units: [unit('L', 'ASH_004', { isLeader: true }), unit('u1', 'TST_U1')] }),
+        opponent: player({ units: [unit('e1', 'TST_U1', { upgrades: [{ cardId: TOKEN_SHIELD, owner: 'opponent' }] })] }),
+      },
+    })
+    const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
+    const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'e1' })
+    expect(done.players.opponent.units.find(u => u.instanceId === 'e1')).toBeUndefined() // shield didn't save it
   })
 })
 

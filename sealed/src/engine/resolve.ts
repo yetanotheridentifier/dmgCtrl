@@ -6,7 +6,7 @@ import { addLastingEffect, clearLastingEffects, resetPhaseEvents, recordUnitEnte
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
-import { applyUnitDamage, dealDamageToUnit } from './combat'
+import { applyUnitDamage, dealDamageToUnit, defeatUnit } from './combat'
 import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
@@ -61,7 +61,15 @@ export function resolve(state: GameState, action: Action): GameState {
         const grantCardId = choice?.kind === 'support'
           ? state.players[state.activePlayer].units.find(u => u.instanceId === choice.unitId)?.cardId
           : choice?.kind === 'mayAttack' ? choice.grantCardId : undefined
-        const before = grantCardId ? grantAbilityCard(state, action.attackerId, grantCardId) : state
+        let before = grantCardId ? grantAbilityCard(state, action.attackerId, grantCardId) : state
+        // Thrawn front (#348): the chosen attacker gains Restore N for this attack.
+        if (choice?.kind === 'attackWithRestore' && choice.restore > 0) {
+          before = updatePlayer(before, before.activePlayer, {
+            units: before.players[before.activePlayer].units.map(u =>
+              u.instanceId === action.attackerId ? { ...u, grantedKeywords: [{ name: 'Restore', value: choice.restore }] } : u,
+            ),
+          })
+        }
         let attacked = attack(before, action.attackerId, action.target)
         // Consume the ambush/support choice this attack resolved. Support-granted
         // keywords are cleared inside completeAttack (after they're used), so they
@@ -511,6 +519,14 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       break
     }
+    case 'mayDefeatEnemyUnit':
+      // Thrawn deployed (#348): defeat the chosen non-leader enemy unit.
+      if (targetInstanceId) {
+        next = defeatUnit(next, targetInstanceId)
+        next = checkWin(next)
+        if (next.winner !== null) return next
+      }
+      break
     case 'mayDeployLeader':
       // Grogu (#348): deploy via the triggered epic action — not once-per-game, so it doesn't burn
       // the epic action (`epicUsed: false`), letting Grogu redeploy after being defeated + readying.
