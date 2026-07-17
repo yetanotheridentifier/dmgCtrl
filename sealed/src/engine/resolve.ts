@@ -1,13 +1,13 @@
 import type { Action, AttackTarget } from './actions'
 import type { GameState, PlayerId, UnitState } from './types'
-import type { PendingChoice } from './types'
+import type { PendingChoice, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeChoice, hasPendingChoices, pushChoice } from './types'
-import { addLastingEffect, clearLastingEffects, resetPhaseEvents, recordUnitEntered, markAbilityUsed } from './types'
+import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, markAbilityUsed } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
-import { effectiveCost, enemyAttackTargets, supportGrantedKeywords } from './legalMoves'
+import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
-import { applyUnitDamage, dealDamageToUnit } from './combat'
-import { exhaustUnit, findUnit, giveToken, defeatUpgrade, dealDamageToBase, firstCardUpgrade } from './effects'
+import { applyUnitDamage, dealDamageToUnit, defeatUnit } from './combat'
+import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
@@ -38,25 +38,38 @@ export function resolve(state: GameState, action: Action): GameState {
     case 'playUpgrade':
       return requirePhase(state, 'action', () => {
         const played = playUpgrade(state, action.handIndex, action.targetInstanceId)
+        // A raised choice (Camtono's look-at, the unique-rule defeat) keeps the turn (#342/#348).
+        if (played.winner === null && activeChoice(played)) return resetPasses(played)
         return played.winner !== null ? played : advanceTurn(resetPasses(played))
       })
     case 'deployLeader':
-      return requirePhase(state, 'action', () => advanceTurn(resetPasses(deployLeader(state))))
+      return requirePhase(state, 'action', () => {
+        // Deploying a Support leader opens a support attack — hold the turn to resolve it (#348).
+        const deployed = deployLeader(state)
+        return activeChoice(deployed) ? resetPasses(deployed) : advanceTurn(resetPasses(deployed))
+      })
     case 'useAbility':
       return requirePhase(state, 'action', () => useAbility(state, action.instanceId, action.cardId, action.index))
     case 'useLeaderAbility':
       return requirePhase(state, 'action', () => useLeaderAbility(state, action.index, action.targetInstanceId))
     case 'attack':
       return requirePhase(state, 'action', () => {
-        // An attack resolves a pending choice, if one is active (#334/#343). Support
-        // lends its keywords to the chosen attacker; Improvised Identity's mayAttack
-        // lends the discarded unit's full abilities.
+        // An attack resolves a pending choice, if one is active (#334/#343/#348). Both Support
+        // ("gains this unit's other abilities") and Improvised Identity's mayAttack lend a source
+        // card's full abilities (keywords + triggered) to the chosen attacker for this attack.
         const choice = activeChoice(state)
-        const before = choice?.kind === 'support'
-          ? grantSupportKeywords(state, choice.unitId, action.attackerId)
-          : choice?.kind === 'mayAttack' && choice.grantCardId
-            ? grantAbilityCard(state, action.attackerId, choice.grantCardId)
-            : state
+        const grantCardId = choice?.kind === 'support'
+          ? state.players[state.activePlayer].units.find(u => u.instanceId === choice.unitId)?.cardId
+          : choice?.kind === 'mayAttack' ? choice.grantCardId : undefined
+        let before = grantCardId ? grantAbilityCard(state, action.attackerId, grantCardId) : state
+        // Thrawn front (#348): the chosen attacker gains Restore N for this attack.
+        if (choice?.kind === 'attackWithRestore' && choice.restore > 0) {
+          before = updatePlayer(before, before.activePlayer, {
+            units: before.players[before.activePlayer].units.map(u =>
+              u.instanceId === action.attackerId ? { ...u, grantedKeywords: [{ name: 'Restore', value: choice.restore }] } : u,
+            ),
+          })
+        }
         let attacked = attack(before, action.attackerId, action.target)
         // Consume the ambush/support choice this attack resolved. Support-granted
         // keywords are cleared inside completeAttack (after they're used), so they
@@ -72,7 +85,7 @@ export function resolve(state: GameState, action: Action): GameState {
     case 'skipTrigger':
       return requirePhase(state, 'action', () => resolveSkip(state, action.choiceId))
     case 'acceptChoice':
-      return requirePhase(state, 'action', () => resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex))
+      return requirePhase(state, 'action', () => resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex, action.baseTarget, action.handIndex))
     case 'resourceCard':
       return requirePhase(state, 'regroup', () => regroupChoice(state, action.handIndex))
     case 'skipResource':
@@ -192,26 +205,37 @@ function setupResourceChoice(state: GameState, handIndex: number): GameState {
  * responsible for spending cost / removing the card from its source zone, and for the
  * win check afterwards.
  */
-function enterUnit(state: GameState, owner: PlayerId, cardId: string): GameState {
+function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: boolean): GameState {
   const card = state.cards[cardId]
+  // Keywords the played unit gains on entry: its card's, plus any "next unit you play this phase"
+  // grant (Sabine → Shielded, #348) — so a granted Ambush/Shielded/Hidden fires just like a printed one.
+  const grantKeywords = state.players[owner].nextPlayedUnitKeywords ?? []
+  const entersWith = (name: string): boolean => hasKeyword(state, cardId, name) || grantKeywords.some(k => k.name === name)
   // Ambush: the unit may immediately attack an enemy unit, so it enters ready (#334).
-  const ambush = hasKeyword(state, cardId, 'Ambush')
+  const ambush = entersWith('Ambush')
   const newUnit: UnitState = {
     instanceId: `u${state.instanceCounter}`,
     cardId,
     arena: card?.arena ?? 'ground',
     damage: 0,
-    exhausted: !ambush, // units normally enter exhausted (CR 1.5.4b); Ambush enters ready
+    // Units normally enter exhausted (CR 1.5.4b); Ambush — or an ability (Fennec, #348) — enters ready.
+    exhausted: ready === true ? false : !ambush,
     isLeader: false,
     // Shielded: the unit enters play with a shield token (#334).
-    upgrades: hasKeyword(state, cardId, 'Shielded') ? [{ cardId: TOKEN_SHIELD, owner }] : [],
+    upgrades: entersWith('Shielded') ? [{ cardId: TOKEN_SHIELD, owner }] : [],
     // Hidden: the unit enters play hidden — unattackable until the next phase (#334).
-    ...(hasKeyword(state, cardId, 'Hidden') ? { hidden: true } : {}),
+    ...(entersWith('Hidden') ? { hidden: true } : {}),
   }
 
   let next = updatePlayer(state, owner, { units: [...state.players[owner].units, newUnit] })
   next = { ...next, instanceCounter: state.instanceCounter + 1 }
   next = recordUnitEntered(next, owner, newUnit.instanceId) // "entered play this phase" (#347)
+  // Consume the "next unit" grant: give the unit the keywords for this phase (a lasting effect, so an
+  // ongoing keyword like Sentinel counts too) and clear it — only the first unit played benefits (#348).
+  if (grantKeywords.length > 0) {
+    next = addLastingEffect(next, { targetInstanceId: newUnit.instanceId, keywords: grantKeywords })
+    next = updatePlayer(next, owner, { nextPlayedUnitKeywords: undefined })
+  }
 
   // Ambush: open the pending attack only if there's actually an enemy to hit;
   // otherwise the unit just enters play exhausted, as normal (#334).
@@ -223,18 +247,15 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string): GameState
         units: next.players[owner].units.map(u => (u.instanceId === newUnit.instanceId ? { ...u, exhausted: true } : u)),
       })
     }
-  } else if (hasKeyword(state, cardId, 'Support')) {
-    // Support: open the pending attack if there's another ready unit to attack with.
-    const others = next.players[owner].units.filter(u => u.instanceId !== newUnit.instanceId && !u.exhausted)
-    if (others.length > 0) {
-      next = pushChoice(next, { kind: 'support', id: newUnit.instanceId, controller: owner, unitId: newUnit.instanceId })
-    }
+  } else if (unitHasKeyword(next, next.players[owner].units.find(u => u.instanceId === newUnit.instanceId)!, 'Support')) {
+    next = openSupportChoice(next, owner, newUnit.instanceId)
   }
 
   // "When Played" abilities fire after the card enters play (CR 6.2.0f).
   next = runTrigger(next, 'whenPlayed', { owner, cardId, sourceInstanceId: newUnit.instanceId })
   // "When you play or create a unit" reacts on the controller's other cards (#309).
-  return fireEntersPlay(next, owner, newUnit.instanceId)
+  next = fireEntersPlay(next, owner, newUnit.instanceId)
+  return uniqueUnitCheck(next, owner) // two units with the same unique title → defeat one
 }
 
 /** Fire "When you play or create a unit" (#309) on the owner's undeployed leader and its
@@ -264,14 +285,16 @@ function playCard(state: GameState, handIndex: number): GameState {
   return checkWin(enterUnit(next, playerId, card.id))
 }
 
-/** Lend a Support unit's keywords to the chosen attacker for one attack (#334). */
-function grantSupportKeywords(state: GameState, supportUnitId: string, attackerId: string): GameState {
-  const granted = supportGrantedKeywords(state, supportUnitId)
-  if (granted.length === 0) return state
-  const playerId = state.activePlayer
-  return updatePlayer(state, playerId, {
-    units: state.players[playerId].units.map(u => (u.instanceId === attackerId ? { ...u, grantedKeywords: granted } : u)),
-  })
+/**
+ * Open the Support pending choice (#334/#348): another ready unit may attack, gaining the Support
+ * source's abilities for that attack (see the `support` case in the attack dispatcher). No choice
+ * if there's no other ready unit. Shared by playing a Support unit and deploying a Support leader.
+ */
+function openSupportChoice(state: GameState, owner: PlayerId, sourceInstanceId: string): GameState {
+  const others = state.players[owner].units.filter(u => u.instanceId !== sourceInstanceId && !u.exhausted)
+  return others.length > 0
+    ? pushChoice(state, { kind: 'support', id: sourceInstanceId, controller: owner, unitId: sourceInstanceId })
+    : state
 }
 
 /** Strip transient per-attack grants (Support keywords #334, Improvised Identity
@@ -312,8 +335,18 @@ function resumeAfterChoice(state: GameState, resolved: PendingChoice): GameState
   }
   // A combat suspended for an On Defense choice resumes once the queue drains (#342).
   if (state.pendingAttack) return resumePendingAttack(state)
+  // A "when you take the initiative" choice (#348): complete the deferred turn transition.
+  if (state.pendingInitiativeEndsPhase !== undefined) {
+    const cleared = { ...state, pendingInitiativeEndsPhase: undefined }
+    return state.pendingInitiativeEndsPhase ? enterRegroup(cleared) : advanceTurn(resetPasses(cleared))
+  }
   if (resolved.kind === 'payOrExhaust' && resolved.resumeAtInitiative) {
     return { ...state, activePlayer: state.initiative }
+  }
+  // An opponent-interjected choice (Sabine, #348) drained: restore the original actor, then advance
+  // the turn as their action normally would (so it becomes the opponent's turn).
+  if (state.pendingResumeActive !== undefined) {
+    return advanceTurn(resetPasses({ ...state, activePlayer: state.pendingResumeActive, pendingResumeActive: undefined }))
   }
   return advanceTurn(resetPasses(state))
 }
@@ -342,7 +375,7 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
 }
 
 /** Accept a pending "may…" choice — pay the cost / play the card / search (#342/#343). */
-function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: string, deckIndex?: number): GameState {
+function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: string, deckIndex?: number, optionIndex?: number, baseTarget?: PlayerId, handIndex?: number): GameState {
   const choice = findChoice(state, choiceId)
   if (!choice) throw new Error(`acceptChoice: no choice ${choiceId}`)
   let next = removeChoice(state, choice.id)
@@ -425,13 +458,153 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         if (choice.markUsed) next = markAbilityUsed(next, choice.controller, choice.markUsed.instanceId, choice.markUsed.key)
       }
       break
-    case 'mayDefeatUpgradeForBase': {
-      // Vane: defeat a card upgrade on the chosen friendly unit, then deal 2 to the enemy base (#309).
-      const host = targetInstanceId ? next.players[choice.controller].units.find(u => u.instanceId === targetInstanceId) : undefined
-      const upgrade = host && firstCardUpgrade(next, host)
-      if (host && upgrade) {
-        next = defeatUpgrade(next, host.instanceId, upgrade)
-        next = dealDamageToBase(next, opponentOf(choice.controller), 2)
+    case 'chooseOne': {
+      // Choose-one/modal (#348): apply the picked option's effect (Sloane's arena buff).
+      const opt = choice.options[optionIndex ?? 0]
+      if (opt?.kind === 'arenaLastingBuff') {
+        for (const owner of ['player', 'opponent'] as PlayerId[]) {
+          for (const u of next.players[owner].units) {
+            if (u.arena === opt.arena) next = addLastingEffect(next, { targetInstanceId: u.instanceId, power: opt.power, hp: opt.hp, keywords: opt.keywords })
+          }
+        }
+      }
+      break
+    }
+    case 'selectUpgradeToDefeat': {
+      // Vane (#309/#348): defeat the chosen friendly upgrade (card or token), then choose where the
+      // 2 damage lands (a base — or, deployed, the defending unit or a base).
+      const pick = choice.candidates[optionIndex ?? 0]
+      if (pick) {
+        next = defeatUpgradeAt(next, pick.unitId, pick.upgradeIndex)
+        const inPlay = new Set([...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId))
+        const spec = choice.then
+        next = pushChoice(next, {
+          kind: 'selectDamageTarget',
+          id: `${choice.id}-dmg`,
+          controller: choice.controller,
+          amount: spec.amount,
+          unitTargets: spec.unitTargets.filter(id => inPlay.has(id)), // a target may have left play
+          baseTargets: spec.baseTargets,
+        })
+      }
+      break
+    }
+    case 'selectDamageTarget': {
+      // Deal the chosen amount to the picked base or unit (#348).
+      if (baseTarget) next = dealDamageToBase(next, baseTarget, choice.amount)
+      else if (targetInstanceId) next = dealDamageToUnit(next, targetInstanceId, choice.amount)
+      next = checkWin(next)
+      if (next.winner !== null) return next
+      break
+    }
+    case 'mayExhaustLeaderHealUnit': {
+      // Luke front: exhaust the (undeployed) leader to heal the attacker (#348).
+      const p = next.players[choice.controller]
+      if (!p.leader.exhausted) {
+        next = updatePlayer(next, choice.controller, { leader: { ...p.leader, exhausted: true } })
+        next = healUnit(next, choice.unitId, choice.amount)
+      }
+      break
+    }
+    case 'selectHealTarget':
+      // Luke deployed: heal the chosen unit or your base (#348).
+      if (baseTarget) next = healBase(next, baseTarget, choice.amount)
+      else if (targetInstanceId) next = healUnit(next, targetInstanceId, choice.amount)
+      break
+    case 'selectUnitToExhaust':
+      // Fennec's additional cost (#348): exhaust the chosen unit, then the play-from-hand step.
+      if (targetInstanceId) {
+        next = exhaustUnit(next, targetInstanceId)
+        const candidates = affordableHandUnits(next, choice.controller, 0, choice.then.costDelta)
+        if (candidates.length > 0) {
+          next = pushChoice(next, { kind: 'playUnitFromHand', id: `${choice.id}-play`, controller: choice.controller, candidates, costDelta: choice.then.costDelta, entersReady: choice.then.entersReady })
+        }
+      }
+      break
+    case 'mayPayToDraw':
+      // Mandalorian (#348): optionally pay the cost, then draw. `cost` 0 = a free "may draw".
+      next = updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost))
+      next = drawCards(next, choice.controller, choice.draw)
+      break
+    case 'selectUniqueToDefeat': {
+      // Unique rule (#348): defeat the chosen duplicate upgrade, then re-check (3+ copies → repeat).
+      const pick = choice.candidates[optionIndex ?? 0]
+      if (pick) {
+        next = defeatUpgradeAt(next, pick.unitId, pick.upgradeIndex)
+        next = uniqueUpgradeCheck(next, choice.controller)
+      }
+      break
+    }
+    case 'opponentGivesAdvantage':
+      // Sabine front (#348): the opponent gives `count` Advantage tokens to their chosen unit.
+      if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
+        for (let i = 0; i < choice.count; i++) next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+      }
+      break
+    case 'selectUniqueUnitToDefeat': {
+      // Unique rule for units (#348): defeat the chosen duplicate unit, then re-check (3+ → repeat).
+      if (targetInstanceId && choice.candidates.includes(targetInstanceId)) {
+        next = defeatUnit(next, targetInstanceId)
+        next = checkWin(next)
+        if (next.winner !== null) return next
+        next = uniqueUnitCheck(next, choice.controller)
+      }
+      break
+    }
+    case 'mayDefeatEnemyUnit':
+      // Thrawn deployed (#348): defeat the chosen non-leader enemy unit.
+      if (targetInstanceId) {
+        next = defeatUnit(next, targetInstanceId)
+        next = checkWin(next)
+        if (next.winner !== null) return next
+      }
+      break
+    case 'mayDeployLeader':
+      // Grogu (#348): deploy via the triggered epic action — not once-per-game, so it doesn't burn
+      // the epic action (`epicUsed: false`), letting Grogu redeploy after being defeated + readying.
+      next = deployLeader(next, false)
+      break
+    case 'selectResourceUpgrade': {
+      // The Armorer (#348): the chosen resource upgrade → pick where to attach it.
+      const pick = choice.candidates[optionIndex ?? 0]
+      if (pick) {
+        const targets = validUpgradeTargets(next, choice.controller, pick.resourceIndex, pick.cardId, choice.then.payCost, choice.then.targetUnits)
+        if (targets.length > 0) {
+          next = pushChoice(next, { kind: 'attachResourceUpgrade', id: `${choice.id}-attach`, controller: choice.controller, resourceIndex: pick.resourceIndex, cardId: pick.cardId, targets, payCost: choice.then.payCost })
+        }
+      }
+      break
+    }
+    case 'attachResourceUpgrade': {
+      // Play the upgrade from resources onto the chosen unit, then resource the top of the deck (#348).
+      const owner = choice.controller
+      const p = next.players[owner]
+      const resource = p.resources[choice.resourceIndex]
+      const card = next.cards[choice.cardId]
+      const targetUnit = targetInstanceId ? [...next.players.player.units, ...next.players.opponent.units].find(u => u.instanceId === targetInstanceId) : undefined
+      if (resource?.cardId === choice.cardId && card?.type === 'upgrade' && targetUnit) {
+        let pl = { ...p, resources: p.resources.filter((_, i) => i !== choice.resourceIndex) }
+        if (choice.payCost) pl = payCost(pl, effectiveCost(next, owner, card, targetUnit)) // front pays; back is free
+        pl = { ...pl, units: pl.units.map(u => (u.instanceId === targetInstanceId ? { ...u, upgrades: [...u.upgrades, { cardId: choice.cardId, owner }] } : u)) }
+        next = updatePlayer(next, owner, pl)
+        next = resourceTopOfDeck(next, owner) // "If you do, resource the top card of your deck."
+        next = runTrigger(next, 'whenPlayed', { owner, cardId: choice.cardId, sourceInstanceId: targetInstanceId })
+        next = uniqueUpgradeCheck(next, owner) // unique rule (#348)
+        next = checkWin(next)
+        if (next.winner !== null) return next
+      }
+      break
+    }
+    case 'playUnitFromHand': {
+      // Play the chosen hand unit, paying its cost + costDelta, entering ready if the ability says so (#348).
+      const p = next.players[choice.controller]
+      const cardId = handIndex !== undefined ? p.hand[handIndex] : undefined
+      const card = cardId ? next.cards[cardId] : undefined
+      if (handIndex !== undefined && card?.type === 'unit') {
+        const cost = Math.max(0, effectiveCost(next, choice.controller, card) + choice.costDelta)
+        const paid = payCost(p, cost)
+        next = updatePlayer(next, choice.controller, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
+        next = enterUnit(next, choice.controller, cardId!, choice.entersReady)
         next = checkWin(next)
         if (next.winner !== null) return next
       }
@@ -481,10 +654,46 @@ function playTopCardFree(state: GameState, owner: PlayerId, cardId: string, targ
         u.instanceId === targetInstanceId ? { ...u, upgrades: [...u.upgrades, { cardId, owner }] } : u,
       ),
     })
-    return runTrigger(next, 'whenPlayed', { owner, cardId, sourceInstanceId: targetInstanceId })
+    next = runTrigger(next, 'whenPlayed', { owner, cardId, sourceInstanceId: targetInstanceId })
+    return uniqueUpgradeCheck(next, owner) // unique rule (#348)
   }
   // Event (or an upgrade with no target): temporary stub — discard with no effect.
   return updatePlayer(next, owner, { discard: [...next.players[owner].discard, cardId] })
+}
+
+/**
+ * Unique rule (CR): a player can't control two upgrades with the same title. After an upgrade
+ * attaches, if `owner` now controls ≥2 unique upgrades of one card id, raise a choice to defeat one
+ * (their pick). Re-run after each defeat so 3+ copies resolve down to one. Titles are keyed by card
+ * id (a deck's duplicates share it). (The unit-side unique rule is a follow-up.)
+ */
+function uniqueUpgradeCheck(state: GameState, owner: PlayerId): GameState {
+  const instances: UpgradeRef[] = []
+  for (const pid of ['player', 'opponent'] as PlayerId[]) {
+    for (const u of state.players[pid].units) {
+      u.upgrades.forEach((up, i) => {
+        if (up.owner === owner && state.cards[up.cardId]?.unique) instances.push({ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId })
+      })
+    }
+  }
+  const dupCardId = instances.map(r => r.cardId).find((id, i, arr) => arr.indexOf(id) !== i)
+  if (!dupCardId) return state
+  const candidates = instances.filter(r => r.cardId === dupCardId)
+  return pushChoice(state, { kind: 'selectUniqueToDefeat', id: `unique-${dupCardId}`, controller: owner, cardId: dupCardId, candidates })
+}
+
+/**
+ * Unique rule for units (CR): a player can't control two units that share a unique title. After a
+ * unit enters play, if `owner` now controls ≥2 units of one card id, raise a choice to defeat one
+ * (their pick, off the board). Re-run after each defeat so 3+ copies resolve down to one. Keyed by
+ * card id (a deck's duplicates share it), mirroring the upgrade rule.
+ */
+function uniqueUnitCheck(state: GameState, owner: PlayerId): GameState {
+  const uniqueIds = state.players[owner].units.filter(u => state.cards[u.cardId]?.unique).map(u => u.cardId)
+  const dupCardId = uniqueIds.find((id, i, arr) => arr.indexOf(id) !== i)
+  if (!dupCardId) return state
+  const candidates = state.players[owner].units.filter(u => u.cardId === dupCardId).map(u => u.instanceId)
+  return pushChoice(state, { kind: 'selectUniqueUnitToDefeat', id: `unique-unit-${dupCardId}`, controller: owner, cardId: dupCardId, candidates })
 }
 
 /**
@@ -524,14 +733,15 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
     cardId: card.id,
     sourceInstanceId: targetInstanceId,
   })
+  next = uniqueUpgradeCheck(next, playerId) // two upgrades with the same title → defeat one
   return checkWin(next)
 }
 
 /**
  * Use a unit's activated "Action:" ability (#343). A once-per-round ability is marked
- * spent before its effect runs (so effects that raise a choice carry the mark), then
- * the turn passes — unless the ability raised a pending choice (e.g. a search), which
- * keeps the turn with the active player to resolve it.
+ * spent before its effect runs (so effects that raise a choice carry the mark), its
+ * `cost` (C=N) is paid, then the turn passes — unless the ability raised a pending choice
+ * (e.g. a search), which keeps the turn with the active player to resolve it.
  */
 function useAbility(state: GameState, instanceId: string, cardId: string, index: number): GameState {
   const found = findUnit(state, instanceId)
@@ -541,6 +751,7 @@ function useAbility(state: GameState, instanceId: string, cardId: string, index:
   const owner = found.owner
 
   let next = state
+  if (ability.cost) next = updatePlayer(next, owner, payCost(next.players[owner], ability.cost))
   if (ability.oncePerRound) {
     const key = actionAbilityKey(cardId, index)
     next = updatePlayer(next, owner, {
@@ -572,13 +783,32 @@ function useLeaderAbility(state: GameState, index: number, targetInstanceId?: st
   next = ability.effect(next, { owner, cardId: p.leader.cardId, targetInstanceId })
   next = checkWin(next)
   if (next.winner !== null) return next
+  next = handOffOpponentChoice(next, owner)
   return hasPendingChoices(next) ? next : advanceTurn(resetPasses(next))
 }
 
-function deployLeader(state: GameState): GameState {
+/**
+ * If an ability raised a choice controlled by the OTHER player (Sabine → "an opponent gives …",
+ * #348) and the actor has none of their own left to resolve, hand control to that opponent and
+ * remember the actor so `resumeAfterChoice` restores them and advances the turn once it drains.
+ * Generic; a no-op when the actor has their own choice to resolve first, or none was raised.
+ */
+function handOffOpponentChoice(state: GameState, actor: PlayerId): GameState {
+  if (!hasPendingChoices(state) || state.pendingChoices!.some(c => c.controller === actor)) return state
+  const other = state.pendingChoices![0].controller
+  return other === actor ? state : { ...state, activePlayer: other, pendingResumeActive: actor }
+}
+
+/**
+ * Deploy the active player's leader. The normal epic action sets `epicActionUsed` so it can't be
+ * used again (and a defeated leader can't redeploy, CR 3.4.5). Grogu's *triggered* deploy (#348)
+ * passes `epicUsed: false` — it's gated on "if this leader is ready", not once-per-game, so he can
+ * redeploy after being defeated once he readies at regroup.
+ */
+function deployLeader(state: GameState, epicUsed = true): GameState {
   const playerId = state.activePlayer
   const p = state.players[playerId]
-  if (p.leader.deployed || p.leader.epicActionUsed) {
+  if (p.leader.deployed || (epicUsed && p.leader.epicActionUsed)) {
     throw new Error('deployLeader: leader cannot deploy')
   }
 
@@ -594,24 +824,60 @@ function deployLeader(state: GameState): GameState {
     upgrades: [],
   }
 
-  const next = updatePlayer(state, playerId, {
-    leader: { ...p.leader, deployed: true, epicActionUsed: true },
+  let next = updatePlayer(state, playerId, {
+    leader: { ...p.leader, deployed: true, epicActionUsed: epicUsed ? true : p.leader.epicActionUsed },
     units: [...p.units, leaderUnit],
   })
-  return { ...next, instanceCounter: state.instanceCounter + 1 }
+  next = { ...next, instanceCounter: state.instanceCounter + 1 }
+  // A deployed leader enters ready (CR 3.4.4) and runs its on-enter keywords — including any GRANTED
+  // at deploy (Moff Gideon gains keywords from an Imperial in your discard, #348): a Shield token,
+  // Hidden, and an Ambush or Support attack.
+  return applyDeployKeywords(next, playerId, leaderUnit.instanceId)
+}
+
+/**
+ * On-enter keyword effects for a just-DEPLOYED leader unit (#334/#348): Shielded → a Shield token,
+ * Hidden → unattackable until the next phase, then Ambush (this unit may attack now) or Support
+ * (another ready unit may attack). Reads the unit's LIVE keywords, so keywords granted at deploy
+ * count (Moff Gideon from a discard Imperial). A leader always enters ready, so an Ambush with no
+ * target simply stays ready. (Units played from hand run the equivalent inline in `enterUnit`.)
+ */
+function applyDeployKeywords(state: GameState, owner: PlayerId, instanceId: string): GameState {
+  const unitNow = (s: GameState) => s.players[owner].units.find(u => u.instanceId === instanceId)!
+  let next = state
+  if (unitHasKeyword(next, unitNow(next), 'Shielded') && !hasToken(unitNow(next).upgrades, TOKEN_SHIELD)) {
+    next = updatePlayer(next, owner, {
+      units: next.players[owner].units.map(u => (u.instanceId === instanceId ? { ...u, upgrades: [...u.upgrades, { cardId: TOKEN_SHIELD, owner }] } : u)),
+    })
+  }
+  if (unitHasKeyword(next, unitNow(next), 'Hidden') && !unitNow(next).hidden) {
+    next = updatePlayer(next, owner, {
+      units: next.players[owner].units.map(u => (u.instanceId === instanceId ? { ...u, hidden: true } : u)),
+    })
+  }
+  if (unitHasKeyword(next, unitNow(next), 'Ambush')) {
+    if (enemyAttackTargets(next, unitNow(next)).targets.length > 0) {
+      next = pushChoice(next, { kind: 'ambush', id: instanceId, controller: owner, unitId: instanceId })
+    }
+  } else if (unitHasKeyword(next, unitNow(next), 'Support')) {
+    next = openSupportChoice(next, owner, instanceId)
+  }
+  return next
 }
 
 function takeInitiative(state: GameState): GameState {
   const playerId = state.activePlayer
-  const taken: GameState = {
-    ...state,
-    initiative: playerId,
-    initiativeTakenBy: playerId,
+  // Taking the initiative immediately after an opponent's pass ends the action phase (CR 1.15.5c).
+  const endsPhase = state.consecutivePasses >= 1
+  let taken: GameState = { ...state, initiative: playerId, initiativeTakenBy: playerId }
+  // "When you take the initiative" (#348, Mandalorian): fire before the turn transition. If it raises
+  // a choice, hold with the taker and finish the transition once the choice drains (resumeAfterChoice).
+  const before = taken.pendingChoices?.length ?? 0
+  taken = runLeaderTrigger(taken, 'whenTakeInitiative', playerId)
+  if ((taken.pendingChoices?.length ?? 0) > before) {
+    return { ...taken, pendingInitiativeEndsPhase: endsPhase }
   }
-  // Taking the initiative immediately after an opponent's pass ends the
-  // action phase (CR 1.15.5c).
-  if (state.consecutivePasses >= 1) return enterRegroup(taken)
-  return { ...taken, activePlayer: opponentOf(playerId) }
+  return endsPhase ? enterRegroup(taken) : { ...taken, activePlayer: opponentOf(playerId) }
 }
 
 function pass(state: GameState): GameState {
@@ -761,28 +1027,41 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
     return clearGrantedKeywords(checkWin(next))
   }
 
-  const defender = state.players[enemyId].units.find(u => u.instanceId === target.instanceId)
+  const defenderBefore = state.players[enemyId].units.find(u => u.instanceId === target.instanceId)
   // The defender may have been defeated before damage → the attack fizzles.
-  if (!defender) {
+  if (!defenderBefore) {
     let next = consumeAdvantage(state, playerId, attackerId)
     next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: 0 })
     return clearGrantedKeywords(checkWin(next))
   }
 
-  const counterPower = effectivePower(state, defender)
+  // Saboteur: when this unit attacks, defeat the defending unit's Shields before combat damage
+  // (CR 6.3.2b) — not optional, so a shield can't soak the hit. (Sentinel-ignoring is in legalMoves.)
+  const preCombat = unitHasKeyword(state, attacker, 'Saboteur') && hasToken(defenderBefore.upgrades, TOKEN_SHIELD)
+    ? updatePlayer(state, enemyId, {
+        units: state.players[enemyId].units.map(u =>
+          u.instanceId === defenderBefore.instanceId ? { ...u, upgrades: u.upgrades.filter(a => a.cardId !== TOKEN_SHIELD) } : u,
+        ),
+      })
+    : state
+  const defender = preCombat.players[enemyId].units.find(u => u.instanceId === target.instanceId)!
+
+  // Combat-conditional auras (Grogu, #348) apply to the defender during damage resolution.
+  const combat = { attackerInstanceId: attackerId, defenderInstanceId: defender.instanceId }
+  const counterPower = effectivePower(preCombat, defender, { combat })
 
   // Overwhelm: excess combat damage beyond the defender's remaining HP hits the
   // defending player's base (CR 1.9.11). A shielded defender takes no damage, so
   // there is no excess to trample (#308).
-  const remainingHp = effectiveHp(state, defender) - defender.damage
-  const overwhelmExcess = unitHasKeyword(state, attacker, 'Overwhelm')
+  const remainingHp = effectiveHp(preCombat, defender, { combat }) - defender.damage
+  const overwhelmExcess = unitHasKeyword(preCombat, attacker, 'Overwhelm')
     && !hasToken(defender.upgrades, TOKEN_SHIELD)
-    && !unitNegatesOverwhelm(state, defender)
+    && !unitNegatesOverwhelm(preCombat, defender)
     ? Math.max(0, attackerPower - remainingHp)
     : 0
 
   // Simultaneous combat damage (CR 1.9.10).
-  let next = applyUnitDamage(state, enemyId, new Map([[defender.instanceId, attackerPower]]))
+  let next = applyUnitDamage(preCombat, enemyId, new Map([[defender.instanceId, attackerPower]]))
   next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, counterPower]]))
 
   if (overwhelmExcess > 0) {
@@ -865,8 +1144,9 @@ function sweepUnitDefeats(state: GameState): GameState {
 
 function enterRegroup(state: GameState): GameState {
   // "This phase" buffs expire and per-phase tracking resets as the phase changes (#347); a unit
-  // that the expired buff was keeping alive is then defeated as a state-based check.
-  let next: GameState = resetPhaseEvents(clearLastingEffects(clearHidden({ ...state, phase: 'regroup', consecutivePasses: 0 })))
+  // that the expired buff was keeping alive is then defeated as a state-based check. Unused
+  // "next unit you play this phase" grants (Sabine, #348) also lapse at the phase boundary.
+  let next: GameState = clearNextUnitGrants(resetPhaseEvents(clearLastingEffects(clearHidden({ ...state, phase: 'regroup', consecutivePasses: 0 }))))
   next = sweepUnitDefeats(next)
   next = drawForRegroup(next, 'player')
   next = drawForRegroup(next, 'opponent')

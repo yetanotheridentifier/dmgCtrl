@@ -1,4 +1,5 @@
-import type { GameState, PlayerId, UnitState } from './types'
+import type { GameState, KeywordInstance, PlayerId, UnitState } from './types'
+import { updatePlayer } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { getCardDefinition } from './abilities'
 
@@ -46,15 +47,43 @@ export function giveToken(state: GameState, instanceId: string, tokenId: string)
   return patchUnit(state, found.owner, instanceId, u => ({ ...u, upgrades: [...u.upgrades, { cardId: tokenId, owner: found.owner }] }))
 }
 
+/**
+ * Grant keywords to the NEXT unit `owner` plays this phase (Sabine Wren → Shielded, #348). Merges
+ * with any existing grant (union by name), so repeated grants don't stack duplicates. Consumed by
+ * the next `enterUnit`; cleared at regroup. Generic — reusable by any "your next unit gains …" card.
+ */
+export function grantNextUnitKeywords(state: GameState, owner: PlayerId, keywords: KeywordInstance[]): GameState {
+  const existing = state.players[owner].nextPlayedUnitKeywords ?? []
+  const merged = [...existing]
+  for (const k of keywords) if (!merged.some(m => m.name === k.name)) merged.push(k)
+  return updatePlayer(state, owner, { nextPlayedUnitKeywords: merged })
+}
+
 /** Deal `amount` damage to a player's base (#309). The caller runs the win check. */
 export function dealDamageToBase(state: GameState, player: PlayerId, amount: number): GameState {
   const p = state.players[player]
   return { ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: p.base.damage + amount } } } }
 }
 
-/** The first non-token (card) upgrade on a unit, if any — used by "defeat a friendly upgrade" costs (#309). */
-export function firstCardUpgrade(state: GameState, unit: UnitState): string | undefined {
-  return unit.upgrades.find(a => state.cards[a.cardId]?.type !== 'token')?.cardId
+/** Heal `amount` damage from a unit — remove that much damage, never below 0 (#348). No-op if absent. */
+export function healUnit(state: GameState, instanceId: string, amount: number): GameState {
+  const found = findUnit(state, instanceId)
+  if (!found || found.unit.damage === 0) return state
+  return patchUnit(state, found.owner, instanceId, u => ({ ...u, damage: Math.max(0, u.damage - amount) }))
+}
+
+/** Resource the top card of a player's deck (#348): move deck[0] into resources, ready. No-op if empty. */
+export function resourceTopOfDeck(state: GameState, owner: PlayerId): GameState {
+  const p = state.players[owner]
+  if (p.deck.length === 0) return state
+  return { ...state, players: { ...state.players, [owner]: { ...p, resources: [...p.resources, { cardId: p.deck[0], exhausted: false }], deck: p.deck.slice(1) } } }
+}
+
+/** Heal `amount` damage from a player's base — never below 0 (#348). */
+export function healBase(state: GameState, player: PlayerId, amount: number): GameState {
+  const p = state.players[player]
+  if (p.base.damage === 0) return state
+  return { ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: Math.max(0, p.base.damage - amount) } } } }
 }
 
 /** Exhaust a unit (no-op if already exhausted or absent). */
@@ -117,6 +146,24 @@ export function defeatUpgrade(state: GameState, instanceId: string, cardId: stri
   if (state.cards[cardId]?.type !== 'token') {
     const op = next.players[removed.owner]
     next = { ...next, players: { ...next.players, [removed.owner]: { ...op, discard: [...op.discard, cardId] } } }
+  }
+  return next
+}
+
+/**
+ * Defeat the upgrade at position `index` on a unit (#348) — the precise-instance form of
+ * `defeatUpgrade`, so a chosen upgrade (e.g. one of two identical Advantage tokens) is removed
+ * exactly. A card-upgrade goes to its owner's discard; a token ceases to exist. No-op if the
+ * unit or index is gone.
+ */
+export function defeatUpgradeAt(state: GameState, instanceId: string, index: number): GameState {
+  const found = findUnit(state, instanceId)
+  const removed = found?.unit.upgrades[index]
+  if (!found || !removed) return state
+  let next = patchUnit(state, found.owner, instanceId, u => ({ ...u, upgrades: u.upgrades.filter((_, i) => i !== index) }))
+  if (state.cards[removed.cardId]?.type !== 'token') {
+    const op = next.players[removed.owner]
+    next = { ...next, players: { ...next.players, [removed.owner]: { ...op, discard: [...op.discard, removed.cardId] } } }
   }
   return next
 }

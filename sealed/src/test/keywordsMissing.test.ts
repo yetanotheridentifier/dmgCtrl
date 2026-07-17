@@ -220,3 +220,41 @@ describe('Support keyword (#334)', () => {
     expect(next.activePlayer).toBe('opponent')
   })
 })
+
+describe('Support on deploy — leaders (#348)', () => {
+  // The Mandalorian (ASH_014) has Support; its deployed side has "On Attack: if initiative, may draw".
+  const cards = { ...CARDS, ASH_014: card({ id: 'ASH_014', type: 'leader', power: 4, hp: 6, keywords: [{ name: 'Support' }] }) }
+  const undeployed = { cardId: 'ASH_014', deployed: false, epicActionUsed: false, exhausted: false }
+
+  it('deploying a Support leader with another ready unit opens a support attack (holds the turn)', () => {
+    const s = state({
+      cards,
+      players: { player: player({ leader: undeployed, units: [unit('u1', 'TST_U3')] }), opponent: player({ units: [unit('e1', 'TST_U1')] }) },
+    })
+    const deployed = resolve(s, { type: 'deployLeader' })
+    expect(deployed.pendingChoices?.[0]).toMatchObject({ kind: 'support', controller: 'player' })
+    expect(deployed.activePlayer).toBe('player')
+  })
+
+  it('the support attacker gains the source leader’s TRIGGERED abilities, not just keywords', () => {
+    const s = state({
+      cards,
+      initiative: 'player',
+      players: { player: player({ leader: undeployed, units: [unit('u1', 'TST_U3')], deck: ['TST_U1'] }), opponent: player() },
+    })
+    const deployed = resolve(s, { type: 'deployLeader' })
+    // u1 attacks under Support → it gains the Mandalorian's "On Attack: may draw" for this attack.
+    const attacked = resolve(deployed, { type: 'attack', attackerId: 'u1', target: { kind: 'base' } })
+    expect(attacked.pendingChoices?.[0]).toMatchObject({ kind: 'mayPayToDraw', cost: 0 })
+  })
+
+  it('deploying a Support leader with no other ready unit just deploys (no support attack)', () => {
+    const s = state({
+      cards,
+      players: { player: player({ leader: undeployed, units: [unit('u1', 'TST_U3', { exhausted: true })] }), opponent: player() },
+    })
+    const deployed = resolve(s, { type: 'deployLeader' })
+    expect(deployed.pendingChoices).toBeUndefined()
+    expect(deployed.activePlayer).toBe('opponent')
+  })
+})

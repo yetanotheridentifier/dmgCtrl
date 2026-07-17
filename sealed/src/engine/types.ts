@@ -124,6 +124,17 @@ export interface PlayerState {
   discard: string[]
   resources: ResourceState[]
   units: UnitState[]
+  /**
+   * Keywords the NEXT unit this player plays this phase gains (Sabine Wren → Shielded, #348).
+   * Consumed by the next `enterUnit` (on-enter effects + a this-phase lasting keyword) and cleared
+   * at the start of the regroup phase. Generic — any card can grant "your next unit gains <keywords>".
+   *
+   * FUTURE (not yet needed): the granted "X" will likely need to be more than a keyword — an ability,
+   * a stat modifier (+X/+Y), a cost discount, etc. When that arises, generalise this into a single
+   * grant payload (keywords? / abilities? / power? / hp? / costDelta?) rather than adding sibling
+   * fields, and apply each part in `enterUnit`. See docs/ability-framework.md "Chunk E".
+   */
+  nextPlayedUnitKeywords?: KeywordInstance[]
 }
 
 export interface GameState {
@@ -168,6 +179,19 @@ export interface GameState {
    */
   pendingAttack?: { attackerId: string; target: AttackTarget; activePlayer: PlayerId; stage: 'onDefense' | 'damage' }
   /**
+   * A "take the initiative" whose "When you take the initiative" trigger raised a choice (#348):
+   * the turn transition (end the phase, or pass to the opponent) is deferred until the choice
+   * drains. `true` = taking the initiative also ended the action phase (CR 1.15.5c).
+   */
+  pendingInitiativeEndsPhase?: boolean
+  /**
+   * An opponent-interjected choice is pending as part of this player's action (Sabine Wren, #348):
+   * `activePlayer` is temporarily the choosing opponent, and this holds the original actor so that
+   * once the interjected choice(s) drain, control is restored to them and the turn advances normally.
+   * Generic — any effect that makes "an opponent" choose mid-action sets this.
+   */
+  pendingResumeActive?: PlayerId
+  /**
    * Transient "this phase" stat/keyword modifiers (#306/#347), each aimed at a unit.
    * Folded into `effectivePower`/`effectiveHp`/`unitKeywords`; cleared at the start of
    * the regroup phase so a unit defeated during regroup uses its base stats.
@@ -179,6 +203,69 @@ export interface GameState {
    * (per controller). Reset whenever the phase changes.
    */
   phaseEvents?: PhaseEvents
+}
+
+/**
+ * One option of a choose-one/modal ability (#348). A small serialisable effect descriptor,
+ * resolved by the engine when the option is picked. New variants extend the `kind` union.
+ * `arenaLastingBuff`: grant every unit in `arena` (both players) the given "this phase" buff.
+ */
+/** Reference to a specific attached upgrade (its host unit + position), for card-select choices (#348). */
+export interface UpgradeRef {
+  unitId: string
+  upgradeIndex: number
+  cardId: string
+}
+
+/** The current combat's roles, so combat-conditional auras (Grogu, #348) can react to who is
+ *  attacking / defending. Threaded through `StatContext` into the aura pass during damage resolution. */
+export interface CombatContext {
+  attackerInstanceId: string
+  defenderInstanceId: string
+}
+
+/** A hand card offered for play by an ability — its hand position + card id (#348). */
+export interface HandCardRef {
+  handIndex: number
+  cardId: string
+}
+
+/** Parameters for a "play a unit from hand" step (#348): cost delta and whether it enters ready. */
+export interface PlayFromHandSpec {
+  costDelta: number
+  entersReady: boolean
+}
+
+/** An upgrade sitting in the resource zone, offered for play (#348) — its position + card id. */
+export interface ResourceUpgradeRef {
+  resourceIndex: number
+  cardId: string
+}
+
+/** Parameters for a "play an upgrade from your resources" step (#348). */
+export interface PlayResourceUpgradeSpec {
+  /** Front pays the upgrade's cost from remaining resources; the deployed back plays it free. */
+  payCost: boolean
+  /** Eligible target unit instance ids (front: entered this phase; back: any friendly). */
+  targetUnits: string[]
+}
+
+/** A follow-up "deal N damage to a unit or a base" selection (#348). */
+export interface DamageTargetSpec {
+  amount: number
+  /** Instance ids of units that may take the damage. */
+  unitTargets: string[]
+  /** Owners whose base may take the damage. */
+  baseTargets: PlayerId[]
+}
+
+export interface ChooseOption {
+  label: string
+  kind: 'arenaLastingBuff'
+  arena: Arena
+  power?: number
+  hp?: number
+  keywords?: KeywordInstance[]
 }
 
 /** A "this phase" modifier targeting a single unit (#347). Omitted stats = 0. */
@@ -218,8 +305,13 @@ export type PendingChoice =
   // eligible unit instance ids; the controller picks one or declines.
   | { kind: 'mayDamage'; id: string; controller: PlayerId; unitId: string; targets: string[]; amount: number }
   | { kind: 'mayAdvantageEach'; id: string; controller: PlayerId; unitId: string; targets: string[] }
-  // Vane (#309): optionally defeat a friendly upgrade (on the chosen unit) to deal 2 to the enemy base.
-  | { kind: 'mayDefeatUpgradeForBase'; id: string; controller: PlayerId; unitId: string; targets: string[] }
+  // Vane (#309/#348): defeat a friendly upgrade (chosen from `candidates`, cards or tokens); then the
+  // `then` damage-target selection follows. `optional` = the deployed "may" version (a Cancel is
+  // offered); the front action is mandatory. Each candidate is the exact upgrade (unit + index).
+  | { kind: 'selectUpgradeToDefeat'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional: boolean; then: DamageTargetSpec }
+  // Choose where to deal a fixed amount of damage (#348): a unit (`unitTargets`) or a base
+  // (`baseTargets`, by owner). Mandatory. Vane's "deal 2 to a base / the defending unit or a base".
+  | { kind: 'selectDamageTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[] }
   // Greef Karga front (#309): on playing a unit, may exhaust the leader to give it an Advantage token.
   // `unitId` is the just-played unit to receive the token.
   | { kind: 'mayExhaustLeaderForAdvantage'; id: string; controller: PlayerId; unitId: string }
@@ -237,6 +329,40 @@ export type PendingChoice =
   // Shin Hati deployed (#347): may exhaust one of `targets`, or decline (no leader-exhaust cost).
   // `markUsed`, when set, marks a once-per-round triggered ability as spent on acceptance.
   | { kind: 'mayExhaustUnit'; id: string; controller: PlayerId; targets: string[]; markUsed?: { instanceId: string; key: string } }
+  // Choose-one / modal (#348): pick exactly one of `options` (Sloane). Each option is a small
+  // serialisable effect descriptor, resolved by index; mandatory (no decline).
+  | { kind: 'chooseOne'; id: string; controller: PlayerId; options: ChooseOption[] }
+  // Luke front (#348): may exhaust the (undeployed) leader to heal `amount` from `unitId`, or decline.
+  | { kind: 'mayExhaustLeaderHealUnit'; id: string; controller: PlayerId; unitId: string; amount: number }
+  // Luke deployed (#348): heal `amount` from a chosen unit (`unitTargets`) or base (`baseTargets`). Mandatory.
+  | { kind: 'selectHealTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[] }
+  // Play a unit from hand as part of an ability (#348): pick one of `candidates` (affordable hand
+  // units), paying its cost + `costDelta`, entering ready if `entersReady` (Fennec, Moff Gideon).
+  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean }
+  // Additional cost "exhaust a friendly unit" (#348): pick one of `targets` to exhaust, then the
+  // `then` play-from-hand step follows (Fennec). Mandatory.
+  | { kind: 'selectUnitToExhaust'; id: string; controller: PlayerId; targets: string[]; then: PlayFromHandSpec }
+  // The Armorer (#348): look at your resources and pick an upgrade to play (by candidate index); the
+  // `then` spec carries how it plays. `optional` = the deployed "may" version (a Cancel is offered).
+  | { kind: 'selectResourceUpgrade'; id: string; controller: PlayerId; candidates: ResourceUpgradeRef[]; optional: boolean; then: PlayResourceUpgradeSpec }
+  // Follow-up: attach the chosen resource upgrade to one of `targets` (#348). Mandatory.
+  | { kind: 'attachResourceUpgrade'; id: string; controller: PlayerId; resourceIndex: number; cardId: string; targets: string[]; payCost: boolean }
+  // Optionally pay `cost` to draw `draw` cards (#348, Mandalorian). `cost` 0 = a free "may draw".
+  | { kind: 'mayPayToDraw'; id: string; controller: PlayerId; cost: number; draw: number }
+  // Optionally deploy your leader via a triggered epic action (#348, Grogu). A yes/no.
+  | { kind: 'mayDeployLeader'; id: string; controller: PlayerId }
+  // Unique rule (CR): a player controlling two upgrades with the same title defeats one (their
+  // choice). `candidates` are the duplicate instances; picking one defeats it. Mandatory.
+  | { kind: 'selectUniqueToDefeat'; id: string; controller: PlayerId; cardId: string; candidates: UpgradeRef[] }
+  | { kind: 'selectUniqueUnitToDefeat'; id: string; controller: PlayerId; cardId: string; candidates: string[] }
+  // Thrawn front (#348): attack with any ready unit; it gains Restore `restore` for that attack
+  // (0 when the condition didn't hold). Mandatory — the attack is made on the board.
+  | { kind: 'attackWithRestore'; id: string; controller: PlayerId; restore: number }
+  // Thrawn deployed (#348): On Attack, may defeat one of `targets` (a non-leader enemy unit), or decline.
+  | { kind: 'mayDefeatEnemyUnit'; id: string; controller: PlayerId; targets: string[] }
+  // Sabine front (#348): the opponent (`controller`) must give `count` Advantage tokens to one of
+  // their units (`targets`). Mandatory when able — an opponent-interjected choice (pendingResumeActive).
+  | { kind: 'opponentGivesAdvantage'; id: string; controller: PlayerId; count: number; targets: string[] }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */
 export function activeChoice(state: GameState): PendingChoice | undefined {
@@ -288,6 +414,17 @@ export function addLastingEffect(state: GameState, effect: LastingEffect): GameS
 /** Drop every lasting effect (called at the start of the regroup phase). */
 export function clearLastingEffects(state: GameState): GameState {
   return state.lastingEffects ? { ...state, lastingEffects: undefined } : state
+}
+
+/** Clear both players' "next unit you play this phase" grants — a phase-boundary reset (#348). */
+export function clearNextUnitGrants(state: GameState): GameState {
+  return {
+    ...state,
+    players: {
+      player: { ...state.players.player, nextPlayedUnitKeywords: undefined },
+      opponent: { ...state.players.opponent, nextPlayedUnitKeywords: undefined },
+    },
+  }
 }
 
 function emptyPhaseEvents(): PhaseEvents {

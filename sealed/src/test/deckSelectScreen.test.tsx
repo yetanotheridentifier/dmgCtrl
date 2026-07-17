@@ -39,12 +39,16 @@ describe('DeckSelectScreen', () => {
   it('shows the implemented-cards reference: leaders with front/back and every upgrade', () => {
     render(<DeckSelectScreen onPlay={vi.fn()} />)
     const leaders = screen.getByTestId('implemented-leaders')
-    // A fully-implemented leader shows ✓ for both sides; a partial one shows ✓ and ·.
+    // Each leader row shows a ✓ (implemented) or · (not yet) per side — the flag counts across
+    // the table track the manifest's front/back booleans (derived so this stays true as sides land).
+    const implementedFlags = IMPLEMENTED_LEADERS.reduce((n, l) => n + (l.front ? 1 : 0) + (l.back ? 1 : 0), 0)
+    const notYetFlags = IMPLEMENTED_LEADERS.length * 2 - implementedFlags
+    expect(within(leaders).getAllByLabelText('implemented')).toHaveLength(implementedFlags)
+    if (notYetFlags > 0) expect(within(leaders).getAllByLabelText('not yet')).toHaveLength(notYetFlags)
+    else expect(within(leaders).queryByLabelText('not yet')).toBeNull()
+    // A fully-implemented leader shows ✓ for both sides.
     const cadBane = within(leaders).getByText('Cad Bane').closest('tr')!
     expect(within(cadBane).getAllByLabelText('implemented')).toHaveLength(2) // front + back
-    const ahsoka = within(leaders).getByText('Ahsoka Tano').closest('tr')!
-    expect(within(ahsoka).getByLabelText('implemented')).toBeInTheDocument() // front
-    expect(within(ahsoka).getByLabelText('not yet')).toBeInTheDocument() // back pending
 
     const upgrades = screen.getByTestId('implemented-upgrades')
     expect(within(upgrades).getAllByRole('listitem')).toHaveLength(IMPLEMENTED_UPGRADES.length)

@@ -1,5 +1,5 @@
 import type { Action } from './actions'
-import type { EngineCard, GameState, KeywordInstance, PlayerId, UnitState } from './types'
+import type { EngineCard, GameState, HandCardRef, PlayerId, ResourceUpgradeRef, UnitState } from './types'
 import { opponentOf, hasPendingChoices } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { unitHasKeyword } from './keywords'
@@ -51,6 +51,53 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   // Card-specific cost modifiers (e.g. −1 on an Imperial/Mandalorian unit) (#340).
   const modifier = getCardDefinition(card.id)?.costModifier?.(state, playerId, target) ?? 0
   return Math.max(0, card.cost + penalty + modifier)
+}
+
+/**
+ * Hand units `owner` can afford to play via an ability (#348): each unit card whose effective cost
+ * (plus `costDelta`, floored at 0) fits the ready resources left after `extraResourceCost` (the
+ * ability's own C=… cost). Used both to gate the ability (`usable`) and to build the play choice.
+ */
+export function affordableHandUnits(state: GameState, owner: PlayerId, extraResourceCost: number, costDelta: number): HandCardRef[] {
+  const p = state.players[owner]
+  const budget = readyResourceCount(p) - extraResourceCost
+  const out: HandCardRef[] = []
+  p.hand.forEach((cardId, handIndex) => {
+    const card = state.cards[cardId]
+    if (card?.type !== 'unit') return
+    if (Math.max(0, effectiveCost(state, owner, card) + costDelta) <= budget) out.push({ handIndex, cardId })
+  })
+  return out
+}
+
+/**
+ * Valid targets for playing the resource upgrade at `resourceIndex` (#348): units from `targetUnits`
+ * that pass the upgrade's attach restriction and — when `payCost` — are affordable from the ready
+ * resources left after the upgrade itself leaves the resource pool.
+ */
+export function validUpgradeTargets(state: GameState, owner: PlayerId, resourceIndex: number, cardId: string, payCost: boolean, targetUnits: string[]): string[] {
+  const p = state.players[owner]
+  const resource = p.resources[resourceIndex]
+  const card = state.cards[cardId]
+  if (!resource || resource.cardId !== cardId || card?.type !== 'upgrade') return []
+  const available = readyResourceCount(p) - (resource.exhausted ? 0 : 1)
+  const restriction = getCardDefinition(cardId)?.attachRestriction
+  const inPlay = [...state.players.player.units, ...state.players.opponent.units]
+  return targetUnits.filter(id => {
+    const tu = inPlay.find(u => u.instanceId === id)
+    if (!tu || (restriction && !restriction(state, tu))) return false
+    return !payCost || effectiveCost(state, owner, card, tu) <= available
+  })
+}
+
+/** Upgrades in `owner`'s resource zone that can be played on at least one of `targetUnits` (#348). */
+export function resourceUpgradeCandidates(state: GameState, owner: PlayerId, payCost: boolean, targetUnits: string[]): ResourceUpgradeRef[] {
+  const out: ResourceUpgradeRef[] = []
+  state.players[owner].resources.forEach((r, resourceIndex) => {
+    if (state.cards[r.cardId]?.type !== 'upgrade') return
+    if (validUpgradeTargets(state, owner, resourceIndex, r.cardId, payCost, targetUnits).length > 0) out.push({ resourceIndex, cardId: r.cardId })
+  })
+  return out
 }
 
 /**
@@ -146,6 +193,7 @@ function actionPhaseMoves(state: GameState): Action[] {
   for (const u of p.units) {
     for (const { cardId, index, ability } of unitActionAbilities(u)) {
       if (ability.oncePerRound && u.usedAbilities?.includes(actionAbilityKey(cardId, index))) continue
+      if (!canAfford(p, ability.cost ?? 0)) continue
       if (ability.usable && !ability.usable(state, u)) continue
       moves.push({ type: 'useAbility', instanceId: u.instanceId, cardId, index })
     }
@@ -177,20 +225,6 @@ function actionPhaseMoves(state: GameState): Action[] {
 }
 
 /**
- * The keywords a Support unit lends to another attacker for one attack — its card's
- * and upgrades' keywords, excluding Support itself (no chaining) (#334).
- */
-export function supportGrantedKeywords(state: GameState, supportUnitId: string): KeywordInstance[] {
-  const su = state.players[state.activePlayer].units.find(u => u.instanceId === supportUnitId)
-  if (!su) return []
-  const kws = [
-    ...(state.cards[su.cardId]?.keywords ?? []),
-    ...su.upgrades.flatMap(a => state.cards[a.cardId]?.keywords ?? []),
-  ]
-  return kws.filter(k => k.name !== 'Support')
-}
-
-/**
  * Moves while choices are pending (#334/#342). The active player resolves their own
  * simultaneous choices in any order (each is addressable by id, honouring active-player
  * trigger ordering). Ambush: the played unit may attack an enemy unit (never the base).
@@ -216,10 +250,12 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'support': {
-        const granted = supportGrantedKeywords(state, choice.unitId)
+        // The chosen attacker gains the Support source's full abilities for the attack (#348), so
+        // its granted keywords (Saboteur, Sentinel-ignoring…) shape the legal targets here too.
+        const sourceCardId = p.units.find(u => u.instanceId === choice.unitId)?.cardId
         for (const candidate of p.units) {
           if (candidate.exhausted || candidate.instanceId === choice.unitId) continue
-          const attacker = granted.length ? { ...candidate, grantedKeywords: granted } : candidate
+          const attacker = sourceCardId ? { ...candidate, grantedAbilityCardIds: [sourceCardId] } : candidate
           const { targets, sentinelLocked } = enemyAttackTargets(state, attacker)
           for (const e of targets) {
             moves.push({ type: 'attack', attackerId: candidate.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
@@ -272,7 +308,6 @@ function choiceMoves(state: GameState): Action[] {
       }
       case 'mayDamage':
       case 'mayAdvantageEach':
-      case 'mayDefeatUpgradeForBase':
       case 'mayLastingBuff':
       case 'mayGiveAdvantage':
       case 'mayExhaustLeaderGiveAdvantage':
@@ -283,10 +318,98 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'chooseOne': {
+        // Choose-one/modal (#348): one move per option, no decline (mandatory).
+        choice.options.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
+        break
+      }
+      case 'selectUpgradeToDefeat': {
+        // Vane (#348): pick a candidate upgrade to defeat; Cancel only on the optional (deployed) form.
+        choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'selectDamageTarget':
+      case 'selectHealTarget': {
+        // Deal/heal N to a chosen unit or base (#348) — mandatory (a target must be picked).
+        for (const id of choice.unitTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        for (const bp of choice.baseTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, baseTarget: bp })
+        break
+      }
+      case 'mayExhaustLeaderHealUnit': {
+        // Luke front: a yes/no — the healed unit is fixed (the attacker).
+        moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'playUnitFromHand': {
+        // Play a chosen hand unit (#348) — one move per affordable candidate. Mandatory.
+        for (const { handIndex } of choice.candidates) moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex })
+        break
+      }
+      case 'selectUnitToExhaust': {
+        // Fennec's "exhaust a friendly unit" additional cost (#348) — pick one. Mandatory.
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        break
+      }
+      case 'selectResourceUpgrade': {
+        // The Armorer (#348): pick a resource upgrade to play; Cancel only on the optional (deployed) form.
+        choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'attachResourceUpgrade': {
+        // Attach the chosen resource upgrade to a valid unit (#348). Mandatory.
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        break
+      }
       case 'mayExhaustLeaderForAdvantage': {
         // Greef Karga front: a yes/no — the target unit is fixed (#309).
         moves.push({ type: 'acceptChoice', choiceId: choice.id })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'mayPayToDraw': {
+        // Mandalorian (#348): a yes/no — accept only if the cost is affordable.
+        if (readyResourceCount(p) >= choice.cost) moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'mayDeployLeader': {
+        // Grogu (#348): a yes/no to deploy via the triggered epic action.
+        moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'selectUniqueToDefeat': {
+        // Unique rule (#348): pick which duplicate to defeat. Mandatory (must reduce to one).
+        choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
+        break
+      }
+      case 'selectUniqueUnitToDefeat': {
+        // Unique unit rule (#348): pick which duplicate unit to defeat (board target). Mandatory.
+        for (const id of choice.candidates) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        break
+      }
+      case 'attackWithRestore': {
+        // Thrawn front (#348): attack with any ready unit (the Restore grant is applied on resolve).
+        for (const u of p.units) {
+          if (u.exhausted) continue
+          const { targets, sentinelLocked } = enemyAttackTargets(state, u)
+          for (const e of targets) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
+          if (!sentinelLocked) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'base' } })
+        }
+        break
+      }
+      case 'mayDefeatEnemyUnit': {
+        // Thrawn deployed (#348): pick a non-leader enemy unit to defeat, or decline.
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'opponentGivesAdvantage': {
+        // Sabine front (#348): the opponent picks which of their units gets the Advantage tokens. Mandatory.
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         break
       }
       case 'mayAttack': {

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
 import { card, state, player, unit, CARDS } from './helpers/engineFixtures'
+import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import type { GameState } from '../engine/types'
 
 function withCards(extra: Record<string, ReturnType<typeof card>>, overrides: Partial<GameState>) {
@@ -176,5 +177,26 @@ describe('Sentinel (forced defender) and Saboteur (ignores it)', () => {
     const attacks = legalMoves(sentinelBoard('TST_SAB')).filter(a => a.type === 'attack')
     expect(attacks).toContainEqual({ type: 'attack', attackerId: 'a1', target: { kind: 'base' } })
     expect(attacks).toContainEqual({ type: 'attack', attackerId: 'a1', target: { kind: 'unit', instanceId: 'e1' } })
+  })
+
+  const shieldedDefender = (attackerCard: string) => withCards({ TST_SAB: SABOTEUR }, {
+    players: {
+      player: player({ units: [{ ...unit('a1', 'TST_U1'), cardId: attackerCard }] }), // power via card
+      opponent: player({ units: [unit('e1', 'TST_U1', { upgrades: [{ cardId: TOKEN_SHIELD, owner: 'opponent' }] })] }), // hp 4, shielded
+    },
+  })
+
+  it('Saboteur defeats the defender’s Shield before combat, so the hit lands (not optional)', () => {
+    const after = resolve(shieldedDefender('TST_SAB'), { type: 'attack', attackerId: 'a1', target: { kind: 'unit', instanceId: 'e1' } })
+    const e1 = after.players.opponent.units.find(u => u.instanceId === 'e1')!
+    expect(e1.upgrades.some(a => a.cardId === TOKEN_SHIELD)).toBe(false) // shield defeated
+    expect(e1.damage).toBe(2) // took the 2 combat damage (SABOTEUR power 2)
+  })
+
+  it('without Saboteur, the Shield soaks the hit and is spent (contrast)', () => {
+    const after = resolve(shieldedDefender('TST_U1'), { type: 'attack', attackerId: 'a1', target: { kind: 'unit', instanceId: 'e1' } })
+    const e1 = after.players.opponent.units.find(u => u.instanceId === 'e1')!
+    expect(e1.upgrades.some(a => a.cardId === TOKEN_SHIELD)).toBe(false) // shield consumed
+    expect(e1.damage).toBe(0) // damage prevented
   })
 })

@@ -328,10 +328,7 @@ recurses through the aura pass) — inspect card data / traits (`unitHasTrait` i
 Grand Admiral Sloane (007) — each other friendly unit gains Overwhelm + Sentinel.
 Tests: `src/test/auras.test.ts`.
 
-**Deferred:** Grogu (018)'s aura is combat-conditional ("while another friendly unit is
-defending, +1/0; while attacking, the defender gets −1/0") — needs the attack context
-(attacking/defending) threaded into the aura call, so it lands with Grogu's full build
-(alongside #347's combat/phase tracking).
+Grogu (018)'s aura is combat-conditional — see #348-F3, which threaded combat roles into the aura call.
 
 ## Lasting effects + phase/attack tracking (#306/#347)
 
@@ -391,15 +388,234 @@ passes `markUsed: { instanceId, key }` in its choice so the mark lands on **acce
 doesn't spend it). Same `usedAbilities` list the activated-ability path (#343) uses, so it clears at
 regroup for free.
 
-**UI — +X/+Y modifier token:** a unit carrying lasting-effect stats shows a white token with the
-power delta (red) top-left and the HP delta (blue) bottom-right — diagonally opposed like the
-physical token (`board-unit-mod-<id>`);
-it appears/updates from `lastingEffectTotals` and disappears when the effects clear at phase end.
-Reusable for any future source of transient stat deltas. (`CardTokens` in `gameScreen.tsx`.)
+**UI — +X/+Y modifier token:** a unit whose stats are modified by something **not printed on its
+card** shows a white token with the power delta (red) top-left and the HP delta (blue) bottom-right
+— diagonally opposed like the physical token (`board-unit-mod-<id>`). It sums `lastingEffectTotals`
+("this phase" buffs, #347) **and** `auraContributions` power/HP (constant auras like Bo-Katan's
++1/0, #346/#348); upgrade stats are excluded (those already show on the card art). Phase buffs clear
+the token at phase end; an aura's contribution shows while its source is in play. (`CardTokens` in
+`gameScreen.tsx`.)
 
 **Consumers landing with #348** (need its play-from-resources / play-from-hand primitives): The
 Armorer (001) reads `enteredPlayThisPhase`; Moff Gideon (008) reads `defeatedThisPhase` for a
 friendly Imperial. The tracking mechanism is built and tested here; those leaders wire up in #348.
 
-**Deferred deployed backs:** Luke (005) both sides need #348's heal (heal that unit / your base).
-Ahsoka's deployed back awaits its own build.
+**Deferred deployed backs (since landed):** Ahsoka's deployed back and Luke's heal both landed in
+#348 — see the chunk sections below. All 18 leaders' backs are now implemented.
+
+## New primitives + UI (#348)
+
+Phased into independently-deployable chunks; each groups a primitive with the leaders it unlocks.
+
+### Chunk C — choose-one/modal + create-token (DONE)
+
+- **Choose-one / modal** — a `chooseOne` pending choice carrying serialisable `ChooseOption[]`;
+  `acceptChoice.optionIndex` picks one (mandatory — no decline). Rendered as menu buttons
+  (`describeAction` labels each option). The first option variant is `arenaLastingBuff` (grant every
+  unit in an arena a "this phase" buff). Wired: **Grand Admiral Sloane (007)** front "Choose One:
+  give each ground / each space unit Sentinel + Overwhelm this phase" — applies to **both players'**
+  units in the chosen arena ("each … unit", reusing #347 lasting effects). New `ChooseOption`
+  variants extend the modal to other effects later.
+- **Create-token action** — Bo-Katan uses the existing `createTokenUnit` primitive. Wired:
+  **Bo-Katan Kryze (010)** front leader action (C=2, `usable` = a unit in each arena → create a
+  Mandalorian token) and her deployed **back** On Attack (same condition, mandatory).
+  `controlsUnitInEachArena` helper. Note: `createTokenUnit` still doesn't fire `whenPlayOrCreateUnit`
+  (the token-creation trigger path stays deferred) — moot for leaders, since only one leader is ever
+  in play (Greef, the only such reactor, can't coexist with Bo-Katan). Tests in `leaderAbilities.test.ts`.
+
+### Chunk G — select-a-card overlay + Vane's choose-an-upgrade (DONE)
+
+- **`selectUpgradeToDefeat`** pending choice: `candidates: UpgradeRef[]` (`{unitId, upgradeIndex, cardId}`
+  for **every** upgrade the controller has — card **and** token), plus `optional`. Resolved by
+  `acceptChoice.optionIndex`; `defeatUpgradeAt(state, unitId, index)` removes the exact upgrade
+  (precise-instance form of `defeatUpgrade`, so one of two identical tokens goes), then 2 to the
+  enemy base. Fixes two Vane defects: token upgrades (Shield/Advantage/Experience) are now
+  selectable, and the player **chooses which** upgrade rather than auto-defeating the first card one.
+- **Two-step target selection.** After defeating the upgrade, a `selectDamageTarget` choice follows
+  (carried on `selectUpgradeToDefeat.then: DamageTargetSpec`): the 2 damage goes to a chosen **unit
+  or base**, not a hardcoded enemy base. `acceptChoice.baseTarget: PlayerId` picks a base;
+  `targetInstanceId` picks a unit. Vane **front** = "a base" (either); deployed **back** = "the
+  defending unit or a base" (the defender is the attack's target when it's a unit). Mandatory.
+- **Vane** front is a target-less `usable`-gated action (offered when ≥1 upgrade) raising the upgrade
+  choice **mandatory** (`optional:false`, no Cancel — the action's already committed); the deployed
+  back's On Attack raises it **optional** (`optional:true`, Cancel = decline). Retired the old
+  board-select `mayDefeatUpgradeForBase` choice and the `firstCardUpgrade` helper.
+- **`CardSelectOverlay`** (`gameScreen.tsx`) — a reusable centre-screen card picker: **click the
+  (highlighted) card itself** to select it, plus a Cancel shown only when `onCancel` is given (the
+  optional case). Token art included. Extensible for any future "select a card / card type" effect.
+  Its accept/skip moves are pulled out of the action menu like the look/search overlays.
+- **Base targeting on the board.** `BaseCard` takes a click handler per side via `Board`'s
+  `baseAction(side)`, so **either** base highlights + is clickable when it's a valid damage target
+  (previously only the opponent base, for attacks). `selectDamageTarget`'s unit targets ride the
+  existing board-target mechanism (`boardTargetKinds`).
+- **Token card art:** `frontArt` added to the four token cards — Mandalorian `ASH/T01`, Advantage
+  `ASH/T02`, Experience `SOR/T01`, Shield `LOF/T02` (served via the `artUrl` proxy). The on-board
+  Mandalorian token now shows its art too.
+
+### Chunk A — heal (Luke) (DONE)
+
+- **Heal primitives** (`effects.ts`): `healUnit(state, id, amount)` and `healBase(state, player, amount)`
+  — remove that much damage, never below 0.
+- **Luke (005)** front (undeployed): `whenFriendlyAttackEnds` → `mayExhaustLeaderHealUnit` (a yes/no —
+  may exhaust the leader to heal 1 from the attacker; offered only when the attacker is in play with
+  damage and the leader is ready). Deployed back: `whenFriendlyAttackEnds` → `selectHealTarget`
+  (mandatory: heal 2 from the attacking unit or your base — only damaged targets are offered; nothing
+  raised if neither has damage). `selectHealTarget` shares `selectDamageTarget`'s board wiring (in
+  `boardTargetKinds`, `acceptChoice.baseTarget` picks a base) — the same highlight-unit-or-base picker.
+
+### Chunk B — play a unit from hand (Fennec, Moff Gideon) (DONE)
+
+- **`playUnitFromHand`** choice: pick one of `candidates` (affordable hand units) → pay its
+  `effectiveCost + costDelta` (floored at 0), remove from hand, `enterUnit` with an `entersReady`
+  override. `acceptChoice.handIndex` carries the pick; `affordableHandUnits(state, owner,
+  extraResourceCost, costDelta)` (in `legalMoves.ts`) builds candidates and gates the ability.
+  `enterUnit` gained a `ready?` param (forces the unit in ready, past the normal exhausted-on-entry).
+- **Moff Gideon (008)** front: leader action gated on `defeatedThisPhase` containing a friendly
+  Imperial (the #347 tracking) → play a hand unit at **−1** cost (enters exhausted).
+- **Fennec Shand (002)** front: additional cost "**exhaust a friendly unit**" modelled as a preceding
+  `selectUnitToExhaust` choice (`then: PlayFromHandSpec`); on accept it exhausts the picked unit and
+  raises `playUnitFromHand` (enters **ready**). `usable` requires C=1 affordable, a ready friendly
+  unit, and a hand unit affordable after the C=1.
+- **UI:** the affordable hand cards become clickable (their `acceptChoice` moves fold into the
+  `handAction` map, reusing the normal `HandCard` play affordance; excluded from the action menu);
+  `selectUnitToExhaust` rides the board-target mechanism (`boardTargetKinds`).
+
+**Deployed backs (DONE):**
+- **`ActionAbilityDef` gained an optional `cost`** (the ability's "C=N"), paid by `resolve.useAbility`
+  and gated in `legalMoves` (`canAfford`) — the unit-action equivalent of a leader action's cost.
+- **Fennec Shand (002)** back: a deployed **unit action** `[C=1, exhaust a friendly unit] → play a
+  unit from hand ready`. Same `selectUnitToExhaust → playUnitFromHand (entersReady)` chain as her
+  front, but no self-exhaust (the cost has no `[Exhaust]`), so she can use it after attacking and may
+  even exhaust **herself** as the friendly unit. `Saboteur` comes free from the card DB. UI: surfaces
+  as a "Use Fennec Shand" menu button (like Improvised Identity).
+- **Moff Gideon (008)** back: a constant `conditionalKeywords` — for each of {Ambush, Grit, Hidden,
+  Overwhelm, Saboteur, Sentinel, Shielded, Support}, the deployed unit gains it when an **Imperial
+  unit in your discard pile** has it. Reads the owner's discard (via `findUnit`), folds into
+  `keywords.unitKeywords`; no UI action needed.
+- **On-enter keywords fire on DEPLOY, not just when played:** `deployLeader` now runs
+  `applyDeployKeywords` (Shielded → a Shield token, Hidden → unattackable, then Ambush → attack now
+  / Support → another unit may attack), reading the deployed unit's **live** keywords so ones GRANTED
+  at deploy count (Moff from a discard Imperial; also any future leader that prints these). The deploy
+  dispatch already holds the turn on any raised choice. The Support/Ambush checks use `unitHasKeyword`
+  (the unit's keywords), not `hasKeyword` (the card's printed keywords) — the earlier "Support didn't
+  work on Moff deploy" bug. `leaderAbilities.test.ts` covers all eight granted keywords behaving.
+
+### Chunk D — play an upgrade from your resources (The Armorer) (DONE)
+
+- **Two-step flow, both sides share it:** `selectResourceUpgrade` (pick an upgrade from your resource
+  zone — overlay) → `attachResourceUpgrade` (pick the target unit — board). On resolve: remove the
+  upgrade from `resources`, pay its cost (both sides — paying is the default), attach it, then
+  **resource the top of the deck** (`resourceTopOfDeck`), and fire `whenPlayed`. Helpers in `legalMoves.ts`:
+  `resourceUpgradeCandidates` and `validUpgradeTargets` (honour `attachRestriction` and — when
+  paying — affordability from the ready resources left after the upgrade itself leaves the pool).
+- **The Armorer (001)** front (undeployed): mandatory action, **pays** the cost, targets a unit that
+  **entered play this phase** (`enteredPlayThisPhase`, the #347 tracking). Deployed **back**:
+  `onAttackEnd` (this unit's attack), **optional**, also pays the cost, targets any friendly unit.
+- **UI — "look at your resources":** the `CardSelectOverlay` gained `disabled` + `key` per item, so
+  the overlay **reveals every resource** with the playable upgrades selectable and the rest dimmed
+  (a private reveal, reusable for other select-a-resource effects). `attachResourceUpgrade` rides the
+  board-target mechanism (`boardTargetKinds`); either base/unit highlight machinery already exists.
+
+### Chunk F1 — The Mandalorian (DONE)
+
+- **New `whenTakeInitiative` trigger point** — fired in `takeInitiative` for the taker's undeployed
+  leader. If the trigger raises a choice, the turn transition is **deferred**: `takeInitiative`
+  records `GameState.pendingInitiativeEndsPhase` (whether taking also ended the phase, CR 1.15.5c),
+  holds with the taker, and `resumeAfterChoice` completes it (→ `enterRegroup` or pass to opponent)
+  once the choice drains.
+- **`mayPayToDraw`** choice (`{cost, draw}`) — optional pay-then-draw; `cost` 0 = a free "may draw".
+- **The Mandalorian (014)** front: `whenTakeInitiative` → may pay 1, draw 1. Deployed back: `onAttack`
+  → if you have the initiative, may draw 1 (free). (Support keyword comes from the card DB.)
+
+**Support generalized (#348):** Support now lends the source's **full abilities** (keywords +
+triggered), not just keywords — the chosen attacker gets `grantedAbilityCardIds: [sourceCardId]` (the
+same path Improvised Identity uses), so it fires the source's combat abilities for that attack.
+`openSupportChoice` is shared by playing a Support unit **and deploying a Support leader**
+(`deployLeader`; its dispatch now holds the turn while the support attack resolves). This unblocks
+the Mandalorian's and Ahsoka's Support. (The granted card includes the harmless Support keyword,
+which never re-triggers mid-attack.) **Ahsoka (009)** deployed back is now complete — its On-Attack
+"give a unit with less power than this unit +2/0 this phase" reuses `mayLastingBuff` (as Baylan's does).
+
+### Chunk F3 — Grogu (DONE)
+
+- **Combat context threaded into auras** — new `CombatContext { attackerInstanceId, defenderInstanceId }`
+  on `StatContext.combat`, passed through `auraContributions` into the `aura` hook's 5th param.
+  `completeAttack` sets it on the **defender's** `effectivePower`/`effectiveHp` during damage
+  resolution, so an aura can react to who is attacking/defending (the piece deferred in #346).
+- **`mayDeployLeader`** choice — a triggered epic-action deploy (yes/no → `deployLeader`).
+- **Grogu (018)** — `deployCondition: () => false` (never deploys via the normal epic action); a
+  `whenPlayOrCreateUnit` leader trigger offers `mayDeployLeader` when you play a **Unique unit costing
+  4+** and Grogu is **ready** (undeployed + not exhausted). Deployed aura on the current combat's
+  **defender**: a friendly non-Grogu defender gets **+1/0**; the enemy defender gets **−1/0** while
+  another friendly unit (not Grogu) attacks — so it only shifts counter-attack damage.
+- **Grogu redeploys** (his triggered deploy isn't once-per-game): `deployLeader(state, epicUsed)` —
+  the normal epic action passes `epicUsed: true` (burns the epic action so a defeated leader can't
+  redeploy, CR 3.4.5); `mayDeployLeader` passes `false`, so a defeated-then-readied Grogu can deploy
+  again. His trigger gates on `!leader.exhausted`, so he can't redeploy until he readies at regroup.
+
+### Unique rule (#348)
+
+A player can't control two cards with the same unique title. Both card types are keyed by card id
+(a deck's duplicates share it), per-**controller**, and re-check so 3+ copies resolve down to one.
+
+- **Upgrades:** `uniqueUpgradeCheck(state, owner)` runs after every upgrade attach (`playUpgrade`,
+  `attachResourceUpgrade`, `playTopCardFree`): if the owner now controls ≥2 unique upgrades of one
+  card id it raises `selectUniqueToDefeat` (candidates = the duplicate `UpgradeRef`s) — pick one to
+  defeat (mandatory, no cancel; centre-screen `CardSelectOverlay`). Per-controller via an upgrade's
+  `owner`, so the opponent's copy of the same card doesn't conflict. `playUpgrade`'s dispatch holds
+  the turn while such a choice (or Camtono's look-at) resolves.
+- **Units:** `uniqueUnitCheck(state, owner)` runs at the end of `enterUnit` (so every play-a-unit
+  path — hand, Fennec/Moff play-from-hand, play-top-free — is covered): if the owner now controls ≥2
+  units of one card id it raises `selectUniqueUnitToDefeat` (candidates = the duplicate unit instance
+  ids) — pick one to defeat off the board (mandatory). Presented as a **board-target** selection
+  (`boardTargetKinds`, click the highlighted duplicate; no Decline), since the copies may differ in
+  damage/upgrades. Per-controller (the units in your `units[]`), so the opponent's copy is fine.
+
+### Chunk F2 — Grand Admiral Thrawn (DONE)
+
+- **`defeatUnit(state, id)`** (`combat.ts`) — a targeted *defeat* that **bypasses Shields** (those
+  prevent damage, not defeat). `applyUnitDamage`'s defeat handling was extracted into a shared
+  `finishDefeats(state, owner, survivors, defeated)` so both damage-defeats and direct defeats route
+  through the same discard / leader-return / `whenDefeated` path.
+- **`attackWithRestore`** choice (Thrawn front) — attack with **any** ready unit (its `attack` moves
+  come from `enemyAttackTargets` for every ready unit; mandatory, no skip). The chosen attacker gains
+  `Restore restore` for the attack via `grantedKeywords` (cleared after, like Support used to). The
+  condition ("as many units as the defending player") is evaluated when the leader action is used and
+  baked into `restore` (2 or 0).
+- **`mayDefeatEnemyUnit`** choice (Thrawn deployed) — `onAttack`, if you control **more** units than
+  the enemy, may defeat one of their **non-leader** units (`isLeaderUnit` excludes leaders;
+  board-target + Decline).
+
+### Chunk E — Sabine Wren (DONE)
+
+Two reusable mechanisms plus the leader:
+
+- **Opponent-interjected choice** — a pending choice whose `controller` is the *non-active* player,
+  made as part of the active player's action. When a leader action raises one, `handOffOpponentChoice`
+  hands `activePlayer` to that controller and records `GameState.pendingResumeActive` (the actor);
+  once the choice(s) drain, `resumeAfterChoice` restores the actor and advances the turn as their
+  action normally would (so it becomes the opponent's turn). Mirrors the On-Defense combat suspend.
+  Drives cleanly through `useGame`'s AI loop (`activePlayer === AI`): the AI auto-resolves its
+  interjected pick, or hands control to the human when the AI is the actor. Generic — any "an opponent
+  chooses …" effect reuses it.
+- **"Next unit you play this phase gains <keywords>"** — `PlayerState.nextPlayedUnitKeywords`, set via
+  `grantNextUnitKeywords(state, owner, keywords)` (merges, union by name). `enterUnit` consumes it on
+  the next unit the owner plays: the granted keywords join the card's for the on-enter effects
+  (`entersWith` covers Shielded token / Ambush attack / Hidden), and are added as a **this-phase
+  lasting keyword** (so an ongoing keyword like Sentinel counts too), then the grant clears. Lapses at
+  regroup (`clearNextUnitGrants`). Generic — any "your next unit gains …" card reuses it.
+- **`opponentGivesAdvantage`** choice — the opponent must give `count` Advantage tokens to one of
+  their units (`targets`); mandatory, one option per their unit (board-target, no Decline).
+- **Sabine Wren (006)** front: `Action [Exhaust]` gated on the opponent controlling a unit → grant
+  Shielded to your next unit now (their giving is mandatory when able), then raise the
+  `opponentGivesAdvantage` choice for them. Deployed **back**: `onAttack` → grant Shielded to your
+  next unit. Manifest front + back true.
+
+> **Future extension (not yet needed, no ticket yet):** the "next unit you play this phase gains …"
+> grant currently carries only **keywords** (`nextPlayedUnitKeywords`). Other cards will likely want
+> the granted "X" to also be an **ability**, a **stat modifier** (+X/+Y), a **cost discount**, etc.
+> When that lands, generalise the grant payload (e.g. `nextPlayedUnitGrant: { keywords?, abilities?,
+> power?, hp?, costDelta? }`) and have `enterUnit` apply each part, rather than adding a new
+> per-flavour field.
+
+**All 18 ASH leaders are now implemented (both sides).**

@@ -1,12 +1,13 @@
 import { registerCard } from './abilities'
-import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount, dealDamageToBase, firstCardUpgrade } from './effects'
+import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount, grantNextUnitKeywords } from './effects'
 import { dealDamageToUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
-import { opponentOf, pushChoice, addLastingEffect } from './types'
+import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, enteredPlayThisPhase } from './types'
+import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets } from './legalMoves'
 import { unitHasTrait, isLeaderUnit } from './keywords'
-import type { EngineCard, GameState, PlayerId, UnitState } from './types'
+import type { EngineCard, GameState, PlayerId, UnitState, UpgradeRef } from './types'
 
 /**
  * Real card definitions (#341+). Side-effect module: importing it registers every
@@ -239,26 +240,222 @@ registerCard('ASH_015', { // Emperor Palpatine — front (undeployed) + deployed
   }],
 })
 
-registerCard('ASH_012', { // Vane — front (undeployed) + deployed (On Attack)
-  // NOTE: "Deal 2 to a base" / "...to the defending unit or a base" are simplified to the
-  // enemy base for now (the sensible default); the full target choice can be added later.
+registerCard('ASH_014', { // The Mandalorian — front take-initiative draw; deployed on-attack draw (#348)
+  // Front (undeployed): when you take the initiative, may pay 1 to draw.
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenTakeInitiative',
+      description: 'You may pay 1 to draw a card.',
+      effect: (s, ctx) =>
+        s.players[ctx.owner].resources.some(r => !r.exhausted)
+          ? pushChoice(s, { kind: 'mayPayToDraw', id: `${ctx.cardId}-init`, controller: ctx.owner, cost: 1, draw: 1 })
+          : s,
+    }],
+  },
+  // Deployed (back): On Attack, if you have the initiative, may draw a card (free). Support keyword
+  // comes from the card DB; Support-on-deploy (attack with another unit) is deferred — shared with Ahsoka.
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'If you have the initiative, you may draw a card.',
+    effect: (s, ctx) => (s.initiative === ctx.owner ? pushChoice(s, { kind: 'mayPayToDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, draw: 1 }) : s),
+  }],
+})
+
+// Every upgrade the player controls — card upgrades AND tokens — as defeatable candidates (#348).
+const friendlyUpgradeCandidates = (s: GameState, owner: PlayerId): UpgradeRef[] =>
+  s.players[owner].units.flatMap(u => u.upgrades.map((up, i) => ({ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId })))
+
+const BOTH_BASES: PlayerId[] = ['player', 'opponent']
+
+registerCard('ASH_012', { // Vane — front (undeployed) + deployed (On Attack) (#348)
+  // The player chooses which upgrade to defeat (any upgrade, token or card), then where the 2 damage
+  // lands: front = "a base" (either); deployed = "the defending unit or a base".
   leaderAbilities: {
     actions: [{
-      description: 'Defeat a friendly upgrade; deal 2 damage to the enemy base.',
-      targets: (s, owner) => s.players[owner].units.filter(u => firstCardUpgrade(s, u)).map(u => u.instanceId),
-      effect: (s, ctx) => {
-        const host = s.players[ctx.owner].units.find(u => u.instanceId === ctx.targetInstanceId)!
-        const next = defeatUpgrade(s, host.instanceId, firstCardUpgrade(s, host)!)
-        return dealDamageToBase(next, opponentOf(ctx.owner), 2)
-      },
+      description: 'Defeat a friendly upgrade; deal 2 damage to a base.',
+      usable: (s, owner) => friendlyUpgradeCandidates(s, owner).length > 0,
+      effect: (s, ctx) =>
+        pushChoice(s, {
+          kind: 'selectUpgradeToDefeat',
+          id: `${ctx.cardId}-defeatUpgrade`,
+          controller: ctx.owner,
+          candidates: friendlyUpgradeCandidates(s, ctx.owner),
+          optional: false,
+          then: { amount: 2, unitTargets: [], baseTargets: BOTH_BASES },
+        }),
     }],
   },
   abilities: [{
     trigger: 'onAttack',
-    description: 'You may defeat a friendly upgrade to deal 2 to the enemy base.',
+    description: 'You may defeat a friendly upgrade to deal 2 to the defending unit or a base.',
     effect: (s, ctx) => {
-      const targets = s.players[ctx.owner].units.filter(u => firstCardUpgrade(s, u)).map(u => u.instanceId)
-      return targets.length === 0 ? s : pushChoice(s, { kind: 'mayDefeatUpgradeForBase', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets })
+      const candidates = friendlyUpgradeCandidates(s, ctx.owner)
+      if (candidates.length === 0) return s
+      // "The defending unit or a base" — the defender is the attack's target when it's a unit.
+      const unitTargets = ctx.attackTarget?.kind === 'unit' ? [ctx.attackTarget.instanceId] : []
+      return pushChoice(s, {
+        kind: 'selectUpgradeToDefeat',
+        id: ctx.sourceInstanceId!,
+        controller: ctx.owner,
+        candidates,
+        optional: true,
+        then: { amount: 2, unitTargets, baseTargets: BOTH_BASES },
+      })
+    },
+  }],
+})
+
+registerCard('ASH_001', { // The Armorer — play an upgrade from your resources, then resource the top of your deck (#348)
+  // Front (undeployed): pay the upgrade's cost, target a unit that entered play this phase.
+  leaderAbilities: {
+    actions: [{
+      description: 'Play an upgrade from your resources on a unit that entered play this phase (paying its cost); resource the top of your deck.',
+      usable: (s, owner) => resourceUpgradeCandidates(s, owner, true, enteredPlayThisPhase(s, owner)).length > 0,
+      effect: (s, ctx) => pushChoice(s, {
+        kind: 'selectResourceUpgrade',
+        id: `${ctx.cardId}-resUpgrade`,
+        controller: ctx.owner,
+        candidates: resourceUpgradeCandidates(s, ctx.owner, true, enteredPlayThisPhase(s, ctx.owner)),
+        optional: false,
+        then: { payCost: true, targetUnits: enteredPlayThisPhase(s, ctx.owner) },
+      }),
+    }],
+  },
+  // Deployed (back): When Attack Ends, may play an upgrade from resources on any friendly unit,
+  // paying its cost (the default — a free play would be spelled out on the card).
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: 'You may play an upgrade from your resources (paying its cost) on a friendly unit; resource the top of your deck.',
+    effect: (s, ctx) => {
+      const friendly = s.players[ctx.owner].units.map(u => u.instanceId)
+      const candidates = resourceUpgradeCandidates(s, ctx.owner, true, friendly)
+      return candidates.length === 0
+        ? s
+        : pushChoice(s, { kind: 'selectResourceUpgrade', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true, then: { payCost: true, targetUnits: friendly } })
+    },
+  }],
+})
+
+const imperialDefeatedThisPhase = (s: GameState, owner: PlayerId): boolean =>
+  defeatedThisPhase(s, owner).some(id => (s.cards[id]?.traits ?? []).some(t => t.toLowerCase() === 'imperial'))
+
+// Deployed Moff Gideon collects keywords from the fallen: for each of these eight, if an
+// Imperial unit in your discard pile has it, this unit gains it too (#348).
+const MOFF_KEYWORDS = ['Ambush', 'Grit', 'Hidden', 'Overwhelm', 'Saboteur', 'Sentinel', 'Shielded', 'Support']
+const cardHasKeyword = (c: EngineCard | undefined, name: string): boolean => (c?.keywords ?? []).some(k => k.name === name)
+const isImperialUnitCard = (c: EngineCard | undefined): boolean =>
+  c?.type === 'unit' && (c.traits ?? []).some(t => t.toLowerCase() === 'imperial')
+
+registerCard('ASH_008', { // Moff Gideon — front: play a unit costing 1 less if a friendly Imperial died this phase (#348)
+  leaderAbilities: {
+    actions: [{
+      description: 'If a friendly Imperial unit was defeated this phase, play a unit from your hand costing 1 less.',
+      usable: (s, owner) => imperialDefeatedThisPhase(s, owner) && affordableHandUnits(s, owner, 0, -1).length > 0,
+      effect: (s, ctx) => pushChoice(s, {
+        kind: 'playUnitFromHand',
+        id: `${ctx.cardId}-play`,
+        controller: ctx.owner,
+        candidates: affordableHandUnits(s, ctx.owner, 0, -1),
+        costDelta: -1,
+        entersReady: false,
+      }),
+    }],
+  },
+  // Deployed (back): gain each listed keyword an Imperial unit in your discard pile has.
+  conditionalKeywords: (s, u) => {
+    const owner = findUnit(s, u.instanceId)?.owner
+    if (!owner) return []
+    const discardImperials = s.players[owner].discard.map(id => s.cards[id]).filter(isImperialUnitCard)
+    return MOFF_KEYWORDS.filter(kw => discardImperials.some(c => cardHasKeyword(c, kw))).map(name => ({ name }))
+  },
+})
+
+registerCard('ASH_002', { // Fennec Shand — front leader action; deployed unit action (Saboteur from card data) (#348)
+  // Front (undeployed): [C=1, Exhaust, exhaust a friendly unit] → play a unit from hand ready.
+  leaderAbilities: {
+    actions: [{
+      description: 'Exhaust a friendly unit and pay 1: play a unit from your hand; it enters ready.',
+      cost: 1,
+      // Needs a ready friendly unit to exhaust and a hand unit affordable after paying the C=1.
+      usable: (s, owner) => s.players[owner].units.some(u => !u.exhausted) && affordableHandUnits(s, owner, 1, 0).length > 0,
+      effect: (s, ctx) => pushChoice(s, {
+        kind: 'selectUnitToExhaust',
+        id: `${ctx.cardId}-exhaust`,
+        controller: ctx.owner,
+        targets: s.players[ctx.owner].units.filter(u => !u.exhausted).map(u => u.instanceId),
+        then: { costDelta: 0, entersReady: true },
+      }),
+    }],
+  },
+  // Deployed (back): [C=1, exhaust a friendly unit] → play a unit from hand ready. No self-exhaust,
+  // so it works even after Fennec attacks; she counts as an exhaustable friendly unit herself.
+  actionAbilities: [{
+    description: 'Pay 1 and exhaust a friendly unit: play a unit from your hand; it enters ready.',
+    cost: 1,
+    usable: (s, u) => {
+      const owner = findUnit(s, u.instanceId)?.owner
+      if (!owner) return false
+      return s.players[owner].units.some(x => !x.exhausted) && affordableHandUnits(s, owner, 1, 0).length > 0
+    },
+    effect: (s, ctx) => pushChoice(s, {
+      kind: 'selectUnitToExhaust',
+      id: `${ctx.cardId}-exhaust`,
+      controller: ctx.owner,
+      targets: s.players[ctx.owner].units.filter(u => !u.exhausted).map(u => u.instanceId),
+      then: { costDelta: 0, entersReady: true },
+    }),
+  }],
+})
+
+registerCard('ASH_006', { // Sabine Wren — front: opponent gives 2 Advantage, grant Shielded; back: On Attack grant Shielded (#348)
+  leaderAbilities: {
+    actions: [{
+      description: 'An opponent gives 2 Advantage tokens to a unit they control. If they do, the next unit you play this phase gains Shielded.',
+      // "If they do" resolves only when the opponent has a unit to receive the tokens — gate on it.
+      usable: (s, owner) => s.players[opponentOf(owner)].units.length > 0,
+      effect: (s, ctx) => {
+        const opp = opponentOf(ctx.owner)
+        const targets = s.players[opp].units.map(u => u.instanceId)
+        if (targets.length === 0) return s
+        // Grant Shielded to our next unit now (the opponent's giving is mandatory when able), then
+        // hand the "which unit gets the tokens" choice to the opponent (useLeaderAbility hands off).
+        const granted = grantNextUnitKeywords(s, ctx.owner, [{ name: 'Shielded' }])
+        return pushChoice(granted, { kind: 'opponentGivesAdvantage', id: `${ctx.cardId}-adv`, controller: opp, count: 2, targets })
+      },
+    }],
+  },
+  // Deployed (back): On Attack, the next unit you play this phase gains Shielded.
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'The next unit you play this phase gains Shielded.',
+    effect: (s, ctx) => grantNextUnitKeywords(s, ctx.owner, [{ name: 'Shielded' }]),
+  }],
+})
+
+registerCard('ASH_005', { // Luke Skywalker — front/back heal on a friendly attack ending (#348)
+  // Front (undeployed): may exhaust the leader to heal 1 from the attacker.
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenFriendlyAttackEnds',
+      description: 'You may exhaust this leader to heal 1 damage from the attacking unit.',
+      effect: (s, ctx) => {
+        const attacker = s.players[ctx.owner].units.find(u => u.instanceId === ctx.attackerInstanceId)
+        if (s.players[ctx.owner].leader.exhausted || !attacker || attacker.damage === 0) return s
+        return pushChoice(s, { kind: 'mayExhaustLeaderHealUnit', id: `${ctx.cardId}-heal`, controller: ctx.owner, unitId: ctx.attackerInstanceId!, amount: 1 })
+      },
+    }],
+  },
+  // Deployed (back): heal 2 from the attacking unit or your base (mandatory — pick a damaged target).
+  abilities: [{
+    trigger: 'whenFriendlyAttackEnds',
+    description: 'Heal 2 damage from the attacking unit or from your base.',
+    effect: (s, ctx) => {
+      const attacker = s.players[ctx.owner].units.find(u => u.instanceId === ctx.attackerInstanceId)
+      const unitTargets = attacker && attacker.damage > 0 ? [attacker.instanceId] : []
+      const baseTargets = s.players[ctx.owner].base.damage > 0 ? [ctx.owner] : []
+      return unitTargets.length === 0 && baseTargets.length === 0
+        ? s
+        : pushChoice(s, { kind: 'selectHealTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 2, unitTargets, baseTargets })
     },
   }],
 })
@@ -281,14 +478,105 @@ registerCard('ASH_017', { // Greef Karga — front (undeployed, optional) + depl
   }],
 })
 
-registerCard('ASH_010', { // Bo-Katan Kryze — deploy gate + deployed aura (front create-token is #309/#348)
+const controlsUnitInEachArena = (s: GameState, owner: PlayerId): boolean =>
+  s.players[owner].units.some(u => u.arena === 'ground') && s.players[owner].units.some(u => u.arena === 'space')
+
+registerCard('ASH_010', { // Bo-Katan Kryze — front/back create a Mandalorian token (#348) + deploy gate (#309) + aura (#346)
   deployCondition: (s, owner) =>
     s.players[owner].resources.length + s.players[owner].units.filter(u => unitHasTrait(s, u, 'Mandalorian')).length >= 10,
+  leaderAbilities: {
+    actions: [{
+      description: 'If you control a unit in each arena, create a Mandalorian token.',
+      cost: 2,
+      usable: (s, owner) => controlsUnitInEachArena(s, owner),
+      effect: (s, ctx) => createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN),
+    }],
+  },
+  // Deployed: On Attack, create a token under the same condition (mandatory).
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'If you control a unit in each arena, create a Mandalorian token.',
+    effect: (s, ctx) => (controlsUnitInEachArena(s, ctx.owner) ? createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN) : s),
+  }],
   // Deployed: other friendly Mandalorian units get +1/+0 (#346).
   aura: (s, src, tgt, friendly) => (friendly && tgt.instanceId !== src.instanceId && unitHasTrait(s, tgt, 'Mandalorian') ? { power: 1 } : undefined),
 })
 
-registerCard('ASH_007', { // Grand Admiral Sloane — deployed aura (front choose-one is #347/#348)
+const canAnyUnitAttack = (s: GameState, owner: PlayerId): boolean =>
+  s.players[owner].units.some(u => {
+    if (u.exhausted) return false
+    const { targets, sentinelLocked } = enemyAttackTargets(s, u)
+    return targets.length > 0 || !sentinelLocked
+  })
+
+registerCard('ASH_004', { // Grand Admiral Thrawn — front attack + conditional Restore; deployed On Attack conditional defeat (#348)
+  leaderAbilities: {
+    actions: [{
+      description: 'Attack with a unit; it gains Restore 2 for this attack if you control as many units as the defending player.',
+      usable: (s, owner) => canAnyUnitAttack(s, owner),
+      effect: (s, ctx) => {
+        const restore = s.players[ctx.owner].units.length === s.players[opponentOf(ctx.owner)].units.length ? 2 : 0
+        return pushChoice(s, { kind: 'attackWithRestore', id: `${ctx.cardId}-attack`, controller: ctx.owner, restore })
+      },
+    }],
+  },
+  // Deployed: On Attack, if you control more units than the defending player, may defeat a non-leader enemy unit.
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'If you control more units than the defending player, you may defeat a non-leader unit they control.',
+    effect: (s, ctx) => {
+      const enemy = opponentOf(ctx.owner)
+      if (s.players[ctx.owner].units.length <= s.players[enemy].units.length) return s
+      const targets = s.players[enemy].units.filter(u => !isLeaderUnit(s, u)).map(u => u.instanceId)
+      return targets.length === 0 ? s : pushChoice(s, { kind: 'mayDefeatEnemyUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets })
+    },
+  }],
+})
+
+registerCard('ASH_018', { // Grogu — triggered deploy on a Unique 4+ unit; combat-conditional aura (#346/#348)
+  deployCondition: () => false, // never deploys via the normal epic action — only via the trigger below
+  leaderAbilities: {
+    abilities: [{
+      trigger: 'whenPlayOrCreateUnit',
+      description: 'When you play a Unique unit costing 4 or more, if Grogu is ready you may deploy him.',
+      effect: (s, ctx) => {
+        const played = allUnits(s).find(u => u.instanceId === ctx.targetInstanceId)
+        const card = played ? s.cards[played.cardId] : undefined
+        const leader = s.players[ctx.owner].leader
+        // "If this leader is ready" — deployable while undeployed and not exhausted. Grogu's deploy
+        // isn't the once-per-game epic action, so a defeated-then-readied Grogu can deploy again.
+        if (!card || !card.unique || card.cost < 4 || leader.deployed || leader.exhausted) return s
+        return pushChoice(s, { kind: 'mayDeployLeader', id: `${ctx.cardId}-deploy`, controller: ctx.owner })
+      },
+    }],
+  },
+  // Deployed: the current combat's defender gets +1/0 if it's another friendly unit (defending), or
+  // -1/0 if it's the enemy defender while another friendly unit (not Grogu) attacks.
+  aura: (_s, src, tgt, sameController, combat) => {
+    if (!combat || tgt.instanceId !== combat.defenderInstanceId) return undefined
+    if (sameController) return tgt.instanceId !== src.instanceId ? { power: 1 } : undefined
+    return combat.attackerInstanceId !== src.instanceId ? { power: -1 } : undefined
+  },
+})
+
+const SLOANE_KEYWORDS = [{ name: 'Sentinel' }, { name: 'Overwhelm' }]
+registerCard('ASH_007', { // Grand Admiral Sloane — front Choose One arena buff (#348) + deployed aura (#346)
+  leaderAbilities: {
+    actions: [{
+      // "Give each ground/space unit Sentinel and Overwhelm for this phase" — every unit in the
+      // chosen arena, both players' (the card says "each ... unit", not "friendly").
+      description: 'Choose one: give each ground unit, or each space unit, Sentinel and Overwhelm for this phase.',
+      effect: (s, ctx) => pushChoice(s, {
+        kind: 'chooseOne',
+        id: `${ctx.cardId}-arena`,
+        controller: ctx.owner,
+        options: [
+          { label: 'Ground units: Sentinel + Overwhelm', kind: 'arenaLastingBuff', arena: 'ground', keywords: SLOANE_KEYWORDS },
+          { label: 'Space units: Sentinel + Overwhelm', kind: 'arenaLastingBuff', arena: 'space', keywords: SLOANE_KEYWORDS },
+        ],
+      }),
+    }],
+  },
   // Deployed: each other friendly unit gains Overwhelm and Sentinel (#346).
   aura: (_s, src, tgt, friendly) => (friendly && tgt.instanceId !== src.instanceId ? { keywords: [{ name: 'Overwhelm' }, { name: 'Sentinel' }] } : undefined),
 })
@@ -323,7 +611,7 @@ registerCard('ASH_003', { // Baylan Skoll — front +2/+2 this phase to a lone u
   }],
 })
 
-registerCard('ASH_009', { // Ahsoka Tano — front +2/+0 this phase to a unit weaker than a friendly one (#347)
+registerCard('ASH_009', { // Ahsoka Tano — front +2/+0 to a unit weaker than a friendly one; deployed On Attack +2/+0 (#347/#348)
   leaderAbilities: {
     actions: [{
       description: 'Choose a unit with less power than a friendly unit; it gets +2/+0 for this phase.',
@@ -334,6 +622,18 @@ registerCard('ASH_009', { // Ahsoka Tano — front +2/+0 this phase to a unit we
       effect: (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, power: 2 }),
     }],
   },
+  // Deployed (back): On Attack, may give a unit with less power than THIS unit +2/+0 for the phase.
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'You may give a unit with less power than this unit +2/+0 for this phase.',
+    effect: (s, ctx) => {
+      const self = allUnits(s).find(u => u.instanceId === ctx.sourceInstanceId)
+      if (!self) return s
+      const selfPower = effectivePower(s, self)
+      const targets = allUnits(s).filter(u => effectivePower(s, u) < selfPower).map(u => u.instanceId)
+      return targets.length === 0 ? s : pushChoice(s, { kind: 'mayLastingBuff', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, power: 2, hp: 0 })
+    },
+  }],
 })
 
 // Units other than the just-ended attacker — Ezra's "a different unit" (#347).

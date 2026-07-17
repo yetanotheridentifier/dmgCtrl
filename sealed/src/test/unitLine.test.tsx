@@ -2,10 +2,11 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, within, fireEvent } from '@testing-library/react'
 import { UnitLine } from '../components/gameScreen'
 import type { UnitInteraction } from '../components/gameScreen'
-import { state, unit, card, CARDS } from './helpers/engineFixtures'
+import { state, player, unit, card, CARDS } from './helpers/engineFixtures'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { addLastingEffect } from '../engine/types'
-import type { GameState } from '../engine/types'
+import type { GameState, LeaderState } from '../engine/types'
+import '../engine/cardDefinitions' // registers ASH_010's aura for the aura-token test
 
 const noInteract: UnitInteraction = { actionable: false, selected: false, isTarget: false }
 
@@ -75,6 +76,24 @@ describe('UnitLine — on-card damage overlay (#326)', () => {
     expect(parts[1]).toHaveStyle({ color: '#2563eb' })
   })
 
+  it('includes an aura buff in the +X/+Y token (#348)', () => {
+    // Deployed Bo-Katan gives other friendly Mandalorian units +1/+0 — the aura should token too.
+    const deployedBoKatan: LeaderState = { cardId: 'ASH_010', deployed: true, epicActionUsed: true, exhausted: false }
+    const s = state({
+      cards: {
+        ...CARDS,
+        ASH_010: card({ id: 'ASH_010', type: 'leader', power: 4, hp: 7 }),
+        MANDO: card({ id: 'MANDO', type: 'unit', arena: 'ground', power: 2, hp: 2, traits: ['Mandalorian'] }),
+      },
+      players: {
+        player: player({ leader: deployedBoKatan, units: [unit('L', 'ASH_010', { isLeader: true }), unit('m1', 'MANDO')] }),
+        opponent: player(),
+      },
+    })
+    render(<UnitLine state={s} unit={s.players.player.units.find(u => u.instanceId === 'm1')!} interact={noInteract} />)
+    expect(screen.getByTestId('board-unit-mod-m1')).toHaveTextContent('+1+0')
+  })
+
   it('shows +2/+0 when only power is buffed, and no token with no modifier (#347)', () => {
     let s = boardWith('TST_D')
     s = addLastingEffect(s, { targetInstanceId: 'u1', power: 2 })
@@ -132,6 +151,13 @@ describe('UnitLine — attached upgrades (#336)', () => {
   it('shows a Hidden badge on a hidden unit (#334)', () => {
     render(<UnitLine state={boardWith('TST_D')} unit={unit('u1', 'TST_D', { hidden: true })} interact={noInteract} />)
     expect(screen.getByTestId('board-unit-hidden-u1')).toHaveTextContent(/hidden/i)
+  })
+
+  it('hides the Hidden badge when the unit also has Sentinel — Sentinel overrides Hidden (#348)', () => {
+    const s = state({ cards: { ...CARDS, TST_HS: card({ id: 'TST_HS', type: 'unit', power: 2, hp: 2, keywords: [{ name: 'Sentinel' }] }) } })
+    render(<UnitLine state={s} unit={unit('u1', 'TST_HS', { hidden: true })} interact={noInteract} />)
+    expect(screen.queryByTestId('board-unit-hidden-u1')).toBeNull() // no Hidden badge
+    expect(screen.getByTestId('board-unit-sentinel-u1')).toBeInTheDocument()
   })
 
   it('shows a Sentinel badge on a unit with the Sentinel keyword, and none without (#334)', () => {

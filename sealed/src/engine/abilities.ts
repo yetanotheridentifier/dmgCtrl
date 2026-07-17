@@ -1,4 +1,4 @@
-import type { GameState, KeywordInstance, PlayerId, UnitState } from './types'
+import type { GameState, KeywordInstance, PlayerId, UnitState, CombatContext } from './types'
 import type { AttackTarget } from './actions'
 
 /**
@@ -26,6 +26,8 @@ export type TriggerPoint =
   | 'whenFriendlyAttackEnds'
   | 'whenReadies'
   | 'whenRegroupStarts'
+  // "When you take the initiative" (#348, Mandalorian) — fires for the taker's undeployed leader.
+  | 'whenTakeInitiative'
   | 'whenDefeated'
   | 'onDefense'
   | 'whenPlayOrCreateUnit'
@@ -106,10 +108,11 @@ export interface CardDefinition {
    * Constant/aura ability (#346): while `source` (a unit with this card, or an upgrade)
    * is in play, it contributes power/HP and/or keywords to OTHER units. Called for each
    * in-play `target`; return `undefined` when it doesn't affect that target. `sameController`
-   * is true when source and target share a controller (friendly). Must NOT read the target's
-   * computed keywords/power (that recurses through the aura pass) — inspect card data/traits.
+   * is true when source and target share a controller (friendly). `combat` carries the current
+   * combat's roles when the aura pass runs during damage resolution (Grogu, #348). Must NOT read
+   * the target's computed keywords/power (that recurses through the aura pass) — inspect card data.
    */
-  aura?: (state: GameState, source: UnitState, target: UnitState, sameController: boolean) => AuraContribution | undefined
+  aura?: (state: GameState, source: UnitState, target: UnitState, sameController: boolean, combat?: CombatContext) => AuraContribution | undefined
 }
 
 /** What an aura contributes to one affected unit (#346). */
@@ -157,6 +160,8 @@ export function leaderActions(cardId: string): LeaderActionAbilityDef[] {
 /** An activated ability a unit may use as its action (CR 2.4); e.g. Improvised Identity. */
 export interface ActionAbilityDef {
   description: string
+  /** Resource cost paid on use (default 0) — the ability's "C=N" cost (#348). */
+  cost?: number
   /** May be used only once per round by a given unit (tracked on `UnitState.usedAbilities`). */
   oncePerRound?: boolean
   /** Extra gate beyond once-per-round (defaults usable). */
