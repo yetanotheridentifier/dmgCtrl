@@ -10,7 +10,7 @@ dmgCtrl Sealed lets you play Star Wars: Unlimited **Sealed** games against an AI
 
 Your decks are saved on this device and appear in the deck list. The first time you play a deck, its card details are fetched and cached locally — later games work from the cache.
 
-Alongside the deck selection, an **Implemented cards** panel lists which card abilities are currently built into the engine: leaders by side (**front** = undeployed leader ability, **back** = deployed leader-unit ability), and the implemented **upgrades**. Cards not listed still play — they just use their printed stats and keywords (and make fine resources) rather than their special ability text.
+Alongside the deck selection, an **Implemented cards** panel lists which card abilities are currently built into the engine. A **progress bar** at the top shows how much of the whole set (tokens included) has its rules fully implemented. **Leaders** (by side — **front** = undeployed, **back** = deployed leader-unit) and **upgrades** are complete, so they roll up into collapsible sections (collapsed by default — click to expand). **Units** are shown as collapsible **work groups** (each listing its cards) with a development status; the next group to be built is expanded, completed and later groups are collapsed with a status note. Cards not yet implemented still play — they just use their printed stats and keywords (and make fine resources) rather than their special ability text.
 
 ## Caching a full set
 

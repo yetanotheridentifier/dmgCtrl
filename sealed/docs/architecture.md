@@ -26,7 +26,10 @@ The heart of the app is a pure function pair:
   game over) but does not re-validate game rules.
 
 Supporting modules: `types.ts` (schema), `cardDb.ts` (SWUDB payload → normalised
-static card data), `initGame.ts` (setup per CR §5.2: shuffle, draw 6 — the game opens in a SETUP
+static card data — two small data-patch tables feed in here: `upgradeStatOverrides.ts` *fills* the
+Power/HP the ASH upgrade data omits, and `cardDataCorrections.ts` *overrides* values the source
+gets wrong, read off the printed card (e.g. Moff Gideon unit cost, Nebulon-C Frigate arena); both
+drop out per-card once upstream is fixed), `initGame.ts` (setup per CR §5.2: shuffle, draw 6 — the game opens in a SETUP
 phase with two stages resolved through legalMoves/resolve: mulligan decisions
 (CR 5.2.1e, initiative holder first), then each player picks which 2 hand
 cards become starting resources (CR 5.2.1f; all pairs enumerated as actions).
@@ -195,8 +198,10 @@ leaves CORS-friendly hosts (cdn.starwarsunlimited.com) untouched.
 
 ## Testing
 
-Strict TDD; ~460 tests at the time of writing. Engine tests use hand-built fixture
-states (`src/test/helpers/engineFixtures.ts`); data-layer tests run against
-fake-indexeddb; screen tests drive the real hook + engine with seeded caches,
-deterministic shuffles, and a "passive" AI rng (near-1 → always picks pass, the
-last-ordered legal move). `npm test` at the repo root runs main + proxy + sealed.
+Strict TDD; 600+ tests. Engine tests use hand-built fixture states
+(`src/test/helpers/engineFixtures.ts`); a few validation/behaviour tests run against a trimmed
+snapshot of the real ASH card data (`src/test/fixtures/ashSet.json` — 264 cards, refreshed from
+`worker.dmgctrl.app/cards/search?q=set:ASH`), e.g. `groupAUnits.test.ts` proving the keyword-only
+units need no engine work. Data-layer tests run against fake-indexeddb; screen tests drive the real
+hook + engine with seeded caches, deterministic shuffles, and a "passive" AI rng (near-1 → always
+picks pass, the last-ordered legal move). `npm test` at the repo root runs main + proxy + sealed.

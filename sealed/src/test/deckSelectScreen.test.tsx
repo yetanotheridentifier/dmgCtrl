@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import DeckSelectScreen from '../components/deckSelectScreen'
-import { IMPLEMENTED_LEADERS, IMPLEMENTED_UPGRADES } from '../data/implementedCards'
+import { IMPLEMENTED_LEADERS, IMPLEMENTED_UPGRADES, TOTAL_PROGRESS } from '../data/implementedCards'
 import { saveDeck } from '../data/deckStore'
 import { syncCatalogue } from '../data/catalogueSync'
 import { importSet } from '../data/setImport'
@@ -55,6 +55,40 @@ describe('DeckSelectScreen', () => {
     expect(within(upgrades).getByText('Camtono')).toBeInTheDocument()
     // Spot-check a leader name renders too.
     expect(IMPLEMENTED_LEADERS.some(l => l.name === 'Baylan Skoll')).toBe(true)
+  })
+
+  it('shows a total implementation progress bar (whole set, tokens included)', () => {
+    render(<DeckSelectScreen onPlay={vi.fn()} />)
+    const bar = screen.getByTestId('implementation-progress')
+    expect(within(bar).getByText(`${TOTAL_PROGRESS.done} / ${TOTAL_PROGRESS.total} cards`)).toBeInTheDocument()
+    const pct = Math.round((TOTAL_PROGRESS.done / TOTAL_PROGRESS.total) * 100)
+    expect(within(bar).getByLabelText(`${pct}% implemented`)).toBeInTheDocument()
+    expect(within(bar).getByRole('progressbar')).toHaveAttribute('aria-valuenow', String(pct))
+  })
+
+  it('rolls up the completed Leaders and Upgrades into sections collapsed by default', () => {
+    render(<DeckSelectScreen onPlay={vi.fn()} />)
+    const leadersDetails = screen.getByTestId('implemented-leaders').closest('details') as HTMLDetailsElement
+    expect(leadersDetails).not.toBeNull()
+    expect(leadersDetails.open).toBe(false)
+    const upgradesDetails = screen.getByTestId('implemented-upgrades').closest('details') as HTMLDetailsElement
+    expect(upgradesDetails.open).toBe(false)
+  })
+
+  it('shows unit work-groups as collapsible sections, expanding the first not-yet-done group', () => {
+    render(<DeckSelectScreen onPlay={vi.fn()} />)
+    const groups = screen.getByTestId('implemented-unit-groups')
+    const groupA = within(groups).getByTestId('unit-group-A') as HTMLDetailsElement // Group A = done
+    const groupB = within(groups).getByTestId('unit-group-B') as HTMLDetailsElement // Group B = first not-done
+    expect(groupA.open).toBe(false) // done → collapsed
+    expect(groupB.open).toBe(true) // next up → expanded
+    // Development status is shown for the groups (same treatment as leaders/upgrades).
+    expect(within(groupA).getByText(/done/i)).toBeInTheDocument()
+    expect(within(groupB).getByText(/planned/i)).toBeInTheDocument()
+    // Each group lists its specific units.
+    expect(within(groupB).getByText('Bo-Katan Kryze')).toBeInTheDocument()
+    // No group-letter prefixes in the section titles.
+    expect(within(groups).queryByText(/^[A-F]\s*·/)).toBeNull()
   })
 
   it('imports a pasted deck and lists it', async () => {

@@ -4,6 +4,7 @@ import type { CardDb, CardType, EngineCard, Arena, KeywordInstance } from './typ
 import { TOKEN_CARDS } from './tokenUpgrades'
 import { TOKEN_UNIT_CARDS } from './tokenUnits'
 import { UPGRADE_STAT_OVERRIDES } from './upgradeStatOverrides'
+import { CARD_DATA_CORRECTIONS } from './cardDataCorrections'
 
 function toInt(value: string | undefined): number {
   const n = parseInt(value ?? '', 10)
@@ -49,7 +50,7 @@ export function normaliseCard(card: SwuCard): EngineCard {
   // the source data, so fill in the printed modifier from a lookup. Applied only
   // when the source omits both fields, so it auto-drops once the data is fixed.
   const override = card.Power === undefined && card.HP === undefined ? UPGRADE_STAT_OVERRIDES[id] : undefined
-  return {
+  const normalised: EngineCard = {
     id,
     name: card.Name,
     ...(card.Subtitle !== undefined && { subtitle: card.Subtitle }),
@@ -66,6 +67,8 @@ export function normaliseCard(card: SwuCard): EngineCard {
     ...(card.BackArt !== undefined && { backArt: card.BackArt }),
     ...(card.FrontText !== undefined && { text: card.FrontText }),
   }
+  // Last: override any values the source data gets wrong (read off the printed card, #306).
+  return { ...normalised, ...CARD_DATA_CORRECTIONS[id] }
 }
 
 export function buildCardDb(cards: SwuCard[]): CardDb {
