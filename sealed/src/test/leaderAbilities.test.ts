@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
-import { legalMoves } from '../engine/legalMoves'
+import { legalMoves, enemyAttackTargets } from '../engine/legalMoves'
 import { describeAction } from '../utils/describeAction'
 import { effectivePower, effectiveHp } from '../engine/stats'
 import { unitHasKeyword } from '../engine/keywords'
@@ -1122,5 +1122,237 @@ describe('Fennec Shand (ASH_002) — front: exhaust a friendly unit + C=1 → pl
     expect(legalMoves(noReadyUnit).some(a => a.type === 'useLeaderAbility')).toBe(false)
     // Only 2 resources: 1 for C=1 leaves 1, but GRUNT costs 2 → unaffordable.
     expect(legalMoves(board(2)).some(a => a.type === 'useLeaderAbility')).toBe(false)
+  })
+})
+
+describe('Fennec Shand (ASH_002) — deployed: C=1 + exhaust a friendly unit → play a unit ready (#348)', () => {
+  const cards = {
+    ...CARDS,
+    ASH_002: card({ id: 'ASH_002', type: 'leader', cost: 4, power: 3, hp: 4, keywords: [{ name: 'Saboteur' }] }),
+    GRUNT: card({ id: 'GRUNT', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 2 }),
+  }
+  const board = (resources = 3) => state({
+    cards,
+    players: {
+      player: player({
+        leader: deployed('ASH_002'),
+        hand: ['GRUNT'],
+        resources: ready(resources),
+        units: [unit('L', 'ASH_002', { isLeader: true }), unit('x1', 'TST_U1')],
+      }),
+      opponent: player(),
+    },
+  })
+
+  it('deployed Fennec keeps her Saboteur keyword (from the card data)', () => {
+    expect(unitHasKeyword(board(), board().players.player.units.find(u => u.instanceId === 'L')!, 'Saboteur')).toBe(true)
+  })
+
+  it('offers the action; it exhausts a chosen friendly unit, pays 1, and plays the hand unit READY — without exhausting Fennec herself', () => {
+    const s = board()
+    const move = legalMoves(s).find(a => a.type === 'useAbility' && a.cardId === 'ASH_002')
+    expect(move).toBeDefined()
+    const raised = resolve(s, move!)
+    // Both the deployed Fennec and x1 are ready → either can be the exhausted friendly unit.
+    expect(raised.pendingChoices?.[0]).toMatchObject({ kind: 'selectUnitToExhaust', targets: ['L', 'x1'] })
+    expect(raised.players.player.resources.filter(r => !r.exhausted)).toHaveLength(2) // paid the C=1
+    expect(raised.players.player.units.find(u => u.instanceId === 'L')!.exhausted).toBe(false) // Fennec not self-exhausted
+    // Step 2: exhaust x1 → the play-from-hand choice appears.
+    const exhausted = resolve(raised, { type: 'acceptChoice', choiceId: raised.pendingChoices![0].id, targetInstanceId: 'x1' })
+    expect(exhausted.players.player.units.find(u => u.instanceId === 'x1')!.exhausted).toBe(true)
+    expect(exhausted.pendingChoices?.[0]).toMatchObject({ kind: 'playUnitFromHand', entersReady: true, candidates: [{ handIndex: 0, cardId: 'GRUNT' }] })
+    // Step 3: play GRUNT → enters ready, cost paid.
+    const done = resolve(exhausted, { type: 'acceptChoice', choiceId: exhausted.pendingChoices![0].id, handIndex: 0 })
+    expect(done.players.player.units.find(u => u.cardId === 'GRUNT')!.exhausted).toBe(false) // READY
+    expect(done.players.player.hand).toEqual([])
+    expect(done.players.player.resources.filter(r => !r.exhausted)).toHaveLength(0) // 3 − 1 (C) − 2 (GRUNT)
+    expect(done.activePlayer).toBe('opponent')
+  })
+
+  it('is not offered when Fennec and every friendly unit are exhausted', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({
+          leader: deployed('ASH_002'),
+          hand: ['GRUNT'],
+          resources: ready(3),
+          units: [unit('L', 'ASH_002', { isLeader: true, exhausted: true }), unit('x1', 'TST_U1', { exhausted: true })],
+        }),
+        opponent: player(),
+      },
+    })
+    expect(legalMoves(s).some(a => a.type === 'useAbility' && a.cardId === 'ASH_002')).toBe(false)
+  })
+
+  it('is not offered when the hand unit is unaffordable after paying C=1', () => {
+    // 2 resources: 1 for C=1 leaves 1, but GRUNT costs 2 → unaffordable.
+    expect(legalMoves(board(2)).some(a => a.type === 'useAbility' && a.cardId === 'ASH_002')).toBe(false)
+  })
+
+  it('lets Fennec exhaust herself as the friendly unit when she is the only ready unit', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ leader: deployed('ASH_002'), hand: ['GRUNT'], resources: ready(3), units: [unit('L', 'ASH_002', { isLeader: true })] }),
+        opponent: player(),
+      },
+    })
+    const move = legalMoves(s).find(a => a.type === 'useAbility' && a.cardId === 'ASH_002')
+    expect(move).toBeDefined()
+    const raised = resolve(s, move!)
+    expect(raised.pendingChoices?.[0]).toMatchObject({ kind: 'selectUnitToExhaust', targets: ['L'] })
+    const exhausted = resolve(raised, { type: 'acceptChoice', choiceId: raised.pendingChoices![0].id, targetInstanceId: 'L' })
+    expect(exhausted.players.player.units.find(u => u.instanceId === 'L')!.exhausted).toBe(true)
+  })
+})
+
+describe('Moff Gideon (ASH_008) — deployed: gains keywords from Imperial units in your discard (#348)', () => {
+  const cards = {
+    ...CARDS,
+    ASH_008: card({ id: 'ASH_008', type: 'leader', cost: 7, power: 5, hp: 8 }),
+    IMP_SENT: card({ id: 'IMP_SENT', type: 'unit', traits: ['Imperial'], keywords: [{ name: 'Sentinel' }] }),
+    IMP_AMBUSH: card({ id: 'IMP_AMBUSH', type: 'unit', traits: ['Imperial'], keywords: [{ name: 'Ambush' }] }),
+    IMP_RAID: card({ id: 'IMP_RAID', type: 'unit', traits: ['Imperial'], keywords: [{ name: 'Raid', value: 2 }] }),
+    REBEL_GRIT: card({ id: 'REBEL_GRIT', type: 'unit', traits: ['Rebel'], keywords: [{ name: 'Grit' }] }),
+  }
+  const board = (discard: string[]) => state({
+    cards,
+    players: { player: player({ leader: deployed('ASH_008'), units: [unit('L', 'ASH_008', { isLeader: true })], discard }), opponent: player() },
+  })
+
+  it('grants each listed keyword an Imperial unit in your discard has', () => {
+    const s = board(['IMP_SENT', 'IMP_AMBUSH'])
+    const m = s.players.player.units[0]
+    expect(unitHasKeyword(s, m, 'Sentinel')).toBe(true)
+    expect(unitHasKeyword(s, m, 'Ambush')).toBe(true)
+    expect(unitHasKeyword(s, m, 'Overwhelm')).toBe(false) // no Overwhelm Imperial in discard
+  })
+
+  it('ignores keywords outside the granted list, and non-Imperial discard units', () => {
+    const s = board(['IMP_RAID', 'REBEL_GRIT'])
+    const m = s.players.player.units[0]
+    expect(unitHasKeyword(s, m, 'Raid')).toBe(false) // Raid is not one of the eight granted keywords
+    expect(unitHasKeyword(s, m, 'Grit')).toBe(false) // Grit is granted, but its discard unit is not Imperial
+  })
+
+  it('grants nothing from an empty discard', () => {
+    expect(unitHasKeyword(board([]), board([]).players.player.units[0], 'Sentinel')).toBe(false)
+  })
+
+  it('reads only your own discard, not the opponent’s', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ leader: deployed('ASH_008'), units: [unit('L', 'ASH_008', { isLeader: true })], discard: [] }),
+        opponent: player({ discard: ['IMP_SENT'] }),
+      },
+    })
+    expect(unitHasKeyword(s, s.players.player.units[0], 'Sentinel')).toBe(false)
+  })
+
+  it('opens a Support attack on DEPLOY when a Support Imperial is in your discard', () => {
+    const withSupport = { ...cards, IMP_SUP: card({ id: 'IMP_SUP', type: 'unit', traits: ['Imperial'], keywords: [{ name: 'Support' }] }) }
+    const s = state({
+      cards: withSupport,
+      players: {
+        player: player({ leader: undeployed('ASH_008'), resources: ready(7), discard: ['IMP_SUP'], units: [unit('ally', 'TST_U1')] }),
+        opponent: player({ units: [unit('e1', 'TST_U1')] }),
+      },
+    })
+    expect(legalMoves(s).some(a => a.type === 'deployLeader')).toBe(true)
+    const deployedState = resolve(s, { type: 'deployLeader' })
+    // Deployed Moff gained Support (from the discard), so another ready unit may attack.
+    expect(deployedState.pendingChoices?.[0]).toMatchObject({ kind: 'support' })
+  })
+
+  it('opens no Support attack on deploy without a Support Imperial in your discard', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ leader: undeployed('ASH_008'), resources: ready(7), discard: ['IMP_SENT'], units: [unit('ally', 'TST_U1')] }),
+        opponent: player({ units: [unit('e1', 'TST_U1')] }),
+      },
+    })
+    const deployedState = resolve(s, { type: 'deployLeader' })
+    expect(deployedState.pendingChoices ?? []).toHaveLength(0)
+  })
+})
+
+describe('Moff Gideon (ASH_008) deployed — every granted keyword behaves (#348)', () => {
+  const imp = (id: string, name: string) => card({ id, type: 'unit', arena: 'ground', traits: ['Imperial'], keywords: [{ name }] })
+  const cards = {
+    ...CARDS,
+    ASH_008: card({ id: 'ASH_008', type: 'leader', cost: 7, power: 5, hp: 8 }),
+    IMP_AMBUSH: imp('IMP_AMBUSH', 'Ambush'),
+    IMP_GRIT: imp('IMP_GRIT', 'Grit'),
+    IMP_HIDDEN: imp('IMP_HIDDEN', 'Hidden'),
+    IMP_OVER: imp('IMP_OVER', 'Overwhelm'),
+    IMP_SAB: imp('IMP_SAB', 'Saboteur'),
+    IMP_SENT: imp('IMP_SENT', 'Sentinel'),
+    IMP_SHIELD: imp('IMP_SHIELD', 'Shielded'),
+    IMP_SUPPORT: imp('IMP_SUPPORT', 'Support'),
+  }
+  // Actually deploy Moff (so on-enter keywords run), with the given discard and a ready ally.
+  const deploy = (discard: string[]) => resolve(state({
+    cards,
+    players: {
+      player: player({ leader: undeployed('ASH_008'), resources: ready(7), discard, units: [unit('ally', 'TST_U1')] }),
+      opponent: player({ units: [unit('e1', 'TST_U1')] }),
+    },
+  }), { type: 'deployLeader' })
+  const moffOf = (s: ReturnType<typeof deploy>) => s.players.player.units.find(u => u.cardId === 'ASH_008')!
+  // A pre-deployed Moff (leader unit already on the board) for the constant/combat keywords.
+  const onBoard = (discard: string[], moffOverrides = {}) => state({
+    cards,
+    players: {
+      player: player({ leader: deployed('ASH_008'), units: [unit('L', 'ASH_008', { isLeader: true, ...moffOverrides }), unit('bystander', 'TST_U1')], discard }),
+      opponent: player({ units: [unit('e1', 'TST_U1')] }),
+    },
+  })
+
+  it('Ambush — opens an ambush attack on deploy', () => {
+    const s = deploy(['IMP_AMBUSH'])
+    const moff = moffOf(s)
+    expect(unitHasKeyword(s, moff, 'Ambush')).toBe(true)
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'ambush', unitId: moff.instanceId })
+  })
+
+  it('Grit — gains power per damage counter', () => {
+    const s = onBoard(['IMP_GRIT'], { damage: 2 })
+    const moff = s.players.player.units[0]
+    expect(unitHasKeyword(s, moff, 'Grit')).toBe(true)
+    expect(effectivePower(s, moff)).toBe(5 + 2) // base 5 + Grit (2 damage)
+  })
+
+  it('Hidden — deploys hidden (unattackable until next phase)', () => {
+    expect(moffOf(deploy(['IMP_HIDDEN'])).hidden).toBe(true)
+  })
+
+  it('Overwhelm — gains the keyword', () => {
+    expect(unitHasKeyword(onBoard(['IMP_OVER']), onBoard(['IMP_OVER']).players.player.units[0], 'Overwhelm')).toBe(true)
+  })
+
+  it('Saboteur — gains the keyword', () => {
+    expect(unitHasKeyword(onBoard(['IMP_SAB']), onBoard(['IMP_SAB']).players.player.units[0], 'Saboteur')).toBe(true)
+  })
+
+  it('Sentinel — forces enemy attackers onto Moff', () => {
+    // enemyAttackTargets reads opponentOf(activePlayer), so make the opponent the attacker here.
+    const s = { ...onBoard(['IMP_SENT']), activePlayer: 'opponent' as const }
+    const moff = s.players.player.units.find(u => u.cardId === 'ASH_008')!
+    expect(unitHasKeyword(s, moff, 'Sentinel')).toBe(true)
+    // Only the Sentinel (Moff) is a legal unit target — the bystander is protected.
+    const { targets, sentinelLocked } = enemyAttackTargets(s, s.players.opponent.units[0])
+    expect(sentinelLocked).toBe(true)
+    expect(targets.map(t => t.instanceId)).toEqual([moff.instanceId])
+  })
+
+  it('Shielded — deploys with a Shield token', () => {
+    expect(moffOf(deploy(['IMP_SHIELD'])).upgrades.some(u => u.cardId === TOKEN_SHIELD)).toBe(true)
+  })
+
+  it('Support — opens a support attack on deploy', () => {
+    expect(deploy(['IMP_SUPPORT']).pendingChoices?.[0]).toMatchObject({ kind: 'support' })
   })
 })

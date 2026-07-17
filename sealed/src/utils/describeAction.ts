@@ -147,6 +147,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const host = pick ? anyUnitName(state, pick.unitId) : undefined
         return `Defeat the copy${host ? ` on ${host}` : ''}`
       }
+      if (choice.kind === 'selectUniqueUnitToDefeat') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Defeat ${target ?? 'the duplicate'}`
+      }
       if (choice.kind === 'mayLastingBuff') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         const buff = [choice.power || choice.hp ? `+${choice.power ?? 0}/+${choice.hp ?? 0}` : '', ...(choice.keywords ?? []).map(k => k.name)].filter(Boolean).join(' & ')

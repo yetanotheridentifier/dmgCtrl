@@ -479,9 +479,25 @@ Phased into independently-deployable chunks; each groups a primitive with the le
   `handAction` map, reusing the normal `HandCard` play affordance; excluded from the action menu);
   `selectUnitToExhaust` rides the board-target mechanism (`boardTargetKinds`).
 
-**Deferred:** Fennec's deployed **back** (same effect as a leader-unit action) needs unit action
-abilities to support a resource cost + the exhaust-a-unit additional cost — not built yet. Moff's
-**back** is a separate keyword-grant-from-discard mechanic (not play-from-hand).
+**Deployed backs (DONE):**
+- **`ActionAbilityDef` gained an optional `cost`** (the ability's "C=N"), paid by `resolve.useAbility`
+  and gated in `legalMoves` (`canAfford`) — the unit-action equivalent of a leader action's cost.
+- **Fennec Shand (002)** back: a deployed **unit action** `[C=1, exhaust a friendly unit] → play a
+  unit from hand ready`. Same `selectUnitToExhaust → playUnitFromHand (entersReady)` chain as her
+  front, but no self-exhaust (the cost has no `[Exhaust]`), so she can use it after attacking and may
+  even exhaust **herself** as the friendly unit. `Saboteur` comes free from the card DB. UI: surfaces
+  as a "Use Fennec Shand" menu button (like Improvised Identity).
+- **Moff Gideon (008)** back: a constant `conditionalKeywords` — for each of {Ambush, Grit, Hidden,
+  Overwhelm, Saboteur, Sentinel, Shielded, Support}, the deployed unit gains it when an **Imperial
+  unit in your discard pile** has it. Reads the owner's discard (via `findUnit`), folds into
+  `keywords.unitKeywords`; no UI action needed.
+- **On-enter keywords fire on DEPLOY, not just when played:** `deployLeader` now runs
+  `applyDeployKeywords` (Shielded → a Shield token, Hidden → unattackable, then Ambush → attack now
+  / Support → another unit may attack), reading the deployed unit's **live** keywords so ones GRANTED
+  at deploy count (Moff from a discard Imperial; also any future leader that prints these). The deploy
+  dispatch already holds the turn on any raised choice. The Support/Ambush checks use `unitHasKeyword`
+  (the unit's keywords), not `hasKeyword` (the card's printed keywords) — the earlier "Support didn't
+  work on Moff deploy" bug. `leaderAbilities.test.ts` covers all eight granted keywords behaving.
 
 ### Chunk D — play an upgrade from your resources (The Armorer) (DONE)
 
@@ -536,16 +552,23 @@ which never re-triggers mid-attack.) **Ahsoka (009)** deployed back is now compl
   redeploy, CR 3.4.5); `mayDeployLeader` passes `false`, so a defeated-then-readied Grogu can deploy
   again. His trigger gates on `!leader.exhausted`, so he can't redeploy until he readies at regroup.
 
-### Unique rule for upgrades (#348)
+### Unique rule (#348)
 
-A player can't control two upgrades with the same title. `uniqueUpgradeCheck(state, owner)` runs
-after every upgrade attach (`playUpgrade`, `attachResourceUpgrade`, `playTopCardFree`): if the owner
-now controls ≥2 unique upgrades of one card id, it raises `selectUniqueToDefeat` (candidates = the
-duplicate `UpgradeRef`s) — the player picks one to defeat (mandatory, no cancel; centre-screen
-`CardSelectOverlay`), then it re-checks so 3+ copies resolve down to one. Per-**controller** (an
-upgrade's `owner`), so the opponent's copy of the same card doesn't conflict. `playUpgrade`'s
-dispatch now holds the turn while such a choice (or Camtono's look-at) resolves. (The unit-side
-unique rule is a follow-up.)
+A player can't control two cards with the same unique title. Both card types are keyed by card id
+(a deck's duplicates share it), per-**controller**, and re-check so 3+ copies resolve down to one.
+
+- **Upgrades:** `uniqueUpgradeCheck(state, owner)` runs after every upgrade attach (`playUpgrade`,
+  `attachResourceUpgrade`, `playTopCardFree`): if the owner now controls ≥2 unique upgrades of one
+  card id it raises `selectUniqueToDefeat` (candidates = the duplicate `UpgradeRef`s) — pick one to
+  defeat (mandatory, no cancel; centre-screen `CardSelectOverlay`). Per-controller via an upgrade's
+  `owner`, so the opponent's copy of the same card doesn't conflict. `playUpgrade`'s dispatch holds
+  the turn while such a choice (or Camtono's look-at) resolves.
+- **Units:** `uniqueUnitCheck(state, owner)` runs at the end of `enterUnit` (so every play-a-unit
+  path — hand, Fennec/Moff play-from-hand, play-top-free — is covered): if the owner now controls ≥2
+  units of one card id it raises `selectUniqueUnitToDefeat` (candidates = the duplicate unit instance
+  ids) — pick one to defeat off the board (mandatory). Presented as a **board-target** selection
+  (`boardTargetKinds`, click the highlighted duplicate; no Decline), since the copies may differ in
+  damage/upgrades. Per-controller (the units in your `units[]`), so the opponent's copy is fine.
 
 ### Chunk F2 — Grand Admiral Thrawn (DONE)
 

@@ -339,6 +339,13 @@ registerCard('ASH_001', { // The Armorer — play an upgrade from your resources
 const imperialDefeatedThisPhase = (s: GameState, owner: PlayerId): boolean =>
   defeatedThisPhase(s, owner).some(id => (s.cards[id]?.traits ?? []).some(t => t.toLowerCase() === 'imperial'))
 
+// Deployed Moff Gideon collects keywords from the fallen: for each of these eight, if an
+// Imperial unit in your discard pile has it, this unit gains it too (#348).
+const MOFF_KEYWORDS = ['Ambush', 'Grit', 'Hidden', 'Overwhelm', 'Saboteur', 'Sentinel', 'Shielded', 'Support']
+const cardHasKeyword = (c: EngineCard | undefined, name: string): boolean => (c?.keywords ?? []).some(k => k.name === name)
+const isImperialUnitCard = (c: EngineCard | undefined): boolean =>
+  c?.type === 'unit' && (c.traits ?? []).some(t => t.toLowerCase() === 'imperial')
+
 registerCard('ASH_008', { // Moff Gideon — front: play a unit costing 1 less if a friendly Imperial died this phase (#348)
   leaderAbilities: {
     actions: [{
@@ -354,9 +361,17 @@ registerCard('ASH_008', { // Moff Gideon — front: play a unit costing 1 less i
       }),
     }],
   },
+  // Deployed (back): gain each listed keyword an Imperial unit in your discard pile has.
+  conditionalKeywords: (s, u) => {
+    const owner = findUnit(s, u.instanceId)?.owner
+    if (!owner) return []
+    const discardImperials = s.players[owner].discard.map(id => s.cards[id]).filter(isImperialUnitCard)
+    return MOFF_KEYWORDS.filter(kw => discardImperials.some(c => cardHasKeyword(c, kw))).map(name => ({ name }))
+  },
 })
 
-registerCard('ASH_002', { // Fennec Shand — front: C=1 + exhaust a friendly unit → play a unit from hand ready (#348)
+registerCard('ASH_002', { // Fennec Shand — front leader action; deployed unit action (Saboteur from card data) (#348)
+  // Front (undeployed): [C=1, Exhaust, exhaust a friendly unit] → play a unit from hand ready.
   leaderAbilities: {
     actions: [{
       description: 'Exhaust a friendly unit and pay 1: play a unit from your hand; it enters ready.',
@@ -372,6 +387,24 @@ registerCard('ASH_002', { // Fennec Shand — front: C=1 + exhaust a friendly un
       }),
     }],
   },
+  // Deployed (back): [C=1, exhaust a friendly unit] → play a unit from hand ready. No self-exhaust,
+  // so it works even after Fennec attacks; she counts as an exhaustable friendly unit herself.
+  actionAbilities: [{
+    description: 'Pay 1 and exhaust a friendly unit: play a unit from your hand; it enters ready.',
+    cost: 1,
+    usable: (s, u) => {
+      const owner = findUnit(s, u.instanceId)?.owner
+      if (!owner) return false
+      return s.players[owner].units.some(x => !x.exhausted) && affordableHandUnits(s, owner, 1, 0).length > 0
+    },
+    effect: (s, ctx) => pushChoice(s, {
+      kind: 'selectUnitToExhaust',
+      id: `${ctx.cardId}-exhaust`,
+      controller: ctx.owner,
+      targets: s.players[ctx.owner].units.filter(u => !u.exhausted).map(u => u.instanceId),
+      then: { costDelta: 0, entersReady: true },
+    }),
+  }],
 })
 
 registerCard('ASH_005', { // Luke Skywalker — front/back heal on a friendly attack ending (#348)

@@ -336,6 +336,7 @@ export type PendingChoice =
   // Unique rule (CR): a player controlling two upgrades with the same title defeats one (their
   // choice). `candidates` are the duplicate instances; picking one defeats it. Mandatory.
   | { kind: 'selectUniqueToDefeat'; id: string; controller: PlayerId; cardId: string; candidates: UpgradeRef[] }
+  | { kind: 'selectUniqueUnitToDefeat'; id: string; controller: PlayerId; cardId: string; candidates: string[] }
   // Thrawn front (#348): attack with any ready unit; it gains Restore `restore` for that attack
   // (0 when the condition didn't hold). Mandatory — the attack is made on the board.
   | { kind: 'attackWithRestore'; id: string; controller: PlayerId; restore: number }

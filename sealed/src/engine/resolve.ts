@@ -237,14 +237,15 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
         units: next.players[owner].units.map(u => (u.instanceId === newUnit.instanceId ? { ...u, exhausted: true } : u)),
       })
     }
-  } else if (hasKeyword(state, cardId, 'Support')) {
+  } else if (unitHasKeyword(next, next.players[owner].units.find(u => u.instanceId === newUnit.instanceId)!, 'Support')) {
     next = openSupportChoice(next, owner, newUnit.instanceId)
   }
 
   // "When Played" abilities fire after the card enters play (CR 6.2.0f).
   next = runTrigger(next, 'whenPlayed', { owner, cardId, sourceInstanceId: newUnit.instanceId })
   // "When you play or create a unit" reacts on the controller's other cards (#309).
-  return fireEntersPlay(next, owner, newUnit.instanceId)
+  next = fireEntersPlay(next, owner, newUnit.instanceId)
+  return uniqueUnitCheck(next, owner) // two units with the same unique title → defeat one
 }
 
 /** Fire "When you play or create a unit" (#309) on the owner's undeployed leader and its
@@ -519,6 +520,16 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       break
     }
+    case 'selectUniqueUnitToDefeat': {
+      // Unique rule for units (#348): defeat the chosen duplicate unit, then re-check (3+ → repeat).
+      if (targetInstanceId && choice.candidates.includes(targetInstanceId)) {
+        next = defeatUnit(next, targetInstanceId)
+        next = checkWin(next)
+        if (next.winner !== null) return next
+        next = uniqueUnitCheck(next, choice.controller)
+      }
+      break
+    }
     case 'mayDefeatEnemyUnit':
       // Thrawn deployed (#348): defeat the chosen non-leader enemy unit.
       if (targetInstanceId) {
@@ -651,6 +662,20 @@ function uniqueUpgradeCheck(state: GameState, owner: PlayerId): GameState {
 }
 
 /**
+ * Unique rule for units (CR): a player can't control two units that share a unique title. After a
+ * unit enters play, if `owner` now controls ≥2 units of one card id, raise a choice to defeat one
+ * (their pick, off the board). Re-run after each defeat so 3+ copies resolve down to one. Keyed by
+ * card id (a deck's duplicates share it), mirroring the upgrade rule.
+ */
+function uniqueUnitCheck(state: GameState, owner: PlayerId): GameState {
+  const uniqueIds = state.players[owner].units.filter(u => state.cards[u.cardId]?.unique).map(u => u.cardId)
+  const dupCardId = uniqueIds.find((id, i, arr) => arr.indexOf(id) !== i)
+  if (!dupCardId) return state
+  const candidates = state.players[owner].units.filter(u => u.cardId === dupCardId).map(u => u.instanceId)
+  return pushChoice(state, { kind: 'selectUniqueUnitToDefeat', id: `unique-unit-${dupCardId}`, controller: owner, cardId: dupCardId, candidates })
+}
+
+/**
  * Play an upgrade from hand and attach it to a unit (#308). Any unit in play is a
  * valid target by default; per-card restrictions are #337. Cost + aspect penalty
  * apply as for units; the upgrade's power/HP and keywords then modify the unit
@@ -693,9 +718,9 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
 
 /**
  * Use a unit's activated "Action:" ability (#343). A once-per-round ability is marked
- * spent before its effect runs (so effects that raise a choice carry the mark), then
- * the turn passes — unless the ability raised a pending choice (e.g. a search), which
- * keeps the turn with the active player to resolve it.
+ * spent before its effect runs (so effects that raise a choice carry the mark), its
+ * `cost` (C=N) is paid, then the turn passes — unless the ability raised a pending choice
+ * (e.g. a search), which keeps the turn with the active player to resolve it.
  */
 function useAbility(state: GameState, instanceId: string, cardId: string, index: number): GameState {
   const found = findUnit(state, instanceId)
@@ -705,6 +730,7 @@ function useAbility(state: GameState, instanceId: string, cardId: string, index:
   const owner = found.owner
 
   let next = state
+  if (ability.cost) next = updatePlayer(next, owner, payCost(next.players[owner], ability.cost))
   if (ability.oncePerRound) {
     const key = actionAbilityKey(cardId, index)
     next = updatePlayer(next, owner, {
@@ -769,10 +795,38 @@ function deployLeader(state: GameState, epicUsed = true): GameState {
     units: [...p.units, leaderUnit],
   })
   next = { ...next, instanceCounter: state.instanceCounter + 1 }
-  // Support (a leader keyword): on deploy, another ready unit may attack gaining this leader's
-  // abilities for the attack (#348) — same choice as playing a Support unit.
-  if (hasKeyword(next, p.leader.cardId, 'Support')) {
-    next = openSupportChoice(next, playerId, leaderUnit.instanceId)
+  // A deployed leader enters ready (CR 3.4.4) and runs its on-enter keywords — including any GRANTED
+  // at deploy (Moff Gideon gains keywords from an Imperial in your discard, #348): a Shield token,
+  // Hidden, and an Ambush or Support attack.
+  return applyDeployKeywords(next, playerId, leaderUnit.instanceId)
+}
+
+/**
+ * On-enter keyword effects for a just-DEPLOYED leader unit (#334/#348): Shielded → a Shield token,
+ * Hidden → unattackable until the next phase, then Ambush (this unit may attack now) or Support
+ * (another ready unit may attack). Reads the unit's LIVE keywords, so keywords granted at deploy
+ * count (Moff Gideon from a discard Imperial). A leader always enters ready, so an Ambush with no
+ * target simply stays ready. (Units played from hand run the equivalent inline in `enterUnit`.)
+ */
+function applyDeployKeywords(state: GameState, owner: PlayerId, instanceId: string): GameState {
+  const unitNow = (s: GameState) => s.players[owner].units.find(u => u.instanceId === instanceId)!
+  let next = state
+  if (unitHasKeyword(next, unitNow(next), 'Shielded') && !hasToken(unitNow(next).upgrades, TOKEN_SHIELD)) {
+    next = updatePlayer(next, owner, {
+      units: next.players[owner].units.map(u => (u.instanceId === instanceId ? { ...u, upgrades: [...u.upgrades, { cardId: TOKEN_SHIELD, owner }] } : u)),
+    })
+  }
+  if (unitHasKeyword(next, unitNow(next), 'Hidden') && !unitNow(next).hidden) {
+    next = updatePlayer(next, owner, {
+      units: next.players[owner].units.map(u => (u.instanceId === instanceId ? { ...u, hidden: true } : u)),
+    })
+  }
+  if (unitHasKeyword(next, unitNow(next), 'Ambush')) {
+    if (enemyAttackTargets(next, unitNow(next)).targets.length > 0) {
+      next = pushChoice(next, { kind: 'ambush', id: instanceId, controller: owner, unitId: instanceId })
+    }
+  } else if (unitHasKeyword(next, unitNow(next), 'Support')) {
+    next = openSupportChoice(next, owner, instanceId)
   }
   return next
 }

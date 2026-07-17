@@ -193,6 +193,7 @@ function actionPhaseMoves(state: GameState): Action[] {
   for (const u of p.units) {
     for (const { cardId, index, ability } of unitActionAbilities(u)) {
       if (ability.oncePerRound && u.usedAbilities?.includes(actionAbilityKey(cardId, index))) continue
+      if (!canAfford(p, ability.cost ?? 0)) continue
       if (ability.usable && !ability.usable(state, u)) continue
       moves.push({ type: 'useAbility', instanceId: u.instanceId, cardId, index })
     }
@@ -383,6 +384,11 @@ function choiceMoves(state: GameState): Action[] {
       case 'selectUniqueToDefeat': {
         // Unique rule (#348): pick which duplicate to defeat. Mandatory (must reduce to one).
         choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
+        break
+      }
+      case 'selectUniqueUnitToDefeat': {
+        // Unique unit rule (#348): pick which duplicate unit to defeat (board target). Mandatory.
+        for (const id of choice.candidates) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         break
       }
       case 'attackWithRestore': {

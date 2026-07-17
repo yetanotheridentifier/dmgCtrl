@@ -312,3 +312,83 @@ describe('unique upgrade rule (#348)', () => {
     expect(played.pendingChoices).toBeUndefined() // each player controls one copy — fine
   })
 })
+
+describe('unique unit rule (#348)', () => {
+  const cards = {
+    ...CARDS,
+    UNIQ_UNIT: card({ id: 'UNIQ_UNIT', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 2, unique: true }),
+    COMMON_UNIT: card({ id: 'COMMON_UNIT', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 2, unique: false }),
+  }
+
+  it('playing a second copy of a unique unit forces you to defeat one (your choice)', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ hand: ['UNIQ_UNIT'], resources: ready(2), units: [unit('u1', 'UNIQ_UNIT')] }),
+        opponent: player(),
+      },
+    })
+    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'selectUniqueUnitToDefeat', cardId: 'UNIQ_UNIT' })
+    expect(played.players.player.units.filter(u => u.cardId === 'UNIQ_UNIT')).toHaveLength(2) // both in play until resolved
+    expect(played.activePlayer).toBe('player') // holds for the choice — mandatory, no skip
+    expect(legalMoves(played).some(a => a.type === 'skipTrigger')).toBe(false)
+
+    const choiceId = played.pendingChoices![0].id
+    const target = (played.pendingChoices![0] as { candidates: string[] }).candidates[0]
+    const done = resolve(played, { type: 'acceptChoice', choiceId, targetInstanceId: target })
+    expect(done.players.player.units.filter(u => u.cardId === 'UNIQ_UNIT')).toHaveLength(1)
+    expect(done.players.player.discard).toContain('UNIQ_UNIT')
+    expect(done.pendingChoices ?? []).toHaveLength(0)
+    expect(done.activePlayer).toBe('opponent')
+  })
+
+  it('no conflict for a non-unique unit, or a first copy', () => {
+    const nonUnique = state({
+      cards,
+      players: { player: player({ hand: ['COMMON_UNIT'], resources: ready(2), units: [unit('u1', 'COMMON_UNIT')] }), opponent: player() },
+    })
+    expect(resolve(nonUnique, { type: 'playCard', handIndex: 0 }).pendingChoices ?? []).toHaveLength(0)
+
+    const first = state({ cards, players: { player: player({ hand: ['UNIQ_UNIT'], resources: ready(2), units: [] }), opponent: player() } })
+    expect(resolve(first, { type: 'playCard', handIndex: 0 }).pendingChoices ?? []).toHaveLength(0)
+  })
+
+  it('is per-player — the opponent controlling a copy does not conflict with yours', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ hand: ['UNIQ_UNIT'], resources: ready(2), units: [] }),
+        opponent: player({ units: [unit('e1', 'UNIQ_UNIT')] }),
+      },
+    })
+    expect(resolve(s, { type: 'playCard', handIndex: 0 }).pendingChoices ?? []).toHaveLength(0)
+  })
+
+  it('re-checks for 3+ copies until only one remains', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ hand: ['UNIQ_UNIT'], resources: ready(2), units: [unit('u1', 'UNIQ_UNIT'), unit('u2', 'UNIQ_UNIT')] }),
+        opponent: player(),
+      },
+    })
+    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    expect(played.players.player.units.filter(u => u.cardId === 'UNIQ_UNIT')).toHaveLength(3)
+    // Defeat one → still two copies → another mandatory choice.
+    const first = resolve(played, {
+      type: 'acceptChoice',
+      choiceId: played.pendingChoices![0].id,
+      targetInstanceId: (played.pendingChoices![0] as { candidates: string[] }).candidates[0],
+    })
+    expect(first.pendingChoices?.[0]).toMatchObject({ kind: 'selectUniqueUnitToDefeat', cardId: 'UNIQ_UNIT' })
+    // Defeat a second → down to one, choice drains.
+    const second = resolve(first, {
+      type: 'acceptChoice',
+      choiceId: first.pendingChoices![0].id,
+      targetInstanceId: (first.pendingChoices![0] as { candidates: string[] }).candidates[0],
+    })
+    expect(second.players.player.units.filter(u => u.cardId === 'UNIQ_UNIT')).toHaveLength(1)
+    expect(second.pendingChoices ?? []).toHaveLength(0)
+  })
+})

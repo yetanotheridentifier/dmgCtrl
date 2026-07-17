@@ -160,6 +160,8 @@ export function leaderActions(cardId: string): LeaderActionAbilityDef[] {
 /** An activated ability a unit may use as its action (CR 2.4); e.g. Improvised Identity. */
 export interface ActionAbilityDef {
   description: string
+  /** Resource cost paid on use (default 0) — the ability's "C=N" cost (#348). */
+  cost?: number
   /** May be used only once per round by a given unit (tracked on `UnitState.usedAbilities`). */
   oncePerRound?: boolean
   /** Extra gate beyond once-per-round (defaults usable). */

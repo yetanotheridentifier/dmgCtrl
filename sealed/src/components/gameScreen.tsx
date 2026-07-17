@@ -784,7 +784,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
 
     // Optional targeted pending choices (#309/#342) — resolved by clicking a highlighted
     // board unit plus a Decline button, rather than one menu button per target.
-    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage', 'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit', 'mayExhaustUnit', 'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust', 'attachResourceUpgrade', 'mayDefeatEnemyUnit']
+    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage', 'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit', 'mayExhaustUnit', 'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust', 'attachResourceUpgrade', 'mayDefeatEnemyUnit', 'selectUniqueUnitToDefeat']
     const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && boardTargetKinds.includes(c.kind))
     const choiceTargetIds = new Map<string, Action>()
     // Base targets (selectDamageTarget, #348): pick a player's base to take the damage.

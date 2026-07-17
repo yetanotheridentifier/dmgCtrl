@@ -55,7 +55,8 @@ Deal damage to the opponent's base until it reaches its health before they do th
 The rules engine runs the cards, not just the board:
 
 - **Keywords** apply — Sentinel (enemies must attack it), Saboteur (ignores Sentinel and defeats the defender's Shields before it attacks), Raid, Grit, Overwhelm, Restore, **Ambush** (may attack the moment it enters play), **Shielded** (enters with a Shield token), **Hidden** (can't be attacked until your next turn), **Support** (lends its abilities to another attacker), and **Advantage**.
-- **Upgrades** attach to a unit — yours *or* the enemy's — and modify power/health, grant keywords, or add abilities. A **unique** upgrade (star by its name) is one-per-player: play a second copy and you choose one of the two to defeat.
+- **Upgrades** attach to a unit — yours *or* the enemy's — and modify power/health, grant keywords, or add abilities.
+- **Unique** cards (star by the name) are one-per-player. Come to control a second copy of a unique **upgrade** or **unit** and you choose one of the two to defeat — pick the upgrade in the centre-screen prompt, or click the duplicate unit on the board. (Your opponent controlling their own copy is fine — the limit is per player.)
 - **Card abilities** resolve, including triggered effects (**when played**, **when defeated**, **when an attack ends** — which still fires even if the attacker was defeated in the combat — **when a unit readies**, **on attack/defence**), activated **Action** abilities, and the interactive choices they raise (pay-or-exhaust, play a revealed card free, deal damage, search-and-discard, an optional follow-up attack, and so on).
 - **Leader abilities** — some leaders have an ability you use while they're **undeployed** (click your leader card, then a highlighted target). Once **deployed**, the leader is a unit on the board with its own (usually stronger) ability, keywords and stats.
 
