@@ -69,8 +69,9 @@ discard on defeat; token upgrades (Shield/Experience/Advantage) and token units 
 there too. Optional "may…" decisions and simultaneous triggers resolve through a
 **pending-choice queue** (`pendingChoices`), including a mid-combat suspend/resume
 (`pendingAttack`) for On Defense. All 25 ASH upgrades (#340–#343) are implemented.
-**Still pending**: events, non-keyword abilities on non-upgrade cards, concession, and
-active-player ordering of simultaneous cross-player triggers (no card exercises it yet).
+Every ASH leader (both sides) is implemented too. **Still pending**: events, ability text on ordinary
+unit cards beyond keywords, concession, and active-player ordering of simultaneous cross-player
+triggers (no card exercises it yet).
 
 ## Data model
 

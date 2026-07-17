@@ -1,4 +1,5 @@
-import type { GameState, PlayerId, UnitState } from './types'
+import type { GameState, KeywordInstance, PlayerId, UnitState } from './types'
+import { updatePlayer } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { getCardDefinition } from './abilities'
 
@@ -44,6 +45,18 @@ export function giveToken(state: GameState, instanceId: string, tokenId: string)
   const found = findUnit(state, instanceId)
   if (!found) return state
   return patchUnit(state, found.owner, instanceId, u => ({ ...u, upgrades: [...u.upgrades, { cardId: tokenId, owner: found.owner }] }))
+}
+
+/**
+ * Grant keywords to the NEXT unit `owner` plays this phase (Sabine Wren → Shielded, #348). Merges
+ * with any existing grant (union by name), so repeated grants don't stack duplicates. Consumed by
+ * the next `enterUnit`; cleared at regroup. Generic — reusable by any "your next unit gains …" card.
+ */
+export function grantNextUnitKeywords(state: GameState, owner: PlayerId, keywords: KeywordInstance[]): GameState {
+  const existing = state.players[owner].nextPlayedUnitKeywords ?? []
+  const merged = [...existing]
+  for (const k of keywords) if (!merged.some(m => m.name === k.name)) merged.push(k)
+  return updatePlayer(state, owner, { nextPlayedUnitKeywords: merged })
 }
 
 /** Deal `amount` damage to a player's base (#309). The caller runs the win check. */

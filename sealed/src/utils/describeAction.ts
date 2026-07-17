@@ -151,6 +151,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Defeat ${target ?? 'the duplicate'}`
       }
+      if (choice.kind === 'opponentGivesAdvantage') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `${choice.count} Advantage to ${target ?? 'unit'}`
+      }
       if (choice.kind === 'mayLastingBuff') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         const buff = [choice.power || choice.hp ? `+${choice.power ?? 0}/+${choice.hp ?? 0}` : '', ...(choice.keywords ?? []).map(k => k.name)].filter(Boolean).join(' & ')

@@ -1,5 +1,5 @@
 import { registerCard } from './abilities'
-import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount } from './effects'
+import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount, grantNextUnitKeywords } from './effects'
 import { dealDamageToUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
@@ -404,6 +404,31 @@ registerCard('ASH_002', { // Fennec Shand — front leader action; deployed unit
       targets: s.players[ctx.owner].units.filter(u => !u.exhausted).map(u => u.instanceId),
       then: { costDelta: 0, entersReady: true },
     }),
+  }],
+})
+
+registerCard('ASH_006', { // Sabine Wren — front: opponent gives 2 Advantage, grant Shielded; back: On Attack grant Shielded (#348)
+  leaderAbilities: {
+    actions: [{
+      description: 'An opponent gives 2 Advantage tokens to a unit they control. If they do, the next unit you play this phase gains Shielded.',
+      // "If they do" resolves only when the opponent has a unit to receive the tokens — gate on it.
+      usable: (s, owner) => s.players[opponentOf(owner)].units.length > 0,
+      effect: (s, ctx) => {
+        const opp = opponentOf(ctx.owner)
+        const targets = s.players[opp].units.map(u => u.instanceId)
+        if (targets.length === 0) return s
+        // Grant Shielded to our next unit now (the opponent's giving is mandatory when able), then
+        // hand the "which unit gets the tokens" choice to the opponent (useLeaderAbility hands off).
+        const granted = grantNextUnitKeywords(s, ctx.owner, [{ name: 'Shielded' }])
+        return pushChoice(granted, { kind: 'opponentGivesAdvantage', id: `${ctx.cardId}-adv`, controller: opp, count: 2, targets })
+      },
+    }],
+  },
+  // Deployed (back): On Attack, the next unit you play this phase gains Shielded.
+  abilities: [{
+    trigger: 'onAttack',
+    description: 'The next unit you play this phase gains Shielded.',
+    effect: (s, ctx) => grantNextUnitKeywords(s, ctx.owner, [{ name: 'Shielded' }]),
   }],
 })
 

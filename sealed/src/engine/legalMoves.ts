@@ -407,6 +407,11 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'opponentGivesAdvantage': {
+        // Sabine front (#348): the opponent picks which of their units gets the Advantage tokens. Mandatory.
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        break
+      }
       case 'mayAttack': {
         // Improvised Identity's optional follow-up attack, with the discarded unit's
         // abilities granted (so granted Saboteur etc. shape the legal targets).

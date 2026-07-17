@@ -60,7 +60,7 @@ The rules engine runs the cards, not just the board:
 - **Card abilities** resolve, including triggered effects (**when played**, **when defeated**, **when an attack ends** — which still fires even if the attacker was defeated in the combat — **when a unit readies**, **on attack/defence**), activated **Action** abilities, and the interactive choices they raise (pay-or-exhaust, play a revealed card free, deal damage, search-and-discard, an optional follow-up attack, and so on).
 - **Leader abilities** — some leaders have an ability you use while they're **undeployed** (click your leader card, then a highlighted target). Once **deployed**, the leader is a unit on the board with its own (usually stronger) ability, keywords and stats.
 
-Every upgrade in the ASH set is implemented, plus several leaders (with more to come). Still on the roadmap: the remaining leaders, **event cards**, and ability text on ordinary **unit** cards beyond keywords — those still make fine resources.
+Every upgrade **and every leader** (both sides) in the ASH set is implemented. Still on the roadmap: **event cards**, and ability text on ordinary **unit** cards beyond keywords — those still make fine resources.
 
 ## After the game
 

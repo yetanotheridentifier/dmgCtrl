@@ -124,6 +124,17 @@ export interface PlayerState {
   discard: string[]
   resources: ResourceState[]
   units: UnitState[]
+  /**
+   * Keywords the NEXT unit this player plays this phase gains (Sabine Wren → Shielded, #348).
+   * Consumed by the next `enterUnit` (on-enter effects + a this-phase lasting keyword) and cleared
+   * at the start of the regroup phase. Generic — any card can grant "your next unit gains <keywords>".
+   *
+   * FUTURE (not yet needed): the granted "X" will likely need to be more than a keyword — an ability,
+   * a stat modifier (+X/+Y), a cost discount, etc. When that arises, generalise this into a single
+   * grant payload (keywords? / abilities? / power? / hp? / costDelta?) rather than adding sibling
+   * fields, and apply each part in `enterUnit`. See docs/ability-framework.md "Chunk E".
+   */
+  nextPlayedUnitKeywords?: KeywordInstance[]
 }
 
 export interface GameState {
@@ -173,6 +184,13 @@ export interface GameState {
    * drains. `true` = taking the initiative also ended the action phase (CR 1.15.5c).
    */
   pendingInitiativeEndsPhase?: boolean
+  /**
+   * An opponent-interjected choice is pending as part of this player's action (Sabine Wren, #348):
+   * `activePlayer` is temporarily the choosing opponent, and this holds the original actor so that
+   * once the interjected choice(s) drain, control is restored to them and the turn advances normally.
+   * Generic — any effect that makes "an opponent" choose mid-action sets this.
+   */
+  pendingResumeActive?: PlayerId
   /**
    * Transient "this phase" stat/keyword modifiers (#306/#347), each aimed at a unit.
    * Folded into `effectivePower`/`effectiveHp`/`unitKeywords`; cleared at the start of
@@ -342,6 +360,9 @@ export type PendingChoice =
   | { kind: 'attackWithRestore'; id: string; controller: PlayerId; restore: number }
   // Thrawn deployed (#348): On Attack, may defeat one of `targets` (a non-leader enemy unit), or decline.
   | { kind: 'mayDefeatEnemyUnit'; id: string; controller: PlayerId; targets: string[] }
+  // Sabine front (#348): the opponent (`controller`) must give `count` Advantage tokens to one of
+  // their units (`targets`). Mandatory when able — an opponent-interjected choice (pendingResumeActive).
+  | { kind: 'opponentGivesAdvantage'; id: string; controller: PlayerId; count: number; targets: string[] }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */
 export function activeChoice(state: GameState): PendingChoice | undefined {
@@ -393,6 +414,17 @@ export function addLastingEffect(state: GameState, effect: LastingEffect): GameS
 /** Drop every lasting effect (called at the start of the regroup phase). */
 export function clearLastingEffects(state: GameState): GameState {
   return state.lastingEffects ? { ...state, lastingEffects: undefined } : state
+}
+
+/** Clear both players' "next unit you play this phase" grants — a phase-boundary reset (#348). */
+export function clearNextUnitGrants(state: GameState): GameState {
+  return {
+    ...state,
+    players: {
+      player: { ...state.players.player, nextPlayedUnitKeywords: undefined },
+      opponent: { ...state.players.opponent, nextPlayedUnitKeywords: undefined },
+    },
+  }
 }
 
 function emptyPhaseEvents(): PhaseEvents {

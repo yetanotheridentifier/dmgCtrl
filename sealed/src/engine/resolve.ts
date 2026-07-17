@@ -2,7 +2,7 @@ import type { Action, AttackTarget } from './actions'
 import type { GameState, PlayerId, UnitState } from './types'
 import type { PendingChoice, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeChoice, hasPendingChoices, pushChoice } from './types'
-import { addLastingEffect, clearLastingEffects, resetPhaseEvents, recordUnitEntered, markAbilityUsed } from './types'
+import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, markAbilityUsed } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
@@ -207,8 +207,12 @@ function setupResourceChoice(state: GameState, handIndex: number): GameState {
  */
 function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: boolean): GameState {
   const card = state.cards[cardId]
+  // Keywords the played unit gains on entry: its card's, plus any "next unit you play this phase"
+  // grant (Sabine → Shielded, #348) — so a granted Ambush/Shielded/Hidden fires just like a printed one.
+  const grantKeywords = state.players[owner].nextPlayedUnitKeywords ?? []
+  const entersWith = (name: string): boolean => hasKeyword(state, cardId, name) || grantKeywords.some(k => k.name === name)
   // Ambush: the unit may immediately attack an enemy unit, so it enters ready (#334).
-  const ambush = hasKeyword(state, cardId, 'Ambush')
+  const ambush = entersWith('Ambush')
   const newUnit: UnitState = {
     instanceId: `u${state.instanceCounter}`,
     cardId,
@@ -218,14 +222,20 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
     exhausted: ready === true ? false : !ambush,
     isLeader: false,
     // Shielded: the unit enters play with a shield token (#334).
-    upgrades: hasKeyword(state, cardId, 'Shielded') ? [{ cardId: TOKEN_SHIELD, owner }] : [],
+    upgrades: entersWith('Shielded') ? [{ cardId: TOKEN_SHIELD, owner }] : [],
     // Hidden: the unit enters play hidden — unattackable until the next phase (#334).
-    ...(hasKeyword(state, cardId, 'Hidden') ? { hidden: true } : {}),
+    ...(entersWith('Hidden') ? { hidden: true } : {}),
   }
 
   let next = updatePlayer(state, owner, { units: [...state.players[owner].units, newUnit] })
   next = { ...next, instanceCounter: state.instanceCounter + 1 }
   next = recordUnitEntered(next, owner, newUnit.instanceId) // "entered play this phase" (#347)
+  // Consume the "next unit" grant: give the unit the keywords for this phase (a lasting effect, so an
+  // ongoing keyword like Sentinel counts too) and clear it — only the first unit played benefits (#348).
+  if (grantKeywords.length > 0) {
+    next = addLastingEffect(next, { targetInstanceId: newUnit.instanceId, keywords: grantKeywords })
+    next = updatePlayer(next, owner, { nextPlayedUnitKeywords: undefined })
+  }
 
   // Ambush: open the pending attack only if there's actually an enemy to hit;
   // otherwise the unit just enters play exhausted, as normal (#334).
@@ -332,6 +342,11 @@ function resumeAfterChoice(state: GameState, resolved: PendingChoice): GameState
   }
   if (resolved.kind === 'payOrExhaust' && resolved.resumeAtInitiative) {
     return { ...state, activePlayer: state.initiative }
+  }
+  // An opponent-interjected choice (Sabine, #348) drained: restore the original actor, then advance
+  // the turn as their action normally would (so it becomes the opponent's turn).
+  if (state.pendingResumeActive !== undefined) {
+    return advanceTurn(resetPasses({ ...state, activePlayer: state.pendingResumeActive, pendingResumeActive: undefined }))
   }
   return advanceTurn(resetPasses(state))
 }
@@ -520,6 +535,12 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       break
     }
+    case 'opponentGivesAdvantage':
+      // Sabine front (#348): the opponent gives `count` Advantage tokens to their chosen unit.
+      if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
+        for (let i = 0; i < choice.count; i++) next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+      }
+      break
     case 'selectUniqueUnitToDefeat': {
       // Unique rule for units (#348): defeat the chosen duplicate unit, then re-check (3+ → repeat).
       if (targetInstanceId && choice.candidates.includes(targetInstanceId)) {
@@ -762,7 +783,20 @@ function useLeaderAbility(state: GameState, index: number, targetInstanceId?: st
   next = ability.effect(next, { owner, cardId: p.leader.cardId, targetInstanceId })
   next = checkWin(next)
   if (next.winner !== null) return next
+  next = handOffOpponentChoice(next, owner)
   return hasPendingChoices(next) ? next : advanceTurn(resetPasses(next))
+}
+
+/**
+ * If an ability raised a choice controlled by the OTHER player (Sabine → "an opponent gives …",
+ * #348) and the actor has none of their own left to resolve, hand control to that opponent and
+ * remember the actor so `resumeAfterChoice` restores them and advances the turn once it drains.
+ * Generic; a no-op when the actor has their own choice to resolve first, or none was raised.
+ */
+function handOffOpponentChoice(state: GameState, actor: PlayerId): GameState {
+  if (!hasPendingChoices(state) || state.pendingChoices!.some(c => c.controller === actor)) return state
+  const other = state.pendingChoices![0].controller
+  return other === actor ? state : { ...state, activePlayer: other, pendingResumeActive: actor }
 }
 
 /**
@@ -1110,8 +1144,9 @@ function sweepUnitDefeats(state: GameState): GameState {
 
 function enterRegroup(state: GameState): GameState {
   // "This phase" buffs expire and per-phase tracking resets as the phase changes (#347); a unit
-  // that the expired buff was keeping alive is then defeated as a state-based check.
-  let next: GameState = resetPhaseEvents(clearLastingEffects(clearHidden({ ...state, phase: 'regroup', consecutivePasses: 0 })))
+  // that the expired buff was keeping alive is then defeated as a state-based check. Unused
+  // "next unit you play this phase" grants (Sabine, #348) also lapse at the phase boundary.
+  let next: GameState = clearNextUnitGrants(resetPhaseEvents(clearLastingEffects(clearHidden({ ...state, phase: 'regroup', consecutivePasses: 0 }))))
   next = sweepUnitDefeats(next)
   next = drawForRegroup(next, 'player')
   next = drawForRegroup(next, 'opponent')

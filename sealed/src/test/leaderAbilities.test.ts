@@ -1356,3 +1356,114 @@ describe('Moff Gideon (ASH_008) deployed — every granted keyword behaves (#348
     expect(deploy(['IMP_SUPPORT']).pendingChoices?.[0]).toMatchObject({ kind: 'support' })
   })
 })
+
+describe('Sabine Wren (ASH_006) — front: opponent gives Advantage, grant Shielded (#348)', () => {
+  const cards = {
+    ...CARDS,
+    ASH_006: card({ id: 'ASH_006', type: 'leader', cost: 5, power: 3, hp: 5 }),
+    GRUNT: card({ id: 'GRUNT', type: 'unit', arena: 'ground', cost: 1, power: 1, hp: 1 }),
+  }
+  const board = () => state({
+    cards,
+    players: {
+      player: player({ leader: undeployed('ASH_006'), hand: ['GRUNT'], resources: ready(3) }),
+      opponent: player({ units: [unit('e1', 'TST_U1'), unit('e2', 'TST_U1')] }),
+    },
+  })
+
+  it('is offered only when the opponent controls a unit to receive the tokens', () => {
+    expect(legalMoves(board()).some(a => a.type === 'useLeaderAbility')).toBe(true)
+    const noEnemyUnits = state({
+      cards,
+      players: { player: player({ leader: undeployed('ASH_006'), hand: ['GRUNT'], resources: ready(3) }), opponent: player() },
+    })
+    expect(legalMoves(noEnemyUnits).some(a => a.type === 'useLeaderAbility')).toBe(false)
+  })
+
+  it('hands the choice to the opponent, sets the Shielded grant, and returns the turn after they pick', () => {
+    const used = resolve(board(), { type: 'useLeaderAbility', index: 0 })
+    // The user's leader exhausts and their next-unit grant is set immediately.
+    expect(used.players.player.leader.exhausted).toBe(true)
+    expect(used.players.player.nextPlayedUnitKeywords).toEqual([{ name: 'Shielded' }])
+    // The opponent now decides — control is handed to them, mandatory, one option per their units.
+    expect(used.pendingChoices?.[0]).toMatchObject({ kind: 'opponentGivesAdvantage', controller: 'opponent', count: 2 })
+    expect(used.activePlayer).toBe('opponent')
+    expect(legalMoves(used).some(a => a.type === 'skipTrigger')).toBe(false)
+    expect(legalMoves(used).filter(a => a.type === 'acceptChoice').map(a => a.targetInstanceId).sort()).toEqual(['e1', 'e2'])
+    // Opponent gives the 2 Advantage tokens to their chosen unit; then it's their turn (user's action done).
+    const done = resolve(used, { type: 'acceptChoice', choiceId: used.pendingChoices![0].id, targetInstanceId: 'e2' })
+    expect(done.players.opponent.units.find(u => u.instanceId === 'e2')!.upgrades.filter(u => u.cardId === TOKEN_ADVANTAGE)).toHaveLength(2)
+    expect(done.players.opponent.units.find(u => u.instanceId === 'e1')!.upgrades).toHaveLength(0)
+    expect(done.pendingChoices ?? []).toHaveLength(0)
+    expect(done.activePlayer).toBe('opponent')
+  })
+})
+
+describe('Sabine Wren (ASH_006) — deployed: On Attack grant Shielded (#348)', () => {
+  const cards = { ...CARDS, ASH_006: card({ id: 'ASH_006', type: 'leader', cost: 5, power: 3, hp: 5 }) }
+  it('sets the Shielded grant on the controller when it attacks', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ leader: deployed('ASH_006'), units: [unit('L', 'ASH_006', { isLeader: true })] }),
+        opponent: player(),
+      },
+    })
+    const attacked = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
+    expect(attacked.players.player.nextPlayedUnitKeywords).toEqual([{ name: 'Shielded' }])
+  })
+})
+
+describe('"next unit you play this phase gains <keywords>" grant (generic, #348)', () => {
+  const cards = { ...CARDS, GRUNT: card({ id: 'GRUNT', type: 'unit', arena: 'ground', cost: 1, power: 1, hp: 1 }) }
+
+  it('applies the granted keyword to the next unit played, then consumes the grant', () => {
+    const s = state({
+      cards,
+      players: { player: player({ hand: ['GRUNT'], resources: ready(2), nextPlayedUnitKeywords: [{ name: 'Shielded' }] }), opponent: player() },
+    })
+    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const grunt = played.players.player.units.find(u => u.cardId === 'GRUNT')!
+    expect(grunt.upgrades.some(u => u.cardId === TOKEN_SHIELD)).toBe(true) // Shielded → a Shield token on entry
+    expect(unitHasKeyword(played, grunt, 'Shielded')).toBe(true) // holds the keyword this phase
+    expect(played.players.player.nextPlayedUnitKeywords).toBeUndefined() // consumed by the first unit
+  })
+
+  it('fires a granted on-enter keyword (Ambush) for the played unit', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ hand: ['GRUNT'], resources: ready(2), nextPlayedUnitKeywords: [{ name: 'Ambush' }] }),
+        opponent: player({ units: [unit('e1', 'TST_U1')] }),
+      },
+    })
+    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const grunt = played.players.player.units.find(u => u.cardId === 'GRUNT')!
+    expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'ambush', unitId: grunt.instanceId })
+  })
+
+  it('only the granting player benefits, and the grant clears at the end of the phase', () => {
+    // Per-player: the opponent's played unit does not consume the player's grant.
+    const s = state({
+      cards,
+      players: {
+        player: player({ nextPlayedUnitKeywords: [{ name: 'Shielded' }] }),
+        opponent: player({ hand: ['GRUNT'], resources: ready(2) }),
+      },
+      activePlayer: 'opponent',
+    })
+    const oppPlays = resolve(s, { type: 'playCard', handIndex: 0 })
+    expect(oppPlays.players.opponent.units.find(u => u.cardId === 'GRUNT')!.upgrades.some(u => u.cardId === TOKEN_SHIELD)).toBe(false)
+    expect(oppPlays.players.player.nextPlayedUnitKeywords).toEqual([{ name: 'Shielded' }]) // still set
+
+    // Cleared when the action phase ends (both players pass).
+    const passReady = state({
+      cards,
+      players: { player: player({ nextPlayedUnitKeywords: [{ name: 'Shielded' }] }), opponent: player() },
+      consecutivePasses: 1,
+    })
+    const regrouped = resolve(passReady, { type: 'pass' })
+    expect(regrouped.phase).toBe('regroup')
+    expect(regrouped.players.player.nextPlayedUnitKeywords).toBeUndefined()
+  })
+})

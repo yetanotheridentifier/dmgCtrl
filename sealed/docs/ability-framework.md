@@ -400,7 +400,8 @@ the token at phase end; an aura's contribution shows while its source is in play
 Armorer (001) reads `enteredPlayThisPhase`; Moff Gideon (008) reads `defeatedThisPhase` for a
 friendly Imperial. The tracking mechanism is built and tested here; those leaders wire up in #348.
 
-**Deferred deployed backs:** Ahsoka's deployed back awaits its own build. (Luke's heal landed in #348-A.)
+**Deferred deployed backs (since landed):** Ahsoka's deployed back and Luke's heal both landed in
+#348 — see the chunk sections below. All 18 leaders' backs are now implemented.
 
 ## New primitives + UI (#348)
 
@@ -585,6 +586,36 @@ A player can't control two cards with the same unique title. Both card types are
   the enemy, may defeat one of their **non-leader** units (`isLeaderUnit` excludes leaders;
   board-target + Decline).
 
-### Remaining chunks (planned)
+### Chunk E — Sabine Wren (DONE)
 
-E — opponent-makes-a-choice + "next unit you play this phase" grant (Sabine).
+Two reusable mechanisms plus the leader:
+
+- **Opponent-interjected choice** — a pending choice whose `controller` is the *non-active* player,
+  made as part of the active player's action. When a leader action raises one, `handOffOpponentChoice`
+  hands `activePlayer` to that controller and records `GameState.pendingResumeActive` (the actor);
+  once the choice(s) drain, `resumeAfterChoice` restores the actor and advances the turn as their
+  action normally would (so it becomes the opponent's turn). Mirrors the On-Defense combat suspend.
+  Drives cleanly through `useGame`'s AI loop (`activePlayer === AI`): the AI auto-resolves its
+  interjected pick, or hands control to the human when the AI is the actor. Generic — any "an opponent
+  chooses …" effect reuses it.
+- **"Next unit you play this phase gains <keywords>"** — `PlayerState.nextPlayedUnitKeywords`, set via
+  `grantNextUnitKeywords(state, owner, keywords)` (merges, union by name). `enterUnit` consumes it on
+  the next unit the owner plays: the granted keywords join the card's for the on-enter effects
+  (`entersWith` covers Shielded token / Ambush attack / Hidden), and are added as a **this-phase
+  lasting keyword** (so an ongoing keyword like Sentinel counts too), then the grant clears. Lapses at
+  regroup (`clearNextUnitGrants`). Generic — any "your next unit gains …" card reuses it.
+- **`opponentGivesAdvantage`** choice — the opponent must give `count` Advantage tokens to one of
+  their units (`targets`); mandatory, one option per their unit (board-target, no Decline).
+- **Sabine Wren (006)** front: `Action [Exhaust]` gated on the opponent controlling a unit → grant
+  Shielded to your next unit now (their giving is mandatory when able), then raise the
+  `opponentGivesAdvantage` choice for them. Deployed **back**: `onAttack` → grant Shielded to your
+  next unit. Manifest front + back true.
+
+> **Future extension (not yet needed, no ticket yet):** the "next unit you play this phase gains …"
+> grant currently carries only **keywords** (`nextPlayedUnitKeywords`). Other cards will likely want
+> the granted "X" to also be an **ability**, a **stat modifier** (+X/+Y), a **cost discount**, etc.
+> When that lands, generalise the grant payload (e.g. `nextPlayedUnitGrant: { keywords?, abilities?,
+> power?, hp?, costDelta? }`) and have `enterUnit` apply each part, rather than adding a new
+> per-flavour field.
+
+**All 18 ASH leaders are now implemented (both sides).**

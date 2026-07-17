@@ -37,6 +37,7 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'ASH_016', name: 'Shin Hati', front: true, back: true },
   { id: 'ASH_014', name: 'The Mandalorian', front: true, back: true },
   { id: 'ASH_012', name: 'Vane', front: true, back: true },
+  { id: 'ASH_006', name: 'Sabine Wren', front: true, back: true },
 ]
 
 export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
