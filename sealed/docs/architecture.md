@@ -26,7 +26,10 @@ The heart of the app is a pure function pair:
   game over) but does not re-validate game rules.
 
 Supporting modules: `types.ts` (schema), `cardDb.ts` (SWUDB payload → normalised
-static card data), `initGame.ts` (setup per CR §5.2: shuffle, draw 6 — the game opens in a SETUP
+static card data — two small data-patch tables feed in here: `upgradeStatOverrides.ts` *fills* the
+Power/HP the ASH upgrade data omits, and `cardDataCorrections.ts` *overrides* values the source
+gets wrong, read off the printed card (e.g. Moff Gideon unit cost, Nebulon-C Frigate arena); both
+drop out per-card once upstream is fixed), `initGame.ts` (setup per CR §5.2: shuffle, draw 6 — the game opens in a SETUP
 phase with two stages resolved through legalMoves/resolve: mulligan decisions
 (CR 5.2.1e, initiative holder first), then each player picks which 2 hand
 cards become starting resources (CR 5.2.1f; all pairs enumerated as actions).

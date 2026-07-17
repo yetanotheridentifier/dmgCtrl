@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { useDecks } from '../hooks/useDecks'
 import type { SavedDeck } from '../data/deckStore'
 import { cardRefFromId } from '../utils/parseProtectThePod'
@@ -6,7 +7,8 @@ import type { ParseDeckError, ParsedDeck } from '../utils/parseProtectThePod'
 import { syncCatalogue } from '../data/catalogueSync'
 import { importSet } from '../data/setImport'
 import type { CardRef } from '../data/catalogueSync'
-import { IMPLEMENTED_LEADERS, IMPLEMENTED_UPGRADES } from '../data/implementedCards'
+import { IMPLEMENTED_LEADERS, IMPLEMENTED_UPGRADES, UNIT_GROUPS, TOTAL_PROGRESS } from '../data/implementedCards'
+import type { GroupStatus } from '../data/implementedCards'
 
 interface Props {
   onPlay: (deck: SavedDeck, opponentDeck: SavedDeck) => void
@@ -43,10 +45,56 @@ function Flag({ on }: { on: boolean }) {
     : <span className="text-ink-faint" aria-label="not yet">·</span>
 }
 
+/** Headline "% of the whole set implemented" bar (tokens included). */
+function ProgressBar() {
+  const { done, total } = TOTAL_PROGRESS
+  const pct = Math.round((done / total) * 100)
+  return (
+    <div data-testid="implementation-progress" className="mt-3">
+      <div className="flex items-baseline justify-between text-xs">
+        <span className="text-ink-dim">{done} / {total} cards</span>
+        <span className="text-accent font-medium" aria-label={`${pct}% implemented`}>{pct}%</span>
+      </div>
+      <div className="mt-1 h-2 rounded-full bg-line/40 overflow-hidden" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+        <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  )
+}
+
+const STATUS_LABEL: Record<GroupStatus, string> = { done: 'Done', 'in progress': 'In progress', planned: 'Planned' }
+
+/** Development-status chip shown on each collapsible section's summary. */
+function StatusChip({ status }: { status: GroupStatus }) {
+  const tone = status === 'done' ? 'text-accent' : status === 'in progress' ? 'text-ink' : 'text-ink-faint'
+  return <span className={`text-[0.6rem] uppercase tracking-[0.1em] ${tone}`}>{STATUS_LABEL[status]}</span>
+}
+
+/** A collapsible reference section: a summary row (title + status) with expandable content. */
+function Section({ title, status, defaultOpen, testId, children }: {
+  title: string
+  status: GroupStatus
+  defaultOpen: boolean
+  testId?: string
+  children: ReactNode
+}) {
+  return (
+    <details data-testid={testId} open={defaultOpen} className="mt-2 border-2 border-line/60 rounded-xl bg-surface overflow-hidden">
+      <summary className="flex items-center justify-between gap-2 px-3 py-1.5 cursor-pointer select-none text-accent text-xs uppercase tracking-[0.12em] font-light">
+        <span className="truncate">{title}</span>
+        <StatusChip status={status} />
+      </summary>
+      <div className="border-t-2 border-line/30">{children}</div>
+    </details>
+  )
+}
+
 /**
- * Reference panel (RHS of the setup screen): which cards' abilities are built into the engine —
- * leaders by side (front = undeployed, back = deployed) and the implemented upgrades. Sourced
- * from the manifest in `data/implementedCards`, which a test pins to the ability registry.
+ * Reference panel (RHS of the setup screen): which cards' abilities are built into the engine.
+ * Leaders and upgrades are complete, so they roll up into sections collapsed by default (still
+ * expandable). Units are split into work groups (#306); the in-progress group is expanded, the
+ * rest collapsed with their development status. Sourced from the manifest in `data/implementedCards`
+ * (leaders/upgrades pinned to the ability registry by a test).
  */
 function ImplementationStatus() {
   return (
@@ -56,36 +104,58 @@ function ImplementationStatus() {
         Which card abilities are built in. Others still play as vanilla stats / resources.
       </p>
 
-      <h3 className="mt-4 text-accent text-xs uppercase tracking-[0.12em] font-light">
-        Leaders <span className="text-ink-faint normal-case tracking-normal">(front / back)</span>
-      </h3>
-      <table data-testid="implemented-leaders" className="mt-2 w-full text-sm border-2 border-line/60 rounded-xl bg-surface overflow-hidden">
-        <thead>
-          <tr className="text-ink-faint text-[0.65rem] uppercase tracking-[0.1em]">
-            <th className="text-left font-light px-3 py-1.5">Leader</th>
-            <th className="font-light px-2 py-1.5">Front</th>
-            <th className="font-light px-2 py-1.5">Back</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line/30">
-          {IMPLEMENTED_LEADERS.map(l => (
-            <tr key={l.id}>
-              <td className="px-3 py-1.5 truncate">{l.name}</td>
-              <td className="px-2 py-1.5 text-center"><Flag on={l.front} /></td>
-              <td className="px-2 py-1.5 text-center"><Flag on={l.back} /></td>
+      <ProgressBar />
+
+      <Section title={`Leaders (${IMPLEMENTED_LEADERS.length})`} status="done" defaultOpen={false}>
+        <table data-testid="implemented-leaders" className="w-full text-sm">
+          <thead>
+            <tr className="text-ink-faint text-[0.65rem] uppercase tracking-[0.1em]">
+              <th className="text-left font-light px-3 py-1.5">Leader</th>
+              <th className="font-light px-2 py-1.5">Front</th>
+              <th className="font-light px-2 py-1.5">Back</th>
             </tr>
+          </thead>
+          <tbody className="divide-y divide-line/30">
+            {IMPLEMENTED_LEADERS.map(l => (
+              <tr key={l.id}>
+                <td className="px-3 py-1.5 truncate">{l.name}</td>
+                <td className="px-2 py-1.5 text-center"><Flag on={l.front} /></td>
+                <td className="px-2 py-1.5 text-center"><Flag on={l.back} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Section>
+
+      <Section title={`Upgrades (${IMPLEMENTED_UPGRADES.length})`} status="done" defaultOpen={false}>
+        <ul data-testid="implemented-upgrades" className="divide-y divide-line/30 text-sm">
+          {IMPLEMENTED_UPGRADES.map(u => (
+            <li key={u.id} className="px-3 py-1 truncate">{u.name}</li>
           ))}
-        </tbody>
-      </table>
+        </ul>
+      </Section>
 
       <h3 className="mt-5 text-accent text-xs uppercase tracking-[0.12em] font-light">
-        Upgrades <span className="text-ink-faint normal-case tracking-normal">({IMPLEMENTED_UPGRADES.length})</span>
+        Units <span className="text-ink-faint normal-case tracking-normal">(by work group)</span>
       </h3>
-      <ul data-testid="implemented-upgrades" className="mt-2 border-2 border-line/60 rounded-xl bg-surface divide-y divide-line/30 text-sm">
-        {IMPLEMENTED_UPGRADES.map(u => (
-          <li key={u.id} className="px-3 py-1 truncate">{u.name}</li>
+      <div data-testid="implemented-unit-groups">
+        {UNIT_GROUPS.map(g => (
+          <details key={g.id} data-testid={`unit-group-${g.id}`} open={g.status === 'in progress'} className="mt-2 border-2 border-line/60 rounded-xl bg-surface overflow-hidden">
+            <summary className="flex items-center justify-between gap-2 px-3 py-1.5 cursor-pointer select-none text-xs">
+              <span className="truncate text-accent uppercase tracking-[0.1em] font-light">{g.name} <span className="text-ink-faint normal-case tracking-normal">({g.units.length})</span></span>
+              <StatusChip status={g.status} />
+            </summary>
+            <div className="border-t-2 border-line/30">
+              <p className="px-3 py-2 text-ink-dim text-xs">{g.note}</p>
+              <ul className="border-t border-line/20 divide-y divide-line/20 text-sm">
+                {g.units.map(name => (
+                  <li key={name} className="px-3 py-1 truncate">{name}</li>
+                ))}
+              </ul>
+            </div>
+          </details>
         ))}
-      </ul>
+      </div>
     </aside>
   )
 }
