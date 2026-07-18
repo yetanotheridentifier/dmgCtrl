@@ -357,7 +357,7 @@ export type PendingChoice =
   | { kind: 'selectHealTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[]; optional?: boolean }
   // Play a unit from hand as part of an ability (#348): pick one of `candidates` (affordable hand
   // units), paying its cost + `costDelta`, entering ready if `entersReady` (Fennec, Moff Gideon).
-  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean }
+  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean }
   // Additional cost "exhaust a friendly unit" (#348): pick one of `targets` to exhaust, then the
   // `then` play-from-hand step follows (Fennec). Mandatory.
   | { kind: 'selectUnitToExhaust'; id: string; controller: PlayerId; targets: string[]; then: PlayFromHandSpec }
@@ -379,6 +379,14 @@ export type PendingChoice =
   // `remaining` reaches 0. `targets` are the currently-eligible unit instance ids (both sides,
   // recomputed as units are defeated). Always optional — the controller may stop early (a "may").
   | { kind: 'distributeDamage'; id: string; controller: PlayerId; remaining: number; total: number; targets: string[] }
+  // Look at `target`'s hand (#355, Imperial Defector / Remnant Lookouts) — the controller sees it
+  // revealed. View-only unless `mayDiscard`, when the controller may discard one of the target's
+  // cards (an `acceptChoice` with its hand index); `thenDraw` then has the target draw a card.
+  | { kind: 'lookAtHand'; id: string; controller: PlayerId; target: PlayerId; mayDiscard?: boolean; thenDraw?: boolean }
+  // Search the revealed top cards (#355, Clan Wren Loyalist): pick one of the `eligibleIndices`
+  // (indices into `revealed`) to draw; the rest go to the bottom of the deck. Resolved by an
+  // `acceptChoice` carrying the `deckIndex` (0-based within `revealed`). Mandatory when eligible.
+  | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[] }
   // Optionally deploy your leader via a triggered epic action (#348, Grogu). A yes/no.
   | { kind: 'mayDeployLeader'; id: string; controller: PlayerId }
   // Unique rule (CR): a player controlling two upgrades with the same title defeats one (their

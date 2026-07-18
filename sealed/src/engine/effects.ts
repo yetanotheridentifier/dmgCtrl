@@ -127,6 +127,14 @@ export function drawCards(state: GameState, owner: PlayerId, n: number): GameSta
   }
 }
 
+/** Move the top `n` cards of a player's deck to the bottom, preserving order (#355, Clan Wren Loyalist). */
+export function bottomTopCards(state: GameState, owner: PlayerId, n: number): GameState {
+  const p = state.players[owner]
+  const top = p.deck.slice(0, n)
+  if (top.length === 0) return state
+  return { ...state, players: { ...state.players, [owner]: { ...p, deck: [...p.deck.slice(top.length), ...top] } } }
+}
+
 /** Discard the card at `handIndex` from a player's hand to their discard pile (#355). No-op if out of range. */
 export function discardFromHand(state: GameState, owner: PlayerId, handIndex: number): GameState {
   const p = state.players[owner]

@@ -225,6 +225,13 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_260', name: 'Mos Espa Watermonger' },
   // Opponent discard + distribute damage (#355 UI)
   { id: 'ASH_148', name: 'Ninth Sister' },
+  // Look at opponent's hand (#355 UI)
+  { id: 'ASH_250', name: 'Imperial Defector' },
+  { id: 'ASH_220', name: 'Remnant Lookouts' },
+  // Search top 5 for a trait match (#355 UI)
+  { id: 'ASH_107', name: 'Clan Wren Loyalist' },
+  // Play a discounted unit from hand (#355 UI)
+  { id: 'ASH_108', name: 'Crix Madine' },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */

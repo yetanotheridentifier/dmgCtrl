@@ -1,12 +1,12 @@
 import { registerCard } from './abilities'
-import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount, grantNextUnit, healUnit } from './effects'
+import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount, grantNextUnit, healUnit, bottomTopCards } from './effects'
 import { dealDamageToUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
 import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, enteredPlayThisPhase } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets } from './legalMoves'
-import { unitHasTrait, isLeaderUnit, nonAuraKeywordNames, unitHasKeyword, unitKeywords } from './keywords'
+import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, unitHasKeyword, unitKeywords } from './keywords'
 import type { EngineCard, GameState, PlayerId, UnitState, UpgradeRef } from './types'
 
 /**
@@ -888,4 +888,35 @@ registerCard('ASH_148', whenPlayed('An opponent discards a card from their hand.
   const opp = opponentOf(ctx.owner)
   if (s.players[opp].hand.length === 0) return s // no card to discard → the whole ability does nothing
   return pushChoice(s, { kind: 'selectDiscard', id: ctx.sourceInstanceId!, controller: opp, count: 1, then: { distributeDamageTo: ctx.owner } })
+}))
+
+registerCard('ASH_250', whenPlayed("Look at an opponent's hand.", (s, ctx) => // Imperial Defector
+  pushChoice(s, { kind: 'lookAtHand', id: ctx.sourceInstanceId!, controller: ctx.owner, target: opponentOf(ctx.owner) })))
+
+registerCard('ASH_220', whenPlayed("Look at an opponent's hand. You may discard a card from it. If you do, they draw a card.", (s, ctx) => // Remnant Lookouts
+  pushChoice(s, { kind: 'lookAtHand', id: ctx.sourceInstanceId!, controller: ctx.owner, target: opponentOf(ctx.owner), mayDiscard: true, thenDraw: true })))
+
+/** Number of arenas (ground/space) in which `owner` controls strictly more units than the opponent (#355, Crix Madine). */
+function arenasControllingMost(s: GameState, owner: PlayerId): number {
+  const opp = opponentOf(owner)
+  return (['ground', 'space'] as const).filter(arena =>
+    s.players[owner].units.filter(u => u.arena === arena).length > s.players[opp].units.filter(u => u.arena === arena).length,
+  ).length
+}
+
+registerCard('ASH_108', whenPlayed('You may play a Heroism unit from your hand. It costs 2 less for each arena in which you control the most units.', (s, ctx) => { // Crix Madine
+  const costDelta = -2 * arenasControllingMost(s, ctx.owner)
+  const candidates = affordableHandUnits(s, ctx.owner, 0, costDelta).filter(ref => (s.cards[ref.cardId]?.aspects ?? []).some(a => a.toLowerCase() === 'heroism'))
+  if (candidates.length === 0) return s
+  return pushChoice(s, { kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, costDelta, entersReady: false, optional: true })
+}))
+
+registerCard('ASH_107', whenPlayed('Search the top 5 cards of your deck for a card that shares a Trait with a unit you control, reveal it, and draw it.', (s, ctx) => { // Clan Wren Loyalist
+  const owner = ctx.owner
+  const revealed = s.players[owner].deck.slice(0, 5)
+  const myTraits = new Set(s.players[owner].units.flatMap(u => unitTraits(s, u).map(t => t.toLowerCase())))
+  const eligibleIndices = revealed.flatMap((cardId, i) => (s.cards[cardId]?.traits.some(t => myTraits.has(t.toLowerCase())) ? [i] : []))
+  // No trait match among the top cards → they all go to the bottom and nothing is drawn.
+  if (eligibleIndices.length === 0) return bottomTopCards(s, owner, revealed.length)
+  return pushChoice(s, { kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: owner, revealed, eligibleIndices })
 }))

@@ -587,6 +587,27 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       break
     }
+    case 'lookAtHand': {
+      // Remnant Lookouts (#355): discard the chosen card from the target's hand; if `thenDraw`, they draw.
+      if (choice.mayDiscard && handIndex !== undefined) {
+        next = discardFromHand(next, choice.target, handIndex)
+        if (choice.thenDraw) next = drawCards(next, choice.target, 1)
+      }
+      break
+    }
+    case 'searchDraw': {
+      // Clan Wren Loyalist (#355): draw the chosen revealed card; put the other revealed cards on
+      // the bottom of the deck (revealed order — the "random order" is immaterial hidden info here).
+      if (deckIndex !== undefined && deckIndex < choice.revealed.length) {
+        const owner = choice.controller
+        const p = next.players[owner]
+        const drawn = choice.revealed[deckIndex]
+        const rest = p.deck.slice(choice.revealed.length)
+        const others = choice.revealed.filter((_, i) => i !== deckIndex)
+        next = updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: [...rest, ...others] })
+      }
+      break
+    }
     case 'selectUniqueToDefeat': {
       // Unique rule (#348): defeat the chosen duplicate upgrade, then re-check (3+ copies → repeat).
       const pick = choice.candidates[optionIndex ?? 0]

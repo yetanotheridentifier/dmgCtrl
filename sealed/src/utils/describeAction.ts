@@ -69,7 +69,8 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayPlayTopFree') return "Don't play"
       if (choice.kind === 'mayDamageExhaust') return 'Decline'
       if (choice.kind === 'mayAttack') return "Don't attack"
-      if (choice.kind === 'distributeDamage') return 'Done'
+      if (choice.kind === 'distributeDamage' || choice.kind === 'lookAtHand') return 'Done'
+      if (choice.kind === 'playUnitFromHand') return "Don't play"
       if (choice.kind === 'mayDamage' || choice.kind === 'mayAdvantageEach' || choice.kind === 'mayDefeatEnemyUnit' || choice.kind === 'selectDiscard') return 'Decline'
       if (choice.kind === 'selectUpgradeToDefeat' || choice.kind === 'selectResourceUpgrade') return 'Cancel'
       if (choice.kind === 'mayLastingBuff' || choice.kind === 'mayGiveAdvantage' || choice.kind === 'mayExhaustLeaderGiveAdvantage' || choice.kind === 'mayExhaustLeaderExhaustUnit' || choice.kind === 'mayExhaustUnit') return 'Decline'
@@ -92,6 +93,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'search' && action.deckIndex !== undefined) {
         const cardId = choice.revealed[action.deckIndex]
         return `Discard ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
+      }
+      if (choice.kind === 'searchDraw' && action.deckIndex !== undefined) {
+        const cardId = choice.revealed[action.deckIndex]
+        return `Draw ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
       }
       if (choice.kind === 'mayDamage') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
@@ -140,6 +145,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'distributeDamage') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Deal 1${target ? ` to ${target}` : ''}`
+      }
+      if (choice.kind === 'lookAtHand') {
+        const cardId = action.handIndex !== undefined ? state.players[choice.target].hand[action.handIndex] : undefined
+        return `Discard ${cardId ? state.cards[cardId]?.name ?? cardId : 'a card'}`
       }
       if (choice.kind === 'mayExhaustLeaderForAdvantage') return `Exhaust leader → Advantage to ${anyUnitName(state, choice.unitId) ?? 'unit'}`
       if (choice.kind === 'mayPayToDraw') {

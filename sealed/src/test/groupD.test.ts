@@ -63,7 +63,23 @@ const D = {
   ASH_148: card({ id: 'ASH_148', type: 'unit', arena: 'ground', power: 8, hp: 7, keywords: [{ name: 'Overwhelm' }] }), // Ninth Sister
   COST3: card({ id: 'COST3', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 2 }),
   COST0: card({ id: 'COST0', type: 'event', cost: 0 }),
+  // Phase 5 — look at opponent's hand
+  ASH_250: card({ id: 'ASH_250', type: 'unit', arena: 'ground', power: 3, hp: 2 }), // Imperial Defector
+  ASH_220: card({ id: 'ASH_220', type: 'unit', arena: 'ground', power: 3, hp: 3 }), // Remnant Lookouts
+  DRAWN: card({ id: 'DRAWN', type: 'unit', arena: 'ground', power: 1, hp: 1 }),
+  // Phase 5 — search top 5 for a trait match
+  ASH_107: card({ id: 'ASH_107', type: 'unit', arena: 'ground', power: 3, hp: 2, traits: ['Mandalorian'] }), // Clan Wren Loyalist
+  TRAIT_U: card({ id: 'TRAIT_U', type: 'unit', arena: 'ground', power: 2, hp: 2, traits: ['Rebel'] }),
+  REBELCARD: card({ id: 'REBELCARD', type: 'unit', arena: 'ground', traits: ['Rebel'] }),
+  MANDOCARD: card({ id: 'MANDOCARD', type: 'unit', arena: 'ground', traits: ['Mandalorian'] }),
+  NEUTRAL: card({ id: 'NEUTRAL', type: 'unit', arena: 'ground', traits: ['Jedi'] }),
+  EXTRA: card({ id: 'EXTRA', type: 'unit', arena: 'ground', traits: [] }),
+  // Phase 5 — play a discounted Heroism unit
+  ASH_108: card({ id: 'ASH_108', type: 'unit', arena: 'ground', power: 3, hp: 2, aspects: ['Heroism'] }), // Crix Madine
+  HEROUNIT: card({ id: 'HEROUNIT', type: 'unit', arena: 'ground', cost: 5, power: 2, hp: 2, aspects: ['Heroism'] }),
+  VILLAINUNIT: card({ id: 'VILLAINUNIT', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 2, aspects: ['Villainy'] }),
 }
+const readyCount = (s: GameState) => s.players.player.resources.filter(r => !r.exhausted).length
 const accept = (s: GameState, targetInstanceId?: string) => resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, targetInstanceId })
 const U = (s: GameState, id: string) => [...s.players.player.units, ...s.players.opponent.units].find(u => u.instanceId === id)!
 
@@ -398,5 +414,115 @@ describe('Group D Phase 4 — opponent discard + distribute damage (Ninth Sister
     const s = play('ASH_148', {}, { hand: [], units: [unit('e', 'GRUNT', { arena: 'ground' })] })
     expect(s.pendingChoices ?? []).toHaveLength(0)
     expect(played(s, 'ASH_148')).toBeDefined() // still entered play
+  })
+})
+
+describe('Group D Phase 5 — look at opponent hand (#355)', () => {
+  const skip = (s: GameState) => resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id })
+  const pick = (s: GameState, handIndex: number) => resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, handIndex })
+
+  it('Imperial Defector (250): a view-only look at the opponent hand, dismissed with Done', () => {
+    const s = play('ASH_250', {}, { hand: ['GRUNT', 'SPACER'] })
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'lookAtHand', controller: 'player', target: 'opponent' })
+    expect(s.pendingChoices?.[0]).not.toHaveProperty('mayDiscard', true)
+    const moves = legalMoves(s)
+    expect(moves).toEqual([{ type: 'skipTrigger', choiceId: s.pendingChoices![0].id }]) // Done only
+    const done = skip(s)
+    expect(done.pendingChoices ?? []).toHaveLength(0)
+    expect(done.players.opponent.hand).toEqual(['GRUNT', 'SPACER']) // untouched
+  })
+
+  it('Remnant Lookouts (220): may discard a card from the opponent hand; if so, they draw', () => {
+    const s = play('ASH_220', {}, { hand: ['GRUNT', 'SPACER'], deck: ['DRAWN'] })
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'lookAtHand', controller: 'player', target: 'opponent', mayDiscard: true, thenDraw: true })
+    // one accept per opponent hand card, plus Done
+    const picks = legalMoves(s).filter(a => a.type === 'acceptChoice').map(a => a.handIndex)
+    expect(picks.sort()).toEqual([0, 1])
+    const s1 = pick(s, 0) // discard the opponent's GRUNT → they draw DRAWN
+    expect(s1.players.opponent.discard).toContain('GRUNT')
+    expect(s1.players.opponent.hand).toEqual(['SPACER', 'DRAWN'])
+    expect(s1.pendingChoices ?? []).toHaveLength(0)
+  })
+
+  it('Remnant Lookouts: declining discards nothing and draws nothing', () => {
+    const s = skip(play('ASH_220', {}, { hand: ['GRUNT', 'SPACER'], deck: ['DRAWN'] }))
+    expect(s.players.opponent.hand).toEqual(['GRUNT', 'SPACER']) // no discard
+    expect(s.players.opponent.deck).toEqual(['DRAWN']) // no draw
+    expect(s.pendingChoices ?? []).toHaveLength(0)
+  })
+
+  it('Remnant Lookouts: an empty opponent hand offers only Done', () => {
+    const s = play('ASH_220', {}, { hand: [], deck: ['DRAWN'] })
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'lookAtHand', mayDiscard: true })
+    expect(legalMoves(s)).toEqual([{ type: 'skipTrigger', choiceId: s.pendingChoices![0].id }])
+  })
+})
+
+describe('Group D Phase 5 — search top 5 for a trait match (Clan Wren Loyalist #355)', () => {
+  it('reveals the top 5 and only lets you draw a trait-sharing card', () => {
+    const s = play('ASH_107', { units: [unit('u', 'TRAIT_U')], deck: ['REBELCARD', 'NEUTRAL', 'MANDOCARD', 'NEUTRAL', 'NEUTRAL', 'EXTRA'] })
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'searchDraw', revealed: ['REBELCARD', 'NEUTRAL', 'MANDOCARD', 'NEUTRAL', 'NEUTRAL'] })
+    // Rebel (index 0, matches TRAIT_U) and Mandalorian (index 2, matches Clan Wren itself) are eligible.
+    expect((s.pendingChoices![0] as { eligibleIndices: number[] }).eligibleIndices).toEqual([0, 2])
+    expect(legalMoves(s).filter(a => a.type === 'acceptChoice').map(a => a.deckIndex)).toEqual([0, 2])
+  })
+
+  it('draws the chosen card and bottoms the rest of the revealed cards', () => {
+    const s = play('ASH_107', { units: [unit('u', 'TRAIT_U')], deck: ['REBELCARD', 'NEUTRAL', 'MANDOCARD', 'NEUTRAL', 'NEUTRAL', 'EXTRA'] })
+    const s1 = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, deckIndex: 0 })
+    expect(s1.players.player.hand).toContain('REBELCARD')
+    // EXTRA (the 6th, untouched top) stays on top; the other four revealed go to the bottom in order.
+    expect(s1.players.player.deck).toEqual(['EXTRA', 'NEUTRAL', 'MANDOCARD', 'NEUTRAL', 'NEUTRAL'])
+    expect(s1.pendingChoices ?? []).toHaveLength(0)
+  })
+
+  it('with no trait match, bottoms all five and draws nothing (no choice)', () => {
+    // Clan Wren is Mandalorian, but no Mandalorian/other-controlled-trait card is in the top 5.
+    const s = play('ASH_107', { deck: ['NEUTRAL', 'NEUTRAL', 'NEUTRAL', 'NEUTRAL', 'NEUTRAL', 'EXTRA'] })
+    expect(s.pendingChoices ?? []).toHaveLength(0)
+    expect(s.players.player.hand).toEqual([]) // nothing drawn
+    expect(s.players.player.deck).toEqual(['EXTRA', 'NEUTRAL', 'NEUTRAL', 'NEUTRAL', 'NEUTRAL', 'NEUTRAL'])
+  })
+
+  it('searches fewer than 5 when the deck is short', () => {
+    const s = play('ASH_107', { deck: ['MANDOCARD'] }) // shares Mandalorian with Clan Wren
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'searchDraw', revealed: ['MANDOCARD'], eligibleIndices: [0] })
+    const s1 = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, deckIndex: 0 })
+    expect(s1.players.player.hand).toContain('MANDOCARD')
+    expect(s1.players.player.deck).toEqual([])
+  })
+})
+
+describe('Group D Phase 5 — play a discounted Heroism unit (Crix Madine #355)', () => {
+  it('offers only Heroism hand units, discounted 2 per arena controlled', () => {
+    const s = play('ASH_108', { hand: ['ASH_108', 'HEROUNIT', 'VILLAINUNIT'] }) // Crix alone on ground → controls ground only
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'playUnitFromHand', optional: true, costDelta: -2 })
+    const cands = (s.pendingChoices![0] as { candidates: { cardId: string }[] }).candidates.map(c => c.cardId)
+    expect(cands).toEqual(['HEROUNIT']) // Villainy unit excluded
+  })
+
+  it('discounts 2 per arena controlled — both arenas gives -4', () => {
+    const s = play('ASH_108', { hand: ['ASH_108', 'HEROUNIT'], units: [unit('sp', 'SPACER', { arena: 'space' })] })
+    expect((s.pendingChoices![0] as { costDelta: number }).costDelta).toBe(-4)
+  })
+
+  it('plays the chosen Heroism unit at the discounted cost', () => {
+    const s = play('ASH_108', { hand: ['ASH_108', 'HEROUNIT'], resources: ready(20) })
+    const before = readyCount(s)
+    const s1 = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, handIndex: 0 })
+    expect(s1.players.player.units.some(u => u.cardId === 'HEROUNIT')).toBe(true)
+    expect(before - readyCount(s1)).toBe(3) // HEROUNIT cost 5, -2 discount
+  })
+
+  it('is optional — the player may decline', () => {
+    const s = play('ASH_108', { hand: ['ASH_108', 'HEROUNIT'] })
+    const s1 = resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id })
+    expect(s1.players.player.units.some(u => u.cardId === 'HEROUNIT')).toBe(false)
+    expect(s1.pendingChoices ?? []).toHaveLength(0)
+  })
+
+  it('does nothing when there is no Heroism unit in hand', () => {
+    const s = play('ASH_108', { hand: ['ASH_108', 'VILLAINUNIT'] })
+    expect(s.pendingChoices ?? []).toHaveLength(0)
   })
 })

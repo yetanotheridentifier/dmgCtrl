@@ -341,6 +341,61 @@ export function SearchRevealOverlay({ state, choice, onPick }: {
 }
 
 /**
+ * "Search the top N, draw a match" overlay (#355, Clan Wren Loyalist): reveals the top cards; the
+ * trait-matching ones get a Draw button, the rest are dimmed. Mandatory (a match exists). A thin
+ * wrapper over `CardGridOverlay`.
+ */
+export function SearchDrawOverlay({ state, choice, onPick }: {
+  state: GameState
+  choice: Extract<PendingChoice, { kind: 'searchDraw' }>
+  onPick: (deckIndex: number) => void
+}) {
+  const eligible = new Set(choice.eligibleIndices)
+  return (
+    <CardGridOverlay
+      idPrefix="search-draw"
+      prompt={`Search the top ${choice.revealed.length} — draw a card sharing a Trait`}
+      cardsById={state.cards}
+      items={choice.revealed.map((cardId, i) => eligible.has(i)
+        ? { cardId, key: i, testId: `search-draw-pick-${i}`, actionLabel: 'Draw', onSelect: () => onPick(i) }
+        : { cardId, key: i, dimmed: true })}
+    />
+  )
+}
+
+/**
+ * "Look at an opponent's hand" overlay (#355, Imperial Defector / Remnant Lookouts): reveals the
+ * target's hand face-up. View-only unless `mayDiscard`, when each card gets a Discard button. A
+ * Done button dismisses it. A thin wrapper over `CardGridOverlay`.
+ */
+export function OpponentHandOverlay({ state, choice, onDiscard, onDone }: {
+  state: GameState
+  choice: Extract<PendingChoice, { kind: 'lookAtHand' }>
+  onDiscard: (handIndex: number) => void
+  onDone: () => void
+}) {
+  const hand = state.players[choice.target].hand
+  const prompt = hand.length === 0
+    ? "Opponent's hand is empty"
+    : choice.mayDiscard ? "Opponent's hand — you may discard one" : "Opponent's hand"
+  return (
+    <CardGridOverlay
+      idPrefix="opp-hand"
+      prompt={prompt}
+      cardsById={state.cards}
+      items={hand.map((cardId, i) => choice.mayDiscard
+        ? { cardId, key: i, testId: `opp-hand-pick-${i}`, actionLabel: 'Discard', onSelect: () => onDiscard(i) }
+        : { cardId, key: i })}
+      footer={
+        <button data-testid="opp-hand-done" onClick={onDone} className="rounded-xl border-2 border-line/60 px-4 py-1.5 text-xs text-ink-dim hover:text-ink">
+          Done
+        </button>
+      }
+    />
+  )
+}
+
+/**
  * One player's units in one arena, anchored to the battlefront. The grid cell's
  * alignment (items-end for the opponent, items-start for you) pins the lane to
  * the centre line; extra units wrap *away* from it. Keeps `{side}-{arena}-units`.
@@ -716,11 +771,14 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // What clicking each hand card does, keyed by hand index: play it in the action
     // phase, resource it in the setup or regroup phase (#6, #328). Derived from the
     // legal moves so the hand affordance always matches what the engine allows.
+    // A "look at an opponent's hand" discard (#355) also uses acceptChoice+handIndex, but its
+    // indices are into the OPPONENT's hand (shown in an overlay) — keep them off our own hand.
+    const oppHandChoiceId = gameState.pendingChoices?.find(c => c.kind === 'lookAtHand' && c.controller === 'player')?.id
     const handAction = new Map<number, Action>()
     for (const a of legal) {
       if (a.type === 'playCard' || a.type === 'resourceCard' || a.type === 'setupResource') handAction.set(a.handIndex, a)
       // "Play a unit from hand" ability choice (#348): the affordable hand cards become clickable.
-      else if (a.type === 'acceptChoice' && a.handIndex !== undefined) handAction.set(a.handIndex, a)
+      else if (a.type === 'acceptChoice' && a.handIndex !== undefined && a.choiceId !== oppHandChoiceId) handAction.set(a.handIndex, a)
     }
     const hand = gameState.players.player.hand
 
@@ -730,6 +788,13 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       (c): c is Extract<PendingChoice, { kind: 'selectDiscard' }> => c.kind === 'selectDiscard' && c.controller === 'player',
     )
     const discardDecline = discardChoice ? legal.find(a => a.type === 'skipTrigger' && a.choiceId === discardChoice.id) : undefined
+
+    // An optional "play a unit from hand" (Crix Madine, #355): the candidate cards are clickable in
+    // hand; a Decline button lets the player pass on the "may".
+    const handPlayChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'playUnitFromHand' }> => c.kind === 'playUnitFromHand' && c.controller === 'player' && c.optional === true,
+    )
+    const handPlayDecline = handPlayChoice ? legal.find(a => a.type === 'skipTrigger' && a.choiceId === handPlayChoice.id) : undefined
 
     const attacks = legal.filter(a => a.type === 'attack')
     const attackerIds = new Set(attacks.map(a => a.attackerId))
@@ -861,6 +926,19 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     )
     const searchActions = searchChoice ? legal.filter(a => a.type === 'acceptChoice' && a.choiceId === searchChoice.id) : []
 
+    // A "look at an opponent's hand" choice (Imperial Defector / Remnant Lookouts, #355): its
+    // discard picks + Done live in the reveal overlay, not the action menu.
+    const lookHandChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'lookAtHand' }> => c.kind === 'lookAtHand' && c.controller === 'player',
+    )
+    const lookHandActions = lookHandChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === lookHandChoice.id) : []
+
+    // A "search top N, draw a trait match" choice (Clan Wren Loyalist, #355): draw picks in the overlay.
+    const searchDrawChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'searchDraw' }> => c.kind === 'searchDraw' && c.controller === 'player',
+    )
+    const searchDrawActions = searchDrawChoice ? legal.filter(a => a.type === 'acceptChoice' && a.choiceId === searchDrawChoice.id) : []
+
     // A "select an upgrade to defeat" choice (Vane, #348): the candidate upgrades are shown as a
     // centre-screen card picker with a Cancel (optional only), not in the action menu.
     const selectUpgradeChoice = gameState.pendingChoices?.find(
@@ -895,11 +973,11 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // "Play a unit from hand" accepts (#348) are clicked on the hand card, not the menu.
     const isHandPlay = (a: Action) => a.type === 'acceptChoice' && a.handIndex !== undefined
     const menuActions = gameState.winner === null
-      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline)
+      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
       : []
     // The board-target decline and the hand-discard decline share one button (only one
     // choice is active at a time). "Done" for the repeatable multiPick, else "Decline".
-    const declineButton = declineChoice ?? discardDecline
+    const declineButton = declineChoice ?? discardDecline ?? handPlayDecline
     // Distribute-damage HUD (Ninth Sister, #355): show how much of the pool is allocated.
     const distribute = targetChoice?.kind === 'distributeDamage' ? targetChoice : undefined
     const repeatable = targetChoice?.kind === 'multiPick' || targetChoice?.kind === 'distributeDamage'
@@ -956,6 +1034,23 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           state={gameState}
           choice={searchChoice}
           onPick={deckIndex => actAndClear({ type: 'acceptChoice', choiceId: searchChoice.id, deckIndex })}
+        />
+      )
+    } else if (lookHandChoice) {
+      choiceOverlay = (
+        <OpponentHandOverlay
+          state={gameState}
+          choice={lookHandChoice}
+          onDiscard={handIndex => actAndClear({ type: 'acceptChoice', choiceId: lookHandChoice.id, handIndex })}
+          onDone={() => actAndClear({ type: 'skipTrigger', choiceId: lookHandChoice.id })}
+        />
+      )
+    } else if (searchDrawChoice) {
+      choiceOverlay = (
+        <SearchDrawOverlay
+          state={gameState}
+          choice={searchDrawChoice}
+          onPick={deckIndex => actAndClear({ type: 'acceptChoice', choiceId: searchDrawChoice.id, deckIndex })}
         />
       )
     } else if (selectUpgradeChoice) {

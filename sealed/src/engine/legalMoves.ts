@@ -354,8 +354,9 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'playUnitFromHand': {
-        // Play a chosen hand unit (#348) — one move per affordable candidate. Mandatory.
+        // Play a chosen hand unit (#348) — one move per affordable candidate. Optional for a "may" (Crix Madine, #355).
         for (const { handIndex } of choice.candidates) moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex })
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'selectUnitToExhaust': {
@@ -396,6 +397,18 @@ function choiceMoves(state: GameState): Action[] {
         // Ninth Sister (#355): allocate a point to any eligible unit, or stop (Done) — always optional.
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'lookAtHand': {
+        // Imperial Defector / Remnant Lookouts (#355): view the target's hand. With `mayDiscard`,
+        // one accept per card in it; always a Done to dismiss.
+        if (choice.mayDiscard) state.players[choice.target].hand.forEach((_, handIndex) => moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex }))
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'searchDraw': {
+        // Clan Wren Loyalist (#355): draw one of the trait-matching revealed cards. Mandatory (a match exists).
+        for (const deckIndex of choice.eligibleIndices) moves.push({ type: 'acceptChoice', choiceId: choice.id, deckIndex })
         break
       }
       case 'mayDeployLeader': {
