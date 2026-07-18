@@ -387,6 +387,13 @@ export type PendingChoice =
   // (indices into `revealed`) to draw; the rest go to the bottom of the deck. Resolved by an
   // `acceptChoice` carrying the `deckIndex` (0-based within `revealed`). Mandatory when eligible.
   | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[] }
+  // "You may defeat this unit. If you do, [search]" (#355, Admiral Ackbar) — a yes/no. Accept defeats
+  // `unitId` and starts the search-and-play-free (below); skip leaves the unit in play.
+  | { kind: 'mayDefeatSelfSearch'; id: string; controller: PlayerId; unitId: string }
+  // Search the revealed cards (held out of the deck) and play space units for free while a combined-cost
+  // `budget` lasts (#355, Admiral Ackbar). Pick one `eligibleIndices` (indices into `revealed`) at a time
+  // via an `acceptChoice`'s `deckIndex`; skip (Done) stops. Leftover revealed cards return to the bottom.
+  | { kind: 'searchPlayFree'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; budget: number }
   // Optionally deploy your leader via a triggered epic action (#348, Grogu). A yes/no.
   | { kind: 'mayDeployLeader'; id: string; controller: PlayerId }
   // Unique rule (CR): a player controlling two upgrades with the same title defeats one (their

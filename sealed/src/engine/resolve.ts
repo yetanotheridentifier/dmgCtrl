@@ -282,6 +282,30 @@ function fireEntersPlay(state: GameState, owner: PlayerId, newUnitId: string): G
   return next
 }
 
+/** Space units among `revealed` whose cost fits `budget` (#355, Admiral Ackbar). */
+function ackbarEligible(state: GameState, revealed: string[], budget: number): number[] {
+  return revealed.flatMap((cardId, i) => {
+    const c = state.cards[cardId]
+    return c?.type === 'unit' && c.arena === 'space' && (c.cost ?? 0) <= budget ? [i] : []
+  })
+}
+
+/**
+ * Admiral Ackbar's search (#355): reveal the top 10, and if any space unit fits the cost-5 budget,
+ * hold those cards out of the deck in a `searchPlayFree` choice; otherwise put the searched cards on
+ * the bottom (nothing to play). The `#348`-style "shuffle after search" is approximated by bottoming.
+ */
+function startAckbarSearch(state: GameState, owner: PlayerId, choiceId: string): GameState {
+  const p = state.players[owner]
+  const revealed = p.deck.slice(0, 10)
+  const rest = p.deck.slice(10)
+  const eligibleIndices = ackbarEligible(state, revealed, 5)
+  if (eligibleIndices.length === 0) return updatePlayer(state, owner, { deck: [...rest, ...revealed] })
+  // Pull the searched window out of the deck; leftover cards return to the bottom when the choice ends.
+  const pulled = updatePlayer(state, owner, { deck: rest })
+  return pushChoice(pulled, { kind: 'searchPlayFree', id: choiceId, controller: owner, revealed, eligibleIndices, budget: 5 })
+}
+
 function playCard(state: GameState, handIndex: number): GameState {
   const playerId = state.activePlayer
   const p = state.players[playerId]
@@ -382,6 +406,10 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
     next = updatePlayer(next, choice.controller, {
       units: next.players[choice.controller].units.map(u => (u.instanceId === choice.unitId ? { ...u, exhausted: true } : u)),
     })
+  }
+  // Admiral Ackbar (#355): stopping the search returns the still-held revealed cards to the deck bottom.
+  if (choice.kind === 'searchPlayFree') {
+    next = updatePlayer(next, choice.controller, { deck: [...next.players[choice.controller].deck, ...choice.revealed] })
   }
   return resumeAfterChoice(next, choice)
 }
@@ -605,6 +633,35 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         const rest = p.deck.slice(choice.revealed.length)
         const others = choice.revealed.filter((_, i) => i !== deckIndex)
         next = updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: [...rest, ...others] })
+      }
+      break
+    }
+    case 'mayDefeatSelfSearch': {
+      // Admiral Ackbar (#355): defeat this unit, then search the top 10 for space units to play free.
+      next = defeatUnit(next, choice.unitId)
+      next = checkWin(next)
+      if (next.winner !== null) return next
+      next = startAckbarSearch(next, choice.controller, choice.id)
+      break
+    }
+    case 'searchPlayFree': {
+      // Admiral Ackbar (#355): play the chosen revealed space unit for free (it may trigger its own
+      // When Played — that sub-choice resolves first, then we re-offer the rest of the budget).
+      if (deckIndex !== undefined && choice.eligibleIndices.includes(deckIndex)) {
+        const owner = choice.controller
+        const cardId = choice.revealed[deckIndex]
+        const cost = next.cards[cardId]?.cost ?? 0
+        next = enterUnit(next, owner, cardId, false)
+        next = checkWin(next)
+        if (next.winner !== null) return next
+        const revealed = choice.revealed.filter((_, i) => i !== deckIndex)
+        const budget = choice.budget - cost
+        const eligibleIndices = ackbarEligible(next, revealed, budget)
+        if (budget > 0 && eligibleIndices.length > 0) {
+          next = pushChoice(next, { kind: 'searchPlayFree', id: choice.id, controller: owner, revealed, eligibleIndices, budget })
+        } else {
+          next = updatePlayer(next, owner, { deck: [...next.players[owner].deck, ...revealed] }) // bottom the leftovers
+        }
       }
       break
     }

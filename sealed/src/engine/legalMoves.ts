@@ -411,6 +411,18 @@ function choiceMoves(state: GameState): Action[] {
         for (const deckIndex of choice.eligibleIndices) moves.push({ type: 'acceptChoice', choiceId: choice.id, deckIndex })
         break
       }
+      case 'mayDefeatSelfSearch': {
+        // Admiral Ackbar (#355): a yes/no — defeat this unit to search, or decline.
+        moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'searchPlayFree': {
+        // Admiral Ackbar (#355): play one eligible revealed space unit, or stop (Done).
+        for (const deckIndex of choice.eligibleIndices) moves.push({ type: 'acceptChoice', choiceId: choice.id, deckIndex })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
       case 'mayDeployLeader': {
         // Grogu (#348): a yes/no to deploy via the triggered epic action.
         moves.push({ type: 'acceptChoice', choiceId: choice.id })

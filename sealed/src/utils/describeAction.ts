@@ -69,8 +69,9 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayPlayTopFree') return "Don't play"
       if (choice.kind === 'mayDamageExhaust') return 'Decline'
       if (choice.kind === 'mayAttack') return "Don't attack"
-      if (choice.kind === 'distributeDamage' || choice.kind === 'lookAtHand') return 'Done'
+      if (choice.kind === 'distributeDamage' || choice.kind === 'lookAtHand' || choice.kind === 'searchPlayFree') return 'Done'
       if (choice.kind === 'playUnitFromHand') return "Don't play"
+      if (choice.kind === 'mayDefeatSelfSearch') return "Don't"
       if (choice.kind === 'mayDamage' || choice.kind === 'mayAdvantageEach' || choice.kind === 'mayDefeatEnemyUnit' || choice.kind === 'selectDiscard') return 'Decline'
       if (choice.kind === 'selectUpgradeToDefeat' || choice.kind === 'selectResourceUpgrade') return 'Cancel'
       if (choice.kind === 'mayLastingBuff' || choice.kind === 'mayGiveAdvantage' || choice.kind === 'mayExhaustLeaderGiveAdvantage' || choice.kind === 'mayExhaustLeaderExhaustUnit' || choice.kind === 'mayExhaustUnit') return 'Decline'
@@ -97,6 +98,11 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'searchDraw' && action.deckIndex !== undefined) {
         const cardId = choice.revealed[action.deckIndex]
         return `Draw ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
+      }
+      if (choice.kind === 'mayDefeatSelfSearch') return `Defeat ${anyUnitName(state, choice.unitId) ?? 'this unit'} & search`
+      if (choice.kind === 'searchPlayFree' && action.deckIndex !== undefined) {
+        const cardId = choice.revealed[action.deckIndex]
+        return `Play ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'} free`
       }
       if (choice.kind === 'mayDamage') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined

@@ -364,6 +364,35 @@ export function SearchDrawOverlay({ state, choice, onPick }: {
 }
 
 /**
+ * "Search & play for free" overlay (#355, Admiral Ackbar): reveals the searched cards; eligible space
+ * units (fitting the remaining cost budget) get a "Play free" button, the rest are dimmed. A Done
+ * button (with the remaining budget) stops early. A thin wrapper over `CardGridOverlay`.
+ */
+export function SearchPlayFreeOverlay({ state, choice, onPick, onDone }: {
+  state: GameState
+  choice: Extract<PendingChoice, { kind: 'searchPlayFree' }>
+  onPick: (deckIndex: number) => void
+  onDone: () => void
+}) {
+  const eligible = new Set(choice.eligibleIndices)
+  return (
+    <CardGridOverlay
+      idPrefix="search-free"
+      prompt={`Play space units for free — ${choice.budget} cost left`}
+      cardsById={state.cards}
+      items={choice.revealed.map((cardId, i) => eligible.has(i)
+        ? { cardId, key: i, testId: `search-free-pick-${i}`, actionLabel: 'Play free', onSelect: () => onPick(i) }
+        : { cardId, key: i, dimmed: true })}
+      footer={
+        <button data-testid="search-free-done" onClick={onDone} className="rounded-xl border-2 border-line/60 px-4 py-1.5 text-xs text-ink-dim hover:text-ink">
+          Done
+        </button>
+      }
+    />
+  )
+}
+
+/**
  * "Look at an opponent's hand" overlay (#355, Imperial Defector / Remnant Lookouts): reveals the
  * target's hand face-up. View-only unless `mayDiscard`, when each card gets a Discard button. A
  * Done button dismisses it. A thin wrapper over `CardGridOverlay`.
@@ -939,6 +968,12 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     )
     const searchDrawActions = searchDrawChoice ? legal.filter(a => a.type === 'acceptChoice' && a.choiceId === searchDrawChoice.id) : []
 
+    // A "search & play space units for free" choice (Admiral Ackbar, #355): picks + Done in the overlay.
+    const searchFreeChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'searchPlayFree' }> => c.kind === 'searchPlayFree' && c.controller === 'player',
+    )
+    const searchFreeActions = searchFreeChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === searchFreeChoice.id) : []
+
     // A "select an upgrade to defeat" choice (Vane, #348): the candidate upgrades are shown as a
     // centre-screen card picker with a Cancel (optional only), not in the action menu.
     const selectUpgradeChoice = gameState.pendingChoices?.find(
@@ -973,7 +1008,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // "Play a unit from hand" accepts (#348) are clicked on the hand card, not the menu.
     const isHandPlay = (a: Action) => a.type === 'acceptChoice' && a.handIndex !== undefined
     const menuActions = gameState.winner === null
-      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
+      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
       : []
     // The board-target decline and the hand-discard decline share one button (only one
     // choice is active at a time). "Done" for the repeatable multiPick, else "Decline".
@@ -1051,6 +1086,15 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           state={gameState}
           choice={searchDrawChoice}
           onPick={deckIndex => actAndClear({ type: 'acceptChoice', choiceId: searchDrawChoice.id, deckIndex })}
+        />
+      )
+    } else if (searchFreeChoice) {
+      choiceOverlay = (
+        <SearchPlayFreeOverlay
+          state={gameState}
+          choice={searchFreeChoice}
+          onPick={deckIndex => actAndClear({ type: 'acceptChoice', choiceId: searchFreeChoice.id, deckIndex })}
+          onDone={() => actAndClear({ type: 'skipTrigger', choiceId: searchFreeChoice.id })}
         />
       )
     } else if (selectUpgradeChoice) {

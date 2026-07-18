@@ -78,6 +78,12 @@ const D = {
   ASH_108: card({ id: 'ASH_108', type: 'unit', arena: 'ground', power: 3, hp: 2, aspects: ['Heroism'] }), // Crix Madine
   HEROUNIT: card({ id: 'HEROUNIT', type: 'unit', arena: 'ground', cost: 5, power: 2, hp: 2, aspects: ['Heroism'] }),
   VILLAINUNIT: card({ id: 'VILLAINUNIT', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 2, aspects: ['Villainy'] }),
+  // Phase 5 — Admiral Ackbar: self-defeat + search top 10 for cheap space units, play free
+  ASH_110: card({ id: 'ASH_110', type: 'unit', arena: 'ground', power: 6, hp: 6 }), // Admiral Ackbar
+  SPACE2: card({ id: 'SPACE2', type: 'unit', arena: 'space', cost: 2, power: 2, hp: 2 }),
+  SPACE3: card({ id: 'SPACE3', type: 'unit', arena: 'space', cost: 3, power: 3, hp: 3 }),
+  SPACE6: card({ id: 'SPACE6', type: 'unit', arena: 'space', cost: 6, power: 6, hp: 6 }),
+  GROUND2: card({ id: 'GROUND2', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 2 }),
 }
 const readyCount = (s: GameState) => s.players.player.resources.filter(r => !r.exhausted).length
 const accept = (s: GameState, targetInstanceId?: string) => resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, targetInstanceId })
@@ -524,5 +530,73 @@ describe('Group D Phase 5 — play a discounted Heroism unit (Crix Madine #355)'
   it('does nothing when there is no Heroism unit in hand', () => {
     const s = play('ASH_108', { hand: ['ASH_108', 'VILLAINUNIT'] })
     expect(s.pendingChoices ?? []).toHaveLength(0)
+  })
+})
+
+describe('Group D Phase 5 — Admiral Ackbar (110): self-defeat + search-play-free', () => {
+  const accept = (s: GameState) => resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id })
+  const skip = (s: GameState) => resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id })
+  const pick = (s: GameState, deckIndex: number) => resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, deckIndex })
+  const eligible = (s: GameState) => (s.pendingChoices![0] as { eligibleIndices: number[] }).eligibleIndices
+
+  it('offers an optional self-defeat when played', () => {
+    const s = play('ASH_110', { deck: ['SPACE2'] })
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayDefeatSelfSearch', controller: 'player' })
+    expect(s.players.player.units.some(u => u.cardId === 'ASH_110')).toBe(true) // still in play until accepted
+  })
+
+  it('declining leaves Ackbar in play and searches nothing', () => {
+    const s = skip(play('ASH_110', { deck: ['SPACE2', 'SPACE3'] }))
+    expect(s.players.player.units.some(u => u.cardId === 'ASH_110')).toBe(true)
+    expect(s.pendingChoices ?? []).toHaveLength(0)
+    expect(s.players.player.deck).toEqual(['SPACE2', 'SPACE3'])
+  })
+
+  it('accepting defeats Ackbar and reveals only cost-≤5 space units', () => {
+    const s = accept(play('ASH_110', { deck: ['SPACE2', 'SPACE6', 'GROUND2', 'SPACE3'] }))
+    expect(s.players.player.units.some(u => u.cardId === 'ASH_110')).toBe(false) // defeated
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'searchPlayFree', budget: 5 })
+    expect(eligible(s)).toEqual([0, 3]) // SPACE2, SPACE3 — not SPACE6 (cost 6) nor GROUND2 (ground)
+  })
+
+  it('plays space units for free while the combined budget lasts, bottoming the rest', () => {
+    let s = accept(play('ASH_110', { deck: ['SPACE2', 'SPACE6', 'GROUND2', 'SPACE3', 'EXTRA'] }))
+    s = pick(s, 0) // SPACE2 (cost 2) → budget 3; revealed now [SPACE6, GROUND2, SPACE3, EXTRA]
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'searchPlayFree', budget: 3 })
+    expect(eligible(s)).toEqual([2]) // only SPACE3 (cost 3 ≤ 3) fits now
+    s = pick(s, 2) // SPACE3 (cost 3) → budget 0 → done
+    expect(s.players.player.units.filter(u => ['SPACE2', 'SPACE3'].includes(u.cardId))).toHaveLength(2)
+    expect(s.pendingChoices ?? []).toHaveLength(0)
+    expect(s.players.player.deck).toEqual(['SPACE6', 'GROUND2', 'EXTRA']) // unplayed searched cards bottomed
+  })
+
+  it('Done stops early and returns the searched cards to the bottom', () => {
+    const s = skip(accept(play('ASH_110', { deck: ['SPACE2', 'SPACE3'] })))
+    expect(s.players.player.units.some(u => ['SPACE2', 'SPACE3'].includes(u.cardId))).toBe(false)
+    expect(s.players.player.deck).toEqual(['SPACE2', 'SPACE3'])
+  })
+
+  it('with no eligible space unit, defeats Ackbar and searches nothing (no choice)', () => {
+    const s = accept(play('ASH_110', { deck: ['GROUND2', 'SPACE6', 'GROUND2'] }))
+    expect(s.players.player.units.some(u => u.cardId === 'ASH_110')).toBe(false)
+    expect(s.pendingChoices ?? []).toHaveLength(0)
+    expect(s.players.player.deck).toEqual(['GROUND2', 'SPACE6', 'GROUND2'])
+  })
+
+  it('a freely-played unit still triggers its own When Played', () => {
+    // Helix Starfighter (221, space): no enemy space unit → 2 Advantage to itself.
+    const s = pick(accept(play('ASH_110', { deck: ['ASH_221'] })), 0)
+    const helix = s.players.player.units.find(u => u.cardId === 'ASH_221')!
+    expect(helix).toBeDefined()
+    expect(advs(helix)).toBe(2) // its When Played fired during the free play
+  })
+
+  it("a freely-played unit's own choice interrupts, then the search resumes", () => {
+    // Reinforcing Light Cruiser (051, space): When Played "may exhaust a unit" raises a choice.
+    let s = pick(accept(play('ASH_110', { deck: ['ASH_051', 'SPACE2'] })), 0) // play 051 (cost 0) free
+    expect(s.pendingChoices?.[0]?.kind).toBe('mayExhaustUnit') // its choice is active…
+    expect(s.pendingChoices?.[1]?.kind).toBe('searchPlayFree') // …with the search queued behind
+    s = resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id }) // decline the exhaust
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'searchPlayFree', revealed: ['SPACE2'] })
   })
 })

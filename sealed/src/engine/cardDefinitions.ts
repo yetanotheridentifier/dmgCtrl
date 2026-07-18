@@ -904,6 +904,9 @@ function arenasControllingMost(s: GameState, owner: PlayerId): number {
   ).length
 }
 
+registerCard('ASH_110', whenPlayed('You may defeat this unit. If you do, search the top 10 cards of your deck for any number of space units with combined cost 5 or less and play each of them for free.', (s, ctx) => // Admiral Ackbar
+  pushChoice(s, { kind: 'mayDefeatSelfSearch', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId! })))
+
 registerCard('ASH_108', whenPlayed('You may play a Heroism unit from your hand. It costs 2 less for each arena in which you control the most units.', (s, ctx) => { // Crix Madine
   const costDelta = -2 * arenasControllingMost(s, ctx.owner)
   const candidates = affordableHandUnits(s, ctx.owner, 0, costDelta).filter(ref => (s.cards[ref.cardId]?.aspects ?? []).some(a => a.toLowerCase() === 'heroism'))
