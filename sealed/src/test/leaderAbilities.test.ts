@@ -1384,7 +1384,7 @@ describe('Sabine Wren (ASH_006) — front: opponent gives Advantage, grant Shiel
     const used = resolve(board(), { type: 'useLeaderAbility', index: 0 })
     // The user's leader exhausts and their next-unit grant is set immediately.
     expect(used.players.player.leader.exhausted).toBe(true)
-    expect(used.players.player.nextPlayedUnitKeywords).toEqual([{ name: 'Shielded' }])
+    expect(used.players.player.nextUnitGrants).toEqual([{ keywords: [{ name: 'Shielded' }] }])
     // The opponent now decides — control is handed to them, mandatory, one option per their units.
     expect(used.pendingChoices?.[0]).toMatchObject({ kind: 'opponentGivesAdvantage', controller: 'opponent', count: 2 })
     expect(used.activePlayer).toBe('opponent')
@@ -1410,7 +1410,7 @@ describe('Sabine Wren (ASH_006) — deployed: On Attack grant Shielded (#348)', 
       },
     })
     const attacked = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
-    expect(attacked.players.player.nextPlayedUnitKeywords).toEqual([{ name: 'Shielded' }])
+    expect(attacked.players.player.nextUnitGrants).toEqual([{ keywords: [{ name: 'Shielded' }] }])
   })
 })
 
@@ -1420,20 +1420,20 @@ describe('"next unit you play this phase gains <keywords>" grant (generic, #348)
   it('applies the granted keyword to the next unit played, then consumes the grant', () => {
     const s = state({
       cards,
-      players: { player: player({ hand: ['GRUNT'], resources: ready(2), nextPlayedUnitKeywords: [{ name: 'Shielded' }] }), opponent: player() },
+      players: { player: player({ hand: ['GRUNT'], resources: ready(2), nextUnitGrants: [{ keywords: [{ name: 'Shielded' }] }] }), opponent: player() },
     })
     const played = resolve(s, { type: 'playCard', handIndex: 0 })
     const grunt = played.players.player.units.find(u => u.cardId === 'GRUNT')!
     expect(grunt.upgrades.some(u => u.cardId === TOKEN_SHIELD)).toBe(true) // Shielded → a Shield token on entry
     expect(unitHasKeyword(played, grunt, 'Shielded')).toBe(true) // holds the keyword this phase
-    expect(played.players.player.nextPlayedUnitKeywords).toBeUndefined() // consumed by the first unit
+    expect(played.players.player.nextUnitGrants).toBeUndefined() // consumed by the first unit
   })
 
   it('fires a granted on-enter keyword (Ambush) for the played unit', () => {
     const s = state({
       cards,
       players: {
-        player: player({ hand: ['GRUNT'], resources: ready(2), nextPlayedUnitKeywords: [{ name: 'Ambush' }] }),
+        player: player({ hand: ['GRUNT'], resources: ready(2), nextUnitGrants: [{ keywords: [{ name: 'Ambush' }] }] }),
         opponent: player({ units: [unit('e1', 'TST_U1')] }),
       },
     })
@@ -1447,23 +1447,23 @@ describe('"next unit you play this phase gains <keywords>" grant (generic, #348)
     const s = state({
       cards,
       players: {
-        player: player({ nextPlayedUnitKeywords: [{ name: 'Shielded' }] }),
+        player: player({ nextUnitGrants: [{ keywords: [{ name: 'Shielded' }] }] }),
         opponent: player({ hand: ['GRUNT'], resources: ready(2) }),
       },
       activePlayer: 'opponent',
     })
     const oppPlays = resolve(s, { type: 'playCard', handIndex: 0 })
     expect(oppPlays.players.opponent.units.find(u => u.cardId === 'GRUNT')!.upgrades.some(u => u.cardId === TOKEN_SHIELD)).toBe(false)
-    expect(oppPlays.players.player.nextPlayedUnitKeywords).toEqual([{ name: 'Shielded' }]) // still set
+    expect(oppPlays.players.player.nextUnitGrants).toEqual([{ keywords: [{ name: 'Shielded' }] }]) // still set
 
     // Cleared when the action phase ends (both players pass).
     const passReady = state({
       cards,
-      players: { player: player({ nextPlayedUnitKeywords: [{ name: 'Shielded' }] }), opponent: player() },
+      players: { player: player({ nextUnitGrants: [{ keywords: [{ name: 'Shielded' }] }] }), opponent: player() },
       consecutivePasses: 1,
     })
     const regrouped = resolve(passReady, { type: 'pass' })
     expect(regrouped.phase).toBe('regroup')
-    expect(regrouped.players.player.nextPlayedUnitKeywords).toBeUndefined()
+    expect(regrouped.players.player.nextUnitGrants).toBeUndefined()
   })
 })

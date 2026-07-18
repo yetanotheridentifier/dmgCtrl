@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 import { resolve } from '../engine/resolve'
-import { legalMoves } from '../engine/legalMoves'
+import { legalMoves, effectiveCost } from '../engine/legalMoves'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { TOKEN_ADVANTAGE, TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
@@ -48,6 +48,15 @@ const D = {
   ASH_112: card({ id: 'ASH_112', type: 'unit', arena: 'ground', power: 5, hp: 5, keywords: [{ name: 'Restore', value: 1 }] }), // Luke Skywalker
   ASH_176: card({ id: 'ASH_176', type: 'unit', arena: 'ground', power: 4, hp: 6 }), // Imposing Scout Walker
   TOUGH_SPACE: card({ id: 'TOUGH_SPACE', type: 'unit', arena: 'space', power: 1, hp: 4 }),
+  // D4 — generalised next-unit grants
+  ASH_237: card({ id: 'ASH_237', type: 'unit', arena: 'ground', power: 1, hp: 1, keywords: [{ name: 'Raid', value: 1 }] }), // Mouse Droid
+  ASH_248: card({ id: 'ASH_248', type: 'unit', arena: 'ground', power: 2, hp: 3 }), // Neel
+  IMP3: card({ id: 'IMP3', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 2, traits: ['Imperial'] }),
+  NONIMP3: card({ id: 'NONIMP3', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 2 }),
+  LOWPOW: card({ id: 'LOWPOW', type: 'unit', arena: 'ground', cost: 2, power: 1, hp: 3 }),
+  // Phase 2 — multi-target pick
+  ASH_205: card({ id: 'ASH_205', type: 'unit', arena: 'ground', power: 3, hp: 3 }), // Inspiring Veteran
+  ASH_053: card({ id: 'ASH_053', type: 'unit', arena: 'ground', power: 6, hp: 6 }), // Pre Vizsla
 }
 const accept = (s: GameState, targetInstanceId?: string) => resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, targetInstanceId })
 const U = (s: GameState, id: string) => [...s.players.player.units, ...s.players.opponent.units].find(u => u.instanceId === id)!
@@ -215,5 +224,70 @@ describe('Group D3 — When Played, multi-step (#355)', () => {
     const done2 = accept(survives, 'tough')
     expect(U(done2, 'tough').damage).toBe(3)
     expect(advs(played(done2, 'ASH_176'))).toBe(0) // no reward — not defeated
+  })
+})
+
+describe('Group D4 — generalised next-unit grants (#355)', () => {
+  it('Mouse Droid (237): grants −1 cost to the next Imperial unit', () => {
+    expect(play('ASH_237').players.player.nextUnitGrants).toEqual([{ costDelta: -1, trait: 'Imperial' }])
+  })
+
+  it('the −1 cost applies to an Imperial unit, not others, and only that unit consumes it', () => {
+    const grant = [{ costDelta: -1, trait: 'Imperial' }]
+    const s = state({ cards: D, players: { player: player({ nextUnitGrants: grant }), opponent: player() } })
+    expect(effectiveCost(s, 'player', D.IMP3)).toBe(2) // 3 − 1
+    expect(effectiveCost(s, 'player', D.NONIMP3)).toBe(3) // non-Imperial unchanged
+    // a non-Imperial unit played leaves the grant in place; the Imperial unit consumes it
+    expect(play('NONIMP3', { nextUnitGrants: grant }).players.player.nextUnitGrants).toEqual(grant)
+    expect(play('IMP3', { nextUnitGrants: grant, resources: ready(2) }).players.player.nextUnitGrants).toBeUndefined()
+  })
+
+  it('Neel (248): the next unit you play with 1 or less power enters ready; a higher-power one does not', () => {
+    expect(play('ASH_248').players.player.nextUnitGrants).toEqual([{ entersReady: true, maxPower: 1 }])
+    const grant = [{ entersReady: true, maxPower: 1 }]
+    const low = play('LOWPOW', { nextUnitGrants: grant })
+    expect(played(low, 'LOWPOW').exhausted).toBe(false) // power 1 → enters ready
+    expect(low.players.player.nextUnitGrants).toBeUndefined() // consumed
+    const high = play('GRUNT', { nextUnitGrants: grant })
+    expect(played(high, 'GRUNT').exhausted).toBe(true) // power 2 → normal (exhausted)
+    expect(high.players.player.nextUnitGrants).toEqual(grant) // not consumed
+  })
+})
+
+describe('Group D Phase 2 — multi-target pick (#355)', () => {
+  const pickTargets = (s: GameState) => (s.pendingChoices![0] as { targets: string[] }).targets
+
+  it('Inspiring Veteran (205): an Advantage to each of up to 3 exhausted units (self is exhausted too)', () => {
+    const s = play('ASH_205', { units: [unit('a', 'GRUNT', { exhausted: true }), unit('b', 'GRUNT', { exhausted: true })] }, { units: [unit('d', 'GRUNT')] })
+    const iv = played(s, 'ASH_205').instanceId // enters exhausted → eligible
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'multiPick' })
+    expect(pickTargets(s)).toEqual(expect.arrayContaining(['a', 'b', iv]))
+    expect(pickTargets(s)).not.toContain('d') // ready
+    let cur = s
+    for (const id of ['a', 'b', iv]) cur = resolve(cur, { type: 'acceptChoice', choiceId: cur.pendingChoices![0].id, targetInstanceId: id })
+    expect(cur.pendingChoices ?? []).toHaveLength(0) // 3 picked → done
+    expect(advs(U(cur, 'a'))).toBe(1)
+    expect(advs(U(cur, 'b'))).toBe(1)
+  })
+
+  it('Inspiring Veteran: can stop early with Done', () => {
+    const s = play('ASH_205', { units: [unit('a', 'GRUNT', { exhausted: true })] })
+    const s1 = accept(s, 'a')
+    expect(s1.pendingChoices?.[0]).toMatchObject({ kind: 'multiPick' }) // self still eligible
+    const done = resolve(s1, { type: 'skipTrigger', choiceId: s1.pendingChoices![0].id })
+    expect(done.pendingChoices ?? []).toHaveLength(0)
+  })
+
+  it('Pre Vizsla (053): defeats non-leader units up to 6 total remaining HP; a Mando token per defeat', () => {
+    const s = play('ASH_053', {}, { units: [unit('a', 'GRUNT'), unit('b', 'GRUNT'), unit('big', 'EXPENSIVE')] }) // GRUNT 2hp, EXPENSIVE 5hp
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'multiPick' })
+    expect(pickTargets(s)).toEqual(expect.arrayContaining(['a', 'b', 'big'])) // all ≤ 6 individually
+    const s1 = accept(s, 'a') // defeat a (2) → budget 4
+    expect(s1.players.opponent.units.find(u => u.instanceId === 'a')).toBeUndefined()
+    expect(s1.players.player.units.filter(u => u.cardId === TOKEN_MANDALORIAN)).toHaveLength(1)
+    expect(pickTargets(s1)).toEqual(['b']) // big (5) now exceeds the 4 budget
+    const s2 = accept(s1, 'b') // defeat b (2) → budget 2, no targets left → done
+    expect(s2.pendingChoices ?? []).toHaveLength(0)
+    expect(s2.players.player.units.filter(u => u.cardId === TOKEN_MANDALORIAN)).toHaveLength(2)
   })
 })

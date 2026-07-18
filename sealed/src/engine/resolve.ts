@@ -2,12 +2,12 @@ import type { Action, AttackTarget } from './actions'
 import type { GameState, PlayerId, UnitState } from './types'
 import type { PendingChoice, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeChoice, hasPendingChoices, pushChoice } from './types'
-import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, markAbilityUsed } from './types'
+import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit } from './combat'
-import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards } from './effects'
+import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, createTokenUnit } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
@@ -209,7 +209,11 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
   const card = state.cards[cardId]
   // Keywords the played unit gains on entry: its card's, plus any "next unit you play this phase"
   // grant (Sabine → Shielded, #348) — so a granted Ambush/Shielded/Hidden fires just like a printed one.
-  const grantKeywords = state.players[owner].nextPlayedUnitKeywords ?? []
+  // "Your next unit …" grants matching this card (#348/#355) — their keywords/enters-ready apply here
+  // (the cost delta was already folded into `effectiveCost` at play time).
+  const grants = (state.players[owner].nextUnitGrants ?? []).filter(g => nextUnitGrantMatches(card, g))
+  const grantKeywords = grants.flatMap(g => g.keywords ?? [])
+  const grantEntersReady = grants.some(g => g.entersReady)
   const entersWith = (name: string): boolean => hasKeyword(state, cardId, name) || grantKeywords.some(k => k.name === name)
   // Ambush: the unit may immediately attack an enemy unit, so it enters ready (#334).
   const ambush = entersWith('Ambush')
@@ -218,8 +222,8 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
     cardId,
     arena: card?.arena ?? 'ground',
     damage: 0,
-    // Units normally enter exhausted (CR 1.5.4b); Ambush — or an ability (Fennec, #348) — enters ready.
-    exhausted: ready === true ? false : !ambush,
+    // Units normally enter exhausted (CR 1.5.4b); Ambush — or an ability (Fennec #348 / Neel #355) — enters ready.
+    exhausted: ready === true || grantEntersReady ? false : !ambush,
     isLeader: false,
     // Shielded: the unit enters play with a shield token (#334).
     upgrades: entersWith('Shielded') ? [{ cardId: TOKEN_SHIELD, owner }] : [],
@@ -230,11 +234,13 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
   let next = updatePlayer(state, owner, { units: [...state.players[owner].units, newUnit] })
   next = { ...next, instanceCounter: state.instanceCounter + 1 }
   next = recordUnitEntered(next, owner, newUnit.instanceId) // "entered play this phase" (#347)
-  // Consume the "next unit" grant: give the unit the keywords for this phase (a lasting effect, so an
-  // ongoing keyword like Sentinel counts too) and clear it — only the first unit played benefits (#348).
-  if (grantKeywords.length > 0) {
-    next = addLastingEffect(next, { targetInstanceId: newUnit.instanceId, keywords: grantKeywords })
-    next = updatePlayer(next, owner, { nextPlayedUnitKeywords: undefined })
+  // Consume the matching grants: give the unit their keywords for this phase (a lasting effect, so an
+  // ongoing keyword like Sentinel counts too), and drop the consumed grants — a non-matching unit
+  // leaves them in place for a later matching unit (#348/#355).
+  if (grants.length > 0) {
+    if (grantKeywords.length > 0) next = addLastingEffect(next, { targetInstanceId: newUnit.instanceId, keywords: grantKeywords })
+    const remaining = (next.players[owner].nextUnitGrants ?? []).filter(g => !nextUnitGrantMatches(card, g))
+    next = updatePlayer(next, owner, { nextUnitGrants: remaining.length > 0 ? remaining : undefined })
   }
 
   // The unit is in play now, so read Ambush/Support from its LIVE keywords — an aura can strip them
@@ -250,8 +256,9 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
     }
   } else {
     // No (or aura-stripped) Ambush: it was constructed ready only if the card printed Ambush, so revert
-    // to the normal exhausted entry — unless an ability entered it ready (Fennec, `ready === true`).
-    if (ready !== true && !inPlay().exhausted) exhaust()
+    // to the normal exhausted entry — unless an ability entered it ready (Fennec `ready`, or a Neel-style
+    // enters-ready grant, #355).
+    if (ready !== true && !grantEntersReady && !inPlay().exhausted) exhaust()
     if (unitHasKeyword(next, inPlay(), 'Support')) next = openSupportChoice(next, owner, newUnit.instanceId)
   }
 
@@ -551,6 +558,33 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       // Sabine front (#348): the opponent gives `count` Advantage tokens to their chosen unit.
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
         for (let i = 0; i < choice.count; i++) next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+      }
+      break
+    case 'multiPick':
+      // Repeatable board-target pick (#355): apply the per-pick effect, then re-offer the remaining
+      // eligible targets — Inspiring Veteran (up to N Advantage), Pre Vizsla (defeat within an HP budget).
+      if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
+        if (choice.spec.mode === 'giveAdvantage') {
+          next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+          const remaining = choice.spec.remaining - 1
+          const targets = choice.targets.filter(id => id !== targetInstanceId)
+          if (remaining > 0 && targets.length > 0) next = pushChoice(next, { kind: 'multiPick', id: choice.id, controller: choice.controller, targets, spec: { mode: 'giveAdvantage', remaining } })
+        } else {
+          const found = findUnit(next, targetInstanceId)
+          const remHp = found ? Math.max(0, effectiveHp(next, found.unit) - found.unit.damage) : 0
+          next = createTokenUnit(defeatUnit(next, targetInstanceId), choice.controller, choice.spec.token)
+          next = checkWin(next)
+          if (next.winner !== null) return next
+          const budget = choice.spec.budget - remHp
+          // Re-offer from the ORIGINAL candidate set (minus the one just defeated), filtered by the
+          // remaining budget — so the tokens created this way don't become targets themselves.
+          const targets = choice.targets.filter(id => {
+            if (id === targetInstanceId) return false
+            const u = findUnit(next, id)?.unit
+            return u !== undefined && effectiveHp(next, u) - u.damage <= budget
+          })
+          if (budget > 0 && targets.length > 0) next = pushChoice(next, { kind: 'multiPick', id: choice.id, controller: choice.controller, targets, spec: { mode: 'defeatForToken', budget, token: choice.spec.token } })
+        }
       }
       break
     case 'selectUniqueUnitToDefeat': {

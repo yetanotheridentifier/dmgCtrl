@@ -155,6 +155,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `${choice.count} Advantage to ${target ?? 'unit'}`
       }
+      if (choice.kind === 'multiPick') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return choice.spec.mode === 'defeatForToken' ? `Defeat ${target ?? 'unit'}` : `Advantage to ${target ?? 'unit'}`
+      }
       if (choice.kind === 'mayGiveTokens') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         const tokenName = state.cards[choice.token]?.name ?? 'token'

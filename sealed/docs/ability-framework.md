@@ -694,14 +694,19 @@ Effects reuse the primitive/choice library; a couple of small additions:
   that many Advantage tokens to `instanceId` (Imposing Scout Walker rewards itself).
 - **Area / self-damage** are plain loops over `dealDamageToUnit` (Luke → each enemy if you control
   4+ units; Battered Haulcraft / Han Solo deal to themselves then a chosen target).
+- **Generalised "next unit you play this phase" grant** — `PlayerState.nextUnitGrants: NextUnitGrant[]`
+  replaces the old keyword-only field. Each grant carries `keywords?` / `costDelta?` / `entersReady?`
+  plus an optional filter (`trait?` / `maxPower?`), and is consumed by the **next unit that matches its
+  filter** (`nextUnitGrantMatches`): `costDelta` folds into `effectiveCost`, keywords / enters-ready
+  apply in `enterUnit`; a non-matching unit leaves the grant in place. Sabine (Shielded, no filter),
+  Mouse Droid (−1 to the next Imperial), Neel (next ≤1-power unit enters ready — When Played / On Attack).
 
 **Done:** D1 (self/no-target, 8), D2 (single-target, 10), D3 (multi-step, 4: Battered Haulcraft, Han
-Solo, Luke, Imposing Scout Walker).
+Solo, Luke, Imposing Scout Walker), D4 (next-unit grants, 2: Mouse Droid, Neel).
 
 **Deferred (need UI or a design call — for when the user's back):** multi-target selection (Inspiring
 Veteran, Pre Vizsla), variable/modal damage (The Cyborg Mech, Barriss Offee), discard-from-hand
-(Mos Espa Watermonger), the next-unit-grant *generalisation* with filters + cost-discount / enters-ready
-(Mouse Droid, Neel), opponent-discard + distribute-damage (Ninth Sister), search / opponent-hand /
+(Mos Espa Watermonger), opponent-discard + distribute-damage (Ninth Sister), search / opponent-hand /
 naming (Admiral Ackbar, Clan Wren Loyalist, Crix Madine, Imperial Defector, Remnant Lookouts, Ryder
 Azadi, Jod Na Nawood, Jabba, Purrgil Ultra, Queen Soruna, Trask Walker), and cards whose second
 ability needs an unbuilt trigger / choice-on-defeat (Flarestar, The Twins, Chimaera, Zeb Orrelios,

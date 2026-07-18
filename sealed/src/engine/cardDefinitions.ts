@@ -1,5 +1,5 @@
 import { registerCard } from './abilities'
-import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount, grantNextUnitKeywords, healUnit } from './effects'
+import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount, grantNextUnit, healUnit } from './effects'
 import { dealDamageToUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
@@ -419,7 +419,7 @@ registerCard('ASH_006', { // Sabine Wren — front: opponent gives 2 Advantage, 
         if (targets.length === 0) return s
         // Grant Shielded to our next unit now (the opponent's giving is mandatory when able), then
         // hand the "which unit gets the tokens" choice to the opponent (useLeaderAbility hands off).
-        const granted = grantNextUnitKeywords(s, ctx.owner, [{ name: 'Shielded' }])
+        const granted = grantNextUnit(s, ctx.owner, { keywords: [{ name: 'Shielded' }] })
         return pushChoice(granted, { kind: 'opponentGivesAdvantage', id: `${ctx.cardId}-adv`, controller: opp, count: 2, targets })
       },
     }],
@@ -428,7 +428,7 @@ registerCard('ASH_006', { // Sabine Wren — front: opponent gives 2 Advantage, 
   abilities: [{
     trigger: 'onAttack',
     description: 'The next unit you play this phase gains Shielded.',
-    effect: (s, ctx) => grantNextUnitKeywords(s, ctx.owner, [{ name: 'Shielded' }]),
+    effect: (s, ctx) => grantNextUnit(s, ctx.owner, { keywords: [{ name: 'Shielded' }] }),
   }],
 })
 
@@ -860,4 +860,23 @@ registerCard('ASH_112', whenPlayed('If you control at least 4 units, deal 3 dama
 registerCard('ASH_176', whenPlayed('You may deal 3 damage to a ground unit; if defeated this way, give 3 Advantage to this unit.', (s, ctx) => { // Imposing Scout Walker
   const targets = allUnits(s).filter(u => u.arena === 'ground').map(u => u.instanceId)
   return targets.length ? pushChoice(s, { kind: 'mayDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount: 3, rewardIfDefeated: { instanceId: ctx.sourceInstanceId!, count: 3 } }) : s
+}))
+
+// D4 — "next unit you play this phase" grants with filters (generalised next-unit grant, #355).
+registerCard('ASH_237', whenPlayed('The next Imperial unit you play this phase costs 1 less.', (s, ctx) => grantNextUnit(s, ctx.owner, { costDelta: -1, trait: 'Imperial' }))) // Mouse Droid
+registerCard('ASH_248', { // Neel — the next ≤1-power unit you play this phase enters play ready
+  abilities: [
+    { trigger: 'whenPlayed', description: 'The next unit you play this phase with 1 or less power enters play ready.', effect: (s, ctx) => grantNextUnit(s, ctx.owner, { entersReady: true, maxPower: 1 }) },
+    { trigger: 'onAttack', description: 'The next unit you play this phase with 1 or less power enters play ready.', effect: (s, ctx) => grantNextUnit(s, ctx.owner, { entersReady: true, maxPower: 1 }) },
+  ],
+})
+
+// Phase 2 — repeatable multi-target picks (#355).
+registerCard('ASH_205', whenPlayed('Give an Advantage token to each of up to 3 exhausted units.', (s, ctx) => { // Inspiring Veteran
+  const targets = allUnits(s).filter(u => u.exhausted).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'multiPick', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, spec: { mode: 'giveAdvantage', remaining: 3 } }) : s
+}))
+registerCard('ASH_053', whenPlayed('Defeat any number of non-leader units with a total of 6 or less remaining HP; create a Mandalorian token for each.', (s, ctx) => { // Pre Vizsla
+  const targets = allUnits(s).filter(u => !isLeaderUnit(s, u) && effectiveHp(s, u) - u.damage <= 6).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'multiPick', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, spec: { mode: 'defeatForToken', budget: 6, token: TOKEN_MANDALORIAN } }) : s
 }))

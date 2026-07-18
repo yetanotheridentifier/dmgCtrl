@@ -125,16 +125,31 @@ export interface PlayerState {
   resources: ResourceState[]
   units: UnitState[]
   /**
-   * Keywords the NEXT unit this player plays this phase gains (Sabine Wren → Shielded, #348).
-   * Consumed by the next `enterUnit` (on-enter effects + a this-phase lasting keyword) and cleared
-   * at the start of the regroup phase. Generic — any card can grant "your next unit gains <keywords>".
-   *
-   * FUTURE (not yet needed): the granted "X" will likely need to be more than a keyword — an ability,
-   * a stat modifier (+X/+Y), a cost discount, etc. When that arises, generalise this into a single
-   * grant payload (keywords? / abilities? / power? / hp? / costDelta?) rather than adding sibling
-   * fields, and apply each part in `enterUnit`. See docs/ability-framework.md "Chunk E".
+   * Grants waiting for the next unit this player plays this phase (Sabine → Shielded #348; Mouse
+   * Droid → −1 cost to the next Imperial #355; Neel → the next ≤1-power unit enters ready #355).
+   * Each grant carries an optional filter (`trait` / `maxPower`) and is consumed by the next unit
+   * that matches it — `costDelta` folds into `effectiveCost`, `keywords` / `entersReady` apply in
+   * `enterUnit`. Cleared at the start of the regroup phase.
    */
-  nextPlayedUnitKeywords?: KeywordInstance[]
+  nextUnitGrants?: NextUnitGrant[]
+}
+
+/** A pending "your next unit …" grant (#348/#355). All fields are plain data (GameState is JSON). */
+export interface NextUnitGrant {
+  keywords?: KeywordInstance[]
+  costDelta?: number // e.g. −1 to the matching unit's cost
+  entersReady?: boolean
+  // Filter — the grant only applies to (and is consumed by) a unit matching all set constraints:
+  trait?: string // the unit must have this trait
+  maxPower?: number // the unit's printed power must be ≤ this
+}
+
+/** True if `card` is a unit satisfying a grant's filter (#355). */
+export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUnitGrant): boolean {
+  if (!card || card.type !== 'unit') return false
+  if (grant.trait && !card.traits.some(t => t.toLowerCase() === grant.trait!.toLowerCase())) return false
+  if (grant.maxPower !== undefined && (card.power ?? 0) > grant.maxPower) return false
+  return true
 }
 
 export interface GameState {
@@ -367,6 +382,13 @@ export type PendingChoice =
   // Sabine front (#348): the opponent (`controller`) must give `count` Advantage tokens to one of
   // their units (`targets`). Mandatory when able — an opponent-interjected choice (pendingResumeActive).
   | { kind: 'opponentGivesAdvantage'; id: string; controller: PlayerId; count: number; targets: string[] }
+  // Repeatable board-target pick (#355): click eligible `targets` one at a time (each applies `spec`
+  // immediately and re-offers), or Done (skipTrigger). Inspiring Veteran (up to N Advantage) / Pre
+  // Vizsla (defeat non-leaders within an HP budget, a token each).
+  | {
+      kind: 'multiPick'; id: string; controller: PlayerId; targets: string[]
+      spec: { mode: 'giveAdvantage'; remaining: number } | { mode: 'defeatForToken'; budget: number; token: string }
+    }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */
 export function activeChoice(state: GameState): PendingChoice | undefined {
@@ -425,8 +447,8 @@ export function clearNextUnitGrants(state: GameState): GameState {
   return {
     ...state,
     players: {
-      player: { ...state.players.player, nextPlayedUnitKeywords: undefined },
-      opponent: { ...state.players.opponent, nextPlayedUnitKeywords: undefined },
+      player: { ...state.players.player, nextUnitGrants: undefined },
+      opponent: { ...state.players.opponent, nextUnitGrants: undefined },
     },
   }
 }

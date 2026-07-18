@@ -8,7 +8,8 @@ import { describeAction } from '../utils/describeAction'
 import { orderUnits } from './boardLayout'
 import { outcomeBanner } from './outcome'
 import CardFace from './cardFace'
-import { CARD_WIDTH_PX, ZOOM_WIDTH_PX } from './cardSizing'
+import { CardGridOverlay } from './cardGridOverlay'
+import { CARD_WIDTH_PX } from './cardSizing'
 import { tokenLayout, TOKEN_W, TOKEN_H } from './tokens'
 import { TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { unitHasKeyword, auraContributions } from '../engine/keywords'
@@ -255,12 +256,8 @@ function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
 }
 
 /**
- * A centred, zoomed card overlay for "look at" / "reveal" flows (#342). Shows a card
- * over a dark backdrop with a prompt and the caller's action buttons. "Look at" is
- * PRIVATE — only the acting player sees the card (so it's rendered solely for the
- * human's own choices; the opponent/AI never surfaces it). A future "reveal" (public,
- * both players confirm they've seen it) reuses this shell. Built to serve search
- * effects too.
+ * "Look at" / "reveal" overlay (#342) — a single card over a dark backdrop with a prompt and the
+ * caller's action buttons. PRIVATE to the acting player. A thin wrapper over `CardGridOverlay`.
  */
 export function CardChoiceOverlay({ card, cardId, prompt, children }: {
   card: EngineCard | undefined
@@ -269,71 +266,58 @@ export function CardChoiceOverlay({ card, cardId, prompt, children }: {
   children: ReactNode
 }) {
   return (
-    <div data-testid="card-choice-overlay" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/75 p-4">
-      <p data-testid="card-choice-prompt" className="text-xs uppercase tracking-[0.14em] text-ink-dim">{prompt}</p>
-      <CardFace card={card} fallbackName={cardId} widthPx={ZOOM_WIDTH_PX} tight />
-      <div className="flex flex-wrap justify-center gap-2">{children}</div>
-    </div>
+    <CardGridOverlay
+      idPrefix="card-choice"
+      prompt={prompt}
+      cardsById={{ [cardId]: card }}
+      items={[{ cardId, key: 0 }]}
+      fullWidthCards
+      footer={<div className="flex flex-wrap justify-center gap-2">{children}</div>}
+    />
   )
 }
 
 /**
- * A reusable "select a card" overlay (#348) — a centre-screen picker for choosing one of several
- * cards (Vane's "choose an upgrade to defeat"; extensible to any select-a-card-type effect). Each
- * item shows its card art (token art included) with a Select button; a Cancel appears when the
- * effect is optional (`onCancel` provided). Private to the acting player, like the other overlays.
+ * "Select a card" overlay (#348) — pick one of several cards (Vane's upgrade-to-defeat, the unique
+ * rule, the Armorer's resource reveal). `disabled` items are revealed but not selectable; a Cancel
+ * appears when `onCancel` is given. A thin wrapper over `CardGridOverlay`.
  */
 export function CardSelectOverlay({ state, prompt, items, onPick, onCancel }: {
   state: GameState
   prompt: string
-  /** `disabled` items are revealed but not selectable (e.g. non-upgrade resources in the Armorer's
-   *  "look at your resources"). `key` gives a stable identity when optionIndex isn't unique. */
   items: { cardId: string; optionIndex: number; hostId?: string; disabled?: boolean; key?: string | number }[]
   onPick: (optionIndex: number) => void
   onCancel?: () => void
 }) {
   const hostName = (id?: string) => (id ? state.players.player.units.find(u => u.instanceId === id)?.cardId : undefined)
   return (
-    <div data-testid="card-select-overlay" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/75 p-4">
-      <p data-testid="card-select-prompt" className="text-xs uppercase tracking-[0.14em] text-ink-dim">{prompt}</p>
-      <div className="flex flex-wrap justify-center gap-4">
-        {items.map(item => {
-          const host = state.cards[hostName(item.hostId) ?? '']?.name
-          const key = item.key ?? item.optionIndex
-          return (
-            <div key={key} className="flex flex-col items-center gap-2">
-              {/* Click the (highlighted) card itself to select it — no separate button. Disabled
-                  cards are shown (revealed) but dimmed and not clickable. */}
-              <button
-                data-testid={`card-select-${key}`}
-                onClick={() => onPick(item.optionIndex)}
-                disabled={item.disabled}
-                className={item.disabled ? 'block cursor-default opacity-40' : 'block cursor-pointer'}
-              >
-                <CardFace card={state.cards[item.cardId]} fallbackName={item.cardId} widthPx={Math.round(ZOOM_WIDTH_PX * 0.6)} tight highlight={item.disabled ? undefined : 'accent'} />
-              </button>
-              {host && <span className="text-[10px] text-ink-faint">on {host}</span>}
-            </div>
-          )
-        })}
-      </div>
-      {onCancel && (
-        <button
-          data-testid="card-select-cancel"
-          onClick={onCancel}
-          className="rounded-xl border-2 border-line/60 px-4 py-1.5 text-xs text-ink-dim hover:text-ink"
-        >
+    <CardGridOverlay
+      idPrefix="card-select"
+      prompt={prompt}
+      cardsById={state.cards}
+      items={items.map(item => {
+        const key = item.key ?? item.optionIndex
+        return {
+          cardId: item.cardId,
+          key,
+          testId: `card-select-${key}`,
+          hostLabel: state.cards[hostName(item.hostId) ?? '']?.name,
+          dimmed: item.disabled,
+          onSelect: () => onPick(item.optionIndex),
+        }
+      })}
+      footer={onCancel && (
+        <button data-testid="card-select-cancel" onClick={onCancel} className="rounded-xl border-2 border-line/60 px-4 py-1.5 text-xs text-ink-dim hover:text-ink">
           Cancel
         </button>
       )}
-    </div>
+    />
   )
 }
 
 /**
- * A "search" reveal overlay (#343) — the private "look at the top N" for Improvised
- * Identity. Shows each revealed card; a ground unit gets a Discard button. Reuses the
- * same centre-screen shell as `CardChoiceOverlay`; serves any future search effect.
+ * "Search" reveal overlay (#343) — the private "look at the top N" for Improvised Identity: each
+ * revealed ground unit gets a Discard button; the rest are dimmed. A thin wrapper over `CardGridOverlay`.
  */
 export function SearchRevealOverlay({ state, choice, onPick }: {
   state: GameState
@@ -341,29 +325,18 @@ export function SearchRevealOverlay({ state, choice, onPick }: {
   onPick: (deckIndex: number) => void
 }) {
   return (
-    <div data-testid="search-overlay" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/75 p-4">
-      <p className="text-xs uppercase tracking-[0.14em] text-ink-dim">Look at the top {choice.revealed.length} — discard a ground unit</p>
-      <div className="flex flex-wrap justify-center gap-4">
-        {choice.revealed.map((cardId, i) => {
-          const c = state.cards[cardId]
-          const ground = c?.type === 'unit' && c.arena === 'ground'
-          return (
-            <div key={i} className="flex flex-col items-center gap-2">
-              <CardFace card={c} fallbackName={cardId} widthPx={Math.round(ZOOM_WIDTH_PX * 0.6)} tight className={ground ? '' : 'brightness-[0.45]'} />
-              {ground && (
-                <button
-                  data-testid={`search-pick-${i}`}
-                  onClick={() => onPick(i)}
-                  className="rounded-xl border-2 border-accent px-3 py-1.5 text-xs text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10"
-                >
-                  Discard
-                </button>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </div>
+    <CardGridOverlay
+      idPrefix="search"
+      prompt={`Look at the top ${choice.revealed.length} — discard a ground unit`}
+      cardsById={state.cards}
+      items={choice.revealed.map((cardId, i) => {
+        const c = state.cards[cardId]
+        const ground = c?.type === 'unit' && c.arena === 'ground'
+        return ground
+          ? { cardId, key: i, testId: `search-pick-${i}`, actionLabel: 'Discard', onSelect: () => onPick(i) }
+          : { cardId, key: i, dimmed: true }
+      })}
+    />
   )
 }
 
@@ -784,7 +757,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
 
     // Optional targeted pending choices (#309/#342) — resolved by clicking a highlighted
     // board unit plus a Decline button, rather than one menu button per target.
-    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage', 'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit', 'mayExhaustUnit', 'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust', 'attachResourceUpgrade', 'mayDefeatEnemyUnit', 'selectUniqueUnitToDefeat', 'opponentGivesAdvantage', 'mayGiveTokens']
+    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage', 'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit', 'mayExhaustUnit', 'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust', 'attachResourceUpgrade', 'mayDefeatEnemyUnit', 'selectUniqueUnitToDefeat', 'opponentGivesAdvantage', 'mayGiveTokens', 'multiPick']
     const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && boardTargetKinds.includes(c.kind))
     const choiceTargetIds = new Map<string, Action>()
     // Base targets (selectDamageTarget, #348): pick a player's base to take the damage.
@@ -917,7 +890,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             onClick={() => actAndClear(declineChoice)}
             className="rounded-xl border-2 border-line/60 px-3 py-1.5 text-xs text-ink-dim hover:text-ink"
           >
-            Decline
+            {targetChoice?.kind === 'multiPick' ? 'Done' : 'Decline'}
           </button>
         )}
         {menuActions.map((action, i) => (

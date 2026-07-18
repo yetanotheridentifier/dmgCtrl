@@ -1,6 +1,6 @@
 import type { Action } from './actions'
 import type { EngineCard, GameState, HandCardRef, PlayerId, ResourceUpgradeRef, UnitState } from './types'
-import { opponentOf, hasPendingChoices } from './types'
+import { opponentOf, hasPendingChoices, nextUnitGrantMatches } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { unitHasKeyword } from './keywords'
 import { getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions } from './abilities'
@@ -50,7 +50,9 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   }
   // Card-specific cost modifiers (e.g. −1 on an Imperial/Mandalorian unit) (#340).
   const modifier = getCardDefinition(card.id)?.costModifier?.(state, playerId, target) ?? 0
-  return Math.max(0, card.cost + penalty + modifier)
+  // "Your next unit …" cost grants that match this card — Mouse Droid's −1 to the next Imperial (#355).
+  const grantDelta = (p.nextUnitGrants ?? []).reduce((sum, g) => sum + (nextUnitGrantMatches(card, g) ? (g.costDelta ?? 0) : 0), 0)
+  return Math.max(0, card.cost + penalty + modifier + grantDelta)
 }
 
 /**
@@ -311,8 +313,9 @@ function choiceMoves(state: GameState): Action[] {
       case 'mayGiveAdvantage':
       case 'mayExhaustLeaderGiveAdvantage':
       case 'mayExhaustLeaderExhaustUnit':
-      case 'mayExhaustUnit': {
-        // Optional targeted effects (#309/#347): pick an eligible target, or decline.
+      case 'mayExhaustUnit':
+      case 'multiPick': {
+        // Optional targeted effects (#309/#347/#355): pick an eligible target, or decline / finish.
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break

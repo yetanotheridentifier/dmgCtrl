@@ -215,6 +215,12 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_158', name: 'Han Solo' },
   { id: 'ASH_112', name: 'Luke Skywalker' },
   { id: 'ASH_176', name: 'Imposing Scout Walker' },
+  // D4: generalised next-unit grants
+  { id: 'ASH_237', name: 'Mouse Droid' },
+  { id: 'ASH_248', name: 'Neel' },
+  // Multi-target pick (#355 UI)
+  { id: 'ASH_205', name: 'Inspiring Veteran' },
+  { id: 'ASH_053', name: 'Pre Vizsla' },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */
