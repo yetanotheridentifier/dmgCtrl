@@ -6,7 +6,7 @@ import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
 import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, enteredPlayThisPhase } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets } from './legalMoves'
-import { unitHasTrait, isLeaderUnit } from './keywords'
+import { unitHasTrait, isLeaderUnit, nonAuraKeywordNames } from './keywords'
 import type { EngineCard, GameState, PlayerId, UnitState, UpgradeRef } from './types'
 
 /**
@@ -748,4 +748,19 @@ const isUpgraded = (u: UnitState): boolean => u.upgrades.length > 0
 registerCard('ASH_030', { // Marrok
   conditionalKeywords: (_s, u) => (isUpgraded(u) ? [{ name: 'Saboteur' }] : []),
   suppressedKeywords: (_s, u) => (isUpgraded(u) ? ['Sentinel'] : []),
+})
+
+// Group C (#354): constant effects on OTHER units — the `aura` hook, now with keyword removal.
+registerCard('ASH_177', { // Onyx Cinder — other friendly units gain Hidden
+  aura: (_s, src, tgt, friendly) => (friendly && tgt.instanceId !== src.instanceId ? { keywords: [{ name: 'Hidden' }] } : undefined),
+})
+registerCard('ASH_100', { // Gallius Rax — other friendly units with 2+ different keywords get +2/+2
+  aura: (s, src, tgt, friendly) =>
+    friendly && tgt.instanceId !== src.instanceId && nonAuraKeywordNames(s, tgt).size >= 2 ? { power: 2, hp: 2 } : undefined,
+})
+registerCard('ASH_068', { // Domesticated Loth-Cat — enemy units lose Ambush and Support
+  aura: (_s, _src, _tgt, friendly) => (friendly ? undefined : { removeKeywords: ['Ambush', 'Support'] }),
+})
+registerCard('ASH_040', { // Poe Dameron — all units lose Sentinel
+  aura: () => ({ removeKeywords: ['Sentinel'] }),
 })

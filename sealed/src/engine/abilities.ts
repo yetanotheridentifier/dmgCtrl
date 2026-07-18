@@ -126,6 +126,8 @@ export interface AuraContribution {
   power?: number
   hp?: number
   keywords?: KeywordInstance[]
+  /** Keyword names this aura *removes* from the target — "enemy/all units lose X" (#354). */
+  removeKeywords?: string[]
 }
 
 /**

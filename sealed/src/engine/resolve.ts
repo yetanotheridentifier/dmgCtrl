@@ -237,18 +237,22 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
     next = updatePlayer(next, owner, { nextPlayedUnitKeywords: undefined })
   }
 
-  // Ambush: open the pending attack only if there's actually an enemy to hit;
-  // otherwise the unit just enters play exhausted, as normal (#334).
-  if (ambush) {
-    if (enemyAttackTargets(next, newUnit).targets.length > 0) {
+  // The unit is in play now, so read Ambush/Support from its LIVE keywords — an aura can strip them
+  // (Domesticated Loth-Cat → "enemy units lose Ambush and Support", #354). Ambush: open the pending
+  // attack only if there's an enemy to hit; otherwise the unit just enters exhausted, as normal (#334).
+  const inPlay = (): UnitState => next.players[owner].units.find(u => u.instanceId === newUnit.instanceId)!
+  const exhaust = () => { next = updatePlayer(next, owner, { units: next.players[owner].units.map(u => (u.instanceId === newUnit.instanceId ? { ...u, exhausted: true } : u)) }) }
+  if (unitHasKeyword(next, inPlay(), 'Ambush')) {
+    if (enemyAttackTargets(next, inPlay()).targets.length > 0) {
       next = pushChoice(next, { kind: 'ambush', id: newUnit.instanceId, controller: owner, unitId: newUnit.instanceId })
-    } else {
-      next = updatePlayer(next, owner, {
-        units: next.players[owner].units.map(u => (u.instanceId === newUnit.instanceId ? { ...u, exhausted: true } : u)),
-      })
+    } else if (!inPlay().exhausted) {
+      exhaust() // no target → settle into a normal exhausted entry
     }
-  } else if (unitHasKeyword(next, next.players[owner].units.find(u => u.instanceId === newUnit.instanceId)!, 'Support')) {
-    next = openSupportChoice(next, owner, newUnit.instanceId)
+  } else {
+    // No (or aura-stripped) Ambush: it was constructed ready only if the card printed Ambush, so revert
+    // to the normal exhausted entry — unless an ability entered it ready (Fennec, `ready === true`).
+    if (ready !== true && !inPlay().exhausted) exhaust()
+    if (unitHasKeyword(next, inPlay(), 'Support')) next = openSupportChoice(next, owner, newUnit.instanceId)
   }
 
   // "When Played" abilities fire after the card enters play (CR 6.2.0f).

@@ -66,7 +66,7 @@ export const UNIT_GROUPS: UnitGroup[] = [
   {
     id: 'C',
     name: 'Constant effects on other units (auras)',
-    status: 'planned',
+    status: 'done',
     note: 'Buff or strip keywords on other units. Reuses the aura hook. (#354)',
     units: ['Domesticated Loth-Cat', 'Gallius Rax', 'Onyx Cinder', 'Poe Dameron'],
   },
@@ -185,6 +185,11 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_113', name: 'Mandalorian Flagship' },
   // Group B3 (#353) — conditional keyword swap
   { id: 'ASH_030', name: 'Marrok' },
+  // Group C (#354) — auras / constant effects on other units
+  { id: 'ASH_177', name: 'Onyx Cinder' },
+  { id: 'ASH_100', name: 'Gallius Rax' },
+  { id: 'ASH_068', name: 'Domesticated Loth-Cat' },
+  { id: 'ASH_040', name: 'Poe Dameron' },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */
