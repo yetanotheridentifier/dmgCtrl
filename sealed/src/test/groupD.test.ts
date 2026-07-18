@@ -59,6 +59,10 @@ const D = {
   ASH_053: card({ id: 'ASH_053', type: 'unit', arena: 'ground', power: 6, hp: 6 }), // Pre Vizsla
   // Phase 3 — discard from hand
   ASH_260: card({ id: 'ASH_260', type: 'unit', arena: 'ground', power: 1, hp: 3 }), // Mos Espa Watermonger
+  // Phase 4 — opponent discard + distribute damage
+  ASH_148: card({ id: 'ASH_148', type: 'unit', arena: 'ground', power: 8, hp: 7, keywords: [{ name: 'Overwhelm' }] }), // Ninth Sister
+  COST3: card({ id: 'COST3', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 2 }),
+  COST0: card({ id: 'COST0', type: 'event', cost: 0 }),
 }
 const accept = (s: GameState, targetInstanceId?: string) => resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, targetInstanceId })
 const U = (s: GameState, id: string) => [...s.players.player.units, ...s.players.opponent.units].find(u => u.instanceId === id)!
@@ -334,5 +338,65 @@ describe('Group D Phase 3 — discard from hand (Mos Espa Watermonger #355)', ()
     const s = accept(setup([], ['SPACER']))
     expect(s.players.player.hand).toEqual(['SPACER'])
     expect(s.pendingChoices ?? []).toHaveLength(0)
+  })
+})
+
+describe('Group D Phase 4 — opponent discard + distribute damage (Ninth Sister #355)', () => {
+  const oppDiscard = (s: GameState, handIndex: number) =>
+    resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, handIndex })
+  const deal = (s: GameState, id: string) => resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, targetInstanceId: id })
+  const done = (s: GameState) => resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id })
+
+  it('hands the discard to the opponent, then hands the distribute back to the player', () => {
+    const s0 = play('ASH_148', {}, { hand: ['COST3'], units: [unit('e', 'EXPENSIVE', { arena: 'ground' })] })
+    expect(s0.pendingChoices?.[0]).toMatchObject({ kind: 'selectDiscard', controller: 'opponent', count: 1 })
+    expect(s0.activePlayer).toBe('opponent') // handed off to the opponent to choose
+    const s1 = oppDiscard(s0, 0) // opponent discards its COST3 (cost 3)
+    expect(s1.players.opponent.discard).toContain('COST3')
+    expect(s1.pendingChoices?.[0]).toMatchObject({ kind: 'distributeDamage', controller: 'player', remaining: 3, total: 3 })
+    expect(s1.activePlayer).toBe('player') // control returns to Ninth Sister's owner
+  })
+
+  it('distributes the cost as damage, one point per click, among any units on either side', () => {
+    const s1 = oppDiscard(play('ASH_148', {}, { hand: ['COST3'], units: [unit('e', 'EXPENSIVE', { arena: 'ground' })] }), 0)
+    const own = played(s1, 'ASH_148').instanceId
+    let s = deal(s1, 'e') // 1 → enemy
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'distributeDamage', remaining: 2 })
+    s = deal(s, own) // 1 → own Ninth Sister
+    s = deal(s, 'e') // 1 → enemy again (3 dealt, done)
+    expect(U(s, 'e').damage).toBe(2)
+    expect(U(s, own).damage).toBe(1)
+    expect(s.pendingChoices ?? []).toHaveLength(0) // all spent → resolved
+  })
+
+  it('is optional — the player may deal none', () => {
+    const s1 = oppDiscard(play('ASH_148', {}, { hand: ['COST3'], units: [unit('e', 'EXPENSIVE', { arena: 'ground' })] }), 0)
+    const s = done(s1) // decline the "may deal damage"
+    expect(U(s, 'e').damage).toBe(0)
+    expect(s.pendingChoices ?? []).toHaveLength(0)
+  })
+
+  it('a defeated unit drops out of the remaining targets', () => {
+    const s1 = oppDiscard(play('ASH_148', {}, { hand: ['COST3'], units: [unit('e', 'GRUNT', { arena: 'ground' })] }), 0) // GRUNT 2hp
+    const own = played(s1, 'ASH_148').instanceId
+    let s = deal(s1, 'e') // 1
+    s = deal(s, 'e') // 2 → GRUNT defeated
+    expect(U(s, own)).toBeDefined()
+    expect([...s.players.opponent.units].find(u => u.instanceId === 'e')).toBeUndefined()
+    // 1 damage left, GRUNT gone — only Ninth Sister remains as a target
+    const targets = legalMoves(s).filter(a => a.type === 'acceptChoice').map(a => a.targetInstanceId)
+    expect(targets).toEqual([own])
+  })
+
+  it('a cost-0 discard deals no damage (no distribute choice)', () => {
+    const s = oppDiscard(play('ASH_148', {}, { hand: ['COST0'], units: [unit('e', 'GRUNT', { arena: 'ground' })] }), 0)
+    expect(s.players.opponent.discard).toContain('COST0')
+    expect(s.pendingChoices ?? []).toHaveLength(0)
+  })
+
+  it('an opponent with an empty hand skips the whole ability', () => {
+    const s = play('ASH_148', {}, { hand: [], units: [unit('e', 'GRUNT', { arena: 'ground' })] })
+    expect(s.pendingChoices ?? []).toHaveLength(0)
+    expect(played(s, 'ASH_148')).toBeDefined() // still entered play
   })
 })

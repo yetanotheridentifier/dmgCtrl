@@ -371,8 +371,14 @@ export type PendingChoice =
   // but only if a card was actually drawn ("you may draw a card. If you do, discard a card").
   | { kind: 'mayPayToDraw'; id: string; controller: PlayerId; cost: number; draw: number; thenDiscard?: number }
   // Discard `count` cards from your own hand, one at a time (#355, Mos Espa Watermonger). Mandatory
-  // unless `optional`. Resolved by an `acceptChoice` carrying the hand index to discard.
-  | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean }
+  // unless `optional`. Resolved by an `acceptChoice` carrying the hand index to discard. `then`
+  // (Ninth Sister) runs after the last discard, using the just-discarded card's cost as damage to
+  // distribute among any units for the player in `distributeDamageTo`.
+  | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean; then?: { distributeDamageTo: PlayerId } }
+  // Deal `total` damage spread among any units (#355, Ninth Sister), one point per pick until
+  // `remaining` reaches 0. `targets` are the currently-eligible unit instance ids (both sides,
+  // recomputed as units are defeated). Always optional — the controller may stop early (a "may").
+  | { kind: 'distributeDamage'; id: string; controller: PlayerId; remaining: number; total: number; targets: string[] }
   // Optionally deploy your leader via a triggered epic action (#348, Grogu). A yes/no.
   | { kind: 'mayDeployLeader'; id: string; controller: PlayerId }
   // Unique rule (CR): a player controlling two upgrades with the same title defeats one (their

@@ -392,6 +392,12 @@ function choiceMoves(state: GameState): Action[] {
         if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'distributeDamage': {
+        // Ninth Sister (#355): allocate a point to any eligible unit, or stop (Done) — always optional.
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
       case 'mayDeployLeader': {
         // Grogu (#348): a yes/no to deploy via the triggered epic action.
         moves.push({ type: 'acceptChoice', choiceId: choice.id })

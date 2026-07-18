@@ -31,8 +31,9 @@ export function resolve(state: GameState, action: Action): GameState {
         const played = playCard(state, action.handIndex)
         if (played.winner !== null) return played
         // An on-play trigger (Ambush) keeps the turn with the active player to
-        // resolve it before passing (#334).
-        if (activeChoice(played)) return resetPasses(played)
+        // resolve it before passing (#334). If the trigger raised an OPPONENT-controlled
+        // choice (Ninth Sister: "an opponent discards…", #355), hand control to them first.
+        if (activeChoice(played)) return resetPasses(handOffOpponentChoice(played, played.activePlayer))
         return advanceTurn(resetPasses(played))
       })
     case 'playUpgrade':
@@ -555,10 +556,33 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'selectDiscard': {
       // Discard the chosen hand card (#355), then re-offer until `count` are discarded.
       if (handIndex !== undefined) {
+        const discardedId = next.players[choice.controller].hand[handIndex]
         next = discardFromHand(next, choice.controller, handIndex)
         const remaining = choice.count - 1
         if (remaining > 0 && next.players[choice.controller].hand.length > 0) {
-          next = pushChoice(next, { kind: 'selectDiscard', id: choice.id, controller: choice.controller, count: remaining, optional: choice.optional })
+          next = pushChoice(next, { kind: 'selectDiscard', id: choice.id, controller: choice.controller, count: remaining, optional: choice.optional, then: choice.then })
+        } else if (choice.then && discardedId !== undefined) {
+          // Ninth Sister (#355): "you may deal damage equal to its cost divided among any units".
+          const amount = next.cards[discardedId]?.cost ?? 0
+          const targets = [...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId)
+          if (amount > 0 && targets.length > 0) {
+            next = pushChoice(next, { kind: 'distributeDamage', id: choice.id, controller: choice.then.distributeDamageTo, remaining: amount, total: amount, targets })
+          }
+        }
+      }
+      break
+    }
+    case 'distributeDamage': {
+      // Ninth Sister (#355): spend one point of the pool onto the chosen unit, then re-offer the
+      // rest against the still-living units. skipTrigger (Done) ends it early — the whole thing is optional.
+      if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
+        next = dealDamageToUnit(next, targetInstanceId, 1)
+        next = checkWin(next)
+        if (next.winner !== null) return next
+        const remaining = choice.remaining - 1
+        const targets = [...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId)
+        if (remaining > 0 && targets.length > 0) {
+          next = pushChoice(next, { kind: 'distributeDamage', id: choice.id, controller: choice.controller, remaining, total: choice.total, targets })
         }
       }
       break

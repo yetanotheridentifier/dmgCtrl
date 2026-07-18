@@ -771,7 +771,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
 
     // Optional targeted pending choices (#309/#342) — resolved by clicking a highlighted
     // board unit plus a Decline button, rather than one menu button per target.
-    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage', 'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit', 'mayExhaustUnit', 'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust', 'attachResourceUpgrade', 'mayDefeatEnemyUnit', 'selectUniqueUnitToDefeat', 'opponentGivesAdvantage', 'mayGiveTokens', 'multiPick']
+    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage', 'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit', 'mayExhaustUnit', 'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust', 'attachResourceUpgrade', 'mayDefeatEnemyUnit', 'selectUniqueUnitToDefeat', 'opponentGivesAdvantage', 'mayGiveTokens', 'multiPick', 'distributeDamage']
     const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && boardTargetKinds.includes(c.kind))
     const choiceTargetIds = new Map<string, Action>()
     // Base targets (selectDamageTarget, #348): pick a player's base to take the damage.
@@ -900,15 +900,23 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // The board-target decline and the hand-discard decline share one button (only one
     // choice is active at a time). "Done" for the repeatable multiPick, else "Decline".
     const declineButton = declineChoice ?? discardDecline
+    // Distribute-damage HUD (Ninth Sister, #355): show how much of the pool is allocated.
+    const distribute = targetChoice?.kind === 'distributeDamage' ? targetChoice : undefined
+    const repeatable = targetChoice?.kind === 'multiPick' || targetChoice?.kind === 'distributeDamage'
     const actionColumn = (
       <div className="flex flex-col items-stretch gap-1.5">
+        {distribute && (
+          <div data-testid="distribute-hud" className="rounded-xl border-2 border-red/60 px-3 py-1.5 text-center text-xs text-ink-dim">
+            Damage allocated <span className="font-semibold text-ink">{distribute.total - distribute.remaining} / {distribute.total}</span>
+          </div>
+        )}
         {declineButton && (
           <button
             data-testid="decline-choice-btn"
             onClick={() => actAndClear(declineButton)}
             className="rounded-xl border-2 border-line/60 px-3 py-1.5 text-xs text-ink-dim hover:text-ink"
           >
-            {targetChoice?.kind === 'multiPick' ? 'Done' : 'Decline'}
+            {repeatable ? 'Done' : 'Decline'}
           </button>
         )}
         {menuActions.map((action, i) => (

@@ -883,3 +883,9 @@ registerCard('ASH_053', whenPlayed('Defeat any number of non-leader units with a
 
 registerCard('ASH_260', whenPlayed('You may draw a card. If you do, discard a card.', (s, ctx) => // Mos Espa Watermonger
   pushChoice(s, { kind: 'mayPayToDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, draw: 1, thenDiscard: 1 })))
+
+registerCard('ASH_148', whenPlayed('An opponent discards a card from their hand. You may deal damage equal to its cost divided as you choose among any number of units.', (s, ctx) => { // Ninth Sister
+  const opp = opponentOf(ctx.owner)
+  if (s.players[opp].hand.length === 0) return s // no card to discard → the whole ability does nothing
+  return pushChoice(s, { kind: 'selectDiscard', id: ctx.sourceInstanceId!, controller: opp, count: 1, then: { distributeDamageTo: ctx.owner } })
+}))
