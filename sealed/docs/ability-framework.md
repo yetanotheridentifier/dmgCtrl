@@ -664,3 +664,19 @@ foundation for Group C's "enemy units lose \<keyword\>" (which will extend suppr
 **B4 (combat-context / multi-ability: Heroic Purrgil, Scion Shuttle, Carson Teva, Elzar Mann, Koska
 Reeves) is deferred** until the combat-role `statModifier` context (Group F) and the relevant
 When-Played (Group D) halves land.
+
+### Group C — auras / constant effects on other units (#354, DONE)
+
+Reuses the `aura` hook, extended two ways:
+- **Keyword removal:** `AuraContribution.removeKeywords?: string[]`. `auraContributions` collects them
+  and `unitKeywords` filters them out (folded into the same suppressed-set as the B3
+  `suppressedKeywords`). Domesticated Loth-Cat ("enemy units lose Ambush and Support"), Poe Dameron
+  ("all units lose Sentinel").
+- **Non-recursive keyword count:** `nonAuraKeywordNames(state, unit)` returns a unit's distinct
+  keyword names from every source *except* auras (and minus its own suppressions), so an aura can
+  count a target's keywords without recursing back through `auraContributions`. Gallius Rax ("other
+  friendly units with 2+ different keywords get +2/+2"). Onyx Cinder (other friendly units gain Hidden)
+  reuses the existing keyword-grant aura.
+- **`enterUnit` now reads Ambush/Support from the unit's LIVE keywords** (not just the card's), so an
+  aura that strips Ambush/Support takes effect the moment a unit is played (Loth-Cat denying an enemy's
+  ambush attack). Shielded/Hidden still apply from the card at construction (they change entry state).

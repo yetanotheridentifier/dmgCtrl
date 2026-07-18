@@ -29,6 +29,23 @@ function conditionalKeywordsOf(state: GameState, cardId: string, unit: UnitState
  * and any keywords granted for a single attack (Support).
  */
 export function unitKeywords(state: GameState, unit: UnitState): KeywordInstance[] {
+  const out = baseKeywordList(state, unit)
+  // Keywords granted by other units' auras (Sloane → Overwhelm/Sentinel, #346).
+  const aura = auraContributions(state, unit)
+  out.push(...aura.keywords)
+  // Removals: the unit's own card/upgrades (Marrok loses Sentinel while upgraded, #353) plus auras
+  // ("enemy/all units lose X", #354). Applied after all grants — a keyword survives unless removed by name.
+  const suppressed = suppressedKeywordsOf(state, unit)
+  for (const name of aura.removeKeywords) suppressed.add(name)
+  return suppressed.size > 0 ? out.filter(k => !suppressed.has(k.name)) : out
+}
+
+/**
+ * A unit's keywords from every NON-aura source: its card + conditional keywords, each upgrade
+ * (printed + conditional), Support-granted abilities, single-attack grants, and "this phase" lasting
+ * effects. No aura contributions and no removals — the recursion-safe base an aura can inspect (#354).
+ */
+function baseKeywordList(state: GameState, unit: UnitState): KeywordInstance[] {
   const out: KeywordInstance[] = [
     ...(state.cards[unit.cardId]?.keywords ?? []),
     ...conditionalKeywordsOf(state, unit.cardId, unit),
@@ -41,13 +58,18 @@ export function unitKeywords(state: GameState, unit: UnitState): KeywordInstance
     out.push(...(state.cards[cardId]?.keywords ?? []))
   }
   out.push(...(unit.grantedKeywords ?? []))
-  // Keywords granted by other units' auras (Sloane → Overwhelm/Sentinel, #346).
-  out.push(...auraContributions(state, unit).keywords)
-  // Keywords granted by "this phase" lasting effects (Baylan → Sentinel, #347).
   out.push(...lastingEffectTotals(state, unit.instanceId).keywords)
-  // Conditional removals from the unit's own card / upgrades (Marrok loses Sentinel while upgraded, #353).
-  const suppressed = suppressedKeywordsOf(state, unit)
-  return suppressed.size > 0 ? out.filter(k => !suppressed.has(k.name)) : out
+  return out
+}
+
+/**
+ * Distinct keyword names a unit has from non-aura sources, after its own conditional removals — used
+ * by auras that *count* a target's keywords (Gallius Rax) without recursing back through auras (#354).
+ */
+export function nonAuraKeywordNames(state: GameState, unit: UnitState): Set<string> {
+  const names = new Set(baseKeywordList(state, unit).map(k => k.name))
+  for (const name of suppressedKeywordsOf(state, unit)) names.delete(name)
+  return names
 }
 
 /** Keyword names conditionally removed from a unit by its own card or an upgrade (#353). */
@@ -92,12 +114,13 @@ export function unitHasTrait(state: GameState, unit: UnitState, name: string): b
  * Sums power/HP and collects granted keywords. A source affects a target via its card's
  * (or an upgrade's) `aura` hook; `sameController` = source and target share a controller.
  */
-export function auraContributions(state: GameState, target: UnitState, combat?: CombatContext): { power: number; hp: number; keywords: KeywordInstance[] } {
+export function auraContributions(state: GameState, target: UnitState, combat?: CombatContext): { power: number; hp: number; keywords: KeywordInstance[]; removeKeywords: string[] } {
   const targetOwner = (['player', 'opponent'] as const).find(o => state.players[o].units.some(u => u.instanceId === target.instanceId))
-  if (!targetOwner) return { power: 0, hp: 0, keywords: [] }
+  if (!targetOwner) return { power: 0, hp: 0, keywords: [], removeKeywords: [] }
   let power = 0
   let hp = 0
   const keywords: KeywordInstance[] = []
+  const removeKeywords: string[] = []
   for (const owner of ['player', 'opponent'] as const) {
     const sameController = owner === targetOwner
     for (const source of state.players[owner].units) {
@@ -107,11 +130,12 @@ export function auraContributions(state: GameState, target: UnitState, combat?: 
           power += contrib.power ?? 0
           hp += contrib.hp ?? 0
           if (contrib.keywords) keywords.push(...contrib.keywords)
+          if (contrib.removeKeywords) removeKeywords.push(...contrib.removeKeywords)
         }
       }
     }
   }
-  return { power, hp, keywords }
+  return { power, hp, keywords, removeKeywords }
 }
 
 /** True if this unit is a leader unit — natively, or made one by an upgrade (The Darksaber, #343). */
