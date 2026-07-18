@@ -306,7 +306,6 @@ function choiceMoves(state: GameState): Action[] {
         })
         break
       }
-      case 'mayDamage':
       case 'mayAdvantageEach':
       case 'mayLastingBuff':
       case 'mayGiveAdvantage':
@@ -316,6 +315,14 @@ function choiceMoves(state: GameState): Action[] {
         // Optional targeted effects (#309/#347): pick an eligible target, or decline.
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'mayDamage':
+      case 'mayGiveTokens': {
+        // Targeted damage / token grant (#309/#355): a decline is offered unless the effect is
+        // mandatory (`optional: false`, e.g. Snub Fighter Squadron's "Deal 1 to a space unit").
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        if (choice.optional !== false) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'chooseOne': {
@@ -331,9 +338,10 @@ function choiceMoves(state: GameState): Action[] {
       }
       case 'selectDamageTarget':
       case 'selectHealTarget': {
-        // Deal/heal N to a chosen unit or base (#348) — mandatory (a target must be picked).
+        // Deal/heal N to a chosen unit or base (#348) — mandatory unless `optional` (Nebulon-C's "may heal").
         for (const id of choice.unitTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         for (const bp of choice.baseTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, baseTarget: bp })
+        if (choice.kind === 'selectHealTarget' && choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'mayExhaustLeaderHealUnit': {

@@ -409,6 +409,10 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         next = dealDamageToUnit(next, targetInstanceId, choice.amount)
         next = checkWin(next)
         if (next.winner !== null) return next
+        // "If it's defeated this way, …" — Imposing Scout Walker rewards its own unit (#355).
+        if (choice.rewardIfDefeated && !findUnit(next, targetInstanceId)) {
+          for (let i = 0; i < choice.rewardIfDefeated.count; i++) next = giveToken(next, choice.rewardIfDefeated.instanceId, TOKEN_ADVANTAGE)
+        }
       }
       break
     case 'mayAdvantageEach':
@@ -436,6 +440,10 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'mayGiveAdvantage':
       // Ezra deployed: give the chosen unit an Advantage token, no cost (#347).
       if (targetInstanceId) next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+      break
+    case 'mayGiveTokens':
+      // Give `count` of a token to the chosen unit (#355) — Attendant Navigator, Anakin, Trexler.
+      if (targetInstanceId) for (let i = 0; i < choice.count; i++) next = giveToken(next, targetInstanceId, choice.token)
       break
     case 'mayExhaustLeaderGiveAdvantage': {
       // Ezra front: exhaust the (undeployed) leader to give the chosen unit an Advantage token (#347).

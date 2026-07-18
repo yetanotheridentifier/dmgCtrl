@@ -73,7 +73,7 @@ export const UNIT_GROUPS: UnitGroup[] = [
   {
     id: 'D',
     name: 'When Played effects',
-    status: 'planned',
+    status: 'in progress',
     note: 'The largest bucket; mostly reuses existing effect primitives (damage / tokens / heal / draw). (#355)',
     units: [
       'Admiral Ackbar', 'Amnesty Officer', 'Anakin Skywalker', 'Attendant Navigator', 'Barriss Offee', 'Battered Haulcraft',
@@ -190,6 +190,31 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_100', name: 'Gallius Rax' },
   { id: 'ASH_068', name: 'Domesticated Loth-Cat' },
   { id: 'ASH_040', name: 'Poe Dameron' },
+  // Group D (#355) — "When Played" effects — D1: self / no-target
+  { id: 'ASH_218', name: 'Ferry Droid' },
+  { id: 'ASH_251', name: 'Zealous Soldier' },
+  { id: 'ASH_178', name: 'Knobby White Ice Spider' },
+  { id: 'ASH_221', name: 'Helix Starfighter' },
+  { id: 'ASH_111', name: 'Children of the Watch' },
+  { id: 'ASH_124', name: 'Protectorate Fighter' },
+  { id: 'ASH_065', name: 'Home One' },
+  { id: 'ASH_064', name: 'The Armorer' },
+  // D2: single target
+  { id: 'ASH_259', name: 'LEP Ratcatcher' },
+  { id: 'ASH_170', name: 'Desert Sharpshooter' },
+  { id: 'ASH_174', name: 'StarFortress Heavy Bomber' },
+  { id: 'ASH_081', name: 'Nebulon-C Frigate' },
+  { id: 'ASH_051', name: 'Reinforcing Light Cruiser' },
+  { id: 'ASH_214', name: 'Amnesty Officer' },
+  { id: 'ASH_238', name: 'Attendant Navigator' },
+  { id: 'ASH_255', name: 'Anakin Skywalker' },
+  { id: 'ASH_082', name: 'Trexler Armored Marauder' },
+  { id: 'ASH_194', name: 'Snub Fighter Squadron' },
+  // D3: multi-step
+  { id: 'ASH_071', name: 'Battered Haulcraft' },
+  { id: 'ASH_158', name: 'Han Solo' },
+  { id: 'ASH_112', name: 'Luke Skywalker' },
+  { id: 'ASH_176', name: 'Imposing Scout Walker' },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */

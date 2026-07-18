@@ -303,7 +303,11 @@ export type PendingChoice =
   | { kind: 'mayAttack'; id: string; controller: PlayerId; unitId: string; grantCardId?: string }
   // Optional targeted effects, e.g. from an On Attack ability (#309): `targets` are the
   // eligible unit instance ids; the controller picks one or declines.
-  | { kind: 'mayDamage'; id: string; controller: PlayerId; unitId: string; targets: string[]; amount: number }
+  // `rewardIfDefeated`: if the damage defeats the target, give `count` Advantage to `instanceId`
+  // (Imposing Scout Walker → its own unit) (#355).
+  | { kind: 'mayDamage'; id: string; controller: PlayerId; unitId: string; targets: string[]; amount: number; optional?: boolean; rewardIfDefeated?: { instanceId: string; count: number } }
+  // Give `count` of a token to a chosen target (#355). `optional` (default true) offers a decline.
+  | { kind: 'mayGiveTokens'; id: string; controller: PlayerId; token: string; count: number; targets: string[]; optional?: boolean }
   | { kind: 'mayAdvantageEach'; id: string; controller: PlayerId; unitId: string; targets: string[] }
   // Vane (#309/#348): defeat a friendly upgrade (chosen from `candidates`, cards or tokens); then the
   // `then` damage-target selection follows. `optional` = the deployed "may" version (a Cancel is
@@ -335,7 +339,7 @@ export type PendingChoice =
   // Luke front (#348): may exhaust the (undeployed) leader to heal `amount` from `unitId`, or decline.
   | { kind: 'mayExhaustLeaderHealUnit'; id: string; controller: PlayerId; unitId: string; amount: number }
   // Luke deployed (#348): heal `amount` from a chosen unit (`unitTargets`) or base (`baseTargets`). Mandatory.
-  | { kind: 'selectHealTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[] }
+  | { kind: 'selectHealTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[]; optional?: boolean }
   // Play a unit from hand as part of an ability (#348): pick one of `candidates` (affordable hand
   // units), paying its cost + `costDelta`, entering ready if `entersReady` (Fennec, Moff Gideon).
   | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean }

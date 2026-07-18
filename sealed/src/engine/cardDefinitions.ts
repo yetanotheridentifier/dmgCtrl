@@ -1,12 +1,12 @@
 import { registerCard } from './abilities'
-import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount, grantNextUnitKeywords } from './effects'
+import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount, grantNextUnitKeywords, healUnit } from './effects'
 import { dealDamageToUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
 import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, enteredPlayThisPhase } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets } from './legalMoves'
-import { unitHasTrait, isLeaderUnit, nonAuraKeywordNames } from './keywords'
+import { unitHasTrait, isLeaderUnit, nonAuraKeywordNames, unitHasKeyword, unitKeywords } from './keywords'
 import type { EngineCard, GameState, PlayerId, UnitState, UpgradeRef } from './types'
 
 /**
@@ -764,3 +764,100 @@ registerCard('ASH_068', { // Domesticated Loth-Cat — enemy units lose Ambush a
 registerCard('ASH_040', { // Poe Dameron — all units lose Sentinel
   aura: () => ({ removeKeywords: ['Sentinel'] }),
 })
+
+// ── Units (#306) — Group D: "When Played" effects (#355) ─────────────────────
+/** Give `n` copies of a token to a unit. */
+const giveTokens = (s: GameState, id: string, token: string, n: number): GameState => {
+  let next = s
+  for (let i = 0; i < n; i++) next = giveToken(next, id, token)
+  return next
+}
+const whenPlayed = (description: string, effect: (s: GameState, ctx: { owner: PlayerId; sourceInstanceId?: string }) => GameState) => ({
+  abilities: [{ trigger: 'whenPlayed' as const, description, effect }],
+})
+
+// D1 — self / no-target effects.
+registerCard('ASH_218', whenPlayed('Give 4 Advantage tokens to this unit.', (s, ctx) => giveTokens(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE, 4))) // Ferry Droid
+registerCard('ASH_251', whenPlayed('Give an Advantage token to this unit.', (s, ctx) => giveToken(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE))) // Zealous Soldier
+registerCard('ASH_178', whenPlayed('Give an Advantage token to this unit for each enemy unit.', (s, ctx) => giveTokens(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE, s.players[opponentOf(ctx.owner)].units.length))) // Knobby White Ice Spider
+registerCard('ASH_221', whenPlayed('If an opponent controls a space unit, give a Shield to this; otherwise 2 Advantage.', (s, ctx) => // Helix Starfighter
+  s.players[opponentOf(ctx.owner)].units.some(u => u.arena === 'space')
+    ? giveToken(s, ctx.sourceInstanceId!, TOKEN_SHIELD)
+    : giveTokens(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE, 2)))
+registerCard('ASH_111', whenPlayed('Create 2 Mandalorian tokens.', (s, ctx) => createTokenUnit(createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN), ctx.owner, TOKEN_MANDALORIAN))) // Children of the Watch
+registerCard('ASH_124', whenPlayed('If you control a unique unit, create a Mandalorian token.', (s, ctx) => // Protectorate Fighter
+  s.players[ctx.owner].units.some(u => s.cards[u.cardId]?.unique) ? createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN) : s))
+registerCard('ASH_065', whenPlayed('Heal all damage from each friendly unit.', (s, ctx) => // Home One
+  s.players[ctx.owner].units.reduce((acc, u) => healUnit(acc, u.instanceId, u.damage), s)))
+registerCard('ASH_064', whenPlayed('Give a Shield token to each friendly unit with Shielded.', (s, ctx) => // The Armorer
+  s.players[ctx.owner].units.filter(u => unitHasKeyword(s, u, 'Shielded')).reduce((acc, u) => giveToken(acc, u.instanceId, TOKEN_SHIELD), s)))
+
+// D2 — single-target "When Played" effects (reuse mayDamage / mayGiveTokens / mayExhaustUnit /
+// selectHealTarget). Each guards on having a target: no eligible target → the effect just does nothing.
+const groundUnits = (s: GameState) => allUnits(s).filter(u => u.arena === 'ground')
+const spaceUnits = (s: GameState) => allUnits(s).filter(u => u.arena === 'space')
+
+registerCard('ASH_259', whenPlayed('You may deal 1 damage to a ground unit.', (s, ctx) => { // LEP Ratcatcher
+  const targets = groundUnits(s).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount: 1 }) : s
+}))
+registerCard('ASH_170', whenPlayed('You may deal 2 damage to an upgraded ground unit.', (s, ctx) => { // Desert Sharpshooter
+  const targets = groundUnits(s).filter(u => u.upgrades.length > 0).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount: 2 }) : s
+}))
+registerCard('ASH_174', whenPlayed('You may deal 6 damage to a non-unique ground unit.', (s, ctx) => { // StarFortress Heavy Bomber
+  const targets = groundUnits(s).filter(u => !s.cards[u.cardId]?.unique).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount: 6 }) : s
+}))
+registerCard('ASH_081', whenPlayed('You may heal 3 damage from a unit or base.', (s, ctx) => { // Nebulon-C Frigate
+  const unitTargets = allUnits(s).filter(u => u.damage > 0).map(u => u.instanceId)
+  const baseTargets = (['player', 'opponent'] as PlayerId[]).filter(p => s.players[p].base.damage > 0)
+  return unitTargets.length || baseTargets.length
+    ? pushChoice(s, { kind: 'selectHealTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 3, unitTargets, baseTargets, optional: true })
+    : s
+}))
+registerCard('ASH_051', whenPlayed('You may exhaust a unit.', (s, ctx) => { // Reinforcing Light Cruiser
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayExhaustUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
+}))
+registerCard('ASH_214', whenPlayed('You may exhaust a unit with one or more keywords.', (s, ctx) => { // Amnesty Officer
+  const targets = allUnits(s).filter(u => unitKeywords(s, u).length > 0).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayExhaustUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
+}))
+registerCard('ASH_238', whenPlayed('You may give 2 Advantage tokens to a space unit.', (s, ctx) => { // Attendant Navigator
+  const targets = spaceUnits(s).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_ADVANTAGE, count: 2, targets }) : s
+}))
+registerCard('ASH_255', whenPlayed('Give a Shield token to another friendly unit.', (s, ctx) => { // Anakin Skywalker
+  const targets = s.players[ctx.owner].units.filter(u => u.instanceId !== ctx.sourceInstanceId).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_SHIELD, count: 1, targets, optional: false }) : s
+}))
+registerCard('ASH_082', whenPlayed('You may give a Shield token to a unit that costs 3 or less.', (s, ctx) => { // Trexler Armored Marauder
+  const targets = allUnits(s).filter(u => (s.cards[u.cardId]?.cost ?? 0) <= 3).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_SHIELD, count: 1, targets }) : s
+}))
+registerCard('ASH_194', whenPlayed('Deal 1 damage to a space unit.', (s, ctx) => { // Snub Fighter Squadron
+  const targets = spaceUnits(s).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayDamage', id: `${ctx.sourceInstanceId!}-wp`, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount: 1, optional: false }) : s
+}))
+
+// D3 — multi-step "When Played" effects (self-damage sequences, area damage, damage-then-reward).
+registerCard('ASH_071', whenPlayed('Deal 1 damage to this unit and 1 damage to an enemy space unit.', (s, ctx) => { // Battered Haulcraft
+  const next = dealDamageToUnit(s, ctx.sourceInstanceId!, 1)
+  const targets = next.players[opponentOf(ctx.owner)].units.filter(u => u.arena === 'space').map(u => u.instanceId)
+  return targets.length ? pushChoice(next, { kind: 'mayDamage', id: `${ctx.sourceInstanceId!}-wp`, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount: 1, optional: false }) : next
+}))
+registerCard('ASH_158', whenPlayed('Deal 3 damage to this unit. Give 3 Advantage tokens to a unit.', (s, ctx) => { // Han Solo
+  const next = dealDamageToUnit(s, ctx.sourceInstanceId!, 3)
+  const targets = allUnits(next).map(u => u.instanceId)
+  return targets.length ? pushChoice(next, { kind: 'mayGiveTokens', id: `${ctx.sourceInstanceId!}-wp`, controller: ctx.owner, token: TOKEN_ADVANTAGE, count: 3, targets, optional: false }) : next
+}))
+registerCard('ASH_112', whenPlayed('If you control at least 4 units, deal 3 damage to each enemy unit.', (s, ctx) => { // Luke Skywalker
+  if (s.players[ctx.owner].units.length < 4) return s
+  const enemies = s.players[opponentOf(ctx.owner)].units.map(u => u.instanceId)
+  return enemies.reduce((acc, id) => dealDamageToUnit(acc, id, 3), s)
+}))
+registerCard('ASH_176', whenPlayed('You may deal 3 damage to a ground unit; if defeated this way, give 3 Advantage to this unit.', (s, ctx) => { // Imposing Scout Walker
+  const targets = allUnits(s).filter(u => u.arena === 'ground').map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount: 3, rewardIfDefeated: { instanceId: ctx.sourceInstanceId!, count: 3 } }) : s
+}))

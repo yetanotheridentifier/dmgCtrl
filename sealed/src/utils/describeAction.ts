@@ -155,6 +155,11 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `${choice.count} Advantage to ${target ?? 'unit'}`
       }
+      if (choice.kind === 'mayGiveTokens') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        const tokenName = state.cards[choice.token]?.name ?? 'token'
+        return `${choice.count > 1 ? `${choice.count} ` : ''}${tokenName}${choice.count > 1 ? 's' : ''} to ${target ?? 'unit'}`
+      }
       if (choice.kind === 'mayLastingBuff') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         const buff = [choice.power || choice.hp ? `+${choice.power ?? 0}/+${choice.hp ?? 0}` : '', ...(choice.keywords ?? []).map(k => k.name)].filter(Boolean).join(' & ')
