@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { registeredCardIds, getCardDefinition } from '../engine/abilities'
 import '../engine/cardDefinitions' // side-effect: registers every implemented card
-import { IMPLEMENTED_LEADERS, IMPLEMENTED_UPGRADES, IMPLEMENTATION_PROGRESS, TOTAL_PROGRESS, UNIT_GROUPS } from '../data/implementedCards'
+import { IMPLEMENTED_LEADERS, IMPLEMENTED_UPGRADES, IMPLEMENTED_UNITS, IMPLEMENTATION_PROGRESS, TOTAL_PROGRESS, UNIT_GROUPS } from '../data/implementedCards'
 
 /** The setup-screen manifest must mirror what's actually registered, or it lies to the player. */
 describe('implemented-cards manifest (#347)', () => {
-  const manifestIds = [...IMPLEMENTED_LEADERS, ...IMPLEMENTED_UPGRADES].map(c => c.id)
+  const manifestIds = [...IMPLEMENTED_LEADERS, ...IMPLEMENTED_UPGRADES, ...IMPLEMENTED_UNITS].map(c => c.id)
 
   it('lists exactly the registered ASH cards — no more, no fewer', () => {
     const registered = registeredCardIds().filter(id => id.startsWith('ASH_')).sort()
@@ -29,12 +29,12 @@ describe('implementation progress (#306)', () => {
     expect(cat.Upgrades).toMatchObject({ done: 25, total: 25 })
     expect(cat.Bases).toMatchObject({ done: 8, total: 8 })
     expect(cat.Tokens).toMatchObject({ done: 3, total: 3 }) // Shield/Advantage/Mandalorian — Experience deferred
-    expect(cat.Units).toMatchObject({ done: 39, total: 179 }) // Group A done (validated); B–F pending
+    expect(cat.Units).toMatchObject({ done: 39 + 13, total: 179 }) // Group A (39) + B1 (9) + B2 (3) + B3 (1) registered
     expect(cat.Events).toMatchObject({ done: 0, total: 34 })
   })
 
   it('the total is the sum of the categories', () => {
-    expect(TOTAL_PROGRESS.done).toBe(18 + 25 + 8 + 3 + 39 + 0) // 93
+    expect(TOTAL_PROGRESS.done).toBe(18 + 25 + 8 + 3 + 52 + 0) // 106
     expect(TOTAL_PROGRESS.total).toBe(18 + 25 + 8 + 3 + 179 + 34) // 267
   })
 

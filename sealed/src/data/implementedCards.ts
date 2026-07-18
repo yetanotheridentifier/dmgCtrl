@@ -55,7 +55,7 @@ export const UNIT_GROUPS: UnitGroup[] = [
   {
     id: 'B',
     name: 'Conditional self buffs (“While X …”)',
-    status: 'planned',
+    status: 'in progress',
     note: 'Grant this unit a keyword or stat while a condition holds. Reuses conditionalKeywords + statModifier. (#353)',
     units: [
       'AT-ST Raider', 'B-Wing Rearguard', 'Bo-Katan Kryze', 'Captain Pellaeon', 'Carson Teva', 'Consortium StarViper',
@@ -164,6 +164,29 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'ASH_183', name: 'Whistling Birds' },
 ]
 
+/**
+ * Unit cards whose *abilities* are built into the engine (#306). Keyword-only / vanilla units
+ * (Group A) aren't here — they need no definition and are counted separately. Grows group by group.
+ */
+export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
+  // Group B1 (#353) — conditional self keyword grants
+  { id: 'ASH_098', name: 'AT-ST Raider' },
+  { id: 'ASH_078', name: 'B-Wing Rearguard' },
+  { id: 'ASH_105', name: 'Bo-Katan Kryze' },
+  { id: 'ASH_093', name: 'Captain Pellaeon' },
+  { id: 'ASH_122', name: 'Consortium StarViper' },
+  { id: 'ASH_243', name: 'Darth Vader' },
+  { id: 'ASH_057', name: 'Lothal E-Wing' },
+  { id: 'ASH_049', name: 'Shin Hati' },
+  { id: 'ASH_120', name: 'Warrior of Clan Kryze' },
+  // Group B2 (#353) — conditional stat buffs
+  { id: 'ASH_240', name: 'Mandalorian Super Commandos' },
+  { id: 'ASH_125', name: 'Stolen Eta Shuttle' },
+  { id: 'ASH_113', name: 'Mandalorian Flagship' },
+  // Group B3 (#353) — conditional keyword swap
+  { id: 'ASH_030', name: 'Marrok' },
+]
+
 /** Card-type totals for the ASH set (from the SWUDB set listing). */
 const SET_TOTAL = { leaders: 18, upgrades: 25, bases: 8, units: 179, events: 34 } as const
 
@@ -183,7 +206,8 @@ export const IMPLEMENTATION_PROGRESS: CategoryProgress[] = [
   { label: 'Upgrades', done: IMPLEMENTED_UPGRADES.length, total: SET_TOTAL.upgrades },
   { label: 'Bases', done: SET_TOTAL.bases, total: SET_TOTAL.bases }, // all vanilla — fully playable
   { label: 'Tokens', done: TOKEN_COUNT, total: TOKEN_COUNT },
-  { label: 'Units', done: UNIT_GROUPS.filter(g => g.status === 'done').reduce((n, g) => n + g.units.length, 0), total: SET_TOTAL.units },
+  // Units done = keyword-only/vanilla units (Group A, need no code) + units with a registered ability.
+  { label: 'Units', done: (UNIT_GROUPS.find(g => g.id === 'A')?.units.length ?? 0) + IMPLEMENTED_UNITS.length, total: SET_TOTAL.units },
   { label: 'Events', done: 0, total: SET_TOTAL.events },
 ]
 

@@ -73,6 +73,12 @@ export interface CardDefinition {
   /** Extra keywords this card grants a unit (e.g. an upgrade granting a conditional keyword). */
   conditionalKeywords?: (state: GameState, unit: UnitState) => KeywordInstance[]
   /**
+   * Keyword names this card *removes* from its unit while a condition holds (#353) — e.g. Marrok
+   * loses Sentinel while upgraded. Applied after all keyword sources are gathered, so a keyword
+   * granted here-and-now by another source isn't stripped unless its name is in this list.
+   */
+  suppressedKeywords?: (state: GameState, unit: UnitState) => string[]
+  /**
    * Conditional power/HP delta this card contributes to its unit (the unit's own
    * card, or an upgrade modifying its host). Folded into `effectivePower`/`effectiveHp`;
    * `ctx` carries the combat situation (e.g. attacking a base). Omitted stats = 0.

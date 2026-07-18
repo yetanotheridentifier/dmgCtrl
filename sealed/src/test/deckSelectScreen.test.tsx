@@ -84,7 +84,7 @@ describe('DeckSelectScreen', () => {
     expect(groupB.open).toBe(true) // next up → expanded
     // Development status is shown for the groups (same treatment as leaders/upgrades).
     expect(within(groupA).getByText(/done/i)).toBeInTheDocument()
-    expect(within(groupB).getByText(/planned/i)).toBeInTheDocument()
+    expect(within(groupB).getByText(/in progress/i)).toBeInTheDocument()
     // Each group lists its specific units.
     expect(within(groupB).getByText('Bo-Katan Kryze')).toBeInTheDocument()
     // No group-letter prefixes in the section titles.
