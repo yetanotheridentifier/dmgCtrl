@@ -179,6 +179,12 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_057', name: 'Lothal E-Wing' },
   { id: 'ASH_049', name: 'Shin Hati' },
   { id: 'ASH_120', name: 'Warrior of Clan Kryze' },
+  // Group B2 (#353) — conditional stat buffs
+  { id: 'ASH_240', name: 'Mandalorian Super Commandos' },
+  { id: 'ASH_125', name: 'Stolen Eta Shuttle' },
+  { id: 'ASH_113', name: 'Mandalorian Flagship' },
+  // Group B3 (#353) — conditional keyword swap
+  { id: 'ASH_030', name: 'Marrok' },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */

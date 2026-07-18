@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { state, player, unit, card, CARDS } from './helpers/engineFixtures'
 import { unitHasKeyword, unitKeywordValue } from '../engine/keywords'
+import { effectivePower } from '../engine/stats'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { normaliseCard } from '../engine/cardDb'
 import { cardId } from '../data/cards'
@@ -27,6 +28,10 @@ const B = {
   ASH_120: card({ id: 'ASH_120', type: 'unit', arena: 'ground', power: 2, hp: 2, traits: ['Mandalorian'] }), // Warrior of Clan Kryze
   ASH_049: card({ id: 'ASH_049', type: 'unit', arena: 'ground', power: 4, hp: 5 }), // Shin Hati
   ASH_093: card({ id: 'ASH_093', type: 'unit', arena: 'space', power: 3, hp: 5 }), // Captain Pellaeon
+  ASH_240: card({ id: 'ASH_240', type: 'unit', arena: 'ground', power: 2, hp: 5, traits: ['Mandalorian'] }), // Mandalorian Super Commandos
+  ASH_125: card({ id: 'ASH_125', type: 'unit', arena: 'space', power: 3, hp: 5, keywords: [{ name: 'Hidden' }] }), // Stolen Eta Shuttle
+  ASH_113: card({ id: 'ASH_113', type: 'unit', arena: 'space', power: 4, hp: 8, traits: ['Mandalorian'] }), // Mandalorian Flagship
+  ASH_030: card({ id: 'ASH_030', type: 'unit', arena: 'ground', power: 2, hp: 6, traits: ['Force'], keywords: [{ name: 'Sentinel' }] }), // Marrok
   MANDO: card({ id: 'MANDO', type: 'unit', arena: 'ground', traits: ['Mandalorian'] }),
   GRUNT: card({ id: 'GRUNT', type: 'unit', arena: 'ground' }),
   UNIQUE_U: card({ id: 'UNIQUE_U', type: 'unit', arena: 'ground', unique: true }),
@@ -108,15 +113,60 @@ describe('Group B1 — conditional self keyword grants (#353)', () => {
   })
 })
 
-describe('Group B1 — conditional keywords are stripped from the base data (#353)', () => {
+describe('Group B2 — conditional stat buffs (#353)', () => {
+  const leader = () => unit('lead', 'LEAD', { isLeader: true })
+
+  it('Mandalorian Super Commandos (240): +2/+0 only while you control a leader unit', () => {
+    const yes = mk({ players: { player: player({ units: [unit('sc', 'ASH_240'), leader()] }), opponent: player() } })
+    const no = mk({ players: { player: player({ units: [unit('sc', 'ASH_240')] }), opponent: player() } })
+    expect(effectivePower(yes, yes.players.player.units[0])).toBe(4) // 2 + 2
+    expect(effectivePower(no, no.players.player.units[0])).toBe(2)
+  })
+
+  it('Stolen Eta Shuttle (125): +2/+0 only while you have the initiative', () => {
+    const yes = mk({ initiative: 'player', players: { player: player({ units: [unit('e', 'ASH_125')] }), opponent: player() } })
+    const no = mk({ initiative: 'opponent', players: { player: player({ units: [unit('e', 'ASH_125')] }), opponent: player() } })
+    expect(effectivePower(yes, yes.players.player.units[0])).toBe(5) // 3 + 2
+    expect(effectivePower(no, no.players.player.units[0])).toBe(3)
+  })
+
+  it('Mandalorian Flagship (113): +1/+0 per other friendly Mandalorian, and Ambush while you control a leader', () => {
+    const s = mk({ players: { player: player({ units: [unit('f', 'ASH_113'), unit('m1', 'MANDO'), unit('m2', 'MANDO'), unit('g', 'GRUNT'), leader()] }), opponent: player() } })
+    // Two other Mandalorians (the leader unit isn't Mandalorian, the grunt isn't) → +2 power.
+    expect(effectivePower(s, s.players.player.units[0])).toBe(6) // 4 + 2
+    expect(kw(s, 'f', 'Ambush')).toBe(true) // controls a leader unit
+    const noLeader = mk({ players: { player: player({ units: [unit('f', 'ASH_113'), unit('m1', 'MANDO')] }), opponent: player() } })
+    expect(kw(noLeader, 'f', 'Ambush')).toBe(false)
+    expect(effectivePower(noLeader, noLeader.players.player.units[0])).toBe(5) // 4 + 1 (one other Mandalorian)
+  })
+})
+
+describe('Group B3 — conditional keyword swap (#353)', () => {
+  it('Marrok (030): Sentinel by default; while upgraded he loses Sentinel and gains Saboteur', () => {
+    const bare = mk({ players: { player: player({ units: [unit('m', 'ASH_030')] }), opponent: player() } })
+    const upgraded = mk({ players: { player: player({ units: [unit('m', 'ASH_030', { upgrades: [{ cardId: 'UPG', owner: 'player' }] })] }), opponent: player() } })
+    expect(kw(bare, 'm', 'Sentinel')).toBe(true)
+    expect(kw(bare, 'm', 'Saboteur')).toBe(false)
+    expect(kw(upgraded, 'm', 'Sentinel')).toBe(false) // suppressed while upgraded
+    expect(kw(upgraded, 'm', 'Saboteur')).toBe(true)
+  })
+})
+
+describe('Group B — conditional keywords are stripped from the base data (#353)', () => {
   const byId = new Map((ashSet as unknown as SwuCard[]).map(c => [cardId(c.Set, c.Number), c]))
   // The base keyword set after correction: the conditional keyword is gone; genuine keywords remain.
   const cases: [string, string[]][] = [
     ['ASH_098', []], ['ASH_078', []], ['ASH_105', []], ['ASH_093', []], ['ASH_122', []],
     ['ASH_057', []], ['ASH_049', []], ['ASH_120', []], ['ASH_243', ['Shielded']],
+    ['ASH_113', []], // Mandalorian Flagship — Ambush is conditional; Stolen Eta Shuttle (125) keeps Hidden
+    ['ASH_030', ['Sentinel']], // Marrok — Saboteur is conditional; Sentinel is his genuine base keyword
   ]
   it.each(cases)('%s base keywords are corrected', (id, expected) => {
     const names = normaliseCard(byId.get(id)!).keywords.map(k => k.name)
     expect(names).toEqual(expected)
+  })
+
+  it('Stolen Eta Shuttle (125) keeps its genuine Hidden keyword', () => {
+    expect(normaliseCard(byId.get('ASH_125')!).keywords.map(k => k.name)).toEqual(['Hidden'])
   })
 })

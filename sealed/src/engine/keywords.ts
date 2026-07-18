@@ -45,7 +45,18 @@ export function unitKeywords(state: GameState, unit: UnitState): KeywordInstance
   out.push(...auraContributions(state, unit).keywords)
   // Keywords granted by "this phase" lasting effects (Baylan → Sentinel, #347).
   out.push(...lastingEffectTotals(state, unit.instanceId).keywords)
-  return out
+  // Conditional removals from the unit's own card / upgrades (Marrok loses Sentinel while upgraded, #353).
+  const suppressed = suppressedKeywordsOf(state, unit)
+  return suppressed.size > 0 ? out.filter(k => !suppressed.has(k.name)) : out
+}
+
+/** Keyword names conditionally removed from a unit by its own card or an upgrade (#353). */
+function suppressedKeywordsOf(state: GameState, unit: UnitState): Set<string> {
+  const names = new Set<string>()
+  for (const cardId of [unit.cardId, ...unit.upgrades.map(u => u.cardId)]) {
+    for (const name of getCardDefinition(cardId)?.suppressedKeywords?.(state, unit) ?? []) names.add(name)
+  }
+  return names
 }
 
 export function unitHasKeyword(state: GameState, unit: UnitState, name: string): boolean {

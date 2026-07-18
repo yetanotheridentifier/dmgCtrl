@@ -643,3 +643,24 @@ unit)` hook — the unit's own card grants itself a keyword when a state predica
   ground unit → Sentinel), AT-ST Raider (another non-unique → Ambush), Warrior of Clan Kryze (another
   exhausted → Sentinel), Shin Hati (sole non-leader ground → Sentinel), Captain Pellaeon (leader
   defeated this phase → Raid 3).
+
+### Group B2 — conditional stat buffs (#353, DONE)
+
+"While \<condition\>, this unit gets +X/+Y" via the `statModifier(state, unit, ctx)` hook (which
+receives full `state`, so it can read board conditions). Mandalorian Super Commandos (+2/+0 while you
+control a leader unit — `controlsLeaderUnit`), Stolen Eta Shuttle (+2/+0 while you have the
+initiative), Mandalorian Flagship (conditional Ambush via the B1 pattern **plus** a count-based
+`statModifier` — +1/+0 per other friendly Mandalorian).
+
+### Group B3 — conditional keyword swap + a suppression hook (#353, DONE)
+
+New hook **`CardDefinition.suppressedKeywords(state, unit) => string[]`** — keyword names a card
+conditionally *removes* from its unit. `keywords.unitKeywords` gathers suppressions from the unit's
+card and its upgrades and filters them out of the final keyword set (after all grants, so a keyword
+granted right now survives unless its own name is suppressed). Marrok: base Sentinel (kept; Saboteur
+stripped via corrections) → while upgraded, suppress Sentinel and grant Saboteur. This hook is the
+foundation for Group C's "enemy units lose \<keyword\>" (which will extend suppression to auras).
+
+**B4 (combat-context / multi-ability: Heroic Purrgil, Scion Shuttle, Carson Teva, Elzar Mann, Koska
+Reeves) is deferred** until the combat-role `statModifier` context (Group F) and the relevant
+When-Played (Group D) halves land.

@@ -724,3 +724,28 @@ registerCard('ASH_098', { conditionalKeywords: (s, u) => (controlsAnother(s, u, 
 registerCard('ASH_120', { conditionalKeywords: (s, u) => (controlsAnother(s, u, (_st, x) => x.exhausted) ? [{ name: 'Sentinel' }] : []) }) // Warrior of Clan Kryze — Sentinel while you control another exhausted unit
 registerCard('ASH_049', { conditionalKeywords: (s, u) => { const o = unitOwner(s, u); return o !== undefined && soleNonLeaderInArena(s, o, u) ? [{ name: 'Sentinel' }] : [] } }) // Shin Hati — Sentinel while she is the only friendly non-leader ground unit
 registerCard('ASH_093', { conditionalKeywords: s => (leaderUnitDefeatedThisPhase(s) ? [{ name: 'Raid', value: 3 }] : []) }) // Captain Pellaeon — Raid 3 while a leader unit was defeated this phase
+
+// Group B2 (#353): conditional stat buffs — "While <condition>, this unit gets +X/+Y" via statModifier.
+const controlsLeaderUnit = (s: GameState, u: UnitState): boolean => {
+  const o = unitOwner(s, u)
+  return o !== undefined && s.players[o].units.some(x => isLeaderUnit(s, x))
+}
+registerCard('ASH_240', { statModifier: (s, u) => (controlsLeaderUnit(s, u) ? { power: 2 } : {}) }) // Mandalorian Super Commandos — +2/+0 while you control a leader unit
+registerCard('ASH_125', { statModifier: (s, u) => (unitOwner(s, u) === s.initiative ? { power: 2 } : {}) }) // Stolen Eta Shuttle — +2/+0 while you have the initiative
+registerCard('ASH_113', { // Mandalorian Flagship — Ambush while you control a leader; +1/+0 per other friendly Mandalorian
+  conditionalKeywords: (s, u) => (controlsLeaderUnit(s, u) ? [{ name: 'Ambush' }] : []),
+  statModifier: (s, u) => {
+    const o = unitOwner(s, u)
+    if (o === undefined) return {}
+    const others = s.players[o].units.filter(x => x.instanceId !== u.instanceId && unitHasTrait(s, x, 'Mandalorian')).length
+    return others > 0 ? { power: others } : {}
+  },
+})
+
+// Group B3 (#353): conditional keyword swap. Marrok's Sentinel is his base keyword; while upgraded he
+// loses it (suppressedKeywords) and gains Saboteur (conditionalKeywords).
+const isUpgraded = (u: UnitState): boolean => u.upgrades.length > 0
+registerCard('ASH_030', { // Marrok
+  conditionalKeywords: (_s, u) => (isUpgraded(u) ? [{ name: 'Saboteur' }] : []),
+  suppressedKeywords: (_s, u) => (isUpgraded(u) ? ['Sentinel'] : []),
+})

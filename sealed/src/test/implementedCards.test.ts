@@ -29,12 +29,12 @@ describe('implementation progress (#306)', () => {
     expect(cat.Upgrades).toMatchObject({ done: 25, total: 25 })
     expect(cat.Bases).toMatchObject({ done: 8, total: 8 })
     expect(cat.Tokens).toMatchObject({ done: 3, total: 3 }) // Shield/Advantage/Mandalorian — Experience deferred
-    expect(cat.Units).toMatchObject({ done: 39 + 9, total: 179 }) // Group A (39) + B1 registered (9)
+    expect(cat.Units).toMatchObject({ done: 39 + 13, total: 179 }) // Group A (39) + B1 (9) + B2 (3) + B3 (1) registered
     expect(cat.Events).toMatchObject({ done: 0, total: 34 })
   })
 
   it('the total is the sum of the categories', () => {
-    expect(TOTAL_PROGRESS.done).toBe(18 + 25 + 8 + 3 + 48 + 0) // 102
+    expect(TOTAL_PROGRESS.done).toBe(18 + 25 + 8 + 3 + 52 + 0) // 106
     expect(TOTAL_PROGRESS.total).toBe(18 + 25 + 8 + 3 + 179 + 34) // 267
   })
 

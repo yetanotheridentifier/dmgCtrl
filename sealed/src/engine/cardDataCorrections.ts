@@ -24,4 +24,6 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   ASH_049: { keywords: [] }, // Shin Hati (unit) — Sentinel is conditional
   ASH_120: { keywords: [] }, // Warrior of Clan Kryze — Sentinel is conditional
   ASH_243: { keywords: [{ name: 'Shielded' }] }, // Darth Vader — Shielded is real; Sentinel is conditional (while ready)
+  ASH_113: { keywords: [] }, // Mandalorian Flagship (B2) — Ambush is conditional (while you control a leader)
+  ASH_030: { keywords: [{ name: 'Sentinel' }] }, // Marrok (B3) — Sentinel is real; Saboteur is conditional (while upgraded)
 }
