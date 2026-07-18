@@ -127,6 +127,17 @@ export function drawCards(state: GameState, owner: PlayerId, n: number): GameSta
   }
 }
 
+/** Discard the card at `handIndex` from a player's hand to their discard pile (#355). No-op if out of range. */
+export function discardFromHand(state: GameState, owner: PlayerId, handIndex: number): GameState {
+  const p = state.players[owner]
+  const cardId = p.hand[handIndex]
+  if (cardId === undefined) return state
+  return {
+    ...state,
+    players: { ...state.players, [owner]: { ...p, hand: p.hand.filter((_, i) => i !== handIndex), discard: [...p.discard, cardId] } },
+  }
+}
+
 /**
  * Defeat the first upgrade with `cardId` on a unit (#342): remove it from the unit;
  * a card-upgrade goes to its OWNER's discard, a token simply ceases to exist. A no-op

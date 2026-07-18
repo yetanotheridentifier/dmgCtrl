@@ -386,6 +386,12 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'selectDiscard': {
+        // Mos Espa Watermonger (#355): discard a card from hand — any hand card is eligible.
+        p.hand.forEach((_, handIndex) => moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex }))
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
       case 'mayDeployLeader': {
         // Grogu (#348): a yes/no to deploy via the triggered epic action.
         moves.push({ type: 'acceptChoice', choiceId: choice.id })

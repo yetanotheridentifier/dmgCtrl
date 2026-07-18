@@ -467,7 +467,7 @@ export function LeaderCard({ state, side, widthPx, interact }: { state: GameStat
  * A card in your hand. Clickable to play (blue) or resource (green); hover /
  * focus / long-press zooms it (#321). Its own component so it can use the zoom hook.
  */
-function HandCard({ card, cardId, index, action, onAct, onSelect, selected }: {
+function HandCard({ card, cardId, index, action, onAct, onSelect, selected, discarding }: {
   card: EngineCard | undefined
   cardId: string
   index: number
@@ -476,9 +476,12 @@ function HandCard({ card, cardId, index, action, onAct, onSelect, selected }: {
   /** Set for an upgrade card: click selects it, then you click a unit to attach (#336). */
   onSelect?: () => void
   selected?: boolean
+  /** A pending "discard a card" choice (#355): clicking discards this card — highlight it red. */
+  discarding?: boolean
 }) {
   const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
   const isResource = action?.type === 'resourceCard' || action?.type === 'setupResource'
+  const playHighlight = discarding ? 'red' : isResource ? 'green' : 'accent'
   const popover = zoomed && <CardZoomPopover card={card} fallbackName={cardId} anchorRef={anchorRef} />
   if (action) {
     // Clickable shortcut for the matching action-menu button:
@@ -492,7 +495,7 @@ function HandCard({ card, cardId, index, action, onAct, onSelect, selected }: {
         {...bind}
         className="relative block w-fit shrink-0 cursor-pointer"
       >
-        <CardFace card={card} fallbackName={cardId} tight highlight={isResource ? 'green' : 'accent'} />
+        <CardFace card={card} fallbackName={cardId} tight highlight={playHighlight} />
         {popover}
       </button>
     )
@@ -721,6 +724,13 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     }
     const hand = gameState.players.player.hand
 
+    // A "discard a card from hand" choice (Mos Espa Watermonger, #355): the hand cards
+    // glow red and clicking one discards it; an optional discard also offers a Decline.
+    const discardChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'selectDiscard' }> => c.kind === 'selectDiscard' && c.controller === 'player',
+    )
+    const discardDecline = discardChoice ? legal.find(a => a.type === 'skipTrigger' && a.choiceId === discardChoice.id) : undefined
+
     const attacks = legal.filter(a => a.type === 'attack')
     const attackerIds = new Set(attacks.map(a => a.attackerId))
     const selectedAttacks = selectedAttacker ? attacks.filter(a => a.attackerId === selectedAttacker) : []
@@ -828,6 +838,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
                   : undefined
               }
               selected={selectedUpgrade === i}
+              discarding={discardChoice !== undefined}
             />
           </li>
         ))}
@@ -884,14 +895,17 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // "Play a unit from hand" accepts (#348) are clicked on the hand card, not the menu.
     const isHandPlay = (a: Action) => a.type === 'acceptChoice' && a.handIndex !== undefined
     const menuActions = gameState.winner === null
-      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a))
+      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline)
       : []
+    // The board-target decline and the hand-discard decline share one button (only one
+    // choice is active at a time). "Done" for the repeatable multiPick, else "Decline".
+    const declineButton = declineChoice ?? discardDecline
     const actionColumn = (
       <div className="flex flex-col items-stretch gap-1.5">
-        {declineChoice && (
+        {declineButton && (
           <button
             data-testid="decline-choice-btn"
-            onClick={() => actAndClear(declineChoice)}
+            onClick={() => actAndClear(declineButton)}
             className="rounded-xl border-2 border-line/60 px-3 py-1.5 text-xs text-ink-dim hover:text-ink"
           >
             {targetChoice?.kind === 'multiPick' ? 'Done' : 'Decline'}

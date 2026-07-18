@@ -221,6 +221,8 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   // Multi-target pick (#355 UI)
   { id: 'ASH_205', name: 'Inspiring Veteran' },
   { id: 'ASH_053', name: 'Pre Vizsla' },
+  // Discard from hand (#355 UI)
+  { id: 'ASH_260', name: 'Mos Espa Watermonger' },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */

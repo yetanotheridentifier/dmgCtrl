@@ -880,3 +880,6 @@ registerCard('ASH_053', whenPlayed('Defeat any number of non-leader units with a
   const targets = allUnits(s).filter(u => !isLeaderUnit(s, u) && effectiveHp(s, u) - u.damage <= 6).map(u => u.instanceId)
   return targets.length ? pushChoice(s, { kind: 'multiPick', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, spec: { mode: 'defeatForToken', budget: 6, token: TOKEN_MANDALORIAN } }) : s
 }))
+
+registerCard('ASH_260', whenPlayed('You may draw a card. If you do, discard a card.', (s, ctx) => // Mos Espa Watermonger
+  pushChoice(s, { kind: 'mayPayToDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, draw: 1, thenDiscard: 1 })))

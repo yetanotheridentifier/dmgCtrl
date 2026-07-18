@@ -57,6 +57,8 @@ const D = {
   // Phase 2 — multi-target pick
   ASH_205: card({ id: 'ASH_205', type: 'unit', arena: 'ground', power: 3, hp: 3 }), // Inspiring Veteran
   ASH_053: card({ id: 'ASH_053', type: 'unit', arena: 'ground', power: 6, hp: 6 }), // Pre Vizsla
+  // Phase 3 — discard from hand
+  ASH_260: card({ id: 'ASH_260', type: 'unit', arena: 'ground', power: 1, hp: 3 }), // Mos Espa Watermonger
 }
 const accept = (s: GameState, targetInstanceId?: string) => resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, targetInstanceId })
 const U = (s: GameState, id: string) => [...s.players.player.units, ...s.players.opponent.units].find(u => u.instanceId === id)!
@@ -289,5 +291,48 @@ describe('Group D Phase 2 — multi-target pick (#355)', () => {
     const s2 = accept(s1, 'b') // defeat b (2) → budget 2, no targets left → done
     expect(s2.pendingChoices ?? []).toHaveLength(0)
     expect(s2.players.player.units.filter(u => u.cardId === TOKEN_MANDALORIAN)).toHaveLength(2)
+  })
+})
+
+describe('Group D Phase 3 — discard from hand (Mos Espa Watermonger #355)', () => {
+  const discard = (s: GameState, handIndex: number) =>
+    resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, handIndex })
+  const skip = (s: GameState) => resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id })
+  // Play Mos Espa with `extraHand` still in hand and `deck` to draw from.
+  const setup = (deck: string[], extraHand: string[] = []) =>
+    play('ASH_260', { hand: ['ASH_260', ...extraHand], deck })
+
+  it('offers an optional "may draw" when played', () => {
+    const s = setup(['GRUNT'], ['SPACER'])
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayPayToDraw', cost: 0, draw: 1 })
+  })
+
+  it('drawing then forces a discard from hand', () => {
+    const s0 = setup(['GRUNT'], ['SPACER']) // hand after play: ['SPACER']; deck ['GRUNT']
+    const s1 = accept(s0) // draw GRUNT
+    expect(s1.players.player.hand).toEqual(['SPACER', 'GRUNT'])
+    expect(s1.pendingChoices?.[0]).toMatchObject({ kind: 'selectDiscard', count: 1 })
+    const s2 = discard(s1, 1) // discard the drawn GRUNT
+    expect(s2.players.player.hand).toEqual(['SPACER'])
+    expect(s2.players.player.discard).toContain('GRUNT')
+    expect(s2.pendingChoices ?? []).toHaveLength(0)
+  })
+
+  it('every hand card is a legal discard target', () => {
+    const s1 = accept(setup(['GRUNT'], ['SPACER', 'CHEAP'])) // hand now [SPACER, CHEAP, GRUNT]
+    const picks = legalMoves(s1).filter(a => a.type === 'acceptChoice').map(a => a.handIndex)
+    expect(picks.sort()).toEqual([0, 1, 2])
+  })
+
+  it('declining the draw skips the discard entirely', () => {
+    const s = skip(setup(['GRUNT'], ['SPACER']))
+    expect(s.players.player.hand).toEqual(['SPACER']) // no draw, no discard
+    expect(s.pendingChoices ?? []).toHaveLength(0)
+  })
+
+  it('an empty deck draws nothing, so no discard is forced', () => {
+    const s = accept(setup([], ['SPACER']))
+    expect(s.players.player.hand).toEqual(['SPACER'])
+    expect(s.pendingChoices ?? []).toHaveLength(0)
   })
 })

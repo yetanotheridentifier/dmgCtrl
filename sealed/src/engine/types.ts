@@ -367,7 +367,12 @@ export type PendingChoice =
   // Follow-up: attach the chosen resource upgrade to one of `targets` (#348). Mandatory.
   | { kind: 'attachResourceUpgrade'; id: string; controller: PlayerId; resourceIndex: number; cardId: string; targets: string[]; payCost: boolean }
   // Optionally pay `cost` to draw `draw` cards (#348, Mandalorian). `cost` 0 = a free "may draw".
-  | { kind: 'mayPayToDraw'; id: string; controller: PlayerId; cost: number; draw: number }
+  // `thenDiscard` (Mos Espa Watermonger, #355): after drawing, discard that many cards from hand —
+  // but only if a card was actually drawn ("you may draw a card. If you do, discard a card").
+  | { kind: 'mayPayToDraw'; id: string; controller: PlayerId; cost: number; draw: number; thenDiscard?: number }
+  // Discard `count` cards from your own hand, one at a time (#355, Mos Espa Watermonger). Mandatory
+  // unless `optional`. Resolved by an `acceptChoice` carrying the hand index to discard.
+  | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean }
   // Optionally deploy your leader via a triggered epic action (#348, Grogu). A yes/no.
   | { kind: 'mayDeployLeader'; id: string; controller: PlayerId }
   // Unique rule (CR): a player controlling two upgrades with the same title defeats one (their

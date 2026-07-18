@@ -7,7 +7,7 @@ import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit } from './combat'
-import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, createTokenUnit } from './effects'
+import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
@@ -540,11 +540,29 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         }
       }
       break
-    case 'mayPayToDraw':
+    case 'mayPayToDraw': {
       // Mandalorian (#348): optionally pay the cost, then draw. `cost` 0 = a free "may draw".
       next = updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost))
+      const handBefore = next.players[choice.controller].hand.length
       next = drawCards(next, choice.controller, choice.draw)
+      // Mos Espa Watermonger (#355): "if you do, discard a card" — only when a card was actually drawn.
+      const drew = next.players[choice.controller].hand.length - handBefore
+      if (choice.thenDiscard && drew > 0) {
+        next = pushChoice(next, { kind: 'selectDiscard', id: choice.id, controller: choice.controller, count: Math.min(choice.thenDiscard, next.players[choice.controller].hand.length) })
+      }
       break
+    }
+    case 'selectDiscard': {
+      // Discard the chosen hand card (#355), then re-offer until `count` are discarded.
+      if (handIndex !== undefined) {
+        next = discardFromHand(next, choice.controller, handIndex)
+        const remaining = choice.count - 1
+        if (remaining > 0 && next.players[choice.controller].hand.length > 0) {
+          next = pushChoice(next, { kind: 'selectDiscard', id: choice.id, controller: choice.controller, count: remaining, optional: choice.optional })
+        }
+      }
+      break
+    }
     case 'selectUniqueToDefeat': {
       // Unique rule (#348): defeat the chosen duplicate upgrade, then re-check (3+ copies → repeat).
       const pick = choice.candidates[optionIndex ?? 0]
