@@ -81,6 +81,8 @@ describe('DiscardPile (#332)', () => {
     const cards = within(overlay).getAllByTestId('card-face')
     fireEvent.pointerEnter(cards[0].parentElement!, { pointerType: 'mouse' })
     fireEvent.keyDown(window, { key: 'Shift', shiftKey: true })
-    expect(within(overlay).getByTestId('card-zoom')).toBeInTheDocument()
+    // The zoom portals to document.body (so it escapes the overlay's scroll clip),
+    // so it lives outside the overlay subtree now — assert against the whole screen.
+    expect(screen.getByTestId('card-zoom')).toBeInTheDocument()
   })
 })

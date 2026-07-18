@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { EngineCard } from '../engine/types'
 import CardFace from './cardFace'
 import { ZOOM_WIDTH_PX } from './cardSizing'
@@ -32,20 +33,20 @@ export interface CardGridItem {
 /** One card cell: the card (a click target when selectable), zoom-on-hover, an optional labelled
  *  action button and host caption. */
 function GridCardCell({ item, card, width }: { item: CardGridItem; card: EngineCard | undefined; width: number }) {
-  const { zoomed, bind } = useCardZoom()
+  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
   const clickCard = item.onSelect && !item.actionLabel
   const face = (
     <CardFace card={card} fallbackName={item.cardId} widthPx={width} tight highlight={clickCard && !item.dimmed ? 'accent' : undefined} className={item.dimmed && !clickCard ? 'brightness-[0.45]' : ''} />
   )
-  const zoom = zoomed && <CardZoomPopover card={card} fallbackName={item.cardId} />
+  const zoom = zoomed && <CardZoomPopover card={card} fallbackName={item.cardId} anchorRef={anchorRef} />
   return (
     <div className="flex flex-col items-center gap-2">
       {clickCard ? (
-        <button data-testid={item.testId} onClick={item.onSelect} disabled={item.dimmed} {...bind} className={`relative w-fit ${item.dimmed ? 'cursor-default opacity-40' : 'cursor-pointer'}`}>
+        <button ref={setAnchor} data-testid={item.testId} onClick={item.onSelect} disabled={item.dimmed} {...bind} className={`relative w-fit ${item.dimmed ? 'cursor-default opacity-40' : 'cursor-pointer'}`}>
           {face}{zoom}
         </button>
       ) : (
-        <div {...bind} className="relative w-fit">{face}{zoom}</div>
+        <div ref={setAnchor} {...bind} className="relative w-fit">{face}{zoom}</div>
       )}
       {item.actionLabel && item.onSelect && (
         <button data-testid={item.testId} onClick={item.onSelect} className="rounded-xl border-2 border-accent px-3 py-1.5 text-xs text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10">
@@ -70,8 +71,11 @@ export function CardGridOverlay({
   scrollable?: boolean
   onBackdropClick?: () => void
 }) {
-  const width = cardWidthPx ?? (fullWidthCards ? ZOOM_WIDTH_PX : Math.round(ZOOM_WIDTH_PX * 0.6))
-  return (
+  const width = cardWidthPx ?? (fullWidthCards ? ZOOM_WIDTH_PX : Math.round(ZOOM_WIDTH_PX * 0.8))
+  // Portalled to document.body so it shares the root stacking context with the zoom
+  // popover (also portalled): the backdrop's z-50 then sits below the zoom's z-100,
+  // instead of being trapped in a board-tree stacking context that outranks it.
+  return createPortal(
     <div data-testid={`${idPrefix}-overlay`} onClick={onBackdropClick} className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/75 p-4">
       {prompt && <p data-testid={`${idPrefix}-prompt`} className="text-xs uppercase tracking-[0.14em] text-ink-dim">{prompt}</p>}
       <div
@@ -83,6 +87,7 @@ export function CardGridOverlay({
         {items.map(item => <GridCardCell key={item.key} item={item} card={cardsById[item.cardId]} width={width} />)}
       </div>
       {footer}
-    </div>
+    </div>,
+    document.body,
   )
 }

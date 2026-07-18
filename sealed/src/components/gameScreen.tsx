@@ -55,11 +55,11 @@ function AttachedUpgrade({ card, fallbackName, top, dim }: {
   top: number
   dim: boolean
 }) {
-  const { zoomed, bind } = useCardZoom()
+  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
   return (
-    <div className="pointer-events-auto absolute left-1/2 -translate-x-1/2" style={{ top }} {...bind}>
+    <div ref={setAnchor} className="pointer-events-auto absolute left-1/2 -translate-x-1/2" style={{ top }} {...bind}>
       <CardFace card={card} fallbackName={fallbackName} tight className={dim ? 'brightness-[0.55]' : ''} />
-      {zoomed && <CardZoomPopover card={card} fallbackName={fallbackName} />}
+      {zoomed && <CardZoomPopover card={card} fallbackName={fallbackName} anchorRef={anchorRef} />}
     </div>
   )
 }
@@ -97,7 +97,7 @@ function UpgradeStack({ state, upgrades, instanceId, exhausted }: {
 
 export function UnitLine({ state, unit, interact }: { state: GameState; unit: UnitState; interact: UnitInteraction }) {
   const card = state.cards[unit.cardId]
-  const { zoomed, bind } = useCardZoom()
+  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
   // Only card upgrades stack behind the unit; token upgrades render as on-card
   // tokens via CardTokens instead (#334).
   const cardUpgrades = unit.upgrades.filter(u => state.cards[u.cardId]?.type !== 'token')
@@ -125,7 +125,7 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
       <UpgradeStack state={state} upgrades={cardUpgrades} instanceId={unit.instanceId} exhausted={unit.exhausted} />
       {/* The unit card carries the unit's own zoom — hover here, not the dead tile
           padding; the upgrades zoom from their exposed strips instead (#336). */}
-      <div className="relative w-fit" {...bind}>
+      <div ref={setAnchor} className="relative w-fit" {...bind}>
         <CardFace card={card} fallbackName={unit.cardId} deployed={unit.isLeader} exhausted={unit.exhausted} highlight={highlight} />
         <CardTokens state={state} unit={unit} />
         {/* Keyword badges (#334): Hidden (temporary, until next phase) and Sentinel
@@ -144,7 +144,7 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
           )}
         </div>
       </div>
-      {zoomed && <CardZoomPopover card={card} deployed={unit.isLeader} fallbackName={unit.cardId} />}
+      {zoomed && <CardZoomPopover card={card} deployed={unit.isLeader} fallbackName={unit.cardId} anchorRef={anchorRef} />}
     </div>
   )
 }
@@ -368,7 +368,7 @@ function BaseCard({ state, side, onAttack }: {
 }) {
   const p = state.players[side]
   const baseCard = state.cards[p.base.cardId]
-  const { zoomed, bind } = useCardZoom()
+  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
   // Base HP comes from the card metadata (bases vary; never assume 30).
   const baseHp = baseCard?.hp ?? 0
   // Damage taken, counting up to the base's HP — the SWU-standard display (#323).
@@ -399,7 +399,7 @@ function BaseCard({ state, side, onAttack }: {
     </div>
   )
   return (
-    <div data-testid={`${side}-base-card`} {...bind} className="relative">
+    <div ref={setAnchor} data-testid={`${side}-base-card`} {...bind} className="relative">
       {onAttack ? (
         <button
           data-testid={`target-${side}-base`}
@@ -411,7 +411,7 @@ function BaseCard({ state, side, onAttack }: {
       ) : (
         inner
       )}
-      {zoomed && <CardZoomPopover card={baseCard} fallbackName={p.base.cardId} />}
+      {zoomed && <CardZoomPopover card={baseCard} fallbackName={p.base.cardId} anchorRef={anchorRef} />}
     </div>
   )
 }
@@ -421,7 +421,7 @@ function BaseCard({ state, side, onAttack }: {
 export function LeaderCard({ state, side, widthPx, interact }: { state: GameState; side: PlayerId; widthPx?: number; interact?: UnitInteraction }) {
   const p = state.players[side]
   const leaderCard = state.cards[p.leader.cardId]
-  const { zoomed, bind } = useCardZoom()
+  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
   // Deployed → the leader is on the battlefield as a unit; the slot is an empty
   // outline (whether it's deployed is self-evident). Keep it for alignment.
   if (p.leader.deployed) {
@@ -438,6 +438,7 @@ export function LeaderCard({ state, side, widthPx, interact }: { state: GameStat
   const highlight = interact?.selected ? 'accent' : interact?.actionable ? 'accent-dim' : undefined
   return (
     <div
+      ref={setAnchor}
       data-testid={`${side}-leader-card`}
       {...bind}
       data-actionable={interact?.actionable}
@@ -457,7 +458,7 @@ export function LeaderCard({ state, side, widthPx, interact }: { state: GameStat
         </div>
       )}
       {/* Shift while hovering shows the leader's unit (back) side (#321). */}
-      {zoomed && <CardZoomPopover card={leaderCard} deployed={false} fallbackName={p.leader.cardId} />}
+      {zoomed && <CardZoomPopover card={leaderCard} deployed={false} fallbackName={p.leader.cardId} anchorRef={anchorRef} />}
     </div>
   )
 }
@@ -476,14 +477,15 @@ function HandCard({ card, cardId, index, action, onAct, onSelect, selected }: {
   onSelect?: () => void
   selected?: boolean
 }) {
-  const { zoomed, bind } = useCardZoom()
+  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
   const isResource = action?.type === 'resourceCard' || action?.type === 'setupResource'
-  const popover = zoomed && <CardZoomPopover card={card} fallbackName={cardId} />
+  const popover = zoomed && <CardZoomPopover card={card} fallbackName={cardId} anchorRef={anchorRef} />
   if (action) {
     // Clickable shortcut for the matching action-menu button:
     // "Play …" (action phase) or "Resource …" (setup/regroup).
     return (
       <button
+        ref={setAnchor}
         data-testid={`hand-card-${index}`}
         data-playable={true}
         onClick={() => onAct(action)}
@@ -500,6 +502,7 @@ function HandCard({ card, cardId, index, action, onAct, onSelect, selected }: {
     // to attach it. Highlighted blue like a playable card (#336).
     return (
       <button
+        ref={setAnchor}
         data-testid={`hand-card-${index}`}
         data-playable={true}
         data-selected={Boolean(selected)}
@@ -514,6 +517,7 @@ function HandCard({ card, cardId, index, action, onAct, onSelect, selected }: {
   }
   return (
     <span
+      ref={setAnchor}
       data-testid={`hand-card-${index}`}
       data-playable={false}
       {...bind}

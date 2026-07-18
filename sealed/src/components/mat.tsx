@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import type { GameState, PlayerId } from '../engine/types'
 import CardFace from './cardFace'
-import { longEdge } from './cardSizing'
+import { CARD_WIDTH_PX, longEdge } from './cardSizing'
 import { useCardZoom } from './useCardZoom'
 import { CardZoomPopover } from './cardZoom'
 import { CardGridOverlay } from './cardGridOverlay'
@@ -94,7 +94,7 @@ function DiscardOverlay({ cardIds, state, onClose }: { cardIds: string[]; state:
     <CardGridOverlay
       idPrefix="discard"
       cardsById={state.cards}
-      cardWidthPx={MAT_CARD_PX}
+      cardWidthPx={CARD_WIDTH_PX}
       scrollable
       onBackdropClick={onClose}
       items={cardIds.map((id, i) => ({ cardId: id, key: `${id}-${i}` }))}
@@ -108,7 +108,7 @@ function DiscardOverlay({ cardIds, state, onClose }: { cardIds: string[]; state:
  */
 export function DiscardPile({ state, side }: { state: GameState; side: PlayerId }) {
   const [open, setOpen] = useState(false)
-  const { zoomed, bind } = useCardZoom()
+  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
   const discard = state.players[side].discard
   const top = discard[discard.length - 1]
   return (
@@ -117,6 +117,7 @@ export function DiscardPile({ state, side }: { state: GameState; side: PlayerId 
         <EmptySlot />
       ) : (
         <button
+          ref={setAnchor}
           data-testid={`${side}-discard-pile`}
           onClick={() => setOpen(true)}
           {...bind}
@@ -124,7 +125,7 @@ export function DiscardPile({ state, side }: { state: GameState; side: PlayerId 
         >
           <CardFace card={state.cards[top]} fallbackName={top} tight widthPx={MAT_CARD_PX} />
           <CountChip>{discard.length}</CountChip>
-          {zoomed && <CardZoomPopover card={state.cards[top]} fallbackName={top} />}
+          {zoomed && <CardZoomPopover card={state.cards[top]} fallbackName={top} anchorRef={anchorRef} />}
         </button>
       )}
       {open && <DiscardOverlay cardIds={discard} state={state} onClose={() => setOpen(false)} />}

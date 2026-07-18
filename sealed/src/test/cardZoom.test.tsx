@@ -130,4 +130,38 @@ describe('CardZoomPopover (#321)', () => {
     act(() => { fireEvent.keyDown(window, { key: 'Alt', altKey: true }) })
     expect(screen.getByRole('img')).toHaveAttribute('src', before!)
   })
+
+  it('portals to document.body and is fixed, so no ancestor overflow can clip it (#331)', () => {
+    const unit: EngineCard = { ...LEADER, type: 'unit', backArt: undefined }
+    // A scroll-clipping ancestor: the old absolute-in-place popover would be trapped here.
+    render(
+      <div style={{ overflow: 'hidden' }} data-testid="clip">
+        <CardZoomPopover card={unit} />
+      </div>,
+    )
+    const zoom = screen.getByTestId('card-zoom')
+    expect(zoom).toHaveClass('fixed')
+    // Rendered outside the clipping wrapper (portalled to body), not inside it.
+    expect(screen.getByTestId('clip').contains(zoom)).toBe(false)
+    expect(document.body.contains(zoom)).toBe(true)
+  })
+
+  it('clamps a bottom-right-anchored card so it stays fully on-screen (#331)', () => {
+    const unit: EngineCard = { ...LEADER, type: 'unit', backArt: undefined }
+    const anchorRef = { current: null as HTMLElement | null }
+    // Anchor sitting at the far bottom-right corner of a 1024×768 jsdom viewport.
+    const anchor = document.createElement('div')
+    Object.defineProperty(anchor, 'getBoundingClientRect', {
+      value: () => ({ left: 1000, top: 740, width: 20, height: 20, right: 1020, bottom: 760, x: 1000, y: 740, toJSON() {} }),
+    })
+    document.body.appendChild(anchor)
+    anchorRef.current = anchor
+    render(<CardZoomPopover card={unit} anchorRef={anchorRef} />)
+    const zoom = screen.getByTestId('card-zoom')
+    // Clamped inside the viewport with the 12px margin (offsetWidth/Height are 0 in
+    // jsdom, so it falls back to the full 240×336 zoom size: 1024-240-12=772, 768-336-12=420).
+    expect(zoom.style.left).toBe('772px')
+    expect(zoom.style.top).toBe('420px')
+    document.body.removeChild(anchor)
+  })
 })

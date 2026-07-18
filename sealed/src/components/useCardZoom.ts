@@ -14,6 +14,9 @@ const LONG_PRESS_MS = 350
  *
  * No keyboard/focus zoom: focus persists on a card until a blur, which left the
  * zoom stuck on for long-lived cards (leaders/bases) — see the removed focusZoom.
+ *
+ * `anchorRef` is attached to the card's wrapper and handed to `CardZoomPopover`, which
+ * centres the (portalled) zoom over it and clamps it to the viewport (#331).
  */
 export function useCardZoom() {
   const { shift } = useModifierKeys()
@@ -21,6 +24,7 @@ export function useCardZoom() {
   const [pressZoom, setPressZoom] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressed = useRef(false)
+  const anchorRef = useRef<HTMLElement | null>(null)
 
   const clear = () => {
     if (timer.current != null) {
@@ -68,5 +72,7 @@ export function useCardZoom() {
   }
 
   const zoomed = (hovering && shift) || pressZoom
-  return { zoomed, bind }
+  /** Callback ref for the card's wrapper element — attach with `ref={setAnchor}`. */
+  const setAnchor = (el: HTMLElement | null) => { anchorRef.current = el }
+  return { zoomed, bind, anchorRef, setAnchor }
 }
