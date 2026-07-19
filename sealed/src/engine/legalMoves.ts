@@ -358,12 +358,18 @@ function choiceMoves(state: GameState): Action[] {
         if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'selectFromDiscard': {
+        // Moff Gideon (#356): pick a candidate discard card to return, or decline (optional).
+        choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
       case 'selectDamageTarget':
       case 'selectHealTarget': {
         // Deal/heal N to a chosen unit or base (#348) — mandatory unless `optional` (Nebulon-C's "may heal").
         for (const id of choice.unitTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         for (const bp of choice.baseTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, baseTarget: bp })
-        if (choice.kind === 'selectHealTarget' && choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'mayExhaustLeaderHealUnit': {
@@ -415,6 +421,37 @@ function choiceMoves(state: GameState): Action[] {
       case 'distributeDamage': {
         // Ninth Sister (#355): allocate a point to any eligible unit, or stop (Done) — always optional.
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'distributeTokens': {
+        // Helgait (#356): allocate a token to any friendly unit, or stop (Done) — always optional.
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'dealOwnBaseForDiscount': {
+        // Enoch (#356): deal one more to your base (up to `max`), or stop (Done).
+        if (choice.dealt < choice.max) moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'maySelfDamageHealBase':
+      case 'mayExhaustLeaderBuffSelf': {
+        // Leia / Mando's N-1 (#356): a yes/no.
+        moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'returnFriendlyUnit': {
+        // Purrgil Ultra (#356): return a chosen friendly unit, or decline (optional).
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'peekTopDiscard': {
+        // Reanimated Night Trooper (#356): discard the top of a chosen deck (with cards), or decline.
+        for (const deck of choice.decks) if (state.players[deck].deck.length > 0) moves.push({ type: 'acceptChoice', choiceId: choice.id, baseTarget: deck })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }

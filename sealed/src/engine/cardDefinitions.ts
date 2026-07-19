@@ -1,10 +1,10 @@
 import { registerCard } from './abilities'
-import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount, grantNextUnit, healUnit, bottomTopCards } from './effects'
-import { dealDamageToUnit } from './combat'
+import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, bottomTopCards, exhaustReadyResource, readyResource, readyUnit } from './effects'
+import { dealDamageToUnit, defeatUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
-import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, enteredPlayThisPhase } from './types'
+import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, enteredPlayThisPhase, baseAttackedThisPhase } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets } from './legalMoves'
 import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, unitHasKeyword, unitKeywords } from './keywords'
 import type { EngineCard, GameState, PlayerId, UnitState, UpgradeRef } from './types'
@@ -776,6 +776,12 @@ const whenPlayed = (description: string, effect: (s: GameState, ctx: { owner: Pl
   abilities: [{ trigger: 'whenPlayed' as const, description, effect }],
 })
 
+/** whenDefeated ability (#356). `ctx.defeatedUnit` is the unit captured at the moment of defeat
+ *  (it has already left play) — use it for its power/upgrades or as a stable choice id. */
+const whenDefeated = (description: string, effect: (s: GameState, ctx: { owner: PlayerId; sourceInstanceId?: string; defeatedUnit?: UnitState; defeatedByCombat?: boolean }) => GameState) => ({
+  abilities: [{ trigger: 'whenDefeated' as const, description, effect }],
+})
+
 // D1 — self / no-target effects.
 registerCard('ASH_218', whenPlayed('Give 4 Advantage tokens to this unit.', (s, ctx) => giveTokens(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE, 4))) // Ferry Droid
 registerCard('ASH_251', whenPlayed('Give an Advantage token to this unit.', (s, ctx) => giveToken(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE))) // Zealous Soldier
@@ -936,3 +942,251 @@ registerCard('ASH_107', whenPlayed('Search the top 5 cards of your deck for a ca
   if (eligibleIndices.length === 0) return bottomTopCards(s, owner, revealed.length)
   return pushChoice(s, { kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: owner, revealed, eligibleIndices })
 }))
+
+// ── Group E (#356): whenDefeated ────────────────────────────────────────────
+registerCard('ASH_116', whenDefeated('Draw a card.', (s, ctx) => drawCards(s, ctx.owner, 1))) // Ant Droid
+registerCard('ASH_080', whenDefeated('Create a Mandalorian token.', (s, ctx) => createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN))) // Covert Believers
+registerCard('ASH_058', whenDefeated('Create a Mandalorian token.', (s, ctx) => createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN))) // Duchess's Protector
+registerCard('ASH_216', whenDefeated('Exhaust a ready friendly resource.', (s, ctx) => exhaustReadyResource(s, ctx.owner))) // Mandalorian Scout
+
+registerCard('ASH_153', whenDefeated('You may deal 2 damage to a unit.', (s, ctx) => { // Green Leader
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayDamage', id: ctx.defeatedUnit!.instanceId, controller: ctx.owner, unitId: ctx.defeatedUnit!.instanceId, targets, amount: 2, optional: true }) : s
+}))
+
+registerCard('ASH_254', whenDefeated('Give 2 Advantage tokens to a friendly unit.', (s, ctx) => { // Gallofree Transport
+  const targets = s.players[ctx.owner].units.map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.defeatedUnit!.instanceId, controller: ctx.owner, token: TOKEN_ADVANTAGE, count: 2, targets, optional: false }) : s
+}))
+
+registerCard('ASH_028', whenDefeated("If this unit wasn't defeated by combat damage, create 2 Mandalorian tokens.", (s, ctx) => // Paz Vizsla
+  ctx.defeatedByCombat ? s : createTokenUnit(createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN), ctx.owner, TOKEN_MANDALORIAN)))
+
+registerCard('ASH_191', whenDefeated('You may give 2 Advantage tokens to a unit. If this unit was not defeated by combat damage, give 3 instead.', (s, ctx) => { // Shin Hati's Fiend Fighter
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_ADVANTAGE, count: ctx.defeatedByCombat ? 2 : 3, targets, optional: true }) : s
+}))
+
+// Flarestar Attack Shuttle (167): the same "may give an Advantage token" on both When Played and When Defeated.
+const flarestarGiveAdvantage = (s: GameState, ctx: { owner: PlayerId; sourceInstanceId?: string }): GameState => {
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_ADVANTAGE, count: 1, targets, optional: true }) : s
+}
+registerCard('ASH_167', {
+  abilities: [
+    { trigger: 'whenPlayed', description: 'You may give an Advantage token to a unit.', effect: flarestarGiveAdvantage },
+    { trigger: 'whenDefeated', description: 'You may give an Advantage token to a unit.', effect: flarestarGiveAdvantage },
+  ],
+})
+
+registerCard('ASH_195', whenDefeated("You may distribute Advantage tokens equal to this unit's power among friendly units.", (s, ctx) => { // Helgait
+  const power = ctx.defeatedUnit ? effectivePower(s, ctx.defeatedUnit) : 0
+  const targets = s.players[ctx.owner].units.map(u => u.instanceId)
+  return power > 0 && targets.length ? pushChoice(s, { kind: 'distributeTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_ADVANTAGE, remaining: power, total: power, targets }) : s
+}))
+
+registerCard('ASH_043', { // Corona Four — On Attack debuff + When Defeated defeat a 0-power unit
+  abilities: [
+    {
+      trigger: 'onAttack',
+      description: 'You may give a unit -2/-0 for this phase.',
+      effect: (s, ctx) => {
+        const targets = allUnits(s).map(u => u.instanceId)
+        return targets.length ? pushChoice(s, { kind: 'mayLastingBuff', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, power: -2, hp: 0 }) : s
+      },
+    },
+    {
+      trigger: 'whenDefeated',
+      description: 'You may defeat a non-leader unit with 0 power.',
+      effect: (s, ctx) => {
+        const targets = allUnits(s).filter(u => !isLeaderUnit(s, u) && effectivePower(s, u) === 0).map(u => u.instanceId)
+        return targets.length ? pushChoice(s, { kind: 'mayDefeatEnemyUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
+      },
+    },
+  ],
+})
+
+// Every upgrade in play (both sides) — the "defeat an upgrade" candidate set (#356, Clan Vizsla Soldier).
+const allUpgradeCandidates = (s: GameState): UpgradeRef[] =>
+  allUnits(s).flatMap(u => u.upgrades.map((up, i) => ({ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId })))
+
+registerCard('ASH_165', whenDefeated('You may defeat an upgrade.', (s, ctx) => { // Clan Vizsla Soldier
+  const candidates = allUpgradeCandidates(s)
+  return candidates.length ? pushChoice(s, { kind: 'selectUpgradeToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true }) : s
+}))
+
+registerCard('ASH_097', whenDefeated("You may return a non-unique Imperial unit from your discard pile to your hand.", (s, ctx) => { // Moff Gideon
+  const seen = new Set<string>()
+  const candidates = s.players[ctx.owner].discard.filter(id => {
+    const c = s.cards[id]
+    if (!c || c.type !== 'unit' || c.unique || !c.traits.some(t => t.toLowerCase() === 'imperial')) return false
+    if (seen.has(id)) return false // list each distinct title once
+    seen.add(id)
+    return true
+  })
+  return candidates.length ? pushChoice(s, { kind: 'selectFromDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true }) : s
+}))
+
+registerCard('ASH_027', whenDefeated('You may deal up to 6 damage to your base. The next unit you play this phase costs 1 less for every 2 damage dealt this way.', (s, ctx) => // Enoch
+  pushChoice(s, { kind: 'dealOwnBaseForDiscount', id: ctx.sourceInstanceId!, controller: ctx.owner, dealt: 0, max: 6 })))
+
+// Purrgil Ultra (038): the same "return a friendly unit, deal its cost" on both When Played and When Defeated.
+const purrgilReturn = (s: GameState, ctx: { owner: PlayerId; sourceInstanceId?: string }): GameState => {
+  const targets = s.players[ctx.owner].units.filter(u => !isLeaderUnit(s, u) && u.instanceId !== ctx.sourceInstanceId).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'returnFriendlyUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
+}
+registerCard('ASH_038', {
+  abilities: [
+    { trigger: 'whenPlayed', description: "You may return another friendly non-leader unit to its owner's hand. If you do, deal damage to a unit equal to the returned unit's cost.", effect: purrgilReturn },
+    { trigger: 'whenDefeated', description: "You may return another friendly non-leader unit to its owner's hand. If you do, deal damage to a unit equal to the returned unit's cost.", effect: purrgilReturn },
+  ],
+})
+
+registerCard('ASH_045', whenDefeated('Look at the top card of a deck. You may discard it.', (s, ctx) => { // Reanimated Night Trooper
+  const decks = (['player', 'opponent'] as PlayerId[]).filter(d => s.players[d].deck.length > 0)
+  return decks.length ? pushChoice(s, { kind: 'peekTopDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, decks }) : s
+}))
+
+// ── Group E (#356): onAttack — batch A ──────────────────────────────────────
+registerCard('ASH_157', { abilities: [{ trigger: 'onAttack', description: 'You may give an Advantage token to another unit.', effect: (s, ctx) => { // Danger Squadron Wingmen
+  const targets = allUnits(s).filter(u => u.instanceId !== ctx.sourceInstanceId).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_ADVANTAGE, count: 1, targets, optional: true }) : s
+} }] })
+
+registerCard('ASH_189', { abilities: [{ trigger: 'onAttack', description: 'Ready a resource.', effect: (s, ctx) => readyResource(s, ctx.owner) }] }) // Emperor's Messenger
+
+registerCard('ASH_056', { abilities: [{ trigger: 'onAttack', description: 'You may give an upgraded unit -4/-0 for this phase.', effect: (s, ctx) => { // Huyang
+  const targets = allUnits(s).filter(u => u.upgrades.length > 0).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayLastingBuff', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, power: -4, hp: 0 }) : s
+} }] })
+
+registerCard('ASH_168', { abilities: [{ trigger: 'onAttack', description: 'Deal 1 damage to the defending unit; 2 instead if this unit is upgraded.', effect: (s, ctx) => { // Migs Mayfeld
+  if (ctx.attackTarget?.kind !== 'unit') return s
+  const attacker = allUnits(s).find(u => u.instanceId === ctx.sourceInstanceId)
+  return dealDamageToUnit(s, ctx.attackTarget.instanceId, attacker && attacker.upgrades.length > 0 ? 2 : 1)
+} }] })
+
+registerCard('ASH_083', { abilities: [{ trigger: 'onAttack', description: 'Defeat all other space units.', effect: (s, ctx) => { // Summa-verminoth
+  let next = s
+  for (const id of allUnits(s).filter(u => u.arena === 'space' && u.instanceId !== ctx.sourceInstanceId).map(u => u.instanceId)) next = defeatUnit(next, id)
+  return next
+} }] })
+
+registerCard('ASH_156', { abilities: [{ trigger: 'onAttack', description: 'Defeat all upgrades on the defending unit.', effect: (s, ctx) => { // R5-D4
+  const target = ctx.attackTarget
+  if (target?.kind !== 'unit') return s
+  const u = allUnits(s).find(x => x.instanceId === target.instanceId)
+  if (!u) return s
+  let next = s
+  for (let i = u.upgrades.length - 1; i >= 0; i--) next = defeatUpgradeAt(next, u.instanceId, i) // last→first keeps indices valid
+  return next
+} }] })
+
+// ── Group E (#356): onAttack — batch B1 (conditional / self) ────────────────
+registerCard('ASH_072', { abilities: [{ trigger: 'onAttack', description: 'If this unit has 3 or more remaining HP, draw a card.', effect: (s, ctx) => { // Doctor Pershing
+  const u = allUnits(s).find(x => x.instanceId === ctx.sourceInstanceId)
+  return u && remainingHp(s, u) >= 3 ? drawCards(s, ctx.owner, 1) : s
+} }] })
+
+registerCard('ASH_099', { abilities: [{ trigger: 'onAttack', description: 'This unit gains Sentinel for this phase.', effect: (s, ctx) => // Gozanti Assault Carrier
+  addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, keywords: [{ name: 'Sentinel' }] }) }] })
+
+registerCard('ASH_209', { abilities: [{ trigger: 'onAttack', description: 'If this unit is upgraded, you may give a unit -3/-0 for this phase.', effect: (s, ctx) => { // Ezra Bridger
+  const u = allUnits(s).find(x => x.instanceId === ctx.sourceInstanceId)
+  if (!u || !isUpgraded(u)) return s
+  const targets = allUnits(s).map(x => x.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayLastingBuff', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, power: -3, hp: 0 }) : s
+} }] })
+
+registerCard('ASH_253', { abilities: [{ trigger: 'onAttack', description: 'If this unit is upgraded, deal 2 damage to a base.', effect: (s, ctx) => { // Yellow Aces Bomber
+  const u = allUnits(s).find(x => x.instanceId === ctx.sourceInstanceId)
+  if (!u || !isUpgraded(u)) return s
+  return pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 2, unitTargets: [], baseTargets: ['player', 'opponent'] })
+} }] })
+
+// ── Group E (#356): onAttack — batch B2 (self-cost choices) ─────────────────
+registerCard('ASH_059', { abilities: [{ trigger: 'onAttack', description: 'You may deal 1 damage to this unit. If you do, heal 2 damage from your base.', effect: (s, ctx) => // Leia Organa
+  pushChoice(s, { kind: 'maySelfDamageHealBase', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, selfDamage: 1, healBase: 2 }) }] })
+
+registerCard('ASH_172', { abilities: [{ trigger: 'onAttack', description: 'You may discard a card from your hand. If you do, this unit gets +2/+0 for this attack.', effect: (s, ctx) => // Razor Crest
+  s.players[ctx.owner].hand.length > 0 ? pushChoice(s, { kind: 'selectDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, count: 1, optional: true, then: { buffUnit: ctx.sourceInstanceId!, power: 2, hp: 0 } }) : s }] })
+
+registerCard('ASH_203', { abilities: [{ trigger: 'onAttack', description: 'You may exhaust a friendly leader. If you do, this unit gets +2/+0 for this attack.', effect: (s, ctx) => // Mando's N-1 Starfighter
+  !s.players[ctx.owner].leader.exhausted ? pushChoice(s, { kind: 'mayExhaustLeaderBuffSelf', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, power: 2, hp: 0 }) : s }] })
+
+// ── Group E (#356): When Attack Ends ────────────────────────────────────────
+registerCard('ASH_033', { abilities: [{ trigger: 'onAttackEnd', description: 'If the defending unit was defeated, ready this unit.', effect: (s, ctx) => // Grand Admiral Thrawn
+  ctx.defenderDefeated ? readyUnit(s, ctx.sourceInstanceId!) : s }] })
+
+registerCard('ASH_223', { abilities: [{ trigger: 'onAttackEnd', description: 'If the defending unit was defeated, give a Shield token to this unit.', effect: (s, ctx) => // Halo
+  ctx.defenderDefeated ? giveToken(s, ctx.sourceInstanceId!, TOKEN_SHIELD) : s }] })
+
+registerCard('ASH_036', { abilities: [{ trigger: 'onAttackEnd', description: 'If the defending unit was defeated, you may give 3 Advantage tokens to a unit.', effect: (s, ctx) => { // Rukh
+  if (!ctx.defenderDefeated) return s
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_ADVANTAGE, count: 3, targets, optional: true }) : s
+} }] })
+
+registerCard('ASH_101', { abilities: [{ trigger: 'onAttackEnd', description: 'If this unit dealt combat damage to a non-leader unit, defeat that unit.', effect: (s, ctx) => { // The Great Mothers
+  if (!ctx.combatDamageToDefender || ctx.attackTarget?.kind !== 'unit') return s
+  const d = allUnits(s).find(u => u.instanceId === (ctx.attackTarget as { instanceId: string }).instanceId)
+  return d && !isLeaderUnit(s, d) ? defeatUnit(s, d.instanceId) : s // already gone if combat killed it
+} }] })
+
+registerCard('ASH_031', { abilities: [{ trigger: 'onAttackEnd', description: 'If this unit dealt combat damage to a base, heal that much damage from your base.', effect: (s, ctx) => // Hera Syndulla
+  (ctx.combatDamageToBase ?? 0) > 0 ? healBase(s, ctx.owner, ctx.combatDamageToBase!) : s }] })
+
+// ── Group E (#356): multi-trigger onAttack + action abilities ───────────────
+const justifierPing = (s: GameState, ctx: { owner: PlayerId; sourceInstanceId?: string }): GameState => { // Justifier
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount: 1, optional: true, rewardIfDefeated: { chooseAdvantage: 1 } }) : s
+}
+registerCard('ASH_146', {
+  abilities: [
+    { trigger: 'whenPlayed', description: 'You may deal 1 damage to a unit. If that unit is defeated this way, give an Advantage token to a unit.', effect: justifierPing },
+    { trigger: 'onAttack', description: 'You may deal 1 damage to a unit. If that unit is defeated this way, give an Advantage token to a unit.', effect: justifierPing },
+  ],
+})
+
+registerCard('ASH_123', { actionAbilities: [{ // Lang
+  description: "Deal damage equal to this unit's power to a ground unit.",
+  usable: (s, u) => !u.exhausted && groundUnits(s).length > 0,
+  effect: (s, ctx) => {
+    const u = allUnits(s).find(x => x.instanceId === ctx.sourceInstanceId)
+    const power = u ? effectivePower(s, u) : 0
+    const next = exhaustUnit(s, ctx.sourceInstanceId!)
+    const targets = groundUnits(next).map(x => x.instanceId)
+    return targets.length ? pushChoice(next, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: power, unitTargets: targets, baseTargets: [] }) : next
+  },
+}] })
+
+registerCard('ASH_142', { actionAbilities: [{ // Mortar Trooper
+  description: 'Deal 1 damage to each of up to 3 ground units.',
+  usable: (s, u) => !u.exhausted && groundUnits(s).length > 0,
+  effect: (s, ctx) => {
+    const next = exhaustUnit(s, ctx.sourceInstanceId!)
+    const targets = groundUnits(next).map(x => x.instanceId)
+    return targets.length ? pushChoice(next, { kind: 'multiPick', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, spec: { mode: 'dealEach', amount: 1, remaining: 3 } }) : next
+  },
+}] })
+
+registerCard('ASH_179', { // Boba Fett's Rancor
+  abilities: [
+    { trigger: 'whenPlayed', description: 'Deal 5 damage to your base. Then deal 10 damage to an enemy ground unit.', effect: (s, ctx) => {
+      const next = dealDamageToBase(s, ctx.owner, 5)
+      const enemyGround = next.players[opponentOf(ctx.owner)].units.filter(u => u.arena === 'ground').map(u => u.instanceId)
+      return enemyGround.length ? pushChoice(next, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 10, unitTargets: enemyGround, baseTargets: [] }) : next
+    } },
+    { trigger: 'onAttack', description: 'You may deal 1 damage to a base for every 5 damage on your base.', effect: (s, ctx) => {
+      const count = Math.floor(s.players[ctx.owner].base.damage / 5)
+      return count > 0 ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: count, unitTargets: [], baseTargets: ['player', 'opponent'], optional: true }) : s
+    } },
+  ],
+})
+
+registerCard('ASH_119', { actionAbilities: [{ // Greef Karga (unit)
+  description: 'If your base was attacked this phase, create a Mandalorian token.',
+  cost: 1,
+  usable: (s, u) => { const owner = findUnit(s, u.instanceId)?.owner; return !u.exhausted && owner !== undefined && baseAttackedThisPhase(s, owner) },
+  effect: (s, ctx) => createTokenUnit(exhaustUnit(s, ctx.sourceInstanceId!), ctx.owner, TOKEN_MANDALORIAN),
+}] })

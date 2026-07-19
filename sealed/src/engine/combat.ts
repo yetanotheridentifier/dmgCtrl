@@ -26,7 +26,7 @@ function damageMultiplier(state: GameState, unit: UnitState): number {
  * Fires each defeated unit's (and its upgrades') `whenDefeated` abilities after
  * the unit has left play (#342).
  */
-export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<string, number>): GameState {
+export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<string, number>, byCombat = false): GameState {
   const p = state.players[owner]
   const survivors: UnitState[] = []
   const defeated: UnitState[] = []
@@ -50,7 +50,7 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
     }
   }
 
-  return finishDefeats(state, owner, survivors, defeated)
+  return finishDefeats(state, owner, survivors, defeated, byCombat)
 }
 
 /**
@@ -59,7 +59,7 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
  * discard; a defeated leader unit back to the base zone exhausted (CR 3.4.5); then fire each unit's
  * `whenDefeated`. Shared by combat damage and direct defeats (`defeatUnit`).
  */
-function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[], defeated: UnitState[]): GameState {
+function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[], defeated: UnitState[], byCombat = false): GameState {
   // Always write `survivors` back — they carry the damage just applied (defeated may be empty).
   const p = state.players[owner]
   const defeatedUpgrades = defeated.flatMap(u => u.upgrades).filter(a => state.cards[a.cardId]?.type !== 'token')
@@ -86,7 +86,7 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
 
   for (const dead of defeated) {
     result = recordUnitDefeated(result, owner, dead.cardId) // "defeated this phase" tracking (#347)
-    result = runUnitTrigger(result, 'whenDefeated', dead, owner, { defeatedUnit: dead })
+    result = runUnitTrigger(result, 'whenDefeated', dead, owner, { defeatedUnit: dead, defeatedByCombat: byCombat })
   }
   return result
 }

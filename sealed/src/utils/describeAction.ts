@@ -69,11 +69,12 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayPlayTopFree') return "Don't play"
       if (choice.kind === 'mayDamageExhaust') return 'Decline'
       if (choice.kind === 'mayAttack') return "Don't attack"
-      if (choice.kind === 'distributeDamage' || choice.kind === 'lookAtHand' || choice.kind === 'searchPlayFree') return 'Done'
+      if (choice.kind === 'distributeDamage' || choice.kind === 'distributeTokens' || choice.kind === 'lookAtHand' || choice.kind === 'searchPlayFree' || choice.kind === 'dealOwnBaseForDiscount') return 'Done'
+      if (choice.kind === 'returnFriendlyUnit' || choice.kind === 'peekTopDiscard' || choice.kind === 'maySelfDamageHealBase' || choice.kind === 'mayExhaustLeaderBuffSelf') return "Don't"
       if (choice.kind === 'playUnitFromHand') return "Don't play"
       if (choice.kind === 'mayDefeatSelfSearch') return "Don't"
       if (choice.kind === 'mayDamage' || choice.kind === 'mayAdvantageEach' || choice.kind === 'mayDefeatEnemyUnit' || choice.kind === 'selectDiscard') return 'Decline'
-      if (choice.kind === 'selectUpgradeToDefeat' || choice.kind === 'selectResourceUpgrade') return 'Cancel'
+      if (choice.kind === 'selectUpgradeToDefeat' || choice.kind === 'selectResourceUpgrade' || choice.kind === 'selectFromDiscard') return 'Cancel'
       if (choice.kind === 'mayLastingBuff' || choice.kind === 'mayGiveAdvantage' || choice.kind === 'mayExhaustLeaderGiveAdvantage' || choice.kind === 'mayExhaustLeaderExhaustUnit' || choice.kind === 'mayExhaustUnit') return 'Decline'
       if (choice.kind === 'mayExhaustLeaderForAdvantage' || choice.kind === 'mayExhaustLeaderHealUnit' || choice.kind === 'mayPayToDraw' || choice.kind === 'mayDeployLeader') return "Don't"
       return `Skip ${choice.kind}`
@@ -108,6 +109,18 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Heal${target ? ` ${target}` : ''}`
       }
+      if (choice.kind === 'dealOwnBaseForDiscount') return 'Deal 1 to your base'
+      if (choice.kind === 'maySelfDamageHealBase') return `Deal ${choice.selfDamage} to self, heal ${choice.healBase}`
+      if (choice.kind === 'mayExhaustLeaderBuffSelf') return `Exhaust leader → +${choice.power}/+${choice.hp}`
+      if (choice.kind === 'returnFriendlyUnit') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Return ${target ?? 'unit'} to hand`
+      }
+      if (choice.kind === 'peekTopDiscard' && action.baseTarget) {
+        const top = state.players[action.baseTarget].deck[0]
+        const name = top ? state.cards[top]?.name ?? top : 'card'
+        return `Discard ${name} (${action.baseTarget === by ? 'your' : "opponent's"} deck)`
+      }
       if (choice.kind === 'nameCard') return `Name ${action.cardName ?? 'a card'}`
       if (choice.kind === 'mayDefeatSelfSearch') return `Defeat ${anyUnitName(state, choice.unitId) ?? 'this unit'} & search`
       if (choice.kind === 'searchPlayFree' && action.deckIndex !== undefined) {
@@ -126,6 +139,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const pick = choice.candidates[action.optionIndex ?? 0]
         const name = pick ? state.cards[pick.cardId]?.name ?? pick.cardId : 'upgrade'
         return `Defeat ${name}`
+      }
+      if (choice.kind === 'selectFromDiscard') {
+        const cardId = choice.candidates[action.optionIndex ?? 0]
+        return `Return ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
       }
       if (choice.kind === 'selectDamageTarget') {
         if (action.baseTarget) return `Deal ${choice.amount} to ${action.baseTarget === by ? 'your base' : "opponent's base"}`
@@ -162,6 +179,11 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Deal 1${target ? ` to ${target}` : ''}`
       }
+      if (choice.kind === 'distributeTokens') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        const tokenName = state.cards[choice.token]?.name ?? 'token'
+        return `${tokenName}${target ? ` to ${target}` : ''}`
+      }
       if (choice.kind === 'lookAtHand') {
         const cardId = action.handIndex !== undefined ? state.players[choice.target].hand[action.handIndex] : undefined
         return `Discard ${cardId ? state.cards[cardId]?.name ?? cardId : 'a card'}`
@@ -191,7 +213,9 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       }
       if (choice.kind === 'multiPick') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
-        return choice.spec.mode === 'defeatForToken' ? `Defeat ${target ?? 'unit'}` : `Advantage to ${target ?? 'unit'}`
+        if (choice.spec.mode === 'defeatForToken') return `Defeat ${target ?? 'unit'}`
+        if (choice.spec.mode === 'dealEach') return `Deal ${choice.spec.amount} to ${target ?? 'unit'}`
+        return `Advantage to ${target ?? 'unit'}`
       }
       if (choice.kind === 'mayGiveTokens') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
