@@ -380,11 +380,15 @@ export type PendingChoice =
   // `thenDiscard` (Mos Espa Watermonger, #355): after drawing, discard that many cards from hand —
   // but only if a card was actually drawn ("you may draw a card. If you do, discard a card").
   | { kind: 'mayPayToDraw'; id: string; controller: PlayerId; cost: number; draw: number; thenDiscard?: number }
-  // Discard `count` cards from your own hand, one at a time (#355, Mos Espa Watermonger). Mandatory
-  // unless `optional`. Resolved by an `acceptChoice` carrying the hand index to discard. `then`
-  // (Ninth Sister) runs after the last discard, using the just-discarded card's cost as damage to
-  // distribute among any units for the player in `distributeDamageTo`.
-  | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean; then?: { distributeDamageTo: PlayerId } }
+  // Discard `count` cards from your own hand, one at a time (#355/#356). Mandatory unless `optional`.
+  // Resolved by an `acceptChoice` carrying the hand index. `then` runs after the last discard: Ninth
+  // Sister distributes the discarded card's cost as damage (`distributeDamageTo`); Razor Crest gives a
+  // unit a "this phase" buff (`buffUnit`).
+  | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean; then?: { distributeDamageTo: PlayerId } | { buffUnit: string; power?: number; hp?: number } }
+  // Leia Organa (#356): a yes/no — deal `selfDamage` to `unitId`, then heal `healBase` from your base.
+  | { kind: 'maySelfDamageHealBase'; id: string; controller: PlayerId; unitId: string; selfDamage: number; healBase: number }
+  // Mando's N-1 (#356): a yes/no — exhaust your (ready) leader to give `unitId` a "+power/+hp this phase" buff.
+  | { kind: 'mayExhaustLeaderBuffSelf'; id: string; controller: PlayerId; unitId: string; power: number; hp: number }
   // Deal `total` damage spread among any units (#355, Ninth Sister), one point per pick until
   // `remaining` reaches 0. `targets` are the currently-eligible unit instance ids (both sides,
   // recomputed as units are defeated). Always optional — the controller may stop early (a "may").

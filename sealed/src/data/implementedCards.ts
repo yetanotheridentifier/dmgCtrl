@@ -263,6 +263,13 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_168', name: 'Migs Mayfeld' },
   { id: 'ASH_083', name: 'Summa-verminoth' },
   { id: 'ASH_156', name: 'R5-D4' },
+  { id: 'ASH_072', name: 'Doctor Pershing' },
+  { id: 'ASH_099', name: 'Gozanti Assault Carrier' },
+  { id: 'ASH_209', name: 'Ezra Bridger' },
+  { id: 'ASH_253', name: 'Yellow Aces Bomber' },
+  { id: 'ASH_059', name: 'Leia Organa' },
+  { id: 'ASH_172', name: 'Razor Crest' },
+  { id: 'ASH_203', name: "Mando's N-1 Starfighter" },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */

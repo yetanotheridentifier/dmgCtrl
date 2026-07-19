@@ -609,13 +609,35 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         if (remaining > 0 && next.players[choice.controller].hand.length > 0) {
           next = pushChoice(next, { kind: 'selectDiscard', id: choice.id, controller: choice.controller, count: remaining, optional: choice.optional, then: choice.then })
         } else if (choice.then && discardedId !== undefined) {
-          // Ninth Sister (#355): "you may deal damage equal to its cost divided among any units".
-          const amount = next.cards[discardedId]?.cost ?? 0
-          const targets = [...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId)
-          if (amount > 0 && targets.length > 0) {
-            next = pushChoice(next, { kind: 'distributeDamage', id: choice.id, controller: choice.then.distributeDamageTo, remaining: amount, total: amount, targets })
+          if ('distributeDamageTo' in choice.then) {
+            // Ninth Sister (#355): "deal damage equal to its cost divided among any units".
+            const amount = next.cards[discardedId]?.cost ?? 0
+            const targets = [...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId)
+            if (amount > 0 && targets.length > 0) {
+              next = pushChoice(next, { kind: 'distributeDamage', id: choice.id, controller: choice.then.distributeDamageTo, remaining: amount, total: amount, targets })
+            }
+          } else {
+            // Razor Crest (#356): "if you do, this unit gets +power/+hp for this attack".
+            next = addLastingEffect(next, { targetInstanceId: choice.then.buffUnit, power: choice.then.power, hp: choice.then.hp })
           }
         }
+      }
+      break
+    }
+    case 'maySelfDamageHealBase': {
+      // Leia Organa (#356): deal `selfDamage` to this unit, then heal `healBase` from your base.
+      next = dealDamageToUnit(next, choice.unitId, choice.selfDamage)
+      next = checkWin(next)
+      if (next.winner !== null) return next
+      next = healBase(next, choice.controller, choice.healBase)
+      break
+    }
+    case 'mayExhaustLeaderBuffSelf': {
+      // Mando's N-1 (#356): exhaust your leader, then give this unit a "this phase" buff.
+      const p = next.players[choice.controller]
+      if (!p.leader.exhausted) {
+        next = updatePlayer(next, choice.controller, { leader: { ...p.leader, exhausted: true } })
+        next = addLastingEffect(next, { targetInstanceId: choice.unitId, power: choice.power, hp: choice.hp })
       }
       break
     }

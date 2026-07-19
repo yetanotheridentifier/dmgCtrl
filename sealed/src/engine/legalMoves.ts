@@ -436,6 +436,13 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'maySelfDamageHealBase':
+      case 'mayExhaustLeaderBuffSelf': {
+        // Leia / Mando's N-1 (#356): a yes/no.
+        moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
       case 'returnFriendlyUnit': {
         // Purrgil Ultra (#356): return a chosen friendly unit, or decline (optional).
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })

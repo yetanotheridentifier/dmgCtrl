@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
 import { dealDamageToUnit } from '../engine/combat'
+import { unitHasKeyword } from '../engine/keywords'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
@@ -46,6 +47,15 @@ const E = {
   ASH_168: card({ id: 'ASH_168', type: 'unit', arena: 'ground', power: 2, hp: 3, keywords: [{ name: 'Support' }] }), // Migs Mayfeld
   ASH_083: card({ id: 'ASH_083', type: 'unit', arena: 'space', power: 15, hp: 15, keywords: [{ name: 'Sentinel' }] }), // Summa-verminoth
   ASH_156: card({ id: 'ASH_156', type: 'unit', arena: 'ground', power: 3, hp: 4, keywords: [{ name: 'Support' }] }), // R5-D4
+  // onAttack batch B1 (conditional/self)
+  ASH_072: card({ id: 'ASH_072', type: 'unit', arena: 'ground', power: 0, hp: 4, keywords: [{ name: 'Support' }] }), // Doctor Pershing
+  ASH_099: card({ id: 'ASH_099', type: 'unit', arena: 'space', power: 4, hp: 6, keywords: [{ name: 'Support' }] }), // Gozanti (Sentinel stripped — granted on attack)
+  ASH_209: card({ id: 'ASH_209', type: 'unit', arena: 'ground', power: 3, hp: 7, keywords: [{ name: 'Support' }] }), // Ezra Bridger
+  ASH_253: card({ id: 'ASH_253', type: 'unit', arena: 'space', power: 3, hp: 4, keywords: [{ name: 'Support' }] }), // Yellow Aces Bomber
+  // onAttack batch B2 (self-cost choices)
+  ASH_059: card({ id: 'ASH_059', type: 'unit', arena: 'ground', power: 3, hp: 4, keywords: [{ name: 'Support' }] }), // Leia Organa
+  ASH_172: card({ id: 'ASH_172', type: 'unit', arena: 'space', power: 3, hp: 5, keywords: [{ name: 'Saboteur' }] }), // Razor Crest
+  ASH_203: card({ id: 'ASH_203', type: 'unit', arena: 'space', power: 1, hp: 3, keywords: [{ name: 'Support' }] }), // Mando's N-1 Starfighter
   FILLER: card({ id: 'FILLER', type: 'unit', arena: 'ground', power: 2, hp: 5 }),
   FILLERSPACE: card({ id: 'FILLERSPACE', type: 'unit', arena: 'space', power: 2, hp: 5 }),
   BRUISERBIG: card({ id: 'BRUISERBIG', type: 'unit', arena: 'ground', power: 9, hp: 10 }),
@@ -366,5 +376,100 @@ describe('Group E — onAttack, simple (#356)', () => {
     expect(U(s, 'theirs')).toBeUndefined()
     expect(U(s, 'grd')).toBeDefined() // ground survives
     expect(s.players.player.units.some(u => u.instanceId === 'a')).toBe(true) // Summa itself survives
+  })
+})
+
+describe('Group E — Support passes On Attack to the supported attacker (#356)', () => {
+  it("Migs Mayfeld (168): a unit attacking via Support gains Migs's On Attack (deal 1 to the defender)", () => {
+    const s0 = state({
+      cards: E,
+      players: {
+        player: player({ hand: ['ASH_168'], resources: ready(5), units: [unit('ally', 'FILLER', { arena: 'ground' })] }),
+        opponent: player({ units: [unit('e', 'FILLER', { arena: 'ground' })] }),
+      },
+    })
+    const played = resolve(s0, { type: 'playCard', handIndex: 0 })
+    expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'support' }) // Support opened a bonus attack
+    // Attack with 'ally' via Support → it gains Migs's On Attack.
+    const attacked = resolve(played, { type: 'attack', attackerId: 'ally', target: { kind: 'unit', instanceId: 'e' } })
+    expect(U(attacked, 'e').damage).toBe(1 + 2) // 1 from Migs's granted On Attack + 2 from ally's combat
+  })
+
+  it('the granted On Attack sees the ATTACKER as "this unit" (upgraded check follows the attacker)', () => {
+    const s0 = state({
+      cards: E,
+      players: {
+        player: player({ hand: ['ASH_168'], resources: ready(5), units: [unit('ally', 'FILLER', { arena: 'ground', upgrades: [{ cardId: 'UPG0', owner: 'player' }] })] }),
+        opponent: player({ units: [unit('e', 'FILLER', { arena: 'ground' })] }),
+      },
+    })
+    const played = resolve(s0, { type: 'playCard', handIndex: 0 })
+    const attacked = resolve(played, { type: 'attack', attackerId: 'ally', target: { kind: 'unit', instanceId: 'e' } })
+    expect(U(attacked, 'e').damage).toBe(2 + 2) // ally is upgraded → Migs's On Attack deals 2, + 2 combat
+  })
+})
+
+describe('Group E — onAttack, conditional/self (batch B1) (#356)', () => {
+  it('Doctor Pershing (072): draws only with 3+ remaining HP', () => {
+    const full = onAtk('ASH_072') // 0/4, undamaged → draws
+    expect(full.players.player.hand).toHaveLength(1)
+    const hurt = onAtk('ASH_072', { playerUnits: [] }) // place damaged below the threshold
+    // rebuild with damage: remaining HP 2 (< 3) → no draw
+    const s0 = state({ cards: E, players: { player: player({ units: [unit('a', 'ASH_072', { arena: 'ground', damage: 2 })] }), opponent: player({}) } })
+    const damaged = resolve(s0, { type: 'attack', attackerId: 'a', target: { kind: 'base' } })
+    expect(damaged.players.player.hand).toHaveLength(0)
+    void hurt
+  })
+
+  it('Gozanti Assault Carrier (099): has no innate Sentinel, gains it on attack', () => {
+    const s0 = state({ cards: E, players: { player: player({ units: [unit('a', 'ASH_099', { arena: 'space' })] }), opponent: player({}) } })
+    expect(unitHasKeyword(s0, U(s0, 'a'), 'Sentinel')).toBe(false) // stripped base keyword
+    const attacked = resolve(s0, { type: 'attack', attackerId: 'a', target: { kind: 'base' } })
+    expect(unitHasKeyword(attacked, U(attacked, 'a'), 'Sentinel')).toBe(true) // granted this phase
+  })
+
+  it('Ezra Bridger (209): may give a unit -3/-0 only while upgraded', () => {
+    const plain = onAtk('ASH_209', { oppUnits: [unit('e', 'FILLER', { arena: 'ground' })] })
+    expect(plain.pendingChoices ?? []).toHaveLength(0) // not upgraded → nothing
+    const up = onAtk('ASH_209', { upgrades: [{ cardId: 'UPG0', owner: 'player' }], oppUnits: [unit('e', 'FILLER', { arena: 'ground' })] })
+    expect(up.pendingChoices?.[0]).toMatchObject({ kind: 'mayLastingBuff', power: -3 })
+  })
+
+  it('Yellow Aces Bomber (253): deals 2 to a base only while upgraded', () => {
+    const plain = onAtk('ASH_253')
+    expect(plain.pendingChoices ?? []).toHaveLength(0)
+    const up = onAtk('ASH_253', { upgrades: [{ cardId: 'UPG0', owner: 'player' }] })
+    expect(up.pendingChoices?.[0]).toMatchObject({ kind: 'selectDamageTarget', amount: 2 })
+    const done = resolve(up, { type: 'acceptChoice', choiceId: up.pendingChoices![0].id, baseTarget: 'opponent' })
+    expect(done.players.opponent.base.damage).toBeGreaterThanOrEqual(2) // 2 from the ability (+ combat if any)
+  })
+})
+
+describe('Group E — onAttack, self-cost choices (batch B2) (#356)', () => {
+  it('Leia Organa (059): may deal 1 to herself to heal 2 from your base', () => {
+    const s0 = state({ cards: E, players: { player: player({ units: [unit('a', 'ASH_059', { arena: 'ground' })], base: { cardId: 'TST_B', damage: 3 } }), opponent: player({}) } })
+    const atk = resolve(s0, { type: 'attack', attackerId: 'a', target: { kind: 'base' } })
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'maySelfDamageHealBase', selfDamage: 1, healBase: 2 })
+    const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id })
+    expect(U(done, 'a').damage).toBe(1)
+    expect(done.players.player.base.damage).toBe(1) // 3 - 2 healed
+  })
+
+  it('Razor Crest (172): may discard a card for +2/+0 this attack', () => {
+    const s0 = state({ cards: E, players: { player: player({ units: [unit('a', 'ASH_172', { arena: 'space' })], hand: ['FILLER'] }), opponent: player({}) } })
+    const atk = resolve(s0, { type: 'attack', attackerId: 'a', target: { kind: 'base' } })
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'selectDiscard' })
+    const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, handIndex: 0 })
+    expect(done.players.player.hand).not.toContain('FILLER')
+    expect(done.players.opponent.base.damage).toBe(5) // power 3 + 2 buff
+  })
+
+  it("Mando's N-1 Starfighter (203): may exhaust the leader for +2/+0 this attack", () => {
+    const s0 = state({ cards: E, players: { player: player({ units: [unit('a', 'ASH_203', { arena: 'space' })] }), opponent: player({}) } })
+    const atk = resolve(s0, { type: 'attack', attackerId: 'a', target: { kind: 'base' } })
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayExhaustLeaderBuffSelf', power: 2 })
+    const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id })
+    expect(done.players.player.leader.exhausted).toBe(true)
+    expect(done.players.opponent.base.damage).toBe(3) // power 1 + 2 buff
   })
 })
