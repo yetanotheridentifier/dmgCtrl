@@ -2,7 +2,7 @@ import type { Action, AttackTarget } from './actions'
 import type { GameState, PlayerId, UnitState } from './types'
 import type { PendingChoice, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeChoice, hasPendingChoices, pushChoice } from './types'
-import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, markAbilityUsed, nextUnitGrantMatches } from './types'
+import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
@@ -464,7 +464,14 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         if (next.winner !== null) return next
         // "If it's defeated this way, …" — Imposing Scout Walker rewards its own unit (#355).
         if (choice.rewardIfDefeated && !findUnit(next, targetInstanceId)) {
-          for (let i = 0; i < choice.rewardIfDefeated.count; i++) next = giveToken(next, choice.rewardIfDefeated.instanceId, TOKEN_ADVANTAGE)
+          const reward = choice.rewardIfDefeated
+          if ('instanceId' in reward) {
+            for (let i = 0; i < reward.count; i++) next = giveToken(next, reward.instanceId, TOKEN_ADVANTAGE)
+          } else {
+            // Justifier (#356): give Advantage to a chosen unit.
+            const targets = [...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId)
+            if (targets.length > 0) next = pushChoice(next, { kind: 'mayGiveTokens', id: choice.id, controller: choice.controller, token: TOKEN_ADVANTAGE, count: reward.chooseAdvantage, targets, optional: false })
+          }
         }
       }
       break
@@ -807,11 +814,19 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       // Repeatable board-target pick (#355): apply the per-pick effect, then re-offer the remaining
       // eligible targets — Inspiring Veteran (up to N Advantage), Pre Vizsla (defeat within an HP budget).
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
-        if (choice.spec.mode === 'giveAdvantage') {
-          next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
-          const remaining = choice.spec.remaining - 1
+        if (choice.spec.mode === 'giveAdvantage' || choice.spec.mode === 'dealEach') {
           const targets = choice.targets.filter(id => id !== targetInstanceId)
-          if (remaining > 0 && targets.length > 0) next = pushChoice(next, { kind: 'multiPick', id: choice.id, controller: choice.controller, targets, spec: { mode: 'giveAdvantage', remaining } })
+          const remaining = choice.spec.remaining - 1
+          if (choice.spec.mode === 'giveAdvantage') {
+            next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+            if (remaining > 0 && targets.length > 0) next = pushChoice(next, { kind: 'multiPick', id: choice.id, controller: choice.controller, targets, spec: { mode: 'giveAdvantage', remaining } })
+          } else {
+            const amount = choice.spec.amount
+            next = dealDamageToUnit(next, targetInstanceId, amount)
+            next = checkWin(next)
+            if (next.winner !== null) return next
+            if (remaining > 0 && targets.length > 0) next = pushChoice(next, { kind: 'multiPick', id: choice.id, controller: choice.controller, targets, spec: { mode: 'dealEach', amount, remaining } })
+          }
         } else {
           const found = findUnit(next, targetInstanceId)
           const remHp = found ? Math.max(0, effectiveHp(next, found.unit) - found.unit.damage) : 0
@@ -1311,6 +1326,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   if (target.kind === 'base') {
     const enemy = state.players[enemyId]
     let next = updatePlayer(state, enemyId, { base: { ...enemy.base, damage: enemy.base.damage + attackerPower } })
+    next = recordBaseAttacked(next, enemyId) // "your base was attacked this phase" (#356, Greef Karga)
     next = consumeAdvantage(next, playerId, attackerId) // the attack completed
     next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: attackerPower })
     return clearGrantedKeywords(checkWin(next))

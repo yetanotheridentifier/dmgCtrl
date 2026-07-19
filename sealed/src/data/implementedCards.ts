@@ -276,6 +276,11 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_036', name: 'Rukh' },
   { id: 'ASH_101', name: 'The Great Mothers' },
   { id: 'ASH_031', name: 'Hera Syndulla' },
+  { id: 'ASH_146', name: 'Justifier' },
+  { id: 'ASH_123', name: 'Lang' },
+  { id: 'ASH_142', name: 'Mortar Trooper' },
+  { id: 'ASH_179', name: "Boba Fett's Rancor" },
+  { id: 'ASH_119', name: 'Greef Karga' },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */

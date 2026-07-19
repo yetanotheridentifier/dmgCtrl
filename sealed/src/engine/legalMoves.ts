@@ -369,7 +369,7 @@ function choiceMoves(state: GameState): Action[] {
         // Deal/heal N to a chosen unit or base (#348) — mandatory unless `optional` (Nebulon-C's "may heal").
         for (const id of choice.unitTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         for (const bp of choice.baseTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, baseTarget: bp })
-        if (choice.kind === 'selectHealTarget' && choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'mayExhaustLeaderHealUnit': {

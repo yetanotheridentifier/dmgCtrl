@@ -302,6 +302,8 @@ export interface LastingEffect {
 export interface PhaseEvents {
   enteredPlay: Record<PlayerId, string[]>
   defeated: Record<PlayerId, string[]>
+  /** Players whose base was attacked this phase (#356, Greef Karga). */
+  basesAttacked: PlayerId[]
 }
 
 /**
@@ -326,7 +328,10 @@ export type PendingChoice =
   // eligible unit instance ids; the controller picks one or declines.
   // `rewardIfDefeated`: if the damage defeats the target, give `count` Advantage to `instanceId`
   // (Imposing Scout Walker → its own unit) (#355).
-  | { kind: 'mayDamage'; id: string; controller: PlayerId; unitId: string; targets: string[]; amount: number; optional?: boolean; rewardIfDefeated?: { instanceId: string; count: number } }
+  // `rewardIfDefeated`: if the damage defeats the target, either give `count` Advantage to a fixed
+  // `instanceId` (Imposing Scout Walker), or let the controller give `chooseAdvantage` Advantage to a
+  // chosen unit (Justifier, #356).
+  | { kind: 'mayDamage'; id: string; controller: PlayerId; unitId: string; targets: string[]; amount: number; optional?: boolean; rewardIfDefeated?: { instanceId: string; count: number } | { chooseAdvantage: number } }
   // Give `count` of a token to a chosen target (#355). `optional` (default true) offers a decline.
   | { kind: 'mayGiveTokens'; id: string; controller: PlayerId; token: string; count: number; targets: string[]; optional?: boolean }
   | { kind: 'mayAdvantageEach'; id: string; controller: PlayerId; unitId: string; targets: string[] }
@@ -340,7 +345,7 @@ export type PendingChoice =
   | { kind: 'selectFromDiscard'; id: string; controller: PlayerId; candidates: string[]; optional: boolean }
   // Choose where to deal a fixed amount of damage (#348): a unit (`unitTargets`) or a base
   // (`baseTargets`, by owner). Mandatory. Vane's "deal 2 to a base / the defending unit or a base".
-  | { kind: 'selectDamageTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[] }
+  | { kind: 'selectDamageTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[]; optional?: boolean }
   // Greef Karga front (#309): on playing a unit, may exhaust the leader to give it an Advantage token.
   // `unitId` is the just-played unit to receive the token.
   | { kind: 'mayExhaustLeaderForAdvantage'; id: string; controller: PlayerId; unitId: string }
@@ -449,7 +454,7 @@ export type PendingChoice =
   // Vizsla (defeat non-leaders within an HP budget, a token each).
   | {
       kind: 'multiPick'; id: string; controller: PlayerId; targets: string[]
-      spec: { mode: 'giveAdvantage'; remaining: number } | { mode: 'defeatForToken'; budget: number; token: string }
+      spec: { mode: 'giveAdvantage'; remaining: number } | { mode: 'defeatForToken'; budget: number; token: string } | { mode: 'dealEach'; amount: number; remaining: number }
     }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */
@@ -516,7 +521,7 @@ export function clearNextUnitGrants(state: GameState): GameState {
 }
 
 function emptyPhaseEvents(): PhaseEvents {
-  return { enteredPlay: { player: [], opponent: [] }, defeated: { player: [], opponent: [] } }
+  return { enteredPlay: { player: [], opponent: [] }, defeated: { player: [], opponent: [] }, basesAttacked: [] }
 }
 
 /** Clear the tracked per-phase events (called whenever the phase changes). */
@@ -534,6 +539,17 @@ export function recordUnitEntered(state: GameState, owner: PlayerId, instanceId:
 export function recordUnitDefeated(state: GameState, owner: PlayerId, cardId: string): GameState {
   const events = state.phaseEvents ?? emptyPhaseEvents()
   return { ...state, phaseEvents: { ...events, defeated: { ...events.defeated, [owner]: [...events.defeated[owner], cardId] } } }
+}
+
+/** Note that `owner`'s base was attacked this phase (#356, Greef Karga). */
+export function recordBaseAttacked(state: GameState, owner: PlayerId): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  return events.basesAttacked.includes(owner) ? state : { ...state, phaseEvents: { ...events, basesAttacked: [...events.basesAttacked, owner] } }
+}
+
+/** Whether `owner`'s base was attacked this phase. */
+export function baseAttackedThisPhase(state: GameState, owner: PlayerId): boolean {
+  return state.phaseEvents?.basesAttacked.includes(owner) ?? false
 }
 
 /** Instance ids of units that entered play under `owner` this phase. */

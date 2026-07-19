@@ -1,10 +1,10 @@
 import { registerCard } from './abilities'
-import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, findUnit, searchCount, grantNextUnit, healUnit, healBase, bottomTopCards, exhaustReadyResource, readyResource, readyUnit } from './effects'
+import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, bottomTopCards, exhaustReadyResource, readyResource, readyUnit } from './effects'
 import { dealDamageToUnit, defeatUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
-import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, enteredPlayThisPhase } from './types'
+import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, enteredPlayThisPhase, baseAttackedThisPhase } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets } from './legalMoves'
 import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, unitHasKeyword, unitKeywords } from './keywords'
 import type { EngineCard, GameState, PlayerId, UnitState, UpgradeRef } from './types'
@@ -1135,3 +1135,58 @@ registerCard('ASH_101', { abilities: [{ trigger: 'onAttackEnd', description: 'If
 
 registerCard('ASH_031', { abilities: [{ trigger: 'onAttackEnd', description: 'If this unit dealt combat damage to a base, heal that much damage from your base.', effect: (s, ctx) => // Hera Syndulla
   (ctx.combatDamageToBase ?? 0) > 0 ? healBase(s, ctx.owner, ctx.combatDamageToBase!) : s }] })
+
+// ── Group E (#356): multi-trigger onAttack + action abilities ───────────────
+const justifierPing = (s: GameState, ctx: { owner: PlayerId; sourceInstanceId?: string }): GameState => { // Justifier
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount: 1, optional: true, rewardIfDefeated: { chooseAdvantage: 1 } }) : s
+}
+registerCard('ASH_146', {
+  abilities: [
+    { trigger: 'whenPlayed', description: 'You may deal 1 damage to a unit. If that unit is defeated this way, give an Advantage token to a unit.', effect: justifierPing },
+    { trigger: 'onAttack', description: 'You may deal 1 damage to a unit. If that unit is defeated this way, give an Advantage token to a unit.', effect: justifierPing },
+  ],
+})
+
+registerCard('ASH_123', { actionAbilities: [{ // Lang
+  description: "Deal damage equal to this unit's power to a ground unit.",
+  usable: (s, u) => !u.exhausted && groundUnits(s).length > 0,
+  effect: (s, ctx) => {
+    const u = allUnits(s).find(x => x.instanceId === ctx.sourceInstanceId)
+    const power = u ? effectivePower(s, u) : 0
+    const next = exhaustUnit(s, ctx.sourceInstanceId!)
+    const targets = groundUnits(next).map(x => x.instanceId)
+    return targets.length ? pushChoice(next, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: power, unitTargets: targets, baseTargets: [] }) : next
+  },
+}] })
+
+registerCard('ASH_142', { actionAbilities: [{ // Mortar Trooper
+  description: 'Deal 1 damage to each of up to 3 ground units.',
+  usable: (s, u) => !u.exhausted && groundUnits(s).length > 0,
+  effect: (s, ctx) => {
+    const next = exhaustUnit(s, ctx.sourceInstanceId!)
+    const targets = groundUnits(next).map(x => x.instanceId)
+    return targets.length ? pushChoice(next, { kind: 'multiPick', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, spec: { mode: 'dealEach', amount: 1, remaining: 3 } }) : next
+  },
+}] })
+
+registerCard('ASH_179', { // Boba Fett's Rancor
+  abilities: [
+    { trigger: 'whenPlayed', description: 'Deal 5 damage to your base. Then deal 10 damage to an enemy ground unit.', effect: (s, ctx) => {
+      const next = dealDamageToBase(s, ctx.owner, 5)
+      const enemyGround = next.players[opponentOf(ctx.owner)].units.filter(u => u.arena === 'ground').map(u => u.instanceId)
+      return enemyGround.length ? pushChoice(next, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 10, unitTargets: enemyGround, baseTargets: [] }) : next
+    } },
+    { trigger: 'onAttack', description: 'You may deal 1 damage to a base for every 5 damage on your base.', effect: (s, ctx) => {
+      const count = Math.floor(s.players[ctx.owner].base.damage / 5)
+      return count > 0 ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: count, unitTargets: [], baseTargets: ['player', 'opponent'], optional: true }) : s
+    } },
+  ],
+})
+
+registerCard('ASH_119', { actionAbilities: [{ // Greef Karga (unit)
+  description: 'If your base was attacked this phase, create a Mandalorian token.',
+  cost: 1,
+  usable: (s, u) => { const owner = findUnit(s, u.instanceId)?.owner; return !u.exhausted && owner !== undefined && baseAttackedThisPhase(s, owner) },
+  effect: (s, ctx) => createTokenUnit(exhaustUnit(s, ctx.sourceInstanceId!), ctx.owner, TOKEN_MANDALORIAN),
+}] })

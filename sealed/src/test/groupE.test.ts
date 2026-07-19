@@ -63,6 +63,13 @@ const E = {
   ASH_101: card({ id: 'ASH_101', type: 'unit', arena: 'ground', power: 6, hp: 7, keywords: [{ name: 'Support' }] }), // The Great Mothers
   ASH_031: card({ id: 'ASH_031', type: 'unit', arena: 'ground', power: 3, hp: 4 }), // Hera Syndulla
   BIGWALL: card({ id: 'BIGWALL', type: 'unit', arena: 'ground', power: 0, hp: 12 }),
+  // multi-trigger + action abilities
+  ASH_146: card({ id: 'ASH_146', type: 'unit', arena: 'space', power: 4, hp: 5 }), // Justifier
+  ASH_123: card({ id: 'ASH_123', type: 'unit', arena: 'ground', power: 2, hp: 5 }), // Lang
+  ASH_142: card({ id: 'ASH_142', type: 'unit', arena: 'ground', power: 1, hp: 4 }), // Mortar Trooper
+  WEAK: card({ id: 'WEAK', type: 'unit', arena: 'space', power: 1, hp: 1 }),
+  ASH_179: card({ id: 'ASH_179', type: 'unit', arena: 'ground', cost: 8, power: 8, hp: 9 }), // Boba Fett's Rancor
+  ASH_119: card({ id: 'ASH_119', type: 'unit', arena: 'ground', power: 2, hp: 3 }), // Greef Karga (unit)
   FILLER: card({ id: 'FILLER', type: 'unit', arena: 'ground', power: 2, hp: 5 }),
   FILLERSPACE: card({ id: 'FILLERSPACE', type: 'unit', arena: 'space', power: 2, hp: 5 }),
   BRUISERBIG: card({ id: 'BRUISERBIG', type: 'unit', arena: 'ground', power: 9, hp: 10 }),
@@ -510,5 +517,67 @@ describe('Group E — When Attack Ends (#356)', () => {
     const s0 = state({ cards: E, players: { player: player({ units: [unit('a', 'ASH_031', { arena: 'ground' })], base: { cardId: 'TST_B', damage: 5 } }), opponent: player({}) } })
     const done = resolve(s0, { type: 'attack', attackerId: 'a', target: { kind: 'base' } })
     expect(done.players.player.base.damage).toBe(2) // 5 - 3 (Hera's power dealt to the base)
+  })
+})
+
+describe('Group E — multi-trigger + action abilities (#356)', () => {
+  it('Justifier (146): On Attack may deal 1; a kill lets you give Advantage to a unit', () => {
+    const s = onAtk('ASH_146', { oppUnits: [unit('weak', 'WEAK', { arena: 'space' }), unit('other', 'FILLERSPACE', { arena: 'space' })] })
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayDamage', amount: 1, optional: true })
+    const killed = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, targetInstanceId: 'weak' })
+    expect(killed.pendingChoices?.[0]).toMatchObject({ kind: 'mayGiveTokens', token: TOKEN_ADVANTAGE, count: 1 })
+    const done = resolve(killed, { type: 'acceptChoice', choiceId: killed.pendingChoices![0].id, targetInstanceId: 'other' })
+    expect(advs(U(done, 'other'))).toBe(1)
+  })
+
+  it('Lang (123): Action [Exhaust] deals power to a ground unit', () => {
+    const s0 = state({ cards: E, players: { player: player({ units: [unit('a', 'ASH_123', { arena: 'ground' })] }), opponent: player({ units: [unit('e', 'BIGWALL', { arena: 'ground' })] }) } })
+    const used = resolve(s0, { type: 'useAbility', instanceId: 'a', cardId: 'ASH_123', index: 0 })
+    expect(U(used, 'a').exhausted).toBe(true) // exhausted as the cost
+    expect(used.pendingChoices?.[0]).toMatchObject({ kind: 'selectDamageTarget', amount: 2 })
+    const done = resolve(used, { type: 'acceptChoice', choiceId: used.pendingChoices![0].id, targetInstanceId: 'e' })
+    expect(U(done, 'e').damage).toBe(2)
+  })
+
+  it('Mortar Trooper (142): Action [Exhaust] deals 1 to each of up to 3 ground units', () => {
+    const s0 = state({ cards: E, players: { player: player({ units: [unit('a', 'ASH_142', { arena: 'ground' })] }), opponent: player({ units: [unit('e1', 'BIGWALL', { arena: 'ground' }), unit('e2', 'BIGWALL', { arena: 'ground' })] }) } })
+    const used = resolve(s0, { type: 'useAbility', instanceId: 'a', cardId: 'ASH_142', index: 0 })
+    expect(used.pendingChoices?.[0]).toMatchObject({ kind: 'multiPick', spec: { mode: 'dealEach', amount: 1, remaining: 3 } })
+    let cur = resolve(used, { type: 'acceptChoice', choiceId: used.pendingChoices![0].id, targetInstanceId: 'e1' })
+    cur = resolve(cur, { type: 'acceptChoice', choiceId: cur.pendingChoices![0].id, targetInstanceId: 'e2' })
+    expect(U(cur, 'e1').damage).toBe(1)
+    expect(U(cur, 'e2').damage).toBe(1)
+    const done = resolve(cur, { type: 'skipTrigger', choiceId: cur.pendingChoices![0].id })
+    expect(done.pendingChoices ?? []).toHaveLength(0)
+  })
+})
+
+describe('Group E — Boba Fett\'s Rancor + Greef Karga (#356)', () => {
+  it("Boba Fett's Rancor (179): When Played deals 5 to your base, then 10 to an enemy ground unit", () => {
+    const s0 = state({ cards: E, players: { player: player({ hand: ['ASH_179'], resources: ready(10) }), opponent: player({ units: [unit('e', 'BIGWALL', { arena: 'ground' })] }) } })
+    const played = resolve(s0, { type: 'playCard', handIndex: 0 })
+    expect(played.players.player.base.damage).toBe(5)
+    expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'selectDamageTarget', amount: 10 })
+    const done = resolve(played, { type: 'acceptChoice', choiceId: played.pendingChoices![0].id, targetInstanceId: 'e' })
+    expect(U(done, 'e').damage).toBe(10)
+  })
+
+  it("Boba Fett's Rancor (179): On Attack may deal 1 per 5 damage on your base", () => {
+    const s0 = state({ cards: E, players: { player: player({ units: [unit('a', 'ASH_179', { arena: 'ground' })], base: { cardId: 'TST_B', damage: 10 } }), opponent: player({}) } })
+    const atk = resolve(s0, { type: 'attack', attackerId: 'a', target: { kind: 'base' } })
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'selectDamageTarget', amount: 2, optional: true }) // floor(10/5)
+  })
+
+  it('Greef Karga (119): Action creates a Mandalorian token if your base was attacked this phase', () => {
+    const attacked = state({ cards: E, players: { player: player({ units: [unit('a', 'ASH_119', { arena: 'ground' })], resources: ready(3) }), opponent: player({}) }, phaseEvents: { enteredPlay: { player: [], opponent: [] }, defeated: { player: [], opponent: [] }, basesAttacked: ['player'] } })
+    expect(legalMoves(attacked).filter(m => m.type === 'useAbility')).toHaveLength(1)
+    const used = resolve(attacked, { type: 'useAbility', instanceId: 'a', cardId: 'ASH_119', index: 0 })
+    expect(used.players.player.units.filter(u => u.cardId === TOKEN_MANDALORIAN)).toHaveLength(1)
+    expect(U(used, 'a').exhausted).toBe(true)
+  })
+
+  it('Greef Karga (119): unusable if your base was not attacked', () => {
+    const s0 = state({ cards: E, players: { player: player({ units: [unit('a', 'ASH_119', { arena: 'ground' })], resources: ready(3) }), opponent: player({}) } })
+    expect(legalMoves(s0).filter(m => m.type === 'useAbility')).toHaveLength(0)
   })
 })
