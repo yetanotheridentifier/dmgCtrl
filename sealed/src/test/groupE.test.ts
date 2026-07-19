@@ -4,7 +4,7 @@ import { legalMoves } from '../engine/legalMoves'
 import { dealDamageToUnit } from '../engine/combat'
 import { unitHasKeyword } from '../engine/keywords'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
-import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
+import { TOKEN_ADVANTAGE, TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 import type { GameState, PlayerState, UnitState } from '../engine/types'
@@ -56,6 +56,13 @@ const E = {
   ASH_059: card({ id: 'ASH_059', type: 'unit', arena: 'ground', power: 3, hp: 4, keywords: [{ name: 'Support' }] }), // Leia Organa
   ASH_172: card({ id: 'ASH_172', type: 'unit', arena: 'space', power: 3, hp: 5, keywords: [{ name: 'Saboteur' }] }), // Razor Crest
   ASH_203: card({ id: 'ASH_203', type: 'unit', arena: 'space', power: 1, hp: 3, keywords: [{ name: 'Support' }] }), // Mando's N-1 Starfighter
+  // attack-end
+  ASH_033: card({ id: 'ASH_033', type: 'unit', arena: 'ground', power: 5, hp: 7, keywords: [{ name: 'Support' }] }), // Grand Admiral Thrawn
+  ASH_223: card({ id: 'ASH_223', type: 'unit', arena: 'space', power: 4, hp: 4, keywords: [{ name: 'Support' }] }), // Halo
+  ASH_036: card({ id: 'ASH_036', type: 'unit', arena: 'ground', power: 1, hp: 5, keywords: [{ name: 'Support' }] }), // Rukh
+  ASH_101: card({ id: 'ASH_101', type: 'unit', arena: 'ground', power: 6, hp: 7, keywords: [{ name: 'Support' }] }), // The Great Mothers
+  ASH_031: card({ id: 'ASH_031', type: 'unit', arena: 'ground', power: 3, hp: 4 }), // Hera Syndulla
+  BIGWALL: card({ id: 'BIGWALL', type: 'unit', arena: 'ground', power: 0, hp: 12 }),
   FILLER: card({ id: 'FILLER', type: 'unit', arena: 'ground', power: 2, hp: 5 }),
   FILLERSPACE: card({ id: 'FILLERSPACE', type: 'unit', arena: 'space', power: 2, hp: 5 }),
   BRUISERBIG: card({ id: 'BRUISERBIG', type: 'unit', arena: 'ground', power: 9, hp: 10 }),
@@ -471,5 +478,37 @@ describe('Group E — onAttack, self-cost choices (batch B2) (#356)', () => {
     const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id })
     expect(done.players.player.leader.exhausted).toBe(true)
     expect(done.players.opponent.base.damage).toBe(3) // power 1 + 2 buff
+  })
+})
+
+describe('Group E — When Attack Ends (#356)', () => {
+  it('Grand Admiral Thrawn (033): readies itself only if the defender was defeated', () => {
+    const killed = onAtk('ASH_033', { oppUnits: [unit('e', 'ZEROPOW', { arena: 'ground', damage: 2 })], target: { kind: 'unit', instanceId: 'e' } })
+    expect(U(killed, 'e')).toBeUndefined()
+    expect(U(killed, 'a').exhausted).toBe(false) // defender died → readied
+    const survived = onAtk('ASH_033', { oppUnits: [unit('e', 'BIGWALL', { arena: 'ground' })], target: { kind: 'unit', instanceId: 'e' } })
+    expect(U(survived, 'a').exhausted).toBe(true) // defender lived → stays exhausted
+  })
+
+  it('Halo (223): gains a Shield if the defender was defeated', () => {
+    const s = onAtk('ASH_223', { oppUnits: [unit('e', 'FILLERSPACE', { arena: 'space', damage: 2 })], target: { kind: 'unit', instanceId: 'e' } })
+    expect(U(s, 'e')).toBeUndefined()
+    expect(U(s, 'a').upgrades.some(u => u.cardId === TOKEN_SHIELD)).toBe(true)
+  })
+
+  it('Rukh (036): may give 3 Advantage tokens if the defender was defeated', () => {
+    const s = onAtk('ASH_036', { oppUnits: [unit('e', 'ZEROPOW', { arena: 'ground', damage: 2 })], target: { kind: 'unit', instanceId: 'e' } })
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayGiveTokens', token: TOKEN_ADVANTAGE, count: 3, optional: true })
+  })
+
+  it('The Great Mothers (101): defeats a non-leader unit it dealt combat damage to (that survived)', () => {
+    const s = onAtk('ASH_101', { oppUnits: [unit('e', 'BIGWALL', { arena: 'ground' })], target: { kind: 'unit', instanceId: 'e' } })
+    expect(U(s, 'e')).toBeUndefined() // survived combat (6 < 12), then defeated at attack-end
+  })
+
+  it('Hera Syndulla (031): heals from your base equal to combat damage dealt to a base', () => {
+    const s0 = state({ cards: E, players: { player: player({ units: [unit('a', 'ASH_031', { arena: 'ground' })], base: { cardId: 'TST_B', damage: 5 } }), opponent: player({}) } })
+    const done = resolve(s0, { type: 'attack', attackerId: 'a', target: { kind: 'base' } })
+    expect(done.players.player.base.damage).toBe(2) // 5 - 3 (Hera's power dealt to the base)
   })
 })

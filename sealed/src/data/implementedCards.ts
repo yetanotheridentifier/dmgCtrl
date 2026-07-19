@@ -270,6 +270,12 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_059', name: 'Leia Organa' },
   { id: 'ASH_172', name: 'Razor Crest' },
   { id: 'ASH_203', name: "Mando's N-1 Starfighter" },
+  // Group E (#356) — When Attack Ends
+  { id: 'ASH_033', name: 'Grand Admiral Thrawn' },
+  { id: 'ASH_223', name: 'Halo' },
+  { id: 'ASH_036', name: 'Rukh' },
+  { id: 'ASH_101', name: 'The Great Mothers' },
+  { id: 'ASH_031', name: 'Hera Syndulla' },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */

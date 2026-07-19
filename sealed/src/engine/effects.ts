@@ -158,6 +158,16 @@ export function exhaustReadyResource(state: GameState, owner: PlayerId): GameSta
   return { ...state, players: { ...state.players, [owner]: { ...p, resources: p.resources.map((r, i) => (i === idx ? { ...r, exhausted: true } : r)) } } }
 }
 
+/** Ready a unit (clear its exhausted flag) wherever it is (#356, Grand Admiral Thrawn). No-op if not in play. */
+export function readyUnit(state: GameState, instanceId: string): GameState {
+  for (const owner of ['player', 'opponent'] as PlayerId[]) {
+    if (state.players[owner].units.some(u => u.instanceId === instanceId)) {
+      return updatePlayer(state, owner, { units: state.players[owner].units.map(u => (u.instanceId === instanceId ? { ...u, exhausted: false } : u)) })
+    }
+  }
+  return state
+}
+
 /** Ready one exhausted resource of `owner` (#356, Emperor's Messenger). No-op if none is exhausted. */
 export function readyResource(state: GameState, owner: PlayerId): GameState {
   const p = state.players[owner]

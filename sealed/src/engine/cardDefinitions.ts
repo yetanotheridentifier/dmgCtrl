@@ -1,5 +1,5 @@
 import { registerCard } from './abilities'
-import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, findUnit, searchCount, grantNextUnit, healUnit, bottomTopCards, exhaustReadyResource, readyResource } from './effects'
+import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, findUnit, searchCount, grantNextUnit, healUnit, healBase, bottomTopCards, exhaustReadyResource, readyResource, readyUnit } from './effects'
 import { dealDamageToUnit, defeatUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
@@ -1113,3 +1113,25 @@ registerCard('ASH_172', { abilities: [{ trigger: 'onAttack', description: 'You m
 
 registerCard('ASH_203', { abilities: [{ trigger: 'onAttack', description: 'You may exhaust a friendly leader. If you do, this unit gets +2/+0 for this attack.', effect: (s, ctx) => // Mando's N-1 Starfighter
   !s.players[ctx.owner].leader.exhausted ? pushChoice(s, { kind: 'mayExhaustLeaderBuffSelf', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, power: 2, hp: 0 }) : s }] })
+
+// ── Group E (#356): When Attack Ends ────────────────────────────────────────
+registerCard('ASH_033', { abilities: [{ trigger: 'onAttackEnd', description: 'If the defending unit was defeated, ready this unit.', effect: (s, ctx) => // Grand Admiral Thrawn
+  ctx.defenderDefeated ? readyUnit(s, ctx.sourceInstanceId!) : s }] })
+
+registerCard('ASH_223', { abilities: [{ trigger: 'onAttackEnd', description: 'If the defending unit was defeated, give a Shield token to this unit.', effect: (s, ctx) => // Halo
+  ctx.defenderDefeated ? giveToken(s, ctx.sourceInstanceId!, TOKEN_SHIELD) : s }] })
+
+registerCard('ASH_036', { abilities: [{ trigger: 'onAttackEnd', description: 'If the defending unit was defeated, you may give 3 Advantage tokens to a unit.', effect: (s, ctx) => { // Rukh
+  if (!ctx.defenderDefeated) return s
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_ADVANTAGE, count: 3, targets, optional: true }) : s
+} }] })
+
+registerCard('ASH_101', { abilities: [{ trigger: 'onAttackEnd', description: 'If this unit dealt combat damage to a non-leader unit, defeat that unit.', effect: (s, ctx) => { // The Great Mothers
+  if (!ctx.combatDamageToDefender || ctx.attackTarget?.kind !== 'unit') return s
+  const d = allUnits(s).find(u => u.instanceId === (ctx.attackTarget as { instanceId: string }).instanceId)
+  return d && !isLeaderUnit(s, d) ? defeatUnit(s, d.instanceId) : s // already gone if combat killed it
+} }] })
+
+registerCard('ASH_031', { abilities: [{ trigger: 'onAttackEnd', description: 'If this unit dealt combat damage to a base, heal that much damage from your base.', effect: (s, ctx) => // Hera Syndulla
+  (ctx.combatDamageToBase ?? 0) > 0 ? healBase(s, ctx.owner, ctx.combatDamageToBase!) : s }] })

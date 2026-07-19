@@ -1320,7 +1320,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   // The defender may have been defeated before damage → the attack fizzles.
   if (!defenderBefore) {
     let next = consumeAdvantage(state, playerId, attackerId)
-    next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: 0 })
+    next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: 0, defenderDefeated: true, combatDamageToDefender: 0 })
     return clearGrantedKeywords(checkWin(next))
   }
 
@@ -1362,7 +1362,8 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   next = consumeAdvantage(next, playerId, attackerId)
   next = consumeAdvantage(next, enemyId, defender.instanceId)
   // Pass the pre-combat attacker so its "When Attack Ends" fires even if it was defeated.
-  next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: overwhelmExcess }, attacker)
+  const defenderDefeated = !next.players[enemyId].units.some(u => u.instanceId === defender.instanceId)
+  next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: overwhelmExcess, defenderDefeated, combatDamageToDefender: attackerPower }, attacker)
   return clearGrantedKeywords(checkWin(next))
 }
 

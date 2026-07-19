@@ -45,6 +45,10 @@ export interface EffectContext {
   attackerInstanceId?: string
   /** `onAttackEnd` only: combat damage dealt to the opponent's base this attack (0 if none). */
   combatDamageToBase?: number
+  /** `onAttackEnd` only: the defending unit was defeated during this attack (#356, Thrawn / Halo / Rukh). */
+  defenderDefeated?: boolean
+  /** `onAttackEnd` only: combat damage the attacker dealt to the defending unit (0 if a base attack) (#356, Great Mothers). */
+  combatDamageToDefender?: number
   /** `whenDefeated` only: the unit as captured at the moment of defeat (it has left play). */
   defeatedUnit?: UnitState
   /** `whenDefeated` only: true when the defeat was caused by combat damage (#356, Paz Vizsla / Shin Hati). */
