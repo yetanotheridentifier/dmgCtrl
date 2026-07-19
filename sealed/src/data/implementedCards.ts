@@ -234,6 +234,8 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_108', name: 'Crix Madine' },
   // Self-defeat + search top 10, play space units free (#355 UI)
   { id: 'ASH_110', name: 'Admiral Ackbar' },
+  // Name a card (#355 UI)
+  { id: 'ASH_077', name: 'Ryder Azadi' },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */

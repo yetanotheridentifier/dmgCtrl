@@ -84,6 +84,8 @@ const D = {
   SPACE3: card({ id: 'SPACE3', type: 'unit', arena: 'space', cost: 3, power: 3, hp: 3 }),
   SPACE6: card({ id: 'SPACE6', type: 'unit', arena: 'space', cost: 6, power: 6, hp: 6 }),
   GROUND2: card({ id: 'GROUND2', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 2 }),
+  // Phase 6 — name a card
+  ASH_077: card({ id: 'ASH_077', type: 'unit', arena: 'ground', power: 2, hp: 5, keywords: [{ name: 'Restore', value: 1 }] }), // Ryder Azadi
 }
 const readyCount = (s: GameState) => s.players.player.resources.filter(r => !r.exhausted).length
 const accept = (s: GameState, targetInstanceId?: string) => resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, targetInstanceId })
@@ -598,5 +600,34 @@ describe('Group D Phase 5 — Admiral Ackbar (110): self-defeat + search-play-fr
     expect(s.pendingChoices?.[1]?.kind).toBe('searchPlayFree') // …with the search queued behind
     s = resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id }) // decline the exhaust
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'searchPlayFree', revealed: ['SPACE2'] })
+  })
+})
+
+describe('Group D Phase 6 — name a card (Ryder Azadi #355)', () => {
+  const oppPlayable = (s: GameState) =>
+    legalMoves(s).filter(a => a.type === 'playCard').map(a => s.players.opponent.hand[(a as { handIndex: number }).handIndex])
+  const name = (s: GameState, cardName: string) => resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, cardName })
+
+  it('raises a name-a-card choice when played', () => {
+    const s = play('ASH_077', {}, { hand: ['GRUNT'] })
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'nameCard', controller: 'player' })
+    const names = legalMoves(s).filter(a => a.type === 'acceptChoice').map(a => (a as { cardName: string }).cardName)
+    expect(names).toContain('GRUNT') // a card in the game is nameable
+  })
+
+  it('forbids the opponent from playing a card with the named name', () => {
+    const s = name(play('ASH_077', {}, { hand: ['GRUNT', 'SPACER'] }), 'GRUNT')
+    expect(s.activePlayer).toBe('opponent') // turn passed after naming
+    expect(played(s, 'ASH_077').namedCard).toBe('GRUNT')
+    const playable = oppPlayable(s)
+    expect(playable).not.toContain('GRUNT') // named card is locked
+    expect(playable).toContain('SPACER') // others are fine
+  })
+
+  it('lifts the restriction once Ryder leaves play', () => {
+    const named = name(play('ASH_077', {}, { hand: ['GRUNT', 'SPACER'] }), 'GRUNT')
+    // Simulate Ryder being defeated: remove it from the board.
+    const gone: GameState = { ...named, players: { ...named.players, player: { ...named.players.player, units: [] } } }
+    expect(oppPlayable(gone)).toContain('GRUNT') // freely playable again
   })
 })

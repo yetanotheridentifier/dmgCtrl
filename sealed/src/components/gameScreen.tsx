@@ -1,4 +1,6 @@
 import { useState, type CSSProperties, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { nameableCardNames } from '../engine/legalMoves'
 import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
 import type { SavedDeck } from '../data/deckStore'
@@ -360,6 +362,40 @@ export function SearchDrawOverlay({ state, choice, onPick }: {
         ? { cardId, key: i, testId: `search-draw-pick-${i}`, actionLabel: 'Draw', onSelect: () => onPick(i) }
         : { cardId, key: i, dimmed: true })}
     />
+  )
+}
+
+/**
+ * "Name a card" overlay (#355, Ryder Azadi): a text box that filters the nameable card list (every
+ * card in the current game — both decks) by substring; clicking one names it. Portalled to body so it
+ * clears the board's stacking context. The full-ASH-set list is a later extension (#355 follow-up).
+ */
+export function NameCardOverlay({ names, onPick }: { names: string[]; onPick: (name: string) => void }) {
+  const [query, setQuery] = useState('')
+  const filtered = query.trim() ? names.filter(n => n.toLowerCase().includes(query.trim().toLowerCase())) : names
+  return createPortal(
+    <div data-testid="name-card-overlay" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/75 p-4">
+      <p className="text-xs uppercase tracking-[0.14em] text-ink-dim">Name a card</p>
+      <input
+        data-testid="name-card-input"
+        autoFocus
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        placeholder="Type to search…"
+        className="w-72 rounded-xl border-2 border-line/60 bg-black/40 px-4 py-2 text-sm text-ink outline-none focus:border-accent"
+      />
+      <ul className="flex max-h-[50vh] w-72 flex-col gap-1 overflow-y-auto">
+        {filtered.slice(0, 50).map((n, i) => (
+          <li key={n}>
+            <button data-testid={`name-card-option-${i}`} onClick={() => onPick(n)} className="w-full rounded-lg border border-line/40 px-3 py-1.5 text-left text-sm text-ink-dim hover:border-accent hover:text-ink">
+              {n}
+            </button>
+          </li>
+        ))}
+        {filtered.length === 0 && <li className="py-2 text-center text-xs text-ink-faint">No match</li>}
+      </ul>
+    </div>,
+    document.body,
   )
 }
 
@@ -974,6 +1010,12 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     )
     const searchFreeActions = searchFreeChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === searchFreeChoice.id) : []
 
+    // A "name a card" choice (Ryder Azadi, #355): resolved in a text-input overlay, not the menu.
+    const nameCardChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'nameCard' }> => c.kind === 'nameCard' && c.controller === 'player',
+    )
+    const nameCardActions = nameCardChoice ? legal.filter(a => a.type === 'acceptChoice' && a.choiceId === nameCardChoice.id) : []
+
     // A "select an upgrade to defeat" choice (Vane, #348): the candidate upgrades are shown as a
     // centre-screen card picker with a Cancel (optional only), not in the action menu.
     const selectUpgradeChoice = gameState.pendingChoices?.find(
@@ -1008,7 +1050,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // "Play a unit from hand" accepts (#348) are clicked on the hand card, not the menu.
     const isHandPlay = (a: Action) => a.type === 'acceptChoice' && a.handIndex !== undefined
     const menuActions = gameState.winner === null
-      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
+      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !nameCardActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
       : []
     // The board-target decline and the hand-discard decline share one button (only one
     // choice is active at a time). "Done" for the repeatable multiPick, else "Decline".
@@ -1095,6 +1137,13 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           choice={searchFreeChoice}
           onPick={deckIndex => actAndClear({ type: 'acceptChoice', choiceId: searchFreeChoice.id, deckIndex })}
           onDone={() => actAndClear({ type: 'skipTrigger', choiceId: searchFreeChoice.id })}
+        />
+      )
+    } else if (nameCardChoice) {
+      choiceOverlay = (
+        <NameCardOverlay
+          names={nameableCardNames(gameState)}
+          onPick={cardName => actAndClear({ type: 'acceptChoice', choiceId: nameCardChoice.id, cardName })}
         />
       )
     } else if (selectUpgradeChoice) {

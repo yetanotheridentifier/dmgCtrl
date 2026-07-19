@@ -60,6 +60,20 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
  * (plus `costDelta`, floored at 0) fits the ready resources left after `extraResourceCost` (the
  * ability's own C=… cost). Used both to gate the ability (`usable`) and to build the play choice.
  */
+/** Distinct names of playable cards in the game (either deck) — the nameable set for Ryder Azadi (#355). */
+export function nameableCardNames(state: GameState): string[] {
+  const names = new Set<string>()
+  for (const card of Object.values(state.cards)) {
+    if (card && (card.type === 'unit' || card.type === 'event' || card.type === 'upgrade')) names.add(card.name)
+  }
+  return [...names].sort((a, b) => a.localeCompare(b))
+}
+
+/** Card names the opponent has forbidden us from playing via a Ryder Azadi they control (#355). */
+export function namedByOpponent(state: GameState, playerId: PlayerId): Set<string> {
+  return new Set(state.players[opponentOf(playerId)].units.flatMap(u => (u.namedCard ? [u.namedCard] : [])))
+}
+
 export function affordableHandUnits(state: GameState, owner: PlayerId, extraResourceCost: number, costDelta: number): HandCardRef[] {
   const p = state.players[owner]
   const budget = readyResourceCount(p) - extraResourceCost
@@ -140,10 +154,14 @@ function actionPhaseMoves(state: GameState): Action[] {
   const p = state.players[playerId]
   const enemy = state.players[opponentOf(playerId)]
 
+  // A Ryder Azadi (#355) the opponent controls forbids us from playing cards with the named names.
+  const forbiddenNames = namedByOpponent(state, playerId)
+
   // Play a Card (units only in MVP — see actions.ts)
   p.hand.forEach((cardId, handIndex) => {
     const card = state.cards[cardId]
     if (!card || card.type !== 'unit') return
+    if (forbiddenNames.has(card.name)) return
     if (canAfford(p, effectiveCost(state, playerId, card))) {
       moves.push({ type: 'playCard', handIndex })
     }
@@ -156,6 +174,7 @@ function actionPhaseMoves(state: GameState): Action[] {
   p.hand.forEach((cardId, handIndex) => {
     const card = state.cards[cardId]
     if (!card || card.type !== 'upgrade') return
+    if (forbiddenNames.has(card.name)) return
     const restriction = getCardDefinition(card.id)?.attachRestriction
     for (const target of allUnits) {
       if (restriction && !restriction(state, target)) continue
@@ -415,6 +434,12 @@ function choiceMoves(state: GameState): Action[] {
         // Admiral Ackbar (#355): a yes/no — defeat this unit to search, or decline.
         moves.push({ type: 'acceptChoice', choiceId: choice.id })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'nameCard': {
+        // Ryder Azadi (#355): name any card. The nameable set is the cards in play (both decks) — the
+        // UI filters it by typing; the AI just picks one. Mandatory.
+        for (const name of nameableCardNames(state)) moves.push({ type: 'acceptChoice', choiceId: choice.id, cardName: name })
         break
       }
       case 'searchPlayFree': {

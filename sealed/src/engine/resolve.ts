@@ -86,7 +86,7 @@ export function resolve(state: GameState, action: Action): GameState {
     case 'skipTrigger':
       return requirePhase(state, 'action', () => resolveSkip(state, action.choiceId))
     case 'acceptChoice':
-      return requirePhase(state, 'action', () => resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex, action.baseTarget, action.handIndex))
+      return requirePhase(state, 'action', () => resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex, action.baseTarget, action.handIndex, action.cardName))
     case 'resourceCard':
       return requirePhase(state, 'regroup', () => regroupChoice(state, action.handIndex))
     case 'skipResource':
@@ -415,7 +415,7 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
 }
 
 /** Accept a pending "may…" choice — pay the cost / play the card / search (#342/#343). */
-function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: string, deckIndex?: number, optionIndex?: number, baseTarget?: PlayerId, handIndex?: number): GameState {
+function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: string, deckIndex?: number, optionIndex?: number, baseTarget?: PlayerId, handIndex?: number, cardName?: string): GameState {
   const choice = findChoice(state, choiceId)
   if (!choice) throw new Error(`acceptChoice: no choice ${choiceId}`)
   let next = removeChoice(state, choice.id)
@@ -633,6 +633,16 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         const rest = p.deck.slice(choice.revealed.length)
         const others = choice.revealed.filter((_, i) => i !== deckIndex)
         next = updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: [...rest, ...others] })
+      }
+      break
+    }
+    case 'nameCard': {
+      // Ryder Azadi (#355): record the named card on this unit — the opponent can't play cards with
+      // that name while it's in play (enforced in legalMoves). Naming is mandatory.
+      if (cardName) {
+        next = updatePlayer(next, choice.controller, {
+          units: next.players[choice.controller].units.map(u => (u.instanceId === choice.unitId ? { ...u, namedCard: cardName } : u)),
+        })
       }
       break
     }

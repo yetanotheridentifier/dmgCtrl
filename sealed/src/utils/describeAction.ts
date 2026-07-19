@@ -99,6 +99,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const cardId = choice.revealed[action.deckIndex]
         return `Draw ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
       }
+      if (choice.kind === 'nameCard') return `Name ${action.cardName ?? 'a card'}`
       if (choice.kind === 'mayDefeatSelfSearch') return `Defeat ${anyUnitName(state, choice.unitId) ?? 'this unit'} & search`
       if (choice.kind === 'searchPlayFree' && action.deckIndex !== undefined) {
         const cardId = choice.revealed[action.deckIndex]

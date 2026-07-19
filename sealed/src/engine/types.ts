@@ -95,6 +95,12 @@ export interface UnitState {
    * (`${cardId}#${index}`); cleared at round start (#343).
    */
   usedAbilities?: string[]
+  /**
+   * A card name this unit forbids the opponent from playing while it's in play (#355,
+   * Ryder Azadi). Set by its When Played "name a card"; the restriction ends naturally
+   * when the unit leaves play (the field goes with it).
+   */
+  namedCard?: string
 }
 
 export interface ResourceState {
@@ -387,6 +393,10 @@ export type PendingChoice =
   // (indices into `revealed`) to draw; the rest go to the bottom of the deck. Resolved by an
   // `acceptChoice` carrying the `deckIndex` (0-based within `revealed`). Mandatory when eligible.
   | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[] }
+  // Name a card (#355, Ryder Azadi) — resolved by an `acceptChoice` carrying `cardName`; the name is
+  // recorded on `unitId` (a `namedCard`), forbidding the opponent from playing cards with that name
+  // while it's in play. Mandatory.
+  | { kind: 'nameCard'; id: string; controller: PlayerId; unitId: string }
   // "You may defeat this unit. If you do, [search]" (#355, Admiral Ackbar) — a yes/no. Accept defeats
   // `unitId` and starts the search-and-play-free (below); skip leaves the unit in play.
   | { kind: 'mayDefeatSelfSearch'; id: string; controller: PlayerId; unitId: string }
