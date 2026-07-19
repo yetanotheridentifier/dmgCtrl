@@ -86,6 +86,11 @@ const D = {
   GROUND2: card({ id: 'GROUND2', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 2 }),
   // Phase 6 — name a card
   ASH_077: card({ id: 'ASH_077', type: 'unit', arena: 'ground', power: 2, hp: 5, keywords: [{ name: 'Restore', value: 1 }] }), // Ryder Azadi
+  // Phase 7 — modal / variable damage & heal
+  ASH_147: card({ id: 'ASH_147', type: 'unit', arena: 'ground', power: 3, hp: 7, keywords: [{ name: 'Grit' }] }), // The Cyborg Mech
+  ASH_044: card({ id: 'ASH_044', type: 'unit', arena: 'ground', power: 3, hp: 4 }), // Barriss Offee
+  TANK: card({ id: 'TANK', type: 'unit', arena: 'ground', power: 1, hp: 10 }),
+  TANKSPACE: card({ id: 'TANKSPACE', type: 'unit', arena: 'space', power: 1, hp: 10 }),
 }
 const readyCount = (s: GameState) => s.players.player.resources.filter(r => !r.exhausted).length
 const accept = (s: GameState, targetInstanceId?: string) => resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, targetInstanceId })
@@ -629,5 +634,57 @@ describe('Group D Phase 6 — name a card (Ryder Azadi #355)', () => {
     // Simulate Ryder being defeated: remove it from the board.
     const gone: GameState = { ...named, players: { ...named.players, player: { ...named.players.player, units: [] } } }
     expect(oppPlayable(gone)).toContain('GRUNT') // freely playable again
+  })
+})
+
+describe('Group D Phase 7 — The Cyborg Mech (147): modal ground strike', () => {
+  it('deals 2 to an undamaged ground unit', () => {
+    const s = play('ASH_147', {}, { units: [unit('u', 'TANK', { arena: 'ground' })] })
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'variableStrike', undamagedAmount: 2, damagedAmount: 5 })
+    expect(U(accept(s, 'u'), 'u').damage).toBe(2)
+  })
+
+  it('deals 5 to a damaged ground unit', () => {
+    const s = play('ASH_147', {}, { units: [unit('d', 'TANK', { arena: 'ground', damage: 1 })] })
+    expect(U(accept(s, 'd'), 'd').damage).toBe(6) // 1 + 5
+  })
+
+  it('is mandatory (no decline) and only targets ground units', () => {
+    const s = play('ASH_147', {}, { units: [unit('g', 'TANK', { arena: 'ground' }), unit('sp', 'TANKSPACE', { arena: 'space' })] })
+    const moves = legalMoves(s)
+    expect(moves.some(a => a.type === 'skipTrigger')).toBe(false) // mandatory
+    const targets = moves.filter(a => a.type === 'acceptChoice').map(a => a.targetInstanceId)
+    expect(targets).toContain('g') // ground enemy
+    expect(targets).toContain(played(s, 'ASH_147').instanceId) // and the Mech itself (a ground unit)
+    expect(targets).not.toContain('sp') // never the space unit
+  })
+})
+
+describe('Group D Phase 7 — Barriss Offee (044): heal up to 2, Advantage per heal', () => {
+  it('heals up to 2 from a unit and gives that many Advantage tokens', () => {
+    const s = play('ASH_044', { units: [unit('h', 'TANK', { arena: 'ground', damage: 3 })] })
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'healForAdvantage', maxHeal: 2 })
+    const a = accept(s, 'h')
+    expect(U(a, 'h').damage).toBe(1) // 3 → 1 (healed 2)
+    expect(advs(U(a, 'h'))).toBe(2)
+  })
+
+  it('heals only what damage is there when under 2, with matching tokens', () => {
+    const a = accept(play('ASH_044', { units: [unit('h', 'TANK', { arena: 'ground', damage: 1 })] }), 'h')
+    expect(U(a, 'h').damage).toBe(0)
+    expect(advs(U(a, 'h'))).toBe(1)
+  })
+
+  it('offers only damaged units and may be declined', () => {
+    const s = play('ASH_044', { units: [unit('h', 'TANK', { arena: 'ground', damage: 1 }), unit('clean', 'TANK', { arena: 'ground' })] })
+    const targets = legalMoves(s).filter(a => a.type === 'acceptChoice').map(a => a.targetInstanceId)
+    expect(targets).toEqual(['h']) // the undamaged unit isn't a target
+    const done = resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id })
+    expect(done.pendingChoices ?? []).toHaveLength(0)
+  })
+
+  it('does nothing when no unit is damaged', () => {
+    const s = play('ASH_044', { units: [unit('clean', 'TANK', { arena: 'ground' })] })
+    expect(s.pendingChoices ?? []).toHaveLength(0)
   })
 })

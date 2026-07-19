@@ -99,6 +99,15 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const cardId = choice.revealed[action.deckIndex]
         return `Draw ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
       }
+      if (choice.kind === 'variableStrike') {
+        const found = action.targetInstanceId ? [...state.players.player.units, ...state.players.opponent.units].find(u => u.instanceId === action.targetInstanceId) : undefined
+        const amount = found && found.damage > 0 ? choice.damagedAmount : choice.undamagedAmount
+        return `Deal ${amount}${found ? ` to ${anyUnitName(state, found.instanceId)}` : ''}`
+      }
+      if (choice.kind === 'healForAdvantage') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Heal${target ? ` ${target}` : ''}`
+      }
       if (choice.kind === 'nameCard') return `Name ${action.cardName ?? 'a card'}`
       if (choice.kind === 'mayDefeatSelfSearch') return `Defeat ${anyUnitName(state, choice.unitId) ?? 'this unit'} & search`
       if (choice.kind === 'searchPlayFree' && action.deckIndex !== undefined) {

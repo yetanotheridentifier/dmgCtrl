@@ -436,6 +436,17 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'variableStrike': {
+        // The Cyborg Mech (#355): pick a ground unit to strike. Mandatory.
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        break
+      }
+      case 'healForAdvantage': {
+        // Barriss Offee (#355): pick a damaged unit to heal, or decline (optional).
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
       case 'nameCard': {
         // Ryder Azadi (#355): name any card. The nameable set is the cards in play (both decks) — the
         // UI filters it by typing; the AI just picks one. Mandatory.

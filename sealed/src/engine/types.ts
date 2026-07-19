@@ -393,6 +393,12 @@ export type PendingChoice =
   // (indices into `revealed`) to draw; the rest go to the bottom of the deck. Resolved by an
   // `acceptChoice` carrying the `deckIndex` (0-based within `revealed`). Mandatory when eligible.
   | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[] }
+  // The Cyborg Mech (#355): deal `undamagedAmount` to a chosen undamaged target, or `damagedAmount`
+  // to a damaged one (the amount is decided by the picked unit's damage). Mandatory board-target.
+  | { kind: 'variableStrike'; id: string; controller: PlayerId; targets: string[]; undamagedAmount: number; damagedAmount: number }
+  // Barriss Offee (#355): heal up to `maxHeal` from a chosen unit and give it that many Advantage
+  // tokens (one per damage healed). Optional board-target — only damaged units are eligible.
+  | { kind: 'healForAdvantage'; id: string; controller: PlayerId; targets: string[]; maxHeal: number }
   // Name a card (#355, Ryder Azadi) — resolved by an `acceptChoice` carrying `cardName`; the name is
   // recorded on `unitId` (a `namedCard`), forbidding the opponent from playing cards with that name
   // while it's in play. Mandatory.

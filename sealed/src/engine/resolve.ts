@@ -636,6 +636,29 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       break
     }
+    case 'variableStrike': {
+      // The Cyborg Mech (#355): deal 5 to a damaged target, else 2 to an undamaged one.
+      if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
+        const found = findUnit(next, targetInstanceId)
+        const amount = found && found.unit.damage > 0 ? choice.damagedAmount : choice.undamagedAmount
+        next = dealDamageToUnit(next, targetInstanceId, amount)
+        next = checkWin(next)
+        if (next.winner !== null) return next
+      }
+      break
+    }
+    case 'healForAdvantage': {
+      // Barriss Offee (#355): heal min(maxHeal, damage) from the unit and give it that many Advantage tokens.
+      if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
+        const found = findUnit(next, targetInstanceId)
+        const healed = found ? Math.min(choice.maxHeal, found.unit.damage) : 0
+        if (healed > 0) {
+          next = healUnit(next, targetInstanceId, healed)
+          for (let i = 0; i < healed; i++) next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+        }
+      }
+      break
+    }
     case 'nameCard': {
       // Ryder Azadi (#355): record the named card on this unit — the opponent can't play cards with
       // that name while it's in play (enforced in legalMoves). Naming is mandatory.

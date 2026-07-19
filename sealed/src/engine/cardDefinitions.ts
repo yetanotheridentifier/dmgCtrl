@@ -910,6 +910,16 @@ registerCard('ASH_110', whenPlayed('You may defeat this unit. If you do, search 
 registerCard('ASH_077', whenPlayed("Name a card. While this unit is in play, opponents can't play cards with that name.", (s, ctx) => // Ryder Azadi
   pushChoice(s, { kind: 'nameCard', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId! })))
 
+registerCard('ASH_147', whenPlayed('Either deal 2 damage to an undamaged ground unit or 5 damage to a damaged ground unit.', (s, ctx) => { // The Cyborg Mech
+  const targets = groundUnits(s).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'variableStrike', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, undamagedAmount: 2, damagedAmount: 5 }) : s
+}))
+
+registerCard('ASH_044', whenPlayed('Heal up to 2 damage from a unit. Give an Advantage token to it for each damage healed this way.', (s, ctx) => { // Barriss Offee
+  const targets = allUnits(s).filter(u => u.damage > 0).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'healForAdvantage', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, maxHeal: 2 }) : s
+}))
+
 registerCard('ASH_108', whenPlayed('You may play a Heroism unit from your hand. It costs 2 less for each arena in which you control the most units.', (s, ctx) => { // Crix Madine
   const costDelta = -2 * arenasControllingMost(s, ctx.owner)
   const candidates = affordableHandUnits(s, ctx.owner, 0, costDelta).filter(ref => (s.cards[ref.cardId]?.aspects ?? []).some(a => a.toLowerCase() === 'heroism'))
