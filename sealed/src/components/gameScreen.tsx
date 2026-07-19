@@ -901,7 +901,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
 
     // Optional targeted pending choices (#309/#342) — resolved by clicking a highlighted
     // board unit plus a Decline button, rather than one menu button per target.
-    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage', 'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit', 'mayExhaustUnit', 'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust', 'attachResourceUpgrade', 'mayDefeatEnemyUnit', 'selectUniqueUnitToDefeat', 'opponentGivesAdvantage', 'mayGiveTokens', 'multiPick', 'distributeDamage', 'variableStrike', 'healForAdvantage']
+    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage', 'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit', 'mayExhaustUnit', 'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust', 'attachResourceUpgrade', 'mayDefeatEnemyUnit', 'selectUniqueUnitToDefeat', 'opponentGivesAdvantage', 'mayGiveTokens', 'multiPick', 'distributeDamage', 'distributeTokens', 'variableStrike', 'healForAdvantage']
     const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && boardTargetKinds.includes(c.kind))
     const choiceTargetIds = new Map<string, Action>()
     // Base targets (selectDamageTarget, #348): pick a player's base to take the damage.
@@ -1025,6 +1025,14 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === selectUpgradeChoice.id)
       : []
 
+    // A "return a card from your discard" choice (Moff Gideon, #356): a centre-screen card picker.
+    const fromDiscardChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'selectFromDiscard' }> => c.kind === 'selectFromDiscard' && c.controller === 'player',
+    )
+    const fromDiscardActions = fromDiscardChoice
+      ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === fromDiscardChoice.id)
+      : []
+
     // The Armorer (#348): "look at your resources" — a card picker over the player's resources,
     // upgrades selectable, the rest revealed but dimmed. Resolved in the overlay, not the menu.
     const resourceUpgradeChoice = gameState.pendingChoices?.find(
@@ -1050,19 +1058,19 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // "Play a unit from hand" accepts (#348) are clicked on the hand card, not the menu.
     const isHandPlay = (a: Action) => a.type === 'acceptChoice' && a.handIndex !== undefined
     const menuActions = gameState.winner === null
-      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !nameCardActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
+      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !nameCardActions.includes(a) && !fromDiscardActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
       : []
     // The board-target decline and the hand-discard decline share one button (only one
     // choice is active at a time). "Done" for the repeatable multiPick, else "Decline".
     const declineButton = declineChoice ?? discardDecline ?? handPlayDecline
-    // Distribute-damage HUD (Ninth Sister, #355): show how much of the pool is allocated.
-    const distribute = targetChoice?.kind === 'distributeDamage' ? targetChoice : undefined
-    const repeatable = targetChoice?.kind === 'multiPick' || targetChoice?.kind === 'distributeDamage'
+    // Distribute HUD (Ninth Sister damage / Helgait tokens, #355/#356): how much of the pool is allocated.
+    const distribute = targetChoice?.kind === 'distributeDamage' || targetChoice?.kind === 'distributeTokens' ? targetChoice : undefined
+    const repeatable = targetChoice?.kind === 'multiPick' || targetChoice?.kind === 'distributeDamage' || targetChoice?.kind === 'distributeTokens'
     const actionColumn = (
       <div className="flex flex-col items-stretch gap-1.5">
         {distribute && (
-          <div data-testid="distribute-hud" className="rounded-xl border-2 border-red/60 px-3 py-1.5 text-center text-xs text-ink-dim">
-            Damage allocated <span className="font-semibold text-ink">{distribute.total - distribute.remaining} / {distribute.total}</span>
+          <div data-testid="distribute-hud" className="rounded-xl border-2 border-accent/60 px-3 py-1.5 text-center text-xs text-ink-dim">
+            {distribute.kind === 'distributeTokens' ? 'Tokens' : 'Damage'} allocated <span className="font-semibold text-ink">{distribute.total - distribute.remaining} / {distribute.total}</span>
           </div>
         )}
         {declineButton && (
@@ -1170,6 +1178,17 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           prompt="Play an upgrade from your resources"
           items={items}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: resourceUpgradeChoice.id, optionIndex })}
+          onCancel={cancel ? () => actAndClear(cancel) : undefined}
+        />
+      )
+    } else if (fromDiscardChoice) {
+      const cancel = fromDiscardActions.find(a => a.type === 'skipTrigger')
+      choiceOverlay = (
+        <CardSelectOverlay
+          state={gameState}
+          prompt="Return a card from your discard to your hand"
+          items={fromDiscardChoice.candidates.map((cardId, i) => ({ cardId, optionIndex: i, key: i }))}
+          onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: fromDiscardChoice.id, optionIndex })}
           onCancel={cancel ? () => actAndClear(cancel) : undefined}
         />
       )

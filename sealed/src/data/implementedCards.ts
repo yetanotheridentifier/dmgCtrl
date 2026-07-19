@@ -249,6 +249,10 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_028', name: 'Paz Vizsla' },
   { id: 'ASH_191', name: "Shin Hati's Fiend Fighter" },
   { id: 'ASH_167', name: 'Flarestar Attack Shuttle' },
+  { id: 'ASH_195', name: 'Helgait' },
+  { id: 'ASH_043', name: 'Corona Four' },
+  { id: 'ASH_165', name: 'Clan Vizsla Soldier' },
+  { id: 'ASH_097', name: 'Moff Gideon' },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */

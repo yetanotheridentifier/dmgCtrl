@@ -25,6 +25,15 @@ const E = {
   ASH_028: card({ id: 'ASH_028', type: 'unit', arena: 'ground', power: 4, hp: 7, keywords: [{ name: 'Sentinel' }] }), // Paz Vizsla
   ASH_191: card({ id: 'ASH_191', type: 'unit', arena: 'space', power: 3, hp: 1 }), // Shin Hati's Fiend Fighter
   ASH_167: card({ id: 'ASH_167', type: 'unit', arena: 'space', power: 2, hp: 1 }), // Flarestar Attack Shuttle
+  ASH_195: card({ id: 'ASH_195', type: 'unit', arena: 'ground', power: 6, hp: 4 }), // Helgait
+  ASH_043: card({ id: 'ASH_043', type: 'unit', arena: 'space', power: 2, hp: 3 }), // Corona Four
+  ZEROPOW: card({ id: 'ZEROPOW', type: 'unit', arena: 'ground', power: 0, hp: 3 }),
+  ASH_165: card({ id: 'ASH_165', type: 'unit', arena: 'ground', power: 2, hp: 3 }), // Clan Vizsla Soldier
+  ASH_097: card({ id: 'ASH_097', type: 'unit', arena: 'ground', power: 2, hp: 5, keywords: [{ name: 'Sentinel' }] }), // Moff Gideon
+  UPG: card({ id: 'UPG', type: 'upgrade', power: 1, hp: 1 }),
+  IMPUNIT: card({ id: 'IMPUNIT', type: 'unit', arena: 'ground', power: 3, hp: 3, traits: ['Imperial'] }),
+  IMPUNIQUE: card({ id: 'IMPUNIQUE', type: 'unit', arena: 'ground', power: 3, hp: 3, traits: ['Imperial'], unique: true }),
+  REBELUNIT: card({ id: 'REBELUNIT', type: 'unit', arena: 'ground', power: 3, hp: 3, traits: ['Rebel'] }),
   FILLER: card({ id: 'FILLER', type: 'unit', arena: 'ground', power: 2, hp: 5 }),
   FILLERSPACE: card({ id: 'FILLERSPACE', type: 'unit', arena: 'space', power: 2, hp: 5 }),
   BRUISERBIG: card({ id: 'BRUISERBIG', type: 'unit', arena: 'ground', power: 9, hp: 10 }),
@@ -142,5 +151,82 @@ describe('Group E — Flarestar (167): whenPlayed / whenDefeated (#356)', () => 
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayGiveTokens', token: TOKEN_ADVANTAGE, count: 1, optional: true })
     const done = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, targetInstanceId: 'e' })
     expect(advs(U(done, 'e'))).toBe(1)
+  })
+})
+
+describe('Group E — Helgait (195): distribute Advantage = power', () => {
+  it('distributes power(6) Advantage among friendly units, stacking allowed, Done stops early', () => {
+    const s = defeat('ASH_195', { playerUnits: [unit('a', 'FILLER', { arena: 'ground' }), unit('b', 'FILLER', { arena: 'ground' })] })
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'distributeTokens', token: TOKEN_ADVANTAGE, remaining: 6, total: 6 })
+    const targets = legalMoves(s).filter(a => a.type === 'acceptChoice').map(a => a.targetInstanceId)
+    expect(targets.sort()).toEqual(['a', 'b']) // friendly only
+    let cur = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, targetInstanceId: 'a' })
+    expect(advs(U(cur, 'a'))).toBe(1)
+    expect(cur.pendingChoices?.[0]).toMatchObject({ remaining: 5 })
+    cur = resolve(cur, { type: 'acceptChoice', choiceId: cur.pendingChoices![0].id, targetInstanceId: 'a' }) // stack on the same unit
+    expect(advs(U(cur, 'a'))).toBe(2)
+    const done = resolve(cur, { type: 'skipTrigger', choiceId: cur.pendingChoices![0].id })
+    expect(done.pendingChoices ?? []).toHaveLength(0)
+  })
+
+  it('no effect with no other friendly unit', () => {
+    expect(defeat('ASH_195').pendingChoices ?? []).toHaveLength(0)
+  })
+})
+
+describe('Group E — Corona Four (043)', () => {
+  it('whenDefeated: may defeat a non-leader unit with 0 power', () => {
+    const s = defeat('ASH_043', { oppUnits: [unit('z', 'ZEROPOW', { arena: 'ground' }), unit('e', 'FILLER', { arena: 'ground' })] })
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayDefeatEnemyUnit' })
+    const targets = legalMoves(s).filter(a => a.type === 'acceptChoice').map(a => a.targetInstanceId)
+    expect(targets).toEqual(['z']) // only the 0-power unit (FILLER has power 2)
+    const done = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, targetInstanceId: 'z' })
+    expect(done.players.opponent.units.find(u => u.instanceId === 'z')).toBeUndefined()
+  })
+
+  it('onAttack: may give a unit -2/-0 this phase', () => {
+    const s = state({
+      cards: E,
+      players: {
+        player: player({ units: [unit('c', 'ASH_043', { arena: 'space' })] }),
+        opponent: player({ units: [unit('e', 'FILLERSPACE', { arena: 'space' })] }),
+      },
+    })
+    const attacked = resolve(s, { type: 'attack', attackerId: 'c', target: { kind: 'base' } })
+    expect(attacked.pendingChoices?.[0]).toMatchObject({ kind: 'mayLastingBuff', power: -2 })
+  })
+})
+
+describe('Group E — Clan Vizsla Soldier (165): may defeat an upgrade', () => {
+  it('raises an optional upgrade-defeat choice covering upgrades on either side', () => {
+    const s = defeat('ASH_165', { oppUnits: [unit('e', 'FILLER', { arena: 'ground', upgrades: [{ cardId: 'UPG', owner: 'opponent' }] })] })
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'selectUpgradeToDefeat', optional: true })
+    const done = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, optionIndex: 0 })
+    expect(U(done, 'e').upgrades).toHaveLength(0) // the upgrade was defeated
+    expect(done.pendingChoices ?? []).toHaveLength(0) // no damage follow-up (unlike Vane)
+  })
+
+  it('no upgrades in play → no choice', () => {
+    expect(defeat('ASH_165', { oppUnits: [unit('e', 'FILLER', { arena: 'ground' })] }).pendingChoices ?? []).toHaveLength(0)
+  })
+})
+
+describe('Group E — Moff Gideon (097): return a non-unique Imperial from discard', () => {
+  it('offers only non-unique Imperial units in your discard, and returns the pick to hand', () => {
+    // seed the discard, then defeat Moff Gideon
+    const board = state({
+      cards: E,
+      players: {
+        player: player({ units: [unit('t', 'ASH_097', { arena: 'ground', damage: 4 })], discard: ['IMPUNIT', 'IMPUNIQUE', 'REBELUNIT'] }),
+        opponent: player({}),
+      },
+    })
+    const defeated = dealDamageToUnit(board, 't', 1)
+    expect(defeated.pendingChoices?.[0]).toMatchObject({ kind: 'selectFromDiscard', optional: true })
+    const cands = (defeated.pendingChoices![0] as { candidates: string[] }).candidates
+    expect(cands).toEqual(['IMPUNIT']) // unique Imperial + Rebel excluded
+    const done = resolve(defeated, { type: 'acceptChoice', choiceId: defeated.pendingChoices![0].id, optionIndex: 0 })
+    expect(done.players.player.hand).toContain('IMPUNIT')
+    expect(done.players.player.discard).not.toContain('IMPUNIT')
   })
 })

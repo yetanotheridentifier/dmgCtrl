@@ -7,7 +7,7 @@ import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit } from './combat'
-import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit } from './effects'
+import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, returnUpgradeFromDiscardToHand } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
@@ -526,21 +526,23 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       break
     }
     case 'selectUpgradeToDefeat': {
-      // Vane (#309/#348): defeat the chosen friendly upgrade (card or token), then choose where the
-      // 2 damage lands (a base — or, deployed, the defending unit or a base).
+      // Vane (#309/#348): defeat the chosen upgrade (card or token). Vane then chooses where 2 damage
+      // lands (`then`); Clan Vizsla Soldier (#356) just defeats it, with no follow-up.
       const pick = choice.candidates[optionIndex ?? 0]
       if (pick) {
         next = defeatUpgradeAt(next, pick.unitId, pick.upgradeIndex)
-        const inPlay = new Set([...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId))
         const spec = choice.then
-        next = pushChoice(next, {
-          kind: 'selectDamageTarget',
-          id: `${choice.id}-dmg`,
-          controller: choice.controller,
-          amount: spec.amount,
-          unitTargets: spec.unitTargets.filter(id => inPlay.has(id)), // a target may have left play
-          baseTargets: spec.baseTargets,
-        })
+        if (spec) {
+          const inPlay = new Set([...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId))
+          next = pushChoice(next, {
+            kind: 'selectDamageTarget',
+            id: `${choice.id}-dmg`,
+            controller: choice.controller,
+            amount: spec.amount,
+            unitTargets: spec.unitTargets.filter(id => inPlay.has(id)), // a target may have left play
+            baseTargets: spec.baseTargets,
+          })
+        }
       }
       break
     }
@@ -622,12 +624,30 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       break
     }
+    case 'distributeTokens': {
+      // Helgait (#356): give one token to the chosen friendly unit, then re-offer the rest.
+      if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
+        next = giveToken(next, targetInstanceId, choice.token)
+        const remaining = choice.remaining - 1
+        const targets = next.players[choice.controller].units.map(u => u.instanceId)
+        if (remaining > 0 && targets.length > 0) {
+          next = pushChoice(next, { kind: 'distributeTokens', id: choice.id, controller: choice.controller, token: choice.token, remaining, total: choice.total, targets })
+        }
+      }
+      break
+    }
     case 'lookAtHand': {
       // Remnant Lookouts (#355): discard the chosen card from the target's hand; if `thenDraw`, they draw.
       if (choice.mayDiscard && handIndex !== undefined) {
         next = discardFromHand(next, choice.target, handIndex)
         if (choice.thenDraw) next = drawCards(next, choice.target, 1)
       }
+      break
+    }
+    case 'selectFromDiscard': {
+      // Moff Gideon (#356): return the chosen discard-pile card to hand.
+      const cardId = choice.candidates[optionIndex ?? 0]
+      if (cardId !== undefined) next = returnUpgradeFromDiscardToHand(next, choice.controller, cardId)
       break
     }
     case 'searchDraw': {

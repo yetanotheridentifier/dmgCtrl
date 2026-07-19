@@ -978,3 +978,51 @@ registerCard('ASH_167', {
     { trigger: 'whenDefeated', description: 'You may give an Advantage token to a unit.', effect: flarestarGiveAdvantage },
   ],
 })
+
+registerCard('ASH_195', whenDefeated("You may distribute Advantage tokens equal to this unit's power among friendly units.", (s, ctx) => { // Helgait
+  const power = ctx.defeatedUnit ? effectivePower(s, ctx.defeatedUnit) : 0
+  const targets = s.players[ctx.owner].units.map(u => u.instanceId)
+  return power > 0 && targets.length ? pushChoice(s, { kind: 'distributeTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_ADVANTAGE, remaining: power, total: power, targets }) : s
+}))
+
+registerCard('ASH_043', { // Corona Four — On Attack debuff + When Defeated defeat a 0-power unit
+  abilities: [
+    {
+      trigger: 'onAttack',
+      description: 'You may give a unit -2/-0 for this phase.',
+      effect: (s, ctx) => {
+        const targets = allUnits(s).map(u => u.instanceId)
+        return targets.length ? pushChoice(s, { kind: 'mayLastingBuff', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, power: -2, hp: 0 }) : s
+      },
+    },
+    {
+      trigger: 'whenDefeated',
+      description: 'You may defeat a non-leader unit with 0 power.',
+      effect: (s, ctx) => {
+        const targets = allUnits(s).filter(u => !isLeaderUnit(s, u) && effectivePower(s, u) === 0).map(u => u.instanceId)
+        return targets.length ? pushChoice(s, { kind: 'mayDefeatEnemyUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
+      },
+    },
+  ],
+})
+
+// Every upgrade in play (both sides) — the "defeat an upgrade" candidate set (#356, Clan Vizsla Soldier).
+const allUpgradeCandidates = (s: GameState): UpgradeRef[] =>
+  allUnits(s).flatMap(u => u.upgrades.map((up, i) => ({ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId })))
+
+registerCard('ASH_165', whenDefeated('You may defeat an upgrade.', (s, ctx) => { // Clan Vizsla Soldier
+  const candidates = allUpgradeCandidates(s)
+  return candidates.length ? pushChoice(s, { kind: 'selectUpgradeToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true }) : s
+}))
+
+registerCard('ASH_097', whenDefeated("You may return a non-unique Imperial unit from your discard pile to your hand.", (s, ctx) => { // Moff Gideon
+  const seen = new Set<string>()
+  const candidates = s.players[ctx.owner].discard.filter(id => {
+    const c = s.cards[id]
+    if (!c || c.type !== 'unit' || c.unique || !c.traits.some(t => t.toLowerCase() === 'imperial')) return false
+    if (seen.has(id)) return false // list each distinct title once
+    seen.add(id)
+    return true
+  })
+  return candidates.length ? pushChoice(s, { kind: 'selectFromDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true }) : s
+}))

@@ -358,6 +358,12 @@ function choiceMoves(state: GameState): Action[] {
         if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'selectFromDiscard': {
+        // Moff Gideon (#356): pick a candidate discard card to return, or decline (optional).
+        choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
       case 'selectDamageTarget':
       case 'selectHealTarget': {
         // Deal/heal N to a chosen unit or base (#348) — mandatory unless `optional` (Nebulon-C's "may heal").
@@ -414,6 +420,12 @@ function choiceMoves(state: GameState): Action[] {
       }
       case 'distributeDamage': {
         // Ninth Sister (#355): allocate a point to any eligible unit, or stop (Done) — always optional.
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'distributeTokens': {
+        // Helgait (#356): allocate a token to any friendly unit, or stop (Done) — always optional.
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break

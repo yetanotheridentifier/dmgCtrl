@@ -333,7 +333,11 @@ export type PendingChoice =
   // Vane (#309/#348): defeat a friendly upgrade (chosen from `candidates`, cards or tokens); then the
   // `then` damage-target selection follows. `optional` = the deployed "may" version (a Cancel is
   // offered); the front action is mandatory. Each candidate is the exact upgrade (unit + index).
-  | { kind: 'selectUpgradeToDefeat'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional: boolean; then: DamageTargetSpec }
+  // Vane chains 2 damage via `then`; Clan Vizsla Soldier (#356) just defeats the upgrade (`then` omitted).
+  | { kind: 'selectUpgradeToDefeat'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional: boolean; then?: DamageTargetSpec }
+  // Return a chosen card from your discard to your hand (#356, Moff Gideon). `candidates` are the
+  // eligible discard-pile card ids; `acceptChoice`'s `optionIndex` picks one. Optional.
+  | { kind: 'selectFromDiscard'; id: string; controller: PlayerId; candidates: string[]; optional: boolean }
   // Choose where to deal a fixed amount of damage (#348): a unit (`unitTargets`) or a base
   // (`baseTargets`, by owner). Mandatory. Vane's "deal 2 to a base / the defending unit or a base".
   | { kind: 'selectDamageTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[] }
@@ -385,6 +389,9 @@ export type PendingChoice =
   // `remaining` reaches 0. `targets` are the currently-eligible unit instance ids (both sides,
   // recomputed as units are defeated). Always optional — the controller may stop early (a "may").
   | { kind: 'distributeDamage'; id: string; controller: PlayerId; remaining: number; total: number; targets: string[] }
+  // Distribute `total` tokens among `targets`, one per pick until `remaining` reaches 0 (#356, Helgait).
+  // Unlike `multiPick`'s give-advantage, targets stay eligible so tokens can stack. Always optional.
+  | { kind: 'distributeTokens'; id: string; controller: PlayerId; token: string; remaining: number; total: number; targets: string[] }
   // Look at `target`'s hand (#355, Imperial Defector / Remnant Lookouts) — the controller sees it
   // revealed. View-only unless `mayDiscard`, when the controller may discard one of the target's
   // cards (an `acceptChoice` with its hand index); `thenDraw` then has the target draw a card.
