@@ -203,6 +203,10 @@ export function actionAbilityKey(cardId: string, index: number): string {
 export interface StatModContext {
   attacking?: boolean
   attackingBase?: boolean
+  /** This unit is the defender in the current combat (#357, Palace Chef Droid). */
+  defending?: boolean
+  /** For the attacker: the defending unit had damage on it (#357, Marrok's Fiend Fighter). */
+  defenderDamaged?: boolean
 }
 
 const registry = new Map<string, CardDefinition>()

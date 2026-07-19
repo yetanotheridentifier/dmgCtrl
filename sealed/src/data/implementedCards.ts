@@ -281,6 +281,12 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_142', name: 'Mortar Trooper' },
   { id: 'ASH_179', name: "Boba Fett's Rancor" },
   { id: 'ASH_119', name: 'Greef Karga' },
+  // Group F (#357) — conditional stat modifiers
+  { id: 'ASH_073', name: 'Palace Chef Droid' },
+  { id: 'ASH_241', name: "Marrok's Fiend Fighter" },
+  { id: 'ASH_206', name: 'Kelleran Beq' },
+  { id: 'ASH_197', name: 'Executor' },
+  { id: 'ASH_226', name: "Qi'ra" },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */

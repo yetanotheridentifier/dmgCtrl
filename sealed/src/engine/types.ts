@@ -389,7 +389,7 @@ export type PendingChoice =
   // Resolved by an `acceptChoice` carrying the hand index. `then` runs after the last discard: Ninth
   // Sister distributes the discarded card's cost as damage (`distributeDamageTo`); Razor Crest gives a
   // unit a "this phase" buff (`buffUnit`).
-  | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean; then?: { distributeDamageTo: PlayerId } | { buffUnit: string; power?: number; hp?: number } }
+  | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean; then?: { distributeDamageTo: PlayerId } | { buffUnit: string; power?: number; hp?: number } | { dealDamage: number } }
   // Leia Organa (#356): a yes/no — deal `selfDamage` to `unitId`, then heal `healBase` from your base.
   | { kind: 'maySelfDamageHealBase'; id: string; controller: PlayerId; unitId: string; selfDamage: number; healBase: number }
   // Mando's N-1 (#356): a yes/no — exhaust your (ready) leader to give `unitId` a "+power/+hp this phase" buff.

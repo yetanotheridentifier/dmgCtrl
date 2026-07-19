@@ -1190,3 +1190,30 @@ registerCard('ASH_119', { actionAbilities: [{ // Greef Karga (unit)
   usable: (s, u) => { const owner = findUnit(s, u.instanceId)?.owner; return !u.exhausted && owner !== undefined && baseAttackedThisPhase(s, owner) },
   effect: (s, ctx) => createTokenUnit(exhaustUnit(s, ctx.sourceInstanceId!), ctx.owner, TOKEN_MANDALORIAN),
 }] })
+
+// ── Group F (#357): combat-role + static statModifiers ──────────────────────
+registerCard('ASH_073', { statModifier: (_s, _u, ctx) => (ctx.defending ? { power: 2 } : {}) }) // Palace Chef Droid — +2/+0 while defending
+
+registerCard('ASH_241', { statModifier: (_s, _u, ctx) => (ctx.attacking && ctx.defenderDamaged ? { power: 2 } : {}) }) // Marrok's Fiend Fighter — +2/+0 attacking a damaged unit
+
+registerCard('ASH_206', { statModifier: (s, u) => // Kelleran Beq — +1/+0 per other unit (either side) with 0 power
+  ({ power: allUnits(s).filter(x => x.instanceId !== u.instanceId && effectivePower(s, x) === 0).length }) })
+
+registerCard('ASH_197', { // Executor
+  statModifier: (s, u) => {
+    const owner = findUnit(s, u.instanceId)?.owner
+    if (!owner) return {}
+    return { power: s.players[owner].units.filter(x => x.instanceId !== u.instanceId).reduce((sum, x) => sum + x.upgrades.length, 0) }
+  },
+  abilities: [{ trigger: 'whenPlayed', description: 'Give an Advantage token to each other friendly unit.', effect: (s, ctx) => {
+    let next = s
+    for (const x of s.players[ctx.owner].units) if (x.instanceId !== ctx.sourceInstanceId) next = giveToken(next, x.instanceId, TOKEN_ADVANTAGE)
+    return next
+  } }],
+})
+
+registerCard('ASH_226', { // Qi'ra
+  statModifier: (s, u) => { const owner = findUnit(s, u.instanceId)?.owner; return owner ? { power: -s.players[owner].hand.length } : {} },
+  abilities: [{ trigger: 'whenPlayed', description: 'You may discard a card from your hand. If you do, deal 3 damage to a unit.', effect: (s, ctx) =>
+    s.players[ctx.owner].hand.length > 0 ? pushChoice(s, { kind: 'selectDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, count: 1, optional: true, then: { dealDamage: 3 } }) : s }],
+})

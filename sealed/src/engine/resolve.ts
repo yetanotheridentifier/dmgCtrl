@@ -623,9 +623,13 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
             if (amount > 0 && targets.length > 0) {
               next = pushChoice(next, { kind: 'distributeDamage', id: choice.id, controller: choice.then.distributeDamageTo, remaining: amount, total: amount, targets })
             }
-          } else {
+          } else if ('buffUnit' in choice.then) {
             // Razor Crest (#356): "if you do, this unit gets +power/+hp for this attack".
             next = addLastingEffect(next, { targetInstanceId: choice.then.buffUnit, power: choice.then.power, hp: choice.then.hp })
+          } else {
+            // Qi'ra (#357): "if you do, deal N damage to a unit".
+            const targets = [...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId)
+            if (targets.length > 0) next = pushChoice(next, { kind: 'mayDamage', id: choice.id, controller: choice.controller, unitId: choice.id, targets, amount: choice.then.dealDamage, optional: false })
           }
         }
       }
@@ -1321,7 +1325,9 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   // The attacker may have been defeated before damage (e.g. an On Defense ping).
   if (!attacker) return clearGrantedKeywords(checkWin(state))
 
-  const attackerPower = effectivePower(state, attacker, { attacking: true, attackingBase: target.kind === 'base' })
+  // "While attacking a damaged unit …" (#357, Marrok's Fiend Fighter) reads the defender's pre-combat damage.
+  const targetUnit = target.kind === 'unit' ? state.players[enemyId].units.find(u => u.instanceId === target.instanceId) : undefined
+  const attackerPower = effectivePower(state, attacker, { attacking: true, attackingBase: target.kind === 'base', defenderDamaged: (targetUnit?.damage ?? 0) > 0 })
 
   if (target.kind === 'base') {
     const enemy = state.players[enemyId]
@@ -1353,12 +1359,13 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
 
   // Combat-conditional auras (Grogu, #348) apply to the defender during damage resolution.
   const combat = { attackerInstanceId: attackerId, defenderInstanceId: defender.instanceId }
-  const counterPower = effectivePower(preCombat, defender, { combat })
+  const defenderCtx = { combat, defending: true } // #357, Palace Chef Droid: "+X while defending"
+  const counterPower = effectivePower(preCombat, defender, defenderCtx)
 
   // Overwhelm: excess combat damage beyond the defender's remaining HP hits the
   // defending player's base (CR 1.9.11). A shielded defender takes no damage, so
   // there is no excess to trample (#308).
-  const remainingHp = effectiveHp(preCombat, defender, { combat }) - defender.damage
+  const remainingHp = effectiveHp(preCombat, defender, defenderCtx) - defender.damage
   const overwhelmExcess = unitHasKeyword(preCombat, attacker, 'Overwhelm')
     && !hasToken(defender.upgrades, TOKEN_SHIELD)
     && !unitNegatesOverwhelm(preCombat, defender)

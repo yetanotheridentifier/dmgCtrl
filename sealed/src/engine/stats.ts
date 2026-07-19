@@ -15,6 +15,10 @@ export interface StatContext {
   attacking?: boolean
   /** True while the unit is attacking the enemy base (not a unit). */
   attackingBase?: boolean
+  /** True while the unit is the defender in the current combat (#357, Palace Chef Droid). */
+  defending?: boolean
+  /** For the attacker: the defending unit had damage on it (#357, Marrok's Fiend Fighter). */
+  defenderDamaged?: boolean
   /** The current combat's roles, for combat-conditional auras (Grogu, #348). */
   combat?: CombatContext
 }
