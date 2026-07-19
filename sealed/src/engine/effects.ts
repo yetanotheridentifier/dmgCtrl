@@ -158,6 +158,14 @@ export function exhaustReadyResource(state: GameState, owner: PlayerId): GameSta
   return { ...state, players: { ...state.players, [owner]: { ...p, resources: p.resources.map((r, i) => (i === idx ? { ...r, exhausted: true } : r)) } } }
 }
 
+/** Ready one exhausted resource of `owner` (#356, Emperor's Messenger). No-op if none is exhausted. */
+export function readyResource(state: GameState, owner: PlayerId): GameState {
+  const p = state.players[owner]
+  const idx = p.resources.findIndex(r => r.exhausted)
+  if (idx === -1) return state
+  return { ...state, players: { ...state.players, [owner]: { ...p, resources: p.resources.map((r, i) => (i === idx ? { ...r, exhausted: false } : r)) } } }
+}
+
 /** Move the top `n` cards of a player's deck to the bottom, preserving order (#355, Clan Wren Loyalist). */
 export function bottomTopCards(state: GameState, owner: PlayerId, n: number): GameState {
   const p = state.players[owner]

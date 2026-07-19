@@ -31,6 +31,7 @@ const E = {
   ASH_165: card({ id: 'ASH_165', type: 'unit', arena: 'ground', power: 2, hp: 3 }), // Clan Vizsla Soldier
   ASH_097: card({ id: 'ASH_097', type: 'unit', arena: 'ground', power: 2, hp: 5, keywords: [{ name: 'Sentinel' }] }), // Moff Gideon
   UPG: card({ id: 'UPG', type: 'upgrade', power: 1, hp: 1 }),
+  UPG0: card({ id: 'UPG0', type: 'upgrade', power: 0, hp: 0 }), // stat-neutral (just marks a unit "upgraded")
   IMPUNIT: card({ id: 'IMPUNIT', type: 'unit', arena: 'ground', power: 3, hp: 3, traits: ['Imperial'] }),
   IMPUNIQUE: card({ id: 'IMPUNIQUE', type: 'unit', arena: 'ground', power: 3, hp: 3, traits: ['Imperial'], unique: true }),
   REBELUNIT: card({ id: 'REBELUNIT', type: 'unit', arena: 'ground', power: 3, hp: 3, traits: ['Rebel'] }),
@@ -38,6 +39,13 @@ const E = {
   ASH_038: card({ id: 'ASH_038', type: 'unit', arena: 'space', power: 6, hp: 10 }), // Purrgil Ultra
   ASH_045: card({ id: 'ASH_045', type: 'unit', arena: 'ground', power: 2, hp: 2 }), // Reanimated Night Trooper
   COST3UNIT: card({ id: 'COST3UNIT', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 2 }),
+  // onAttack batch A
+  ASH_157: card({ id: 'ASH_157', type: 'unit', arena: 'space', power: 4, hp: 5 }), // Danger Squadron Wingmen
+  ASH_189: card({ id: 'ASH_189', type: 'unit', arena: 'ground', power: 0, hp: 3, keywords: [{ name: 'Support' }] }), // Emperor's Messenger
+  ASH_056: card({ id: 'ASH_056', type: 'unit', arena: 'ground', power: 2, hp: 4 }), // Huyang
+  ASH_168: card({ id: 'ASH_168', type: 'unit', arena: 'ground', power: 2, hp: 3, keywords: [{ name: 'Support' }] }), // Migs Mayfeld
+  ASH_083: card({ id: 'ASH_083', type: 'unit', arena: 'space', power: 15, hp: 15, keywords: [{ name: 'Sentinel' }] }), // Summa-verminoth
+  ASH_156: card({ id: 'ASH_156', type: 'unit', arena: 'ground', power: 3, hp: 4, keywords: [{ name: 'Support' }] }), // R5-D4
   FILLER: card({ id: 'FILLER', type: 'unit', arena: 'ground', power: 2, hp: 5 }),
   FILLERSPACE: card({ id: 'FILLERSPACE', type: 'unit', arena: 'space', power: 2, hp: 5 }),
   BRUISERBIG: card({ id: 'BRUISERBIG', type: 'unit', arena: 'ground', power: 9, hp: 10 }),
@@ -303,5 +311,60 @@ describe('Group E — Reanimated Night Trooper (045): peek & maybe discard a dec
     const done = resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id })
     expect(done.players.player.deck).toEqual(['FILLER', 'ZEROPOW'])
     expect(done.players.opponent.deck).toEqual(['REBELUNIT', 'IMPUNIT'])
+  })
+})
+
+/** Attack with `cardId` (a ready player unit) and return the resulting state. */
+function onAtk(cardId: string, opts: { target?: { kind: 'base' } | { kind: 'unit'; instanceId: string }; oppUnits?: UnitState[]; playerUnits?: UnitState[]; upgrades?: { cardId: string; owner: 'player' | 'opponent' }[]; resources?: PlayerState['resources'] } = {}): GameState {
+  const c = E[cardId as keyof typeof E]
+  const s = state({
+    cards: E,
+    players: {
+      player: player({ units: [unit('a', cardId, { arena: c.arena, upgrades: opts.upgrades ?? [] }), ...(opts.playerUnits ?? [])], resources: opts.resources ?? [] }),
+      opponent: player({ units: opts.oppUnits ?? [] }),
+    },
+  })
+  return resolve(s, { type: 'attack', attackerId: 'a', target: opts.target ?? { kind: 'base' } })
+}
+
+describe('Group E — onAttack, simple (#356)', () => {
+  it('Danger Squadron Wingmen (157): may give an Advantage to ANOTHER unit', () => {
+    const s = onAtk('ASH_157', { playerUnits: [unit('f', 'FILLER', { arena: 'ground' })] })
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayGiveTokens', token: TOKEN_ADVANTAGE, count: 1, optional: true })
+    const targets = legalMoves(s).filter(a => a.type === 'acceptChoice').map(a => a.targetInstanceId)
+    expect(targets).toContain('f')
+    expect(targets).not.toContain('a') // "another" excludes self
+  })
+
+  it("Emperor's Messenger (189): readies a resource on attack", () => {
+    const s = onAtk('ASH_189', { resources: [{ cardId: 'FILLER', exhausted: true }, { cardId: 'FILLER', exhausted: true }] })
+    expect(s.players.player.resources.filter(r => !r.exhausted)).toHaveLength(1)
+  })
+
+  it('Huyang (056): may give an upgraded unit -4/-0', () => {
+    const s = onAtk('ASH_056', { oppUnits: [unit('up', 'FILLER', { arena: 'ground', upgrades: [{ cardId: 'UPG', owner: 'opponent' }] }), unit('plain', 'FILLER', { arena: 'ground' })] })
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayLastingBuff', power: -4 })
+    const targets = legalMoves(s).filter(a => a.type === 'acceptChoice').map(a => a.targetInstanceId)
+    expect(targets).toEqual(['up']) // only the upgraded unit
+  })
+
+  it('Migs Mayfeld (168): deals 1 to the defender, 2 if upgraded', () => {
+    const plain = onAtk('ASH_168', { oppUnits: [unit('e', 'FILLER', { arena: 'ground' })], target: { kind: 'unit', instanceId: 'e' } })
+    expect(U(plain, 'e').damage).toBe(1 + 2) // 1 onAttack + 2 combat
+    const up = onAtk('ASH_168', { upgrades: [{ cardId: 'UPG0', owner: 'player' }], oppUnits: [unit('e', 'FILLER', { arena: 'ground' })], target: { kind: 'unit', instanceId: 'e' } })
+    expect(U(up, 'e').damage).toBe(2 + 2) // 2 onAttack (upgraded) + 2 combat
+  })
+
+  it('R5-D4 (156): defeats all upgrades on the defending unit', () => {
+    const s = onAtk('ASH_156', { oppUnits: [unit('e', 'FILLER', { arena: 'ground', upgrades: [{ cardId: 'UPG', owner: 'opponent' }] })], target: { kind: 'unit', instanceId: 'e' } })
+    expect(U(s, 'e').upgrades).toHaveLength(0)
+  })
+
+  it('Summa-verminoth (083): defeats all other space units', () => {
+    const s = onAtk('ASH_083', { playerUnits: [unit('mine', 'FILLERSPACE', { arena: 'space' })], oppUnits: [unit('theirs', 'FILLERSPACE', { arena: 'space' }), unit('grd', 'FILLER', { arena: 'ground' })] })
+    expect(U(s, 'mine')).toBeUndefined()
+    expect(U(s, 'theirs')).toBeUndefined()
+    expect(U(s, 'grd')).toBeDefined() // ground survives
+    expect(s.players.player.units.some(u => u.instanceId === 'a')).toBe(true) // Summa itself survives
   })
 })

@@ -1,6 +1,6 @@
 import { registerCard } from './abilities'
-import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount, grantNextUnit, healUnit, bottomTopCards, exhaustReadyResource } from './effects'
-import { dealDamageToUnit } from './combat'
+import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, findUnit, searchCount, grantNextUnit, healUnit, bottomTopCards, exhaustReadyResource, readyResource } from './effects'
+import { dealDamageToUnit, defeatUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
@@ -1046,3 +1046,38 @@ registerCard('ASH_045', whenDefeated('Look at the top card of a deck. You may di
   const decks = (['player', 'opponent'] as PlayerId[]).filter(d => s.players[d].deck.length > 0)
   return decks.length ? pushChoice(s, { kind: 'peekTopDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, decks }) : s
 }))
+
+// ── Group E (#356): onAttack — batch A ──────────────────────────────────────
+registerCard('ASH_157', { abilities: [{ trigger: 'onAttack', description: 'You may give an Advantage token to another unit.', effect: (s, ctx) => { // Danger Squadron Wingmen
+  const targets = allUnits(s).filter(u => u.instanceId !== ctx.sourceInstanceId).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_ADVANTAGE, count: 1, targets, optional: true }) : s
+} }] })
+
+registerCard('ASH_189', { abilities: [{ trigger: 'onAttack', description: 'Ready a resource.', effect: (s, ctx) => readyResource(s, ctx.owner) }] }) // Emperor's Messenger
+
+registerCard('ASH_056', { abilities: [{ trigger: 'onAttack', description: 'You may give an upgraded unit -4/-0 for this phase.', effect: (s, ctx) => { // Huyang
+  const targets = allUnits(s).filter(u => u.upgrades.length > 0).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayLastingBuff', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, power: -4, hp: 0 }) : s
+} }] })
+
+registerCard('ASH_168', { abilities: [{ trigger: 'onAttack', description: 'Deal 1 damage to the defending unit; 2 instead if this unit is upgraded.', effect: (s, ctx) => { // Migs Mayfeld
+  if (ctx.attackTarget?.kind !== 'unit') return s
+  const attacker = allUnits(s).find(u => u.instanceId === ctx.sourceInstanceId)
+  return dealDamageToUnit(s, ctx.attackTarget.instanceId, attacker && attacker.upgrades.length > 0 ? 2 : 1)
+} }] })
+
+registerCard('ASH_083', { abilities: [{ trigger: 'onAttack', description: 'Defeat all other space units.', effect: (s, ctx) => { // Summa-verminoth
+  let next = s
+  for (const id of allUnits(s).filter(u => u.arena === 'space' && u.instanceId !== ctx.sourceInstanceId).map(u => u.instanceId)) next = defeatUnit(next, id)
+  return next
+} }] })
+
+registerCard('ASH_156', { abilities: [{ trigger: 'onAttack', description: 'Defeat all upgrades on the defending unit.', effect: (s, ctx) => { // R5-D4
+  const target = ctx.attackTarget
+  if (target?.kind !== 'unit') return s
+  const u = allUnits(s).find(x => x.instanceId === target.instanceId)
+  if (!u) return s
+  let next = s
+  for (let i = u.upgrades.length - 1; i >= 0; i--) next = defeatUpgradeAt(next, u.instanceId, i) // last→first keeps indices valid
+  return next
+} }] })

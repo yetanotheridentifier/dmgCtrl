@@ -256,6 +256,13 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_027', name: 'Enoch' },
   { id: 'ASH_038', name: 'Purrgil Ultra' },
   { id: 'ASH_045', name: 'Reanimated Night Trooper' },
+  // Group E (#356) — onAttack
+  { id: 'ASH_157', name: 'Danger Squadron Wingmen' },
+  { id: 'ASH_189', name: "Emperor's Messenger" },
+  { id: 'ASH_056', name: 'Huyang' },
+  { id: 'ASH_168', name: 'Migs Mayfeld' },
+  { id: 'ASH_083', name: 'Summa-verminoth' },
+  { id: 'ASH_156', name: 'R5-D4' },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */
