@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from 'react'
-import type { EngineCard, GameState, PlayerId } from '../engine/types'
+import type { GameState, PlayerId } from '../engine/types'
 import CardFace from './cardFace'
-import { longEdge } from './cardSizing'
+import { CARD_WIDTH_PX, longEdge } from './cardSizing'
 import { useCardZoom } from './useCardZoom'
 import { CardZoomPopover } from './cardZoom'
+import { CardGridOverlay } from './cardGridOverlay'
 
 /** Mat cards (deck/resources/discard/opponent-hand) are smaller than the hand. */
 export const MAT_CARD_PX = 84
@@ -88,37 +89,16 @@ export function ResourceStack({ ready, exhausted }: { ready: number; exhausted: 
   )
 }
 
-/** A discarded card that zooms on Shift+hover / long-press, like the hand (#332). */
-function DiscardCard({ card, fallbackName }: { card: EngineCard | undefined; fallbackName: string }) {
-  const { zoomed, bind } = useCardZoom()
-  return (
-    <div {...bind} className="relative w-fit">
-      <CardFace card={card} fallbackName={fallbackName} tight />
-      {zoomed && <CardZoomPopover card={card} fallbackName={fallbackName} />}
-    </div>
-  )
-}
-
 function DiscardOverlay({ cardIds, state, onClose }: { cardIds: string[]; state: GameState; onClose: () => void }) {
   return (
-    <div
-      data-testid="discard-overlay"
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
-    >
-      <div
-        data-testid="discard-overlay-content"
-        onClick={e => e.stopPropagation()}
-        style={{ backgroundColor: '#0d1b2a' }}
-        className="max-h-[80vh] max-w-4xl overflow-y-auto rounded-xl border-2 border-line/60 p-4"
-      >
-        <div className="flex flex-wrap gap-2">
-          {cardIds.map((id, i) => (
-            <DiscardCard key={`${id}-${i}`} card={state.cards[id]} fallbackName={id} />
-          ))}
-        </div>
-      </div>
-    </div>
+    <CardGridOverlay
+      idPrefix="discard"
+      cardsById={state.cards}
+      cardWidthPx={CARD_WIDTH_PX}
+      scrollable
+      onBackdropClick={onClose}
+      items={cardIds.map((id, i) => ({ cardId: id, key: `${id}-${i}` }))}
+    />
   )
 }
 
@@ -128,7 +108,7 @@ function DiscardOverlay({ cardIds, state, onClose }: { cardIds: string[]; state:
  */
 export function DiscardPile({ state, side }: { state: GameState; side: PlayerId }) {
   const [open, setOpen] = useState(false)
-  const { zoomed, bind } = useCardZoom()
+  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
   const discard = state.players[side].discard
   const top = discard[discard.length - 1]
   return (
@@ -137,6 +117,7 @@ export function DiscardPile({ state, side }: { state: GameState; side: PlayerId 
         <EmptySlot />
       ) : (
         <button
+          ref={setAnchor}
           data-testid={`${side}-discard-pile`}
           onClick={() => setOpen(true)}
           {...bind}
@@ -144,7 +125,7 @@ export function DiscardPile({ state, side }: { state: GameState; side: PlayerId 
         >
           <CardFace card={state.cards[top]} fallbackName={top} tight widthPx={MAT_CARD_PX} />
           <CountChip>{discard.length}</CountChip>
-          {zoomed && <CardZoomPopover card={state.cards[top]} fallbackName={top} />}
+          {zoomed && <CardZoomPopover card={state.cards[top]} fallbackName={top} anchorRef={anchorRef} />}
         </button>
       )}
       {open && <DiscardOverlay cardIds={discard} state={state} onClose={() => setOpen(false)} />}

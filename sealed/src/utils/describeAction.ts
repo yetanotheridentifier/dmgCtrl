@@ -69,7 +69,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayPlayTopFree') return "Don't play"
       if (choice.kind === 'mayDamageExhaust') return 'Decline'
       if (choice.kind === 'mayAttack') return "Don't attack"
-      if (choice.kind === 'mayDamage' || choice.kind === 'mayAdvantageEach' || choice.kind === 'mayDefeatEnemyUnit') return 'Decline'
+      if (choice.kind === 'distributeDamage' || choice.kind === 'lookAtHand' || choice.kind === 'searchPlayFree') return 'Done'
+      if (choice.kind === 'playUnitFromHand') return "Don't play"
+      if (choice.kind === 'mayDefeatSelfSearch') return "Don't"
+      if (choice.kind === 'mayDamage' || choice.kind === 'mayAdvantageEach' || choice.kind === 'mayDefeatEnemyUnit' || choice.kind === 'selectDiscard') return 'Decline'
       if (choice.kind === 'selectUpgradeToDefeat' || choice.kind === 'selectResourceUpgrade') return 'Cancel'
       if (choice.kind === 'mayLastingBuff' || choice.kind === 'mayGiveAdvantage' || choice.kind === 'mayExhaustLeaderGiveAdvantage' || choice.kind === 'mayExhaustLeaderExhaustUnit' || choice.kind === 'mayExhaustUnit') return 'Decline'
       if (choice.kind === 'mayExhaustLeaderForAdvantage' || choice.kind === 'mayExhaustLeaderHealUnit' || choice.kind === 'mayPayToDraw' || choice.kind === 'mayDeployLeader') return "Don't"
@@ -91,6 +94,25 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'search' && action.deckIndex !== undefined) {
         const cardId = choice.revealed[action.deckIndex]
         return `Discard ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
+      }
+      if (choice.kind === 'searchDraw' && action.deckIndex !== undefined) {
+        const cardId = choice.revealed[action.deckIndex]
+        return `Draw ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
+      }
+      if (choice.kind === 'variableStrike') {
+        const found = action.targetInstanceId ? [...state.players.player.units, ...state.players.opponent.units].find(u => u.instanceId === action.targetInstanceId) : undefined
+        const amount = found && found.damage > 0 ? choice.damagedAmount : choice.undamagedAmount
+        return `Deal ${amount}${found ? ` to ${anyUnitName(state, found.instanceId)}` : ''}`
+      }
+      if (choice.kind === 'healForAdvantage') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Heal${target ? ` ${target}` : ''}`
+      }
+      if (choice.kind === 'nameCard') return `Name ${action.cardName ?? 'a card'}`
+      if (choice.kind === 'mayDefeatSelfSearch') return `Defeat ${anyUnitName(state, choice.unitId) ?? 'this unit'} & search`
+      if (choice.kind === 'searchPlayFree' && action.deckIndex !== undefined) {
+        const cardId = choice.revealed[action.deckIndex]
+        return `Play ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'} free`
       }
       if (choice.kind === 'mayDamage') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
@@ -132,6 +154,18 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Attach ${state.cards[choice.cardId]?.name ?? choice.cardId} to ${target ?? 'unit'}`
       }
+      if (choice.kind === 'selectDiscard') {
+        const cardId = action.handIndex !== undefined ? state.players[by].hand[action.handIndex] : undefined
+        return `Discard ${cardId ? state.cards[cardId]?.name ?? cardId : 'a card'}`
+      }
+      if (choice.kind === 'distributeDamage') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Deal 1${target ? ` to ${target}` : ''}`
+      }
+      if (choice.kind === 'lookAtHand') {
+        const cardId = action.handIndex !== undefined ? state.players[choice.target].hand[action.handIndex] : undefined
+        return `Discard ${cardId ? state.cards[cardId]?.name ?? cardId : 'a card'}`
+      }
       if (choice.kind === 'mayExhaustLeaderForAdvantage') return `Exhaust leader → Advantage to ${anyUnitName(state, choice.unitId) ?? 'unit'}`
       if (choice.kind === 'mayPayToDraw') {
         const cards = choice.draw === 1 ? 'a card' : `${choice.draw} cards`
@@ -154,6 +188,15 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'opponentGivesAdvantage') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `${choice.count} Advantage to ${target ?? 'unit'}`
+      }
+      if (choice.kind === 'multiPick') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return choice.spec.mode === 'defeatForToken' ? `Defeat ${target ?? 'unit'}` : `Advantage to ${target ?? 'unit'}`
+      }
+      if (choice.kind === 'mayGiveTokens') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        const tokenName = state.cards[choice.token]?.name ?? 'token'
+        return `${choice.count > 1 ? `${choice.count} ` : ''}${tokenName}${choice.count > 1 ? 's' : ''} to ${target ?? 'unit'}`
       }
       if (choice.kind === 'mayLastingBuff') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined

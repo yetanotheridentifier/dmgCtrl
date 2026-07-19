@@ -1,4 +1,4 @@
-import type { GameState, KeywordInstance, PlayerId, UnitState } from './types'
+import type { GameState, NextUnitGrant, PlayerId, UnitState } from './types'
 import { updatePlayer } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { getCardDefinition } from './abilities'
@@ -48,15 +48,13 @@ export function giveToken(state: GameState, instanceId: string, tokenId: string)
 }
 
 /**
- * Grant keywords to the NEXT unit `owner` plays this phase (Sabine Wren → Shielded, #348). Merges
- * with any existing grant (union by name), so repeated grants don't stack duplicates. Consumed by
- * the next `enterUnit`; cleared at regroup. Generic — reusable by any "your next unit gains …" card.
+ * Queue a "your next unit …" grant for `owner` this phase (#348/#355). The grant (keywords, a cost
+ * delta, and/or enters-ready, with an optional trait/power filter) is consumed by the next unit that
+ * matches its filter — cost in `effectiveCost`, the rest in `enterUnit`; cleared at regroup. Generic:
+ * Sabine (Shielded), Mouse Droid (−1 to the next Imperial), Neel (next ≤1-power unit enters ready).
  */
-export function grantNextUnitKeywords(state: GameState, owner: PlayerId, keywords: KeywordInstance[]): GameState {
-  const existing = state.players[owner].nextPlayedUnitKeywords ?? []
-  const merged = [...existing]
-  for (const k of keywords) if (!merged.some(m => m.name === k.name)) merged.push(k)
-  return updatePlayer(state, owner, { nextPlayedUnitKeywords: merged })
+export function grantNextUnit(state: GameState, owner: PlayerId, grant: NextUnitGrant): GameState {
+  return updatePlayer(state, owner, { nextUnitGrants: [...(state.players[owner].nextUnitGrants ?? []), grant] })
 }
 
 /** Deal `amount` damage to a player's base (#309). The caller runs the win check. */
@@ -126,6 +124,25 @@ export function drawCards(state: GameState, owner: PlayerId, n: number): GameSta
   return {
     ...state,
     players: { ...state.players, [owner]: { ...p, hand: [...p.hand, ...drawn], deck: p.deck.slice(drawn.length) } },
+  }
+}
+
+/** Move the top `n` cards of a player's deck to the bottom, preserving order (#355, Clan Wren Loyalist). */
+export function bottomTopCards(state: GameState, owner: PlayerId, n: number): GameState {
+  const p = state.players[owner]
+  const top = p.deck.slice(0, n)
+  if (top.length === 0) return state
+  return { ...state, players: { ...state.players, [owner]: { ...p, deck: [...p.deck.slice(top.length), ...top] } } }
+}
+
+/** Discard the card at `handIndex` from a player's hand to their discard pile (#355). No-op if out of range. */
+export function discardFromHand(state: GameState, owner: PlayerId, handIndex: number): GameState {
+  const p = state.players[owner]
+  const cardId = p.hand[handIndex]
+  if (cardId === undefined) return state
+  return {
+    ...state,
+    players: { ...state.players, [owner]: { ...p, hand: p.hand.filter((_, i) => i !== handIndex), discard: [...p.discard, cardId] } },
   }
 }
 

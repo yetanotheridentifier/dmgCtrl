@@ -2,12 +2,12 @@ import type { Action, AttackTarget } from './actions'
 import type { GameState, PlayerId, UnitState } from './types'
 import type { PendingChoice, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeChoice, hasPendingChoices, pushChoice } from './types'
-import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, markAbilityUsed } from './types'
+import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit } from './combat'
-import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards } from './effects'
+import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
@@ -31,8 +31,9 @@ export function resolve(state: GameState, action: Action): GameState {
         const played = playCard(state, action.handIndex)
         if (played.winner !== null) return played
         // An on-play trigger (Ambush) keeps the turn with the active player to
-        // resolve it before passing (#334).
-        if (activeChoice(played)) return resetPasses(played)
+        // resolve it before passing (#334). If the trigger raised an OPPONENT-controlled
+        // choice (Ninth Sister: "an opponent discards…", #355), hand control to them first.
+        if (activeChoice(played)) return resetPasses(handOffOpponentChoice(played, played.activePlayer))
         return advanceTurn(resetPasses(played))
       })
     case 'playUpgrade':
@@ -85,7 +86,7 @@ export function resolve(state: GameState, action: Action): GameState {
     case 'skipTrigger':
       return requirePhase(state, 'action', () => resolveSkip(state, action.choiceId))
     case 'acceptChoice':
-      return requirePhase(state, 'action', () => resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex, action.baseTarget, action.handIndex))
+      return requirePhase(state, 'action', () => resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex, action.baseTarget, action.handIndex, action.cardName))
     case 'resourceCard':
       return requirePhase(state, 'regroup', () => regroupChoice(state, action.handIndex))
     case 'skipResource':
@@ -209,7 +210,11 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
   const card = state.cards[cardId]
   // Keywords the played unit gains on entry: its card's, plus any "next unit you play this phase"
   // grant (Sabine → Shielded, #348) — so a granted Ambush/Shielded/Hidden fires just like a printed one.
-  const grantKeywords = state.players[owner].nextPlayedUnitKeywords ?? []
+  // "Your next unit …" grants matching this card (#348/#355) — their keywords/enters-ready apply here
+  // (the cost delta was already folded into `effectiveCost` at play time).
+  const grants = (state.players[owner].nextUnitGrants ?? []).filter(g => nextUnitGrantMatches(card, g))
+  const grantKeywords = grants.flatMap(g => g.keywords ?? [])
+  const grantEntersReady = grants.some(g => g.entersReady)
   const entersWith = (name: string): boolean => hasKeyword(state, cardId, name) || grantKeywords.some(k => k.name === name)
   // Ambush: the unit may immediately attack an enemy unit, so it enters ready (#334).
   const ambush = entersWith('Ambush')
@@ -218,8 +223,8 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
     cardId,
     arena: card?.arena ?? 'ground',
     damage: 0,
-    // Units normally enter exhausted (CR 1.5.4b); Ambush — or an ability (Fennec, #348) — enters ready.
-    exhausted: ready === true ? false : !ambush,
+    // Units normally enter exhausted (CR 1.5.4b); Ambush — or an ability (Fennec #348 / Neel #355) — enters ready.
+    exhausted: ready === true || grantEntersReady ? false : !ambush,
     isLeader: false,
     // Shielded: the unit enters play with a shield token (#334).
     upgrades: entersWith('Shielded') ? [{ cardId: TOKEN_SHIELD, owner }] : [],
@@ -230,11 +235,13 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
   let next = updatePlayer(state, owner, { units: [...state.players[owner].units, newUnit] })
   next = { ...next, instanceCounter: state.instanceCounter + 1 }
   next = recordUnitEntered(next, owner, newUnit.instanceId) // "entered play this phase" (#347)
-  // Consume the "next unit" grant: give the unit the keywords for this phase (a lasting effect, so an
-  // ongoing keyword like Sentinel counts too) and clear it — only the first unit played benefits (#348).
-  if (grantKeywords.length > 0) {
-    next = addLastingEffect(next, { targetInstanceId: newUnit.instanceId, keywords: grantKeywords })
-    next = updatePlayer(next, owner, { nextPlayedUnitKeywords: undefined })
+  // Consume the matching grants: give the unit their keywords for this phase (a lasting effect, so an
+  // ongoing keyword like Sentinel counts too), and drop the consumed grants — a non-matching unit
+  // leaves them in place for a later matching unit (#348/#355).
+  if (grants.length > 0) {
+    if (grantKeywords.length > 0) next = addLastingEffect(next, { targetInstanceId: newUnit.instanceId, keywords: grantKeywords })
+    const remaining = (next.players[owner].nextUnitGrants ?? []).filter(g => !nextUnitGrantMatches(card, g))
+    next = updatePlayer(next, owner, { nextUnitGrants: remaining.length > 0 ? remaining : undefined })
   }
 
   // The unit is in play now, so read Ambush/Support from its LIVE keywords — an aura can strip them
@@ -250,8 +257,9 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
     }
   } else {
     // No (or aura-stripped) Ambush: it was constructed ready only if the card printed Ambush, so revert
-    // to the normal exhausted entry — unless an ability entered it ready (Fennec, `ready === true`).
-    if (ready !== true && !inPlay().exhausted) exhaust()
+    // to the normal exhausted entry — unless an ability entered it ready (Fennec `ready`, or a Neel-style
+    // enters-ready grant, #355).
+    if (ready !== true && !grantEntersReady && !inPlay().exhausted) exhaust()
     if (unitHasKeyword(next, inPlay(), 'Support')) next = openSupportChoice(next, owner, newUnit.instanceId)
   }
 
@@ -272,6 +280,30 @@ function fireEntersPlay(state: GameState, owner: PlayerId, newUnitId: string): G
     if (reactor) next = runUnitTrigger(next, 'whenPlayOrCreateUnit', reactor, owner, { targetInstanceId: newUnitId })
   }
   return next
+}
+
+/** Space units among `revealed` whose cost fits `budget` (#355, Admiral Ackbar). */
+function ackbarEligible(state: GameState, revealed: string[], budget: number): number[] {
+  return revealed.flatMap((cardId, i) => {
+    const c = state.cards[cardId]
+    return c?.type === 'unit' && c.arena === 'space' && (c.cost ?? 0) <= budget ? [i] : []
+  })
+}
+
+/**
+ * Admiral Ackbar's search (#355): reveal the top 10, and if any space unit fits the cost-5 budget,
+ * hold those cards out of the deck in a `searchPlayFree` choice; otherwise put the searched cards on
+ * the bottom (nothing to play). The `#348`-style "shuffle after search" is approximated by bottoming.
+ */
+function startAckbarSearch(state: GameState, owner: PlayerId, choiceId: string): GameState {
+  const p = state.players[owner]
+  const revealed = p.deck.slice(0, 10)
+  const rest = p.deck.slice(10)
+  const eligibleIndices = ackbarEligible(state, revealed, 5)
+  if (eligibleIndices.length === 0) return updatePlayer(state, owner, { deck: [...rest, ...revealed] })
+  // Pull the searched window out of the deck; leftover cards return to the bottom when the choice ends.
+  const pulled = updatePlayer(state, owner, { deck: rest })
+  return pushChoice(pulled, { kind: 'searchPlayFree', id: choiceId, controller: owner, revealed, eligibleIndices, budget: 5 })
 }
 
 function playCard(state: GameState, handIndex: number): GameState {
@@ -375,11 +407,15 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
       units: next.players[choice.controller].units.map(u => (u.instanceId === choice.unitId ? { ...u, exhausted: true } : u)),
     })
   }
+  // Admiral Ackbar (#355): stopping the search returns the still-held revealed cards to the deck bottom.
+  if (choice.kind === 'searchPlayFree') {
+    next = updatePlayer(next, choice.controller, { deck: [...next.players[choice.controller].deck, ...choice.revealed] })
+  }
   return resumeAfterChoice(next, choice)
 }
 
 /** Accept a pending "may…" choice — pay the cost / play the card / search (#342/#343). */
-function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: string, deckIndex?: number, optionIndex?: number, baseTarget?: PlayerId, handIndex?: number): GameState {
+function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: string, deckIndex?: number, optionIndex?: number, baseTarget?: PlayerId, handIndex?: number, cardName?: string): GameState {
   const choice = findChoice(state, choiceId)
   if (!choice) throw new Error(`acceptChoice: no choice ${choiceId}`)
   let next = removeChoice(state, choice.id)
@@ -409,6 +445,10 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         next = dealDamageToUnit(next, targetInstanceId, choice.amount)
         next = checkWin(next)
         if (next.winner !== null) return next
+        // "If it's defeated this way, …" — Imposing Scout Walker rewards its own unit (#355).
+        if (choice.rewardIfDefeated && !findUnit(next, targetInstanceId)) {
+          for (let i = 0; i < choice.rewardIfDefeated.count; i++) next = giveToken(next, choice.rewardIfDefeated.instanceId, TOKEN_ADVANTAGE)
+        }
       }
       break
     case 'mayAdvantageEach':
@@ -436,6 +476,10 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'mayGiveAdvantage':
       // Ezra deployed: give the chosen unit an Advantage token, no cost (#347).
       if (targetInstanceId) next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+      break
+    case 'mayGiveTokens':
+      // Give `count` of a token to the chosen unit (#355) — Attendant Navigator, Anakin, Trexler.
+      if (targetInstanceId) for (let i = 0; i < choice.count; i++) next = giveToken(next, targetInstanceId, choice.token)
       break
     case 'mayExhaustLeaderGiveAdvantage': {
       // Ezra front: exhaust the (undeployed) leader to give the chosen unit an Advantage token (#347).
@@ -525,11 +569,135 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         }
       }
       break
-    case 'mayPayToDraw':
+    case 'mayPayToDraw': {
       // Mandalorian (#348): optionally pay the cost, then draw. `cost` 0 = a free "may draw".
       next = updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost))
+      const handBefore = next.players[choice.controller].hand.length
       next = drawCards(next, choice.controller, choice.draw)
+      // Mos Espa Watermonger (#355): "if you do, discard a card" — only when a card was actually drawn.
+      const drew = next.players[choice.controller].hand.length - handBefore
+      if (choice.thenDiscard && drew > 0) {
+        next = pushChoice(next, { kind: 'selectDiscard', id: choice.id, controller: choice.controller, count: Math.min(choice.thenDiscard, next.players[choice.controller].hand.length) })
+      }
       break
+    }
+    case 'selectDiscard': {
+      // Discard the chosen hand card (#355), then re-offer until `count` are discarded.
+      if (handIndex !== undefined) {
+        const discardedId = next.players[choice.controller].hand[handIndex]
+        next = discardFromHand(next, choice.controller, handIndex)
+        const remaining = choice.count - 1
+        if (remaining > 0 && next.players[choice.controller].hand.length > 0) {
+          next = pushChoice(next, { kind: 'selectDiscard', id: choice.id, controller: choice.controller, count: remaining, optional: choice.optional, then: choice.then })
+        } else if (choice.then && discardedId !== undefined) {
+          // Ninth Sister (#355): "you may deal damage equal to its cost divided among any units".
+          const amount = next.cards[discardedId]?.cost ?? 0
+          const targets = [...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId)
+          if (amount > 0 && targets.length > 0) {
+            next = pushChoice(next, { kind: 'distributeDamage', id: choice.id, controller: choice.then.distributeDamageTo, remaining: amount, total: amount, targets })
+          }
+        }
+      }
+      break
+    }
+    case 'distributeDamage': {
+      // Ninth Sister (#355): spend one point of the pool onto the chosen unit, then re-offer the
+      // rest against the still-living units. skipTrigger (Done) ends it early — the whole thing is optional.
+      if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
+        next = dealDamageToUnit(next, targetInstanceId, 1)
+        next = checkWin(next)
+        if (next.winner !== null) return next
+        const remaining = choice.remaining - 1
+        const targets = [...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId)
+        if (remaining > 0 && targets.length > 0) {
+          next = pushChoice(next, { kind: 'distributeDamage', id: choice.id, controller: choice.controller, remaining, total: choice.total, targets })
+        }
+      }
+      break
+    }
+    case 'lookAtHand': {
+      // Remnant Lookouts (#355): discard the chosen card from the target's hand; if `thenDraw`, they draw.
+      if (choice.mayDiscard && handIndex !== undefined) {
+        next = discardFromHand(next, choice.target, handIndex)
+        if (choice.thenDraw) next = drawCards(next, choice.target, 1)
+      }
+      break
+    }
+    case 'searchDraw': {
+      // Clan Wren Loyalist (#355): draw the chosen revealed card; put the other revealed cards on
+      // the bottom of the deck (revealed order — the "random order" is immaterial hidden info here).
+      if (deckIndex !== undefined && deckIndex < choice.revealed.length) {
+        const owner = choice.controller
+        const p = next.players[owner]
+        const drawn = choice.revealed[deckIndex]
+        const rest = p.deck.slice(choice.revealed.length)
+        const others = choice.revealed.filter((_, i) => i !== deckIndex)
+        next = updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: [...rest, ...others] })
+      }
+      break
+    }
+    case 'variableStrike': {
+      // The Cyborg Mech (#355): deal 5 to a damaged target, else 2 to an undamaged one.
+      if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
+        const found = findUnit(next, targetInstanceId)
+        const amount = found && found.unit.damage > 0 ? choice.damagedAmount : choice.undamagedAmount
+        next = dealDamageToUnit(next, targetInstanceId, amount)
+        next = checkWin(next)
+        if (next.winner !== null) return next
+      }
+      break
+    }
+    case 'healForAdvantage': {
+      // Barriss Offee (#355): heal min(maxHeal, damage) from the unit and give it that many Advantage tokens.
+      if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
+        const found = findUnit(next, targetInstanceId)
+        const healed = found ? Math.min(choice.maxHeal, found.unit.damage) : 0
+        if (healed > 0) {
+          next = healUnit(next, targetInstanceId, healed)
+          for (let i = 0; i < healed; i++) next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+        }
+      }
+      break
+    }
+    case 'nameCard': {
+      // Ryder Azadi (#355): record the named card on this unit — the opponent can't play cards with
+      // that name while it's in play (enforced in legalMoves). Naming is mandatory.
+      if (cardName) {
+        next = updatePlayer(next, choice.controller, {
+          units: next.players[choice.controller].units.map(u => (u.instanceId === choice.unitId ? { ...u, namedCard: cardName } : u)),
+        })
+      }
+      break
+    }
+    case 'mayDefeatSelfSearch': {
+      // Admiral Ackbar (#355): defeat this unit, then search the top 10 for space units to play free.
+      next = defeatUnit(next, choice.unitId)
+      next = checkWin(next)
+      if (next.winner !== null) return next
+      next = startAckbarSearch(next, choice.controller, choice.id)
+      break
+    }
+    case 'searchPlayFree': {
+      // Admiral Ackbar (#355): play the chosen revealed space unit for free (it may trigger its own
+      // When Played — that sub-choice resolves first, then we re-offer the rest of the budget).
+      if (deckIndex !== undefined && choice.eligibleIndices.includes(deckIndex)) {
+        const owner = choice.controller
+        const cardId = choice.revealed[deckIndex]
+        const cost = next.cards[cardId]?.cost ?? 0
+        next = enterUnit(next, owner, cardId, false)
+        next = checkWin(next)
+        if (next.winner !== null) return next
+        const revealed = choice.revealed.filter((_, i) => i !== deckIndex)
+        const budget = choice.budget - cost
+        const eligibleIndices = ackbarEligible(next, revealed, budget)
+        if (budget > 0 && eligibleIndices.length > 0) {
+          next = pushChoice(next, { kind: 'searchPlayFree', id: choice.id, controller: owner, revealed, eligibleIndices, budget })
+        } else {
+          next = updatePlayer(next, owner, { deck: [...next.players[owner].deck, ...revealed] }) // bottom the leftovers
+        }
+      }
+      break
+    }
     case 'selectUniqueToDefeat': {
       // Unique rule (#348): defeat the chosen duplicate upgrade, then re-check (3+ copies → repeat).
       const pick = choice.candidates[optionIndex ?? 0]
@@ -543,6 +711,33 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       // Sabine front (#348): the opponent gives `count` Advantage tokens to their chosen unit.
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
         for (let i = 0; i < choice.count; i++) next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+      }
+      break
+    case 'multiPick':
+      // Repeatable board-target pick (#355): apply the per-pick effect, then re-offer the remaining
+      // eligible targets — Inspiring Veteran (up to N Advantage), Pre Vizsla (defeat within an HP budget).
+      if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
+        if (choice.spec.mode === 'giveAdvantage') {
+          next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+          const remaining = choice.spec.remaining - 1
+          const targets = choice.targets.filter(id => id !== targetInstanceId)
+          if (remaining > 0 && targets.length > 0) next = pushChoice(next, { kind: 'multiPick', id: choice.id, controller: choice.controller, targets, spec: { mode: 'giveAdvantage', remaining } })
+        } else {
+          const found = findUnit(next, targetInstanceId)
+          const remHp = found ? Math.max(0, effectiveHp(next, found.unit) - found.unit.damage) : 0
+          next = createTokenUnit(defeatUnit(next, targetInstanceId), choice.controller, choice.spec.token)
+          next = checkWin(next)
+          if (next.winner !== null) return next
+          const budget = choice.spec.budget - remHp
+          // Re-offer from the ORIGINAL candidate set (minus the one just defeated), filtered by the
+          // remaining budget — so the tokens created this way don't become targets themselves.
+          const targets = choice.targets.filter(id => {
+            if (id === targetInstanceId) return false
+            const u = findUnit(next, id)?.unit
+            return u !== undefined && effectiveHp(next, u) - u.damage <= budget
+          })
+          if (budget > 0 && targets.length > 0) next = pushChoice(next, { kind: 'multiPick', id: choice.id, controller: choice.controller, targets, spec: { mode: 'defeatForToken', budget, token: choice.spec.token } })
+        }
       }
       break
     case 'selectUniqueUnitToDefeat': {

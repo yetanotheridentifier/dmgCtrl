@@ -1,6 +1,6 @@
 import type { Action } from './actions'
 import type { EngineCard, GameState, HandCardRef, PlayerId, ResourceUpgradeRef, UnitState } from './types'
-import { opponentOf, hasPendingChoices } from './types'
+import { opponentOf, hasPendingChoices, nextUnitGrantMatches } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { unitHasKeyword } from './keywords'
 import { getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions } from './abilities'
@@ -50,7 +50,9 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   }
   // Card-specific cost modifiers (e.g. −1 on an Imperial/Mandalorian unit) (#340).
   const modifier = getCardDefinition(card.id)?.costModifier?.(state, playerId, target) ?? 0
-  return Math.max(0, card.cost + penalty + modifier)
+  // "Your next unit …" cost grants that match this card — Mouse Droid's −1 to the next Imperial (#355).
+  const grantDelta = (p.nextUnitGrants ?? []).reduce((sum, g) => sum + (nextUnitGrantMatches(card, g) ? (g.costDelta ?? 0) : 0), 0)
+  return Math.max(0, card.cost + penalty + modifier + grantDelta)
 }
 
 /**
@@ -58,6 +60,20 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
  * (plus `costDelta`, floored at 0) fits the ready resources left after `extraResourceCost` (the
  * ability's own C=… cost). Used both to gate the ability (`usable`) and to build the play choice.
  */
+/** Distinct names of playable cards in the game (either deck) — the nameable set for Ryder Azadi (#355). */
+export function nameableCardNames(state: GameState): string[] {
+  const names = new Set<string>()
+  for (const card of Object.values(state.cards)) {
+    if (card && (card.type === 'unit' || card.type === 'event' || card.type === 'upgrade')) names.add(card.name)
+  }
+  return [...names].sort((a, b) => a.localeCompare(b))
+}
+
+/** Card names the opponent has forbidden us from playing via a Ryder Azadi they control (#355). */
+export function namedByOpponent(state: GameState, playerId: PlayerId): Set<string> {
+  return new Set(state.players[opponentOf(playerId)].units.flatMap(u => (u.namedCard ? [u.namedCard] : [])))
+}
+
 export function affordableHandUnits(state: GameState, owner: PlayerId, extraResourceCost: number, costDelta: number): HandCardRef[] {
   const p = state.players[owner]
   const budget = readyResourceCount(p) - extraResourceCost
@@ -138,10 +154,14 @@ function actionPhaseMoves(state: GameState): Action[] {
   const p = state.players[playerId]
   const enemy = state.players[opponentOf(playerId)]
 
+  // A Ryder Azadi (#355) the opponent controls forbids us from playing cards with the named names.
+  const forbiddenNames = namedByOpponent(state, playerId)
+
   // Play a Card (units only in MVP — see actions.ts)
   p.hand.forEach((cardId, handIndex) => {
     const card = state.cards[cardId]
     if (!card || card.type !== 'unit') return
+    if (forbiddenNames.has(card.name)) return
     if (canAfford(p, effectiveCost(state, playerId, card))) {
       moves.push({ type: 'playCard', handIndex })
     }
@@ -154,6 +174,7 @@ function actionPhaseMoves(state: GameState): Action[] {
   p.hand.forEach((cardId, handIndex) => {
     const card = state.cards[cardId]
     if (!card || card.type !== 'upgrade') return
+    if (forbiddenNames.has(card.name)) return
     const restriction = getCardDefinition(card.id)?.attachRestriction
     for (const target of allUnits) {
       if (restriction && !restriction(state, target)) continue
@@ -306,16 +327,24 @@ function choiceMoves(state: GameState): Action[] {
         })
         break
       }
-      case 'mayDamage':
       case 'mayAdvantageEach':
       case 'mayLastingBuff':
       case 'mayGiveAdvantage':
       case 'mayExhaustLeaderGiveAdvantage':
       case 'mayExhaustLeaderExhaustUnit':
-      case 'mayExhaustUnit': {
-        // Optional targeted effects (#309/#347): pick an eligible target, or decline.
+      case 'mayExhaustUnit':
+      case 'multiPick': {
+        // Optional targeted effects (#309/#347/#355): pick an eligible target, or decline / finish.
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'mayDamage':
+      case 'mayGiveTokens': {
+        // Targeted damage / token grant (#309/#355): a decline is offered unless the effect is
+        // mandatory (`optional: false`, e.g. Snub Fighter Squadron's "Deal 1 to a space unit").
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        if (choice.optional !== false) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'chooseOne': {
@@ -331,9 +360,10 @@ function choiceMoves(state: GameState): Action[] {
       }
       case 'selectDamageTarget':
       case 'selectHealTarget': {
-        // Deal/heal N to a chosen unit or base (#348) — mandatory (a target must be picked).
+        // Deal/heal N to a chosen unit or base (#348) — mandatory unless `optional` (Nebulon-C's "may heal").
         for (const id of choice.unitTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         for (const bp of choice.baseTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, baseTarget: bp })
+        if (choice.kind === 'selectHealTarget' && choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'mayExhaustLeaderHealUnit': {
@@ -343,8 +373,9 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'playUnitFromHand': {
-        // Play a chosen hand unit (#348) — one move per affordable candidate. Mandatory.
+        // Play a chosen hand unit (#348) — one move per affordable candidate. Optional for a "may" (Crix Madine, #355).
         for (const { handIndex } of choice.candidates) moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex })
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'selectUnitToExhaust': {
@@ -372,6 +403,59 @@ function choiceMoves(state: GameState): Action[] {
       case 'mayPayToDraw': {
         // Mandalorian (#348): a yes/no — accept only if the cost is affordable.
         if (readyResourceCount(p) >= choice.cost) moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'selectDiscard': {
+        // Mos Espa Watermonger (#355): discard a card from hand — any hand card is eligible.
+        p.hand.forEach((_, handIndex) => moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex }))
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'distributeDamage': {
+        // Ninth Sister (#355): allocate a point to any eligible unit, or stop (Done) — always optional.
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'lookAtHand': {
+        // Imperial Defector / Remnant Lookouts (#355): view the target's hand. With `mayDiscard`,
+        // one accept per card in it; always a Done to dismiss.
+        if (choice.mayDiscard) state.players[choice.target].hand.forEach((_, handIndex) => moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex }))
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'searchDraw': {
+        // Clan Wren Loyalist (#355): draw one of the trait-matching revealed cards. Mandatory (a match exists).
+        for (const deckIndex of choice.eligibleIndices) moves.push({ type: 'acceptChoice', choiceId: choice.id, deckIndex })
+        break
+      }
+      case 'mayDefeatSelfSearch': {
+        // Admiral Ackbar (#355): a yes/no — defeat this unit to search, or decline.
+        moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'variableStrike': {
+        // The Cyborg Mech (#355): pick a ground unit to strike. Mandatory.
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        break
+      }
+      case 'healForAdvantage': {
+        // Barriss Offee (#355): pick a damaged unit to heal, or decline (optional).
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'nameCard': {
+        // Ryder Azadi (#355): name any card. The nameable set is the cards in play (both decks) — the
+        // UI filters it by typing; the AI just picks one. Mandatory.
+        for (const name of nameableCardNames(state)) moves.push({ type: 'acceptChoice', choiceId: choice.id, cardName: name })
+        break
+      }
+      case 'searchPlayFree': {
+        // Admiral Ackbar (#355): play one eligible revealed space unit, or stop (Done).
+        for (const deckIndex of choice.eligibleIndices) moves.push({ type: 'acceptChoice', choiceId: choice.id, deckIndex })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }

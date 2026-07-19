@@ -680,3 +680,34 @@ Reuses the `aura` hook, extended two ways:
 - **`enterUnit` now reads Ambush/Support from the unit's LIVE keywords** (not just the card's), so an
   aura that strips Ambush/Support takes effect the moment a unit is played (Loth-Cat denying an enemy's
   ambush attack). Shielded/Hidden still apply from the card at construction (they change entry state).
+
+### Group D — "When Played" effects (#355, partial)
+
+Units register a `whenPlayed` triggered ability (shared `whenPlayed(description, effect)` helper).
+Effects reuse the primitive/choice library; a couple of small additions:
+- **`mayGiveTokens` choice** — `{ token, count, targets, optional? }`: give N of a token to a chosen
+  unit. Generalises the give-Advantage choice (also does Shields). Board-target; optional unless
+  `optional: false` (Anakin's mandatory Shield-to-another-friendly).
+- **`optional?` on `mayDamage` / `selectHealTarget`** — a decline is offered unless `optional: false`
+  (Snub Fighter Squadron's mandatory "Deal 1 to a space unit"; Nebulon-C's optional "may heal").
+- **`mayDamage.rewardIfDefeated`** — `{ instanceId, count }`: if the damage defeats the target, give
+  that many Advantage tokens to `instanceId` (Imposing Scout Walker rewards itself).
+- **Area / self-damage** are plain loops over `dealDamageToUnit` (Luke → each enemy if you control
+  4+ units; Battered Haulcraft / Han Solo deal to themselves then a chosen target).
+- **Generalised "next unit you play this phase" grant** — `PlayerState.nextUnitGrants: NextUnitGrant[]`
+  replaces the old keyword-only field. Each grant carries `keywords?` / `costDelta?` / `entersReady?`
+  plus an optional filter (`trait?` / `maxPower?`), and is consumed by the **next unit that matches its
+  filter** (`nextUnitGrantMatches`): `costDelta` folds into `effectiveCost`, keywords / enters-ready
+  apply in `enterUnit`; a non-matching unit leaves the grant in place. Sabine (Shielded, no filter),
+  Mouse Droid (−1 to the next Imperial), Neel (next ≤1-power unit enters ready — When Played / On Attack).
+
+**Done:** D1 (self/no-target, 8), D2 (single-target, 10), D3 (multi-step, 4: Battered Haulcraft, Han
+Solo, Luke, Imposing Scout Walker), D4 (next-unit grants, 2: Mouse Droid, Neel).
+
+**Deferred (need UI or a design call — for when the user's back):** multi-target selection (Inspiring
+Veteran, Pre Vizsla), variable/modal damage (The Cyborg Mech, Barriss Offee), discard-from-hand
+(Mos Espa Watermonger), opponent-discard + distribute-damage (Ninth Sister), search / opponent-hand /
+naming (Admiral Ackbar, Clan Wren Loyalist, Crix Madine, Imperial Defector, Remnant Lookouts, Ryder
+Azadi, Jod Na Nawood, Jabba, Purrgil Ultra, Queen Soruna, Trask Walker), and cards whose second
+ability needs an unbuilt trigger / choice-on-defeat (Flarestar, The Twins, Chimaera, Zeb Orrelios,
+Boba Fett's Rancor, Justifier, Pegasus Tri-Wing).

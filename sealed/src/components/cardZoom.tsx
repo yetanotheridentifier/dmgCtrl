@@ -1,34 +1,74 @@
+import { useLayoutEffect, useRef, useState } from 'react'
+import type { RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import type { EngineCard } from '../engine/types'
 import CardFace from './cardFace'
-import { ZOOM_WIDTH_PX } from './cardSizing'
+import { ZOOM_WIDTH_PX, longEdge } from './cardSizing'
 import { useModifierKeys } from './modifierKeys'
+
+/** Keep the zoomed card at least this far from the viewport edge (#331). */
+const VIEWPORT_MARGIN_PX = 12
 
 /**
  * The enlarged card shown while zooming (#321): full size, upright and clean (no
- * highlight, exhaustion or tokens), centred over the source card and floating
- * above neighbours. For a dual-sided leader, holding **Alt** shows the other side
- * (Shift is the zoom trigger, so the flip is Alt; desktop only). Positioning is
- * centred-on-source for the MVP; on-screen clamping near edges is the follow-up (#331).
+ * highlight, exhaustion or tokens), floating above everything else. For a dual-sided
+ * leader, holding **Alt** shows the other side (Shift is the zoom trigger, so the flip
+ * is Alt; desktop only).
+ *
+ * It renders through a portal to `document.body` and is positioned `fixed`, so it can
+ * never be clipped by an ancestor's `overflow` (e.g. a scrollable overlay) or trapped
+ * inside a stacking context. When given an `anchorRef` it centres over that element and
+ * then clamps to the viewport so edge cards stay fully on-screen (#331); without one it
+ * simply centres in the viewport (used by isolated render tests).
  */
 export function CardZoomPopover({
   card,
   deployed = false,
   fallbackName,
+  anchorRef,
 }: {
   card: EngineCard | undefined
   deployed?: boolean
   fallbackName?: string
+  anchorRef?: RefObject<HTMLElement | null>
 }) {
   const { alt } = useModifierKeys()
   const dualSided = card?.type === 'leader' && Boolean(card?.backArt)
   const effectiveDeployed = dualSided && alt ? !deployed : deployed
 
-  return (
+  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
+
+  useLayoutEffect(() => {
+    const anchor = anchorRef?.current
+    const el = ref.current
+    if (!anchor || !el) return // no anchor → stay centred (see style below)
+    const a = anchor.getBoundingClientRect()
+    const w = el.offsetWidth || ZOOM_WIDTH_PX
+    const h = el.offsetHeight || longEdge(ZOOM_WIDTH_PX)
+    const max = (extent: number, size: number) => Math.max(VIEWPORT_MARGIN_PX, extent - size - VIEWPORT_MARGIN_PX)
+    const left = Math.min(Math.max(VIEWPORT_MARGIN_PX, a.left + a.width / 2 - w / 2), max(window.innerWidth, w))
+    const top = Math.min(Math.max(VIEWPORT_MARGIN_PX, a.top + a.height / 2 - h / 2), max(window.innerHeight, h))
+    setPos({ left, top })
+  }, [anchorRef, card, effectiveDeployed])
+
+  const anchored = pos !== null
+  // With an anchor we hide until the layout effect measures it, to avoid a one-frame
+  // flash at the wrong spot. Without one we centre immediately (isolated render tests).
+  const measuring = anchorRef !== undefined && !anchored
+  const style = anchored
+    ? { left: pos.left, top: pos.top }
+    : { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }
+
+  return createPortal(
     <div
+      ref={ref}
       data-testid="card-zoom"
-      className="pointer-events-none absolute left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 drop-shadow-[0_8px_24px_rgba(0,0,0,0.7)]"
+      className="pointer-events-none fixed z-[100] drop-shadow-[0_8px_24px_rgba(0,0,0,0.7)]"
+      style={{ ...style, visibility: measuring ? 'hidden' : 'visible' }}
     >
       <CardFace card={card} deployed={effectiveDeployed} fallbackName={fallbackName} widthPx={ZOOM_WIDTH_PX} tight />
-    </div>
+    </div>,
+    document.body,
   )
 }

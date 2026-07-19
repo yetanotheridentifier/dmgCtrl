@@ -95,6 +95,12 @@ export interface UnitState {
    * (`${cardId}#${index}`); cleared at round start (#343).
    */
   usedAbilities?: string[]
+  /**
+   * A card name this unit forbids the opponent from playing while it's in play (#355,
+   * Ryder Azadi). Set by its When Played "name a card"; the restriction ends naturally
+   * when the unit leaves play (the field goes with it).
+   */
+  namedCard?: string
 }
 
 export interface ResourceState {
@@ -125,16 +131,31 @@ export interface PlayerState {
   resources: ResourceState[]
   units: UnitState[]
   /**
-   * Keywords the NEXT unit this player plays this phase gains (Sabine Wren → Shielded, #348).
-   * Consumed by the next `enterUnit` (on-enter effects + a this-phase lasting keyword) and cleared
-   * at the start of the regroup phase. Generic — any card can grant "your next unit gains <keywords>".
-   *
-   * FUTURE (not yet needed): the granted "X" will likely need to be more than a keyword — an ability,
-   * a stat modifier (+X/+Y), a cost discount, etc. When that arises, generalise this into a single
-   * grant payload (keywords? / abilities? / power? / hp? / costDelta?) rather than adding sibling
-   * fields, and apply each part in `enterUnit`. See docs/ability-framework.md "Chunk E".
+   * Grants waiting for the next unit this player plays this phase (Sabine → Shielded #348; Mouse
+   * Droid → −1 cost to the next Imperial #355; Neel → the next ≤1-power unit enters ready #355).
+   * Each grant carries an optional filter (`trait` / `maxPower`) and is consumed by the next unit
+   * that matches it — `costDelta` folds into `effectiveCost`, `keywords` / `entersReady` apply in
+   * `enterUnit`. Cleared at the start of the regroup phase.
    */
-  nextPlayedUnitKeywords?: KeywordInstance[]
+  nextUnitGrants?: NextUnitGrant[]
+}
+
+/** A pending "your next unit …" grant (#348/#355). All fields are plain data (GameState is JSON). */
+export interface NextUnitGrant {
+  keywords?: KeywordInstance[]
+  costDelta?: number // e.g. −1 to the matching unit's cost
+  entersReady?: boolean
+  // Filter — the grant only applies to (and is consumed by) a unit matching all set constraints:
+  trait?: string // the unit must have this trait
+  maxPower?: number // the unit's printed power must be ≤ this
+}
+
+/** True if `card` is a unit satisfying a grant's filter (#355). */
+export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUnitGrant): boolean {
+  if (!card || card.type !== 'unit') return false
+  if (grant.trait && !card.traits.some(t => t.toLowerCase() === grant.trait!.toLowerCase())) return false
+  if (grant.maxPower !== undefined && (card.power ?? 0) > grant.maxPower) return false
+  return true
 }
 
 export interface GameState {
@@ -303,7 +324,11 @@ export type PendingChoice =
   | { kind: 'mayAttack'; id: string; controller: PlayerId; unitId: string; grantCardId?: string }
   // Optional targeted effects, e.g. from an On Attack ability (#309): `targets` are the
   // eligible unit instance ids; the controller picks one or declines.
-  | { kind: 'mayDamage'; id: string; controller: PlayerId; unitId: string; targets: string[]; amount: number }
+  // `rewardIfDefeated`: if the damage defeats the target, give `count` Advantage to `instanceId`
+  // (Imposing Scout Walker → its own unit) (#355).
+  | { kind: 'mayDamage'; id: string; controller: PlayerId; unitId: string; targets: string[]; amount: number; optional?: boolean; rewardIfDefeated?: { instanceId: string; count: number } }
+  // Give `count` of a token to a chosen target (#355). `optional` (default true) offers a decline.
+  | { kind: 'mayGiveTokens'; id: string; controller: PlayerId; token: string; count: number; targets: string[]; optional?: boolean }
   | { kind: 'mayAdvantageEach'; id: string; controller: PlayerId; unitId: string; targets: string[] }
   // Vane (#309/#348): defeat a friendly upgrade (chosen from `candidates`, cards or tokens); then the
   // `then` damage-target selection follows. `optional` = the deployed "may" version (a Cancel is
@@ -335,10 +360,10 @@ export type PendingChoice =
   // Luke front (#348): may exhaust the (undeployed) leader to heal `amount` from `unitId`, or decline.
   | { kind: 'mayExhaustLeaderHealUnit'; id: string; controller: PlayerId; unitId: string; amount: number }
   // Luke deployed (#348): heal `amount` from a chosen unit (`unitTargets`) or base (`baseTargets`). Mandatory.
-  | { kind: 'selectHealTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[] }
+  | { kind: 'selectHealTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[]; optional?: boolean }
   // Play a unit from hand as part of an ability (#348): pick one of `candidates` (affordable hand
   // units), paying its cost + `costDelta`, entering ready if `entersReady` (Fennec, Moff Gideon).
-  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean }
+  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean }
   // Additional cost "exhaust a friendly unit" (#348): pick one of `targets` to exhaust, then the
   // `then` play-from-hand step follows (Fennec). Mandatory.
   | { kind: 'selectUnitToExhaust'; id: string; controller: PlayerId; targets: string[]; then: PlayFromHandSpec }
@@ -348,7 +373,43 @@ export type PendingChoice =
   // Follow-up: attach the chosen resource upgrade to one of `targets` (#348). Mandatory.
   | { kind: 'attachResourceUpgrade'; id: string; controller: PlayerId; resourceIndex: number; cardId: string; targets: string[]; payCost: boolean }
   // Optionally pay `cost` to draw `draw` cards (#348, Mandalorian). `cost` 0 = a free "may draw".
-  | { kind: 'mayPayToDraw'; id: string; controller: PlayerId; cost: number; draw: number }
+  // `thenDiscard` (Mos Espa Watermonger, #355): after drawing, discard that many cards from hand —
+  // but only if a card was actually drawn ("you may draw a card. If you do, discard a card").
+  | { kind: 'mayPayToDraw'; id: string; controller: PlayerId; cost: number; draw: number; thenDiscard?: number }
+  // Discard `count` cards from your own hand, one at a time (#355, Mos Espa Watermonger). Mandatory
+  // unless `optional`. Resolved by an `acceptChoice` carrying the hand index to discard. `then`
+  // (Ninth Sister) runs after the last discard, using the just-discarded card's cost as damage to
+  // distribute among any units for the player in `distributeDamageTo`.
+  | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean; then?: { distributeDamageTo: PlayerId } }
+  // Deal `total` damage spread among any units (#355, Ninth Sister), one point per pick until
+  // `remaining` reaches 0. `targets` are the currently-eligible unit instance ids (both sides,
+  // recomputed as units are defeated). Always optional — the controller may stop early (a "may").
+  | { kind: 'distributeDamage'; id: string; controller: PlayerId; remaining: number; total: number; targets: string[] }
+  // Look at `target`'s hand (#355, Imperial Defector / Remnant Lookouts) — the controller sees it
+  // revealed. View-only unless `mayDiscard`, when the controller may discard one of the target's
+  // cards (an `acceptChoice` with its hand index); `thenDraw` then has the target draw a card.
+  | { kind: 'lookAtHand'; id: string; controller: PlayerId; target: PlayerId; mayDiscard?: boolean; thenDraw?: boolean }
+  // Search the revealed top cards (#355, Clan Wren Loyalist): pick one of the `eligibleIndices`
+  // (indices into `revealed`) to draw; the rest go to the bottom of the deck. Resolved by an
+  // `acceptChoice` carrying the `deckIndex` (0-based within `revealed`). Mandatory when eligible.
+  | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[] }
+  // The Cyborg Mech (#355): deal `undamagedAmount` to a chosen undamaged target, or `damagedAmount`
+  // to a damaged one (the amount is decided by the picked unit's damage). Mandatory board-target.
+  | { kind: 'variableStrike'; id: string; controller: PlayerId; targets: string[]; undamagedAmount: number; damagedAmount: number }
+  // Barriss Offee (#355): heal up to `maxHeal` from a chosen unit and give it that many Advantage
+  // tokens (one per damage healed). Optional board-target — only damaged units are eligible.
+  | { kind: 'healForAdvantage'; id: string; controller: PlayerId; targets: string[]; maxHeal: number }
+  // Name a card (#355, Ryder Azadi) — resolved by an `acceptChoice` carrying `cardName`; the name is
+  // recorded on `unitId` (a `namedCard`), forbidding the opponent from playing cards with that name
+  // while it's in play. Mandatory.
+  | { kind: 'nameCard'; id: string; controller: PlayerId; unitId: string }
+  // "You may defeat this unit. If you do, [search]" (#355, Admiral Ackbar) — a yes/no. Accept defeats
+  // `unitId` and starts the search-and-play-free (below); skip leaves the unit in play.
+  | { kind: 'mayDefeatSelfSearch'; id: string; controller: PlayerId; unitId: string }
+  // Search the revealed cards (held out of the deck) and play space units for free while a combined-cost
+  // `budget` lasts (#355, Admiral Ackbar). Pick one `eligibleIndices` (indices into `revealed`) at a time
+  // via an `acceptChoice`'s `deckIndex`; skip (Done) stops. Leftover revealed cards return to the bottom.
+  | { kind: 'searchPlayFree'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; budget: number }
   // Optionally deploy your leader via a triggered epic action (#348, Grogu). A yes/no.
   | { kind: 'mayDeployLeader'; id: string; controller: PlayerId }
   // Unique rule (CR): a player controlling two upgrades with the same title defeats one (their
@@ -363,6 +424,13 @@ export type PendingChoice =
   // Sabine front (#348): the opponent (`controller`) must give `count` Advantage tokens to one of
   // their units (`targets`). Mandatory when able — an opponent-interjected choice (pendingResumeActive).
   | { kind: 'opponentGivesAdvantage'; id: string; controller: PlayerId; count: number; targets: string[] }
+  // Repeatable board-target pick (#355): click eligible `targets` one at a time (each applies `spec`
+  // immediately and re-offers), or Done (skipTrigger). Inspiring Veteran (up to N Advantage) / Pre
+  // Vizsla (defeat non-leaders within an HP budget, a token each).
+  | {
+      kind: 'multiPick'; id: string; controller: PlayerId; targets: string[]
+      spec: { mode: 'giveAdvantage'; remaining: number } | { mode: 'defeatForToken'; budget: number; token: string }
+    }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */
 export function activeChoice(state: GameState): PendingChoice | undefined {
@@ -421,8 +489,8 @@ export function clearNextUnitGrants(state: GameState): GameState {
   return {
     ...state,
     players: {
-      player: { ...state.players.player, nextPlayedUnitKeywords: undefined },
-      opponent: { ...state.players.opponent, nextPlayedUnitKeywords: undefined },
+      player: { ...state.players.player, nextUnitGrants: undefined },
+      opponent: { ...state.players.opponent, nextUnitGrants: undefined },
     },
   }
 }

@@ -1,4 +1,6 @@
 import { useState, type CSSProperties, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { nameableCardNames } from '../engine/legalMoves'
 import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
 import type { SavedDeck } from '../data/deckStore'
@@ -8,7 +10,8 @@ import { describeAction } from '../utils/describeAction'
 import { orderUnits } from './boardLayout'
 import { outcomeBanner } from './outcome'
 import CardFace from './cardFace'
-import { CARD_WIDTH_PX, ZOOM_WIDTH_PX } from './cardSizing'
+import { CardGridOverlay } from './cardGridOverlay'
+import { CARD_WIDTH_PX } from './cardSizing'
 import { tokenLayout, TOKEN_W, TOKEN_H } from './tokens'
 import { TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { unitHasKeyword, auraContributions } from '../engine/keywords'
@@ -54,11 +57,11 @@ function AttachedUpgrade({ card, fallbackName, top, dim }: {
   top: number
   dim: boolean
 }) {
-  const { zoomed, bind } = useCardZoom()
+  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
   return (
-    <div className="pointer-events-auto absolute left-1/2 -translate-x-1/2" style={{ top }} {...bind}>
+    <div ref={setAnchor} className="pointer-events-auto absolute left-1/2 -translate-x-1/2" style={{ top }} {...bind}>
       <CardFace card={card} fallbackName={fallbackName} tight className={dim ? 'brightness-[0.55]' : ''} />
-      {zoomed && <CardZoomPopover card={card} fallbackName={fallbackName} />}
+      {zoomed && <CardZoomPopover card={card} fallbackName={fallbackName} anchorRef={anchorRef} />}
     </div>
   )
 }
@@ -96,7 +99,7 @@ function UpgradeStack({ state, upgrades, instanceId, exhausted }: {
 
 export function UnitLine({ state, unit, interact }: { state: GameState; unit: UnitState; interact: UnitInteraction }) {
   const card = state.cards[unit.cardId]
-  const { zoomed, bind } = useCardZoom()
+  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
   // Only card upgrades stack behind the unit; token upgrades render as on-card
   // tokens via CardTokens instead (#334).
   const cardUpgrades = unit.upgrades.filter(u => state.cards[u.cardId]?.type !== 'token')
@@ -124,7 +127,7 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
       <UpgradeStack state={state} upgrades={cardUpgrades} instanceId={unit.instanceId} exhausted={unit.exhausted} />
       {/* The unit card carries the unit's own zoom — hover here, not the dead tile
           padding; the upgrades zoom from their exposed strips instead (#336). */}
-      <div className="relative w-fit" {...bind}>
+      <div ref={setAnchor} className="relative w-fit" {...bind}>
         <CardFace card={card} fallbackName={unit.cardId} deployed={unit.isLeader} exhausted={unit.exhausted} highlight={highlight} />
         <CardTokens state={state} unit={unit} />
         {/* Keyword badges (#334): Hidden (temporary, until next phase) and Sentinel
@@ -143,7 +146,7 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
           )}
         </div>
       </div>
-      {zoomed && <CardZoomPopover card={card} deployed={unit.isLeader} fallbackName={unit.cardId} />}
+      {zoomed && <CardZoomPopover card={card} deployed={unit.isLeader} fallbackName={unit.cardId} anchorRef={anchorRef} />}
     </div>
   )
 }
@@ -255,12 +258,8 @@ function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
 }
 
 /**
- * A centred, zoomed card overlay for "look at" / "reveal" flows (#342). Shows a card
- * over a dark backdrop with a prompt and the caller's action buttons. "Look at" is
- * PRIVATE — only the acting player sees the card (so it's rendered solely for the
- * human's own choices; the opponent/AI never surfaces it). A future "reveal" (public,
- * both players confirm they've seen it) reuses this shell. Built to serve search
- * effects too.
+ * "Look at" / "reveal" overlay (#342) — a single card over a dark backdrop with a prompt and the
+ * caller's action buttons. PRIVATE to the acting player. A thin wrapper over `CardGridOverlay`.
  */
 export function CardChoiceOverlay({ card, cardId, prompt, children }: {
   card: EngineCard | undefined
@@ -269,71 +268,58 @@ export function CardChoiceOverlay({ card, cardId, prompt, children }: {
   children: ReactNode
 }) {
   return (
-    <div data-testid="card-choice-overlay" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/75 p-4">
-      <p data-testid="card-choice-prompt" className="text-xs uppercase tracking-[0.14em] text-ink-dim">{prompt}</p>
-      <CardFace card={card} fallbackName={cardId} widthPx={ZOOM_WIDTH_PX} tight />
-      <div className="flex flex-wrap justify-center gap-2">{children}</div>
-    </div>
+    <CardGridOverlay
+      idPrefix="card-choice"
+      prompt={prompt}
+      cardsById={{ [cardId]: card }}
+      items={[{ cardId, key: 0 }]}
+      fullWidthCards
+      footer={<div className="flex flex-wrap justify-center gap-2">{children}</div>}
+    />
   )
 }
 
 /**
- * A reusable "select a card" overlay (#348) — a centre-screen picker for choosing one of several
- * cards (Vane's "choose an upgrade to defeat"; extensible to any select-a-card-type effect). Each
- * item shows its card art (token art included) with a Select button; a Cancel appears when the
- * effect is optional (`onCancel` provided). Private to the acting player, like the other overlays.
+ * "Select a card" overlay (#348) — pick one of several cards (Vane's upgrade-to-defeat, the unique
+ * rule, the Armorer's resource reveal). `disabled` items are revealed but not selectable; a Cancel
+ * appears when `onCancel` is given. A thin wrapper over `CardGridOverlay`.
  */
 export function CardSelectOverlay({ state, prompt, items, onPick, onCancel }: {
   state: GameState
   prompt: string
-  /** `disabled` items are revealed but not selectable (e.g. non-upgrade resources in the Armorer's
-   *  "look at your resources"). `key` gives a stable identity when optionIndex isn't unique. */
   items: { cardId: string; optionIndex: number; hostId?: string; disabled?: boolean; key?: string | number }[]
   onPick: (optionIndex: number) => void
   onCancel?: () => void
 }) {
   const hostName = (id?: string) => (id ? state.players.player.units.find(u => u.instanceId === id)?.cardId : undefined)
   return (
-    <div data-testid="card-select-overlay" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/75 p-4">
-      <p data-testid="card-select-prompt" className="text-xs uppercase tracking-[0.14em] text-ink-dim">{prompt}</p>
-      <div className="flex flex-wrap justify-center gap-4">
-        {items.map(item => {
-          const host = state.cards[hostName(item.hostId) ?? '']?.name
-          const key = item.key ?? item.optionIndex
-          return (
-            <div key={key} className="flex flex-col items-center gap-2">
-              {/* Click the (highlighted) card itself to select it — no separate button. Disabled
-                  cards are shown (revealed) but dimmed and not clickable. */}
-              <button
-                data-testid={`card-select-${key}`}
-                onClick={() => onPick(item.optionIndex)}
-                disabled={item.disabled}
-                className={item.disabled ? 'block cursor-default opacity-40' : 'block cursor-pointer'}
-              >
-                <CardFace card={state.cards[item.cardId]} fallbackName={item.cardId} widthPx={Math.round(ZOOM_WIDTH_PX * 0.6)} tight highlight={item.disabled ? undefined : 'accent'} />
-              </button>
-              {host && <span className="text-[10px] text-ink-faint">on {host}</span>}
-            </div>
-          )
-        })}
-      </div>
-      {onCancel && (
-        <button
-          data-testid="card-select-cancel"
-          onClick={onCancel}
-          className="rounded-xl border-2 border-line/60 px-4 py-1.5 text-xs text-ink-dim hover:text-ink"
-        >
+    <CardGridOverlay
+      idPrefix="card-select"
+      prompt={prompt}
+      cardsById={state.cards}
+      items={items.map(item => {
+        const key = item.key ?? item.optionIndex
+        return {
+          cardId: item.cardId,
+          key,
+          testId: `card-select-${key}`,
+          hostLabel: state.cards[hostName(item.hostId) ?? '']?.name,
+          dimmed: item.disabled,
+          onSelect: () => onPick(item.optionIndex),
+        }
+      })}
+      footer={onCancel && (
+        <button data-testid="card-select-cancel" onClick={onCancel} className="rounded-xl border-2 border-line/60 px-4 py-1.5 text-xs text-ink-dim hover:text-ink">
           Cancel
         </button>
       )}
-    </div>
+    />
   )
 }
 
 /**
- * A "search" reveal overlay (#343) — the private "look at the top N" for Improvised
- * Identity. Shows each revealed card; a ground unit gets a Discard button. Reuses the
- * same centre-screen shell as `CardChoiceOverlay`; serves any future search effect.
+ * "Search" reveal overlay (#343) — the private "look at the top N" for Improvised Identity: each
+ * revealed ground unit gets a Discard button; the rest are dimmed. A thin wrapper over `CardGridOverlay`.
  */
 export function SearchRevealOverlay({ state, choice, onPick }: {
   state: GameState
@@ -341,29 +327,136 @@ export function SearchRevealOverlay({ state, choice, onPick }: {
   onPick: (deckIndex: number) => void
 }) {
   return (
-    <div data-testid="search-overlay" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/75 p-4">
-      <p className="text-xs uppercase tracking-[0.14em] text-ink-dim">Look at the top {choice.revealed.length} — discard a ground unit</p>
-      <div className="flex flex-wrap justify-center gap-4">
-        {choice.revealed.map((cardId, i) => {
-          const c = state.cards[cardId]
-          const ground = c?.type === 'unit' && c.arena === 'ground'
-          return (
-            <div key={i} className="flex flex-col items-center gap-2">
-              <CardFace card={c} fallbackName={cardId} widthPx={Math.round(ZOOM_WIDTH_PX * 0.6)} tight className={ground ? '' : 'brightness-[0.45]'} />
-              {ground && (
-                <button
-                  data-testid={`search-pick-${i}`}
-                  onClick={() => onPick(i)}
-                  className="rounded-xl border-2 border-accent px-3 py-1.5 text-xs text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10"
-                >
-                  Discard
-                </button>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </div>
+    <CardGridOverlay
+      idPrefix="search"
+      prompt={`Look at the top ${choice.revealed.length} — discard a ground unit`}
+      cardsById={state.cards}
+      items={choice.revealed.map((cardId, i) => {
+        const c = state.cards[cardId]
+        const ground = c?.type === 'unit' && c.arena === 'ground'
+        return ground
+          ? { cardId, key: i, testId: `search-pick-${i}`, actionLabel: 'Discard', onSelect: () => onPick(i) }
+          : { cardId, key: i, dimmed: true }
+      })}
+    />
+  )
+}
+
+/**
+ * "Search the top N, draw a match" overlay (#355, Clan Wren Loyalist): reveals the top cards; the
+ * trait-matching ones get a Draw button, the rest are dimmed. Mandatory (a match exists). A thin
+ * wrapper over `CardGridOverlay`.
+ */
+export function SearchDrawOverlay({ state, choice, onPick }: {
+  state: GameState
+  choice: Extract<PendingChoice, { kind: 'searchDraw' }>
+  onPick: (deckIndex: number) => void
+}) {
+  const eligible = new Set(choice.eligibleIndices)
+  return (
+    <CardGridOverlay
+      idPrefix="search-draw"
+      prompt={`Search the top ${choice.revealed.length} — draw a card sharing a Trait`}
+      cardsById={state.cards}
+      items={choice.revealed.map((cardId, i) => eligible.has(i)
+        ? { cardId, key: i, testId: `search-draw-pick-${i}`, actionLabel: 'Draw', onSelect: () => onPick(i) }
+        : { cardId, key: i, dimmed: true })}
+    />
+  )
+}
+
+/**
+ * "Name a card" overlay (#355, Ryder Azadi): a text box that filters the nameable card list (every
+ * card in the current game — both decks) by substring; clicking one names it. Portalled to body so it
+ * clears the board's stacking context. The full-ASH-set list is a later extension (#355 follow-up).
+ */
+export function NameCardOverlay({ names, onPick }: { names: string[]; onPick: (name: string) => void }) {
+  const [query, setQuery] = useState('')
+  const filtered = query.trim() ? names.filter(n => n.toLowerCase().includes(query.trim().toLowerCase())) : names
+  return createPortal(
+    <div data-testid="name-card-overlay" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/75 p-4">
+      <p className="text-xs uppercase tracking-[0.14em] text-ink-dim">Name a card</p>
+      <input
+        data-testid="name-card-input"
+        autoFocus
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        placeholder="Type to search…"
+        className="w-72 rounded-xl border-2 border-line/60 bg-black/40 px-4 py-2 text-sm text-ink outline-none focus:border-accent"
+      />
+      <ul className="flex max-h-[50vh] w-72 flex-col gap-1 overflow-y-auto">
+        {filtered.slice(0, 50).map((n, i) => (
+          <li key={n}>
+            <button data-testid={`name-card-option-${i}`} onClick={() => onPick(n)} className="w-full rounded-lg border border-line/40 px-3 py-1.5 text-left text-sm text-ink-dim hover:border-accent hover:text-ink">
+              {n}
+            </button>
+          </li>
+        ))}
+        {filtered.length === 0 && <li className="py-2 text-center text-xs text-ink-faint">No match</li>}
+      </ul>
+    </div>,
+    document.body,
+  )
+}
+
+/**
+ * "Search & play for free" overlay (#355, Admiral Ackbar): reveals the searched cards; eligible space
+ * units (fitting the remaining cost budget) get a "Play free" button, the rest are dimmed. A Done
+ * button (with the remaining budget) stops early. A thin wrapper over `CardGridOverlay`.
+ */
+export function SearchPlayFreeOverlay({ state, choice, onPick, onDone }: {
+  state: GameState
+  choice: Extract<PendingChoice, { kind: 'searchPlayFree' }>
+  onPick: (deckIndex: number) => void
+  onDone: () => void
+}) {
+  const eligible = new Set(choice.eligibleIndices)
+  return (
+    <CardGridOverlay
+      idPrefix="search-free"
+      prompt={`Play space units for free — ${choice.budget} cost left`}
+      cardsById={state.cards}
+      items={choice.revealed.map((cardId, i) => eligible.has(i)
+        ? { cardId, key: i, testId: `search-free-pick-${i}`, actionLabel: 'Play free', onSelect: () => onPick(i) }
+        : { cardId, key: i, dimmed: true })}
+      footer={
+        <button data-testid="search-free-done" onClick={onDone} className="rounded-xl border-2 border-line/60 px-4 py-1.5 text-xs text-ink-dim hover:text-ink">
+          Done
+        </button>
+      }
+    />
+  )
+}
+
+/**
+ * "Look at an opponent's hand" overlay (#355, Imperial Defector / Remnant Lookouts): reveals the
+ * target's hand face-up. View-only unless `mayDiscard`, when each card gets a Discard button. A
+ * Done button dismisses it. A thin wrapper over `CardGridOverlay`.
+ */
+export function OpponentHandOverlay({ state, choice, onDiscard, onDone }: {
+  state: GameState
+  choice: Extract<PendingChoice, { kind: 'lookAtHand' }>
+  onDiscard: (handIndex: number) => void
+  onDone: () => void
+}) {
+  const hand = state.players[choice.target].hand
+  const prompt = hand.length === 0
+    ? "Opponent's hand is empty"
+    : choice.mayDiscard ? "Opponent's hand — you may discard one" : "Opponent's hand"
+  return (
+    <CardGridOverlay
+      idPrefix="opp-hand"
+      prompt={prompt}
+      cardsById={state.cards}
+      items={hand.map((cardId, i) => choice.mayDiscard
+        ? { cardId, key: i, testId: `opp-hand-pick-${i}`, actionLabel: 'Discard', onSelect: () => onDiscard(i) }
+        : { cardId, key: i })}
+      footer={
+        <button data-testid="opp-hand-done" onClick={onDone} className="rounded-xl border-2 border-line/60 px-4 py-1.5 text-xs text-ink-dim hover:text-ink">
+          Done
+        </button>
+      }
+    />
   )
 }
 
@@ -395,7 +488,7 @@ function BaseCard({ state, side, onAttack }: {
 }) {
   const p = state.players[side]
   const baseCard = state.cards[p.base.cardId]
-  const { zoomed, bind } = useCardZoom()
+  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
   // Base HP comes from the card metadata (bases vary; never assume 30).
   const baseHp = baseCard?.hp ?? 0
   // Damage taken, counting up to the base's HP — the SWU-standard display (#323).
@@ -426,7 +519,7 @@ function BaseCard({ state, side, onAttack }: {
     </div>
   )
   return (
-    <div data-testid={`${side}-base-card`} {...bind} className="relative">
+    <div ref={setAnchor} data-testid={`${side}-base-card`} {...bind} className="relative">
       {onAttack ? (
         <button
           data-testid={`target-${side}-base`}
@@ -438,7 +531,7 @@ function BaseCard({ state, side, onAttack }: {
       ) : (
         inner
       )}
-      {zoomed && <CardZoomPopover card={baseCard} fallbackName={p.base.cardId} />}
+      {zoomed && <CardZoomPopover card={baseCard} fallbackName={p.base.cardId} anchorRef={anchorRef} />}
     </div>
   )
 }
@@ -448,7 +541,7 @@ function BaseCard({ state, side, onAttack }: {
 export function LeaderCard({ state, side, widthPx, interact }: { state: GameState; side: PlayerId; widthPx?: number; interact?: UnitInteraction }) {
   const p = state.players[side]
   const leaderCard = state.cards[p.leader.cardId]
-  const { zoomed, bind } = useCardZoom()
+  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
   // Deployed → the leader is on the battlefield as a unit; the slot is an empty
   // outline (whether it's deployed is self-evident). Keep it for alignment.
   if (p.leader.deployed) {
@@ -465,6 +558,7 @@ export function LeaderCard({ state, side, widthPx, interact }: { state: GameStat
   const highlight = interact?.selected ? 'accent' : interact?.actionable ? 'accent-dim' : undefined
   return (
     <div
+      ref={setAnchor}
       data-testid={`${side}-leader-card`}
       {...bind}
       data-actionable={interact?.actionable}
@@ -484,7 +578,7 @@ export function LeaderCard({ state, side, widthPx, interact }: { state: GameStat
         </div>
       )}
       {/* Shift while hovering shows the leader's unit (back) side (#321). */}
-      {zoomed && <CardZoomPopover card={leaderCard} deployed={false} fallbackName={p.leader.cardId} />}
+      {zoomed && <CardZoomPopover card={leaderCard} deployed={false} fallbackName={p.leader.cardId} anchorRef={anchorRef} />}
     </div>
   )
 }
@@ -493,7 +587,7 @@ export function LeaderCard({ state, side, widthPx, interact }: { state: GameStat
  * A card in your hand. Clickable to play (blue) or resource (green); hover /
  * focus / long-press zooms it (#321). Its own component so it can use the zoom hook.
  */
-function HandCard({ card, cardId, index, action, onAct, onSelect, selected }: {
+function HandCard({ card, cardId, index, action, onAct, onSelect, selected, discarding }: {
   card: EngineCard | undefined
   cardId: string
   index: number
@@ -502,22 +596,26 @@ function HandCard({ card, cardId, index, action, onAct, onSelect, selected }: {
   /** Set for an upgrade card: click selects it, then you click a unit to attach (#336). */
   onSelect?: () => void
   selected?: boolean
+  /** A pending "discard a card" choice (#355): clicking discards this card — highlight it red. */
+  discarding?: boolean
 }) {
-  const { zoomed, bind } = useCardZoom()
+  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
   const isResource = action?.type === 'resourceCard' || action?.type === 'setupResource'
-  const popover = zoomed && <CardZoomPopover card={card} fallbackName={cardId} />
+  const playHighlight = discarding ? 'red' : isResource ? 'green' : 'accent'
+  const popover = zoomed && <CardZoomPopover card={card} fallbackName={cardId} anchorRef={anchorRef} />
   if (action) {
     // Clickable shortcut for the matching action-menu button:
     // "Play …" (action phase) or "Resource …" (setup/regroup).
     return (
       <button
+        ref={setAnchor}
         data-testid={`hand-card-${index}`}
         data-playable={true}
         onClick={() => onAct(action)}
         {...bind}
         className="relative block w-fit shrink-0 cursor-pointer"
       >
-        <CardFace card={card} fallbackName={cardId} tight highlight={isResource ? 'green' : 'accent'} />
+        <CardFace card={card} fallbackName={cardId} tight highlight={playHighlight} />
         {popover}
       </button>
     )
@@ -527,6 +625,7 @@ function HandCard({ card, cardId, index, action, onAct, onSelect, selected }: {
     // to attach it. Highlighted blue like a playable card (#336).
     return (
       <button
+        ref={setAnchor}
         data-testid={`hand-card-${index}`}
         data-playable={true}
         data-selected={Boolean(selected)}
@@ -541,6 +640,7 @@ function HandCard({ card, cardId, index, action, onAct, onSelect, selected }: {
   }
   return (
     <span
+      ref={setAnchor}
       data-testid={`hand-card-${index}`}
       data-playable={false}
       {...bind}
@@ -736,13 +836,30 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // What clicking each hand card does, keyed by hand index: play it in the action
     // phase, resource it in the setup or regroup phase (#6, #328). Derived from the
     // legal moves so the hand affordance always matches what the engine allows.
+    // A "look at an opponent's hand" discard (#355) also uses acceptChoice+handIndex, but its
+    // indices are into the OPPONENT's hand (shown in an overlay) — keep them off our own hand.
+    const oppHandChoiceId = gameState.pendingChoices?.find(c => c.kind === 'lookAtHand' && c.controller === 'player')?.id
     const handAction = new Map<number, Action>()
     for (const a of legal) {
       if (a.type === 'playCard' || a.type === 'resourceCard' || a.type === 'setupResource') handAction.set(a.handIndex, a)
       // "Play a unit from hand" ability choice (#348): the affordable hand cards become clickable.
-      else if (a.type === 'acceptChoice' && a.handIndex !== undefined) handAction.set(a.handIndex, a)
+      else if (a.type === 'acceptChoice' && a.handIndex !== undefined && a.choiceId !== oppHandChoiceId) handAction.set(a.handIndex, a)
     }
     const hand = gameState.players.player.hand
+
+    // A "discard a card from hand" choice (Mos Espa Watermonger, #355): the hand cards
+    // glow red and clicking one discards it; an optional discard also offers a Decline.
+    const discardChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'selectDiscard' }> => c.kind === 'selectDiscard' && c.controller === 'player',
+    )
+    const discardDecline = discardChoice ? legal.find(a => a.type === 'skipTrigger' && a.choiceId === discardChoice.id) : undefined
+
+    // An optional "play a unit from hand" (Crix Madine, #355): the candidate cards are clickable in
+    // hand; a Decline button lets the player pass on the "may".
+    const handPlayChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'playUnitFromHand' }> => c.kind === 'playUnitFromHand' && c.controller === 'player' && c.optional === true,
+    )
+    const handPlayDecline = handPlayChoice ? legal.find(a => a.type === 'skipTrigger' && a.choiceId === handPlayChoice.id) : undefined
 
     const attacks = legal.filter(a => a.type === 'attack')
     const attackerIds = new Set(attacks.map(a => a.attackerId))
@@ -784,7 +901,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
 
     // Optional targeted pending choices (#309/#342) — resolved by clicking a highlighted
     // board unit plus a Decline button, rather than one menu button per target.
-    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage', 'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit', 'mayExhaustUnit', 'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust', 'attachResourceUpgrade', 'mayDefeatEnemyUnit', 'selectUniqueUnitToDefeat', 'opponentGivesAdvantage']
+    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage', 'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit', 'mayExhaustUnit', 'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust', 'attachResourceUpgrade', 'mayDefeatEnemyUnit', 'selectUniqueUnitToDefeat', 'opponentGivesAdvantage', 'mayGiveTokens', 'multiPick', 'distributeDamage', 'variableStrike', 'healForAdvantage']
     const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && boardTargetKinds.includes(c.kind))
     const choiceTargetIds = new Map<string, Action>()
     // Base targets (selectDamageTarget, #348): pick a player's base to take the damage.
@@ -851,6 +968,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
                   : undefined
               }
               selected={selectedUpgrade === i}
+              discarding={discardChoice !== undefined}
             />
           </li>
         ))}
@@ -872,6 +990,31 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       (c): c is Extract<PendingChoice, { kind: 'search' }> => c.kind === 'search' && c.controller === 'player',
     )
     const searchActions = searchChoice ? legal.filter(a => a.type === 'acceptChoice' && a.choiceId === searchChoice.id) : []
+
+    // A "look at an opponent's hand" choice (Imperial Defector / Remnant Lookouts, #355): its
+    // discard picks + Done live in the reveal overlay, not the action menu.
+    const lookHandChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'lookAtHand' }> => c.kind === 'lookAtHand' && c.controller === 'player',
+    )
+    const lookHandActions = lookHandChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === lookHandChoice.id) : []
+
+    // A "search top N, draw a trait match" choice (Clan Wren Loyalist, #355): draw picks in the overlay.
+    const searchDrawChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'searchDraw' }> => c.kind === 'searchDraw' && c.controller === 'player',
+    )
+    const searchDrawActions = searchDrawChoice ? legal.filter(a => a.type === 'acceptChoice' && a.choiceId === searchDrawChoice.id) : []
+
+    // A "search & play space units for free" choice (Admiral Ackbar, #355): picks + Done in the overlay.
+    const searchFreeChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'searchPlayFree' }> => c.kind === 'searchPlayFree' && c.controller === 'player',
+    )
+    const searchFreeActions = searchFreeChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === searchFreeChoice.id) : []
+
+    // A "name a card" choice (Ryder Azadi, #355): resolved in a text-input overlay, not the menu.
+    const nameCardChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'nameCard' }> => c.kind === 'nameCard' && c.controller === 'player',
+    )
+    const nameCardActions = nameCardChoice ? legal.filter(a => a.type === 'acceptChoice' && a.choiceId === nameCardChoice.id) : []
 
     // A "select an upgrade to defeat" choice (Vane, #348): the candidate upgrades are shown as a
     // centre-screen card picker with a Cancel (optional only), not in the action menu.
@@ -907,17 +1050,28 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // "Play a unit from hand" accepts (#348) are clicked on the hand card, not the menu.
     const isHandPlay = (a: Action) => a.type === 'acceptChoice' && a.handIndex !== undefined
     const menuActions = gameState.winner === null
-      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a))
+      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !nameCardActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
       : []
+    // The board-target decline and the hand-discard decline share one button (only one
+    // choice is active at a time). "Done" for the repeatable multiPick, else "Decline".
+    const declineButton = declineChoice ?? discardDecline ?? handPlayDecline
+    // Distribute-damage HUD (Ninth Sister, #355): show how much of the pool is allocated.
+    const distribute = targetChoice?.kind === 'distributeDamage' ? targetChoice : undefined
+    const repeatable = targetChoice?.kind === 'multiPick' || targetChoice?.kind === 'distributeDamage'
     const actionColumn = (
       <div className="flex flex-col items-stretch gap-1.5">
-        {declineChoice && (
+        {distribute && (
+          <div data-testid="distribute-hud" className="rounded-xl border-2 border-red/60 px-3 py-1.5 text-center text-xs text-ink-dim">
+            Damage allocated <span className="font-semibold text-ink">{distribute.total - distribute.remaining} / {distribute.total}</span>
+          </div>
+        )}
+        {declineButton && (
           <button
             data-testid="decline-choice-btn"
-            onClick={() => actAndClear(declineChoice)}
+            onClick={() => actAndClear(declineButton)}
             className="rounded-xl border-2 border-line/60 px-3 py-1.5 text-xs text-ink-dim hover:text-ink"
           >
-            Decline
+            {repeatable ? 'Done' : 'Decline'}
           </button>
         )}
         {menuActions.map((action, i) => (
@@ -957,6 +1111,39 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           state={gameState}
           choice={searchChoice}
           onPick={deckIndex => actAndClear({ type: 'acceptChoice', choiceId: searchChoice.id, deckIndex })}
+        />
+      )
+    } else if (lookHandChoice) {
+      choiceOverlay = (
+        <OpponentHandOverlay
+          state={gameState}
+          choice={lookHandChoice}
+          onDiscard={handIndex => actAndClear({ type: 'acceptChoice', choiceId: lookHandChoice.id, handIndex })}
+          onDone={() => actAndClear({ type: 'skipTrigger', choiceId: lookHandChoice.id })}
+        />
+      )
+    } else if (searchDrawChoice) {
+      choiceOverlay = (
+        <SearchDrawOverlay
+          state={gameState}
+          choice={searchDrawChoice}
+          onPick={deckIndex => actAndClear({ type: 'acceptChoice', choiceId: searchDrawChoice.id, deckIndex })}
+        />
+      )
+    } else if (searchFreeChoice) {
+      choiceOverlay = (
+        <SearchPlayFreeOverlay
+          state={gameState}
+          choice={searchFreeChoice}
+          onPick={deckIndex => actAndClear({ type: 'acceptChoice', choiceId: searchFreeChoice.id, deckIndex })}
+          onDone={() => actAndClear({ type: 'skipTrigger', choiceId: searchFreeChoice.id })}
+        />
+      )
+    } else if (nameCardChoice) {
+      choiceOverlay = (
+        <NameCardOverlay
+          names={nameableCardNames(gameState)}
+          onPick={cardName => actAndClear({ type: 'acceptChoice', choiceId: nameCardChoice.id, cardName })}
         />
       )
     } else if (selectUpgradeChoice) {
