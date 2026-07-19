@@ -10,10 +10,10 @@ import { state, player, unit, card, ready, CARDS } from './helpers/engineFixture
 import type { GameState, PlayerState, UnitState } from '../engine/types'
 
 /**
- * Group E (#356): whenDefeated / onAttack / attack-end / action abilities. Tests defeat the unit
- * (via `dealDamageToUnit`, which fires `whenDefeated` through the same `finishDefeats` path combat
- * uses) and assert the resulting board / raised choice. The mid-combat handoff is covered separately
- * by `whenDefeatedCombat.test.ts`.
+ * Unit triggered & activated abilities (#356): When Defeated / On Attack / When Attack Ends / Action
+ * abilities. Tests defeat the unit (via `dealDamageToUnit`, which fires `whenDefeated` through the same
+ * `finishDefeats` path combat uses) or attack with it, then assert the resulting board / raised choice.
+ * The mid-combat whenDefeated handoff is covered separately by `whenDefeatedCombat.test.ts`.
  */
 const E = {
   ...CARDS,
@@ -105,7 +105,7 @@ function defeatInCombat(cardId: string): GameState {
   return resolve(s, { type: 'attack', attackerId: 't', target: { kind: 'unit', instanceId: 'br' } })
 }
 
-describe('Group E — whenDefeated, simple effects (#356)', () => {
+describe('whenDefeated, simple effects (#356)', () => {
   it('Ant Droid (116): draws a card', () => {
     expect(defeat('ASH_116').players.player.hand).toHaveLength(1)
   })
@@ -129,7 +129,7 @@ describe('Group E — whenDefeated, simple effects (#356)', () => {
   })
 })
 
-describe('Group E — whenDefeated, target choices (#356)', () => {
+describe('whenDefeated, target choices (#356)', () => {
   it('Green Leader (153): may deal 2 damage to a unit', () => {
     const s = defeat('ASH_153', { oppUnits: [unit('e', 'FILLER', { arena: 'ground' })] })
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayDamage', amount: 2, controller: 'player', optional: true })
@@ -159,7 +159,7 @@ describe('Group E — whenDefeated, target choices (#356)', () => {
   })
 })
 
-describe('Group E — whenDefeated, combat-context (#356)', () => {
+describe('whenDefeated, combat-context (#356)', () => {
   it('Paz Vizsla (028): creates 2 Mandalorian tokens when NOT defeated by combat', () => {
     const s = defeat('ASH_028') // ability damage, not combat
     expect(s.players.player.units.filter(u => u.cardId === TOKEN_MANDALORIAN)).toHaveLength(2)
@@ -181,7 +181,7 @@ describe('Group E — whenDefeated, combat-context (#356)', () => {
   })
 })
 
-describe('Group E — Flarestar (167): whenPlayed / whenDefeated (#356)', () => {
+describe('Flarestar (167): whenPlayed / whenDefeated (#356)', () => {
   it('may give an Advantage token to a unit when defeated', () => {
     const s = defeat('ASH_167', { oppUnits: [unit('e', 'FILLER', { arena: 'ground' })] })
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayGiveTokens', token: TOKEN_ADVANTAGE, count: 1, optional: true })
@@ -190,7 +190,7 @@ describe('Group E — Flarestar (167): whenPlayed / whenDefeated (#356)', () => 
   })
 })
 
-describe('Group E — Helgait (195): distribute Advantage = power', () => {
+describe('Helgait (195): distribute Advantage = power', () => {
   it('distributes power(6) Advantage among friendly units, stacking allowed, Done stops early', () => {
     const s = defeat('ASH_195', { playerUnits: [unit('a', 'FILLER', { arena: 'ground' }), unit('b', 'FILLER', { arena: 'ground' })] })
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'distributeTokens', token: TOKEN_ADVANTAGE, remaining: 6, total: 6 })
@@ -210,7 +210,7 @@ describe('Group E — Helgait (195): distribute Advantage = power', () => {
   })
 })
 
-describe('Group E — Corona Four (043)', () => {
+describe('Corona Four (043)', () => {
   it('whenDefeated: may defeat a non-leader unit with 0 power', () => {
     const s = defeat('ASH_043', { oppUnits: [unit('z', 'ZEROPOW', { arena: 'ground' }), unit('e', 'FILLER', { arena: 'ground' })] })
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayDefeatEnemyUnit' })
@@ -233,7 +233,7 @@ describe('Group E — Corona Four (043)', () => {
   })
 })
 
-describe('Group E — Clan Vizsla Soldier (165): may defeat an upgrade', () => {
+describe('Clan Vizsla Soldier (165): may defeat an upgrade', () => {
   it('raises an optional upgrade-defeat choice covering upgrades on either side', () => {
     const s = defeat('ASH_165', { oppUnits: [unit('e', 'FILLER', { arena: 'ground', upgrades: [{ cardId: 'UPG', owner: 'opponent' }] })] })
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'selectUpgradeToDefeat', optional: true })
@@ -247,7 +247,7 @@ describe('Group E — Clan Vizsla Soldier (165): may defeat an upgrade', () => {
   })
 })
 
-describe('Group E — Moff Gideon (097): return a non-unique Imperial from discard', () => {
+describe('Moff Gideon (097): return a non-unique Imperial from discard', () => {
   it('offers only non-unique Imperial units in your discard, and returns the pick to hand', () => {
     // seed the discard, then defeat Moff Gideon
     const board = state({
@@ -267,7 +267,7 @@ describe('Group E — Moff Gideon (097): return a non-unique Imperial from disca
   })
 })
 
-describe('Group E — Enoch (027): self base-damage for a discount', () => {
+describe('Enoch (027): self base-damage for a discount', () => {
   it('deals up to 6 to your base; -1 discount per 2 dealt (Done at 4 → -2)', () => {
     let s = defeat('ASH_027')
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'dealOwnBaseForDiscount', dealt: 0, max: 6 })
@@ -293,7 +293,7 @@ describe('Group E — Enoch (027): self base-damage for a discount', () => {
   })
 })
 
-describe('Group E — Purrgil Ultra (038): return a unit, deal its cost', () => {
+describe('Purrgil Ultra (038): return a unit, deal its cost', () => {
   it('returns a friendly unit to hand, then deals its cost to a chosen unit', () => {
     const s = defeat('ASH_038', { playerUnits: [unit('r', 'COST3UNIT', { arena: 'ground' })], oppUnits: [unit('e', 'FILLER', { arena: 'ground' })] })
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'returnFriendlyUnit' })
@@ -313,7 +313,7 @@ describe('Group E — Purrgil Ultra (038): return a unit, deal its cost', () => 
   })
 })
 
-describe('Group E — Reanimated Night Trooper (045): peek & maybe discard a deck top', () => {
+describe('Reanimated Night Trooper (045): peek & maybe discard a deck top', () => {
   const board = () => state({
     cards: E,
     players: {
@@ -351,7 +351,7 @@ function onAtk(cardId: string, opts: { target?: { kind: 'base' } | { kind: 'unit
   return resolve(s, { type: 'attack', attackerId: 'a', target: opts.target ?? { kind: 'base' } })
 }
 
-describe('Group E — onAttack, simple (#356)', () => {
+describe('onAttack, simple (#356)', () => {
   it('Danger Squadron Wingmen (157): may give an Advantage to ANOTHER unit', () => {
     const s = onAtk('ASH_157', { playerUnits: [unit('f', 'FILLER', { arena: 'ground' })] })
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayGiveTokens', token: TOKEN_ADVANTAGE, count: 1, optional: true })
@@ -393,7 +393,7 @@ describe('Group E — onAttack, simple (#356)', () => {
   })
 })
 
-describe('Group E — Support passes On Attack to the supported attacker (#356)', () => {
+describe('Support passes On Attack to the supported attacker (#356)', () => {
   it("Migs Mayfeld (168): a unit attacking via Support gains Migs's On Attack (deal 1 to the defender)", () => {
     const s0 = state({
       cards: E,
@@ -423,7 +423,7 @@ describe('Group E — Support passes On Attack to the supported attacker (#356)'
   })
 })
 
-describe('Group E — onAttack, conditional/self (batch B1) (#356)', () => {
+describe('onAttack, conditional/self (batch B1) (#356)', () => {
   it('Doctor Pershing (072): draws only with 3+ remaining HP', () => {
     const full = onAtk('ASH_072') // 0/4, undamaged → draws
     expect(full.players.player.hand).toHaveLength(1)
@@ -459,7 +459,7 @@ describe('Group E — onAttack, conditional/self (batch B1) (#356)', () => {
   })
 })
 
-describe('Group E — onAttack, self-cost choices (batch B2) (#356)', () => {
+describe('onAttack, self-cost choices (batch B2) (#356)', () => {
   it('Leia Organa (059): may deal 1 to herself to heal 2 from your base', () => {
     const s0 = state({ cards: E, players: { player: player({ units: [unit('a', 'ASH_059', { arena: 'ground' })], base: { cardId: 'TST_B', damage: 3 } }), opponent: player({}) } })
     const atk = resolve(s0, { type: 'attack', attackerId: 'a', target: { kind: 'base' } })
@@ -488,7 +488,7 @@ describe('Group E — onAttack, self-cost choices (batch B2) (#356)', () => {
   })
 })
 
-describe('Group E — When Attack Ends (#356)', () => {
+describe('When Attack Ends (#356)', () => {
   it('Grand Admiral Thrawn (033): readies itself only if the defender was defeated', () => {
     const killed = onAtk('ASH_033', { oppUnits: [unit('e', 'ZEROPOW', { arena: 'ground', damage: 2 })], target: { kind: 'unit', instanceId: 'e' } })
     expect(U(killed, 'e')).toBeUndefined()
@@ -520,7 +520,7 @@ describe('Group E — When Attack Ends (#356)', () => {
   })
 })
 
-describe('Group E — multi-trigger + action abilities (#356)', () => {
+describe('multi-trigger + action abilities (#356)', () => {
   it('Justifier (146): On Attack may deal 1; a kill lets you give Advantage to a unit', () => {
     const s = onAtk('ASH_146', { oppUnits: [unit('weak', 'WEAK', { arena: 'space' }), unit('other', 'FILLERSPACE', { arena: 'space' })] })
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayDamage', amount: 1, optional: true })
@@ -552,7 +552,7 @@ describe('Group E — multi-trigger + action abilities (#356)', () => {
   })
 })
 
-describe('Group E — Boba Fett\'s Rancor + Greef Karga (#356)', () => {
+describe('Boba Fett\'s Rancor + Greef Karga (#356)', () => {
   it("Boba Fett's Rancor (179): When Played deals 5 to your base, then 10 to an enemy ground unit", () => {
     const s0 = state({ cards: E, players: { player: player({ hand: ['ASH_179'], resources: ready(10) }), opponent: player({ units: [unit('e', 'BIGWALL', { arena: 'ground' })] }) } })
     const played = resolve(s0, { type: 'playCard', handIndex: 0 })
