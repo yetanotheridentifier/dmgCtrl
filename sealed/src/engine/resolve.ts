@@ -76,8 +76,15 @@ export function resolve(state: GameState, action: Action): GameState {
         // keywords are cleared inside completeAttack (after they're used), so they
         // survive a mid-combat On Defense suspension.
         if (choice) attacked = popChoice(attacked)
-        // A choice the attack raised (Camtono onAttackEnd, On Defense) keeps the turn.
-        return attacked.winner !== null || hasPendingChoices(attacked) ? attacked : advanceTurn(resetPasses(attacked))
+        if (attacked.winner !== null) return attacked
+        // A choice the attack raised keeps the turn to resolve it first. A defender's own trigger
+        // (whenDefeated, #356) is controlled by the defender, so hand control to them; remember the
+        // attacker (`pendingResumeActive`) so the turn advances once every post-combat trigger drains.
+        if (hasPendingChoices(attacked)) {
+          const handed = handOffOpponentChoice(attacked, attacked.activePlayer)
+          return handed.pendingResumeActive !== undefined ? handed : { ...handed, pendingResumeActive: attacked.activePlayer }
+        }
+        return advanceTurn(resetPasses(attacked))
       })
     case 'takeInitiative':
       return requirePhase(state, 'action', () => takeInitiative(state))
