@@ -69,7 +69,8 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayPlayTopFree') return "Don't play"
       if (choice.kind === 'mayDamageExhaust') return 'Decline'
       if (choice.kind === 'mayAttack') return "Don't attack"
-      if (choice.kind === 'distributeDamage' || choice.kind === 'distributeTokens' || choice.kind === 'lookAtHand' || choice.kind === 'searchPlayFree') return 'Done'
+      if (choice.kind === 'distributeDamage' || choice.kind === 'distributeTokens' || choice.kind === 'lookAtHand' || choice.kind === 'searchPlayFree' || choice.kind === 'dealOwnBaseForDiscount') return 'Done'
+      if (choice.kind === 'returnFriendlyUnit' || choice.kind === 'peekTopDiscard') return 'Decline'
       if (choice.kind === 'playUnitFromHand') return "Don't play"
       if (choice.kind === 'mayDefeatSelfSearch') return "Don't"
       if (choice.kind === 'mayDamage' || choice.kind === 'mayAdvantageEach' || choice.kind === 'mayDefeatEnemyUnit' || choice.kind === 'selectDiscard') return 'Decline'
@@ -107,6 +108,16 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'healForAdvantage') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Heal${target ? ` ${target}` : ''}`
+      }
+      if (choice.kind === 'dealOwnBaseForDiscount') return 'Deal 1 to your base'
+      if (choice.kind === 'returnFriendlyUnit') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Return ${target ?? 'unit'} to hand`
+      }
+      if (choice.kind === 'peekTopDiscard' && action.baseTarget) {
+        const top = state.players[action.baseTarget].deck[0]
+        const name = top ? state.cards[top]?.name ?? top : 'card'
+        return `Discard ${name} (${action.baseTarget === by ? 'your' : "opponent's"} deck)`
       }
       if (choice.kind === 'nameCard') return `Name ${action.cardName ?? 'a card'}`
       if (choice.kind === 'mayDefeatSelfSearch') return `Defeat ${anyUnitName(state, choice.unitId) ?? 'this unit'} & search`

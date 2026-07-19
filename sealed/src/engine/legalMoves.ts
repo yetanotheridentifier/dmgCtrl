@@ -430,6 +430,24 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'dealOwnBaseForDiscount': {
+        // Enoch (#356): deal one more to your base (up to `max`), or stop (Done).
+        if (choice.dealt < choice.max) moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'returnFriendlyUnit': {
+        // Purrgil Ultra (#356): return a chosen friendly unit, or decline (optional).
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'peekTopDiscard': {
+        // Reanimated Night Trooper (#356): discard the top of a chosen deck (with cards), or decline.
+        for (const deck of choice.decks) if (state.players[deck].deck.length > 0) moves.push({ type: 'acceptChoice', choiceId: choice.id, baseTarget: deck })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
       case 'lookAtHand': {
         // Imperial Defector / Remnant Lookouts (#355): view the target's hand. With `mayDiscard`,
         // one accept per card in it; always a Done to dismiss.

@@ -1026,3 +1026,23 @@ registerCard('ASH_097', whenDefeated("You may return a non-unique Imperial unit 
   })
   return candidates.length ? pushChoice(s, { kind: 'selectFromDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true }) : s
 }))
+
+registerCard('ASH_027', whenDefeated('You may deal up to 6 damage to your base. The next unit you play this phase costs 1 less for every 2 damage dealt this way.', (s, ctx) => // Enoch
+  pushChoice(s, { kind: 'dealOwnBaseForDiscount', id: ctx.sourceInstanceId!, controller: ctx.owner, dealt: 0, max: 6 })))
+
+// Purrgil Ultra (038): the same "return a friendly unit, deal its cost" on both When Played and When Defeated.
+const purrgilReturn = (s: GameState, ctx: { owner: PlayerId; sourceInstanceId?: string }): GameState => {
+  const targets = s.players[ctx.owner].units.filter(u => !isLeaderUnit(s, u) && u.instanceId !== ctx.sourceInstanceId).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'returnFriendlyUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
+}
+registerCard('ASH_038', {
+  abilities: [
+    { trigger: 'whenPlayed', description: "You may return another friendly non-leader unit to its owner's hand. If you do, deal damage to a unit equal to the returned unit's cost.", effect: purrgilReturn },
+    { trigger: 'whenDefeated', description: "You may return another friendly non-leader unit to its owner's hand. If you do, deal damage to a unit equal to the returned unit's cost.", effect: purrgilReturn },
+  ],
+})
+
+registerCard('ASH_045', whenDefeated('Look at the top card of a deck. You may discard it.', (s, ctx) => { // Reanimated Night Trooper
+  const decks = (['player', 'opponent'] as PlayerId[]).filter(d => s.players[d].deck.length > 0)
+  return decks.length ? pushChoice(s, { kind: 'peekTopDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, decks }) : s
+}))

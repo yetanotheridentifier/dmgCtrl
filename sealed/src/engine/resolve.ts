@@ -7,7 +7,7 @@ import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit } from './combat'
-import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, returnUpgradeFromDiscardToHand } from './effects'
+import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
@@ -289,6 +289,12 @@ function fireEntersPlay(state: GameState, owner: PlayerId, newUnitId: string): G
   return next
 }
 
+/** Enoch (#356): grant "next unit costs 1 less per 2 damage dealt to your base". */
+function grantEnochDiscount(state: GameState, controller: PlayerId, dealt: number): GameState {
+  const delta = Math.floor(dealt / 2)
+  return delta > 0 ? grantNextUnit(state, controller, { costDelta: -delta }) : state
+}
+
 /** Space units among `revealed` whose cost fits `budget` (#355, Admiral Ackbar). */
 function ackbarEligible(state: GameState, revealed: string[], budget: number): number[] {
   return revealed.flatMap((cardId, i) => {
@@ -417,6 +423,10 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
   // Admiral Ackbar (#355): stopping the search returns the still-held revealed cards to the deck bottom.
   if (choice.kind === 'searchPlayFree') {
     next = updatePlayer(next, choice.controller, { deck: [...next.players[choice.controller].deck, ...choice.revealed] })
+  }
+  // Enoch (#356): stopping grants the discount for the damage dealt to your base so far.
+  if (choice.kind === 'dealOwnBaseForDiscount') {
+    next = grantEnochDiscount(next, choice.controller, choice.dealt)
   }
   return resumeAfterChoice(next, choice)
 }
@@ -633,6 +643,37 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         if (remaining > 0 && targets.length > 0) {
           next = pushChoice(next, { kind: 'distributeTokens', id: choice.id, controller: choice.controller, token: choice.token, remaining, total: choice.total, targets })
         }
+      }
+      break
+    }
+    case 'dealOwnBaseForDiscount': {
+      // Enoch (#356): deal 1 to your own base; at `max` (or on Done, see resolveSkip) grant the discount.
+      next = dealDamageToBase(next, choice.controller, 1)
+      next = checkWin(next)
+      if (next.winner !== null) return next
+      const dealt = choice.dealt + 1
+      if (dealt < choice.max) next = pushChoice(next, { kind: 'dealOwnBaseForDiscount', id: choice.id, controller: choice.controller, dealt, max: choice.max })
+      else next = grantEnochDiscount(next, choice.controller, dealt)
+      break
+    }
+    case 'returnFriendlyUnit': {
+      // Purrgil Ultra (#356): return the chosen unit to hand, then deal its cost as damage to any unit.
+      if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
+        const found = findUnit(next, targetInstanceId)
+        const cost = found ? next.cards[found.unit.cardId]?.cost ?? 0 : 0
+        next = returnUnitToHand(next, targetInstanceId)
+        const targets = [...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId)
+        if (cost > 0 && targets.length > 0) {
+          next = pushChoice(next, { kind: 'mayDamage', id: choice.id, controller: choice.controller, unitId: choice.id, targets, amount: cost, optional: false })
+        }
+      }
+      break
+    }
+    case 'peekTopDiscard': {
+      // Reanimated Night Trooper (#356): discard the top card of the chosen deck.
+      if (baseTarget) {
+        const p = next.players[baseTarget]
+        if (p.deck.length > 0) next = updatePlayer(next, baseTarget, { deck: p.deck.slice(1), discard: [...p.discard, p.deck[0]] })
       }
       break
     }

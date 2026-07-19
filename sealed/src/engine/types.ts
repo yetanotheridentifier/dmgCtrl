@@ -392,6 +392,15 @@ export type PendingChoice =
   // Distribute `total` tokens among `targets`, one per pick until `remaining` reaches 0 (#356, Helgait).
   // Unlike `multiPick`'s give-advantage, targets stay eligible so tokens can stack. Always optional.
   | { kind: 'distributeTokens'; id: string; controller: PlayerId; token: string; remaining: number; total: number; targets: string[] }
+  // Enoch (#356): deal up to `max` damage to your own base, one at a time (`dealt` so far); stopping
+  // (or reaching `max`) grants "next unit costs 1 less per 2 damage dealt". Each accept deals 1 more.
+  | { kind: 'dealOwnBaseForDiscount'; id: string; controller: PlayerId; dealt: number; max: number }
+  // Purrgil Ultra (#356): return a chosen friendly non-leader unit (`targets`) to hand, then deal
+  // damage equal to its cost to any unit. Optional (skip = don't return).
+  | { kind: 'returnFriendlyUnit'; id: string; controller: PlayerId; targets: string[] }
+  // Reanimated Night Trooper (#356): having looked at the top of each deck in `decks`, you may discard
+  // one deck's top card (`acceptChoice`'s `baseTarget` picks the deck), or decline.
+  | { kind: 'peekTopDiscard'; id: string; controller: PlayerId; decks: PlayerId[] }
   // Look at `target`'s hand (#355, Imperial Defector / Remnant Lookouts) — the controller sees it
   // revealed. View-only unless `mayDiscard`, when the controller may discard one of the target's
   // cards (an `acceptChoice` with its hand index); `thenDraw` then has the target draw a card.

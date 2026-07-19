@@ -253,6 +253,9 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_043', name: 'Corona Four' },
   { id: 'ASH_165', name: 'Clan Vizsla Soldier' },
   { id: 'ASH_097', name: 'Moff Gideon' },
+  { id: 'ASH_027', name: 'Enoch' },
+  { id: 'ASH_038', name: 'Purrgil Ultra' },
+  { id: 'ASH_045', name: 'Reanimated Night Trooper' },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */

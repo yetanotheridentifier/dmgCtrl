@@ -1,6 +1,7 @@
 import type { GameState, NextUnitGrant, PlayerId, UnitState } from './types'
 import { updatePlayer } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
+import { isTokenCard } from './tokenUnits'
 import { getCardDefinition } from './abilities'
 
 /**
@@ -125,6 +126,28 @@ export function drawCards(state: GameState, owner: PlayerId, n: number): GameSta
     ...state,
     players: { ...state.players, [owner]: { ...p, hand: [...p.hand, ...drawn], deck: p.deck.slice(drawn.length) } },
   }
+}
+
+/**
+ * Return a unit from the board to its owner's hand (#356, Purrgil Ultra). The unit's card goes to
+ * hand (a token unit can't return — it ceases to exist); its card-upgrades go to their owners'
+ * discards; token upgrades vanish. No-op if the unit isn't in play.
+ */
+export function returnUnitToHand(state: GameState, instanceId: string): GameState {
+  for (const owner of ['player', 'opponent'] as PlayerId[]) {
+    const u = state.players[owner].units.find(x => x.instanceId === instanceId)
+    if (!u) continue
+    let next = updatePlayer(state, owner, {
+      units: state.players[owner].units.filter(x => x.instanceId !== instanceId),
+      hand: isTokenCard(u.cardId) ? state.players[owner].hand : [...state.players[owner].hand, u.cardId],
+    })
+    for (const up of u.upgrades) {
+      if (state.cards[up.cardId]?.type === 'token') continue // token upgrades cease to exist
+      next = updatePlayer(next, up.owner, { discard: [...next.players[up.owner].discard, up.cardId] })
+    }
+    return next
+  }
+  return state
 }
 
 /** Exhaust one ready resource of `owner` (#356, Mandalorian Scout). No-op if none is ready. */

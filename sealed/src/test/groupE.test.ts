@@ -34,6 +34,10 @@ const E = {
   IMPUNIT: card({ id: 'IMPUNIT', type: 'unit', arena: 'ground', power: 3, hp: 3, traits: ['Imperial'] }),
   IMPUNIQUE: card({ id: 'IMPUNIQUE', type: 'unit', arena: 'ground', power: 3, hp: 3, traits: ['Imperial'], unique: true }),
   REBELUNIT: card({ id: 'REBELUNIT', type: 'unit', arena: 'ground', power: 3, hp: 3, traits: ['Rebel'] }),
+  ASH_027: card({ id: 'ASH_027', type: 'unit', arena: 'ground', power: 4, hp: 5 }), // Enoch
+  ASH_038: card({ id: 'ASH_038', type: 'unit', arena: 'space', power: 6, hp: 10 }), // Purrgil Ultra
+  ASH_045: card({ id: 'ASH_045', type: 'unit', arena: 'ground', power: 2, hp: 2 }), // Reanimated Night Trooper
+  COST3UNIT: card({ id: 'COST3UNIT', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 2 }),
   FILLER: card({ id: 'FILLER', type: 'unit', arena: 'ground', power: 2, hp: 5 }),
   FILLERSPACE: card({ id: 'FILLERSPACE', type: 'unit', arena: 'space', power: 2, hp: 5 }),
   BRUISERBIG: card({ id: 'BRUISERBIG', type: 'unit', arena: 'ground', power: 9, hp: 10 }),
@@ -228,5 +232,76 @@ describe('Group E — Moff Gideon (097): return a non-unique Imperial from disca
     const done = resolve(defeated, { type: 'acceptChoice', choiceId: defeated.pendingChoices![0].id, optionIndex: 0 })
     expect(done.players.player.hand).toContain('IMPUNIT')
     expect(done.players.player.discard).not.toContain('IMPUNIT')
+  })
+})
+
+describe('Group E — Enoch (027): self base-damage for a discount', () => {
+  it('deals up to 6 to your base; -1 discount per 2 dealt (Done at 4 → -2)', () => {
+    let s = defeat('ASH_027')
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'dealOwnBaseForDiscount', dealt: 0, max: 6 })
+    for (let i = 0; i < 4; i++) s = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id })
+    s = resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id }) // Done at 4
+    expect(s.players.player.base.damage).toBe(4)
+    expect(s.players.player.nextUnitGrants).toEqual([{ costDelta: -2 }])
+  })
+
+  it('reaching the max deals 6 and grants -3 (no extra Done)', () => {
+    let s = defeat('ASH_027')
+    for (let i = 0; i < 6; i++) s = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id })
+    expect(s.pendingChoices ?? []).toHaveLength(0)
+    expect(s.players.player.base.damage).toBe(6)
+    expect(s.players.player.nextUnitGrants).toEqual([{ costDelta: -3 }])
+  })
+
+  it('declining immediately deals nothing and grants no discount', () => {
+    const d = defeat('ASH_027')
+    const s = resolve(d, { type: 'skipTrigger', choiceId: d.pendingChoices![0].id })
+    expect(s.players.player.base.damage).toBe(0)
+    expect(s.players.player.nextUnitGrants ?? []).toHaveLength(0)
+  })
+})
+
+describe('Group E — Purrgil Ultra (038): return a unit, deal its cost', () => {
+  it('returns a friendly unit to hand, then deals its cost to a chosen unit', () => {
+    const s = defeat('ASH_038', { playerUnits: [unit('r', 'COST3UNIT', { arena: 'ground' })], oppUnits: [unit('e', 'FILLER', { arena: 'ground' })] })
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'returnFriendlyUnit' })
+    const ret = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, targetInstanceId: 'r' })
+    expect(ret.players.player.hand).toContain('COST3UNIT') // returned to hand
+    expect(ret.players.player.units.find(u => u.instanceId === 'r')).toBeUndefined()
+    expect(ret.pendingChoices?.[0]).toMatchObject({ kind: 'mayDamage', amount: 3, optional: false })
+    const done = resolve(ret, { type: 'acceptChoice', choiceId: ret.pendingChoices![0].id, targetInstanceId: 'e' })
+    expect(U(done, 'e').damage).toBe(3)
+  })
+
+  it('is optional — declining returns nothing', () => {
+    const s = defeat('ASH_038', { playerUnits: [unit('r', 'COST3UNIT', { arena: 'ground' })] })
+    const done = resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id })
+    expect(done.players.player.hand).not.toContain('COST3UNIT')
+    expect(done.pendingChoices ?? []).toHaveLength(0)
+  })
+})
+
+describe('Group E — Reanimated Night Trooper (045): peek & maybe discard a deck top', () => {
+  const board = () => state({
+    cards: E,
+    players: {
+      player: player({ units: [unit('t', 'ASH_045', { arena: 'ground', damage: 1 })], deck: ['FILLER', 'ZEROPOW'] }),
+      opponent: player({ deck: ['REBELUNIT', 'IMPUNIT'] }),
+    },
+  })
+
+  it('may discard the top card of a chosen deck', () => {
+    const s = dealDamageToUnit(board(), 't', 1)
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'peekTopDiscard', decks: ['player', 'opponent'] })
+    const done = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, baseTarget: 'opponent' })
+    expect(done.players.opponent.deck).toEqual(['IMPUNIT'])
+    expect(done.players.opponent.discard).toContain('REBELUNIT')
+  })
+
+  it('may decline (look only)', () => {
+    const s = dealDamageToUnit(board(), 't', 1)
+    const done = resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id })
+    expect(done.players.player.deck).toEqual(['FILLER', 'ZEROPOW'])
+    expect(done.players.opponent.deck).toEqual(['REBELUNIT', 'IMPUNIT'])
   })
 })
