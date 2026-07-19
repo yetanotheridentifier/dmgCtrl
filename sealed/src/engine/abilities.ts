@@ -47,6 +47,8 @@ export interface EffectContext {
   combatDamageToBase?: number
   /** `whenDefeated` only: the unit as captured at the moment of defeat (it has left play). */
   defeatedUnit?: UnitState
+  /** `whenDefeated` only: true when the defeat was caused by combat damage (#356, Paz Vizsla / Shin Hati). */
+  defeatedByCombat?: boolean
   /** A chosen target unit's instance id, when the ability picks one (#309). */
   targetInstanceId?: string
 }

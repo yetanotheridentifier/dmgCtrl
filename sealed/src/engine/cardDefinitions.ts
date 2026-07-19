@@ -1,5 +1,5 @@
 import { registerCard } from './abilities'
-import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount, grantNextUnit, healUnit, bottomTopCards } from './effects'
+import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, createTokenUnit, findUnit, searchCount, grantNextUnit, healUnit, bottomTopCards, exhaustReadyResource } from './effects'
 import { dealDamageToUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
@@ -776,6 +776,12 @@ const whenPlayed = (description: string, effect: (s: GameState, ctx: { owner: Pl
   abilities: [{ trigger: 'whenPlayed' as const, description, effect }],
 })
 
+/** whenDefeated ability (#356). `ctx.defeatedUnit` is the unit captured at the moment of defeat
+ *  (it has already left play) — use it for its power/upgrades or as a stable choice id. */
+const whenDefeated = (description: string, effect: (s: GameState, ctx: { owner: PlayerId; sourceInstanceId?: string; defeatedUnit?: UnitState; defeatedByCombat?: boolean }) => GameState) => ({
+  abilities: [{ trigger: 'whenDefeated' as const, description, effect }],
+})
+
 // D1 — self / no-target effects.
 registerCard('ASH_218', whenPlayed('Give 4 Advantage tokens to this unit.', (s, ctx) => giveTokens(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE, 4))) // Ferry Droid
 registerCard('ASH_251', whenPlayed('Give an Advantage token to this unit.', (s, ctx) => giveToken(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE))) // Zealous Soldier
@@ -936,3 +942,39 @@ registerCard('ASH_107', whenPlayed('Search the top 5 cards of your deck for a ca
   if (eligibleIndices.length === 0) return bottomTopCards(s, owner, revealed.length)
   return pushChoice(s, { kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: owner, revealed, eligibleIndices })
 }))
+
+// ── Group E (#356): whenDefeated ────────────────────────────────────────────
+registerCard('ASH_116', whenDefeated('Draw a card.', (s, ctx) => drawCards(s, ctx.owner, 1))) // Ant Droid
+registerCard('ASH_080', whenDefeated('Create a Mandalorian token.', (s, ctx) => createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN))) // Covert Believers
+registerCard('ASH_058', whenDefeated('Create a Mandalorian token.', (s, ctx) => createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN))) // Duchess's Protector
+registerCard('ASH_216', whenDefeated('Exhaust a ready friendly resource.', (s, ctx) => exhaustReadyResource(s, ctx.owner))) // Mandalorian Scout
+
+registerCard('ASH_153', whenDefeated('You may deal 2 damage to a unit.', (s, ctx) => { // Green Leader
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayDamage', id: ctx.defeatedUnit!.instanceId, controller: ctx.owner, unitId: ctx.defeatedUnit!.instanceId, targets, amount: 2, optional: true }) : s
+}))
+
+registerCard('ASH_254', whenDefeated('Give 2 Advantage tokens to a friendly unit.', (s, ctx) => { // Gallofree Transport
+  const targets = s.players[ctx.owner].units.map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.defeatedUnit!.instanceId, controller: ctx.owner, token: TOKEN_ADVANTAGE, count: 2, targets, optional: false }) : s
+}))
+
+registerCard('ASH_028', whenDefeated("If this unit wasn't defeated by combat damage, create 2 Mandalorian tokens.", (s, ctx) => // Paz Vizsla
+  ctx.defeatedByCombat ? s : createTokenUnit(createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN), ctx.owner, TOKEN_MANDALORIAN)))
+
+registerCard('ASH_191', whenDefeated('You may give 2 Advantage tokens to a unit. If this unit was not defeated by combat damage, give 3 instead.', (s, ctx) => { // Shin Hati's Fiend Fighter
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_ADVANTAGE, count: ctx.defeatedByCombat ? 2 : 3, targets, optional: true }) : s
+}))
+
+// Flarestar Attack Shuttle (167): the same "may give an Advantage token" on both When Played and When Defeated.
+const flarestarGiveAdvantage = (s: GameState, ctx: { owner: PlayerId; sourceInstanceId?: string }): GameState => {
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_ADVANTAGE, count: 1, targets, optional: true }) : s
+}
+registerCard('ASH_167', {
+  abilities: [
+    { trigger: 'whenPlayed', description: 'You may give an Advantage token to a unit.', effect: flarestarGiveAdvantage },
+    { trigger: 'whenDefeated', description: 'You may give an Advantage token to a unit.', effect: flarestarGiveAdvantage },
+  ],
+})

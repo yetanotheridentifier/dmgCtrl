@@ -239,6 +239,16 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   // Modal / variable damage & heal (#355 UI)
   { id: 'ASH_147', name: 'The Cyborg Mech' },
   { id: 'ASH_044', name: 'Barriss Offee' },
+  // Group E (#356) — whenDefeated
+  { id: 'ASH_116', name: 'Ant Droid' },
+  { id: 'ASH_080', name: 'Covert Believers' },
+  { id: 'ASH_058', name: "Duchess's Protector" },
+  { id: 'ASH_216', name: 'Mandalorian Scout' },
+  { id: 'ASH_153', name: 'Green Leader' },
+  { id: 'ASH_254', name: 'Gallofree Transport' },
+  { id: 'ASH_028', name: 'Paz Vizsla' },
+  { id: 'ASH_191', name: "Shin Hati's Fiend Fighter" },
+  { id: 'ASH_167', name: 'Flarestar Attack Shuttle' },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */

@@ -1266,9 +1266,9 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
     ? Math.max(0, attackerPower - remainingHp)
     : 0
 
-  // Simultaneous combat damage (CR 1.9.10).
-  let next = applyUnitDamage(preCombat, enemyId, new Map([[defender.instanceId, attackerPower]]))
-  next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, counterPower]]))
+  // Simultaneous combat damage (CR 1.9.10) — flagged as combat damage for whenDefeated (#356).
+  let next = applyUnitDamage(preCombat, enemyId, new Map([[defender.instanceId, attackerPower]]), true)
+  next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, counterPower]]), true)
 
   if (overwhelmExcess > 0) {
     const enemy = next.players[enemyId]
