@@ -37,7 +37,7 @@ export interface EngineCard {
   traits: string[]
   keywords: KeywordInstance[]
   unique: boolean
-  /** Card art URL as served by the data source; render via artUrl() (#311). */
+  /** Card art URL as served by the data source; render via artUrl(). */
   frontArt?: string
   /** Back-side art (SWUDB BackArt): the unit side of a deployed leader. */
   backArt?: string
@@ -48,7 +48,7 @@ export interface EngineCard {
 export type CardDb = Readonly<Record<string, EngineCard>>
 
 /**
- * An upgrade attached to a unit (#308). `owner` is the player who played it —
+ * An upgrade attached to a unit. `owner` is the player who played it —
  * on defeat the upgrade returns to its owner's discard, which may differ from the
  * unit's controller when an upgrade is attached to an enemy unit.
  */
@@ -68,41 +68,41 @@ export interface UnitState {
   /**
    * Attached upgrades. Card upgrades return to their owner's discard on defeat;
    * token upgrades (cardId in TOKEN_CARDS, type `token`) never go to a discard —
-   * they cease to exist. Rendering them as tokens rather than cards is #336.
+   * they cease to exist. The UI draws them as on-card tokens rather than behind-card upgrades.
    */
   upgrades: UpgradeAttachment[]
   /**
-   * Hidden state (#334): the unit can't be attacked (unless it has Sentinel, which
+   * Hidden state: the unit can't be attacked (unless it has Sentinel, which
    * overrides Hidden); cleared at the next phase. Set on entry for units with the
-   * Hidden keyword, or when an ability grants it (#337).
+   * Hidden keyword, or when an ability grants it.
    */
   hidden?: boolean
   /**
-   * Keywords temporarily granted for a single attack (Support, #334). Set only
+   * Keywords temporarily granted for a single attack (Support). Set only
    * during the resolution of a support attack and cleared immediately after, so a
    * resting state never carries it. `unitHasKeyword`/`unitKeywordValue` include it.
    */
   grantedKeywords?: KeywordInstance[]
   /**
    * Card ids whose full abilities (keywords + triggered) this unit has been granted
-   * for a single attack (Improvised Identity, #343). Like `grantedKeywords`, set only
+   * for a single attack (Improvised Identity). Like `grantedKeywords`, set only
    * during that attack and cleared immediately after. `unitKeywords`/`runUnitTrigger`
    * include them.
    */
   grantedAbilityCardIds?: string[]
   /**
    * Keys of once-per-round action abilities this unit has already used this round
-   * (`${cardId}#${index}`); cleared at round start (#343).
+   * (`${cardId}#${index}`); cleared at round start.
    */
   usedAbilities?: string[]
   /**
-   * Cards this unit has captured (#357, Bothan-5) — card ids held face-down under it, out of every
+   * Cards this unit has captured (Bothan-5) — card ids held face-down under it, out of every
    * other zone. Released to their owner's discard when the captor leaves play.
    */
   captured?: string[]
   /**
-   * A card name this unit forbids the opponent from playing while it's in play (#355,
-   * Ryder Azadi). Set by its When Played "name a card"; the restriction ends naturally
+   * A card name this unit forbids the opponent from playing while it's in play (Ryder
+   * Azadi). Set by its When Played "name a card"; the restriction ends naturally
    * when the unit leaves play (the field goes with it).
    */
   namedCard?: string
@@ -136,8 +136,8 @@ export interface PlayerState {
   resources: ResourceState[]
   units: UnitState[]
   /**
-   * Grants waiting for the next unit this player plays this phase (Sabine → Shielded #348; Mouse
-   * Droid → −1 cost to the next Imperial #355; Neel → the next ≤1-power unit enters ready #355).
+   * Grants waiting for the next unit this player plays this phase (Sabine → Shielded; Mouse
+   * Droid → −1 cost to the next Imperial; Neel → the next ≤1-power unit enters ready).
    * Each grant carries an optional filter (`trait` / `maxPower`) and is consumed by the next unit
    * that matches it — `costDelta` folds into `effectiveCost`, `keywords` / `entersReady` apply in
    * `enterUnit`. Cleared at the start of the regroup phase.
@@ -146,7 +146,7 @@ export interface PlayerState {
 }
 
 /**
- * Where an instance of damage came from (#357, Gorian Shard's Corsair). Card-level rather than
+ * Where an instance of damage came from (Gorian Shard's Corsair). Card-level rather than
  * instance-level so it also describes a leader's or an event's damage, which have no unit in play.
  * `undefined` means "unattributed" — treated as preventable.
  */
@@ -155,7 +155,7 @@ export interface DamageSource {
   controller: PlayerId
 }
 
-/** A pending "your next unit …" grant (#348/#355). All fields are plain data (GameState is JSON). */
+/** A pending "your next unit …" grant. All fields are plain data (GameState is JSON). */
 export interface NextUnitGrant {
   keywords?: KeywordInstance[]
   costDelta?: number // e.g. −1 to the matching unit's cost
@@ -165,7 +165,7 @@ export interface NextUnitGrant {
   maxPower?: number // the unit's printed power must be ≤ this
 }
 
-/** True if `card` is a unit satisfying a grant's filter (#355). */
+/** True if `card` is a unit satisfying a grant's filter. */
 export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUnitGrant): boolean {
   if (!card || card.type !== 'unit') return false
   if (grant.trait && !card.traits.some(t => t.toLowerCase() === grant.trait!.toLowerCase())) return false
@@ -201,7 +201,7 @@ export interface GameState {
   /** Terminal outcome: a winning player, `'draw'` (both bases fall at once), or null while live. */
   winner: PlayerId | 'draw' | null
   /**
-   * Queue of pending mid-resolution choices (#334/#342). While the head is set, the
+   * Queue of pending mid-resolution choices. While the head is set, the
    * only legal moves are that choice's options (or `skipTrigger` to decline), and
    * `activePlayer` is held at the choice's `controller` so the right side decides.
    * Ambush/Support use it (a single-element queue); optional "may…" abilities and
@@ -209,34 +209,34 @@ export interface GameState {
    */
   pendingChoices?: PendingChoice[]
   /**
-   * A combat suspended mid-resolution (#342): an "On Defense" ability raised a choice
+   * A combat suspended mid-resolution: an "On Defense" ability raised a choice
    * before combat damage. Holds what's needed to resume (`completeAttack`) once the
    * choice(s) drain, plus the attacker's `activePlayer` to restore for the turn pass.
    */
   // `prevented` collects units whose incoming combat damage a prevention effect has cancelled
-  // (#357, The Mandalorian) — decided at the `prevent` stage, honoured when damage is dealt.
+  // (The Mandalorian) — decided at the `prevent` stage, honoured when damage is dealt.
   pendingAttack?: { attackerId: string; target: AttackTarget; activePlayer: PlayerId; stage: 'onDefense' | 'damage'; viaAmbush?: boolean; preventAsked?: string[]; prevented?: string[] }
   /**
-   * A "take the initiative" whose "When you take the initiative" trigger raised a choice (#348):
+   * A "take the initiative" whose "When you take the initiative" trigger raised a choice:
    * the turn transition (end the phase, or pass to the opponent) is deferred until the choice
    * drains. `true` = taking the initiative also ended the action phase (CR 1.15.5c).
    */
   pendingInitiativeEndsPhase?: boolean
   /**
-   * An opponent-interjected choice is pending as part of this player's action (Sabine Wren, #348):
+   * An opponent-interjected choice is pending as part of this player's action (Sabine Wren):
    * `activePlayer` is temporarily the choosing opponent, and this holds the original actor so that
    * once the interjected choice(s) drain, control is restored to them and the turn advances normally.
    * Generic — any effect that makes "an opponent" choose mid-action sets this.
    */
   pendingResumeActive?: PlayerId
   /**
-   * Transient "this phase" stat/keyword modifiers (#306/#347), each aimed at a unit.
+   * Transient "this phase" stat/keyword modifiers, each aimed at a unit.
    * Folded into `effectivePower`/`effectiveHp`/`unitKeywords`; cleared at the start of
    * the regroup phase so a unit defeated during regroup uses its base stats.
    */
   lastingEffects?: LastingEffect[]
   /**
-   * Events the engine tracks within a boundary so abilities can query them (#347):
+   * Events the engine tracks within a boundary so abilities can query them:
    * which units entered play this phase and which cards were defeated this phase
    * (per controller). Reset whenever the phase changes.
    */
@@ -244,43 +244,43 @@ export interface GameState {
 }
 
 /**
- * One option of a choose-one/modal ability (#348). A small serialisable effect descriptor,
+ * One option of a choose-one/modal ability. A small serialisable effect descriptor,
  * resolved by the engine when the option is picked. New variants extend the `kind` union.
  * `arenaLastingBuff`: grant every unit in `arena` (both players) the given "this phase" buff.
  */
-/** Reference to a specific attached upgrade (its host unit + position), for card-select choices (#348). */
+/** Reference to a specific attached upgrade (its host unit + position), for card-select choices. */
 export interface UpgradeRef {
   unitId: string
   upgradeIndex: number
   cardId: string
 }
 
-/** The current combat's roles, so combat-conditional auras (Grogu, #348) can react to who is
+/** The current combat's roles, so combat-conditional auras (Grogu) can react to who is
  *  attacking / defending. Threaded through `StatContext` into the aura pass during damage resolution. */
 export interface CombatContext {
   attackerInstanceId: string
   defenderInstanceId: string
 }
 
-/** A hand card offered for play by an ability — its hand position + card id (#348). */
+/** A hand card offered for play by an ability — its hand position + card id. */
 export interface HandCardRef {
   handIndex: number
   cardId: string
 }
 
-/** Parameters for a "play a unit from hand" step (#348): cost delta and whether it enters ready. */
+/** Parameters for a "play a unit from hand" step: cost delta and whether it enters ready. */
 export interface PlayFromHandSpec {
   costDelta: number
   entersReady: boolean
 }
 
-/** An upgrade sitting in the resource zone, offered for play (#348) — its position + card id. */
+/** An upgrade sitting in the resource zone, offered for play — its position + card id. */
 export interface ResourceUpgradeRef {
   resourceIndex: number
   cardId: string
 }
 
-/** Parameters for a "play an upgrade from your resources" step (#348). */
+/** Parameters for a "play an upgrade from your resources" step. */
 export interface PlayResourceUpgradeSpec {
   /** Front pays the upgrade's cost from remaining resources; the deployed back plays it free. */
   payCost: boolean
@@ -288,7 +288,7 @@ export interface PlayResourceUpgradeSpec {
   targetUnits: string[]
 }
 
-/** A follow-up "deal N damage to a unit or a base" selection (#348). */
+/** A follow-up "deal N damage to a unit or a base" selection. */
 export interface DamageTargetSpec {
   amount: number
   /** Instance ids of units that may take the damage. */
@@ -306,7 +306,7 @@ export interface ChooseOption {
   keywords?: KeywordInstance[]
 }
 
-/** A "this phase" modifier targeting a single unit (#347). Omitted stats = 0. */
+/** A "this phase" modifier targeting a single unit. Omitted stats = 0. */
 export interface LastingEffect {
   targetInstanceId: string
   power?: number
@@ -314,18 +314,18 @@ export interface LastingEffect {
   keywords?: KeywordInstance[]
 }
 
-/** Per-phase event counters (#347). `enteredPlay` holds instance ids (still-in-play
+/** Per-phase event counters. `enteredPlay` holds instance ids (still-in-play
  *  units), `defeated` holds card ids (so trait conditions like "Imperial" can check). */
 export interface PhaseEvents {
   enteredPlay: Record<PlayerId, string[]>
   defeated: Record<PlayerId, string[]>
-  /** Players whose base was attacked this phase (#356, Greef Karga). */
+  /** Players whose base was attacked this phase (Greef Karga). */
   basesAttacked: PlayerId[]
-  /** Players whose base was DEALT DAMAGE this phase — combat or ability (#357, Baylan Skoll). */
+  /** Players whose base was DEALT DAMAGE this phase — combat or ability (Baylan Skoll). */
   basesDamaged: PlayerId[]
-  /** Players who had an upgrade defeated this phase (#357, Baylan Skoll). */
+  /** Players who had an upgrade defeated this phase (Baylan Skoll). */
   upgradesDefeated: PlayerId[]
-  /** Card ids each player has played this phase, in order — "the first X you play each phase" (#357). */
+  /** Card ids each player has played this phase, in order — "the first X you play each phase". */
   played: Record<PlayerId, string[]>
 }
 
@@ -342,155 +342,155 @@ export type PendingChoice =
   | { kind: 'payOrExhaust'; id: string; controller: PlayerId; unitId: string; cost: number; resumeAtInitiative?: boolean }
   | { kind: 'mayPlayTopFree'; id: string; controller: PlayerId; unitId: string; cardId: string }
   | { kind: 'mayDamageExhaust'; id: string; controller: PlayerId; unitId: string; arena: Arena }
-  // Improvised Identity (#343): search the revealed top cards for a ground unit to
+  // Improvised Identity: search the revealed top cards for a ground unit to
   // discard (`revealed` are the top-of-deck ids, pickable by deck index), then a
   // `mayAttack` follows, granting the discarded card's abilities for that attack.
   | { kind: 'search'; id: string; controller: PlayerId; unitId: string; revealed: string[] }
   | { kind: 'mayAttack'; id: string; controller: PlayerId; unitId: string; grantCardId?: string }
-  // Optional targeted effects, e.g. from an On Attack ability (#309): `targets` are the
+  // Optional targeted effects, e.g. from an On Attack ability: `targets` are the
   // eligible unit instance ids; the controller picks one or declines.
   // `rewardIfDefeated`: if the damage defeats the target, give `count` Advantage to `instanceId`
-  // (Imposing Scout Walker → its own unit) (#355).
+  // (Imposing Scout Walker → its own unit).
   // `rewardIfDefeated`: if the damage defeats the target, either give `count` Advantage to a fixed
   // `instanceId` (Imposing Scout Walker), or let the controller give `chooseAdvantage` Advantage to a
-  // chosen unit (Justifier, #356).
-  // `thenSearchDraw` chains "if you do, search the top N for a unit and draw it" (#357, 8D8).
+  // chosen unit (Justifier).
+  // `thenSearchDraw` chains "if you do, search the top N for a unit and draw it" (8D8).
   | { kind: 'mayDamage'; id: string; controller: PlayerId; unitId: string; targets: string[]; amount: number; optional?: boolean; rewardIfDefeated?: { instanceId: string; count: number } | { chooseAdvantage: number }; thenSearchDraw?: number; source?: DamageSource }
-  // Give `count` of a token to a chosen target (#355). `optional` (default true) offers a decline.
+  // Give `count` of a token to a chosen target. `optional` (default true) offers a decline.
   | { kind: 'mayGiveTokens'; id: string; controller: PlayerId; token: string; count: number; targets: string[]; optional?: boolean }
   | { kind: 'mayAdvantageEach'; id: string; controller: PlayerId; unitId: string; targets: string[] }
-  // Vane (#309/#348): defeat a friendly upgrade (chosen from `candidates`, cards or tokens); then the
+  // Vane: defeat a friendly upgrade (chosen from `candidates`, cards or tokens); then the
   // `then` damage-target selection follows. `optional` = the deployed "may" version (a Cancel is
   // offered); the front action is mandatory. Each candidate is the exact upgrade (unit + index).
-  // Vane chains 2 damage via `then`; Clan Vizsla Soldier (#356) just defeats the upgrade (`then` omitted).
-  // `thenReadyUnit` readies that unit instead — "if you do, ready this unit" (#357, Pegasus Tri-Wing).
+  // Vane chains 2 damage via `then`; Clan Vizsla Soldier just defeats the upgrade (`then` omitted).
+  // `thenReadyUnit` readies that unit instead — "if you do, ready this unit" (Pegasus Tri-Wing).
   | { kind: 'selectUpgradeToDefeat'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional: boolean; then?: DamageTargetSpec; thenReadyUnit?: string }
-  // Return a chosen card from your discard to your hand (#356, Moff Gideon). `candidates` are the
+  // Return a chosen card from your discard to your hand (Moff Gideon). `candidates` are the
   // eligible discard-pile card ids; `acceptChoice`'s `optionIndex` picks one. Optional.
-  // `then: 'discardFate'` chains the bottom-and-heal / return-to-hand modal (#357, Trask Walker)
+  // `then: 'discardFate'` chains the bottom-and-heal / return-to-hand modal (Trask Walker)
   // instead of the default return-to-hand.
   | { kind: 'selectFromDiscard'; id: string; controller: PlayerId; candidates: string[]; optional: boolean; then?: 'discardFate' }
-  // Trask Walker (#357): optionIndex 0 = bottom the card and heal `heal` from your base,
+  // Trask Walker: optionIndex 0 = bottom the card and heal `heal` from your base,
   // 1 = return it to your hand. Mandatory once a card is chosen.
   | { kind: 'chooseDiscardFate'; id: string; controller: PlayerId; cardId: string; heal: number }
-  // Chimaera (#357): choose a friendly AND an enemy non-leader unit, then defeat both. Resolved in
+  // Chimaera: choose a friendly AND an enemy non-leader unit, then defeat both. Resolved in
   // two accepts — the first records `chosenFriendly` and re-offers with the enemy targets. Optional.
   | { kind: 'selectPairToDefeat'; id: string; controller: PlayerId; friendlyTargets: string[]; enemyTargets: string[]; chosenFriendly?: string }
-  // Jabba the Hutt (#357): return one of `candidates` (card upgrades in play) to its owner's hand.
+  // Jabba the Hutt: return one of `candidates` (card upgrades in play) to its owner's hand.
   | { kind: 'selectUpgradeToReturn'; id: string; controller: PlayerId; candidates: UpgradeRef[] }
-  // Jabba the Hutt (#357): having returned `cardId` to your own hand, may attach it free to a unit.
+  // Jabba the Hutt: having returned `cardId` to your own hand, may attach it free to a unit.
   | { kind: 'mayPlayUpgradeFree'; id: string; controller: PlayerId; cardId: string; targets: string[] }
-  // Jod Na Nawood (#357): may pay `cost`, then exhaust every unit in the chosen arena
+  // Jod Na Nawood: may pay `cost`, then exhaust every unit in the chosen arena
   // (optionIndex 0 = ground, 1 = space).
   | { kind: 'mayPayExhaustArena'; id: string; controller: PlayerId; cost: number }
-  // Queen Soruna (#357): may reveal a unit from hand (`handIndices`); the revealed card's cost
+  // Queen Soruna: may reveal a unit from hand (`handIndices`); the revealed card's cost
   // then picks out the units that can be damaged.
   | { kind: 'revealUnitFromHand'; id: string; controller: PlayerId; handIndices: number[]; amount: number }
-  // Choose where to deal a fixed amount of damage (#348): a unit (`unitTargets`) or a base
+  // Choose where to deal a fixed amount of damage: a unit (`unitTargets`) or a base
   // (`baseTargets`, by owner). Mandatory. Vane's "deal 2 to a base / the defending unit or a base".
   | { kind: 'selectDamageTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[]; optional?: boolean; source?: DamageSource }
-  // Greef Karga front (#309): on playing a unit, may exhaust the leader to give it an Advantage token.
+  // Greef Karga front: on playing a unit, may exhaust the leader to give it an Advantage token.
   // `unitId` is the just-played unit to receive the token.
   | { kind: 'mayExhaustLeaderForAdvantage'; id: string; controller: PlayerId; unitId: string }
-  // Optional "this phase" buff (#347), e.g. Baylan's On Attack: pick a unit among `targets`
+  // Optional "this phase" buff, e.g. Baylan's On Attack: pick a unit among `targets`
   // and grant it the given power/HP/keywords for the phase, or decline.
-  // `thenMayAttack` chains "you may attack with that unit" (#357, T-6 Shuttle 1974).
+  // `thenMayAttack` chains "you may attack with that unit" (T-6 Shuttle 1974).
   | { kind: 'mayLastingBuff'; id: string; controller: PlayerId; targets: string[]; power?: number; hp?: number; keywords?: KeywordInstance[]; thenMayAttack?: boolean }
-  // Ezra front (#347): on a friendly attack ending, may exhaust the leader to give an Advantage
+  // Ezra front: on a friendly attack ending, may exhaust the leader to give an Advantage
   // token to one of `targets` (a unit other than the attacker), or decline.
   | { kind: 'mayExhaustLeaderGiveAdvantage'; id: string; controller: PlayerId; targets: string[] }
-  // Ezra deployed (#347): may give an Advantage token to one of `targets`, or decline (no cost).
+  // Ezra deployed: may give an Advantage token to one of `targets`, or decline (no cost).
   | { kind: 'mayGiveAdvantage'; id: string; controller: PlayerId; targets: string[] }
-  // Shin Hati front (#347): on a friendly attack ending, may exhaust the leader to exhaust one of
+  // Shin Hati front: on a friendly attack ending, may exhaust the leader to exhaust one of
   // `targets` (a ready unit cheaper than the base damage dealt), or decline.
   | { kind: 'mayExhaustLeaderExhaustUnit'; id: string; controller: PlayerId; targets: string[] }
-  // Shin Hati deployed (#347): may exhaust one of `targets`, or decline (no leader-exhaust cost).
+  // Shin Hati deployed: may exhaust one of `targets`, or decline (no leader-exhaust cost).
   // `markUsed`, when set, marks a once-per-round triggered ability as spent on acceptance.
   | { kind: 'mayExhaustUnit'; id: string; controller: PlayerId; targets: string[]; markUsed?: { instanceId: string; key: string } }
-  // Choose-one / modal (#348): pick exactly one of `options` (Sloane). Each option is a small
+  // Choose-one / modal: pick exactly one of `options` (Sloane). Each option is a small
   // serialisable effect descriptor, resolved by index; mandatory (no decline).
   | { kind: 'chooseOne'; id: string; controller: PlayerId; options: ChooseOption[] }
-  // Luke front (#348): may exhaust the (undeployed) leader to heal `amount` from `unitId`, or decline.
+  // Luke front: may exhaust the (undeployed) leader to heal `amount` from `unitId`, or decline.
   | { kind: 'mayExhaustLeaderHealUnit'; id: string; controller: PlayerId; unitId: string; amount: number }
-  // Luke deployed (#348): heal `amount` from a chosen unit (`unitTargets`) or base (`baseTargets`). Mandatory.
+  // Luke deployed: heal `amount` from a chosen unit (`unitTargets`) or base (`baseTargets`). Mandatory.
   | { kind: 'selectHealTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[]; optional?: boolean }
-  // Play a unit from hand as part of an ability (#348): pick one of `candidates` (affordable hand
+  // Play a unit from hand as part of an ability: pick one of `candidates` (affordable hand
   // units), paying its cost + `costDelta`, entering ready if `entersReady` (Fennec, Moff Gideon).
   | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean }
-  // Additional cost "exhaust a friendly unit" (#348): pick one of `targets` to exhaust, then the
+  // Additional cost "exhaust a friendly unit": pick one of `targets` to exhaust, then the
   // `then` play-from-hand step follows (Fennec). Mandatory.
   | { kind: 'selectUnitToExhaust'; id: string; controller: PlayerId; targets: string[]; then: PlayFromHandSpec }
-  // The Armorer (#348): look at your resources and pick an upgrade to play (by candidate index); the
+  // The Armorer: look at your resources and pick an upgrade to play (by candidate index); the
   // `then` spec carries how it plays. `optional` = the deployed "may" version (a Cancel is offered).
   | { kind: 'selectResourceUpgrade'; id: string; controller: PlayerId; candidates: ResourceUpgradeRef[]; optional: boolean; then: PlayResourceUpgradeSpec }
-  // Follow-up: attach the chosen resource upgrade to one of `targets` (#348). Mandatory.
+  // Follow-up: attach the chosen resource upgrade to one of `targets`. Mandatory.
   | { kind: 'attachResourceUpgrade'; id: string; controller: PlayerId; resourceIndex: number; cardId: string; targets: string[]; payCost: boolean }
-  // Optionally pay `cost` to draw `draw` cards (#348, Mandalorian). `cost` 0 = a free "may draw".
-  // `thenDiscard` (Mos Espa Watermonger, #355): after drawing, discard that many cards from hand —
+  // Optionally pay `cost` to draw `draw` cards (Mandalorian). `cost` 0 = a free "may draw".
+  // `thenDiscard` (Mos Espa Watermonger): after drawing, discard that many cards from hand —
   // but only if a card was actually drawn ("you may draw a card. If you do, discard a card").
   | { kind: 'mayPayToDraw'; id: string; controller: PlayerId; cost: number; draw: number; thenDiscard?: number }
-  // Discard `count` cards from your own hand, one at a time (#355/#356). Mandatory unless `optional`.
+  // Discard `count` cards from your own hand, one at a time. Mandatory unless `optional`.
   // Resolved by an `acceptChoice` carrying the hand index. `then` runs after the last discard: Ninth
   // Sister distributes the discarded card's cost as damage (`distributeDamageTo`); Razor Crest gives a
   // unit a "this phase" buff (`buffUnit`).
   | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean; then?: { distributeDamageTo: PlayerId } | { buffUnit: string; power?: number; hp?: number } | { dealDamage: number } | { exhaustUnit: true } }
-  // Leia Organa (#356): a yes/no — deal `selfDamage` to `unitId`, then heal `healBase` from your base.
+  // Leia Organa: a yes/no — deal `selfDamage` to `unitId`, then heal `healBase` from your base.
   | { kind: 'maySelfDamageHealBase'; id: string; controller: PlayerId; unitId: string; selfDamage: number; healBase: number }
-  // Mando's N-1 (#356): a yes/no — exhaust your (ready) leader to give `unitId` a "+power/+hp this phase" buff.
+  // Mando's N-1: a yes/no — exhaust your (ready) leader to give `unitId` a "+power/+hp this phase" buff.
   | { kind: 'mayExhaustLeaderBuffSelf'; id: string; controller: PlayerId; unitId: string; power: number; hp: number }
-  // Deal `total` damage spread among any units (#355, Ninth Sister), one point per pick until
+  // Deal `total` damage spread among any units (Ninth Sister), one point per pick until
   // `remaining` reaches 0. `targets` are the currently-eligible unit instance ids (both sides,
   // recomputed as units are defeated). Always optional — the controller may stop early (a "may").
   | { kind: 'distributeDamage'; id: string; controller: PlayerId; remaining: number; total: number; targets: string[] }
-  // Distribute `total` tokens among `targets`, one per pick until `remaining` reaches 0 (#356, Helgait).
+  // Distribute `total` tokens among `targets`, one per pick until `remaining` reaches 0 (Helgait).
   // Unlike `multiPick`'s give-advantage, targets stay eligible so tokens can stack. Always optional.
   // `exclude` keeps a unit out of the target list across re-offers ("other friendly units"), and
-  // `then` chains once distribution finishes — by exhausting the pool or stopping (#357, Elzar Mann).
+  // `then` chains once distribution finishes — by exhausting the pool or stopping (Elzar Mann).
   | { kind: 'distributeTokens'; id: string; controller: PlayerId; token: string; remaining: number; total: number; targets: string[]; exclude?: string; then?: 'opponentSearchEvent' }
-  // Enoch (#356): deal up to `max` damage to your own base, one at a time (`dealt` so far); stopping
+  // Enoch: deal up to `max` damage to your own base, one at a time (`dealt` so far); stopping
   // (or reaching `max`) grants "next unit costs 1 less per 2 damage dealt". Each accept deals 1 more.
   | { kind: 'dealOwnBaseForDiscount'; id: string; controller: PlayerId; dealt: number; max: number }
-  // Purrgil Ultra (#356): return a chosen friendly non-leader unit (`targets`) to hand, then deal
+  // Purrgil Ultra: return a chosen friendly non-leader unit (`targets`) to hand, then deal
   // damage equal to its cost to any unit. Optional (skip = don't return).
   | { kind: 'returnFriendlyUnit'; id: string; controller: PlayerId; targets: string[] }
-  // Reanimated Night Trooper (#356): having looked at the top of each deck in `decks`, you may discard
+  // Reanimated Night Trooper: having looked at the top of each deck in `decks`, you may discard
   // one deck's top card (`acceptChoice`'s `baseTarget` picks the deck), or decline.
   | { kind: 'peekTopDiscard'; id: string; controller: PlayerId; decks: PlayerId[] }
-  // Look at `target`'s hand (#355, Imperial Defector / Remnant Lookouts) — the controller sees it
+  // Look at `target`'s hand (Imperial Defector / Remnant Lookouts) — the controller sees it
   // revealed. View-only unless `mayDiscard`, when the controller may discard one of the target's
   // cards (an `acceptChoice` with its hand index); `thenDraw` then has the target draw a card.
   | { kind: 'lookAtHand'; id: string; controller: PlayerId; target: PlayerId; mayDiscard?: boolean; thenDraw?: boolean }
-  // Search the revealed top cards (#355, Clan Wren Loyalist): pick one of the `eligibleIndices`
+  // Search the revealed top cards (Clan Wren Loyalist): pick one of the `eligibleIndices`
   // (indices into `revealed`) to draw; the rest go to the bottom of the deck. Resolved by an
   // `acceptChoice` carrying the `deckIndex` (0-based within `revealed`). Mandatory when eligible.
   | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[] }
-  // The Cyborg Mech (#355): deal `undamagedAmount` to a chosen undamaged target, or `damagedAmount`
+  // The Cyborg Mech: deal `undamagedAmount` to a chosen undamaged target, or `damagedAmount`
   // to a damaged one (the amount is decided by the picked unit's damage). Mandatory board-target.
   | { kind: 'variableStrike'; id: string; controller: PlayerId; targets: string[]; undamagedAmount: number; damagedAmount: number }
-  // Barriss Offee (#355): heal up to `maxHeal` from a chosen unit and give it that many Advantage
+  // Barriss Offee: heal up to `maxHeal` from a chosen unit and give it that many Advantage
   // tokens (one per damage healed). Optional board-target — only damaged units are eligible.
   | { kind: 'healForAdvantage'; id: string; controller: PlayerId; targets: string[]; maxHeal: number }
-  // Moff Jerjerrod (#357): after creating `count` tokens, you may defeat `unitId` to create `count`
+  // Moff Jerjerrod: after creating `count` tokens, you may defeat `unitId` to create `count`
   // more (equivalent to "create twice that number instead"). A yes/no.
   | { kind: 'mayDoubleTokens'; id: string; controller: PlayerId; unitId: string; token: string; count: number }
-  // Name a card (#355, Ryder Azadi) — resolved by an `acceptChoice` carrying `cardName`; the name is
+  // Name a card (Ryder Azadi) — resolved by an `acceptChoice` carrying `cardName`; the name is
   // recorded on `unitId` (a `namedCard`), forbidding the opponent from playing cards with that name
   // while it's in play. Mandatory.
   | { kind: 'nameCard'; id: string; controller: PlayerId; unitId: string }
-  // "You may defeat this unit. If you do, [search]" (#355, Admiral Ackbar) — a yes/no. Accept defeats
+  // "You may defeat this unit. If you do, [search]" (Admiral Ackbar) — a yes/no. Accept defeats
   // `unitId` and starts the search-and-play-free (below); skip leaves the unit in play.
   | { kind: 'mayDefeatSelfSearch'; id: string; controller: PlayerId; unitId: string }
   // Search the revealed cards (held out of the deck) and play space units for free while a combined-cost
-  // `budget` lasts (#355, Admiral Ackbar). Pick one `eligibleIndices` (indices into `revealed`) at a time
+  // `budget` lasts (Admiral Ackbar). Pick one `eligibleIndices` (indices into `revealed`) at a time
   // via an `acceptChoice`'s `deckIndex`; skip (Done) stops. Leftover revealed cards return to the bottom.
   // `playOne` stops after a single pick rather than spending the whole budget, and `entersReady`
-  // brings it in ready — "play it for free. It enters play ready" (#357, Eye of Sion).
+  // brings it in ready — "play it for free. It enters play ready" (Eye of Sion).
   | { kind: 'searchPlayFree'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; budget: number; playOne?: boolean; entersReady?: boolean }
-  // Rancor Keeper (#357): "deal 1 damage to any number of bases" — repeatable, each base at most
+  // Rancor Keeper: "deal 1 damage to any number of bases" — repeatable, each base at most
   // once; `remaining` are the bases not yet picked. Skip finishes.
   | { kind: 'damageAnyBases'; id: string; controller: PlayerId; remaining: PlayerId[]; amount: number; source?: DamageSource }
   /**
-   * The Mandalorian (#357): may defeat a Shield on `preventerId` to prevent `amount` damage headed
+   * The Mandalorian: may defeat a Shield on `preventerId` to prevent `amount` damage headed
    * for `targetId`. A yes/no. Raised on two paths:
    *  - combat, at the `prevent` attack stage, before any damage is calculated — accepting records
    *    the target on `pendingAttack.prevented` and the normal damage step skips it;
@@ -500,30 +500,29 @@ export type PendingChoice =
    * damage actually lands.
    */
   | { kind: 'mayPreventDamage'; id: string; controller: PlayerId; preventerId: string; targetId: string; amount: number; source?: DamageSource; combat?: boolean; followUp?: PendingChoice }
-  // Bothan-5 (#357): may capture `cardId` from your discard under `unitId`. A yes/no;
+  // Bothan-5: may capture `cardId` from your discard under `unitId`. A yes/no;
   // `markUsed` records the once-each-round use when accepted.
   | { kind: 'mayCapture'; id: string; controller: PlayerId; unitId: string; cardId: string; markUsed?: { instanceId: string; key: string } }
-  // Cobb Vanth (#357): may deal `amount` to `selfId`; if you do, give a Shield to `targetId`. A yes/no.
+  // Cobb Vanth: may deal `amount` to `selfId`; if you do, give a Shield to `targetId`. A yes/no.
   | { kind: 'maySelfDamageShield'; id: string; controller: PlayerId; selfId: string; targetId: string; amount: number }
-  // Gar Saxon (#357): may create `count` of a token unit. A yes/no; `markUsed` records the
+  // Gar Saxon: may create `count` of a token unit. A yes/no; `markUsed` records the
   // once-each-round use on the source unit when accepted.
   | { kind: 'mayCreateToken'; id: string; controller: PlayerId; token: string; count: number; markUsed?: { instanceId: string; key: string } }
-  // Optionally deploy your leader via a triggered epic action (#348, Grogu). A yes/no.
+  // Optionally deploy your leader via a triggered epic action (Grogu). A yes/no.
   | { kind: 'mayDeployLeader'; id: string; controller: PlayerId }
   // Unique rule (CR): a player controlling two upgrades with the same title defeats one (their
   // choice). `candidates` are the duplicate instances; picking one defeats it. Mandatory.
   | { kind: 'selectUniqueToDefeat'; id: string; controller: PlayerId; cardId: string; candidates: UpgradeRef[] }
   | { kind: 'selectUniqueUnitToDefeat'; id: string; controller: PlayerId; cardId: string; candidates: string[] }
-  // Attack with any ready unit; it gains Restore `restore` for that attack, if any (#348 Thrawn,
-  // #357 Grogu). Mandatory only in the sense that the attack is made on the board — skip declines.
-  // (0 when the condition didn't hold). Mandatory — the attack is made on the board.
+  // Attack with any ready unit (Thrawn, Grogu); it gains Restore `restore` for that attack, which is
+  // 0 when nothing grants it. Resolved by making the attack on the board — skipping declines it.
   | { kind: 'mayAttackAnyUnit'; id: string; controller: PlayerId; restore: number }
-  // Thrawn deployed (#348): On Attack, may defeat one of `targets` (a non-leader enemy unit), or decline.
+  // Thrawn deployed: On Attack, may defeat one of `targets` (a non-leader enemy unit), or decline.
   | { kind: 'mayDefeatEnemyUnit'; id: string; controller: PlayerId; targets: string[] }
-  // Sabine front (#348): the opponent (`controller`) must give `count` Advantage tokens to one of
+  // Sabine front: the opponent (`controller`) must give `count` Advantage tokens to one of
   // their units (`targets`). Mandatory when able — an opponent-interjected choice (pendingResumeActive).
   | { kind: 'opponentGivesAdvantage'; id: string; controller: PlayerId; count: number; targets: string[] }
-  // Repeatable board-target pick (#355): click eligible `targets` one at a time (each applies `spec`
+  // Repeatable board-target pick: click eligible `targets` one at a time (each applies `spec`
   // immediately and re-offers), or Done (skipTrigger). Inspiring Veteran (up to N Advantage) / Pre
   // Vizsla (defeat non-leaders within an HP budget, a token each).
   | {
@@ -570,7 +569,7 @@ export function pushChoice(state: GameState, choice: PendingChoice): GameState {
 }
 
 // ---------------------------------------------------------------------------
-// Lasting effects + phase-event tracking (#306/#347)
+// Lasting effects + phase-event tracking
 // ---------------------------------------------------------------------------
 
 /** Add a "this phase" modifier aimed at a unit. */
@@ -583,7 +582,7 @@ export function clearLastingEffects(state: GameState): GameState {
   return state.lastingEffects ? { ...state, lastingEffects: undefined } : state
 }
 
-/** Clear both players' "next unit you play this phase" grants — a phase-boundary reset (#348). */
+/** Clear both players' "next unit you play this phase" grants — a phase-boundary reset. */
 export function clearNextUnitGrants(state: GameState): GameState {
   return {
     ...state,
@@ -609,13 +608,13 @@ export function recordUnitEntered(state: GameState, owner: PlayerId, instanceId:
   return { ...state, phaseEvents: { ...events, enteredPlay: { ...events.enteredPlay, [owner]: [...events.enteredPlay[owner], instanceId] } } }
 }
 
-/** Note that `owner` played `cardId` this phase — recorded after its cost is paid (#357). */
+/** Note that `owner` played `cardId` this phase — recorded after its cost is paid. */
 export function recordCardPlayed(state: GameState, owner: PlayerId, cardId: string): GameState {
   const events = state.phaseEvents ?? emptyPhaseEvents()
   return { ...state, phaseEvents: { ...events, played: { ...events.played, [owner]: [...events.played[owner], cardId] } } }
 }
 
-/** Card ids `owner` has played this phase, in order (#357, "the first X you play each phase"). */
+/** Card ids `owner` has played this phase, in order ("the first X you play each phase"). */
 export function cardsPlayedThisPhase(state: GameState, owner: PlayerId): string[] {
   return state.phaseEvents?.played[owner] ?? []
 }
@@ -626,30 +625,30 @@ export function recordUnitDefeated(state: GameState, owner: PlayerId, cardId: st
   return { ...state, phaseEvents: { ...events, defeated: { ...events.defeated, [owner]: [...events.defeated[owner], cardId] } } }
 }
 
-/** Note that `owner`'s base was attacked this phase (#356, Greef Karga). */
+/** Note that `owner`'s base was attacked this phase (Greef Karga). */
 export function recordBaseAttacked(state: GameState, owner: PlayerId): GameState {
   const events = state.phaseEvents ?? emptyPhaseEvents()
   return events.basesAttacked.includes(owner) ? state : { ...state, phaseEvents: { ...events, basesAttacked: [...events.basesAttacked, owner] } }
 }
 
-/** Record that `owner`'s base took damage this phase (#357). Idempotent. */
+/** Record that `owner`'s base took damage this phase. Idempotent. */
 export function recordBaseDamaged(state: GameState, owner: PlayerId): GameState {
   const events = state.phaseEvents ?? emptyPhaseEvents()
   return events.basesDamaged.includes(owner) ? state : { ...state, phaseEvents: { ...events, basesDamaged: [...events.basesDamaged, owner] } }
 }
 
-/** Whether `owner`'s base was dealt damage this phase (#357, Baylan Skoll). */
+/** Whether `owner`'s base was dealt damage this phase (Baylan Skoll). */
 export function baseDamagedThisPhase(state: GameState, owner: PlayerId): boolean {
   return state.phaseEvents?.basesDamaged.includes(owner) ?? false
 }
 
-/** Record that `owner` had an upgrade defeated this phase (#357). Idempotent. */
+/** Record that `owner` had an upgrade defeated this phase. Idempotent. */
 export function recordUpgradeDefeated(state: GameState, owner: PlayerId): GameState {
   const events = state.phaseEvents ?? emptyPhaseEvents()
   return events.upgradesDefeated.includes(owner) ? state : { ...state, phaseEvents: { ...events, upgradesDefeated: [...events.upgradesDefeated, owner] } }
 }
 
-/** Whether `owner` had an upgrade defeated this phase (#357, Baylan Skoll). */
+/** Whether `owner` had an upgrade defeated this phase (Baylan Skoll). */
 export function upgradeDefeatedThisPhase(state: GameState, owner: PlayerId): boolean {
   return state.phaseEvents?.upgradesDefeated.includes(owner) ?? false
 }
@@ -670,7 +669,7 @@ export function defeatedThisPhase(state: GameState, owner: PlayerId): string[] {
 }
 
 /** Mark a once-per-round ability (`key`) as spent on the unit `instanceId` under `owner`.
- *  Cleared when the unit readies at regroup (shared with activated abilities, #343). */
+ *  Cleared when the unit readies at regroup (shared with activated abilities). */
 export function markAbilityUsed(state: GameState, owner: PlayerId, instanceId: string, key: string): GameState {
   return updatePlayer(state, owner, {
     units: state.players[owner].units.map(u =>
