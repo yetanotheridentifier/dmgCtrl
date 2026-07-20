@@ -3,7 +3,7 @@ import type { GameState, PlayerId } from '../engine/types'
 import { effectiveCost } from '../engine/legalMoves'
 
 /**
- * Setup-phase heuristic (early slice of #319, prompted by #304 playtesting):
+ * Setup-phase heuristic (early slice of , prompted by playtesting):
  * random setup decisions are catastrophically bad, so even the rung-0 opponent
  * uses these. The general in-game AI remains whatever rung is wired in.
  *

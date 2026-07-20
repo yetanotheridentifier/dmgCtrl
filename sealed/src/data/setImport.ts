@@ -4,11 +4,11 @@ import type { SwuCard } from './cards'
 import { logger } from './log'
 
 /**
- * Full-set import (#310): one SWUDB search call returns every card in a set
+ * Full-set import: one SWUDB search call returns every card in a set
  * (Normal variants included for all types — notably the bases whose detail
  * endpoint 502s). Caching the set makes every later lookup cache-first, and
- * is the substrate for deck inspection (#316/#317). Sideboards remain out of
- * scope for pool import (user decision on #310).
+ * is the substrate for deck inspection. Sideboards remain out of
+ * scope for pool import (user decision on).
  */
 
 export interface SetImportResult {

@@ -9,7 +9,7 @@ import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 import type { GameState } from '../engine/types'
 
-/** Unique/complex units whose behaviour the existing hooks already covered — registration only (#357). */
+/** Unique/complex units whose behaviour the existing hooks already covered — registration only. */
 const F = {
   ...CARDS,
   ASH_144: card({ id: 'ASH_144', type: 'unit', arena: 'space', power: 2, hp: 3 }), // Vane's Snub Fighter
@@ -24,7 +24,7 @@ const U = (s: GameState, id: string) => [...s.players.player.units, ...s.players
 const advs = (u: { upgrades: { cardId: string }[] }) => u.upgrades.filter(a => a.cardId === TOKEN_ADVANTAGE).length
 const rich = (over: Parameters<typeof player>[0] = {}) => player({ resources: ready(20), ...over })
 
-describe("Vane's Snub Fighter (144) — Advantage when a friendly attack hits a base (#357)", () => {
+describe("Vane's Snub Fighter (144) — Advantage when a friendly attack hits a base", () => {
   it('gains a token when a friendly unit damages a base, but not when it attacks a unit', () => {
     const s = state({ cards: F, players: { player: rich({ units: [unit('v', 'ASH_144', { arena: 'space' }), unit('a', 'GRD', { arena: 'ground' })] }), opponent: player({ units: [unit('e', 'GRD', { arena: 'ground' })] }) } })
     const hitBase = resolve(s, { type: 'attack', attackerId: 'a', target: { kind: 'base' } })
@@ -34,26 +34,26 @@ describe("Vane's Snub Fighter (144) — Advantage when a friendly attack hits a 
   })
 })
 
-describe('Outcast (041) — +1/+0 to friendly units entering play, including itself (#357)', () => {
+describe('Outcast (041) — +1/+0 to friendly units entering play, including itself', () => {
   it('buffs itself on entry', () => {
     const s = state({ cards: F, players: { player: rich({ hand: ['ASH_041'] }), opponent: player() } })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     const o = played.players.player.units.find(u => u.cardId === 'ASH_041')!
     expect(effectivePower(played, o)).toBe(2 + 1)
   })
 
   it('buffs a later friendly unit entering play', () => {
     const s = state({ cards: F, players: { player: rich({ hand: ['GRD'], units: [unit('o', 'ASH_041', { arena: 'ground' })] }), opponent: player() } })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     const g = played.players.player.units.find(u => u.cardId === 'GRD')!
     expect(effectivePower(played, g)).toBe(2 + 1)
   })
 })
 
-describe('Ravager (102) — an entering unit may deal its power to a unit in the same arena (#357)', () => {
+describe('Ravager (102) — an entering unit may deal its power to a unit in the same arena', () => {
   it('offers the damage, sized to the entering unit’s power, in that arena only', () => {
     const s = state({ cards: F, players: { player: rich({ hand: ['SPC'], units: [unit('r', 'ASH_102', { arena: 'space' })] }), opponent: player({ units: [unit('es', 'SPC', { arena: 'space' }), unit('eg', 'GRD', { arena: 'ground' })] }) } })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'mayDamage', amount: 2, optional: true })
     const done = resolve(played, { type: 'acceptChoice', choiceId: played.pendingChoices![0].id, targetInstanceId: 'es' })
     expect(U(done, 'es').damage).toBe(2)
@@ -61,7 +61,7 @@ describe('Ravager (102) — an entering unit may deal its power to a unit in the
   })
 })
 
-describe('Koska Reeves (079) — conditional Sentinel + token on a friendly death (#357)', () => {
+describe('Koska Reeves (079) — conditional Sentinel + token on a friendly death', () => {
   it('gains Sentinel only while a friendly token unit is in play', () => {
     const without = state({ cards: F, players: { player: player({ units: [unit('k', 'ASH_079', { arena: 'ground' })] }), opponent: player() } })
     expect(unitHasKeyword(without, U(without, 'k'), 'Sentinel')).toBe(false)
@@ -71,13 +71,13 @@ describe('Koska Reeves (079) — conditional Sentinel + token on a friendly deat
 
   it('creates a Mandalorian token only if a friendly unit died this phase', () => {
     const quiet = state({ cards: F, players: { player: rich({ hand: ['ASH_079'] }), opponent: player() } })
-    expect(resolve(quiet, { type: 'playCard', handIndex: 0 }).players.player.units.filter(u => u.cardId === TOKEN_MANDALORIAN)).toHaveLength(0)
+    expect(resolve(quiet, { type: 'playUnit', handIndex: 0 }).players.player.units.filter(u => u.cardId === TOKEN_MANDALORIAN)).toHaveLength(0)
 
     const afterDeath = dealDamageToUnit(
       state({ cards: F, players: { player: rich({ hand: ['ASH_079'], units: [unit('f', 'FRAGILE', { arena: 'ground' })] }), opponent: player() } }),
       'f', 1,
     )
-    const played = resolve(afterDeath, { type: 'playCard', handIndex: 0 })
+    const played = resolve(afterDeath, { type: 'playUnit', handIndex: 0 })
     expect(played.players.player.units.filter(u => u.cardId === TOKEN_MANDALORIAN)).toHaveLength(1)
   })
 })

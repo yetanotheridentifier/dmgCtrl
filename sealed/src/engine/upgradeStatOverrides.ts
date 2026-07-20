@@ -1,5 +1,5 @@
 /**
- * TEMPORARY upgrade Power/HP modifiers (#308).
+ * TEMPORARY upgrade Power/HP modifiers.
  *
  * Both upstream card sources (SWUDB and swuapi) currently omit Power/HP for the
  * entire **Set of Ashes (ASH)** upgrade cards — the +X/+Y is printed on the card

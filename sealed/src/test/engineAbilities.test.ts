@@ -61,7 +61,7 @@ describe('runTrigger', () => {
   })
 })
 
-describe('resolve integration — whenPlayed fires on playCard', () => {
+describe('resolve integration — whenPlayed fires on playUnit', () => {
   function playableState(): GameState {
     return state({
       players: {
@@ -85,7 +85,7 @@ describe('resolve integration — whenPlayed fires on playCard', () => {
       },
     })
 
-    const next = resolve(playableState(), { type: 'playCard', handIndex: 0 })
+    const next = resolve(playableState(), { type: 'playUnit', handIndex: 0 })
 
     expect(next.players.opponent.base.damage).toBe(3)
     expect(next.players.player.units).toHaveLength(1) // unit still entered play
@@ -102,7 +102,7 @@ describe('resolve integration — whenPlayed fires on playCard', () => {
       },
     })
 
-    const next = resolve(playableState(), { type: 'playCard', handIndex: 0 })
+    const next = resolve(playableState(), { type: 'playUnit', handIndex: 0 })
 
     expect(seenInstanceId).toBe(next.players.player.units[0].instanceId)
   })
@@ -121,13 +121,13 @@ describe('resolve integration — whenPlayed fires on playCard', () => {
       },
     })
 
-    const next = resolve(playableState(), { type: 'playCard', handIndex: 0 })
+    const next = resolve(playableState(), { type: 'playUnit', handIndex: 0 })
 
     expect(next.winner).toBe('player')
   })
 
   it('leaves unregistered cards exactly as before (vanilla)', () => {
-    const next = resolve(playableState(), { type: 'playCard', handIndex: 0 })
+    const next = resolve(playableState(), { type: 'playUnit', handIndex: 0 })
     expect(next.players.opponent.base.damage).toBe(0)
     expect(next.players.player.units).toHaveLength(1)
   })

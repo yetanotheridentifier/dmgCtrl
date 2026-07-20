@@ -7,7 +7,7 @@ import { state, player, unit, card, ready, CARDS } from './helpers/engineFixture
 import type { GameState } from '../engine/types'
 
 /**
- * The Mandalorian (#357): "If damage would be dealt to another friendly unit, you may defeat a
+ * The Mandalorian: "If damage would be dealt to another friendly unit, you may defeat a
  * Shield token on this unit. If you do, prevent that damage." The one ability in the set that
  * interrupts damage mid-resolution — combat damage via a pre-damage attack stage, ability damage
  * by deferring the application into the choice.

@@ -8,7 +8,7 @@ import { state, player, unit, card, ready, CARDS } from './helpers/engineFixture
 import type { EngineCard } from '../engine/types'
 
 /**
- * The pending-choice queue for optional "may…" abilities (#342 group B). Conflict
+ * The pending-choice queue for optional "may…" abilities (group B). Conflict
  * Within grants "When this unit readies: you may pay 3, else exhaust this unit",
  * which pauses the round-start readying for the controller to decide.
  */
@@ -36,7 +36,7 @@ function regroupWith(units088: string[], resources = ready(5)) {
   })
 }
 
-describe('The Conflict Within (ASH_088) — whenReadies pay-or-exhaust (#342)', () => {
+describe('The Conflict Within (ASH_088) — whenReadies pay-or-exhaust', () => {
   it('raises a pay-or-exhaust choice for the readied unit at the start of the next round', () => {
     const next = intoNextRound(regroupWith(['ASH_088']))
     expect(next.phase).toBe('action')
@@ -85,7 +85,7 @@ describe('The Conflict Within (ASH_088) — whenReadies pay-or-exhaust (#342)', 
   })
 })
 
-describe('Camtono (ASH_229) — onAttackEnd may play top card free (#342)', () => {
+describe('Camtono (ASH_229) — onAttackEnd may play top card free', () => {
   function camtonoBoard(top: Partial<EngineCard> & { id: string }) {
     return state({
       cards: { ...CARDS, ASH_229: card({ id: 'ASH_229', type: 'upgrade', power: 0, hp: 0 }), [top.id]: card(top) },
@@ -147,7 +147,7 @@ describe('Camtono (ASH_229) — onAttackEnd may play top card free (#342)', () =
   })
 })
 
-describe('DDC Defender (ASH_210) — onDefense mid-combat (#342 phase 2)', () => {
+describe('DDC Defender (ASH_210) — onDefense mid-combat (phase 2)', () => {
   function board(defenderUnits: ReturnType<typeof unit>[], attackerCard = 'TST_U1') {
     return state({
       cards: { ...CARDS, ASH_210: card({ id: 'ASH_210', type: 'upgrade', power: 0, hp: 0 }) },
@@ -209,7 +209,7 @@ describe('DDC Defender (ASH_210) — onDefense mid-combat (#342 phase 2)', () =>
   })
 })
 
-describe('Improvised Identity (ASH_230) — action: search, discard, may attack (#343)', () => {
+describe('Improvised Identity (ASH_230) — action: search, discard, may attack', () => {
   afterEach(() => unregisterAbility('GRD_TRIG'))
 
   function board(deck: string[], extraCards = {}) {

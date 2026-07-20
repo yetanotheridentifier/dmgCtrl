@@ -6,7 +6,7 @@ import { useModifierKeys } from './modifierKeys'
 const LONG_PRESS_MS = 350
 
 /**
- * Roll-over zoom (#321). Returns handlers to spread on a card's wrapper:
+ * Roll-over zoom. Returns handlers to spread on a card's wrapper:
  * - **mouse** zooms only while **Shift** is held and the pointer is over the card
  *   (so plain hovering doesn't obscure the board mid-play);
  * - **touch/pen** long-press zooms and, on release, suppresses the click so a
@@ -16,7 +16,7 @@ const LONG_PRESS_MS = 350
  * zoom stuck on for long-lived cards (leaders/bases) — see the removed focusZoom.
  *
  * `anchorRef` is attached to the card's wrapper and handed to `CardZoomPopover`, which
- * centres the (portalled) zoom over it and clamps it to the viewport (#331).
+ * centres the (portalled) zoom over it and clamps it to the viewport.
  */
 export function useCardZoom() {
   const { shift } = useModifierKeys()

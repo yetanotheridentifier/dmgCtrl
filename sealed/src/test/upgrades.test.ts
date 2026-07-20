@@ -15,7 +15,7 @@ const UPGRADE = (over: Partial<Parameters<typeof card>[0]> = {}) =>
 const att = (cardId: string, owner: PlayerId = 'player'): UpgradeAttachment => ({ cardId, owner })
 const hasUpgrade = (u: { upgrades: UpgradeAttachment[] }, cardId: string) => u.upgrades.some(a => a.cardId === cardId)
 
-/** A card pool with a few upgrade cards for attachment tests (#308). */
+/** A card pool with a few upgrade cards for attachment tests. */
 function withUpgrades() {
   return state({
     cards: {
@@ -27,7 +27,7 @@ function withUpgrades() {
   })
 }
 
-describe('upgrade stat modifiers (#308)', () => {
+describe('upgrade stat modifiers', () => {
   it('adds an attached upgrade’s power/HP to the unit', () => {
     const s = withUpgrades()
     const u = unit('u1', 'TST_U1', { upgrades: [att('TST_UP_STAT')] }) // base 3/4 + 2/2
@@ -76,7 +76,7 @@ describe('upgrade stat modifiers (#308)', () => {
   })
 })
 
-describe('upgrade granted keywords (#308)', () => {
+describe('upgrade granted keywords', () => {
   it('a unit gains a keyword from an attached upgrade', () => {
     const s = withUpgrades()
     expect(unitHasKeyword(s, unit('u1', 'TST_U1', { upgrades: [att('TST_UP_SENT')] }), 'Sentinel')).toBe(true)
@@ -102,7 +102,7 @@ describe('upgrade granted keywords (#308)', () => {
   })
 })
 
-describe('playing upgrades — legal moves (#308)', () => {
+describe('playing upgrades — legal moves', () => {
   it('offers playUpgrade for an affordable upgrade onto any unit (friendly or enemy)', () => {
     const s = state({
       cards: { ...CARDS, TST_UP: UPGRADE({ cost: 1 }) },
@@ -140,7 +140,7 @@ describe('playing upgrades — legal moves (#308)', () => {
   })
 })
 
-describe('playing upgrades — resolution (#308)', () => {
+describe('playing upgrades — resolution', () => {
   it('attaches the upgrade to the chosen unit, pays the cost, and removes it from hand', () => {
     const s = state({
       cards: { ...CARDS, TST_UP: UPGRADE({ cost: 1, power: 2, hp: 2 }) },
@@ -169,7 +169,7 @@ describe('playing upgrades — resolution (#308)', () => {
   })
 })
 
-describe('upgrade lifecycle (#308)', () => {
+describe('upgrade lifecycle', () => {
   it('sends a defeated unit’s self-owned card-upgrade to that owner’s discard', () => {
     const s = state({
       cards: { ...CARDS, TST_UP: UPGRADE({ power: 0, hp: 0 }) },
@@ -201,7 +201,7 @@ describe('upgrade lifecycle (#308)', () => {
   })
 })
 
-describe('token upgrades (#308)', () => {
+describe('token upgrades', () => {
   it('Experience gives +1/+1', () => {
     const s = state()
     const u = unit('u1', 'TST_U1', { upgrades: [att(TOKEN_EXPERIENCE)] }) // 3/4 → 4/5
@@ -261,7 +261,7 @@ describe('token upgrades (#308)', () => {
   })
 })
 
-describe('unique upgrade rule (#348)', () => {
+describe('unique upgrade rule', () => {
   const cards = {
     ...CARDS,
     UNIQ: card({ id: 'UNIQ', type: 'upgrade', cost: 1, power: 1, hp: 1, unique: true }),
@@ -313,7 +313,7 @@ describe('unique upgrade rule (#348)', () => {
   })
 })
 
-describe('unique unit rule (#348)', () => {
+describe('unique unit rule', () => {
   const cards = {
     ...CARDS,
     UNIQ_UNIT: card({ id: 'UNIQ_UNIT', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 2, unique: true }),
@@ -328,7 +328,7 @@ describe('unique unit rule (#348)', () => {
         opponent: player(),
       },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'selectUniqueUnitToDefeat', cardId: 'UNIQ_UNIT' })
     expect(played.players.player.units.filter(u => u.cardId === 'UNIQ_UNIT')).toHaveLength(2) // both in play until resolved
     expect(played.activePlayer).toBe('player') // holds for the choice — mandatory, no skip
@@ -348,10 +348,10 @@ describe('unique unit rule (#348)', () => {
       cards,
       players: { player: player({ hand: ['COMMON_UNIT'], resources: ready(2), units: [unit('u1', 'COMMON_UNIT')] }), opponent: player() },
     })
-    expect(resolve(nonUnique, { type: 'playCard', handIndex: 0 }).pendingChoices ?? []).toHaveLength(0)
+    expect(resolve(nonUnique, { type: 'playUnit', handIndex: 0 }).pendingChoices ?? []).toHaveLength(0)
 
     const first = state({ cards, players: { player: player({ hand: ['UNIQ_UNIT'], resources: ready(2), units: [] }), opponent: player() } })
-    expect(resolve(first, { type: 'playCard', handIndex: 0 }).pendingChoices ?? []).toHaveLength(0)
+    expect(resolve(first, { type: 'playUnit', handIndex: 0 }).pendingChoices ?? []).toHaveLength(0)
   })
 
   it('is per-player — the opponent controlling a copy does not conflict with yours', () => {
@@ -362,7 +362,7 @@ describe('unique unit rule (#348)', () => {
         opponent: player({ units: [unit('e1', 'UNIQ_UNIT')] }),
       },
     })
-    expect(resolve(s, { type: 'playCard', handIndex: 0 }).pendingChoices ?? []).toHaveLength(0)
+    expect(resolve(s, { type: 'playUnit', handIndex: 0 }).pendingChoices ?? []).toHaveLength(0)
   })
 
   it('re-checks for 3+ copies until only one remains', () => {
@@ -373,7 +373,7 @@ describe('unique unit rule (#348)', () => {
         opponent: player(),
       },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(played.players.player.units.filter(u => u.cardId === 'UNIQ_UNIT')).toHaveLength(3)
     // Defeat one → still two copies → another mandatory choice.
     const first = resolve(played, {

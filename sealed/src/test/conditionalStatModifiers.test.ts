@@ -7,7 +7,7 @@ import { state, player, unit, card, CARDS } from './helpers/engineFixtures'
 import type { GameState } from '../engine/types'
 
 /**
- * Conditional stat modifiers (#357): combat-role ("+X while defending" / "while attacking a damaged
+ * Conditional stat modifiers: combat-role ("+X while defending" / "while attacking a damaged
  * unit") and static counts ("+X per <thing>"). The combat-role fields (`defending`, `defenderDamaged`)
  * are set by `completeAttack`; tested both directly through `effectivePower(ctx)` and through real combat.
  */
@@ -26,7 +26,7 @@ const F = {
 }
 const U = (s: GameState, id: string) => [...s.players.player.units, ...s.players.opponent.units].find(u => u.instanceId === id)!
 
-describe('Conditional stat modifiers — combat role (#357)', () => {
+describe('Conditional stat modifiers — combat role', () => {
   it('Palace Chef Droid (073): +2/+0 while defending (direct + combat counter)', () => {
     const s = state({ cards: F, players: { player: player({ units: [unit('p', 'ASH_073', { arena: 'ground' })] }), opponent: player() } })
     expect(effectivePower(s, U(s, 'p'))).toBe(0) // resting
@@ -49,14 +49,14 @@ describe('Conditional stat modifiers — combat role (#357)', () => {
   })
 })
 
-describe('Conditional stat modifiers — static counts (#357)', () => {
+describe('Conditional stat modifiers — static counts', () => {
   it('Executor (197): +1/+0 per upgrade on other friendly units; When Played buffs each other friendly', () => {
     const s = state({ cards: F, players: { player: player({ units: [unit('e', 'ASH_197', { arena: 'space' }), unit('f', 'ZEROPOWSP', { arena: 'space', upgrades: [{ cardId: 'UPG', owner: 'player' }, { cardId: 'UPG', owner: 'player' }] })] }), opponent: player() } })
     expect(effectivePower(s, U(s, 'e'))).toBe(5 + 2) // 2 upgrades on the other friendly
 
     // When Played: an Advantage token to each other friendly unit.
     const board = state({ cards: F, players: { player: player({ hand: ['ASH_197'], resources: Array.from({ length: 10 }, () => ({ cardId: 'r', exhausted: false })), units: [unit('f', 'ZEROPOWSP', { arena: 'space' })] }), opponent: player() } })
-    const played = resolve(board, { type: 'playCard', handIndex: 0 })
+    const played = resolve(board, { type: 'playUnit', handIndex: 0 })
     expect(U(played, 'f').upgrades.filter(u => u.cardId === TOKEN_ADVANTAGE)).toHaveLength(1)
   })
 
@@ -72,7 +72,7 @@ describe('Conditional stat modifiers — static counts (#357)', () => {
 
   it("Qi'ra (226): When Played may discard a card to deal 3 damage to a unit", () => {
     const board = state({ cards: F, players: { player: player({ hand: ['ASH_226', 'ZEROPOW'], resources: Array.from({ length: 10 }, () => ({ cardId: 'r', exhausted: false })) }), opponent: player({ units: [unit('e', 'ATTACKER', { arena: 'ground' })] }) } })
-    const played = resolve(board, { type: 'playCard', handIndex: 0 })
+    const played = resolve(board, { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'selectDiscard', optional: true })
     const discarded = resolve(played, { type: 'acceptChoice', choiceId: played.pendingChoices![0].id, handIndex: 0 })
     expect(discarded.pendingChoices?.[0]).toMatchObject({ kind: 'mayDamage', amount: 3, optional: false })

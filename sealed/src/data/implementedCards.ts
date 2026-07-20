@@ -22,12 +22,6 @@ export interface UpgradeStatus {
 /** Development status of a body of work shown in the setup reference panel. */
 export type GroupStatus = 'done' | 'in progress' | 'planned'
 
-/**
- * The 179 ASH unit cards, grouped by what each is *blocked on* (#306). This replaced the original
- * A–F effort split (#353–#357), which became misleading once those tickets landed the shared
- * infrastructure: what matters now is not how hard a card once looked, but whether the engine can
- * already express it. Order runs done → ready → blocked, so the first open group is what's next.
- */
 /** A unit card in a group. Keyed by id: 13 unit names collide with leader names (Grogu, Baylan
  *  Skoll, The Mandalorian, …), so name alone can't identify a card. */
 export interface UnitRef {
@@ -45,9 +39,12 @@ export interface UnitGroup {
 }
 
 /**
- * The unbuilt classification: every unit that does NOT yet have a registered ability, grouped by what
- * blocks it. The "built" group is derived from IMPLEMENTED_UNITS rather than listed here, so a card
- * moves out of its blocker group automatically the moment its ability lands — the panel can't go stale.
+ * The 179 ASH unit cards that do NOT yet have a registered ability, grouped by what blocks each one:
+ * not how hard it looks, but whether the engine can already express it. Order runs done → ready →
+ * blocked, so the first open group is what's next.
+ *
+ * The "built" group is derived from IMPLEMENTED_UNITS rather than listed here, so a card leaves its
+ * blocker group automatically the moment its ability lands — the panel can't go stale.
  */
 const UNIT_PLAN: { id: string; name: string; status: GroupStatus; note: string; units: UnitRef[] }[] = [
   {
@@ -205,11 +202,52 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
 ]
 
 /**
- * Unit cards whose *abilities* are built into the engine (#306). Keyword-only / vanilla units
- * (Group A) aren't here — they need no definition and are counted separately. Grows group by group.
+ * Unit cards whose *abilities* are built into the engine. Keyword-only / vanilla units aren't here —
+ * they need no definition and are counted separately. Grouped by the mechanic each ability uses.
  */
+/**
+ * Event cards whose effects are built into the engine. An event's effect is registered as its
+ * `whenPlayed`, so — unlike units — there is no "vanilla event": every one needs a definition.
+ */
+export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
+  { id: 'ASH_140', name: 'Stronger Together' },
+  { id: 'ASH_185', name: 'Intimidation' },
+  { id: 'ASH_258', name: 'Grassroots Resistance' },
+  { id: 'ASH_136', name: 'Display of Strength' },
+  { id: 'ASH_151', name: 'Operation Cinder' },
+  { id: 'ASH_187', name: 'Reckoning' },
+  { id: 'ASH_138', name: 'Turning the Tide' },
+  { id: 'ASH_264', name: 'A New Order' },
+  { id: 'ASH_067', name: 'Get Lost' },
+  { id: 'ASH_092', name: 'Foundling Rescue' },
+  { id: 'ASH_091', name: 'Buy Time' },
+  { id: 'ASH_103', name: 'Long Live the Empire' },
+  { id: 'ASH_246', name: 'Exploit Advantage' },
+  { id: 'ASH_089', name: 'Perserverance' },
+  { id: 'ASH_233', name: 'Keep Them Talking' },
+  { id: 'ASH_236', name: 'Far Far Away' },
+  { id: 'ASH_232', name: 'Full of Surprises' },
+  { id: 'ASH_115', name: 'The Student Guides the Master' },
+  { id: 'ASH_139', name: 'Hold Them Off' },
+  { id: 'ASH_163', name: 'Reckless Sacrifice' },
+  { id: 'ASH_188', name: 'Galvanized Leap' },
+  { id: 'ASH_211', name: 'Fateful Goodbye' },
+  { id: 'ASH_231', name: 'Diplomatic Pageantry' },
+  { id: 'ASH_247', name: 'One Must Destroy to Create' },
+  { id: 'ASH_104', name: 'Dathomiri Magicks' },
+  { id: 'ASH_257', name: 'Choose Your Path' },
+  { id: 'ASH_200', name: 'Rehabilitation' },
+  { id: 'ASH_162', name: 'Rash Action' },
+  { id: 'ASH_184', name: 'Follow Me' },
+  { id: 'ASH_234', name: 'Masterstroke' },
+  { id: 'ASH_137', name: 'Wipe Them Out' },
+  { id: 'ASH_186', name: 'Treacherous Minefield' },
+  { id: 'ASH_090', name: 'Reforge' },
+  { id: 'ASH_235', name: 'Sense Through the Force' },
+]
+
 export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
-  // Group B1 (#353) — conditional self keyword grants
+  // Conditional self keyword grants
   { id: 'ASH_098', name: 'AT-ST Raider' },
   { id: 'ASH_078', name: 'B-Wing Rearguard' },
   { id: 'ASH_105', name: 'Bo-Katan Kryze' },
@@ -219,18 +257,18 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_057', name: 'Lothal E-Wing' },
   { id: 'ASH_049', name: 'Shin Hati' },
   { id: 'ASH_120', name: 'Warrior of Clan Kryze' },
-  // Group B2 (#353) — conditional stat buffs
+  // Conditional stat buffs
   { id: 'ASH_240', name: 'Mandalorian Super Commandos' },
   { id: 'ASH_125', name: 'Stolen Eta Shuttle' },
   { id: 'ASH_113', name: 'Mandalorian Flagship' },
-  // Group B3 (#353) — conditional keyword swap
+  // Conditional keyword swap
   { id: 'ASH_030', name: 'Marrok' },
-  // Group C (#354) — auras / constant effects on other units
+  // Auras — constant effects on other units
   { id: 'ASH_177', name: 'Onyx Cinder' },
   { id: 'ASH_100', name: 'Gallius Rax' },
   { id: 'ASH_068', name: 'Domesticated Loth-Cat' },
   { id: 'ASH_040', name: 'Poe Dameron' },
-  // Group D (#355) — "When Played" effects — D1: self / no-target
+  // "When Played" — self / no target
   { id: 'ASH_218', name: 'Ferry Droid' },
   { id: 'ASH_251', name: 'Zealous Soldier' },
   { id: 'ASH_178', name: 'Knobby White Ice Spider' },
@@ -239,7 +277,7 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_124', name: 'Protectorate Fighter' },
   { id: 'ASH_065', name: 'Home One' },
   { id: 'ASH_064', name: 'The Armorer' },
-  // D2: single target
+  // "When Played" — single target
   { id: 'ASH_259', name: 'LEP Ratcatcher' },
   { id: 'ASH_170', name: 'Desert Sharpshooter' },
   { id: 'ASH_174', name: 'StarFortress Heavy Bomber' },
@@ -250,36 +288,36 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_255', name: 'Anakin Skywalker' },
   { id: 'ASH_082', name: 'Trexler Armored Marauder' },
   { id: 'ASH_194', name: 'Snub Fighter Squadron' },
-  // D3: multi-step
+  // "When Played" — multi-step
   { id: 'ASH_071', name: 'Battered Haulcraft' },
   { id: 'ASH_158', name: 'Han Solo' },
   { id: 'ASH_112', name: 'Luke Skywalker' },
   { id: 'ASH_176', name: 'Imposing Scout Walker' },
-  // D4: generalised next-unit grants
+  // "Your next unit …" grants
   { id: 'ASH_237', name: 'Mouse Droid' },
   { id: 'ASH_248', name: 'Neel' },
-  // Multi-target pick (#355 UI)
+  // Multi-target pick
   { id: 'ASH_205', name: 'Inspiring Veteran' },
   { id: 'ASH_053', name: 'Pre Vizsla' },
-  // Discard from hand (#355 UI)
+  // Discard from hand
   { id: 'ASH_260', name: 'Mos Espa Watermonger' },
-  // Opponent discard + distribute damage (#355 UI)
+  // Opponent discard + distribute damage
   { id: 'ASH_148', name: 'Ninth Sister' },
-  // Look at opponent's hand (#355 UI)
+  // Look at opponent's hand
   { id: 'ASH_250', name: 'Imperial Defector' },
   { id: 'ASH_220', name: 'Remnant Lookouts' },
-  // Search top 5 for a trait match (#355 UI)
+  // Search top 5 for a trait match
   { id: 'ASH_107', name: 'Clan Wren Loyalist' },
-  // Play a discounted unit from hand (#355 UI)
+  // Play a discounted unit from hand
   { id: 'ASH_108', name: 'Crix Madine' },
-  // Self-defeat + search top 10, play space units free (#355 UI)
+  // Self-defeat + search top 10, play space units free
   { id: 'ASH_110', name: 'Admiral Ackbar' },
-  // Name a card (#355 UI)
+  // Name a card
   { id: 'ASH_077', name: 'Ryder Azadi' },
-  // Modal / variable damage & heal (#355 UI)
+  // Modal / variable damage & heal
   { id: 'ASH_147', name: 'The Cyborg Mech' },
   { id: 'ASH_044', name: 'Barriss Offee' },
-  // Group E (#356) — whenDefeated
+  // When Defeated
   { id: 'ASH_116', name: 'Ant Droid' },
   { id: 'ASH_080', name: 'Covert Believers' },
   { id: 'ASH_058', name: "Duchess's Protector" },
@@ -296,7 +334,7 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_027', name: 'Enoch' },
   { id: 'ASH_038', name: 'Purrgil Ultra' },
   { id: 'ASH_045', name: 'Reanimated Night Trooper' },
-  // Group E (#356) — onAttack
+  // On Attack
   { id: 'ASH_157', name: 'Danger Squadron Wingmen' },
   { id: 'ASH_189', name: "Emperor's Messenger" },
   { id: 'ASH_056', name: 'Huyang' },
@@ -310,7 +348,7 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_059', name: 'Leia Organa' },
   { id: 'ASH_172', name: 'Razor Crest' },
   { id: 'ASH_203', name: "Mando's N-1 Starfighter" },
-  // Group E (#356) — When Attack Ends
+  // When Attack Ends
   { id: 'ASH_033', name: 'Grand Admiral Thrawn' },
   { id: 'ASH_223', name: 'Halo' },
   { id: 'ASH_036', name: 'Rukh' },
@@ -321,35 +359,35 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_142', name: 'Mortar Trooper' },
   { id: 'ASH_179', name: "Boba Fett's Rancor" },
   { id: 'ASH_119', name: 'Greef Karga' },
-  // Group F (#357) — conditional stat modifiers
+  // Conditional stat modifiers (combat role, board state)
   { id: 'ASH_073', name: 'Palace Chef Droid' },
   { id: 'ASH_241', name: "Marrok's Fiend Fighter" },
   { id: 'ASH_206', name: 'Kelleran Beq' },
   { id: 'ASH_197', name: 'Executor' },
   { id: 'ASH_226', name: "Qi'ra" },
-  // Group F (#357) — reactive triggers
+  // Reactive triggers — firing off another card's event
   { id: 'ASH_127', name: 'The Twins' },
   { id: 'ASH_160', name: 'Kachirho Militia' },
   { id: 'ASH_208', name: 'Sabine Wren' },
-  // Group F (#357) — once-per-phase cost reductions
+  // Once-per-phase cost reductions
   { id: 'ASH_075', name: 'Pit Droid Team' },
   { id: 'ASH_212', name: 'Peli Motto' },
-  // Group F (#357) — targeting rules
+  // Targeting rules — what may attack, and what may be attacked
   { id: 'ASH_034', name: 'Wicket' },
   { id: 'ASH_037', name: 'Red Leader' },
   { id: 'ASH_035', name: 'Tatooine Repulsor Train' },
-  // Group F (#357) — HP-reduction defeats
+  // HP reduction, defeating a unit without dealing damage
   { id: 'ASH_050', name: 'Morgan Elsbeth' },
   { id: 'ASH_046', name: 'Scion Shuttle' },
-  // Group F (#357) — damage prevention
+  // Damage prevention and token-creation replacement
   { id: 'ASH_070', name: 'At Attin Safety Droid' },
   { id: 'ASH_094', name: 'Moff Jerjerrod' },
-  // Tier 1 (#357) — covered by existing hooks
+  // Reactions to units entering play, and to friendly attacks
   { id: 'ASH_144', name: "Vane's Snub Fighter" },
   { id: 'ASH_041', name: 'Outcast' },
   { id: 'ASH_102', name: 'Ravager' },
   { id: 'ASH_079', name: 'Koska Reeves' },
-  // Tier 1 (#357) — a chained follow-up choice or a real "[Exhaust]" action cost
+  // Chained follow-up choices, and "[Exhaust]" action costs
   { id: 'ASH_171', name: 'Pegasus Tri-Wing' },
   { id: 'ASH_060', name: 'Cobb Vanth' },
   { id: 'ASH_047', name: 'Gar Saxon' },
@@ -357,7 +395,7 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_118', name: '8D8' },
   { id: 'ASH_109', name: 'T-6 Shuttle 1974' },
   { id: 'ASH_245', name: 'Eye of Sion' },
-  // Mechanic tier (#357) — reactive triggers + phase conditions
+  // Draw / base-damage / upgrade-defeat triggers, combat timing, and multi-step choices
   { id: 'ASH_169', name: 'Axe Woves' },
   { id: 'ASH_204', name: 'Blade Three' },
   { id: 'ASH_161', name: 'Zeb Orrelios' },
@@ -373,7 +411,7 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_217', name: 'Mayor\'s Majordomo' },
   { id: 'ASH_159', name: 'Alphabet Squadron U-Wing' },
   { id: 'ASH_149', name: 'Eviscerator' },
-  // Subsystem tier (#357)
+  // Aura-granted abilities, capture, unpreventable damage, damage prevention
   { id: 'ASH_063', name: 'Bo-Katan\'s Gauntlet' },
   { id: 'ASH_128', name: 'Bothan-5' },
   { id: 'ASH_224', name: 'Elzar Mann' },
@@ -395,7 +433,7 @@ export const UNIT_GROUPS: UnitGroup[] = (() => {
       id: 'built',
       name: 'Abilities built',
       status: 'done' as GroupStatus,
-      note: 'Card abilities are implemented and covered by tests (#353–#357).',
+      note: 'Card abilities are implemented and covered by tests.',
       units: IMPLEMENTED_UNITS.map(u => ({ id: u.id, name: u.name })),
     },
     keep('ready'),
@@ -403,8 +441,8 @@ export const UNIT_GROUPS: UnitGroup[] = (() => {
     keep('subsystem'),
     // A blocker group empties as its units get built; drop it rather than render an empty section.
   ].filter(g => g.id === 'built' || g.units.length > 0)
-    // Status follows position, not a hand-maintained field: whichever blocker tier is next up is
-    // the one in progress, and clearing a tier promotes the one behind it (#357).
+    // Status follows position, not a hand-maintained field: whichever blocker group is next up is
+    // the one in progress, and clearing a group promotes the one behind it.
     .map((g, _i, all) => {
       if (g.status === 'done') return g
       const first = all.find(x => x.status !== 'done')
@@ -412,32 +450,116 @@ export const UNIT_GROUPS: UnitGroup[] = (() => {
     })
 })()
 
-/** Card-type totals for the ASH set (from the SWUDB set listing). */
-const SET_TOTAL = { leaders: 18, upgrades: 25, bases: 8, units: 179, events: 34 } as const
+/** The card types counted separately on the setup panel, in the order they're displayed. */
+export const CARD_TYPES = ['leaders', 'bases', 'units', 'upgrades', 'events', 'tokens'] as const
+export type CardTypeKey = (typeof CARD_TYPES)[number]
+export type TypeCounts = Record<CardTypeKey, number>
 
-// Tokens actually created/used by cards: Shield + Advantage (upgrades) + Mandalorian (unit). The
-// Experience token upgrade is defined but no card grants it yet — deferred until one needs it (#306).
-const TOKEN_COUNT = 3
+/**
+ * Which block a set is listed under. `rotation` is the currently-legal cycle; `retired` sets have
+ * rotated out; `out-of-cycle` products released outside the cycle altogether and are legal in a
+ * different subset of formats.
+ */
+export type SetGroup = 'rotation' | 'retired' | 'out-of-cycle'
 
-export interface CategoryProgress {
-  label: string
-  done: number
-  total: number
+export interface SetProgress {
+  /** SWU set code — the only set identifier the card data carries. */
+  code: string
+  group: SetGroup
+  done: TypeCounts
+  total: TypeCounts
 }
 
-/** Fully-implemented cards vs the whole set, by category — feeds the setup-screen progress bar (#306). */
-export const IMPLEMENTATION_PROGRESS: CategoryProgress[] = [
-  { label: 'Leaders', done: IMPLEMENTED_LEADERS.filter(l => l.front && l.back).length, total: SET_TOTAL.leaders },
-  { label: 'Upgrades', done: IMPLEMENTED_UPGRADES.length, total: SET_TOTAL.upgrades },
-  { label: 'Bases', done: SET_TOTAL.bases, total: SET_TOTAL.bases }, // all vanilla — fully playable
-  { label: 'Tokens', done: TOKEN_COUNT, total: TOKEN_COUNT },
-  // Units done = keyword-only/vanilla units (need no code) + units with a registered ability.
-  { label: 'Units', done: (UNIT_GROUPS.find(g => g.id === 'keyword')?.units.length ?? 0) + IMPLEMENTED_UNITS.length, total: SET_TOTAL.units },
-  { label: 'Events', done: 0, total: SET_TOTAL.events },
+const NONE: TypeCounts = { leaders: 0, bases: 0, units: 0, upgrades: 0, events: 0, tokens: 0 }
+
+/**
+ * Printed card counts per set, from the SWUDB set listing (`cards/search?q=set:…`, normal variants
+ * only), newest first within each group — the order the panel shows them in.
+ *
+ * TOKEN counts are NOT from that listing, which omits them. The API's own token data is too partial
+ * to use: only `TSOR` and `TASH` exist at all, it holds no token *units* (Mandalorian, X-wing, …),
+ * and some rows are findable by search but not by direct fetch. These counts are therefore recorded
+ * from the printed cards — every set in the cycle prints Experience and Shield, plus its own
+ * extras: Clone Trooper/Battle Droid (TWI), X-wing/TIE Fighter (JTL), Force (LOF),
+ * Advantage/Mandalorian (ASH), Spy (SEC), Credit (LAW). The out-of-cycle products print none
+ * of their own.
+ *
+ * IBH is counted by DISTINCT cards, not collector numbers: it reprints the same card at up to three
+ * numbers (Blizzard Force AT-ST is #70, #89 and #103), so its 104 printed slots are 51 real cards,
+ * and implementing one covers every printing of it.
+ */
+const SET_TOTALS: { code: string; group: SetGroup; total: TypeCounts }[] = [
+  { code: 'ASH', group: 'rotation', total: { leaders: 18, bases: 8, units: 179, upgrades: 25, events: 34, tokens: 4 } },
+  { code: 'LAW', group: 'rotation', total: { leaders: 18, bases: 12, units: 182, upgrades: 14, events: 38, tokens: 3 } },
+  { code: 'SEC', group: 'rotation', total: { leaders: 18, bases: 8, units: 171, upgrades: 17, events: 50, tokens: 3 } },
+  { code: 'LOF', group: 'rotation', total: { leaders: 18, bases: 12, units: 166, upgrades: 20, events: 48, tokens: 3 } },
+  { code: 'JTL', group: 'rotation', total: { leaders: 18, bases: 13, units: 167, upgrades: 7, events: 57, tokens: 4 } },
+  { code: 'TWI', group: 'retired', total: { leaders: 18, bases: 12, units: 150, upgrades: 19, events: 58, tokens: 4 } },
+  { code: 'SHD', group: 'retired', total: { leaders: 18, bases: 8, units: 160, upgrades: 30, events: 46, tokens: 2 } },
+  { code: 'SOR', group: 'retired', total: { leaders: 18, bases: 12, units: 148, upgrades: 14, events: 60, tokens: 2 } },
+  { code: 'TS26', group: 'out-of-cycle', total: { leaders: 8, bases: 4, units: 41, upgrades: 8, events: 23, tokens: 0 } },
+  { code: 'IBH', group: 'out-of-cycle', total: { leaders: 2, bases: 2, units: 35, upgrades: 0, events: 12, tokens: 0 } },
 ]
 
-/** Whole-set implementation total (tokens included) — the headline progress figure. */
+/**
+ * Cards that already play correctly with no engine work: vanilla ones, and keyword-only ones whose
+ * every keyword is implemented (Ambush, Grit, Hidden, Overwhelm, Raid, Restore, Saboteur, Sentinel,
+ * Shielded, Support). Counted from the SWUDB set listings by the same rule `keywordOnlyUnits.test.ts`
+ * applies — strip parenthetical reminder text and the declared keywords, and anything left is a real
+ * ability. IBH is counted by distinct card, so its reprints aren't double-counted.
+ *
+ * LEADERS ARE EXCLUDED: every leader has a deployed-side ability, and reading only `FrontText` would
+ * wrongly pass one whose front is blank (ASH's Grogu).
+ *
+ * The unimplemented keywords across the card data are Bounty (SHD, TS26), Coordinate and Exploit
+ * (TWI), Piloting (JTL), Plot (SEC, TS26) and Smuggle (SHD). A card carrying any of them is never
+ * credited. 12 are otherwise vanilla and held back purely by the keyword — 6 on Plot, 6 on Exploit —
+ * and would move over if those landed. ASH uses none of them, so no registered card is affected.
+ */
+const PLAYABLE_AS_PRINTED: Record<string, Partial<TypeCounts>> = {
+  ASH: { bases: 8, units: 39 },
+  LAW: { units: 47 },
+  SEC: { bases: 8, units: 32 },
+  LOF: { units: 46 },
+  JTL: { bases: 9, units: 22 },
+  TWI: { bases: 8, units: 22 },
+  SHD: { bases: 8, units: 23, upgrades: 1 },
+  SOR: { bases: 8, units: 29, upgrades: 2 },
+  TS26: { units: 5, upgrades: 1 },
+  IBH: { bases: 2, units: 19 },
+}
+
+/**
+ * What's implemented, per set: the cards that play as printed, plus — for ASH — every card with a
+ * registered ability. Tokens count the three the engine actually creates; Experience is printed but
+ * no card grants it, so ASH reads 3 of 4.
+ */
+const IMPLEMENTED_BY_SET: Record<string, TypeCounts> = {
+  ...Object.fromEntries(SET_TOTALS.map(({ code }) => [code, { ...NONE, ...PLAYABLE_AS_PRINTED[code] }])),
+  ASH: {
+    leaders: IMPLEMENTED_LEADERS.filter(l => l.front && l.back).length,
+    bases: 8,
+    units: (UNIT_GROUPS.find(g => g.id === 'keyword')?.units.length ?? 0) + IMPLEMENTED_UNITS.length,
+    upgrades: IMPLEMENTED_UPGRADES.length,
+    events: IMPLEMENTED_EVENTS.length,
+    tokens: 3,
+  },
+}
+
+export const SET_PROGRESS: SetProgress[] = SET_TOTALS.map(({ code, group, total }) => ({
+  code,
+  group,
+  total,
+  done: IMPLEMENTED_BY_SET[code] ?? NONE,
+}))
+
+/** Sum a set's counts across every card type. */
+export function sumCounts(counts: TypeCounts): number {
+  return CARD_TYPES.reduce((n, t) => n + counts[t], 0)
+}
+
+/** Every set combined — the headline progress figure. */
 export const TOTAL_PROGRESS = {
-  done: IMPLEMENTATION_PROGRESS.reduce((n, c) => n + c.done, 0),
-  total: IMPLEMENTATION_PROGRESS.reduce((n, c) => n + c.total, 0),
+  done: SET_PROGRESS.reduce((n, s) => n + sumCounts(s.done), 0),
+  total: SET_PROGRESS.reduce((n, s) => n + sumCounts(s.total), 0),
 }

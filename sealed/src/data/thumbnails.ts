@@ -3,7 +3,7 @@ import { cardId, SWU_DB_API } from './cards'
 import type { SwuCard } from './cards'
 
 /**
- * Rewrite a card-art URL to be fetchable from the browser (#311):
+ * Rewrite a card-art URL to be fetchable from the browser:
  * cdn.swu-db.com serves no CORS headers, so its images route through the
  * worker's /art passthrough. Hosts that do serve CORS (e.g.
  * cdn.starwarsunlimited.com, used by swuapi-sourced cards) pass unchanged.
@@ -18,7 +18,7 @@ export function artUrl(frontArt: string | undefined): string | undefined {
 }
 
 /**
- * Background thumbnail hydration (T1.4): once a card's JSON is cached, fetch its
+ * Background thumbnail hydration: once a card's JSON is cached, fetch its
  * art and store the bytes on the record. Never throws — callers fire-and-forget.
  * Returns true when a thumbnail is present on the record afterwards.
  *

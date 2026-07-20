@@ -3,7 +3,7 @@ import { db } from '../data/db'
 import { saveGameRecord, listGameRecords } from '../data/gameRecords'
 import { state } from './helpers/engineFixtures'
 
-describe('game records (T2.7 / T4.5)', () => {
+describe('game records', () => {
   beforeEach(async () => {
     await db.games.clear()
   })

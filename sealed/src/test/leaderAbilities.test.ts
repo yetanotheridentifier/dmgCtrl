@@ -10,10 +10,10 @@ import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
 import { recordUnitDefeated, recordUnitEntered } from '../engine/types'
 import type { LeaderState } from '../engine/types'
 
-/** Undeployed-leader activated abilities (#309). */
+/** Undeployed-leader activated abilities. */
 const undeployed = (cardId: string): LeaderState => ({ cardId, deployed: false, epicActionUsed: false, exhausted: false })
 
-describe('Cad Bane (ASH_011) — front: deal 1 to a unit with 2+ remaining HP (#309)', () => {
+describe('Cad Bane (ASH_011) — front: deal 1 to a unit with 2+ remaining HP', () => {
   const cards = { ...CARDS, ASH_011: card({ id: 'ASH_011', type: 'leader', cost: 6, power: 4, hp: 7 }) }
 
   it('offers the ability only against units with 2+ remaining HP', () => {
@@ -42,7 +42,7 @@ describe('Cad Bane (ASH_011) — front: deal 1 to a unit with 2+ remaining HP (#
   })
 })
 
-describe('Emperor Palpatine (ASH_015) — front: Advantage per other friendly unit (#309)', () => {
+describe('Emperor Palpatine (ASH_015) — front: Advantage per other friendly unit', () => {
   const cards = { ...CARDS, ASH_015: card({ id: 'ASH_015', type: 'leader', cost: 7 }) }
 
   it('targets only exhausted friendly units and gives one Advantage per other friendly unit', () => {
@@ -63,7 +63,7 @@ describe('Emperor Palpatine (ASH_015) — front: Advantage per other friendly un
 
 const deployed = (cardId: string): LeaderState => ({ cardId, deployed: true, epicActionUsed: true, exhausted: false })
 
-describe('Cad Bane (ASH_011) — deployed: On Attack may deal 1 (#309)', () => {
+describe('Cad Bane (ASH_011) — deployed: On Attack may deal 1', () => {
   const cards = { ...CARDS, ASH_011: card({ id: 'ASH_011', type: 'leader', power: 4, hp: 7 }) }
   const board = () => state({
     cards,
@@ -98,7 +98,7 @@ describe('Cad Bane (ASH_011) — deployed: On Attack may deal 1 (#309)', () => {
   })
 })
 
-describe('Emperor Palpatine (ASH_015) — deployed: On Attack may give Advantage per other (#309)', () => {
+describe('Emperor Palpatine (ASH_015) — deployed: On Attack may give Advantage per other', () => {
   it('offers only another exhausted friendly unit and gives one Advantage per other friendly unit', () => {
     const s = state({
       cards: { ...CARDS, ASH_015: card({ id: 'ASH_015', type: 'leader', power: 3, hp: 5 }) },
@@ -116,7 +116,7 @@ describe('Emperor Palpatine (ASH_015) — deployed: On Attack may give Advantage
   })
 })
 
-describe('Vane (ASH_012) — defeat a friendly upgrade → 2 to base (#309/#348)', () => {
+describe('Vane (ASH_012) — defeat a friendly upgrade → 2 to base', () => {
   const cards = { ...CARDS, ASH_012: card({ id: 'ASH_012', type: 'leader', power: 2, hp: 5 }), UP: card({ id: 'UP', type: 'upgrade' }) }
 
   it('front: offers every friendly upgrade — card AND token — to choose from, and is mandatory', () => {
@@ -237,7 +237,7 @@ describe('Vane (ASH_012) — defeat a friendly upgrade → 2 to base (#309/#348)
   })
 })
 
-describe('Greef Karga (ASH_017) — when you play a unit, Advantage (#309)', () => {
+describe('Greef Karga (ASH_017) — when you play a unit, Advantage', () => {
   const cards = { ...CARDS, ASH_017: card({ id: 'ASH_017', type: 'leader' }) }
 
   it('front: playing a unit offers to exhaust the leader for an Advantage token on it', () => {
@@ -245,7 +245,7 @@ describe('Greef Karga (ASH_017) — when you play a unit, Advantage (#309)', () 
       cards,
       players: { player: player({ leader: undeployed('ASH_017'), hand: ['TST_U1'], resources: ready(6) }), opponent: player() },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'mayExhaustLeaderForAdvantage' })
     expect(played.activePlayer).toBe('player') // holds the turn for the choice
 
@@ -260,7 +260,7 @@ describe('Greef Karga (ASH_017) — when you play a unit, Advantage (#309)', () 
       cards,
       players: { player: player({ leader: undeployed('ASH_017'), hand: ['TST_U1'], resources: ready(6) }), opponent: player() },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     const declined = resolve(played, { type: 'skipTrigger', choiceId: played.pendingChoices![0].id })
     expect(declined.players.player.leader.exhausted).toBe(false)
     expect(declined.players.player.units[0].upgrades.some(a => a.cardId === TOKEN_ADVANTAGE)).toBe(false)
@@ -275,14 +275,14 @@ describe('Greef Karga (ASH_017) — when you play a unit, Advantage (#309)', () 
         opponent: player(),
       },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices).toBeUndefined()
     expect(played.players.player.units.find(u => u.cardId === 'TST_U1')!.upgrades.some(a => a.cardId === TOKEN_ADVANTAGE)).toBe(true)
     expect(played.activePlayer).toBe('opponent')
   })
 })
 
-describe('choice-id collisions (#309 regression)', () => {
+describe('choice-id collisions (regression)', () => {
   it('a Support choice and Greef Karga’s trigger on the same played unit get distinct ids and labels', () => {
     const s = state({
       cards: { ...CARDS, ASH_017: card({ id: 'ASH_017', type: 'leader' }), SUP: card({ id: 'SUP', type: 'unit', arena: 'ground', cost: 0, keywords: [{ name: 'Support' }] }) },
@@ -291,7 +291,7 @@ describe('choice-id collisions (#309 regression)', () => {
         opponent: player({ units: [unit('e1', 'TST_U1')] }),
       },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     const kinds = played.pendingChoices!.map(c => c.kind)
     expect(kinds).toContain('support')
     expect(kinds).toContain('mayExhaustLeaderForAdvantage')
@@ -304,7 +304,7 @@ describe('choice-id collisions (#309 regression)', () => {
   })
 })
 
-describe('Baylan Skoll (ASH_003) — +2/+2 this phase to a lone unit (#347)', () => {
+describe('Baylan Skoll (ASH_003) — +2/+2 this phase to a lone unit', () => {
   const cards = { ...CARDS, ASH_003: card({ id: 'ASH_003', type: 'leader', cost: 5, power: 4, hp: 6 }) }
 
   it('front: offers only a unit that is alone in its arena, and gives it +2/+2 for the phase', () => {
@@ -367,7 +367,7 @@ describe('Baylan Skoll (ASH_003) — +2/+2 this phase to a lone unit (#347)', ()
   })
 })
 
-describe('Ahsoka Tano (ASH_009) — +2/+0 this phase to a weaker unit (#347)', () => {
+describe('Ahsoka Tano (ASH_009) — +2/+0 this phase to a weaker unit', () => {
   const cards = { ...CARDS, ASH_009: card({ id: 'ASH_009', type: 'leader', cost: 6, power: 5, hp: 6 }) }
 
   it('front: offers any unit with less power than a friendly unit and gives it +2/+0', () => {
@@ -404,7 +404,7 @@ describe('Ahsoka Tano (ASH_009) — +2/+0 this phase to a weaker unit (#347)', (
   })
 })
 
-describe('Ezra Bridger (ASH_013) — attack-end Advantage if 3+ dealt to a base (#347)', () => {
+describe('Ezra Bridger (ASH_013) — attack-end Advantage if 3+ dealt to a base', () => {
   const cards = { ...CARDS, ASH_013: card({ id: 'ASH_013', type: 'leader', cost: 5, power: 3, hp: 6 }) }
   const board = () => state({
     cards,
@@ -447,7 +447,7 @@ describe('Ezra Bridger (ASH_013) — attack-end Advantage if 3+ dealt to a base 
   })
 })
 
-describe('Ezra Bridger (ASH_013) — deployed: reacts to ANY friendly attack ending (#347)', () => {
+describe('Ezra Bridger (ASH_013) — deployed: reacts to ANY friendly attack ending', () => {
   const cards = { ...CARDS, ASH_013: card({ id: 'ASH_013', type: 'leader', power: 3, hp: 6 }) }
   const board = (attacker: string) => state({
     cards,
@@ -472,7 +472,7 @@ describe('Ezra Bridger (ASH_013) — deployed: reacts to ANY friendly attack end
   })
 })
 
-describe('Shin Hati (ASH_016) — attack-end exhaust a cheaper unit (#347)', () => {
+describe('Shin Hati (ASH_016) — attack-end exhaust a cheaper unit', () => {
   const cards = {
     ...CARDS,
     ASH_016: card({ id: 'ASH_016', type: 'leader', cost: 6, power: 4, hp: 6 }),
@@ -497,7 +497,7 @@ describe('Shin Hati (ASH_016) — attack-end exhaust a cheaper unit (#347)', () 
   })
 })
 
-describe('Shin Hati (ASH_016) — deployed: exhaust a cheaper unit, once each round (#347)', () => {
+describe('Shin Hati (ASH_016) — deployed: exhaust a cheaper unit, once each round', () => {
   const cards = {
     ...CARDS,
     ASH_016: card({ id: 'ASH_016', type: 'leader', cost: 6, power: 4, hp: 6 }),
@@ -523,7 +523,7 @@ describe('Shin Hati (ASH_016) — deployed: exhaust a cheaper unit, once each ro
   })
 })
 
-describe('Grand Admiral Sloane (ASH_007) — front: Choose One arena buff (#348)', () => {
+describe('Grand Admiral Sloane (ASH_007) — front: Choose One arena buff', () => {
   const cards = { ...CARDS, ASH_007: card({ id: 'ASH_007', type: 'leader', cost: 5, power: 4, hp: 5 }) }
   const board = () => state({
     cards,
@@ -553,7 +553,7 @@ describe('Grand Admiral Sloane (ASH_007) — front: Choose One arena buff (#348)
   })
 })
 
-describe('Bo-Katan Kryze (ASH_010) — front: create a Mandalorian token (#348)', () => {
+describe('Bo-Katan Kryze (ASH_010) — front: create a Mandalorian token', () => {
   const cards = { ...CARDS, ASH_010: card({ id: 'ASH_010', type: 'leader', cost: 10 }) }
   const withArenas = (ground: boolean, space: boolean, resources = 2) =>
     state({
@@ -594,7 +594,7 @@ describe('Bo-Katan Kryze (ASH_010) — front: create a Mandalorian token (#348)'
   })
 })
 
-describe('Bo-Katan Kryze (ASH_010) — custom deploy condition (#309)', () => {
+describe('Bo-Katan Kryze (ASH_010) — custom deploy condition', () => {
   const cards = { ...CARDS, ASH_010: card({ id: 'ASH_010', type: 'leader', cost: 10 }), MANDO: card({ id: 'MANDO', type: 'unit', arena: 'ground', traits: ['Mandalorian'] }) }
   const withResourcesAndMandos = (n: number, mandos: number) =>
     state({
@@ -614,7 +614,7 @@ describe('Bo-Katan Kryze (ASH_010) — custom deploy condition (#309)', () => {
   })
 })
 
-describe('Luke Skywalker (ASH_005) — heal on a friendly attack ending (#348)', () => {
+describe('Luke Skywalker (ASH_005) — heal on a friendly attack ending', () => {
   const cards = { ...CARDS, ASH_005: card({ id: 'ASH_005', type: 'leader', cost: 7, power: 6, hp: 7 }) }
   // a1 (TST_U4: power 1, hp 9) attacks e1 (TST_U1: power 3, hp 4): a1 survives with 3 counter damage.
   const boardFront = () => state({
@@ -672,7 +672,7 @@ describe('Luke Skywalker (ASH_005) — heal on a friendly attack ending (#348)',
   })
 })
 
-describe('The Armorer (ASH_001) — play an upgrade from your resources (#348)', () => {
+describe('The Armorer (ASH_001) — play an upgrade from your resources', () => {
   const cards = {
     ...CARDS,
     ASH_001: card({ id: 'ASH_001', type: 'leader', cost: 5, power: 4, hp: 6 }),
@@ -745,7 +745,7 @@ describe('The Armorer (ASH_001) — play an upgrade from your resources (#348)',
   })
 })
 
-describe('Grand Admiral Thrawn (ASH_004) — front: attack with a unit, conditional Restore 2 (#348)', () => {
+describe('Grand Admiral Thrawn (ASH_004) — front: attack with a unit, conditional Restore 2', () => {
   const cards = { ...CARDS, ASH_004: card({ id: 'ASH_004', type: 'leader', cost: 8, power: 5, hp: 8 }) }
   // player controls 2 units (u1 power 3); the enemy controls `enemyUnits`.
   const board = (enemyUnits: number) => state({
@@ -774,7 +774,7 @@ describe('Grand Admiral Thrawn (ASH_004) — front: attack with a unit, conditio
   })
 })
 
-describe('Grand Admiral Thrawn (ASH_004) — deployed: On Attack may defeat a non-leader enemy unit (#348)', () => {
+describe('Grand Admiral Thrawn (ASH_004) — deployed: On Attack may defeat a non-leader enemy unit', () => {
   const cards = { ...CARDS, ASH_004: card({ id: 'ASH_004', type: 'leader', power: 5, hp: 8 }) }
 
   it('offers to defeat a non-leader enemy unit when you control more units, and defeats the pick', () => {
@@ -786,7 +786,7 @@ describe('Grand Admiral Thrawn (ASH_004) — deployed: On Attack may defeat a no
       },
     })
     const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
-    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayDefeatEnemyUnit', targets: ['e1'] })
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'selectUnitToDefeat', targets: ['e1'] })
     const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'e1' })
     expect(done.players.opponent.units.find(u => u.instanceId === 'e1')).toBeUndefined()
     expect(done.players.opponent.discard).toContain('TST_U1')
@@ -802,7 +802,7 @@ describe('Grand Admiral Thrawn (ASH_004) — deployed: On Attack may defeat a no
       },
     })
     const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
-    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayDefeatEnemyUnit', targets: ['e1'] }) // eL excluded
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'selectUnitToDefeat', targets: ['e1'] }) // eL excluded
   })
 
   it('is not offered without a unit lead, and declining defeats nothing', () => {
@@ -826,7 +826,7 @@ describe('Grand Admiral Thrawn (ASH_004) — deployed: On Attack may defeat a no
     })
     // Thrawn (power 5) attacks e1 (hp 5) — lethal. On Attack, defeat a DIFFERENT unit (e2).
     const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'unit', instanceId: 'e1' } })
-    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayDefeatEnemyUnit' })
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'selectUnitToDefeat' })
     const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'e2' })
     expect(done.players.opponent.units.find(u => u.instanceId === 'e2')).toBeUndefined() // ability defeat
     expect(done.players.opponent.units.find(u => u.instanceId === 'e1')).toBeUndefined() // combat: 5 dmg ≥ 5 hp
@@ -841,7 +841,7 @@ describe('Grand Admiral Thrawn (ASH_004) — deployed: On Attack may defeat a no
       },
     })
     const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'unit', instanceId: 'e1' } })
-    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayDefeatEnemyUnit' })
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'selectUnitToDefeat' })
     // 1) defeat a different unit (e2); 2) the defender's On Defense fires; decline it.
     const afterDefeat = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'e2' })
     expect(afterDefeat.pendingChoices?.[0]).toMatchObject({ kind: 'mayDamageExhaust' }) // e1's On Defense
@@ -863,7 +863,7 @@ describe('Grand Admiral Thrawn (ASH_004) — deployed: On Attack may defeat a no
   })
 })
 
-describe('Grogu (ASH_018) — triggered deploy + combat-conditional aura (#348)', () => {
+describe('Grogu (ASH_018) — triggered deploy + combat-conditional aura', () => {
   const cards = {
     ...CARDS,
     ASH_018: card({ id: 'ASH_018', type: 'leader', cost: 4, power: 0, hp: 3, unique: true }),
@@ -877,7 +877,7 @@ describe('Grogu (ASH_018) — triggered deploy + combat-conditional aura (#348)'
   })
 
   it('offers to deploy Grogu when you play a Unique unit costing 4+, without burning the epic action', () => {
-    const played = resolve(playing('BIG'), { type: 'playCard', handIndex: 0 })
+    const played = resolve(playing('BIG'), { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'mayDeployLeader' })
     const deployed = resolve(played, { type: 'acceptChoice', choiceId: played.pendingChoices![0].id })
     expect(deployed.players.player.leader.deployed).toBe(true)
@@ -890,7 +890,7 @@ describe('Grogu (ASH_018) — triggered deploy + combat-conditional aura (#348)'
       cards,
       players: { player: player({ leader: { cardId: 'ASH_018', deployed: false, epicActionUsed: true, exhausted: false }, hand: ['BIG'], resources: ready(5) }), opponent: player() },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'mayDeployLeader' }) // offered despite epicActionUsed
     expect(resolve(played, { type: 'acceptChoice', choiceId: played.pendingChoices![0].id }).players.player.leader.deployed).toBe(true)
   })
@@ -900,26 +900,26 @@ describe('Grogu (ASH_018) — triggered deploy + combat-conditional aura (#348)'
       cards,
       players: { player: player({ leader: { cardId: 'ASH_018', deployed: false, epicActionUsed: false, exhausted: true }, hand: ['BIG'], resources: ready(5) }), opponent: player() },
     })
-    expect(resolve(s, { type: 'playCard', handIndex: 0 }).pendingChoices).toBeUndefined()
+    expect(resolve(s, { type: 'playUnit', handIndex: 0 }).pendingChoices).toBeUndefined()
   })
 
   it('does not offer for a non-Unique unit, or a Unique unit costing under 4', () => {
-    expect(resolve(playing('COMMON'), { type: 'playCard', handIndex: 0 }).pendingChoices).toBeUndefined() // not Unique
-    expect(resolve(playing('SMALL'), { type: 'playCard', handIndex: 0 }).pendingChoices).toBeUndefined() // cost 3
+    expect(resolve(playing('COMMON'), { type: 'playUnit', handIndex: 0 }).pendingChoices).toBeUndefined() // not Unique
+    expect(resolve(playing('SMALL'), { type: 'playUnit', handIndex: 0 }).pendingChoices).toBeUndefined() // cost 3
   })
 
   it('offers for Unique units costing MORE than 4, not just exactly 4', () => {
     const big5 = { ...cards, BIG5: card({ id: 'BIG5', type: 'unit', arena: 'ground', cost: 5, power: 3, hp: 3, unique: true }) }
     const s5 = state({ cards: big5, players: { player: player({ leader: undeployed('ASH_018'), hand: ['BIG5'], resources: ready(5) }), opponent: player() } })
-    expect(resolve(s5, { type: 'playCard', handIndex: 0 }).pendingChoices?.[0]).toMatchObject({ kind: 'mayDeployLeader' })
+    expect(resolve(s5, { type: 'playUnit', handIndex: 0 }).pendingChoices?.[0]).toMatchObject({ kind: 'mayDeployLeader' })
 
     const big7 = { ...cards, BIG7: card({ id: 'BIG7', type: 'unit', arena: 'ground', cost: 7, power: 5, hp: 5, unique: true }) }
     const s7 = state({ cards: big7, players: { player: player({ leader: undeployed('ASH_018'), hand: ['BIG7'], resources: ready(7) }), opponent: player() } })
-    expect(resolve(s7, { type: 'playCard', handIndex: 0 }).pendingChoices?.[0]).toMatchObject({ kind: 'mayDeployLeader' })
+    expect(resolve(s7, { type: 'playUnit', handIndex: 0 }).pendingChoices?.[0]).toMatchObject({ kind: 'mayDeployLeader' })
   })
 
   it('declining leaves Grogu undeployed', () => {
-    const played = resolve(playing('BIG'), { type: 'playCard', handIndex: 0 })
+    const played = resolve(playing('BIG'), { type: 'playUnit', handIndex: 0 })
     const declined = resolve(played, { type: 'skipTrigger', choiceId: played.pendingChoices![0].id })
     expect(declined.players.player.leader.deployed).toBe(false)
   })
@@ -971,7 +971,7 @@ describe('Grogu (ASH_018) — triggered deploy + combat-conditional aura (#348)'
   })
 })
 
-describe('The Mandalorian (ASH_014) — draw on initiative / on attack (#348)', () => {
+describe('The Mandalorian (ASH_014) — draw on initiative / on attack', () => {
   const cards = { ...CARDS, ASH_014: card({ id: 'ASH_014', type: 'leader', cost: 6, power: 4, hp: 6 }) }
 
   it('front: taking the initiative offers to pay 1 and draw, then passes the turn', () => {
@@ -1050,7 +1050,7 @@ describe('The Mandalorian (ASH_014) — draw on initiative / on attack (#348)', 
   })
 })
 
-describe('Moff Gideon (ASH_008) — front: play a unit costing 1 less (#348)', () => {
+describe('Moff Gideon (ASH_008) — front: play a unit costing 1 less', () => {
   const cards = {
     ...CARDS,
     ASH_008: card({ id: 'ASH_008', type: 'leader', cost: 7, power: 5, hp: 8 }),
@@ -1083,7 +1083,7 @@ describe('Moff Gideon (ASH_008) — front: play a unit costing 1 less (#348)', (
   })
 })
 
-describe('Fennec Shand (ASH_002) — front: exhaust a friendly unit + C=1 → play a unit ready (#348)', () => {
+describe('Fennec Shand (ASH_002) — front: exhaust a friendly unit + C=1 → play a unit ready', () => {
   const cards = {
     ...CARDS,
     ASH_002: card({ id: 'ASH_002', type: 'leader', cost: 4, power: 3, hp: 4 }),
@@ -1125,7 +1125,7 @@ describe('Fennec Shand (ASH_002) — front: exhaust a friendly unit + C=1 → pl
   })
 })
 
-describe('Fennec Shand (ASH_002) — deployed: C=1 + exhaust a friendly unit → play a unit ready (#348)', () => {
+describe('Fennec Shand (ASH_002) — deployed: C=1 + exhaust a friendly unit → play a unit ready', () => {
   const cards = {
     ...CARDS,
     ASH_002: card({ id: 'ASH_002', type: 'leader', cost: 4, power: 3, hp: 4, keywords: [{ name: 'Saboteur' }] }),
@@ -1207,7 +1207,7 @@ describe('Fennec Shand (ASH_002) — deployed: C=1 + exhaust a friendly unit →
   })
 })
 
-describe('Moff Gideon (ASH_008) — deployed: gains keywords from Imperial units in your discard (#348)', () => {
+describe('Moff Gideon (ASH_008) — deployed: gains keywords from Imperial units in your discard', () => {
   const cards = {
     ...CARDS,
     ASH_008: card({ id: 'ASH_008', type: 'leader', cost: 7, power: 5, hp: 8 }),
@@ -1279,7 +1279,7 @@ describe('Moff Gideon (ASH_008) — deployed: gains keywords from Imperial units
   })
 })
 
-describe('Moff Gideon (ASH_008) deployed — every granted keyword behaves (#348)', () => {
+describe('Moff Gideon (ASH_008) deployed — every granted keyword behaves', () => {
   const imp = (id: string, name: string) => card({ id, type: 'unit', arena: 'ground', traits: ['Imperial'], keywords: [{ name }] })
   const cards = {
     ...CARDS,
@@ -1357,7 +1357,7 @@ describe('Moff Gideon (ASH_008) deployed — every granted keyword behaves (#348
   })
 })
 
-describe('Sabine Wren (ASH_006) — front: opponent gives Advantage, grant Shielded (#348)', () => {
+describe('Sabine Wren (ASH_006) — front: opponent gives Advantage, grant Shielded', () => {
   const cards = {
     ...CARDS,
     ASH_006: card({ id: 'ASH_006', type: 'leader', cost: 5, power: 3, hp: 5 }),
@@ -1399,7 +1399,7 @@ describe('Sabine Wren (ASH_006) — front: opponent gives Advantage, grant Shiel
   })
 })
 
-describe('Sabine Wren (ASH_006) — deployed: On Attack grant Shielded (#348)', () => {
+describe('Sabine Wren (ASH_006) — deployed: On Attack grant Shielded', () => {
   const cards = { ...CARDS, ASH_006: card({ id: 'ASH_006', type: 'leader', cost: 5, power: 3, hp: 5 }) }
   it('sets the Shielded grant on the controller when it attacks', () => {
     const s = state({
@@ -1414,7 +1414,7 @@ describe('Sabine Wren (ASH_006) — deployed: On Attack grant Shielded (#348)', 
   })
 })
 
-describe('"next unit you play this phase gains <keywords>" grant (generic, #348)', () => {
+describe('"next unit you play this phase gains <keywords>" grant (generic)', () => {
   const cards = { ...CARDS, GRUNT: card({ id: 'GRUNT', type: 'unit', arena: 'ground', cost: 1, power: 1, hp: 1 }) }
 
   it('applies the granted keyword to the next unit played, then consumes the grant', () => {
@@ -1422,7 +1422,7 @@ describe('"next unit you play this phase gains <keywords>" grant (generic, #348)
       cards,
       players: { player: player({ hand: ['GRUNT'], resources: ready(2), nextUnitGrants: [{ keywords: [{ name: 'Shielded' }] }] }), opponent: player() },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     const grunt = played.players.player.units.find(u => u.cardId === 'GRUNT')!
     expect(grunt.upgrades.some(u => u.cardId === TOKEN_SHIELD)).toBe(true) // Shielded → a Shield token on entry
     expect(unitHasKeyword(played, grunt, 'Shielded')).toBe(true) // holds the keyword this phase
@@ -1437,7 +1437,7 @@ describe('"next unit you play this phase gains <keywords>" grant (generic, #348)
         opponent: player({ units: [unit('e1', 'TST_U1')] }),
       },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     const grunt = played.players.player.units.find(u => u.cardId === 'GRUNT')!
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'ambush', unitId: grunt.instanceId })
   })
@@ -1452,7 +1452,7 @@ describe('"next unit you play this phase gains <keywords>" grant (generic, #348)
       },
       activePlayer: 'opponent',
     })
-    const oppPlays = resolve(s, { type: 'playCard', handIndex: 0 })
+    const oppPlays = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(oppPlays.players.opponent.units.find(u => u.cardId === 'GRUNT')!.upgrades.some(u => u.cardId === TOKEN_SHIELD)).toBe(false)
     expect(oppPlays.players.player.nextUnitGrants).toEqual([{ keywords: [{ name: 'Shielded' }] }]) // still set
 

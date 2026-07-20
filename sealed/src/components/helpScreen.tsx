@@ -28,7 +28,7 @@ export default function HelpScreen({ onBack }: Props) {
         className="help-content mt-4 text-ink-body text-sm leading-relaxed space-y-3"
         dangerouslySetInnerHTML={{ __html: contentHtml }}
       />
-      {/* Build marker lives here in prod; in dev it's a corner badge (#332). */}
+      {/* Build marker lives here in prod; in dev it's a corner badge. */}
       {!isDev() && (
         <p data-testid="build-tag" className="mt-8 text-[10px] text-ink-faint">
           {BUILD_TAG}

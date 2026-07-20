@@ -7,11 +7,11 @@ import { unitHasKeyword } from '../engine/keywords'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 
-/** Real ASH card definitions are registered on import of the engine (#341). */
+/** Real ASH card definitions are registered on import of the engine. */
 const cardIds = (u: { upgrades: { cardId: string }[] }) => u.upgrades.map(a => a.cardId)
 const has = (u: { upgrades: { cardId: string }[] }, id: string) => u.upgrades.some(a => a.cardId === id)
 
-describe('ASH upgrades — cost modifiers (#341)', () => {
+describe('ASH upgrades — cost modifiers', () => {
   it('Faith in the Empire (ASH_262) costs 1 less on an Imperial unit', () => {
     const s = state({
       cards: {
@@ -27,7 +27,7 @@ describe('ASH upgrades — cost modifiers (#341)', () => {
   })
 })
 
-describe('ASH upgrades — attach restrictions & conditional keywords (#341)', () => {
+describe('ASH upgrades — attach restrictions & conditional keywords', () => {
   it('Mark My Words (ASH_181) only attaches to a damaged unit', () => {
     const s = state({
       cards: { ...CARDS, ASH_181: card({ id: 'ASH_181', type: 'upgrade', cost: 0, keywords: [{ name: 'Overwhelm' }] }) },
@@ -55,7 +55,7 @@ describe('ASH upgrades — attach restrictions & conditional keywords (#341)', (
   })
 })
 
-describe('ASH upgrades — keyword grants (#342)', () => {
+describe('ASH upgrades — keyword grants', () => {
   it('Nowhere to Hide (ASH_198) grants the attached unit Sentinel', () => {
     const s = state({ cards: { ...CARDS, ASH_198: card({ id: 'ASH_198', type: 'upgrade' }) } })
     const u = unit('u1', 'TST_U1', { upgrades: [{ cardId: 'ASH_198', owner: 'player' }] })
@@ -71,7 +71,7 @@ describe('ASH upgrades — keyword grants (#342)', () => {
   })
 })
 
-describe('ASH upgrades — stat modifiers (#342)', () => {
+describe('ASH upgrades — stat modifiers', () => {
   it('Pointless to Resist (ASH_054) gives -3 power only while attacking a base', () => {
     const s = state({ cards: { ...CARDS, ASH_054: card({ id: 'ASH_054', type: 'upgrade', power: 0, hp: 0 }) } })
     const u = unit('u1', 'TST_U1', { upgrades: [{ cardId: 'ASH_054', owner: 'player' }] }) // base power 3
@@ -90,7 +90,7 @@ describe('ASH upgrades — stat modifiers (#342)', () => {
   })
 })
 
-describe('ASH upgrades — whenPlayed effects (#341)', () => {
+describe('ASH upgrades — whenPlayed effects', () => {
   function playUpgradeState(upgradeId: string, extra: Partial<Parameters<typeof card>[0]> = {}, unitUpgrades: { cardId: string; owner: 'player' }[] = []) {
     return state({
       cards: { ...CARDS, [upgradeId]: card({ id: upgradeId, type: 'upgrade', cost: 0, ...extra }), OTHER_UP: card({ id: 'OTHER_UP', type: 'upgrade' }) },
@@ -129,7 +129,7 @@ describe('ASH upgrades — whenPlayed effects (#341)', () => {
   })
 })
 
-describe('ASH upgrades — onAttackEnd combat effects (#342)', () => {
+describe('ASH upgrades — onAttackEnd combat effects', () => {
   it('Grav Charge (ASH_085) deals 4 to the attached unit and defeats itself when the unit survives', () => {
     const s = state({
       cards: { ...CARDS, ASH_085: card({ id: 'ASH_085', type: 'upgrade', power: 0, hp: 0 }) },
@@ -179,7 +179,7 @@ describe('ASH upgrades — onAttackEnd combat effects (#342)', () => {
   })
 })
 
-describe('ASH upgrades — Deadly Vulnerability (ASH_150) (#342)', () => {
+describe('ASH upgrades — Deadly Vulnerability (ASH_150)', () => {
   it('doubles combat damage the attached unit takes', () => {
     const s = state({
       cards: { ...CARDS, ASH_150: card({ id: 'ASH_150', type: 'upgrade', power: 0, hp: 0 }) },
@@ -219,7 +219,7 @@ describe('ASH upgrades — Deadly Vulnerability (ASH_150) (#342)', () => {
   })
 })
 
-describe('ASH upgrades — Blade of Talzin (ASH_055) (#342)', () => {
+describe('ASH upgrades — Blade of Talzin (ASH_055)', () => {
   const CARDS55 = {
     ...CARDS,
     ASH_055: card({ id: 'ASH_055', type: 'upgrade', power: 0, hp: 0 }),
@@ -254,7 +254,7 @@ describe('ASH upgrades — Blade of Talzin (ASH_055) (#342)', () => {
   })
 })
 
-describe('ASH upgrades — token-unit creation (#342)', () => {
+describe('ASH upgrades — token-unit creation', () => {
   it("Warrior's Legacy (ASH_134) creates a Mandalorian token when the attached unit is defeated", () => {
     const s = state({
       cards: { ...CARDS, ASH_134: card({ id: 'ASH_134', type: 'upgrade', power: 0, hp: 0 }) },
@@ -285,7 +285,7 @@ describe('ASH upgrades — token-unit creation (#342)', () => {
   })
 })
 
-describe('ASH upgrades — granted triggers (#341)', () => {
+describe('ASH upgrades — granted triggers', () => {
   it('Bokken Saber (ASH_180) gives an Advantage token when the attached unit attacks', () => {
     const s = state({
       cards: { ...CARDS, ASH_180: card({ id: 'ASH_180', type: 'upgrade', power: 1, hp: 1 }) },

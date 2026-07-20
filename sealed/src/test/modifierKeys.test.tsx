@@ -10,7 +10,7 @@ function Probe() {
 
 afterEach(() => fireEvent.keyUp(window, { key: 'Shift', shiftKey: false, altKey: false }))
 
-describe('modifierKeys (#321)', () => {
+describe('modifierKeys', () => {
   it('suppresses the default for a lone Alt press (which stole page focus and broke Shift-to-zoom)', () => {
     render(<Probe />)
     const alt = new KeyboardEvent('keydown', { key: 'Alt', altKey: true, cancelable: true })

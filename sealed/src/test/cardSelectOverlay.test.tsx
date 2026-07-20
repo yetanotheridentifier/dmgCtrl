@@ -4,7 +4,7 @@ import { CardSelectOverlay } from '../components/gameScreen'
 import { state } from './helpers/engineFixtures'
 import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 
-/** Reusable "select a card" overlay (#348) — Vane's choose-an-upgrade picker. */
+/** Reusable "select a card" overlay — Vane's choose-an-upgrade picker. */
 describe('CardSelectOverlay', () => {
   const s = state()
   const items = [

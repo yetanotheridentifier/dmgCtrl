@@ -7,7 +7,7 @@ import type { Action } from '../engine/actions'
 import type { GameState } from '../engine/types'
 
 /**
- * Targeting rules (#357) — who may attack what: "can't attack bases" (Wicket), "can't be attacked
+ * Targeting rules — who may attack what: "can't attack bases" (Wicket), "can't be attacked
  * while …" (Tatooine Repulsor Train) and "may attack either arena" (Red Leader). All are enforced in
  * `legalMoves` (`enemyAttackTargets` + the base-attack move), so they also bind Ambush/Support attacks.
  */
@@ -25,7 +25,7 @@ const attacks = (s: GameState, attackerId: string) =>
 const targetsOf = (s: GameState, attackerId: string) =>
   attacks(s, attackerId).map(a => (a.target.kind === 'base' ? 'base' : a.target.instanceId)).sort()
 
-describe("Wicket (034) — can't attack bases (#357)", () => {
+describe("Wicket (034) — can't attack bases", () => {
   it('offers enemy units but never the base', () => {
     const s = state({
       cards: F,
@@ -43,7 +43,7 @@ describe("Wicket (034) — can't attack bases (#357)", () => {
   })
 })
 
-describe('Red Leader (037) — may attack units in either arena (#357)', () => {
+describe('Red Leader (037) — may attack units in either arena', () => {
   it('reaches a ground unit from the space arena', () => {
     const s = state({
       cards: F,
@@ -67,7 +67,7 @@ describe('Red Leader (037) — may attack units in either arena (#357)', () => {
   })
 })
 
-describe("Tatooine Repulsor Train (035) — can't be attacked while you control 2+ exhausted units (#357)", () => {
+describe("Tatooine Repulsor Train (035) — can't be attacked while you control 2+ exhausted units", () => {
   const board = (defenderExtras: ReturnType<typeof unit>[], train: Parameters<typeof unit>[2] = {}) => state({
     cards: F,
     players: {

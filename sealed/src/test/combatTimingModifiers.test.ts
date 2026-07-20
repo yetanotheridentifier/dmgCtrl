@@ -6,7 +6,7 @@ import { state, player, unit, card, ready, CARDS } from './helpers/engineFixture
 import type { GameState } from '../engine/types'
 
 /**
- * Combat-timing and combat-entry modifiers (#357): dealing damage before the defender
+ * Combat-timing and combat-entry modifiers: dealing damage before the defender
  * (Carson Teva) and a bonus that only applies to an Ambush attack (Heroic Purrgil).
  */
 const F = {
@@ -20,7 +20,7 @@ const F = {
 const U = (s: GameState, id: string) => [...s.players.player.units, ...s.players.opponent.units].find(u => u.instanceId === id)!
 const rich = (over: Parameters<typeof player>[0] = {}) => player({ resources: ready(20), ...over })
 
-describe('Carson Teva (202) — deals combat damage before the defender (#357)', () => {
+describe('Carson Teva (202) — deals combat damage before the defender', () => {
   it('takes no counter damage when its damage defeats the defender', () => {
     const s = state({ cards: F, players: { player: rich({ units: [unit('c', 'ASH_202')] }), opponent: player({ units: [unit('g', 'GLASS')] }) } })
     const done = resolve(s, { type: 'attack', attackerId: 'c', target: { kind: 'unit', instanceId: 'g' } })
@@ -43,10 +43,10 @@ describe('Carson Teva (202) — deals combat damage before the defender (#357)',
   })
 })
 
-describe('Heroic Purrgil (207) — +2/+0 while attacking using Ambush (#357)', () => {
+describe('Heroic Purrgil (207) — +2/+0 while attacking using Ambush', () => {
   it('gets the bonus on its Ambush attack, but not on a later normal attack', () => {
     const s = state({ cards: F, players: { player: rich({ hand: ['ASH_207'] }), opponent: player({ units: [unit('e', 'SPC', { arena: 'space' })] }) } })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     const ambush = played.pendingChoices?.[0]
     expect(ambush).toMatchObject({ kind: 'ambush' })
     const purrgil = played.players.player.units.find(u => u.cardId === 'ASH_207')!

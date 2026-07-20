@@ -47,7 +47,7 @@ describe('initGame', () => {
     }
   })
 
-  it('expands deck entries by count and deals 6 (resources are taken after mulligans — #304)', () => {
+  it('expands deck entries by count and deals 6 (resources are taken after mulligans)', () => {
     const state = initGame(DECK, DECK, CARD_DB, { firstPlayer: 'player', shuffle: identity })
     for (const side of ['player', 'opponent'] as const) {
       const p = state.players[side]

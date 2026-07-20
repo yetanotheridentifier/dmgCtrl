@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
 import { CARDS, player, state, unit, ready } from './helpers/engineFixtures'
 
-describe('resolve — playCard', () => {
+describe('resolve — playUnit', () => {
   const base = () =>
     state({
       players: {
@@ -12,7 +12,7 @@ describe('resolve — playCard', () => {
     })
 
   it('puts the unit into its arena exhausted and removes it from hand', () => {
-    const next = resolve(base(), { type: 'playCard', handIndex: 0 })
+    const next = resolve(base(), { type: 'playUnit', handIndex: 0 })
     const p = next.players.player
     expect(p.hand).toEqual(['TST_E1'])
     expect(p.units).toHaveLength(1)
@@ -20,27 +20,27 @@ describe('resolve — playCard', () => {
   })
 
   it('pays the effective cost by exhausting resources', () => {
-    const next = resolve(base(), { type: 'playCard', handIndex: 0 })
+    const next = resolve(base(), { type: 'playUnit', handIndex: 0 })
     expect(next.players.player.resources.filter(r => r.exhausted)).toHaveLength(2)
   })
 
   it('assigns a fresh instance id from the counter', () => {
     const s = base()
-    const next = resolve(s, { type: 'playCard', handIndex: 0 })
+    const next = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(next.players.player.units[0].instanceId).toBe('u10')
     expect(next.instanceCounter).toBe(11)
   })
 
   it('passes the turn to the opponent and resets the pass chain', () => {
     const s = { ...base(), consecutivePasses: 1 }
-    const next = resolve(s, { type: 'playCard', handIndex: 0 })
+    const next = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(next.activePlayer).toBe('opponent')
     expect(next.consecutivePasses).toBe(0)
   })
 
   it('does not mutate the input state', () => {
     const s = base()
-    resolve(s, { type: 'playCard', handIndex: 0 })
+    resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(s.players.player.hand).toHaveLength(2)
     expect(s.players.player.units).toHaveLength(0)
   })
@@ -111,7 +111,7 @@ describe('resolve — pass and phase end', () => {
       },
     })
     const afterPass = resolve(s, { type: 'pass' })
-    const afterPlay = resolve(afterPass, { type: 'playCard', handIndex: 0 })
+    const afterPlay = resolve(afterPass, { type: 'playUnit', handIndex: 0 })
     expect(afterPlay.consecutivePasses).toBe(0)
     expect(afterPlay.phase).toBe('action')
   })
@@ -136,7 +136,7 @@ describe('resolve — takeInitiative', () => {
     })
     const taken = resolve(s, { type: 'takeInitiative' })
     expect(taken.activePlayer).toBe('opponent')
-    const afterPlay = resolve(taken, { type: 'playCard', handIndex: 0 })
+    const afterPlay = resolve(taken, { type: 'playUnit', handIndex: 0 })
     // player (the taker) auto-passed; turn returns to opponent
     expect(afterPlay.activePlayer).toBe('opponent')
     expect(afterPlay.phase).toBe('action')
@@ -224,7 +224,7 @@ describe('resolve — attack', () => {
     expect(next.winner).toBe('player')
   })
 
-  it('is a draw when both bases are defeated by the same action (#323)', () => {
+  it('is a draw when both bases are defeated by the same action', () => {
     // The attacker's own base is already at lethal damage; the attack pushes the
     // defender's base to lethal too, so both are defeated at once → draw.
     const s = state({

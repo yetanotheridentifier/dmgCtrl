@@ -1,7 +1,7 @@
 /**
  * The favicon for the current environment: the **white** dmgCtrl icon in dev
  * (so the dev.dmgctrl.app tab is easy to tell apart), the standard **blue** icon
- * in prod (#329). Paths are under the app base (`/sealed/`).
+ * in prod. Paths are under the app base (`/sealed/`).
  */
 export function faviconHref(isDev: boolean, baseUrl: string): string {
   return `${baseUrl}${isDev ? 'dmgctrl-icon-192-white.svg' : 'dmgCtrl-icon-192.png'}`

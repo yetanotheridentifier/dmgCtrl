@@ -17,7 +17,7 @@ describe('App shell', () => {
     expect(screen.getByRole('heading', { name: /dmgctrl/i })).toBeInTheDocument()
   })
 
-  it('shows the build tag (dev: fixed bottom-right badge), not in the header (#332)', () => {
+  it('shows the build tag (dev: fixed bottom-right badge), not in the header', () => {
     render(<App />)
     const tag = screen.getByTestId('build-tag')
     expect(tag).toHaveTextContent(/b\d+/)
@@ -26,7 +26,7 @@ describe('App shell', () => {
     expect(within(screen.getByRole('banner')).queryByTestId('build-tag')).toBeNull()
   })
 
-  it('exits the game via the dmgCtrl icon, returning to decks (#332)', async () => {
+  it('exits the game via the dmgCtrl icon, returning to decks', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network')))
     const user = userEvent.setup()
     saveDeck({ name: 'Ready Deck', leader: 'SOR_010', base: 'SOR_029', cards: [] })

@@ -8,8 +8,8 @@ import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
 import type { GameState, PlayerState } from '../engine/types'
 
 /**
- * Group D (#355): "When Played" effects. Most reuse existing effect primitives. Tests play the unit
- * through the real `playCard` path and assert the resulting board.
+ * "When Played" effects. Most reuse existing effect primitives. Tests play the unit
+ * through the real `playUnit` path and assert the resulting board.
  */
 
 const D = {
@@ -26,7 +26,7 @@ const D = {
   SPACER: card({ id: 'SPACER', type: 'unit', arena: 'space', power: 2, hp: 2 }),
   UNIQUE_U: card({ id: 'UNIQUE_U', type: 'unit', arena: 'ground', power: 2, hp: 2, unique: true }),
   SHIELDED_U: card({ id: 'SHIELDED_U', type: 'unit', arena: 'ground', power: 2, hp: 2, keywords: [{ name: 'Shielded' }] }),
-  // D2
+  // Single-target effects
   ASH_259: card({ id: 'ASH_259', type: 'unit', arena: 'ground', power: 1, hp: 1 }), // LEP Ratcatcher
   ASH_170: card({ id: 'ASH_170', type: 'unit', arena: 'ground', power: 3, hp: 3 }), // Desert Sharpshooter
   ASH_174: card({ id: 'ASH_174', type: 'unit', arena: 'space', power: 3, hp: 3 }), // StarFortress Heavy Bomber
@@ -42,51 +42,51 @@ const D = {
   CHEAP: card({ id: 'CHEAP', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 2 }),
   EXPENSIVE: card({ id: 'EXPENSIVE', type: 'unit', arena: 'ground', cost: 5, power: 2, hp: 5 }),
   UPG: card({ id: 'UPG', type: 'upgrade', power: 0, hp: 0 }),
-  // D3
+  // Multi-step effects
   ASH_071: card({ id: 'ASH_071', type: 'unit', arena: 'space', power: 2, hp: 3 }), // Battered Haulcraft
   ASH_158: card({ id: 'ASH_158', type: 'unit', arena: 'ground', power: 3, hp: 7, keywords: [{ name: 'Saboteur' }] }), // Han Solo
   ASH_112: card({ id: 'ASH_112', type: 'unit', arena: 'ground', power: 5, hp: 5, keywords: [{ name: 'Restore', value: 1 }] }), // Luke Skywalker
   ASH_176: card({ id: 'ASH_176', type: 'unit', arena: 'ground', power: 4, hp: 6 }), // Imposing Scout Walker
   TOUGH_SPACE: card({ id: 'TOUGH_SPACE', type: 'unit', arena: 'space', power: 1, hp: 4 }),
-  // D4 — generalised next-unit grants
+  // "Next unit you play" grants
   ASH_237: card({ id: 'ASH_237', type: 'unit', arena: 'ground', power: 1, hp: 1, keywords: [{ name: 'Raid', value: 1 }] }), // Mouse Droid
   ASH_248: card({ id: 'ASH_248', type: 'unit', arena: 'ground', power: 2, hp: 3 }), // Neel
   IMP3: card({ id: 'IMP3', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 2, traits: ['Imperial'] }),
   NONIMP3: card({ id: 'NONIMP3', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 2 }),
   LOWPOW: card({ id: 'LOWPOW', type: 'unit', arena: 'ground', cost: 2, power: 1, hp: 3 }),
-  // Phase 2 — multi-target pick
+  // Multi-target pick
   ASH_205: card({ id: 'ASH_205', type: 'unit', arena: 'ground', power: 3, hp: 3 }), // Inspiring Veteran
   ASH_053: card({ id: 'ASH_053', type: 'unit', arena: 'ground', power: 6, hp: 6 }), // Pre Vizsla
-  // Phase 3 — discard from hand
+  // Discard from hand
   ASH_260: card({ id: 'ASH_260', type: 'unit', arena: 'ground', power: 1, hp: 3 }), // Mos Espa Watermonger
-  // Phase 4 — opponent discard + distribute damage
+  // Opponent discard + distribute damage
   ASH_148: card({ id: 'ASH_148', type: 'unit', arena: 'ground', power: 8, hp: 7, keywords: [{ name: 'Overwhelm' }] }), // Ninth Sister
   COST3: card({ id: 'COST3', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 2 }),
   COST0: card({ id: 'COST0', type: 'event', cost: 0 }),
-  // Phase 5 — look at opponent's hand
+  // Look at opponent's hand
   ASH_250: card({ id: 'ASH_250', type: 'unit', arena: 'ground', power: 3, hp: 2 }), // Imperial Defector
   ASH_220: card({ id: 'ASH_220', type: 'unit', arena: 'ground', power: 3, hp: 3 }), // Remnant Lookouts
   DRAWN: card({ id: 'DRAWN', type: 'unit', arena: 'ground', power: 1, hp: 1 }),
-  // Phase 5 — search top 5 for a trait match
+  // Search top 5 for a trait match
   ASH_107: card({ id: 'ASH_107', type: 'unit', arena: 'ground', power: 3, hp: 2, traits: ['Mandalorian'] }), // Clan Wren Loyalist
   TRAIT_U: card({ id: 'TRAIT_U', type: 'unit', arena: 'ground', power: 2, hp: 2, traits: ['Rebel'] }),
   REBELCARD: card({ id: 'REBELCARD', type: 'unit', arena: 'ground', traits: ['Rebel'] }),
   MANDOCARD: card({ id: 'MANDOCARD', type: 'unit', arena: 'ground', traits: ['Mandalorian'] }),
   NEUTRAL: card({ id: 'NEUTRAL', type: 'unit', arena: 'ground', traits: ['Jedi'] }),
   EXTRA: card({ id: 'EXTRA', type: 'unit', arena: 'ground', traits: [] }),
-  // Phase 5 — play a discounted Heroism unit
+  // Play a discounted Heroism unit
   ASH_108: card({ id: 'ASH_108', type: 'unit', arena: 'ground', power: 3, hp: 2, aspects: ['Heroism'] }), // Crix Madine
   HEROUNIT: card({ id: 'HEROUNIT', type: 'unit', arena: 'ground', cost: 5, power: 2, hp: 2, aspects: ['Heroism'] }),
   VILLAINUNIT: card({ id: 'VILLAINUNIT', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 2, aspects: ['Villainy'] }),
-  // Phase 5 — Admiral Ackbar: self-defeat + search top 10 for cheap space units, play free
+  // Admiral Ackbar: self-defeat + search top 10 for cheap space units, play free
   ASH_110: card({ id: 'ASH_110', type: 'unit', arena: 'ground', power: 6, hp: 6 }), // Admiral Ackbar
   SPACE2: card({ id: 'SPACE2', type: 'unit', arena: 'space', cost: 2, power: 2, hp: 2 }),
   SPACE3: card({ id: 'SPACE3', type: 'unit', arena: 'space', cost: 3, power: 3, hp: 3 }),
   SPACE6: card({ id: 'SPACE6', type: 'unit', arena: 'space', cost: 6, power: 6, hp: 6 }),
   GROUND2: card({ id: 'GROUND2', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 2 }),
-  // Phase 6 — name a card
+  // Name a card
   ASH_077: card({ id: 'ASH_077', type: 'unit', arena: 'ground', power: 2, hp: 5, keywords: [{ name: 'Restore', value: 1 }] }), // Ryder Azadi
-  // Phase 7 — modal / variable damage & heal
+  // Modal / variable damage & heal
   ASH_147: card({ id: 'ASH_147', type: 'unit', arena: 'ground', power: 3, hp: 7, keywords: [{ name: 'Grit' }] }), // The Cyborg Mech
   ASH_044: card({ id: 'ASH_044', type: 'unit', arena: 'ground', power: 3, hp: 4 }), // Barriss Offee
   TANK: card({ id: 'TANK', type: 'unit', arena: 'ground', power: 1, hp: 10 }),
@@ -98,12 +98,12 @@ const U = (s: GameState, id: string) => [...s.players.player.units, ...s.players
 
 /** Play `cardId` from hand and return the resulting state (ample resources; no aspect penalties). */
 const play = (cardId: string, pl: Partial<PlayerState> = {}, opp: Partial<PlayerState> = {}): GameState =>
-  resolve(state({ cards: D, players: { player: player({ hand: [cardId], resources: ready(15), ...pl }), opponent: player(opp) } }), { type: 'playCard', handIndex: 0 })
+  resolve(state({ cards: D, players: { player: player({ hand: [cardId], resources: ready(15), ...pl }), opponent: player(opp) } }), { type: 'playUnit', handIndex: 0 })
 const played = (s: GameState, cardId: string) => s.players.player.units.find(u => u.cardId === cardId)!
 const advs = (u: { upgrades: { cardId: string }[] }) => u.upgrades.filter(a => a.cardId === TOKEN_ADVANTAGE).length
 const shields = (u: { upgrades: { cardId: string }[] }) => u.upgrades.filter(a => a.cardId === TOKEN_SHIELD).length
 
-describe('Group D1 — When Played, self / no-target (#355)', () => {
+describe('When Played — self / no target', () => {
   it('Ferry Droid (218): 4 Advantage tokens to itself', () => {
     expect(advs(played(play('ASH_218'), 'ASH_218'))).toBe(4)
   })
@@ -154,7 +154,7 @@ describe('Group D1 — When Played, self / no-target (#355)', () => {
   })
 })
 
-describe('Group D2 — When Played, single target (#355)', () => {
+describe('When Played — single target', () => {
   it('LEP Ratcatcher (259): may deal 1 to a ground unit (or decline)', () => {
     const s = play('ASH_259', { units: [unit('g', 'GRUNT')] }, { units: [unit('e', 'GRUNT'), unit('sp', 'SPACER', { arena: 'space' })] })
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayDamage', amount: 1 })
@@ -224,7 +224,7 @@ describe('Group D2 — When Played, single target (#355)', () => {
   })
 })
 
-describe('Group D3 — When Played, multi-step (#355)', () => {
+describe('When Played — multi-step', () => {
   it('Battered Haulcraft (071): deals 1 to itself and 1 to a (mandatory) enemy space unit', () => {
     const s = play('ASH_071', {}, { units: [unit('es', 'TOUGH_SPACE', { arena: 'space' }), unit('eg', 'GRUNT', { arena: 'ground' })] })
     expect(played(s, 'ASH_071').damage).toBe(1) // self-damage
@@ -262,7 +262,7 @@ describe('Group D3 — When Played, multi-step (#355)', () => {
   })
 })
 
-describe('Group D4 — generalised next-unit grants (#355)', () => {
+describe('When Played — "next unit you play" grants', () => {
   it('Mouse Droid (237): grants −1 cost to the next Imperial unit', () => {
     expect(play('ASH_237').players.player.nextUnitGrants).toEqual([{ costDelta: -1, trait: 'Imperial' }])
   })
@@ -289,7 +289,7 @@ describe('Group D4 — generalised next-unit grants (#355)', () => {
   })
 })
 
-describe('Group D Phase 2 — multi-target pick (#355)', () => {
+describe('When Played — multi-target pick', () => {
   const pickTargets = (s: GameState) => (s.pendingChoices![0] as { targets: string[] }).targets
 
   it('Inspiring Veteran (205): an Advantage to each of up to 3 exhausted units (self is exhausted too)', () => {
@@ -327,7 +327,7 @@ describe('Group D Phase 2 — multi-target pick (#355)', () => {
   })
 })
 
-describe('Group D Phase 3 — discard from hand (Mos Espa Watermonger #355)', () => {
+describe('When Played — discard from hand (Mos Espa Watermonger)', () => {
   const discard = (s: GameState, handIndex: number) =>
     resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, handIndex })
   const skip = (s: GameState) => resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id })
@@ -370,7 +370,7 @@ describe('Group D Phase 3 — discard from hand (Mos Espa Watermonger #355)', ()
   })
 })
 
-describe('Group D Phase 4 — opponent discard + distribute damage (Ninth Sister #355)', () => {
+describe('When Played — opponent discard, then distribute damage (Ninth Sister)', () => {
   const oppDiscard = (s: GameState, handIndex: number) =>
     resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, handIndex })
   const deal = (s: GameState, id: string) => resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, targetInstanceId: id })
@@ -430,7 +430,7 @@ describe('Group D Phase 4 — opponent discard + distribute damage (Ninth Sister
   })
 })
 
-describe('Group D Phase 5 — look at opponent hand (#355)', () => {
+describe('When Played — look at the opponent\'s hand', () => {
   const skip = (s: GameState) => resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id })
   const pick = (s: GameState, handIndex: number) => resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, handIndex })
 
@@ -471,7 +471,7 @@ describe('Group D Phase 5 — look at opponent hand (#355)', () => {
   })
 })
 
-describe('Group D Phase 5 — search top 5 for a trait match (Clan Wren Loyalist #355)', () => {
+describe('When Played — search top 5 for a trait match (Clan Wren Loyalist)', () => {
   it('reveals the top 5 and only lets you draw a trait-sharing card', () => {
     const s = play('ASH_107', { units: [unit('u', 'TRAIT_U')], deck: ['REBELCARD', 'NEUTRAL', 'MANDOCARD', 'NEUTRAL', 'NEUTRAL', 'EXTRA'] })
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'searchDraw', revealed: ['REBELCARD', 'NEUTRAL', 'MANDOCARD', 'NEUTRAL', 'NEUTRAL'] })
@@ -506,7 +506,7 @@ describe('Group D Phase 5 — search top 5 for a trait match (Clan Wren Loyalist
   })
 })
 
-describe('Group D Phase 5 — play a discounted Heroism unit (Crix Madine #355)', () => {
+describe('When Played — play a discounted Heroism unit (Crix Madine)', () => {
   it('offers only Heroism hand units, discounted 2 per arena controlled', () => {
     const s = play('ASH_108', { hand: ['ASH_108', 'HEROUNIT', 'VILLAINUNIT'] }) // Crix alone on ground → controls ground only
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'playUnitFromHand', optional: true, costDelta: -2 })
@@ -540,7 +540,7 @@ describe('Group D Phase 5 — play a discounted Heroism unit (Crix Madine #355)'
   })
 })
 
-describe('Group D Phase 5 — Admiral Ackbar (110): self-defeat + search-play-free', () => {
+describe('When Played — Admiral Ackbar (110): self-defeat, then search and play free', () => {
   const accept = (s: GameState) => resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id })
   const skip = (s: GameState) => resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id })
   const pick = (s: GameState, deckIndex: number) => resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, deckIndex })
@@ -608,9 +608,9 @@ describe('Group D Phase 5 — Admiral Ackbar (110): self-defeat + search-play-fr
   })
 })
 
-describe('Group D Phase 6 — name a card (Ryder Azadi #355)', () => {
+describe('When Played — name a card (Ryder Azadi)', () => {
   const oppPlayable = (s: GameState) =>
-    legalMoves(s).filter(a => a.type === 'playCard').map(a => s.players.opponent.hand[(a as { handIndex: number }).handIndex])
+    legalMoves(s).filter(a => a.type === 'playUnit').map(a => s.players.opponent.hand[(a as { handIndex: number }).handIndex])
   const name = (s: GameState, cardName: string) => resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, cardName })
 
   it('raises a name-a-card choice when played', () => {
@@ -637,7 +637,7 @@ describe('Group D Phase 6 — name a card (Ryder Azadi #355)', () => {
   })
 })
 
-describe('Group D Phase 7 — The Cyborg Mech (147): modal ground strike', () => {
+describe('When Played — The Cyborg Mech (147): modal ground strike', () => {
   it('deals 2 to an undamaged ground unit', () => {
     const s = play('ASH_147', {}, { units: [unit('u', 'TANK', { arena: 'ground' })] })
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'variableStrike', undamagedAmount: 2, damagedAmount: 5 })
@@ -660,7 +660,7 @@ describe('Group D Phase 7 — The Cyborg Mech (147): modal ground strike', () =>
   })
 })
 
-describe('Group D Phase 7 — Barriss Offee (044): heal up to 2, Advantage per heal', () => {
+describe('When Played — Barriss Offee (044): heal up to 2, Advantage per heal', () => {
   it('heals up to 2 from a unit and gives that many Advantage tokens', () => {
     const s = play('ASH_044', { units: [unit('h', 'TANK', { arena: 'ground', damage: 3 })] })
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'healForAdvantage', maxHeal: 2 })

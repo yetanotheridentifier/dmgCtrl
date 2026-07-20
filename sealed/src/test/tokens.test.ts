@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { tokenLayout } from '../components/tokens'
 
-describe('tokenLayout — physical-token placement on unit cards (#326)', () => {
+describe('tokenLayout — physical-token placement on unit cards', () => {
   it('places a single token over the middle of the art when ready (portrait)', () => {
     const pos = tokenLayout(1, 'portrait')
     expect(pos).toHaveLength(1)

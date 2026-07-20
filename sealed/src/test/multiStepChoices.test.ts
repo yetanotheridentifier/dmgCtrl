@@ -6,7 +6,7 @@ import { state, player, unit, card, ready, CARDS } from './helpers/engineFixture
 import type { GameState } from '../engine/types'
 
 /**
- * Units whose text is a sequence of decisions (#357): pick two things, pay-then-choose,
+ * Units whose text is a sequence of decisions: pick two things, pay-then-choose,
  * reveal-then-target, or pick-then-pick-a-mode.
  */
 const F = {
@@ -28,7 +28,7 @@ const rich = (over: Parameters<typeof player>[0] = {}) => player({ resources: re
 const choice = (s: GameState) => s.pendingChoices![0]
 const readyCount = (s: GameState, p: 'player' | 'opponent' = 'player') => s.players[p].resources.filter(r => !r.exhausted).length
 
-describe('Chimaera (052) — pair a friendly and an enemy unit for defeat (#357)', () => {
+describe('Chimaera (052) — pair a friendly and an enemy unit for defeat', () => {
   const board = () => state({
     cards: F,
     players: {
@@ -38,17 +38,17 @@ describe('Chimaera (052) — pair a friendly and an enemy unit for defeat (#357)
   })
 
   it('defeats both chosen units, in two picks', () => {
-    const p = resolve(board(), { type: 'playCard', handIndex: 0 })
-    expect(choice(p)).toMatchObject({ kind: 'selectPairToDefeat' })
+    const p = resolve(board(), { type: 'playUnit', handIndex: 0 })
+    expect(choice(p)).toMatchObject({ kind: 'selectPair' })
     const friendly = resolve(p, { type: 'acceptChoice', choiceId: choice(p).id, targetInstanceId: 'f' })
-    expect(choice(friendly)).toMatchObject({ kind: 'selectPairToDefeat', chosenFriendly: 'f' })
+    expect(choice(friendly)).toMatchObject({ kind: 'selectPair', chosenFriendly: 'f' })
     const done = resolve(friendly, { type: 'acceptChoice', choiceId: choice(friendly).id, targetInstanceId: 'e' })
     expect(U(done, 'f')).toBeUndefined()
     expect(U(done, 'e')).toBeUndefined()
   })
 
   it('declining costs nothing', () => {
-    const p = resolve(board(), { type: 'playCard', handIndex: 0 })
+    const p = resolve(board(), { type: 'playUnit', handIndex: 0 })
     const done = resolve(p, { type: 'skipTrigger', choiceId: choice(p).id })
     expect(U(done, 'f')).toBeDefined()
     expect(U(done, 'e')).toBeDefined()
@@ -67,7 +67,7 @@ describe('Chimaera (052) — pair a friendly and an enemy unit for defeat (#357)
   })
 })
 
-describe('Jabba the Hutt (042) — return an upgrade, then replay it free (#357)', () => {
+describe('Jabba the Hutt (042) — return an upgrade, then replay it free', () => {
   it('returns your own upgrade and offers to replay it for free', () => {
     const s = state({
       cards: F,
@@ -76,7 +76,7 @@ describe('Jabba the Hutt (042) — return an upgrade, then replay it free (#357)
         opponent: player(),
       },
     })
-    const p = resolve(s, { type: 'playCard', handIndex: 0 })
+    const p = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(choice(p)).toMatchObject({ kind: 'selectUpgradeToReturn' })
     const returned = resolve(p, { type: 'acceptChoice', choiceId: choice(p).id, optionIndex: 0 })
     expect(U(returned, 'g').upgrades).toHaveLength(0)
@@ -98,14 +98,14 @@ describe('Jabba the Hutt (042) — return an upgrade, then replay it free (#357)
         opponent: player({ units: [unit('e', 'GRD', { upgrades: [{ cardId: 'UPG', owner: 'opponent' }] })] }),
       },
     })
-    const p = resolve(s, { type: 'playCard', handIndex: 0 })
+    const p = resolve(s, { type: 'playUnit', handIndex: 0 })
     const returned = resolve(p, { type: 'acceptChoice', choiceId: choice(p).id, optionIndex: 0 })
     expect(returned.players.opponent.hand).toContain('UPG') // to ITS owner's hand
     expect(returned.pendingChoices ?? []).toHaveLength(0) // not your hand → no free play
   })
 })
 
-describe('Jod Na Nawood (219) — pay 4 to exhaust an arena (#357)', () => {
+describe('Jod Na Nawood (219) — pay 4 to exhaust an arena', () => {
   it('pays 4 and exhausts every unit in the chosen arena, both sides', () => {
     const s = state({
       cards: F,
@@ -114,7 +114,7 @@ describe('Jod Na Nawood (219) — pay 4 to exhaust an arena (#357)', () => {
         opponent: player({ units: [unit('eg', 'GRD'), unit('es', 'SPC', { arena: 'space' })] }),
       },
     })
-    const p = resolve(s, { type: 'playCard', handIndex: 0 })
+    const p = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(choice(p)).toMatchObject({ kind: 'mayPayExhaustArena', cost: 4 })
     const before = readyCount(p)
     const done = resolve(p, { type: 'acceptChoice', choiceId: choice(p).id, optionIndex: 0 }) // ground
@@ -130,12 +130,12 @@ describe('Jod Na Nawood (219) — pay 4 to exhaust an arena (#357)', () => {
       cards: F,
       players: { player: player({ resources: ready(3), hand: ['ASH_219'] }), opponent: player() },
     })
-    const p = resolve(s, { type: 'playCard', handIndex: 0 })
+    const p = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(p.pendingChoices ?? []).toHaveLength(0)
   })
 })
 
-describe('Queen Soruna (132) — reveal a unit to snipe one of matching cost (#357)', () => {
+describe('Queen Soruna (132) — reveal a unit to snipe one of matching cost', () => {
   it('deals 3 to a unit costing the same as the revealed card', () => {
     const s = state({
       cards: F,
@@ -144,7 +144,7 @@ describe('Queen Soruna (132) — reveal a unit to snipe one of matching cost (#3
         opponent: player({ units: [unit('match', 'COST3'), unit('other', 'COST5')] }),
       },
     })
-    const p = resolve(s, { type: 'playCard', handIndex: 0 })
+    const p = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(choice(p)).toMatchObject({ kind: 'revealUnitFromHand' })
     const revealed = resolve(p, { type: 'acceptChoice', choiceId: choice(p).id, handIndex: 0 }) // COST3
     const dmg = choice(revealed)
@@ -155,13 +155,13 @@ describe('Queen Soruna (132) — reveal a unit to snipe one of matching cost (#3
 
   it('can be declined', () => {
     const s = state({ cards: F, players: { player: rich({ hand: ['ASH_132', 'COST3'] }), opponent: player({ units: [unit('m', 'COST3')] }) } })
-    const p = resolve(s, { type: 'playCard', handIndex: 0 })
+    const p = resolve(s, { type: 'playUnit', handIndex: 0 })
     const done = resolve(p, { type: 'skipTrigger', choiceId: choice(p).id })
     expect(U(done, 'm').damage).toBe(0)
   })
 })
 
-describe('Trask Walker (133) — take a discarded unit to hand, or bottom it and heal (#357)', () => {
+describe('Trask Walker (133) — take a discarded unit to hand, or bottom it and heal', () => {
   const board = () => state({
     cards: F,
     players: {
@@ -171,7 +171,7 @@ describe('Trask Walker (133) — take a discarded unit to hand, or bottom it and
   })
 
   it('offers only discard units costing 7 or less, then the two modes', () => {
-    const p = resolve(board(), { type: 'playCard', handIndex: 0 })
+    const p = resolve(board(), { type: 'playUnit', handIndex: 0 })
     expect(choice(p)).toMatchObject({ kind: 'selectFromDiscard', candidates: ['COST3'] }) // DEAR costs 9
     const picked = resolve(p, { type: 'acceptChoice', choiceId: choice(p).id, optionIndex: 0 })
     expect(choice(picked)).toMatchObject({ kind: 'chooseDiscardFate', cardId: 'COST3' })
@@ -183,7 +183,7 @@ describe('Trask Walker (133) — take a discarded unit to hand, or bottom it and
   })
 
   it('bottoms the card and heals 3 on the other mode', () => {
-    const p = resolve(board(), { type: 'playCard', handIndex: 0 })
+    const p = resolve(board(), { type: 'playUnit', handIndex: 0 })
     const picked = resolve(p, { type: 'acceptChoice', choiceId: choice(p).id, optionIndex: 0 })
     const bottomed = resolve(picked, { type: 'acceptChoice', choiceId: choice(picked).id, optionIndex: 0 })
     expect(bottomed.players.player.deck.at(-1)).toBe('COST3')

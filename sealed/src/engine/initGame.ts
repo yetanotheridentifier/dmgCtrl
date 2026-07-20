@@ -42,7 +42,7 @@ function initPlayer(deck: ParsedDeck, shuffle: <T>(arr: T[]) => T[]): PlayerStat
 }
 
 /**
- * Two decklists → the start of setup (T2.2 + #304): bases and leaders placed,
+ * Two decklists → the start of setup: bases and leaders placed,
  * decks shuffled, 6 cards dealt. The game begins in the SETUP phase — mulligan
  * decisions (CR 5.2.1e, initiative holder first) and the taking of 2 starting
  * resources (CR 5.2.1f) resolve through the normal action pipeline; round 1's

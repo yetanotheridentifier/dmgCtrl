@@ -18,7 +18,7 @@ interface SyncOptions {
 }
 
 /**
- * Progressive catalogue sync (T1.5): walk the given refs in order — callers pass
+ * Progressive catalogue sync: walk the given refs in order — callers pass
  * priority order (active deck cards first) — hydrating card JSON and thumbnails
  * for anything not yet cached. Individual failures don't stop the walk.
  */

@@ -23,7 +23,7 @@ export default function App() {
     <div className="min-h-screen text-ink font-sans">
       {screen === 'game' && selectedDeck && opponentDeck ? (
         // The game screen is full-bleed: its own header (dmgCtrl icon = exit, ? =
-        // help) lives in the log column, so the play area reaches the top (#332).
+        // help) lives in the log column, so the play area reaches the top.
         <GameScreen
           deck={selectedDeck}
           opponentDeck={opponentDeck}
@@ -67,7 +67,7 @@ export default function App() {
       )}
 
       {/* Dev-only build marker in the bottom-right corner (setup + game screens);
-          in prod it lives at the foot of the Help page instead (#332). */}
+          in prod it lives at the foot of the Help page instead. */}
       {isDev() && screen !== 'help' && (
         <div
           data-testid="build-tag"

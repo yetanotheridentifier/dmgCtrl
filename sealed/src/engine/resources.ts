@@ -1,7 +1,7 @@
 import type { PlayerState } from './types'
 
 /**
- * Resource system (T2.3). Pure PlayerState helpers — no mutation.
+ * Resource system. Pure PlayerState helpers — no mutation.
  * CR 1.7: costs are paid by exhausting ready resources; exhausted resources
  * cannot pay; resourced cards enter play facedown and exhausted (CR 1.7.7) —
  * the regroup ready-step then readies them.

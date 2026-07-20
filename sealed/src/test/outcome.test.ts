@@ -10,7 +10,7 @@ describe('outcomeBanner', () => {
     expect(outcomeBanner('opponent').title).toBe('You lost')
   })
 
-  it('reports a draw when both bases fall together (#323)', () => {
+  it('reports a draw when both bases fall together', () => {
     expect(outcomeBanner('draw').title).toBe('Draw')
   })
 

@@ -9,7 +9,7 @@ import { state, player, unit, card, ready, CARDS } from './helpers/engineFixture
 import type { GameState } from '../engine/types'
 
 /**
- * Subsystem-tier units (#357): an aura that grants a *triggered ability* to other units
+ * An aura that grants a *triggered ability* to other units
  * (Bo-Katan's Gauntlet), capturing a card under a unit (Bothan-5), and Elzar Mann's
  * distribute-then-opponent-searches chain.
  */
@@ -29,7 +29,7 @@ const rich = (over: Parameters<typeof player>[0] = {}) => player({ resources: re
 const choice = (s: GameState) => s.pendingChoices![0]
 const mandos = (s: GameState, p: 'player' | 'opponent' = 'player') => s.players[p].units.filter(u => u.cardId === TOKEN_MANDALORIAN).length
 
-describe("Bo-Katan's Gauntlet (063) — grants other friendly units a When Defeated ability (#357)", () => {
+describe("Bo-Katan's Gauntlet (063) — grants other friendly units a When Defeated ability", () => {
   it('creates a Mandalorian token when another friendly non-token unit is defeated', () => {
     const s = state({ cards: F, players: { player: rich({ units: [unit('bk', 'ASH_063'), unit('f', 'FODDER')] }), opponent: player() } })
     const dead = dealDamageToUnit(s, 'f', 1)
@@ -65,7 +65,7 @@ describe("Bo-Katan's Gauntlet (063) — grants other friendly units a When Defea
   })
 })
 
-describe('Bothan-5 (128) — captures a defeated friendly unit from the discard (#357)', () => {
+describe('Bothan-5 (128) — captures a defeated friendly unit from the discard', () => {
   const board = (extra: Parameters<typeof unit>[2] = {}) => state({
     cards: F,
     players: { player: rich({ units: [unit('b', 'ASH_128', extra), unit('f', 'FODDER')] }), opponent: player() },
@@ -125,7 +125,7 @@ describe('Bothan-5 (128) — captures a defeated friendly unit from the discard 
   })
 })
 
-describe('Elzar Mann (224) — distribute Advantage, then the opponent digs for an event (#357)', () => {
+describe('Elzar Mann (224) — distribute Advantage, then the opponent digs for an event', () => {
   const board = () => state({
     cards: F,
     players: {
@@ -135,7 +135,7 @@ describe('Elzar Mann (224) — distribute Advantage, then the opponent digs for 
   })
 
   it('distributes up to 5, then has the opponent search twice that many for an event', () => {
-    const p = resolve(board(), { type: 'playCard', handIndex: 0 })
+    const p = resolve(board(), { type: 'playUnit', handIndex: 0 })
     expect(choice(p)).toMatchObject({ kind: 'distributeTokens', remaining: 5, total: 5 })
 
     // Give 2 tokens, then stop.
@@ -156,7 +156,7 @@ describe('Elzar Mann (224) — distribute Advantage, then the opponent digs for 
   })
 
   it('skips the search entirely when no tokens are distributed', () => {
-    const p = resolve(board(), { type: 'playCard', handIndex: 0 })
+    const p = resolve(board(), { type: 'playUnit', handIndex: 0 })
     const stopped = resolve(p, { type: 'skipTrigger', choiceId: choice(p).id })
     expect(stopped.pendingChoices ?? []).toHaveLength(0)
   })
@@ -166,10 +166,10 @@ describe('Elzar Mann (224) — distribute Advantage, then the opponent digs for 
       cards: F,
       players: { player: rich({ hand: ['ASH_224'], leader: { cardId: 'FORCE_L', deployed: false, epicActionUsed: false, exhausted: false } }), opponent: player() },
     })
-    const played = resolve(withForce, { type: 'playCard', handIndex: 0 })
+    const played = resolve(withForce, { type: 'playUnit', handIndex: 0 })
     expect(played.players.player.units.find(u => u.cardId === 'ASH_224')!.exhausted).toBe(false)
 
-    const without = resolve(state({ cards: F, players: { player: rich({ hand: ['ASH_224'] }), opponent: player() } }), { type: 'playCard', handIndex: 0 })
+    const without = resolve(state({ cards: F, players: { player: rich({ hand: ['ASH_224'] }), opponent: player() } }), { type: 'playUnit', handIndex: 0 })
     expect(without.players.player.units.find(u => u.cardId === 'ASH_224')!.exhausted).toBe(true)
   })
 })

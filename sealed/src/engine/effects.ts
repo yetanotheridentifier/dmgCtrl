@@ -1,12 +1,12 @@
 import type { DamageSource, GameState, NextUnitGrant, PlayerId, UnitState } from './types'
-import { updatePlayer, pushChoice, recordBaseDamaged, recordUpgradeDefeated } from './types'
+import { updatePlayer, pushChoice, recordBaseDamaged, recordUpgradeDefeated, recordUnitLeftPlay } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { EffectContext, TriggerPoint } from './abilities'
 import { getCardDefinition, runUnitTrigger } from './abilities'
 
 /**
- * How many cards a search by `unit` looks at (#343): the base count times every
+ * How many cards a search by `unit` looks at: the base count times every
  * `searchModifier` its card and upgrades contribute (Arcana Star Map ×2). Kept here
  * so any future search effect sizes consistently.
  */
@@ -19,7 +19,7 @@ export function searchCount(state: GameState, unit: UnitState, baseCount: number
 }
 
 /**
- * Effect primitives (#340): pure `(state, …) => state` building blocks that card
+ * Effect primitives: pure `(state, …) => state` building blocks that card
  * abilities compose. Card-type-agnostic and reused across units/leaders/events/
  * upgrades. Unit-targeting primitives take an instance id and find it on either
  * side, so an ability doesn't need to know who controls the unit. Grown as needed.
@@ -51,7 +51,7 @@ export function giveToken(state: GameState, instanceId: string, tokenId: string)
 }
 
 /**
- * Fire "when 1 or more upgrades attach to this unit" (#357, Sabine Wren) on the receiving unit.
+ * Fire "when 1 or more upgrades attach to this unit" (Sabine Wren) on the receiving unit.
  * Called from every attach site: token grants (here), `playUpgrade`, and a Shielded entry.
  * Note: granting N tokens one-at-a-time fires it N times — fine for the current card, which is a
  * "may", but a future "exactly once per attach event" card would need batching.
@@ -62,7 +62,7 @@ export function fireUpgradeAttached(state: GameState, instanceId: string, upgrad
 }
 
 /**
- * Queue a "your next unit …" grant for `owner` this phase (#348/#355). The grant (keywords, a cost
+ * Queue a "your next unit …" grant for `owner` this phase. The grant (keywords, a cost
  * delta, and/or enters-ready, with an optional trait/power filter) is consumed by the next unit that
  * matches its filter — cost in `effectiveCost`, the rest in `enterUnit`; cleared at regroup. Generic:
  * Sabine (Shielded), Mouse Droid (−1 to the next Imperial), Neel (next ≤1-power unit enters ready).
@@ -71,20 +71,20 @@ export function grantNextUnit(state: GameState, owner: PlayerId, grant: NextUnit
   return updatePlayer(state, owner, { nextUnitGrants: [...(state.players[owner].nextUnitGrants ?? []), grant] })
 }
 
-/** Deal `amount` damage to a player's base (#309). The caller runs the win check. */
+/** Deal `amount` damage to a player's base. The caller runs the win check. */
 export function dealDamageToBase(state: GameState, player: PlayerId, amount: number, source?: DamageSource): GameState {
   const p = state.players[player]
   const dealt = baseDamageAfterPrevention(state, player, amount, source)
   if (dealt <= 0) return state
   let next: GameState = { ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: p.base.damage + dealt } } } }
-  next = recordBaseDamaged(next, player) // "an enemy base was damaged this phase" (#357, Baylan Skoll)
-  // "When your base is dealt damage" (#357, Blade Three) — the base owner's units react.
+  next = recordBaseDamaged(next, player) // "an enemy base was damaged this phase" (Baylan Skoll)
+  // "When your base is dealt damage" (Blade Three) — the base owner's units react.
   return fireUnitsTrigger(next, 'whenOwnBaseDamaged', player)
 }
 
 /**
  * Defeat the upgrades that were attached to units leaving play, firing "when a friendly upgrade is
- * defeated" for each affected owner (#357, Zeb Orrelios / Baylan Skoll). Fired once per owner, not
+ * defeated" for each affected owner (Zeb Orrelios / Baylan Skoll). Fired once per owner, not
  * per upgrade — a unit dying with three upgrades is one reaction per controller.
  */
 export function fireUpgradesDefeated(state: GameState, owners: PlayerId[]): GameState {
@@ -98,7 +98,7 @@ export function fireUpgradesDefeated(state: GameState, owners: PlayerId[]): Game
 
 /**
  * How much of `amount` actually lands on `player`'s base after their own units' prevention effects
- * (#357, At Attin Safety Droid caps an instance at 4). Exposed separately so callers that report the
+ * (At Attin Safety Droid caps an instance at 4). Exposed separately so callers that report the
  * damage dealt (When Attack Ends → Hera Syndulla) quote the post-prevention figure.
  */
 export function baseDamageAfterPrevention(state: GameState, player: PlayerId, amount: number, source?: DamageSource): number {
@@ -114,7 +114,7 @@ export function baseDamageAfterPrevention(state: GameState, player: PlayerId, am
 }
 
 /**
- * True if this instance of damage ignores Shields and base-damage prevention (#357, Gorian Shard's
+ * True if this instance of damage ignores Shields and base-damage prevention (Gorian Shard's
  * Corsair). Asked of every unit in play belonging to the damage's controller.
  */
 export function damageIsUnpreventable(state: GameState, source?: DamageSource): boolean {
@@ -124,21 +124,21 @@ export function damageIsUnpreventable(state: GameState, source?: DamageSource): 
   )
 }
 
-/** Heal `amount` damage from a unit — remove that much damage, never below 0 (#348). No-op if absent. */
+/** Heal `amount` damage from a unit — remove that much damage, never below 0. No-op if absent. */
 export function healUnit(state: GameState, instanceId: string, amount: number): GameState {
   const found = findUnit(state, instanceId)
   if (!found || found.unit.damage === 0) return state
   return patchUnit(state, found.owner, instanceId, u => ({ ...u, damage: Math.max(0, u.damage - amount) }))
 }
 
-/** Resource the top card of a player's deck (#348): move deck[0] into resources, ready. No-op if empty. */
+/** Resource the top card of a player's deck: move deck[0] into resources, ready. No-op if empty. */
 export function resourceTopOfDeck(state: GameState, owner: PlayerId): GameState {
   const p = state.players[owner]
   if (p.deck.length === 0) return state
   return { ...state, players: { ...state.players, [owner]: { ...p, resources: [...p.resources, { cardId: p.deck[0], exhausted: false }], deck: p.deck.slice(1) } } }
 }
 
-/** Heal `amount` damage from a player's base — never below 0 (#348). */
+/** Heal `amount` damage from a player's base — never below 0. */
 export function healBase(state: GameState, player: PlayerId, amount: number): GameState {
   const p = state.players[player]
   if (p.base.damage === 0) return state
@@ -153,12 +153,12 @@ export function exhaustUnit(state: GameState, instanceId: string): GameState {
 }
 
 /**
- * Create a token unit for `owner` (#342) — a fresh in-play unit from a built-in
+ * Create a token unit for `owner` — a fresh in-play unit from a built-in
  * token card (e.g. the Mandalorian). A Shielded token enters play with a shield
  * token, per its keyword. Consumes one instance id.
  */
 /**
- * Create `count` token units, then offer any "double the tokens" replacement (#357, Moff Jerjerrod).
+ * Create `count` token units, then offer any "double the tokens" replacement (Moff Jerjerrod).
  *
  * The card reads "if you would create N tokens, you may defeat this unit to create 2N instead". Rather
  * than pause mid-effect for that choice (which would need a resumable pipeline), we lean on the
@@ -207,13 +207,13 @@ export function drawCards(state: GameState, owner: PlayerId, n: number): GameSta
     ...state,
     players: { ...state.players, [owner]: { ...p, hand: [...p.hand, ...drawn], deck: p.deck.slice(drawn.length) } },
   }
-  // "When you draw 1 or more cards" (#357, Axe Woves) — once per event, however many cards.
+  // "When you draw 1 or more cards" (Axe Woves) — once per event, however many cards.
   return fireUnitsTrigger(next, 'whenDrawCards', owner)
 }
 
 /**
  * Fire `point` on every unit `owner` controls, re-finding each one as we go so an earlier
- * reactor leaving play (or changing the board) can't resurrect a stale unit (#357).
+ * reactor leaving play (or changing the board) can't resurrect a stale unit.
  */
 export function fireUnitsTrigger(state: GameState, point: TriggerPoint, owner: PlayerId, extra?: Partial<EffectContext>): GameState {
   let next = state
@@ -225,7 +225,7 @@ export function fireUnitsTrigger(state: GameState, point: TriggerPoint, owner: P
 }
 
 /**
- * Return a unit from the board to its owner's hand (#356, Purrgil Ultra). The unit's card goes to
+ * Return a unit from the board to its owner's hand (Purrgil Ultra). The unit's card goes to
  * hand (a token unit can't return — it ceases to exist); its card-upgrades go to their owners'
  * discards; token upgrades vanish. No-op if the unit isn't in play.
  */
@@ -233,22 +233,25 @@ export function returnUnitToHand(state: GameState, instanceId: string): GameStat
   for (const owner of ['player', 'opponent'] as PlayerId[]) {
     const u = state.players[owner].units.find(x => x.instanceId === instanceId)
     if (!u) continue
-    let next = updatePlayer(state, owner, {
-      units: state.players[owner].units.filter(x => x.instanceId !== instanceId),
-      hand: isTokenCard(u.cardId) ? state.players[owner].hand : [...state.players[owner].hand, u.cardId],
-    })
+    // The card returns to its OWNER's hand, which may not be its controller (a stolen unit).
+    const cardOwner = u.owner ?? owner
+    let next = updatePlayer(state, owner, { units: state.players[owner].units.filter(x => x.instanceId !== instanceId) })
+    if (!isTokenCard(u.cardId)) {
+      next = updatePlayer(next, cardOwner, { hand: [...next.players[cardOwner].hand, u.cardId] })
+    }
     for (const up of u.upgrades) {
       if (state.cards[up.cardId]?.type === 'token') continue // token upgrades cease to exist
       next = updatePlayer(next, up.owner, { discard: [...next.players[up.owner].discard, up.cardId] })
     }
-    // Leaving play releases whatever it had captured (#357).
+    next = recordUnitLeftPlay(next, owner, u.cardId, u.isLeader)
+    // Leaving play releases whatever it had captured.
     return releaseCaptured(next, owner, u.captured ?? [])
   }
   return state
 }
 
 /**
- * Release the cards a unit had captured (#357, Bothan-5): each returns to PLAY under its owner's
+ * Release the cards a unit had captured (Bothan-5): each returns to PLAY under its owner's
  * control, exhausted, in its own arena. It is not being *played*, so nothing that keys off playing
  * or entering play happens: no "When Played" (or play/create) trigger, no Shielded shield token, no
  * Ambush attack, and no cost. Token cards can't come back — they ceased to exist when captured.
@@ -281,7 +284,7 @@ export function releaseCaptured(state: GameState, owner: PlayerId, cardIds: stri
   return next
 }
 
-/** Exhaust one ready resource of `owner` (#356, Mandalorian Scout). No-op if none is ready. */
+/** Exhaust one ready resource of `owner` (Mandalorian Scout). No-op if none is ready. */
 export function exhaustReadyResource(state: GameState, owner: PlayerId): GameState {
   const p = state.players[owner]
   const idx = p.resources.findIndex(r => !r.exhausted)
@@ -289,7 +292,7 @@ export function exhaustReadyResource(state: GameState, owner: PlayerId): GameSta
   return { ...state, players: { ...state.players, [owner]: { ...p, resources: p.resources.map((r, i) => (i === idx ? { ...r, exhausted: true } : r)) } } }
 }
 
-/** Ready a unit (clear its exhausted flag) wherever it is (#356, Grand Admiral Thrawn). No-op if not in play. */
+/** Ready a unit (clear its exhausted flag) wherever it is (Grand Admiral Thrawn). No-op if not in play. */
 export function readyUnit(state: GameState, instanceId: string): GameState {
   for (const owner of ['player', 'opponent'] as PlayerId[]) {
     if (state.players[owner].units.some(u => u.instanceId === instanceId)) {
@@ -299,7 +302,7 @@ export function readyUnit(state: GameState, instanceId: string): GameState {
   return state
 }
 
-/** Ready one exhausted resource of `owner` (#356, Emperor's Messenger). No-op if none is exhausted. */
+/** Ready one exhausted resource of `owner` (Emperor's Messenger). No-op if none is exhausted. */
 export function readyResource(state: GameState, owner: PlayerId): GameState {
   const p = state.players[owner]
   const idx = p.resources.findIndex(r => r.exhausted)
@@ -307,7 +310,7 @@ export function readyResource(state: GameState, owner: PlayerId): GameState {
   return { ...state, players: { ...state.players, [owner]: { ...p, resources: p.resources.map((r, i) => (i === idx ? { ...r, exhausted: false } : r)) } } }
 }
 
-/** Move the top `n` cards of a player's deck to the bottom, preserving order (#355, Clan Wren Loyalist). */
+/** Move the top `n` cards of a player's deck to the bottom, preserving order (Clan Wren Loyalist). */
 export function bottomTopCards(state: GameState, owner: PlayerId, n: number): GameState {
   const p = state.players[owner]
   const top = p.deck.slice(0, n)
@@ -315,7 +318,7 @@ export function bottomTopCards(state: GameState, owner: PlayerId, n: number): Ga
   return { ...state, players: { ...state.players, [owner]: { ...p, deck: [...p.deck.slice(top.length), ...top] } } }
 }
 
-/** Discard the card at `handIndex` from a player's hand to their discard pile (#355). No-op if out of range. */
+/** Discard the card at `handIndex` from a player's hand to their discard pile. No-op if out of range. */
 export function discardFromHand(state: GameState, owner: PlayerId, handIndex: number): GameState {
   const p = state.players[owner]
   const cardId = p.hand[handIndex]
@@ -327,7 +330,7 @@ export function discardFromHand(state: GameState, owner: PlayerId, handIndex: nu
 }
 
 /**
- * Defeat the first upgrade with `cardId` on a unit (#342): remove it from the unit;
+ * Defeat the first upgrade with `cardId` on a unit: remove it from the unit;
  * a card-upgrade goes to its OWNER's discard, a token simply ceases to exist. A no-op
  * if the unit or upgrade is gone (e.g. the host was already defeated). Used by
  * self-sacrificing upgrades like Grav Charge.
@@ -348,7 +351,7 @@ export function defeatUpgrade(state: GameState, instanceId: string, cardId: stri
 }
 
 /**
- * Defeat the upgrade at position `index` on a unit (#348) — the precise-instance form of
+ * Defeat the upgrade at position `index` on a unit — the precise-instance form of
  * `defeatUpgrade`, so a chosen upgrade (e.g. one of two identical Advantage tokens) is removed
  * exactly. A card-upgrade goes to its owner's discard; a token ceases to exist. No-op if the
  * unit or index is gone.
@@ -366,7 +369,7 @@ export function defeatUpgradeAt(state: GameState, instanceId: string, index: num
 }
 
 /**
- * Return the upgrade at `index` to **its owner's** hand (#357, Jabba the Hutt) — which may not be
+ * Return the upgrade at `index` to **its owner's** hand (Jabba the Hutt) — which may not be
  * the host unit's controller. Token upgrades can't go to a hand, so they simply cease to exist.
  * Fires "a friendly upgrade was defeated"? No — returning is not defeating, so no trigger.
  */
@@ -381,7 +384,7 @@ export function returnUpgradeToHand(state: GameState, instanceId: string, index:
 }
 
 /**
- * Move one copy of `cardId` from a player's discard pile to their hand (#342).
+ * Move one copy of `cardId` from a player's discard pile to their hand.
  * A no-op if it isn't there. Used by Blade of Talzin's self-return.
  */
 export function returnUpgradeFromDiscardToHand(state: GameState, owner: PlayerId, cardId: string): GameState {
@@ -396,7 +399,7 @@ export function returnUpgradeFromDiscardToHand(state: GameState, owner: PlayerId
 
 /**
  * Return every card-upgrade on a unit (except `exceptCardId` and tokens) to its
- * OWNER's hand — each upgrade routes to the player who owns it (#340).
+ * OWNER's hand — each upgrade routes to the player who owns it.
  */
 export function returnOtherUpgradesToHand(state: GameState, instanceId: string, exceptCardId: string): GameState {
   const found = findUnit(state, instanceId)

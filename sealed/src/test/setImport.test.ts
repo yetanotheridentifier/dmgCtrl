@@ -20,7 +20,7 @@ function mockSearchOk() {
   })
 }
 
-describe('importSet (#310)', () => {
+describe('importSet', () => {
   beforeEach(async () => {
     await db.cards.clear()
   })

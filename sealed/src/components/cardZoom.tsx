@@ -6,11 +6,11 @@ import CardFace from './cardFace'
 import { ZOOM_WIDTH_PX, longEdge } from './cardSizing'
 import { useModifierKeys } from './modifierKeys'
 
-/** Keep the zoomed card at least this far from the viewport edge (#331). */
+/** Keep the zoomed card at least this far from the viewport edge. */
 const VIEWPORT_MARGIN_PX = 12
 
 /**
- * The enlarged card shown while zooming (#321): full size, upright and clean (no
+ * The enlarged card shown while zooming: full size, upright and clean (no
  * highlight, exhaustion or tokens), floating above everything else. For a dual-sided
  * leader, holding **Alt** shows the other side (Shift is the zoom trigger, so the flip
  * is Alt; desktop only).
@@ -18,7 +18,7 @@ const VIEWPORT_MARGIN_PX = 12
  * It renders through a portal to `document.body` and is positioned `fixed`, so it can
  * never be clipped by an ancestor's `overflow` (e.g. a scrollable overlay) or trapped
  * inside a stacking context. When given an `anchorRef` it centres over that element and
- * then clamps to the viewport so edge cards stay fully on-screen (#331); without one it
+ * then clamps to the viewport so edge cards stay fully on-screen; without one it
  * simply centres in the viewport (used by isolated render tests).
  */
 export function CardZoomPopover({

@@ -3,7 +3,7 @@ import { effectiveCost, legalMoves } from '../engine/legalMoves'
 import { isLeaderUnit, unitHasTrait } from '../engine/keywords'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 
-/** The Darksaber (ASH_135, #343): unique+nonVehicle attach; grants Mandalorian + leader-unit
+/** The Darksaber (ASH_135): unique+nonVehicle attach; grants Mandalorian + leader-unit
  *  status; provides its aspect icons while its controller pays costs. */
 const DARK = { cardId: 'ASH_135', owner: 'player' as const }
 

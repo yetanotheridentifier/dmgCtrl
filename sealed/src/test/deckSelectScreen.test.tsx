@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import DeckSelectScreen from '../components/deckSelectScreen'
-import { IMPLEMENTED_LEADERS, IMPLEMENTED_UPGRADES, TOTAL_PROGRESS, UNIT_GROUPS } from '../data/implementedCards'
+import { TOTAL_PROGRESS, SET_PROGRESS, CARD_TYPES } from '../data/implementedCards'
 import { saveDeck } from '../data/deckStore'
 import { syncCatalogue } from '../data/catalogueSync'
 import { importSet } from '../data/setImport'
@@ -36,66 +36,42 @@ describe('DeckSelectScreen', () => {
     expect(screen.getByTestId('deck-empty-state')).toBeInTheDocument()
   })
 
-  it('shows the implemented-cards reference: leaders with front/back and every upgrade', () => {
+  it('breaks progress down per set, newest first, with a row per card type', () => {
     render(<DeckSelectScreen onPlay={vi.fn()} />)
-    const leaders = screen.getByTestId('implemented-leaders')
-    // Each leader row shows a ✓ (implemented) or · (not yet) per side — the flag counts across
-    // the table track the manifest's front/back booleans (derived so this stays true as sides land).
-    const implementedFlags = IMPLEMENTED_LEADERS.reduce((n, l) => n + (l.front ? 1 : 0) + (l.back ? 1 : 0), 0)
-    const notYetFlags = IMPLEMENTED_LEADERS.length * 2 - implementedFlags
-    expect(within(leaders).getAllByLabelText('implemented')).toHaveLength(implementedFlags)
-    if (notYetFlags > 0) expect(within(leaders).getAllByLabelText('not yet')).toHaveLength(notYetFlags)
-    else expect(within(leaders).queryByLabelText('not yet')).toBeNull()
-    // A fully-implemented leader shows ✓ for both sides.
-    const cadBane = within(leaders).getByText('Cad Bane').closest('tr')!
-    expect(within(cadBane).getAllByLabelText('implemented')).toHaveLength(2) // front + back
+    const panel = screen.getByTestId('set-progress')
 
-    const upgrades = screen.getByTestId('implemented-upgrades')
-    expect(within(upgrades).getAllByRole('listitem')).toHaveLength(IMPLEMENTED_UPGRADES.length)
-    expect(within(upgrades).getByText('Camtono')).toBeInTheDocument()
-    // Spot-check a leader name renders too.
-    expect(IMPLEMENTED_LEADERS.some(l => l.name === 'Baylan Skoll')).toBe(true)
+    // Newest set first, in the order the manifest declares.
+    const codes = SET_PROGRESS.map(s => s.code)
+    const rendered = within(panel).getAllByRole('group').map(el => el.getAttribute('data-testid'))
+    expect(rendered).toEqual(codes.map(c => `set-progress-${c}`))
+    expect(codes[0]).toBe('ASH') // most recent at the top
+
+    // Sets are blocked by legality, with the two non-current blocks labelled.
+    expect(within(panel).getByTestId('set-group-rotation')).toBeInTheDocument()
+    expect(within(within(panel).getByTestId('set-group-retired')).getByText(/rotated out/i)).toBeInTheDocument()
+    expect(within(within(panel).getByTestId('set-group-out-of-cycle')).getByText(/other sets/i)).toBeInTheDocument()
+
+    // Only the newest set is expanded.
+    expect((within(panel).getByTestId('set-progress-ASH') as HTMLDetailsElement).open).toBe(true)
+    for (const code of codes.slice(1)) {
+      expect((within(panel).getByTestId(`set-progress-${code}`) as HTMLDetailsElement).open, code).toBe(false)
+    }
+
+    // Every set carries a row per card type, showing implemented / total.
+    for (const set of SET_PROGRESS) {
+      for (const type of CARD_TYPES) {
+        expect(within(panel).getByTestId(`set-${set.code}-${type}`)).toHaveTextContent(`${set.done[type]} / ${set.total[type]}`)
+      }
+    }
   })
 
-  it('shows a total implementation progress bar (whole set, tokens included)', () => {
+  it('shows a total implementation progress bar (every set)', () => {
     render(<DeckSelectScreen onPlay={vi.fn()} />)
     const bar = screen.getByTestId('implementation-progress')
     expect(within(bar).getByText(`${TOTAL_PROGRESS.done} / ${TOTAL_PROGRESS.total} cards`)).toBeInTheDocument()
     const pct = Math.round((TOTAL_PROGRESS.done / TOTAL_PROGRESS.total) * 100)
     expect(within(bar).getByLabelText(`${pct}% implemented`)).toBeInTheDocument()
     expect(within(bar).getByRole('progressbar')).toHaveAttribute('aria-valuenow', String(pct))
-  })
-
-  it('rolls up the completed Leaders and Upgrades into sections collapsed by default', () => {
-    render(<DeckSelectScreen onPlay={vi.fn()} />)
-    const leadersDetails = screen.getByTestId('implemented-leaders').closest('details') as HTMLDetailsElement
-    expect(leadersDetails).not.toBeNull()
-    expect(leadersDetails.open).toBe(false)
-    const upgradesDetails = screen.getByTestId('implemented-upgrades').closest('details') as HTMLDetailsElement
-    expect(upgradesDetails.open).toBe(false)
-  })
-
-  it('shows unit groups as collapsible sections, expanding the first not-yet-done group', () => {
-    render(<DeckSelectScreen onPlay={vi.fn()} />)
-    const groups = screen.getByTestId('implemented-unit-groups')
-    const done = within(groups).getByTestId('unit-group-keyword') as HTMLDetailsElement // playable as printed
-    expect(done.open).toBe(false) // done → collapsed
-    expect(within(done).getByText(/done/i)).toBeInTheDocument()
-
-    // Which group is "next up" changes as tiers get cleared — and once every unit is built there
-    // is no blocked group left at all, which is the state we're in now (#357).
-    const nextGroup = UNIT_GROUPS.find(g => g.status !== 'done')
-    if (nextGroup) {
-      const next = within(groups).getByTestId(`unit-group-${nextGroup.id}`) as HTMLDetailsElement
-      expect(next.open).toBe(true) // next up → expanded
-      expect(within(next).getByText(/in progress/i)).toBeInTheDocument()
-      expect(within(next).getAllByRole('listitem').length).toBeGreaterThan(0)
-    } else {
-      // All units implemented: every section is done and collapsed, and the built group lists them.
-      const built = within(groups).getByTestId('unit-group-built') as HTMLDetailsElement
-      expect(built.open).toBe(false)
-      expect(within(built).getAllByRole('listitem').length).toBeGreaterThan(0)
-    }
   })
 
   it('imports a pasted deck and lists it', async () => {

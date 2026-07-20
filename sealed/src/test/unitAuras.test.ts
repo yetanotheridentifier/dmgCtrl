@@ -8,7 +8,7 @@ import '../engine/cardDefinitions' // side effect: registers card behaviours
 import type { GameState } from '../engine/types'
 
 /**
- * Group C (#354): constant effects on OTHER units — auras. Reuses the `aura` hook (Bo-Katan/Sloane/
+ * Constant effects on OTHER units — auras. Reuses the `aura` hook (Bo-Katan/Sloane/
  * Grogu), extended with keyword *removal* (`removeKeywords`) for "enemy units lose X" / "all units
  * lose X". Gallius Rax counts a target's keywords via a non-recursive helper.
  */
@@ -29,7 +29,7 @@ const U = (s: GameState, id: string) => [...s.players.player.units, ...s.players
 const kw = (s: GameState, id: string, name: string) => unitHasKeyword(s, U(s, id), name)
 const mk = (over: Parameters<typeof state>[0]) => state({ cards: C, ...over })
 
-describe('Group C — auras on other units (#354)', () => {
+describe('Auras on other units', () => {
   it('Onyx Cinder (177): other friendly units gain Hidden; enemies do not', () => {
     const s = mk({ players: { player: player({ units: [unit('o', 'ASH_177'), unit('f', 'GRUNT')] }), opponent: player({ units: [unit('e', 'GRUNT')] }) } })
     expect(kw(s, 'f', 'Hidden')).toBe(true) // other friendly gains it
@@ -68,7 +68,7 @@ describe('Group C — auras on other units (#354)', () => {
         opponent: player({ hand: ['AMB_SUP'], resources: ready(6) }),
       },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices ?? []).toHaveLength(0) // Ambush stripped by the aura → no ambush attack
     expect(played.players.opponent.units.find(u => u.cardId === 'AMB_SUP')!.exhausted).toBe(true) // enters exhausted
   })

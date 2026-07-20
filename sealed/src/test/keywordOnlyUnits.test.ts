@@ -11,7 +11,7 @@ import { state, player, unit, ready, CARDS } from './helpers/engineFixtures'
 import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 
 /**
- * Group A (#306): the ~39 vanilla + keyword-only units that need NO engine work. These tests
+ * The ~39 vanilla + keyword-only units that need NO engine work. These tests
  * validate that claim against a snapshot of the real ASH card data (`fixtures/ashSet.json`):
  * every listed card is a unit whose only "ability" is already-implemented keywords, so it plays
  * correctly as printed. Keyword *behaviour* is covered by keywords/keywordCombat/keywordsMissing.
@@ -30,7 +30,7 @@ function residualAbility(c: SwuCard): string {
   return t.replace(/[\s.,]+/g, ' ').trim()
 }
 
-describe('Keyword-only units — no engine work needed (#306)', () => {
+describe('Keyword-only units — no engine work needed', () => {
   it('each entry is a real ASH unit card', () => {
     for (const u of keywordOnly) expect(byName.get(u.name), u.name).toBeTruthy()
   })
@@ -59,20 +59,20 @@ describe('Keyword-only units — no engine work needed (#306)', () => {
     }
   })
 
-  // Real-data smoke tests: build the card db from the fixture and confirm a couple of Group A
+  // Real-data smoke tests: build the card db from the fixture and confirm a couple of these
   // archetypes play through the engine, tying the actual card data to the keyword behaviour.
-  it('a Group A Shielded unit (Noti Nomad) enters play with a Shield token', () => {
+  it('a keyword-only Shielded unit (Noti Nomad) enters play with a Shield token', () => {
     const noti = byName.get('Noti Nomad')!
     const id = normaliseCard(noti).id
     const s = state({
       cards: { ...CARDS, ...buildCardDb([noti]) },
       players: { player: player({ hand: [id], resources: ready(15) }), opponent: player() },
     })
-    const next = resolve(s, { type: 'playCard', handIndex: 0 })
+    const next = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(next.players.player.units[0].upgrades.some(u => u.cardId === TOKEN_SHIELD)).toBe(true)
   })
 
-  it('a Group A Sentinel unit (Imperial Loyalist) forces enemy attacks onto it', () => {
+  it('a keyword-only Sentinel unit (Imperial Loyalist) forces enemy attacks onto it', () => {
     const sentinel = byName.get('Imperial Loyalist')!
     const id = normaliseCard(sentinel).id
     const s = state({

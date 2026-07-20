@@ -7,7 +7,7 @@ import { state, player, unit, card, ready, CARDS } from './helpers/engineFixture
 import type { GameState } from '../engine/types'
 
 /**
- * Token-creation replacement (#357, Moff Jerjerrod): "if you would create N tokens, you may defeat
+ * Token-creation replacement (Moff Jerjerrod): "if you would create N tokens, you may defeat
  * this unit to create 2N instead". Implemented as the equivalent **N, then optionally N more** so no
  * mid-effect interrupt is needed — see `createTokenUnits`.
  */
@@ -20,7 +20,7 @@ const mandos = (s: GameState) => s.players.player.units.filter(u => u.cardId ===
 const board = (units: ReturnType<typeof unit>[] = [], over: Parameters<typeof player>[0] = {}) =>
   state({ cards: F, players: { player: player({ units, ...over }), opponent: player() } })
 
-describe('Moff Jerjerrod (094) — may double a batch of created tokens (#357)', () => {
+describe('Moff Jerjerrod (094) — may double a batch of created tokens', () => {
   it('offers the doubling after a batch, and accepting defeats him for N more', () => {
     const s = createTokenUnits(board([unit('j', 'ASH_094', { arena: 'ground' })]), 'player', TOKEN_MANDALORIAN, 2)
     expect(mandos(s)).toBe(2) // the batch is made first
@@ -46,7 +46,7 @@ describe('Moff Jerjerrod (094) — may double a batch of created tokens (#357)',
 
   it('doubles a real card’s batch — Children of the Watch (2 → 4)', () => {
     const s = board([unit('j', 'ASH_094', { arena: 'ground' })], { hand: ['ASH_111'], resources: ready(10) })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(mandos(played)).toBe(2)
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'mayDoubleTokens', count: 2 })
     expect(mandos(resolve(played, { type: 'acceptChoice', choiceId: played.pendingChoices![0].id }))).toBe(4)

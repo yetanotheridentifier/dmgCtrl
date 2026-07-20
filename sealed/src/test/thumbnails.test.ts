@@ -102,7 +102,7 @@ describe('ensureThumb', () => {
   })
 })
 
-describe('artUrl (#311 — CORS-safe art URLs)', () => {
+describe('artUrl (CORS-safe art URLs)', () => {
   it('rewrites cdn.swu-db.com URLs through the worker /art route', () => {
     expect(artUrl('https://cdn.swu-db.com/images/cards/ASH/011.png'))
       .toBe('https://worker.dmgctrl.app/art/images/cards/ASH/011.png')

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { NameCardOverlay } from '../components/gameScreen'
 
-/** The "name a card" text-input overlay for Ryder Azadi (#355). */
+/** The "name a card" text-input overlay for Ryder Azadi. */
 describe('NameCardOverlay', () => {
   const NAMES = ['Darth Vader', 'Luke Skywalker', 'Han Solo', 'Boba Fett']
 

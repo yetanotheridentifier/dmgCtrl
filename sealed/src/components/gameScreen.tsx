@@ -23,9 +23,9 @@ import { DeckPile, ResourceStack, DiscardPile, OpponentHand, EmptySlot } from '.
 interface Props {
   deck: SavedDeck
   opponentDeck: SavedDeck
-  /** Leave the game — wired to the dmgCtrl icon in the game screen's header (#332). */
+  /** Leave the game — wired to the dmgCtrl icon in the game screen's header. */
   onExit: () => void
-  /** Open the Help screen — wired to the ? button in the header (#332). */
+  /** Open the Help screen — wired to the ? button in the header. */
   onHelp: () => void
   /** Injectable for deterministic tests; defaults to real randomness. */
   gameOptions?: UseGameOptions
@@ -37,16 +37,16 @@ export interface UnitInteraction {
   selected: boolean
   /** This enemy unit is a legal target of the selected attacker. */
   isTarget: boolean
-  /** Valid target for the upgrade currently being placed from hand (#336). */
+  /** Valid target for the upgrade currently being placed from hand. */
   isUpgradeTarget?: boolean
   onClick?: () => void
 }
 
-/** How far each attached upgrade protrudes below the one in front of it (#336). */
+/** How far each attached upgrade protrudes below the one in front of it. */
 const UPGRADE_STEP_PX = 34
 
 /**
- * How far each captured card protrudes below the capturing unit (#357). Larger than the upgrade
+ * How far each captured card protrudes below the capturing unit. Larger than the upgrade
  * step because a captured card is laid on its side (exhausted), so its exposed strip is its short
  * edge — this keeps it visible even when the capturing unit is itself exhausted and rotated.
  */
@@ -56,7 +56,7 @@ const CAPTURED_STEP_PX = 46
  * One attached upgrade, positioned behind the unit and protruding from the bottom.
  * It carries its OWN Shift+hover / long-press zoom on its exposed strip, so you can
  * read it there (hovering the unit card zooms the unit, not the upgrade). It stays
- * upright when the unit is exhausted, dimming (opaque) along with it (#336).
+ * upright when the unit is exhausted, dimming (opaque) along with it.
  */
 function AttachedUpgrade({ card, fallbackName, top, dim }: {
   card: EngineCard | undefined
@@ -77,7 +77,7 @@ function AttachedUpgrade({ card, fallbackName, top, dim }: {
  * The stack of attached upgrades behind the unit, protruding downward. The
  * first-played sits closest to the unit; each later one goes further back and
  * further down so every stat modifier shows. Rendered back-to-front (reversed) so
- * the fronts paint on top, all below the unit card in the tile (#336).
+ * the fronts paint on top, all below the unit card in the tile.
  */
 function UpgradeStack({ state, upgrades, instanceId, exhausted }: {
   state: GameState
@@ -105,7 +105,7 @@ function UpgradeStack({ state, upgrades, instanceId, exhausted }: {
 }
 
 /**
- * Cards this unit has captured, stacked behind it and protruding below the upgrades (#357).
+ * Cards this unit has captured, stacked behind it and protruding below the upgrades.
  * Always drawn exhausted (turned) and heavily dimmed: a captured card is out of play and can't be
  * interacted with — the only way to "reach" it is to remove its captor, which springs it back into
  * its arena. It still carries its own zoom on the exposed strip so you can read what's held.
@@ -146,7 +146,7 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
   const card = state.cards[unit.cardId]
   const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
   // Only card upgrades stack behind the unit; token upgrades render as on-card
-  // tokens via CardTokens instead (#334).
+  // tokens via CardTokens instead.
   const cardUpgrades = unit.upgrades.filter(u => state.cards[u.cardId]?.type !== 'token')
   const captured = unit.captured ?? []
   const clickable = (interact.actionable || interact.isTarget || interact.isUpgradeTarget) && interact.onClick
@@ -179,11 +179,11 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
         topStart={(cardUpgrades.length + 1) * UPGRADE_STEP_PX}
       />
       {/* The unit card carries the unit's own zoom — hover here, not the dead tile
-          padding; the upgrades zoom from their exposed strips instead (#336). */}
+          padding; the upgrades zoom from their exposed strips instead. */}
       <div ref={setAnchor} className="relative w-fit" {...bind}>
         <CardFace card={card} fallbackName={unit.cardId} deployed={unit.isLeader} exhausted={unit.exhausted} highlight={highlight} />
         <CardTokens state={state} unit={unit} />
-        {/* Keyword badges (#334): Hidden (temporary, until next phase) and Sentinel
+        {/* Keyword badges: Hidden (temporary, until next phase) and Sentinel
             (a keyword — shown while the unit has it, gone if it loses it/defeated).
             Stacked so both can show. */}
         <div className="pointer-events-none absolute inset-x-0 top-1 flex flex-col items-center gap-0.5">
@@ -207,7 +207,7 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
 /**
  * Effect tokens (physical-token style) laid over a unit card on this
  * non-rotating wrapper, so they stay upright when the card is exhausted. Damage
- * is the first token; more effect types slot into the same 1–4 layout (#326).
+ * is the first token; more effect types slot into the same 1–4 layout.
  */
 interface CardToken {
   key: string
@@ -235,8 +235,8 @@ function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
   if (unit.damage > 0) {
     tokens.push({ key: 'damage', label: String(unit.damage), color: 'var(--color-red)', testid: `board-unit-damage-${unit.instanceId}` })
   }
-  // Floating stat modifiers not printed on the card art — "this phase" buffs (Baylan/Ahsoka,
-  // #347) plus constant auras (Bo-Katan, #346/#348): a white token with red +X (power) over
+  // Floating stat modifiers not printed on the card art — "this phase" buffs (Baylan/Ahsoka)
+  // plus constant auras (Bo-Katan): a white token with red +X (power) over
   // blue +Y (HP), mirroring the physical token. (Upgrade stats already show on the card.)
   const lasting = lastingEffectTotals(state, unit.instanceId)
   const aura = auraContributions(state, unit)
@@ -258,7 +258,7 @@ function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
       ),
     })
   }
-  // Token upgrades render as on-card tokens (not cards behind the unit) (#334):
+  // Token upgrades render as on-card tokens (not cards behind the unit):
   // Shield = blue, Experience = amber (+1/+1), Advantage = gold "adv." (+1/0 next combat).
   const shields = countToken(TOKEN_SHIELD)
   if (shields > 0) {
@@ -311,7 +311,7 @@ function CardTokens({ state, unit }: { state: GameState; unit: UnitState }) {
 }
 
 /**
- * "Look at" / "reveal" overlay (#342) — a single card over a dark backdrop with a prompt and the
+ * "Look at" / "reveal" overlay — a single card over a dark backdrop with a prompt and the
  * caller's action buttons. PRIVATE to the acting player. A thin wrapper over `CardGridOverlay`.
  */
 export function CardChoiceOverlay({ card, cardId, prompt, children }: {
@@ -333,7 +333,7 @@ export function CardChoiceOverlay({ card, cardId, prompt, children }: {
 }
 
 /**
- * "Select a card" overlay (#348) — pick one of several cards (Vane's upgrade-to-defeat, the unique
+ * "Select a card" overlay — pick one of several cards (Vane's upgrade-to-defeat, the unique
  * rule, the Armorer's resource reveal). `disabled` items are revealed but not selectable; a Cancel
  * appears when `onCancel` is given. A thin wrapper over `CardGridOverlay`.
  */
@@ -371,7 +371,7 @@ export function CardSelectOverlay({ state, prompt, items, onPick, onCancel }: {
 }
 
 /**
- * "Search" reveal overlay (#343) — the private "look at the top N" for Improvised Identity: each
+ * "Search" reveal overlay — the private "look at the top N" for Improvised Identity: each
  * revealed ground unit gets a Discard button; the rest are dimmed. A thin wrapper over `CardGridOverlay`.
  */
 export function SearchRevealOverlay({ state, choice, onPick }: {
@@ -396,7 +396,7 @@ export function SearchRevealOverlay({ state, choice, onPick }: {
 }
 
 /**
- * "Search the top N, draw a match" overlay (#355, Clan Wren Loyalist): reveals the top cards; the
+ * "Search the top N, draw a match" overlay (Clan Wren Loyalist): reveals the top cards; the
  * trait-matching ones get a Draw button, the rest are dimmed. Mandatory (a match exists). A thin
  * wrapper over `CardGridOverlay`.
  */
@@ -419,9 +419,9 @@ export function SearchDrawOverlay({ state, choice, onPick }: {
 }
 
 /**
- * "Name a card" overlay (#355, Ryder Azadi): a text box that filters the nameable card list (every
+ * "Name a card" overlay (Ryder Azadi): a text box that filters the nameable card list (every
  * card in the current game — both decks) by substring; clicking one names it. Portalled to body so it
- * clears the board's stacking context. The full-ASH-set list is a later extension (#355 follow-up).
+ * clears the board's stacking context. The full-ASH-set list is a later extension (follow-up).
  */
 export function NameCardOverlay({ names, onPick }: { names: string[]; onPick: (name: string) => void }) {
   const [query, setQuery] = useState('')
@@ -453,7 +453,7 @@ export function NameCardOverlay({ names, onPick }: { names: string[]; onPick: (n
 }
 
 /**
- * "Search & play for free" overlay (#355, Admiral Ackbar): reveals the searched cards; eligible space
+ * "Search & play for free" overlay (Admiral Ackbar): reveals the searched cards; eligible space
  * units (fitting the remaining cost budget) get a "Play free" button, the rest are dimmed. A Done
  * button (with the remaining budget) stops early. A thin wrapper over `CardGridOverlay`.
  */
@@ -482,7 +482,7 @@ export function SearchPlayFreeOverlay({ state, choice, onPick, onDone }: {
 }
 
 /**
- * "Look at an opponent's hand" overlay (#355, Imperial Defector / Remnant Lookouts): reveals the
+ * "Look at an opponent's hand" overlay (Imperial Defector / Remnant Lookouts): reveals the
  * target's hand face-up. View-only unless `mayDiscard`, when each card gets a Discard button. A
  * Done button dismisses it. A thin wrapper over `CardGridOverlay`.
  */
@@ -544,8 +544,8 @@ function BaseCard({ state, side, onAttack }: {
   const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
   // Base HP comes from the card metadata (bases vary; never assume 30).
   const baseHp = baseCard?.hp ?? 0
-  // Damage taken, counting up to the base's HP — the SWU-standard display (#323).
-  // A future ticket makes counting down (remaining) a user preference (#324).
+  // Damage taken, counting up to the base's HP — the SWU-standard display.
+  // A future ticket makes counting down (remaining) a user preference.
   const damage = Math.min(p.base.damage, baseHp)
   const inner = (
     <div className="relative">
@@ -606,7 +606,7 @@ export function LeaderCard({ state, side, widthPx, interact }: { state: GameStat
   }
   // Deployed once and defeated (its epic action is spent) — it can't redeploy.
   const defeated = p.leader.epicActionUsed
-  // An undeployed leader with an available activated ability is clickable (#309).
+  // An undeployed leader with an available activated ability is clickable.
   const clickable = Boolean(interact?.actionable && interact.onClick)
   const highlight = interact?.selected ? 'accent' : interact?.actionable ? 'accent-dim' : undefined
   return (
@@ -630,7 +630,7 @@ export function LeaderCard({ state, side, widthPx, interact }: { state: GameStat
           </span>
         </div>
       )}
-      {/* Shift while hovering shows the leader's unit (back) side (#321). */}
+      {/* Shift while hovering shows the leader's unit (back) side. */}
       {zoomed && <CardZoomPopover card={leaderCard} deployed={false} fallbackName={p.leader.cardId} anchorRef={anchorRef} />}
     </div>
   )
@@ -638,7 +638,7 @@ export function LeaderCard({ state, side, widthPx, interact }: { state: GameStat
 
 /**
  * A card in your hand. Clickable to play (blue) or resource (green); hover /
- * focus / long-press zooms it (#321). Its own component so it can use the zoom hook.
+ * focus / long-press zooms it. Its own component so it can use the zoom hook.
  */
 function HandCard({ card, cardId, index, action, onAct, onSelect, selected, discarding }: {
   card: EngineCard | undefined
@@ -646,10 +646,10 @@ function HandCard({ card, cardId, index, action, onAct, onSelect, selected, disc
   index: number
   action: Action | undefined
   onAct: (action: Action) => void
-  /** Set for an upgrade card: click selects it, then you click a unit to attach (#336). */
+  /** Set for an upgrade card: click selects it, then you click a unit to attach. */
   onSelect?: () => void
   selected?: boolean
-  /** A pending "discard a card" choice (#355): clicking discards this card — highlight it red. */
+  /** A pending "discard a card" choice: clicking discards this card — highlight it red. */
   discarding?: boolean
 }) {
   const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
@@ -675,7 +675,7 @@ function HandCard({ card, cardId, index, action, onAct, onSelect, selected, disc
   }
   if (onSelect) {
     // An upgrade: clicking selects it (bright when selected), then a unit is clicked
-    // to attach it. Highlighted blue like a playable card (#336).
+    // to attach it. Highlighted blue like a playable card.
     return (
       <button
         ref={setAnchor}
@@ -700,7 +700,7 @@ function HandCard({ card, cardId, index, action, onAct, onSelect, selected, disc
       className="relative block w-fit shrink-0"
     >
       {/* Dim the card (unplayable), but not the zoom popover — the opacity must
-          stay off the wrapper or it'd dim and trap the popover above (#321). */}
+          stay off the wrapper or it'd dim and trap the popover above. */}
       <CardFace card={card} fallbackName={cardId} tight className="opacity-60" />
       {popover}
     </span>
@@ -728,7 +728,7 @@ function Board({ state, playerInteraction, opponentInteraction, baseAction, lead
   const cols: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)', columnGap: '1rem' }
   return (
     // Transparent — the play-area container behind it supplies one continuous
-    // background across the opponent bar, battlefield and player bar (#332). It
+    // background across the opponent bar, battlefield and player bar. It
     // grows to fill the play area's height, centring the board vertically.
     <section data-testid="battlefield" className="flex flex-1 flex-col justify-center gap-1.5 px-2">
       {/* Opponent half: everything anchored to the BOTTOM (the battlefront), so
@@ -736,7 +736,7 @@ function Board({ state, playerInteraction, opponentInteraction, baseAction, lead
           stack upward, away from it. */}
       <div className="items-end" style={cols}>
         <ArenaZone state={state} side="opponent" arena="space" unitInteraction={opponentInteraction} anchor="bottom" />
-        {/* Opponent leader lives in their bar's centre column (#332), so the strip
+        {/* Opponent leader lives in their bar's centre column, so the strip
             holds only their base here. */}
         <div className="flex flex-col items-center gap-2">
           <BaseCard state={state} side="opponent" onAttack={baseAction?.('opponent')} />
@@ -745,7 +745,7 @@ function Board({ state, playerInteraction, opponentInteraction, baseAction, lead
       </div>
 
       {/* Battlefront: Space / Ground labels (centred over their lanes) flank the
-          game state, which sits between the two bases (#332). */}
+          game state, which sits between the two bases. */}
       <div className="items-center" style={cols}>
         <div className="text-ink-faint text-sm uppercase tracking-widest text-center">Space</div>
         <div data-testid="game-state" className="text-center text-sm text-ink leading-tight whitespace-nowrap">
@@ -770,7 +770,7 @@ function Board({ state, playerInteraction, opponentInteraction, baseAction, lead
 }
 
 /**
- * A labelled column within a player bar (#332): its component with an accent
+ * A labelled column within a player bar: its component with an accent
  * all-caps label rotated 90° anticlockwise on the left (vertical-rl + rotate
  * reads bottom-to-top on iOS, which lacks `sideways-lr`). A subtle background band
  * separates it from its neighbours over the shared play-area background.
@@ -790,7 +790,7 @@ function BarColumn({ label, children }: { label: string; children: ReactNode }) 
 }
 
 /**
- * The opponent bar (#332): their leader in the centre so it lines up with the
+ * The opponent bar: their leader in the centre so it lines up with the
  * bases and the player leader below, flanked by discard + hand on the left and
  * resources + deck on the right. Transparent, joined to the battlefield below.
  */
@@ -819,7 +819,7 @@ function OpponentBar({ state }: { state: GameState }) {
 }
 
 /**
- * The player bar (#332): Deck | Resources | Hand | Action | Discard, the hand
+ * The player bar: Deck | Resources | Hand | Action | Discard, the hand
  * flexing to fill the remaining width (the most important area). The action column
  * is a fixed width so its buttons don't shift the layout between phases.
  */
@@ -841,13 +841,13 @@ function PlayerBar({ state, hand, action }: { state: GameState; hand: ReactNode;
 
 export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOptions }: Props) {
   const { status, errorDetail, gameState, legal, log, act, rematch } = useGame(deck, opponentDeck, gameOptions)
-  // Board affordance (#314): click an actionable friendly unit to select it,
+  // Board affordance: click an actionable friendly unit to select it,
   // then click a highlighted target to attack. Any action clears the selection.
   const [selectedAttacker, setSelectedAttacker] = useState<string | null>(null)
-  // Placing an upgrade (#336): click an upgrade card in hand (its hand index is
+  // Placing an upgrade: click an upgrade card in hand (its hand index is
   // held here) to highlight valid target units, then click a unit to attach it.
   const [selectedUpgrade, setSelectedUpgrade] = useState<number | null>(null)
-  // Using an undeployed leader's activated ability (#309): click the leader to select
+  // Using an undeployed leader's activated ability: click the leader to select
   // it, then click a highlighted target unit.
   const [leaderSelected, setLeaderSelected] = useState(false)
 
@@ -860,9 +860,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
 
   // The play area (right of the log) shows loading, an error, or the live board.
   // The surrounding frame — icon (exit) + help + log — always renders, so leaving
-  // and Help stay available even while cards load or a load fails (#332).
+  // and Help stay available even while cards load or a load fails.
   let playContent: ReactNode
-  // A "look at a card" overlay (Camtono, #342): shown centre-screen while the human
+  // A "look at a card" overlay (Camtono): shown centre-screen while the human
   // resolves a mayPlayTopFree choice. Rendered over everything in the main return.
   let choiceOverlay: ReactNode = null
   if (status === 'loading') {
@@ -887,27 +887,27 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     )
   } else {
     // What clicking each hand card does, keyed by hand index: play it in the action
-    // phase, resource it in the setup or regroup phase (#6, #328). Derived from the
+    // phase, resource it in the setup or regroup phase (#6). Derived from the
     // legal moves so the hand affordance always matches what the engine allows.
-    // A "look at an opponent's hand" discard (#355) also uses acceptChoice+handIndex, but its
+    // A "look at an opponent's hand" discard also uses acceptChoice+handIndex, but its
     // indices are into the OPPONENT's hand (shown in an overlay) — keep them off our own hand.
     const oppHandChoiceId = gameState.pendingChoices?.find(c => c.kind === 'lookAtHand' && c.controller === 'player')?.id
     const handAction = new Map<number, Action>()
     for (const a of legal) {
-      if (a.type === 'playCard' || a.type === 'resourceCard' || a.type === 'setupResource') handAction.set(a.handIndex, a)
-      // "Play a unit from hand" ability choice (#348): the affordable hand cards become clickable.
+      if (a.type === 'playUnit' || a.type === 'playEvent' || a.type === 'resourceCard' || a.type === 'setupResource') handAction.set(a.handIndex, a)
+      // "Play a unit from hand" ability choice: the affordable hand cards become clickable.
       else if (a.type === 'acceptChoice' && a.handIndex !== undefined && a.choiceId !== oppHandChoiceId) handAction.set(a.handIndex, a)
     }
     const hand = gameState.players.player.hand
 
-    // A "discard a card from hand" choice (Mos Espa Watermonger, #355): the hand cards
+    // A "discard a card from hand" choice (Mos Espa Watermonger): the hand cards
     // glow red and clicking one discards it; an optional discard also offers a Decline.
     const discardChoice = gameState.pendingChoices?.find(
       (c): c is Extract<PendingChoice, { kind: 'selectDiscard' }> => c.kind === 'selectDiscard' && c.controller === 'player',
     )
     const discardDecline = discardChoice ? legal.find(a => a.type === 'skipTrigger' && a.choiceId === discardChoice.id) : undefined
 
-    // An optional "play a unit from hand" (Crix Madine, #355): the candidate cards are clickable in
+    // An optional "play a unit from hand" (Crix Madine): the candidate cards are clickable in
     // hand; a Decline button lets the player pass on the "may".
     const handPlayChoice = gameState.pendingChoices?.find(
       (c): c is Extract<PendingChoice, { kind: 'playUnitFromHand' }> => c.kind === 'playUnitFromHand' && c.controller === 'player' && c.optional === true,
@@ -922,7 +922,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     )
     const baseAttack = selectedAttacks.find(a => a.target.kind === 'base')
 
-    // Placing an upgrade (#336): which hand cards are upgrades, and — once one is
+    // Placing an upgrade: which hand cards are upgrades, and — once one is
     // selected — which units it may attach to. While placing, unit clicks attach
     // the upgrade rather than driving an attack.
     const upgradeMoves = legal.filter(a => a.type === 'playUpgrade')
@@ -932,7 +932,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     )
     const placing = selectedUpgrade !== null
 
-    // Undeployed-leader activated abilities (#309): click the leader to use a target-less
+    // Undeployed-leader activated abilities: click the leader to use a target-less
     // one, or to highlight its target units and then click one.
     const leaderAbilityMoves = legal.filter((a): a is Extract<Action, { type: 'useLeaderAbility' }> => a.type === 'useLeaderAbility')
     const leaderTargetlessMove = leaderAbilityMoves.find(a => a.targetInstanceId === undefined)
@@ -952,12 +952,12 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         }
       : undefined
 
-    // Optional targeted pending choices (#309/#342) — resolved by clicking a highlighted
+    // Optional targeted pending choices — resolved by clicking a highlighted
     // board unit plus a Decline button, rather than one menu button per target.
-    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage', 'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit', 'mayExhaustUnit', 'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust', 'attachResourceUpgrade', 'mayDefeatEnemyUnit', 'selectUniqueUnitToDefeat', 'opponentGivesAdvantage', 'mayGiveTokens', 'multiPick', 'distributeDamage', 'distributeTokens', 'variableStrike', 'healForAdvantage', 'returnFriendlyUnit']
+    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage', 'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit', 'mayExhaustUnit', 'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust', 'attachResourceUpgrade', 'selectUnitToDefeat', 'selectUniqueUnitToDefeat', 'opponentGivesAdvantage', 'mayGiveTokens', 'multiPick', 'distributeDamage', 'distributeTokens', 'variableStrike', 'healForAdvantage', 'returnFriendlyUnit']
     const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && boardTargetKinds.includes(c.kind))
     const choiceTargetIds = new Map<string, Action>()
-    // Base targets (selectDamageTarget, #348): pick a player's base to take the damage.
+    // Base targets (selectDamageTarget): pick a player's base to take the damage.
     const baseTargetActions = new Map<PlayerId, Action>()
     if (targetChoice) for (const a of legal) if (a.type === 'acceptChoice' && a.choiceId === targetChoice.id) {
       if (a.targetInstanceId) choiceTargetIds.set(a.targetInstanceId, a)
@@ -1028,7 +1028,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       </ul>
     )
 
-    // A "look at the top card" choice (Camtono, #342): its accept/decline moves are
+    // A "look at the top card" choice (Camtono): its accept/decline moves are
     // shown inside the centre-screen overlay next to the card, not in the action menu.
     const lookChoice = gameState.pendingChoices?.find(
       (c): c is Extract<PendingChoice, { kind: 'mayPlayTopFree' }> => c.kind === 'mayPlayTopFree' && c.controller === 'player',
@@ -1037,39 +1037,39 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === lookChoice.id)
       : []
 
-    // A "search" reveal (Improvised Identity, #343): its discard picks live in the
+    // A "search" reveal (Improvised Identity): its discard picks live in the
     // centre-screen overlay, not the action menu.
     const searchChoice = gameState.pendingChoices?.find(
       (c): c is Extract<PendingChoice, { kind: 'search' }> => c.kind === 'search' && c.controller === 'player',
     )
     const searchActions = searchChoice ? legal.filter(a => a.type === 'acceptChoice' && a.choiceId === searchChoice.id) : []
 
-    // A "look at an opponent's hand" choice (Imperial Defector / Remnant Lookouts, #355): its
+    // A "look at an opponent's hand" choice (Imperial Defector / Remnant Lookouts): its
     // discard picks + Done live in the reveal overlay, not the action menu.
     const lookHandChoice = gameState.pendingChoices?.find(
       (c): c is Extract<PendingChoice, { kind: 'lookAtHand' }> => c.kind === 'lookAtHand' && c.controller === 'player',
     )
     const lookHandActions = lookHandChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === lookHandChoice.id) : []
 
-    // A "search top N, draw a trait match" choice (Clan Wren Loyalist, #355): draw picks in the overlay.
+    // A "search top N, draw a trait match" choice (Clan Wren Loyalist): draw picks in the overlay.
     const searchDrawChoice = gameState.pendingChoices?.find(
       (c): c is Extract<PendingChoice, { kind: 'searchDraw' }> => c.kind === 'searchDraw' && c.controller === 'player',
     )
     const searchDrawActions = searchDrawChoice ? legal.filter(a => a.type === 'acceptChoice' && a.choiceId === searchDrawChoice.id) : []
 
-    // A "search & play space units for free" choice (Admiral Ackbar, #355): picks + Done in the overlay.
+    // A "search & play space units for free" choice (Admiral Ackbar): picks + Done in the overlay.
     const searchFreeChoice = gameState.pendingChoices?.find(
       (c): c is Extract<PendingChoice, { kind: 'searchPlayFree' }> => c.kind === 'searchPlayFree' && c.controller === 'player',
     )
     const searchFreeActions = searchFreeChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === searchFreeChoice.id) : []
 
-    // A "name a card" choice (Ryder Azadi, #355): resolved in a text-input overlay, not the menu.
+    // A "name a card" choice (Ryder Azadi): resolved in a text-input overlay, not the menu.
     const nameCardChoice = gameState.pendingChoices?.find(
       (c): c is Extract<PendingChoice, { kind: 'nameCard' }> => c.kind === 'nameCard' && c.controller === 'player',
     )
     const nameCardActions = nameCardChoice ? legal.filter(a => a.type === 'acceptChoice' && a.choiceId === nameCardChoice.id) : []
 
-    // A "select an upgrade to defeat" choice (Vane, #348): the candidate upgrades are shown as a
+    // A "select an upgrade to defeat" choice (Vane): the candidate upgrades are shown as a
     // centre-screen card picker with a Cancel (optional only), not in the action menu.
     const selectUpgradeChoice = gameState.pendingChoices?.find(
       (c): c is Extract<PendingChoice, { kind: 'selectUpgradeToDefeat' }> => c.kind === 'selectUpgradeToDefeat' && c.controller === 'player',
@@ -1078,7 +1078,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === selectUpgradeChoice.id)
       : []
 
-    // A "return a card from your discard" choice (Moff Gideon, #356): a centre-screen card picker.
+    // A "return a card from your discard" choice (Moff Gideon): a centre-screen card picker.
     const fromDiscardChoice = gameState.pendingChoices?.find(
       (c): c is Extract<PendingChoice, { kind: 'selectFromDiscard' }> => c.kind === 'selectFromDiscard' && c.controller === 'player',
     )
@@ -1086,7 +1086,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === fromDiscardChoice.id)
       : []
 
-    // The Armorer (#348): "look at your resources" — a card picker over the player's resources,
+    // The Armorer: "look at your resources" — a card picker over the player's resources,
     // upgrades selectable, the rest revealed but dimmed. Resolved in the overlay, not the menu.
     const resourceUpgradeChoice = gameState.pendingChoices?.find(
       (c): c is Extract<PendingChoice, { kind: 'selectResourceUpgrade' }> => c.kind === 'selectResourceUpgrade' && c.controller === 'player',
@@ -1095,7 +1095,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === resourceUpgradeChoice.id)
       : []
 
-    // Unique rule (#348): pick which duplicate upgrade to defeat (mandatory) — a centre-screen picker.
+    // Unique rule: pick which duplicate upgrade to defeat (mandatory) — a centre-screen picker.
     const uniqueChoice = gameState.pendingChoices?.find(
       (c): c is Extract<PendingChoice, { kind: 'selectUniqueToDefeat' }> => c.kind === 'selectUniqueToDefeat' && c.controller === 'player',
     )
@@ -1103,12 +1103,12 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
 
     // Playing, resourcing, attacking and attaching upgrades are all driven by
     // clicking a card or unit, so the menu holds only the remaining choices —
-    // mulligan, keep hand, take the initiative, pass (and skip/deploy) (#332/#336).
+    // mulligan, keep hand, take the initiative, pass (and skip/deploy).
     // Leader abilities are driven from the leader card; a board-target choice is driven
-    // from the board + a single Decline button — neither belongs in the action menu (#309).
-    const CLICK_HANDLED: Action['type'][] = ['playCard', 'playUpgrade', 'attack', 'resourceCard', 'setupResource', 'useLeaderAbility']
+    // from the board + a single Decline button — neither belongs in the action menu.
+    const CLICK_HANDLED: Action['type'][] = ['playUnit', 'playEvent', 'playUpgrade', 'attack', 'resourceCard', 'setupResource', 'useLeaderAbility']
     const choiceBoardActions = targetChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === targetChoice.id) : []
-    // "Play a unit from hand" accepts (#348) are clicked on the hand card, not the menu.
+    // "Play a unit from hand" accepts are clicked on the hand card, not the menu.
     const isHandPlay = (a: Action) => a.type === 'acceptChoice' && a.handIndex !== undefined
     const menuActions = gameState.winner === null
       ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !nameCardActions.includes(a) && !fromDiscardActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
@@ -1116,7 +1116,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // The board-target decline and the hand-discard decline share one button (only one
     // choice is active at a time). "Done" for the repeatable multiPick, else "Decline".
     const declineButton = declineChoice ?? discardDecline ?? handPlayDecline
-    // Distribute HUD (Ninth Sister damage / Helgait tokens, #355/#356): how much of the pool is allocated.
+    // Distribute HUD (Ninth Sister damage / Helgait tokens): how much of the pool is allocated.
     const distribute = targetChoice?.kind === 'distributeDamage' || targetChoice?.kind === 'distributeTokens' ? targetChoice : undefined
     const repeatable = targetChoice?.kind === 'multiPick' || targetChoice?.kind === 'distributeDamage' || targetChoice?.kind === 'distributeTokens'
     const actionColumn = (
@@ -1281,7 +1281,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   return (
     <div data-testid="game-screen" className="grid h-screen w-full" style={{ gridTemplateColumns: '16rem 1fr' }}>
       {/* Left column: the header (on the core theme background, like the page
-          header) above the log panel — no divider to the play area (#332). */}
+          header) above the log panel — no divider to the play area. */}
       <div className="flex min-h-0 flex-col">
         <header className="flex items-center justify-between px-2 py-2">
           <div className="flex min-w-0 items-center gap-2">
@@ -1306,7 +1306,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">Log</h3>
             <ol data-testid="game-log" className="mt-2 space-y-0.5 text-xs text-ink-dim">
               {log.map((entry, i) => (
-                // Actor in its own fixed-width column so the actions line up (#332).
+                // Actor in its own fixed-width column so the actions line up.
                 <li key={i} className="flex gap-2">
                   <span className={`w-8 shrink-0 ${entry.by === 'player' ? 'text-accent' : 'text-amber'}`}>
                     {entry.by === 'player' ? 'You' : 'Opp'}
@@ -1321,15 +1321,15 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
 
       {/* Right column: the play area, edge-to-edge to the top and right. It is
           transparent (starfield); the bars carry the surface background, so the
-          battlefield between them shows the stars (#332). */}
+          battlefield between them shows the stars. */}
       <div className="flex min-h-0 flex-col">
         {playContent}
       </div>
 
-      {/* "Look at a card" overlay (Camtono, #342) — centre-screen, over the board. */}
+      {/* "Look at a card" overlay (Camtono) — centre-screen, over the board. */}
       {choiceOverlay}
 
-      {/* Game over — a modal overlay over the whole screen (#332). */}
+      {/* Game over — a modal overlay over the whole screen. */}
       {gameState && gameState.winner !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <section

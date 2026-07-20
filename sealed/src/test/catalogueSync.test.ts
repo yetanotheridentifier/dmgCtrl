@@ -18,7 +18,7 @@ function mockNetwork(failFor: string[] = []) {
   return vi.fn().mockImplementation((url: string) => {
     const failed = failFor.some(f => url.includes(f))
     if (failed) return Promise.resolve({ ok: false, status: 500 })
-    // Art requests also route through the worker now (#311) — match them first.
+    // Art requests also route through the worker now — match them first.
     if (url.includes('/art/')) {
       return Promise.resolve({
         ok: true,
