@@ -236,6 +236,7 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'ASH_247', name: 'One Must Destroy to Create' },
   { id: 'ASH_104', name: 'Dathomiri Magicks' },
   { id: 'ASH_257', name: 'Choose Your Path' },
+  { id: 'ASH_200', name: 'Rehabilitation' },
 ]
 
 export const IMPLEMENTED_UNITS: UpgradeStatus[] = [

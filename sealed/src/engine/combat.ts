@@ -80,17 +80,23 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
   const p = state.players[owner]
   const defeatedUpgrades = defeated.flatMap(u => u.upgrades).filter(a => state.cards[a.cardId]?.type !== 'token')
 
+  // A defeated card goes to its OWNER's discard, which is not always its controller's: a unit
+  // taken with Rehabilitation is defeated back to the player it was stolen from.
+  const cardsFor = (side: PlayerId) => defeated
+    .filter(u => !u.isLeader && !isTokenCard(u.cardId) && (u.owner ?? owner) === side)
+    .map(u => u.cardId)
+
   let result = updatePlayer(state, owner, {
     units: survivors,
     discard: [
       ...p.discard,
-      ...defeated.filter(u => !u.isLeader && !isTokenCard(u.cardId)).map(u => u.cardId),
+      ...cardsFor(owner),
       ...defeatedUpgrades.filter(a => a.owner === owner).map(a => a.cardId),
     ],
   })
 
   const other = opponentOf(owner)
-  const othersUpgrades = defeatedUpgrades.filter(a => a.owner === other).map(a => a.cardId)
+  const othersUpgrades = [...cardsFor(other), ...defeatedUpgrades.filter(a => a.owner === other).map(a => a.cardId)]
   if (othersUpgrades.length > 0) {
     result = updatePlayer(result, other, { discard: [...result.players[other].discard, ...othersUpgrades] })
   }

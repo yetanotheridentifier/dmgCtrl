@@ -233,10 +233,12 @@ export function returnUnitToHand(state: GameState, instanceId: string): GameStat
   for (const owner of ['player', 'opponent'] as PlayerId[]) {
     const u = state.players[owner].units.find(x => x.instanceId === instanceId)
     if (!u) continue
-    let next = updatePlayer(state, owner, {
-      units: state.players[owner].units.filter(x => x.instanceId !== instanceId),
-      hand: isTokenCard(u.cardId) ? state.players[owner].hand : [...state.players[owner].hand, u.cardId],
-    })
+    // The card returns to its OWNER's hand, which may not be its controller (a stolen unit).
+    const cardOwner = u.owner ?? owner
+    let next = updatePlayer(state, owner, { units: state.players[owner].units.filter(x => x.instanceId !== instanceId) })
+    if (!isTokenCard(u.cardId)) {
+      next = updatePlayer(next, cardOwner, { hand: [...next.players[cardOwner].hand, u.cardId] })
+    }
     for (const up of u.upgrades) {
       if (state.cards[up.cardId]?.type === 'token') continue // token upgrades cease to exist
       next = updatePlayer(next, up.owner, { discard: [...next.players[up.owner].discard, up.cardId] })

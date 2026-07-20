@@ -1001,6 +1001,17 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       // Galvanized Leap: ready the chosen unit.
       if (targetInstanceId) next = readyUnit(next, targetInstanceId)
       break
+    case 'selectUnitToSteal': {
+      // Rehabilitation: debuff the unit for the phase, then move it across exactly as it stands —
+      // same damage, upgrades and ready state — recording who still owns the card.
+      const found = targetInstanceId ? findUnit(next, targetInstanceId) : undefined
+      if (!found || found.owner === choice.controller) break
+      if (choice.power !== undefined || choice.hp !== undefined) {
+        next = addLastingEffect(next, { targetInstanceId: found.unit.instanceId, power: choice.power, hp: choice.hp })
+      }
+      next = takeControlOfUnit(next, found.owner, choice.controller, found.unit.instanceId)
+      break
+    }
     case 'mayPlayUnitFromDiscard': {
       // Bring the chosen unit out of the discard and into play, paying nothing. It enters as a
       // normal play would, so its own When Played fires.
@@ -1878,6 +1889,35 @@ function inPlayUnits(state: GameState): UnitState[] {
   return [...state.players.player.units, ...state.players.opponent.units]
 }
 
+/**
+ * Move a unit from `from` to `to`, unchanged in every other respect. `owner` records where the card
+ * came from so it can go home — to that player's discard if it's defeated, or back under their
+ * control at regroup. Moving a unit that was already stolen keeps the ORIGINAL owner, and a unit
+ * returning to its owner drops the field entirely.
+ */
+function takeControlOfUnit(state: GameState, from: PlayerId, to: PlayerId, instanceId: string): GameState {
+  const unit = state.players[from].units.find(u => u.instanceId === instanceId)
+  if (!unit || from === to) return state
+  const cardOwner = unit.owner ?? from
+  const moved: UnitState = cardOwner === to ? { ...unit, owner: undefined } : { ...unit, owner: cardOwner }
+  const without = updatePlayer(state, from, { units: state.players[from].units.filter(u => u.instanceId !== instanceId) })
+  return updatePlayer(without, to, { units: [...without.players[to].units, moved] })
+}
+
+/**
+ * Hand every unit back to its owner. Runs at the START of the regroup phase, before units ready, so
+ * the owner gets it back in time to ready it and use it in the next action phase.
+ */
+function returnStolenUnits(state: GameState): GameState {
+  let next = state
+  for (const controller of ['player', 'opponent'] as PlayerId[]) {
+    for (const u of next.players[controller].units.filter(x => x.owner !== undefined && x.owner !== controller)) {
+      next = takeControlOfUnit(next, controller, u.owner!, u.instanceId)
+    }
+  }
+  return next
+}
+
 /** Unit cards in `owner`'s discard matching an optional cost cap and excluded trait. */
 export function discardUnitsMatching(state: GameState, owner: PlayerId, maxCost?: number, excludeTrait?: string): string[] {
   return state.players[owner].discard.filter(id => {
@@ -1971,6 +2011,9 @@ function enterRegroup(state: GameState): GameState {
   // that the expired buff was keeping alive is then defeated as a state-based check. Unused
   // "next unit you play this phase" grants (Sabine) also lapse at the phase boundary.
   let next: GameState = clearNextUnitGrants(resetPhaseEvents(clearLastingEffects(clearHidden({ ...state, phase: 'regroup', consecutivePasses: 0 }))))
+  // "At the start of the regroup phase, its owner takes control of it" (Rehabilitation) — before
+  // anything readies, so the owner has it available for the next action phase.
+  next = returnStolenUnits(next)
   next = sweepUnitDefeats(next)
   next = drawForRegroup(next, 'player')
   next = drawForRegroup(next, 'opponent')

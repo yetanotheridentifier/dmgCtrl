@@ -1918,3 +1918,10 @@ registerCard('ASH_257', whenPlayed('Choose one: if you control a Force unit, hea
   if (s.players[ctx.owner].units.some(u => unitHasTrait(s, u, 'Mandalorian'))) modes.push('mandoToken')
   return modes.length ? pushChoice(s, { kind: 'chooseMode', id: ctx.sourceInstanceId!, controller: ctx.owner, modes }) : s
 }))
+
+registerCard('ASH_200', whenPlayed('Choose a non-leader unit. Give that unit -3/-0 for this phase, then take control of it. At the start of the regroup phase, its owner takes control of it.', (s, ctx) => { // Rehabilitation
+  const targets = s.players[opponentOf(ctx.owner)].units.filter(u => !u.isLeader).map(u => u.instanceId)
+  return targets.length
+    ? pushChoice(s, { kind: 'selectUnitToSteal', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, power: -3 })
+    : s
+}))

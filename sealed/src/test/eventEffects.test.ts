@@ -555,3 +555,76 @@ describe('Choose Your Path (257) — choose one of two conditional modes', () =>
     expect(play(neither).pendingChoices ?? []).toHaveLength(0)
   })
 })
+
+// ── Taking control of a unit ──────────────────────────────────────────────────────────────────
+
+const K = {
+  ...J,
+  ASH_200: card({ id: 'ASH_200', type: 'event', name: 'Rehabilitation', cost: 5 }),
+  ASH_246X: card({ id: 'ASH_246X', type: 'upgrade', cost: 1, power: 1, hp: 1 }),
+}
+
+describe('Rehabilitation (200) — take control of a unit until the regroup phase', () => {
+  const stolen = () => {
+    const s = state({
+      cards: K,
+      players: {
+        player: rich({ hand: ['ASH_200'] }),
+        opponent: player({
+          units: [
+            unit('prize', 'STRONG', { damage: 2, upgrades: [{ cardId: 'UPG', owner: 'opponent' }] }),
+            unit('lead', 'STRONG', { isLeader: true }),
+          ],
+        }),
+      },
+    })
+    const played = play(s)
+    const c = choice(played)
+    expect(c.kind === 'selectUnitToDefeat' || c.kind === 'selectUnitToSteal').toBe(true)
+    return resolve(played, { type: 'acceptChoice', choiceId: c.id, targetInstanceId: 'prize' })
+  }
+
+  it('moves the unit to your side, keeping its damage, upgrades and ready state', () => {
+    const took = stolen()
+    expect(took.players.player.units.map(u => u.instanceId)).toContain('prize')
+    expect(took.players.opponent.units.map(u => u.instanceId)).not.toContain('prize')
+    const u = U(took, 'prize')!
+    expect(u.damage).toBe(2)
+    expect(u.upgrades).toHaveLength(1)
+    expect(u.exhausted).toBe(false) // came across ready, so it can attack
+    expect(u.owner).toBe('opponent') // controlled by us, still owned by them
+  })
+
+  it('applies -3/-0 for the phase', () => {
+    const took = stolen()
+    expect(effectivePower(took, U(took, 'prize')!)).toBe(5 - 3 + 1) // STRONG 5, −3, +1 from the upgrade
+  })
+
+  it('excludes leaders', () => {
+    const s = state({
+      cards: K,
+      players: { player: rich({ hand: ['ASH_200'] }), opponent: player({ units: [unit('lead', 'STRONG', { isLeader: true })] }) },
+    })
+    expect(play(s).pendingChoices ?? []).toHaveLength(0)
+  })
+
+  it('returns to its owner at the start of regroup, before units ready', () => {
+    const took = stolen()
+    // Both players pass to end the action phase.
+    const passed = resolve(resolve({ ...took, activePlayer: 'player', consecutivePasses: 0 }, { type: 'pass' }), { type: 'pass' })
+    expect(passed.phase).toBe('regroup')
+    expect(passed.players.opponent.units.map(u => u.instanceId)).toContain('prize')
+    expect(passed.players.player.units.map(u => u.instanceId)).not.toContain('prize')
+    expect(U(passed, 'prize')!.owner).toBeUndefined() // home again — controller and owner match
+    expect(effectivePower(passed, U(passed, 'prize')!)).toBe(5 + 1) // the −3 lapsed with the phase
+  })
+
+  it('sends the card to its OWNER’s discard if it is defeated while you control it', () => {
+    const took = stolen()
+    const dead = dealDamageToUnit(took, 'prize', 99)
+    expect(U(dead, 'prize')).toBeUndefined()
+    expect(dead.players.opponent.discard).toContain('STRONG') // owner's discard, not the thief's
+    expect(dead.players.player.discard).not.toContain('STRONG')
+    expect(dead.players.opponent.discard).toContain('UPG') // and the upgrade to its own owner
+  })
+})

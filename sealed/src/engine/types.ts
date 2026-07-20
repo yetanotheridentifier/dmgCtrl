@@ -106,6 +106,14 @@ export interface UnitState {
    * when the unit leaves play (the field goes with it).
    */
   namedCard?: string
+  /**
+   * The player who OWNS this card, when that differs from the player who controls it (Rehabilitation
+   * takes control of an enemy unit). Which `players[…].units` array a unit sits in is its
+   * *controller*; ownership decides where the card goes when it leaves play — a stolen unit is
+   * defeated into its owner's discard, not its controller's. Absent = owner is the controller,
+   * which is true of every unit that has never changed hands.
+   */
+  owner?: PlayerId
 }
 
 export interface ResourceState {
@@ -472,6 +480,9 @@ export type PendingChoice =
   | { kind: 'selectUnitToReturn'; id: string; controller: PlayerId; targets: string[] }
   // Galvanized Leap: ready one of `targets`.
   | { kind: 'selectUnitToReady'; id: string; controller: PlayerId; targets: string[] }
+  // Rehabilitation: take control of one of `targets` until the regroup phase, debuffing it by
+  // `power`/`hp` for this phase.
+  | { kind: 'selectUnitToSteal'; id: string; controller: PlayerId; targets: string[]; power?: number; hp?: number }
   // Play a unit from your discard for free (One Must Destroy to Create, Dathomiri Magicks).
   // `candidates` are discard-pile card ids; `acceptChoice`'s `optionIndex` picks one. `remaining`
   // counts how many more may be played after this one, so the offer re-raises until the pool runs out.

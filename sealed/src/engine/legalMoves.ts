@@ -537,6 +537,7 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'selectUnitToReady':
+      case 'selectUnitToSteal':
       case 'selectDistributeSource':
       case 'selectUnitToReturn': {
         // Pick one of the eligible units, or decline.
