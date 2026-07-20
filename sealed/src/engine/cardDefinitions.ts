@@ -3,7 +3,7 @@ import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpg
 import { dealDamageToUnit, defeatUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
-import { TOKEN_MANDALORIAN } from './tokenUnits'
+import { TOKEN_MANDALORIAN, isTokenCard } from './tokenUnits'
 import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, cardsPlayedThisPhase, markAbilityUsed } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets } from './legalMoves'
 import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, unitHasKeyword, unitKeywords } from './keywords'
@@ -1304,3 +1304,33 @@ registerCard('ASH_070', { preventBaseDamage: (_s, _source, amount) => Math.min(a
 // Moff Jerjerrod (094): "if you would create a number of tokens, you may defeat this unit to create
 // twice that number instead" — offered by `createTokenUnits` as a top-up (see its note).
 registerCard('ASH_094', { doublesTokenCreation: () => true })
+
+// ── Tier 1 (#357): cards the existing hooks already cover ───────────────────
+registerCard('ASH_144', { abilities: [{ trigger: 'whenFriendlyAttackEnds', description: "If the attack dealt combat damage to a base, give an Advantage token to this unit.", effect: (s, ctx) => // Vane's Snub Fighter
+  (ctx.combatDamageToBase ?? 0) > 0 ? giveToken(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE) : s }] })
+
+registerCard('ASH_041', { // Outcast — "when a friendly unit enters play (including this one)"
+  abilities: [
+    // `whenPlayOrCreateUnit` fires on the controller's OTHER units, so the "including this one" half
+    // is covered by its own whenPlayed.
+    { trigger: 'whenPlayed', description: 'This unit gets +1/+0 for this phase.', effect: (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, power: 1 }) },
+    { trigger: 'whenPlayOrCreateUnit', description: 'A friendly unit entering play gets +1/+0 for this phase.', effect: (s, ctx) => ctx.targetInstanceId ? addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId, power: 1 }) : s },
+  ],
+})
+
+registerCard('ASH_102', { abilities: [{ trigger: 'whenPlayOrCreateUnit', description: 'You may have the entering unit deal damage equal to its power to a unit in the same arena.', effect: (s, ctx) => { // Ravager
+  const entered = ctx.targetInstanceId ? allUnits(s).find(u => u.instanceId === ctx.targetInstanceId) : undefined
+  if (!entered) return s
+  const amount = effectivePower(s, entered)
+  const targets = allUnits(s).filter(u => u.arena === entered.arena).map(u => u.instanceId)
+  return amount > 0 && targets.length ? pushChoice(s, { kind: 'mayDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount, optional: true }) : s
+} }] })
+
+registerCard('ASH_079', { // Koska Reeves
+  conditionalKeywords: (s, u) => {
+    const owner = findUnit(s, u.instanceId)?.owner
+    return owner !== undefined && s.players[owner].units.some(x => isTokenCard(x.cardId)) ? [{ name: 'Sentinel' }] : []
+  },
+  abilities: [{ trigger: 'whenPlayed', description: 'If a friendly unit was defeated this phase, create a Mandalorian token.', effect: (s, ctx) =>
+    defeatedThisPhase(s, ctx.owner).length > 0 ? createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN) : s }],
+})

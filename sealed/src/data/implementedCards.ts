@@ -23,97 +23,137 @@ export interface UpgradeStatus {
 export type GroupStatus = 'done' | 'in progress' | 'planned'
 
 /**
- * The 179 ASH unit cards, split into work groups by effort (least → most) for #306. Group A needs
- * no engine work; B–F are the split-out tickets (#353–#357). Counts are approximate — a few
- * multi-ability cards straddle groups. Descriptive only (no per-card drift-guard yet).
+ * The 179 ASH unit cards, grouped by what each is *blocked on* (#306). This replaced the original
+ * A–F effort split (#353–#357), which became misleading once those tickets landed the shared
+ * infrastructure: what matters now is not how hard a card once looked, but whether the engine can
+ * already express it. Order runs done → ready → blocked, so the first open group is what's next.
  */
+/** A unit card in a group. Keyed by id: 13 unit names collide with leader names (Grogu, Baylan
+ *  Skoll, The Mandalorian, …), so name alone can't identify a card. */
+export interface UnitRef {
+  id: string
+  name: string
+}
+
 export interface UnitGroup {
   id: string
   name: string
   status: GroupStatus
   note: string
-  /** The specific unit cards in this group (approximate — a few multi-ability cards straddle groups). */
-  units: string[]
+  /** The unit cards in this group. */
+  units: UnitRef[]
 }
 
-export const UNIT_GROUPS: UnitGroup[] = [
+/**
+ * The unbuilt classification: every unit that does NOT yet have a registered ability, grouped by what
+ * blocks it. The "built" group is derived from IMPLEMENTED_UNITS rather than listed here, so a card
+ * moves out of its blocker group automatically the moment its ability lands — the panel can't go stale.
+ */
+const UNIT_PLAN: { id: string; name: string; status: GroupStatus; note: string; units: UnitRef[] }[] = [
   {
-    id: 'A',
-    name: 'No engine work (vanilla + keyword-only)',
+    id: 'keyword',
+    name: 'Playable as printed (no engine work)',
     status: 'done',
-    note: 'Vanilla + keyword-only. Every keyword in the set is already implemented, so these play correctly as printed — validated by groupAUnits.test.ts.',
+    note: 'Vanilla or keyword-only. Every keyword in the set is implemented, so these already play correctly — validated by groupAUnits.test.ts.',
     units: [
-      'Alamite Hunter', 'Blurrg', 'Covert Veteran', 'Death Trooper Squad', 'Defenders of the Forest', 'Dinosaur Turtle',
-      'Emperor\'s Champion', 'Ewok Warrior', 'Fang Fighter Squadron', 'Fennec Shand', 'Flanking TIE Interceptor', 'Forest Patroller',
-      'Honorable Nite Owl', 'Imperial Armored Commando', 'Imperial Loyalist', 'Inspired Recruit', 'Mos Eisley Modifier', 'N5 Sentry Droid',
-      'Noti Mobile Pod', 'Noti Nomad', 'Open Circle Ace', 'Outland Protector', 'Pathfinder Sergeant', 'Peridea Bandit',
-      'Praetorian Elite', 'Rebel Infiltrators', 'Remnant Interceptor', 'Remnant Official', 'Remnant Trooper Corps', 'Scorpenek Annihilator Droid',
-      'Shydopp Pirate Skiff', 'Strike Team Vanguard', 'Survivors\' Langskib', 'TIE Striker', 'Tatooine Sand Beast', 'Tempest Lieutenant',
-      'Unsanctioned Patrol', 'Womp Rat', 'Wookiee Chieftain',
+      { id: 'ASH_164', name: 'Alamite Hunter' },
+      { id: 'ASH_121', name: 'Blurrg' },
+      { id: 'ASH_249', name: 'Covert Veteran' },
+      { id: 'ASH_242', name: 'Death Trooper Squad' },
+      { id: 'ASH_129', name: 'Defenders of the Forest' },
+      { id: 'ASH_131', name: 'Dinosaur Turtle' },
+      { id: 'ASH_193', name: 'Emperor\'s Champion' },
+      { id: 'ASH_166', name: 'Ewok Warrior' },
+      { id: 'ASH_130', name: 'Fang Fighter Squadron' },
+      { id: 'ASH_192', name: 'Fennec Shand' },
+      { id: 'ASH_215', name: 'Flanking TIE Interceptor' },
+      { id: 'ASH_096', name: 'Forest Patroller' },
+      { id: 'ASH_154', name: 'Honorable Nite Owl' },
+      { id: 'ASH_048', name: 'Imperial Armored Commando' },
+      { id: 'ASH_239', name: 'Imperial Loyalist' },
+      { id: 'ASH_152', name: 'Inspired Recruit' },
+      { id: 'ASH_074', name: 'Mos Eisley Modifier' },
+      { id: 'ASH_252', name: 'N5 Sentry Droid' },
+      { id: 'ASH_261', name: 'Noti Mobile Pod' },
+      { id: 'ASH_069', name: 'Noti Nomad' },
+      { id: 'ASH_201', name: 'Open Circle Ace' },
+      { id: 'ASH_117', name: 'Outland Protector' },
+      { id: 'ASH_106', name: 'Pathfinder Sergeant' },
+      { id: 'ASH_190', name: 'Peridea Bandit' },
+      { id: 'ASH_145', name: 'Praetorian Elite' },
+      { id: 'ASH_256', name: 'Rebel Infiltrators' },
+      { id: 'ASH_095', name: 'Remnant Interceptor' },
+      { id: 'ASH_076', name: 'Remnant Official' },
+      { id: 'ASH_244', name: 'Remnant Trooper Corps' },
+      { id: 'ASH_029', name: 'Scorpenek Annihilator Droid' },
+      { id: 'ASH_173', name: 'Shydopp Pirate Skiff' },
+      { id: 'ASH_061', name: 'Strike Team Vanguard' },
+      { id: 'ASH_126', name: 'Survivors\' Langskib' },
+      { id: 'ASH_141', name: 'TIE Striker' },
+      { id: 'ASH_225', name: 'Tatooine Sand Beast' },
+      { id: 'ASH_143', name: 'Tempest Lieutenant' },
+      { id: 'ASH_222', name: 'Unsanctioned Patrol' },
+      { id: 'ASH_213', name: 'Womp Rat' },
+      { id: 'ASH_175', name: 'Wookiee Chieftain' },
     ],
   },
   {
-    id: 'B',
-    name: 'Conditional self buffs (“While X …”)',
+    id: 'ready',
+    name: 'Ready to build (hooks already exist)',
     status: 'in progress',
-    note: 'Grant this unit a keyword or stat while a condition holds. Reuses conditionalKeywords + statModifier. (#353)',
+    note: 'Blocked on nothing — the triggers, choices and effects these need are already in place.',
     units: [
-      'AT-ST Raider', 'B-Wing Rearguard', 'Bo-Katan Kryze', 'Captain Pellaeon', 'Carson Teva', 'Consortium StarViper',
-      'Darth Vader', 'Elzar Mann', 'Heroic Purrgil', 'Koska Reeves', 'Lothal E-Wing', 'Mandalorian Flagship',
-      'Mandalorian Super Commandos', 'Marrok', 'Scion Shuttle', 'Shin Hati', 'Stolen Eta Shuttle', 'Warrior of Clan Kryze',
+      { id: 'ASH_079', name: 'Koska Reeves' },
+      { id: 'ASH_171', name: 'Pegasus Tri-Wing' },
+      { id: 'ASH_118', name: '8D8' },
+      { id: 'ASH_060', name: 'Cobb Vanth' },
+      { id: 'ASH_245', name: 'Eye of Sion' },
+      { id: 'ASH_047', name: 'Gar Saxon' },
+      { id: 'ASH_155', name: 'Grogu' },
+      { id: 'ASH_102', name: 'Ravager' },
+      { id: 'ASH_109', name: 'T-6 Shuttle 1974' },
+      { id: 'ASH_041', name: 'Outcast' },
+      { id: 'ASH_144', name: 'Vane\'s Snub Fighter' },
     ],
   },
   {
-    id: 'C',
-    name: 'Constant effects on other units (auras)',
-    status: 'done',
-    note: 'Buff or strip keywords on other units. Reuses the aura hook. (#354)',
-    units: ['Domesticated Loth-Cat', 'Gallius Rax', 'Onyx Cinder', 'Poe Dameron'],
-  },
-  {
-    id: 'D',
-    name: 'When Played effects',
-    status: 'in progress',
-    note: 'The largest bucket; mostly reuses existing effect primitives (damage / tokens / heal / draw). (#355)',
+    id: 'mechanic',
+    name: 'Needs one new mechanic each',
+    status: 'planned',
+    note: 'Each is blocked on a single small addition — a new trigger, a chained choice, an extra action-ability cost, or choice support during the regroup phase.',
     units: [
-      'Admiral Ackbar', 'Amnesty Officer', 'Anakin Skywalker', 'Attendant Navigator', 'Barriss Offee', 'Battered Haulcraft',
-      'Baylan Skoll', 'Boba Fett\'s Rancor', 'Children of the Watch', 'Chimaera', 'Clan Wren Loyalist', 'Crix Madine',
-      'Desert Sharpshooter', 'Ferry Droid', 'Flarestar Attack Shuttle', 'Han Solo', 'Helix Starfighter', 'Home One',
-      'Imperial Defector', 'Imposing Scout Walker', 'Inspiring Veteran', 'Jabba the Hutt', 'Jod Na Nawood', 'Justifier',
-      'Knobby White Ice Spider', 'LEP Ratcatcher', 'Luke Skywalker', 'Mos Espa Watermonger', 'Mouse Droid', 'Nebulon-C Frigate',
-      'Neel', 'Ninth Sister', 'Pegasus Tri-Wing', 'Pre Vizsla', 'Protectorate Fighter', 'Purrgil Ultra', 'Queen Soruna',
-      'Reinforcing Light Cruiser', 'Remnant Lookouts', 'Ryder Azadi', 'Snub Fighter Squadron', 'StarFortress Heavy Bomber',
-      'The Armorer', 'The Cyborg Mech', 'The Twins', 'Trask Walker', 'Trexler Armored Marauder', 'Zealous Soldier', 'Zeb Orrelios',
+      { id: 'ASH_202', name: 'Carson Teva' },
+      { id: 'ASH_207', name: 'Heroic Purrgil' },
+      { id: 'ASH_039', name: 'Baylan Skoll' },
+      { id: 'ASH_052', name: 'Chimaera' },
+      { id: 'ASH_042', name: 'Jabba the Hutt' },
+      { id: 'ASH_219', name: 'Jod Na Nawood' },
+      { id: 'ASH_132', name: 'Queen Soruna' },
+      { id: 'ASH_133', name: 'Trask Walker' },
+      { id: 'ASH_161', name: 'Zeb Orrelios' },
+      { id: 'ASH_169', name: 'Axe Woves' },
+      { id: 'ASH_204', name: 'Blade Three' },
+      { id: 'ASH_217', name: 'Mayor\'s Majordomo' },
+      { id: 'ASH_149', name: 'Eviscerator' },
+      { id: 'ASH_032', name: 'Rancor Keeper' },
+      { id: 'ASH_159', name: 'Alphabet Squadron U-Wing' },
     ],
   },
   {
-    id: 'E',
-    name: 'When Defeated / On Attack / Action',
-    status: 'in progress',
-    note: 'Reuses the whenDefeated / onAttack / attack-end / actionAbilities hooks. The stragglers need mechanics from the long tail below. (#356)',
+    id: 'subsystem',
+    name: 'Blocked on a subsystem',
+    status: 'planned',
+    note: 'Each needs a substantial new system: a damage pipeline that tracks sources, unit capture, aura-granted triggered abilities, or the event card type.',
     units: [
-      '8D8', 'Ant Droid', 'Axe Woves', 'Blade Three', 'Clan Vizsla Soldier', 'Cobb Vanth', 'Corona Four', 'Covert Believers',
-      'Danger Squadron Wingmen', 'Doctor Pershing', 'Duchess\'s Protector', 'Emperor\'s Messenger', 'Enoch', 'Eye of Sion',
-      'Ezra Bridger', 'Gallofree Transport', 'Gar Saxon', 'Gozanti Assault Carrier', 'Greef Karga', 'Green Leader', 'Grogu',
-      'Helgait', 'Huyang', 'Lang', 'Leia Organa', 'Mandalorian Scout', 'Mando\'s N-1 Starfighter', 'Mayor\'s Majordomo',
-      'Migs Mayfeld', 'Moff Gideon', 'Morgan Elsbeth', 'Mortar Trooper', 'Paz Vizsla', 'R5-D4', 'Ravager', 'Razor Crest',
-      'Reanimated Night Trooper', 'Shin Hati\'s Fiend Fighter', 'Summa-verminoth', 'T-6 Shuttle 1974', 'Yellow Aces Bomber',
-    ],
-  },
-  {
-    id: 'F',
-    name: 'Unique abilities & new mechanics',
-    status: 'in progress',
-    note: 'The long tail, built one mechanic at a time: combat-role stats, reactive triggers, cost reductions and targeting rules are in; the damage-prevention layer and a few bespoke cards are still to come. (#357)',
-    units: [
-      'Alphabet Squadron U-Wing', 'At Attin Safety Droid', 'Bo-Katan\'s Gauntlet', 'Bothan-5', 'Eviscerator', 'Executor',
-      'Gorian Shard\'s Corsair', 'Grand Admiral Thrawn', 'Halo', 'Hera Syndulla', 'Kachirho Militia', 'Kelleran Beq',
-      'Marrok\'s Fiend Fighter', 'Moff Jerjerrod', 'Outcast', 'Palace Chef Droid', 'Peli Motto', 'Pit Droid Team', 'Qi\'ra',
-      'Rancor Keeper', 'Red Leader', 'Rukh', 'Sabine Wren', 'Tatooine Repulsor Train', 'The Great Mothers', 'The Mandalorian',
-      'Vane\'s Snub Fighter', 'Wicket',
+      { id: 'ASH_224', name: 'Elzar Mann' },
+      { id: 'ASH_063', name: 'Bo-Katan\'s Gauntlet' },
+      { id: 'ASH_128', name: 'Bothan-5' },
+      { id: 'ASH_196', name: 'Gorian Shard\'s Corsair' },
+      { id: 'ASH_062', name: 'The Mandalorian' },
     ],
   },
 ]
+
 
 export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'ASH_001', name: 'The Armorer', front: true, back: true },
@@ -304,7 +344,35 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   // Group F (#357) — damage prevention
   { id: 'ASH_070', name: 'At Attin Safety Droid' },
   { id: 'ASH_094', name: 'Moff Jerjerrod' },
+  // Tier 1 (#357) — covered by existing hooks
+  { id: 'ASH_144', name: "Vane's Snub Fighter" },
+  { id: 'ASH_041', name: 'Outcast' },
+  { id: 'ASH_102', name: 'Ravager' },
+  { id: 'ASH_079', name: 'Koska Reeves' },
 ]
+
+/**
+ * Groups shown on the setup screen: the plan above with every already-built unit lifted out into its
+ * own "built" group. Derived so implementing a card needs no edit here.
+ */
+export const UNIT_GROUPS: UnitGroup[] = (() => {
+  const built = new Set(IMPLEMENTED_UNITS.map(u => u.id))
+  const plan = UNIT_PLAN.map(g => ({ ...g, units: g.units.filter(u => !built.has(u.id)) }))
+  const keep = (id: string) => plan.find(g => g.id === id)!
+  return [
+    keep('keyword'),
+    {
+      id: 'built',
+      name: 'Abilities built',
+      status: 'done' as GroupStatus,
+      note: 'Card abilities are implemented and covered by tests (#353–#357).',
+      units: IMPLEMENTED_UNITS.map(u => ({ id: u.id, name: u.name })),
+    },
+    keep('ready'),
+    keep('mechanic'),
+    keep('subsystem'),
+  ]
+})()
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */
 const SET_TOTAL = { leaders: 18, upgrades: 25, bases: 8, units: 179, events: 34 } as const
@@ -325,8 +393,8 @@ export const IMPLEMENTATION_PROGRESS: CategoryProgress[] = [
   { label: 'Upgrades', done: IMPLEMENTED_UPGRADES.length, total: SET_TOTAL.upgrades },
   { label: 'Bases', done: SET_TOTAL.bases, total: SET_TOTAL.bases }, // all vanilla — fully playable
   { label: 'Tokens', done: TOKEN_COUNT, total: TOKEN_COUNT },
-  // Units done = keyword-only/vanilla units (Group A, need no code) + units with a registered ability.
-  { label: 'Units', done: (UNIT_GROUPS.find(g => g.id === 'A')?.units.length ?? 0) + IMPLEMENTED_UNITS.length, total: SET_TOTAL.units },
+  // Units done = keyword-only/vanilla units (need no code) + units with a registered ability.
+  { label: 'Units', done: (UNIT_GROUPS.find(g => g.id === 'keyword')?.units.length ?? 0) + IMPLEMENTED_UNITS.length, total: SET_TOTAL.units },
   { label: 'Events', done: 0, total: SET_TOTAL.events },
 ]
 

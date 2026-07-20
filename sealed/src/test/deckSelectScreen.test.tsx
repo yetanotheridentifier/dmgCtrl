@@ -75,20 +75,18 @@ describe('DeckSelectScreen', () => {
     expect(upgradesDetails.open).toBe(false)
   })
 
-  it('shows unit work-groups as collapsible sections, expanding the first not-yet-done group', () => {
+  it('shows unit groups as collapsible sections, expanding the first not-yet-done group', () => {
     render(<DeckSelectScreen onPlay={vi.fn()} />)
     const groups = screen.getByTestId('implemented-unit-groups')
-    const groupA = within(groups).getByTestId('unit-group-A') as HTMLDetailsElement // Group A = done
-    const groupB = within(groups).getByTestId('unit-group-B') as HTMLDetailsElement // Group B = first not-done
-    expect(groupA.open).toBe(false) // done → collapsed
-    expect(groupB.open).toBe(true) // next up → expanded
+    const done = within(groups).getByTestId('unit-group-keyword') as HTMLDetailsElement // playable as printed
+    const next = within(groups).getByTestId('unit-group-ready') as HTMLDetailsElement // first not-done
+    expect(done.open).toBe(false) // done → collapsed
+    expect(next.open).toBe(true) // next up → expanded
     // Development status is shown for the groups (same treatment as leaders/upgrades).
-    expect(within(groupA).getByText(/done/i)).toBeInTheDocument()
-    expect(within(groupB).getByText(/in progress/i)).toBeInTheDocument()
-    // Each group lists its specific units.
-    expect(within(groupB).getByText('Bo-Katan Kryze')).toBeInTheDocument()
-    // No group-letter prefixes in the section titles.
-    expect(within(groups).queryByText(/^[A-F]\s*·/)).toBeNull()
+    expect(within(done).getByText(/done/i)).toBeInTheDocument()
+    expect(within(next).getByText(/in progress/i)).toBeInTheDocument()
+    // Each group lists its units (names churn as cards get built, so just assert it's populated).
+    expect(within(next).getAllByRole('listitem').length).toBeGreaterThan(0)
   })
 
   it('imports a pasted deck and lists it', async () => {
