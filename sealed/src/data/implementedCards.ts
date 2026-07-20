@@ -54,7 +54,7 @@ const UNIT_PLAN: { id: string; name: string; status: GroupStatus; note: string; 
     id: 'keyword',
     name: 'Playable as printed (no engine work)',
     status: 'done',
-    note: 'Vanilla or keyword-only. Every keyword in the set is implemented, so these already play correctly — validated by groupAUnits.test.ts.',
+    note: 'Vanilla or keyword-only. Every keyword in the set is implemented, so these already play correctly — validated by keywordOnlyUnits.test.ts.',
     units: [
       { id: 'ASH_164', name: 'Alamite Hunter' },
       { id: 'ASH_121', name: 'Blurrg' },
