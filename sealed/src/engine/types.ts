@@ -426,6 +426,9 @@ export type PendingChoice =
   // Barriss Offee (#355): heal up to `maxHeal` from a chosen unit and give it that many Advantage
   // tokens (one per damage healed). Optional board-target — only damaged units are eligible.
   | { kind: 'healForAdvantage'; id: string; controller: PlayerId; targets: string[]; maxHeal: number }
+  // Moff Jerjerrod (#357): after creating `count` tokens, you may defeat `unitId` to create `count`
+  // more (equivalent to "create twice that number instead"). A yes/no.
+  | { kind: 'mayDoubleTokens'; id: string; controller: PlayerId; unitId: string; token: string; count: number }
   // Name a card (#355, Ryder Azadi) — resolved by an `acceptChoice` carrying `cardName`; the name is
   // recorded on `unitId` (a `namedCard`), forbidding the opponent from playing cards with that name
   // while it's in play. Mandatory.

@@ -1,5 +1,5 @@
 import type { GameState, NextUnitGrant, PlayerId, UnitState } from './types'
-import { updatePlayer } from './types'
+import { updatePlayer, pushChoice } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import { getCardDefinition, runUnitTrigger } from './abilities'
@@ -127,6 +127,27 @@ export function exhaustUnit(state: GameState, instanceId: string): GameState {
  * token card (e.g. the Mandalorian). A Shielded token enters play with a shield
  * token, per its keyword. Consumes one instance id.
  */
+/**
+ * Create `count` token units, then offer any "double the tokens" replacement (#357, Moff Jerjerrod).
+ *
+ * The card reads "if you would create N tokens, you may defeat this unit to create 2N instead". Rather
+ * than pause mid-effect for that choice (which would need a resumable pipeline), we lean on the
+ * equivalence **2N ≡ N then N more**: create the N, then offer a yes/no to defeat the replacer and top
+ * up by another N. Same end state, no interrupt. The batch `count` is why this API exists — creating
+ * one at a time would only ever let it add +1.
+ */
+export function createTokenUnits(state: GameState, owner: PlayerId, tokenCardId: string, count: number): GameState {
+  let next = state
+  for (let i = 0; i < count; i++) next = createTokenUnit(next, owner, tokenCardId)
+  if (count <= 0) return next
+  const replacer = next.players[owner].units.find(u =>
+    [u.cardId, ...u.upgrades.map(x => x.cardId)].some(id => getCardDefinition(id)?.doublesTokenCreation?.(next, u) ?? false),
+  )
+  return replacer
+    ? pushChoice(next, { kind: 'mayDoubleTokens', id: `${replacer.instanceId}-double`, controller: owner, unitId: replacer.instanceId, token: tokenCardId, count })
+    : next
+}
+
 export function createTokenUnit(state: GameState, owner: PlayerId, tokenCardId: string): GameState {
   const tokenCard = state.cards[tokenCardId]
   const shielded = (tokenCard?.keywords ?? []).some(k => k.name === 'Shielded')

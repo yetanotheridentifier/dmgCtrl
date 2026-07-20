@@ -121,6 +121,11 @@ export interface CardDefinition {
    * caps an instance at 4). Receives the incoming amount, returns what actually lands.
    */
   preventBaseDamage?: (state: GameState, source: UnitState, amount: number) => number
+  /**
+   * This unit may be defeated to double a batch of token creation (#357, Moff Jerjerrod). Offered by
+   * `createTokenUnits` after the batch is made — see the 2N ≡ N-then-N note there.
+   */
+  doublesTokenCreation?: (state: GameState, source: UnitState) => boolean
   /** This unit can't declare an attack against a base (#357, Wicket). */
   cannotAttackBases?: (state: GameState, unit: UnitState) => boolean
   /** This unit can't currently be attacked (#357, Tatooine Repulsor Train). Also keeps it from being a forced Sentinel target. */

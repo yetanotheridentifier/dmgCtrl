@@ -1,5 +1,5 @@
 import { registerCard } from './abilities'
-import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, bottomTopCards, exhaustReadyResource, readyResource, readyUnit } from './effects'
+import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, bottomTopCards, exhaustReadyResource, readyResource, readyUnit } from './effects'
 import { dealDamageToUnit, defeatUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
@@ -790,7 +790,7 @@ registerCard('ASH_221', whenPlayed('If an opponent controls a space unit, give a
   s.players[opponentOf(ctx.owner)].units.some(u => u.arena === 'space')
     ? giveToken(s, ctx.sourceInstanceId!, TOKEN_SHIELD)
     : giveTokens(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE, 2)))
-registerCard('ASH_111', whenPlayed('Create 2 Mandalorian tokens.', (s, ctx) => createTokenUnit(createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN), ctx.owner, TOKEN_MANDALORIAN))) // Children of the Watch
+registerCard('ASH_111', whenPlayed('Create 2 Mandalorian tokens.', (s, ctx) => createTokenUnits(s, ctx.owner, TOKEN_MANDALORIAN, 2))) // Children of the Watch
 registerCard('ASH_124', whenPlayed('If you control a unique unit, create a Mandalorian token.', (s, ctx) => // Protectorate Fighter
   s.players[ctx.owner].units.some(u => s.cards[u.cardId]?.unique) ? createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN) : s))
 registerCard('ASH_065', whenPlayed('Heal all damage from each friendly unit.', (s, ctx) => // Home One
@@ -960,7 +960,7 @@ registerCard('ASH_254', whenDefeated('Give 2 Advantage tokens to a friendly unit
 }))
 
 registerCard('ASH_028', whenDefeated("If this unit wasn't defeated by combat damage, create 2 Mandalorian tokens.", (s, ctx) => // Paz Vizsla
-  ctx.defeatedByCombat ? s : createTokenUnit(createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN), ctx.owner, TOKEN_MANDALORIAN)))
+  ctx.defeatedByCombat ? s : createTokenUnits(s, ctx.owner, TOKEN_MANDALORIAN, 2)))
 
 registerCard('ASH_191', whenDefeated('You may give 2 Advantage tokens to a unit. If this unit was not defeated by combat damage, give 3 instead.', (s, ctx) => { // Shin Hati's Fiend Fighter
   const targets = allUnits(s).map(u => u.instanceId)
@@ -1300,3 +1300,7 @@ registerCard('ASH_046', {
 // ── Group F (#357): damage prevention ───────────────────────────────────────
 // At Attin Safety Droid (070): "if your base would be dealt more than 4 damage, prevent all but 4".
 registerCard('ASH_070', { preventBaseDamage: (_s, _source, amount) => Math.min(amount, 4) })
+
+// Moff Jerjerrod (094): "if you would create a number of tokens, you may defeat this unit to create
+// twice that number instead" — offered by `createTokenUnits` as a top-up (see its note).
+registerCard('ASH_094', { doublesTokenCreation: () => true })

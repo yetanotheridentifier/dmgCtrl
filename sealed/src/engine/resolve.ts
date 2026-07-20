@@ -773,6 +773,14 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       break
     }
+    case 'mayDoubleTokens': {
+      // Moff Jerjerrod (#357): defeat him, then top the batch up by the same number again.
+      next = defeatUnit(next, choice.unitId)
+      for (let i = 0; i < choice.count; i++) next = createTokenUnit(next, choice.controller, choice.token)
+      next = checkWin(next)
+      if (next.winner !== null) return next
+      break
+    }
     case 'nameCard': {
       // Ryder Azadi (#355): record the named card on this unit — the opponent can't play cards with
       // that name while it's in play (enforced in legalMoves). Naming is mandatory.

@@ -303,6 +303,7 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_046', name: 'Scion Shuttle' },
   // Group F (#357) — damage prevention
   { id: 'ASH_070', name: 'At Attin Safety Droid' },
+  { id: 'ASH_094', name: 'Moff Jerjerrod' },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */

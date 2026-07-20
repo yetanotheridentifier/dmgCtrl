@@ -452,6 +452,7 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'mayDoubleTokens':
       case 'maySelfDamageHealBase':
       case 'mayExhaustLeaderBuffSelf': {
         // Leia / Mando's N-1 (#356): a yes/no.

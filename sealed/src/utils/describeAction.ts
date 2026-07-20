@@ -70,6 +70,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayDamageExhaust') return 'Decline'
       if (choice.kind === 'mayAttack') return "Don't attack"
       if (choice.kind === 'distributeDamage' || choice.kind === 'distributeTokens' || choice.kind === 'lookAtHand' || choice.kind === 'searchPlayFree' || choice.kind === 'dealOwnBaseForDiscount') return 'Done'
+      if (choice.kind === 'mayDoubleTokens') return "Don't"
       if (choice.kind === 'returnFriendlyUnit' || choice.kind === 'peekTopDiscard' || choice.kind === 'maySelfDamageHealBase' || choice.kind === 'mayExhaustLeaderBuffSelf') return "Don't"
       if (choice.kind === 'playUnitFromHand') return "Don't play"
       if (choice.kind === 'mayDefeatSelfSearch') return "Don't"
@@ -109,6 +110,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Heal${target ? ` ${target}` : ''}`
       }
+      if (choice.kind === 'mayDoubleTokens') return `Defeat ${anyUnitName(state, choice.unitId) ?? 'this unit'} \u2192 ${choice.count} more`
       if (choice.kind === 'dealOwnBaseForDiscount') return 'Deal 1 to your base'
       if (choice.kind === 'maySelfDamageHealBase') return `Deal ${choice.selfDamage} to self, heal ${choice.healBase}`
       if (choice.kind === 'mayExhaustLeaderBuffSelf') return `Exhaust leader → +${choice.power}/+${choice.hp}`
