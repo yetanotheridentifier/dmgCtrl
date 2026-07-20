@@ -146,6 +146,49 @@ describe('CardZoomPopover', () => {
     expect(document.body.contains(zoom)).toBe(true)
   })
 
+  /**
+   * The popover measures its anchor in a layout effect. Refs attach bottom-up, so when the
+   * popover is rendered *inside* the anchored element (as every card but the board unit does)
+   * the effect runs before the anchor's ref is set — leaving it permanently `visibility: hidden`.
+   * A production-only failure: StrictMode's dev-mode double-invoke re-ran the effect late enough
+   * to hide it. Both layouts must end up visible and positioned.
+   */
+  describe('measures its anchor whichever side of it the popover renders', () => {
+    const unit: EngineCard = { ...LEADER, type: 'unit', backArt: undefined }
+
+    function Inside() {
+      const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
+      return (
+        <div ref={setAnchor} data-testid="anchor" {...bind}>
+          <span>card</span>
+          {zoomed && <CardZoomPopover card={unit} anchorRef={anchorRef} />}
+        </div>
+      )
+    }
+
+    function After() {
+      const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
+      return (
+        <div>
+          <div ref={setAnchor} data-testid="anchor" {...bind}><span>card</span></div>
+          {zoomed && <CardZoomPopover card={unit} anchorRef={anchorRef} />}
+        </div>
+      )
+    }
+
+    for (const [layout, Component] of [['inside the anchor', Inside], ['after the anchor', After]] as const) {
+      it(layout, () => {
+        render(<Component />)
+        fireEvent.pointerEnter(screen.getByTestId('anchor'), { pointerType: 'mouse' })
+        fireEvent.keyDown(window, { key: 'Shift', shiftKey: true })
+        const zoom = screen.getByTestId('card-zoom')
+        // Anchored: measured to a pixel position, and actually on screen.
+        expect(zoom.style.visibility).not.toBe('hidden')
+        expect(zoom.style.left).toMatch(/px$/)
+      })
+    }
+  })
+
   it('clamps a bottom-right-anchored card so it stays fully on-screen', () => {
     const unit: EngineCard = { ...LEADER, type: 'unit', backArt: undefined }
     const anchorRef = { current: null as HTMLElement | null }

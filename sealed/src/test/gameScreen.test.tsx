@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import GameScreen from '../components/gameScreen'
 import { db } from '../data/db'
@@ -118,6 +118,28 @@ describe('GameScreen', () => {
     // Big Test Unit has art → the card is the art image (name via alt).
     expect(within(cards[3]).getByRole('img', { name: /big test unit/i })).toBeInTheDocument()
     expect(cards[3]).toHaveAttribute('data-playable', 'true')
+  })
+
+  /**
+   * Each of these renders its zoom popover inside the anchored element, so the popover has to
+   * measure an anchor whose ref attaches after it. Assert it is actually visible: mounting a
+   * popover that stays `visibility: hidden` is exactly how zoom failed in production.
+   */
+  it.each([
+    ['a hand card', 'hand-card-0'],
+    ['your base', 'player-base-card'],
+    ['your leader', 'player-leader-card'],
+  ])('zooms %s on Shift+hover', async (_label, testId) => {
+    await renderBoard()
+    // Setup ends by clicking a hand card, which leaves it hovered — release it, or Shift
+    // would zoom that card as well as the one under test.
+    fireEvent.pointerLeave(screen.getByTestId('hand-card-0'), { pointerType: 'mouse' })
+    fireEvent.pointerEnter(screen.getByTestId(testId), { pointerType: 'mouse' })
+    fireEvent.keyDown(window, { key: 'Shift', shiftKey: true })
+    const zoom = screen.getByTestId('card-zoom')
+    expect(zoom.style.visibility).not.toBe('hidden')
+    expect(zoom.style.left).toMatch(/px$/) // measured against its anchor, not left centred
+    fireEvent.keyUp(window, { key: 'Shift', shiftKey: false })
   })
 
   it('playing a hand card resolves the move and the AI responds', async () => {
