@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { registeredCardIds, getCardDefinition } from '../engine/abilities'
 import '../engine/cardDefinitions' // side-effect: registers every implemented card
-import { IMPLEMENTED_LEADERS, IMPLEMENTED_UPGRADES, IMPLEMENTED_UNITS, IMPLEMENTED_EVENTS, SET_PROGRESS, sumCounts, TOTAL_PROGRESS, UNIT_GROUPS } from '../data/implementedCards'
+import { IMPLEMENTED_LEADERS, IMPLEMENTED_UPGRADES, IMPLEMENTED_UNITS, IMPLEMENTED_EVENTS, SET_PROGRESS, sumCounts, TOTAL_PROGRESS, UNIT_GROUPS, CARD_TYPES } from '../data/implementedCards'
 
 /** The setup-screen manifest must mirror what's actually registered, or it lies to the player. */
 describe('implemented-cards manifest', () => {
@@ -52,17 +52,26 @@ describe('implementation progress', () => {
     expect(ash.done.tokens).toBe(3) // Shield/Advantage/Mandalorian — Experience is printed but ungranted
   })
 
-  it('shows every unstarted set at zero, with a real printed total', () => {
+  it('credits every set with the cards that play as printed, and never more than it prints', () => {
+    for (const set of SET_PROGRESS) {
+      expect(sumCounts(set.done), set.code).toBeGreaterThan(0) // every set has some vanilla cards
+      for (const type of CARD_TYPES) {
+        expect(set.done[type], `${set.code} ${type}`).toBeLessThanOrEqual(set.total[type])
+      }
+    }
+  })
+
+  it('credits no leaders outside ASH — every leader has a deployed-side ability', () => {
     for (const set of SET_PROGRESS.filter(s => s.code !== 'ASH')) {
-      expect(sumCounts(set.done), set.code).toBe(0)
-      expect(sumCounts(set.total), set.code).toBeGreaterThan(0)
+      expect(set.done.leaders, set.code).toBe(0)
     }
   })
 
   it('the headline total sums every set', () => {
     expect(TOTAL_PROGRESS.done).toBe(SET_PROGRESS.reduce((n, s) => n + sumCounts(s.done), 0))
     expect(TOTAL_PROGRESS.total).toBe(SET_PROGRESS.reduce((n, s) => n + sumCounts(s.total), 0))
-    expect(TOTAL_PROGRESS.done).toBe(sumCounts(bySet.ASH.done)) // only ASH is built so far
+    // ASH is the only set with built abilities; the rest contribute their play-as-printed cards.
+    expect(TOTAL_PROGRESS.done).toBeGreaterThan(sumCounts(bySet.ASH.done))
   })
 
   it('the unit groups list every unit exactly once (179 total)', () => {

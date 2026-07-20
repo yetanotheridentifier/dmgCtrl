@@ -502,14 +502,40 @@ const SET_TOTALS: { code: string; group: SetGroup; total: TypeCounts }[] = [
 ]
 
 /**
- * What's implemented, per set. Only ASH has any card abilities built: a set appears with zeroes
- * until its first card lands, so the panel doubles as the roadmap.
+ * Cards that already play correctly with no engine work: vanilla ones, and keyword-only ones whose
+ * every keyword is implemented (Ambush, Grit, Hidden, Overwhelm, Raid, Restore, Saboteur, Sentinel,
+ * Shielded, Support). Counted from the SWUDB set listings by the same rule `keywordOnlyUnits.test.ts`
+ * applies — strip parenthetical reminder text and the declared keywords, and anything left is a real
+ * ability. IBH is counted by distinct card, so its reprints aren't double-counted.
  *
- * Bases are all vanilla, so they count as done outright. Units count the keyword-only ones (which
- * need no code) plus every unit with a registered ability. Tokens count the three the engine
- * actually creates — Experience is defined but no card grants it, so ASH reads 3 of 4.
+ * LEADERS ARE EXCLUDED: every leader has a deployed-side ability, and reading only `FrontText` would
+ * wrongly pass one whose front is blank (ASH's Grogu).
+ *
+ * The unimplemented keywords across the card data are Bounty (SHD, TS26), Coordinate and Exploit
+ * (TWI), Piloting (JTL), Plot (SEC, TS26) and Smuggle (SHD). A card carrying any of them is never
+ * credited. 12 are otherwise vanilla and held back purely by the keyword — 6 on Plot, 6 on Exploit —
+ * and would move over if those landed. ASH uses none of them, so no registered card is affected.
+ */
+const PLAYABLE_AS_PRINTED: Record<string, Partial<TypeCounts>> = {
+  ASH: { bases: 8, units: 39 },
+  LAW: { units: 47 },
+  SEC: { bases: 8, units: 32 },
+  LOF: { units: 46 },
+  JTL: { bases: 9, units: 22 },
+  TWI: { bases: 8, units: 22 },
+  SHD: { bases: 8, units: 23, upgrades: 1 },
+  SOR: { bases: 8, units: 29, upgrades: 2 },
+  TS26: { units: 5, upgrades: 1 },
+  IBH: { bases: 2, units: 19 },
+}
+
+/**
+ * What's implemented, per set: the cards that play as printed, plus — for ASH — every card with a
+ * registered ability. Tokens count the three the engine actually creates; Experience is printed but
+ * no card grants it, so ASH reads 3 of 4.
  */
 const IMPLEMENTED_BY_SET: Record<string, TypeCounts> = {
+  ...Object.fromEntries(SET_TOTALS.map(({ code }) => [code, { ...NONE, ...PLAYABLE_AS_PRINTED[code] }])),
   ASH: {
     leaders: IMPLEMENTED_LEADERS.filter(l => l.front && l.back).length,
     bases: 8,

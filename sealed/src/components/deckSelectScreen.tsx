@@ -62,10 +62,10 @@ function ProgressBar() {
  * legality rather than just naming the block: "out of rotation" and "out of cycle" read alike, but
  * one means no longer legal and the other means legal indefinitely.
  */
-const SET_GROUPS: { group: SetGroup; heading?: string; note?: string }[] = [
+const SET_GROUPS: { group: SetGroup; heading?: string }[] = [
   { group: 'rotation' },
-  { group: 'retired', heading: 'Out of rotation', note: 'No longer tournament legal' },
-  { group: 'out-of-cycle', heading: 'Out of cycle', note: 'Outside the rotation cycle — legality varies by format' },
+  { group: 'retired', heading: 'Rotated out' },
+  { group: 'out-of-cycle', heading: 'Other sets' },
 ]
 
 const TYPE_LABEL: Record<keyof TypeCounts, string> = {
@@ -123,17 +123,12 @@ function ImplementationStatus() {
 
       {/* Sets by legality block, newest first within each. Only the newest set starts expanded. */}
       <div data-testid="set-progress">
-        {SET_GROUPS.map(({ group, heading, note }) => {
+        {SET_GROUPS.map(({ group, heading }) => {
           const sets = SET_PROGRESS.filter(s => s.group === group)
           if (sets.length === 0) return null
           return (
             <section key={group} data-testid={`set-group-${group}`}>
-              {heading && (
-                <h3 className="mt-4 text-ink-faint text-[0.65rem] uppercase tracking-[0.12em] font-light">
-                  {heading}
-                  {note && <span className="ml-2 normal-case tracking-normal">— {note}</span>}
-                </h3>
-              )}
+              {heading && <h3 className="mt-4 text-ink-faint text-[0.65rem] uppercase tracking-[0.12em] font-light">{heading}</h3>}
               {sets.map(set => <SetRow key={set.code} set={set} defaultOpen={set.code === SET_PROGRESS[0].code} />)}
             </section>
           )

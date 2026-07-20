@@ -48,8 +48,8 @@ describe('DeckSelectScreen', () => {
 
     // Sets are blocked by legality, with the two non-current blocks labelled.
     expect(within(panel).getByTestId('set-group-rotation')).toBeInTheDocument()
-    expect(within(within(panel).getByTestId('set-group-retired')).getByText(/out of rotation/i)).toBeInTheDocument()
-    expect(within(within(panel).getByTestId('set-group-out-of-cycle')).getByText(/out of cycle/i)).toBeInTheDocument()
+    expect(within(within(panel).getByTestId('set-group-retired')).getByText(/rotated out/i)).toBeInTheDocument()
+    expect(within(within(panel).getByTestId('set-group-out-of-cycle')).getByText(/other sets/i)).toBeInTheDocument()
 
     // Only the newest set is expanded.
     expect((within(panel).getByTestId('set-progress-ASH') as HTMLDetailsElement).open).toBe(true)
