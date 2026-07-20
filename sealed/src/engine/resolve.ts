@@ -12,6 +12,7 @@ import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst } from './keywords'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
+import { TOKEN_MANDALORIAN } from './tokenUnits'
 
 /**
  * Action resolver — pure `(state, action) => state`.
@@ -603,17 +604,28 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       break
     }
-    case 'selectPairToDefeat': {
-      // Chimaera: first accept records the friendly pick, second defeats the pair.
+    case 'selectPair': {
+      // First accept records the friendly pick; the second applies `mode` to both.
       if (!targetInstanceId) break
       if (choice.chosenFriendly === undefined) {
         next = pushChoice(next, { ...choice, chosenFriendly: targetInstanceId })
         break
       }
-      next = defeatUnit(next, choice.chosenFriendly)
-      next = defeatUnit(next, targetInstanceId)
-      next = checkWin(next)
-      if (next.winner !== null) return next
+      const pair = [choice.chosenFriendly, targetInstanceId]
+      if (choice.mode === 'exhaust') {
+        for (const id of pair) next = exhaustUnit(next, id)
+      } else {
+        for (const id of pair) next = defeatUnit(next, id)
+        next = checkWin(next)
+        if (next.winner !== null) return next
+      }
+      // Diplomatic Pageantry: "if you do, give 2 Advantage tokens to a friendly unit".
+      if (choice.thenAdvantage) {
+        const targets = next.players[choice.controller].units.map(u => u.instanceId)
+        if (targets.length > 0) {
+          next = pushChoice(next, { kind: 'mayGiveTokens', id: `${choice.id}-adv`, controller: choice.controller, token: TOKEN_ADVANTAGE, count: choice.thenAdvantage, targets, optional: false })
+        }
+      }
       break
     }
     case 'selectUpgradeToReturn': {
@@ -623,6 +635,14 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       if (!pick) break
       const upgradeOwner = findUnit(next, pick.unitId)?.unit.upgrades[pick.upgradeIndex]?.owner
       next = returnUpgradeToHand(next, pick.unitId, pick.upgradeIndex)
+      if (choice.thenShield) {
+        // Full of Surprises: "Give a Shield token to a unit" — a separate effect, any unit.
+        const targets = inPlayUnits(next).map(u => u.instanceId)
+        if (targets.length > 0) {
+          next = pushChoice(next, { kind: 'mayGiveTokens', id: `${choice.id}-shield`, controller: choice.controller, token: TOKEN_SHIELD, count: 1, targets, optional: false })
+        }
+        break
+      }
       if (upgradeOwner === choice.controller) {
         const targets = inPlayUnits(next).map(u => u.instanceId)
         if (targets.length > 0) {
@@ -751,7 +771,14 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'mayLastingBuff':
       // Optional "this phase" buff, e.g. Baylan's On Attack: grant the chosen unit the buff.
       if (targetInstanceId) {
-        next = addLastingEffect(next, { targetInstanceId, power: choice.power, hp: choice.hp, keywords: choice.keywords })
+        // The Student Guides the Master: +1 per friendly unit with strictly less power than the pick.
+        let power = choice.power
+        if (choice.powerPerWeakerFriendly) {
+          const picked = findUnit(next, targetInstanceId)
+          const mine = picked ? effectivePower(next, picked.unit) : 0
+          power = next.players[choice.controller].units.filter(u => u.instanceId !== targetInstanceId && effectivePower(next, u) < mine).length
+        }
+        next = addLastingEffect(next, { targetInstanceId, power, hp: choice.hp, keywords: choice.keywords })
         // T-6 Shuttle: "you may attack with that unit" — only meaningful for a ready unit
         // we control (the buff itself may target any unit).
         const buffed = findUnit(next, targetInstanceId)
@@ -813,6 +840,8 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         next = defeatUpgradeAt(next, pick.unitId, pick.upgradeIndex)
         // Pegasus Tri-Wing: "if you do, ready this unit".
         if (choice.thenReadyUnit) next = readyUnit(next, choice.thenReadyUnit)
+        // Exploit Advantage: "if you do, draw 2 cards".
+        if (choice.thenDraw) next = drawCards(next, choice.controller, choice.thenDraw)
         const spec = choice.then
         if (spec) {
           const inPlay = new Set([...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId))
@@ -848,7 +877,11 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'selectHealTarget':
       // Luke deployed: heal the chosen unit or your base.
       if (baseTarget) next = healBase(next, baseTarget, choice.amount)
-      else if (targetInstanceId) next = healUnit(next, targetInstanceId, choice.amount)
+      else if (targetInstanceId) {
+        next = healUnit(next, targetInstanceId, choice.amount)
+        // "…and give a Shield token to it" (Perserverance) — the same unit, one effect.
+        if (choice.thenShield) next = giveToken(next, targetInstanceId, TOKEN_SHIELD)
+      }
       break
     case 'selectUnitToExhaust':
       // Fennec's additional cost: exhaust the chosen unit, then the play-from-hand step.
@@ -896,8 +929,12 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
             const targets = inPlayUnits(next).map(u => u.instanceId)
             if (targets.length > 0) next = pushChoice(next, { kind: 'mayExhaustUnit', id: `${choice.id}-exh`, controller: choice.controller, targets })
           } else {
-            // Qi'ra: "if you do, deal N damage to a unit".
-            const targets = inPlayUnits(next).map(u => u.instanceId)
+            // Qi'ra: "if you do, deal N damage to a unit". Reckless Sacrifice narrows the targets to
+            // units costing more than the card just discarded.
+            const floor = choice.then.costlierThanDiscard ? next.cards[discardedId]?.cost ?? 0 : undefined
+            const targets = inPlayUnits(next)
+              .filter(u => floor === undefined || (next.cards[u.cardId]?.cost ?? 0) > floor)
+              .map(u => u.instanceId)
             if (targets.length > 0) next = pushChoice(next, { kind: 'mayDamage', id: choice.id, controller: choice.controller, unitId: choice.id, targets, amount: choice.then.dealDamage, optional: false })
           }
         }
@@ -960,12 +997,64 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       else next = grantEnochDiscount(next, choice.controller, dealt)
       break
     }
+    case 'selectUnitToReady':
+      // Galvanized Leap: ready the chosen unit.
+      if (targetInstanceId) next = readyUnit(next, targetInstanceId)
+      break
+    case 'mayPlayUnitFromDiscard': {
+      // Bring the chosen unit out of the discard and into play, paying nothing. It enters as a
+      // normal play would, so its own When Played fires.
+      const owner = choice.controller
+      const cardId = choice.candidates[optionIndex ?? 0]
+      const idx = cardId === undefined ? -1 : next.players[owner].discard.indexOf(cardId)
+      if (idx === -1) break
+      next = updatePlayer(next, owner, { discard: next.players[owner].discard.filter((_, i) => i !== idx) })
+      next = enterUnit(next, owner, cardId)
+      next = checkWin(next)
+      if (next.winner !== null) return next
+      // Re-offer while the pool allows it — Dathomiri Magicks plays up to three.
+      const remaining = choice.remaining - 1
+      if (remaining > 0) {
+        const candidates = discardUnitsMatching(next, owner, choice.maxCost, choice.excludeTrait)
+        if (candidates.length > 0) {
+          next = pushChoice(next, { ...choice, candidates, remaining })
+        }
+      }
+      break
+    }
+    case 'chooseMode': {
+      // "Choose one:" — the card decided which modes were available; run the one picked.
+      next = applyChosenMode(next, choice.controller, choice.modes[optionIndex ?? 0])
+      break
+    }
+    case 'selectDistributeSource': {
+      // Hold Them Off: the chosen unit's power becomes a pool spread among units in its own arena.
+      const src = targetInstanceId ? findUnit(next, targetInstanceId) : undefined
+      if (!src) break
+      const total = effectivePower(next, src.unit)
+      const targets = inPlayUnits(next).filter(u => u.arena === src.unit.arena).map(u => u.instanceId)
+      if (total > 0 && targets.length > 0) {
+        next = pushChoice(next, { kind: 'distributeDamage', id: `${choice.id}-dist`, controller: choice.controller, remaining: total, total, targets })
+      }
+      break
+    }
+    case 'selectUnitToReturn':
+      // Far Far Away's second half: return the chosen unit to its owner's hand.
+      if (targetInstanceId && choice.targets.includes(targetInstanceId)) next = returnUnitToHand(next, targetInstanceId)
+      break
     case 'returnFriendlyUnit': {
-      // Purrgil Ultra: return the chosen unit to hand, then deal its cost as damage to any unit.
+      // Return the chosen unit to hand, then the card's follow-up: Purrgil Ultra deals its cost as
+      // damage; Far Far Away bounces an enemy non-leader in turn.
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
         const found = findUnit(next, targetInstanceId)
         const cost = found ? next.cards[found.unit.cardId]?.cost ?? 0 : 0
         next = returnUnitToHand(next, targetInstanceId)
+        if (choice.then === 'returnEnemyUnit') {
+          const enemy = opponentOf(choice.controller)
+          const targets = next.players[enemy].units.filter(u => !u.isLeader).map(u => u.instanceId)
+          if (targets.length > 0) next = pushChoice(next, { kind: 'selectUnitToReturn', id: `${choice.id}-enemy`, controller: choice.controller, targets })
+          break
+        }
         const targets = [...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId)
         if (cost > 0 && targets.length > 0) {
           next = pushChoice(next, { kind: 'mayDamage', id: choice.id, controller: choice.controller, unitId: choice.id, targets, amount: cost, optional: false })
@@ -1117,6 +1206,12 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
             if (next.winner !== null) return next
             if (remaining > 0 && targets.length > 0) next = pushChoice(next, { kind: 'multiPick', id: choice.id, controller: choice.controller, targets, spec: { mode: 'dealEach', amount, remaining } })
           }
+        } else if (choice.spec.mode === 'exhaust') {
+          // Keep Them Talking: exhaust up to N of the eligible units.
+          next = exhaustUnit(next, targetInstanceId)
+          const targets = choice.targets.filter(id => id !== targetInstanceId)
+          const remaining = choice.spec.remaining - 1
+          if (remaining > 0 && targets.length > 0) next = pushChoice(next, { kind: 'multiPick', id: choice.id, controller: choice.controller, targets, spec: { mode: 'exhaust', remaining } })
         } else {
           const found = findUnit(next, targetInstanceId)
           const remHp = found ? Math.max(0, effectiveHp(next, found.unit) - found.unit.damage) : 0
@@ -1148,11 +1243,16 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'selectUnitToDefeat':
       // Defeat the chosen unit; the card decided which ones were eligible.
       if (targetInstanceId) {
+        const defeatedCardId = findUnit(next, targetInstanceId)?.unit.cardId
         next = defeatUnit(next, targetInstanceId)
         next = checkWin(next)
         if (next.winner !== null) return next
         // "If you do, resource the top card of your deck" (Long Live the Empire).
         if (choice.thenResource) next = resourceTopOfDeck(next, choice.controller)
+        // "Then, you may play that unit from your discard pile for free" (One Must Destroy to Create).
+        if (choice.thenReplayFromDiscard && defeatedCardId !== undefined && next.players[choice.controller].discard.includes(defeatedCardId)) {
+          next = pushChoice(next, { kind: 'mayPlayUnitFromDiscard', id: `${choice.id}-replay`, controller: choice.controller, candidates: [defeatedCardId], remaining: 1 })
+        }
       }
       break
     case 'mayDeployLeader':
@@ -1776,6 +1876,34 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
 /** Every unit in play, both sides. */
 function inPlayUnits(state: GameState): UnitState[] {
   return [...state.players.player.units, ...state.players.opponent.units]
+}
+
+/** Unit cards in `owner`'s discard matching an optional cost cap and excluded trait. */
+export function discardUnitsMatching(state: GameState, owner: PlayerId, maxCost?: number, excludeTrait?: string): string[] {
+  return state.players[owner].discard.filter(id => {
+    const c = state.cards[id]
+    if (c?.type !== 'unit') return false
+    if (maxCost !== undefined && c.cost > maxCost) return false
+    if (excludeTrait && c.traits.some(t => t.toLowerCase() === excludeTrait.toLowerCase())) return false
+    return true
+  })
+}
+
+/**
+ * Run one branch of a "Choose one:" event. Modes are named rather than carrying their own effect,
+ * because a pending choice is plain JSON and can't hold a function.
+ */
+function applyChosenMode(state: GameState, owner: PlayerId, mode: string | undefined): GameState {
+  switch (mode) {
+    case 'healBase': // Choose Your Path — with a Force unit
+      return healBase(state, owner, 5)
+    case 'mandoToken': { // Choose Your Path — with a Mandalorian unit
+      const tokenId = `u${state.instanceCounter}`
+      return giveToken(createTokenUnit(state, owner, TOKEN_MANDALORIAN), tokenId, TOKEN_ADVANTAGE)
+    }
+    default:
+      return state
+  }
 }
 
 function checkWin(state: GameState): GameState {

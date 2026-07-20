@@ -1,5 +1,5 @@
 import type { DamageSource, GameState, NextUnitGrant, PlayerId, UnitState } from './types'
-import { updatePlayer, pushChoice, recordBaseDamaged, recordUpgradeDefeated } from './types'
+import { updatePlayer, pushChoice, recordBaseDamaged, recordUpgradeDefeated, recordUnitLeftPlay } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { EffectContext, TriggerPoint } from './abilities'
@@ -241,6 +241,7 @@ export function returnUnitToHand(state: GameState, instanceId: string): GameStat
       if (state.cards[up.cardId]?.type === 'token') continue // token upgrades cease to exist
       next = updatePlayer(next, up.owner, { discard: [...next.players[up.owner].discard, up.cardId] })
     }
+    next = recordUnitLeftPlay(next, owner, u.cardId, u.isLeader)
     // Leaving play releases whatever it had captured.
     return releaseCaptured(next, owner, u.captured ?? [])
   }

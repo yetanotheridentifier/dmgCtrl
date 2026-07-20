@@ -521,10 +521,26 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 1 })
         break
       }
-      case 'selectPairToDefeat': {
-        // Chimaera: friendly first, then the enemy half.
+      case 'selectPair': {
+        // Friendly first, then the enemy half.
         const stage = choice.chosenFriendly === undefined ? choice.friendlyTargets : choice.enemyTargets
         for (const id of stage) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'mayPlayUnitFromDiscard':
+      case 'chooseMode': {
+        // Pick one of the listed options (a discard-pile unit, or a mode), or decline.
+        const options = choice.kind === 'chooseMode' ? choice.modes : choice.candidates
+        options.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'selectUnitToReady':
+      case 'selectDistributeSource':
+      case 'selectUnitToReturn': {
+        // Pick one of the eligible units, or decline.
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }

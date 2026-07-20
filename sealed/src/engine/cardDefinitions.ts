@@ -4,8 +4,9 @@ import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpg
 import { dealDamageToUnit, defeatUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
+import { discardUnitsMatching } from './resolve'
 import { TOKEN_MANDALORIAN, isTokenCard } from './tokenUnits'
-import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, markAbilityUsed } from './types'
+import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, markAbilityUsed } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets } from './legalMoves'
 import { canAfford } from './resources'
 import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, unitHasKeyword, unitKeywords } from './keywords'
@@ -1034,7 +1035,7 @@ registerCard('ASH_027', whenDefeated('You may deal up to 6 damage to your base. 
 // Purrgil Ultra (038): the same "return a friendly unit, deal its cost" on both When Played and When Defeated.
 const purrgilReturn = (s: GameState, ctx: { owner: PlayerId; sourceInstanceId?: string }): GameState => {
   const targets = s.players[ctx.owner].units.filter(u => !isLeaderUnit(s, u) && u.instanceId !== ctx.sourceInstanceId).map(u => u.instanceId)
-  return targets.length ? pushChoice(s, { kind: 'returnFriendlyUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
+  return targets.length ? pushChoice(s, { kind: 'returnFriendlyUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, then: 'damageEqualToCost' }) : s
 }
 registerCard('ASH_038', {
   abilities: [
@@ -1535,7 +1536,7 @@ registerCard('ASH_052', { // Chimaera
       const friendlyTargets = s.players[ctx.owner].units.map(u => u.instanceId)
       const enemyTargets = s.players[opponentOf(ctx.owner)].units.filter(u => !u.isLeader).map(u => u.instanceId)
       return friendlyTargets.length && enemyTargets.length
-        ? pushChoice(s, { kind: 'selectPairToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, friendlyTargets, enemyTargets })
+        ? pushChoice(s, { kind: 'selectPair', id: ctx.sourceInstanceId!, controller: ctx.owner, friendlyTargets, enemyTargets, mode: 'defeat' })
         : s
     } },
     { trigger: 'whenEnemyUnitDefeated', description: 'Heal 2 damage from your base.', effect: (s, ctx) => healBase(s, ctx.owner, 2) },
@@ -1804,4 +1805,116 @@ registerCard('ASH_103', whenPlayed('Defeat a friendly Imperial unit. If you do, 
   return targets.length
     ? pushChoice(s, { kind: 'selectUnitToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, thenResource: true })
     : s
+}))
+
+registerCard('ASH_246', whenPlayed('Defeat a friendly upgrade. If you do, draw 2 cards.', (s, ctx) => { // Exploit Advantage
+  const candidates = s.players[ctx.owner].units.flatMap(u => u.upgrades.map((up, i) => ({ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId })))
+  return candidates.length
+    ? pushChoice(s, { kind: 'selectUpgradeToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true, thenDraw: 2 })
+    : s
+}))
+
+registerCard('ASH_089', whenPlayed('Heal 3 damage from a unit and give a Shield token to it.', (s, ctx) => { // Perserverance
+  const unitTargets = allUnits(s).map(u => u.instanceId)
+  return unitTargets.length
+    ? pushChoice(s, { kind: 'selectHealTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 3, unitTargets, baseTargets: [], thenShield: true })
+    : s
+}))
+
+registerCard('ASH_233', whenPlayed('Exhaust up to 2 units that each cost 3 or less.', (s, ctx) => { // Keep Them Talking
+  const targets = allUnits(s).filter(u => (s.cards[u.cardId]?.cost ?? 0) <= 3).map(u => u.instanceId)
+  return targets.length
+    ? pushChoice(s, { kind: 'multiPick', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, spec: { mode: 'exhaust', remaining: 2 } })
+    : s
+}))
+
+registerCard('ASH_236', whenPlayed("Return a friendly non-leader unit to its owner's hand. If you do, return an enemy non-leader unit to its owner's hand.", (s, ctx) => { // Far Far Away
+  const targets = s.players[ctx.owner].units.filter(u => !u.isLeader).map(u => u.instanceId)
+  return targets.length
+    ? pushChoice(s, { kind: 'returnFriendlyUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, then: 'returnEnemyUnit' })
+    : s
+}))
+
+registerCard('ASH_232', whenPlayed("Return an upgrade that costs 2 or less to its owner's hand. Give a Shield token to a unit.", (s, ctx) => { // Full of Surprises
+  const candidates = allUnits(s).flatMap(u => u.upgrades.flatMap((up, i) => {
+    const c = s.cards[up.cardId]
+    return c?.type === 'upgrade' && c.cost <= 2 ? [{ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId }] : []
+  }))
+  return candidates.length
+    ? pushChoice(s, { kind: 'selectUpgradeToReturn', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, thenShield: true })
+    : s
+}))
+
+registerCard('ASH_115', whenPlayed('Give a friendly unit +1/+0 for this phase for each other friendly unit with less power than it.', (s, ctx) => { // The Student Guides the Master
+  const targets = s.players[ctx.owner].units.map(u => u.instanceId)
+  return targets.length
+    ? pushChoice(s, { kind: 'mayLastingBuff', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, powerPerWeakerFriendly: true })
+    : s
+}))
+
+registerCard('ASH_139', whenPlayed('Choose a friendly unit. That unit deals damage equal to its power divided as you choose among any number of units in its arena.', (s, ctx) => { // Hold Them Off
+  const targets = s.players[ctx.owner].units.filter(u => effectivePower(s, u) > 0).map(u => u.instanceId)
+  return targets.length
+    ? pushChoice(s, { kind: 'selectDistributeSource', id: ctx.sourceInstanceId!, controller: ctx.owner, targets })
+    : s
+}))
+
+registerCard('ASH_163', whenPlayed('Discard a unit from your hand. Deal 5 damage to a unit that costs more than the discarded card.', (s, ctx) => { // Reckless Sacrifice
+  const hasUnit = s.players[ctx.owner].hand.some(id => s.cards[id]?.type === 'unit')
+  return hasUnit
+    ? pushChoice(s, { kind: 'selectDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, count: 1, optional: false, then: { dealDamage: 5, costlierThanDiscard: true } })
+    : s
+}))
+
+registerCard('ASH_188', whenPlayed('Ready a unit that was damaged this phase.', (s, ctx) => { // Galvanized Leap
+  const damaged = new Set(damagedThisPhase(s))
+  const targets = allUnits(s).filter(u => damaged.has(u.instanceId)).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'selectUnitToReady', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
+}))
+
+registerCard('ASH_211', whenPlayed('If a friendly unit left play this phase, distribute 3 Advantage tokens among friendly units. If a friendly leader unit left play this phase, distribute 5 instead.', (s, ctx) => { // Fateful Goodbye
+  if (leftPlayThisPhase(s, ctx.owner).length === 0) return s
+  const total = leaderLeftPlayThisPhase(s, ctx.owner) ? 5 : 3
+  const targets = s.players[ctx.owner].units.map(u => u.instanceId)
+  return targets.length
+    ? pushChoice(s, { kind: 'distributeTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_ADVANTAGE, remaining: total, total, targets })
+    : s
+}))
+
+registerCard('ASH_231', whenPlayed('Exhaust a friendly unit and an enemy unit. If you do, give 2 Advantage tokens to a friendly unit.', (s, ctx) => { // Diplomatic Pageantry
+  const friendlyTargets = s.players[ctx.owner].units.map(u => u.instanceId)
+  const enemyTargets = s.players[opponentOf(ctx.owner)].units.map(u => u.instanceId)
+  return friendlyTargets.length && enemyTargets.length
+    ? pushChoice(s, { kind: 'selectPair', id: ctx.sourceInstanceId!, controller: ctx.owner, friendlyTargets, enemyTargets, mode: 'exhaust', thenAdvantage: 2 })
+    : s
+}))
+
+registerCard('ASH_247', whenPlayed('Defeat a friendly non-leader unit. Then, you may play that unit from your discard pile for free.', (s, ctx) => { // One Must Destroy to Create
+  const targets = s.players[ctx.owner].units.filter(u => !u.isLeader && !isTokenCard(u.cardId)).map(u => u.instanceId)
+  return targets.length
+    ? pushChoice(s, { kind: 'selectUnitToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, thenReplayFromDiscard: true })
+    : s
+}))
+
+registerCard('ASH_104', { // Dathomiri Magicks
+  costModifier: (s, playerId) => (s.players[playerId].units.some(u => unitHasTrait(s, u, 'Force')) ? -1 : 0),
+  abilities: [{
+    trigger: 'whenPlayed',
+    description: 'Play up to 3 non-Vehicle units that each cost 2 or less from your discard pile for free.',
+    effect: (s, ctx) => {
+      const candidates = discardUnitsMatching(s, ctx.owner, 2, 'Vehicle')
+      return candidates.length
+        ? pushChoice(s, { kind: 'mayPlayUnitFromDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, remaining: 3, maxCost: 2, excludeTrait: 'Vehicle' })
+        : s
+    },
+  }],
+})
+
+registerCard('ASH_257', whenPlayed('Choose one: if you control a Force unit, heal 5 damage from your base; if you control a Mandalorian unit, create a Mandalorian token and give an Advantage token to it.', (s, ctx) => { // Choose Your Path
+  // Only modes whose condition currently holds are offered — picking an option that would do
+  // nothing isn't a meaningful choice.
+  const modes: string[] = []
+  if (s.players[ctx.owner].units.some(u => unitHasTrait(s, u, 'Force'))) modes.push('healBase')
+  if (s.players[ctx.owner].units.some(u => unitHasTrait(s, u, 'Mandalorian'))) modes.push('mandoToken')
+  return modes.length ? pushChoice(s, { kind: 'chooseMode', id: ctx.sourceInstanceId!, controller: ctx.owner, modes }) : s
 }))

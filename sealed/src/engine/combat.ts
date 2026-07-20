@@ -1,5 +1,5 @@
 import type { DamageSource, GameState, PendingChoice, PlayerId, UnitState } from './types'
-import { opponentOf, updatePlayer, recordUnitDefeated, pushChoice } from './types'
+import { opponentOf, updatePlayer, recordUnitDefeated, recordUnitDamaged, recordUnitLeftPlay, pushChoice } from './types'
 import { effectiveHp } from './stats'
 import type { StatContext } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
@@ -35,11 +35,15 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
   const survivors: UnitState[] = []
   const defeated: UnitState[] = []
   let survivedDamage = false
+  const damagedIds: string[] = []
 
   for (const u of p.units) {
     let extra = damaged.get(u.instanceId) ?? 0
     // Damage-taken multipliers (e.g. Deadly Vulnerability ×2) scale the instance.
-    if (extra > 0) extra *= damageMultiplier(state, u)
+    if (extra > 0) {
+      extra *= damageMultiplier(state, u)
+      damagedIds.push(u.instanceId)
+    }
     let upgrades = u.upgrades
     // A shield token prevents one instance of incoming damage, then is removed.
     if (extra > 0 && !unpreventable && hasToken(upgrades, TOKEN_SHIELD)) {
@@ -59,6 +63,8 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
   }
 
   let result = finishDefeats(state, owner, survivors, defeated, byCombat)
+  // "…a unit that was damaged this phase" (Galvanized Leap) — recorded whether or not it survived.
+  for (const id of damagedIds) result = recordUnitDamaged(result, id)
   if (survivedDamage) result = fireUnitsTrigger(result, 'whenFriendlyDamagedSurvives', owner)
   return result
 }
@@ -104,6 +110,7 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
 
   for (const dead of defeated) {
     result = recordUnitDefeated(result, owner, dead.cardId) // "defeated this phase" tracking
+    result = recordUnitLeftPlay(result, owner, dead.cardId, dead.isLeader)
     result = runUnitTrigger(result, 'whenDefeated', dead, owner, { defeatedUnit: dead, defeatedByCombat: byCombat })
     // "When another friendly unit is defeated" (The Twins) — the controller's surviving units
     // react. Re-found each step in case an earlier reactor changed the board.

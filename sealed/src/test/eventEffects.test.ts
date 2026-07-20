@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
 import { unitHasKeyword } from '../engine/keywords'
+import { effectivePower } from '../engine/stats'
+import { dealDamageToUnit } from '../engine/combat'
+import { returnUnitToHand } from '../engine/effects'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
@@ -182,5 +185,373 @@ describe('Long Live the Empire (103) — defeat a friendly Imperial to resource 
     const before = played.players.player.resources.length
     const done = resolve(played, { type: 'skipTrigger', choiceId: choice(played).id })
     expect(done.players.player.resources).toHaveLength(before)
+  })
+})
+
+// ── Events that chain a second effect off the first ───────────────────────────────────────────
+
+const G = {
+  ...F,
+  ASH_246: card({ id: 'ASH_246', type: 'event', name: 'Exploit Advantage', cost: 2 }),
+  ASH_089: card({ id: 'ASH_089', type: 'event', name: 'Perserverance', cost: 2 }),
+  ASH_233: card({ id: 'ASH_233', type: 'event', name: 'Keep Them Talking', cost: 2 }),
+  ASH_236: card({ id: 'ASH_236', type: 'event', name: 'Far Far Away', cost: 3 }),
+  ASH_232: card({ id: 'ASH_232', type: 'event', name: 'Full of Surprises', cost: 2 }),
+  CHEAP: card({ id: 'CHEAP', type: 'unit', arena: 'ground', cost: 3, power: 1, hp: 5 }),
+  DEAR: card({ id: 'DEAR', type: 'unit', arena: 'ground', cost: 6, power: 1, hp: 5 }),
+  BIGUPG: card({ id: 'BIGUPG', type: 'upgrade', cost: 5, power: 1, hp: 1 }),
+}
+const shields = (s: GameState, id: string) => U(s, id)!.upgrades.filter(u => u.cardId === 'TOKEN_SHIELD').length
+
+describe('Exploit Advantage (246) — defeat a friendly upgrade to draw 2', () => {
+  it('draws only when an upgrade is actually defeated', () => {
+    const s = state({
+      cards: G,
+      players: { player: rich({ hand: ['ASH_246'], units: [upgraded('g', 'GRD')], deck: ['GRD', 'GRD', 'GRD'] }), opponent: player() },
+    })
+    const played = play(s)
+    const done = resolve(played, { type: 'acceptChoice', choiceId: choice(played).id, optionIndex: 0 })
+    expect(U(done, 'g')!.upgrades).toHaveLength(0)
+    expect(done.players.player.hand).toHaveLength(2)
+
+    const declined = resolve(played, { type: 'skipTrigger', choiceId: choice(played).id })
+    expect(declined.players.player.hand).toHaveLength(0) // no defeat → no draw
+  })
+})
+
+describe('Perserverance (089) — heal 3 from a unit and shield it', () => {
+  it('heals and shields the same unit', () => {
+    const s = state({ cards: G, players: { player: rich({ hand: ['ASH_089'], units: [unit('g', 'GRD', { damage: 5 })] }), opponent: player() } })
+    const played = play(s)
+    const done = resolve(played, { type: 'acceptChoice', choiceId: choice(played).id, targetInstanceId: 'g' })
+    expect(U(done, 'g')!.damage).toBe(2)
+    expect(shields(done, 'g')).toBe(1)
+  })
+})
+
+describe('Keep Them Talking (233) — exhaust up to 2 units costing 3 or less', () => {
+  it('offers only cheap units and exhausts up to two', () => {
+    const s = state({
+      cards: G,
+      players: {
+        player: rich({ hand: ['ASH_233'] }),
+        opponent: player({ units: [unit('a', 'CHEAP'), unit('b', 'CHEAP'), unit('big', 'DEAR')] }),
+      },
+    })
+    const played = play(s)
+    const c = choice(played)
+    expect(c.kind === 'multiPick' && c.targets.sort()).toEqual(['a', 'b'])
+    const one = resolve(played, { type: 'acceptChoice', choiceId: c.id, targetInstanceId: 'a' })
+    const two = resolve(one, { type: 'acceptChoice', choiceId: choice(one).id, targetInstanceId: 'b' })
+    expect(U(two, 'a')!.exhausted).toBe(true)
+    expect(U(two, 'b')!.exhausted).toBe(true)
+    expect(two.pendingChoices ?? []).toHaveLength(0)
+  })
+})
+
+describe('Far Far Away (236) — bounce one of yours, then one of theirs', () => {
+  it('returns a friendly then an enemy non-leader', () => {
+    const s = state({
+      cards: G,
+      players: {
+        player: rich({ hand: ['ASH_236'], units: [unit('mine', 'GRD')] }),
+        opponent: player({ units: [unit('theirs', 'GRD'), unit('lead', 'GRD', { isLeader: true })] }),
+      },
+    })
+    const played = play(s)
+    const first = resolve(played, { type: 'acceptChoice', choiceId: choice(played).id, targetInstanceId: 'mine' })
+    expect(U(first, 'mine')).toBeUndefined()
+    expect(first.players.player.hand).toContain('GRD')
+
+    const c = choice(first)
+    expect(c.kind === 'selectUnitToReturn' && c.targets).toEqual(['theirs']) // leaders excluded
+    const done = resolve(first, { type: 'acceptChoice', choiceId: c.id, targetInstanceId: 'theirs' })
+    expect(U(done, 'theirs')).toBeUndefined()
+    expect(done.players.opponent.hand).toContain('GRD')
+  })
+
+  it('does nothing further if the friendly return is declined', () => {
+    const s = state({
+      cards: G,
+      players: { player: rich({ hand: ['ASH_236'], units: [unit('mine', 'GRD')] }), opponent: player({ units: [unit('theirs', 'GRD')] }) },
+    })
+    const played = play(s)
+    const done = resolve(played, { type: 'skipTrigger', choiceId: choice(played).id })
+    expect(U(done, 'theirs')).toBeDefined()
+    expect(done.pendingChoices ?? []).toHaveLength(0)
+  })
+})
+
+describe('Full of Surprises (232) — bounce a cheap upgrade, then shield a unit', () => {
+  it('offers only upgrades costing 2 or less, then shields a chosen unit', () => {
+    const s = state({
+      cards: G,
+      players: {
+        player: rich({ hand: ['ASH_232'], units: [upgraded('g', 'GRD')] }),
+        opponent: player({ units: [unit('e', 'GRD', { upgrades: [{ cardId: 'BIGUPG', owner: 'opponent' }] })] }),
+      },
+    })
+    const played = play(s)
+    const c = choice(played)
+    expect(c.kind === 'selectUpgradeToReturn' && c.candidates.map(x => x.cardId)).toEqual(['UPG']) // BIGUPG costs 5
+    const returned = resolve(played, { type: 'acceptChoice', choiceId: c.id, optionIndex: 0 })
+    expect(U(returned, 'g')!.upgrades).toHaveLength(0)
+    expect(returned.players.player.hand).toContain('UPG')
+
+    const shield = choice(returned)
+    expect(shield).toMatchObject({ kind: 'mayGiveTokens', count: 1 })
+    const done = resolve(returned, { type: 'acceptChoice', choiceId: shield.id, targetInstanceId: 'g' })
+    expect(shields(done, 'g')).toBe(1)
+  })
+})
+
+// ── Events whose effect is sized by the board, or by what happened this phase ──────────────────
+
+const H = {
+  ...G,
+  ASH_115: card({ id: 'ASH_115', type: 'event', name: 'The Student Guides the Master', cost: 1 }),
+  ASH_139: card({ id: 'ASH_139', type: 'event', name: 'Hold Them Off', cost: 4 }),
+  ASH_163: card({ id: 'ASH_163', type: 'event', name: 'Reckless Sacrifice', cost: 2 }),
+  ASH_188: card({ id: 'ASH_188', type: 'event', name: 'Galvanized Leap', cost: 4 }),
+  ASH_211: card({ id: 'ASH_211', type: 'event', name: 'Fateful Goodbye', cost: 2 }),
+  ASH_231: card({ id: 'ASH_231', type: 'event', name: 'Diplomatic Pageantry', cost: 1 }),
+  STRONG: card({ id: 'STRONG', type: 'unit', arena: 'ground', cost: 5, power: 5, hp: 8 }),
+  WEAK1: card({ id: 'WEAK1', type: 'unit', arena: 'ground', cost: 1, power: 1, hp: 4 }),
+  SPACER: card({ id: 'SPACER', type: 'unit', arena: 'space', cost: 2, power: 2, hp: 6 }),
+}
+
+describe('The Student Guides the Master (115) — +1/+0 per weaker friendly unit', () => {
+  it('scales with how many friendly units have less power than the chosen one', () => {
+    const s = state({
+      cards: H,
+      players: { player: rich({ hand: ['ASH_115'], units: [unit('big', 'STRONG'), unit('w1', 'WEAK1'), unit('w2', 'WEAK1'), unit('peer', 'STRONG')] }), opponent: player() },
+    })
+    const played = play(s)
+    const done = resolve(played, { type: 'acceptChoice', choiceId: choice(played).id, targetInstanceId: 'big' })
+    expect(effectivePower(done, U(done, 'big')!)).toBe(5 + 2) // two weaker friendlies; the equal-power peer doesn't count
+  })
+})
+
+describe('Hold Them Off (139) — a friendly unit spreads its power among units in its arena', () => {
+  it('distributes exactly that unit’s power, and only within its arena', () => {
+    const s = state({
+      cards: H,
+      players: {
+        player: rich({ hand: ['ASH_139'], units: [unit('src', 'STRONG')] }),
+        opponent: player({ units: [unit('a', 'TOUGH'), unit('b', 'TOUGH'), unit('sp', 'SPACER', { arena: 'space' })] }),
+      },
+    })
+    const played = play(s)
+    const picked = resolve(played, { type: 'acceptChoice', choiceId: choice(played).id, targetInstanceId: 'src' })
+    const dist = choice(picked)
+    expect(dist).toMatchObject({ kind: 'distributeDamage', remaining: 5 })
+    expect(dist.kind === 'distributeDamage' && dist.targets).not.toContain('sp') // space unit is out of reach
+
+    let cur = picked
+    for (let i = 0; i < 5; i++) cur = resolve(cur, { type: 'acceptChoice', choiceId: choice(cur).id, targetInstanceId: 'a' })
+    expect(U(cur, 'a')!.damage).toBe(5)
+    expect(cur.pendingChoices ?? []).toHaveLength(0)
+  })
+})
+
+describe('Reckless Sacrifice (163) — discard a unit to snipe something pricier', () => {
+  it('offers only units costing more than the discarded card', () => {
+    const s = state({
+      cards: H,
+      players: {
+        player: rich({ hand: ['ASH_163', 'CHEAP'] }), // CHEAP costs 3
+        opponent: player({ units: [unit('dear', 'DEAR'), unit('cheap', 'CHEAP')] }), // 6 vs 3
+      },
+    })
+    const played = play(s)
+    const discarded = resolve(played, { type: 'acceptChoice', choiceId: choice(played).id, handIndex: 0 })
+    const dmg = choice(discarded)
+    expect(dmg.kind === 'mayDamage' && dmg.targets).toEqual(['dear']) // only the costlier unit
+    const done = resolve(discarded, { type: 'acceptChoice', choiceId: dmg.id, targetInstanceId: 'dear' })
+    expect(U(done, 'dear')).toBeUndefined() // DEAR has 5 HP, so the 5 damage defeats it
+  })
+})
+
+describe('Galvanized Leap (188) — ready a unit damaged this phase', () => {
+  it('offers only units that took damage this phase', () => {
+    const s = state({
+      cards: H,
+      players: {
+        player: rich({ hand: ['ASH_188'], units: [unit('hurt', 'TOUGH', { exhausted: true }), unit('fine', 'TOUGH', { exhausted: true })] }),
+        opponent: player({ units: [unit('e', 'GRD')] }),
+      },
+    })
+    // Damage 'hurt' this phase via an attack against it.
+    const attacked = resolve({ ...s, activePlayer: 'opponent' }, { type: 'attack', attackerId: 'e', target: { kind: 'unit', instanceId: 'hurt' } })
+    const played = play({ ...attacked, activePlayer: 'player' })
+    const c = choice(played)
+    // Both combatants took damage, and the card says "a unit" — not "a friendly unit" — so the
+    // attacker is a legal (if unhelpful) target too.
+    expect(c.kind === 'selectUnitToReady' && c.targets.sort()).toEqual(['e', 'hurt'])
+    const done = resolve(played, { type: 'acceptChoice', choiceId: c.id, targetInstanceId: 'hurt' })
+    expect(U(done, 'hurt')!.exhausted).toBe(false)
+  })
+
+  it('raises no choice when nothing was damaged this phase', () => {
+    const s = state({ cards: H, players: { player: rich({ hand: ['ASH_188'], units: [unit('a', 'TOUGH', { exhausted: true })] }), opponent: player() } })
+    expect(play(s).pendingChoices ?? []).toHaveLength(0)
+  })
+})
+
+describe('Fateful Goodbye (211) — pays out if a friendly unit left play this phase', () => {
+  it('distributes 3 Advantage after a friendly unit was defeated, and 5 for a leader unit', () => {
+    const base = state({
+      cards: H,
+      players: { player: rich({ hand: ['ASH_211'], units: [unit('gone', 'WEAK1'), unit('keep', 'TOUGH')] }), opponent: player() },
+    })
+    expect(play(base).pendingChoices ?? []).toHaveLength(0) // nothing has left play yet
+
+    const dead = dealDamageToUnit(base, 'gone', 99)
+    expect(choice(play(dead))).toMatchObject({ kind: 'distributeTokens', remaining: 3 })
+
+    const leaderBase = state({
+      cards: H,
+      players: { player: rich({ hand: ['ASH_211'], units: [unit('lead', 'WEAK1', { isLeader: true }), unit('keep', 'TOUGH')] }), opponent: player() },
+    })
+    const leaderDead = dealDamageToUnit(leaderBase, 'lead', 99)
+    expect(choice(play(leaderDead))).toMatchObject({ kind: 'distributeTokens', remaining: 5 })
+  })
+
+  it('counts a unit returned to hand as having left play', () => {
+    const s = state({
+      cards: H,
+      players: { player: rich({ hand: ['ASH_211'], units: [unit('bounced', 'WEAK1'), unit('keep', 'TOUGH')] }), opponent: player() },
+    })
+    const bounced = returnUnitToHand(s, 'bounced')
+    expect(choice(play(bounced))).toMatchObject({ kind: 'distributeTokens', remaining: 3 })
+  })
+})
+
+describe('Diplomatic Pageantry (231) — exhaust one of each side, then reward', () => {
+  it('exhausts a friendly and an enemy, then gives 2 Advantage to a friendly unit', () => {
+    const s = state({
+      cards: H,
+      players: {
+        player: rich({ hand: ['ASH_231'], units: [unit('mine', 'TOUGH'), unit('other', 'TOUGH')] }),
+        opponent: player({ units: [unit('theirs', 'TOUGH')] }),
+      },
+    })
+    const played = play(s)
+    expect(choice(played)).toMatchObject({ kind: 'selectPair', mode: 'exhaust' })
+    const first = resolve(played, { type: 'acceptChoice', choiceId: choice(played).id, targetInstanceId: 'mine' })
+    const second = resolve(first, { type: 'acceptChoice', choiceId: choice(first).id, targetInstanceId: 'theirs' })
+    expect(U(second, 'mine')!.exhausted).toBe(true)
+    expect(U(second, 'theirs')!.exhausted).toBe(true)
+
+    const reward = choice(second)
+    expect(reward).toMatchObject({ kind: 'mayGiveTokens', count: 2 })
+    const done = resolve(second, { type: 'acceptChoice', choiceId: reward.id, targetInstanceId: 'other' })
+    expect(U(done, 'other')!.upgrades.filter(u => u.cardId === TOKEN_ADVANTAGE)).toHaveLength(2)
+  })
+})
+
+// ── Events that replay units from the discard, and modal "choose one" ─────────────────────────
+
+const J = {
+  ...H,
+  ASH_247: card({ id: 'ASH_247', type: 'event', name: 'One Must Destroy to Create', cost: 3 }),
+  ASH_104: card({ id: 'ASH_104', type: 'event', name: 'Dathomiri Magicks', cost: 6 }),
+  ASH_257: card({ id: 'ASH_257', type: 'event', name: 'Choose Your Path', cost: 2 }),
+  FORCEU: card({ id: 'FORCEU', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 5, traits: ['Force'] }),
+  MANDOU: card({ id: 'MANDOU', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 5, traits: ['Mandalorian'] }),
+  TINY: card({ id: 'TINY', type: 'unit', arena: 'ground', cost: 2, power: 1, hp: 2 }),
+  RIG: card({ id: 'RIG', type: 'unit', arena: 'ground', cost: 2, power: 1, hp: 2, traits: ['Vehicle'] }),
+}
+
+describe('One Must Destroy to Create (247) — defeat a unit, then replay it free', () => {
+  it('defeats the chosen unit and offers it back from the discard for free', () => {
+    const s = state({
+      cards: J,
+      players: { player: rich({ hand: ['ASH_247'], units: [unit('g', 'GRD'), unit('lead', 'GRD', { isLeader: true })] }), opponent: player() },
+    })
+    const played = play(s)
+    const c = choice(played)
+    expect(c.kind === 'selectUnitToDefeat' && c.targets).toEqual(['g']) // leaders excluded
+    const defeated = resolve(played, { type: 'acceptChoice', choiceId: c.id, targetInstanceId: 'g' })
+    expect(defeated.players.player.discard).toContain('GRD')
+
+    const replay = choice(defeated)
+    expect(replay).toMatchObject({ kind: 'mayPlayUnitFromDiscard' })
+    const before = defeated.players.player.resources.filter(r => !r.exhausted).length
+    const done = resolve(defeated, { type: 'acceptChoice', choiceId: replay.id, optionIndex: 0 })
+    expect(done.players.player.units.some(u => u.cardId === 'GRD')).toBe(true)
+    expect(done.players.player.discard).not.toContain('GRD')
+    expect(done.players.player.resources.filter(r => !r.exhausted).length).toBe(before) // free
+  })
+
+  it('leaves it in the discard when the replay is declined', () => {
+    const s = state({ cards: J, players: { player: rich({ hand: ['ASH_247'], units: [unit('g', 'GRD')] }), opponent: player() } })
+    const played = play(s)
+    const defeated = resolve(played, { type: 'acceptChoice', choiceId: choice(played).id, targetInstanceId: 'g' })
+    const done = resolve(defeated, { type: 'skipTrigger', choiceId: choice(defeated).id })
+    expect(done.players.player.discard).toContain('GRD')
+    expect(done.players.player.units).toHaveLength(0)
+  })
+})
+
+describe('Dathomiri Magicks (104) — cheaper with a Force unit, replays up to 3 from the discard', () => {
+  const spent = (before: GameState, after: GameState) =>
+    before.players.player.resources.filter(r => !r.exhausted).length - after.players.player.resources.filter(r => !r.exhausted).length
+
+  it('costs 1 less while you control a Force unit', () => {
+    const withForce = state({ cards: J, players: { player: rich({ hand: ['ASH_104'], units: [unit('f', 'FORCEU')] }), opponent: player() } })
+    expect(spent(withForce, play(withForce))).toBe(5) // 6 − 1
+
+    const without = state({ cards: J, players: { player: rich({ hand: ['ASH_104'] }), opponent: player() } })
+    expect(spent(without, play(without))).toBe(6)
+  })
+
+  it('offers only non-Vehicle units costing 2 or less, up to three of them', () => {
+    const s = state({
+      cards: J,
+      players: { player: rich({ hand: ['ASH_104'], discard: ['TINY', 'TINY', 'TINY', 'RIG', 'DEAR'] }), opponent: player() },
+    })
+    const played = play(s)
+    const c = choice(played)
+    expect(c.kind === 'mayPlayUnitFromDiscard' && c.candidates).toEqual(['TINY', 'TINY', 'TINY']) // RIG is a Vehicle, DEAR too dear
+
+    let cur = played
+    for (let i = 0; i < 3; i++) cur = resolve(cur, { type: 'acceptChoice', choiceId: choice(cur).id, optionIndex: 0 })
+    expect(cur.players.player.units.filter(u => u.cardId === 'TINY')).toHaveLength(3)
+    expect(cur.pendingChoices ?? []).toHaveLength(0) // three is the cap
+  })
+})
+
+describe('Choose Your Path (257) — choose one of two conditional modes', () => {
+  it('offers only the modes whose condition you meet', () => {
+    const forceOnly = state({
+      cards: J,
+      players: { player: rich({ hand: ['ASH_257'], units: [unit('f', 'FORCEU')], base: { cardId: 'TST_B', damage: 9 } }), opponent: player() },
+    })
+    const played = play(forceOnly)
+    const c = choice(played)
+    expect(c.kind === 'chooseMode' && c.modes).toEqual(['healBase'])
+    const done = resolve(played, { type: 'acceptChoice', choiceId: c.id, optionIndex: 0 })
+    expect(done.players.player.base.damage).toBe(4)
+  })
+
+  it('offers both when you control both a Force and a Mandalorian unit', () => {
+    const both = state({
+      cards: J,
+      players: { player: rich({ hand: ['ASH_257'], units: [unit('f', 'FORCEU'), unit('m', 'MANDOU')], base: { cardId: 'TST_B', damage: 9 } }), opponent: player() },
+    })
+    const played = play(both)
+    const c = choice(played)
+    expect(c.kind === 'chooseMode' && [...c.modes].sort()).toEqual(['healBase', 'mandoToken'])
+    const idx = c.kind === 'chooseMode' ? c.modes.indexOf('mandoToken') : 0
+    const done = resolve(played, { type: 'acceptChoice', choiceId: c.id, optionIndex: idx })
+    const token = done.players.player.units.find(u => u.cardId === TOKEN_MANDALORIAN)!
+    expect(token.upgrades.filter(u => u.cardId === TOKEN_ADVANTAGE)).toHaveLength(1)
+    expect(done.players.player.base.damage).toBe(9) // the other mode didn't happen
+  })
+
+  it('does nothing at all when neither condition is met', () => {
+    const neither = state({ cards: J, players: { player: rich({ hand: ['ASH_257'], units: [unit('g', 'GRD')] }), opponent: player() } })
+    expect(play(neither).pendingChoices ?? []).toHaveLength(0)
   })
 })

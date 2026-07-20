@@ -325,6 +325,12 @@ export interface PhaseEvents {
   basesDamaged: PlayerId[]
   /** Players who had an upgrade defeated this phase (Baylan Skoll). */
   upgradesDefeated: PlayerId[]
+  /** Instance ids of units dealt damage this phase, whether or not they survived (Galvanized Leap). */
+  damagedUnits: string[]
+  /** Card ids of units that LEFT PLAY this phase — defeated, bounced, or otherwise (Fateful Goodbye). */
+  leftPlay: Record<PlayerId, string[]>
+  /** Players whose LEADER unit left play this phase (Fateful Goodbye pays out more). */
+  leaderLeftPlay: PlayerId[]
   /** Card ids each player has played this phase, in order — "the first X you play each phase". */
   played: Record<PlayerId, string[]>
 }
@@ -364,7 +370,7 @@ export type PendingChoice =
   // offered); the front action is mandatory. Each candidate is the exact upgrade (unit + index).
   // Vane chains 2 damage via `then`; Clan Vizsla Soldier just defeats the upgrade (`then` omitted).
   // `thenReadyUnit` readies that unit instead — "if you do, ready this unit" (Pegasus Tri-Wing).
-  | { kind: 'selectUpgradeToDefeat'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional: boolean; then?: DamageTargetSpec; thenReadyUnit?: string }
+  | { kind: 'selectUpgradeToDefeat'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional: boolean; then?: DamageTargetSpec; thenReadyUnit?: string; thenDraw?: number }
   // Return a chosen card from your discard to your hand (Moff Gideon). `candidates` are the
   // eligible discard-pile card ids; `acceptChoice`'s `optionIndex` picks one. Optional.
   // `then: 'discardFate'` chains the bottom-and-heal / return-to-hand modal (Trask Walker)
@@ -375,9 +381,12 @@ export type PendingChoice =
   | { kind: 'chooseDiscardFate'; id: string; controller: PlayerId; cardId: string; heal: number }
   // Chimaera: choose a friendly AND an enemy non-leader unit, then defeat both. Resolved in
   // two accepts — the first records `chosenFriendly` and re-offers with the enemy targets. Optional.
-  | { kind: 'selectPairToDefeat'; id: string; controller: PlayerId; friendlyTargets: string[]; enemyTargets: string[]; chosenFriendly?: string }
+  // Pick one friendly and one enemy unit, then apply `mode` to both. Resolved in two accepts — the
+  // first records `chosenFriendly` and re-offers with the enemy targets. Optional.
+  // `thenAdvantage` gives that many Advantage tokens to a friendly unit afterwards (Diplomatic Pageantry).
+  | { kind: 'selectPair'; id: string; controller: PlayerId; friendlyTargets: string[]; enemyTargets: string[]; chosenFriendly?: string; mode: 'defeat' | 'exhaust'; thenAdvantage?: number }
   // Jabba the Hutt: return one of `candidates` (card upgrades in play) to its owner's hand.
-  | { kind: 'selectUpgradeToReturn'; id: string; controller: PlayerId; candidates: UpgradeRef[] }
+  | { kind: 'selectUpgradeToReturn'; id: string; controller: PlayerId; candidates: UpgradeRef[]; thenShield?: boolean }
   // Jabba the Hutt: having returned `cardId` to your own hand, may attach it free to a unit.
   | { kind: 'mayPlayUpgradeFree'; id: string; controller: PlayerId; cardId: string; targets: string[] }
   // Jod Na Nawood: may pay `cost`, then exhaust every unit in the chosen arena
@@ -395,7 +404,10 @@ export type PendingChoice =
   // Optional "this phase" buff, e.g. Baylan's On Attack: pick a unit among `targets`
   // and grant it the given power/HP/keywords for the phase, or decline.
   // `thenMayAttack` chains "you may attack with that unit" (T-6 Shuttle 1974).
-  | { kind: 'mayLastingBuff'; id: string; controller: PlayerId; targets: string[]; power?: number; hp?: number; keywords?: KeywordInstance[]; thenMayAttack?: boolean }
+  | { kind: 'mayLastingBuff'; id: string; controller: PlayerId; targets: string[]; power?: number; hp?: number; keywords?: KeywordInstance[]; thenMayAttack?: boolean
+      // The Student Guides the Master: power is +1 per friendly unit weaker than the chosen one,
+      // so it can only be worked out once a target is picked.
+      powerPerWeakerFriendly?: boolean }
   // Ezra front: on a friendly attack ending, may exhaust the leader to give an Advantage
   // token to one of `targets` (a unit other than the attacker), or decline.
   | { kind: 'mayExhaustLeaderGiveAdvantage'; id: string; controller: PlayerId; targets: string[] }
@@ -413,7 +425,8 @@ export type PendingChoice =
   // Luke front: may exhaust the (undeployed) leader to heal `amount` from `unitId`, or decline.
   | { kind: 'mayExhaustLeaderHealUnit'; id: string; controller: PlayerId; unitId: string; amount: number }
   // Luke deployed: heal `amount` from a chosen unit (`unitTargets`) or base (`baseTargets`). Mandatory.
-  | { kind: 'selectHealTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[]; optional?: boolean }
+  // `thenShield` gives the healed unit a Shield token as part of the same effect (Perserverance).
+  | { kind: 'selectHealTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[]; optional?: boolean; thenShield?: boolean }
   // Play a unit from hand as part of an ability: pick one of `candidates` (affordable hand
   // units), paying its cost + `costDelta`, entering ready if `entersReady` (Fennec, Moff Gideon).
   | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean }
@@ -433,7 +446,7 @@ export type PendingChoice =
   // Resolved by an `acceptChoice` carrying the hand index. `then` runs after the last discard: Ninth
   // Sister distributes the discarded card's cost as damage (`distributeDamageTo`); Razor Crest gives a
   // unit a "this phase" buff (`buffUnit`).
-  | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean; then?: { distributeDamageTo: PlayerId } | { buffUnit: string; power?: number; hp?: number } | { dealDamage: number } | { exhaustUnit: true } }
+  | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean; then?: { distributeDamageTo: PlayerId } | { buffUnit: string; power?: number; hp?: number } | { dealDamage: number; costlierThanDiscard?: boolean } | { exhaustUnit: true } }
   // Leia Organa: a yes/no — deal `selfDamage` to `unitId`, then heal `healBase` from your base.
   | { kind: 'maySelfDamageHealBase'; id: string; controller: PlayerId; unitId: string; selfDamage: number; healBase: number }
   // Mando's N-1: a yes/no — exhaust your (ready) leader to give `unitId` a "+power/+hp this phase" buff.
@@ -452,7 +465,23 @@ export type PendingChoice =
   | { kind: 'dealOwnBaseForDiscount'; id: string; controller: PlayerId; dealt: number; max: number }
   // Purrgil Ultra: return a chosen friendly non-leader unit (`targets`) to hand, then deal
   // damage equal to its cost to any unit. Optional (skip = don't return).
-  | { kind: 'returnFriendlyUnit'; id: string; controller: PlayerId; targets: string[] }
+  // `then` picks the follow-up: 'damageEqualToCost' (Purrgil Ultra) or 'returnEnemyUnit' (Far Far Away).
+  | { kind: 'returnFriendlyUnit'; id: string; controller: PlayerId; targets: string[]; then?: 'damageEqualToCost' | 'returnEnemyUnit' }
+  // Return one of `targets` to its owner's hand. Distinct from returnFriendlyUnit in that the card
+  // supplies the eligible units, which may be the opponent's.
+  | { kind: 'selectUnitToReturn'; id: string; controller: PlayerId; targets: string[] }
+  // Galvanized Leap: ready one of `targets`.
+  | { kind: 'selectUnitToReady'; id: string; controller: PlayerId; targets: string[] }
+  // Play a unit from your discard for free (One Must Destroy to Create, Dathomiri Magicks).
+  // `candidates` are discard-pile card ids; `acceptChoice`'s `optionIndex` picks one. `remaining`
+  // counts how many more may be played after this one, so the offer re-raises until the pool runs out.
+  | { kind: 'mayPlayUnitFromDiscard'; id: string; controller: PlayerId; candidates: string[]; remaining: number; maxCost?: number; excludeTrait?: string }
+  // "Choose one:" — a modal effect. `modes` holds only the options the card allows right now, so a
+  // mode whose condition isn't met is never offered.
+  | { kind: 'chooseMode'; id: string; controller: PlayerId; modes: string[] }
+  // Hold Them Off: pick the unit that will deal the damage; its power becomes the pool to spread
+  // among units in its own arena.
+  | { kind: 'selectDistributeSource'; id: string; controller: PlayerId; targets: string[] }
   // Reanimated Night Trooper: having looked at the top of each deck in `decks`, you may discard
   // one deck's top card (`acceptChoice`'s `baseTarget` picks the deck), or decline.
   | { kind: 'peekTopDiscard'; id: string; controller: PlayerId; decks: PlayerId[] }
@@ -520,7 +549,9 @@ export type PendingChoice =
   // Defeat one of `targets`, or decline. The card supplies the eligible units, so this covers
   // "a non-leader enemy unit" (Thrawn), "an upgraded non-leader unit" (Get Lost), and so on.
   // `thenResource` chains "if you do, resource the top card of your deck" (Long Live the Empire).
-  | { kind: 'selectUnitToDefeat'; id: string; controller: PlayerId; targets: string[]; thenResource?: boolean }
+  // `thenReplayFromDiscard` offers the defeated unit straight back from the discard, free
+  // (One Must Destroy to Create).
+  | { kind: 'selectUnitToDefeat'; id: string; controller: PlayerId; targets: string[]; thenResource?: boolean; thenReplayFromDiscard?: boolean }
   // Sabine front: the opponent (`controller`) must give `count` Advantage tokens to one of
   // their units (`targets`). Mandatory when able — an opponent-interjected choice (pendingResumeActive).
   | { kind: 'opponentGivesAdvantage'; id: string; controller: PlayerId; count: number; targets: string[] }
@@ -529,7 +560,7 @@ export type PendingChoice =
   // Vizsla (defeat non-leaders within an HP budget, a token each).
   | {
       kind: 'multiPick'; id: string; controller: PlayerId; targets: string[]
-      spec: { mode: 'giveAdvantage'; remaining: number } | { mode: 'defeatForToken'; budget: number; token: string } | { mode: 'dealEach'; amount: number; remaining: number }
+      spec: { mode: 'giveAdvantage'; remaining: number } | { mode: 'defeatForToken'; budget: number; token: string } | { mode: 'dealEach'; amount: number; remaining: number } | { mode: 'exhaust'; remaining: number }
     }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */
@@ -596,7 +627,7 @@ export function clearNextUnitGrants(state: GameState): GameState {
 }
 
 function emptyPhaseEvents(): PhaseEvents {
-  return { enteredPlay: { player: [], opponent: [] }, defeated: { player: [], opponent: [] }, basesAttacked: [], basesDamaged: [], upgradesDefeated: [], played: { player: [], opponent: [] } }
+  return { enteredPlay: { player: [], opponent: [] }, defeated: { player: [], opponent: [] }, basesAttacked: [], basesDamaged: [], upgradesDefeated: [], damagedUnits: [], leftPlay: { player: [], opponent: [] }, leaderLeftPlay: [], played: { player: [], opponent: [] } }
 }
 
 /** Clear the tracked per-phase events (called whenever the phase changes). */
@@ -648,6 +679,40 @@ export function baseDamagedThisPhase(state: GameState, owner: PlayerId): boolean
 export function recordUpgradeDefeated(state: GameState, owner: PlayerId): GameState {
   const events = state.phaseEvents ?? emptyPhaseEvents()
   return events.upgradesDefeated.includes(owner) ? state : { ...state, phaseEvents: { ...events, upgradesDefeated: [...events.upgradesDefeated, owner] } }
+}
+
+/** Record that `instanceId` was dealt damage this phase. Idempotent. */
+export function recordUnitDamaged(state: GameState, instanceId: string): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  return events.damagedUnits.includes(instanceId) ? state : { ...state, phaseEvents: { ...events, damagedUnits: [...events.damagedUnits, instanceId] } }
+}
+
+/** Instance ids of units dealt damage this phase (Galvanized Leap). */
+export function damagedThisPhase(state: GameState): string[] {
+  return state.phaseEvents?.damagedUnits ?? []
+}
+
+/** Record that a unit left play under `owner` this phase — defeated, bounced, or otherwise. */
+export function recordUnitLeftPlay(state: GameState, owner: PlayerId, cardId: string, isLeader: boolean): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  return {
+    ...state,
+    phaseEvents: {
+      ...events,
+      leftPlay: { ...events.leftPlay, [owner]: [...events.leftPlay[owner], cardId] },
+      leaderLeftPlay: isLeader && !events.leaderLeftPlay.includes(owner) ? [...events.leaderLeftPlay, owner] : events.leaderLeftPlay,
+    },
+  }
+}
+
+/** Card ids of `owner`'s units that left play this phase (Fateful Goodbye). */
+export function leftPlayThisPhase(state: GameState, owner: PlayerId): string[] {
+  return state.phaseEvents?.leftPlay[owner] ?? []
+}
+
+/** Whether `owner`'s leader unit left play this phase. */
+export function leaderLeftPlayThisPhase(state: GameState, owner: PlayerId): boolean {
+  return state.phaseEvents?.leaderLeftPlay.includes(owner) ?? false
 }
 
 /** Whether `owner` had an upgrade defeated this phase (Baylan Skoll). */

@@ -39,9 +39,9 @@ describe('Chimaera (052) — pair a friendly and an enemy unit for defeat', () =
 
   it('defeats both chosen units, in two picks', () => {
     const p = resolve(board(), { type: 'playUnit', handIndex: 0 })
-    expect(choice(p)).toMatchObject({ kind: 'selectPairToDefeat' })
+    expect(choice(p)).toMatchObject({ kind: 'selectPair' })
     const friendly = resolve(p, { type: 'acceptChoice', choiceId: choice(p).id, targetInstanceId: 'f' })
-    expect(choice(friendly)).toMatchObject({ kind: 'selectPairToDefeat', chosenFriendly: 'f' })
+    expect(choice(friendly)).toMatchObject({ kind: 'selectPair', chosenFriendly: 'f' })
     const done = resolve(friendly, { type: 'acceptChoice', choiceId: choice(friendly).id, targetInstanceId: 'e' })
     expect(U(done, 'f')).toBeUndefined()
     expect(U(done, 'e')).toBeUndefined()

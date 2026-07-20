@@ -81,7 +81,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayExhaustLeaderForAdvantage' || choice.kind === 'mayExhaustLeaderHealUnit' || choice.kind === 'mayPayToDraw' || choice.kind === 'mayDeployLeader') return "Don't"
       if (choice.kind === 'maySelfDamageShield' || choice.kind === 'mayCreateToken' || choice.kind === 'mayCapture') return "Don't"
       if (choice.kind === 'damageAnyBases') return 'Done'
-      if (choice.kind === 'selectPairToDefeat' || choice.kind === 'selectUpgradeToReturn' || choice.kind === 'mayPlayUpgradeFree') return 'Decline'
+      if (choice.kind === 'selectPair' || choice.kind === 'selectUpgradeToReturn' || choice.kind === 'mayPlayUpgradeFree') return 'Decline'
       if (choice.kind === 'mayPayExhaustArena' || choice.kind === 'revealUnitFromHand') return "Don't"
       return `Skip ${choice.kind}`
     }
@@ -213,7 +213,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const name = state.cards[choice.cardId]?.name ?? 'card'
         return (action.optionIndex ?? 0) === 0 ? `Bottom ${name}, heal ${choice.heal}` : `Return ${name} to hand`
       }
-      if (choice.kind === 'selectPairToDefeat') {
+      if (choice.kind === 'selectPair') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return choice.chosenFriendly === undefined ? `Sacrifice ${target ?? 'unit'}` : `Defeat ${target ?? 'unit'}`
       }

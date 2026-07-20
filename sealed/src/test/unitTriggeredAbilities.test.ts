@@ -569,7 +569,7 @@ describe('Boba Fett\'s Rancor + Greef Karga', () => {
   })
 
   it('Greef Karga (119): Action creates a Mandalorian token if your base was attacked this phase', () => {
-    const attacked = state({ cards: E, players: { player: player({ units: [unit('a', 'ASH_119', { arena: 'ground' })], resources: ready(3) }), opponent: player({}) }, phaseEvents: { enteredPlay: { player: [], opponent: [] }, defeated: { player: [], opponent: [] }, basesAttacked: ['player'], basesDamaged: [], upgradesDefeated: [], played: { player: [], opponent: [] } } })
+    const attacked = state({ cards: E, players: { player: player({ units: [unit('a', 'ASH_119', { arena: 'ground' })], resources: ready(3) }), opponent: player({}) }, phaseEvents: { enteredPlay: { player: [], opponent: [] }, defeated: { player: [], opponent: [] }, basesAttacked: ['player'], basesDamaged: [], upgradesDefeated: [], damagedUnits: [], leftPlay: { player: [], opponent: [] }, leaderLeftPlay: [], played: { player: [], opponent: [] } } })
     expect(legalMoves(attacked).filter(m => m.type === 'useAbility')).toHaveLength(1)
     const used = resolve(attacked, { type: 'useAbility', instanceId: 'a', cardId: 'ASH_119', index: 0 })
     expect(used.players.player.units.filter(u => u.cardId === TOKEN_MANDALORIAN)).toHaveLength(1)

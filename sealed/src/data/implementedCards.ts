@@ -222,6 +222,20 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'ASH_092', name: 'Foundling Rescue' },
   { id: 'ASH_091', name: 'Buy Time' },
   { id: 'ASH_103', name: 'Long Live the Empire' },
+  { id: 'ASH_246', name: 'Exploit Advantage' },
+  { id: 'ASH_089', name: 'Perserverance' },
+  { id: 'ASH_233', name: 'Keep Them Talking' },
+  { id: 'ASH_236', name: 'Far Far Away' },
+  { id: 'ASH_232', name: 'Full of Surprises' },
+  { id: 'ASH_115', name: 'The Student Guides the Master' },
+  { id: 'ASH_139', name: 'Hold Them Off' },
+  { id: 'ASH_163', name: 'Reckless Sacrifice' },
+  { id: 'ASH_188', name: 'Galvanized Leap' },
+  { id: 'ASH_211', name: 'Fateful Goodbye' },
+  { id: 'ASH_231', name: 'Diplomatic Pageantry' },
+  { id: 'ASH_247', name: 'One Must Destroy to Create' },
+  { id: 'ASH_104', name: 'Dathomiri Magicks' },
+  { id: 'ASH_257', name: 'Choose Your Path' },
 ]
 
 export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
