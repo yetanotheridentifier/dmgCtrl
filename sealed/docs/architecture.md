@@ -137,6 +137,15 @@ The board is drawn with art-dominant cards, not text rows:
   follow-up #331). Long-press suppresses the click so it doesn't also play/attack; holding **Alt**
   flips a dual-sided leader's face. Shift/Alt come from a shared `useModifierKeys` store (one set
   of listeners, not one per card). The zoom scale is `ZOOM_WIDTH_PX` (cardSizing.ts) — one place.
+  The popover portals to `document.body` and positions itself from the anchor element supplied by
+  `setAnchor`. Two constraints keep that working, both learned from a production-only failure
+  (#367) where every card but the board unit stayed invisible: `setAnchor` **must stay
+  referentially stable**, since React detaches and re-attaches a callback ref whose identity
+  changed — and refs attach bottom-up, so a popover rendered *inside* its anchor would otherwise
+  measure a null ref; and a positioning pass that finds no anchor **falls back to centred, never
+  hidden**. Dev hid the bug because StrictMode's dev-only double-invoke re-ran the layout effect
+  after the ref attached. Assert zoom is *visible*, not merely mounted — presence alone passes
+  while the popover is `visibility: hidden`.
 - **Screen layout** (#332): the game screen is full-bleed — a two-column grid
   (`16rem 1fr`), no divider between them. Backgrounds follow one rule: the **play area,
   the bars and the two headers use the core theme background** (transparent → the body

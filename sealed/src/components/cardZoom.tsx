@@ -37,12 +37,18 @@ export function CardZoomPopover({
   const effectiveDeployed = dualSided && alt ? !deployed : deployed
 
   const ref = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
+  // null until the positioning pass runs; 'centred' once it has run with nothing to measure.
+  // Keeping "not yet placed" and "no anchor found" distinct matters: collapsing them left a
+  // popover that missed its anchor hidden forever instead of falling back to centred.
+  const [pos, setPos] = useState<{ left: number; top: number } | 'centred' | null>(null)
 
   useLayoutEffect(() => {
     const anchor = anchorRef?.current
     const el = ref.current
-    if (!anchor || !el) return // no anchor → stay centred (see style below)
+    if (!anchor || !el) {
+      setPos('centred')
+      return
+    }
     const a = anchor.getBoundingClientRect()
     const w = el.offsetWidth || ZOOM_WIDTH_PX
     const h = el.offsetHeight || longEdge(ZOOM_WIDTH_PX)
@@ -52,10 +58,11 @@ export function CardZoomPopover({
     setPos({ left, top })
   }, [anchorRef, card, effectiveDeployed])
 
-  const anchored = pos !== null
-  // With an anchor we hide until the layout effect measures it, to avoid a one-frame
-  // flash at the wrong spot. Without one we centre immediately (isolated render tests).
-  const measuring = anchorRef !== undefined && !anchored
+  const anchored = pos !== null && pos !== 'centred'
+  // With an anchor we hide until the positioning pass runs, to avoid a one-frame flash at the
+  // wrong spot. Without one we centre immediately (isolated render tests). A pass that ran but
+  // found no anchor still reveals the card — centred beats invisible.
+  const measuring = anchorRef !== undefined && pos === null
   const style = anchored
     ? { left: pos.left, top: pos.top }
     : { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }

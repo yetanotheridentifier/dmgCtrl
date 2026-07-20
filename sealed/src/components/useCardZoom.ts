@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, MouseEvent as ReactMouseEvent } from 'react'
 import { useModifierKeys } from './modifierKeys'
 
@@ -72,7 +72,14 @@ export function useCardZoom() {
   }
 
   const zoomed = (hovering && shift) || pressZoom
-  /** Callback ref for the card's wrapper element — attach with `ref={setAnchor}`. */
-  const setAnchor = (el: HTMLElement | null) => { anchorRef.current = el }
+  /**
+   * Callback ref for the card's wrapper element — attach with `ref={setAnchor}`.
+   *
+   * Must stay referentially stable: React re-invokes a callback ref whose identity changed,
+   * detaching it (`current = null`) before the commit and re-attaching bottom-up. Most cards
+   * render the popover *inside* this wrapper, so an unstable ref left `anchorRef.current` null
+   * when the popover's layout effect measured it, and it never became visible.
+   */
+  const setAnchor = useCallback((el: HTMLElement | null) => { anchorRef.current = el }, [])
   return { zoomed, bind, anchorRef, setAnchor }
 }

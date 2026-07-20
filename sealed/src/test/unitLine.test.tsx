@@ -145,6 +145,9 @@ describe('UnitLine — attached upgrades', () => {
     fireEvent.pointerEnter(upgradeCard, { pointerType: 'mouse' })
     fireEvent.keyDown(window, { key: 'Shift', shiftKey: true })
     expect(screen.getByTestId('card-zoom')).toBeInTheDocument()
+    // The upgrade's popover renders inside its anchor, so it must still measure — a
+    // present-but-hidden popover is the production failure this guards.
+    expect(screen.getByTestId('card-zoom').style.visibility).not.toBe('hidden')
     fireEvent.keyUp(window, { key: 'Shift', shiftKey: false })
   })
 

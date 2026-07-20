@@ -85,4 +85,14 @@ describe('DiscardPile', () => {
     // so it lives outside the overlay subtree now — assert against the whole screen.
     expect(screen.getByTestId('card-zoom')).toBeInTheDocument()
   })
+
+  it('zooms the pile itself on shift + hover — visible, not just mounted', () => {
+    render(<DiscardPile state={discardState(['D1'])} side="player" />)
+    const pile = screen.getByTestId('player-discard-pile')
+    fireEvent.pointerEnter(pile, { pointerType: 'mouse' })
+    fireEvent.keyDown(window, { key: 'Shift', shiftKey: true })
+    // Present but hidden is the failure this guards: an unmeasured popover stays
+    // `visibility: hidden` forever, so presence alone proves nothing.
+    expect(screen.getByTestId('card-zoom').style.visibility).not.toBe('hidden')
+  })
 })
