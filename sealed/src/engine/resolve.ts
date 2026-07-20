@@ -6,7 +6,7 @@ import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseE
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
-import { applyUnitDamage, dealDamageToUnit, defeatUnit } from './combat'
+import { applyUnitDamage, dealDamageToUnit, defeatUnit, sweepStateBasedDefeats } from './combat'
 import { exhaustUnit, findUnit, giveToken, fireUpgradeAttached, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
@@ -20,7 +20,16 @@ import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
  * throws on engine-invariant violations (wrong phase, unknown ids, game over)
  * rather than re-validating game rules.
  */
+/**
+ * Apply an action, then settle state-based defeats (#357) — an effect that LOWERS a unit's HP
+ * (Morgan Elsbeth's −2/−2) defeats it without dealing damage, so every action ends with a sweep.
+ */
 export function resolve(state: GameState, action: Action): GameState {
+  const next = resolveAction(state, action)
+  return next.winner !== null ? next : checkWin(sweepStateBasedDefeats(next))
+}
+
+function resolveAction(state: GameState, action: Action): GameState {
   if (state.winner !== null) {
     throw new Error('Cannot resolve actions: the game is over')
   }
@@ -1386,9 +1395,10 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
     ? Math.max(0, attackerPower - remainingHp)
     : 0
 
-  // Simultaneous combat damage (CR 1.9.10) — flagged as combat damage for whenDefeated (#356).
-  let next = applyUnitDamage(preCombat, enemyId, new Map([[defender.instanceId, attackerPower]]), true)
-  next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, counterPower]]), true)
+  // Simultaneous combat damage (CR 1.9.10) — flagged as combat damage for whenDefeated (#356). The
+  // stat context goes through so combat-only debuffs count in the defeat check (#357, Scion Shuttle).
+  let next = applyUnitDamage(preCombat, enemyId, new Map([[defender.instanceId, attackerPower]]), true, defenderCtx)
+  next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, counterPower]]), true, { combat, attacking: true })
 
   if (overwhelmExcess > 0) {
     const enemy = next.players[enemyId]

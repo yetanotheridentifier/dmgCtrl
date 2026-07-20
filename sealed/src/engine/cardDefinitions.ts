@@ -1282,3 +1282,17 @@ registerCard('ASH_035', { // Tatooine Repulsor Train
     return amount > 0 && targets.length ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount, unitTargets: targets, baseTargets: [] }) : s
   } }],
 })
+
+// ── Group F (#357): HP-reduction defeats (state-based + combat-only) ────────
+registerCard('ASH_050', whenDefeated('You may give a unit -2/-2 for this phase.', (s, ctx) => { // Morgan Elsbeth
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayLastingBuff', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, power: -2, hp: -2 }) : s
+}))
+
+// Scion Shuttle (046): while it attacks, the DEFENDING unit gets -1/-1 — a combat-conditional aura.
+registerCard('ASH_046', {
+  aura: (_s, source, target, _sameController, combat) =>
+    combat && combat.attackerInstanceId === source.instanceId && combat.defenderInstanceId === target.instanceId
+      ? { power: -1, hp: -1 }
+      : undefined,
+})

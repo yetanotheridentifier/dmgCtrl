@@ -1,6 +1,7 @@
 import type { GameState, PlayerId, UnitState } from './types'
 import { opponentOf, updatePlayer, recordUnitDefeated } from './types'
 import { effectiveHp } from './stats'
+import type { StatContext } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import { runUnitTrigger, getCardDefinition } from './abilities'
@@ -26,7 +27,7 @@ function damageMultiplier(state: GameState, unit: UnitState): number {
  * Fires each defeated unit's (and its upgrades') `whenDefeated` abilities after
  * the unit has left play (#342).
  */
-export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<string, number>, byCombat = false): GameState {
+export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<string, number>, byCombat = false, statCtx: StatContext = {}): GameState {
   const p = state.players[owner]
   const survivors: UnitState[] = []
   const defeated: UnitState[] = []
@@ -43,7 +44,8 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
     }
     const total = u.damage + extra
     const next = extra > 0 || upgrades !== u.upgrades ? { ...u, damage: total, upgrades } : u
-    if (total >= effectiveHp(state, next)) {
+    // `statCtx` lets the combat defeat check see combat-only debuffs (#357, Scion Shuttle's -1/-1).
+    if (total >= effectiveHp(state, next, statCtx)) {
       defeated.push(next)
     } else {
       survivors.push(next)
@@ -95,6 +97,30 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
     }
   }
   return result
+}
+
+/**
+ * State-based defeats (#357): a unit whose damage has reached its *current* HP — or whose HP has been
+ * reduced to 0 — is defeated even though no damage was just dealt. Needed by effects that LOWER HP
+ * (Morgan Elsbeth's −2/−2). Uses resting stats, so combat-only debuffs aren't considered here (those
+ * are handled by the combat defeat check). Loops until stable, since a whenDefeated can change the
+ * board again; bounded so a pathological loop can't hang the game.
+ */
+export function sweepStateBasedDefeats(state: GameState): GameState {
+  let next = state
+  for (let pass = 0; pass < 8; pass++) {
+    let changed = false
+    for (const owner of ['player', 'opponent'] as PlayerId[]) {
+      const units = next.players[owner].units
+      const doomed = units.filter(u => u.damage >= effectiveHp(next, u))
+      if (doomed.length === 0) continue
+      const doomedIds = new Set(doomed.map(u => u.instanceId))
+      next = finishDefeats(next, owner, units.filter(u => !doomedIds.has(u.instanceId)), doomed)
+      changed = true
+    }
+    if (!changed) break
+  }
+  return next
 }
 
 /** Defeat a unit outright (#348) — a targeted "defeat" (Thrawn), which bypasses Shields (those

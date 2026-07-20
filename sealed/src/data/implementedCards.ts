@@ -298,6 +298,9 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_034', name: 'Wicket' },
   { id: 'ASH_037', name: 'Red Leader' },
   { id: 'ASH_035', name: 'Tatooine Repulsor Train' },
+  // Group F (#357) — HP-reduction defeats
+  { id: 'ASH_050', name: 'Morgan Elsbeth' },
+  { id: 'ASH_046', name: 'Scion Shuttle' },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */
