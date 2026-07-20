@@ -1,14 +1,14 @@
 import type { EngineCard } from './types'
 
 /**
- * Token upgrades (#308) — Shield, Experience, Advantage. These aren't deck cards;
+ * Token upgrades — Shield, Experience, Advantage. These aren't deck cards;
  * abilities create them and attach them to a unit (they live in `unit.upgrades`
  * like card upgrades). They're modelled as built-in `token` cards always present
  * in the card db, so the stats/keyword helpers pick them up for free:
  *  - **Experience**: a +1/+1 stat upgrade.
  *  - **Shield**: prevents one instance of incoming damage, then is removed.
  *  - **Advantage**: +1/0 until the unit next completes an attack or defence, then
- *    removed (#334).
+ *    removed.
  * On defeat a unit's tokens cease to exist rather than going to a discard pile.
  */
 
@@ -23,7 +23,7 @@ function tokenCard(id: string, name: string, power: number, hp: number, frontArt
 // Official token card art (cdn.swu-db.com) — routed through the art proxy by `artUrl`.
 const CDN = 'https://cdn.swu-db.com/images/cards'
 
-/** Built-in token upgrades, merged into every card db (#308). */
+/** Built-in token upgrades, merged into every card db. */
 export const TOKEN_CARDS: Record<string, EngineCard> = {
   [TOKEN_EXPERIENCE]: tokenCard(TOKEN_EXPERIENCE, 'Experience', 1, 1, `${CDN}/SOR/T01.png`),
   [TOKEN_SHIELD]: tokenCard(TOKEN_SHIELD, 'Shield', 0, 0, `${CDN}/LOF/T02.png`),
@@ -36,7 +36,7 @@ export function removeFirst<T>(arr: T[], pred: (x: T) => boolean): T[] {
   return i === -1 ? arr : arr.filter((_, j) => j !== i)
 }
 
-/** True if the unit carries at least one token of the given kind (#308). */
+/** True if the unit carries at least one token of the given kind. */
 export function hasToken(upgrades: { cardId: string }[], tokenId: string): boolean {
   return upgrades.some(u => u.cardId === tokenId)
 }

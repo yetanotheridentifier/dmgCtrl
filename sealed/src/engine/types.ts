@@ -1,13 +1,13 @@
 /**
- * Game state schema (T2.1) — pure data, fully JSON-serialisable.
+ * Game state schema — pure data, fully JSON-serialisable.
  *
  * The engine is a pure function over this shape: (state, action) => state.
  * `cards` is the static card database for the match; it is shared by reference
  * between successive states and never mutated, so structural cloning of states
  * stays cheap for search (MCTS) later.
  *
- * Ability text is intentionally NOT modelled in the MVP engine — Sealed play
- * with vanilla stats first; abilities layer in post-M1.
+ * Card ability *text* is never stored here — abilities live in the registry keyed by card id
+ * (see abilities.ts), so state stays plain JSON and replays deterministically.
  */
 
 import type { AttackTarget } from './actions'

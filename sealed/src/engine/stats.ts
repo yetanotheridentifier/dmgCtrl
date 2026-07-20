@@ -5,8 +5,8 @@ import { getCardDefinition } from './abilities'
 import { TOKEN_ADVANTAGE } from './tokenUpgrades'
 
 /**
- * Computed unit stats (#305). All combat and defeat checks go through these
- * helpers so upgrades (#308) and lasting effects (#306) slot into one place.
+ * Computed unit stats. All combat and defeat checks go through these
+ * helpers so upgrades and lasting effects slot into one place.
  * Attached upgrades add their printed power/HP; Power/HP never drop below 0
  * (CR 1.10.4 / 1.11.4).
  */
@@ -16,18 +16,18 @@ export interface StatContext {
   attacking?: boolean
   /** True while the unit is attacking the enemy base (not a unit). */
   attackingBase?: boolean
-  /** True while the unit is the defender in the current combat (#357, Palace Chef Droid). */
+  /** True while the unit is the defender in the current combat (Palace Chef Droid). */
   defending?: boolean
-  /** For the attacker: the defending unit had damage on it (#357, Marrok's Fiend Fighter). */
+  /** For the attacker: the defending unit had damage on it (Marrok's Fiend Fighter). */
   defenderDamaged?: boolean
-  /** The attack was made via Ambush, on the unit entering play (#357, Heroic Purrgil). */
+  /** The attack was made via Ambush, on the unit entering play (Heroic Purrgil). */
   viaAmbush?: boolean
-  /** The current combat's roles, for combat-conditional auras (Grogu, #348). */
+  /** The current combat's roles, for combat-conditional auras (Grogu). */
   combat?: CombatContext
 }
 
 /**
- * True while `owner`'s Advantage tokens "lose all abilities" (#357, Eviscerator): they add no
+ * True while `owner`'s Advantage tokens "lose all abilities" (Eviscerator): they add no
  * power and aren't spent after combat. Read from the controller's own units.
  */
 export function friendlyAdvantageInert(state: GameState, owner: PlayerId): boolean {
@@ -36,10 +36,10 @@ export function friendlyAdvantageInert(state: GameState, owner: PlayerId): boole
   )
 }
 
-/** Sum a stat across the unit's card and every attached upgrade (#308). */
+/** Sum a stat across the unit's card and every attached upgrade. */
 function withUpgrades(state: GameState, unit: UnitState, stat: 'power' | 'hp'): number {
   let total = state.cards[unit.cardId]?.[stat] ?? 0
-  // An inert Advantage token contributes nothing (#357, Eviscerator).
+  // An inert Advantage token contributes nothing (Eviscerator).
   const owner = findUnitOwner(state, unit.instanceId)
   const inert = owner !== undefined && friendlyAdvantageInert(state, owner)
   for (const { cardId } of unit.upgrades) {
@@ -58,7 +58,7 @@ function findUnitOwner(state: GameState, instanceId: string): PlayerId | undefin
 
 /**
  * Conditional stat deltas from the unit's own card definition and each attached
- * upgrade's (#342) — e.g. Pointless to Resist's −3 power while attacking a base.
+ * upgrade's — e.g. Pointless to Resist's −3 power while attacking a base.
  */
 function statModifiers(state: GameState, unit: UnitState, ctx: StatContext, stat: 'power' | 'hp'): number {
   let total = 0
@@ -77,8 +77,8 @@ export function effectivePower(state: GameState, unit: UnitState, ctx: StatConte
     power += unit.damage
   }
   power += statModifiers(state, unit, ctx, 'power')
-  power += auraContributions(state, unit, ctx.combat).power // other units' auras (#346/#348)
-  power += lastingEffectTotals(state, unit.instanceId).power // "this phase" buffs (#347)
+  power += auraContributions(state, unit, ctx.combat).power // other units' auras
+  power += lastingEffectTotals(state, unit.instanceId).power // "this phase" buffs
   return Math.max(0, power)
 }
 

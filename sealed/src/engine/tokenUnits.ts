@@ -1,7 +1,7 @@
 import type { EngineCard } from './types'
 
 /**
- * Token units (#342) — units that abilities create rather than play from a deck
+ * Token units — units that abilities create rather than play from a deck
  * (e.g. Warrior's Legacy's Mandalorian). Modelled as built-in `unit` cards always
  * present in the card db (like the token upgrades in `tokenUpgrades.ts`), so every
  * stat/keyword helper picks them up. Their ids carry the shared `TOKEN_` prefix so

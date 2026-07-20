@@ -14,7 +14,7 @@ import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, uni
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
 
 /**
- * Action resolver (T2.5) — pure `(state, action) => state`.
+ * Action resolver — pure `(state, action) => state`.
  *
  * Legality lives in the legal-move generator; the resolver applies actions and
  * throws on engine-invariant violations (wrong phase, unknown ids, game over)
@@ -1467,7 +1467,7 @@ function pass(state: GameState): GameState {
 }
 
 // ---------------------------------------------------------------------------
-// Combat (basic resolution — T2.5/T3.2/T3.3)
+// Combat resolution
 // ---------------------------------------------------------------------------
 
 /**

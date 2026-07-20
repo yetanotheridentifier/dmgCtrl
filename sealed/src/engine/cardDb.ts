@@ -35,7 +35,7 @@ function toKeywords(card: SwuCard): KeywordInstance[] {
   const text = `${card.FrontText ?? ''}\n${card.BackText ?? ''}`
   return (card.Keywords ?? []).map(raw => {
     // Trim: the source data ships some keywords with stray whitespace (e.g. two
-    // "Shielded" variants), which would otherwise miss `hasKeyword` matches (#334).
+    // "Shielded" variants), which would otherwise miss `hasKeyword` matches.
     const name = raw.trim()
     const match = text.match(new RegExp(`${name}\\s+(\\d+)`, 'i'))
     return match ? { name, value: parseInt(match[1], 10) } : { name }
@@ -67,12 +67,12 @@ export function normaliseCard(card: SwuCard): EngineCard {
     ...(card.BackArt !== undefined && { backArt: card.BackArt }),
     ...(card.FrontText !== undefined && { text: card.FrontText }),
   }
-  // Last: override any values the source data gets wrong (read off the printed card, #306).
+  // Last: override any values the source data gets wrong (read off the printed card).
   return { ...normalised, ...CARD_DATA_CORRECTIONS[id] }
 }
 
 export function buildCardDb(cards: SwuCard[]): CardDb {
-  // Built-in token upgrades and token units are always present so tokens resolve (#308/#342).
+  // Built-in token upgrades and token units are always present so tokens resolve.
   const db: Record<string, EngineCard> = { ...TOKEN_CARDS, ...TOKEN_UNIT_CARDS }
   for (const card of cards) {
     const normalised = normaliseCard(card)
