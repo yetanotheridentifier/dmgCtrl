@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { registeredCardIds, getCardDefinition } from '../engine/abilities'
 import '../engine/cardDefinitions' // side-effect: registers every implemented card
-import { IMPLEMENTED_LEADERS, IMPLEMENTED_UPGRADES, IMPLEMENTED_UNITS, IMPLEMENTED_EVENTS, IMPLEMENTATION_PROGRESS, TOTAL_PROGRESS, UNIT_GROUPS } from '../data/implementedCards'
+import { IMPLEMENTED_LEADERS, IMPLEMENTED_UPGRADES, IMPLEMENTED_UNITS, IMPLEMENTED_EVENTS, SET_PROGRESS, sumCounts, TOTAL_PROGRESS, UNIT_GROUPS } from '../data/implementedCards'
 
 /** The setup-screen manifest must mirror what's actually registered, or it lies to the player. */
 describe('implemented-cards manifest', () => {
@@ -22,21 +22,47 @@ describe('implemented-cards manifest', () => {
 })
 
 describe('implementation progress', () => {
-  it('counts the whole set plus the tokens', () => {
-    const cat = Object.fromEntries(IMPLEMENTATION_PROGRESS.map(c => [c.label, c]))
-    // ASH set totals + the 4 built-in tokens.
-    expect(cat.Leaders).toMatchObject({ done: 18, total: 18 })
-    expect(cat.Upgrades).toMatchObject({ done: 25, total: 25 })
-    expect(cat.Bases).toMatchObject({ done: 8, total: 8 })
-    expect(cat.Tokens).toMatchObject({ done: 3, total: 3 }) // Shield/Advantage/Mandalorian — Experience deferred
-    // Keyword-only units (39) + every registered unit ability.
-    expect(cat.Units).toMatchObject({ done: 39 + IMPLEMENTED_UNITS.length, total: 179 })
-    expect(cat.Events).toMatchObject({ done: IMPLEMENTED_EVENTS.length, total: 34 })
+  const bySet = Object.fromEntries(SET_PROGRESS.map(s => [s.code, s]))
+
+  it('groups sets by legality — in rotation, out of rotation, out of cycle — newest first', () => {
+    const codesIn = (group: string) => SET_PROGRESS.filter(s => s.group === group).map(s => s.code)
+    expect(codesIn('rotation')).toEqual(['ASH', 'LAW', 'SEC', 'LOF', 'JTL'])
+    expect(codesIn('retired')).toEqual(['TWI', 'SHD', 'SOR'])
+    expect(codesIn('out-of-cycle')).toEqual(['TS26', 'IBH'])
+    // The blocks are contiguous and in that order, so the panel can render them by filtering.
+    expect(SET_PROGRESS.map(s => s.group)).toEqual([...Array(5).fill('rotation'), ...Array(3).fill('retired'), 'out-of-cycle', 'out-of-cycle'])
   })
 
-  it('the total is the sum of the categories', () => {
-    expect(TOTAL_PROGRESS.done).toBe(18 + 25 + 8 + 3 + (39 + IMPLEMENTED_UNITS.length) + IMPLEMENTED_EVENTS.length)
-    expect(TOTAL_PROGRESS.total).toBe(18 + 25 + 8 + 3 + 179 + 34) // 267
+  it('counts IBH by distinct cards, not collector numbers, and neither extra set prints tokens', () => {
+    // IBH fills 104 numbered slots but reprints cards (Blizzard Force AT-ST is #70/#89/#103).
+    expect(bySet.IBH.total).toEqual({ leaders: 2, bases: 2, units: 35, upgrades: 0, events: 12, tokens: 0 })
+    expect(sumCounts(bySet.IBH.total)).toBe(51)
+    expect(bySet.TS26.total).toEqual({ leaders: 8, bases: 4, units: 41, upgrades: 8, events: 23, tokens: 0 })
+  })
+
+  it('counts ASH by card type', () => {
+    const ash = bySet.ASH
+    expect(ash.total).toEqual({ leaders: 18, bases: 8, units: 179, upgrades: 25, events: 34, tokens: 4 })
+    expect(ash.done.leaders).toBe(18)
+    expect(ash.done.bases).toBe(8) // all vanilla
+    expect(ash.done.upgrades).toBe(IMPLEMENTED_UPGRADES.length)
+    expect(ash.done.events).toBe(IMPLEMENTED_EVENTS.length)
+    // Keyword-only units (39) + every registered unit ability.
+    expect(ash.done.units).toBe(39 + IMPLEMENTED_UNITS.length)
+    expect(ash.done.tokens).toBe(3) // Shield/Advantage/Mandalorian — Experience is printed but ungranted
+  })
+
+  it('shows every unstarted set at zero, with a real printed total', () => {
+    for (const set of SET_PROGRESS.filter(s => s.code !== 'ASH')) {
+      expect(sumCounts(set.done), set.code).toBe(0)
+      expect(sumCounts(set.total), set.code).toBeGreaterThan(0)
+    }
+  })
+
+  it('the headline total sums every set', () => {
+    expect(TOTAL_PROGRESS.done).toBe(SET_PROGRESS.reduce((n, s) => n + sumCounts(s.done), 0))
+    expect(TOTAL_PROGRESS.total).toBe(SET_PROGRESS.reduce((n, s) => n + sumCounts(s.total), 0))
+    expect(TOTAL_PROGRESS.done).toBe(sumCounts(bySet.ASH.done)) // only ASH is built so far
   })
 
   it('the unit groups list every unit exactly once (179 total)', () => {

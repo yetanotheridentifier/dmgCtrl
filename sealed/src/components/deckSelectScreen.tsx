@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import type { ReactNode } from 'react'
 import { useDecks } from '../hooks/useDecks'
 import type { SavedDeck } from '../data/deckStore'
 import { cardRefFromId } from '../utils/parseProtectThePod'
@@ -7,8 +6,8 @@ import type { ParseDeckError, ParsedDeck } from '../utils/parseProtectThePod'
 import { syncCatalogue } from '../data/catalogueSync'
 import { importSet } from '../data/setImport'
 import type { CardRef } from '../data/catalogueSync'
-import { IMPLEMENTED_LEADERS, IMPLEMENTED_UPGRADES, UNIT_GROUPS, TOTAL_PROGRESS } from '../data/implementedCards'
-import type { GroupStatus } from '../data/implementedCards'
+import { TOTAL_PROGRESS, SET_PROGRESS, CARD_TYPES, sumCounts } from '../data/implementedCards'
+import type { SetProgress, SetGroup, TypeCounts } from '../data/implementedCards'
 
 interface Props {
   onPlay: (deck: SavedDeck, opponentDeck: SavedDeck) => void
@@ -38,17 +37,12 @@ function pickOpponent(decks: SavedDeck[], choice: string, fallback: SavedDeck): 
   return decks[Math.floor(Math.random() * decks.length)]
 }
 
-/** Yes/No glyph for an implemented card side. */
-function Flag({ on }: { on: boolean }) {
-  return on
-    ? <span className="text-accent" aria-label="implemented">✓</span>
-    : <span className="text-ink-faint" aria-label="not yet">·</span>
-}
+const pctOf = (done: number, total: number) => (total === 0 ? 0 : Math.round((done / total) * 100))
 
-/** Headline "% of the whole set implemented" bar (tokens included). */
+/** Headline "% of every set implemented" bar. */
 function ProgressBar() {
   const { done, total } = TOTAL_PROGRESS
-  const pct = Math.round((done / total) * 100)
+  const pct = pctOf(done, total)
   return (
     <div data-testid="implementation-progress" className="mt-3">
       <div className="flex items-baseline justify-between text-xs">
@@ -62,43 +56,62 @@ function ProgressBar() {
   )
 }
 
-const STATUS_LABEL: Record<GroupStatus, string> = { done: 'Done', 'in progress': 'In progress', planned: 'Planned' }
+/**
+ * The blocks the sets are listed under, in display order. The in-rotation sets lead and need no
+ * heading — they're the default expectation. The other two are labelled, and the labels spell out
+ * legality rather than just naming the block: "out of rotation" and "out of cycle" read alike, but
+ * one means no longer legal and the other means legal indefinitely.
+ */
+const SET_GROUPS: { group: SetGroup; heading?: string; note?: string }[] = [
+  { group: 'rotation' },
+  { group: 'retired', heading: 'Out of rotation', note: 'No longer tournament legal' },
+  { group: 'out-of-cycle', heading: 'Out of cycle', note: 'Outside the rotation cycle — legality varies by format' },
+]
 
-/** Development-status chip shown on each collapsible section's summary. */
-function StatusChip({ status }: { status: GroupStatus }) {
-  const tone = status === 'done' ? 'text-accent' : status === 'in progress' ? 'text-ink' : 'text-ink-faint'
-  return <span className={`text-[0.6rem] uppercase tracking-[0.1em] ${tone}`}>{STATUS_LABEL[status]}</span>
+const TYPE_LABEL: Record<keyof TypeCounts, string> = {
+  leaders: 'Leaders',
+  bases: 'Bases',
+  units: 'Units',
+  upgrades: 'Upgrades',
+  events: 'Events',
+  tokens: 'Tokens',
 }
 
-/** A collapsible reference section: a summary row (title + status) with expandable content. */
-function Section({ title, status, defaultOpen, testId, children }: {
-  title: string
-  status: GroupStatus
-  defaultOpen: boolean
-  testId?: string
-  children: ReactNode
-}) {
+/**
+ * One set's breakdown: a summary line carrying its overall count, then a row per card type. Sets
+ * with nothing built still appear (all zeroes), so the panel doubles as the roadmap.
+ */
+function SetRow({ set, defaultOpen }: { set: SetProgress; defaultOpen: boolean }) {
+  const done = sumCounts(set.done)
+  const total = sumCounts(set.total)
+  const pct = pctOf(done, total)
   return (
-    <details data-testid={testId} open={defaultOpen} className="mt-2 border-2 border-line/60 rounded-xl bg-surface overflow-hidden">
-      <summary className="flex items-center justify-between gap-2 px-3 py-1.5 cursor-pointer select-none text-accent text-xs uppercase tracking-[0.12em] font-light">
-        <span className="truncate">{title}</span>
-        <StatusChip status={status} />
+    <details data-testid={`set-progress-${set.code}`} open={defaultOpen} className="mt-2 border-2 border-line/60 rounded-xl bg-surface overflow-hidden">
+      <summary className="flex items-baseline justify-between gap-2 px-3 py-1.5 cursor-pointer select-none text-xs">
+        <span className="text-accent uppercase tracking-[0.12em] font-light">{set.code}</span>
+        <span className="ml-auto text-ink-dim tabular-nums">{done} / {total}</span>
+        <span className={`w-10 text-right tabular-nums ${done === total ? 'text-accent' : 'text-ink-faint'}`} aria-label={`${set.code} ${pct}% implemented`}>{pct}%</span>
       </summary>
-      <div className="border-t-2 border-line/30">{children}</div>
+      <dl className="border-t-2 border-line/30 divide-y divide-line/20">
+        {CARD_TYPES.map(type => (
+          <div key={type} className="flex items-baseline justify-between px-3 py-1 text-xs">
+            <dt className="text-ink-dim">{TYPE_LABEL[type]}</dt>
+            <dd data-testid={`set-${set.code}-${type}`} className={`tabular-nums ${set.done[type] === set.total[type] ? 'text-accent' : 'text-ink-faint'}`}>
+              {set.done[type]} / {set.total[type]}
+            </dd>
+          </div>
+        ))}
+      </dl>
     </details>
   )
 }
 
 /**
- * Reference panel (RHS of the setup screen): which cards' abilities are built into the engine.
- * Leaders and upgrades are complete, so they roll up into sections collapsed by default (still
- * expandable). Units are split into work groups; the in-progress group is expanded, the
- * rest collapsed with their development status. Sourced from the manifest in `data/implementedCards`
- * (leaders/upgrades pinned to the ability registry by a test).
+ * Reference panel (RHS of the setup screen): how much of each set's card abilities are built into
+ * the engine. One collapsible block per set, newest first, each broken down by card type. Sourced
+ * from the manifest in `data/implementedCards`, which a test pins to the ability registry.
  */
 function ImplementationStatus() {
-  // Expand the first group that isn't done yet — the one currently being (or next to be) worked on.
-  const nextGroupId = UNIT_GROUPS.find(g => g.status !== 'done')?.id
   return (
     <aside data-testid="implemented-cards" className="w-full lg:w-[27rem] shrink-0 lg:mt-0 mt-4">
       <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Implemented cards</h2>
@@ -108,56 +121,25 @@ function ImplementationStatus() {
 
       <ProgressBar />
 
-      <Section title={`Leaders (${IMPLEMENTED_LEADERS.length})`} status="done" defaultOpen={false}>
-        <table data-testid="implemented-leaders" className="w-full text-sm">
-          <thead>
-            <tr className="text-ink-faint text-[0.65rem] uppercase tracking-[0.1em]">
-              <th className="text-left font-light px-3 py-1.5">Leader</th>
-              <th className="font-light px-2 py-1.5">Front</th>
-              <th className="font-light px-2 py-1.5">Back</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line/30">
-            {IMPLEMENTED_LEADERS.map(l => (
-              <tr key={l.id}>
-                <td className="px-3 py-1.5 truncate">{l.name}</td>
-                <td className="px-2 py-1.5 text-center"><Flag on={l.front} /></td>
-                <td className="px-2 py-1.5 text-center"><Flag on={l.back} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Section>
-
-      <Section title={`Upgrades (${IMPLEMENTED_UPGRADES.length})`} status="done" defaultOpen={false}>
-        <ul data-testid="implemented-upgrades" className="divide-y divide-line/30 text-sm">
-          {IMPLEMENTED_UPGRADES.map(u => (
-            <li key={u.id} className="px-3 py-1 truncate">{u.name}</li>
-          ))}
-        </ul>
-      </Section>
-
-      <h3 className="mt-5 text-accent text-xs uppercase tracking-[0.12em] font-light">
-        Units <span className="text-ink-faint normal-case tracking-normal">(by what's blocking them)</span>
-      </h3>
-      <div data-testid="implemented-unit-groups">
-        {UNIT_GROUPS.map(g => (
-          <details key={g.id} data-testid={`unit-group-${g.id}`} open={g.id === nextGroupId} className="mt-2 border-2 border-line/60 rounded-xl bg-surface overflow-hidden">
-            <summary className="flex items-center justify-between gap-2 px-3 py-1.5 cursor-pointer select-none text-xs">
-              <span className="truncate text-accent uppercase tracking-[0.1em] font-light">{g.name} <span className="text-ink-faint normal-case tracking-normal">({g.units.length})</span></span>
-              <StatusChip status={g.status} />
-            </summary>
-            <div className="border-t-2 border-line/30">
-              <p className="px-3 py-2 text-ink-dim text-xs">{g.note}</p>
-              <ul className="border-t border-line/20 divide-y divide-line/20 text-sm">
-                {g.units.map(u => (
-                  <li key={u.id} className="px-3 py-1 truncate">{u.name}</li>
-                ))}
-              </ul>
-            </div>
-          </details>
-        ))}
+      {/* Sets by legality block, newest first within each. Only the newest set starts expanded. */}
+      <div data-testid="set-progress">
+        {SET_GROUPS.map(({ group, heading, note }) => {
+          const sets = SET_PROGRESS.filter(s => s.group === group)
+          if (sets.length === 0) return null
+          return (
+            <section key={group} data-testid={`set-group-${group}`}>
+              {heading && (
+                <h3 className="mt-4 text-ink-faint text-[0.65rem] uppercase tracking-[0.12em] font-light">
+                  {heading}
+                  {note && <span className="ml-2 normal-case tracking-normal">— {note}</span>}
+                </h3>
+              )}
+              {sets.map(set => <SetRow key={set.code} set={set} defaultOpen={set.code === SET_PROGRESS[0].code} />)}
+            </section>
+          )
+        })}
       </div>
+
     </aside>
   )
 }

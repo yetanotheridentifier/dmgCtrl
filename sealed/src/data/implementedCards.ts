@@ -450,32 +450,90 @@ export const UNIT_GROUPS: UnitGroup[] = (() => {
     })
 })()
 
-/** Card-type totals for the ASH set (from the SWUDB set listing). */
-const SET_TOTAL = { leaders: 18, upgrades: 25, bases: 8, units: 179, events: 34 } as const
+/** The card types counted separately on the setup panel, in the order they're displayed. */
+export const CARD_TYPES = ['leaders', 'bases', 'units', 'upgrades', 'events', 'tokens'] as const
+export type CardTypeKey = (typeof CARD_TYPES)[number]
+export type TypeCounts = Record<CardTypeKey, number>
 
-// Tokens actually created/used by cards: Shield + Advantage (upgrades) + Mandalorian (unit). The
-// Experience token upgrade is defined but no card grants it yet, so it isn't counted here.
-const TOKEN_COUNT = 3
+/**
+ * Which block a set is listed under. `rotation` is the currently-legal cycle; `retired` sets have
+ * rotated out; `out-of-cycle` products released outside the cycle altogether and are legal in a
+ * different subset of formats.
+ */
+export type SetGroup = 'rotation' | 'retired' | 'out-of-cycle'
 
-export interface CategoryProgress {
-  label: string
-  done: number
-  total: number
+export interface SetProgress {
+  /** SWU set code — the only set identifier the card data carries. */
+  code: string
+  group: SetGroup
+  done: TypeCounts
+  total: TypeCounts
 }
 
-/** Fully-implemented cards vs the whole set, by category — feeds the setup-screen progress bar. */
-export const IMPLEMENTATION_PROGRESS: CategoryProgress[] = [
-  { label: 'Leaders', done: IMPLEMENTED_LEADERS.filter(l => l.front && l.back).length, total: SET_TOTAL.leaders },
-  { label: 'Upgrades', done: IMPLEMENTED_UPGRADES.length, total: SET_TOTAL.upgrades },
-  { label: 'Bases', done: SET_TOTAL.bases, total: SET_TOTAL.bases }, // all vanilla — fully playable
-  { label: 'Tokens', done: TOKEN_COUNT, total: TOKEN_COUNT },
-  // Units done = keyword-only/vanilla units (need no code) + units with a registered ability.
-  { label: 'Units', done: (UNIT_GROUPS.find(g => g.id === 'keyword')?.units.length ?? 0) + IMPLEMENTED_UNITS.length, total: SET_TOTAL.units },
-  { label: 'Events', done: IMPLEMENTED_EVENTS.length, total: SET_TOTAL.events },
+const NONE: TypeCounts = { leaders: 0, bases: 0, units: 0, upgrades: 0, events: 0, tokens: 0 }
+
+/**
+ * Printed card counts per set, from the SWUDB set listing (`cards/search?q=set:…`, normal variants
+ * only), newest first within each group — the order the panel shows them in.
+ *
+ * TOKEN counts are NOT from that listing, which omits them. The API's own token data is too partial
+ * to use: only `TSOR` and `TASH` exist at all, it holds no token *units* (Mandalorian, X-wing, …),
+ * and some rows are findable by search but not by direct fetch. These counts are therefore recorded
+ * from the printed cards — every set in the cycle prints Experience and Shield, plus its own
+ * extras: Clone Trooper/Battle Droid (TWI), X-wing/TIE Fighter (JTL), Force (LOF),
+ * Advantage/Mandalorian (ASH), Spy (SEC), Credit (LAW). The out-of-cycle products print none
+ * of their own.
+ *
+ * IBH is counted by DISTINCT cards, not collector numbers: it reprints the same card at up to three
+ * numbers (Blizzard Force AT-ST is #70, #89 and #103), so its 104 printed slots are 51 real cards,
+ * and implementing one covers every printing of it.
+ */
+const SET_TOTALS: { code: string; group: SetGroup; total: TypeCounts }[] = [
+  { code: 'ASH', group: 'rotation', total: { leaders: 18, bases: 8, units: 179, upgrades: 25, events: 34, tokens: 4 } },
+  { code: 'LAW', group: 'rotation', total: { leaders: 18, bases: 12, units: 182, upgrades: 14, events: 38, tokens: 3 } },
+  { code: 'SEC', group: 'rotation', total: { leaders: 18, bases: 8, units: 171, upgrades: 17, events: 50, tokens: 3 } },
+  { code: 'LOF', group: 'rotation', total: { leaders: 18, bases: 12, units: 166, upgrades: 20, events: 48, tokens: 3 } },
+  { code: 'JTL', group: 'rotation', total: { leaders: 18, bases: 13, units: 167, upgrades: 7, events: 57, tokens: 4 } },
+  { code: 'TWI', group: 'retired', total: { leaders: 18, bases: 12, units: 150, upgrades: 19, events: 58, tokens: 4 } },
+  { code: 'SHD', group: 'retired', total: { leaders: 18, bases: 8, units: 160, upgrades: 30, events: 46, tokens: 2 } },
+  { code: 'SOR', group: 'retired', total: { leaders: 18, bases: 12, units: 148, upgrades: 14, events: 60, tokens: 2 } },
+  { code: 'TS26', group: 'out-of-cycle', total: { leaders: 8, bases: 4, units: 41, upgrades: 8, events: 23, tokens: 0 } },
+  { code: 'IBH', group: 'out-of-cycle', total: { leaders: 2, bases: 2, units: 35, upgrades: 0, events: 12, tokens: 0 } },
 ]
 
-/** Whole-set implementation total (tokens included) — the headline progress figure. */
+/**
+ * What's implemented, per set. Only ASH has any card abilities built: a set appears with zeroes
+ * until its first card lands, so the panel doubles as the roadmap.
+ *
+ * Bases are all vanilla, so they count as done outright. Units count the keyword-only ones (which
+ * need no code) plus every unit with a registered ability. Tokens count the three the engine
+ * actually creates — Experience is defined but no card grants it, so ASH reads 3 of 4.
+ */
+const IMPLEMENTED_BY_SET: Record<string, TypeCounts> = {
+  ASH: {
+    leaders: IMPLEMENTED_LEADERS.filter(l => l.front && l.back).length,
+    bases: 8,
+    units: (UNIT_GROUPS.find(g => g.id === 'keyword')?.units.length ?? 0) + IMPLEMENTED_UNITS.length,
+    upgrades: IMPLEMENTED_UPGRADES.length,
+    events: IMPLEMENTED_EVENTS.length,
+    tokens: 3,
+  },
+}
+
+export const SET_PROGRESS: SetProgress[] = SET_TOTALS.map(({ code, group, total }) => ({
+  code,
+  group,
+  total,
+  done: IMPLEMENTED_BY_SET[code] ?? NONE,
+}))
+
+/** Sum a set's counts across every card type. */
+export function sumCounts(counts: TypeCounts): number {
+  return CARD_TYPES.reduce((n, t) => n + counts[t], 0)
+}
+
+/** Every set combined — the headline progress figure. */
 export const TOTAL_PROGRESS = {
-  done: IMPLEMENTATION_PROGRESS.reduce((n, c) => n + c.done, 0),
-  total: IMPLEMENTATION_PROGRESS.reduce((n, c) => n + c.total, 0),
+  done: SET_PROGRESS.reduce((n, s) => n + sumCounts(s.done), 0),
+  total: SET_PROGRESS.reduce((n, s) => n + sumCounts(s.total), 0),
 }
