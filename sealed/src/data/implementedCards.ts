@@ -89,8 +89,8 @@ export const UNIT_GROUPS: UnitGroup[] = [
   {
     id: 'E',
     name: 'When Defeated / On Attack / Action',
-    status: 'planned',
-    note: 'Reuses the whenDefeated / onAttack / actionAbilities hooks. (#356)',
+    status: 'in progress',
+    note: 'Reuses the whenDefeated / onAttack / attack-end / actionAbilities hooks. The stragglers need mechanics from the long tail below. (#356)',
     units: [
       '8D8', 'Ant Droid', 'Axe Woves', 'Blade Three', 'Clan Vizsla Soldier', 'Cobb Vanth', 'Corona Four', 'Covert Believers',
       'Danger Squadron Wingmen', 'Doctor Pershing', 'Duchess\'s Protector', 'Emperor\'s Messenger', 'Enoch', 'Eye of Sion',
@@ -103,8 +103,8 @@ export const UNIT_GROUPS: UnitGroup[] = [
   {
     id: 'F',
     name: 'Unique abilities & new mechanics',
-    status: 'planned',
-    note: 'The long tail — new triggers, targeting rules, and a damage-prevention layer. (#357)',
+    status: 'in progress',
+    note: 'The long tail, built one mechanic at a time: combat-role stats and new reactive triggers are in; targeting rules, cost reductions and a damage-prevention layer are still to come. (#357)',
     units: [
       'Alphabet Squadron U-Wing', 'At Attin Safety Droid', 'Bo-Katan\'s Gauntlet', 'Bothan-5', 'Eviscerator', 'Executor',
       'Gorian Shard\'s Corsair', 'Grand Admiral Thrawn', 'Halo', 'Hera Syndulla', 'Kachirho Militia', 'Kelleran Beq',
@@ -291,6 +291,9 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_127', name: 'The Twins' },
   { id: 'ASH_160', name: 'Kachirho Militia' },
   { id: 'ASH_208', name: 'Sabine Wren' },
+  // Group F (#357) — once-per-phase cost reductions
+  { id: 'ASH_075', name: 'Pit Droid Team' },
+  { id: 'ASH_212', name: 'Peli Motto' },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */

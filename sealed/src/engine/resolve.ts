@@ -2,7 +2,7 @@ import type { Action, AttackTarget } from './actions'
 import type { GameState, PlayerId, UnitState } from './types'
 import type { PendingChoice, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeChoice, hasPendingChoices, pushChoice } from './types'
-import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
+import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
@@ -332,7 +332,8 @@ function playCard(state: GameState, handIndex: number): GameState {
   }
 
   const paid = payCost(p, effectiveCost(state, playerId, card))
-  const next = updatePlayer(state, playerId, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
+  let next = updatePlayer(state, playerId, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
+  next = recordCardPlayed(next, playerId, card.id) // after the cost, so "first X each phase" sees this one as the first (#357)
   // whenPlayed effects can defeat a base, so the win check runs afterwards.
   return checkWin(enterUnit(next, playerId, card.id))
 }
@@ -1037,6 +1038,8 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
       u.instanceId === targetInstanceId ? { ...u, upgrades: [...u.upgrades, { cardId: card.id, owner: playerId }] } : u,
     ),
   })
+
+  next = recordCardPlayed(next, playerId, card.id) // after the cost (#357, "the first upgrade you play each phase")
 
   // "When 1 or more upgrades attach to this unit" (#357, Sabine Wren) — the host reacts.
   next = fireUpgradeAttached(next, targetInstanceId)

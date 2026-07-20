@@ -50,9 +50,22 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   }
   // Card-specific cost modifiers (e.g. −1 on an Imperial/Mandalorian unit) (#340).
   const modifier = getCardDefinition(card.id)?.costModifier?.(state, playerId, target) ?? 0
+  // Units in play that discount cards their controller plays, or waive the aspect penalty (#357,
+  // Pit Droid Team / Peli Motto). Distinct from `costModifier`, which lives on the played card.
+  let discount = 0
+  let waivePenalty = false
+  const discountCtx = { owner: playerId, card, target }
+  for (const u of p.units) {
+    for (const cid of [u.cardId, ...u.upgrades.map(x => x.cardId)]) {
+      const def = getCardDefinition(cid)
+      discount += def?.costDiscount?.(state, u, discountCtx) ?? 0
+      if (def?.waivesAspectPenalty?.(state, u, discountCtx)) waivePenalty = true
+    }
+  }
+  if (waivePenalty) penalty = 0
   // "Your next unit …" cost grants that match this card — Mouse Droid's −1 to the next Imperial (#355).
   const grantDelta = (p.nextUnitGrants ?? []).reduce((sum, g) => sum + (nextUnitGrantMatches(card, g) ? (g.costDelta ?? 0) : 0), 0)
-  return Math.max(0, card.cost + penalty + modifier + grantDelta)
+  return Math.max(0, card.cost + penalty + modifier + grantDelta + discount)
 }
 
 /**

@@ -1,4 +1,4 @@
-import type { GameState, KeywordInstance, PlayerId, UnitState, CombatContext } from './types'
+import type { EngineCard, GameState, KeywordInstance, PlayerId, UnitState, CombatContext } from './types'
 import type { AttackTarget } from './actions'
 
 /**
@@ -99,6 +99,17 @@ export interface CardDefinition {
    * `ctx` carries the combat situation (e.g. attacking a base). Omitted stats = 0.
    */
   statModifier?: (state: GameState, unit: UnitState, ctx: StatModContext) => { power?: number; hp?: number }
+  /**
+   * A unit *in play* discounting cards its controller plays (#357, Pit Droid Team). Distinct from
+   * `costModifier`, which lives on the card being played. Summed across the controller's units and
+   * their upgrades in `effectiveCost`; negative = cheaper.
+   */
+  costDiscount?: (state: GameState, source: UnitState, ctx: CostDiscountContext) => number
+  /**
+   * A unit *in play* waiving the aspect penalty of a card its controller plays (#357, Peli Motto).
+   * Any waiving unit zeroes the whole penalty for that card.
+   */
+  waivesAspectPenalty?: (state: GameState, source: UnitState, ctx: CostDiscountContext) => boolean
   /**
    * Multiplier applied to each instance of damage this unit takes (the unit's own
    * card, or an upgrade) — e.g. Deadly Vulnerability's ×2. Multipliers from the card
@@ -206,6 +217,16 @@ export function unitActionAbilities(unit: UnitState): { cardId: string; index: n
 /** Stable key for once-per-round tracking of a specific action ability instance. */
 export function actionAbilityKey(cardId: string, index: number): string {
   return `${cardId}#${index}`
+}
+
+/** What a `costDiscount` / `waivesAspectPenalty` hook is being asked about (#357). */
+export interface CostDiscountContext {
+  /** The player paying — the controller of the discounting unit. */
+  owner: PlayerId
+  /** The card being played. */
+  card: EngineCard
+  /** The upgrade's target unit, when an upgrade is being played. */
+  target?: UnitState
 }
 
 /** Combat context passed to `statModifier` (mirrors `stats.StatContext`). */

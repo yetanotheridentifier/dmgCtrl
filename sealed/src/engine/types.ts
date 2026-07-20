@@ -304,6 +304,8 @@ export interface PhaseEvents {
   defeated: Record<PlayerId, string[]>
   /** Players whose base was attacked this phase (#356, Greef Karga). */
   basesAttacked: PlayerId[]
+  /** Card ids each player has played this phase, in order — "the first X you play each phase" (#357). */
+  played: Record<PlayerId, string[]>
 }
 
 /**
@@ -521,7 +523,7 @@ export function clearNextUnitGrants(state: GameState): GameState {
 }
 
 function emptyPhaseEvents(): PhaseEvents {
-  return { enteredPlay: { player: [], opponent: [] }, defeated: { player: [], opponent: [] }, basesAttacked: [] }
+  return { enteredPlay: { player: [], opponent: [] }, defeated: { player: [], opponent: [] }, basesAttacked: [], played: { player: [], opponent: [] } }
 }
 
 /** Clear the tracked per-phase events (called whenever the phase changes). */
@@ -533,6 +535,17 @@ export function resetPhaseEvents(state: GameState): GameState {
 export function recordUnitEntered(state: GameState, owner: PlayerId, instanceId: string): GameState {
   const events = state.phaseEvents ?? emptyPhaseEvents()
   return { ...state, phaseEvents: { ...events, enteredPlay: { ...events.enteredPlay, [owner]: [...events.enteredPlay[owner], instanceId] } } }
+}
+
+/** Note that `owner` played `cardId` this phase — recorded after its cost is paid (#357). */
+export function recordCardPlayed(state: GameState, owner: PlayerId, cardId: string): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  return { ...state, phaseEvents: { ...events, played: { ...events.played, [owner]: [...events.played[owner], cardId] } } }
+}
+
+/** Card ids `owner` has played this phase, in order (#357, "the first X you play each phase"). */
+export function cardsPlayedThisPhase(state: GameState, owner: PlayerId): string[] {
+  return state.phaseEvents?.played[owner] ?? []
 }
 
 /** Note that a unit with card id `cardId` was defeated under `owner` this phase. */

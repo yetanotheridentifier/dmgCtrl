@@ -4,7 +4,7 @@ import { dealDamageToUnit, defeatUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
-import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, markAbilityUsed } from './types'
+import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, cardsPlayedThisPhase, markAbilityUsed } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets } from './legalMoves'
 import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, unitHasKeyword, unitKeywords } from './keywords'
 import type { EngineCard, GameState, PlayerId, UnitState, UpgradeRef } from './types'
@@ -1246,3 +1246,20 @@ registerCard('ASH_208', { abilities: [{ trigger: 'whenUpgradeAttached', descript
   const targets = groundUnits(s).map(u => u.instanceId)
   return targets.length ? pushChoice(s, { kind: 'mayExhaustUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
 } }] })
+
+// ── Group F (#357): once-per-phase cost reductions ──────────────────────────
+registerCard('ASH_075', { // Pit Droid Team — the first upgrade you play on ANOTHER friendly unit each phase costs 1 less
+  costDiscount: (s, source, ctx) => {
+    if (ctx.card.type !== 'upgrade') return 0
+    const t = ctx.target
+    if (!t || t.instanceId === source.instanceId) return 0 // "another" — not onto Pit Droid Team itself
+    if (!s.players[ctx.owner].units.some(u => u.instanceId === t.instanceId)) return 0 // friendly only
+    if (cardsPlayedThisPhase(s, ctx.owner).some(id => s.cards[id]?.type === 'upgrade')) return 0 // already used this phase
+    return -1
+  },
+})
+
+registerCard('ASH_212', { // Peli Motto — ignore the aspect penalties of the first non-unit card you play each phase
+  waivesAspectPenalty: (s, _source, ctx) =>
+    ctx.card.type !== 'unit' && !cardsPlayedThisPhase(s, ctx.owner).some(id => s.cards[id]?.type !== 'unit'),
+})
