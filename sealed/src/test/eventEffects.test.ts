@@ -628,3 +628,156 @@ describe('Rehabilitation (200) — take control of a unit until the regroup phas
     expect(dead.players.opponent.discard).toContain('UPG') // and the upgrade to its own owner
   })
 })
+
+// ── Attack-granting events ────────────────────────────────────────────────────────────────────
+
+const L = {
+  ...K,
+  ASH_162: card({ id: 'ASH_162', type: 'event', name: 'Rash Action', cost: 2 }),
+  ASH_184: card({ id: 'ASH_184', type: 'event', name: 'Follow Me', cost: 1 }),
+  ASH_234: card({ id: 'ASH_234', type: 'event', name: 'Masterstroke', cost: 2 }),
+  ASH_137: card({ id: 'ASH_137', type: 'event', name: 'Wipe Them Out', cost: 2 }),
+  FRAGILE: card({ id: 'FRAGILE', type: 'unit', arena: 'ground', cost: 1, power: 1, hp: 1 }),
+}
+
+describe('attack-granting events', () => {
+  it('Rash Action (162): +1/+0, and a base hit makes the opponent discard', () => {
+    const s = state({
+      cards: L,
+      players: {
+        player: rich({ hand: ['ASH_162'], units: [unit('a', 'GRD')] }),
+        opponent: player({ hand: ['GRD', 'TOUGH'] }),
+      },
+    })
+    const played = play(s)
+    expect(choice(played)).toMatchObject({ kind: 'mayAttackAnyUnit' })
+    const attacked = resolve(played, { type: 'attack', attackerId: 'a', target: { kind: 'base' } })
+    expect(attacked.players.opponent.base.damage).toBe(3) // GRD's 2 power + 1
+    const discard = choice(attacked)
+    expect(discard).toMatchObject({ kind: 'selectDiscard', controller: 'opponent' })
+    const done = resolve(attacked, { type: 'acceptChoice', choiceId: discard.id, handIndex: 0 })
+    expect(done.players.opponent.hand).toHaveLength(1)
+  })
+
+  it('Follow Me (184): after the attack, 3 Advantage tokens to a unit', () => {
+    const s = state({
+      cards: L,
+      players: { player: rich({ hand: ['ASH_184'], units: [unit('a', 'GRD'), unit('b', 'GRD')] }), opponent: player() },
+    })
+    const played = play(s)
+    const attacked = resolve(played, { type: 'attack', attackerId: 'a', target: { kind: 'base' } })
+    const give = choice(attacked)
+    expect(give).toMatchObject({ kind: 'mayGiveTokens', count: 3 })
+    const done = resolve(attacked, { type: 'acceptChoice', choiceId: give.id, targetInstanceId: 'b' })
+    expect(U(done, 'b')!.upgrades.filter(u => u.cardId === TOKEN_ADVANTAGE)).toHaveLength(3)
+  })
+
+  it('Masterstroke (234): +1/+0 per defending unit in the arena', () => {
+    const s = state({
+      cards: L,
+      players: {
+        player: rich({ hand: ['ASH_234'], units: [unit('a', 'GRD')] }),
+        opponent: player({ units: [unit('x', 'TOUGH'), unit('y', 'TOUGH'), unit('sp', 'SPACER', { arena: 'space' })] }),
+      },
+    })
+    const played = play(s)
+    const done = resolve(played, { type: 'attack', attackerId: 'a', target: { kind: 'unit', instanceId: 'x' } })
+    expect(U(done, 'x')!.damage).toBe(2 + 2) // two ground defenders; the space unit doesn't count
+  })
+
+  it('Wipe Them Out (137): excess damage may be aimed at another unit in the arena', () => {
+    const s = state({
+      cards: L,
+      players: {
+        player: rich({ hand: ['ASH_137'], units: [unit('a', 'STRONG')] }), // 5 power
+        opponent: player({ units: [unit('weak', 'FRAGILE'), unit('other', 'TOUGH')] }),
+      },
+    })
+    const played = play(s)
+    const attacked = resolve(played, { type: 'attack', attackerId: 'a', target: { kind: 'unit', instanceId: 'weak' } })
+    expect(U(attacked, 'weak')).toBeUndefined()
+    const spill = choice(attacked)
+    expect(spill).toMatchObject({ kind: 'selectDamageTarget', amount: 4 }) // 5 power − 1 HP
+    const done = resolve(attacked, { type: 'acceptChoice', choiceId: spill.id, targetInstanceId: 'other' })
+    expect(U(done, 'other')!.damage).toBe(4)
+  })
+})
+
+// ── The last three ────────────────────────────────────────────────────────────────────────────
+
+const M = {
+  ...L,
+  ASH_186: card({ id: 'ASH_186', type: 'event', name: 'Treacherous Minefield', cost: 2 }),
+  ASH_090: card({ id: 'ASH_090', type: 'event', name: 'Reforge', cost: 2 }),
+  ASH_235: card({ id: 'ASH_235', type: 'event', name: 'Sense Through the Force', cost: 2 }),
+  GROUNDUPG: card({ id: 'GROUNDUPG', type: 'upgrade', cost: 6, power: 3, hp: 3 }),
+  COST4: card({ id: 'COST4', type: 'unit', arena: 'ground', cost: 4, power: 1, hp: 4 }),
+}
+
+describe('Treacherous Minefield (186) — an arena-wide On Attack for the phase', () => {
+  it('makes every unit in the chosen arena hurt itself when it attacks', () => {
+    const s = state({
+      cards: M,
+      players: {
+        player: rich({ hand: ['ASH_186'], units: [unit('g', 'TOUGH'), unit('sp', 'SPACER', { arena: 'space' })] }),
+        opponent: player({ units: [unit('e', 'TOUGH'), unit('esp', 'SPACER', { arena: 'space' })] }),
+      },
+    })
+    const played = play(s)
+    expect(choice(played)).toMatchObject({ kind: 'selectArenaToGrant' })
+    const ground = resolve(played, { type: 'acceptChoice', choiceId: choice(played).id, optionIndex: 0 })
+
+    const attacked = resolve({ ...ground, activePlayer: 'player' }, { type: 'attack', attackerId: 'g', target: { kind: 'base' } })
+    expect(U(attacked, 'g')!.damage).toBe(2) // hurt itself attacking
+
+    // The space arena was untouched.
+    const spaceAttack = resolve({ ...attacked, activePlayer: 'player' }, { type: 'attack', attackerId: 'sp', target: { kind: 'base' } })
+    expect(U(spaceAttack, 'sp')!.damage).toBe(0)
+  })
+})
+
+describe('Reforge (090) — swap an upgrade for one dug out of the deck at −4', () => {
+  it('defeats the upgrade, then attaches a found one at a discount', () => {
+    const s = state({
+      cards: M,
+      players: {
+        player: rich({ hand: ['ASH_090'], units: [upgraded('g', 'TOUGH')], deck: ['GRD', 'GROUNDUPG', 'GRD'] }),
+        opponent: player(),
+      },
+    })
+    const played = play(s)
+    const defeated = resolve(played, { type: 'acceptChoice', choiceId: choice(played).id, optionIndex: 0 })
+    expect(U(defeated, 'g')!.upgrades).toHaveLength(0)
+
+    const search = choice(defeated)
+    expect(search.kind === 'searchPlayUpgrade' && search.eligibleIndices).toEqual([1]) // only the upgrade
+    const before = defeated.players.player.resources.filter(r => !r.exhausted).length
+    const done = resolve(defeated, { type: 'acceptChoice', choiceId: search.id, deckIndex: 1 })
+    expect(U(done, 'g')!.upgrades.map(u => u.cardId)).toEqual(['GROUNDUPG'])
+    expect(done.players.player.resources.filter(r => !r.exhausted).length).toBe(before - 2) // 6 − 4
+  })
+})
+
+describe('Sense Through the Force (235) — name a cost, then dig', () => {
+  it('pays out 3 Advantage on a correct guess, and nothing on a wrong one', () => {
+    const s = state({
+      cards: M,
+      players: { player: rich({ hand: ['ASH_235'], units: [unit('f', 'FORCEU')], deck: ['COST4', 'GRD'] }), opponent: player() },
+    })
+    const played = play(s)
+    expect(choice(played)).toMatchObject({ kind: 'chooseNumber', max: 10 })
+
+    const guessed = resolve(played, { type: 'acceptChoice', choiceId: choice(played).id, optionIndex: 4 })
+    const drawn = resolve(guessed, { type: 'acceptChoice', choiceId: choice(guessed).id, deckIndex: 0 }) // COST4
+    expect(drawn.players.player.hand).toContain('COST4')
+    const reward = choice(drawn)
+    expect(reward).toMatchObject({ kind: 'mayGiveTokens', count: 3 })
+    const done = resolve(drawn, { type: 'acceptChoice', choiceId: reward.id, targetInstanceId: 'f' })
+    expect(U(done, 'f')!.upgrades.filter(u => u.cardId === TOKEN_ADVANTAGE)).toHaveLength(3)
+
+    const wrong = resolve(played, { type: 'acceptChoice', choiceId: choice(played).id, optionIndex: 7 })
+    const drawnWrong = resolve(wrong, { type: 'acceptChoice', choiceId: choice(wrong).id, deckIndex: 0 })
+    expect(drawnWrong.players.player.hand).toContain('COST4') // still drawn
+    expect(drawnWrong.pendingChoices ?? []).toHaveLength(0) // but no payout
+  })
+})

@@ -320,6 +320,12 @@ export interface LastingEffect {
   power?: number
   hp?: number
   keywords?: KeywordInstance[]
+  /**
+   * Card ids whose triggered abilities the unit gains for the duration (Treacherous Minefield hands
+   * every unit in an arena an "On Attack" for the phase). Gathered by `runUnitTrigger` exactly like
+   * a printed or upgrade-granted ability.
+   */
+  abilityCardIds?: string[]
 }
 
 /** Per-phase event counters. `enteredPlay` holds instance ids (still-in-play
@@ -378,7 +384,12 @@ export type PendingChoice =
   // offered); the front action is mandatory. Each candidate is the exact upgrade (unit + index).
   // Vane chains 2 damage via `then`; Clan Vizsla Soldier just defeats the upgrade (`then` omitted).
   // `thenReadyUnit` readies that unit instead — "if you do, ready this unit" (Pegasus Tri-Wing).
-  | { kind: 'selectUpgradeToDefeat'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional: boolean; then?: DamageTargetSpec; thenReadyUnit?: string; thenDraw?: number }
+  // `thenSearchUpgrade` searches the top N for an upgrade that can attach to the unit the defeated
+  // one was on, at `discount` off its cost (Reforge).
+  | { kind: 'selectUpgradeToDefeat'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional: boolean; then?: DamageTargetSpec; thenReadyUnit?: string; thenDraw?: number; thenSearchUpgrade?: { depth: number; discount: number } }
+  // Reforge: play one of the revealed upgrades onto `unitId`, paying `discount` less than its cost.
+  // `revealed` are held out of the deck; the leftovers go to the bottom when this resolves.
+  | { kind: 'searchPlayUpgrade'; id: string; controller: PlayerId; unitId: string; revealed: string[]; eligibleIndices: number[]; discount: number }
   // Return a chosen card from your discard to your hand (Moff Gideon). `candidates` are the
   // eligible discard-pile card ids; `acceptChoice`'s `optionIndex` picks one. Optional.
   // `then: 'discardFate'` chains the bottom-and-heal / return-to-hand modal (Trask Walker)
@@ -490,6 +501,12 @@ export type PendingChoice =
   // "Choose one:" — a modal effect. `modes` holds only the options the card allows right now, so a
   // mode whose condition isn't met is never offered.
   | { kind: 'chooseMode'; id: string; controller: PlayerId; modes: string[] }
+  // Treacherous Minefield: pick an arena (optionIndex 0 = ground, 1 = space); every unit there
+  // gains `grantCardId`'s abilities for the phase.
+  | { kind: 'selectArenaToGrant'; id: string; controller: PlayerId; grantCardId: string }
+  // Sense Through the Force: name a number from 0 to `max`, then search — the guess is checked
+  // against the drawn card's cost.
+  | { kind: 'chooseNumber'; id: string; controller: PlayerId; max: number; then: 'senseThroughTheForce' }
   // Hold Them Off: pick the unit that will deal the damage; its power becomes the pool to spread
   // among units in its own arena.
   | { kind: 'selectDistributeSource'; id: string; controller: PlayerId; targets: string[] }
@@ -503,7 +520,9 @@ export type PendingChoice =
   // Search the revealed top cards (Clan Wren Loyalist): pick one of the `eligibleIndices`
   // (indices into `revealed`) to draw; the rest go to the bottom of the deck. Resolved by an
   // `acceptChoice` carrying the `deckIndex` (0-based within `revealed`). Mandatory when eligible.
-  | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[] }
+  // `guessedCost` carries Sense Through the Force's named number: if the drawn card's cost matches,
+  // the follow-up Advantage offer fires.
+  | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; guessedCost?: number }
   // The Cyborg Mech: deal `undamagedAmount` to a chosen undamaged target, or `damagedAmount`
   // to a damaged one (the amount is decided by the picked unit's damage). Mandatory board-target.
   | { kind: 'variableStrike'; id: string; controller: PlayerId; targets: string[]; undamagedAmount: number; damagedAmount: number }
@@ -556,7 +575,9 @@ export type PendingChoice =
   | { kind: 'selectUniqueUnitToDefeat'; id: string; controller: PlayerId; cardId: string; candidates: string[] }
   // Attack with any ready unit (Thrawn, Grogu); it gains Restore `restore` for that attack, which is
   // 0 when nothing grants it. Resolved by making the attack on the board — skipping declines it.
-  | { kind: 'mayAttackAnyUnit'; id: string; controller: PlayerId; restore: number }
+  // `grantCardId` lends the chosen attacker a carrier card's abilities for that attack — how the
+  // attack-granting events (Rash Action, Follow Me, Masterstroke, Wipe Them Out) add their rider.
+  | { kind: 'mayAttackAnyUnit'; id: string; controller: PlayerId; restore: number; grantCardId?: string }
   // Defeat one of `targets`, or decline. The card supplies the eligible units, so this covers
   // "a non-leader enemy unit" (Thrawn), "an upgraded non-leader unit" (Get Lost), and so on.
   // `thenResource` chains "if you do, resource the top card of your deck" (Long Live the Empire).

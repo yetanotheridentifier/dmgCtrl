@@ -237,6 +237,13 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'ASH_104', name: 'Dathomiri Magicks' },
   { id: 'ASH_257', name: 'Choose Your Path' },
   { id: 'ASH_200', name: 'Rehabilitation' },
+  { id: 'ASH_162', name: 'Rash Action' },
+  { id: 'ASH_184', name: 'Follow Me' },
+  { id: 'ASH_234', name: 'Masterstroke' },
+  { id: 'ASH_137', name: 'Wipe Them Out' },
+  { id: 'ASH_186', name: 'Treacherous Minefield' },
+  { id: 'ASH_090', name: 'Reforge' },
+  { id: 'ASH_235', name: 'Sense Through the Force' },
 ]
 
 export const IMPLEMENTED_UNITS: UpgradeStatus[] = [

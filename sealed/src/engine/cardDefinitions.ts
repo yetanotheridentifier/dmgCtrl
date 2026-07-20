@@ -1925,3 +1925,84 @@ registerCard('ASH_200', whenPlayed('Choose a non-leader unit. Give that unit -3/
     ? pushChoice(s, { kind: 'selectUnitToSteal', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, power: -3 })
     : s
 }))
+
+// ── Attack-granting events ────────────────────────────────────────────────────────────────────
+// Each lets you attack with a unit and lends it a rider for that attack. The rider lives on a
+// carrier card whose abilities are granted to the attacker via `mayAttackAnyUnit.grantCardId` —
+// the same mechanism Support and Improvised Identity use. Carrier ids are deliberately not
+// `ASH_`-prefixed: the manifest drift test treats every registered ASH id as an implemented card.
+
+const GRANT_RASH_ACTION = 'GRANT_RASH_ACTION'
+registerCard(GRANT_RASH_ACTION, {
+  statModifier: (_s, _u, ctx) => (ctx.attacking ? { power: 1 } : {}),
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: "If this unit dealt combat damage to an opponent's base, that opponent discards a card.",
+    effect: (s, ctx) => {
+      const enemy = opponentOf(ctx.owner)
+      if (!ctx.combatDamageToBase || s.players[enemy].hand.length === 0) return s
+      return pushChoice(s, { kind: 'selectDiscard', id: `${ctx.sourceInstanceId}-rash`, controller: enemy, count: 1, optional: false })
+    },
+  }],
+})
+
+const GRANT_FOLLOW_ME = 'GRANT_FOLLOW_ME'
+registerCard(GRANT_FOLLOW_ME, {
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: 'After completing the attack, give 3 Advantage tokens to a unit.',
+    effect: (s, ctx) => {
+      const targets = allUnits(s).map(u => u.instanceId)
+      return targets.length
+        ? pushChoice(s, { kind: 'mayGiveTokens', id: `${ctx.sourceInstanceId}-follow`, controller: ctx.owner, token: TOKEN_ADVANTAGE, count: 3, targets, optional: false })
+        : s
+    },
+  }],
+})
+
+const GRANT_MASTERSTROKE = 'GRANT_MASTERSTROKE'
+registerCard(GRANT_MASTERSTROKE, {
+  // +1/+0 per unit the defending player has in this unit's arena.
+  statModifier: (s, u, ctx) => {
+    if (!ctx.attacking) return {}
+    const owner = findUnit(s, u.instanceId)?.owner
+    if (owner === undefined) return {}
+    return { power: s.players[opponentOf(owner)].units.filter(e => e.arena === u.arena).length }
+  },
+})
+
+const GRANT_WIPE_THEM_OUT = 'GRANT_WIPE_THEM_OUT'
+registerCard(GRANT_WIPE_THEM_OUT, { spillsExcessToUnit: () => true })
+
+/** "Attack with a unit", lending it `grantCardId`'s rider for that attack. */
+const attackWithRider = (description: string, grantCardId: string) =>
+  whenPlayed(description, (s, ctx) => (s.players[ctx.owner].units.some(u => !u.exhausted)
+    ? pushChoice(s, { kind: 'mayAttackAnyUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, restore: 0, grantCardId })
+    : s))
+
+registerCard('ASH_162', attackWithRider('Attack with a unit. For this attack, it gets +1/+0 and gains: "When Attack Ends: If this unit dealt combat damage to an opponent\'s base, that opponent discards a card."', GRANT_RASH_ACTION))
+registerCard('ASH_184', attackWithRider('Attack with a unit. After completing the attack, give 3 Advantage tokens to a unit.', GRANT_FOLLOW_ME))
+registerCard('ASH_234', attackWithRider('Attack with a unit. It gets +1/+0 for this attack for each unit the defending player controls in its arena.', GRANT_MASTERSTROKE))
+registerCard('ASH_137', attackWithRider('Attack with a unit. For this attack, you may deal its excess damage to another unit in the same arena.', GRANT_WIPE_THEM_OUT))
+
+// ── The last three events ─────────────────────────────────────────────────────────────────────
+
+/** The ability Treacherous Minefield hands to every unit in the chosen arena for the phase. */
+const GRANT_MINEFIELD = 'GRANT_MINEFIELD'
+registerCard(GRANT_MINEFIELD, {
+  abilities: [{ trigger: 'onAttack', description: 'Deal 2 damage to this unit.', effect: (s, ctx) => dealDamageToUnit(s, ctx.sourceInstanceId!, 2) }],
+})
+
+registerCard('ASH_186', whenPlayed('Choose an arena. For this phase, each unit in that arena gains: "On Attack: Deal 2 damage to this unit."', (s, ctx) => // Treacherous Minefield
+  pushChoice(s, { kind: 'selectArenaToGrant', id: ctx.sourceInstanceId!, controller: ctx.owner, grantCardId: GRANT_MINEFIELD })))
+
+registerCard('ASH_090', whenPlayed('Defeat an upgrade on a friendly unit. If you do, search the top 8 cards of your deck for an upgrade that can attach to that unit, reveal it, and play it on that unit. It costs 4 less.', (s, ctx) => { // Reforge
+  const candidates = s.players[ctx.owner].units.flatMap(u => u.upgrades.flatMap((up, i) =>
+    s.cards[up.cardId]?.type === 'upgrade' ? [{ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId }] : []))
+  return candidates.length
+    ? pushChoice(s, { kind: 'selectUpgradeToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true, thenSearchUpgrade: { depth: 8, discount: 4 } })
+    : s
+}))
+
+registerCard('ASH_235', whenPlayed('Choose a number, then search the top 5 cards of your deck for a card, reveal it, and draw it. If its cost is the chosen number, you may give 3 Advantage tokens to a Force unit.', (s, ctx) => // Sense Through the Force
+  pushChoice(s, { kind: 'chooseNumber', id: ctx.sourceInstanceId!, controller: ctx.owner, max: 10, then: 'senseThroughTheForce' })))

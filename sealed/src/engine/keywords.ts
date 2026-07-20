@@ -105,6 +105,12 @@ export function unitDealsDamageFirst(state: GameState, unit: UnitState): boolean
     .some(id => getCardDefinition(id)?.dealsDamageFirst?.(state, unit) ?? false)
 }
 
+/** True if this unit's excess combat damage spills onto another unit rather than the base (Wipe Them Out). */
+export function unitSpillsExcessToUnit(state: GameState, unit: UnitState): boolean {
+  return [unit.cardId, ...unit.upgrades.map(u => u.cardId), ...(unit.grantedAbilityCardIds ?? [])]
+    .some(id => getCardDefinition(id)?.spillsExcessToUnit?.(state, unit) ?? false)
+}
+
 /** True if any of the unit's cards forbids it attacking bases (Wicket). */
 export function unitCannotAttackBases(state: GameState, unit: UnitState): boolean {
   return [unit.cardId, ...unit.upgrades.map(u => u.cardId)].some(id => getCardDefinition(id)?.cannotAttackBases?.(state, unit) ?? false)

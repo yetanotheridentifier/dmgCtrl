@@ -165,6 +165,11 @@ export interface CardDefinition {
    */
   dealsDamageFirst?: (state: GameState, unit: UnitState) => boolean
   /**
+   * "You may deal its excess damage to another unit in the same arena" (Wipe Them Out) — Overwhelm
+   * aimed at a unit rather than the base. Offered after combat damage, using the same excess figure.
+   */
+  spillsExcessToUnit?: (state: GameState, unit: UnitState) => boolean
+  /**
    * "Advantage tokens on friendly units lose all abilities" (Eviscerator): while this unit is
    * in play, its controller's Advantage tokens give no power and survive combat instead of being spent.
    */
@@ -423,6 +428,8 @@ export function runUnitTrigger(
     ...unit.upgrades.map(u => u.cardId),
     ...(unit.grantedAbilityCardIds ?? []),
     ...auraGrantedAbilityCards(state, unit, owner),
+    // Abilities handed over for the phase by a lasting effect (Treacherous Minefield).
+    ...(state.lastingEffects ?? []).flatMap(e => (e.targetInstanceId === unit.instanceId ? e.abilityCardIds ?? [] : [])),
   ]
   for (const cardId of cardIds) {
     for (const ability of getAbilities(cardId)) {

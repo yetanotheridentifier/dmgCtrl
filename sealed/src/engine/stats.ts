@@ -62,7 +62,9 @@ function findUnitOwner(state: GameState, instanceId: string): PlayerId | undefin
  */
 function statModifiers(state: GameState, unit: UnitState, ctx: StatContext, stat: 'power' | 'hp'): number {
   let total = 0
-  for (const cardId of [unit.cardId, ...unit.upgrades.map(u => u.cardId)]) {
+  // Includes cards lent for a single attack (Support, Improvised Identity, and the attack-granting
+  // events), so a rider's stat bonus applies for exactly that attack.
+  for (const cardId of [unit.cardId, ...unit.upgrades.map(u => u.cardId), ...(unit.grantedAbilityCardIds ?? [])]) {
     total += getCardDefinition(cardId)?.statModifier?.(state, unit, ctx)?.[stat] ?? 0
   }
   return total

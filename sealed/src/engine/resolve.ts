@@ -10,7 +10,7 @@ import { applyUnitDamage, dealDamageToUnit, defeatUnit, sweepStateBasedDefeats, 
 import { exhaustUnit, findUnit, giveToken, fireUpgradeAttached, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, searchCount, bottomTopCards, returnUpgradeToHand } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
-import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst } from './keywords'
+import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait } from './keywords'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
 
@@ -80,7 +80,7 @@ function resolveAction(state: GameState, action: Action): GameState {
         const choice = activeChoice(state)
         const grantCardId = choice?.kind === 'support'
           ? state.players[state.activePlayer].units.find(u => u.instanceId === choice.unitId)?.cardId
-          : choice?.kind === 'mayAttack' ? choice.grantCardId : undefined
+          : choice?.kind === 'mayAttack' || choice?.kind === 'mayAttackAnyUnit' ? choice.grantCardId : undefined
         let before = grantCardId ? grantAbilityCard(state, action.attackerId, grantCardId) : state
         // Thrawn front: the chosen attacker gains Restore N for this attack.
         if (choice?.kind === 'mayAttackAnyUnit' && choice.restore > 0) {
@@ -842,6 +842,26 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         if (choice.thenReadyUnit) next = readyUnit(next, choice.thenReadyUnit)
         // Exploit Advantage: "if you do, draw 2 cards".
         if (choice.thenDraw) next = drawCards(next, choice.controller, choice.thenDraw)
+        // Reforge: dig for a replacement upgrade that can attach to the same unit.
+        const search = choice.thenSearchUpgrade
+        const host = search ? findUnit(next, pick.unitId) : undefined
+        if (search && host) {
+          const owner = choice.controller
+          const revealed = next.players[owner].deck.slice(0, search.depth)
+          const eligibleIndices = revealed.flatMap((cardId, i) => {
+            const c = next.cards[cardId]
+            if (c?.type !== 'upgrade') return []
+            const restriction = getCardDefinition(cardId)?.attachRestriction
+            return !restriction || restriction(next, host.unit) ? [i] : []
+          })
+          next = eligibleIndices.length === 0
+            ? bottomTopCards(next, owner, revealed.length)
+            : updatePlayer(
+                pushChoice(next, { kind: 'searchPlayUpgrade', id: `${choice.id}-reforge`, controller: owner, unitId: pick.unitId, revealed, eligibleIndices, discount: search.discount }),
+                owner,
+                { deck: next.players[owner].deck.slice(revealed.length) }, // held out until the choice resolves
+              )
+        }
         const spec = choice.then
         if (spec) {
           const inPlay = new Set([...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId))
@@ -1038,6 +1058,49 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       next = applyChosenMode(next, choice.controller, choice.modes[optionIndex ?? 0])
       break
     }
+    case 'searchPlayUpgrade': {
+      // Reforge: attach the chosen revealed upgrade, paying its cost less the discount; whatever
+      // wasn't taken goes to the bottom of the deck.
+      const owner = choice.controller
+      const idx = deckIndex
+      const cardId = idx !== undefined ? choice.revealed[idx] : undefined
+      const card = cardId ? next.cards[cardId] : undefined
+      const host = findUnit(next, choice.unitId)
+      if (card && cardId && host && idx !== undefined && choice.eligibleIndices.includes(idx)) {
+        const cost = Math.max(0, effectiveCost(next, owner, card, host.unit) - choice.discount)
+        next = updatePlayer(next, owner, payCost(next.players[owner], cost))
+        next = updatePlayer(next, host.owner, {
+          units: next.players[host.owner].units.map(u =>
+            u.instanceId === choice.unitId ? { ...u, upgrades: [...u.upgrades, { cardId, owner }] } : u,
+          ),
+        })
+        next = fireUpgradeAttached(next, choice.unitId, true)
+        next = updatePlayer(next, owner, { deck: [...next.players[owner].deck, ...choice.revealed.filter((_, i) => i !== idx)] })
+      } else {
+        next = updatePlayer(next, owner, { deck: [...next.players[owner].deck, ...choice.revealed] })
+      }
+      break
+    }
+    case 'selectArenaToGrant': {
+      // Treacherous Minefield: hand the carrier card's abilities to every unit in the chosen arena
+      // for the phase. Applied to the units there NOW — one arriving later doesn't pick it up.
+      const arena = (optionIndex ?? 0) === 0 ? 'ground' : 'space'
+      for (const u of inPlayUnits(next).filter(x => x.arena === arena)) {
+        next = addLastingEffect(next, { targetInstanceId: u.instanceId, abilityCardIds: [choice.grantCardId] })
+      }
+      break
+    }
+    case 'chooseNumber': {
+      // Sense Through the Force: the named number rides along on the search that follows.
+      const owner = choice.controller
+      const guessedCost = optionIndex ?? 0
+      const revealed = next.players[owner].deck.slice(0, 5)
+      const eligibleIndices = revealed.map((_, i) => i) // "search for a card" — any card qualifies
+      next = eligibleIndices.length === 0
+        ? bottomTopCards(next, owner, revealed.length)
+        : pushChoice(next, { kind: 'searchDraw', id: `${choice.id}-search`, controller: owner, revealed, eligibleIndices, guessedCost })
+      break
+    }
     case 'selectDistributeSource': {
       // Hold Them Off: the chosen unit's power becomes a pool spread among units in its own arena.
       const src = targetInstanceId ? findUnit(next, targetInstanceId) : undefined
@@ -1111,6 +1174,13 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         const rest = p.deck.slice(choice.revealed.length)
         const others = choice.revealed.filter((_, i) => i !== deckIndex)
         next = updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: [...rest, ...others] })
+        // Sense Through the Force: a correct guess at the drawn card's cost pays out.
+        if (choice.guessedCost !== undefined && next.cards[drawn]?.cost === choice.guessedCost) {
+          const targets = next.players[owner].units.filter(u => unitHasTrait(next, u, 'Force')).map(u => u.instanceId)
+          if (targets.length > 0) {
+            next = pushChoice(next, { kind: 'mayGiveTokens', id: `${choice.id}-sense`, controller: owner, token: TOKEN_ADVANTAGE, count: 3, targets })
+          }
+        }
       }
       break
     }
@@ -1869,6 +1939,17 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   // Overwhelm excess also goes through base-damage prevention.
   const overwhelmDealt = overwhelmExcess > 0 ? baseDamageAfterPrevention(next, enemyId, overwhelmExcess, attackerSource) : 0
   if (overwhelmExcess > 0) next = dealDamageToBase(next, enemyId, overwhelmExcess, attackerSource)
+
+  // Wipe Them Out: the same excess may be aimed at another unit in the arena instead of the base.
+  const spillExcess = Math.max(0, damageTo(defender.instanceId, attackerPower) - remainingHp)
+  if (spillExcess > 0 && unitSpillsExcessToUnit(preCombat, attacker)) {
+    const targets = inPlayUnits(next)
+      .filter(u => u.arena === attacker.arena && u.instanceId !== defender.instanceId)
+      .map(u => u.instanceId)
+    if (targets.length > 0) {
+      next = pushChoice(next, { kind: 'selectDamageTarget', id: `${attackerId}-spill`, controller: playerId, amount: spillExcess, unitTargets: targets, baseTargets: [], optional: true, source: attackerSource })
+    }
+  }
 
   // Both units completed a combat — spend any Advantage on the survivors.
   next = consumeAdvantage(next, playerId, attackerId)

@@ -528,6 +528,29 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'searchPlayUpgrade': {
+        // Reforge: take one of the revealed upgrades if it's affordable after the discount, or pass.
+        const host = [...state.players.player.units, ...state.players.opponent.units].find(u => u.instanceId === choice.unitId)
+        for (const deckIndex of choice.eligibleIndices) {
+          const card = state.cards[choice.revealed[deckIndex]]
+          if (card && canAfford(p, Math.max(0, effectiveCost(state, choice.controller, card, host) - choice.discount))) {
+            moves.push({ type: 'acceptChoice', choiceId: choice.id, deckIndex })
+          }
+        }
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'selectArenaToGrant': {
+        // Treacherous Minefield: ground or space.
+        moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 0 })
+        moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 1 })
+        break
+      }
+      case 'chooseNumber': {
+        // Sense Through the Force: name any cost from 0 to `max`.
+        for (let n = 0; n <= choice.max; n++) moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: n })
+        break
+      }
       case 'mayPlayUnitFromDiscard':
       case 'chooseMode': {
         // Pick one of the listed options (a discard-pile unit, or a mode), or decline.
