@@ -230,6 +230,7 @@ function actionPhaseMoves(state: GameState): Action[] {
   for (const u of p.units) {
     for (const { cardId, index, ability } of unitActionAbilities(u)) {
       if (ability.oncePerRound && u.usedAbilities?.includes(actionAbilityKey(cardId, index))) continue
+      if (ability.exhaustCost && u.exhausted) continue // "[Exhaust]" — the unit must be ready to pay it (#357)
       if (!canAfford(p, ability.cost ?? 0)) continue
       if (ability.usable && !ability.usable(state, u)) continue
       moves.push({ type: 'useAbility', instanceId: u.instanceId, cardId, index })
@@ -513,7 +514,11 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
-      case 'mayDeployLeader': {
+      // A yes/no with no target to pick: Grogu's triggered deploy (#348), and Cobb Vanth /
+      // Gar Saxon (#357).
+      case 'mayDeployLeader':
+      case 'maySelfDamageShield':
+      case 'mayCreateToken': {
         // Grogu (#348): a yes/no to deploy via the triggered epic action.
         moves.push({ type: 'acceptChoice', choiceId: choice.id })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
@@ -529,7 +534,7 @@ function choiceMoves(state: GameState): Action[] {
         for (const id of choice.candidates) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         break
       }
-      case 'attackWithRestore': {
+      case 'mayAttackAnyUnit': {
         // Thrawn front (#348): attack with any ready unit (the Restore grant is applied on resolve).
         for (const u of p.units) {
           if (u.exhausted) continue

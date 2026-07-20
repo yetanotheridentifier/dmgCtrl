@@ -55,9 +55,9 @@ export function giveToken(state: GameState, instanceId: string, tokenId: string)
  * Note: granting N tokens one-at-a-time fires it N times — fine for the current card, which is a
  * "may", but a future "exactly once per attach event" card would need batching.
  */
-export function fireUpgradeAttached(state: GameState, instanceId: string): GameState {
+export function fireUpgradeAttached(state: GameState, instanceId: string, upgradePlayed = false): GameState {
   const found = findUnit(state, instanceId)
-  return found ? runUnitTrigger(state, 'whenUpgradeAttached', found.unit, found.owner, {}) : state
+  return found ? runUnitTrigger(state, 'whenUpgradeAttached', found.unit, found.owner, { upgradePlayed }) : state
 }
 
 /**

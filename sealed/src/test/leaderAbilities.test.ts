@@ -758,7 +758,7 @@ describe('Grand Admiral Thrawn (ASH_004) — front: attack with a unit, conditio
 
   it('grants Restore 2 to the attacker when unit counts are equal (heals your base on attack)', () => {
     const raised = resolve(board(2), { type: 'useLeaderAbility', index: 0 })
-    expect(raised.pendingChoices?.[0]).toMatchObject({ kind: 'attackWithRestore', restore: 2 })
+    expect(raised.pendingChoices?.[0]).toMatchObject({ kind: 'mayAttackAnyUnit', restore: 2 })
     const done = resolve(raised, { type: 'attack', attackerId: 'u1', target: { kind: 'base' } })
     expect(done.players.player.base.damage).toBe(3) // 5 healed by Restore 2
     expect(done.players.opponent.base.damage).toBe(3) // u1 power 3 to the enemy base
@@ -768,7 +768,7 @@ describe('Grand Admiral Thrawn (ASH_004) — front: attack with a unit, conditio
 
   it('grants no Restore when unit counts differ', () => {
     const raised = resolve(board(3), { type: 'useLeaderAbility', index: 0 }) // 2 vs 3
-    expect(raised.pendingChoices?.[0]).toMatchObject({ kind: 'attackWithRestore', restore: 0 })
+    expect(raised.pendingChoices?.[0]).toMatchObject({ kind: 'mayAttackAnyUnit', restore: 0 })
     const done = resolve(raised, { type: 'attack', attackerId: 'u1', target: { kind: 'base' } })
     expect(done.players.player.base.damage).toBe(5) // no heal
   })

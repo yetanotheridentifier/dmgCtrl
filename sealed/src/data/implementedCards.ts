@@ -349,6 +349,14 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_041', name: 'Outcast' },
   { id: 'ASH_102', name: 'Ravager' },
   { id: 'ASH_079', name: 'Koska Reeves' },
+  // Tier 1 (#357) — a chained follow-up choice or a real "[Exhaust]" action cost
+  { id: 'ASH_171', name: 'Pegasus Tri-Wing' },
+  { id: 'ASH_060', name: 'Cobb Vanth' },
+  { id: 'ASH_047', name: 'Gar Saxon' },
+  { id: 'ASH_155', name: 'Grogu' },
+  { id: 'ASH_118', name: '8D8' },
+  { id: 'ASH_109', name: 'T-6 Shuttle 1974' },
+  { id: 'ASH_245', name: 'Eye of Sion' },
 ]
 
 /**
@@ -371,7 +379,15 @@ export const UNIT_GROUPS: UnitGroup[] = (() => {
     keep('ready'),
     keep('mechanic'),
     keep('subsystem'),
-  ]
+    // A blocker group empties as its units get built; drop it rather than render an empty section.
+  ].filter(g => g.id === 'built' || g.units.length > 0)
+    // Status follows position, not a hand-maintained field: whichever blocker tier is next up is
+    // the one in progress, and clearing a tier promotes the one behind it (#357).
+    .map((g, _i, all) => {
+      if (g.status === 'done') return g
+      const first = all.find(x => x.status !== 'done')
+      return { ...g, status: (g === first ? 'in progress' : 'planned') as GroupStatus }
+    })
 })()
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */

@@ -7,7 +7,7 @@ import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, sweepStateBasedDefeats } from './combat'
-import { exhaustUnit, findUnit, giveToken, fireUpgradeAttached, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit } from './effects'
+import { exhaustUnit, findUnit, giveToken, fireUpgradeAttached, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, searchCount, bottomTopCards } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
@@ -73,7 +73,7 @@ function resolveAction(state: GameState, action: Action): GameState {
           : choice?.kind === 'mayAttack' ? choice.grantCardId : undefined
         let before = grantCardId ? grantAbilityCard(state, action.attackerId, grantCardId) : state
         // Thrawn front (#348): the chosen attacker gains Restore N for this attack.
-        if (choice?.kind === 'attackWithRestore' && choice.restore > 0) {
+        if (choice?.kind === 'mayAttackAnyUnit' && choice.restore > 0) {
           before = updatePlayer(before, before.activePlayer, {
             units: before.players[before.activePlayer].units.map(u =>
               u.instanceId === action.attackerId ? { ...u, grantedKeywords: [{ name: 'Restore', value: choice.restore }] } : u,
@@ -486,8 +486,40 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
             if (targets.length > 0) next = pushChoice(next, { kind: 'mayGiveTokens', id: choice.id, controller: choice.controller, token: TOKEN_ADVANTAGE, count: reward.chooseAdvantage, targets, optional: false })
           }
         }
+        // 8D8 (#357): "if you do, search the top N of your deck for a unit, reveal it, and draw it."
+        if (choice.thenSearchDraw) {
+          const owner = choice.controller
+          const source = findUnit(next, choice.unitId)
+          const depth = source ? searchCount(next, source.unit, choice.thenSearchDraw) : choice.thenSearchDraw
+          const revealed = next.players[owner].deck.slice(0, depth)
+          const eligibleIndices = revealed.flatMap((cardId, i) => (next.cards[cardId]?.type === 'unit' ? [i] : []))
+          next = eligibleIndices.length === 0
+            ? bottomTopCards(next, owner, revealed.length) // no unit revealed → they all go to the bottom
+            : pushChoice(next, { kind: 'searchDraw', id: `${choice.id}-search`, controller: owner, revealed, eligibleIndices })
+        }
       }
       break
+    case 'maySelfDamageShield': {
+      // Cobb Vanth (#357): pay 2 damage to himself to shield the unit that just entered play.
+      next = dealDamageToUnit(next, choice.selfId, choice.amount)
+      next = giveToken(next, choice.targetId, TOKEN_SHIELD)
+      next = checkWin(next)
+      if (next.winner !== null) return next
+      break
+    }
+    case 'mayCreateToken': {
+      // Gar Saxon (#357): create the token unit(s) and record the once-each-round use.
+      next = createTokenUnits(next, choice.controller, choice.token, choice.count)
+      if (choice.markUsed) {
+        const { instanceId, key } = choice.markUsed
+        next = updatePlayer(next, choice.controller, {
+          units: next.players[choice.controller].units.map(u =>
+            u.instanceId === instanceId ? { ...u, usedAbilities: [...(u.usedAbilities ?? []), key] } : u,
+          ),
+        })
+      }
+      break
+    }
     case 'mayAdvantageEach':
       // Emperor Palpatine: give the chosen unit an Advantage token per other friendly unit (#309).
       if (targetInstanceId) {
@@ -508,6 +540,12 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       // Optional "this phase" buff, e.g. Baylan's On Attack: grant the chosen unit the buff (#347).
       if (targetInstanceId) {
         next = addLastingEffect(next, { targetInstanceId, power: choice.power, hp: choice.hp, keywords: choice.keywords })
+        // T-6 Shuttle (#357): "you may attack with that unit" — only meaningful for a ready unit
+        // we control (the buff itself may target any unit).
+        const buffed = findUnit(next, targetInstanceId)
+        if (choice.thenMayAttack && buffed && buffed.owner === choice.controller && !buffed.unit.exhausted) {
+          next = pushChoice(next, { kind: 'mayAttack', id: `${choice.id}-attack`, controller: choice.controller, unitId: targetInstanceId })
+        }
       }
       break
     case 'mayGiveAdvantage':
@@ -561,6 +599,8 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       const pick = choice.candidates[optionIndex ?? 0]
       if (pick) {
         next = defeatUpgradeAt(next, pick.unitId, pick.upgradeIndex)
+        // Pegasus Tri-Wing (#357): "if you do, ready this unit".
+        if (choice.thenReadyUnit) next = readyUnit(next, choice.thenReadyUnit)
         const spec = choice.then
         if (spec) {
           const inPlay = new Set([...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId))
@@ -806,13 +846,14 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         const owner = choice.controller
         const cardId = choice.revealed[deckIndex]
         const cost = next.cards[cardId]?.cost ?? 0
-        next = enterUnit(next, owner, cardId, false)
+        next = enterUnit(next, owner, cardId, choice.entersReady === true)
         next = checkWin(next)
         if (next.winner !== null) return next
         const revealed = choice.revealed.filter((_, i) => i !== deckIndex)
         const budget = choice.budget - cost
         const eligibleIndices = ackbarEligible(next, revealed, budget)
-        if (budget > 0 && eligibleIndices.length > 0) {
+        // Eye of Sion (#357) plays exactly one; Ackbar keeps offering until the budget runs out.
+        if (!choice.playOne && budget > 0 && eligibleIndices.length > 0) {
           next = pushChoice(next, { kind: 'searchPlayFree', id: choice.id, controller: owner, revealed, eligibleIndices, budget })
         } else {
           next = updatePlayer(next, owner, { deck: [...next.players[owner].deck, ...revealed] }) // bottom the leftovers
@@ -1058,8 +1099,9 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
 
   next = recordCardPlayed(next, playerId, card.id) // after the cost (#357, "the first upgrade you play each phase")
 
-  // "When 1 or more upgrades attach to this unit" (#357, Sabine Wren) — the host reacts.
-  next = fireUpgradeAttached(next, targetInstanceId)
+  // "When 1 or more upgrades attach to this unit" (#357, Sabine Wren) — the host reacts. This is the
+  // played-from-hand path, so it also satisfies "when you PLAY an upgrade on this unit" (Gar Saxon).
+  next = fireUpgradeAttached(next, targetInstanceId, true)
 
   // "When Played" abilities fire after the upgrade attaches (CR 6.2.0f).
   next = runTrigger(next, 'whenPlayed', {
@@ -1086,6 +1128,7 @@ function useAbility(state: GameState, instanceId: string, cardId: string, index:
 
   let next = state
   if (ability.cost) next = updatePlayer(next, owner, payCost(next.players[owner], ability.cost))
+  if (ability.exhaustCost) next = exhaustUnit(next, instanceId) // pay the "[Exhaust]" cost (#357)
   if (ability.oncePerRound) {
     const key = actionAbilityKey(cardId, index)
     next = updatePlayer(next, owner, {
@@ -1208,6 +1251,11 @@ function takeInitiative(state: GameState): GameState {
   // a choice, hold with the taker and finish the transition once the choice drains (resumeAfterChoice).
   const before = taken.pendingChoices?.length ?? 0
   taken = runLeaderTrigger(taken, 'whenTakeInitiative', playerId)
+  // The taker's units carry the trigger too (#357, Grogu the unit).
+  for (const u of taken.players[playerId].units) {
+    const still = taken.players[playerId].units.find(x => x.instanceId === u.instanceId)
+    if (still) taken = runUnitTrigger(taken, 'whenTakeInitiative', still, playerId)
+  }
   if ((taken.pendingChoices?.length ?? 0) > before) {
     return { ...taken, pendingInitiativeEndsPhase: endsPhase }
   }

@@ -64,6 +64,12 @@ export interface EffectContext {
   defeatedByCombat?: boolean
   /** A chosen target unit's instance id, when the ability picks one (#309). */
   targetInstanceId?: string
+  /**
+   * `whenUpgradeAttached` only (#357, Gar Saxon): the upgrade was **played** from hand, rather
+   * than created and attached by an ability (a Shield/Experience token, Sabine's grant, …).
+   * "When you play an upgrade on this unit" only counts the former.
+   */
+  upgradePlayed?: boolean
 }
 
 export type EffectFn = (state: GameState, ctx: EffectContext) => GameState
@@ -212,6 +218,13 @@ export interface ActionAbilityDef {
   description: string
   /** Resource cost paid on use (default 0) — the ability's "C=N" cost (#348). */
   cost?: number
+  /**
+   * The ability's "[Exhaust]" cost (#357): the unit must be ready to use it, and using it
+   * exhausts the unit — so it can't also attack that round. Distinct from `oncePerRound`,
+   * which limits uses without touching the unit's ready state (an ability with no
+   * "[Exhaust]" in its cost, e.g. Improvised Identity, which then attacks).
+   */
+  exhaustCost?: boolean
   /** May be used only once per round by a given unit (tracked on `UnitState.usedAbilities`). */
   oncePerRound?: boolean
   /** Extra gate beyond once-per-round (defaults usable). */

@@ -9,7 +9,7 @@ import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 import type { GameState } from '../engine/types'
 
-/** Units the existing hooks already covered — registration only, no new engine mechanic (#357). */
+/** Unique/complex units whose behaviour the existing hooks already covered — registration only (#357). */
 const F = {
   ...CARDS,
   ASH_144: card({ id: 'ASH_144', type: 'unit', arena: 'space', power: 2, hp: 3 }), // Vane's Snub Fighter

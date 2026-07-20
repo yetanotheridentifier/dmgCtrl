@@ -333,7 +333,8 @@ export type PendingChoice =
   // `rewardIfDefeated`: if the damage defeats the target, either give `count` Advantage to a fixed
   // `instanceId` (Imposing Scout Walker), or let the controller give `chooseAdvantage` Advantage to a
   // chosen unit (Justifier, #356).
-  | { kind: 'mayDamage'; id: string; controller: PlayerId; unitId: string; targets: string[]; amount: number; optional?: boolean; rewardIfDefeated?: { instanceId: string; count: number } | { chooseAdvantage: number } }
+  // `thenSearchDraw` chains "if you do, search the top N for a unit and draw it" (#357, 8D8).
+  | { kind: 'mayDamage'; id: string; controller: PlayerId; unitId: string; targets: string[]; amount: number; optional?: boolean; rewardIfDefeated?: { instanceId: string; count: number } | { chooseAdvantage: number }; thenSearchDraw?: number }
   // Give `count` of a token to a chosen target (#355). `optional` (default true) offers a decline.
   | { kind: 'mayGiveTokens'; id: string; controller: PlayerId; token: string; count: number; targets: string[]; optional?: boolean }
   | { kind: 'mayAdvantageEach'; id: string; controller: PlayerId; unitId: string; targets: string[] }
@@ -341,7 +342,8 @@ export type PendingChoice =
   // `then` damage-target selection follows. `optional` = the deployed "may" version (a Cancel is
   // offered); the front action is mandatory. Each candidate is the exact upgrade (unit + index).
   // Vane chains 2 damage via `then`; Clan Vizsla Soldier (#356) just defeats the upgrade (`then` omitted).
-  | { kind: 'selectUpgradeToDefeat'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional: boolean; then?: DamageTargetSpec }
+  // `thenReadyUnit` readies that unit instead — "if you do, ready this unit" (#357, Pegasus Tri-Wing).
+  | { kind: 'selectUpgradeToDefeat'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional: boolean; then?: DamageTargetSpec; thenReadyUnit?: string }
   // Return a chosen card from your discard to your hand (#356, Moff Gideon). `candidates` are the
   // eligible discard-pile card ids; `acceptChoice`'s `optionIndex` picks one. Optional.
   | { kind: 'selectFromDiscard'; id: string; controller: PlayerId; candidates: string[]; optional: boolean }
@@ -353,7 +355,8 @@ export type PendingChoice =
   | { kind: 'mayExhaustLeaderForAdvantage'; id: string; controller: PlayerId; unitId: string }
   // Optional "this phase" buff (#347), e.g. Baylan's On Attack: pick a unit among `targets`
   // and grant it the given power/HP/keywords for the phase, or decline.
-  | { kind: 'mayLastingBuff'; id: string; controller: PlayerId; targets: string[]; power?: number; hp?: number; keywords?: KeywordInstance[] }
+  // `thenMayAttack` chains "you may attack with that unit" (#357, T-6 Shuttle 1974).
+  | { kind: 'mayLastingBuff'; id: string; controller: PlayerId; targets: string[]; power?: number; hp?: number; keywords?: KeywordInstance[]; thenMayAttack?: boolean }
   // Ezra front (#347): on a friendly attack ending, may exhaust the leader to give an Advantage
   // token to one of `targets` (a unit other than the attacker), or decline.
   | { kind: 'mayExhaustLeaderGiveAdvantage'; id: string; controller: PlayerId; targets: string[] }
@@ -439,16 +442,24 @@ export type PendingChoice =
   // Search the revealed cards (held out of the deck) and play space units for free while a combined-cost
   // `budget` lasts (#355, Admiral Ackbar). Pick one `eligibleIndices` (indices into `revealed`) at a time
   // via an `acceptChoice`'s `deckIndex`; skip (Done) stops. Leftover revealed cards return to the bottom.
-  | { kind: 'searchPlayFree'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; budget: number }
+  // `playOne` stops after a single pick rather than spending the whole budget, and `entersReady`
+  // brings it in ready — "play it for free. It enters play ready" (#357, Eye of Sion).
+  | { kind: 'searchPlayFree'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; budget: number; playOne?: boolean; entersReady?: boolean }
+  // Cobb Vanth (#357): may deal `amount` to `selfId`; if you do, give a Shield to `targetId`. A yes/no.
+  | { kind: 'maySelfDamageShield'; id: string; controller: PlayerId; selfId: string; targetId: string; amount: number }
+  // Gar Saxon (#357): may create `count` of a token unit. A yes/no; `markUsed` records the
+  // once-each-round use on the source unit when accepted.
+  | { kind: 'mayCreateToken'; id: string; controller: PlayerId; token: string; count: number; markUsed?: { instanceId: string; key: string } }
   // Optionally deploy your leader via a triggered epic action (#348, Grogu). A yes/no.
   | { kind: 'mayDeployLeader'; id: string; controller: PlayerId }
   // Unique rule (CR): a player controlling two upgrades with the same title defeats one (their
   // choice). `candidates` are the duplicate instances; picking one defeats it. Mandatory.
   | { kind: 'selectUniqueToDefeat'; id: string; controller: PlayerId; cardId: string; candidates: UpgradeRef[] }
   | { kind: 'selectUniqueUnitToDefeat'; id: string; controller: PlayerId; cardId: string; candidates: string[] }
-  // Thrawn front (#348): attack with any ready unit; it gains Restore `restore` for that attack
+  // Attack with any ready unit; it gains Restore `restore` for that attack, if any (#348 Thrawn,
+  // #357 Grogu). Mandatory only in the sense that the attack is made on the board — skip declines.
   // (0 when the condition didn't hold). Mandatory — the attack is made on the board.
-  | { kind: 'attackWithRestore'; id: string; controller: PlayerId; restore: number }
+  | { kind: 'mayAttackAnyUnit'; id: string; controller: PlayerId; restore: number }
   // Thrawn deployed (#348): On Attack, may defeat one of `targets` (a non-leader enemy unit), or decline.
   | { kind: 'mayDefeatEnemyUnit'; id: string; controller: PlayerId; targets: string[] }
   // Sabine front (#348): the opponent (`controller`) must give `count` Advantage tokens to one of

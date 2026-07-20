@@ -516,7 +516,7 @@ registerCard('ASH_004', { // Grand Admiral Thrawn — front attack + conditional
       usable: (s, owner) => canAnyUnitAttack(s, owner),
       effect: (s, ctx) => {
         const restore = s.players[ctx.owner].units.length === s.players[opponentOf(ctx.owner)].units.length ? 2 : 0
-        return pushChoice(s, { kind: 'attackWithRestore', id: `${ctx.cardId}-attack`, controller: ctx.owner, restore })
+        return pushChoice(s, { kind: 'mayAttackAnyUnit', id: `${ctx.cardId}-attack`, controller: ctx.owner, restore })
       },
     }],
   },
@@ -1150,11 +1150,12 @@ registerCard('ASH_146', {
 
 registerCard('ASH_123', { actionAbilities: [{ // Lang
   description: "Deal damage equal to this unit's power to a ground unit.",
-  usable: (s, u) => !u.exhausted && groundUnits(s).length > 0,
+  exhaustCost: true,
+  usable: (s) => groundUnits(s).length > 0,
   effect: (s, ctx) => {
     const u = allUnits(s).find(x => x.instanceId === ctx.sourceInstanceId)
     const power = u ? effectivePower(s, u) : 0
-    const next = exhaustUnit(s, ctx.sourceInstanceId!)
+    const next = s
     const targets = groundUnits(next).map(x => x.instanceId)
     return targets.length ? pushChoice(next, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: power, unitTargets: targets, baseTargets: [] }) : next
   },
@@ -1162,9 +1163,10 @@ registerCard('ASH_123', { actionAbilities: [{ // Lang
 
 registerCard('ASH_142', { actionAbilities: [{ // Mortar Trooper
   description: 'Deal 1 damage to each of up to 3 ground units.',
-  usable: (s, u) => !u.exhausted && groundUnits(s).length > 0,
+  exhaustCost: true,
+  usable: (s) => groundUnits(s).length > 0,
   effect: (s, ctx) => {
-    const next = exhaustUnit(s, ctx.sourceInstanceId!)
+    const next = s
     const targets = groundUnits(next).map(x => x.instanceId)
     return targets.length ? pushChoice(next, { kind: 'multiPick', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, spec: { mode: 'dealEach', amount: 1, remaining: 3 } }) : next
   },
@@ -1187,8 +1189,9 @@ registerCard('ASH_179', { // Boba Fett's Rancor
 registerCard('ASH_119', { actionAbilities: [{ // Greef Karga (unit)
   description: 'If your base was attacked this phase, create a Mandalorian token.',
   cost: 1,
-  usable: (s, u) => { const owner = findUnit(s, u.instanceId)?.owner; return !u.exhausted && owner !== undefined && baseAttackedThisPhase(s, owner) },
-  effect: (s, ctx) => createTokenUnit(exhaustUnit(s, ctx.sourceInstanceId!), ctx.owner, TOKEN_MANDALORIAN),
+  exhaustCost: true,
+  usable: (s, u) => { const owner = findUnit(s, u.instanceId)?.owner; return owner !== undefined && baseAttackedThisPhase(s, owner) },
+  effect: (s, ctx) => createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN),
 }] })
 
 // ── Group F (#357): combat-role + static statModifiers ──────────────────────
@@ -1333,4 +1336,131 @@ registerCard('ASH_079', { // Koska Reeves
   },
   abilities: [{ trigger: 'whenPlayed', description: 'If a friendly unit was defeated this phase, create a Mandalorian token.', effect: (s, ctx) =>
     defeatedThisPhase(s, ctx.owner).length > 0 ? createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN) : s }],
+})
+
+// ── Units needing a chained follow-up choice or a real "[Exhaust]" action cost (#357) ──────────
+
+registerCard('ASH_171', whenPlayed('You may defeat a friendly upgrade. If you do, ready this unit.', (s, ctx) => { // Pegasus Tri-Wing
+  const candidates = s.players[ctx.owner].units.flatMap(u => u.upgrades.map((up, i) => ({ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId })))
+  return candidates.length === 0 ? s : pushChoice(s, {
+    kind: 'selectUpgradeToDefeat',
+    id: ctx.sourceInstanceId!,
+    controller: ctx.owner,
+    candidates,
+    optional: true,
+    thenReadyUnit: ctx.sourceInstanceId!,
+  })
+}))
+
+registerCard('ASH_060', { // Cobb Vanth
+  abilities: [{
+    trigger: 'whenPlayOrCreateUnit',
+    description: 'You may deal 2 damage to this unit. If you do, give a Shield token to that unit.',
+    effect: (s, ctx) => (ctx.targetInstanceId && findUnit(s, ctx.sourceInstanceId!) ? pushChoice(s, {
+      kind: 'maySelfDamageShield',
+      id: `${ctx.sourceInstanceId}-${ctx.targetInstanceId}`,
+      controller: ctx.owner,
+      selfId: ctx.sourceInstanceId!,
+      targetId: ctx.targetInstanceId,
+      amount: 2,
+    }) : s),
+  }],
+})
+
+const GAR_SAXON_KEY = 'ASH_047#token'
+registerCard('ASH_047', { // Gar Saxon
+  abilities: [{
+    trigger: 'whenUpgradeAttached',
+    description: 'When you play an upgrade on this unit: You may create a Mandalorian token. Use this ability only once each round.',
+    effect: (s, ctx) => {
+      const self = findUnit(s, ctx.sourceInstanceId!)?.unit
+      // Only a *played* upgrade counts, and only once each round.
+      if (!ctx.upgradePlayed || !self || self.usedAbilities?.includes(GAR_SAXON_KEY)) return s
+      return pushChoice(s, {
+        kind: 'mayCreateToken',
+        id: ctx.sourceInstanceId!,
+        controller: ctx.owner,
+        token: TOKEN_MANDALORIAN,
+        count: 1,
+        markUsed: { instanceId: ctx.sourceInstanceId!, key: GAR_SAXON_KEY },
+      })
+    },
+  }],
+})
+
+registerCard('ASH_155', { // Grogu (unit)
+  abilities: [{
+    trigger: 'whenTakeInitiative',
+    description: 'You may attack with a unit.',
+    effect: (s, ctx) => (s.players[ctx.owner].units.some(u => !u.exhausted)
+      ? pushChoice(s, { kind: 'mayAttackAnyUnit', id: `${ctx.sourceInstanceId}-attack`, controller: ctx.owner, restore: 0 })
+      : s),
+  }],
+})
+
+registerCard('ASH_118', { // 8D8
+  actionAbilities: [{
+    description: 'Deal 1 damage to another friendly unit. If you do, search the top 5 cards of your deck for a unit, reveal it, and draw it.',
+    exhaustCost: true,
+    usable: (s, u) => s.players[findUnit(s, u.instanceId)!.owner].units.some(x => x.instanceId !== u.instanceId),
+    effect: (s, ctx) => {
+      const targets = s.players[ctx.owner].units.filter(u => u.instanceId !== ctx.sourceInstanceId).map(u => u.instanceId)
+      return targets.length === 0 ? s : pushChoice(s, {
+        kind: 'mayDamage',
+        id: ctx.sourceInstanceId!,
+        controller: ctx.owner,
+        unitId: ctx.sourceInstanceId!,
+        targets,
+        amount: 1,
+        thenSearchDraw: 5,
+      })
+    },
+  }],
+})
+
+registerCard('ASH_109', { // T-6 Shuttle 1974
+  actionAbilities: [{
+    description: 'Give another unit +2/+2 for this phase. You may attack with that unit.',
+    exhaustCost: true,
+    effect: (s, ctx) => {
+      const targets = allUnits(s).filter(u => u.instanceId !== ctx.sourceInstanceId).map(u => u.instanceId)
+      return targets.length === 0 ? s : pushChoice(s, {
+        kind: 'mayLastingBuff',
+        id: ctx.sourceInstanceId!,
+        controller: ctx.owner,
+        targets,
+        power: 2,
+        hp: 2,
+        thenMayAttack: true,
+      })
+    },
+  }],
+})
+
+registerCard('ASH_245', { // Eye of Sion
+  actionAbilities: [{
+    description: "Search the top 8 cards of your deck for a unit that costs the same as or less than this unit's power. Play it for free. It enters play ready.",
+    exhaustCost: true,
+    effect: (s, ctx) => {
+      const self = findUnit(s, ctx.sourceInstanceId!)?.unit
+      if (!self) return s
+      const budget = effectivePower(s, self)
+      const revealed = s.players[ctx.owner].deck.slice(0, searchCount(s, self, 8))
+      const eligibleIndices = revealed.flatMap((cardId, i) => {
+        const c = s.cards[cardId]
+        return c?.type === 'unit' && c.cost <= budget ? [i] : []
+      })
+      if (eligibleIndices.length === 0) return bottomTopCards(s, ctx.owner, revealed.length)
+      return pushChoice(s, {
+        kind: 'searchPlayFree',
+        id: ctx.sourceInstanceId!,
+        controller: ctx.owner,
+        revealed,
+        eligibleIndices,
+        budget,
+        playOne: true,
+        entersReady: true,
+      })
+    },
+  }],
 })

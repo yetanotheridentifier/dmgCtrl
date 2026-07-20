@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import DeckSelectScreen from '../components/deckSelectScreen'
-import { IMPLEMENTED_LEADERS, IMPLEMENTED_UPGRADES, TOTAL_PROGRESS } from '../data/implementedCards'
+import { IMPLEMENTED_LEADERS, IMPLEMENTED_UPGRADES, TOTAL_PROGRESS, UNIT_GROUPS } from '../data/implementedCards'
 import { saveDeck } from '../data/deckStore'
 import { syncCatalogue } from '../data/catalogueSync'
 import { importSet } from '../data/setImport'
@@ -79,7 +79,9 @@ describe('DeckSelectScreen', () => {
     render(<DeckSelectScreen onPlay={vi.fn()} />)
     const groups = screen.getByTestId('implemented-unit-groups')
     const done = within(groups).getByTestId('unit-group-keyword') as HTMLDetailsElement // playable as printed
-    const next = within(groups).getByTestId('unit-group-ready') as HTMLDetailsElement // first not-done
+    // The first still-blocked group — which one that is changes as tiers get cleared (#357).
+    const nextGroupId = UNIT_GROUPS.find(g => g.status !== 'done')!.id
+    const next = within(groups).getByTestId(`unit-group-${nextGroupId}`) as HTMLDetailsElement
     expect(done.open).toBe(false) // done → collapsed
     expect(next.open).toBe(true) // next up → expanded
     // Development status is shown for the groups (same treatment as leaders/upgrades).

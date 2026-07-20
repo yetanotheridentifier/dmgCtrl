@@ -78,6 +78,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'selectUpgradeToDefeat' || choice.kind === 'selectResourceUpgrade' || choice.kind === 'selectFromDiscard') return 'Cancel'
       if (choice.kind === 'mayLastingBuff' || choice.kind === 'mayGiveAdvantage' || choice.kind === 'mayExhaustLeaderGiveAdvantage' || choice.kind === 'mayExhaustLeaderExhaustUnit' || choice.kind === 'mayExhaustUnit') return 'Decline'
       if (choice.kind === 'mayExhaustLeaderForAdvantage' || choice.kind === 'mayExhaustLeaderHealUnit' || choice.kind === 'mayPayToDraw' || choice.kind === 'mayDeployLeader') return "Don't"
+      if (choice.kind === 'maySelfDamageShield' || choice.kind === 'mayCreateToken') return "Don't"
       return `Skip ${choice.kind}`
     }
     case 'acceptChoice': {
@@ -196,6 +197,15 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         return choice.cost > 0 ? `Pay ${choice.cost}, draw ${cards}` : `Draw ${cards}`
       }
       if (choice.kind === 'mayDeployLeader') return `Deploy ${state.cards[state.players[by].leader.cardId]?.name ?? 'leader'}`
+      if (choice.kind === 'maySelfDamageShield') {
+        const self = anyUnitName(state, choice.selfId)
+        const target = anyUnitName(state, choice.targetId)
+        return `${choice.amount} damage to ${self ?? 'this unit'} → Shield to ${target ?? 'it'}`
+      }
+      if (choice.kind === 'mayCreateToken') {
+        const tokenName = state.cards[choice.token]?.name ?? 'token'
+        return `Create ${choice.count > 1 ? `${choice.count} ${tokenName}s` : `a ${tokenName}`}`
+      }
       if (choice.kind === 'mayDefeatEnemyUnit') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Defeat ${target ?? 'unit'}`
