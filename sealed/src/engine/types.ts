@@ -96,6 +96,11 @@ export interface UnitState {
    */
   usedAbilities?: string[]
   /**
+   * Cards this unit has captured (#357, Bothan-5) — card ids held face-down under it, out of every
+   * other zone. Released to their owner's discard when the captor leaves play.
+   */
+  captured?: string[]
+  /**
    * A card name this unit forbids the opponent from playing while it's in play (#355,
    * Ryder Azadi). Set by its When Played "name a card"; the restriction ends naturally
    * when the unit leaves play (the field goes with it).
@@ -138,6 +143,16 @@ export interface PlayerState {
    * `enterUnit`. Cleared at the start of the regroup phase.
    */
   nextUnitGrants?: NextUnitGrant[]
+}
+
+/**
+ * Where an instance of damage came from (#357, Gorian Shard's Corsair). Card-level rather than
+ * instance-level so it also describes a leader's or an event's damage, which have no unit in play.
+ * `undefined` means "unattributed" — treated as preventable.
+ */
+export interface DamageSource {
+  cardId: string
+  controller: PlayerId
 }
 
 /** A pending "your next unit …" grant (#348/#355). All fields are plain data (GameState is JSON). */
@@ -338,7 +353,7 @@ export type PendingChoice =
   // `instanceId` (Imposing Scout Walker), or let the controller give `chooseAdvantage` Advantage to a
   // chosen unit (Justifier, #356).
   // `thenSearchDraw` chains "if you do, search the top N for a unit and draw it" (#357, 8D8).
-  | { kind: 'mayDamage'; id: string; controller: PlayerId; unitId: string; targets: string[]; amount: number; optional?: boolean; rewardIfDefeated?: { instanceId: string; count: number } | { chooseAdvantage: number }; thenSearchDraw?: number }
+  | { kind: 'mayDamage'; id: string; controller: PlayerId; unitId: string; targets: string[]; amount: number; optional?: boolean; rewardIfDefeated?: { instanceId: string; count: number } | { chooseAdvantage: number }; thenSearchDraw?: number; source?: DamageSource }
   // Give `count` of a token to a chosen target (#355). `optional` (default true) offers a decline.
   | { kind: 'mayGiveTokens'; id: string; controller: PlayerId; token: string; count: number; targets: string[]; optional?: boolean }
   | { kind: 'mayAdvantageEach'; id: string; controller: PlayerId; unitId: string; targets: string[] }
@@ -371,7 +386,7 @@ export type PendingChoice =
   | { kind: 'revealUnitFromHand'; id: string; controller: PlayerId; handIndices: number[]; amount: number }
   // Choose where to deal a fixed amount of damage (#348): a unit (`unitTargets`) or a base
   // (`baseTargets`, by owner). Mandatory. Vane's "deal 2 to a base / the defending unit or a base".
-  | { kind: 'selectDamageTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[]; optional?: boolean }
+  | { kind: 'selectDamageTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[]; optional?: boolean; source?: DamageSource }
   // Greef Karga front (#309): on playing a unit, may exhaust the leader to give it an Advantage token.
   // `unitId` is the just-played unit to receive the token.
   | { kind: 'mayExhaustLeaderForAdvantage'; id: string; controller: PlayerId; unitId: string }
@@ -427,7 +442,9 @@ export type PendingChoice =
   | { kind: 'distributeDamage'; id: string; controller: PlayerId; remaining: number; total: number; targets: string[] }
   // Distribute `total` tokens among `targets`, one per pick until `remaining` reaches 0 (#356, Helgait).
   // Unlike `multiPick`'s give-advantage, targets stay eligible so tokens can stack. Always optional.
-  | { kind: 'distributeTokens'; id: string; controller: PlayerId; token: string; remaining: number; total: number; targets: string[] }
+  // `exclude` keeps a unit out of the target list across re-offers ("other friendly units"), and
+  // `then` chains once distribution finishes — by exhausting the pool or stopping (#357, Elzar Mann).
+  | { kind: 'distributeTokens'; id: string; controller: PlayerId; token: string; remaining: number; total: number; targets: string[]; exclude?: string; then?: 'opponentSearchEvent' }
   // Enoch (#356): deal up to `max` damage to your own base, one at a time (`dealt` so far); stopping
   // (or reaching `max`) grants "next unit costs 1 less per 2 damage dealt". Each accept deals 1 more.
   | { kind: 'dealOwnBaseForDiscount'; id: string; controller: PlayerId; dealt: number; max: number }
@@ -469,7 +486,10 @@ export type PendingChoice =
   | { kind: 'searchPlayFree'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; budget: number; playOne?: boolean; entersReady?: boolean }
   // Rancor Keeper (#357): "deal 1 damage to any number of bases" — repeatable, each base at most
   // once; `remaining` are the bases not yet picked. Skip finishes.
-  | { kind: 'damageAnyBases'; id: string; controller: PlayerId; remaining: PlayerId[]; amount: number }
+  | { kind: 'damageAnyBases'; id: string; controller: PlayerId; remaining: PlayerId[]; amount: number; source?: DamageSource }
+  // Bothan-5 (#357): may capture `cardId` from your discard under `unitId`. A yes/no;
+  // `markUsed` records the once-each-round use when accepted.
+  | { kind: 'mayCapture'; id: string; controller: PlayerId; unitId: string; cardId: string; markUsed?: { instanceId: string; key: string } }
   // Cobb Vanth (#357): may deal `amount` to `selfId`; if you do, give a Shield to `targetId`. A yes/no.
   | { kind: 'maySelfDamageShield'; id: string; controller: PlayerId; selfId: string; targetId: string; amount: number }
   // Gar Saxon (#357): may create `count` of a token unit. A yes/no; `markUsed` records the

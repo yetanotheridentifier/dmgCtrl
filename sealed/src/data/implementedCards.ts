@@ -373,6 +373,11 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_217', name: 'Mayor\'s Majordomo' },
   { id: 'ASH_159', name: 'Alphabet Squadron U-Wing' },
   { id: 'ASH_149', name: 'Eviscerator' },
+  // Subsystem tier (#357)
+  { id: 'ASH_063', name: 'Bo-Katan\'s Gauntlet' },
+  { id: 'ASH_128', name: 'Bothan-5' },
+  { id: 'ASH_224', name: 'Elzar Mann' },
+  { id: 'ASH_196', name: 'Gorian Shard\'s Corsair' },
 ]
 
 /**

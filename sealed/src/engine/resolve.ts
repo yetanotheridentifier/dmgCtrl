@@ -235,7 +235,10 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
   // (the cost delta was already folded into `effectiveCost` at play time).
   const grants = (state.players[owner].nextUnitGrants ?? []).filter(g => nextUnitGrantMatches(card, g))
   const grantKeywords = grants.flatMap(g => g.keywords ?? [])
-  const grantEntersReady = grants.some(g => g.entersReady)
+  // Every "enters play ready" source, in one place: a caller override (`ready`), a Neel-style grant,
+  // or the card's own condition (#357, Elzar Mann). Both the construction below AND the revert-to-
+  // exhausted branch further down must honour all of them.
+  const grantEntersReady = grants.some(g => g.entersReady) || (getCardDefinition(cardId)?.entersReady?.(state, owner) ?? false)
   const entersWith = (name: string): boolean => hasKeyword(state, cardId, name) || grantKeywords.some(k => k.name === name)
   // Ambush: the unit may immediately attack an enemy unit, so it enters ready (#334).
   const ambush = entersWith('Ambush')
@@ -446,6 +449,10 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
   if (choice.kind === 'dealOwnBaseForDiscount') {
     next = grantEnochDiscount(next, choice.controller, choice.dealt)
   }
+  // Elzar Mann (#357): stopping early still triggers the follow-up, sized to what was distributed.
+  if (choice.kind === 'distributeTokens') {
+    next = finishDistribution(next, choice, choice.total - choice.remaining)
+  }
   return resumeAfterChoice(next, choice)
 }
 
@@ -477,7 +484,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'mayDamage':
       // Optional targeted damage, e.g. Cad Bane's On Attack (#309).
       if (targetInstanceId) {
-        next = dealDamageToUnit(next, targetInstanceId, choice.amount)
+        next = dealDamageToUnit(next, targetInstanceId, choice.amount, choice.source)
         next = checkWin(next)
         if (next.winner !== null) return next
         // "If it's defeated this way, …" — Imposing Scout Walker rewards its own unit (#355).
@@ -590,12 +597,25 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'damageAnyBases': {
       // Rancor Keeper (#357): 1 damage to a chosen base, then re-offer the bases not yet hit.
       if (baseTarget) {
-        next = dealDamageToBase(next, baseTarget, choice.amount)
+        next = dealDamageToBase(next, baseTarget, choice.amount, choice.source)
         next = checkWin(next)
         if (next.winner !== null) return next
         const remaining = choice.remaining.filter(b => b !== baseTarget)
         if (remaining.length > 0) next = pushChoice(next, { ...choice, remaining })
       }
+      break
+    }
+    case 'mayCapture': {
+      // Bothan-5 (#357): move the card out of the discard and under the capturing unit.
+      const owner = choice.controller
+      const p = next.players[owner]
+      const idx = p.discard.indexOf(choice.cardId)
+      if (idx === -1) break
+      next = updatePlayer(next, owner, {
+        discard: p.discard.filter((_, i) => i !== idx),
+        units: p.units.map(u => (u.instanceId === choice.unitId ? { ...u, captured: [...(u.captured ?? []), choice.cardId] } : u)),
+      })
+      if (choice.markUsed) next = markAbilityUsed(next, owner, choice.markUsed.instanceId, choice.markUsed.key)
       break
     }
     case 'maySelfDamageShield': {
@@ -717,8 +737,8 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     }
     case 'selectDamageTarget': {
       // Deal the chosen amount to the picked base or unit (#348).
-      if (baseTarget) next = dealDamageToBase(next, baseTarget, choice.amount)
-      else if (targetInstanceId) next = dealDamageToUnit(next, targetInstanceId, choice.amount)
+      if (baseTarget) next = dealDamageToBase(next, baseTarget, choice.amount, choice.source)
+      else if (targetInstanceId) next = dealDamageToUnit(next, targetInstanceId, choice.amount, choice.source)
       next = checkWin(next)
       if (next.winner !== null) return next
       break
@@ -828,9 +848,11 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
         next = giveToken(next, targetInstanceId, choice.token)
         const remaining = choice.remaining - 1
-        const targets = next.players[choice.controller].units.map(u => u.instanceId)
+        const targets = next.players[choice.controller].units.map(u => u.instanceId).filter(id => id !== choice.exclude)
         if (remaining > 0 && targets.length > 0) {
-          next = pushChoice(next, { kind: 'distributeTokens', id: choice.id, controller: choice.controller, token: choice.token, remaining, total: choice.total, targets })
+          next = pushChoice(next, { ...choice, remaining, targets })
+        } else {
+          next = finishDistribution(next, choice, choice.total - remaining)
         }
       }
       break
@@ -1279,6 +1301,22 @@ function useLeaderAbility(state: GameState, index: number, targetInstanceId?: st
  * remember the actor so `resumeAfterChoice` restores them and advances the turn once it drains.
  * Generic; a no-op when the actor has their own choice to resolve first, or none was raised.
  */
+/**
+ * Follow-up once a `distributeTokens` pool is spent or stopped (#357, Elzar Mann): the opponent
+ * searches twice the number distributed for an event and draws it. Nothing distributed → no search.
+ * The opponent makes the choice, so control hands over and returns via `pendingResumeActive`.
+ */
+function finishDistribution(state: GameState, choice: PendingChoice & { kind: 'distributeTokens' }, distributed: number): GameState {
+  if (choice.then !== 'opponentSearchEvent' || distributed <= 0) return state
+  const opponent = opponentOf(choice.controller)
+  const revealed = state.players[opponent].deck.slice(0, distributed * 2)
+  const eligibleIndices = revealed.flatMap((cardId, i) => (state.cards[cardId]?.type === 'event' ? [i] : []))
+  // No event among them → they all go to the bottom and nothing is drawn.
+  if (eligibleIndices.length === 0) return bottomTopCards(state, opponent, revealed.length)
+  const pushed = pushChoice(state, { kind: 'searchDraw', id: `${choice.id}-oppsearch`, controller: opponent, revealed, eligibleIndices })
+  return handOffOpponentChoice(pushed, choice.controller)
+}
+
 function handOffOpponentChoice(state: GameState, actor: PlayerId): GameState {
   if (!hasPendingChoices(state) || state.pendingChoices!.some(c => c.controller === actor)) return state
   const other = state.pendingChoices![0].controller
@@ -1517,8 +1555,9 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   if (target.kind === 'base') {
     // Through `dealDamageToBase` so base-damage prevention applies (#357, At Attin Safety Droid);
     // the attack-end ctx reports what actually landed, not the raw power.
-    const dealtToBase = baseDamageAfterPrevention(state, enemyId, attackerPower)
-    let next = dealDamageToBase(state, enemyId, attackerPower)
+    const baseSource = { cardId: attacker.cardId, controller: playerId }
+    const dealtToBase = baseDamageAfterPrevention(state, enemyId, attackerPower, baseSource)
+    let next = dealDamageToBase(state, enemyId, attackerPower, baseSource)
     next = recordBaseAttacked(next, enemyId) // "your base was attacked this phase" (#356, Greef Karga)
     // "When an enemy unit attacks your base" (#357, Kachirho Militia) — the attacked player's units react.
     for (const id of next.players[enemyId].units.map(u => u.instanceId)) {
@@ -1566,17 +1605,20 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
 
   // Simultaneous combat damage (CR 1.9.10) — flagged as combat damage for whenDefeated (#356). The
   // stat context goes through so combat-only debuffs count in the defeat check (#357, Scion Shuttle).
-  let next = applyUnitDamage(preCombat, enemyId, new Map([[defender.instanceId, attackerPower]]), true, defenderCtx)
+  // Combat damage is attributed to the unit dealing it, so "damage dealt by friendly Underworld
+  // cards is unpreventable" can see where it came from (#357, Gorian Shard's Corsair).
+  const attackerSource = { cardId: attacker.cardId, controller: playerId }
+  let next = applyUnitDamage(preCombat, enemyId, new Map([[defender.instanceId, attackerPower]]), true, defenderCtx, attackerSource)
   // "Deals combat damage before the defender" (#357, Carson Teva): a defender defeated by that
   // damage never strikes back. Without it, damage is simultaneous (CR 1.9.10) and both still land.
   const defenderSurvived = next.players[enemyId].units.some(u => u.instanceId === defender.instanceId)
   if (defenderSurvived || !unitDealsDamageFirst(preCombat, attacker)) {
-    next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, counterPower]]), true, { combat, attacking: true, viaAmbush })
+    next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, counterPower]]), true, { combat, attacking: true, viaAmbush }, { cardId: defender.cardId, controller: enemyId })
   }
 
   // Overwhelm excess also goes through base-damage prevention (#357).
-  const overwhelmDealt = overwhelmExcess > 0 ? baseDamageAfterPrevention(next, enemyId, overwhelmExcess) : 0
-  if (overwhelmExcess > 0) next = dealDamageToBase(next, enemyId, overwhelmExcess)
+  const overwhelmDealt = overwhelmExcess > 0 ? baseDamageAfterPrevention(next, enemyId, overwhelmExcess, attackerSource) : 0
+  if (overwhelmExcess > 0) next = dealDamageToBase(next, enemyId, overwhelmExcess, attackerSource)
 
   // Both units completed a combat — spend any Advantage on the survivors (#308).
   next = consumeAdvantage(next, playerId, attackerId)

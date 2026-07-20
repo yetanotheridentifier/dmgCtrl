@@ -774,7 +774,7 @@ const giveTokens = (s: GameState, id: string, token: string, n: number): GameSta
   for (let i = 0; i < n; i++) next = giveToken(next, id, token)
   return next
 }
-const whenPlayed = (description: string, effect: (s: GameState, ctx: { owner: PlayerId; sourceInstanceId?: string }) => GameState) => ({
+const whenPlayed = (description: string, effect: (s: GameState, ctx: { owner: PlayerId; cardId: string; sourceInstanceId?: string }) => GameState) => ({
   abilities: [{ trigger: 'whenPlayed' as const, description, effect }],
 })
 
@@ -846,7 +846,7 @@ registerCard('ASH_082', whenPlayed('You may give a Shield token to a unit that c
 }))
 registerCard('ASH_194', whenPlayed('Deal 1 damage to a space unit.', (s, ctx) => { // Snub Fighter Squadron
   const targets = spaceUnits(s).map(u => u.instanceId)
-  return targets.length ? pushChoice(s, { kind: 'mayDamage', id: `${ctx.sourceInstanceId!}-wp`, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount: 1, optional: false }) : s
+  return targets.length ? pushChoice(s, { kind: 'mayDamage', id: `${ctx.sourceInstanceId!}-wp`, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount: 1, optional: false, source: { cardId: ctx.cardId, controller: ctx.owner } }) : s
 }))
 
 // D3 — multi-step "When Played" effects (self-damage sequences, area damage, damage-then-reward).
@@ -1139,9 +1139,9 @@ registerCard('ASH_031', { abilities: [{ trigger: 'onAttackEnd', description: 'If
   (ctx.combatDamageToBase ?? 0) > 0 ? healBase(s, ctx.owner, ctx.combatDamageToBase!) : s }] })
 
 // ── Group E (#356): multi-trigger onAttack + action abilities ───────────────
-const justifierPing = (s: GameState, ctx: { owner: PlayerId; sourceInstanceId?: string }): GameState => { // Justifier
+const justifierPing = (s: GameState, ctx: { owner: PlayerId; cardId: string; sourceInstanceId?: string }): GameState => { // Justifier
   const targets = allUnits(s).map(u => u.instanceId)
-  return targets.length ? pushChoice(s, { kind: 'mayDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount: 1, optional: true, rewardIfDefeated: { chooseAdvantage: 1 } }) : s
+  return targets.length ? pushChoice(s, { kind: 'mayDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, targets, amount: 1, optional: true, rewardIfDefeated: { chooseAdvantage: 1 }, source: { cardId: ctx.cardId, controller: ctx.owner } }) : s
 }
 registerCard('ASH_146', {
   abilities: [
@@ -1179,11 +1179,11 @@ registerCard('ASH_179', { // Boba Fett's Rancor
     { trigger: 'whenPlayed', description: 'Deal 5 damage to your base. Then deal 10 damage to an enemy ground unit.', effect: (s, ctx) => {
       const next = dealDamageToBase(s, ctx.owner, 5)
       const enemyGround = next.players[opponentOf(ctx.owner)].units.filter(u => u.arena === 'ground').map(u => u.instanceId)
-      return enemyGround.length ? pushChoice(next, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 10, unitTargets: enemyGround, baseTargets: [] }) : next
+      return enemyGround.length ? pushChoice(next, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 10, unitTargets: enemyGround, baseTargets: [], source: { cardId: ctx.cardId, controller: ctx.owner } }) : next
     } },
     { trigger: 'onAttack', description: 'You may deal 1 damage to a base for every 5 damage on your base.', effect: (s, ctx) => {
       const count = Math.floor(s.players[ctx.owner].base.damage / 5)
-      return count > 0 ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: count, unitTargets: [], baseTargets: ['player', 'opponent'], optional: true }) : s
+      return count > 0 ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: count, unitTargets: [], baseTargets: ['player', 'opponent'], optional: true, source: { cardId: ctx.cardId, controller: ctx.owner } }) : s
     } },
   ],
 })
@@ -1284,7 +1284,7 @@ registerCard('ASH_035', { // Tatooine Repulsor Train
   abilities: [{ trigger: 'onAttack', description: 'Deal 2 damage to a ground unit for each friendly exhausted unit.', effect: (s, ctx) => {
     const amount = 2 * s.players[ctx.owner].units.filter(u => u.exhausted).length
     const targets = groundUnits(s).map(u => u.instanceId)
-    return amount > 0 && targets.length ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount, unitTargets: targets, baseTargets: [] }) : s
+    return amount > 0 && targets.length ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount, unitTargets: targets, baseTargets: [], source: { cardId: ctx.cardId, controller: ctx.owner } }) : s
   } }],
 })
 
@@ -1415,6 +1415,7 @@ registerCard('ASH_118', { // 8D8
         targets,
         amount: 1,
         thenSearchDraw: 5,
+        source: { cardId: ctx.cardId, controller: ctx.owner },
       })
     },
   }],
@@ -1497,7 +1498,7 @@ registerCard('ASH_032', { // Rancor Keeper
       const self = findUnit(s, ctx.sourceInstanceId!)?.unit
       if (!self || self.usedAbilities?.includes(RANCOR_KEEPER_KEY)) return s
       const marked = markAbilityUsed(s, ctx.owner, ctx.sourceInstanceId!, RANCOR_KEEPER_KEY)
-      return pushChoice(marked, { kind: 'damageAnyBases', id: ctx.sourceInstanceId!, controller: ctx.owner, remaining: ['player', 'opponent'], amount: 1 })
+      return pushChoice(marked, { kind: 'damageAnyBases', id: ctx.sourceInstanceId!, controller: ctx.owner, remaining: ['player', 'opponent'], amount: 1, source: { cardId: ctx.cardId, controller: ctx.owner } })
     },
   }],
 })
@@ -1625,6 +1626,95 @@ registerCard('ASH_149', { // Eviscerator
         next = giveToken(giveToken(next, u.instanceId, TOKEN_ADVANTAGE), u.instanceId, TOKEN_ADVANTAGE)
       }
       return next
+    },
+  })),
+})
+
+// ── Subsystem tier (#357): aura-granted abilities, capture, Elzar Mann ─────────────────────────
+
+/**
+ * Not a real card — a carrier for the ability Bo-Katan's Gauntlet lends to other units. Deliberately
+ * NOT `ASH_`-prefixed: the manifest drift test treats every registered ASH id as an implemented card.
+ */
+const GRANT_MANDO_ON_DEFEAT = 'GRANT_MANDO_ON_DEFEAT'
+registerCard(GRANT_MANDO_ON_DEFEAT, {
+  abilities: [{ trigger: 'whenDefeated', description: 'Create a Mandalorian token.', effect: (s, ctx) => createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN) }],
+})
+
+registerCard('ASH_063', { // Bo-Katan's Gauntlet
+  grantsAbilities: (_s, source, target, friendly) =>
+    friendly && target.instanceId !== source.instanceId && !isTokenCard(target.cardId) ? [GRANT_MANDO_ON_DEFEAT] : [],
+})
+
+const BOTHAN_KEY = 'ASH_128#round'
+registerCard('ASH_128', { // Bothan-5
+  abilities: [{
+    trigger: 'whenFriendlyUnitDefeated',
+    description: 'You may have this unit capture that unit from your discard pile. Use this ability only once each round.',
+    effect: (s, ctx) => {
+      const self = findUnit(s, ctx.sourceInstanceId!)?.unit
+      const dead = ctx.defeatedUnit
+      if (!self || !dead || self.usedAbilities?.includes(BOTHAN_KEY)) return s
+      // "another friendly non-Vehicle unit" — and only a card that actually reached the discard
+      // (a token unit ceases to exist, so there's nothing to capture).
+      if (dead.instanceId === self.instanceId) return s
+      if (unitTraits(s, dead).some(t => t.toLowerCase() === 'vehicle')) return s
+      if (!s.players[ctx.owner].discard.includes(dead.cardId)) return s
+      return pushChoice(s, {
+        kind: 'mayCapture',
+        id: `${ctx.sourceInstanceId}-capture`,
+        controller: ctx.owner,
+        unitId: ctx.sourceInstanceId!,
+        cardId: dead.cardId,
+        markUsed: { instanceId: ctx.sourceInstanceId!, key: BOTHAN_KEY },
+      })
+    },
+  }],
+})
+
+registerCard('ASH_224', { // Elzar Mann
+  // "While you control a Force leader, this unit enters play ready."
+  entersReady: (s, owner) => (s.cards[s.players[owner].leader.cardId]?.traits ?? []).some(t => t.toLowerCase() === 'force'),
+  abilities: [{
+    trigger: 'whenPlayed',
+    description: 'Distribute up to 5 Advantage tokens among other friendly units. Then, an opponent searches twice that many cards from the top of their deck for an event, reveals it, and draws it.',
+    effect: (s, ctx) => {
+      const targets = s.players[ctx.owner].units.filter(u => u.instanceId !== ctx.sourceInstanceId).map(u => u.instanceId)
+      return targets.length ? pushChoice(s, {
+        kind: 'distributeTokens',
+        id: ctx.sourceInstanceId!,
+        controller: ctx.owner,
+        token: TOKEN_ADVANTAGE,
+        remaining: 5,
+        total: 5,
+        targets,
+        exclude: ctx.sourceInstanceId!,
+        then: 'opponentSearchEvent',
+      }) : s
+    },
+  }],
+})
+
+registerCard('ASH_196', { // Gorian Shard's Corsair
+  // "Damage dealt by friendly Underworld cards is unpreventable."
+  makesDamageUnpreventable: (s, self, source) =>
+    source.controller === findUnit(s, self.instanceId)?.owner
+    && (s.cards[source.cardId]?.traits ?? []).some(t => t.toLowerCase() === 'underworld'),
+  abilities: (['whenPlayed', 'onAttack'] as const).map(trigger => ({
+    trigger,
+    description: 'You may deal 2 damage to a unit.',
+    effect: (s: GameState, ctx: EffectContext) => {
+      const targets = allUnits(s).map(u => u.instanceId)
+      return targets.length ? pushChoice(s, {
+        kind: 'mayDamage',
+        id: `${ctx.sourceInstanceId}-${trigger}`,
+        controller: ctx.owner,
+        unitId: ctx.sourceInstanceId!,
+        targets,
+        amount: 2,
+        optional: true,
+        source: { cardId: ctx.cardId, controller: ctx.owner },
+      }) : s
     },
   })),
 })

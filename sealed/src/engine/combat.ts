@@ -1,11 +1,11 @@
-import type { GameState, PlayerId, UnitState } from './types'
+import type { DamageSource, GameState, PlayerId, UnitState } from './types'
 import { opponentOf, updatePlayer, recordUnitDefeated } from './types'
 import { effectiveHp } from './stats'
 import type { StatContext } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import { runUnitTrigger, getCardDefinition } from './abilities'
-import { fireUpgradesDefeated, fireUnitsTrigger } from './effects'
+import { fireUpgradesDefeated, fireUnitsTrigger, damageIsUnpreventable, releaseCaptured } from './effects'
 
 /** Product of the damage multipliers the unit's card and upgrades contribute (#342). */
 function damageMultiplier(state: GameState, unit: UnitState): number {
@@ -28,7 +28,9 @@ function damageMultiplier(state: GameState, unit: UnitState): number {
  * Fires each defeated unit's (and its upgrades') `whenDefeated` abilities after
  * the unit has left play (#342).
  */
-export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<string, number>, byCombat = false, statCtx: StatContext = {}): GameState {
+export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<string, number>, byCombat = false, statCtx: StatContext = {}, source?: DamageSource): GameState {
+  // Unpreventable damage ignores Shields entirely — the token isn't even spent (#357, Gorian Shard).
+  const unpreventable = damageIsUnpreventable(state, source)
   const p = state.players[owner]
   const survivors: UnitState[] = []
   const defeated: UnitState[] = []
@@ -40,7 +42,7 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
     if (extra > 0) extra *= damageMultiplier(state, u)
     let upgrades = u.upgrades
     // A shield token prevents one instance of incoming damage, then is removed (#308).
-    if (extra > 0 && hasToken(upgrades, TOKEN_SHIELD)) {
+    if (extra > 0 && !unpreventable && hasToken(upgrades, TOKEN_SHIELD)) {
       upgrades = removeFirst(upgrades, a => a.cardId === TOKEN_SHIELD)
       extra = 0
     }
@@ -91,6 +93,10 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
     const owner2 = result.players[owner]
     result = updatePlayer(result, owner, { leader: { ...owner2.leader, deployed: false, exhausted: true } })
   }
+
+  // A captor leaving play frees what it held, back into play rather than to the discard (#357).
+  const released = defeated.flatMap(u => u.captured ?? [])
+  if (released.length > 0) result = releaseCaptured(result, owner, released)
 
   // Upgrades go down with their host — "when a friendly upgrade is defeated" (#357, Zeb Orrelios).
   const lostUpgradeOwners = defeated.flatMap(u => u.upgrades).map(a => a.owner)
@@ -147,10 +153,10 @@ export function defeatUnit(state: GameState, instanceId: string): GameState {
  * `applyUnitDamage` so abilities can deal damage outside the attack flow; honours
  * Shield tokens and fires `whenDefeated`. A no-op if the unit is not in play.
  */
-export function dealDamageToUnit(state: GameState, instanceId: string, amount: number): GameState {
+export function dealDamageToUnit(state: GameState, instanceId: string, amount: number, source?: DamageSource): GameState {
   for (const owner of ['player', 'opponent'] as PlayerId[]) {
     if (state.players[owner].units.some(u => u.instanceId === instanceId)) {
-      return applyUnitDamage(state, owner, new Map([[instanceId, amount]]))
+      return applyUnitDamage(state, owner, new Map([[instanceId, amount]]), false, {}, source)
     }
   }
   return state

@@ -1,4 +1,4 @@
-import type { GameState, NextUnitGrant, PlayerId, UnitState } from './types'
+import type { DamageSource, GameState, NextUnitGrant, PlayerId, UnitState } from './types'
 import { updatePlayer, pushChoice, recordBaseDamaged, recordUpgradeDefeated } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
@@ -72,9 +72,9 @@ export function grantNextUnit(state: GameState, owner: PlayerId, grant: NextUnit
 }
 
 /** Deal `amount` damage to a player's base (#309). The caller runs the win check. */
-export function dealDamageToBase(state: GameState, player: PlayerId, amount: number): GameState {
+export function dealDamageToBase(state: GameState, player: PlayerId, amount: number, source?: DamageSource): GameState {
   const p = state.players[player]
-  const dealt = baseDamageAfterPrevention(state, player, amount)
+  const dealt = baseDamageAfterPrevention(state, player, amount, source)
   if (dealt <= 0) return state
   let next: GameState = { ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: p.base.damage + dealt } } } }
   next = recordBaseDamaged(next, player) // "an enemy base was damaged this phase" (#357, Baylan Skoll)
@@ -101,7 +101,8 @@ export function fireUpgradesDefeated(state: GameState, owners: PlayerId[]): Game
  * (#357, At Attin Safety Droid caps an instance at 4). Exposed separately so callers that report the
  * damage dealt (When Attack Ends → Hera Syndulla) quote the post-prevention figure.
  */
-export function baseDamageAfterPrevention(state: GameState, player: PlayerId, amount: number): number {
+export function baseDamageAfterPrevention(state: GameState, player: PlayerId, amount: number, source?: DamageSource): number {
+  if (damageIsUnpreventable(state, source)) return amount
   let out = amount
   for (const u of state.players[player].units) {
     for (const cid of [u.cardId, ...u.upgrades.map(x => x.cardId)]) {
@@ -110,6 +111,17 @@ export function baseDamageAfterPrevention(state: GameState, player: PlayerId, am
     }
   }
   return Math.max(0, out)
+}
+
+/**
+ * True if this instance of damage ignores Shields and base-damage prevention (#357, Gorian Shard's
+ * Corsair). Asked of every unit in play belonging to the damage's controller.
+ */
+export function damageIsUnpreventable(state: GameState, source?: DamageSource): boolean {
+  if (!source) return false
+  return state.players[source.controller].units.some(u =>
+    [u.cardId, ...u.upgrades.map(x => x.cardId)].some(id => getCardDefinition(id)?.makesDamageUnpreventable?.(state, u, source) ?? false),
+  )
 }
 
 /** Heal `amount` damage from a unit — remove that much damage, never below 0 (#348). No-op if absent. */
@@ -229,9 +241,44 @@ export function returnUnitToHand(state: GameState, instanceId: string): GameStat
       if (state.cards[up.cardId]?.type === 'token') continue // token upgrades cease to exist
       next = updatePlayer(next, up.owner, { discard: [...next.players[up.owner].discard, up.cardId] })
     }
-    return next
+    // Leaving play releases whatever it had captured (#357).
+    return releaseCaptured(next, owner, u.captured ?? [])
   }
   return state
+}
+
+/**
+ * Release the cards a unit had captured (#357, Bothan-5): each returns to PLAY under its owner's
+ * control, exhausted, in its own arena. It is not being *played*, so nothing that keys off playing
+ * or entering play happens: no "When Played" (or play/create) trigger, no Shielded shield token, no
+ * Ambush attack, and no cost. Token cards can't come back — they ceased to exist when captured.
+ */
+export function releaseCaptured(state: GameState, owner: PlayerId, cardIds: string[]): GameState {
+  let next = state
+  for (const cardId of cardIds) {
+    if (isTokenCard(cardId)) continue
+    const card = next.cards[cardId]
+    next = {
+      ...next,
+      instanceCounter: next.instanceCounter + 1,
+      players: {
+        ...next.players,
+        [owner]: {
+          ...next.players[owner],
+          units: [...next.players[owner].units, {
+            instanceId: `u${next.instanceCounter}`,
+            cardId,
+            arena: card?.arena ?? 'ground',
+            damage: 0,
+            exhausted: true, // rescued units arrive exhausted
+            isLeader: false,
+            upgrades: [],
+          }],
+        },
+      },
+    }
+  }
+  return next
 }
 
 /** Exhaust one ready resource of `owner` (#356, Mandalorian Scout). No-op if none is ready. */

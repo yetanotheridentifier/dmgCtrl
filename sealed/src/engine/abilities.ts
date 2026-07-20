@@ -1,4 +1,4 @@
-import type { EngineCard, GameState, KeywordInstance, PlayerId, UnitState, CombatContext } from './types'
+import type { EngineCard, GameState, KeywordInstance, PlayerId, UnitState, CombatContext, DamageSource } from './types'
 import type { AttackTarget } from './actions'
 
 /**
@@ -170,6 +170,21 @@ export interface CardDefinition {
    * in play, its controller's Advantage tokens give no power and survive combat instead of being spent.
    */
   suppressesFriendlyAdvantage?: (state: GameState, source: UnitState) => boolean
+  /**
+   * An aura that grants OTHER units a whole card's worth of triggered abilities (#357,
+   * Bo-Katan's Gauntlet: "each other friendly non-token unit gains 'When Defeated: …'").
+   * Returns the card ids whose abilities `target` gains while `source` is in play. Distinct from
+   * `aura`, which only contributes stats/keywords. Consulted by `runUnitTrigger`, so a granted
+   * ability fires for the target exactly as if printed on it — including `whenDefeated`, where the
+   * target has already left play but the granting source has not.
+   */
+  grantsAbilities?: (state: GameState, source: UnitState, target: UnitState, sameController: boolean) => string[]
+  /**
+   * A unit in play making some damage unpreventable (#357, Gorian Shard's Corsair — friendly
+   * Underworld cards). Asked about each instance of damage; true means Shields and base-damage
+   * prevention are ignored for it.
+   */
+  makesDamageUnpreventable?: (state: GameState, self: UnitState, source: DamageSource) => boolean
   /** Extra traits this card grants a unit — The Darksaber grants Mandalorian (#343). */
   grantedTraits?: (state: GameState, unit: UnitState) => string[]
   /** True if this card makes its unit a leader unit — The Darksaber (#343). */
@@ -182,6 +197,11 @@ export interface CardDefinition {
    * isn't a unit, so those never fire on it; once deployed it's a unit and these don't.
    */
   leaderAbilities?: LeaderAbilities
+  /**
+   * "This unit enters play ready" while a condition holds (#357, Elzar Mann — a Force leader).
+   * Consulted by `enterUnit`, alongside Ambush and the `nextUnitGrants` enters-ready grant.
+   */
+  entersReady?: (state: GameState, owner: PlayerId) => boolean
   /** Custom epic-action deploy gate (#309); default is `resources ≥ leader.cost`. */
   deployCondition?: (state: GameState, owner: PlayerId) => boolean
   /**
@@ -364,6 +384,22 @@ export function runLeaderTrigger(state: GameState, point: TriggerPoint, owner: P
  * attached upgrade's abilities, so an upgrade's "When Attack Ends: …" fires when
  * the attached unit's attack ends. `owner` controls the unit.
  */
+/**
+ * Card ids whose abilities `unit` (controlled by `owner`) currently gains from a `grantsAbilities`
+ * aura in play (#357). Scans both sides' units, since a future aura may target enemies.
+ */
+function auraGrantedAbilityCards(state: GameState, unit: UnitState, owner: PlayerId): string[] {
+  const out: string[] = []
+  for (const side of ['player', 'opponent'] as PlayerId[]) {
+    for (const source of state.players[side].units) {
+      for (const cardId of [source.cardId, ...source.upgrades.map(u => u.cardId)]) {
+        out.push(...(getCardDefinition(cardId)?.grantsAbilities?.(state, source, unit, side === owner) ?? []))
+      }
+    }
+  }
+  return out
+}
+
 export function runUnitTrigger(
   state: GameState,
   point: TriggerPoint,
@@ -372,9 +408,14 @@ export function runUnitTrigger(
   extra?: Partial<EffectContext>,
 ): GameState {
   let next = state
-  // The unit's own card, its upgrades, and any cards whose abilities are granted for
-  // this attack (Improvised Identity, #343).
-  const cardIds = [unit.cardId, ...unit.upgrades.map(u => u.cardId), ...(unit.grantedAbilityCardIds ?? [])]
+  // The unit's own card, its upgrades, any cards whose abilities are granted for this attack
+  // (Improvised Identity, #343), and any granted by an aura in play (Bo-Katan's Gauntlet, #357).
+  const cardIds = [
+    unit.cardId,
+    ...unit.upgrades.map(u => u.cardId),
+    ...(unit.grantedAbilityCardIds ?? []),
+    ...auraGrantedAbilityCards(state, unit, owner),
+  ]
   for (const cardId of cardIds) {
     for (const ability of getAbilities(cardId)) {
       if (ability.trigger === point) {

@@ -78,7 +78,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'selectUpgradeToDefeat' || choice.kind === 'selectResourceUpgrade' || choice.kind === 'selectFromDiscard') return 'Cancel'
       if (choice.kind === 'mayLastingBuff' || choice.kind === 'mayGiveAdvantage' || choice.kind === 'mayExhaustLeaderGiveAdvantage' || choice.kind === 'mayExhaustLeaderExhaustUnit' || choice.kind === 'mayExhaustUnit') return 'Decline'
       if (choice.kind === 'mayExhaustLeaderForAdvantage' || choice.kind === 'mayExhaustLeaderHealUnit' || choice.kind === 'mayPayToDraw' || choice.kind === 'mayDeployLeader') return "Don't"
-      if (choice.kind === 'maySelfDamageShield' || choice.kind === 'mayCreateToken') return "Don't"
+      if (choice.kind === 'maySelfDamageShield' || choice.kind === 'mayCreateToken' || choice.kind === 'mayCapture') return "Don't"
       if (choice.kind === 'damageAnyBases') return 'Done'
       if (choice.kind === 'selectPairToDefeat' || choice.kind === 'selectUpgradeToReturn' || choice.kind === 'mayPlayUpgradeFree') return 'Decline'
       if (choice.kind === 'mayPayExhaustArena' || choice.kind === 'revealUnitFromHand') return "Don't"
@@ -234,6 +234,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const cardId = state.players[by].hand[action.handIndex]
         return `Reveal ${state.cards[cardId]?.name ?? 'card'}`
       }
+      if (choice.kind === 'mayCapture') return `Capture ${state.cards[choice.cardId]?.name ?? 'card'}`
       if (choice.kind === 'mayCreateToken') {
         const tokenName = state.cards[choice.token]?.name ?? 'token'
         return `Create ${choice.count > 1 ? `${choice.count} ${tokenName}s` : `a ${tokenName}`}`
