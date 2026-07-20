@@ -104,7 +104,7 @@ export const UNIT_GROUPS: UnitGroup[] = [
     id: 'F',
     name: 'Unique abilities & new mechanics',
     status: 'in progress',
-    note: 'The long tail, built one mechanic at a time: combat-role stats and new reactive triggers are in; targeting rules, cost reductions and a damage-prevention layer are still to come. (#357)',
+    note: 'The long tail, built one mechanic at a time: combat-role stats, reactive triggers, cost reductions and targeting rules are in; the damage-prevention layer and a few bespoke cards are still to come. (#357)',
     units: [
       'Alphabet Squadron U-Wing', 'At Attin Safety Droid', 'Bo-Katan\'s Gauntlet', 'Bothan-5', 'Eviscerator', 'Executor',
       'Gorian Shard\'s Corsair', 'Grand Admiral Thrawn', 'Halo', 'Hera Syndulla', 'Kachirho Militia', 'Kelleran Beq',
@@ -294,6 +294,10 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   // Group F (#357) — once-per-phase cost reductions
   { id: 'ASH_075', name: 'Pit Droid Team' },
   { id: 'ASH_212', name: 'Peli Motto' },
+  // Group F (#357) — targeting rules
+  { id: 'ASH_034', name: 'Wicket' },
+  { id: 'ASH_037', name: 'Red Leader' },
+  { id: 'ASH_035', name: 'Tatooine Repulsor Train' },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */

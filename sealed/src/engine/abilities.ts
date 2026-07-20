@@ -116,6 +116,12 @@ export interface CardDefinition {
    * and its upgrades compound. Default (no hook) = ×1.
    */
   damageMultiplier?: (state: GameState, unit: UnitState) => number
+  /** This unit can't declare an attack against a base (#357, Wicket). */
+  cannotAttackBases?: (state: GameState, unit: UnitState) => boolean
+  /** This unit can't currently be attacked (#357, Tatooine Repulsor Train). Also keeps it from being a forced Sentinel target. */
+  cannotBeAttacked?: (state: GameState, unit: UnitState) => boolean
+  /** This unit may attack enemy units in either arena, not just its own (#357, Red Leader). */
+  attacksEitherArena?: (state: GameState, unit: UnitState) => boolean
   /** Defender-side: while this unit defends, the attacker loses Overwhelm (#342). */
   negatesOverwhelm?: (state: GameState, unit: UnitState) => boolean
   /** Activated "Action:" abilities usable on the controller's turn (#343). */

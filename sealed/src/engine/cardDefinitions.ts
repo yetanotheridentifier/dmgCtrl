@@ -1263,3 +1263,22 @@ registerCard('ASH_212', { // Peli Motto — ignore the aspect penalties of the f
   waivesAspectPenalty: (s, _source, ctx) =>
     ctx.card.type !== 'unit' && !cardsPlayedThisPhase(s, ctx.owner).some(id => s.cards[id]?.type !== 'unit'),
 })
+
+// ── Group F (#357): targeting rules ─────────────────────────────────────────
+registerCard('ASH_034', { cannotAttackBases: () => true }) // Wicket
+
+registerCard('ASH_037', { attacksEitherArena: () => true }) // Red Leader — may attack units in either arena
+
+registerCard('ASH_035', { // Tatooine Repulsor Train
+  // Can't be attacked while its controller has 2+ exhausted units — unless it has Sentinel.
+  cannotBeAttacked: (s, u) => {
+    if (unitHasKeyword(s, u, 'Sentinel')) return false
+    const owner = findUnit(s, u.instanceId)?.owner
+    return owner !== undefined && s.players[owner].units.filter(x => x.exhausted).length >= 2
+  },
+  abilities: [{ trigger: 'onAttack', description: 'Deal 2 damage to a ground unit for each friendly exhausted unit.', effect: (s, ctx) => {
+    const amount = 2 * s.players[ctx.owner].units.filter(u => u.exhausted).length
+    const targets = groundUnits(s).map(u => u.instanceId)
+    return amount > 0 && targets.length ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount, unitTargets: targets, baseTargets: [] }) : s
+  } }],
+})

@@ -2,7 +2,7 @@ import type { Action } from './actions'
 import type { EngineCard, GameState, HandCardRef, PlayerId, ResourceUpgradeRef, UnitState } from './types'
 import { opponentOf, hasPendingChoices, nextUnitGrantMatches } from './types'
 import { canAfford, readyResourceCount } from './resources'
-import { unitHasKeyword } from './keywords'
+import { unitHasKeyword, unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena } from './keywords'
 import { getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions } from './abilities'
 import './cardDefinitions' // side effect: registers all real card behaviours (#341+)
 
@@ -14,8 +14,11 @@ import './cardDefinitions' // side effect: registers all real card behaviours (#
  */
 export function enemyAttackTargets(state: GameState, attacker: UnitState): { targets: UnitState[]; sentinelLocked: boolean } {
   const enemy = state.players[opponentOf(state.activePlayer)]
-  const sameArena = enemy.units.filter(e => e.arena === attacker.arena)
-  const attackable = sameArena.filter(e => !e.hidden || unitHasKeyword(state, e, 'Sentinel'))
+  // Normally same-arena only; Red Leader (#357) reaches either arena.
+  const inRange = unitAttacksEitherArena(state, attacker) ? enemy.units : enemy.units.filter(e => e.arena === attacker.arena)
+  // Hidden hides a unit (unless it has Sentinel); "can't be attacked" (#357, Tatooine Repulsor Train)
+  // removes it entirely — including as a forced Sentinel target.
+  const attackable = inRange.filter(e => (!e.hidden || unitHasKeyword(state, e, 'Sentinel')) && !unitCannotBeAttacked(state, e))
   const sentinels = attackable.filter(e => unitHasKeyword(state, e, 'Sentinel'))
   const sentinelLocked = sentinels.length > 0 && !unitHasKeyword(state, attacker, 'Saboteur')
   return { targets: sentinelLocked ? sentinels : attackable, sentinelLocked }
@@ -207,7 +210,7 @@ function actionPhaseMoves(state: GameState): Action[] {
     for (const enemyUnit of targets) {
       moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'unit', instanceId: enemyUnit.instanceId } })
     }
-    if (!sentinelLocked) {
+    if (!sentinelLocked && !unitCannotAttackBases(state, unit)) {
       moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'base' } })
     }
   }
