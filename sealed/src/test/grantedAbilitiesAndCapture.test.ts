@@ -135,7 +135,7 @@ describe('Elzar Mann (224) — distribute Advantage, then the opponent digs for 
   })
 
   it('distributes up to 5, then has the opponent search twice that many for an event', () => {
-    const p = resolve(board(), { type: 'playCard', handIndex: 0 })
+    const p = resolve(board(), { type: 'playUnit', handIndex: 0 })
     expect(choice(p)).toMatchObject({ kind: 'distributeTokens', remaining: 5, total: 5 })
 
     // Give 2 tokens, then stop.
@@ -156,7 +156,7 @@ describe('Elzar Mann (224) — distribute Advantage, then the opponent digs for 
   })
 
   it('skips the search entirely when no tokens are distributed', () => {
-    const p = resolve(board(), { type: 'playCard', handIndex: 0 })
+    const p = resolve(board(), { type: 'playUnit', handIndex: 0 })
     const stopped = resolve(p, { type: 'skipTrigger', choiceId: choice(p).id })
     expect(stopped.pendingChoices ?? []).toHaveLength(0)
   })
@@ -166,10 +166,10 @@ describe('Elzar Mann (224) — distribute Advantage, then the opponent digs for 
       cards: F,
       players: { player: rich({ hand: ['ASH_224'], leader: { cardId: 'FORCE_L', deployed: false, epicActionUsed: false, exhausted: false } }), opponent: player() },
     })
-    const played = resolve(withForce, { type: 'playCard', handIndex: 0 })
+    const played = resolve(withForce, { type: 'playUnit', handIndex: 0 })
     expect(played.players.player.units.find(u => u.cardId === 'ASH_224')!.exhausted).toBe(false)
 
-    const without = resolve(state({ cards: F, players: { player: rich({ hand: ['ASH_224'] }), opponent: player() } }), { type: 'playCard', handIndex: 0 })
+    const without = resolve(state({ cards: F, players: { player: rich({ hand: ['ASH_224'] }), opponent: player() } }), { type: 'playUnit', handIndex: 0 })
     expect(without.players.player.units.find(u => u.cardId === 'ASH_224')!.exhausted).toBe(true)
   })
 })

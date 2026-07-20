@@ -59,7 +59,7 @@ describe('"Action [Exhaust]" is a real cost, not once-per-round', () => {
 describe('Pegasus Tri-Wing (171) — defeat a friendly upgrade to ready itself', () => {
   const played = () => {
     const s = state({ cards: F, players: { player: rich({ hand: ['ASH_171'], units: [unit('g', 'GRD', { upgrades: [{ cardId: 'UPG', owner: 'player' }] })] }), opponent: player() } })
-    return resolve(s, { type: 'playCard', handIndex: 0 })
+    return resolve(s, { type: 'playUnit', handIndex: 0 })
   }
 
   it('offers the friendly upgrade, and readies itself when one is defeated', () => {
@@ -83,7 +83,7 @@ describe('Pegasus Tri-Wing (171) — defeat a friendly upgrade to ready itself',
 describe('Cobb Vanth (060) — self-damage to shield an entering unit', () => {
   it('offers the trade when another unit is played, and pays 2 to shield it', () => {
     const s = state({ cards: F, players: { player: rich({ hand: ['GRD'], units: [unit('c', 'ASH_060')] }), opponent: player() } })
-    const p = resolve(s, { type: 'playCard', handIndex: 0 })
+    const p = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(choice(p)).toMatchObject({ kind: 'maySelfDamageShield', amount: 2 })
     const entered = p.players.player.units.find(u => u.cardId === 'GRD')!
     const done = resolve(p, { type: 'acceptChoice', choiceId: choice(p).id })
@@ -93,7 +93,7 @@ describe('Cobb Vanth (060) — self-damage to shield an entering unit', () => {
 
   it('declining costs nothing', () => {
     const s = state({ cards: F, players: { player: rich({ hand: ['GRD'], units: [unit('c', 'ASH_060')] }), opponent: player() } })
-    const p = resolve(s, { type: 'playCard', handIndex: 0 })
+    const p = resolve(s, { type: 'playUnit', handIndex: 0 })
     const done = resolve(p, { type: 'skipTrigger', choiceId: choice(p).id })
     expect(U(done, 'c').damage).toBe(0)
     expect(shields(done.players.player.units.find(u => u.cardId === 'GRD')!)).toBe(0)
@@ -101,7 +101,7 @@ describe('Cobb Vanth (060) — self-damage to shield an entering unit', () => {
 
   it('does not trigger on itself entering play', () => {
     const s = state({ cards: F, players: { player: rich({ hand: ['ASH_060'] }), opponent: player() } })
-    const p = resolve(s, { type: 'playCard', handIndex: 0 })
+    const p = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(p.pendingChoices ?? []).toHaveLength(0)
   })
 })

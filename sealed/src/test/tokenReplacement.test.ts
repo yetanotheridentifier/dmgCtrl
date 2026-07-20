@@ -46,7 +46,7 @@ describe('Moff Jerjerrod (094) — may double a batch of created tokens', () => 
 
   it('doubles a real card’s batch — Children of the Watch (2 → 4)', () => {
     const s = board([unit('j', 'ASH_094', { arena: 'ground' })], { hand: ['ASH_111'], resources: ready(10) })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(mandos(played)).toBe(2)
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'mayDoubleTokens', count: 2 })
     expect(mandos(resolve(played, { type: 'acceptChoice', choiceId: played.pendingChoices![0].id }))).toBe(4)

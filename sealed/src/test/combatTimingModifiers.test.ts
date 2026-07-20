@@ -46,7 +46,7 @@ describe('Carson Teva (202) — deals combat damage before the defender', () => 
 describe('Heroic Purrgil (207) — +2/+0 while attacking using Ambush', () => {
   it('gets the bonus on its Ambush attack, but not on a later normal attack', () => {
     const s = state({ cards: F, players: { player: rich({ hand: ['ASH_207'] }), opponent: player({ units: [unit('e', 'SPC', { arena: 'space' })] }) } })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     const ambush = played.pendingChoices?.[0]
     expect(ambush).toMatchObject({ kind: 'ambush' })
     const purrgil = played.players.player.units.find(u => u.cardId === 'ASH_207')!

@@ -112,7 +112,7 @@ describe('whenUpgradeAttached — Sabine Wren (208)', () => {
         opponent: player(),
       },
     })
-    const played = resolve(board, { type: 'playCard', handIndex: 0 })
+    const played = resolve(board, { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'mayExhaustUnit' })
   })
 
@@ -205,7 +205,7 @@ describe('whenFriendlyUpgradeDefeated — Zeb Orrelios (161)', () => {
 
   it('gives 3 Advantage tokens to another unit when played', () => {
     const s = state({ cards: G, players: { player: rich({ hand: ['ASH_161'], units: [unit('g', 'GROUNDER')] }), opponent: player() } })
-    const p = resolve(s, { type: 'playCard', handIndex: 0 })
+    const p = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(p.pendingChoices?.[0]).toMatchObject({ kind: 'mayGiveTokens', count: 3 })
   })
 })
@@ -239,17 +239,17 @@ describe('Rancor Keeper (032) — damage any number of bases when a friendly uni
 describe('Baylan Skoll (039) — phase-condition triggers', () => {
   it('gives Advantage only if an enemy base was damaged this phase', () => {
     const clean = state({ cards: G, players: { player: rich({ hand: ['ASH_039'], units: [unit('g', 'GROUNDER')] }), opponent: player() } })
-    expect(resolve(clean, { type: 'playCard', handIndex: 0 }).pendingChoices ?? []).toHaveLength(0)
+    expect(resolve(clean, { type: 'playUnit', handIndex: 0 }).pendingChoices ?? []).toHaveLength(0)
 
     const damaged = dealDamageToBase(clean, 'opponent', 2)
-    const p = resolve(damaged, { type: 'playCard', handIndex: 0 })
+    const p = resolve(damaged, { type: 'playUnit', handIndex: 0 })
     expect(p.pendingChoices?.[0]).toMatchObject({ kind: 'mayGiveTokens', count: 1 })
   })
 
   it('offers the exhaust only if a friendly upgrade was defeated this phase', () => {
     const s = state({ cards: G, players: { player: rich({ hand: ['ASH_039'], units: [unit('g', 'GROUNDER', { upgrades: [{ cardId: 'UPG', owner: 'player' }] })] }), opponent: player() } })
     const lost = defeatUpgradeAt(s, 'g', 0)
-    const p = resolve(lost, { type: 'playCard', handIndex: 0 })
+    const p = resolve(lost, { type: 'playUnit', handIndex: 0 })
     expect(p.pendingChoices?.some(c => c.kind === 'mayExhaustUnit')).toBe(true)
   })
 })

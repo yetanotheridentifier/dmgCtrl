@@ -328,7 +328,7 @@ describe('unique unit rule', () => {
         opponent: player(),
       },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'selectUniqueUnitToDefeat', cardId: 'UNIQ_UNIT' })
     expect(played.players.player.units.filter(u => u.cardId === 'UNIQ_UNIT')).toHaveLength(2) // both in play until resolved
     expect(played.activePlayer).toBe('player') // holds for the choice — mandatory, no skip
@@ -348,10 +348,10 @@ describe('unique unit rule', () => {
       cards,
       players: { player: player({ hand: ['COMMON_UNIT'], resources: ready(2), units: [unit('u1', 'COMMON_UNIT')] }), opponent: player() },
     })
-    expect(resolve(nonUnique, { type: 'playCard', handIndex: 0 }).pendingChoices ?? []).toHaveLength(0)
+    expect(resolve(nonUnique, { type: 'playUnit', handIndex: 0 }).pendingChoices ?? []).toHaveLength(0)
 
     const first = state({ cards, players: { player: player({ hand: ['UNIQ_UNIT'], resources: ready(2), units: [] }), opponent: player() } })
-    expect(resolve(first, { type: 'playCard', handIndex: 0 }).pendingChoices ?? []).toHaveLength(0)
+    expect(resolve(first, { type: 'playUnit', handIndex: 0 }).pendingChoices ?? []).toHaveLength(0)
   })
 
   it('is per-player — the opponent controlling a copy does not conflict with yours', () => {
@@ -362,7 +362,7 @@ describe('unique unit rule', () => {
         opponent: player({ units: [unit('e1', 'UNIQ_UNIT')] }),
       },
     })
-    expect(resolve(s, { type: 'playCard', handIndex: 0 }).pendingChoices ?? []).toHaveLength(0)
+    expect(resolve(s, { type: 'playUnit', handIndex: 0 }).pendingChoices ?? []).toHaveLength(0)
   })
 
   it('re-checks for 3+ copies until only one remains', () => {
@@ -373,7 +373,7 @@ describe('unique unit rule', () => {
         opponent: player(),
       },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(played.players.player.units.filter(u => u.cardId === 'UNIQ_UNIT')).toHaveLength(3)
     // Defeat one → still two copies → another mandatory choice.
     const first = resolve(played, {

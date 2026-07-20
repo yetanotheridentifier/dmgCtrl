@@ -68,7 +68,7 @@ describe('Auras on other units', () => {
         opponent: player({ hand: ['AMB_SUP'], resources: ready(6) }),
       },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices ?? []).toHaveLength(0) // Ambush stripped by the aura → no ambush attack
     expect(played.players.opponent.units.find(u => u.cardId === 'AMB_SUP')!.exhausted).toBe(true) // enters exhausted
   })

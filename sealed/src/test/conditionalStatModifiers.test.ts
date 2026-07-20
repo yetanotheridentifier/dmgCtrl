@@ -56,7 +56,7 @@ describe('Conditional stat modifiers — static counts', () => {
 
     // When Played: an Advantage token to each other friendly unit.
     const board = state({ cards: F, players: { player: player({ hand: ['ASH_197'], resources: Array.from({ length: 10 }, () => ({ cardId: 'r', exhausted: false })), units: [unit('f', 'ZEROPOWSP', { arena: 'space' })] }), opponent: player() } })
-    const played = resolve(board, { type: 'playCard', handIndex: 0 })
+    const played = resolve(board, { type: 'playUnit', handIndex: 0 })
     expect(U(played, 'f').upgrades.filter(u => u.cardId === TOKEN_ADVANTAGE)).toHaveLength(1)
   })
 
@@ -72,7 +72,7 @@ describe('Conditional stat modifiers — static counts', () => {
 
   it("Qi'ra (226): When Played may discard a card to deal 3 damage to a unit", () => {
     const board = state({ cards: F, players: { player: player({ hand: ['ASH_226', 'ZEROPOW'], resources: Array.from({ length: 10 }, () => ({ cardId: 'r', exhausted: false })) }), opponent: player({ units: [unit('e', 'ATTACKER', { arena: 'ground' })] }) } })
-    const played = resolve(board, { type: 'playCard', handIndex: 0 })
+    const played = resolve(board, { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'selectDiscard', optional: true })
     const discarded = resolve(played, { type: 'acceptChoice', choiceId: played.pendingChoices![0].id, handIndex: 0 })
     expect(discarded.pendingChoices?.[0]).toMatchObject({ kind: 'mayDamage', amount: 3, optional: false })

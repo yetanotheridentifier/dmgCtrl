@@ -85,7 +85,7 @@ describe('lasting effects mechanism', () => {
 describe('phase/attack event tracking', () => {
   it('records units that entered play this phase, per controller', () => {
     const s = state({ players: { player: player({ hand: ['TST_U1'], resources: ready(2) }), opponent: player() } })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     const entered = enteredPlayThisPhase(played, 'player')
     expect(entered).toHaveLength(1)
     expect(played.players.player.units[0].instanceId).toBe(entered[0])
@@ -107,7 +107,7 @@ describe('phase/attack event tracking', () => {
 
   it('resets tracked events when the phase changes', () => {
     const s = state({ players: { player: player({ hand: ['TST_U1'], resources: ready(2) }), opponent: player() } })
-    let after = resolve(s, { type: 'playCard', handIndex: 0 })
+    let after = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(enteredPlayThisPhase(after, 'player')).toHaveLength(1)
     after = resolve(after, { type: 'pass' })
     after = resolve(after, { type: 'pass' }) // → regroup

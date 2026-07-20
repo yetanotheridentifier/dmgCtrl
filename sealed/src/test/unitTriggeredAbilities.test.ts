@@ -402,7 +402,7 @@ describe('Support passes On Attack to the supported attacker', () => {
         opponent: player({ units: [unit('e', 'FILLER', { arena: 'ground' })] }),
       },
     })
-    const played = resolve(s0, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s0, { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'support' }) // Support opened a bonus attack
     // Attack with 'ally' via Support → it gains Migs's On Attack.
     const attacked = resolve(played, { type: 'attack', attackerId: 'ally', target: { kind: 'unit', instanceId: 'e' } })
@@ -417,7 +417,7 @@ describe('Support passes On Attack to the supported attacker', () => {
         opponent: player({ units: [unit('e', 'FILLER', { arena: 'ground' })] }),
       },
     })
-    const played = resolve(s0, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s0, { type: 'playUnit', handIndex: 0 })
     const attacked = resolve(played, { type: 'attack', attackerId: 'ally', target: { kind: 'unit', instanceId: 'e' } })
     expect(U(attacked, 'e').damage).toBe(2 + 2) // ally is upgraded → Migs's On Attack deals 2, + 2 combat
   })
@@ -555,7 +555,7 @@ describe('multi-trigger + action abilities', () => {
 describe('Boba Fett\'s Rancor + Greef Karga', () => {
   it("Boba Fett's Rancor (179): When Played deals 5 to your base, then 10 to an enemy ground unit", () => {
     const s0 = state({ cards: E, players: { player: player({ hand: ['ASH_179'], resources: ready(10) }), opponent: player({ units: [unit('e', 'BIGWALL', { arena: 'ground' })] }) } })
-    const played = resolve(s0, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s0, { type: 'playUnit', handIndex: 0 })
     expect(played.players.player.base.damage).toBe(5)
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'selectDamageTarget', amount: 10 })
     const done = resolve(played, { type: 'acceptChoice', choiceId: played.pendingChoices![0].id, targetInstanceId: 'e' })

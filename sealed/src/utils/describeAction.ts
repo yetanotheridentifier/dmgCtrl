@@ -28,7 +28,7 @@ export interface DescribeOptions {
 /** Human-readable action label — used by the action menu and the game log. */
 export function describeAction(state: GameState, by: PlayerId, action: Action, opts: DescribeOptions = {}): string {
   switch (action.type) {
-    case 'playCard': {
+    case 'playUnit': {
       const cardId = state.players[by].hand[action.handIndex]
       const card = cardId ? state.cards[cardId] : undefined
       if (!card) return 'Play a card'

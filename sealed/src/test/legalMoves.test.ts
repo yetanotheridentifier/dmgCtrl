@@ -101,24 +101,24 @@ describe('legalMoves — action phase', () => {
     expect(types(legalMoves(state({ initiativeTakenBy: 'opponent' })))).not.toContain('takeInitiative')
   })
 
-  it('offers playCard for affordable units in hand', () => {
+  it('offers playUnit for affordable units in hand', () => {
     const s = state({
       players: {
         player: player({ hand: ['TST_U1'], resources: ready(2) }),
         opponent: player(),
       },
     })
-    expect(legalMoves(s)).toContainEqual({ type: 'playCard', handIndex: 0 })
+    expect(legalMoves(s)).toContainEqual({ type: 'playUnit', handIndex: 0 })
   })
 
-  it('does not offer playCard when the effective cost is unaffordable', () => {
+  it('does not offer playUnit when the effective cost is unaffordable', () => {
     const offAspect = state({
       players: {
         player: player({ hand: ['TST_U3'], resources: ready(2) }), // effective 4, only 2 ready
         opponent: player(),
       },
     })
-    expect(types(legalMoves(offAspect))).not.toContain('playCard')
+    expect(types(legalMoves(offAspect))).not.toContain('playUnit')
   })
 
   it('counts only ready resources towards affordability', () => {
@@ -131,17 +131,17 @@ describe('legalMoves — action phase', () => {
         opponent: player(),
       },
     })
-    expect(types(legalMoves(s))).not.toContain('playCard')
+    expect(types(legalMoves(s))).not.toContain('playUnit')
   })
 
-  it('does not offer playCard for events (units only; upgrades use playUpgrade)', () => {
+  it('does not offer playUnit for events (units only; upgrades use playUpgrade)', () => {
     const s = state({
       players: {
         player: player({ hand: ['TST_E1'], resources: ready(5) }),
         opponent: player(),
       },
     })
-    expect(types(legalMoves(s))).not.toContain('playCard')
+    expect(types(legalMoves(s))).not.toContain('playUnit')
   })
 
   it('offers attacks for ready units but not exhausted ones', () => {

@@ -63,7 +63,7 @@ describe("Gorian Shard's Corsair (196) — friendly Underworld damage is unpreve
         opponent: player({ units: [shielded('d', 'SHIELDED')] }),
       },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     const c = played.pendingChoices!.find(x => x.kind === 'mayDamage')!
     const done = resolve(played, { type: 'acceptChoice', choiceId: c.id, targetInstanceId: 'd' })
     expect(U(done, 'd').damage).toBe(2)

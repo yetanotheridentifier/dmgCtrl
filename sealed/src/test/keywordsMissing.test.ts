@@ -23,7 +23,7 @@ describe('Shielded keyword', () => {
         opponent: player(),
       },
     })
-    const next = resolve(s, { type: 'playCard', handIndex: 0 })
+    const next = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(hasShield(next.players.player.units[0])).toBe(true)
   })
 
@@ -31,7 +31,7 @@ describe('Shielded keyword', () => {
     const s = state({
       players: { player: player({ hand: ['TST_U3'], resources: ready(5) }), opponent: player() }, // TST_U3: no keywords
     })
-    const next = resolve(s, { type: 'playCard', handIndex: 0 })
+    const next = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(hasShield(next.players.player.units[0])).toBe(false)
   })
 
@@ -63,7 +63,7 @@ describe('Hidden keyword', () => {
       cards: hiddenCards,
       players: { player: player({ hand: ['TST_HID'], resources: ready(6) }), opponent: player() },
     })
-    const next = resolve(s, { type: 'playCard', handIndex: 0 })
+    const next = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(next.players.player.units[0].hidden).toBe(true)
   })
 
@@ -124,7 +124,7 @@ describe('Ambush keyword', () => {
   }
 
   it('playing an Ambush unit with a target enters a pending ambush and readies the unit', () => {
-    const next = resolve(beforePlay(), { type: 'playCard', handIndex: 0 })
+    const next = resolve(beforePlay(), { type: 'playUnit', handIndex: 0 })
     expect(next.pendingChoices?.[0]).toMatchObject({ kind: 'ambush', controller: 'player', unitId: expect.any(String) })
     const amb = next.players.player.units.find(u => u.cardId === 'TST_AMB')!
     expect(amb.exhausted).toBe(false) // readied for the ambush attack
@@ -132,17 +132,17 @@ describe('Ambush keyword', () => {
   })
 
   it('during the ambush, only the ambush attack (enemy unit) and skip are legal — no base, no other plays', () => {
-    const s = resolve(beforePlay(), { type: 'playCard', handIndex: 0 })
+    const s = resolve(beforePlay(), { type: 'playUnit', handIndex: 0 })
     const types = legalMoves(s).map(a => a.type)
     expect(types).toContain('attack')
     expect(types).toContain('skipTrigger')
-    expect(types).not.toContain('playCard')
+    expect(types).not.toContain('playUnit')
     const attacks = legalMoves(s).filter(a => a.type === 'attack')
     expect(attacks.every(a => a.target.kind === 'unit')).toBe(true) // never the base
   })
 
   it('resolving the ambush attack fights the enemy unit, clears the pending trigger, and passes the turn', () => {
-    const s = resolve(beforePlay(), { type: 'playCard', handIndex: 0 })
+    const s = resolve(beforePlay(), { type: 'playUnit', handIndex: 0 })
     const ambush = s.pendingChoices![0]
     const ambId = ambush.kind === 'ambush' ? ambush.unitId : ''
     const next = resolve(s, { type: 'attack', attackerId: ambId, target: { kind: 'unit', instanceId: 'e1' } })
@@ -153,7 +153,7 @@ describe('Ambush keyword', () => {
   })
 
   it('skipping the ambush exhausts the unit and passes the turn', () => {
-    const s = resolve(beforePlay(), { type: 'playCard', handIndex: 0 })
+    const s = resolve(beforePlay(), { type: 'playUnit', handIndex: 0 })
     const next = resolve(s, { type: 'skipTrigger' })
     expect(next.pendingChoices).toBeUndefined()
     expect(next.players.player.units.find(u => u.cardId === 'TST_AMB')!.exhausted).toBe(true)
@@ -161,7 +161,7 @@ describe('Ambush keyword', () => {
   })
 
   it('an Ambush unit with no valid target just enters play (no pending trigger, exhausted)', () => {
-    const next = resolve(beforePlay([]), { type: 'playCard', handIndex: 0 }) // no enemy units
+    const next = resolve(beforePlay([]), { type: 'playUnit', handIndex: 0 }) // no enemy units
     expect(next.pendingChoices).toBeUndefined()
     expect(next.players.player.units.find(u => u.cardId === 'TST_AMB')!.exhausted).toBe(true)
     expect(next.activePlayer).toBe('opponent')
@@ -184,20 +184,20 @@ describe('Support keyword', () => {
   }
 
   it('playing a Support unit with another ready unit opens a pending support attack', () => {
-    const next = resolve(beforePlay(), { type: 'playCard', handIndex: 0 })
+    const next = resolve(beforePlay(), { type: 'playUnit', handIndex: 0 })
     expect(next.pendingChoices?.[0]).toMatchObject({ kind: 'support', controller: 'player', unitId: expect.any(String) })
     expect(next.activePlayer).toBe('player') // resolve the support before passing
   })
 
   it('offers attacks with the OTHER ready unit (not the support unit), plus skip', () => {
-    const s = resolve(beforePlay(), { type: 'playCard', handIndex: 0 })
+    const s = resolve(beforePlay(), { type: 'playUnit', handIndex: 0 })
     const attacks = legalMoves(s).filter(a => a.type === 'attack')
     expect(attacks.every(a => a.attackerId === 'u1')).toBe(true) // only the other ready unit attacks
     expect(legalMoves(s).map(a => a.type)).toContain('skipTrigger')
   })
 
   it('the support attacker gains the support unit’s keywords for the attack (Overwhelm → base)', () => {
-    const s = resolve(beforePlay(), { type: 'playCard', handIndex: 0 })
+    const s = resolve(beforePlay(), { type: 'playUnit', handIndex: 0 })
     const next = resolve(s, { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' } })
     expect(next.pendingChoices).toBeUndefined()
     // 5 power vs a 1-HP unit → 4 excess trampled to the base via GRANTED Overwhelm.
@@ -208,14 +208,14 @@ describe('Support keyword', () => {
   })
 
   it('skipping the support leaves the board and passes the turn', () => {
-    const s = resolve(beforePlay(), { type: 'playCard', handIndex: 0 })
+    const s = resolve(beforePlay(), { type: 'playUnit', handIndex: 0 })
     const next = resolve(s, { type: 'skipTrigger' })
     expect(next.pendingChoices).toBeUndefined()
     expect(next.activePlayer).toBe('opponent')
   })
 
   it('a Support unit with no other ready unit just enters play (no pending trigger)', () => {
-    const next = resolve(beforePlay([]), { type: 'playCard', handIndex: 0 }) // no other friendly units
+    const next = resolve(beforePlay([]), { type: 'playUnit', handIndex: 0 }) // no other friendly units
     expect(next.pendingChoices).toBeUndefined()
     expect(next.activePlayer).toBe('opponent')
   })

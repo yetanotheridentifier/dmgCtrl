@@ -1,6 +1,6 @@
 /**
  * Player actions (CR 1.15). Scope notes:
- *  - playCard covers unit cards only; upgrades have their own action, and events are not
+ *  - playUnit covers unit cards only; upgrades have their own action, and events are not
  *    modelled — they stay in hand (still resourceable in regroup).
  *  - resourceCard/skipResource are the regroup-phase choice (CR 5.5), not
  *    action-phase actions.
@@ -11,7 +11,7 @@ import type { PlayerId } from './types'
 export type AttackTarget = { kind: 'base' } | { kind: 'unit'; instanceId: string }
 
 export type Action =
-  | { type: 'playCard'; handIndex: number }
+  | { type: 'playUnit'; handIndex: number }
   // Play an upgrade card, attaching it to a unit in play. Any unit is a valid
   // target by default; a card narrows that with its `attachRestriction`.
   | { type: 'playUpgrade'; handIndex: number; targetInstanceId: string }

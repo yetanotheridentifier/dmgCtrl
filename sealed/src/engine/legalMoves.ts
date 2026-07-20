@@ -179,7 +179,7 @@ function actionPhaseMoves(state: GameState): Action[] {
     if (!card || card.type !== 'unit') return
     if (forbiddenNames.has(card.name)) return
     if (canAfford(p, effectiveCost(state, playerId, card))) {
-      moves.push({ type: 'playCard', handIndex })
+      moves.push({ type: 'playUnit', handIndex })
     }
   })
 

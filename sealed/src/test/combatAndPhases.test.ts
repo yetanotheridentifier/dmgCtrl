@@ -145,7 +145,7 @@ describe('full round cycle', () => {
       },
     })
 
-    s = resolve(s, { type: 'playCard', handIndex: 0 }) // player plays a unit (enters exhausted)
+    s = resolve(s, { type: 'playUnit', handIndex: 0 }) // player plays a unit (enters exhausted)
     s = resolve(s, { type: 'pass' }) // opponent passes
     s = resolve(s, { type: 'pass' }) // player passes → consecutive → regroup
 

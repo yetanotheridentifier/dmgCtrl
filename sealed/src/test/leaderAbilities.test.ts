@@ -245,7 +245,7 @@ describe('Greef Karga (ASH_017) — when you play a unit, Advantage', () => {
       cards,
       players: { player: player({ leader: undeployed('ASH_017'), hand: ['TST_U1'], resources: ready(6) }), opponent: player() },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'mayExhaustLeaderForAdvantage' })
     expect(played.activePlayer).toBe('player') // holds the turn for the choice
 
@@ -260,7 +260,7 @@ describe('Greef Karga (ASH_017) — when you play a unit, Advantage', () => {
       cards,
       players: { player: player({ leader: undeployed('ASH_017'), hand: ['TST_U1'], resources: ready(6) }), opponent: player() },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     const declined = resolve(played, { type: 'skipTrigger', choiceId: played.pendingChoices![0].id })
     expect(declined.players.player.leader.exhausted).toBe(false)
     expect(declined.players.player.units[0].upgrades.some(a => a.cardId === TOKEN_ADVANTAGE)).toBe(false)
@@ -275,7 +275,7 @@ describe('Greef Karga (ASH_017) — when you play a unit, Advantage', () => {
         opponent: player(),
       },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices).toBeUndefined()
     expect(played.players.player.units.find(u => u.cardId === 'TST_U1')!.upgrades.some(a => a.cardId === TOKEN_ADVANTAGE)).toBe(true)
     expect(played.activePlayer).toBe('opponent')
@@ -291,7 +291,7 @@ describe('choice-id collisions (regression)', () => {
         opponent: player({ units: [unit('e1', 'TST_U1')] }),
       },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     const kinds = played.pendingChoices!.map(c => c.kind)
     expect(kinds).toContain('support')
     expect(kinds).toContain('mayExhaustLeaderForAdvantage')
@@ -877,7 +877,7 @@ describe('Grogu (ASH_018) — triggered deploy + combat-conditional aura', () =>
   })
 
   it('offers to deploy Grogu when you play a Unique unit costing 4+, without burning the epic action', () => {
-    const played = resolve(playing('BIG'), { type: 'playCard', handIndex: 0 })
+    const played = resolve(playing('BIG'), { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'mayDeployLeader' })
     const deployed = resolve(played, { type: 'acceptChoice', choiceId: played.pendingChoices![0].id })
     expect(deployed.players.player.leader.deployed).toBe(true)
@@ -890,7 +890,7 @@ describe('Grogu (ASH_018) — triggered deploy + combat-conditional aura', () =>
       cards,
       players: { player: player({ leader: { cardId: 'ASH_018', deployed: false, epicActionUsed: true, exhausted: false }, hand: ['BIG'], resources: ready(5) }), opponent: player() },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'mayDeployLeader' }) // offered despite epicActionUsed
     expect(resolve(played, { type: 'acceptChoice', choiceId: played.pendingChoices![0].id }).players.player.leader.deployed).toBe(true)
   })
@@ -900,26 +900,26 @@ describe('Grogu (ASH_018) — triggered deploy + combat-conditional aura', () =>
       cards,
       players: { player: player({ leader: { cardId: 'ASH_018', deployed: false, epicActionUsed: false, exhausted: true }, hand: ['BIG'], resources: ready(5) }), opponent: player() },
     })
-    expect(resolve(s, { type: 'playCard', handIndex: 0 }).pendingChoices).toBeUndefined()
+    expect(resolve(s, { type: 'playUnit', handIndex: 0 }).pendingChoices).toBeUndefined()
   })
 
   it('does not offer for a non-Unique unit, or a Unique unit costing under 4', () => {
-    expect(resolve(playing('COMMON'), { type: 'playCard', handIndex: 0 }).pendingChoices).toBeUndefined() // not Unique
-    expect(resolve(playing('SMALL'), { type: 'playCard', handIndex: 0 }).pendingChoices).toBeUndefined() // cost 3
+    expect(resolve(playing('COMMON'), { type: 'playUnit', handIndex: 0 }).pendingChoices).toBeUndefined() // not Unique
+    expect(resolve(playing('SMALL'), { type: 'playUnit', handIndex: 0 }).pendingChoices).toBeUndefined() // cost 3
   })
 
   it('offers for Unique units costing MORE than 4, not just exactly 4', () => {
     const big5 = { ...cards, BIG5: card({ id: 'BIG5', type: 'unit', arena: 'ground', cost: 5, power: 3, hp: 3, unique: true }) }
     const s5 = state({ cards: big5, players: { player: player({ leader: undeployed('ASH_018'), hand: ['BIG5'], resources: ready(5) }), opponent: player() } })
-    expect(resolve(s5, { type: 'playCard', handIndex: 0 }).pendingChoices?.[0]).toMatchObject({ kind: 'mayDeployLeader' })
+    expect(resolve(s5, { type: 'playUnit', handIndex: 0 }).pendingChoices?.[0]).toMatchObject({ kind: 'mayDeployLeader' })
 
     const big7 = { ...cards, BIG7: card({ id: 'BIG7', type: 'unit', arena: 'ground', cost: 7, power: 5, hp: 5, unique: true }) }
     const s7 = state({ cards: big7, players: { player: player({ leader: undeployed('ASH_018'), hand: ['BIG7'], resources: ready(7) }), opponent: player() } })
-    expect(resolve(s7, { type: 'playCard', handIndex: 0 }).pendingChoices?.[0]).toMatchObject({ kind: 'mayDeployLeader' })
+    expect(resolve(s7, { type: 'playUnit', handIndex: 0 }).pendingChoices?.[0]).toMatchObject({ kind: 'mayDeployLeader' })
   })
 
   it('declining leaves Grogu undeployed', () => {
-    const played = resolve(playing('BIG'), { type: 'playCard', handIndex: 0 })
+    const played = resolve(playing('BIG'), { type: 'playUnit', handIndex: 0 })
     const declined = resolve(played, { type: 'skipTrigger', choiceId: played.pendingChoices![0].id })
     expect(declined.players.player.leader.deployed).toBe(false)
   })
@@ -1422,7 +1422,7 @@ describe('"next unit you play this phase gains <keywords>" grant (generic)', () 
       cards,
       players: { player: player({ hand: ['GRUNT'], resources: ready(2), nextUnitGrants: [{ keywords: [{ name: 'Shielded' }] }] }), opponent: player() },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     const grunt = played.players.player.units.find(u => u.cardId === 'GRUNT')!
     expect(grunt.upgrades.some(u => u.cardId === TOKEN_SHIELD)).toBe(true) // Shielded → a Shield token on entry
     expect(unitHasKeyword(played, grunt, 'Shielded')).toBe(true) // holds the keyword this phase
@@ -1437,7 +1437,7 @@ describe('"next unit you play this phase gains <keywords>" grant (generic)', () 
         opponent: player({ units: [unit('e1', 'TST_U1')] }),
       },
     })
-    const played = resolve(s, { type: 'playCard', handIndex: 0 })
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
     const grunt = played.players.player.units.find(u => u.cardId === 'GRUNT')!
     expect(played.pendingChoices?.[0]).toMatchObject({ kind: 'ambush', unitId: grunt.instanceId })
   })
@@ -1452,7 +1452,7 @@ describe('"next unit you play this phase gains <keywords>" grant (generic)', () 
       },
       activePlayer: 'opponent',
     })
-    const oppPlays = resolve(s, { type: 'playCard', handIndex: 0 })
+    const oppPlays = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(oppPlays.players.opponent.units.find(u => u.cardId === 'GRUNT')!.upgrades.some(u => u.cardId === TOKEN_SHIELD)).toBe(false)
     expect(oppPlays.players.player.nextUnitGrants).toEqual([{ keywords: [{ name: 'Shielded' }] }]) // still set
 

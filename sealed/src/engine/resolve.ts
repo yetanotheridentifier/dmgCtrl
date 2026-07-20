@@ -35,9 +35,9 @@ function resolveAction(state: GameState, action: Action): GameState {
   }
 
   switch (action.type) {
-    case 'playCard':
+    case 'playUnit':
       return requirePhase(state, 'action', () => {
-        const played = playCard(state, action.handIndex)
+        const played = playUnit(state, action.handIndex)
         if (played.winner !== null) return played
         // An on-play trigger (Ambush) keeps the turn with the active player to
         // resolve it before passing. If the trigger raised an OPPONENT-controlled
@@ -340,13 +340,13 @@ function startAckbarSearch(state: GameState, owner: PlayerId, choiceId: string):
   return pushChoice(pulled, { kind: 'searchPlayFree', id: choiceId, controller: owner, revealed, eligibleIndices, budget: 5 })
 }
 
-function playCard(state: GameState, handIndex: number): GameState {
+function playUnit(state: GameState, handIndex: number): GameState {
   const playerId = state.activePlayer
   const p = state.players[playerId]
   const cardId = p.hand[handIndex]
   const card = cardId ? state.cards[cardId] : undefined
   if (!card || card.type !== 'unit') {
-    throw new Error(`playCard: hand index ${handIndex} is not a playable unit`)
+    throw new Error(`playUnit: hand index ${handIndex} is not a playable unit`)
   }
 
   const paid = payCost(p, effectiveCost(state, playerId, card))

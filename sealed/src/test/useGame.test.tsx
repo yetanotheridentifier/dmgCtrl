@@ -95,7 +95,7 @@ describe('useGame', () => {
 
     act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
     act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
-    act(() => result.current.act({ type: 'playCard', handIndex: 0 }))
+    act(() => result.current.act({ type: 'playUnit', handIndex: 0 }))
 
     // Exactly one log entry per human action taken (keepHand, resource ×2, play).
     expect(result.current.log.filter(e => e.by === 'player')).toHaveLength(4)
@@ -118,7 +118,7 @@ describe('useGame', () => {
     act(() => result.current.act({ type: 'keepHand' }))
     act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
     act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
-    act(() => result.current.act({ type: 'playCard', handIndex: 0 }))
+    act(() => result.current.act({ type: 'playUnit', handIndex: 0 }))
 
     const game = result.current.gameState!
     expect(game.players.player.units).toHaveLength(1)
@@ -134,7 +134,7 @@ describe('useGame', () => {
     act(() => result.current.act({ type: 'keepHand' }))
     act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
     act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
-    act(() => result.current.act({ type: 'playCard', handIndex: 0 }))
+    act(() => result.current.act({ type: 'playUnit', handIndex: 0 }))
     act(() => result.current.act({ type: 'pass' })) // AI passes → regroup begins
     // human regroup choice
     act(() => result.current.act({ type: 'skipResource' }))
@@ -153,7 +153,7 @@ describe('useGame', () => {
     act(() => result.current.act({ type: 'keepHand' }))
     act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
     act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
-    act(() => result.current.act({ type: 'playCard', handIndex: 0 }))
+    act(() => result.current.act({ type: 'playUnit', handIndex: 0 }))
     act(() => result.current.act({ type: 'pass' }))
     act(() => result.current.act({ type: 'skipResource' }))
 
@@ -179,7 +179,7 @@ describe('useGame', () => {
     act(() => result.current.act({ type: 'keepHand' }))
     act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
     act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
-    act(() => result.current.act({ type: 'playCard', handIndex: 0 }))
+    act(() => result.current.act({ type: 'playUnit', handIndex: 0 }))
     act(() => result.current.rematch())
 
     await waitFor(() => {

@@ -9,7 +9,7 @@ import type { GameState, PlayerState } from '../engine/types'
 
 /**
  * "When Played" effects. Most reuse existing effect primitives. Tests play the unit
- * through the real `playCard` path and assert the resulting board.
+ * through the real `playUnit` path and assert the resulting board.
  */
 
 const D = {
@@ -98,7 +98,7 @@ const U = (s: GameState, id: string) => [...s.players.player.units, ...s.players
 
 /** Play `cardId` from hand and return the resulting state (ample resources; no aspect penalties). */
 const play = (cardId: string, pl: Partial<PlayerState> = {}, opp: Partial<PlayerState> = {}): GameState =>
-  resolve(state({ cards: D, players: { player: player({ hand: [cardId], resources: ready(15), ...pl }), opponent: player(opp) } }), { type: 'playCard', handIndex: 0 })
+  resolve(state({ cards: D, players: { player: player({ hand: [cardId], resources: ready(15), ...pl }), opponent: player(opp) } }), { type: 'playUnit', handIndex: 0 })
 const played = (s: GameState, cardId: string) => s.players.player.units.find(u => u.cardId === cardId)!
 const advs = (u: { upgrades: { cardId: string }[] }) => u.upgrades.filter(a => a.cardId === TOKEN_ADVANTAGE).length
 const shields = (u: { upgrades: { cardId: string }[] }) => u.upgrades.filter(a => a.cardId === TOKEN_SHIELD).length
@@ -610,7 +610,7 @@ describe('When Played — Admiral Ackbar (110): self-defeat, then search and pla
 
 describe('When Played — name a card (Ryder Azadi)', () => {
   const oppPlayable = (s: GameState) =>
-    legalMoves(s).filter(a => a.type === 'playCard').map(a => s.players.opponent.hand[(a as { handIndex: number }).handIndex])
+    legalMoves(s).filter(a => a.type === 'playUnit').map(a => s.players.opponent.hand[(a as { handIndex: number }).handIndex])
   const name = (s: GameState, cardName: string) => resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, cardName })
 
   it('raises a name-a-card choice when played', () => {

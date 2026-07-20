@@ -117,7 +117,7 @@ describe('Eviscerator (149) — friendly Advantage tokens lose all abilities', (
         opponent: player({ units: [unit('e', 'SPC', { arena: 'space' })] }),
       },
     })
-    const p = resolve(s, { type: 'playCard', handIndex: 0 })
+    const p = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(advs(U(p, 'x'))).toBe(2)
     expect(advs(U(p, 'y'))).toBe(2)
     expect(advs(U(p, 'e'))).toBe(0) // friendly only

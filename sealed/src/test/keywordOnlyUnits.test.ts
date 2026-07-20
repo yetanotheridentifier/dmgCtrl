@@ -68,7 +68,7 @@ describe('Keyword-only units — no engine work needed', () => {
       cards: { ...CARDS, ...buildCardDb([noti]) },
       players: { player: player({ hand: [id], resources: ready(15) }), opponent: player() },
     })
-    const next = resolve(s, { type: 'playCard', handIndex: 0 })
+    const next = resolve(s, { type: 'playUnit', handIndex: 0 })
     expect(next.players.player.units[0].upgrades.some(u => u.cardId === TOKEN_SHIELD)).toBe(true)
   })
 
