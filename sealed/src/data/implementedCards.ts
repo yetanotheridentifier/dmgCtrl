@@ -378,6 +378,7 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_128', name: 'Bothan-5' },
   { id: 'ASH_224', name: 'Elzar Mann' },
   { id: 'ASH_196', name: 'Gorian Shard\'s Corsair' },
+  { id: 'ASH_062', name: 'The Mandalorian' },
 ]
 
 /**

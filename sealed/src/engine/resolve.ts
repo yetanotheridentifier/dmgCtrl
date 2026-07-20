@@ -6,7 +6,7 @@ import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseE
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
-import { applyUnitDamage, dealDamageToUnit, defeatUnit, sweepStateBasedDefeats } from './combat'
+import { applyUnitDamage, dealDamageToUnit, defeatUnit, sweepStateBasedDefeats, preventionOffer } from './combat'
 import { exhaustUnit, findUnit, giveToken, fireUpgradeAttached, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, searchCount, bottomTopCards, returnUpgradeToHand } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
@@ -421,12 +421,51 @@ function resumeAfterChoice(state: GameState, resolved: PendingChoice): GameState
   return advanceTurn(resetPasses(state))
 }
 
+/**
+ * The "if you do …" tail of a `mayDamage`, run only when the damage actually landed (#355/#356/#357).
+ * Split out because a prevention offer defers the damage into its own choice, which runs this on
+ * the declined branch — prevented damage was never dealt, so no tail fires.
+ */
+function mayDamageFollowUps(state: GameState, choice: PendingChoice & { kind: 'mayDamage' }, targetInstanceId: string): GameState {
+  let next = state
+  // "If it's defeated this way, …" — Imposing Scout Walker rewards its own unit (#355).
+  if (choice.rewardIfDefeated && !findUnit(next, targetInstanceId)) {
+    const reward = choice.rewardIfDefeated
+    if ('instanceId' in reward) {
+      for (let i = 0; i < reward.count; i++) next = giveToken(next, reward.instanceId, TOKEN_ADVANTAGE)
+    } else {
+      // Justifier (#356): give Advantage to a chosen unit.
+      const targets = [...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId)
+      if (targets.length > 0) next = pushChoice(next, { kind: 'mayGiveTokens', id: choice.id, controller: choice.controller, token: TOKEN_ADVANTAGE, count: reward.chooseAdvantage, targets, optional: false })
+    }
+  }
+  // 8D8 (#357): "if you do, search the top N of your deck for a unit, reveal it, and draw it."
+  if (choice.thenSearchDraw) {
+    const owner = choice.controller
+    const source = findUnit(next, choice.unitId)
+    const depth = source ? searchCount(next, source.unit, choice.thenSearchDraw) : choice.thenSearchDraw
+    const revealed = next.players[owner].deck.slice(0, depth)
+    const eligibleIndices = revealed.flatMap((cardId, i) => (next.cards[cardId]?.type === 'unit' ? [i] : []))
+    next = eligibleIndices.length === 0
+      ? bottomTopCards(next, owner, revealed.length) // no unit revealed → they all go to the bottom
+      : pushChoice(next, { kind: 'searchDraw', id: `${choice.id}-search`, controller: owner, revealed, eligibleIndices })
+  }
+  return next
+}
+
 /** Resume a combat suspended by an On Attack / On Defense choice (#342/#309): restore the
  *  attacker as active, run the remaining stages from where it paused, then pass the turn
  *  (unless a later stage suspended again or won the game). */
 function resumePendingAttack(state: GameState): GameState {
   const pa = state.pendingAttack!
-  const next = runAttackStages({ ...state, pendingAttack: undefined, activePlayer: pa.activePlayer }, pa.attackerId, pa.target, pa.stage, pa.viaAmbush)
+  const next = runAttackStages(
+    { ...state, pendingAttack: undefined, activePlayer: pa.activePlayer },
+    pa.attackerId,
+    pa.target,
+    pa.stage,
+    pa.viaAmbush,
+    { preventAsked: pa.preventAsked, prevented: pa.prevented },
+  )
   return next.winner !== null || hasPendingChoices(next) ? next : advanceTurn(resetPasses(next))
 }
 
@@ -452,6 +491,18 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
   // Elzar Mann (#357): stopping early still triggers the follow-up, sized to what was distributed.
   if (choice.kind === 'distributeTokens') {
     next = finishDistribution(next, choice, choice.total - choice.remaining)
+  }
+  // The Mandalorian (#357): declining to prevent lets the damage through. Combat damage is applied
+  // by the resumed attack; ability damage was deferred into this choice, so it lands here — along
+  // with the "if you do …" tail of whatever was dealing it.
+  if (choice.kind === 'mayPreventDamage' && !choice.combat) {
+    const found = findUnit(next, choice.targetId)
+    if (found) {
+      next = applyUnitDamage(next, found.owner, new Map([[choice.targetId, choice.amount]]), false, {}, choice.source)
+      next = checkWin(next)
+      if (next.winner !== null) return next
+      if (choice.followUp?.kind === 'mayDamage') next = mayDamageFollowUps(next, choice.followUp, choice.targetId)
+    }
   }
   return resumeAfterChoice(next, choice)
 }
@@ -484,31 +535,14 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'mayDamage':
       // Optional targeted damage, e.g. Cad Bane's On Attack (#309).
       if (targetInstanceId) {
-        next = dealDamageToUnit(next, targetInstanceId, choice.amount, choice.source)
+        const pending = next.pendingChoices?.length ?? 0
+        next = dealDamageToUnit(next, targetInstanceId, choice.amount, choice.source, choice)
+        // A prevention offer (#357) means the damage hasn't been dealt yet — it lands only if the
+        // offer is declined, and the "if you do …" tail runs there, not here.
+        if ((next.pendingChoices?.length ?? 0) > pending) break
         next = checkWin(next)
         if (next.winner !== null) return next
-        // "If it's defeated this way, …" — Imposing Scout Walker rewards its own unit (#355).
-        if (choice.rewardIfDefeated && !findUnit(next, targetInstanceId)) {
-          const reward = choice.rewardIfDefeated
-          if ('instanceId' in reward) {
-            for (let i = 0; i < reward.count; i++) next = giveToken(next, reward.instanceId, TOKEN_ADVANTAGE)
-          } else {
-            // Justifier (#356): give Advantage to a chosen unit.
-            const targets = [...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId)
-            if (targets.length > 0) next = pushChoice(next, { kind: 'mayGiveTokens', id: choice.id, controller: choice.controller, token: TOKEN_ADVANTAGE, count: reward.chooseAdvantage, targets, optional: false })
-          }
-        }
-        // 8D8 (#357): "if you do, search the top N of your deck for a unit, reveal it, and draw it."
-        if (choice.thenSearchDraw) {
-          const owner = choice.controller
-          const source = findUnit(next, choice.unitId)
-          const depth = source ? searchCount(next, source.unit, choice.thenSearchDraw) : choice.thenSearchDraw
-          const revealed = next.players[owner].deck.slice(0, depth)
-          const eligibleIndices = revealed.flatMap((cardId, i) => (next.cards[cardId]?.type === 'unit' ? [i] : []))
-          next = eligibleIndices.length === 0
-            ? bottomTopCards(next, owner, revealed.length) // no unit revealed → they all go to the bottom
-            : pushChoice(next, { kind: 'searchDraw', id: `${choice.id}-search`, controller: owner, revealed, eligibleIndices })
-        }
+        next = mayDamageFollowUps(next, choice, targetInstanceId)
       }
       break
     case 'chooseDiscardFate': {
@@ -602,6 +636,22 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         if (next.winner !== null) return next
         const remaining = choice.remaining.filter(b => b !== baseTarget)
         if (remaining.length > 0) next = pushChoice(next, { ...choice, remaining })
+      }
+      break
+    }
+    case 'mayPreventDamage': {
+      // The Mandalorian (#357): pay the preventer's own cost (defeat a Shield), then cancel the damage.
+      const preventer = findUnit(next, choice.preventerId)
+      if (preventer) {
+        for (const cardId of [preventer.unit.cardId, ...preventer.unit.upgrades.map(u => u.cardId)]) {
+          const pay = getCardDefinition(cardId)?.payPreventionCost
+          if (pay) { next = pay(next, preventer.unit); break }
+        }
+      }
+      // Combat damage is applied later, by the resumed attack — record the cancellation for it.
+      // Ability damage was deferred into this choice, so cancelling means simply never applying it.
+      if (choice.combat && next.pendingAttack) {
+        next = { ...next, pendingAttack: { ...next.pendingAttack, prevented: [...(next.pendingAttack.prevented ?? []), choice.targetId] } }
       }
       break
     }
@@ -1516,7 +1566,7 @@ function attack(state: GameState, attackerId: string, target: AttackTarget, viaA
  * The On Defense stage may suspend (handing control to the defender); resumption picks
  * up from the stored stage. `state.activePlayer` is the attacker's controller here.
  */
-function runAttackStages(state: GameState, attackerId: string, target: AttackTarget, stage: 'onDefense' | 'damage', viaAmbush = false): GameState {
+function runAttackStages(state: GameState, attackerId: string, target: AttackTarget, stage: 'onDefense' | 'damage', viaAmbush = false, prevent: PreventionProgress = {}): GameState {
   const playerId = state.activePlayer
   const enemyId = opponentOf(playerId)
 
@@ -1527,12 +1577,22 @@ function runAttackStages(state: GameState, attackerId: string, target: AttackTar
       const afterDefense = runUnitTrigger(state, 'onDefense', defender, enemyId)
       if ((afterDefense.pendingChoices?.length ?? 0) > before) {
         // Hand control to the defender; resume at the damage stage.
-        return { ...afterDefense, pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'damage', viaAmbush }, activePlayer: enemyId }
+        return { ...afterDefense, pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'damage', viaAmbush, ...prevent }, activePlayer: enemyId }
       }
-      return completeAttack(afterDefense, attackerId, target, viaAmbush)
+      return completeAttack(afterDefense, attackerId, target, viaAmbush, prevent)
     }
   }
-  return completeAttack(state, attackerId, target, viaAmbush)
+  return completeAttack(state, attackerId, target, viaAmbush, prevent)
+}
+
+/**
+ * How far the damage-prevention offers for one combat have got (#357, The Mandalorian).
+ * `preventAsked` are the units already offered a prevention this combat (so a declined offer isn't
+ * re-raised on resume); `prevented` are those whose damage was actually cancelled.
+ */
+interface PreventionProgress {
+  preventAsked?: string[]
+  prevented?: string[]
 }
 
 /**
@@ -1541,7 +1601,7 @@ function runAttackStages(state: GameState, attackerId: string, target: AttackTar
  * Defense ability, in which case the attack fizzles. Clears any transient
  * Support-granted keywords once the calculation that used them is done.
  */
-function completeAttack(state: GameState, attackerId: string, target: AttackTarget, viaAmbush = false): GameState {
+function completeAttack(state: GameState, attackerId: string, target: AttackTarget, viaAmbush = false, prevent: PreventionProgress = {}): GameState {
   const playerId = state.activePlayer
   const enemyId = opponentOf(playerId)
   const attacker = state.players[playerId].units.find(u => u.instanceId === attackerId)
@@ -1608,12 +1668,46 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   // Combat damage is attributed to the unit dealing it, so "damage dealt by friendly Underworld
   // cards is unpreventable" can see where it came from (#357, Gorian Shard's Corsair).
   const attackerSource = { cardId: attacker.cardId, controller: playerId }
-  let next = applyUnitDamage(preCombat, enemyId, new Map([[defender.instanceId, attackerPower]]), true, defenderCtx, attackerSource)
+  const counterSource = { cardId: defender.cardId, controller: enemyId }
+
+  // Damage prevention (#357, The Mandalorian) is settled HERE — after the powers are known but
+  // before anything is committed — so the logic below (first strike, Overwhelm, attack-end) still
+  // sees correct values. Nothing has been written to `next` yet, so suspending and re-running this
+  // whole function on resume is safe. Each side is asked at most once per combat (`preventAsked`).
+  const asked = prevent.preventAsked ?? []
+  const prevented = prevent.prevented ?? []
+  for (const [targetId, amount, dmgSource] of [
+    [defender.instanceId, attackerPower, attackerSource],
+    [attacker.instanceId, counterPower, counterSource],
+  ] as const) {
+    if (amount <= 0 || asked.includes(targetId)) continue
+    const offer = preventionOffer(preCombat, targetId, dmgSource)
+    if (!offer) continue
+    const withChoice = pushChoice(preCombat, {
+      kind: 'mayPreventDamage',
+      id: `prevent-${targetId}-${preCombat.instanceCounter}`,
+      controller: offer.controller,
+      preventerId: offer.preventerId,
+      targetId,
+      amount,
+      source: dmgSource,
+      combat: true,
+    })
+    return {
+      ...withChoice,
+      pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'damage', viaAmbush, preventAsked: [...asked, targetId], prevented },
+      // The unit's own controller decides; hand them control and come back to the attacker after.
+      ...(offer.controller === playerId ? {} : { activePlayer: offer.controller, pendingResumeActive: playerId }),
+    }
+  }
+  const damageTo = (id: string, amount: number) => (prevented.includes(id) ? 0 : amount)
+
+  let next = applyUnitDamage(preCombat, enemyId, new Map([[defender.instanceId, damageTo(defender.instanceId, attackerPower)]]), true, defenderCtx, attackerSource)
   // "Deals combat damage before the defender" (#357, Carson Teva): a defender defeated by that
   // damage never strikes back. Without it, damage is simultaneous (CR 1.9.10) and both still land.
   const defenderSurvived = next.players[enemyId].units.some(u => u.instanceId === defender.instanceId)
   if (defenderSurvived || !unitDealsDamageFirst(preCombat, attacker)) {
-    next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, counterPower]]), true, { combat, attacking: true, viaAmbush }, { cardId: defender.cardId, controller: enemyId })
+    next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, damageTo(attacker.instanceId, counterPower)]]), true, { combat, attacking: true, viaAmbush }, counterSource)
   }
 
   // Overwhelm excess also goes through base-damage prevention (#357).

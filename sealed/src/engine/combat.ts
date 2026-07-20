@@ -1,5 +1,5 @@
-import type { DamageSource, GameState, PlayerId, UnitState } from './types'
-import { opponentOf, updatePlayer, recordUnitDefeated } from './types'
+import type { DamageSource, GameState, PendingChoice, PlayerId, UnitState } from './types'
+import { opponentOf, updatePlayer, recordUnitDefeated, pushChoice } from './types'
 import { effectiveHp } from './stats'
 import type { StatContext } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
@@ -149,15 +149,52 @@ export function defeatUnit(state: GameState, instanceId: string): GameState {
 }
 
 /**
+ * The unit that may prevent damage headed for `targetId`, if any (#357, The Mandalorian). Nothing
+ * can prevent damage that's been made unpreventable (Gorian Shard's Corsair), and only the target's
+ * OWN controller's units are asked — you can't shield an enemy.
+ */
+export function preventionOffer(state: GameState, targetId: string, source?: DamageSource): { preventerId: string; controller: PlayerId } | undefined {
+  if (damageIsUnpreventable(state, source)) return undefined
+  for (const owner of ['player', 'opponent'] as PlayerId[]) {
+    const target = state.players[owner].units.find(u => u.instanceId === targetId)
+    if (!target) continue
+    for (const self of state.players[owner].units) {
+      const able = [self.cardId, ...self.upgrades.map(u => u.cardId)]
+        .some(id => getCardDefinition(id)?.canPreventDamage?.(state, self, target) ?? false)
+      if (able) return { preventerId: self.instanceId, controller: owner }
+    }
+    return undefined
+  }
+  return undefined
+}
+
+/**
  * Deal `amount` damage to a single unit, wherever it is (#342). A thin wrapper over
  * `applyUnitDamage` so abilities can deal damage outside the attack flow; honours
  * Shield tokens and fires `whenDefeated`. A no-op if the unit is not in play.
+ *
+ * If a prevention effect could stop this damage (#357, The Mandalorian), the damage is NOT applied
+ * here: it's deferred into a `mayPreventDamage` choice, which applies it if the offer is declined.
+ * Combat damage skips that — `completeAttack` settles prevention at its own stage, before any
+ * damage is calculated, so that first strike / Overwhelm / attack-end still see correct values.
  */
-export function dealDamageToUnit(state: GameState, instanceId: string, amount: number, source?: DamageSource): GameState {
+export function dealDamageToUnit(state: GameState, instanceId: string, amount: number, source?: DamageSource, followUp?: PendingChoice): GameState {
   for (const owner of ['player', 'opponent'] as PlayerId[]) {
-    if (state.players[owner].units.some(u => u.instanceId === instanceId)) {
-      return applyUnitDamage(state, owner, new Map([[instanceId, amount]]), false, {}, source)
+    if (!state.players[owner].units.some(u => u.instanceId === instanceId)) continue
+    const offer = amount > 0 ? preventionOffer(state, instanceId, source) : undefined
+    if (offer) {
+      return pushChoice(state, {
+        kind: 'mayPreventDamage',
+        id: `prevent-${instanceId}-${state.instanceCounter}`,
+        controller: offer.controller,
+        preventerId: offer.preventerId,
+        targetId: instanceId,
+        amount,
+        source,
+        followUp,
+      })
     }
+    return applyUnitDamage(state, owner, new Map([[instanceId, amount]]), false, {}, source)
   }
   return state
 }

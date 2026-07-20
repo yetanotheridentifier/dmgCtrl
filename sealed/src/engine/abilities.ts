@@ -185,6 +185,15 @@ export interface CardDefinition {
    * prevention are ignored for it.
    */
   makesDamageUnpreventable?: (state: GameState, self: UnitState, source: DamageSource) => boolean
+  /**
+   * A unit that may prevent damage headed for one of its controller's OTHER units, at a cost it
+   * pays itself (#357, The Mandalorian defeats one of its own Shield tokens). Return true when
+   * `self` is currently able and eligible to prevent damage to `target`; the engine then offers the
+   * choice, and `payPreventionCost` collects the price if it's taken.
+   */
+  canPreventDamage?: (state: GameState, self: UnitState, target: UnitState) => boolean
+  /** Pay the cost of a prevention this card offered (#357) — e.g. defeat a Shield on `self`. */
+  payPreventionCost?: (state: GameState, self: UnitState) => GameState
   /** Extra traits this card grants a unit — The Darksaber grants Mandalorian (#343). */
   grantedTraits?: (state: GameState, unit: UnitState) => string[]
   /** True if this card makes its unit a leader unit — The Darksaber (#343). */

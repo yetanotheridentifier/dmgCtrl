@@ -79,16 +79,23 @@ describe('DeckSelectScreen', () => {
     render(<DeckSelectScreen onPlay={vi.fn()} />)
     const groups = screen.getByTestId('implemented-unit-groups')
     const done = within(groups).getByTestId('unit-group-keyword') as HTMLDetailsElement // playable as printed
-    // The first still-blocked group — which one that is changes as tiers get cleared (#357).
-    const nextGroupId = UNIT_GROUPS.find(g => g.status !== 'done')!.id
-    const next = within(groups).getByTestId(`unit-group-${nextGroupId}`) as HTMLDetailsElement
     expect(done.open).toBe(false) // done → collapsed
-    expect(next.open).toBe(true) // next up → expanded
-    // Development status is shown for the groups (same treatment as leaders/upgrades).
     expect(within(done).getByText(/done/i)).toBeInTheDocument()
-    expect(within(next).getByText(/in progress/i)).toBeInTheDocument()
-    // Each group lists its units (names churn as cards get built, so just assert it's populated).
-    expect(within(next).getAllByRole('listitem').length).toBeGreaterThan(0)
+
+    // Which group is "next up" changes as tiers get cleared — and once every unit is built there
+    // is no blocked group left at all, which is the state we're in now (#357).
+    const nextGroup = UNIT_GROUPS.find(g => g.status !== 'done')
+    if (nextGroup) {
+      const next = within(groups).getByTestId(`unit-group-${nextGroup.id}`) as HTMLDetailsElement
+      expect(next.open).toBe(true) // next up → expanded
+      expect(within(next).getByText(/in progress/i)).toBeInTheDocument()
+      expect(within(next).getAllByRole('listitem').length).toBeGreaterThan(0)
+    } else {
+      // All units implemented: every section is done and collapsed, and the built group lists them.
+      const built = within(groups).getByTestId('unit-group-built') as HTMLDetailsElement
+      expect(built.open).toBe(false)
+      expect(within(built).getAllByRole('listitem').length).toBeGreaterThan(0)
+    }
   })
 
   it('imports a pasted deck and lists it', async () => {

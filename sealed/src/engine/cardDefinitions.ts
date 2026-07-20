@@ -3,7 +3,7 @@ import { registerCard } from './abilities'
 import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, bottomTopCards, exhaustReadyResource, readyResource, readyUnit } from './effects'
 import { dealDamageToUnit, defeatUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
-import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from './tokenUpgrades'
+import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN, isTokenCard } from './tokenUnits'
 import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, markAbilityUsed } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets } from './legalMoves'
@@ -1717,4 +1717,11 @@ registerCard('ASH_196', { // Gorian Shard's Corsair
       }) : s
     },
   })),
+})
+
+registerCard('ASH_062', { // The Mandalorian
+  // "If damage would be dealt to another friendly unit, you may defeat a Shield token on this unit.
+  // If you do, prevent that damage." Offered per instance of damage, for as long as it holds Shields.
+  canPreventDamage: (_s, self, target) => target.instanceId !== self.instanceId && hasToken(self.upgrades, TOKEN_SHIELD),
+  payPreventionCost: (s, self) => defeatUpgrade(s, self.instanceId, TOKEN_SHIELD),
 })

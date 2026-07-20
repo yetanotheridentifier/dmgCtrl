@@ -213,7 +213,9 @@ export interface GameState {
    * before combat damage. Holds what's needed to resume (`completeAttack`) once the
    * choice(s) drain, plus the attacker's `activePlayer` to restore for the turn pass.
    */
-  pendingAttack?: { attackerId: string; target: AttackTarget; activePlayer: PlayerId; stage: 'onDefense' | 'damage'; viaAmbush?: boolean }
+  // `prevented` collects units whose incoming combat damage a prevention effect has cancelled
+  // (#357, The Mandalorian) — decided at the `prevent` stage, honoured when damage is dealt.
+  pendingAttack?: { attackerId: string; target: AttackTarget; activePlayer: PlayerId; stage: 'onDefense' | 'damage'; viaAmbush?: boolean; preventAsked?: string[]; prevented?: string[] }
   /**
    * A "take the initiative" whose "When you take the initiative" trigger raised a choice (#348):
    * the turn transition (end the phase, or pass to the opponent) is deferred until the choice
@@ -487,6 +489,17 @@ export type PendingChoice =
   // Rancor Keeper (#357): "deal 1 damage to any number of bases" — repeatable, each base at most
   // once; `remaining` are the bases not yet picked. Skip finishes.
   | { kind: 'damageAnyBases'; id: string; controller: PlayerId; remaining: PlayerId[]; amount: number; source?: DamageSource }
+  /**
+   * The Mandalorian (#357): may defeat a Shield on `preventerId` to prevent `amount` damage headed
+   * for `targetId`. A yes/no. Raised on two paths:
+   *  - combat, at the `prevent` attack stage, before any damage is calculated — accepting records
+   *    the target on `pendingAttack.prevented` and the normal damage step skips it;
+   *  - ability damage, where `dealDamageToUnit` defers instead of applying, and this choice's
+   *    resolution applies it (declined) or drops it (accepted).
+   * `followUp` carries the damage-dealing choice whose "if you do …" tail must only run when the
+   * damage actually lands.
+   */
+  | { kind: 'mayPreventDamage'; id: string; controller: PlayerId; preventerId: string; targetId: string; amount: number; source?: DamageSource; combat?: boolean; followUp?: PendingChoice }
   // Bothan-5 (#357): may capture `cardId` from your discard under `unitId`. A yes/no;
   // `markUsed` records the once-each-round use when accepted.
   | { kind: 'mayCapture'; id: string; controller: PlayerId; unitId: string; cardId: string; markUsed?: { instanceId: string; key: string } }

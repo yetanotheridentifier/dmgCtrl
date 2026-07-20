@@ -562,6 +562,7 @@ function choiceMoves(state: GameState): Action[] {
       case 'mayDeployLeader':
       case 'maySelfDamageShield':
       case 'mayCapture':
+      case 'mayPreventDamage':
       case 'mayCreateToken': {
         // Grogu (#348): a yes/no to deploy via the triggered epic action.
         moves.push({ type: 'acceptChoice', choiceId: choice.id })
