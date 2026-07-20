@@ -73,7 +73,25 @@ export function grantNextUnit(state: GameState, owner: PlayerId, grant: NextUnit
 /** Deal `amount` damage to a player's base (#309). The caller runs the win check. */
 export function dealDamageToBase(state: GameState, player: PlayerId, amount: number): GameState {
   const p = state.players[player]
-  return { ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: p.base.damage + amount } } } }
+  const dealt = baseDamageAfterPrevention(state, player, amount)
+  if (dealt <= 0) return state
+  return { ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: p.base.damage + dealt } } } }
+}
+
+/**
+ * How much of `amount` actually lands on `player`'s base after their own units' prevention effects
+ * (#357, At Attin Safety Droid caps an instance at 4). Exposed separately so callers that report the
+ * damage dealt (When Attack Ends → Hera Syndulla) quote the post-prevention figure.
+ */
+export function baseDamageAfterPrevention(state: GameState, player: PlayerId, amount: number): number {
+  let out = amount
+  for (const u of state.players[player].units) {
+    for (const cid of [u.cardId, ...u.upgrades.map(x => x.cardId)]) {
+      const hook = getCardDefinition(cid)?.preventBaseDamage
+      if (hook) out = hook(state, u, out)
+    }
+  }
+  return Math.max(0, out)
 }
 
 /** Heal `amount` damage from a unit — remove that much damage, never below 0 (#348). No-op if absent. */

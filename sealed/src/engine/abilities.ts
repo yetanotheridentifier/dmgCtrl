@@ -116,6 +116,11 @@ export interface CardDefinition {
    * and its upgrades compound. Default (no hook) = ×1.
    */
   damageMultiplier?: (state: GameState, unit: UnitState) => number
+  /**
+   * A unit in play reducing damage about to hit *its controller's* base (#357, At Attin Safety Droid
+   * caps an instance at 4). Receives the incoming amount, returns what actually lands.
+   */
+  preventBaseDamage?: (state: GameState, source: UnitState, amount: number) => number
   /** This unit can't declare an attack against a base (#357, Wicket). */
   cannotAttackBases?: (state: GameState, unit: UnitState) => boolean
   /** This unit can't currently be attacked (#357, Tatooine Repulsor Train). Also keeps it from being a forced Sentinel target. */

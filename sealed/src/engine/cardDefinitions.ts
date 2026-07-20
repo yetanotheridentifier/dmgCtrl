@@ -1296,3 +1296,7 @@ registerCard('ASH_046', {
       ? { power: -1, hp: -1 }
       : undefined,
 })
+
+// ── Group F (#357): damage prevention ───────────────────────────────────────
+// At Attin Safety Droid (070): "if your base would be dealt more than 4 damage, prevent all but 4".
+registerCard('ASH_070', { preventBaseDamage: (_s, _source, amount) => Math.min(amount, 4) })

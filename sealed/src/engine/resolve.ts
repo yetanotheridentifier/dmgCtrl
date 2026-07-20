@@ -7,7 +7,7 @@ import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, sweepStateBasedDefeats } from './combat'
-import { exhaustUnit, findUnit, giveToken, fireUpgradeAttached, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit } from './effects'
+import { exhaustUnit, findUnit, giveToken, fireUpgradeAttached, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
@@ -1348,8 +1348,10 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   const attackerPower = effectivePower(state, attacker, { attacking: true, attackingBase: target.kind === 'base', defenderDamaged: (targetUnit?.damage ?? 0) > 0 })
 
   if (target.kind === 'base') {
-    const enemy = state.players[enemyId]
-    let next = updatePlayer(state, enemyId, { base: { ...enemy.base, damage: enemy.base.damage + attackerPower } })
+    // Through `dealDamageToBase` so base-damage prevention applies (#357, At Attin Safety Droid);
+    // the attack-end ctx reports what actually landed, not the raw power.
+    const dealtToBase = baseDamageAfterPrevention(state, enemyId, attackerPower)
+    let next = dealDamageToBase(state, enemyId, attackerPower)
     next = recordBaseAttacked(next, enemyId) // "your base was attacked this phase" (#356, Greef Karga)
     // "When an enemy unit attacks your base" (#357, Kachirho Militia) — the attacked player's units react.
     for (const id of next.players[enemyId].units.map(u => u.instanceId)) {
@@ -1357,7 +1359,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
       if (reactor) next = runUnitTrigger(next, 'whenEnemyAttacksBase', reactor, enemyId, { attackerInstanceId: attackerId })
     }
     next = consumeAdvantage(next, playerId, attackerId) // the attack completed
-    next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: attackerPower })
+    next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: dealtToBase })
     return clearGrantedKeywords(checkWin(next))
   }
 
@@ -1400,17 +1402,16 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   let next = applyUnitDamage(preCombat, enemyId, new Map([[defender.instanceId, attackerPower]]), true, defenderCtx)
   next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, counterPower]]), true, { combat, attacking: true })
 
-  if (overwhelmExcess > 0) {
-    const enemy = next.players[enemyId]
-    next = updatePlayer(next, enemyId, { base: { ...enemy.base, damage: enemy.base.damage + overwhelmExcess } })
-  }
+  // Overwhelm excess also goes through base-damage prevention (#357).
+  const overwhelmDealt = overwhelmExcess > 0 ? baseDamageAfterPrevention(next, enemyId, overwhelmExcess) : 0
+  if (overwhelmExcess > 0) next = dealDamageToBase(next, enemyId, overwhelmExcess)
 
   // Both units completed a combat — spend any Advantage on the survivors (#308).
   next = consumeAdvantage(next, playerId, attackerId)
   next = consumeAdvantage(next, enemyId, defender.instanceId)
   // Pass the pre-combat attacker so its "When Attack Ends" fires even if it was defeated.
   const defenderDefeated = !next.players[enemyId].units.some(u => u.instanceId === defender.instanceId)
-  next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: overwhelmExcess, defenderDefeated, combatDamageToDefender: attackerPower }, attacker)
+  next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: overwhelmDealt, defenderDefeated, combatDamageToDefender: attackerPower }, attacker)
   return clearGrantedKeywords(checkWin(next))
 }
 

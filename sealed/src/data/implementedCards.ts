@@ -301,6 +301,8 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   // Group F (#357) — HP-reduction defeats
   { id: 'ASH_050', name: 'Morgan Elsbeth' },
   { id: 'ASH_046', name: 'Scion Shuttle' },
+  // Group F (#357) — damage prevention
+  { id: 'ASH_070', name: 'At Attin Safety Droid' },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */
