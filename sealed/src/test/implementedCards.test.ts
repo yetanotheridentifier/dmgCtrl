@@ -4,7 +4,7 @@ import '../engine/cardDefinitions' // side-effect: registers every implemented c
 import { IMPLEMENTED_LEADERS, IMPLEMENTED_UPGRADES, IMPLEMENTED_UNITS, IMPLEMENTATION_PROGRESS, TOTAL_PROGRESS, UNIT_GROUPS } from '../data/implementedCards'
 
 /** The setup-screen manifest must mirror what's actually registered, or it lies to the player. */
-describe('implemented-cards manifest (#347)', () => {
+describe('implemented-cards manifest', () => {
   const manifestIds = [...IMPLEMENTED_LEADERS, ...IMPLEMENTED_UPGRADES, ...IMPLEMENTED_UNITS].map(c => c.id)
 
   it('lists exactly the registered ASH cards — no more, no fewer', () => {
@@ -21,7 +21,7 @@ describe('implemented-cards manifest (#347)', () => {
   })
 })
 
-describe('implementation progress (#306)', () => {
+describe('implementation progress', () => {
   it('counts the whole set plus the tokens', () => {
     const cat = Object.fromEntries(IMPLEMENTATION_PROGRESS.map(c => [c.label, c]))
     // ASH set totals + the 4 built-in tokens.
@@ -29,7 +29,7 @@ describe('implementation progress (#306)', () => {
     expect(cat.Upgrades).toMatchObject({ done: 25, total: 25 })
     expect(cat.Bases).toMatchObject({ done: 8, total: 8 })
     expect(cat.Tokens).toMatchObject({ done: 3, total: 3 }) // Shield/Advantage/Mandalorian — Experience deferred
-    // Group A (keyword-only, 39) + every registered unit ability.
+    // Keyword-only units (39) + every registered unit ability.
     expect(cat.Units).toMatchObject({ done: 39 + IMPLEMENTED_UNITS.length, total: 179 })
     expect(cat.Events).toMatchObject({ done: 0, total: 34 })
   })
