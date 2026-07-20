@@ -7,7 +7,7 @@ import { state, player, unit, card, CARDS } from './helpers/engineFixtures'
 import type { GameState } from '../engine/types'
 
 /**
- * Conditional stat modifiers (#357): combat-role ("+X while defending" / "while attacking a damaged
+ * Conditional stat modifiers: combat-role ("+X while defending" / "while attacking a damaged
  * unit") and static counts ("+X per <thing>"). The combat-role fields (`defending`, `defenderDamaged`)
  * are set by `completeAttack`; tested both directly through `effectivePower(ctx)` and through real combat.
  */
@@ -26,7 +26,7 @@ const F = {
 }
 const U = (s: GameState, id: string) => [...s.players.player.units, ...s.players.opponent.units].find(u => u.instanceId === id)!
 
-describe('Conditional stat modifiers — combat role (#357)', () => {
+describe('Conditional stat modifiers — combat role', () => {
   it('Palace Chef Droid (073): +2/+0 while defending (direct + combat counter)', () => {
     const s = state({ cards: F, players: { player: player({ units: [unit('p', 'ASH_073', { arena: 'ground' })] }), opponent: player() } })
     expect(effectivePower(s, U(s, 'p'))).toBe(0) // resting
@@ -49,7 +49,7 @@ describe('Conditional stat modifiers — combat role (#357)', () => {
   })
 })
 
-describe('Conditional stat modifiers — static counts (#357)', () => {
+describe('Conditional stat modifiers — static counts', () => {
   it('Executor (197): +1/+0 per upgrade on other friendly units; When Played buffs each other friendly', () => {
     const s = state({ cards: F, players: { player: player({ units: [unit('e', 'ASH_197', { arena: 'space' }), unit('f', 'ZEROPOWSP', { arena: 'space', upgrades: [{ cardId: 'UPG', owner: 'player' }, { cardId: 'UPG', owner: 'player' }] })] }), opponent: player() } })
     expect(effectivePower(s, U(s, 'e'))).toBe(5 + 2) // 2 upgrades on the other friendly

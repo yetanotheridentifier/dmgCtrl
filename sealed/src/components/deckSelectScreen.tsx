@@ -92,7 +92,7 @@ function Section({ title, status, defaultOpen, testId, children }: {
 /**
  * Reference panel (RHS of the setup screen): which cards' abilities are built into the engine.
  * Leaders and upgrades are complete, so they roll up into sections collapsed by default (still
- * expandable). Units are split into work groups (#306); the in-progress group is expanded, the
+ * expandable). Units are split into work groups; the in-progress group is expanded, the
  * rest collapsed with their development status. Sourced from the manifest in `data/implementedCards`
  * (leaders/upgrades pinned to the ability registry by a test).
  */

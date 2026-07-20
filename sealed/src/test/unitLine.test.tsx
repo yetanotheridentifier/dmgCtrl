@@ -14,7 +14,7 @@ function boardWith(id: string): GameState {
   return state({ cards: { ...CARDS, [id]: card({ id, type: 'unit', power: 3, hp: 4 }) } })
 }
 
-describe('UnitLine — on-card damage overlay (#326)', () => {
+describe('UnitLine — on-card damage overlay', () => {
   it('overlays a damaged unit’s damage as a red token with white text', () => {
     render(<UnitLine state={boardWith('TST_D')} unit={unit('u1', 'TST_D', { damage: 2 })} interact={noInteract} />)
     const token = screen.getByTestId('board-unit-damage-u1')
@@ -35,10 +35,10 @@ describe('UnitLine — on-card damage overlay (#326)', () => {
     expect(screen.getByTestId('board-unit-damage-u1')).toBeInTheDocument()
   })
 
-  it('zooms the card to full size on Shift+hover of the unit card, and removes it on leave (#321)', () => {
+  it('zooms the card to full size on Shift+hover of the unit card, and removes it on leave', () => {
     render(<UnitLine state={boardWith('TST_D')} unit={unit('u1', 'TST_D', { exhausted: true })} interact={noInteract} />)
     // The zoom lives on the unit card itself, not the whole tile (dead padding
-    // under attached upgrades must not zoom) (#336).
+    // under attached upgrades must not zoom).
     const unitCard = within(screen.getByTestId('board-unit-u1')).getByTestId('card-face').parentElement!
 
     fireEvent.pointerEnter(unitCard, { pointerType: 'mouse' })
@@ -63,7 +63,7 @@ describe('UnitLine — on-card damage overlay (#326)', () => {
     expect(token).toHaveTextContent('2')
   })
 
-  it('shows a +X/+Y modifier token for a unit with a "this phase" buff (#347)', () => {
+  it('shows a +X/+Y modifier token for a unit with a "this phase" buff', () => {
     let s = boardWith('TST_D')
     s = addLastingEffect(s, { targetInstanceId: 'u1', power: 2, hp: 2 })
     render(<UnitLine state={s} unit={unit('u1', 'TST_D')} interact={noInteract} />)
@@ -76,7 +76,7 @@ describe('UnitLine — on-card damage overlay (#326)', () => {
     expect(parts[1]).toHaveStyle({ color: '#2563eb' })
   })
 
-  it('includes an aura buff in the +X/+Y token (#348)', () => {
+  it('includes an aura buff in the +X/+Y token', () => {
     // Deployed Bo-Katan gives other friendly Mandalorian units +1/+0 — the aura should token too.
     const deployedBoKatan: LeaderState = { cardId: 'ASH_010', deployed: true, epicActionUsed: true, exhausted: false }
     const s = state({
@@ -94,7 +94,7 @@ describe('UnitLine — on-card damage overlay (#326)', () => {
     expect(screen.getByTestId('board-unit-mod-m1')).toHaveTextContent('+1+0')
   })
 
-  it('shows +2/+0 when only power is buffed, and no token with no modifier (#347)', () => {
+  it('shows +2/+0 when only power is buffed, and no token with no modifier', () => {
     let s = boardWith('TST_D')
     s = addLastingEffect(s, { targetInstanceId: 'u1', power: 2 })
     const { rerender } = render(<UnitLine state={s} unit={unit('u1', 'TST_D')} interact={noInteract} />)
@@ -106,14 +106,14 @@ describe('UnitLine — on-card damage overlay (#326)', () => {
 
   it('does not render the old bottom power/health line for a unit with art-backed stats', () => {
     // A card WITH art renders no textual fallback; the board tile should carry no
-    // "power/health" readout of its own any more — that lives on the card art (#326).
+    // "power/health" readout of its own any more — that lives on the card art.
     const s = state({ cards: { ...CARDS, TST_A: card({ id: 'TST_A', type: 'unit', power: 3, hp: 4, frontArt: 'https://cdn.swu-db.com/images/cards/TST/A.png' }) } })
     render(<UnitLine state={s} unit={unit('u1', 'TST_A', { damage: 0 })} interact={noInteract} />)
     expect(screen.getByTestId('board-unit-u1')).not.toHaveTextContent('3/4')
   })
 })
 
-describe('UnitLine — attached upgrades (#336)', () => {
+describe('UnitLine — attached upgrades', () => {
   function boardWithUpgrade(): GameState {
     return state({
       cards: {
@@ -137,7 +137,7 @@ describe('UnitLine — attached upgrades (#336)', () => {
     expect(screen.queryByTestId('board-unit-upgrades-u1')).toBeNull()
   })
 
-  it('zooms an attached upgrade from its exposed strip on Shift+hover (#336)', () => {
+  it('zooms an attached upgrade from its exposed strip on Shift+hover', () => {
     const u = unit('u1', 'TST_U', { upgrades: [up()] })
     render(<UnitLine state={boardWithUpgrade()} unit={u} interact={noInteract} />)
     const stack = screen.getByTestId('board-unit-upgrades-u1')
@@ -148,7 +148,7 @@ describe('UnitLine — attached upgrades (#336)', () => {
     fireEvent.keyUp(window, { key: 'Shift', shiftKey: false })
   })
 
-  it('stacks captured cards behind the unit, turned and dimmed (#357)', () => {
+  it('stacks captured cards behind the unit, turned and dimmed', () => {
     const s = state({ cards: { ...CARDS, TST_U: card({ id: 'TST_U', type: 'unit', power: 3, hp: 4 }), TST_C: card({ id: 'TST_C', type: 'unit', power: 1, hp: 1 }) } })
     render(<UnitLine state={s} unit={unit('u1', 'TST_U', { captured: ['TST_C'] })} interact={noInteract} />)
     const stack = screen.getByTestId('board-unit-captured-u1')
@@ -158,12 +158,12 @@ describe('UnitLine — attached upgrades (#336)', () => {
     expect(face.className).toMatch(/brightness-\[0\.6\]/)
   })
 
-  it('renders no captured stack for a unit holding nothing (#357)', () => {
+  it('renders no captured stack for a unit holding nothing', () => {
     render(<UnitLine state={boardWith('TST_D')} unit={unit('u1', 'TST_D')} interact={noInteract} />)
     expect(screen.queryByTestId('board-unit-captured-u1')).toBeNull()
   })
 
-  it('keeps captured cards visible below an exhausted capturing unit (#357)', () => {
+  it('keeps captured cards visible below an exhausted capturing unit', () => {
     const s = state({ cards: { ...CARDS, TST_U: card({ id: 'TST_U', type: 'unit', power: 3, hp: 4 }), TST_C: card({ id: 'TST_C', type: 'unit', power: 1, hp: 1 }) } })
     render(<UnitLine state={s} unit={unit('u1', 'TST_U', { exhausted: true, captured: ['TST_C'] })} interact={noInteract} />)
     const captured = screen.getByTestId('captured-card')
@@ -171,19 +171,19 @@ describe('UnitLine — attached upgrades (#336)', () => {
     expect(Number.parseInt(captured.style.top, 10)).toBeGreaterThan(0)
   })
 
-  it('shows a Hidden badge on a hidden unit (#334)', () => {
+  it('shows a Hidden badge on a hidden unit', () => {
     render(<UnitLine state={boardWith('TST_D')} unit={unit('u1', 'TST_D', { hidden: true })} interact={noInteract} />)
     expect(screen.getByTestId('board-unit-hidden-u1')).toHaveTextContent(/hidden/i)
   })
 
-  it('hides the Hidden badge when the unit also has Sentinel — Sentinel overrides Hidden (#348)', () => {
+  it('hides the Hidden badge when the unit also has Sentinel — Sentinel overrides Hidden', () => {
     const s = state({ cards: { ...CARDS, TST_HS: card({ id: 'TST_HS', type: 'unit', power: 2, hp: 2, keywords: [{ name: 'Sentinel' }] }) } })
     render(<UnitLine state={s} unit={unit('u1', 'TST_HS', { hidden: true })} interact={noInteract} />)
     expect(screen.queryByTestId('board-unit-hidden-u1')).toBeNull() // no Hidden badge
     expect(screen.getByTestId('board-unit-sentinel-u1')).toBeInTheDocument()
   })
 
-  it('shows a Sentinel badge on a unit with the Sentinel keyword, and none without (#334)', () => {
+  it('shows a Sentinel badge on a unit with the Sentinel keyword, and none without', () => {
     const s = state({ cards: { ...CARDS, TST_S: card({ id: 'TST_S', type: 'unit', power: 2, hp: 2, keywords: [{ name: 'Sentinel' }] }) } })
     render(<UnitLine state={s} unit={unit('u1', 'TST_S')} interact={noInteract} />)
     expect(screen.getByTestId('board-unit-sentinel-u1')).toHaveTextContent(/sentinel/i)
@@ -192,7 +192,7 @@ describe('UnitLine — attached upgrades (#336)', () => {
     expect(screen.queryByTestId('board-unit-sentinel-u2')).toBeNull()
   })
 
-  it('renders a shield token as an on-card overlay, not a behind-card upgrade (#334)', () => {
+  it('renders a shield token as an on-card overlay, not a behind-card upgrade', () => {
     const u = unit('u1', 'TST_D', { upgrades: [{ cardId: TOKEN_SHIELD, owner: 'player' }] })
     render(<UnitLine state={boardWith('TST_D')} unit={u} interact={noInteract} />)
     expect(screen.getByTestId('board-unit-shield-u1')).toBeInTheDocument()

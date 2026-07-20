@@ -9,7 +9,7 @@ import { state, player, unit, card, ready, CARDS } from './helpers/engineFixture
 import type { GameState } from '../engine/types'
 
 /**
- * Subsystem-tier units (#357): an aura that grants a *triggered ability* to other units
+ * An aura that grants a *triggered ability* to other units
  * (Bo-Katan's Gauntlet), capturing a card under a unit (Bothan-5), and Elzar Mann's
  * distribute-then-opponent-searches chain.
  */
@@ -29,7 +29,7 @@ const rich = (over: Parameters<typeof player>[0] = {}) => player({ resources: re
 const choice = (s: GameState) => s.pendingChoices![0]
 const mandos = (s: GameState, p: 'player' | 'opponent' = 'player') => s.players[p].units.filter(u => u.cardId === TOKEN_MANDALORIAN).length
 
-describe("Bo-Katan's Gauntlet (063) — grants other friendly units a When Defeated ability (#357)", () => {
+describe("Bo-Katan's Gauntlet (063) — grants other friendly units a When Defeated ability", () => {
   it('creates a Mandalorian token when another friendly non-token unit is defeated', () => {
     const s = state({ cards: F, players: { player: rich({ units: [unit('bk', 'ASH_063'), unit('f', 'FODDER')] }), opponent: player() } })
     const dead = dealDamageToUnit(s, 'f', 1)
@@ -65,7 +65,7 @@ describe("Bo-Katan's Gauntlet (063) — grants other friendly units a When Defea
   })
 })
 
-describe('Bothan-5 (128) — captures a defeated friendly unit from the discard (#357)', () => {
+describe('Bothan-5 (128) — captures a defeated friendly unit from the discard', () => {
   const board = (extra: Parameters<typeof unit>[2] = {}) => state({
     cards: F,
     players: { player: rich({ units: [unit('b', 'ASH_128', extra), unit('f', 'FODDER')] }), opponent: player() },
@@ -125,7 +125,7 @@ describe('Bothan-5 (128) — captures a defeated friendly unit from the discard 
   })
 })
 
-describe('Elzar Mann (224) — distribute Advantage, then the opponent digs for an event (#357)', () => {
+describe('Elzar Mann (224) — distribute Advantage, then the opponent digs for an event', () => {
   const board = () => state({
     cards: F,
     players: {

@@ -9,7 +9,7 @@ import { state, player, unit, card, ready, CARDS } from './helpers/engineFixture
 import type { GameState } from '../engine/types'
 
 /**
- * Units whose printed text needs an engine extension beyond the existing hooks (#357):
+ * Units whose printed text needs an engine extension beyond the existing hooks:
  * a real "[Exhaust]" action cost, and choices that chain a follow-up choice on acceptance.
  */
 const F = {
@@ -34,7 +34,7 @@ const rich = (over: Parameters<typeof player>[0] = {}) => player({ resources: re
 const choice = (s: GameState) => s.pendingChoices![0]
 const shields = (u: { upgrades: { cardId: string }[] }) => u.upgrades.filter(a => a.cardId === TOKEN_SHIELD).length
 
-describe('"Action [Exhaust]" is a real cost, not once-per-round (#357)', () => {
+describe('"Action [Exhaust]" is a real cost, not once-per-round', () => {
   // Lang: "Action [Exhaust]: This unit deals damage equal to his power to a ground unit."
   const langState = (exhausted: boolean) => state({
     cards: F,
@@ -56,7 +56,7 @@ describe('"Action [Exhaust]" is a real cost, not once-per-round (#357)', () => {
   })
 })
 
-describe('Pegasus Tri-Wing (171) — defeat a friendly upgrade to ready itself (#357)', () => {
+describe('Pegasus Tri-Wing (171) — defeat a friendly upgrade to ready itself', () => {
   const played = () => {
     const s = state({ cards: F, players: { player: rich({ hand: ['ASH_171'], units: [unit('g', 'GRD', { upgrades: [{ cardId: 'UPG', owner: 'player' }] })] }), opponent: player() } })
     return resolve(s, { type: 'playCard', handIndex: 0 })
@@ -80,7 +80,7 @@ describe('Pegasus Tri-Wing (171) — defeat a friendly upgrade to ready itself (
   })
 })
 
-describe('Cobb Vanth (060) — self-damage to shield an entering unit (#357)', () => {
+describe('Cobb Vanth (060) — self-damage to shield an entering unit', () => {
   it('offers the trade when another unit is played, and pays 2 to shield it', () => {
     const s = state({ cards: F, players: { player: rich({ hand: ['GRD'], units: [unit('c', 'ASH_060')] }), opponent: player() } })
     const p = resolve(s, { type: 'playCard', handIndex: 0 })
@@ -106,7 +106,7 @@ describe('Cobb Vanth (060) — self-damage to shield an entering unit (#357)', (
   })
 })
 
-describe('Gar Saxon (047) — a Mandalorian token when an upgrade is played on him (#357)', () => {
+describe('Gar Saxon (047) — a Mandalorian token when an upgrade is played on him', () => {
   const withGar = () => state({ cards: F, players: { player: rich({ hand: ['UPG', 'UPG'], units: [unit('gar', 'ASH_047')] }), opponent: player() } })
 
   it('offers a token when an upgrade is played on him, once each round', () => {
@@ -128,7 +128,7 @@ describe('Gar Saxon (047) — a Mandalorian token when an upgrade is played on h
   })
 })
 
-describe('Grogu (155) — attack with a unit when you take the initiative (#357)', () => {
+describe('Grogu (155) — attack with a unit when you take the initiative', () => {
   it('offers an attack with any ready friendly unit', () => {
     const s = state({
       cards: F,
@@ -147,7 +147,7 @@ describe('Grogu (155) — attack with a unit when you take the initiative (#357)
   })
 })
 
-describe('8D8 (118) — damage a friendly unit to search for a unit (#357)', () => {
+describe('8D8 (118) — damage a friendly unit to search for a unit', () => {
   it('deals 1 to another friendly unit, then searches the top 5 for a unit', () => {
     const s = state({
       cards: F,
@@ -170,7 +170,7 @@ describe('8D8 (118) — damage a friendly unit to search for a unit (#357)', () 
   })
 })
 
-describe('T-6 Shuttle 1974 (109) — buff another unit, then attack with it (#357)', () => {
+describe('T-6 Shuttle 1974 (109) — buff another unit, then attack with it', () => {
   it('gives +2/+2 for the phase and offers that unit an attack', () => {
     const s = state({
       cards: F,
@@ -192,7 +192,7 @@ describe('T-6 Shuttle 1974 (109) — buff another unit, then attack with it (#35
   })
 })
 
-describe('Eye of Sion (245) — play a unit costing up to its power, ready (#357)', () => {
+describe('Eye of Sion (245) — play a unit costing up to its power, ready', () => {
   it('reveals the top 8 and only offers units within its power', () => {
     const s = state({
       cards: F,

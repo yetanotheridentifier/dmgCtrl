@@ -8,7 +8,7 @@ import { state, player, unit, card, ready, CARDS } from './helpers/engineFixture
 import type { GameState } from '../engine/types'
 
 /**
- * "Damage dealt by friendly Underworld cards is unpreventable" (#357, Gorian Shard's Corsair):
+ * "Damage dealt by friendly Underworld cards is unpreventable" (Gorian Shard's Corsair):
  * it ignores Shield tokens and base-damage prevention (At Attin Safety Droid).
  */
 const F = {
@@ -24,7 +24,7 @@ const U = (s: GameState, id: string) => [...s.players.player.units, ...s.players
 const rich = (over: Parameters<typeof player>[0] = {}) => player({ resources: ready(20), ...over })
 const shielded = (id: string, cardId: string) => unit(id, cardId, { arena: 'space', upgrades: [{ cardId: TOKEN_SHIELD, owner: 'opponent' }] })
 
-describe("Gorian Shard's Corsair (196) — friendly Underworld damage is unpreventable (#357)", () => {
+describe("Gorian Shard's Corsair (196) — friendly Underworld damage is unpreventable", () => {
   const board = (attackerCard: string, withCorsair = true) => state({
     cards: F,
     players: {

@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { LeaderCard } from '../components/gameScreen'
 import { state, player, card, CARDS } from './helpers/engineFixtures'
 
-/** The undeployed leader card is clickable when it has an available activated ability (#309). */
+/** The undeployed leader card is clickable when it has an available activated ability. */
 describe('LeaderCard interaction', () => {
   const s = state({ cards: { ...CARDS, LDR: card({ id: 'LDR', name: 'Boss', type: 'leader', cost: 6 }) }, players: { player: player({ leader: { cardId: 'LDR', deployed: false, epicActionUsed: false, exhausted: false } }), opponent: player() } })
 

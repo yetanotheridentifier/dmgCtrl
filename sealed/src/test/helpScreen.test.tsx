@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
-// Render as production, so the build tag belongs at the foot of the Help page (#332).
+// Render as production, so the build tag belongs at the foot of the Help page.
 vi.mock('../env', () => ({ isDev: () => false }))
 
 import HelpScreen from '../components/helpScreen'
@@ -16,12 +16,12 @@ describe('HelpScreen', () => {
     expect(content.innerHTML).toContain('Playing a game')
   })
 
-  it('shows the fan-content disclaimer at the bottom (#332)', () => {
+  it('shows the fan-content disclaimer at the bottom', () => {
     render(<HelpScreen onBack={vi.fn()} />)
     expect(within(screen.getByTestId('help-screen')).getByText(/unofficial fan site/i)).toBeInTheDocument()
   })
 
-  it('shows the build tag at the foot of the page in prod (#332)', () => {
+  it('shows the build tag at the foot of the page in prod', () => {
     render(<HelpScreen onBack={vi.fn()} />)
     expect(screen.getByTestId('build-tag')).toHaveTextContent(BUILD_TAG)
   })

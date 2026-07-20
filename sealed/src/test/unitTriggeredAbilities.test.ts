@@ -10,7 +10,7 @@ import { state, player, unit, card, ready, CARDS } from './helpers/engineFixture
 import type { GameState, PlayerState, UnitState } from '../engine/types'
 
 /**
- * Unit triggered & activated abilities (#356): When Defeated / On Attack / When Attack Ends / Action
+ * Unit triggered & activated abilities: When Defeated / On Attack / When Attack Ends / Action
  * abilities. Tests defeat the unit (via `dealDamageToUnit`, which fires `whenDefeated` through the same
  * `finishDefeats` path combat uses) or attack with it, then assert the resulting board / raised choice.
  * The mid-combat whenDefeated handoff is covered separately by `whenDefeatedCombat.test.ts`.
@@ -40,19 +40,19 @@ const E = {
   ASH_038: card({ id: 'ASH_038', type: 'unit', arena: 'space', power: 6, hp: 10 }), // Purrgil Ultra
   ASH_045: card({ id: 'ASH_045', type: 'unit', arena: 'ground', power: 2, hp: 2 }), // Reanimated Night Trooper
   COST3UNIT: card({ id: 'COST3UNIT', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 2 }),
-  // onAttack batch A
+  // On Attack
   ASH_157: card({ id: 'ASH_157', type: 'unit', arena: 'space', power: 4, hp: 5 }), // Danger Squadron Wingmen
   ASH_189: card({ id: 'ASH_189', type: 'unit', arena: 'ground', power: 0, hp: 3, keywords: [{ name: 'Support' }] }), // Emperor's Messenger
   ASH_056: card({ id: 'ASH_056', type: 'unit', arena: 'ground', power: 2, hp: 4 }), // Huyang
   ASH_168: card({ id: 'ASH_168', type: 'unit', arena: 'ground', power: 2, hp: 3, keywords: [{ name: 'Support' }] }), // Migs Mayfeld
   ASH_083: card({ id: 'ASH_083', type: 'unit', arena: 'space', power: 15, hp: 15, keywords: [{ name: 'Sentinel' }] }), // Summa-verminoth
   ASH_156: card({ id: 'ASH_156', type: 'unit', arena: 'ground', power: 3, hp: 4, keywords: [{ name: 'Support' }] }), // R5-D4
-  // onAttack batch B1 (conditional/self)
+  // On Attack — conditional on the board or on this unit
   ASH_072: card({ id: 'ASH_072', type: 'unit', arena: 'ground', power: 0, hp: 4, keywords: [{ name: 'Support' }] }), // Doctor Pershing
   ASH_099: card({ id: 'ASH_099', type: 'unit', arena: 'space', power: 4, hp: 6, keywords: [{ name: 'Support' }] }), // Gozanti (Sentinel stripped — granted on attack)
   ASH_209: card({ id: 'ASH_209', type: 'unit', arena: 'ground', power: 3, hp: 7, keywords: [{ name: 'Support' }] }), // Ezra Bridger
   ASH_253: card({ id: 'ASH_253', type: 'unit', arena: 'space', power: 3, hp: 4, keywords: [{ name: 'Support' }] }), // Yellow Aces Bomber
-  // onAttack batch B2 (self-cost choices)
+  // On Attack — paying a cost of your own
   ASH_059: card({ id: 'ASH_059', type: 'unit', arena: 'ground', power: 3, hp: 4, keywords: [{ name: 'Support' }] }), // Leia Organa
   ASH_172: card({ id: 'ASH_172', type: 'unit', arena: 'space', power: 3, hp: 5, keywords: [{ name: 'Saboteur' }] }), // Razor Crest
   ASH_203: card({ id: 'ASH_203', type: 'unit', arena: 'space', power: 1, hp: 3, keywords: [{ name: 'Support' }] }), // Mando's N-1 Starfighter
@@ -105,7 +105,7 @@ function defeatInCombat(cardId: string): GameState {
   return resolve(s, { type: 'attack', attackerId: 't', target: { kind: 'unit', instanceId: 'br' } })
 }
 
-describe('whenDefeated, simple effects (#356)', () => {
+describe('whenDefeated, simple effects', () => {
   it('Ant Droid (116): draws a card', () => {
     expect(defeat('ASH_116').players.player.hand).toHaveLength(1)
   })
@@ -129,7 +129,7 @@ describe('whenDefeated, simple effects (#356)', () => {
   })
 })
 
-describe('whenDefeated, target choices (#356)', () => {
+describe('whenDefeated, target choices', () => {
   it('Green Leader (153): may deal 2 damage to a unit', () => {
     const s = defeat('ASH_153', { oppUnits: [unit('e', 'FILLER', { arena: 'ground' })] })
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayDamage', amount: 2, controller: 'player', optional: true })
@@ -159,7 +159,7 @@ describe('whenDefeated, target choices (#356)', () => {
   })
 })
 
-describe('whenDefeated, combat-context (#356)', () => {
+describe('whenDefeated, combat-context', () => {
   it('Paz Vizsla (028): creates 2 Mandalorian tokens when NOT defeated by combat', () => {
     const s = defeat('ASH_028') // ability damage, not combat
     expect(s.players.player.units.filter(u => u.cardId === TOKEN_MANDALORIAN)).toHaveLength(2)
@@ -181,7 +181,7 @@ describe('whenDefeated, combat-context (#356)', () => {
   })
 })
 
-describe('Flarestar (167): whenPlayed / whenDefeated (#356)', () => {
+describe('Flarestar (167): whenPlayed / whenDefeated', () => {
   it('may give an Advantage token to a unit when defeated', () => {
     const s = defeat('ASH_167', { oppUnits: [unit('e', 'FILLER', { arena: 'ground' })] })
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayGiveTokens', token: TOKEN_ADVANTAGE, count: 1, optional: true })
@@ -351,7 +351,7 @@ function onAtk(cardId: string, opts: { target?: { kind: 'base' } | { kind: 'unit
   return resolve(s, { type: 'attack', attackerId: 'a', target: opts.target ?? { kind: 'base' } })
 }
 
-describe('onAttack, simple (#356)', () => {
+describe('onAttack, simple', () => {
   it('Danger Squadron Wingmen (157): may give an Advantage to ANOTHER unit', () => {
     const s = onAtk('ASH_157', { playerUnits: [unit('f', 'FILLER', { arena: 'ground' })] })
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayGiveTokens', token: TOKEN_ADVANTAGE, count: 1, optional: true })
@@ -393,7 +393,7 @@ describe('onAttack, simple (#356)', () => {
   })
 })
 
-describe('Support passes On Attack to the supported attacker (#356)', () => {
+describe('Support passes On Attack to the supported attacker', () => {
   it("Migs Mayfeld (168): a unit attacking via Support gains Migs's On Attack (deal 1 to the defender)", () => {
     const s0 = state({
       cards: E,
@@ -423,7 +423,7 @@ describe('Support passes On Attack to the supported attacker (#356)', () => {
   })
 })
 
-describe('onAttack, conditional/self (batch B1) (#356)', () => {
+describe('On Attack — conditional on the board or on this unit', () => {
   it('Doctor Pershing (072): draws only with 3+ remaining HP', () => {
     const full = onAtk('ASH_072') // 0/4, undamaged → draws
     expect(full.players.player.hand).toHaveLength(1)
@@ -459,7 +459,7 @@ describe('onAttack, conditional/self (batch B1) (#356)', () => {
   })
 })
 
-describe('onAttack, self-cost choices (batch B2) (#356)', () => {
+describe('On Attack — paying a cost of your own', () => {
   it('Leia Organa (059): may deal 1 to herself to heal 2 from your base', () => {
     const s0 = state({ cards: E, players: { player: player({ units: [unit('a', 'ASH_059', { arena: 'ground' })], base: { cardId: 'TST_B', damage: 3 } }), opponent: player({}) } })
     const atk = resolve(s0, { type: 'attack', attackerId: 'a', target: { kind: 'base' } })
@@ -488,7 +488,7 @@ describe('onAttack, self-cost choices (batch B2) (#356)', () => {
   })
 })
 
-describe('When Attack Ends (#356)', () => {
+describe('When Attack Ends', () => {
   it('Grand Admiral Thrawn (033): readies itself only if the defender was defeated', () => {
     const killed = onAtk('ASH_033', { oppUnits: [unit('e', 'ZEROPOW', { arena: 'ground', damage: 2 })], target: { kind: 'unit', instanceId: 'e' } })
     expect(U(killed, 'e')).toBeUndefined()
@@ -520,7 +520,7 @@ describe('When Attack Ends (#356)', () => {
   })
 })
 
-describe('multi-trigger + action abilities (#356)', () => {
+describe('multi-trigger + action abilities', () => {
   it('Justifier (146): On Attack may deal 1; a kill lets you give Advantage to a unit', () => {
     const s = onAtk('ASH_146', { oppUnits: [unit('weak', 'WEAK', { arena: 'space' }), unit('other', 'FILLERSPACE', { arena: 'space' })] })
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayDamage', amount: 1, optional: true })
@@ -552,7 +552,7 @@ describe('multi-trigger + action abilities (#356)', () => {
   })
 })
 
-describe('Boba Fett\'s Rancor + Greef Karga (#356)', () => {
+describe('Boba Fett\'s Rancor + Greef Karga', () => {
   it("Boba Fett's Rancor (179): When Played deals 5 to your base, then 10 to an enemy ground unit", () => {
     const s0 = state({ cards: E, players: { player: player({ hand: ['ASH_179'], resources: ready(10) }), opponent: player({ units: [unit('e', 'BIGWALL', { arena: 'ground' })] }) } })
     const played = resolve(s0, { type: 'playCard', handIndex: 0 })

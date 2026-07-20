@@ -6,7 +6,7 @@ import { state, player, unit, card, CARDS } from './helpers/engineFixtures'
 import type { GameState } from '../engine/types'
 
 /**
- * Base-damage prevention (#357). All base damage now funnels through `dealDamageToBase`, so a
+ * Base-damage prevention. All base damage now funnels through `dealDamageToBase`, so a
  * prevention effect applies wherever the damage came from — a combat attack, Overwhelm spill, or a
  * card effect. At Attin Safety Droid caps any single instance at 4.
  */
@@ -27,7 +27,7 @@ const board = (attacker: string, defenders: ReturnType<typeof unit>[]) => state(
 })
 const oppBase = (s: GameState) => s.players.opponent.base.damage
 
-describe('At Attin Safety Droid (070) — caps base damage at 4 (#357)', () => {
+describe('At Attin Safety Droid (070) — caps base damage at 4', () => {
   it('caps a big combat hit on its controller’s base', () => {
     const guarded = resolve(board('BIGHITTER', [unit('d', 'ASH_070', { arena: 'ground' })]), { type: 'attack', attackerId: 'a', target: { kind: 'base' } })
     expect(oppBase(guarded)).toBe(4) // 9 → 4

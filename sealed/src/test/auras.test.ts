@@ -10,8 +10,8 @@ afterEach(() => unregisterAbility('TST_AURA'))
 const deployed = (cardId: string): LeaderState => ({ cardId, deployed: true, epicActionUsed: true, exhausted: false })
 const find = (units: UnitState[], id: string): UnitState => units.find(u => u.instanceId === id)!
 
-/** Constant/aura abilities — a unit modifies OTHER units' stats/keywords (#346). */
-describe('aura mechanism (#346)', () => {
+/** Constant/aura abilities — a unit modifies OTHER units' stats/keywords. */
+describe('aura mechanism', () => {
   it('a stat aura buffs other friendly units, but not itself or enemies', () => {
     registerCard('TST_AURA', { aura: (_s, src, tgt, friendly) => (friendly && tgt.instanceId !== src.instanceId ? { power: 2 } : undefined) })
     const s = state({
@@ -37,7 +37,7 @@ describe('aura mechanism (#346)', () => {
   })
 })
 
-describe('Bo-Katan (ASH_010) deployed aura — +1/0 to other Mandalorians (#346)', () => {
+describe('Bo-Katan (ASH_010) deployed aura — +1/0 to other Mandalorians', () => {
   it('buffs other friendly Mandalorian units only', () => {
     const s = state({
       cards: { ...CARDS, ASH_010: card({ id: 'ASH_010', type: 'leader', power: 4, hp: 7 }), MANDO: card({ id: 'MANDO', type: 'unit', arena: 'ground', power: 2, hp: 2, traits: ['Mandalorian'] }) },
@@ -52,7 +52,7 @@ describe('Bo-Katan (ASH_010) deployed aura — +1/0 to other Mandalorians (#346)
   })
 })
 
-describe('Grand Admiral Sloane (ASH_007) deployed aura — Overwhelm+Sentinel to others (#346)', () => {
+describe('Grand Admiral Sloane (ASH_007) deployed aura — Overwhelm+Sentinel to others', () => {
   it('grants Overwhelm and Sentinel to other friendly units', () => {
     const s = state({
       cards: { ...CARDS, ASH_007: card({ id: 'ASH_007', type: 'leader', power: 3, hp: 6 }) },

@@ -3,7 +3,7 @@ import { randomAi } from '../ai/randomAi'
 import { legalMoves } from '../engine/legalMoves'
 import { player, state, ready } from './helpers/engineFixtures'
 
-describe('randomAi (T5.1 — rung 0)', () => {
+describe('randomAi — rung 0', () => {
   const busyState = () =>
     state({
       players: {

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { faviconHref, applyFavicon } from '../favicon'
 
-describe('faviconHref (#329)', () => {
+describe('faviconHref', () => {
   it('uses the white dmgCtrl icon in dev (to tell the dev tab apart)', () => {
     expect(faviconHref(true, '/sealed/')).toBe('/sealed/dmgctrl-icon-192-white.svg')
   })
@@ -11,7 +11,7 @@ describe('faviconHref (#329)', () => {
   })
 })
 
-describe('applyFavicon (#329)', () => {
+describe('applyFavicon', () => {
   beforeEach(() => {
     document.head.innerHTML = '<link id="favicon" rel="icon" href="/sealed/dmgCtrl-icon-192.png" />'
   })

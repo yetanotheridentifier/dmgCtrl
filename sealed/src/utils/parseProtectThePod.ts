@@ -1,5 +1,5 @@
 /**
- * ProtectThePod deck import (T1.6).
+ * ProtectThePod deck import.
  *
  * ASSUMED SHAPE — no real PTP export sample was available when this was written.
  * PTP advertises SWUDB-compatible JSON, so this targets the de-facto SWUDB deck

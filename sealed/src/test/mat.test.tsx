@@ -7,14 +7,14 @@ import type { GameState } from '../engine/types'
 // Reset the shared modifier store between tests (CardFace zoom reads it).
 afterEach(() => fireEvent.keyUp(window, { key: 'Shift', shiftKey: false, altKey: false }))
 
-describe('DeckPile (#332)', () => {
+describe('DeckPile', () => {
   it('shows the number of cards remaining', () => {
     render(<DeckPile count={17} />)
     expect(screen.getByTestId('deck-pile')).toHaveTextContent('17')
   })
 })
 
-describe('ResourceStack (#332)', () => {
+describe('ResourceStack', () => {
   it('shows a ready card with the ready count, and no exhausted card when none are used', () => {
     render(<ResourceStack ready={3} exhausted={0} />)
     expect(screen.getByTestId('resources-ready')).toHaveTextContent('3')
@@ -41,7 +41,7 @@ function discardState(discard: string[]): GameState {
   })
 }
 
-describe('DiscardPile (#332)', () => {
+describe('DiscardPile', () => {
   it('renders nothing clickable when the discard is empty', () => {
     render(<DiscardPile state={discardState([])} side="player" />)
     expect(screen.queryByTestId('player-discard-pile')).toBeNull()
@@ -73,7 +73,7 @@ describe('DiscardPile (#332)', () => {
     expect(screen.getByTestId('discard-overlay')).toBeInTheDocument()
   })
 
-  it('zooms a discarded card on shift + hover in the overlay (#332)', () => {
+  it('zooms a discarded card on shift + hover in the overlay', () => {
     render(<DiscardPile state={discardState(['D1', 'D2'])} side="player" />)
     fireEvent.click(screen.getByTestId('player-discard-pile'))
     const overlay = screen.getByTestId('discard-overlay')

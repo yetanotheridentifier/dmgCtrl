@@ -3,8 +3,8 @@ import { describeAction } from '../utils/describeAction'
 import { state, player, unit, card, CARDS } from './helpers/engineFixtures'
 import type { PendingChoice } from '../engine/types'
 
-/** The action-menu labels for pending "may…" choices (#342), shown as buttons. */
-describe('describeAction — pending choice labels (#342)', () => {
+/** The action-menu labels for pending "may…" choices, shown as buttons. */
+describe('describeAction — pending choice labels', () => {
   const withChoice = (choice: PendingChoice, extraCards = {}) =>
     state({
       cards: { ...CARDS, ...extraCards },

@@ -6,10 +6,10 @@ import { state, player, unit, card, CARDS } from './helpers/engineFixtures'
 import type { GameState } from '../engine/types'
 
 /**
- * Group E spike (#356): a `whenDefeated` ability that raises a *choice* must work when the unit is
+ * A `whenDefeated` ability that raises a *choice* must work when the unit is
  * defeated *in combat* — both when it's the attacker's unit (the choice stays with the active player)
- * and when it's the defender's (control must be handed to the defender, then the turn resumes). This
- * is the linchpin the whole group depends on.
+ * and when it's the defender's (control must be handed to the defender, then the turn resumes).
+ * Uses a synthetic card so the test pins the mechanism rather than any one card's wording.
  */
 const WD = 'WD_TEST'
 registerCard(WD, {
@@ -32,7 +32,7 @@ const CARDSET = {
 }
 const U = (s: GameState, id: string) => [...s.players.player.units, ...s.players.opponent.units].find(u => u.instanceId === id)
 
-describe('whenDefeated raising a choice, mid-combat (#356 spike)', () => {
+describe('whenDefeated raising a choice, mid-combat', () => {
   it("the attacker's own unit: the choice stays with the active player", () => {
     // Player's WD (2/1) attacks a BRUISER (5/6); the counter (5) defeats WD.
     const s = state({

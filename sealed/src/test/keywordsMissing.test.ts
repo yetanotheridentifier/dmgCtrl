@@ -7,14 +7,14 @@ import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 
 const hasShield = (u: { upgrades: { cardId: string }[] }) => u.upgrades.some(a => a.cardId === TOKEN_SHIELD)
 
-describe('keyword name trimming (#334)', () => {
+describe('keyword name trimming', () => {
   it('trims stray whitespace so hasKeyword matches (Shielded variants)', () => {
     const c = normaliseCard({ Set: 'TST', Number: '1', Name: 'X', Type: 'Unit', Keywords: ['Shielded '] })
     expect(c.keywords).toEqual([{ name: 'Shielded' }])
   })
 })
 
-describe('Shielded keyword (#334)', () => {
+describe('Shielded keyword', () => {
   it('a played Shielded unit enters play with a shield token', () => {
     const s = state({
       cards: { ...CARDS, TST_SH: card({ id: 'TST_SH', type: 'unit', arena: 'ground', cost: 0, power: 2, hp: 2, keywords: [{ name: 'Shielded' }] }) },
@@ -51,7 +51,7 @@ describe('Shielded keyword (#334)', () => {
   })
 })
 
-describe('Hidden keyword (#334)', () => {
+describe('Hidden keyword', () => {
   const hiddenCards = {
     ...CARDS,
     TST_HID: card({ id: 'TST_HID', type: 'unit', arena: 'ground', power: 2, hp: 3, keywords: [{ name: 'Hidden' }] }),
@@ -110,7 +110,7 @@ describe('Hidden keyword (#334)', () => {
   })
 })
 
-describe('Ambush keyword (#334)', () => {
+describe('Ambush keyword', () => {
   const ambushCards = {
     ...CARDS,
     TST_AMB: card({ id: 'TST_AMB', type: 'unit', arena: 'ground', cost: 0, power: 3, hp: 3, keywords: [{ name: 'Ambush' }] }),
@@ -168,7 +168,7 @@ describe('Ambush keyword (#334)', () => {
   })
 })
 
-describe('Support keyword (#334)', () => {
+describe('Support keyword', () => {
   const supportCards = {
     ...CARDS,
     // Support + Overwhelm: the chosen attacker should GAIN Overwhelm for the attack.
@@ -221,7 +221,7 @@ describe('Support keyword (#334)', () => {
   })
 })
 
-describe('Support on deploy — leaders (#348)', () => {
+describe('Support on deploy — leaders', () => {
   // The Mandalorian (ASH_014) has Support; its deployed side has "On Attack: if initiative, may draw".
   const cards = { ...CARDS, ASH_014: card({ id: 'ASH_014', type: 'leader', power: 4, hp: 6, keywords: [{ name: 'Support' }] }) }
   const undeployed = { cardId: 'ASH_014', deployed: false, epicActionUsed: false, exhausted: false }

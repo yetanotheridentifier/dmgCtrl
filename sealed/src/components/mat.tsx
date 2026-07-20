@@ -15,7 +15,7 @@ function dims(short: number, landscape: boolean) {
 
 /**
  * A face-down card back: the transparent dmgCtrl symbol on an opaque card in the
- * darker background colour (not the paler play-area surface) (#332).
+ * darker background colour (not the paler play-area surface).
  */
 export function CardBack({ widthPx = MAT_CARD_PX, landscape = false, symbol = true }: { widthPx?: number; landscape?: boolean; symbol?: boolean }) {
   return (
@@ -28,7 +28,7 @@ export function CardBack({ widthPx = MAT_CARD_PX, landscape = false, symbol = tr
   )
 }
 
-/** An empty pile / slot: a solid pale-grey card outline (#332). */
+/** An empty pile / slot: a solid pale-grey card outline. */
 export function EmptySlot({ widthPx = MAT_CARD_PX, landscape = false }: { widthPx?: number; landscape?: boolean }) {
   return <div style={dims(widthPx, landscape)} className="rounded-lg border border-line/50" />
 }
@@ -36,7 +36,7 @@ export function EmptySlot({ widthPx = MAT_CARD_PX, landscape = false }: { widthP
 /**
  * A pile's count across the top of the card — transparent (no banner) with a
  * drop shadow for legibility, so the card art/symbol stays fully visible. Shared
- * by the deck, resources and discard for a consistent placement and size (#332).
+ * by the deck, resources and discard for a consistent placement and size.
  */
 function CountChip({ children }: { children: ReactNode }) {
   return (
@@ -61,7 +61,7 @@ export function DeckPile({ count }: { count: number }) {
 
 function ResourceCounter({ count, exhausted, testid }: { count: number; exhausted?: boolean; testid: string }) {
   // Exhausted resources are shown landscape (turned 90°), like the physical game —
-  // the turn alone marks them as spent, with no dimming overlay (#332).
+  // the turn alone marks them as spent, with no dimming overlay.
   return (
     <div data-testid={testid} className="relative w-fit">
       <CardBack landscape={exhausted} />
@@ -74,7 +74,7 @@ function ResourceCounter({ count, exhausted, testid }: { count: number; exhauste
  * Resources as two statically-placed slots: a ready card showing the number of
  * available resources, and — once any are spent — an exhausted (turned) card
  * showing the number used. Ready + exhausted = total; the ready card disappears
- * at 0; the column width never changes (#332).
+ * at 0; the column width never changes.
  */
 export function ResourceStack({ ready, exhausted }: { ready: number; exhausted: number }) {
   return (
@@ -104,7 +104,7 @@ function DiscardOverlay({ cardIds, state, onClose }: { cardIds: string[]; state:
 
 /**
  * The discard pile: face-up, most-recent card on top, with a count. Clicking it
- * opens an overlay listing every discarded card; clicking outside dismisses (#332).
+ * opens an overlay listing every discarded card; clicking outside dismisses.
  */
 export function DiscardPile({ state, side }: { state: GameState; side: PlayerId }) {
   const [open, setOpen] = useState(false)
@@ -136,7 +136,7 @@ export function DiscardPile({ state, side }: { state: GameState; side: PlayerId 
 /**
  * The opponent's hidden hand: overlaid card backs, each layered over the last.
  * Only the top card carries the dmgCtrl symbol; the covered cards are plain, so
- * the stack never smears symbols however the cards overlap (#332).
+ * the stack never smears symbols however the cards overlap.
  */
 export function OpponentHand({ count }: { count: number }) {
   const STEP_PX = 18 // exposed left edge of each covered card

@@ -6,7 +6,7 @@ import { state, player, unit, card, CARDS } from './helpers/engineFixtures'
 import type { GameState } from '../engine/types'
 
 /**
- * HP-reduction defeats (#357). Lowering a unit's HP can defeat it with no damage dealt — handled two
+ * HP-reduction defeats. Lowering a unit's HP can defeat it with no damage dealt — handled two
  * ways, because the two cards reduce HP through different mechanisms:
  *  - Morgan Elsbeth's −2/−2 is a *lasting* effect, so a resting-state sweep (`sweepStateBasedDefeats`,
  *    run after every action) catches it.
@@ -23,7 +23,7 @@ const F = {
 }
 const U = (s: GameState, id: string) => [...s.players.player.units, ...s.players.opponent.units].find(u => u.instanceId === id)
 
-describe('Morgan Elsbeth (050) — −2/−2 can defeat via the state-based sweep (#357)', () => {
+describe('Morgan Elsbeth (050) — −2/−2 can defeat via the state-based sweep', () => {
   /** Morgan dies, raising her "may give a unit −2/−2" choice. */
   const morganDies = (targetDamage: number) => {
     const s = state({
@@ -58,7 +58,7 @@ describe('Morgan Elsbeth (050) — −2/−2 can defeat via the state-based swee
   })
 })
 
-describe('Scion Shuttle (046) — −1/−1 on the defender applies during combat (#357)', () => {
+describe('Scion Shuttle (046) — −1/−1 on the defender applies during combat', () => {
   const attackWith = (defenderCard: string) => {
     const s = state({
       cards: F,

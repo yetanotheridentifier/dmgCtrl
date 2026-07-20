@@ -8,7 +8,7 @@ import { state, player, unit, card, ready, CARDS } from './helpers/engineFixture
 import type { GameState } from '../engine/types'
 
 /**
- * Reactive triggers (#357) — abilities that fire off *another* card's event:
+ * Reactive triggers — abilities that fire off *another* card's event:
  * `whenFriendlyUnitDefeated` (The Twins) and `whenEnemyAttacksBase` (Kachirho Militia).
  */
 const F = {
@@ -21,7 +21,7 @@ const F = {
 }
 const U = (s: GameState, id: string) => [...s.players.player.units, ...s.players.opponent.units].find(u => u.instanceId === id)!
 
-describe('whenFriendlyUnitDefeated — The Twins (127) (#357)', () => {
+describe('whenFriendlyUnitDefeated — The Twins (127)', () => {
   it('heals 1 from your base when another friendly unit is defeated', () => {
     const s = state({
       cards: F,
@@ -68,7 +68,7 @@ describe('whenFriendlyUnitDefeated — The Twins (127) (#357)', () => {
   })
 })
 
-describe('whenEnemyAttacksBase — Kachirho Militia (160) (#357)', () => {
+describe('whenEnemyAttacksBase — Kachirho Militia (160)', () => {
   const board = (attackerCard: string, arena: 'ground' | 'space', militia: Parameters<typeof unit>[2] = {}) => state({
     cards: F,
     players: {
@@ -101,7 +101,7 @@ describe('whenEnemyAttacksBase — Kachirho Militia (160) (#357)', () => {
   })
 })
 
-describe('whenUpgradeAttached — Sabine Wren (208) (#357)', () => {
+describe('whenUpgradeAttached — Sabine Wren (208)', () => {
   const S = { ...F, ASH_208: card({ id: 'ASH_208', type: 'unit', arena: 'ground', cost: 5, power: 4, hp: 5, keywords: [{ name: 'Shielded' }] }), UPG: card({ id: 'UPG', type: 'upgrade', power: 1, hp: 1 }) }
 
   it('fires when she enters play with a Shield from Shielded', () => {
@@ -141,7 +141,7 @@ describe('whenUpgradeAttached — Sabine Wren (208) (#357)', () => {
   })
 })
 
-// ── Batch A–C (#357): draw / own-base-damage / upgrade-defeat triggers + phase trackers ────────
+// ── Draw / own-base-damage / upgrade-defeat triggers, and phase trackers ────────────────
 
 const G = {
   ...F,
@@ -155,7 +155,7 @@ const G = {
 const adv = (u: { upgrades: { cardId: string }[] }) => u.upgrades.filter(a => a.cardId === TOKEN_ADVANTAGE).length
 const rich = (over: Parameters<typeof player>[0] = {}) => player({ resources: ready(20), ...over })
 
-describe('whenDrawCards — Axe Woves (169) (#357)', () => {
+describe('whenDrawCards — Axe Woves (169)', () => {
   it('gains an Advantage token when its controller draws, once per draw event not per card', () => {
     const s = state({ cards: G, players: { player: rich({ units: [unit('a', 'ASH_169')], deck: ['GROUNDER', 'GROUNDER', 'GROUNDER'] }), opponent: player() } })
     const drawn = drawCards(s, 'player', 2)
@@ -170,7 +170,7 @@ describe('whenDrawCards — Axe Woves (169) (#357)', () => {
   })
 })
 
-describe('whenOwnBaseDamaged — Blade Three (204) (#357)', () => {
+describe('whenOwnBaseDamaged — Blade Three (204)', () => {
   it('gains an Advantage token when its controller’s base is damaged', () => {
     const s = state({ cards: G, players: { player: rich({ units: [unit('b', 'ASH_204')] }), opponent: player() } })
     expect(adv(U(dealDamageToBase(s, 'player', 3), 'b'))).toBe(1)
@@ -188,7 +188,7 @@ describe('whenOwnBaseDamaged — Blade Three (204) (#357)', () => {
   })
 })
 
-describe('whenFriendlyUpgradeDefeated — Zeb Orrelios (161) (#357)', () => {
+describe('whenFriendlyUpgradeDefeated — Zeb Orrelios (161)', () => {
   it('offers 1 damage to a base when a friendly upgrade is defeated', () => {
     const s = state({ cards: G, players: { player: rich({ units: [unit('z', 'ASH_161'), unit('g', 'GROUNDER', { upgrades: [{ cardId: 'UPG', owner: 'player' }] })] }), opponent: player() } })
     const gone = defeatUpgradeAt(s, 'g', 0)
@@ -210,7 +210,7 @@ describe('whenFriendlyUpgradeDefeated — Zeb Orrelios (161) (#357)', () => {
   })
 })
 
-describe('Rancor Keeper (032) — damage any number of bases when a friendly unit survives damage (#357)', () => {
+describe('Rancor Keeper (032) — damage any number of bases when a friendly unit survives damage', () => {
   const board = () => state({ cards: G, players: { player: rich({ units: [unit('r', 'ASH_032'), unit('g', 'GROUNDER')] }), opponent: player() } })
 
   it('offers each base once, and only once each round', () => {
@@ -236,7 +236,7 @@ describe('Rancor Keeper (032) — damage any number of bases when a friendly uni
   })
 })
 
-describe('Baylan Skoll (039) — phase-condition triggers (#357)', () => {
+describe('Baylan Skoll (039) — phase-condition triggers', () => {
   it('gives Advantage only if an enemy base was damaged this phase', () => {
     const clean = state({ cards: G, players: { player: rich({ hand: ['ASH_039'], units: [unit('g', 'GROUNDER')] }), opponent: player() } })
     expect(resolve(clean, { type: 'playCard', handIndex: 0 }).pendingChoices ?? []).toHaveLength(0)

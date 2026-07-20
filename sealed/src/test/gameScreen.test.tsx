@@ -11,7 +11,7 @@ const SWU_CARDS: SwuCard[] = [
   { Set: 'TST', Number: '001', Name: 'Test Leader', Type: 'Leader', Cost: '5', Power: '4', HP: '7' },
   { Set: 'TST', Number: '002', Name: 'Test Base', Type: 'Base', HP: '30' },
   // 40 power vs a 30-HP base → a base attack overkills it, so remaining health
-  // would go negative without clamping (#323).
+  // would go negative without clamping.
   { Set: 'TST', Number: '900', Name: 'Big Test Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '0', Power: '40', HP: '30', FrontArt: 'https://cdn.swu-db.com/images/cards/TST/900.png' },
   { Set: 'TST', Number: '901', Name: 'Pricey Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '9', Power: '1', HP: '1' },
 ]
@@ -42,7 +42,7 @@ async function seedCards() {
 async function renderBoard(onExit = vi.fn()) {
   render(<GameScreen deck={DECK} opponentDeck={DECK} onExit={onExit} onHelp={vi.fn()} gameOptions={OPTS} />)
   await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
-  // Setup phase (#304): keep the opening hand, then resource two cards by clicking
+  // Setup phase: keep the opening hand, then resource two cards by clicking
   // them in the hand (index 0 is a Pricey Unit each time). The AI's setup heuristic
   // does the same, landing in round 1's action phase with hand 901,900,900,900.
   const user = userEvent.setup()
@@ -78,7 +78,7 @@ describe('GameScreen', () => {
     expect(screen.getByTestId('opponent-base-hp')).toHaveTextContent(/^0$/)
   })
 
-  it('shows resources on the mat and the opponent hand face-down (#332)', async () => {
+  it('shows resources on the mat and the opponent hand face-down', async () => {
     await renderBoard()
     // Player mat: 2 ready resources, none exhausted yet.
     const playerMat = screen.getByTestId('player-mat')
@@ -89,7 +89,7 @@ describe('GameScreen', () => {
     expect(oppFan.children).toHaveLength(4)
   })
 
-  it('labels the mat columns; the opponent leader column is unlabelled (#332)', async () => {
+  it('labels the mat columns; the opponent leader column is unlabelled', async () => {
     await renderBoard()
     const playerMat = screen.getByTestId('player-mat')
     for (const label of ['Deck', 'Resources', 'Hand', 'Action', 'Discard']) {
@@ -131,7 +131,7 @@ describe('GameScreen', () => {
     expect(within(screen.getByTestId('game-log')).getAllByText(/pass/i).length).toBeGreaterThan(0)
   })
 
-  it('keeps the pass/initiative choices in the mat Action column, not play/attack (#332)', async () => {
+  it('keeps the pass/initiative choices in the mat Action column, not play/attack', async () => {
     await renderBoard()
     const actionCol = within(screen.getByTestId('player-mat'))
     // Menu-only choices are buttons; playing/attacking are click affordances, not buttons.
@@ -153,7 +153,7 @@ describe('GameScreen', () => {
 
     const banner = screen.getByTestId('game-over-banner')
     expect(banner).toHaveTextContent(/you won/i)
-    // The outcome is a modal overlay over the screen, not an in-flow section (#332).
+    // The outcome is a modal overlay over the screen, not an in-flow section.
     expect(banner.parentElement).toHaveClass('fixed')
 
     await user.click(screen.getByTestId('rematch-btn'))
@@ -173,7 +173,7 @@ describe('GameScreen', () => {
     expect(within(screen.getByTestId('player-ground-units')).getByRole('img', { name: /big test unit/i })).toBeInTheDocument()
   })
 
-  it('resources a card by clicking it in the setup phase, highlighted green (#328)', async () => {
+  it('resources a card by clicking it in the setup phase, highlighted green', async () => {
     const user = userEvent.setup()
     render(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
     await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
@@ -185,13 +185,13 @@ describe('GameScreen', () => {
     expect(within(screen.getByTestId('player-mat')).getByTestId('resources-ready')).toHaveTextContent('1')
   })
 
-  it('highlights playable hand cards blue (accent) in the action phase (#328)', async () => {
+  it('highlights playable hand cards blue (accent) in the action phase', async () => {
     await renderBoard()
     // hand: 901,900,900,900 — index 3 is a playable Big Test Unit
     expect(within(screen.getByTestId('hand-card-3')).getByTestId('card-face')).toHaveAttribute('data-highlight', 'accent')
   })
 
-  it('renders hand cards in a tight portrait frame — no square-slot padding (#328)', async () => {
+  it('renders hand cards in a tight portrait frame — no square-slot padding', async () => {
     await renderBoard()
     const face = within(screen.getByTestId('hand-card-3')).getByTestId('card-face')
     // Portrait card, tight: the frame is the card itself (120×168), not the 168 square slot.
@@ -223,7 +223,7 @@ describe('GameScreen', () => {
     expect(screen.getByTestId('game-board')).toBeInTheDocument()
   })
 
-  it('renders card art in the hand via the worker art proxy (#312)', async () => {
+  it('renders card art in the hand via the worker art proxy', async () => {
     await renderBoard()
     const hand = screen.getByTestId('player-hand')
     const art = within(hand).getAllByRole('img', { name: /big test unit/i })
@@ -231,7 +231,7 @@ describe('GameScreen', () => {
     expect(art[0]).toHaveAttribute('src', 'https://worker.dmgctrl.app/art/images/cards/TST/900.png')
   })
 
-  it('renders card art for units on the board (#312)', async () => {
+  it('renders card art for units on the board', async () => {
     const user = userEvent.setup()
     await renderBoard()
     await user.click(screen.getByTestId('hand-card-3'))
@@ -241,7 +241,7 @@ describe('GameScreen', () => {
       .toHaveAttribute('src', 'https://worker.dmgctrl.app/art/images/cards/TST/900.png')
   })
 
-  it('shows exhausted units rotated and dimmed; ready units upright (#313)', async () => {
+  it('shows exhausted units rotated and dimmed; ready units upright', async () => {
     const user = userEvent.setup()
     await renderBoard()
     await user.click(screen.getByTestId('hand-card-3'))
@@ -258,7 +258,7 @@ describe('GameScreen', () => {
       .toHaveAttribute('data-orientation', 'portrait')
   })
 
-  it('board affordance: click a ready unit, then a highlighted target, to attack (#314)', async () => {
+  it('board affordance: click a ready unit, then a highlighted target, to attack', async () => {
     const user = userEvent.setup()
     await renderBoard()
     await user.click(screen.getByTestId('hand-card-3'))
@@ -266,9 +266,9 @@ describe('GameScreen', () => {
     await user.click(screen.getByRole('button', { name: /^pass$/i }))
     await user.click(screen.getByRole('button', { name: /skip resourcing/i }))
 
-    // The ready unit is actionable — and its card (not the slot) carries the highlight (#326)
+    // The ready unit is actionable — and its card (not the slot) carries the highlight
     const unitTile = screen.getByTestId('board-unit-u1')
-    expect(unitTile.tagName).toBe('DIV') // no <li> marker dots (#326)
+    expect(unitTile.tagName).toBe('DIV') // no <li> marker dots
     expect(unitTile).toHaveAttribute('data-actionable', 'true')
     await user.click(unitTile)
     expect(screen.getByTestId('board-unit-u1')).toHaveAttribute('data-selected', 'true')
@@ -281,7 +281,7 @@ describe('GameScreen', () => {
     expect(screen.getByTestId('opponent-base-hp')).toHaveTextContent(/^30$/) // 40 dmg capped at the 30-HP base, not shown as 40
   })
 
-  it('clicking a selected unit deselects it (#314)', async () => {
+  it('clicking a selected unit deselects it', async () => {
     const user = userEvent.setup()
     await renderBoard()
     await user.click(screen.getByTestId('hand-card-3'))
@@ -294,7 +294,7 @@ describe('GameScreen', () => {
     expect(screen.queryByTestId('target-opponent-base')).not.toBeInTheDocument()
   })
 
-  it('an exhausted unit is not actionable (#314)', async () => {
+  it('an exhausted unit is not actionable', async () => {
     const user = userEvent.setup()
     await renderBoard()
     await user.click(screen.getByTestId('hand-card-3'))
@@ -303,7 +303,7 @@ describe('GameScreen', () => {
     expect(screen.getByTestId('board-unit-u1')).toHaveAttribute('data-actionable', 'false')
   })
 
-  it('shows bases in a central strip with your leader below, opponent leader in their mat (#4, #332)', async () => {
+  it('shows bases in a central strip with your leader below, opponent leader in their mat (#4)', async () => {
     await renderBoard()
     // The opponent's leader has moved to their mat, so the strip holds both bases
     // and only your leader (below your base).
@@ -319,14 +319,14 @@ describe('GameScreen', () => {
     expect(within(screen.getByTestId('opponent-mat')).getByTestId('opponent-leader-card')).toBeInTheDocument()
   })
 
-  it('renders the log in a left-hand side panel (#315, #332)', async () => {
+  it('renders the log in a left-hand side panel', async () => {
     await renderBoard()
     const panel = screen.getByTestId('game-log-panel')
     expect(panel.tagName).toBe('ASIDE')
     expect(within(panel).getByTestId('game-log')).toBeInTheDocument()
   })
 
-  it('puts the game state (round/phase/initiative) between the bases in the battlefield (#332)', async () => {
+  it('puts the game state (round/phase/initiative) between the bases in the battlefield', async () => {
     await renderBoard()
     const gameState = within(screen.getByTestId('battlefield')).getByTestId('game-state')
     expect(gameState).toHaveTextContent(/round/i)
@@ -334,12 +334,12 @@ describe('GameScreen', () => {
     expect(gameState).toHaveTextContent(/init/i)
   })
 
-  it('does not label an empty arena "empty" (#332)', async () => {
+  it('does not label an empty arena "empty"', async () => {
     await renderBoard()
     expect(screen.getByTestId('player-space-units')).not.toHaveTextContent(/empty/i)
   })
 
-  it('logs the actor as capitalised You/Opp in a separate column (#332)', async () => {
+  it('logs the actor as capitalised You/Opp in a separate column', async () => {
     const user = userEvent.setup()
     await renderBoard()
     await user.click(screen.getByTestId('hand-card-3'))
@@ -348,9 +348,9 @@ describe('GameScreen', () => {
     expect(within(log).getAllByText('Opp').length).toBeGreaterThan(0)
   })
 
-  // Exit moved to the app header (#332) — covered in app.test.tsx.
+  // Exit moved to the app header — covered in app.test.tsx.
 
-  it('plays an upgrade from hand onto a unit via click-to-target (#336)', async () => {
+  it('plays an upgrade from hand onto a unit via click-to-target', async () => {
     // A deck with a cheap unit + a cheap upgrade; the opponent's deck is inert
     // (all unaffordable) so the AI just passes and the turn comes back.
     const UP_CARDS: SwuCard[] = [

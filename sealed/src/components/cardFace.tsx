@@ -29,7 +29,7 @@ function keywordLabel(k: KeywordInstance): string {
  * A card's *native* orientation (the ready, un-rotated look): bases and
  * undeployed leaders are landscape cards; everything else (units, events,
  * upgrades, deployed leader unit-sides) is portrait. Exhausting rotates the
- * card 90° from this (#313/#5).
+ * card 90° from this (#5).
  */
 function isNativePortrait(card: EngineCard | undefined, deployed: boolean): boolean {
   if (!card) return true
@@ -39,7 +39,7 @@ function isNativePortrait(card: EngineCard | undefined, deployed: boolean): bool
 }
 
 /**
- * Art-dominant card face (#312/#313/#5): the card is its art, filling a fixed
+ * Art-dominant card face (#5): the card is its art, filling a fixed
  * short-edge card frame at the correct orientation. Exhausted cards rotate 90°
  * and reserve the wider footprint so neighbours never overlap. When the art is
  * missing or fails to load, a compact textual fallback (cost, name, power/HP,
@@ -107,7 +107,7 @@ export default function CardFace({
           'relative overflow-hidden rounded-lg border border-line/60 bg-surface',
           // Exhausted: rotate and DIM, but stay opaque (a brightness filter, not
           // opacity) so anything behind the card — e.g. an upgrade — can't show
-          // through (#336).
+          // through.
           exhausted ? 'rotate-90 brightness-[0.55]' : '',
         ]
           .filter(Boolean)

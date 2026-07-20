@@ -3,7 +3,7 @@ import { render, screen, within, fireEvent } from '@testing-library/react'
 import { CardChoiceOverlay } from '../components/gameScreen'
 import { card } from './helpers/engineFixtures'
 
-/** The reusable centre-screen "look at a card" overlay (#342). */
+/** The reusable centre-screen "look at a card" overlay. */
 describe('CardChoiceOverlay', () => {
   it('shows the prompt, the card, and the action buttons', () => {
     const onPlay = vi.fn()

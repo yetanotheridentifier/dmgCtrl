@@ -24,7 +24,7 @@ export interface CardGridItem {
 }
 
 /**
- * The one centre-screen "set of cards" overlay (#355): a dark backdrop, an optional prompt, a grid of
+ * The one centre-screen "set of cards" overlay: a dark backdrop, an optional prompt, a grid of
  * cards, and an optional footer (buttons / a counter). Consolidates the previous card-choice / card-
  * select / search-reveal / discard overlays. `idPrefix` reproduces each caller's testids
  * (`${idPrefix}-overlay`, `${idPrefix}-prompt`, `${idPrefix}-overlay-content`). `onBackdropClick`

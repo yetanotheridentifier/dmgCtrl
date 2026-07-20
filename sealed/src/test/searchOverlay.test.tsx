@@ -4,7 +4,7 @@ import { SearchRevealOverlay } from '../components/gameScreen'
 import { state, player, card, CARDS } from './helpers/engineFixtures'
 import type { PendingChoice } from '../engine/types'
 
-/** The multi-card "search" reveal overlay for Improvised Identity (#343). */
+/** The multi-card "search" reveal overlay for Improvised Identity. */
 describe('SearchRevealOverlay', () => {
   it('offers Discard only for revealed ground units and reports the deck index', () => {
     const s = state({

@@ -16,7 +16,7 @@ function Harness({ onClick }: { onClick?: () => void }) {
 // Modifier keys are shared module state; release them after each test.
 afterEach(() => fireEvent.keyUp(window, { key: 'Shift', shiftKey: false, altKey: false }))
 
-describe('useCardZoom (#321)', () => {
+describe('useCardZoom', () => {
   it('zooms on Shift + mouse hover, not on hover alone', () => {
     render(<Harness />)
     const el = screen.getByTestId('card')
@@ -38,7 +38,7 @@ describe('useCardZoom (#321)', () => {
     expect(el).toHaveTextContent('idle')
   })
 
-  it('does NOT zoom on focus — focus persisted and left the zoom stuck on for leaders/bases (#321)', () => {
+  it('does NOT zoom on focus — focus persisted and left the zoom stuck on for leaders/bases', () => {
     render(<Harness />)
     const el = screen.getByTestId('card')
     fireEvent.focus(el)
@@ -102,7 +102,7 @@ const LEADER: EngineCard = {
   backArt: 'https://cdn.swu-db.com/images/cards/ASH/001-b.png',
 }
 
-describe('CardZoomPopover (#321)', () => {
+describe('CardZoomPopover', () => {
   it('renders the card at full zoom size (240px short edge), upright', () => {
     const unit: EngineCard = { ...LEADER, type: 'unit', backArt: undefined }
     render(<CardZoomPopover card={unit} />)
@@ -131,7 +131,7 @@ describe('CardZoomPopover (#321)', () => {
     expect(screen.getByRole('img')).toHaveAttribute('src', before!)
   })
 
-  it('portals to document.body and is fixed, so no ancestor overflow can clip it (#331)', () => {
+  it('portals to document.body and is fixed, so no ancestor overflow can clip it', () => {
     const unit: EngineCard = { ...LEADER, type: 'unit', backArt: undefined }
     // A scroll-clipping ancestor: the old absolute-in-place popover would be trapped here.
     render(
@@ -146,7 +146,7 @@ describe('CardZoomPopover (#321)', () => {
     expect(document.body.contains(zoom)).toBe(true)
   })
 
-  it('clamps a bottom-right-anchored card so it stays fully on-screen (#331)', () => {
+  it('clamps a bottom-right-anchored card so it stays fully on-screen', () => {
     const unit: EngineCard = { ...LEADER, type: 'unit', backArt: undefined }
     const anchorRef = { current: null as HTMLElement | null }
     // Anchor sitting at the far bottom-right corner of a 1024×768 jsdom viewport.

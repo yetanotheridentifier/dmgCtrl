@@ -6,7 +6,7 @@ import { state, player, unit, card, ready, CARDS } from './helpers/engineFixture
 import type { GameState } from '../engine/types'
 
 /**
- * Once-per-phase cost reductions (#357) — provided by a unit *in play* to other cards its controller
+ * Once-per-phase cost reductions — provided by a unit *in play* to other cards its controller
  * plays (`costDiscount` / `waivesAspectPenalty`), gated on "the first … you play each phase" via the
  * per-phase `played` record.
  */
@@ -28,7 +28,7 @@ const board = (over: Parameters<typeof player>[0] = {}) => state({
 })
 const U = (s: GameState, id: string) => [...s.players.player.units, ...s.players.opponent.units].find(u => u.instanceId === id)!
 
-describe('Pit Droid Team (075) — first upgrade each phase costs 1 less (#357)', () => {
+describe('Pit Droid Team (075) — first upgrade each phase costs 1 less', () => {
   it('discounts an upgrade played on another friendly unit', () => {
     const s = board()
     expect(effectiveCost(s, 'player', F.PLAIN_UPG, U(s, 'h'))).toBe(2) // 3 - 1
@@ -53,7 +53,7 @@ describe('Pit Droid Team (075) — first upgrade each phase costs 1 less (#357)'
   })
 })
 
-describe('Peli Motto (212) — first non-unit card each phase ignores aspect penalties (#357)', () => {
+describe('Peli Motto (212) — first non-unit card each phase ignores aspect penalties', () => {
   const peliBoard = (over: Parameters<typeof player>[0] = {}) => state({
     cards: F,
     players: {

@@ -9,8 +9,8 @@ afterEach(() => {
   for (const id of ['TST_ACT']) unregisterAbility(id)
 })
 
-/** Activated "Action:" abilities (#343) — the infrastructure Improvised Identity uses. */
-describe('action abilities (#343)', () => {
+/** Activated "Action:" abilities — the infrastructure Improvised Identity uses. */
+describe('action abilities', () => {
   function withActionCard(oncePerRound = true) {
     registerCard('TST_ACT', { actionAbilities: [{ description: 'Draw a card.', oncePerRound, effect: (s, ctx) => drawCards(s, ctx.owner, 1) }] })
     return state({

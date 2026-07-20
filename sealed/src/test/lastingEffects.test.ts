@@ -12,11 +12,11 @@ import { state, player, unit, ready } from './helpers/engineFixtures'
 import '../engine/cardDefinitions'
 
 /**
- * "This phase" lasting effects and phase/attack event tracking (#306/#347).
+ * "This phase" lasting effects and phase/attack event tracking.
  * A lasting effect is a transient +X/+Y and/or keyword grant that expires at the
  * start of the regroup phase (so a unit defeated during regroup uses base stats).
  */
-describe('lasting effects mechanism (#347)', () => {
+describe('lasting effects mechanism', () => {
   const find = (s: ReturnType<typeof state>, id: string) => s.players.player.units.find(u => u.instanceId === id)!
 
   it('adds +power/+hp to the targeted unit only', () => {
@@ -82,7 +82,7 @@ describe('lasting effects mechanism (#347)', () => {
   })
 })
 
-describe('phase/attack event tracking (#347)', () => {
+describe('phase/attack event tracking', () => {
   it('records units that entered play this phase, per controller', () => {
     const s = state({ players: { player: player({ hand: ['TST_U1'], resources: ready(2) }), opponent: player() } })
     const played = resolve(s, { type: 'playCard', handIndex: 0 })

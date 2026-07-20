@@ -83,7 +83,7 @@ describe('DeckSelectScreen', () => {
     expect(within(done).getByText(/done/i)).toBeInTheDocument()
 
     // Which group is "next up" changes as tiers get cleared — and once every unit is built there
-    // is no blocked group left at all, which is the state we're in now (#357).
+    // is no blocked group left at all, which is the state we're in now.
     const nextGroup = UNIT_GROUPS.find(g => g.status !== 'done')
     if (nextGroup) {
       const next = within(groups).getByTestId(`unit-group-${nextGroup.id}`) as HTMLDetailsElement

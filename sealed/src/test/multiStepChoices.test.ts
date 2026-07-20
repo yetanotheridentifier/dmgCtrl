@@ -6,7 +6,7 @@ import { state, player, unit, card, ready, CARDS } from './helpers/engineFixture
 import type { GameState } from '../engine/types'
 
 /**
- * Units whose text is a sequence of decisions (#357): pick two things, pay-then-choose,
+ * Units whose text is a sequence of decisions: pick two things, pay-then-choose,
  * reveal-then-target, or pick-then-pick-a-mode.
  */
 const F = {
@@ -28,7 +28,7 @@ const rich = (over: Parameters<typeof player>[0] = {}) => player({ resources: re
 const choice = (s: GameState) => s.pendingChoices![0]
 const readyCount = (s: GameState, p: 'player' | 'opponent' = 'player') => s.players[p].resources.filter(r => !r.exhausted).length
 
-describe('Chimaera (052) — pair a friendly and an enemy unit for defeat (#357)', () => {
+describe('Chimaera (052) — pair a friendly and an enemy unit for defeat', () => {
   const board = () => state({
     cards: F,
     players: {
@@ -67,7 +67,7 @@ describe('Chimaera (052) — pair a friendly and an enemy unit for defeat (#357)
   })
 })
 
-describe('Jabba the Hutt (042) — return an upgrade, then replay it free (#357)', () => {
+describe('Jabba the Hutt (042) — return an upgrade, then replay it free', () => {
   it('returns your own upgrade and offers to replay it for free', () => {
     const s = state({
       cards: F,
@@ -105,7 +105,7 @@ describe('Jabba the Hutt (042) — return an upgrade, then replay it free (#357)
   })
 })
 
-describe('Jod Na Nawood (219) — pay 4 to exhaust an arena (#357)', () => {
+describe('Jod Na Nawood (219) — pay 4 to exhaust an arena', () => {
   it('pays 4 and exhausts every unit in the chosen arena, both sides', () => {
     const s = state({
       cards: F,
@@ -135,7 +135,7 @@ describe('Jod Na Nawood (219) — pay 4 to exhaust an arena (#357)', () => {
   })
 })
 
-describe('Queen Soruna (132) — reveal a unit to snipe one of matching cost (#357)', () => {
+describe('Queen Soruna (132) — reveal a unit to snipe one of matching cost', () => {
   it('deals 3 to a unit costing the same as the revealed card', () => {
     const s = state({
       cards: F,
@@ -161,7 +161,7 @@ describe('Queen Soruna (132) — reveal a unit to snipe one of matching cost (#3
   })
 })
 
-describe('Trask Walker (133) — take a discarded unit to hand, or bottom it and heal (#357)', () => {
+describe('Trask Walker (133) — take a discarded unit to hand, or bottom it and heal', () => {
   const board = () => state({
     cards: F,
     players: {

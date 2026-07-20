@@ -878,7 +878,7 @@ registerCard('ASH_248', { // Neel — the next ≤1-power unit you play this pha
   ],
 })
 
-// Phase 2 — repeatable multi-target picks.
+// Repeatable multi-target picks.
 registerCard('ASH_205', whenPlayed('Give an Advantage token to each of up to 3 exhausted units.', (s, ctx) => { // Inspiring Veteran
   const targets = allUnits(s).filter(u => u.exhausted).map(u => u.instanceId)
   return targets.length ? pushChoice(s, { kind: 'multiPick', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, spec: { mode: 'giveAdvantage', remaining: 3 } }) : s

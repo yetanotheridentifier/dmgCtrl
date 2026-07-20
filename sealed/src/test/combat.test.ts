@@ -9,7 +9,7 @@ afterEach(() => {
 })
 
 /** CR 7.6 / 1258: a defeated attacker's "When Attack Ends" abilities still trigger. */
-describe('When Attack Ends after the attacker is defeated (#309)', () => {
+describe('When Attack Ends after the attacker is defeated', () => {
   it("fires the attacker's onAttackEnd even when combat damage defeats it", () => {
     registerCard('TST_AEND', {
       abilities: [{ trigger: 'onAttackEnd', description: 'Deal 3 to enemy base', effect: (s, ctx) => {
@@ -32,12 +32,12 @@ describe('When Attack Ends after the attacker is defeated (#309)', () => {
 })
 
 /**
- * Combat infrastructure (#342): the `whenDefeated` trigger and the
+ * Combat infrastructure: the `whenDefeated` trigger and the
  * `dealDamageToUnit` primitive that abilities use to deal damage outside the
  * normal attack flow. Tested with synthetic cards so the wiring is card-text
  * independent.
  */
-describe('whenDefeated trigger (#342)', () => {
+describe('whenDefeated trigger', () => {
   it("fires a defeated unit's own whenDefeated ability", () => {
     // A "death rattle" that deals 5 to the enemy base when this unit is defeated.
     registerCard('TST_DEATH_UNIT', {
@@ -79,7 +79,7 @@ describe('whenDefeated trigger (#342)', () => {
   })
 })
 
-describe('dealDamageToUnit primitive (#342)', () => {
+describe('dealDamageToUnit primitive', () => {
   it('adds damage to a unit without defeating it below its HP', () => {
     const s = state({ players: { player: player({ units: [unit('u1', 'TST_U1')] }), opponent: player() } }) // hp 4
     const next = dealDamageToUnit(s, 'u1', 2)

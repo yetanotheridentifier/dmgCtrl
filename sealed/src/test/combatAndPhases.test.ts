@@ -3,7 +3,7 @@ import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
 import { player, state, unit, ready } from './helpers/engineFixtures'
 
-describe('T2.6 — win conditions', () => {
+describe('win conditions', () => {
   it('lethal empty-deck damage during regroup ends the game immediately', () => {
     const s = state({
       players: {
@@ -29,7 +29,7 @@ describe('T2.6 — win conditions', () => {
   })
 })
 
-describe('T3.2 — unit combat details', () => {
+describe('unit combat details', () => {
   it('an exhausted enemy unit is still a legal attack target and strikes back', () => {
     const s = state({
       players: {
@@ -78,7 +78,7 @@ describe('T3.2 — unit combat details', () => {
   })
 })
 
-describe('T3.3 — base attacks', () => {
+describe('base attacks', () => {
   it('space units can attack the base directly', () => {
     const s = state({
       players: {
@@ -91,7 +91,7 @@ describe('T3.3 — base attacks', () => {
   })
 })
 
-describe('T3.4 — leader lifecycle', () => {
+describe('leader lifecycle', () => {
   it('a deployed leader can attack in the same round (deploys ready)', () => {
     const s = state({
       players: { player: player({ resources: ready(5) }), opponent: player() },
@@ -135,7 +135,7 @@ describe('T3.4 — leader lifecycle', () => {
   })
 })
 
-describe('T3.1/T3.5 — full round cycle', () => {
+describe('full round cycle', () => {
   it('plays a complete round: actions → regroup → next round with everything ready', () => {
     let s = state({
       round: 1,

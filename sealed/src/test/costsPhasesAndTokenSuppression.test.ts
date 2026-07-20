@@ -8,7 +8,7 @@ import { state, player, unit, card, ready, CARDS } from './helpers/engineFixture
 import type { GameState } from '../engine/types'
 
 /**
- * The last mechanic-tier units (#357): an action ability with a discard cost, a choice raised
+ * An action ability with a discard cost, a choice raised
  * during the regroup phase, and a static that turns off friendly Advantage tokens.
  */
 const F = {
@@ -24,7 +24,7 @@ const rich = (over: Parameters<typeof player>[0] = {}) => player({ resources: re
 const choice = (s: GameState) => s.pendingChoices![0]
 const advs = (u: { upgrades: { cardId: string }[] }) => u.upgrades.filter(a => a.cardId === TOKEN_ADVANTAGE).length
 
-describe("Mayor's Majordomo (217) — [Exhaust, discard a card]: exhaust a unit (#357)", () => {
+describe("Mayor's Majordomo (217) — [Exhaust, discard a card]: exhaust a unit", () => {
   it('discards a card as part of the cost, then exhausts the chosen unit', () => {
     const s = state({
       cards: F,
@@ -52,7 +52,7 @@ describe("Mayor's Majordomo (217) — [Exhaust, discard a card]: exhaust a unit 
   })
 })
 
-describe('Alphabet Squadron U-Wing (159) — a choice when the regroup phase starts (#357)', () => {
+describe('Alphabet Squadron U-Wing (159) — a choice when the regroup phase starts', () => {
   it('raises the Advantage choice at regroup and lets it be resolved there', () => {
     const s = state({
       cards: F,
@@ -80,7 +80,7 @@ describe('Alphabet Squadron U-Wing (159) — a choice when the regroup phase sta
   })
 })
 
-describe('Eviscerator (149) — friendly Advantage tokens lose all abilities (#357)', () => {
+describe('Eviscerator (149) — friendly Advantage tokens lose all abilities', () => {
   const board = (withEviscerator: boolean) => state({
     cards: F,
     players: {

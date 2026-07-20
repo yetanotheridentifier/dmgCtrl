@@ -15,7 +15,7 @@ afterEach(() => {
 
 const hasToken = (u: { upgrades: { cardId: string }[] }, id: string) => u.upgrades.some(a => a.cardId === id)
 
-describe('effect primitives (#340)', () => {
+describe('effect primitives', () => {
   it('giveToken attaches a token upgrade to a unit', () => {
     const s = state({ players: { player: player({ units: [unit('u1', 'TST_U1')] }), opponent: player() } })
     const next = giveToken(s, 'u1', TOKEN_ADVANTAGE)
@@ -35,7 +35,7 @@ describe('effect primitives (#340)', () => {
   })
 })
 
-describe('granted-ability dispatch (#340)', () => {
+describe('granted-ability dispatch', () => {
   it('runUnitTrigger fires the unit card AND its upgrades for the trigger point', () => {
     registerCard('TST_UNIT_TRIG', { abilities: [{ trigger: 'onAttackEnd', description: 'unit', effect: s => s }] })
     registerCard('TST_GRANT', { abilities: [{ trigger: 'onAttackEnd', description: 'upgrade', effect: (s, ctx) => giveToken(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE) }] })
@@ -48,7 +48,7 @@ describe('granted-ability dispatch (#340)', () => {
   })
 })
 
-describe('onAttackEnd wiring in the resolver (#340)', () => {
+describe('onAttackEnd wiring in the resolver', () => {
   it("an upgrade's onAttackEnd ability fires when the attached unit attacks", () => {
     // A "Bokken-like" upgrade: When Attack Ends, give this unit an Advantage token.
     registerCard('TST_GRANT', {
@@ -66,7 +66,7 @@ describe('onAttackEnd wiring in the resolver (#340)', () => {
   })
 })
 
-describe('static hooks (#340)', () => {
+describe('static hooks', () => {
   it('costModifier adjusts an upgrade cost for matching targets', () => {
     registerCard('TST_COSTMOD', { costModifier: (s, _pid, target) => (target && s.cards[target.cardId]?.traits.includes('IMPERIAL') ? -1 : 0) })
     const s = state({

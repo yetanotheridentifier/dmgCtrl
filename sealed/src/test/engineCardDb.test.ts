@@ -123,12 +123,12 @@ describe('buildCardDb', () => {
     const deckIds = Object.keys(db).filter(id => !id.startsWith('TOKEN_'))
     expect(deckIds.sort()).toEqual(['SOR_086', 'SOR_087'])
     expect(db['SOR_086'].name).toBe('Darth Vader')
-    // Token upgrades are always present so attached tokens resolve (#308).
+    // Token upgrades are always present so attached tokens resolve.
     expect(db['TOKEN_EXPERIENCE']).toBeDefined()
   })
 })
 
-describe('upgrade stat overrides — temporary ASH data gap (#308)', () => {
+describe('upgrade stat overrides — temporary ASH data gap', () => {
   it('fills in Power/HP the source omits (Bokken Saber ASH_180 → +1/+1)', () => {
     const c = normaliseCard({ Set: 'ASH', Number: '180', Name: 'Bokken Saber', Type: 'Upgrade' })
     expect([c.power, c.hp]).toEqual([1, 1])
@@ -155,7 +155,7 @@ describe('upgrade stat overrides — temporary ASH data gap (#308)', () => {
   })
 })
 
-describe('card data corrections — wrong source values overridden (#306)', () => {
+describe('card data corrections — wrong source values overridden', () => {
   it('corrects the Moff Gideon unit (ASH_097) cost to its printed 3 (source ships 8)', () => {
     const c = normaliseCard({ Set: 'ASH', Number: '097', Name: 'Moff Gideon', Type: 'Unit', Cost: '8', Power: '2', HP: '5', Arenas: ['Ground'] })
     expect(c.cost).toBe(3)

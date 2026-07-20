@@ -15,7 +15,7 @@ const UPGRADE = (over: Partial<Parameters<typeof card>[0]> = {}) =>
 const att = (cardId: string, owner: PlayerId = 'player'): UpgradeAttachment => ({ cardId, owner })
 const hasUpgrade = (u: { upgrades: UpgradeAttachment[] }, cardId: string) => u.upgrades.some(a => a.cardId === cardId)
 
-/** A card pool with a few upgrade cards for attachment tests (#308). */
+/** A card pool with a few upgrade cards for attachment tests. */
 function withUpgrades() {
   return state({
     cards: {
@@ -27,7 +27,7 @@ function withUpgrades() {
   })
 }
 
-describe('upgrade stat modifiers (#308)', () => {
+describe('upgrade stat modifiers', () => {
   it('adds an attached upgrade’s power/HP to the unit', () => {
     const s = withUpgrades()
     const u = unit('u1', 'TST_U1', { upgrades: [att('TST_UP_STAT')] }) // base 3/4 + 2/2
@@ -76,7 +76,7 @@ describe('upgrade stat modifiers (#308)', () => {
   })
 })
 
-describe('upgrade granted keywords (#308)', () => {
+describe('upgrade granted keywords', () => {
   it('a unit gains a keyword from an attached upgrade', () => {
     const s = withUpgrades()
     expect(unitHasKeyword(s, unit('u1', 'TST_U1', { upgrades: [att('TST_UP_SENT')] }), 'Sentinel')).toBe(true)
@@ -102,7 +102,7 @@ describe('upgrade granted keywords (#308)', () => {
   })
 })
 
-describe('playing upgrades — legal moves (#308)', () => {
+describe('playing upgrades — legal moves', () => {
   it('offers playUpgrade for an affordable upgrade onto any unit (friendly or enemy)', () => {
     const s = state({
       cards: { ...CARDS, TST_UP: UPGRADE({ cost: 1 }) },
@@ -140,7 +140,7 @@ describe('playing upgrades — legal moves (#308)', () => {
   })
 })
 
-describe('playing upgrades — resolution (#308)', () => {
+describe('playing upgrades — resolution', () => {
   it('attaches the upgrade to the chosen unit, pays the cost, and removes it from hand', () => {
     const s = state({
       cards: { ...CARDS, TST_UP: UPGRADE({ cost: 1, power: 2, hp: 2 }) },
@@ -169,7 +169,7 @@ describe('playing upgrades — resolution (#308)', () => {
   })
 })
 
-describe('upgrade lifecycle (#308)', () => {
+describe('upgrade lifecycle', () => {
   it('sends a defeated unit’s self-owned card-upgrade to that owner’s discard', () => {
     const s = state({
       cards: { ...CARDS, TST_UP: UPGRADE({ power: 0, hp: 0 }) },
@@ -201,7 +201,7 @@ describe('upgrade lifecycle (#308)', () => {
   })
 })
 
-describe('token upgrades (#308)', () => {
+describe('token upgrades', () => {
   it('Experience gives +1/+1', () => {
     const s = state()
     const u = unit('u1', 'TST_U1', { upgrades: [att(TOKEN_EXPERIENCE)] }) // 3/4 → 4/5
@@ -261,7 +261,7 @@ describe('token upgrades (#308)', () => {
   })
 })
 
-describe('unique upgrade rule (#348)', () => {
+describe('unique upgrade rule', () => {
   const cards = {
     ...CARDS,
     UNIQ: card({ id: 'UNIQ', type: 'upgrade', cost: 1, power: 1, hp: 1, unique: true }),
@@ -313,7 +313,7 @@ describe('unique upgrade rule (#348)', () => {
   })
 })
 
-describe('unique unit rule (#348)', () => {
+describe('unique unit rule', () => {
   const cards = {
     ...CARDS,
     UNIQ_UNIT: card({ id: 'UNIQ_UNIT', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 2, unique: true }),

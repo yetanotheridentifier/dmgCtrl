@@ -224,7 +224,7 @@ describe('resolve — attack', () => {
     expect(next.winner).toBe('player')
   })
 
-  it('is a draw when both bases are defeated by the same action (#323)', () => {
+  it('is a draw when both bases are defeated by the same action', () => {
     // The attacker's own base is already at lethal damage; the attack pushes the
     // defender's base to lethal too, so both are defeated at once → draw.
     const s = state({

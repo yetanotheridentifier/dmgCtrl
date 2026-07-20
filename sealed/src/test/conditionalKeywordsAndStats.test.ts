@@ -10,7 +10,7 @@ import ashSet from './fixtures/ashSet.json'
 import type { GameState } from '../engine/types'
 
 /**
- * Group B1 (#353): conditional self keyword grants — "While <condition>, this unit gains <keyword>".
+ * Conditional self keyword grants — "While <condition>, this unit gains <keyword>".
  * Reuses the existing `conditionalKeywords` hook. The one wrinkle: the source data lists each
  * card's conditional keyword in its base `Keywords`, which would make it permanent — so those are
  * stripped via `cardDataCorrections` and re-granted only when the condition holds.
@@ -45,7 +45,7 @@ const kw = (s: GameState, id: string, name: string): boolean => {
 }
 const mk = (over: Parameters<typeof state>[0]) => state({ cards: B, ...over })
 
-describe('Group B1 — conditional self keyword grants (#353)', () => {
+describe('Conditional self keyword grants', () => {
   it('Darth Vader (243): Sentinel only while ready; Shielded always', () => {
     const ready = mk({ players: { player: player({ units: [unit('v', 'ASH_243')] }), opponent: player() } })
     const spent = mk({ players: { player: player({ units: [unit('v', 'ASH_243', { exhausted: true })] }), opponent: player() } })
@@ -113,7 +113,7 @@ describe('Group B1 — conditional self keyword grants (#353)', () => {
   })
 })
 
-describe('Group B2 — conditional stat buffs (#353)', () => {
+describe('Conditional stat buffs', () => {
   const leader = () => unit('lead', 'LEAD', { isLeader: true })
 
   it('Mandalorian Super Commandos (240): +2/+0 only while you control a leader unit', () => {
@@ -141,7 +141,7 @@ describe('Group B2 — conditional stat buffs (#353)', () => {
   })
 })
 
-describe('Group B3 — conditional keyword swap (#353)', () => {
+describe('Conditional keyword swap', () => {
   it('Marrok (030): Sentinel by default; while upgraded he loses Sentinel and gains Saboteur', () => {
     const bare = mk({ players: { player: player({ units: [unit('m', 'ASH_030')] }), opponent: player() } })
     const upgraded = mk({ players: { player: player({ units: [unit('m', 'ASH_030', { upgrades: [{ cardId: 'UPG', owner: 'player' }] })] }), opponent: player() } })
@@ -152,7 +152,7 @@ describe('Group B3 — conditional keyword swap (#353)', () => {
   })
 })
 
-describe('Group B — conditional keywords are stripped from the base data (#353)', () => {
+describe('Conditional keywords are stripped from the base card data', () => {
   const byId = new Map((ashSet as unknown as SwuCard[]).map(c => [cardId(c.Set, c.Number), c]))
   // The base keyword set after correction: the conditional keyword is gone; genuine keywords remain.
   const cases: [string, string[]][] = [

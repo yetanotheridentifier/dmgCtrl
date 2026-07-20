@@ -150,7 +150,7 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playerDeck, opponentDeck, generation])
 
-  // Persist the record once, when a winner appears (T4.5).
+  // Persist the record once, when a winner appears.
   useEffect(() => {
     if (!gameState || gameState.winner === null || recordSavedRef.current) return
     recordSavedRef.current = true
