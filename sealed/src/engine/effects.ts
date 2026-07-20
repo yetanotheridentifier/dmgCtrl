@@ -1,7 +1,8 @@
 import type { GameState, NextUnitGrant, PlayerId, UnitState } from './types'
-import { updatePlayer, pushChoice } from './types'
+import { updatePlayer, pushChoice, recordBaseDamaged, recordUpgradeDefeated } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
+import type { EffectContext, TriggerPoint } from './abilities'
 import { getCardDefinition, runUnitTrigger } from './abilities'
 
 /**
@@ -75,7 +76,24 @@ export function dealDamageToBase(state: GameState, player: PlayerId, amount: num
   const p = state.players[player]
   const dealt = baseDamageAfterPrevention(state, player, amount)
   if (dealt <= 0) return state
-  return { ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: p.base.damage + dealt } } } }
+  let next: GameState = { ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: p.base.damage + dealt } } } }
+  next = recordBaseDamaged(next, player) // "an enemy base was damaged this phase" (#357, Baylan Skoll)
+  // "When your base is dealt damage" (#357, Blade Three) — the base owner's units react.
+  return fireUnitsTrigger(next, 'whenOwnBaseDamaged', player)
+}
+
+/**
+ * Defeat the upgrades that were attached to units leaving play, firing "when a friendly upgrade is
+ * defeated" for each affected owner (#357, Zeb Orrelios / Baylan Skoll). Fired once per owner, not
+ * per upgrade — a unit dying with three upgrades is one reaction per controller.
+ */
+export function fireUpgradesDefeated(state: GameState, owners: PlayerId[]): GameState {
+  let next = state
+  for (const owner of [...new Set(owners)]) {
+    next = recordUpgradeDefeated(next, owner)
+    next = fireUnitsTrigger(next, 'whenFriendlyUpgradeDefeated', owner)
+  }
+  return next
 }
 
 /**
@@ -172,11 +190,26 @@ export function createTokenUnit(state: GameState, owner: PlayerId, tokenCardId: 
 export function drawCards(state: GameState, owner: PlayerId, n: number): GameState {
   const p = state.players[owner]
   const drawn = p.deck.slice(0, n)
-  if (drawn.length === 0) return state
-  return {
+  if (drawn.length === 0) return state // nothing drawn → not a draw event
+  const next: GameState = {
     ...state,
     players: { ...state.players, [owner]: { ...p, hand: [...p.hand, ...drawn], deck: p.deck.slice(drawn.length) } },
   }
+  // "When you draw 1 or more cards" (#357, Axe Woves) — once per event, however many cards.
+  return fireUnitsTrigger(next, 'whenDrawCards', owner)
+}
+
+/**
+ * Fire `point` on every unit `owner` controls, re-finding each one as we go so an earlier
+ * reactor leaving play (or changing the board) can't resurrect a stale unit (#357).
+ */
+export function fireUnitsTrigger(state: GameState, point: TriggerPoint, owner: PlayerId, extra?: Partial<EffectContext>): GameState {
+  let next = state
+  for (const id of next.players[owner].units.map(u => u.instanceId)) {
+    const reactor = next.players[owner].units.find(u => u.instanceId === id)
+    if (reactor) next = runUnitTrigger(next, point, reactor, owner, extra)
+  }
+  return next
 }
 
 /**
@@ -264,7 +297,7 @@ export function defeatUpgrade(state: GameState, instanceId: string, cardId: stri
     const op = next.players[removed.owner]
     next = { ...next, players: { ...next.players, [removed.owner]: { ...op, discard: [...op.discard, cardId] } } }
   }
-  return next
+  return fireUpgradesDefeated(next, [removed.owner])
 }
 
 /**
@@ -282,7 +315,22 @@ export function defeatUpgradeAt(state: GameState, instanceId: string, index: num
     const op = next.players[removed.owner]
     next = { ...next, players: { ...next.players, [removed.owner]: { ...op, discard: [...op.discard, removed.cardId] } } }
   }
-  return next
+  return fireUpgradesDefeated(next, [removed.owner])
+}
+
+/**
+ * Return the upgrade at `index` to **its owner's** hand (#357, Jabba the Hutt) — which may not be
+ * the host unit's controller. Token upgrades can't go to a hand, so they simply cease to exist.
+ * Fires "a friendly upgrade was defeated"? No — returning is not defeating, so no trigger.
+ */
+export function returnUpgradeToHand(state: GameState, instanceId: string, index: number): GameState {
+  const found = findUnit(state, instanceId)
+  const removed = found?.unit.upgrades[index]
+  if (!found || !removed) return state
+  const next = patchUnit(state, found.owner, instanceId, u => ({ ...u, upgrades: u.upgrades.filter((_, i) => i !== index) }))
+  if (state.cards[removed.cardId]?.type === 'token') return next
+  const op = next.players[removed.owner]
+  return { ...next, players: { ...next.players, [removed.owner]: { ...op, hand: [...op.hand, removed.cardId] } } }
 }
 
 /**

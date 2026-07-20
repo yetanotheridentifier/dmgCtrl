@@ -198,7 +198,7 @@ export interface GameState {
    * before combat damage. Holds what's needed to resume (`completeAttack`) once the
    * choice(s) drain, plus the attacker's `activePlayer` to restore for the turn pass.
    */
-  pendingAttack?: { attackerId: string; target: AttackTarget; activePlayer: PlayerId; stage: 'onDefense' | 'damage' }
+  pendingAttack?: { attackerId: string; target: AttackTarget; activePlayer: PlayerId; stage: 'onDefense' | 'damage'; viaAmbush?: boolean }
   /**
    * A "take the initiative" whose "When you take the initiative" trigger raised a choice (#348):
    * the turn transition (end the phase, or pass to the opponent) is deferred until the choice
@@ -304,6 +304,10 @@ export interface PhaseEvents {
   defeated: Record<PlayerId, string[]>
   /** Players whose base was attacked this phase (#356, Greef Karga). */
   basesAttacked: PlayerId[]
+  /** Players whose base was DEALT DAMAGE this phase — combat or ability (#357, Baylan Skoll). */
+  basesDamaged: PlayerId[]
+  /** Players who had an upgrade defeated this phase (#357, Baylan Skoll). */
+  upgradesDefeated: PlayerId[]
   /** Card ids each player has played this phase, in order — "the first X you play each phase" (#357). */
   played: Record<PlayerId, string[]>
 }
@@ -346,7 +350,25 @@ export type PendingChoice =
   | { kind: 'selectUpgradeToDefeat'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional: boolean; then?: DamageTargetSpec; thenReadyUnit?: string }
   // Return a chosen card from your discard to your hand (#356, Moff Gideon). `candidates` are the
   // eligible discard-pile card ids; `acceptChoice`'s `optionIndex` picks one. Optional.
-  | { kind: 'selectFromDiscard'; id: string; controller: PlayerId; candidates: string[]; optional: boolean }
+  // `then: 'discardFate'` chains the bottom-and-heal / return-to-hand modal (#357, Trask Walker)
+  // instead of the default return-to-hand.
+  | { kind: 'selectFromDiscard'; id: string; controller: PlayerId; candidates: string[]; optional: boolean; then?: 'discardFate' }
+  // Trask Walker (#357): optionIndex 0 = bottom the card and heal `heal` from your base,
+  // 1 = return it to your hand. Mandatory once a card is chosen.
+  | { kind: 'chooseDiscardFate'; id: string; controller: PlayerId; cardId: string; heal: number }
+  // Chimaera (#357): choose a friendly AND an enemy non-leader unit, then defeat both. Resolved in
+  // two accepts — the first records `chosenFriendly` and re-offers with the enemy targets. Optional.
+  | { kind: 'selectPairToDefeat'; id: string; controller: PlayerId; friendlyTargets: string[]; enemyTargets: string[]; chosenFriendly?: string }
+  // Jabba the Hutt (#357): return one of `candidates` (card upgrades in play) to its owner's hand.
+  | { kind: 'selectUpgradeToReturn'; id: string; controller: PlayerId; candidates: UpgradeRef[] }
+  // Jabba the Hutt (#357): having returned `cardId` to your own hand, may attach it free to a unit.
+  | { kind: 'mayPlayUpgradeFree'; id: string; controller: PlayerId; cardId: string; targets: string[] }
+  // Jod Na Nawood (#357): may pay `cost`, then exhaust every unit in the chosen arena
+  // (optionIndex 0 = ground, 1 = space).
+  | { kind: 'mayPayExhaustArena'; id: string; controller: PlayerId; cost: number }
+  // Queen Soruna (#357): may reveal a unit from hand (`handIndices`); the revealed card's cost
+  // then picks out the units that can be damaged.
+  | { kind: 'revealUnitFromHand'; id: string; controller: PlayerId; handIndices: number[]; amount: number }
   // Choose where to deal a fixed amount of damage (#348): a unit (`unitTargets`) or a base
   // (`baseTargets`, by owner). Mandatory. Vane's "deal 2 to a base / the defending unit or a base".
   | { kind: 'selectDamageTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[]; optional?: boolean }
@@ -394,7 +416,7 @@ export type PendingChoice =
   // Resolved by an `acceptChoice` carrying the hand index. `then` runs after the last discard: Ninth
   // Sister distributes the discarded card's cost as damage (`distributeDamageTo`); Razor Crest gives a
   // unit a "this phase" buff (`buffUnit`).
-  | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean; then?: { distributeDamageTo: PlayerId } | { buffUnit: string; power?: number; hp?: number } | { dealDamage: number } }
+  | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean; then?: { distributeDamageTo: PlayerId } | { buffUnit: string; power?: number; hp?: number } | { dealDamage: number } | { exhaustUnit: true } }
   // Leia Organa (#356): a yes/no — deal `selfDamage` to `unitId`, then heal `healBase` from your base.
   | { kind: 'maySelfDamageHealBase'; id: string; controller: PlayerId; unitId: string; selfDamage: number; healBase: number }
   // Mando's N-1 (#356): a yes/no — exhaust your (ready) leader to give `unitId` a "+power/+hp this phase" buff.
@@ -445,6 +467,9 @@ export type PendingChoice =
   // `playOne` stops after a single pick rather than spending the whole budget, and `entersReady`
   // brings it in ready — "play it for free. It enters play ready" (#357, Eye of Sion).
   | { kind: 'searchPlayFree'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; budget: number; playOne?: boolean; entersReady?: boolean }
+  // Rancor Keeper (#357): "deal 1 damage to any number of bases" — repeatable, each base at most
+  // once; `remaining` are the bases not yet picked. Skip finishes.
+  | { kind: 'damageAnyBases'; id: string; controller: PlayerId; remaining: PlayerId[]; amount: number }
   // Cobb Vanth (#357): may deal `amount` to `selfId`; if you do, give a Shield to `targetId`. A yes/no.
   | { kind: 'maySelfDamageShield'; id: string; controller: PlayerId; selfId: string; targetId: string; amount: number }
   // Gar Saxon (#357): may create `count` of a token unit. A yes/no; `markUsed` records the
@@ -537,7 +562,7 @@ export function clearNextUnitGrants(state: GameState): GameState {
 }
 
 function emptyPhaseEvents(): PhaseEvents {
-  return { enteredPlay: { player: [], opponent: [] }, defeated: { player: [], opponent: [] }, basesAttacked: [], played: { player: [], opponent: [] } }
+  return { enteredPlay: { player: [], opponent: [] }, defeated: { player: [], opponent: [] }, basesAttacked: [], basesDamaged: [], upgradesDefeated: [], played: { player: [], opponent: [] } }
 }
 
 /** Clear the tracked per-phase events (called whenever the phase changes). */
@@ -572,6 +597,28 @@ export function recordUnitDefeated(state: GameState, owner: PlayerId, cardId: st
 export function recordBaseAttacked(state: GameState, owner: PlayerId): GameState {
   const events = state.phaseEvents ?? emptyPhaseEvents()
   return events.basesAttacked.includes(owner) ? state : { ...state, phaseEvents: { ...events, basesAttacked: [...events.basesAttacked, owner] } }
+}
+
+/** Record that `owner`'s base took damage this phase (#357). Idempotent. */
+export function recordBaseDamaged(state: GameState, owner: PlayerId): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  return events.basesDamaged.includes(owner) ? state : { ...state, phaseEvents: { ...events, basesDamaged: [...events.basesDamaged, owner] } }
+}
+
+/** Whether `owner`'s base was dealt damage this phase (#357, Baylan Skoll). */
+export function baseDamagedThisPhase(state: GameState, owner: PlayerId): boolean {
+  return state.phaseEvents?.basesDamaged.includes(owner) ?? false
+}
+
+/** Record that `owner` had an upgrade defeated this phase (#357). Idempotent. */
+export function recordUpgradeDefeated(state: GameState, owner: PlayerId): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  return events.upgradesDefeated.includes(owner) ? state : { ...state, phaseEvents: { ...events, upgradesDefeated: [...events.upgradesDefeated, owner] } }
+}
+
+/** Whether `owner` had an upgrade defeated this phase (#357, Baylan Skoll). */
+export function upgradeDefeatedThisPhase(state: GameState, owner: PlayerId): boolean {
+  return state.phaseEvents?.upgradesDefeated.includes(owner) ?? false
 }
 
 /** Whether `owner`'s base was attacked this phase. */

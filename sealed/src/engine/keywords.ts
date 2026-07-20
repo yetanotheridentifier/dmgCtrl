@@ -95,6 +95,16 @@ export function unitNegatesOverwhelm(state: GameState, unit: UnitState): boolean
   return [unit.cardId, ...unit.upgrades.map(u => u.cardId)].some(id => getCardDefinition(id)?.negatesOverwhelm?.(state, unit) ?? false)
 }
 
+/**
+ * True if the unit deals its combat damage before the defender (#357, Carson Teva). Includes
+ * abilities lent for this attack (`grantedAbilityCardIds`), so a unit attacking via Carson's
+ * Support gains his first strike too.
+ */
+export function unitDealsDamageFirst(state: GameState, unit: UnitState): boolean {
+  return [unit.cardId, ...unit.upgrades.map(u => u.cardId), ...(unit.grantedAbilityCardIds ?? [])]
+    .some(id => getCardDefinition(id)?.dealsDamageFirst?.(state, unit) ?? false)
+}
+
 /** True if any of the unit's cards forbids it attacking bases (#357, Wicket). */
 export function unitCannotAttackBases(state: GameState, unit: UnitState): boolean {
   return [unit.cardId, ...unit.upgrades.map(u => u.cardId)].some(id => getCardDefinition(id)?.cannotAttackBases?.(state, unit) ?? false)

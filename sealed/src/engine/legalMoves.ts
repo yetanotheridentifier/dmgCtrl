@@ -516,6 +516,49 @@ function choiceMoves(state: GameState): Action[] {
       }
       // A yes/no with no target to pick: Grogu's triggered deploy (#348), and Cobb Vanth /
       // Gar Saxon (#357).
+      case 'chooseDiscardFate': {
+        // Trask Walker (#357): bottom-and-heal, or take it to hand. Mandatory.
+        moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 0 })
+        moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 1 })
+        break
+      }
+      case 'selectPairToDefeat': {
+        // Chimaera (#357): friendly first, then the enemy half.
+        const stage = choice.chosenFriendly === undefined ? choice.friendlyTargets : choice.enemyTargets
+        for (const id of stage) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'selectUpgradeToReturn': {
+        choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'mayPlayUpgradeFree': {
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'mayPayExhaustArena': {
+        // Jod Na Nawood (#357): ground or space, or decline. Only if the cost is affordable.
+        if (canAfford(p, choice.cost)) {
+          moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 0 })
+          moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 1 })
+        }
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'revealUnitFromHand': {
+        for (const handIndex of choice.handIndices) moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'damageAnyBases': {
+        // Rancor Keeper (#357): pick a base still to be hit, or stop.
+        for (const b of choice.remaining) moves.push({ type: 'acceptChoice', choiceId: choice.id, baseTarget: b })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
       case 'mayDeployLeader':
       case 'maySelfDamageShield':
       case 'mayCreateToken': {
@@ -574,6 +617,9 @@ function choiceMoves(state: GameState): Action[] {
 }
 
 function regroupPhaseMoves(state: GameState): Action[] {
+  // A "when the regroup phase starts" ability may raise a choice (#357, Alphabet Squadron U-Wing);
+  // it must be answerable here, or the phase deadlocks with no legal move.
+  if (hasPendingChoices(state)) return choiceMoves(state)
   if (state.regroupResourced[state.activePlayer]) return []
 
   const moves: Action[] = state.players[state.activePlayer].hand.map(

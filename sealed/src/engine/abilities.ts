@@ -32,12 +32,28 @@ export type TriggerPoint =
   // "When another friendly unit is defeated" (#357, The Twins): fires on the defeated unit's
   // controller's *surviving* units — distinct from `whenDefeated` (the defeated unit itself).
   | 'whenFriendlyUnitDefeated'
+  // "When an enemy unit is defeated" (#357, Chimaera): the mirror of the above — fires on the
+  // OPPOSING player's units when a unit is defeated.
+  | 'whenEnemyUnitDefeated'
   // "When an enemy unit attacks your base" (#357, Kachirho Militia): fires on the attacked
   // player's units. `ctx.attackerInstanceId` is the attacking unit.
   | 'whenEnemyAttacksBase'
   // "When 1 or more upgrades attach to this unit" (#357, Sabine Wren) — fires on the unit that
   // received the upgrade, including the Shield token from Shielded on entry.
   | 'whenUpgradeAttached'
+  // "When you draw 1 or more cards" (#357, Axe Woves): fires once per draw EVENT (not per card)
+  // on the drawing player's units, including the regroup-phase draw.
+  | 'whenDrawCards'
+  // "When your base is dealt damage" (#357, Blade Three): fires on the damaged base's owner's units.
+  // All base damage funnels through `dealDamageToBase`, so combat and ability damage both count.
+  | 'whenOwnBaseDamaged'
+  // "When a friendly upgrade is defeated" (#357, Zeb Orrelios): fires on the upgrade owner's units.
+  // SIMPLIFICATION: raised by an effect defeating an upgrade, or by its host unit dying — NOT by a
+  // Shield/Advantage token being spent during combat resolution, where a raised choice would need
+  // the resumable damage pipeline that's deferred with The Mandalorian (#357 subsystem tier).
+  | 'whenFriendlyUpgradeDefeated'
+  // "When a friendly unit is dealt damage and survives" (#357, Rancor Keeper).
+  | 'whenFriendlyDamagedSurvives'
   | 'onDefense'
   | 'whenPlayOrCreateUnit'
 
@@ -144,6 +160,16 @@ export interface CardDefinition {
   actionAbilities?: ActionAbilityDef[]
   /** Multiplier on how many cards this unit's searches look at — Arcana Star Map ×2 (#343). */
   searchModifier?: (state: GameState, unit: UnitState) => number
+  /**
+   * "While attacking, this unit deals combat damage before the defender" (#357, Carson Teva).
+   * A defender defeated by that damage never deals its counter damage.
+   */
+  dealsDamageFirst?: (state: GameState, unit: UnitState) => boolean
+  /**
+   * "Advantage tokens on friendly units lose all abilities" (#357, Eviscerator): while this unit is
+   * in play, its controller's Advantage tokens give no power and survive combat instead of being spent.
+   */
+  suppressesFriendlyAdvantage?: (state: GameState, source: UnitState) => boolean
   /** Extra traits this card grants a unit — The Darksaber grants Mandalorian (#343). */
   grantedTraits?: (state: GameState, unit: UnitState) => string[]
   /** True if this card makes its unit a leader unit — The Darksaber (#343). */
@@ -266,6 +292,8 @@ export interface StatModContext {
   defending?: boolean
   /** For the attacker: the defending unit had damage on it (#357, Marrok's Fiend Fighter). */
   defenderDamaged?: boolean
+  /** This attack was made via Ambush, as the unit entered play (#357, Heroic Purrgil). */
+  viaAmbush?: boolean
 }
 
 const registry = new Map<string, CardDefinition>()

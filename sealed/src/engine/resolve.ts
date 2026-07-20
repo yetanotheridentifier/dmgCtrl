@@ -7,10 +7,10 @@ import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, sweepStateBasedDefeats } from './combat'
-import { exhaustUnit, findUnit, giveToken, fireUpgradeAttached, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, searchCount, bottomTopCards } from './effects'
+import { exhaustUnit, findUnit, giveToken, fireUpgradeAttached, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, searchCount, bottomTopCards, returnUpgradeToHand } from './effects'
 import { seededShuffle, nextSeed } from './rng'
-import { effectivePower, effectiveHp } from './stats'
-import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
+import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
+import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst } from './keywords'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
 
 /**
@@ -80,7 +80,9 @@ function resolveAction(state: GameState, action: Action): GameState {
             ),
           })
         }
-        let attacked = attack(before, action.attackerId, action.target)
+        // An Ambush attack is the one resolving the entering unit's ambush choice (#357, Heroic Purrgil).
+        const viaAmbush = choice?.kind === 'ambush' && choice.unitId === action.attackerId
+        let attacked = attack(before, action.attackerId, action.target, viaAmbush)
         // Consume the ambush/support choice this attack resolved. Support-granted
         // keywords are cleared inside completeAttack (after they're used), so they
         // survive a mid-combat On Defense suspension.
@@ -99,10 +101,13 @@ function resolveAction(state: GameState, action: Action): GameState {
       return requirePhase(state, 'action', () => takeInitiative(state))
     case 'pass':
       return requirePhase(state, 'action', () => pass(state))
+    // Choices are not action-phase-only: `whenReadies` raises them at round start and
+    // `whenRegroupStarts` during regroup (#357, Alphabet Squadron U-Wing). Gating them on the
+    // action phase would deadlock those — there'd be no legal move.
     case 'skipTrigger':
-      return requirePhase(state, 'action', () => resolveSkip(state, action.choiceId))
+      return resolveSkip(state, action.choiceId)
     case 'acceptChoice':
-      return requirePhase(state, 'action', () => resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex, action.baseTarget, action.handIndex, action.cardName))
+      return resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex, action.baseTarget, action.handIndex, action.cardName)
     case 'resourceCard':
       return requirePhase(state, 'regroup', () => regroupChoice(state, action.handIndex))
     case 'skipResource':
@@ -418,7 +423,7 @@ function resumeAfterChoice(state: GameState, resolved: PendingChoice): GameState
  *  (unless a later stage suspended again or won the game). */
 function resumePendingAttack(state: GameState): GameState {
   const pa = state.pendingAttack!
-  const next = runAttackStages({ ...state, pendingAttack: undefined, activePlayer: pa.activePlayer }, pa.attackerId, pa.target, pa.stage)
+  const next = runAttackStages({ ...state, pendingAttack: undefined, activePlayer: pa.activePlayer }, pa.attackerId, pa.target, pa.stage, pa.viaAmbush)
   return next.winner !== null || hasPendingChoices(next) ? next : advanceTurn(resetPasses(next))
 }
 
@@ -499,6 +504,100 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         }
       }
       break
+    case 'chooseDiscardFate': {
+      // Trask Walker (#357): 0 = bottom the card and heal; 1 = return it to hand.
+      const owner = choice.controller
+      const p = next.players[owner]
+      const idx = p.discard.indexOf(choice.cardId)
+      if (idx === -1) break
+      const discard = p.discard.filter((_, i) => i !== idx)
+      if ((optionIndex ?? 0) === 0) {
+        next = updatePlayer(next, owner, { discard, deck: [...p.deck, choice.cardId] })
+        next = healBase(next, owner, choice.heal)
+      } else {
+        next = updatePlayer(next, owner, { discard, hand: [...p.hand, choice.cardId] })
+      }
+      break
+    }
+    case 'selectPairToDefeat': {
+      // Chimaera (#357): first accept records the friendly pick, second defeats the pair.
+      if (!targetInstanceId) break
+      if (choice.chosenFriendly === undefined) {
+        next = pushChoice(next, { ...choice, chosenFriendly: targetInstanceId })
+        break
+      }
+      next = defeatUnit(next, choice.chosenFriendly)
+      next = defeatUnit(next, targetInstanceId)
+      next = checkWin(next)
+      if (next.winner !== null) return next
+      break
+    }
+    case 'selectUpgradeToReturn': {
+      // Jabba the Hutt (#357): the upgrade goes to ITS OWNER's hand — only your own comes back to you,
+      // and only then may you replay it for free.
+      const pick = choice.candidates[optionIndex ?? 0]
+      if (!pick) break
+      const upgradeOwner = findUnit(next, pick.unitId)?.unit.upgrades[pick.upgradeIndex]?.owner
+      next = returnUpgradeToHand(next, pick.unitId, pick.upgradeIndex)
+      if (upgradeOwner === choice.controller) {
+        const targets = inPlayUnits(next).map(u => u.instanceId)
+        if (targets.length > 0) {
+          next = pushChoice(next, { kind: 'mayPlayUpgradeFree', id: `${choice.id}-free`, controller: choice.controller, cardId: pick.cardId, targets })
+        }
+      }
+      break
+    }
+    case 'mayPlayUpgradeFree': {
+      // Jabba the Hutt (#357): attach the just-returned upgrade to a chosen unit, paying nothing.
+      if (!targetInstanceId) break
+      const owner = choice.controller
+      const p = next.players[owner]
+      const handIdx = p.hand.indexOf(choice.cardId)
+      if (handIdx === -1) break
+      next = updatePlayer(next, owner, { hand: p.hand.filter((_, i) => i !== handIdx) })
+      const host = findUnit(next, targetInstanceId)
+      if (!host) break
+      next = updatePlayer(next, host.owner, {
+        units: next.players[host.owner].units.map(u =>
+          u.instanceId === targetInstanceId ? { ...u, upgrades: [...u.upgrades, { cardId: choice.cardId, owner }] } : u,
+        ),
+      })
+      next = fireUpgradeAttached(next, targetInstanceId, true) // playing it free still counts as playing it
+      break
+    }
+    case 'mayPayExhaustArena': {
+      // Jod Na Nawood (#357): pay the cost, then exhaust every unit in the chosen arena, both sides.
+      const arena = (optionIndex ?? 0) === 0 ? 'ground' : 'space'
+      next = updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost))
+      for (const u of inPlayUnits(next)) {
+        if (u.arena === arena) next = exhaustUnit(next, u.instanceId)
+      }
+      break
+    }
+    case 'revealUnitFromHand': {
+      // Queen Soruna (#357): the revealed card's cost selects the units that can be damaged.
+      // Revealing is public information only — the card stays in hand.
+      if (handIndex === undefined) break
+      const revealed = next.players[choice.controller].hand[handIndex]
+      const cost = next.cards[revealed]?.cost
+      if (cost === undefined) break
+      const unitTargets = inPlayUnits(next).filter(u => next.cards[u.cardId]?.cost === cost).map(u => u.instanceId)
+      if (unitTargets.length > 0) {
+        next = pushChoice(next, { kind: 'selectDamageTarget', id: `${choice.id}-dmg`, controller: choice.controller, amount: choice.amount, unitTargets, baseTargets: [] })
+      }
+      break
+    }
+    case 'damageAnyBases': {
+      // Rancor Keeper (#357): 1 damage to a chosen base, then re-offer the bases not yet hit.
+      if (baseTarget) {
+        next = dealDamageToBase(next, baseTarget, choice.amount)
+        next = checkWin(next)
+        if (next.winner !== null) return next
+        const remaining = choice.remaining.filter(b => b !== baseTarget)
+        if (remaining.length > 0) next = pushChoice(next, { ...choice, remaining })
+      }
+      break
+    }
     case 'maySelfDamageShield': {
       // Cobb Vanth (#357): pay 2 damage to himself to shield the unit that just entered play.
       next = dealDamageToUnit(next, choice.selfId, choice.amount)
@@ -679,9 +778,13 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
           } else if ('buffUnit' in choice.then) {
             // Razor Crest (#356): "if you do, this unit gets +power/+hp for this attack".
             next = addLastingEffect(next, { targetInstanceId: choice.then.buffUnit, power: choice.then.power, hp: choice.then.hp })
+          } else if ('exhaustUnit' in choice.then) {
+            // Mayor's Majordomo (#357): the discard was a COST — now exhaust a unit.
+            const targets = inPlayUnits(next).map(u => u.instanceId)
+            if (targets.length > 0) next = pushChoice(next, { kind: 'mayExhaustUnit', id: `${choice.id}-exh`, controller: choice.controller, targets })
           } else {
             // Qi'ra (#357): "if you do, deal N damage to a unit".
-            const targets = [...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId)
+            const targets = inPlayUnits(next).map(u => u.instanceId)
             if (targets.length > 0) next = pushChoice(next, { kind: 'mayDamage', id: choice.id, controller: choice.controller, unitId: choice.id, targets, amount: choice.then.dealDamage, optional: false })
           }
         }
@@ -774,7 +877,13 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'selectFromDiscard': {
       // Moff Gideon (#356): return the chosen discard-pile card to hand.
       const cardId = choice.candidates[optionIndex ?? 0]
-      if (cardId !== undefined) next = returnUpgradeFromDiscardToHand(next, choice.controller, cardId)
+      if (cardId === undefined) break
+      // Trask Walker (#357) instead picks a fate for the card.
+      if (choice.then === 'discardFate') {
+        next = pushChoice(next, { kind: 'chooseDiscardFate', id: `${choice.id}-fate`, controller: choice.controller, cardId, heal: 3 })
+        break
+      }
+      next = returnUpgradeFromDiscardToHand(next, choice.controller, cardId)
       break
     }
     case 'searchDraw': {
@@ -1281,6 +1390,8 @@ function consumeAdvantage(state: GameState, owner: PlayerId, instanceId: string)
   const p = state.players[owner]
   const unit = p.units.find(u => u.instanceId === instanceId)
   if (!unit || !hasToken(unit.upgrades, TOKEN_ADVANTAGE)) return state
+  // "They aren't defeated after combat" (#357, Eviscerator) — inert tokens stay put.
+  if (friendlyAdvantageInert(state, owner)) return state
   // A unit's next attack/defence removes ALL its Advantage tokens (each gave +1/0), unless
   // another ability says otherwise.
   return updatePlayer(state, owner, {
@@ -1329,7 +1440,7 @@ function fireForAllUnits(state: GameState, point: TriggerPoint): GameState {
  * suspend the combat before damage and hand control to the defender. Combat damage
  * itself is dealt by `completeAttack` (immediately, or on resume after the choice).
  */
-function attack(state: GameState, attackerId: string, target: AttackTarget): GameState {
+function attack(state: GameState, attackerId: string, target: AttackTarget, viaAmbush = false): GameState {
   const playerId = state.activePlayer
   const attacker = state.players[playerId].units.find(u => u.instanceId === attackerId)
   if (!attacker) throw new Error(`attack: no friendly unit ${attackerId}`)
@@ -1357,9 +1468,9 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
   const attackerNow = next.players[playerId].units.find(u => u.instanceId === attackerId)!
   next = runUnitTrigger(next, 'onAttack', attackerNow, playerId, { attackTarget: target })
   if ((next.pendingChoices?.length ?? 0) > before) {
-    return { ...next, pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'onDefense' } }
+    return { ...next, pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'onDefense', viaAmbush } }
   }
-  return runAttackStages(next, attackerId, target, 'onDefense')
+  return runAttackStages(next, attackerId, target, 'onDefense', viaAmbush)
 }
 
 /**
@@ -1367,7 +1478,7 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
  * The On Defense stage may suspend (handing control to the defender); resumption picks
  * up from the stored stage. `state.activePlayer` is the attacker's controller here.
  */
-function runAttackStages(state: GameState, attackerId: string, target: AttackTarget, stage: 'onDefense' | 'damage'): GameState {
+function runAttackStages(state: GameState, attackerId: string, target: AttackTarget, stage: 'onDefense' | 'damage', viaAmbush = false): GameState {
   const playerId = state.activePlayer
   const enemyId = opponentOf(playerId)
 
@@ -1378,12 +1489,12 @@ function runAttackStages(state: GameState, attackerId: string, target: AttackTar
       const afterDefense = runUnitTrigger(state, 'onDefense', defender, enemyId)
       if ((afterDefense.pendingChoices?.length ?? 0) > before) {
         // Hand control to the defender; resume at the damage stage.
-        return { ...afterDefense, pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'damage' }, activePlayer: enemyId }
+        return { ...afterDefense, pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'damage', viaAmbush }, activePlayer: enemyId }
       }
-      return completeAttack(afterDefense, attackerId, target)
+      return completeAttack(afterDefense, attackerId, target, viaAmbush)
     }
   }
-  return completeAttack(state, attackerId, target)
+  return completeAttack(state, attackerId, target, viaAmbush)
 }
 
 /**
@@ -1392,7 +1503,7 @@ function runAttackStages(state: GameState, attackerId: string, target: AttackTar
  * Defense ability, in which case the attack fizzles. Clears any transient
  * Support-granted keywords once the calculation that used them is done.
  */
-function completeAttack(state: GameState, attackerId: string, target: AttackTarget): GameState {
+function completeAttack(state: GameState, attackerId: string, target: AttackTarget, viaAmbush = false): GameState {
   const playerId = state.activePlayer
   const enemyId = opponentOf(playerId)
   const attacker = state.players[playerId].units.find(u => u.instanceId === attackerId)
@@ -1401,7 +1512,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
 
   // "While attacking a damaged unit …" (#357, Marrok's Fiend Fighter) reads the defender's pre-combat damage.
   const targetUnit = target.kind === 'unit' ? state.players[enemyId].units.find(u => u.instanceId === target.instanceId) : undefined
-  const attackerPower = effectivePower(state, attacker, { attacking: true, attackingBase: target.kind === 'base', defenderDamaged: (targetUnit?.damage ?? 0) > 0 })
+  const attackerPower = effectivePower(state, attacker, { attacking: true, attackingBase: target.kind === 'base', defenderDamaged: (targetUnit?.damage ?? 0) > 0, viaAmbush })
 
   if (target.kind === 'base') {
     // Through `dealDamageToBase` so base-damage prevention applies (#357, At Attin Safety Droid);
@@ -1456,7 +1567,12 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   // Simultaneous combat damage (CR 1.9.10) — flagged as combat damage for whenDefeated (#356). The
   // stat context goes through so combat-only debuffs count in the defeat check (#357, Scion Shuttle).
   let next = applyUnitDamage(preCombat, enemyId, new Map([[defender.instanceId, attackerPower]]), true, defenderCtx)
-  next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, counterPower]]), true, { combat, attacking: true })
+  // "Deals combat damage before the defender" (#357, Carson Teva): a defender defeated by that
+  // damage never strikes back. Without it, damage is simultaneous (CR 1.9.10) and both still land.
+  const defenderSurvived = next.players[enemyId].units.some(u => u.instanceId === defender.instanceId)
+  if (defenderSurvived || !unitDealsDamageFirst(preCombat, attacker)) {
+    next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, counterPower]]), true, { combat, attacking: true, viaAmbush })
+  }
 
   // Overwhelm excess also goes through base-damage prevention (#357).
   const overwhelmDealt = overwhelmExcess > 0 ? baseDamageAfterPrevention(next, enemyId, overwhelmExcess) : 0
@@ -1476,6 +1592,11 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
  * evaluated so that if a single action defeats both at once the game is a draw
  * rather than awarding the win to whichever was checked first (#323).
  */
+/** Every unit in play, both sides (#357). */
+function inPlayUnits(state: GameState): UnitState[] {
+  return [...state.players.player.units, ...state.players.opponent.units]
+}
+
 function checkWin(state: GameState): GameState {
   const defeated = (id: PlayerId): boolean => {
     const base = state.players[id].base

@@ -107,7 +107,7 @@ describe('Group B1 — conditional self keyword grants (#353)', () => {
 
   it('Captain Pellaeon (093): Raid 3 only while a leader unit was defeated this phase', () => {
     const base = mk({ players: { player: player({ units: [unit('p', 'ASH_093')] }), opponent: player() } })
-    const withLeaderDefeat: GameState = { ...base, phaseEvents: { enteredPlay: { player: [], opponent: [] }, defeated: { player: [], opponent: ['LEAD'] }, basesAttacked: [], played: { player: [], opponent: [] } } }
+    const withLeaderDefeat: GameState = { ...base, phaseEvents: { enteredPlay: { player: [], opponent: [] }, defeated: { player: [], opponent: ['LEAD'] }, basesAttacked: [], basesDamaged: [], upgradesDefeated: [], played: { player: [], opponent: [] } } }
     expect(unitKeywordValue(withLeaderDefeat, withLeaderDefeat.players.player.units[0], 'Raid')).toBe(3)
     expect(kw(base, 'p', 'Raid')).toBe(false)
   })

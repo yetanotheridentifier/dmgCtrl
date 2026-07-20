@@ -357,6 +357,22 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_118', name: '8D8' },
   { id: 'ASH_109', name: 'T-6 Shuttle 1974' },
   { id: 'ASH_245', name: 'Eye of Sion' },
+  // Mechanic tier (#357) — reactive triggers + phase conditions
+  { id: 'ASH_169', name: 'Axe Woves' },
+  { id: 'ASH_204', name: 'Blade Three' },
+  { id: 'ASH_161', name: 'Zeb Orrelios' },
+  { id: 'ASH_032', name: 'Rancor Keeper' },
+  { id: 'ASH_039', name: 'Baylan Skoll' },
+  { id: 'ASH_202', name: 'Carson Teva' },
+  { id: 'ASH_207', name: 'Heroic Purrgil' },
+  { id: 'ASH_052', name: 'Chimaera' },
+  { id: 'ASH_042', name: 'Jabba the Hutt' },
+  { id: 'ASH_219', name: 'Jod Na Nawood' },
+  { id: 'ASH_132', name: 'Queen Soruna' },
+  { id: 'ASH_133', name: 'Trask Walker' },
+  { id: 'ASH_217', name: 'Mayor\'s Majordomo' },
+  { id: 'ASH_159', name: 'Alphabet Squadron U-Wing' },
+  { id: 'ASH_149', name: 'Eviscerator' },
 ]
 
 /**

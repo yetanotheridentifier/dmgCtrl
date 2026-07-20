@@ -5,6 +5,7 @@ import type { StatContext } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import { runUnitTrigger, getCardDefinition } from './abilities'
+import { fireUpgradesDefeated, fireUnitsTrigger } from './effects'
 
 /** Product of the damage multipliers the unit's card and upgrades contribute (#342). */
 function damageMultiplier(state: GameState, unit: UnitState): number {
@@ -31,6 +32,7 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
   const p = state.players[owner]
   const survivors: UnitState[] = []
   const defeated: UnitState[] = []
+  let survivedDamage = false
 
   for (const u of p.units) {
     let extra = damaged.get(u.instanceId) ?? 0
@@ -49,10 +51,14 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
       defeated.push(next)
     } else {
       survivors.push(next)
+      // "When a friendly unit is dealt damage and survives" (#357, Rancor Keeper).
+      if (extra > 0) survivedDamage = true
     }
   }
 
-  return finishDefeats(state, owner, survivors, defeated, byCombat)
+  let result = finishDefeats(state, owner, survivors, defeated, byCombat)
+  if (survivedDamage) result = fireUnitsTrigger(result, 'whenFriendlyDamagedSurvives', owner)
+  return result
 }
 
 /**
@@ -86,15 +92,18 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
     result = updatePlayer(result, owner, { leader: { ...owner2.leader, deployed: false, exhausted: true } })
   }
 
+  // Upgrades go down with their host — "when a friendly upgrade is defeated" (#357, Zeb Orrelios).
+  const lostUpgradeOwners = defeated.flatMap(u => u.upgrades).map(a => a.owner)
+  if (lostUpgradeOwners.length > 0) result = fireUpgradesDefeated(result, lostUpgradeOwners)
+
   for (const dead of defeated) {
     result = recordUnitDefeated(result, owner, dead.cardId) // "defeated this phase" tracking (#347)
     result = runUnitTrigger(result, 'whenDefeated', dead, owner, { defeatedUnit: dead, defeatedByCombat: byCombat })
     // "When another friendly unit is defeated" (#357, The Twins) — the controller's surviving units
     // react. Re-found each step in case an earlier reactor changed the board.
-    for (const id of result.players[owner].units.map(u => u.instanceId)) {
-      const reactor = result.players[owner].units.find(u => u.instanceId === id)
-      if (reactor) result = runUnitTrigger(result, 'whenFriendlyUnitDefeated', reactor, owner, { defeatedUnit: dead })
-    }
+    result = fireUnitsTrigger(result, 'whenFriendlyUnitDefeated', owner, { defeatedUnit: dead })
+    // "When an enemy unit is defeated" (#357, Chimaera) — the other side reacts.
+    result = fireUnitsTrigger(result, 'whenEnemyUnitDefeated', opponentOf(owner), { defeatedUnit: dead })
   }
   return result
 }

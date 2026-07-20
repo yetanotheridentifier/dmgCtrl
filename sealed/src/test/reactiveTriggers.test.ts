@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
 import { dealDamageToUnit } from '../engine/combat'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
-import { state, player, unit, card, CARDS } from './helpers/engineFixtures'
+import { drawCards, dealDamageToBase, defeatUpgradeAt } from '../engine/effects'
+import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
+import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 import type { GameState } from '../engine/types'
 
 /**
@@ -136,5 +138,118 @@ describe('whenUpgradeAttached — Sabine Wren (208) (#357)', () => {
     })
     const played = resolve(board, { type: 'playUpgrade', handIndex: 0, targetInstanceId: 'g' })
     expect(played.pendingChoices ?? []).toHaveLength(0)
+  })
+})
+
+// ── Batch A–C (#357): draw / own-base-damage / upgrade-defeat triggers + phase trackers ────────
+
+const G = {
+  ...F,
+  ASH_169: card({ id: 'ASH_169', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 4 }), // Axe Woves
+  ASH_204: card({ id: 'ASH_204', type: 'unit', arena: 'ground', cost: 3, power: 2, hp: 4 }), // Blade Three
+  ASH_032: card({ id: 'ASH_032', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 4 }), // Rancor Keeper
+  ASH_161: card({ id: 'ASH_161', type: 'unit', arena: 'ground', cost: 7, power: 5, hp: 7 }), // Zeb Orrelios
+  ASH_039: card({ id: 'ASH_039', type: 'unit', arena: 'ground', cost: 6, power: 6, hp: 6, keywords: [{ name: 'Overwhelm' }] }), // Baylan Skoll
+  UPG: card({ id: 'UPG', type: 'upgrade', cost: 1, power: 1, hp: 1 }),
+}
+const adv = (u: { upgrades: { cardId: string }[] }) => u.upgrades.filter(a => a.cardId === TOKEN_ADVANTAGE).length
+const rich = (over: Parameters<typeof player>[0] = {}) => player({ resources: ready(20), ...over })
+
+describe('whenDrawCards — Axe Woves (169) (#357)', () => {
+  it('gains an Advantage token when its controller draws, once per draw event not per card', () => {
+    const s = state({ cards: G, players: { player: rich({ units: [unit('a', 'ASH_169')], deck: ['GROUNDER', 'GROUNDER', 'GROUNDER'] }), opponent: player() } })
+    const drawn = drawCards(s, 'player', 2)
+    expect(drawn.players.player.hand).toHaveLength(2)
+    expect(adv(U(drawn, 'a'))).toBe(1) // one event, one token
+  })
+
+  it('does not fire for the opponent drawing, nor on an empty deck', () => {
+    const s = state({ cards: G, players: { player: rich({ units: [unit('a', 'ASH_169')], deck: [] }), opponent: player({ deck: ['GROUNDER'] }) } })
+    expect(adv(U(drawCards(s, 'opponent', 1), 'a'))).toBe(0)
+    expect(adv(U(drawCards(s, 'player', 1), 'a'))).toBe(0) // nothing drawn → no trigger
+  })
+})
+
+describe('whenOwnBaseDamaged — Blade Three (204) (#357)', () => {
+  it('gains an Advantage token when its controller’s base is damaged', () => {
+    const s = state({ cards: G, players: { player: rich({ units: [unit('b', 'ASH_204')] }), opponent: player() } })
+    expect(adv(U(dealDamageToBase(s, 'player', 3), 'b'))).toBe(1)
+    expect(adv(U(dealDamageToBase(s, 'opponent', 3), 'b'))).toBe(0) // the enemy base isn't "your base"
+  })
+
+  it('fires on combat damage to the base too', () => {
+    const s = state({
+      cards: G,
+      activePlayer: 'opponent',
+      players: { player: rich({ units: [unit('b', 'ASH_204')] }), opponent: player({ units: [unit('e', 'SPACER', { arena: 'space' })] }) },
+    })
+    const hit = resolve(s, { type: 'attack', attackerId: 'e', target: { kind: 'base' } })
+    expect(adv(U(hit, 'b'))).toBe(1)
+  })
+})
+
+describe('whenFriendlyUpgradeDefeated — Zeb Orrelios (161) (#357)', () => {
+  it('offers 1 damage to a base when a friendly upgrade is defeated', () => {
+    const s = state({ cards: G, players: { player: rich({ units: [unit('z', 'ASH_161'), unit('g', 'GROUNDER', { upgrades: [{ cardId: 'UPG', owner: 'player' }] })] }), opponent: player() } })
+    const gone = defeatUpgradeAt(s, 'g', 0)
+    expect(gone.pendingChoices?.[0]).toMatchObject({ kind: 'selectDamageTarget', amount: 1 })
+    const dealt = resolve(gone, { type: 'acceptChoice', choiceId: gone.pendingChoices![0].id, baseTarget: 'opponent' })
+    expect(dealt.players.opponent.base.damage).toBe(1)
+  })
+
+  it('fires when the upgrade goes down with its host unit', () => {
+    const s = state({ cards: G, players: { player: rich({ units: [unit('z', 'ASH_161'), unit('f', 'FODDER', { upgrades: [{ cardId: 'UPG', owner: 'player' }] })] }), opponent: player() } })
+    const dead = dealDamageToUnit(s, 'f', 5) // FODDER dies, taking its upgrade with it
+    expect(dead.pendingChoices?.[0]).toMatchObject({ kind: 'selectDamageTarget', amount: 1 })
+  })
+
+  it('gives 3 Advantage tokens to another unit when played', () => {
+    const s = state({ cards: G, players: { player: rich({ hand: ['ASH_161'], units: [unit('g', 'GROUNDER')] }), opponent: player() } })
+    const p = resolve(s, { type: 'playCard', handIndex: 0 })
+    expect(p.pendingChoices?.[0]).toMatchObject({ kind: 'mayGiveTokens', count: 3 })
+  })
+})
+
+describe('Rancor Keeper (032) — damage any number of bases when a friendly unit survives damage (#357)', () => {
+  const board = () => state({ cards: G, players: { player: rich({ units: [unit('r', 'ASH_032'), unit('g', 'GROUNDER')] }), opponent: player() } })
+
+  it('offers each base once, and only once each round', () => {
+    const hurt = dealDamageToUnit(board(), 'g', 1) // GROUNDER (5 hp) survives
+    const c = hurt.pendingChoices?.[0]
+    expect(c).toMatchObject({ kind: 'damageAnyBases' })
+    // Hit both bases, then finish.
+    const one = resolve(hurt, { type: 'acceptChoice', choiceId: c!.id, baseTarget: 'opponent' })
+    const two = resolve(one, { type: 'acceptChoice', choiceId: one.pendingChoices![0].id, baseTarget: 'player' })
+    expect(two.players.opponent.base.damage).toBe(1)
+    expect(two.players.player.base.damage).toBe(1)
+    expect(two.pendingChoices ?? []).toHaveLength(0) // both bases used up
+
+    // Second damage event the same round — already used.
+    const again = dealDamageToUnit(two, 'g', 1)
+    expect(again.pendingChoices ?? []).toHaveLength(0)
+  })
+
+  it('does not fire when the damaged unit is defeated', () => {
+    const s = state({ cards: G, players: { player: rich({ units: [unit('r', 'ASH_032'), unit('f', 'FODDER')] }), opponent: player() } })
+    const dead = dealDamageToUnit(s, 'f', 1) // FODDER dies rather than surviving
+    expect(dead.pendingChoices ?? []).toHaveLength(0)
+  })
+})
+
+describe('Baylan Skoll (039) — phase-condition triggers (#357)', () => {
+  it('gives Advantage only if an enemy base was damaged this phase', () => {
+    const clean = state({ cards: G, players: { player: rich({ hand: ['ASH_039'], units: [unit('g', 'GROUNDER')] }), opponent: player() } })
+    expect(resolve(clean, { type: 'playCard', handIndex: 0 }).pendingChoices ?? []).toHaveLength(0)
+
+    const damaged = dealDamageToBase(clean, 'opponent', 2)
+    const p = resolve(damaged, { type: 'playCard', handIndex: 0 })
+    expect(p.pendingChoices?.[0]).toMatchObject({ kind: 'mayGiveTokens', count: 1 })
+  })
+
+  it('offers the exhaust only if a friendly upgrade was defeated this phase', () => {
+    const s = state({ cards: G, players: { player: rich({ hand: ['ASH_039'], units: [unit('g', 'GROUNDER', { upgrades: [{ cardId: 'UPG', owner: 'player' }] })] }), opponent: player() } })
+    const lost = defeatUpgradeAt(s, 'g', 0)
+    const p = resolve(lost, { type: 'playCard', handIndex: 0 })
+    expect(p.pendingChoices?.some(c => c.kind === 'mayExhaustUnit')).toBe(true)
   })
 })
