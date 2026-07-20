@@ -87,6 +87,12 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
   for (const dead of defeated) {
     result = recordUnitDefeated(result, owner, dead.cardId) // "defeated this phase" tracking (#347)
     result = runUnitTrigger(result, 'whenDefeated', dead, owner, { defeatedUnit: dead, defeatedByCombat: byCombat })
+    // "When another friendly unit is defeated" (#357, The Twins) — the controller's surviving units
+    // react. Re-found each step in case an earlier reactor changed the board.
+    for (const id of result.players[owner].units.map(u => u.instanceId)) {
+      const reactor = result.players[owner].units.find(u => u.instanceId === id)
+      if (reactor) result = runUnitTrigger(result, 'whenFriendlyUnitDefeated', reactor, owner, { defeatedUnit: dead })
+    }
   }
   return result
 }

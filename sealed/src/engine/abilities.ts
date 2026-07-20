@@ -29,6 +29,15 @@ export type TriggerPoint =
   // "When you take the initiative" (#348, Mandalorian) — fires for the taker's undeployed leader.
   | 'whenTakeInitiative'
   | 'whenDefeated'
+  // "When another friendly unit is defeated" (#357, The Twins): fires on the defeated unit's
+  // controller's *surviving* units — distinct from `whenDefeated` (the defeated unit itself).
+  | 'whenFriendlyUnitDefeated'
+  // "When an enemy unit attacks your base" (#357, Kachirho Militia): fires on the attacked
+  // player's units. `ctx.attackerInstanceId` is the attacking unit.
+  | 'whenEnemyAttacksBase'
+  // "When 1 or more upgrades attach to this unit" (#357, Sabine Wren) — fires on the unit that
+  // received the upgrade, including the Shield token from Shielded on entry.
+  | 'whenUpgradeAttached'
   | 'onDefense'
   | 'whenPlayOrCreateUnit'
 

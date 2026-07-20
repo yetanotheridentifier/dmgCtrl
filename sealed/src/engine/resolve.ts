@@ -7,7 +7,7 @@ import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit } from './combat'
-import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit } from './effects'
+import { exhaustUnit, findUnit, giveToken, fireUpgradeAttached, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
@@ -269,6 +269,9 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
     if (ready !== true && !grantEntersReady && !inPlay().exhausted) exhaust()
     if (unitHasKeyword(next, inPlay(), 'Support')) next = openSupportChoice(next, owner, newUnit.instanceId)
   }
+
+  // A unit entering with upgrades (a Shielded token) reacts to them attaching (#357, Sabine Wren).
+  if (inPlay().upgrades.length > 0) next = fireUpgradeAttached(next, newUnit.instanceId)
 
   // "When Played" abilities fire after the card enters play (CR 6.2.0f).
   next = runTrigger(next, 'whenPlayed', { owner, cardId, sourceInstanceId: newUnit.instanceId })
@@ -1035,6 +1038,9 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
     ),
   })
 
+  // "When 1 or more upgrades attach to this unit" (#357, Sabine Wren) — the host reacts.
+  next = fireUpgradeAttached(next, targetInstanceId)
+
   // "When Played" abilities fire after the upgrade attaches (CR 6.2.0f).
   next = runTrigger(next, 'whenPlayed', {
     owner: playerId,
@@ -1333,6 +1339,11 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
     const enemy = state.players[enemyId]
     let next = updatePlayer(state, enemyId, { base: { ...enemy.base, damage: enemy.base.damage + attackerPower } })
     next = recordBaseAttacked(next, enemyId) // "your base was attacked this phase" (#356, Greef Karga)
+    // "When an enemy unit attacks your base" (#357, Kachirho Militia) — the attacked player's units react.
+    for (const id of next.players[enemyId].units.map(u => u.instanceId)) {
+      const reactor = next.players[enemyId].units.find(u => u.instanceId === id)
+      if (reactor) next = runUnitTrigger(next, 'whenEnemyAttacksBase', reactor, enemyId, { attackerInstanceId: attackerId })
+    }
     next = consumeAdvantage(next, playerId, attackerId) // the attack completed
     next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: attackerPower })
     return clearGrantedKeywords(checkWin(next))

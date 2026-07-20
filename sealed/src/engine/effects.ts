@@ -2,7 +2,7 @@ import type { GameState, NextUnitGrant, PlayerId, UnitState } from './types'
 import { updatePlayer } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
-import { getCardDefinition } from './abilities'
+import { getCardDefinition, runUnitTrigger } from './abilities'
 
 /**
  * How many cards a search by `unit` looks at (#343): the base count times every
@@ -45,7 +45,19 @@ function patchUnit(state: GameState, owner: PlayerId, instanceId: string, patch:
 export function giveToken(state: GameState, instanceId: string, tokenId: string): GameState {
   const found = findUnit(state, instanceId)
   if (!found) return state
-  return patchUnit(state, found.owner, instanceId, u => ({ ...u, upgrades: [...u.upgrades, { cardId: tokenId, owner: found.owner }] }))
+  const next = patchUnit(state, found.owner, instanceId, u => ({ ...u, upgrades: [...u.upgrades, { cardId: tokenId, owner: found.owner }] }))
+  return fireUpgradeAttached(next, instanceId)
+}
+
+/**
+ * Fire "when 1 or more upgrades attach to this unit" (#357, Sabine Wren) on the receiving unit.
+ * Called from every attach site: token grants (here), `playUpgrade`, and a Shielded entry.
+ * Note: granting N tokens one-at-a-time fires it N times — fine for the current card, which is a
+ * "may", but a future "exactly once per attach event" card would need batching.
+ */
+export function fireUpgradeAttached(state: GameState, instanceId: string): GameState {
+  const found = findUnit(state, instanceId)
+  return found ? runUnitTrigger(state, 'whenUpgradeAttached', found.unit, found.owner, {}) : state
 }
 
 /**

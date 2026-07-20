@@ -287,6 +287,10 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'ASH_206', name: 'Kelleran Beq' },
   { id: 'ASH_197', name: 'Executor' },
   { id: 'ASH_226', name: "Qi'ra" },
+  // Group F (#357) — reactive triggers
+  { id: 'ASH_127', name: 'The Twins' },
+  { id: 'ASH_160', name: 'Kachirho Militia' },
+  { id: 'ASH_208', name: 'Sabine Wren' },
 ]
 
 /** Card-type totals for the ASH set (from the SWUDB set listing). */
