@@ -21,7 +21,7 @@ const SET = ashSet as unknown as SwuCard[]
 const UNITS = SET.filter(c => c.Type === 'Unit')
 const byName = new Map(UNITS.map(c => [c.Name, c])) // unit names are unique within the set
 const IMPLEMENTED_KEYWORDS = new Set(['Ambush', 'Grit', 'Overwhelm', 'Raid', 'Restore', 'Saboteur', 'Sentinel', 'Shielded', 'Hidden', 'Support'])
-const groupA = UNIT_GROUPS.find(g => g.id === 'A')!.units
+const keywordOnly = UNIT_GROUPS.find(g => g.id === 'keyword')!.units
 
 /** Ability text left after removing keyword names and their (parenthetical) reminders — empty ⇒ keyword-only. */
 function residualAbility(c: SwuCard): string {
@@ -30,31 +30,32 @@ function residualAbility(c: SwuCard): string {
   return t.replace(/[\s.,]+/g, ' ').trim()
 }
 
-describe('Group A units — no engine work needed (#306)', () => {
-  it('each Group A entry is a real ASH unit card', () => {
-    for (const name of groupA) expect(byName.get(name), name).toBeTruthy()
+describe('Keyword-only units — no engine work needed (#306)', () => {
+  it('each entry is a real ASH unit card', () => {
+    for (const u of keywordOnly) expect(byName.get(u.name), u.name).toBeTruthy()
   })
 
   it('each is keyword-only — no ability text beyond keyword reminders', () => {
-    for (const name of groupA) {
-      const c = byName.get(name)!
-      expect(residualAbility(c), `${name}: "${(c.FrontText ?? '').replace(/\n/g, ' ')}"`).toBe('')
+    for (const u of keywordOnly) {
+      const c = byName.get(u.name)!
+      expect(residualAbility(c), `${u.name}: "${(c.FrontText ?? '').replace(/\n/g, ' ')}"`).toBe('')
     }
   })
 
   it('each uses only keywords that are already implemented', () => {
-    for (const name of groupA) {
-      for (const k of byName.get(name)!.Keywords ?? []) {
-        expect(IMPLEMENTED_KEYWORDS.has(k.trim()), `${name}: ${k}`).toBe(true)
+    for (const u of keywordOnly) {
+      for (const k of byName.get(u.name)!.Keywords ?? []) {
+        expect(IMPLEMENTED_KEYWORDS.has(k.trim()), `${u.name}: ${k}`).toBe(true)
       }
     }
   })
 
   it('none of them needs a registered ability definition', () => {
     const registered = new Set(registeredCardIds())
-    for (const name of groupA) {
-      const id = normaliseCard(byName.get(name)!).id
-      expect(registered.has(id), `${name} (${id}) should have no definition`).toBe(false)
+    for (const u of keywordOnly) {
+      // The group now carries card ids, so this checks the id we actually ship.
+      expect(normaliseCard(byName.get(u.name)!).id, u.name).toBe(u.id)
+      expect(registered.has(u.id), `${u.name} (${u.id}) should have no definition`).toBe(false)
     }
   })
 

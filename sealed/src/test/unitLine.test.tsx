@@ -148,6 +148,29 @@ describe('UnitLine — attached upgrades (#336)', () => {
     fireEvent.keyUp(window, { key: 'Shift', shiftKey: false })
   })
 
+  it('stacks captured cards behind the unit, turned and dimmed (#357)', () => {
+    const s = state({ cards: { ...CARDS, TST_U: card({ id: 'TST_U', type: 'unit', power: 3, hp: 4 }), TST_C: card({ id: 'TST_C', type: 'unit', power: 1, hp: 1 }) } })
+    render(<UnitLine state={s} unit={unit('u1', 'TST_U', { captured: ['TST_C'] })} interact={noInteract} />)
+    const stack = screen.getByTestId('board-unit-captured-u1')
+    const face = within(stack).getByTestId('card-face')
+    // Turned (as if exhausted) and dimmed beyond the normal exhausted brightness — it's out of play.
+    expect(face).toHaveAttribute('data-orientation', 'landscape')
+    expect(face.className).toMatch(/brightness-\[0\.6\]/)
+  })
+
+  it('renders no captured stack for a unit holding nothing (#357)', () => {
+    render(<UnitLine state={boardWith('TST_D')} unit={unit('u1', 'TST_D')} interact={noInteract} />)
+    expect(screen.queryByTestId('board-unit-captured-u1')).toBeNull()
+  })
+
+  it('keeps captured cards visible below an exhausted capturing unit (#357)', () => {
+    const s = state({ cards: { ...CARDS, TST_U: card({ id: 'TST_U', type: 'unit', power: 3, hp: 4 }), TST_C: card({ id: 'TST_C', type: 'unit', power: 1, hp: 1 }) } })
+    render(<UnitLine state={s} unit={unit('u1', 'TST_U', { exhausted: true, captured: ['TST_C'] })} interact={noInteract} />)
+    const captured = screen.getByTestId('captured-card')
+    // Offset clear of the unit card so the exhausted (rotated) captor doesn't hide it.
+    expect(Number.parseInt(captured.style.top, 10)).toBeGreaterThan(0)
+  })
+
   it('shows a Hidden badge on a hidden unit (#334)', () => {
     render(<UnitLine state={boardWith('TST_D')} unit={unit('u1', 'TST_D', { hidden: true })} interact={noInteract} />)
     expect(screen.getByTestId('board-unit-hidden-u1')).toHaveTextContent(/hidden/i)

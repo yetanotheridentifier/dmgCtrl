@@ -2,7 +2,7 @@ import type { Action } from './actions'
 import type { EngineCard, GameState, HandCardRef, PlayerId, ResourceUpgradeRef, UnitState } from './types'
 import { opponentOf, hasPendingChoices, nextUnitGrantMatches } from './types'
 import { canAfford, readyResourceCount } from './resources'
-import { unitHasKeyword } from './keywords'
+import { unitHasKeyword, unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena } from './keywords'
 import { getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions } from './abilities'
 import './cardDefinitions' // side effect: registers all real card behaviours (#341+)
 
@@ -14,8 +14,11 @@ import './cardDefinitions' // side effect: registers all real card behaviours (#
  */
 export function enemyAttackTargets(state: GameState, attacker: UnitState): { targets: UnitState[]; sentinelLocked: boolean } {
   const enemy = state.players[opponentOf(state.activePlayer)]
-  const sameArena = enemy.units.filter(e => e.arena === attacker.arena)
-  const attackable = sameArena.filter(e => !e.hidden || unitHasKeyword(state, e, 'Sentinel'))
+  // Normally same-arena only; Red Leader (#357) reaches either arena.
+  const inRange = unitAttacksEitherArena(state, attacker) ? enemy.units : enemy.units.filter(e => e.arena === attacker.arena)
+  // Hidden hides a unit (unless it has Sentinel); "can't be attacked" (#357, Tatooine Repulsor Train)
+  // removes it entirely — including as a forced Sentinel target.
+  const attackable = inRange.filter(e => (!e.hidden || unitHasKeyword(state, e, 'Sentinel')) && !unitCannotBeAttacked(state, e))
   const sentinels = attackable.filter(e => unitHasKeyword(state, e, 'Sentinel'))
   const sentinelLocked = sentinels.length > 0 && !unitHasKeyword(state, attacker, 'Saboteur')
   return { targets: sentinelLocked ? sentinels : attackable, sentinelLocked }
@@ -50,9 +53,22 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   }
   // Card-specific cost modifiers (e.g. −1 on an Imperial/Mandalorian unit) (#340).
   const modifier = getCardDefinition(card.id)?.costModifier?.(state, playerId, target) ?? 0
+  // Units in play that discount cards their controller plays, or waive the aspect penalty (#357,
+  // Pit Droid Team / Peli Motto). Distinct from `costModifier`, which lives on the played card.
+  let discount = 0
+  let waivePenalty = false
+  const discountCtx = { owner: playerId, card, target }
+  for (const u of p.units) {
+    for (const cid of [u.cardId, ...u.upgrades.map(x => x.cardId)]) {
+      const def = getCardDefinition(cid)
+      discount += def?.costDiscount?.(state, u, discountCtx) ?? 0
+      if (def?.waivesAspectPenalty?.(state, u, discountCtx)) waivePenalty = true
+    }
+  }
+  if (waivePenalty) penalty = 0
   // "Your next unit …" cost grants that match this card — Mouse Droid's −1 to the next Imperial (#355).
   const grantDelta = (p.nextUnitGrants ?? []).reduce((sum, g) => sum + (nextUnitGrantMatches(card, g) ? (g.costDelta ?? 0) : 0), 0)
-  return Math.max(0, card.cost + penalty + modifier + grantDelta)
+  return Math.max(0, card.cost + penalty + modifier + grantDelta + discount)
 }
 
 /**
@@ -194,7 +210,7 @@ function actionPhaseMoves(state: GameState): Action[] {
     for (const enemyUnit of targets) {
       moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'unit', instanceId: enemyUnit.instanceId } })
     }
-    if (!sentinelLocked) {
+    if (!sentinelLocked && !unitCannotAttackBases(state, unit)) {
       moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'base' } })
     }
   }
@@ -214,6 +230,7 @@ function actionPhaseMoves(state: GameState): Action[] {
   for (const u of p.units) {
     for (const { cardId, index, ability } of unitActionAbilities(u)) {
       if (ability.oncePerRound && u.usedAbilities?.includes(actionAbilityKey(cardId, index))) continue
+      if (ability.exhaustCost && u.exhausted) continue // "[Exhaust]" — the unit must be ready to pay it (#357)
       if (!canAfford(p, ability.cost ?? 0)) continue
       if (ability.usable && !ability.usable(state, u)) continue
       moves.push({ type: 'useAbility', instanceId: u.instanceId, cardId, index })
@@ -436,6 +453,7 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'mayDoubleTokens':
       case 'maySelfDamageHealBase':
       case 'mayExhaustLeaderBuffSelf': {
         // Leia / Mando's N-1 (#356): a yes/no.
@@ -496,7 +514,56 @@ function choiceMoves(state: GameState): Action[] {
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
-      case 'mayDeployLeader': {
+      // A yes/no with no target to pick: Grogu's triggered deploy (#348), and Cobb Vanth /
+      // Gar Saxon (#357).
+      case 'chooseDiscardFate': {
+        // Trask Walker (#357): bottom-and-heal, or take it to hand. Mandatory.
+        moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 0 })
+        moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 1 })
+        break
+      }
+      case 'selectPairToDefeat': {
+        // Chimaera (#357): friendly first, then the enemy half.
+        const stage = choice.chosenFriendly === undefined ? choice.friendlyTargets : choice.enemyTargets
+        for (const id of stage) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'selectUpgradeToReturn': {
+        choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'mayPlayUpgradeFree': {
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'mayPayExhaustArena': {
+        // Jod Na Nawood (#357): ground or space, or decline. Only if the cost is affordable.
+        if (canAfford(p, choice.cost)) {
+          moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 0 })
+          moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 1 })
+        }
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'revealUnitFromHand': {
+        for (const handIndex of choice.handIndices) moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'damageAnyBases': {
+        // Rancor Keeper (#357): pick a base still to be hit, or stop.
+        for (const b of choice.remaining) moves.push({ type: 'acceptChoice', choiceId: choice.id, baseTarget: b })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'mayDeployLeader':
+      case 'maySelfDamageShield':
+      case 'mayCapture':
+      case 'mayPreventDamage':
+      case 'mayCreateToken': {
         // Grogu (#348): a yes/no to deploy via the triggered epic action.
         moves.push({ type: 'acceptChoice', choiceId: choice.id })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
@@ -512,7 +579,7 @@ function choiceMoves(state: GameState): Action[] {
         for (const id of choice.candidates) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         break
       }
-      case 'attackWithRestore': {
+      case 'mayAttackAnyUnit': {
         // Thrawn front (#348): attack with any ready unit (the Restore grant is applied on resolve).
         for (const u of p.units) {
           if (u.exhausted) continue
@@ -552,6 +619,9 @@ function choiceMoves(state: GameState): Action[] {
 }
 
 function regroupPhaseMoves(state: GameState): Action[] {
+  // A "when the regroup phase starts" ability may raise a choice (#357, Alphabet Squadron U-Wing);
+  // it must be answerable here, or the phase deadlocks with no legal move.
+  if (hasPendingChoices(state)) return choiceMoves(state)
   if (state.regroupResourced[state.activePlayer]) return []
 
   const moves: Action[] = state.players[state.activePlayer].hand.map(

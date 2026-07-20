@@ -46,6 +46,13 @@ export interface UnitInteraction {
 const UPGRADE_STEP_PX = 34
 
 /**
+ * How far each captured card protrudes below the capturing unit (#357). Larger than the upgrade
+ * step because a captured card is laid on its side (exhausted), so its exposed strip is its short
+ * edge — this keeps it visible even when the capturing unit is itself exhausted and rotated.
+ */
+const CAPTURED_STEP_PX = 46
+
+/**
  * One attached upgrade, positioned behind the unit and protruding from the bottom.
  * It carries its OWN Shift+hover / long-press zoom on its exposed strip, so you can
  * read it there (hovering the unit card zooms the unit, not the upgrade). It stays
@@ -97,12 +104,51 @@ function UpgradeStack({ state, upgrades, instanceId, exhausted }: {
   )
 }
 
+/**
+ * Cards this unit has captured, stacked behind it and protruding below the upgrades (#357).
+ * Always drawn exhausted (turned) and heavily dimmed: a captured card is out of play and can't be
+ * interacted with — the only way to "reach" it is to remove its captor, which springs it back into
+ * its arena. It still carries its own zoom on the exposed strip so you can read what's held.
+ */
+function CapturedStack({ state, captured, instanceId, topStart }: {
+  state: GameState
+  captured: string[]
+  instanceId: string
+  topStart: number
+}) {
+  if (captured.length === 0) return null
+  return (
+    <div data-testid={`board-unit-captured-${instanceId}`} className="pointer-events-none absolute inset-0">
+      {captured
+        .map((cardId, i) => ({ cardId, i }))
+        .reverse()
+        .map(({ cardId, i }) => (
+          <CapturedCard key={i} card={state.cards[cardId]} fallbackName={cardId} top={topStart + i * CAPTURED_STEP_PX} />
+        ))}
+    </div>
+  )
+}
+
+function CapturedCard({ card, fallbackName, top }: { card: EngineCard | undefined; fallbackName: string; top: number }) {
+  const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
+  return (
+    <div ref={setAnchor} data-testid="captured-card" className="pointer-events-auto absolute left-1/2 -translate-x-1/2" style={{ top }} {...bind}>
+      {/* `exhausted` turns the card AND already dims it to 0.55; this filter compounds with that
+          (≈0.33 net) so a captured card reads as clearly further back than a dimmed upgrade,
+          while staying legible enough to identify. Tune here if it wants to be darker/lighter. */}
+      <CardFace card={card} fallbackName={fallbackName} exhausted className="brightness-[0.6] saturate-[0.6]" />
+      {zoomed && <CardZoomPopover card={card} fallbackName={fallbackName} anchorRef={anchorRef} />}
+    </div>
+  )
+}
+
 export function UnitLine({ state, unit, interact }: { state: GameState; unit: UnitState; interact: UnitInteraction }) {
   const card = state.cards[unit.cardId]
   const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
   // Only card upgrades stack behind the unit; token upgrades render as on-card
   // tokens via CardTokens instead (#334).
   const cardUpgrades = unit.upgrades.filter(u => state.cards[u.cardId]?.type !== 'token')
+  const captured = unit.captured ?? []
   const clickable = (interact.actionable || interact.isTarget || interact.isUpgradeTarget) && interact.onClick
   const highlight: 'accent' | 'red' | 'accent-dim' | 'green' | undefined = interact.selected
     ? 'accent'
@@ -122,9 +168,16 @@ export function UnitLine({ state, unit, interact }: { state: GameState; unit: Un
       data-upgrade-target={Boolean(interact.isUpgradeTarget)}
       onClick={clickable ? interact.onClick : undefined}
       className={`relative w-fit shrink-0 ${clickable ? 'cursor-pointer' : ''}`}
-      style={{ paddingBottom: cardUpgrades.length * UPGRADE_STEP_PX }}
+      style={{ paddingBottom: cardUpgrades.length * UPGRADE_STEP_PX + captured.length * CAPTURED_STEP_PX }}
     >
       <UpgradeStack state={state} upgrades={cardUpgrades} instanceId={unit.instanceId} exhausted={unit.exhausted} />
+      {/* Captured cards continue the stack below any upgrades, so the two never collide. */}
+      <CapturedStack
+        state={state}
+        captured={captured}
+        instanceId={unit.instanceId}
+        topStart={(cardUpgrades.length + 1) * UPGRADE_STEP_PX}
+      />
       {/* The unit card carries the unit's own zoom — hover here, not the dead tile
           padding; the upgrades zoom from their exposed strips instead (#336). */}
       <div ref={setAnchor} className="relative w-fit" {...bind}>

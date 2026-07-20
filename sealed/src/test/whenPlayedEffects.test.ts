@@ -140,10 +140,10 @@ describe('Group D1 — When Played, self / no-target (#355)', () => {
   })
 
   it('Home One (065): heals all damage from each friendly unit, not enemies', () => {
-    const s = play('ASH_065', { units: [unit('a', 'GRUNT', { damage: 2 }), unit('b', 'GRUNT', { damage: 1 })] }, { units: [unit('e', 'GRUNT', { damage: 2 })] })
+    const s = play('ASH_065', { units: [unit('a', 'GRUNT', { damage: 1 }), unit('b', 'GRUNT', { damage: 1 })] }, { units: [unit('e', 'GRUNT', { damage: 1 })] })
     expect(s.players.player.units.find(u => u.instanceId === 'a')!.damage).toBe(0)
     expect(s.players.player.units.find(u => u.instanceId === 'b')!.damage).toBe(0)
-    expect(s.players.opponent.units.find(u => u.instanceId === 'e')!.damage).toBe(2)
+    expect(s.players.opponent.units.find(u => u.instanceId === 'e')!.damage).toBe(1) // enemies aren't healed
   })
 
   it('The Armorer (064): gives a Shield to each friendly Shielded unit (including herself)', () => {
@@ -176,7 +176,7 @@ describe('Group D2 — When Played, single target (#355)', () => {
   })
 
   it('Nebulon-C Frigate (081): may heal 3 from a damaged unit or base (optional)', () => {
-    const s = play('ASH_081', { units: [unit('d', 'GRUNT', { damage: 3 })] })
+    const s = play('ASH_081', { units: [unit('d', 'EXPENSIVE', { damage: 3 })] })
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'selectHealTarget', amount: 3 })
     expect(resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id }).players.player.units.find(u => u.instanceId === 'd')!.damage).toBe(3) // decline
     expect(accept(s, 'd').players.player.units.find(u => u.instanceId === 'd')!.damage).toBe(0)

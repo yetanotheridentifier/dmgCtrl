@@ -42,6 +42,19 @@ describe('implementation progress (#306)', () => {
   it('the unit groups list every unit exactly once (179 total)', () => {
     const all = UNIT_GROUPS.flatMap(g => g.units)
     expect(all).toHaveLength(179)
-    expect(new Set(all).size).toBe(179) // no duplicates across groups
+    expect(new Set(all.map(u => u.id)).size).toBe(179) // keyed by id — 13 unit names collide with leaders
+  })
+
+  it('a built unit is listed as built, never still "blocked on" something', () => {
+    const built = new Set(IMPLEMENTED_UNITS.map(u => u.id))
+    for (const g of UNIT_GROUPS.filter(g => g.id !== 'built' && g.id !== 'keyword')) {
+      for (const u of g.units) expect(built.has(u.id), `${u.name} is built but still listed under "${g.id}"`).toBe(false)
+    }
+    // …and the built group is exactly the manifest.
+    expect(UNIT_GROUPS.find(g => g.id === 'built')!.units.map(u => u.id).sort()).toEqual([...built].sort())
+  })
+
+  it('every unit listed in a group is a real ASH card id', () => {
+    for (const u of UNIT_GROUPS.flatMap(g => g.units)) expect(u.id, u.name).toMatch(/^ASH_\d{3}$/)
   })
 })

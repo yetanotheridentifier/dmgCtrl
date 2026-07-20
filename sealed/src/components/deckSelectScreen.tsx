@@ -138,7 +138,7 @@ function ImplementationStatus() {
       </Section>
 
       <h3 className="mt-5 text-accent text-xs uppercase tracking-[0.12em] font-light">
-        Units <span className="text-ink-faint normal-case tracking-normal">(by work group)</span>
+        Units <span className="text-ink-faint normal-case tracking-normal">(by what's blocking them)</span>
       </h3>
       <div data-testid="implemented-unit-groups">
         {UNIT_GROUPS.map(g => (
@@ -150,8 +150,8 @@ function ImplementationStatus() {
             <div className="border-t-2 border-line/30">
               <p className="px-3 py-2 text-ink-dim text-xs">{g.note}</p>
               <ul className="border-t border-line/20 divide-y divide-line/20 text-sm">
-                {g.units.map(name => (
-                  <li key={name} className="px-3 py-1 truncate">{name}</li>
+                {g.units.map(u => (
+                  <li key={u.id} className="px-3 py-1 truncate">{u.name}</li>
                 ))}
               </ul>
             </div>

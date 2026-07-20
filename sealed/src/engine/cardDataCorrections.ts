@@ -27,4 +27,5 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   ASH_113: { keywords: [] }, // Mandalorian Flagship (B2) — Ambush is conditional (while you control a leader)
   ASH_030: { keywords: [{ name: 'Sentinel' }] }, // Marrok (B3) — Sentinel is real; Saboteur is conditional (while upgraded)
   ASH_099: { keywords: [{ name: 'Support' }] }, // Gozanti Assault Carrier (E) — Support is real; Sentinel is gained on attack
+  ASH_079: { keywords: [] }, // Koska Reeves (F) — Sentinel is conditional (while you control a token unit)
 }

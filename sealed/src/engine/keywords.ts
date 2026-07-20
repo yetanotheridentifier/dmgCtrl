@@ -95,6 +95,31 @@ export function unitNegatesOverwhelm(state: GameState, unit: UnitState): boolean
   return [unit.cardId, ...unit.upgrades.map(u => u.cardId)].some(id => getCardDefinition(id)?.negatesOverwhelm?.(state, unit) ?? false)
 }
 
+/**
+ * True if the unit deals its combat damage before the defender (#357, Carson Teva). Includes
+ * abilities lent for this attack (`grantedAbilityCardIds`), so a unit attacking via Carson's
+ * Support gains his first strike too.
+ */
+export function unitDealsDamageFirst(state: GameState, unit: UnitState): boolean {
+  return [unit.cardId, ...unit.upgrades.map(u => u.cardId), ...(unit.grantedAbilityCardIds ?? [])]
+    .some(id => getCardDefinition(id)?.dealsDamageFirst?.(state, unit) ?? false)
+}
+
+/** True if any of the unit's cards forbids it attacking bases (#357, Wicket). */
+export function unitCannotAttackBases(state: GameState, unit: UnitState): boolean {
+  return [unit.cardId, ...unit.upgrades.map(u => u.cardId)].some(id => getCardDefinition(id)?.cannotAttackBases?.(state, unit) ?? false)
+}
+
+/** True if the unit currently can't be attacked (#357, Tatooine Repulsor Train). */
+export function unitCannotBeAttacked(state: GameState, unit: UnitState): boolean {
+  return [unit.cardId, ...unit.upgrades.map(u => u.cardId)].some(id => getCardDefinition(id)?.cannotBeAttacked?.(state, unit) ?? false)
+}
+
+/** True if the unit may attack enemy units in either arena (#357, Red Leader). */
+export function unitAttacksEitherArena(state: GameState, unit: UnitState): boolean {
+  return [unit.cardId, ...unit.upgrades.map(u => u.cardId)].some(id => getCardDefinition(id)?.attacksEitherArena?.(state, unit) ?? false)
+}
+
 /** A unit's traits — its card's plus any granted by an upgrade (The Darksaber → Mandalorian, #343). */
 export function unitTraits(state: GameState, unit: UnitState): string[] {
   const out = [...(state.cards[unit.cardId]?.traits ?? [])]

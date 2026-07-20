@@ -1,4 +1,4 @@
-import type { GameState, KeywordInstance, PlayerId, UnitState, CombatContext } from './types'
+import type { EngineCard, GameState, KeywordInstance, PlayerId, UnitState, CombatContext, DamageSource } from './types'
 import type { AttackTarget } from './actions'
 
 /**
@@ -29,6 +29,31 @@ export type TriggerPoint =
   // "When you take the initiative" (#348, Mandalorian) — fires for the taker's undeployed leader.
   | 'whenTakeInitiative'
   | 'whenDefeated'
+  // "When another friendly unit is defeated" (#357, The Twins): fires on the defeated unit's
+  // controller's *surviving* units — distinct from `whenDefeated` (the defeated unit itself).
+  | 'whenFriendlyUnitDefeated'
+  // "When an enemy unit is defeated" (#357, Chimaera): the mirror of the above — fires on the
+  // OPPOSING player's units when a unit is defeated.
+  | 'whenEnemyUnitDefeated'
+  // "When an enemy unit attacks your base" (#357, Kachirho Militia): fires on the attacked
+  // player's units. `ctx.attackerInstanceId` is the attacking unit.
+  | 'whenEnemyAttacksBase'
+  // "When 1 or more upgrades attach to this unit" (#357, Sabine Wren) — fires on the unit that
+  // received the upgrade, including the Shield token from Shielded on entry.
+  | 'whenUpgradeAttached'
+  // "When you draw 1 or more cards" (#357, Axe Woves): fires once per draw EVENT (not per card)
+  // on the drawing player's units, including the regroup-phase draw.
+  | 'whenDrawCards'
+  // "When your base is dealt damage" (#357, Blade Three): fires on the damaged base's owner's units.
+  // All base damage funnels through `dealDamageToBase`, so combat and ability damage both count.
+  | 'whenOwnBaseDamaged'
+  // "When a friendly upgrade is defeated" (#357, Zeb Orrelios): fires on the upgrade owner's units.
+  // SIMPLIFICATION: raised by an effect defeating an upgrade, or by its host unit dying — NOT by a
+  // Shield/Advantage token being spent during combat resolution, where a raised choice would need
+  // the resumable damage pipeline that's deferred with The Mandalorian (#357 subsystem tier).
+  | 'whenFriendlyUpgradeDefeated'
+  // "When a friendly unit is dealt damage and survives" (#357, Rancor Keeper).
+  | 'whenFriendlyDamagedSurvives'
   | 'onDefense'
   | 'whenPlayOrCreateUnit'
 
@@ -55,6 +80,12 @@ export interface EffectContext {
   defeatedByCombat?: boolean
   /** A chosen target unit's instance id, when the ability picks one (#309). */
   targetInstanceId?: string
+  /**
+   * `whenUpgradeAttached` only (#357, Gar Saxon): the upgrade was **played** from hand, rather
+   * than created and attached by an ability (a Shield/Experience token, Sabine's grant, …).
+   * "When you play an upgrade on this unit" only counts the former.
+   */
+  upgradePlayed?: boolean
 }
 
 export type EffectFn = (state: GameState, ctx: EffectContext) => GameState
@@ -91,17 +122,78 @@ export interface CardDefinition {
    */
   statModifier?: (state: GameState, unit: UnitState, ctx: StatModContext) => { power?: number; hp?: number }
   /**
+   * A unit *in play* discounting cards its controller plays (#357, Pit Droid Team). Distinct from
+   * `costModifier`, which lives on the card being played. Summed across the controller's units and
+   * their upgrades in `effectiveCost`; negative = cheaper.
+   */
+  costDiscount?: (state: GameState, source: UnitState, ctx: CostDiscountContext) => number
+  /**
+   * A unit *in play* waiving the aspect penalty of a card its controller plays (#357, Peli Motto).
+   * Any waiving unit zeroes the whole penalty for that card.
+   */
+  waivesAspectPenalty?: (state: GameState, source: UnitState, ctx: CostDiscountContext) => boolean
+  /**
    * Multiplier applied to each instance of damage this unit takes (the unit's own
    * card, or an upgrade) — e.g. Deadly Vulnerability's ×2. Multipliers from the card
    * and its upgrades compound. Default (no hook) = ×1.
    */
   damageMultiplier?: (state: GameState, unit: UnitState) => number
+  /**
+   * A unit in play reducing damage about to hit *its controller's* base (#357, At Attin Safety Droid
+   * caps an instance at 4). Receives the incoming amount, returns what actually lands.
+   */
+  preventBaseDamage?: (state: GameState, source: UnitState, amount: number) => number
+  /**
+   * This unit may be defeated to double a batch of token creation (#357, Moff Jerjerrod). Offered by
+   * `createTokenUnits` after the batch is made — see the 2N ≡ N-then-N note there.
+   */
+  doublesTokenCreation?: (state: GameState, source: UnitState) => boolean
+  /** This unit can't declare an attack against a base (#357, Wicket). */
+  cannotAttackBases?: (state: GameState, unit: UnitState) => boolean
+  /** This unit can't currently be attacked (#357, Tatooine Repulsor Train). Also keeps it from being a forced Sentinel target. */
+  cannotBeAttacked?: (state: GameState, unit: UnitState) => boolean
+  /** This unit may attack enemy units in either arena, not just its own (#357, Red Leader). */
+  attacksEitherArena?: (state: GameState, unit: UnitState) => boolean
   /** Defender-side: while this unit defends, the attacker loses Overwhelm (#342). */
   negatesOverwhelm?: (state: GameState, unit: UnitState) => boolean
   /** Activated "Action:" abilities usable on the controller's turn (#343). */
   actionAbilities?: ActionAbilityDef[]
   /** Multiplier on how many cards this unit's searches look at — Arcana Star Map ×2 (#343). */
   searchModifier?: (state: GameState, unit: UnitState) => number
+  /**
+   * "While attacking, this unit deals combat damage before the defender" (#357, Carson Teva).
+   * A defender defeated by that damage never deals its counter damage.
+   */
+  dealsDamageFirst?: (state: GameState, unit: UnitState) => boolean
+  /**
+   * "Advantage tokens on friendly units lose all abilities" (#357, Eviscerator): while this unit is
+   * in play, its controller's Advantage tokens give no power and survive combat instead of being spent.
+   */
+  suppressesFriendlyAdvantage?: (state: GameState, source: UnitState) => boolean
+  /**
+   * An aura that grants OTHER units a whole card's worth of triggered abilities (#357,
+   * Bo-Katan's Gauntlet: "each other friendly non-token unit gains 'When Defeated: …'").
+   * Returns the card ids whose abilities `target` gains while `source` is in play. Distinct from
+   * `aura`, which only contributes stats/keywords. Consulted by `runUnitTrigger`, so a granted
+   * ability fires for the target exactly as if printed on it — including `whenDefeated`, where the
+   * target has already left play but the granting source has not.
+   */
+  grantsAbilities?: (state: GameState, source: UnitState, target: UnitState, sameController: boolean) => string[]
+  /**
+   * A unit in play making some damage unpreventable (#357, Gorian Shard's Corsair — friendly
+   * Underworld cards). Asked about each instance of damage; true means Shields and base-damage
+   * prevention are ignored for it.
+   */
+  makesDamageUnpreventable?: (state: GameState, self: UnitState, source: DamageSource) => boolean
+  /**
+   * A unit that may prevent damage headed for one of its controller's OTHER units, at a cost it
+   * pays itself (#357, The Mandalorian defeats one of its own Shield tokens). Return true when
+   * `self` is currently able and eligible to prevent damage to `target`; the engine then offers the
+   * choice, and `payPreventionCost` collects the price if it's taken.
+   */
+  canPreventDamage?: (state: GameState, self: UnitState, target: UnitState) => boolean
+  /** Pay the cost of a prevention this card offered (#357) — e.g. defeat a Shield on `self`. */
+  payPreventionCost?: (state: GameState, self: UnitState) => GameState
   /** Extra traits this card grants a unit — The Darksaber grants Mandalorian (#343). */
   grantedTraits?: (state: GameState, unit: UnitState) => string[]
   /** True if this card makes its unit a leader unit — The Darksaber (#343). */
@@ -114,6 +206,11 @@ export interface CardDefinition {
    * isn't a unit, so those never fire on it; once deployed it's a unit and these don't.
    */
   leaderAbilities?: LeaderAbilities
+  /**
+   * "This unit enters play ready" while a condition holds (#357, Elzar Mann — a Force leader).
+   * Consulted by `enterUnit`, alongside Ambush and the `nextUnitGrants` enters-ready grant.
+   */
+  entersReady?: (state: GameState, owner: PlayerId) => boolean
   /** Custom epic-action deploy gate (#309); default is `resources ≥ leader.cost`. */
   deployCondition?: (state: GameState, owner: PlayerId) => boolean
   /**
@@ -176,6 +273,13 @@ export interface ActionAbilityDef {
   description: string
   /** Resource cost paid on use (default 0) — the ability's "C=N" cost (#348). */
   cost?: number
+  /**
+   * The ability's "[Exhaust]" cost (#357): the unit must be ready to use it, and using it
+   * exhausts the unit — so it can't also attack that round. Distinct from `oncePerRound`,
+   * which limits uses without touching the unit's ready state (an ability with no
+   * "[Exhaust]" in its cost, e.g. Improvised Identity, which then attacks).
+   */
+  exhaustCost?: boolean
   /** May be used only once per round by a given unit (tracked on `UnitState.usedAbilities`). */
   oncePerRound?: boolean
   /** Extra gate beyond once-per-round (defaults usable). */
@@ -199,10 +303,26 @@ export function actionAbilityKey(cardId: string, index: number): string {
   return `${cardId}#${index}`
 }
 
+/** What a `costDiscount` / `waivesAspectPenalty` hook is being asked about (#357). */
+export interface CostDiscountContext {
+  /** The player paying — the controller of the discounting unit. */
+  owner: PlayerId
+  /** The card being played. */
+  card: EngineCard
+  /** The upgrade's target unit, when an upgrade is being played. */
+  target?: UnitState
+}
+
 /** Combat context passed to `statModifier` (mirrors `stats.StatContext`). */
 export interface StatModContext {
   attacking?: boolean
   attackingBase?: boolean
+  /** This unit is the defender in the current combat (#357, Palace Chef Droid). */
+  defending?: boolean
+  /** For the attacker: the defending unit had damage on it (#357, Marrok's Fiend Fighter). */
+  defenderDamaged?: boolean
+  /** This attack was made via Ambush, as the unit entered play (#357, Heroic Purrgil). */
+  viaAmbush?: boolean
 }
 
 const registry = new Map<string, CardDefinition>()
@@ -273,6 +393,22 @@ export function runLeaderTrigger(state: GameState, point: TriggerPoint, owner: P
  * attached upgrade's abilities, so an upgrade's "When Attack Ends: …" fires when
  * the attached unit's attack ends. `owner` controls the unit.
  */
+/**
+ * Card ids whose abilities `unit` (controlled by `owner`) currently gains from a `grantsAbilities`
+ * aura in play (#357). Scans both sides' units, since a future aura may target enemies.
+ */
+function auraGrantedAbilityCards(state: GameState, unit: UnitState, owner: PlayerId): string[] {
+  const out: string[] = []
+  for (const side of ['player', 'opponent'] as PlayerId[]) {
+    for (const source of state.players[side].units) {
+      for (const cardId of [source.cardId, ...source.upgrades.map(u => u.cardId)]) {
+        out.push(...(getCardDefinition(cardId)?.grantsAbilities?.(state, source, unit, side === owner) ?? []))
+      }
+    }
+  }
+  return out
+}
+
 export function runUnitTrigger(
   state: GameState,
   point: TriggerPoint,
@@ -281,9 +417,14 @@ export function runUnitTrigger(
   extra?: Partial<EffectContext>,
 ): GameState {
   let next = state
-  // The unit's own card, its upgrades, and any cards whose abilities are granted for
-  // this attack (Improvised Identity, #343).
-  const cardIds = [unit.cardId, ...unit.upgrades.map(u => u.cardId), ...(unit.grantedAbilityCardIds ?? [])]
+  // The unit's own card, its upgrades, any cards whose abilities are granted for this attack
+  // (Improvised Identity, #343), and any granted by an aura in play (Bo-Katan's Gauntlet, #357).
+  const cardIds = [
+    unit.cardId,
+    ...unit.upgrades.map(u => u.cardId),
+    ...(unit.grantedAbilityCardIds ?? []),
+    ...auraGrantedAbilityCards(state, unit, owner),
+  ]
   for (const cardId of cardIds) {
     for (const ability of getAbilities(cardId)) {
       if (ability.trigger === point) {

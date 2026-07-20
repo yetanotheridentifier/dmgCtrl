@@ -1,9 +1,11 @@
-import type { GameState, PlayerId, UnitState } from './types'
-import { opponentOf, updatePlayer, recordUnitDefeated } from './types'
+import type { DamageSource, GameState, PendingChoice, PlayerId, UnitState } from './types'
+import { opponentOf, updatePlayer, recordUnitDefeated, pushChoice } from './types'
 import { effectiveHp } from './stats'
+import type { StatContext } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import { runUnitTrigger, getCardDefinition } from './abilities'
+import { fireUpgradesDefeated, fireUnitsTrigger, damageIsUnpreventable, releaseCaptured } from './effects'
 
 /** Product of the damage multipliers the unit's card and upgrades contribute (#342). */
 function damageMultiplier(state: GameState, unit: UnitState): number {
@@ -26,10 +28,13 @@ function damageMultiplier(state: GameState, unit: UnitState): number {
  * Fires each defeated unit's (and its upgrades') `whenDefeated` abilities after
  * the unit has left play (#342).
  */
-export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<string, number>, byCombat = false): GameState {
+export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<string, number>, byCombat = false, statCtx: StatContext = {}, source?: DamageSource): GameState {
+  // Unpreventable damage ignores Shields entirely — the token isn't even spent (#357, Gorian Shard).
+  const unpreventable = damageIsUnpreventable(state, source)
   const p = state.players[owner]
   const survivors: UnitState[] = []
   const defeated: UnitState[] = []
+  let survivedDamage = false
 
   for (const u of p.units) {
     let extra = damaged.get(u.instanceId) ?? 0
@@ -37,20 +42,25 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
     if (extra > 0) extra *= damageMultiplier(state, u)
     let upgrades = u.upgrades
     // A shield token prevents one instance of incoming damage, then is removed (#308).
-    if (extra > 0 && hasToken(upgrades, TOKEN_SHIELD)) {
+    if (extra > 0 && !unpreventable && hasToken(upgrades, TOKEN_SHIELD)) {
       upgrades = removeFirst(upgrades, a => a.cardId === TOKEN_SHIELD)
       extra = 0
     }
     const total = u.damage + extra
     const next = extra > 0 || upgrades !== u.upgrades ? { ...u, damage: total, upgrades } : u
-    if (total >= effectiveHp(state, next)) {
+    // `statCtx` lets the combat defeat check see combat-only debuffs (#357, Scion Shuttle's -1/-1).
+    if (total >= effectiveHp(state, next, statCtx)) {
       defeated.push(next)
     } else {
       survivors.push(next)
+      // "When a friendly unit is dealt damage and survives" (#357, Rancor Keeper).
+      if (extra > 0) survivedDamage = true
     }
   }
 
-  return finishDefeats(state, owner, survivors, defeated, byCombat)
+  let result = finishDefeats(state, owner, survivors, defeated, byCombat)
+  if (survivedDamage) result = fireUnitsTrigger(result, 'whenFriendlyDamagedSurvives', owner)
+  return result
 }
 
 /**
@@ -84,11 +94,48 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
     result = updatePlayer(result, owner, { leader: { ...owner2.leader, deployed: false, exhausted: true } })
   }
 
+  // A captor leaving play frees what it held, back into play rather than to the discard (#357).
+  const released = defeated.flatMap(u => u.captured ?? [])
+  if (released.length > 0) result = releaseCaptured(result, owner, released)
+
+  // Upgrades go down with their host — "when a friendly upgrade is defeated" (#357, Zeb Orrelios).
+  const lostUpgradeOwners = defeated.flatMap(u => u.upgrades).map(a => a.owner)
+  if (lostUpgradeOwners.length > 0) result = fireUpgradesDefeated(result, lostUpgradeOwners)
+
   for (const dead of defeated) {
     result = recordUnitDefeated(result, owner, dead.cardId) // "defeated this phase" tracking (#347)
     result = runUnitTrigger(result, 'whenDefeated', dead, owner, { defeatedUnit: dead, defeatedByCombat: byCombat })
+    // "When another friendly unit is defeated" (#357, The Twins) — the controller's surviving units
+    // react. Re-found each step in case an earlier reactor changed the board.
+    result = fireUnitsTrigger(result, 'whenFriendlyUnitDefeated', owner, { defeatedUnit: dead })
+    // "When an enemy unit is defeated" (#357, Chimaera) — the other side reacts.
+    result = fireUnitsTrigger(result, 'whenEnemyUnitDefeated', opponentOf(owner), { defeatedUnit: dead })
   }
   return result
+}
+
+/**
+ * State-based defeats (#357): a unit whose damage has reached its *current* HP — or whose HP has been
+ * reduced to 0 — is defeated even though no damage was just dealt. Needed by effects that LOWER HP
+ * (Morgan Elsbeth's −2/−2). Uses resting stats, so combat-only debuffs aren't considered here (those
+ * are handled by the combat defeat check). Loops until stable, since a whenDefeated can change the
+ * board again; bounded so a pathological loop can't hang the game.
+ */
+export function sweepStateBasedDefeats(state: GameState): GameState {
+  let next = state
+  for (let pass = 0; pass < 8; pass++) {
+    let changed = false
+    for (const owner of ['player', 'opponent'] as PlayerId[]) {
+      const units = next.players[owner].units
+      const doomed = units.filter(u => u.damage >= effectiveHp(next, u))
+      if (doomed.length === 0) continue
+      const doomedIds = new Set(doomed.map(u => u.instanceId))
+      next = finishDefeats(next, owner, units.filter(u => !doomedIds.has(u.instanceId)), doomed)
+      changed = true
+    }
+    if (!changed) break
+  }
+  return next
 }
 
 /** Defeat a unit outright (#348) — a targeted "defeat" (Thrawn), which bypasses Shields (those
@@ -102,15 +149,52 @@ export function defeatUnit(state: GameState, instanceId: string): GameState {
 }
 
 /**
+ * The unit that may prevent damage headed for `targetId`, if any (#357, The Mandalorian). Nothing
+ * can prevent damage that's been made unpreventable (Gorian Shard's Corsair), and only the target's
+ * OWN controller's units are asked — you can't shield an enemy.
+ */
+export function preventionOffer(state: GameState, targetId: string, source?: DamageSource): { preventerId: string; controller: PlayerId } | undefined {
+  if (damageIsUnpreventable(state, source)) return undefined
+  for (const owner of ['player', 'opponent'] as PlayerId[]) {
+    const target = state.players[owner].units.find(u => u.instanceId === targetId)
+    if (!target) continue
+    for (const self of state.players[owner].units) {
+      const able = [self.cardId, ...self.upgrades.map(u => u.cardId)]
+        .some(id => getCardDefinition(id)?.canPreventDamage?.(state, self, target) ?? false)
+      if (able) return { preventerId: self.instanceId, controller: owner }
+    }
+    return undefined
+  }
+  return undefined
+}
+
+/**
  * Deal `amount` damage to a single unit, wherever it is (#342). A thin wrapper over
  * `applyUnitDamage` so abilities can deal damage outside the attack flow; honours
  * Shield tokens and fires `whenDefeated`. A no-op if the unit is not in play.
+ *
+ * If a prevention effect could stop this damage (#357, The Mandalorian), the damage is NOT applied
+ * here: it's deferred into a `mayPreventDamage` choice, which applies it if the offer is declined.
+ * Combat damage skips that — `completeAttack` settles prevention at its own stage, before any
+ * damage is calculated, so that first strike / Overwhelm / attack-end still see correct values.
  */
-export function dealDamageToUnit(state: GameState, instanceId: string, amount: number): GameState {
+export function dealDamageToUnit(state: GameState, instanceId: string, amount: number, source?: DamageSource, followUp?: PendingChoice): GameState {
   for (const owner of ['player', 'opponent'] as PlayerId[]) {
-    if (state.players[owner].units.some(u => u.instanceId === instanceId)) {
-      return applyUnitDamage(state, owner, new Map([[instanceId, amount]]))
+    if (!state.players[owner].units.some(u => u.instanceId === instanceId)) continue
+    const offer = amount > 0 ? preventionOffer(state, instanceId, source) : undefined
+    if (offer) {
+      return pushChoice(state, {
+        kind: 'mayPreventDamage',
+        id: `prevent-${instanceId}-${state.instanceCounter}`,
+        controller: offer.controller,
+        preventerId: offer.preventerId,
+        targetId: instanceId,
+        amount,
+        source,
+        followUp,
+      })
     }
+    return applyUnitDamage(state, owner, new Map([[instanceId, amount]]), false, {}, source)
   }
   return state
 }

@@ -2,15 +2,15 @@ import type { Action, AttackTarget } from './actions'
 import type { GameState, PlayerId, UnitState } from './types'
 import type { PendingChoice, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeChoice, hasPendingChoices, pushChoice } from './types'
-import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
+import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
-import { applyUnitDamage, dealDamageToUnit, defeatUnit } from './combat'
-import { exhaustUnit, findUnit, giveToken, dealDamageToBase, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit } from './effects'
+import { applyUnitDamage, dealDamageToUnit, defeatUnit, sweepStateBasedDefeats, preventionOffer } from './combat'
+import { exhaustUnit, findUnit, giveToken, fireUpgradeAttached, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, searchCount, bottomTopCards, returnUpgradeToHand } from './effects'
 import { seededShuffle, nextSeed } from './rng'
-import { effectivePower, effectiveHp } from './stats'
-import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm } from './keywords'
+import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
+import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst } from './keywords'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
 
 /**
@@ -20,7 +20,16 @@ import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
  * throws on engine-invariant violations (wrong phase, unknown ids, game over)
  * rather than re-validating game rules.
  */
+/**
+ * Apply an action, then settle state-based defeats (#357) — an effect that LOWERS a unit's HP
+ * (Morgan Elsbeth's −2/−2) defeats it without dealing damage, so every action ends with a sweep.
+ */
 export function resolve(state: GameState, action: Action): GameState {
+  const next = resolveAction(state, action)
+  return next.winner !== null ? next : checkWin(sweepStateBasedDefeats(next))
+}
+
+function resolveAction(state: GameState, action: Action): GameState {
   if (state.winner !== null) {
     throw new Error('Cannot resolve actions: the game is over')
   }
@@ -64,14 +73,16 @@ export function resolve(state: GameState, action: Action): GameState {
           : choice?.kind === 'mayAttack' ? choice.grantCardId : undefined
         let before = grantCardId ? grantAbilityCard(state, action.attackerId, grantCardId) : state
         // Thrawn front (#348): the chosen attacker gains Restore N for this attack.
-        if (choice?.kind === 'attackWithRestore' && choice.restore > 0) {
+        if (choice?.kind === 'mayAttackAnyUnit' && choice.restore > 0) {
           before = updatePlayer(before, before.activePlayer, {
             units: before.players[before.activePlayer].units.map(u =>
               u.instanceId === action.attackerId ? { ...u, grantedKeywords: [{ name: 'Restore', value: choice.restore }] } : u,
             ),
           })
         }
-        let attacked = attack(before, action.attackerId, action.target)
+        // An Ambush attack is the one resolving the entering unit's ambush choice (#357, Heroic Purrgil).
+        const viaAmbush = choice?.kind === 'ambush' && choice.unitId === action.attackerId
+        let attacked = attack(before, action.attackerId, action.target, viaAmbush)
         // Consume the ambush/support choice this attack resolved. Support-granted
         // keywords are cleared inside completeAttack (after they're used), so they
         // survive a mid-combat On Defense suspension.
@@ -90,10 +101,13 @@ export function resolve(state: GameState, action: Action): GameState {
       return requirePhase(state, 'action', () => takeInitiative(state))
     case 'pass':
       return requirePhase(state, 'action', () => pass(state))
+    // Choices are not action-phase-only: `whenReadies` raises them at round start and
+    // `whenRegroupStarts` during regroup (#357, Alphabet Squadron U-Wing). Gating them on the
+    // action phase would deadlock those — there'd be no legal move.
     case 'skipTrigger':
-      return requirePhase(state, 'action', () => resolveSkip(state, action.choiceId))
+      return resolveSkip(state, action.choiceId)
     case 'acceptChoice':
-      return requirePhase(state, 'action', () => resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex, action.baseTarget, action.handIndex, action.cardName))
+      return resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex, action.baseTarget, action.handIndex, action.cardName)
     case 'resourceCard':
       return requirePhase(state, 'regroup', () => regroupChoice(state, action.handIndex))
     case 'skipResource':
@@ -221,7 +235,10 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
   // (the cost delta was already folded into `effectiveCost` at play time).
   const grants = (state.players[owner].nextUnitGrants ?? []).filter(g => nextUnitGrantMatches(card, g))
   const grantKeywords = grants.flatMap(g => g.keywords ?? [])
-  const grantEntersReady = grants.some(g => g.entersReady)
+  // Every "enters play ready" source, in one place: a caller override (`ready`), a Neel-style grant,
+  // or the card's own condition (#357, Elzar Mann). Both the construction below AND the revert-to-
+  // exhausted branch further down must honour all of them.
+  const grantEntersReady = grants.some(g => g.entersReady) || (getCardDefinition(cardId)?.entersReady?.(state, owner) ?? false)
   const entersWith = (name: string): boolean => hasKeyword(state, cardId, name) || grantKeywords.some(k => k.name === name)
   // Ambush: the unit may immediately attack an enemy unit, so it enters ready (#334).
   const ambush = entersWith('Ambush')
@@ -269,6 +286,9 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
     if (ready !== true && !grantEntersReady && !inPlay().exhausted) exhaust()
     if (unitHasKeyword(next, inPlay(), 'Support')) next = openSupportChoice(next, owner, newUnit.instanceId)
   }
+
+  // A unit entering with upgrades (a Shielded token) reacts to them attaching (#357, Sabine Wren).
+  if (inPlay().upgrades.length > 0) next = fireUpgradeAttached(next, newUnit.instanceId)
 
   // "When Played" abilities fire after the card enters play (CR 6.2.0f).
   next = runTrigger(next, 'whenPlayed', { owner, cardId, sourceInstanceId: newUnit.instanceId })
@@ -329,7 +349,8 @@ function playCard(state: GameState, handIndex: number): GameState {
   }
 
   const paid = payCost(p, effectiveCost(state, playerId, card))
-  const next = updatePlayer(state, playerId, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
+  let next = updatePlayer(state, playerId, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
+  next = recordCardPlayed(next, playerId, card.id) // after the cost, so "first X each phase" sees this one as the first (#357)
   // whenPlayed effects can defeat a base, so the win check runs afterwards.
   return checkWin(enterUnit(next, playerId, card.id))
 }
@@ -400,12 +421,51 @@ function resumeAfterChoice(state: GameState, resolved: PendingChoice): GameState
   return advanceTurn(resetPasses(state))
 }
 
+/**
+ * The "if you do …" tail of a `mayDamage`, run only when the damage actually landed (#355/#356/#357).
+ * Split out because a prevention offer defers the damage into its own choice, which runs this on
+ * the declined branch — prevented damage was never dealt, so no tail fires.
+ */
+function mayDamageFollowUps(state: GameState, choice: PendingChoice & { kind: 'mayDamage' }, targetInstanceId: string): GameState {
+  let next = state
+  // "If it's defeated this way, …" — Imposing Scout Walker rewards its own unit (#355).
+  if (choice.rewardIfDefeated && !findUnit(next, targetInstanceId)) {
+    const reward = choice.rewardIfDefeated
+    if ('instanceId' in reward) {
+      for (let i = 0; i < reward.count; i++) next = giveToken(next, reward.instanceId, TOKEN_ADVANTAGE)
+    } else {
+      // Justifier (#356): give Advantage to a chosen unit.
+      const targets = [...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId)
+      if (targets.length > 0) next = pushChoice(next, { kind: 'mayGiveTokens', id: choice.id, controller: choice.controller, token: TOKEN_ADVANTAGE, count: reward.chooseAdvantage, targets, optional: false })
+    }
+  }
+  // 8D8 (#357): "if you do, search the top N of your deck for a unit, reveal it, and draw it."
+  if (choice.thenSearchDraw) {
+    const owner = choice.controller
+    const source = findUnit(next, choice.unitId)
+    const depth = source ? searchCount(next, source.unit, choice.thenSearchDraw) : choice.thenSearchDraw
+    const revealed = next.players[owner].deck.slice(0, depth)
+    const eligibleIndices = revealed.flatMap((cardId, i) => (next.cards[cardId]?.type === 'unit' ? [i] : []))
+    next = eligibleIndices.length === 0
+      ? bottomTopCards(next, owner, revealed.length) // no unit revealed → they all go to the bottom
+      : pushChoice(next, { kind: 'searchDraw', id: `${choice.id}-search`, controller: owner, revealed, eligibleIndices })
+  }
+  return next
+}
+
 /** Resume a combat suspended by an On Attack / On Defense choice (#342/#309): restore the
  *  attacker as active, run the remaining stages from where it paused, then pass the turn
  *  (unless a later stage suspended again or won the game). */
 function resumePendingAttack(state: GameState): GameState {
   const pa = state.pendingAttack!
-  const next = runAttackStages({ ...state, pendingAttack: undefined, activePlayer: pa.activePlayer }, pa.attackerId, pa.target, pa.stage)
+  const next = runAttackStages(
+    { ...state, pendingAttack: undefined, activePlayer: pa.activePlayer },
+    pa.attackerId,
+    pa.target,
+    pa.stage,
+    pa.viaAmbush,
+    { preventAsked: pa.preventAsked, prevented: pa.prevented },
+  )
   return next.winner !== null || hasPendingChoices(next) ? next : advanceTurn(resetPasses(next))
 }
 
@@ -427,6 +487,22 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
   // Enoch (#356): stopping grants the discount for the damage dealt to your base so far.
   if (choice.kind === 'dealOwnBaseForDiscount') {
     next = grantEnochDiscount(next, choice.controller, choice.dealt)
+  }
+  // Elzar Mann (#357): stopping early still triggers the follow-up, sized to what was distributed.
+  if (choice.kind === 'distributeTokens') {
+    next = finishDistribution(next, choice, choice.total - choice.remaining)
+  }
+  // The Mandalorian (#357): declining to prevent lets the damage through. Combat damage is applied
+  // by the resumed attack; ability damage was deferred into this choice, so it lands here — along
+  // with the "if you do …" tail of whatever was dealing it.
+  if (choice.kind === 'mayPreventDamage' && !choice.combat) {
+    const found = findUnit(next, choice.targetId)
+    if (found) {
+      next = applyUnitDamage(next, found.owner, new Map([[choice.targetId, choice.amount]]), false, {}, choice.source)
+      next = checkWin(next)
+      if (next.winner !== null) return next
+      if (choice.followUp?.kind === 'mayDamage') next = mayDamageFollowUps(next, choice.followUp, choice.targetId)
+    }
   }
   return resumeAfterChoice(next, choice)
 }
@@ -459,22 +535,160 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'mayDamage':
       // Optional targeted damage, e.g. Cad Bane's On Attack (#309).
       if (targetInstanceId) {
-        next = dealDamageToUnit(next, targetInstanceId, choice.amount)
+        const pending = next.pendingChoices?.length ?? 0
+        next = dealDamageToUnit(next, targetInstanceId, choice.amount, choice.source, choice)
+        // A prevention offer (#357) means the damage hasn't been dealt yet — it lands only if the
+        // offer is declined, and the "if you do …" tail runs there, not here.
+        if ((next.pendingChoices?.length ?? 0) > pending) break
         next = checkWin(next)
         if (next.winner !== null) return next
-        // "If it's defeated this way, …" — Imposing Scout Walker rewards its own unit (#355).
-        if (choice.rewardIfDefeated && !findUnit(next, targetInstanceId)) {
-          const reward = choice.rewardIfDefeated
-          if ('instanceId' in reward) {
-            for (let i = 0; i < reward.count; i++) next = giveToken(next, reward.instanceId, TOKEN_ADVANTAGE)
-          } else {
-            // Justifier (#356): give Advantage to a chosen unit.
-            const targets = [...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId)
-            if (targets.length > 0) next = pushChoice(next, { kind: 'mayGiveTokens', id: choice.id, controller: choice.controller, token: TOKEN_ADVANTAGE, count: reward.chooseAdvantage, targets, optional: false })
-          }
+        next = mayDamageFollowUps(next, choice, targetInstanceId)
+      }
+      break
+    case 'chooseDiscardFate': {
+      // Trask Walker (#357): 0 = bottom the card and heal; 1 = return it to hand.
+      const owner = choice.controller
+      const p = next.players[owner]
+      const idx = p.discard.indexOf(choice.cardId)
+      if (idx === -1) break
+      const discard = p.discard.filter((_, i) => i !== idx)
+      if ((optionIndex ?? 0) === 0) {
+        next = updatePlayer(next, owner, { discard, deck: [...p.deck, choice.cardId] })
+        next = healBase(next, owner, choice.heal)
+      } else {
+        next = updatePlayer(next, owner, { discard, hand: [...p.hand, choice.cardId] })
+      }
+      break
+    }
+    case 'selectPairToDefeat': {
+      // Chimaera (#357): first accept records the friendly pick, second defeats the pair.
+      if (!targetInstanceId) break
+      if (choice.chosenFriendly === undefined) {
+        next = pushChoice(next, { ...choice, chosenFriendly: targetInstanceId })
+        break
+      }
+      next = defeatUnit(next, choice.chosenFriendly)
+      next = defeatUnit(next, targetInstanceId)
+      next = checkWin(next)
+      if (next.winner !== null) return next
+      break
+    }
+    case 'selectUpgradeToReturn': {
+      // Jabba the Hutt (#357): the upgrade goes to ITS OWNER's hand — only your own comes back to you,
+      // and only then may you replay it for free.
+      const pick = choice.candidates[optionIndex ?? 0]
+      if (!pick) break
+      const upgradeOwner = findUnit(next, pick.unitId)?.unit.upgrades[pick.upgradeIndex]?.owner
+      next = returnUpgradeToHand(next, pick.unitId, pick.upgradeIndex)
+      if (upgradeOwner === choice.controller) {
+        const targets = inPlayUnits(next).map(u => u.instanceId)
+        if (targets.length > 0) {
+          next = pushChoice(next, { kind: 'mayPlayUpgradeFree', id: `${choice.id}-free`, controller: choice.controller, cardId: pick.cardId, targets })
         }
       }
       break
+    }
+    case 'mayPlayUpgradeFree': {
+      // Jabba the Hutt (#357): attach the just-returned upgrade to a chosen unit, paying nothing.
+      if (!targetInstanceId) break
+      const owner = choice.controller
+      const p = next.players[owner]
+      const handIdx = p.hand.indexOf(choice.cardId)
+      if (handIdx === -1) break
+      next = updatePlayer(next, owner, { hand: p.hand.filter((_, i) => i !== handIdx) })
+      const host = findUnit(next, targetInstanceId)
+      if (!host) break
+      next = updatePlayer(next, host.owner, {
+        units: next.players[host.owner].units.map(u =>
+          u.instanceId === targetInstanceId ? { ...u, upgrades: [...u.upgrades, { cardId: choice.cardId, owner }] } : u,
+        ),
+      })
+      next = fireUpgradeAttached(next, targetInstanceId, true) // playing it free still counts as playing it
+      break
+    }
+    case 'mayPayExhaustArena': {
+      // Jod Na Nawood (#357): pay the cost, then exhaust every unit in the chosen arena, both sides.
+      const arena = (optionIndex ?? 0) === 0 ? 'ground' : 'space'
+      next = updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost))
+      for (const u of inPlayUnits(next)) {
+        if (u.arena === arena) next = exhaustUnit(next, u.instanceId)
+      }
+      break
+    }
+    case 'revealUnitFromHand': {
+      // Queen Soruna (#357): the revealed card's cost selects the units that can be damaged.
+      // Revealing is public information only — the card stays in hand.
+      if (handIndex === undefined) break
+      const revealed = next.players[choice.controller].hand[handIndex]
+      const cost = next.cards[revealed]?.cost
+      if (cost === undefined) break
+      const unitTargets = inPlayUnits(next).filter(u => next.cards[u.cardId]?.cost === cost).map(u => u.instanceId)
+      if (unitTargets.length > 0) {
+        next = pushChoice(next, { kind: 'selectDamageTarget', id: `${choice.id}-dmg`, controller: choice.controller, amount: choice.amount, unitTargets, baseTargets: [] })
+      }
+      break
+    }
+    case 'damageAnyBases': {
+      // Rancor Keeper (#357): 1 damage to a chosen base, then re-offer the bases not yet hit.
+      if (baseTarget) {
+        next = dealDamageToBase(next, baseTarget, choice.amount, choice.source)
+        next = checkWin(next)
+        if (next.winner !== null) return next
+        const remaining = choice.remaining.filter(b => b !== baseTarget)
+        if (remaining.length > 0) next = pushChoice(next, { ...choice, remaining })
+      }
+      break
+    }
+    case 'mayPreventDamage': {
+      // The Mandalorian (#357): pay the preventer's own cost (defeat a Shield), then cancel the damage.
+      const preventer = findUnit(next, choice.preventerId)
+      if (preventer) {
+        for (const cardId of [preventer.unit.cardId, ...preventer.unit.upgrades.map(u => u.cardId)]) {
+          const pay = getCardDefinition(cardId)?.payPreventionCost
+          if (pay) { next = pay(next, preventer.unit); break }
+        }
+      }
+      // Combat damage is applied later, by the resumed attack — record the cancellation for it.
+      // Ability damage was deferred into this choice, so cancelling means simply never applying it.
+      if (choice.combat && next.pendingAttack) {
+        next = { ...next, pendingAttack: { ...next.pendingAttack, prevented: [...(next.pendingAttack.prevented ?? []), choice.targetId] } }
+      }
+      break
+    }
+    case 'mayCapture': {
+      // Bothan-5 (#357): move the card out of the discard and under the capturing unit.
+      const owner = choice.controller
+      const p = next.players[owner]
+      const idx = p.discard.indexOf(choice.cardId)
+      if (idx === -1) break
+      next = updatePlayer(next, owner, {
+        discard: p.discard.filter((_, i) => i !== idx),
+        units: p.units.map(u => (u.instanceId === choice.unitId ? { ...u, captured: [...(u.captured ?? []), choice.cardId] } : u)),
+      })
+      if (choice.markUsed) next = markAbilityUsed(next, owner, choice.markUsed.instanceId, choice.markUsed.key)
+      break
+    }
+    case 'maySelfDamageShield': {
+      // Cobb Vanth (#357): pay 2 damage to himself to shield the unit that just entered play.
+      next = dealDamageToUnit(next, choice.selfId, choice.amount)
+      next = giveToken(next, choice.targetId, TOKEN_SHIELD)
+      next = checkWin(next)
+      if (next.winner !== null) return next
+      break
+    }
+    case 'mayCreateToken': {
+      // Gar Saxon (#357): create the token unit(s) and record the once-each-round use.
+      next = createTokenUnits(next, choice.controller, choice.token, choice.count)
+      if (choice.markUsed) {
+        const { instanceId, key } = choice.markUsed
+        next = updatePlayer(next, choice.controller, {
+          units: next.players[choice.controller].units.map(u =>
+            u.instanceId === instanceId ? { ...u, usedAbilities: [...(u.usedAbilities ?? []), key] } : u,
+          ),
+        })
+      }
+      break
+    }
     case 'mayAdvantageEach':
       // Emperor Palpatine: give the chosen unit an Advantage token per other friendly unit (#309).
       if (targetInstanceId) {
@@ -495,6 +709,12 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       // Optional "this phase" buff, e.g. Baylan's On Attack: grant the chosen unit the buff (#347).
       if (targetInstanceId) {
         next = addLastingEffect(next, { targetInstanceId, power: choice.power, hp: choice.hp, keywords: choice.keywords })
+        // T-6 Shuttle (#357): "you may attack with that unit" — only meaningful for a ready unit
+        // we control (the buff itself may target any unit).
+        const buffed = findUnit(next, targetInstanceId)
+        if (choice.thenMayAttack && buffed && buffed.owner === choice.controller && !buffed.unit.exhausted) {
+          next = pushChoice(next, { kind: 'mayAttack', id: `${choice.id}-attack`, controller: choice.controller, unitId: targetInstanceId })
+        }
       }
       break
     case 'mayGiveAdvantage':
@@ -548,6 +768,8 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       const pick = choice.candidates[optionIndex ?? 0]
       if (pick) {
         next = defeatUpgradeAt(next, pick.unitId, pick.upgradeIndex)
+        // Pegasus Tri-Wing (#357): "if you do, ready this unit".
+        if (choice.thenReadyUnit) next = readyUnit(next, choice.thenReadyUnit)
         const spec = choice.then
         if (spec) {
           const inPlay = new Set([...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId))
@@ -565,8 +787,8 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     }
     case 'selectDamageTarget': {
       // Deal the chosen amount to the picked base or unit (#348).
-      if (baseTarget) next = dealDamageToBase(next, baseTarget, choice.amount)
-      else if (targetInstanceId) next = dealDamageToUnit(next, targetInstanceId, choice.amount)
+      if (baseTarget) next = dealDamageToBase(next, baseTarget, choice.amount, choice.source)
+      else if (targetInstanceId) next = dealDamageToUnit(next, targetInstanceId, choice.amount, choice.source)
       next = checkWin(next)
       if (next.winner !== null) return next
       break
@@ -623,9 +845,17 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
             if (amount > 0 && targets.length > 0) {
               next = pushChoice(next, { kind: 'distributeDamage', id: choice.id, controller: choice.then.distributeDamageTo, remaining: amount, total: amount, targets })
             }
-          } else {
+          } else if ('buffUnit' in choice.then) {
             // Razor Crest (#356): "if you do, this unit gets +power/+hp for this attack".
             next = addLastingEffect(next, { targetInstanceId: choice.then.buffUnit, power: choice.then.power, hp: choice.then.hp })
+          } else if ('exhaustUnit' in choice.then) {
+            // Mayor's Majordomo (#357): the discard was a COST — now exhaust a unit.
+            const targets = inPlayUnits(next).map(u => u.instanceId)
+            if (targets.length > 0) next = pushChoice(next, { kind: 'mayExhaustUnit', id: `${choice.id}-exh`, controller: choice.controller, targets })
+          } else {
+            // Qi'ra (#357): "if you do, deal N damage to a unit".
+            const targets = inPlayUnits(next).map(u => u.instanceId)
+            if (targets.length > 0) next = pushChoice(next, { kind: 'mayDamage', id: choice.id, controller: choice.controller, unitId: choice.id, targets, amount: choice.then.dealDamage, optional: false })
           }
         }
       }
@@ -668,9 +898,11 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
         next = giveToken(next, targetInstanceId, choice.token)
         const remaining = choice.remaining - 1
-        const targets = next.players[choice.controller].units.map(u => u.instanceId)
+        const targets = next.players[choice.controller].units.map(u => u.instanceId).filter(id => id !== choice.exclude)
         if (remaining > 0 && targets.length > 0) {
-          next = pushChoice(next, { kind: 'distributeTokens', id: choice.id, controller: choice.controller, token: choice.token, remaining, total: choice.total, targets })
+          next = pushChoice(next, { ...choice, remaining, targets })
+        } else {
+          next = finishDistribution(next, choice, choice.total - remaining)
         }
       }
       break
@@ -717,7 +949,13 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'selectFromDiscard': {
       // Moff Gideon (#356): return the chosen discard-pile card to hand.
       const cardId = choice.candidates[optionIndex ?? 0]
-      if (cardId !== undefined) next = returnUpgradeFromDiscardToHand(next, choice.controller, cardId)
+      if (cardId === undefined) break
+      // Trask Walker (#357) instead picks a fate for the card.
+      if (choice.then === 'discardFate') {
+        next = pushChoice(next, { kind: 'chooseDiscardFate', id: `${choice.id}-fate`, controller: choice.controller, cardId, heal: 3 })
+        break
+      }
+      next = returnUpgradeFromDiscardToHand(next, choice.controller, cardId)
       break
     }
     case 'searchDraw': {
@@ -756,6 +994,14 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       break
     }
+    case 'mayDoubleTokens': {
+      // Moff Jerjerrod (#357): defeat him, then top the batch up by the same number again.
+      next = defeatUnit(next, choice.unitId)
+      for (let i = 0; i < choice.count; i++) next = createTokenUnit(next, choice.controller, choice.token)
+      next = checkWin(next)
+      if (next.winner !== null) return next
+      break
+    }
     case 'nameCard': {
       // Ryder Azadi (#355): record the named card on this unit — the opponent can't play cards with
       // that name while it's in play (enforced in legalMoves). Naming is mandatory.
@@ -781,13 +1027,14 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         const owner = choice.controller
         const cardId = choice.revealed[deckIndex]
         const cost = next.cards[cardId]?.cost ?? 0
-        next = enterUnit(next, owner, cardId, false)
+        next = enterUnit(next, owner, cardId, choice.entersReady === true)
         next = checkWin(next)
         if (next.winner !== null) return next
         const revealed = choice.revealed.filter((_, i) => i !== deckIndex)
         const budget = choice.budget - cost
         const eligibleIndices = ackbarEligible(next, revealed, budget)
-        if (budget > 0 && eligibleIndices.length > 0) {
+        // Eye of Sion (#357) plays exactly one; Ackbar keeps offering until the budget runs out.
+        if (!choice.playOne && budget > 0 && eligibleIndices.length > 0) {
           next = pushChoice(next, { kind: 'searchPlayFree', id: choice.id, controller: owner, revealed, eligibleIndices, budget })
         } else {
           next = updatePlayer(next, owner, { deck: [...next.players[owner].deck, ...revealed] }) // bottom the leftovers
@@ -1031,6 +1278,12 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
     ),
   })
 
+  next = recordCardPlayed(next, playerId, card.id) // after the cost (#357, "the first upgrade you play each phase")
+
+  // "When 1 or more upgrades attach to this unit" (#357, Sabine Wren) — the host reacts. This is the
+  // played-from-hand path, so it also satisfies "when you PLAY an upgrade on this unit" (Gar Saxon).
+  next = fireUpgradeAttached(next, targetInstanceId, true)
+
   // "When Played" abilities fire after the upgrade attaches (CR 6.2.0f).
   next = runTrigger(next, 'whenPlayed', {
     owner: playerId,
@@ -1056,6 +1309,7 @@ function useAbility(state: GameState, instanceId: string, cardId: string, index:
 
   let next = state
   if (ability.cost) next = updatePlayer(next, owner, payCost(next.players[owner], ability.cost))
+  if (ability.exhaustCost) next = exhaustUnit(next, instanceId) // pay the "[Exhaust]" cost (#357)
   if (ability.oncePerRound) {
     const key = actionAbilityKey(cardId, index)
     next = updatePlayer(next, owner, {
@@ -1097,6 +1351,22 @@ function useLeaderAbility(state: GameState, index: number, targetInstanceId?: st
  * remember the actor so `resumeAfterChoice` restores them and advances the turn once it drains.
  * Generic; a no-op when the actor has their own choice to resolve first, or none was raised.
  */
+/**
+ * Follow-up once a `distributeTokens` pool is spent or stopped (#357, Elzar Mann): the opponent
+ * searches twice the number distributed for an event and draws it. Nothing distributed → no search.
+ * The opponent makes the choice, so control hands over and returns via `pendingResumeActive`.
+ */
+function finishDistribution(state: GameState, choice: PendingChoice & { kind: 'distributeTokens' }, distributed: number): GameState {
+  if (choice.then !== 'opponentSearchEvent' || distributed <= 0) return state
+  const opponent = opponentOf(choice.controller)
+  const revealed = state.players[opponent].deck.slice(0, distributed * 2)
+  const eligibleIndices = revealed.flatMap((cardId, i) => (state.cards[cardId]?.type === 'event' ? [i] : []))
+  // No event among them → they all go to the bottom and nothing is drawn.
+  if (eligibleIndices.length === 0) return bottomTopCards(state, opponent, revealed.length)
+  const pushed = pushChoice(state, { kind: 'searchDraw', id: `${choice.id}-oppsearch`, controller: opponent, revealed, eligibleIndices })
+  return handOffOpponentChoice(pushed, choice.controller)
+}
+
 function handOffOpponentChoice(state: GameState, actor: PlayerId): GameState {
   if (!hasPendingChoices(state) || state.pendingChoices!.some(c => c.controller === actor)) return state
   const other = state.pendingChoices![0].controller
@@ -1178,6 +1448,11 @@ function takeInitiative(state: GameState): GameState {
   // a choice, hold with the taker and finish the transition once the choice drains (resumeAfterChoice).
   const before = taken.pendingChoices?.length ?? 0
   taken = runLeaderTrigger(taken, 'whenTakeInitiative', playerId)
+  // The taker's units carry the trigger too (#357, Grogu the unit).
+  for (const u of taken.players[playerId].units) {
+    const still = taken.players[playerId].units.find(x => x.instanceId === u.instanceId)
+    if (still) taken = runUnitTrigger(taken, 'whenTakeInitiative', still, playerId)
+  }
   if ((taken.pendingChoices?.length ?? 0) > before) {
     return { ...taken, pendingInitiativeEndsPhase: endsPhase }
   }
@@ -1203,6 +1478,8 @@ function consumeAdvantage(state: GameState, owner: PlayerId, instanceId: string)
   const p = state.players[owner]
   const unit = p.units.find(u => u.instanceId === instanceId)
   if (!unit || !hasToken(unit.upgrades, TOKEN_ADVANTAGE)) return state
+  // "They aren't defeated after combat" (#357, Eviscerator) — inert tokens stay put.
+  if (friendlyAdvantageInert(state, owner)) return state
   // A unit's next attack/defence removes ALL its Advantage tokens (each gave +1/0), unless
   // another ability says otherwise.
   return updatePlayer(state, owner, {
@@ -1251,7 +1528,7 @@ function fireForAllUnits(state: GameState, point: TriggerPoint): GameState {
  * suspend the combat before damage and hand control to the defender. Combat damage
  * itself is dealt by `completeAttack` (immediately, or on resume after the choice).
  */
-function attack(state: GameState, attackerId: string, target: AttackTarget): GameState {
+function attack(state: GameState, attackerId: string, target: AttackTarget, viaAmbush = false): GameState {
   const playerId = state.activePlayer
   const attacker = state.players[playerId].units.find(u => u.instanceId === attackerId)
   if (!attacker) throw new Error(`attack: no friendly unit ${attackerId}`)
@@ -1279,9 +1556,9 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
   const attackerNow = next.players[playerId].units.find(u => u.instanceId === attackerId)!
   next = runUnitTrigger(next, 'onAttack', attackerNow, playerId, { attackTarget: target })
   if ((next.pendingChoices?.length ?? 0) > before) {
-    return { ...next, pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'onDefense' } }
+    return { ...next, pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'onDefense', viaAmbush } }
   }
-  return runAttackStages(next, attackerId, target, 'onDefense')
+  return runAttackStages(next, attackerId, target, 'onDefense', viaAmbush)
 }
 
 /**
@@ -1289,7 +1566,7 @@ function attack(state: GameState, attackerId: string, target: AttackTarget): Gam
  * The On Defense stage may suspend (handing control to the defender); resumption picks
  * up from the stored stage. `state.activePlayer` is the attacker's controller here.
  */
-function runAttackStages(state: GameState, attackerId: string, target: AttackTarget, stage: 'onDefense' | 'damage'): GameState {
+function runAttackStages(state: GameState, attackerId: string, target: AttackTarget, stage: 'onDefense' | 'damage', viaAmbush = false, prevent: PreventionProgress = {}): GameState {
   const playerId = state.activePlayer
   const enemyId = opponentOf(playerId)
 
@@ -1300,12 +1577,22 @@ function runAttackStages(state: GameState, attackerId: string, target: AttackTar
       const afterDefense = runUnitTrigger(state, 'onDefense', defender, enemyId)
       if ((afterDefense.pendingChoices?.length ?? 0) > before) {
         // Hand control to the defender; resume at the damage stage.
-        return { ...afterDefense, pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'damage' }, activePlayer: enemyId }
+        return { ...afterDefense, pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'damage', viaAmbush, ...prevent }, activePlayer: enemyId }
       }
-      return completeAttack(afterDefense, attackerId, target)
+      return completeAttack(afterDefense, attackerId, target, viaAmbush, prevent)
     }
   }
-  return completeAttack(state, attackerId, target)
+  return completeAttack(state, attackerId, target, viaAmbush, prevent)
+}
+
+/**
+ * How far the damage-prevention offers for one combat have got (#357, The Mandalorian).
+ * `preventAsked` are the units already offered a prevention this combat (so a declined offer isn't
+ * re-raised on resume); `prevented` are those whose damage was actually cancelled.
+ */
+interface PreventionProgress {
+  preventAsked?: string[]
+  prevented?: string[]
 }
 
 /**
@@ -1314,21 +1601,31 @@ function runAttackStages(state: GameState, attackerId: string, target: AttackTar
  * Defense ability, in which case the attack fizzles. Clears any transient
  * Support-granted keywords once the calculation that used them is done.
  */
-function completeAttack(state: GameState, attackerId: string, target: AttackTarget): GameState {
+function completeAttack(state: GameState, attackerId: string, target: AttackTarget, viaAmbush = false, prevent: PreventionProgress = {}): GameState {
   const playerId = state.activePlayer
   const enemyId = opponentOf(playerId)
   const attacker = state.players[playerId].units.find(u => u.instanceId === attackerId)
   // The attacker may have been defeated before damage (e.g. an On Defense ping).
   if (!attacker) return clearGrantedKeywords(checkWin(state))
 
-  const attackerPower = effectivePower(state, attacker, { attacking: true, attackingBase: target.kind === 'base' })
+  // "While attacking a damaged unit …" (#357, Marrok's Fiend Fighter) reads the defender's pre-combat damage.
+  const targetUnit = target.kind === 'unit' ? state.players[enemyId].units.find(u => u.instanceId === target.instanceId) : undefined
+  const attackerPower = effectivePower(state, attacker, { attacking: true, attackingBase: target.kind === 'base', defenderDamaged: (targetUnit?.damage ?? 0) > 0, viaAmbush })
 
   if (target.kind === 'base') {
-    const enemy = state.players[enemyId]
-    let next = updatePlayer(state, enemyId, { base: { ...enemy.base, damage: enemy.base.damage + attackerPower } })
+    // Through `dealDamageToBase` so base-damage prevention applies (#357, At Attin Safety Droid);
+    // the attack-end ctx reports what actually landed, not the raw power.
+    const baseSource = { cardId: attacker.cardId, controller: playerId }
+    const dealtToBase = baseDamageAfterPrevention(state, enemyId, attackerPower, baseSource)
+    let next = dealDamageToBase(state, enemyId, attackerPower, baseSource)
     next = recordBaseAttacked(next, enemyId) // "your base was attacked this phase" (#356, Greef Karga)
+    // "When an enemy unit attacks your base" (#357, Kachirho Militia) — the attacked player's units react.
+    for (const id of next.players[enemyId].units.map(u => u.instanceId)) {
+      const reactor = next.players[enemyId].units.find(u => u.instanceId === id)
+      if (reactor) next = runUnitTrigger(next, 'whenEnemyAttacksBase', reactor, enemyId, { attackerInstanceId: attackerId })
+    }
     next = consumeAdvantage(next, playerId, attackerId) // the attack completed
-    next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: attackerPower })
+    next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: dealtToBase })
     return clearGrantedKeywords(checkWin(next))
   }
 
@@ -1353,33 +1650,76 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
 
   // Combat-conditional auras (Grogu, #348) apply to the defender during damage resolution.
   const combat = { attackerInstanceId: attackerId, defenderInstanceId: defender.instanceId }
-  const counterPower = effectivePower(preCombat, defender, { combat })
+  const defenderCtx = { combat, defending: true } // #357, Palace Chef Droid: "+X while defending"
+  const counterPower = effectivePower(preCombat, defender, defenderCtx)
 
   // Overwhelm: excess combat damage beyond the defender's remaining HP hits the
   // defending player's base (CR 1.9.11). A shielded defender takes no damage, so
   // there is no excess to trample (#308).
-  const remainingHp = effectiveHp(preCombat, defender, { combat }) - defender.damage
+  const remainingHp = effectiveHp(preCombat, defender, defenderCtx) - defender.damage
   const overwhelmExcess = unitHasKeyword(preCombat, attacker, 'Overwhelm')
     && !hasToken(defender.upgrades, TOKEN_SHIELD)
     && !unitNegatesOverwhelm(preCombat, defender)
     ? Math.max(0, attackerPower - remainingHp)
     : 0
 
-  // Simultaneous combat damage (CR 1.9.10) — flagged as combat damage for whenDefeated (#356).
-  let next = applyUnitDamage(preCombat, enemyId, new Map([[defender.instanceId, attackerPower]]), true)
-  next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, counterPower]]), true)
+  // Simultaneous combat damage (CR 1.9.10) — flagged as combat damage for whenDefeated (#356). The
+  // stat context goes through so combat-only debuffs count in the defeat check (#357, Scion Shuttle).
+  // Combat damage is attributed to the unit dealing it, so "damage dealt by friendly Underworld
+  // cards is unpreventable" can see where it came from (#357, Gorian Shard's Corsair).
+  const attackerSource = { cardId: attacker.cardId, controller: playerId }
+  const counterSource = { cardId: defender.cardId, controller: enemyId }
 
-  if (overwhelmExcess > 0) {
-    const enemy = next.players[enemyId]
-    next = updatePlayer(next, enemyId, { base: { ...enemy.base, damage: enemy.base.damage + overwhelmExcess } })
+  // Damage prevention (#357, The Mandalorian) is settled HERE — after the powers are known but
+  // before anything is committed — so the logic below (first strike, Overwhelm, attack-end) still
+  // sees correct values. Nothing has been written to `next` yet, so suspending and re-running this
+  // whole function on resume is safe. Each side is asked at most once per combat (`preventAsked`).
+  const asked = prevent.preventAsked ?? []
+  const prevented = prevent.prevented ?? []
+  for (const [targetId, amount, dmgSource] of [
+    [defender.instanceId, attackerPower, attackerSource],
+    [attacker.instanceId, counterPower, counterSource],
+  ] as const) {
+    if (amount <= 0 || asked.includes(targetId)) continue
+    const offer = preventionOffer(preCombat, targetId, dmgSource)
+    if (!offer) continue
+    const withChoice = pushChoice(preCombat, {
+      kind: 'mayPreventDamage',
+      id: `prevent-${targetId}-${preCombat.instanceCounter}`,
+      controller: offer.controller,
+      preventerId: offer.preventerId,
+      targetId,
+      amount,
+      source: dmgSource,
+      combat: true,
+    })
+    return {
+      ...withChoice,
+      pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'damage', viaAmbush, preventAsked: [...asked, targetId], prevented },
+      // The unit's own controller decides; hand them control and come back to the attacker after.
+      ...(offer.controller === playerId ? {} : { activePlayer: offer.controller, pendingResumeActive: playerId }),
+    }
   }
+  const damageTo = (id: string, amount: number) => (prevented.includes(id) ? 0 : amount)
+
+  let next = applyUnitDamage(preCombat, enemyId, new Map([[defender.instanceId, damageTo(defender.instanceId, attackerPower)]]), true, defenderCtx, attackerSource)
+  // "Deals combat damage before the defender" (#357, Carson Teva): a defender defeated by that
+  // damage never strikes back. Without it, damage is simultaneous (CR 1.9.10) and both still land.
+  const defenderSurvived = next.players[enemyId].units.some(u => u.instanceId === defender.instanceId)
+  if (defenderSurvived || !unitDealsDamageFirst(preCombat, attacker)) {
+    next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, damageTo(attacker.instanceId, counterPower)]]), true, { combat, attacking: true, viaAmbush }, counterSource)
+  }
+
+  // Overwhelm excess also goes through base-damage prevention (#357).
+  const overwhelmDealt = overwhelmExcess > 0 ? baseDamageAfterPrevention(next, enemyId, overwhelmExcess, attackerSource) : 0
+  if (overwhelmExcess > 0) next = dealDamageToBase(next, enemyId, overwhelmExcess, attackerSource)
 
   // Both units completed a combat — spend any Advantage on the survivors (#308).
   next = consumeAdvantage(next, playerId, attackerId)
   next = consumeAdvantage(next, enemyId, defender.instanceId)
   // Pass the pre-combat attacker so its "When Attack Ends" fires even if it was defeated.
   const defenderDefeated = !next.players[enemyId].units.some(u => u.instanceId === defender.instanceId)
-  next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: overwhelmExcess, defenderDefeated, combatDamageToDefender: attackerPower }, attacker)
+  next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: overwhelmDealt, defenderDefeated, combatDamageToDefender: attackerPower }, attacker)
   return clearGrantedKeywords(checkWin(next))
 }
 
@@ -1388,6 +1728,11 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
  * evaluated so that if a single action defeats both at once the game is a draw
  * rather than awarding the win to whichever was checked first (#323).
  */
+/** Every unit in play, both sides (#357). */
+function inPlayUnits(state: GameState): UnitState[] {
+  return [...state.players.player.units, ...state.players.opponent.units]
+}
+
 function checkWin(state: GameState): GameState {
   const defeated = (id: PlayerId): boolean => {
     const base = state.players[id].base
