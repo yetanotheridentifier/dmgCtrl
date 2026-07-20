@@ -529,7 +529,7 @@ registerCard('ASH_004', { // Grand Admiral Thrawn — front attack + conditional
       const enemy = opponentOf(ctx.owner)
       if (s.players[ctx.owner].units.length <= s.players[enemy].units.length) return s
       const targets = s.players[enemy].units.filter(u => !isLeaderUnit(s, u)).map(u => u.instanceId)
-      return targets.length === 0 ? s : pushChoice(s, { kind: 'mayDefeatEnemyUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets })
+      return targets.length === 0 ? s : pushChoice(s, { kind: 'selectUnitToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, targets })
     },
   }],
 })
@@ -1001,7 +1001,7 @@ registerCard('ASH_043', { // Corona Four — On Attack debuff + When Defeated de
       description: 'You may defeat a non-leader unit with 0 power.',
       effect: (s, ctx) => {
         const targets = allUnits(s).filter(u => !isLeaderUnit(s, u) && effectivePower(s, u) === 0).map(u => u.instanceId)
-        return targets.length ? pushChoice(s, { kind: 'mayDefeatEnemyUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
+        return targets.length ? pushChoice(s, { kind: 'selectUnitToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
       },
     },
   ],
@@ -1724,3 +1724,84 @@ registerCard('ASH_062', { // The Mandalorian
   canPreventDamage: (_s, self, target) => target.instanceId !== self.instanceId && hasToken(self.upgrades, TOKEN_SHIELD),
   payPreventionCost: (s, self) => defeatUpgrade(s, self.instanceId, TOKEN_SHIELD),
 })
+
+// ── Events ────────────────────────────────────────────────────────────────────────────────────
+// An event's effect is its `whenPlayed`: the resolver pays the cost, puts the card in the discard,
+// then fires this. `ctx.sourceInstanceId` is a synthetic id (no unit is in play), unique per play,
+// so it is safe to use as a pending-choice id but will never resolve to a unit.
+
+registerCard('ASH_140', whenPlayed('Create 2 Mandalorian tokens.', (s, ctx) => // Stronger Together
+  createTokenUnits(s, ctx.owner, TOKEN_MANDALORIAN, 2)))
+
+registerCard('ASH_185', whenPlayed('If you control a unit with 4 or more power, draw 2 cards.', (s, ctx) => // Intimidation
+  s.players[ctx.owner].units.some(u => effectivePower(s, u) >= 4) ? drawCards(s, ctx.owner, 2) : s))
+
+registerCard('ASH_258', whenPlayed('Deal 3 damage to a unit. Heal 3 damage from your base.', (s, ctx) => { // Grassroots Resistance
+  const healed = healBase(s, ctx.owner, 3)
+  const targets = allUnits(healed).map(u => u.instanceId)
+  return targets.length
+    ? pushChoice(healed, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 3, unitTargets: targets, baseTargets: [] })
+    : healed
+}))
+
+registerCard('ASH_136', whenPlayed('Give a unit +3/+3 for this phase.', (s, ctx) => { // Display of Strength
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length
+    ? pushChoice(s, { kind: 'mayLastingBuff', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, power: 3, hp: 3 })
+    : s
+}))
+
+registerCard('ASH_151', whenPlayed('Deal 5 damage to your base. Then, deal 5 damage to each unit.', (s, ctx) => { // Operation Cinder
+  const next = dealDamageToBase(s, ctx.owner, 5)
+  return allUnits(next).map(u => u.instanceId).reduce((acc, id) => dealDamageToUnit(acc, id, 5), next)
+}))
+
+registerCard('ASH_187', whenPlayed('Deal damage to a unit equal to the total damage on all units you control.', (s, ctx) => { // Reckoning
+  const amount = s.players[ctx.owner].units.reduce((n, u) => n + u.damage, 0)
+  const targets = allUnits(s).map(u => u.instanceId)
+  return amount > 0 && targets.length
+    ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount, unitTargets: targets, baseTargets: [] })
+    : s
+}))
+
+registerCard('ASH_138', whenPlayed('Choose a unit. Deal 1 damage to it for each friendly unit.', (s, ctx) => { // Turning the Tide
+  const amount = s.players[ctx.owner].units.length
+  const targets = allUnits(s).map(u => u.instanceId)
+  return amount > 0 && targets.length
+    ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount, unitTargets: targets, baseTargets: [] })
+    : s
+}))
+
+registerCard('ASH_264', whenPlayed('Give an Advantage token to each of up to 2 units.', (s, ctx) => { // A New Order
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length
+    ? pushChoice(s, { kind: 'multiPick', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, spec: { mode: 'giveAdvantage', remaining: 2 } })
+    : s
+}))
+
+registerCard('ASH_067', whenPlayed('Defeat an upgraded non-leader unit.', (s, ctx) => { // Get Lost
+  const targets = allUnits(s).filter(u => !u.isLeader && u.upgrades.length > 0).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'selectUnitToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
+}))
+
+registerCard('ASH_092', whenPlayed('You may defeat a unit with 2 or less remaining HP. Create a Mandalorian token.', (s, ctx) => { // Foundling Rescue
+  // Eligible units are read BEFORE the token is created: the defeat happens first on the card, so
+  // the new token (1 HP) must not be a legal target for it. Creating the token up front regardless
+  // is otherwise equivalent, and means it lands whether or not the optional defeat is taken.
+  const targets = allUnits(s).filter(u => effectiveHp(s, u) - u.damage <= 2).map(u => u.instanceId)
+  const next = createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN)
+  return targets.length ? pushChoice(next, { kind: 'selectUnitToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : next
+}))
+
+registerCard('ASH_091', whenPlayed('Create a Mandalorian token and give it Sentinel for this phase.', (s, ctx) => { // Buy Time
+  // createTokenUnit assigns the next instance id, so the token it makes is knowable up front.
+  const tokenId = `u${s.instanceCounter}`
+  return addLastingEffect(createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN), { targetInstanceId: tokenId, keywords: [{ name: 'Sentinel' }] })
+}))
+
+registerCard('ASH_103', whenPlayed('Defeat a friendly Imperial unit. If you do, resource the top card of your deck.', (s, ctx) => { // Long Live the Empire
+  const targets = s.players[ctx.owner].units.filter(u => unitHasTrait(s, u, 'Imperial')).map(u => u.instanceId)
+  return targets.length
+    ? pushChoice(s, { kind: 'selectUnitToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, thenResource: true })
+    : s
+}))

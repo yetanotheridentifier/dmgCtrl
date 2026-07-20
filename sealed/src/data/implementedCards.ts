@@ -205,6 +205,25 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
  * Unit cards whose *abilities* are built into the engine. Keyword-only / vanilla units aren't here —
  * they need no definition and are counted separately. Grouped by the mechanic each ability uses.
  */
+/**
+ * Event cards whose effects are built into the engine. An event's effect is registered as its
+ * `whenPlayed`, so — unlike units — there is no "vanilla event": every one needs a definition.
+ */
+export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
+  { id: 'ASH_140', name: 'Stronger Together' },
+  { id: 'ASH_185', name: 'Intimidation' },
+  { id: 'ASH_258', name: 'Grassroots Resistance' },
+  { id: 'ASH_136', name: 'Display of Strength' },
+  { id: 'ASH_151', name: 'Operation Cinder' },
+  { id: 'ASH_187', name: 'Reckoning' },
+  { id: 'ASH_138', name: 'Turning the Tide' },
+  { id: 'ASH_264', name: 'A New Order' },
+  { id: 'ASH_067', name: 'Get Lost' },
+  { id: 'ASH_092', name: 'Foundling Rescue' },
+  { id: 'ASH_091', name: 'Buy Time' },
+  { id: 'ASH_103', name: 'Long Live the Empire' },
+]
+
 export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   // Conditional self keyword grants
   { id: 'ASH_098', name: 'AT-ST Raider' },
@@ -430,7 +449,7 @@ export const IMPLEMENTATION_PROGRESS: CategoryProgress[] = [
   { label: 'Tokens', done: TOKEN_COUNT, total: TOKEN_COUNT },
   // Units done = keyword-only/vanilla units (need no code) + units with a registered ability.
   { label: 'Units', done: (UNIT_GROUPS.find(g => g.id === 'keyword')?.units.length ?? 0) + IMPLEMENTED_UNITS.length, total: SET_TOTAL.units },
-  { label: 'Events', done: 0, total: SET_TOTAL.events },
+  { label: 'Events', done: IMPLEMENTED_EVENTS.length, total: SET_TOTAL.events },
 ]
 
 /** Whole-set implementation total (tokens included) — the headline progress figure. */

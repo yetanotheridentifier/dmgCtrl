@@ -517,8 +517,10 @@ export type PendingChoice =
   // Attack with any ready unit (Thrawn, Grogu); it gains Restore `restore` for that attack, which is
   // 0 when nothing grants it. Resolved by making the attack on the board — skipping declines it.
   | { kind: 'mayAttackAnyUnit'; id: string; controller: PlayerId; restore: number }
-  // Thrawn deployed: On Attack, may defeat one of `targets` (a non-leader enemy unit), or decline.
-  | { kind: 'mayDefeatEnemyUnit'; id: string; controller: PlayerId; targets: string[] }
+  // Defeat one of `targets`, or decline. The card supplies the eligible units, so this covers
+  // "a non-leader enemy unit" (Thrawn), "an upgraded non-leader unit" (Get Lost), and so on.
+  // `thenResource` chains "if you do, resource the top card of your deck" (Long Live the Empire).
+  | { kind: 'selectUnitToDefeat'; id: string; controller: PlayerId; targets: string[]; thenResource?: boolean }
   // Sabine front: the opponent (`controller`) must give `count` Advantage tokens to one of
   // their units (`targets`). Mandatory when able — an opponent-interjected choice (pendingResumeActive).
   | { kind: 'opponentGivesAdvantage'; id: string; controller: PlayerId; count: number; targets: string[] }

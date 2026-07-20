@@ -28,7 +28,8 @@ export interface DescribeOptions {
 /** Human-readable action label — used by the action menu and the game log. */
 export function describeAction(state: GameState, by: PlayerId, action: Action, opts: DescribeOptions = {}): string {
   switch (action.type) {
-    case 'playUnit': {
+    case 'playUnit':
+    case 'playEvent': {
       const cardId = state.players[by].hand[action.handIndex]
       const card = cardId ? state.cards[cardId] : undefined
       if (!card) return 'Play a card'
@@ -74,7 +75,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'returnFriendlyUnit' || choice.kind === 'peekTopDiscard' || choice.kind === 'maySelfDamageHealBase' || choice.kind === 'mayExhaustLeaderBuffSelf') return "Don't"
       if (choice.kind === 'playUnitFromHand') return "Don't play"
       if (choice.kind === 'mayDefeatSelfSearch') return "Don't"
-      if (choice.kind === 'mayDamage' || choice.kind === 'mayAdvantageEach' || choice.kind === 'mayDefeatEnemyUnit' || choice.kind === 'selectDiscard') return 'Decline'
+      if (choice.kind === 'mayDamage' || choice.kind === 'mayAdvantageEach' || choice.kind === 'selectUnitToDefeat' || choice.kind === 'selectDiscard') return 'Decline'
       if (choice.kind === 'selectUpgradeToDefeat' || choice.kind === 'selectResourceUpgrade' || choice.kind === 'selectFromDiscard') return 'Cancel'
       if (choice.kind === 'mayLastingBuff' || choice.kind === 'mayGiveAdvantage' || choice.kind === 'mayExhaustLeaderGiveAdvantage' || choice.kind === 'mayExhaustLeaderExhaustUnit' || choice.kind === 'mayExhaustUnit') return 'Decline'
       if (choice.kind === 'mayExhaustLeaderForAdvantage' || choice.kind === 'mayExhaustLeaderHealUnit' || choice.kind === 'mayPayToDraw' || choice.kind === 'mayDeployLeader') return "Don't"
@@ -239,7 +240,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const tokenName = state.cards[choice.token]?.name ?? 'token'
         return `Create ${choice.count > 1 ? `${choice.count} ${tokenName}s` : `a ${tokenName}`}`
       }
-      if (choice.kind === 'mayDefeatEnemyUnit') {
+      if (choice.kind === 'selectUnitToDefeat') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Defeat ${target ?? 'unit'}`
       }

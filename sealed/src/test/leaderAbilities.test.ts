@@ -786,7 +786,7 @@ describe('Grand Admiral Thrawn (ASH_004) — deployed: On Attack may defeat a no
       },
     })
     const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
-    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayDefeatEnemyUnit', targets: ['e1'] })
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'selectUnitToDefeat', targets: ['e1'] })
     const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'e1' })
     expect(done.players.opponent.units.find(u => u.instanceId === 'e1')).toBeUndefined()
     expect(done.players.opponent.discard).toContain('TST_U1')
@@ -802,7 +802,7 @@ describe('Grand Admiral Thrawn (ASH_004) — deployed: On Attack may defeat a no
       },
     })
     const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
-    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayDefeatEnemyUnit', targets: ['e1'] }) // eL excluded
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'selectUnitToDefeat', targets: ['e1'] }) // eL excluded
   })
 
   it('is not offered without a unit lead, and declining defeats nothing', () => {
@@ -826,7 +826,7 @@ describe('Grand Admiral Thrawn (ASH_004) — deployed: On Attack may defeat a no
     })
     // Thrawn (power 5) attacks e1 (hp 5) — lethal. On Attack, defeat a DIFFERENT unit (e2).
     const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'unit', instanceId: 'e1' } })
-    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayDefeatEnemyUnit' })
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'selectUnitToDefeat' })
     const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'e2' })
     expect(done.players.opponent.units.find(u => u.instanceId === 'e2')).toBeUndefined() // ability defeat
     expect(done.players.opponent.units.find(u => u.instanceId === 'e1')).toBeUndefined() // combat: 5 dmg ≥ 5 hp
@@ -841,7 +841,7 @@ describe('Grand Admiral Thrawn (ASH_004) — deployed: On Attack may defeat a no
       },
     })
     const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'unit', instanceId: 'e1' } })
-    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'mayDefeatEnemyUnit' })
+    expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'selectUnitToDefeat' })
     // 1) defeat a different unit (e2); 2) the defender's On Defense fires; decline it.
     const afterDefeat = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, targetInstanceId: 'e2' })
     expect(afterDefeat.pendingChoices?.[0]).toMatchObject({ kind: 'mayDamageExhaust' }) // e1's On Defense

@@ -894,7 +894,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     const oppHandChoiceId = gameState.pendingChoices?.find(c => c.kind === 'lookAtHand' && c.controller === 'player')?.id
     const handAction = new Map<number, Action>()
     for (const a of legal) {
-      if (a.type === 'playUnit' || a.type === 'resourceCard' || a.type === 'setupResource') handAction.set(a.handIndex, a)
+      if (a.type === 'playUnit' || a.type === 'playEvent' || a.type === 'resourceCard' || a.type === 'setupResource') handAction.set(a.handIndex, a)
       // "Play a unit from hand" ability choice: the affordable hand cards become clickable.
       else if (a.type === 'acceptChoice' && a.handIndex !== undefined && a.choiceId !== oppHandChoiceId) handAction.set(a.handIndex, a)
     }
@@ -954,7 +954,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
 
     // Optional targeted pending choices — resolved by clicking a highlighted
     // board unit plus a Decline button, rather than one menu button per target.
-    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage', 'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit', 'mayExhaustUnit', 'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust', 'attachResourceUpgrade', 'mayDefeatEnemyUnit', 'selectUniqueUnitToDefeat', 'opponentGivesAdvantage', 'mayGiveTokens', 'multiPick', 'distributeDamage', 'distributeTokens', 'variableStrike', 'healForAdvantage', 'returnFriendlyUnit']
+    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage', 'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit', 'mayExhaustUnit', 'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust', 'attachResourceUpgrade', 'selectUnitToDefeat', 'selectUniqueUnitToDefeat', 'opponentGivesAdvantage', 'mayGiveTokens', 'multiPick', 'distributeDamage', 'distributeTokens', 'variableStrike', 'healForAdvantage', 'returnFriendlyUnit']
     const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && boardTargetKinds.includes(c.kind))
     const choiceTargetIds = new Map<string, Action>()
     // Base targets (selectDamageTarget): pick a player's base to take the damage.
@@ -1106,7 +1106,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // mulligan, keep hand, take the initiative, pass (and skip/deploy).
     // Leader abilities are driven from the leader card; a board-target choice is driven
     // from the board + a single Decline button — neither belongs in the action menu.
-    const CLICK_HANDLED: Action['type'][] = ['playUnit', 'playUpgrade', 'attack', 'resourceCard', 'setupResource', 'useLeaderAbility']
+    const CLICK_HANDLED: Action['type'][] = ['playUnit', 'playEvent', 'playUpgrade', 'attack', 'resourceCard', 'setupResource', 'useLeaderAbility']
     const choiceBoardActions = targetChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === targetChoice.id) : []
     // "Play a unit from hand" accepts are clicked on the hand card, not the menu.
     const isHandPlay = (a: Action) => a.type === 'acceptChoice' && a.handIndex !== undefined

@@ -45,6 +45,15 @@ function resolveAction(state: GameState, action: Action): GameState {
         if (activeChoice(played)) return resetPasses(handOffOpponentChoice(played, played.activePlayer))
         return advanceTurn(resetPasses(played))
       })
+    case 'playEvent':
+      return requirePhase(state, 'action', () => {
+        const played = playEvent(state, action.handIndex)
+        if (played.winner !== null) return played
+        // Like a unit's on-play trigger: a raised choice keeps the turn, and an opponent-controlled
+        // one hands over first.
+        if (activeChoice(played)) return resetPasses(handOffOpponentChoice(played, played.activePlayer))
+        return advanceTurn(resetPasses(played))
+      })
     case 'playUpgrade':
       return requirePhase(state, 'action', () => {
         const played = playUpgrade(state, action.handIndex, action.targetInstanceId)
@@ -354,6 +363,39 @@ function playUnit(state: GameState, handIndex: number): GameState {
   next = recordCardPlayed(next, playerId, card.id) // after the cost, so "first X each phase" sees this one as the first
   // whenPlayed effects can defeat a base, so the win check runs afterwards.
   return checkWin(enterUnit(next, playerId, card.id))
+}
+
+/**
+ * Play an event: pay its cost, put the card in the discard, then resolve its effect (registered as
+ * the card's `whenPlayed`). The card reaches the discard BEFORE resolving, so an effect that reads
+ * or replays from the discard sees it there rather than in limbo.
+ *
+ * An event never enters play, so there's no unit to hang its pending choices off. It gets a
+ * synthetic `sourceInstanceId` instead — unique per resolution (via `instanceCounter`) so two
+ * copies played in one turn can't collide, and deliberately matching no unit, so any effect that
+ * looks up its source correctly finds nothing.
+ */
+function playEvent(state: GameState, handIndex: number): GameState {
+  const playerId = state.activePlayer
+  const p = state.players[playerId]
+  const cardId = p.hand[handIndex]
+  const card = cardId ? state.cards[cardId] : undefined
+  if (!card || card.type !== 'event') {
+    throw new Error(`playEvent: hand index ${handIndex} is not a playable event`)
+  }
+
+  const paid = payCost(p, effectiveCost(state, playerId, card))
+  let next = updatePlayer(state, playerId, {
+    ...paid,
+    hand: paid.hand.filter((_, i) => i !== handIndex),
+    discard: [...p.discard, card.id],
+  })
+  // After the cost, so Peli Motto's "first non-unit card each phase" counts this one as the first.
+  next = recordCardPlayed(next, playerId, card.id)
+  const sourceInstanceId = `ev${next.instanceCounter}`
+  next = { ...next, instanceCounter: next.instanceCounter + 1 }
+  next = runTrigger(next, 'whenPlayed', { owner: playerId, cardId: card.id, sourceInstanceId })
+  return checkWin(next)
 }
 
 /**
@@ -1103,12 +1145,14 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       break
     }
-    case 'mayDefeatEnemyUnit':
-      // Thrawn deployed: defeat the chosen non-leader enemy unit.
+    case 'selectUnitToDefeat':
+      // Defeat the chosen unit; the card decided which ones were eligible.
       if (targetInstanceId) {
         next = defeatUnit(next, targetInstanceId)
         next = checkWin(next)
         if (next.winner !== null) return next
+        // "If you do, resource the top card of your deck" (Long Live the Empire).
+        if (choice.thenResource) next = resourceTopOfDeck(next, choice.controller)
       }
       break
     case 'mayDeployLeader':

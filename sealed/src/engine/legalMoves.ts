@@ -173,14 +173,13 @@ function actionPhaseMoves(state: GameState): Action[] {
   // A Ryder Azadi the opponent controls forbids us from playing cards with the named names.
   const forbiddenNames = namedByOpponent(state, playerId)
 
-  // Play a card from hand — units only; upgrades have their own action, events aren't modelled
+  // Play a unit or an event from hand. Upgrades need a target, so they have their own pass below.
   p.hand.forEach((cardId, handIndex) => {
     const card = state.cards[cardId]
-    if (!card || card.type !== 'unit') return
+    if (!card || (card.type !== 'unit' && card.type !== 'event')) return
     if (forbiddenNames.has(card.name)) return
-    if (canAfford(p, effectiveCost(state, playerId, card))) {
-      moves.push({ type: 'playUnit', handIndex })
-    }
+    if (!canAfford(p, effectiveCost(state, playerId, card))) return
+    moves.push(card.type === 'unit' ? { type: 'playUnit', handIndex } : { type: 'playEvent', handIndex })
   })
 
   // Play an Upgrade — attach to any unit in play (either player's) by default; a
@@ -589,7 +588,7 @@ function choiceMoves(state: GameState): Action[] {
         }
         break
       }
-      case 'mayDefeatEnemyUnit': {
+      case 'selectUnitToDefeat': {
         // Thrawn deployed: pick a non-leader enemy unit to defeat, or decline.
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })

@@ -213,7 +213,7 @@ describe('Helgait (195): distribute Advantage = power', () => {
 describe('Corona Four (043)', () => {
   it('whenDefeated: may defeat a non-leader unit with 0 power', () => {
     const s = defeat('ASH_043', { oppUnits: [unit('z', 'ZEROPOW', { arena: 'ground' }), unit('e', 'FILLER', { arena: 'ground' })] })
-    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'mayDefeatEnemyUnit' })
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'selectUnitToDefeat' })
     const targets = legalMoves(s).filter(a => a.type === 'acceptChoice').map(a => a.targetInstanceId)
     expect(targets).toEqual(['z']) // only the 0-power unit (FILLER has power 2)
     const done = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, targetInstanceId: 'z' })
