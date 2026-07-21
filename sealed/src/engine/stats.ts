@@ -2,7 +2,6 @@ import type { GameState, UnitState, CombatContext, PlayerId } from './types'
 import { lastingEffectTotals } from './types'
 import { unitHasKeyword, unitKeywordValue, auraContributions } from './keywords'
 import { getCardDefinition } from './abilities'
-import { TOKEN_ADVANTAGE } from './tokenUpgrades'
 
 /**
  * Computed unit stats. All combat and defeat checks go through these
@@ -36,25 +35,22 @@ export function friendlyAdvantageInert(state: GameState, owner: PlayerId): boole
   )
 }
 
-/** Sum a stat across the unit's card and every attached upgrade. */
+/**
+ * Sum a stat across the unit's card and every attached upgrade.
+ *
+ * An Eviscerator-blanked Advantage token still contributes its printed +1/+0: "lose all
+ * abilities" removes the token's ability, and its stats are not one. The card's own reminder text
+ * names the only consequence, "(They aren't defeated after combat.)", which is handled in
+ * `consumeAdvantage`. Because they are never spent, the +1s accumulate, which is the card's point.
+ */
 function withUpgrades(state: GameState, unit: UnitState, stat: 'power' | 'hp'): number {
   let total = state.cards[unit.cardId]?.[stat] ?? 0
-  // An inert Advantage token contributes nothing (Eviscerator).
-  const owner = findUnitOwner(state, unit.instanceId)
-  const inert = owner !== undefined && friendlyAdvantageInert(state, owner)
   for (const { cardId } of unit.upgrades) {
-    if (inert && cardId === TOKEN_ADVANTAGE) continue
     total += state.cards[cardId]?.[stat] ?? 0
   }
   return total
 }
 
-/** The controller of a unit in play, by instance id (local to avoid an effects.ts import cycle). */
-function findUnitOwner(state: GameState, instanceId: string): PlayerId | undefined {
-  if (state.players.player.units.some(u => u.instanceId === instanceId)) return 'player'
-  if (state.players.opponent.units.some(u => u.instanceId === instanceId)) return 'opponent'
-  return undefined
-}
 
 /**
  * Conditional stat deltas from the unit's own card definition and each attached
