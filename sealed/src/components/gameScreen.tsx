@@ -894,7 +894,7 @@ function PlayerBar({ state, hand, action }: { state: GameState; hand: ReactNode;
 }
 
 export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOptions }: Props) {
-  const { status, errorDetail, gameState, legal, log, act, undo, canUndo, rematch, replayData } = useGame(deck, opponentDeck, gameOptions)
+  const { status, errorDetail, gameState, legal, log, act, undo, canUndo, rematch, replayData, unresolvedPrintings } = useGame(deck, opponentDeck, gameOptions)
   // Board affordance: click an actionable friendly unit to select it,
   // then click a highlighted target to attack. Any action clears the selection.
   const [selectedAttacker, setSelectedAttacker] = useState<string | null>(null)
@@ -915,7 +915,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
 
   async function submitReport(title: string, description: string) {
     const { initialState, moves } = replayData()
-    const markdown = buildReportMarkdown({ description, buildTag: BUILD_TAG, isDev: isDev(), log, initialState, moves })
+    const markdown = buildReportMarkdown({ description, buildTag: BUILD_TAG, isDev: isDev(), log, initialState, moves, unresolvedPrintings })
     try {
       await navigator.clipboard.writeText(markdown)
     } catch {
@@ -1461,6 +1461,16 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         {/* `dir=rtl` on the scroll container puts the scrollbar on the LEFT; the inner
             wrapper restores `dir=ltr` so the text reads normally. Newest entries render
             at the TOP (reverse the list; keys stay the original append index). */}
+        {/* Cards whose printing could not be matched to a Normal id play as vanilla bodies. Named
+            here because the symptom (an ability simply not happening) is otherwise
+            indistinguishable from a broken implementation. */}
+        {unresolvedPrintings.length > 0 && (
+          <div data-testid="unresolved-printings" className="ml-2 mt-3 rounded-lg border-2 border-amber/60 bg-surface p-2 text-[11px] leading-snug text-ink-dim">
+            <span className="font-semibold text-amber">Playing without abilities:</span>{' '}
+            {unresolvedPrintings.map(u => u.name ?? u.id).join(', ')}. Their printing could not be
+            identified, so only printed stats and keywords apply.
+          </div>
+        )}
         <aside dir="rtl" data-testid="game-log-panel" className="ml-2 mt-3 mb-2 min-h-0 flex-1 overflow-y-auto rounded-lg bg-surface p-3">
           <div dir="ltr">
             <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">Log</h3>

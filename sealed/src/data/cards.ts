@@ -37,6 +37,12 @@ export interface SwuCard {
   FrontArt?: string
   BackArt?: string
   Rarity?: string
+  /**
+   * Which printing this is: Normal, Hyperspace, foil, prestige tiers, showcase and so on. Every
+   * printing of a card is the same card with a different collector number, so `data/printings.ts`
+   * canonicalises ids to the Normal printing before the engine sees them.
+   */
+  VariantType?: string
 }
 
 /** swuapi.com card shape (snake_case) — only the fields we map. */

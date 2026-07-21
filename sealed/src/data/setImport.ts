@@ -21,7 +21,7 @@ interface SetImportOptions {
 }
 
 interface SearchPayload {
-  data?: (SwuCard & { VariantType?: string })[]
+  data?: SwuCard[]
 }
 
 export async function importSet(setCode: string, opts: SetImportOptions = {}): Promise<SetImportResult> {

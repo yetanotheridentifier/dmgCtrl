@@ -116,6 +116,21 @@ describe('buildReportMarkdown', () => {
     expect(report()).toContain('<details>')
   })
 
+  /**
+   * By far the most likely explanation for "this card's ability did nothing", so a report says so
+   * rather than sending someone hunting for a card bug that is not there.
+   */
+  it('names cards that played without their abilities', () => {
+    const md = report({ unresolvedPrintings: [{ id: 'ASH_308', name: 'Barriss Offee' }] })
+    expect(md).toMatch(/without abilities/i)
+    expect(md).toContain('Barriss Offee')
+    expect(md).toContain('ASH_308')
+  })
+
+  it('omits that section entirely when every printing resolved', () => {
+    expect(report()).not.toMatch(/without abilities/i)
+  })
+
   it('copes with an empty description and an empty game', () => {
     const md = buildReportMarkdown({ description: '', buildTag: 'b1', isDev: true, log: [], initialState: null, moves: [] })
     expect(md).toContain('b1')
