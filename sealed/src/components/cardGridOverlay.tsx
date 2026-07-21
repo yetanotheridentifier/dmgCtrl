@@ -16,8 +16,6 @@ export interface CardGridItem {
   key: string | number
   /** testid for the interactive control (e.g. `card-select-1`, `search-pick-1`). */
   testId?: string
-  /** A "on <name>" caption under the card — an upgrade's host unit. */
-  hostLabel?: string
   dimmed?: boolean
   actionLabel?: string
   onSelect?: () => void
@@ -53,7 +51,6 @@ function GridCardCell({ item, card, width }: { item: CardGridItem; card: EngineC
           {item.actionLabel}
         </button>
       )}
-      {item.hostLabel && <span className="text-[10px] text-ink-faint">on {item.hostLabel}</span>}
     </div>
   )
 }

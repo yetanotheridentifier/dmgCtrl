@@ -9,6 +9,7 @@ import type { Action } from '../engine/actions'
 import { describeAction, handCardRef } from '../utils/describeAction'
 import type { DescribePart } from '../utils/describeAction'
 import { describeChoiceParts, BOARD_TARGET_KINDS } from '../utils/describeChoice'
+import { upgradeHostIds } from '../utils/upgradeHosts'
 import { orderUnits } from './boardLayout'
 import { outcomeBanner } from './outcome'
 import CardFace from './cardFace'
@@ -340,14 +341,19 @@ export function CardChoiceOverlay({ card, cardId, prompt, children }: {
  * rule, the Armorer's resource reveal). `disabled` items are revealed but not selectable; a Cancel
  * appears when `onCancel` is given. A thin wrapper over `CardGridOverlay`.
  */
+/** A unit's card name, whichever side controls it; falls back to "the unit" if it has left play. */
+function unitDisplayName(state: GameState, instanceId: string): string {
+  const u = [...state.players.player.units, ...state.players.opponent.units].find(x => x.instanceId === instanceId)
+  return (u && state.cards[u.cardId]?.name) || 'the unit'
+}
+
 export function CardSelectOverlay({ state, prompt, items, onPick, onCancel }: {
   state: GameState
   prompt: string
-  items: { cardId: string; optionIndex: number; hostId?: string; disabled?: boolean; key?: string | number }[]
+  items: { cardId: string; optionIndex: number; disabled?: boolean; key?: string | number }[]
   onPick: (optionIndex: number) => void
   onCancel?: () => void
 }) {
-  const hostName = (id?: string) => (id ? state.players.player.units.find(u => u.instanceId === id)?.cardId : undefined)
   return (
     <CardGridOverlay
       idPrefix="card-select"
@@ -359,7 +365,6 @@ export function CardSelectOverlay({ state, prompt, items, onPick, onCancel }: {
           cardId: item.cardId,
           key,
           testId: `card-select-${key}`,
-          hostLabel: state.cards[hostName(item.hostId) ?? '']?.name,
           dimmed: item.disabled,
           onSelect: () => onPick(item.optionIndex),
         }
@@ -895,11 +900,16 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   // Using an undeployed leader's activated ability: click the leader to select
   // it, then click a highlighted target unit.
   const [leaderSelected, setLeaderSelected] = useState(false)
+  // Defeating an upgrade is picked in two steps: click the unit carrying it on the board (so it is
+  // obvious where it sits and who controls it), then choose which of its upgrades in the overlay.
+  // This holds the unit chosen in step one; null means we are still on step one.
+  const [upgradeHost, setUpgradeHost] = useState<string | null>(null)
 
   function clearSelections() {
     setSelectedAttacker(null)
     setSelectedUpgrade(null)
     setLeaderSelected(false)
+    setUpgradeHost(null)
   }
 
   function actAndClear(action: Action) {
@@ -1047,8 +1057,18 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       return action ? { actionable: false, selected: false, isTarget: true, onClick: () => actAndClear(action) } : null
     }
 
+    /**
+     * Step one of defeating an upgrade: the units carrying candidates highlight, and clicking one
+     * opens the picker on it. Selecting here changes UI state only — no action is taken until an
+     * upgrade is chosen, so a misclick costs nothing.
+     */
+    const asUpgradeHost = (instanceId: string): UnitInteraction | null =>
+      pickedHost === null && upgradeHosts.includes(instanceId)
+        ? { actionable: false, selected: false, isTarget: true, onClick: () => setUpgradeHost(instanceId) }
+        : null
+
     const playerInteraction = (unit: { instanceId: string }): UnitInteraction =>
-      upgradeInteraction(unit.instanceId) ?? asBoardTarget(unit.instanceId) ?? {
+      upgradeInteraction(unit.instanceId) ?? asUpgradeHost(unit.instanceId) ?? asBoardTarget(unit.instanceId) ?? {
         actionable: attackerIds.has(unit.instanceId),
         selected: selectedAttacker === unit.instanceId,
         isTarget: false,
@@ -1058,7 +1078,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       }
 
     const opponentInteraction = (unit: { instanceId: string }): UnitInteraction =>
-      upgradeInteraction(unit.instanceId) ?? asBoardTarget(unit.instanceId) ?? {
+      upgradeInteraction(unit.instanceId) ?? asUpgradeHost(unit.instanceId) ?? asBoardTarget(unit.instanceId) ?? {
         actionable: false,
         selected: false,
         isTarget: targetUnitIds.has(unit.instanceId),
@@ -1131,8 +1151,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     )
     const nameCardActions = nameCardChoice ? legal.filter(a => a.type === 'acceptChoice' && a.choiceId === nameCardChoice.id) : []
 
-    // A "select an upgrade to defeat" choice (Vane): the candidate upgrades are shown as a
-    // centre-screen card picker with a Cancel (optional only), not in the action menu.
+    // A "select an upgrade to defeat" choice (Vane) and the unique-copy version. Both are picked
+    // in two steps: highlight the units carrying candidates on the board, then show that unit's
+    // upgrades in the card picker. Neither goes in the action menu.
     const selectUpgradeChoice = gameState.pendingChoices?.find(
       (c): c is Extract<PendingChoice, { kind: 'selectUpgradeToDefeat' }> => c.kind === 'selectUpgradeToDefeat' && c.controller === 'player',
     )
@@ -1162,6 +1183,13 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       (c): c is Extract<PendingChoice, { kind: 'selectUniqueToDefeat' }> => c.kind === 'selectUniqueToDefeat' && c.controller === 'player',
     )
     const uniqueActions = uniqueChoice ? legal.filter(a => a.type === 'acceptChoice' && a.choiceId === uniqueChoice.id) : []
+
+    // Whichever upgrade-defeat choice is live drives the same two-step picker. Step one highlights
+    // the hosts on the board; step two opens the picker on the chosen host. A host that has left
+    // play (defeated mid-choice) drops us back to step one rather than opening an empty picker.
+    const upgradePick = selectUpgradeChoice ?? uniqueChoice
+    const upgradeHosts = upgradePick ? upgradeHostIds(upgradePick.candidates) : []
+    const pickedHost = upgradeHost !== null && upgradeHosts.includes(upgradeHost) ? upgradeHost : null
 
     // Playing, resourcing, attacking and attaching upgrades are all driven by
     // clicking a card or unit, so the menu holds only the remaining choices —
@@ -1281,15 +1309,19 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           onPick={cardName => actAndClear({ type: 'acceptChoice', choiceId: nameCardChoice.id, cardName })}
         />
       )
-    } else if (selectUpgradeChoice) {
-      const cancel = selectUpgradeActions.find(a => a.type === 'skipTrigger')
+    } else if (selectUpgradeChoice && pickedHost !== null) {
+      // Step two: only this unit's upgrades, so which one you are defeating is unambiguous even
+      // when two units share a name. Cancel steps back to the board rather than declining.
       choiceOverlay = (
         <CardSelectOverlay
           state={gameState}
-          prompt="Choose an upgrade to defeat"
-          items={selectUpgradeChoice.candidates.map((c, i) => ({ cardId: c.cardId, optionIndex: i, hostId: c.unitId }))}
+          prompt={`Choose an upgrade to defeat from ${unitDisplayName(gameState, pickedHost)}`}
+          // flatMap keeps each candidate's original index as its optionIndex while dropping the
+          // ones on other units.
+          items={selectUpgradeChoice.candidates.flatMap((c, i) =>
+            c.unitId === pickedHost ? [{ cardId: c.cardId, optionIndex: i, key: i }] : [])}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: selectUpgradeChoice.id, optionIndex })}
-          onCancel={cancel ? () => actAndClear(cancel) : undefined}
+          onCancel={() => setUpgradeHost(null)}
         />
       )
     } else if (resourceUpgradeChoice) {
@@ -1319,14 +1351,17 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           onCancel={cancel ? () => actAndClear(cancel) : undefined}
         />
       )
-    } else if (uniqueChoice) {
-      // Unique rule: two copies of the same upgrade — pick which to defeat (mandatory, no cancel).
+    } else if (uniqueChoice && pickedHost !== null) {
+      // Unique rule: two copies of the same upgrade. Same two-step pick — the copies are
+      // identically named, so the host is the only thing telling them apart.
       choiceOverlay = (
         <CardSelectOverlay
           state={gameState}
-          prompt={`You control two ${gameState.cards[uniqueChoice.cardId]?.name ?? 'copies'}, defeat one`}
-          items={uniqueChoice.candidates.map((c, i) => ({ cardId: c.cardId, optionIndex: i, hostId: c.unitId, key: i }))}
+          prompt={`You control two ${gameState.cards[uniqueChoice.cardId]?.name ?? 'copies'}, defeat the one on ${unitDisplayName(gameState, pickedHost)}`}
+          items={uniqueChoice.candidates.flatMap((c, i) =>
+            c.unitId === pickedHost ? [{ cardId: c.cardId, optionIndex: i, key: i }] : [])}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: uniqueChoice.id, optionIndex })}
+          onCancel={() => setUpgradeHost(null)}
         />
       )
     }
@@ -1338,7 +1373,11 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         <OpponentBar state={gameState} />
         <Board
           state={gameState}
-          prompt={actionPrompt}
+          // Step one of the upgrade pick has its own instruction; it is computed after the choice
+          // is found, so it overrides the general prompt here rather than inside it.
+          prompt={upgradePick && pickedHost === null
+            ? ['Choose the unit to defeat an upgrade from']
+            : actionPrompt}
           playerInteraction={playerInteraction}
           opponentInteraction={opponentInteraction}
           baseAction={side => {
