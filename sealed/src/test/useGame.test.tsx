@@ -288,6 +288,39 @@ describe('useGame', () => {
     })
   })
 
+  /** #373: a bug report carries the game so far, which must replay to what is on screen. */
+  it('exposes replay data that re-resolves to the live state', async () => {
+    const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
+    await waitFor(() => expect(result.current.status).toBe('playing'))
+
+    act(() => result.current.act({ type: 'keepHand' }))
+    act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
+    act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
+    act(() => result.current.act({ type: 'playUnit', handIndex: 0 }))
+
+    const { initialState, moves } = result.current.replayData()
+    expect(initialState).not.toBeNull()
+    expect(moves.length).toBeGreaterThan(0)
+    expect(moves.reduce((s, m) => resolve(s, m.action), initialState!)).toEqual(result.current.gameState)
+  })
+
+  it('leaves undone moves out of the replay data', async () => {
+    const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
+    await waitFor(() => expect(result.current.status).toBe('playing'))
+
+    act(() => result.current.act({ type: 'keepHand' }))
+    act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
+    act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
+    const before = result.current.replayData().moves.length
+
+    act(() => result.current.act({ type: 'playUnit', handIndex: 0 }))
+    act(() => result.current.undo())
+
+    const { initialState, moves } = result.current.replayData()
+    expect(moves).toHaveLength(before)
+    expect(moves.reduce((s, m) => resolve(s, m.action), initialState!)).toEqual(result.current.gameState)
+  })
+
   it('rematch resets to a fresh game', async () => {
     const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
     await waitFor(() => expect(result.current.status).toBe('playing'))

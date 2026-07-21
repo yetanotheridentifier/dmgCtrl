@@ -198,6 +198,21 @@ The board is drawn with art-dominant cards, not text rows:
   `pointer-events-auto` on itself so references inside it stay hoverable. Its fill uses
   `--color-surface-solid`, not `--color-surface`: the latter is itself `rgba(…, 0.45)`, so card
   art reads through it however it is applied.
+- **Bug report** (#373): the header's bug button opens a title/description form; submitting copies
+  the assembled markdown to the clipboard and opens GitHub's prefilled new-issue page. Report
+  assembly is pure (`utils/bugReport.ts`) and so is unit-tested; the hook exposes `replayData()`,
+  a function rather than a value so nothing re-renders as the game runs.
+  The report carries `initialState` + the move list, which **re-resolve to the exact game** thanks
+  to the state-seeded AI, making every report a runnable fixture. The card DB is stripped: it is
+  ~12KB of a ~13KB state and rebuilds from the deck lists.
+  **Why clipboard rather than a one-click API call:** the app is static with no backend, so filing
+  directly would need a token. Going through GitHub's own page means the issue is authored by
+  whoever is signed in there (correct attribution, no secret in the bundle), and the clipboard
+  carries the payload because the replay data is ~17KB against a ~8KB URL ceiling. A refused
+  clipboard keeps the form open with the text shown rather than opening a half-filed issue.
+  The issue body is prefilled **empty**: a "paste the report here" line got pasted around rather
+  than replaced, leaving the instruction in every filed issue (#378). Transient guidance belongs in
+  the form, not in the permanent record.
 - **Screen layout** (#332): the game screen is full-bleed, a two-column grid
   (`16rem 1fr`), no divider between them. Backgrounds follow one rule: the **play area,
   the bars and the two headers use the core theme background** (transparent → the body
