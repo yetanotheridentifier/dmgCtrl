@@ -1,0 +1,209 @@
+[
+ {
+  "Set": "SEC",
+  "Number": "019",
+  "Name": "Rix Road",
+  "Subtitle": "Ferrix",
+  "Type": "Base",
+  "HP": "30",
+  "Aspects": [
+   "Vigilance"
+  ],
+  "Unique": false,
+  "FrontText": ""
+ },
+ {
+  "Set": "JTL",
+  "Number": "132",
+  "Name": "First Order Stormtrooper",
+  "Type": "Unit",
+  "Cost": "1",
+  "Power": "2",
+  "HP": "1",
+  "Arenas": [
+   "Ground"
+  ],
+  "Aspects": [
+   "Aggression",
+   "Villainy"
+  ],
+  "Traits": [
+   "FIRST ORDER",
+   "TROOPER"
+  ],
+  "Unique": false,
+  "FrontText": "On Attack/When Defeated: Deal 1 indirect damage to a player. (They assign 1 unpreventable damage among their base and units.)"
+ },
+ {
+  "Set": "JTL",
+  "Number": "242",
+  "Name": "Shuttle ST-149",
+  "Subtitle": "Under Krennic's Authority",
+  "Type": "Unit",
+  "Cost": "4",
+  "Power": "3",
+  "HP": "4",
+  "Arenas": [
+   "Space"
+  ],
+  "Aspects": [
+   "Villainy"
+  ],
+  "Traits": [
+   "IMPERIAL",
+   "VEHICLE",
+   "TRANSPORT"
+  ],
+  "Keywords": [
+   "Shielded"
+  ],
+  "Unique": true,
+  "FrontText": "Shielded (When you play this unit, give a Shield token to it.) \nWhen Played/When Defeated: You may take control of a token upgrade on a unit and attach it to a different eligible unit."
+ },
+ {
+  "Set": "LAW",
+  "Number": "173",
+  "Name": "BT-1",
+  "Subtitle": "Blastomech",
+  "Type": "Unit",
+  "Cost": "2",
+  "Power": "2",
+  "HP": "4",
+  "Arenas": [
+   "Ground"
+  ],
+  "Aspects": [
+   "Aggression",
+   "Villainy"
+  ],
+  "Traits": [
+   "UNDERWORLD",
+   "DROID"
+  ],
+  "Unique": true,
+  "FrontText": "On Attack: Discard a card from your deck. If it's Aggression, you may deal 1 damage to a ground unit."
+ },
+ {
+  "Set": "LAW",
+  "Number": "042",
+  "Name": "IG-88",
+  "Subtitle": "Programmed to Kill",
+  "Type": "Unit",
+  "Cost": "4",
+  "Power": "6",
+  "HP": "3",
+  "Arenas": [
+   "Ground"
+  ],
+  "Aspects": [
+   "Vigilance",
+   "Aggression",
+   "Villainy"
+  ],
+  "Traits": [
+   "UNDERWORLD",
+   "DROID",
+   "BOUNTY HUNTER"
+  ],
+  "Keywords": [
+   "Shielded"
+  ],
+  "Unique": true,
+  "FrontText": "Shielded"
+ },
+ {
+  "Set": "SEC",
+  "Number": "035",
+  "Name": "Darth Sion",
+  "Subtitle": "Lord of Pain",
+  "Type": "Unit",
+  "Cost": "5",
+  "Power": "5",
+  "HP": "5",
+  "Arenas": [
+   "Ground"
+  ],
+  "Aspects": [
+   "Vigilance",
+   "Villainy"
+  ],
+  "Traits": [
+   "FORCE",
+   "SITH"
+  ],
+  "Unique": true,
+  "FrontText": "When Played: Give an Experience token to this unit for each enemy unit that was defeated this phase.\nWhen Defeated: If this unit had 7 or more power, return him to his owner's hand."
+ },
+ {
+  "Set": "LOF",
+  "Number": "130",
+  "Name": "HK-47",
+  "Subtitle": "Exclamation: Die, Meatbag!",
+  "Type": "Unit",
+  "Cost": "2",
+  "Power": "2",
+  "HP": "4",
+  "Arenas": [
+   "Ground"
+  ],
+  "Aspects": [
+   "Aggression",
+   "Villainy"
+  ],
+  "Traits": [
+   "SITH",
+   "DROID"
+  ],
+  "Unique": true,
+  "FrontText": "When an enemy unit is defeated: Deal 1 damage to its controller's base."
+ },
+ {
+  "Set": "LOF",
+  "Number": "061",
+  "Name": "Secretive Sage",
+  "Type": "Unit",
+  "Cost": "2",
+  "Power": "2",
+  "HP": "2",
+  "Arenas": [
+   "Ground"
+  ],
+  "Aspects": [
+   "Vigilance"
+  ],
+  "Traits": [
+   "FORCE",
+   "FRINGE"
+  ],
+  "Keywords": [
+   "Shielded"
+  ],
+  "Unique": false,
+  "FrontText": "Shielded (When you play this unit, give a Shield token to it.)"
+ },
+ {
+  "Set": "LOF",
+  "Number": "062",
+  "Name": "Axe Woves",
+  "Subtitle": "Accomplished Warrior",
+  "Type": "Unit",
+  "Cost": "3",
+  "Power": "2",
+  "HP": "2",
+  "Arenas": [
+   "Ground"
+  ],
+  "Aspects": [
+   "Vigilance"
+  ],
+  "Traits": [
+   "MANDALORIAN",
+   "TROOPER"
+  ],
+  "Keywords": [
+   "Shielded"
+  ],
+  "Unique": true,
+  "FrontText": "Shielded \nThis unit gets +1/+1 for each upgrade on him."
+ }
+]

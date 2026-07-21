@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SavedDeck } from '../data/deckStore'
-import { getCard } from '../data/cards'
+import { getCard, cardId } from '../data/cards'
 import type { SwuCard } from '../data/cards'
+import { canonicaliseCards } from '../data/printings'
+import type { Unresolved } from '../data/printings'
 import { cardRefFromId } from '../utils/parseProtectThePod'
 import { buildCardDb } from '../engine/cardDb'
 import { initGame, fisherYates } from '../engine/initGame'
@@ -53,6 +55,12 @@ export interface GameValue {
    * taken after an undo still replays.
    */
   replayData: () => { initialState: GameState | null; moves: MoveRecord[] }
+  /**
+   * Cards whose printing could not be resolved to a Normal id, so they play vanilla. Surfaced in
+   * the UI and in bug reports rather than failing silently, since the symptom (an ability simply
+   * not happening) is otherwise indistinguishable from a broken implementation.
+   */
+  unresolvedPrintings: Unresolved[]
 }
 
 export interface UseGameOptions {
@@ -76,6 +84,22 @@ interface MoveRecord {
 }
 
 /**
+ * The deck as the engine should see it: printings collapsed onto their Normal ids. The saved deck
+ * keeps the printings you actually own, so the deck list still shows your cards; only the game
+ * works in canonical ids. Two printings of one card collapse to a single entry, which is correct
+ * for play (they are the same card) and merely means one of the two arts is shown.
+ */
+function canonicalDeck(deck: SavedDeck, canonical: Map<string, string>): SavedDeck {
+  const id = (raw: string) => canonical.get(raw) ?? raw
+  return {
+    ...deck,
+    leader: id(deck.leader),
+    base: id(deck.base),
+    cards: deck.cards.map(c => ({ ...c, id: id(c.id) })),
+  }
+}
+
+/**
  * The state as it stood immediately BEFORE one action, with the lengths of the log and move
  * list at that moment so both truncate back cleanly. Taken per individual action — including
  * each of the AI's — so the history is fine-grained enough to step through later, even though
@@ -94,6 +118,7 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
   const [gameState, setGameState] = useState<GameState | null>(null)
   const [log, setLog] = useState<LogEntry[]>([])
   const [generation, setGeneration] = useState(0)
+  const [unresolvedPrintings, setUnresolvedPrintings] = useState<Unresolved[]>([])
 
   const rng = options.rng ?? Math.random
   const shuffle = options.shuffle ?? fisherYates
@@ -171,7 +196,22 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
 
         if (cancelled) return
 
-        let state = initGame(playerDeck, opponentDeck, buildCardDb(cards), {
+        // Collapse every printing of a card onto its Normal id before the engine sees it, so
+        // abilities, corrections and the unique rule (all keyed by card id) apply to the
+        // Hyperspace, foil, prestige and showcase printings a real pool contains (#382-#385).
+        // The printing's own art rides along, so the card still looks like the one you own.
+        const { map: canonical, unresolved } = await canonicaliseCards(cards)
+        if (cancelled) return
+        setUnresolvedPrintings(unresolved)
+
+        const canonicalCards = cards.map(card => {
+          const target = canonical.get(cardId(card.Set, card.Number))
+          if (!target) return card
+          const [set, number] = target.split('_')
+          return { ...card, Set: set, Number: number }
+        })
+
+        let state = initGame(canonicalDeck(playerDeck, canonical), canonicalDeck(opponentDeck, canonical), buildCardDb(canonicalCards), {
           firstPlayer: options.firstPlayer ?? (rng() < 0.5 ? 'player' : 'opponent'),
           shuffle,
           rngSeed: options.rngSeed,
@@ -278,5 +318,5 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
 
   // Once the game is over the record has been written — rewinding past that would leave a saved
   // game disagreeing with what is on screen.
-  return { status, errorDetail, gameState, legal, log, act, undo, canUndo: canUndo && gameState?.winner === null, rematch, replayData }
+  return { status, errorDetail, gameState, legal, log, act, undo, canUndo: canUndo && gameState?.winner === null, rematch, replayData, unresolvedPrintings }
 }

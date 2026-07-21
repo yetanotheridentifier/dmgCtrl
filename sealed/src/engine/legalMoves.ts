@@ -280,7 +280,7 @@ function choiceMoves(state: GameState): Action[] {
         const unit = p.units.find(u => u.instanceId === choice.unitId)
         if (unit) {
           for (const e of enemyAttackTargets(state, unit).targets) {
-            moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
+            moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'unit', instanceId: e.instanceId }, choiceId: choice.id })
           }
         }
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
@@ -295,9 +295,9 @@ function choiceMoves(state: GameState): Action[] {
           const attacker = sourceCardId ? { ...candidate, grantedAbilityCardIds: [sourceCardId] } : candidate
           const { targets, sentinelLocked } = enemyAttackTargets(state, attacker)
           for (const e of targets) {
-            moves.push({ type: 'attack', attackerId: candidate.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
+            moves.push({ type: 'attack', attackerId: candidate.instanceId, target: { kind: 'unit', instanceId: e.instanceId }, choiceId: choice.id })
           }
-          if (!sentinelLocked) moves.push({ type: 'attack', attackerId: candidate.instanceId, target: { kind: 'base' } })
+          if (!sentinelLocked) moves.push({ type: 'attack', attackerId: candidate.instanceId, target: { kind: 'base' }, choiceId: choice.id })
         }
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
@@ -623,8 +623,8 @@ function choiceMoves(state: GameState): Action[] {
         for (const u of p.units) {
           if (u.exhausted) continue
           const { targets, sentinelLocked } = enemyAttackTargets(state, u)
-          for (const e of targets) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
-          if (!sentinelLocked) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'base' } })
+          for (const e of targets) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'unit', instanceId: e.instanceId }, choiceId: choice.id })
+          if (!sentinelLocked) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'base' }, choiceId: choice.id })
         }
         break
       }
@@ -646,8 +646,8 @@ function choiceMoves(state: GameState): Action[] {
         if (u && !u.exhausted) {
           const attacker = choice.grantCardId ? { ...u, grantedAbilityCardIds: [choice.grantCardId] } : u
           const { targets, sentinelLocked } = enemyAttackTargets(state, attacker)
-          for (const e of targets) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'unit', instanceId: e.instanceId } })
-          if (!sentinelLocked) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'base' } })
+          for (const e of targets) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'unit', instanceId: e.instanceId }, choiceId: choice.id })
+          if (!sentinelLocked) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'base' }, choiceId: choice.id })
         }
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break

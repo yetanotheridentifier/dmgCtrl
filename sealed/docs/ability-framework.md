@@ -175,6 +175,12 @@ helpers `activeChoice`/`findChoice`/`hasPendingChoices`/`popChoice`/`removeChoic
   any order (honours active-player trigger ordering, CR).
 - Generic **`acceptChoice { choiceId, targetInstanceId? }`** takes the positive option;
   **`skipTrigger { choiceId? }`** declines (no id = head, for Ambush/Support).
+- An **attack** can itself be the answer to a choice (Ambush, Support, "you may attack"), so
+  `attack` carries an optional **`choiceId`** naming which one. Since `choiceMoves` offers moves
+  for *every* choice the active player holds, the answered choice is not necessarily the head:
+  inferring it consumed the wrong one and left the real one pending, so the attack appeared not to
+  resolve. Choices are always removed **by id** for the same reason; there is deliberately no
+  "remove the head" helper.
 - `resumeAfterChoice`: while choices remain, the active player finishes theirs first,
   then control passes to the other side; when the queue drains, round-start
   (`resumeAtInitiative`) choices begin the action phase with the initiative holder,

@@ -24,6 +24,12 @@ export interface ReportInput {
   /** Null before a game has loaded, when there is nothing to replay. */
   initialState: GameState | null
   moves: { by: PlayerId; action: Action }[]
+  /**
+   * Cards playing without their abilities because their printing could not be canonicalised.
+   * Included so a report says so up front: it is by far the most likely explanation for
+   * "this card's ability did nothing", and it saves diagnosing it as a card bug.
+   */
+  unresolvedPrintings?: { id: string; name?: string }[]
 }
 
 /** Explains the one thing a reader has to know to use the payload. */
@@ -59,7 +65,7 @@ function replayPayload(initialState: GameState | null, moves: ReportInput['moves
   return JSON.stringify({ initialState: { ...initialState, cards: undefined }, moves })
 }
 
-export function buildReportMarkdown({ description, buildTag, isDev, log, initialState, moves }: ReportInput): string {
+export function buildReportMarkdown({ description, buildTag, isDev, log, initialState, moves, unresolvedPrintings = [] }: ReportInput): string {
   const payload = replayPayload(initialState, moves)
   const logLines = log.map(e => `${e.by === 'player' ? 'You' : 'Opp'}  ${e.text}`).join('\n')
 
@@ -76,6 +82,15 @@ export function buildReportMarkdown({ description, buildTag, isDev, log, initial
     logLines ? '```\n' + logLines + '\n```' : '_Empty._',
     '',
   ]
+
+  if (unresolvedPrintings.length > 0) {
+    sections.push(
+      '### Cards playing without abilities',
+      'Their printing could not be matched to a Normal id, so only printed stats and keywords applied.',
+      ...unresolvedPrintings.map(u => `- ${u.name ?? u.id} (\`${u.id}\`)`),
+      '',
+    )
+  }
 
   if (payload) {
     sections.push(

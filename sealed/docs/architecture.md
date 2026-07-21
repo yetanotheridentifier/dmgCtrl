@@ -82,6 +82,32 @@ Every ASH leader (both sides) is implemented too. **Still pending**: events, abi
 unit cards beyond keywords, concession, and active-player ordering of simultaneous cross-player
 triggers (no card exercises it yet).
 
+## Card identity and printings
+
+A card is printed several ways (Normal, Hyperspace, foil, prestige tiers, showcase and more), each
+with its **own collector number**, and ProtectThePod exports the printing you actually own. Since
+everything the engine keys by card id is written against the Normal number (the ability registry,
+`cardDataCorrections`, `upgradeStatOverrides`, the unique rule), a non-Normal printing was
+unregistered and played as a vanilla body with no ability at all (#382 to #385).
+
+`data/printings.ts` **canonicalises the id during hydration**, before the engine sees anything:
+`useGame` rewrites both the fetched cards and the deck lists onto the Normal ids. The engine
+therefore never learns that printings exist, and no id-keyed table needs to know either. The
+printing's own **art rides along**, so you still see the card you own.
+
+- The join is `Type|Name|Subtitle`, because the set listing returns Normal printings only and so
+  cannot be joined on number. Type matters: 13 unit names collide with leader names. Verified
+  unambiguous for ASH (264 rows, 264 distinct keys).
+- The index comes from the cached set, falling back to one `?q=set:XXX` call per set.
+- **Unresolvable cards keep their own id and play vanilla**, which is the previous behaviour, so
+  being offline degrades rather than breaks. They are reported through
+  `GameValue.unresolvedPrintings`, shown above the log and included in bug reports: the symptom
+  (an ability simply not happening) is otherwise indistinguishable from a broken implementation.
+- Saved decks keep the printings you own; only play is canonical. Two printings of one card in a
+  deck collapse to a single entry, correct for play and merely meaning one of the two arts shows.
+- The implemented-cards panel counts Normal printings, so its totals describe the set, not any
+  particular pool.
+
 ## Data model
 
 ![Data model diagram: GameState composition (players, units, upgrades, cards) and the out-of-state ability registry](diagrams/data-model.svg)

@@ -263,9 +263,18 @@ registerCard('ASH_014', { // The Mandalorian — front take-initiative draw; dep
   }],
 })
 
-// Every upgrade the player controls — card upgrades AND tokens — as defeatable candidates.
+/**
+ * Every upgrade the player OWNS, card upgrades and tokens alike, as defeatable candidates.
+ *
+ * Ownership, not the host unit's controller: an opponent can attach an upgrade to your unit
+ * (Deadly Vulnerability), and it stays theirs — which is why `UpgradeAttachment` carries `owner`,
+ * and why it returns to their discard when defeated. Scanning your own units alone offered those
+ * as "friendly" (#378). Tokens are stamped with the receiving unit's controller, so your own
+ * Shields and Advantage still qualify.
+ */
 const friendlyUpgradeCandidates = (s: GameState, owner: PlayerId): UpgradeRef[] =>
-  s.players[owner].units.flatMap(u => u.upgrades.map((up, i) => ({ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId })))
+  allUnits(s).flatMap(u => u.upgrades.flatMap((up, i) =>
+    up.owner === owner ? [{ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId }] : []))
 
 const BOTH_BASES: PlayerId[] = ['player', 'opponent']
 

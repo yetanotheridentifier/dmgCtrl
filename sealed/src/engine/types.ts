@@ -610,13 +610,13 @@ export function findChoice(state: GameState, id: string): PendingChoice | undefi
   return state.pendingChoices?.find(c => c.id === id)
 }
 
-/** Remove the head choice; the queue becomes `undefined` when it empties. */
-export function popChoice(state: GameState): GameState {
-  const rest = (state.pendingChoices ?? []).slice(1)
-  return { ...state, pendingChoices: rest.length > 0 ? rest : undefined }
-}
-
-/** Remove a specific choice by id; the queue becomes `undefined` when it empties. */
+/**
+ * Remove a specific choice by id; the queue becomes `undefined` when it empties.
+ *
+ * Always by id. A player may answer any of their outstanding choices, not just the one at the
+ * head, so a "remove the head" helper silently consumed the wrong choice (#376 item 5) and is
+ * deliberately not offered.
+ */
 export function removeChoice(state: GameState, id: string): GameState {
   const rest = (state.pendingChoices ?? []).filter(c => c.id !== id)
   return { ...state, pendingChoices: rest.length > 0 ? rest : undefined }

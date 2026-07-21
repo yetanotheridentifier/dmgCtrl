@@ -3,6 +3,7 @@ import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
 import '../engine/cardDefinitions' // side-effect: registers every implemented card
 import { state, player, card, CARDS, unit, ready } from './helpers/engineFixtures'
+import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import type { GameState } from '../engine/types'
 
 /**
@@ -117,6 +118,51 @@ describe('an attack that resolves a choice completes the deferred transition', (
     // Only when the opponent passes does the round move on.
     expect(resolve(playedAgain, { type: 'pass' }).phase).toBe('regroup')
     assertAnswerable(attacked, 'after a granted attack mid-phase')
+  })
+})
+
+/**
+ * `choiceMoves` offers moves for EVERY choice the active player controls, so an attack can answer
+ * a choice that is not at the head of the queue. `attack` used to read the head via `activeChoice`
+ * and drop the head via `popChoice`, so it consumed the wrong one: the choice the player actually
+ * answered stayed pending and the attack appeared not to resolve (#376 item 5, Mandalorian
+ * Flagship). The attack now carries the id of the choice it answers.
+ */
+describe('an attack consumes the choice it answered, not the queue head', () => {
+  const board = () => state({
+    phase: 'action',
+    activePlayer: 'player',
+    cards: { ...CARDS, ATT: card({ id: 'ATT', name: 'Ambusher', type: 'unit', power: 3, hp: 3 }), DEF: card({ id: 'DEF', name: 'Defender', type: 'unit', power: 1, hp: 9 }) },
+    players: {
+      player: player({ deck: ['D1'], resources: ready(5), units: [unit('u1', 'ATT')] }),
+      opponent: player({ deck: ['D1'], units: [unit('e1', 'DEF')] }),
+    },
+    // The ambush the player is about to answer sits BEHIND an unrelated choice of theirs.
+    pendingChoices: [
+      { kind: 'mayGiveTokens', id: 'other', controller: 'player', token: TOKEN_ADVANTAGE, count: 1, targets: ['u1'], optional: true },
+      { kind: 'ambush', id: 'amb', controller: 'player', unitId: 'u1' },
+    ],
+  })
+
+  it('removes the answered ambush and leaves the other choice pending', () => {
+    const attacked = resolve(board(), { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' }, choiceId: 'amb' })
+    const ids = (attacked.pendingChoices ?? []).map(c => c.id)
+    expect(ids).not.toContain('amb') // the one actually answered
+    expect(ids).toContain('other') // the unrelated one survives
+    assertAnswerable(attacked, 'after answering a non-head ambush')
+  })
+
+  it('still works when the answered choice IS the head', () => {
+    const s = { ...board(), pendingChoices: [board().pendingChoices![1], board().pendingChoices![0]] }
+    const attacked = resolve(s, { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' }, choiceId: 'amb' })
+    const ids = (attacked.pendingChoices ?? []).map(c => c.id)
+    expect(ids).toEqual(['other'])
+  })
+
+  it('offers the attack moves stamped with the choice they answer', () => {
+    const moves = legalMoves(board()).filter(m => m.type === 'attack')
+    expect(moves.length).toBeGreaterThan(0)
+    expect(moves.every(m => m.choiceId === 'amb')).toBe(true)
   })
 })
 
