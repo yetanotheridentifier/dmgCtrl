@@ -16,7 +16,10 @@ export type Action =
   | { type: 'playUpgrade'; handIndex: number; targetInstanceId: string }
   // Play an event: it never enters play — pay its cost, put it in the discard, then resolve it.
   | { type: 'playEvent'; handIndex: number }
-  | { type: 'attack'; attackerId: string; target: AttackTarget }
+  // `choiceId` is set when this attack is how a pending choice is ANSWERED (Ambush, Support,
+  // "you may attack"). Without it the resolver had to guess which choice the attack belonged to,
+  // and guessed the queue head, consuming the wrong one when several were outstanding.
+  | { type: 'attack'; attackerId: string; target: AttackTarget; choiceId?: string }
   | { type: 'deployLeader' }
   // Use a unit's activated "Action:" ability. `cardId`+`index` address the
   // ability among the unit's own and its upgrades' action abilities.

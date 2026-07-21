@@ -1,7 +1,7 @@
 import type { Action, AttackTarget } from './actions'
 import type { GameState, PlayerId, UnitState } from './types'
 import type { PendingChoice, UpgradeRef } from './types'
-import { opponentOf, updatePlayer, activeChoice, popChoice, findChoice, removeChoice, hasPendingChoices, pushChoice } from './types'
+import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice } from './types'
 import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
@@ -78,10 +78,11 @@ function resolveAction(state: GameState, action: Action): GameState {
       return requirePhase(state, 'action', () => useLeaderAbility(state, action.index, action.targetInstanceId))
     case 'attack':
       return requirePhase(state, 'action', () => {
-        // An attack resolves a pending choice, if one is active. Both Support
-        // ("gains this unit's other abilities") and Improvised Identity's mayAttack lend a source
-        // card's full abilities (keywords + triggered) to the chosen attacker for this attack.
-        const choice = activeChoice(state)
+        // An attack can be how a pending choice is ANSWERED. `choiceId` names which one: the
+        // player may act on any of their outstanding choices, not just the queue head, so
+        // inferring it left the answered choice pending and the attack looked stuck (#376 item 5).
+        // Falling back to the head keeps hand-written actions and older records working.
+        const choice = action.choiceId ? findChoice(state, action.choiceId) : activeChoice(state)
         const grantCardId = choice?.kind === 'support'
           ? state.players[state.activePlayer].units.find(u => u.instanceId === choice.unitId)?.cardId
           : choice?.kind === 'mayAttack' || choice?.kind === 'mayAttackAnyUnit' ? choice.grantCardId : undefined
@@ -97,10 +98,10 @@ function resolveAction(state: GameState, action: Action): GameState {
         // An Ambush attack is the one resolving the entering unit's ambush choice (Heroic Purrgil).
         const viaAmbush = choice?.kind === 'ambush' && choice.unitId === action.attackerId
         let attacked = attack(before, action.attackerId, action.target, viaAmbush)
-        // Consume the ambush/support choice this attack resolved. Support-granted
-        // keywords are cleared inside completeAttack (after they're used), so they
-        // survive a mid-combat On Defense suspension.
-        if (choice) attacked = popChoice(attacked)
+        // Consume the choice this attack resolved, by id: `popChoice` drops the head, which is
+        // not necessarily the one answered. Support-granted keywords are cleared inside
+        // completeAttack (after they're used), so they survive a mid-combat On Defense suspension.
+        if (choice) attacked = removeChoice(attacked, choice.id)
         if (attacked.winner !== null) return attacked
         // A choice the attack raised keeps the turn to resolve it first. A defender's own trigger
         // (whenDefeated) is controlled by the defender, so hand control to them; remember the

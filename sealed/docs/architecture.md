@@ -86,8 +86,8 @@ triggers (no card exercises it yet).
 
 A card is printed several ways (Normal, Hyperspace, foil, prestige tiers, showcase and more), each
 with its **own collector number**, and ProtectThePod exports the printing you actually own. Since
-everything the engine keys by card id is written against the Normal number — the ability registry,
-`cardDataCorrections`, `upgradeStatOverrides`, the unique rule — a non-Normal printing was
+everything the engine keys by card id is written against the Normal number (the ability registry,
+`cardDataCorrections`, `upgradeStatOverrides`, the unique rule), a non-Normal printing was
 unregistered and played as a vanilla body with no ability at all (#382 to #385).
 
 `data/printings.ts` **canonicalises the id during hydration**, before the engine sees anything:
