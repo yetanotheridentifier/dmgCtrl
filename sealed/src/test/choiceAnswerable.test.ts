@@ -82,15 +82,40 @@ describe('an attack that resolves a choice completes the deferred transition', (
     expect(skipped.pendingInitiativeEndsPhase).toBeUndefined()
   })
 
-  it('hands the turn over normally when taking the initiative did NOT end the phase', () => {
-    const midPhase = { ...afterOpponentPassed(), consecutivePasses: 0 }
-    const took = resolve(midPhase, { type: 'takeInitiative' })
+  /**
+   * Taking the initiative ends the phase for the TAKER only: they auto-pass for the rest of the
+   * round while the opponent keeps acting until they pass too (the phase ends immediately only
+   * when the opponent had already passed, CR 1.15.5c). Resolving the granted attack must not
+   * short-circuit that.
+   */
+  it('leaves the opponent free to act, and the taker out, when the phase did NOT end', () => {
+    const midPhase = () => {
+      const base = afterOpponentPassed()
+      return {
+        ...base,
+        consecutivePasses: 0,
+        players: { ...base.players, opponent: player({ deck: ['D1', 'D2'], hand: ['TST_U2', 'TST_U2'], resources: ready(6) }) },
+      }
+    }
+    const took = resolve(midPhase(), { type: 'takeInitiative' })
     expect(took.pendingInitiativeEndsPhase).toBe(false)
 
     const attacked = resolve(took, { type: 'attack', attackerId: 'sh', target: { kind: 'base' } })
     expect(attacked.phase).toBe('action')
     expect(attacked.activePlayer).toBe('opponent')
     expect(attacked.pendingInitiativeEndsPhase).toBeUndefined()
+
+    // The opponent keeps the turn across successive actions — it never bounces back to the taker,
+    // who has auto-passed for the round.
+    const played = resolve(attacked, { type: 'playUnit', handIndex: 0 })
+    expect(played.activePlayer).toBe('opponent')
+    expect(played.phase).toBe('action')
+    const playedAgain = resolve(played, { type: 'playUnit', handIndex: 0 })
+    expect(playedAgain.activePlayer).toBe('opponent')
+    expect(playedAgain.phase).toBe('action')
+
+    // Only when the opponent passes does the round move on.
+    expect(resolve(playedAgain, { type: 'pass' }).phase).toBe('regroup')
     assertAnswerable(attacked, 'after a granted attack mid-phase')
   })
 })
