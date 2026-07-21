@@ -31,13 +31,24 @@ export interface GameValue {
   legal: Action[]
   log: LogEntry[]
   act: (action: Action) => void
+  /**
+   * Rewind to just before the player's last action, taking the AI's reply with it. Deliberately
+   * a hook method rather than an `Action`: it can't reach `legalMoves`, so the AI can never pick
+   * it and loop. Unavailable before the player's first action and once the game is over.
+   */
+  undo: () => void
+  canUndo: boolean
   rematch: () => void
 }
 
 export interface UseGameOptions {
   shuffle?: <T>(arr: T[]) => T[]
+  /** Only decides the opening initiative roll — the AI draws from the state's own seed. */
   rng?: () => number
   firstPlayer?: PlayerId
+  rngSeed?: number
+  /** Swap the opponent (tests inject a passive one; a smarter rung slots in here later). */
+  ai?: (state: GameState) => Action | null
 }
 
 const HUMAN: PlayerId = 'player'
@@ -50,6 +61,19 @@ interface MoveRecord {
   action: Action
 }
 
+/**
+ * The state as it stood immediately BEFORE one action, with the lengths of the log and move
+ * list at that moment so both truncate back cleanly. Taken per individual action — including
+ * each of the AI's — so the history is fine-grained enough to step through later, even though
+ * `undo` currently rewinds a whole player turn at a time.
+ */
+interface Snapshot {
+  by: PlayerId
+  state: GameState
+  logLength: number
+  movesLength: number
+}
+
 export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options: UseGameOptions = {}): GameValue {
   const [status, setStatus] = useState<GameStatus>('loading')
   const [errorDetail, setErrorDetail] = useState<string | null>(null)
@@ -59,6 +83,7 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
 
   const rng = options.rng ?? Math.random
   const shuffle = options.shuffle ?? fisherYates
+  const ai = options.ai ?? randomAi
 
   const initialStateRef = useRef<GameState | null>(null)
   const movesRef = useRef<MoveRecord[]>([])
@@ -68,6 +93,10 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
   // logic out of the updater (and reading `prev` from this ref instead) makes
   // each action apply — and log — exactly once. See useGame StrictMode test.
   const gameStateRef = useRef<GameState | null>(null)
+  // Undo history, and a rendered mirror of "is there anything to undo" (refs don't re-render).
+  const historyRef = useRef<Snapshot[]>([])
+  const logRef = useRef<LogEntry[]>([])
+  const [canUndo, setCanUndo] = useState(false)
 
   /** Advance the AI while it is the active player; returns the resulting state. */
   const driveAi = useCallback(
@@ -77,8 +106,14 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
       while (current.winner === null && current.activePlayer === AI && steps < MAX_AI_STEPS) {
         // Setup decisions (mulligan/resourcing) use the dedicated heuristic —
         // random choices there are game-ruiningly bad. See ai/setupAi.ts.
-        const action = setupAi(current) ?? randomAi(current, rng)
+        const action = setupAi(current) ?? ai(current)
         if (!action) break
+        historyRef.current.push({
+          by: AI,
+          state: current,
+          logLength: logRef.current.length + entries.length,
+          movesLength: movesRef.current.length,
+        })
         entries.push({ by: AI, text: describeAction(current, AI, action, { redact: true }) })
         movesRef.current.push({ by: AI, action })
         current = resolve(current, action)
@@ -86,7 +121,7 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
       }
       return current
     },
-    [rng],
+    [ai],
   )
 
   useEffect(() => {
@@ -98,7 +133,10 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
       setGameState(null)
       gameStateRef.current = null
       setLog([])
+      logRef.current = []
       movesRef.current = []
+      historyRef.current = []
+      setCanUndo(false)
       recordSavedRef.current = false
 
       try {
@@ -121,6 +159,7 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
         let state = initGame(playerDeck, opponentDeck, buildCardDb(cards), {
           firstPlayer: options.firstPlayer ?? (rng() < 0.5 ? 'player' : 'opponent'),
           shuffle,
+          rngSeed: options.rngSeed,
         })
         initialStateRef.current = state
 
@@ -130,6 +169,7 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
 
         gameStateRef.current = state
         setGameState(state)
+        logRef.current = entries
         setLog(entries)
         setStatus('playing')
       } catch (err) {
@@ -175,16 +215,42 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
       // once even though StrictMode double-invokes updaters.
       const prev = gameStateRef.current
       if (!prev || prev.winner !== null || prev.activePlayer !== HUMAN) return
+      historyRef.current.push({
+        by: HUMAN,
+        state: prev,
+        logLength: logRef.current.length,
+        movesLength: movesRef.current.length,
+      })
       const entries: LogEntry[] = [{ by: HUMAN, text: describeAction(prev, HUMAN, action) }]
       movesRef.current.push({ by: HUMAN, action })
       let next = resolve(prev, action)
       next = driveAi(next, entries)
       gameStateRef.current = next
       setGameState(next)
-      setLog(existing => [...existing, ...entries])
+      logRef.current = [...logRef.current, ...entries]
+      setLog(logRef.current)
+      setCanUndo(true)
     },
     [driveAi],
   )
+
+  /**
+   * Rewind to the snapshot taken before the player's most recent action. Everything after it —
+   * the AI's reply included — is dropped from the state, the log and the move list, so a saved
+   * record never contains a move that was taken back.
+   */
+  const undo = useCallback(() => {
+    const index = historyRef.current.map(s => s.by).lastIndexOf(HUMAN)
+    if (index < 0) return
+    const snapshot = historyRef.current[index]
+    historyRef.current = historyRef.current.slice(0, index)
+    movesRef.current = movesRef.current.slice(0, snapshot.movesLength)
+    logRef.current = logRef.current.slice(0, snapshot.logLength)
+    gameStateRef.current = snapshot.state
+    setGameState(snapshot.state)
+    setLog(logRef.current)
+    setCanUndo(historyRef.current.some(s => s.by === HUMAN))
+  }, [])
 
   const rematch = useCallback(() => setGeneration(g => g + 1), [])
 
@@ -192,5 +258,7 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
     ? legalMoves(gameState)
     : []
 
-  return { status, errorDetail, gameState, legal, log, act, rematch }
+  // Once the game is over the record has been written — rewinding past that would leave a saved
+  // game disagreeing with what is on screen.
+  return { status, errorDetail, gameState, legal, log, act, undo, canUndo: canUndo && gameState?.winner === null, rematch }
 }

@@ -6,6 +6,7 @@ import { db } from '../data/db'
 import type { SavedDeck } from '../data/deckStore'
 import type { SwuCard } from '../data/cards'
 import type { UseGameOptions } from '../hooks/useGame'
+import { legalMoves } from '../engine/legalMoves'
 
 const SWU_CARDS: SwuCard[] = [
   { Set: 'TST', Number: '001', Name: 'Test Leader', Type: 'Leader', Cost: '5', Power: '4', HP: '7' },
@@ -31,7 +32,17 @@ const DECK: SavedDeck = {
 }
 
 const identity = <T,>(arr: T[]) => arr
-const OPTS: UseGameOptions = { shuffle: identity, rng: () => 0.999999, firstPlayer: 'player' }
+// Passive opponent injected outright — the real AI draws from the state seed, so an rng near 1
+// no longer steers it. legalMoves puts the do-nothing move (pass / skipResource) last, so the
+// last move is passive in every phase — what the old `rng: () => 0.999999` meant.
+const OPTS: UseGameOptions = {
+  shuffle: identity,
+  firstPlayer: 'player',
+  ai: s => {
+    const moves = legalMoves(s)
+    return moves.length > 0 ? moves[moves.length - 1] : null
+  },
+}
 
 async function seedCards() {
   for (const card of SWU_CARDS) {
@@ -140,6 +151,26 @@ describe('GameScreen', () => {
     expect(zoom.style.visibility).not.toBe('hidden')
     expect(zoom.style.left).toMatch(/px$/) // measured against its anchor, not left centred
     fireEvent.keyUp(window, { key: 'Shift', shiftKey: false })
+  })
+
+  /** #366: undo is hidden rather than disabled when there is nothing to take back. */
+  it('shows Undo only once the player has acted, and rewinds the board', async () => {
+    const user = userEvent.setup()
+    await renderBoard()
+    // renderBoard finishes the setup phase, so there is already something to undo.
+    const undo = screen.getByTestId('undo-btn')
+
+    await user.click(screen.getByTestId('hand-card-3'))
+    expect(within(screen.getByTestId('player-ground-units')).getAllByTestId('card-face')).toHaveLength(1)
+
+    await user.click(undo)
+    expect(within(screen.getByTestId('player-ground-units')).queryByTestId('card-face')).toBeNull()
+  })
+
+  it('hides Undo before the player has acted', async () => {
+    render(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
+    await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
+    expect(screen.queryByTestId('undo-btn')).toBeNull()
   })
 
   it('playing a hand card resolves the move and the AI responds', async () => {

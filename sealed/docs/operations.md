@@ -128,7 +128,44 @@ Everything is on-device; there is no account or server state.
 |---|---|---|
 | Imported decks | localStorage key `sealed_decks` | Remove buttons in-app, or clear the key |
 | Card cache | IndexedDB `dmgctrl-sealed` → `cards` | Delete the DB in devtools → re-hydrates on next play |
-| Game records | IndexedDB `dmgctrl-sealed` → `games` | Delete rows/DB in devtools |
+| Game records | IndexedDB `dmgctrl-sealed` → `games` | See "Clearing game records" below |
+
+### Clearing game records
+
+1. Open the app: **https://dmgctrl.app/sealed** (or the dev server). IndexedDB is per-origin,
+   so this must be the tab actually running the app — not a blank tab.
+2. Open devtools (**F12**, or **Ctrl+Shift+I** / **Cmd+Option+I**) and go to the **Console**.
+3. Paste and run:
+
+```js
+__sealedClearGames()
+```
+
+It logs `[sealed] cleared N game records` and resolves to the number deleted. Run it again and
+you should see `0` — that confirms the store is empty rather than the call having silently done
+nothing.
+
+If the console reports `__sealedClearGames is not defined`, the tab is running an older build:
+hard-reload (**Ctrl+Shift+R** / **Cmd+Shift+R**) and try again. Failing that, either route below
+works without any app code:
+
+```js
+indexedDB.open('dmgctrl-sealed').onsuccess = e => {
+  const store = e.target.result.transaction('games', 'readwrite').objectStore('games')
+  store.clear().onsuccess = () => console.log('game records cleared')
+}
+```
+
+Or by hand: **Application → IndexedDB → dmgctrl-sealed → games → Clear object store**.
+
+All three touch only `games`. Imported decks (localStorage) and the card cache are untouched, so
+nothing needs re-hydrating afterwards and your decks stay put.
+
+**When you need to:** records written before the AI became state-seeded (#366) **do not replay
+faithfully** — that opponent drew from `Math.random`, so re-resolving the stored move list
+diverges from the stored final state. Records are the substrate for E7 training, so clear the
+store once before collecting anything you intend to train on. Records written since are exact
+replays, and there's a test pinning that (`deterministicReplay.test.ts`).
 
 ## Diagnostics & logging
 
@@ -138,6 +175,7 @@ also mirrors to the devtools console with a `[sealed]` prefix.
 - **Console**: filter on `[sealed]` to follow hydration and game-load events live.
 - **Support dump**: run `__sealedLogs()` in the devtools console for the last 200
   entries (`{at, level, message, detail}`) — useful to paste into a bug report.
+- **Wipe game records**: `__sealedClearGames()` — see "Clearing game records" above.
 
 **"Couldn't load the cards for this deck"** now shows the specific cause under the
 message (e.g. `Card ASH_020 could not be loaded (SWUDB 502, no swuapi match)`),
