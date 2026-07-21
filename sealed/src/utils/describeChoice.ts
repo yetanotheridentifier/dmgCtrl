@@ -111,6 +111,16 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       return [`choose a unit to heal up to ${choice.maxHeal} damage from`]
     case 'returnFriendlyUnit':
       return ['choose one of your units to return to your hand']
+    case 'selectArenaToGrant':
+      return ['choose an arena; every unit in it is dealt 2 damage when it attacks this phase']
+    case 'chooseMode':
+      return ['choose which effect to take']
+    case 'mayPlayUnitFromDiscard':
+      return ['choose a unit to play from your discard pile']
+    case 'chooseNumber':
+      return ['choose a number']
+    case 'selectUnitToSteal':
+      return ['choose an enemy unit to take control of']
     case 'multiPick': {
       // Optional chaining is deliberate: this is decoration over the board, and a malformed
       // choice must degrade to a vaguer prompt rather than throwing and blanking the screen.

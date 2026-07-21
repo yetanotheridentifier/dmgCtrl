@@ -1211,6 +1211,14 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // Whichever upgrade-defeat choice is live drives the same two-step picker. Step one highlights
     // the hosts on the board; step two opens the picker on the chosen host. A host that has left
     // play (defeated mid-choice) drops us back to step one rather than opening an empty picker.
+    /**
+     * Any choice waiting on the player, board-target or not. Menu-driven choices (the arena to
+     * mine, which mode to take) had no prompt at all, leaving a row of buttons with nothing
+     * explaining what was being asked (#379/#380). Suppressed when an overlay is showing, since
+     * those carry their own prompt.
+     */
+    const anyPlayerChoice = gameState.pendingChoices?.find(c => c.controller === 'player')
+
     const upgradePick = selectUpgradeChoice ?? uniqueChoice
     const upgradeHosts = upgradePick ? upgradeHostIds(upgradePick.candidates) : []
     const pickedHost = upgradeHost !== null && upgradeHosts.includes(upgradeHost) ? upgradeHost : null
@@ -1401,11 +1409,11 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           // compete with a modal, whatever the stacking order says.
           // Step one of the upgrade pick has its own instruction; it is computed after the choice
           // is found, so it overrides the general prompt here rather than inside it.
-          prompt={reporting
+          prompt={reporting || choiceOverlay
             ? undefined
             : upgradePick && pickedHost === null
               ? ['Choose the unit to defeat an upgrade from']
-              : actionPrompt}
+              : actionPrompt ?? (anyPlayerChoice ? describeChoiceParts(gameState, anyPlayerChoice) : undefined)}
           playerInteraction={playerInteraction}
           opponentInteraction={opponentInteraction}
           baseAction={side => {

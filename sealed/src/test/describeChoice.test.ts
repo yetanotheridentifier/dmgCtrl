@@ -66,6 +66,15 @@ describe('describeChoiceParts', () => {
     expect(parts.some(p => typeof p !== 'string' && p.cardId === 'SRC')).toBe(true)
   })
 
+  /** Menu-driven choices had no prompt at all, so a row of buttons appeared unexplained. */
+  it('prompts for the menu-driven choices too, not just board targets', () => {
+    expect(prompt({ kind: 'selectArenaToGrant', id: 'c', controller: 'player', grantCardId: 'GRANT_MINEFIELD' } as unknown as PendingChoice)).toMatch(/arena/i)
+    expect(prompt({ kind: 'chooseMode', id: 'c', controller: 'player', modes: ['healBase'] } as unknown as PendingChoice)).toMatch(/choose/i)
+    expect(prompt({ kind: 'chooseNumber', id: 'c', controller: 'player', max: 10 } as unknown as PendingChoice)).toMatch(/number/i)
+    expect(prompt({ kind: 'mayPlayUnitFromDiscard', id: 'c', controller: 'player', candidates: [] } as unknown as PendingChoice)).toMatch(/discard/i)
+    expect(prompt({ kind: 'selectUnitToSteal', id: 'c', controller: 'player', targets: ['u1'] } as unknown as PendingChoice)).toMatch(/control/i)
+  })
+
   it('still reads sensibly when the choice records no source (see #374)', () => {
     // selectUnitToDefeat has no source field — the prompt must not imply one.
     const parts = describeChoiceParts(s, sample.selectUnitToDefeat)

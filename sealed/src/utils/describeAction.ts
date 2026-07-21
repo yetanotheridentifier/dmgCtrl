@@ -160,7 +160,14 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'damageAnyBases') return 'Done'
       if (choice.kind === 'selectPair' || choice.kind === 'selectUpgradeToReturn' || choice.kind === 'mayPlayUpgradeFree') return 'Decline'
       if (choice.kind === 'mayPayExhaustArena' || choice.kind === 'revealUnitFromHand') return "Don't"
-      return `Skip ${choice.kind}`
+      if (choice.kind === 'mayPlayUnitFromDiscard') return "Don't play"
+      // Named rather than left to the generic decline: a played unit can raise several choices at
+      // once, and identical buttons make it unclear which one you are turning down.
+      if (choice.kind === 'support') return 'Decline support'
+      if (choice.kind === 'ambush') return "Don't ambush"
+      // Never fall through to the kind's internal name: "Skip mayPlayUnitFromDiscard" reached
+      // players (#379/#380). An unlabelled decline is still a decline.
+      return 'Decline'
     }
     case 'acceptChoice': {
       const choice = findChoice(state, action.choiceId)
@@ -367,6 +374,40 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         return `Exhaust ${target ?? 'unit'}`
       }
       if (choice.kind === 'chooseOne') return choice.options[action.optionIndex ?? 0]?.label ?? 'Choose'
+      // Choose Your Path: name the mode, not "Accept". The modes are engine keys, so they are
+      // spelled out here rather than shown raw.
+      if (choice.kind === 'chooseMode') {
+        const mode = choice.modes[action.optionIndex ?? 0]
+        if (mode === 'healBase') return 'Heal 5 from your base'
+        if (mode === 'mandoToken') return 'Create a Mandalorian token'
+        return 'Choose'
+      }
+      // Treacherous Minefield: two arenas, two buttons. Unlabelled they were both "Accept", which
+      // read as one button per unit (#379).
+      if (choice.kind === 'selectArenaToGrant') {
+        return `Mine the ${(action.optionIndex ?? 0) === 0 ? 'ground' : 'space'} arena`
+      }
+      if (choice.kind === 'mayPlayUnitFromDiscard') {
+        const cardId = choice.candidates[action.optionIndex ?? 0]
+        return `Play ${cardId ? state.cards[cardId]?.name ?? cardId : 'unit'}`
+      }
+      if (choice.kind === 'chooseNumber') return `Choose ${action.optionIndex ?? 0}`
+      if (choice.kind === 'selectUnitToSteal') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Take control of ${target ?? 'unit'}`
+      }
+      if (choice.kind === 'selectUnitToReady') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Ready ${target ?? 'unit'}`
+      }
+      if (choice.kind === 'selectUnitToReturn') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Return ${target ?? 'unit'} to hand`
+      }
+      if (choice.kind === 'selectDistributeSource') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Take from ${target ?? 'unit'}`
+      }
       return 'Accept'
     }
     case 'resourceCard': {

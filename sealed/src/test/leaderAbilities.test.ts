@@ -298,9 +298,11 @@ describe('choice-id collisions (regression)', () => {
     const ids = played.pendingChoices!.map(c => c.id)
     expect(new Set(ids).size).toBe(ids.length) // ids are unique
 
-    // No duplicate "Skip support" — each skip resolves to its own choice.
+    // Each skip resolves to its own choice, and reads distinctly: two identical decline buttons
+    // would leave it unclear which trigger you were turning down.
     const skipLabels = legalMoves(played).filter(a => a.type === 'skipTrigger').map(a => describeAction(played, 'player', a))
-    expect(skipLabels.filter(l => l === 'Skip support')).toHaveLength(1)
+    expect(skipLabels.filter(l => l === 'Decline support')).toHaveLength(1)
+    expect(new Set(skipLabels).size).toBe(skipLabels.length)
   })
 })
 
