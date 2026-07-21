@@ -46,6 +46,13 @@ export interface GameValue {
   undo: () => void
   canUndo: boolean
   rematch: () => void
+  /**
+   * The game so far as replay data, for an in-app bug report (#373). A function rather than a
+   * value: it reads refs, so nothing re-renders as the game goes on, and it is only ever called
+   * when a report is actually being filed. Undone moves are already truncated out, so a report
+   * taken after an undo still replays.
+   */
+  replayData: () => { initialState: GameState | null; moves: MoveRecord[] }
 }
 
 export interface UseGameOptions {
@@ -263,11 +270,13 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
 
   const rematch = useCallback(() => setGeneration(g => g + 1), [])
 
+  const replayData = useCallback(() => ({ initialState: initialStateRef.current, moves: [...movesRef.current] }), [])
+
   const legal = gameState && status === 'playing' && gameState.activePlayer === HUMAN
     ? legalMoves(gameState)
     : []
 
   // Once the game is over the record has been written — rewinding past that would leave a saved
   // game disagreeing with what is on screen.
-  return { status, errorDetail, gameState, legal, log, act, undo, canUndo: canUndo && gameState?.winner === null, rematch }
+  return { status, errorDetail, gameState, legal, log, act, undo, canUndo: canUndo && gameState?.winner === null, rematch, replayData }
 }

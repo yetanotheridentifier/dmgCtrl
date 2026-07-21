@@ -257,6 +257,93 @@ describe('GameScreen', () => {
     expect(screen.queryByTestId('action-prompt')).toBeNull()
   })
 
+  /**
+   * #373: the report is filed by opening GitHub's own new-issue page (so it is authored by
+   * whoever is signed in there, and no token lives in the app) with the full report on the
+   * clipboard, because the replay payload is far too large for a URL.
+   */
+  describe('bug report', () => {
+    const openReport = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(screen.getByTestId('bug-report-btn'))
+      await user.type(screen.getByTestId('bug-report-title'), 'Game hung')
+      await user.type(screen.getByTestId('bug-report-description'), 'After the initiative.')
+    }
+
+    /** The form is modal: board decoration must not paint over it or distract from it. */
+    it('hides the action prompt while the form is open', async () => {
+      const user = userEvent.setup()
+      render(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
+      await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
+      expect(screen.getByTestId('action-prompt')).toBeInTheDocument() // the mulligan prompt
+
+      await user.click(screen.getByTestId('bug-report-btn'))
+      expect(screen.queryByTestId('action-prompt')).toBeNull()
+
+      await user.click(screen.getByTestId('bug-report-cancel'))
+      expect(screen.getByTestId('action-prompt')).toBeInTheDocument()
+    })
+
+    it('sits in the header beside Help and opens the form', async () => {
+      const user = userEvent.setup()
+      await renderBoard()
+      expect(screen.queryByTestId('bug-report-overlay')).toBeNull()
+
+      await user.click(screen.getByTestId('bug-report-btn'))
+      expect(screen.getByTestId('bug-report-overlay')).toBeInTheDocument()
+      await user.click(screen.getByTestId('bug-report-cancel'))
+      expect(screen.queryByTestId('bug-report-overlay')).toBeNull()
+    })
+
+    it('copies the report and opens a prefilled issue', async () => {
+      const open = vi.fn()
+      vi.stubGlobal('open', open)
+      const user = userEvent.setup()
+      await renderBoard()
+      await user.click(screen.getByTestId('hand-card-3')) // a move worth replaying
+
+      // After the last userEvent.setup() (renderBoard calls one of its own), or its clipboard
+      // stub replaces ours.
+      const writeText = vi.fn().mockResolvedValue(undefined)
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+      await openReport(user)
+      // fireEvent, not user.click: userEvent owns the clipboard during its own API calls, which
+      // would swap our stub back out mid-click.
+      fireEvent.click(screen.getByTestId('bug-report-submit'))
+
+      await waitFor(() => expect(writeText).toHaveBeenCalledOnce())
+      const report = writeText.mock.calls[0][0] as string
+      expect(report).toContain('After the initiative.')
+      expect(report).toContain('"initialState"') // the replay payload rides along
+      expect(report).toMatch(/Build/)
+
+      const url = new URL(open.mock.calls[0][0] as string)
+      expect(url.searchParams.get('title')).toBe('bug: Game hung')
+      expect(url.searchParams.get('labels')).toBe('bug')
+      await waitFor(() => expect(screen.queryByTestId('bug-report-overlay')).toBeNull())
+    })
+
+    it('keeps the form open with the text to copy when the clipboard is refused', async () => {
+      const open = vi.fn()
+      vi.stubGlobal('open', open)
+      const user = userEvent.setup()
+      await renderBoard()
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+        configurable: true,
+      })
+      await openReport(user)
+      // fireEvent, not user.click: userEvent owns the clipboard during its own API calls, which
+      // would swap our stub back out mid-click.
+      fireEvent.click(screen.getByTestId('bug-report-submit'))
+
+      const fallback = await screen.findByTestId('bug-report-fallback') as HTMLTextAreaElement
+      expect(fallback.value).toContain('After the initiative.')
+      expect(fallback.value).toContain('"initialState"') // the replay payload is still there to copy
+      expect(screen.getByTestId('bug-report-overlay')).toBeInTheDocument() // nothing lost
+      expect(open).not.toHaveBeenCalled() // no half-filed issue
+    })
+  })
+
   it('playing a hand card resolves the move and the AI responds', async () => {
     const user = userEvent.setup()
     await renderBoard()

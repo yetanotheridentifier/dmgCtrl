@@ -10,6 +10,10 @@ import { describeAction, handCardRef } from '../utils/describeAction'
 import type { DescribePart } from '../utils/describeAction'
 import { describeChoiceParts, BOARD_TARGET_KINDS } from '../utils/describeChoice'
 import { upgradeHostIds } from '../utils/upgradeHosts'
+import { buildReportMarkdown, issueUrl } from '../utils/bugReport'
+import { BugReportOverlay, BugIcon } from './bugReportOverlay'
+import { BUILD_TAG } from '../buildTag'
+import { isDev } from '../env'
 import { orderUnits } from './boardLayout'
 import { outcomeBanner } from './outcome'
 import CardFace from './cardFace'
@@ -890,7 +894,7 @@ function PlayerBar({ state, hand, action }: { state: GameState; hand: ReactNode;
 }
 
 export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOptions }: Props) {
-  const { status, errorDetail, gameState, legal, log, act, undo, canUndo, rematch } = useGame(deck, opponentDeck, gameOptions)
+  const { status, errorDetail, gameState, legal, log, act, undo, canUndo, rematch, replayData } = useGame(deck, opponentDeck, gameOptions)
   // Board affordance: click an actionable friendly unit to select it,
   // then click a highlighted target to attack. Any action clears the selection.
   const [selectedAttacker, setSelectedAttacker] = useState<string | null>(null)
@@ -904,6 +908,26 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   // obvious where it sits and who controls it), then choose which of its upgrades in the overlay.
   // This holds the unit chosen in step one; null means we are still on step one.
   const [upgradeHost, setUpgradeHost] = useState<string | null>(null)
+  // Bug report (#373): `reporting` opens the form; `fallbackReport` holds the assembled text when
+  // the clipboard refused it, so the report is shown to copy by hand rather than lost.
+  const [reporting, setReporting] = useState(false)
+  const [fallbackReport, setFallbackReport] = useState<string | undefined>(undefined)
+
+  async function submitReport(title: string, description: string) {
+    const { initialState, moves } = replayData()
+    const markdown = buildReportMarkdown({ description, buildTag: BUILD_TAG, isDev: isDev(), log, initialState, moves })
+    try {
+      await navigator.clipboard.writeText(markdown)
+    } catch {
+      // Keep the form open with the text in reach; opening GitHub now would mean a half-filed
+      // issue with nothing to paste into it.
+      setFallbackReport(markdown)
+      return
+    }
+    window.open(issueUrl(title), '_blank', 'noopener')
+    setReporting(false)
+    setFallbackReport(undefined)
+  }
 
   function clearSelections() {
     setSelectedAttacker(null)
@@ -1373,11 +1397,15 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         <OpponentBar state={gameState} />
         <Board
           state={gameState}
+          // Suppressed entirely while the bug form is open: it is board decoration and must not
+          // compete with a modal, whatever the stacking order says.
           // Step one of the upgrade pick has its own instruction; it is computed after the choice
           // is found, so it overrides the general prompt here rather than inside it.
-          prompt={upgradePick && pickedHost === null
-            ? ['Choose the unit to defeat an upgrade from']
-            : actionPrompt}
+          prompt={reporting
+            ? undefined
+            : upgradePick && pickedHost === null
+              ? ['Choose the unit to defeat an upgrade from']
+              : actionPrompt}
           playerInteraction={playerInteraction}
           opponentInteraction={opponentInteraction}
           baseAction={side => {
@@ -1404,13 +1432,23 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             </button>
             <span className="truncate text-xl font-extralight tracking-[0.1em] text-ink">dmgCtrl</span>
           </div>
-          <button
-            onClick={onHelp}
-            aria-label="Help"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-line text-ink-dim hover:text-ink shadow-[0_0_8px_rgba(156,163,175,0.2)]"
-          >
-            ?
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              data-testid="bug-report-btn"
+              onClick={() => setReporting(true)}
+              aria-label="Report a bug"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-line text-ink-dim hover:text-ink shadow-[0_0_8px_rgba(156,163,175,0.2)]"
+            >
+              <BugIcon />
+            </button>
+            <button
+              onClick={onHelp}
+              aria-label="Help"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-line text-ink-dim hover:text-ink shadow-[0_0_8px_rgba(156,163,175,0.2)]"
+            >
+              ?
+            </button>
+          </div>
         </header>
         {/* `dir=rtl` on the scroll container puts the scrollbar on the LEFT; the inner
             wrapper restores `dir=ltr` so the text reads normally. Newest entries render
@@ -1442,6 +1480,16 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
 
       {/* "Look at a card" overlay (Camtono) — centre-screen, over the board. */}
       {choiceOverlay}
+
+      {/* Bug report (#373): sits above the board, but below the zoom so a card can still be read
+          while describing what went wrong. */}
+      {reporting && (
+        <BugReportOverlay
+          onSubmit={submitReport}
+          onCancel={() => { setReporting(false); setFallbackReport(undefined) }}
+          fallbackReport={fallbackReport}
+        />
+      )}
 
       {/* Game over — a modal overlay over the whole screen. */}
       {gameState && gameState.winner !== null && (
