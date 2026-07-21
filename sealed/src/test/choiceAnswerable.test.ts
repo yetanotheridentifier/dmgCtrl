@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
 import '../engine/cardDefinitions' // side-effect: registers every implemented card
-import { state, player, card, CARDS, unit } from './helpers/engineFixtures'
+import { state, player, card, CARDS, unit, ready } from './helpers/engineFixtures'
 import type { GameState } from '../engine/types'
 
 /**
@@ -37,6 +37,63 @@ function aboutToRegroup(uwingOwner: 'player' | 'opponent'): GameState {
     },
   })
 }
+
+/**
+ * An attack can *resolve* a pending choice (Ambush, Support, Grogu's "you may attack" on taking
+ * the initiative). When it does, it must finish the same deferred work that answering the choice
+ * through the menu would — above all the turn transition `takeInitiative` parked while the choice
+ * was outstanding. Bare `advanceTurn` skipped it, stranding `pendingInitiativeEndsPhase` set: the
+ * action phase carried on when it should have ended, and the flag stayed armed to force a regroup
+ * at some unrelated later moment.
+ */
+describe('an attack that resolves a choice completes the deferred transition', () => {
+  const GROGU = card({ id: 'ASH_155', name: 'Grogu', type: 'unit', power: 2, hp: 3 })
+  const SHIP = card({ id: 'SHIP', name: "Survivors' Langskib", type: 'unit', power: 4, hp: 4 })
+
+  /** The opponent has just passed, so taking the initiative ends the action phase (CR 1.15.5c). */
+  const afterOpponentPassed = () => state({
+    phase: 'action',
+    activePlayer: 'player',
+    initiative: 'opponent',
+    initiativeTakenBy: null,
+    consecutivePasses: 1,
+    cards: { ...CARDS, ASH_155: GROGU, SHIP },
+    players: {
+      player: player({ deck: ['D1', 'D2'], resources: ready(5), units: [unit('g', 'ASH_155'), unit('sh', 'SHIP')] }),
+      opponent: player({ deck: ['D1', 'D2'] }),
+    },
+  })
+
+  it('ends the phase after the granted attack is taken', () => {
+    const took = resolve(afterOpponentPassed(), { type: 'takeInitiative' })
+    expect(took.pendingChoices?.[0].kind).toBe('mayAttackAnyUnit')
+    expect(took.pendingInitiativeEndsPhase).toBe(true)
+
+    const attacked = resolve(took, { type: 'attack', attackerId: 'sh', target: { kind: 'base' } })
+    expect(attacked.phase).toBe('regroup') // the parked transition ran
+    expect(attacked.pendingInitiativeEndsPhase).toBeUndefined() // …and disarmed
+    assertAnswerable(attacked, 'after a granted attack ended the phase')
+  })
+
+  it('ends the phase just the same when the granted attack is declined', () => {
+    const took = resolve(afterOpponentPassed(), { type: 'takeInitiative' })
+    const skipped = resolve(took, { type: 'skipTrigger', choiceId: took.pendingChoices![0].id })
+    expect(skipped.phase).toBe('regroup')
+    expect(skipped.pendingInitiativeEndsPhase).toBeUndefined()
+  })
+
+  it('hands the turn over normally when taking the initiative did NOT end the phase', () => {
+    const midPhase = { ...afterOpponentPassed(), consecutivePasses: 0 }
+    const took = resolve(midPhase, { type: 'takeInitiative' })
+    expect(took.pendingInitiativeEndsPhase).toBe(false)
+
+    const attacked = resolve(took, { type: 'attack', attackerId: 'sh', target: { kind: 'base' } })
+    expect(attacked.phase).toBe('action')
+    expect(attacked.activePlayer).toBe('opponent')
+    expect(attacked.pendingInitiativeEndsPhase).toBeUndefined()
+    assertAnswerable(attacked, 'after a granted attack mid-phase')
+  })
+})
 
 describe('a raised choice is always answerable', () => {
   it('regroup trigger owned by the initiative holder', () => {

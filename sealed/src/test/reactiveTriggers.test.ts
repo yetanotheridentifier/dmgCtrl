@@ -168,6 +168,47 @@ describe('whenDrawCards — Axe Woves (169)', () => {
     expect(adv(U(drawCards(s, 'opponent', 1), 'a'))).toBe(0)
     expect(adv(U(drawCards(s, 'player', 1), 'a'))).toBe(0) // nothing drawn → no trigger
   })
+
+  /**
+   * The card spells this case out: "When you draw 1 or more cards (including during the regroup
+   * phase)". The regroup draw built the hand inline instead of going through `drawCards`, so the
+   * trigger never fired there.
+   */
+  it('fires on the regroup draw, for both players', () => {
+    const s = state({
+      phase: 'action',
+      activePlayer: 'player',
+      initiative: 'player',
+      consecutivePasses: 1, // one more pass ends the phase
+      cards: G,
+      players: {
+        player: rich({ units: [unit('a', 'ASH_169')], deck: ['GROUNDER', 'GROUNDER', 'GROUNDER'] }),
+        opponent: player({ units: [unit('b', 'ASH_169')], deck: ['GROUNDER', 'GROUNDER', 'GROUNDER'] }),
+      },
+    })
+    const after = resolve(s, { type: 'pass' })
+    expect(after.phase).toBe('regroup')
+    expect(adv(U(after, 'a'))).toBe(1)
+    expect(adv(U(after, 'b'))).toBe(1) // the opponent's copy reacts to their own draw
+  })
+
+  it('still takes empty-deck damage when the regroup draw comes up short', () => {
+    const s = state({
+      phase: 'action',
+      activePlayer: 'player',
+      initiative: 'player',
+      consecutivePasses: 1,
+      cards: G,
+      players: {
+        player: rich({ units: [unit('a', 'ASH_169')], deck: ['GROUNDER'] }), // 1 of the 2 cards
+        opponent: player({ deck: ['GROUNDER', 'GROUNDER'] }),
+      },
+    })
+    const before = s.players.player.base.damage
+    const after = resolve(s, { type: 'pass' })
+    expect(after.players.player.base.damage).toBe(before + 3) // one missed card = 3 damage
+    expect(adv(U(after, 'a'))).toBe(1) // a partial draw is still a draw
+  })
 })
 
 describe('whenOwnBaseDamaged — Blade Three (204)', () => {
