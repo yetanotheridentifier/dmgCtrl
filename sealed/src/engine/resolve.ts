@@ -453,6 +453,10 @@ function resumeAfterChoice(state: GameState, resolved: PendingChoice): GameState
   }
   // A combat suspended for an On Defense choice resumes once the queue drains.
   if (state.pendingAttack) return resumePendingAttack(state)
+  // Regroup choices are resolved before anyone resources, and resourcing starts with the
+  // initiative holder — `advanceTurn` below is action-phase logic and would hand the turn to the
+  // wrong side here (or worse, re-enter regroup).
+  if (state.phase === 'regroup') return { ...state, activePlayer: state.initiative }
   // A "when you take the initiative" choice: complete the deferred turn transition.
   if (state.pendingInitiativeEndsPhase !== undefined) {
     const cleared = { ...state, pendingInitiativeEndsPhase: undefined }
@@ -2104,12 +2108,19 @@ function enterRegroup(state: GameState): GameState {
   next = drawForRegroup(next, 'opponent')
   next = checkWin(next)
   if (next.winner !== null) return next
-  // "When the regroup phase starts" abilities (e.g. Heightened Awareness).
+  // "When the regroup phase starts" abilities (e.g. Alphabet Squadron U-Wing).
   next = checkWin(fireForAllUnits(next, 'whenRegroupStarts'))
   if (next.winner !== null) return next
+  // These fire for BOTH players' units, and a choice belongs to the card's controller whichever
+  // side that is. Resourcing starts with the initiative holder, but if the only pending choice is
+  // the other player's, handing them the turn is the only way it can be answered: `choiceMoves`
+  // offers the active player's choices alone, so otherwise the regroup phase has no legal move at
+  // all and the game hangs (#365). `resumeAfterChoice` hands back once the queue drains.
+  const pending = next.pendingChoices ?? []
+  const answerable = pending.some(c => c.controller === next.initiative) || pending.length === 0
   return {
     ...next,
-    activePlayer: next.initiative,
+    activePlayer: answerable ? next.initiative : pending[0].controller,
     regroupResourced: { player: false, opponent: false },
   }
 }
