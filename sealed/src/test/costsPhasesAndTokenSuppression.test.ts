@@ -94,12 +94,33 @@ describe('Eviscerator (149) — friendly Advantage tokens lose all abilities', (
     },
   })
 
-  it('zeroes the token’s power bonus for friendly units only', () => {
+  /**
+   * "Lose all abilities" blanks the token's ability, not its printed stats: the token card is a
+   * 1/0, and the card's own reminder text names the sole consequence as "(They aren't defeated
+   * after combat.)" So the +1 keeps applying — and since the tokens are never spent, they stack,
+   * which is the whole point of the card.
+   */
+  it('keeps the token’s printed +1 power — only its ability is blanked', () => {
     const withEv = board(true)
-    expect(effectivePower(withEv, U(withEv, 'a'))).toBe(2) // 2 + 0, token inert
-    expect(effectivePower(withEv, U(withEv, 'e'))).toBe(3) // enemy token still gives +1
+    expect(effectivePower(withEv, U(withEv, 'a'))).toBe(3) // 2 + 1, stats are not an ability
+    expect(effectivePower(withEv, U(withEv, 'e'))).toBe(3) // enemy token unaffected
     const without = board(false)
     expect(effectivePower(without, U(without, 'a'))).toBe(3)
+  })
+
+  it('accumulates: unspent tokens keep adding power across combats', () => {
+    const s = board(true)
+    const before = effectivePower(s, U(s, 'a'))
+    const done = resolve(s, { type: 'attack', attackerId: 'a', target: { kind: 'unit', instanceId: 'e' } })
+    // The token survived the attack, so the attacker is no weaker afterwards.
+    expect(effectivePower(done, U(done, 'a'))).toBe(before)
+    // A second token stacks on top rather than replacing the first.
+    const twice = { ...done, players: { ...done.players, player: { ...done.players.player,
+      units: done.players.player.units.map(u => u.instanceId === 'a'
+        ? { ...u, upgrades: [...u.upgrades, { cardId: TOKEN_ADVANTAGE, owner: 'player' as const }] }
+        : u),
+    } } }
+    expect(effectivePower(twice, U(twice, 'a'))).toBe(before + 1)
   })
 
   it('keeps friendly tokens on the unit after combat, while enemy tokens are spent', () => {

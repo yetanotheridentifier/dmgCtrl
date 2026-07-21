@@ -109,6 +109,12 @@ function resolveAction(state: GameState, action: Action): GameState {
           const handed = handOffOpponentChoice(attacked, attacked.activePlayer)
           return handed.pendingResumeActive !== undefined ? handed : { ...handed, pendingResumeActive: attacked.activePlayer }
         }
+        // Taking the attack is how you ANSWER an Ambush / Support / "you may attack" choice, so it
+        // owes the same follow-through as answering from the menu: above all the turn transition
+        // `takeInitiative` parked while the choice was outstanding. Ending on a bare `advanceTurn`
+        // left `pendingInitiativeEndsPhase` set, so the phase ran on and the flag stayed armed to
+        // force a regroup at an unrelated later moment.
+        if (choice) return resumeAfterChoice(attacked, choice)
         return advanceTurn(resetPasses(attacked))
       })
     case 'takeInitiative':
@@ -453,6 +459,10 @@ function resumeAfterChoice(state: GameState, resolved: PendingChoice): GameState
   }
   // A combat suspended for an On Defense choice resumes once the queue drains.
   if (state.pendingAttack) return resumePendingAttack(state)
+  // Regroup choices are resolved before anyone resources, and resourcing starts with the
+  // initiative holder — `advanceTurn` below is action-phase logic and would hand the turn to the
+  // wrong side here (or worse, re-enter regroup).
+  if (state.phase === 'regroup') return { ...state, activePlayer: state.initiative }
   // A "when you take the initiative" choice: complete the deferred turn transition.
   if (state.pendingInitiativeEndsPhase !== undefined) {
     const cleared = { ...state, pendingInitiativeEndsPhase: undefined }
@@ -2057,14 +2067,14 @@ const REGROUP_DRAW = 2
 const EMPTY_DECK_DAMAGE = 3
 
 function drawForRegroup(state: GameState, id: PlayerId): GameState {
-  const p = state.players[id]
-  const drawn = p.deck.slice(0, REGROUP_DRAW)
-  const missed = REGROUP_DRAW - drawn.length
-  return updatePlayer(state, id, {
-    hand: [...p.hand, ...drawn],
-    deck: p.deck.slice(REGROUP_DRAW),
-    base: missed > 0 ? { ...p.base, damage: p.base.damage + missed * EMPTY_DECK_DAMAGE } : p.base,
-  })
+  // Draw through the shared primitive rather than building the hand inline, so "when you draw 1
+  // or more cards" fires — Axe Woves' text calls the regroup draw out explicitly. `drawCards`
+  // takes what it can and no-ops on an empty deck, so the shortfall is counted here.
+  const missed = Math.max(0, REGROUP_DRAW - state.players[id].deck.length)
+  const next = drawCards(state, id, REGROUP_DRAW)
+  if (missed === 0) return next
+  const p = next.players[id]
+  return updatePlayer(next, id, { base: { ...p.base, damage: p.base.damage + missed * EMPTY_DECK_DAMAGE } })
 }
 
 /** Clear every unit's Hidden state — it lasts only until the next phase. */
@@ -2104,12 +2114,19 @@ function enterRegroup(state: GameState): GameState {
   next = drawForRegroup(next, 'opponent')
   next = checkWin(next)
   if (next.winner !== null) return next
-  // "When the regroup phase starts" abilities (e.g. Heightened Awareness).
+  // "When the regroup phase starts" abilities (e.g. Alphabet Squadron U-Wing).
   next = checkWin(fireForAllUnits(next, 'whenRegroupStarts'))
   if (next.winner !== null) return next
+  // These fire for BOTH players' units, and a choice belongs to the card's controller whichever
+  // side that is. Resourcing starts with the initiative holder, but if the only pending choice is
+  // the other player's, handing them the turn is the only way it can be answered: `choiceMoves`
+  // offers the active player's choices alone, so otherwise the regroup phase has no legal move at
+  // all and the game hangs (#365). `resumeAfterChoice` hands back once the queue drains.
+  const pending = next.pendingChoices ?? []
+  const answerable = pending.some(c => c.controller === next.initiative) || pending.length === 0
   return {
     ...next,
-    activePlayer: next.initiative,
+    activePlayer: answerable ? next.initiative : pending[0].controller,
     regroupResourced: { player: false, opponent: false },
   }
 }
