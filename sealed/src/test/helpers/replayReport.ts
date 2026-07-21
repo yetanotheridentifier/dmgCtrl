@@ -1,5 +1,7 @@
 import ashSet from '../fixtures/ashSet.json'
 import minefieldArenaChoice from '../fixtures/reports/minefieldArenaChoice.json'
+import vaneFriendlyUpgrade from '../fixtures/reports/vaneFriendlyUpgrade.json'
+import vaneFriendlyUpgradeCards from '../fixtures/reports/vaneFriendlyUpgradeCards.json'
 import { buildCardDb } from '../../engine/cardDb'
 import { resolve } from '../../engine/resolve'
 import '../../engine/cardDefinitions' // side-effect: registers every implemented card
@@ -29,7 +31,15 @@ const ashCards = ashSet as SwuCard[]
  * Filed reports, keyed by name. Imported rather than read from disk so they are typechecked and
  * bundled the same way the other fixtures are; add an entry when a new report is worth keeping.
  */
-const REPORTS: Record<string, unknown> = { minefieldArenaChoice }
+const REPORTS: Record<string, unknown> = { minefieldArenaChoice, vaneFriendlyUpgrade }
+
+/**
+ * Card data a report needs from outside ASH, since the bundled fixture is ASH only. Keyed by the
+ * report it belongs to, so `loadReport` callers can pass it straight through as `extra`.
+ */
+export const REPORT_CARDS: Record<string, SwuCard[]> = {
+  vaneFriendlyUpgrade: vaneFriendlyUpgradeCards as SwuCard[],
+}
 
 /** Every card id a report's starting position refers to. */
 function referencedIds(state: Report['initialState']): string[] {
