@@ -11,7 +11,8 @@ import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
 import { randomAi } from '../ai/randomAi'
 import { setupAi } from '../ai/setupAi'
-import { describeAction } from '../utils/describeAction'
+import { describeActionParts, partsText } from '../utils/describeAction'
+import type { DescribePart } from '../utils/describeAction'
 import { saveGameRecord } from '../data/gameRecords'
 import { logger } from '../data/log'
 
@@ -20,6 +21,12 @@ export type GameStatus = 'loading' | 'error' | 'playing'
 export interface LogEntry {
   by: PlayerId
   text: string
+  /**
+   * The same description in pieces, so the log can render the cards it names as hover-to-zoom
+   * references. `text` stays the plain-text join — tests and any text-only consumer are
+   * unaffected by the richer form.
+   */
+  parts: DescribePart[]
 }
 
 export interface GameValue {
@@ -114,7 +121,8 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
           logLength: logRef.current.length + entries.length,
           movesLength: movesRef.current.length,
         })
-        entries.push({ by: AI, text: describeAction(current, AI, action, { redact: true }) })
+        const aiParts = describeActionParts(current, AI, action, { redact: true })
+        entries.push({ by: AI, text: partsText(aiParts), parts: aiParts })
         movesRef.current.push({ by: AI, action })
         current = resolve(current, action)
         steps++
@@ -221,7 +229,8 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
         logLength: logRef.current.length,
         movesLength: movesRef.current.length,
       })
-      const entries: LogEntry[] = [{ by: HUMAN, text: describeAction(prev, HUMAN, action) }]
+      const humanParts = describeActionParts(prev, HUMAN, action)
+      const entries: LogEntry[] = [{ by: HUMAN, text: partsText(humanParts), parts: humanParts }]
       movesRef.current.push({ by: HUMAN, action })
       let next = resolve(prev, action)
       next = driveAi(next, entries)

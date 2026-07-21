@@ -5,6 +5,7 @@
   --color-bg: #0a0e1a;            /* --color-bg-deep    */
   --color-bg-dark: #000510;       /* --color-bg-dark    */
   --color-surface: rgba(13, 27, 42, 0.45); /* translucent panel over starfield */
+  --color-surface-solid: #0d1b2a; /* same panel, opaque — for anything laid over card art */
   --color-line: #6b7280;          /* --color-ui-border  */
   --color-ink: #ffffff;           /* --color-text-primary */
   --color-ink-body: #d0d0d8;      /* --color-text-body  */

@@ -17,6 +17,83 @@ function anyUnitName(state: GameState, instanceId: string): string | undefined {
   return undefined
 }
 
+/**
+ * A described action, in pieces: plain text, or a reference to a specific card. The log and the
+ * action prompt render card references as hover-to-zoom, colour-coded by who controls the card
+ * — which needs the card's identity, and that is exactly what a flat string throws away (card
+ * names are not unique: 13 unit names collide with leader names).
+ */
+export type DescribePart = string | { cardId: string; controller: PlayerId; text: string }
+
+/** The plain-text form of a described action — the join of its parts. */
+export function partsText(parts: DescribePart[]): string {
+  return parts.map(p => (typeof p === 'string' ? p : p.text)).join('')
+}
+
+function unitRef(state: GameState, instanceId: string): DescribePart | undefined {
+  for (const controller of ['player', 'opponent'] as PlayerId[]) {
+    const u = state.players[controller].units.find(u => u.instanceId === instanceId)
+    if (u) return { cardId: u.cardId, controller, text: state.cards[u.cardId]?.name ?? u.cardId }
+  }
+  return undefined
+}
+
+/** A reference to a card in hand, for describing an action that is still being composed. */
+export function handCardRef(state: GameState, owner: PlayerId, handIndex: number): DescribePart | undefined {
+  const cardId = state.players[owner].hand[handIndex]
+  if (!cardId) return undefined
+  return { cardId, controller: owner, text: state.cards[cardId]?.name ?? cardId }
+}
+
+/**
+ * The tokenised form of `describeAction`. Branches that carry a card identity emit a reference;
+ * everything else falls back to the plain string, so an un-converted action renders as text
+ * rather than breaking. `partsText(describeActionParts(…)) === describeAction(…)` always holds
+ * (pinned by test), which is what makes that fallback safe.
+ */
+export function describeActionParts(state: GameState, by: PlayerId, action: Action, opts: DescribeOptions = {}): DescribePart[] {
+  const plain = () => [describeAction(state, by, action, opts)]
+
+  switch (action.type) {
+    case 'playUnit':
+    case 'playEvent': {
+      const ref = handCardRef(state, by, action.handIndex)
+      const card = state.cards[state.players[by].hand[action.handIndex]]
+      if (!ref || !card) return plain()
+      return ['Play ', ref, ` (${effectiveCost(state, by, card)})`]
+    }
+    case 'playUpgrade': {
+      const ref = handCardRef(state, by, action.handIndex)
+      const card = state.cards[state.players[by].hand[action.handIndex]]
+      if (!ref || !card) return plain()
+      const targetUnit = [...state.players.player.units, ...state.players.opponent.units].find(u => u.instanceId === action.targetInstanceId)
+      const target = unitRef(state, action.targetInstanceId)
+      return ['Play ', ref, ` (${effectiveCost(state, by, card, targetUnit)})`, ...(target ? [' on ', target] : [])]
+    }
+    case 'attack': {
+      const attacker = unitRef(state, action.attackerId)
+      if (!attacker) return plain()
+      if (action.target.kind === 'base') return ['Attack base with ', attacker]
+      const defender = unitRef(state, action.target.instanceId)
+      return defender ? ['Attack ', defender, ' with ', attacker] : plain()
+    }
+    case 'deployLeader': {
+      const cardId = state.players[by].leader.cardId
+      const name = state.cards[cardId]?.name
+      return name ? ['Deploy ', { cardId, controller: by, text: name }] : plain()
+    }
+    case 'resourceCard':
+    case 'setupResource': {
+      // Redacted picks stay plain: a card token would leak the identity through the zoom.
+      if (opts.redact) return plain()
+      const ref = handCardRef(state, by, action.handIndex)
+      return ref ? ['Resource ', ref] : plain()
+    }
+    default:
+      return plain()
+  }
+}
+
 export interface DescribeOptions {
   /**
    * Hide hidden information (CR 1.17): which card an opponent resources is
