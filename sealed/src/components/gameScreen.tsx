@@ -6,7 +6,9 @@ import type { UseGameOptions } from '../hooks/useGame'
 import type { SavedDeck } from '../data/deckStore'
 import type { EngineCard, GameState, PendingChoice, PlayerId, UnitState, UpgradeAttachment } from '../engine/types'
 import type { Action } from '../engine/actions'
-import { describeAction } from '../utils/describeAction'
+import { describeAction, handCardRef } from '../utils/describeAction'
+import type { DescribePart } from '../utils/describeAction'
+import { describeChoiceParts, BOARD_TARGET_KINDS } from '../utils/describeChoice'
 import { orderUnits } from './boardLayout'
 import { outcomeBanner } from './outcome'
 import CardFace from './cardFace'
@@ -17,6 +19,7 @@ import { TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE } from '../engine/token
 import { unitHasKeyword, auraContributions } from '../engine/keywords'
 import { lastingEffectTotals } from '../engine/types'
 import { useCardZoom } from './useCardZoom'
+import { DescribedParts } from './cardRef'
 import { CardZoomPopover } from './cardZoom'
 import { DeckPile, ResourceStack, DiscardPile, OpponentHand, EmptySlot } from './mat'
 
@@ -382,7 +385,7 @@ export function SearchRevealOverlay({ state, choice, onPick }: {
   return (
     <CardGridOverlay
       idPrefix="search"
-      prompt={`Look at the top ${choice.revealed.length} — discard a ground unit`}
+      prompt={`Look at the top ${choice.revealed.length}: discard a ground unit`}
       cardsById={state.cards}
       items={choice.revealed.map((cardId, i) => {
         const c = state.cards[cardId]
@@ -409,7 +412,7 @@ export function SearchDrawOverlay({ state, choice, onPick }: {
   return (
     <CardGridOverlay
       idPrefix="search-draw"
-      prompt={`Search the top ${choice.revealed.length} — draw a card sharing a Trait`}
+      prompt={`Search the top ${choice.revealed.length}: draw a card sharing a Trait`}
       cardsById={state.cards}
       items={choice.revealed.map((cardId, i) => eligible.has(i)
         ? { cardId, key: i, testId: `search-draw-pick-${i}`, actionLabel: 'Draw', onSelect: () => onPick(i) }
@@ -467,7 +470,7 @@ export function SearchPlayFreeOverlay({ state, choice, onPick, onDone }: {
   return (
     <CardGridOverlay
       idPrefix="search-free"
-      prompt={`Play space units for free — ${choice.budget} cost left`}
+      prompt={`Play space units for free: ${choice.budget} cost left`}
       cardsById={state.cards}
       items={choice.revealed.map((cardId, i) => eligible.has(i)
         ? { cardId, key: i, testId: `search-free-pick-${i}`, actionLabel: 'Play free', onSelect: () => onPick(i) }
@@ -495,7 +498,7 @@ export function OpponentHandOverlay({ state, choice, onDiscard, onDone }: {
   const hand = state.players[choice.target].hand
   const prompt = hand.length === 0
     ? "Opponent's hand is empty"
-    : choice.mayDiscard ? "Opponent's hand — you may discard one" : "Opponent's hand"
+    : choice.mayDiscard ? "Opponent's hand: you may discard one" : "Opponent's hand"
   return (
     <CardGridOverlay
       idPrefix="opp-hand"
@@ -713,13 +716,43 @@ function HandCard({ card, cardId, index, action, onAct, onSelect, selected, disc
  * base, your base, your leader — so the bases sit closest together and the leaders
  * are outermost. Each grid row is one player, aligning their lanes with their cards.
  */
-function Board({ state, playerInteraction, opponentInteraction, baseAction, leaderInteract }: {
+/** Cards resourced during setup, before the first round (CR 5.2.1f). */
+const SETUP_RESOURCES = 2
+
+/**
+ * Prompts for the steps that aren't resolved by clicking the board.
+ *
+ * Resourcing asks the player to click a hand card, which looks exactly like playing one, so
+ * both resourcing steps say which it is — setup counts the picks off (two are required),
+ * regroup's single pick is optional so it names the way out. The mulligan is resolved from the
+ * Action buttons entirely, and points there: without it a new player clicks at their hand and
+ * gets no response, with nothing on screen explaining why.
+ *
+ * Returns nothing outside those steps, or while the opponent is to act.
+ */
+function setupPrompt(state: GameState): DescribePart[] | undefined {
+  if (state.activePlayer !== 'player' || state.winner !== null) return undefined
+  if (state.phase === 'setup' && state.setupStage === 'mulligan') {
+    return ['Mulligan or keep your opening hand, choose in the Action column']
+  }
+  if (state.phase === 'setup' && state.setupStage === 'resource') {
+    return [`Choose a card to resource: ${state.players.player.resources.length} of ${SETUP_RESOURCES}`]
+  }
+  if (state.phase === 'regroup' && !state.regroupResourced.player) {
+    return ['Choose a card to resource, or skip']
+  }
+  return undefined
+}
+
+function Board({ state, playerInteraction, opponentInteraction, baseAction, leaderInteract, prompt }: {
   state: GameState
   playerInteraction: (unit: UnitState) => UnitInteraction
   opponentInteraction: (unit: UnitState) => UnitInteraction
   /** A click handler for a side's base when it's a valid target (attack, or a damage-target choice). */
   baseAction?: (side: PlayerId) => (() => void) | undefined
   leaderInteract?: UnitInteraction
+  /** What the current board highlights are asking for; absent for self-evident base actions. */
+  prompt?: DescribePart[]
 }) {
   // Space | Leaders+Bases | Ground. Set the template with an inline style rather
   // than a Tailwind arbitrary value: the commas inside minmax() don't compile
@@ -748,9 +781,21 @@ function Board({ state, playerInteraction, opponentInteraction, baseAction, lead
           game state, which sits between the two bases. */}
       <div className="items-center" style={cols}>
         <div className="text-ink-faint text-sm uppercase tracking-widest text-center">Space</div>
-        <div data-testid="game-state" className="text-center text-sm text-ink leading-tight whitespace-nowrap">
-          <div><span className="text-accent uppercase">Round:</span> {state.round} - <span className="capitalize">{state.phase}</span></div>
-          <div><span className="text-accent uppercase">Initiative:</span> {state.initiative === 'player' ? 'You' : 'Opponent'}</div>
+        <div data-testid="game-state" className="relative text-center text-sm text-ink leading-tight">
+          <div className="whitespace-nowrap"><span className="text-accent uppercase">Round:</span> {state.round} - <span className="capitalize">{state.phase}</span></div>
+          <div className="whitespace-nowrap"><span className="text-accent uppercase">Initiative:</span> {state.initiative === 'player' ? 'You' : 'Opponent'}</div>
+          {/* Floated out of the layout: the prompt comes and goes constantly, and in flow it
+              shunted the whole board up and down. `pointer-events-none` keeps clicks reaching
+              the cards it is describing — it has nothing interactive of its own. Card refs
+              inside it re-enable their own hover. */}
+          {prompt && (
+            <div
+              data-testid="action-prompt"
+              className="pointer-events-none absolute left-1/2 top-full z-30 mt-1.5 w-64 -translate-x-1/2 rounded-xl border-2 border-accent/60 bg-surface-solid px-3 py-1.5 text-xs leading-snug text-ink-dim shadow-[0_4px_16px_rgba(0,0,0,0.5)]"
+            >
+              <DescribedParts state={state} parts={prompt} />
+            </div>
+          )}
         </div>
         <div className="text-ink-faint text-sm uppercase tracking-widest text-center">Ground</div>
       </div>
@@ -958,8 +1003,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
 
     // Optional targeted pending choices — resolved by clicking a highlighted
     // board unit plus a Decline button, rather than one menu button per target.
-    const boardTargetKinds = ['mayDamage', 'mayAdvantageEach', 'mayDamageExhaust', 'mayLastingBuff', 'mayGiveAdvantage', 'mayExhaustLeaderGiveAdvantage', 'mayExhaustLeaderExhaustUnit', 'mayExhaustUnit', 'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust', 'attachResourceUpgrade', 'selectUnitToDefeat', 'selectUniqueUnitToDefeat', 'opponentGivesAdvantage', 'mayGiveTokens', 'multiPick', 'distributeDamage', 'distributeTokens', 'variableStrike', 'healForAdvantage', 'returnFriendlyUnit']
-    const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && boardTargetKinds.includes(c.kind))
+    const targetChoice = gameState.pendingChoices?.find(c => c.controller === 'player' && (BOARD_TARGET_KINDS as readonly string[]).includes(c.kind))
     const choiceTargetIds = new Map<string, Action>()
     // Base targets (selectDamageTarget): pick a player's base to take the damage.
     const baseTargetActions = new Map<PlayerId, Action>()
@@ -969,6 +1013,20 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     }
     const declineChoice = targetChoice ? legal.find(a => a.type === 'skipTrigger' && a.choiceId === targetChoice.id) : undefined
     const boardTargetAction = (instanceId: string): Action | undefined => leaderTargetIds.get(instanceId) ?? choiceTargetIds.get(instanceId)
+
+    /**
+     * What the board highlights are asking for (#370). Two sources: a pending choice raised by
+     * a trigger — the case that most needs explaining, since the opponent's card may have
+     * caused it — and placing an upgrade, which is local UI state rather than a choice.
+     *
+     * Deliberately silent for the base actions (playing a card, picking an attacker): those are
+     * self-evident, and a permanent prompt would train the player to ignore the panel.
+     */
+    const actionPrompt: DescribePart[] | undefined = targetChoice
+      ? describeChoiceParts(gameState, targetChoice)
+      : placing
+        ? ['Choose a unit to attach ', handCardRef(gameState, 'player', selectedUpgrade) ?? 'this upgrade', ' to']
+        : setupPrompt(gameState)
 
     const upgradeInteraction = (instanceId: string): UnitInteraction | null =>
       placing
@@ -1266,7 +1324,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       choiceOverlay = (
         <CardSelectOverlay
           state={gameState}
-          prompt={`You control two ${gameState.cards[uniqueChoice.cardId]?.name ?? 'copies'} — defeat one`}
+          prompt={`You control two ${gameState.cards[uniqueChoice.cardId]?.name ?? 'copies'}, defeat one`}
           items={uniqueChoice.candidates.map((c, i) => ({ cardId: c.cardId, optionIndex: i, hostId: c.unitId, key: i }))}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: uniqueChoice.id, optionIndex })}
         />
@@ -1280,6 +1338,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         <OpponentBar state={gameState} />
         <Board
           state={gameState}
+          prompt={actionPrompt}
           playerInteraction={playerInteraction}
           opponentInteraction={opponentInteraction}
           baseAction={side => {
@@ -1327,7 +1386,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
                   <span className={`w-8 shrink-0 ${entry.by === 'player' ? 'text-accent' : 'text-amber'}`}>
                     {entry.by === 'player' ? 'You' : 'Opp'}
                   </span>
-                  <span>{entry.text}</span>
+                  <DescribedParts state={gameState} parts={entry.parts} />
                 </li>
               )).reverse()}
             </ol>

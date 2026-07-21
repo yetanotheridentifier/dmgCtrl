@@ -173,6 +173,90 @@ describe('GameScreen', () => {
     expect(screen.queryByTestId('undo-btn')).toBeNull()
   })
 
+  /** #370: cards named in the log are hover-to-zoom references, coloured by who controls them. */
+  it('renders card names in the log as hoverable references, coloured by controller', async () => {
+    const user = userEvent.setup()
+    await renderBoard()
+    await user.click(screen.getByTestId('hand-card-3'))
+
+    const refs = within(screen.getByTestId('game-log')).getAllByTestId('card-ref')
+    const played = refs.find(r => r.getAttribute('data-card-id') === 'TST_900')!
+    expect(played).toHaveTextContent('Big Test Unit')
+    expect(played).toHaveClass('text-accent') // yours — the opponent's would be amber
+
+    // Plain hover, no Shift: this is a line of text, not a card on the board.
+    fireEvent.pointerEnter(played, { pointerType: 'mouse' })
+    expect(screen.getByTestId('card-zoom').style.visibility).not.toBe('hidden')
+    fireEvent.pointerLeave(played, { pointerType: 'mouse' })
+    expect(screen.queryByTestId('card-zoom')).toBeNull()
+  })
+
+  /**
+   * #370: the board highlights alone don't say what is being asked. The prompt appears for
+   * decisions raised by a trigger — never for the base actions (playing a card, choosing an
+   * attacker), which are self-evident and would just add noise.
+   */
+  it('shows no action prompt during ordinary play', async () => {
+    const user = userEvent.setup()
+    await renderBoard()
+    expect(screen.queryByTestId('action-prompt')).toBeNull()
+
+    await user.click(screen.getByTestId('hand-card-3'))
+    expect(screen.queryByTestId('action-prompt')).toBeNull()
+  })
+
+  /**
+   * The prompt floats over the board rather than sitting in the layout: appearing and
+   * disappearing must not reflow the cards underneath, and it must not swallow clicks meant
+   * for the board it is explaining.
+   */
+  it('overlays the board without displacing it or blocking clicks', async () => {
+    const user = userEvent.setup()
+    render(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
+    await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /keep hand/i }))
+
+    const prompt = screen.getByTestId('action-prompt')
+    expect(prompt).toHaveClass('absolute', 'pointer-events-none')
+    // Opaque fill: `bg-surface` is itself rgba(…, 0.45), so it can never be opaque however it
+    // is applied — the panel must use the solid token, or card art reads through the text.
+    expect(prompt).toHaveClass('bg-surface-solid')
+    expect(prompt).not.toHaveClass('bg-surface')
+    // Taken out of flow, so the round tracker above it keeps its own box.
+    expect(screen.getByTestId('game-state')).toHaveClass('relative')
+  })
+
+  it('prompts for the two setup resources, counting them off', async () => {
+    const user = userEvent.setup()
+    render(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
+    await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
+
+    // The mulligan decision is resolved from the Action buttons, not the board — say so, or a
+    // new player is left clicking cards that won't respond.
+    expect(screen.getByTestId('action-prompt')).toHaveTextContent(/mulligan.*keep.*action/i)
+
+    await user.click(screen.getByRole('button', { name: /keep hand/i }))
+    expect(screen.getByTestId('action-prompt')).toHaveTextContent(/choose a card to resource.*0 of 2/i)
+
+    await user.click(screen.getByTestId('hand-card-0'))
+    expect(screen.getByTestId('action-prompt')).toHaveTextContent(/1 of 2/i)
+
+    // Second pick completes setup — the prompt goes with it.
+    await user.click(screen.getByTestId('hand-card-0'))
+    expect(screen.queryByTestId('action-prompt')).toBeNull()
+  })
+
+  it('prompts for the optional resource in the regroup phase', async () => {
+    const user = userEvent.setup()
+    await renderBoard()
+    await user.click(screen.getByRole('button', { name: /^pass$/i }))
+
+    expect(screen.getByTestId('action-prompt')).toHaveTextContent(/resource.*or skip/i)
+
+    await user.click(screen.getByRole('button', { name: /skip resourcing/i }))
+    expect(screen.queryByTestId('action-prompt')).toBeNull()
+  })
+
   it('playing a hand card resolves the move and the AI responds', async () => {
     const user = userEvent.setup()
     await renderBoard()
@@ -324,6 +408,8 @@ describe('GameScreen', () => {
     expect(unitTile.tagName).toBe('DIV') // no <li> marker dots
     expect(unitTile).toHaveAttribute('data-actionable', 'true')
     await user.click(unitTile)
+    // Choosing an attacker is a base action — no prompt, it would only add noise (#370).
+    expect(screen.queryByTestId('action-prompt')).toBeNull()
     expect(screen.getByTestId('board-unit-u1')).toHaveAttribute('data-selected', 'true')
     expect(within(screen.getByTestId('board-unit-u1')).getAllByTestId('card-face')[0]).toHaveAttribute('data-highlight', 'accent')
 
@@ -434,10 +520,16 @@ describe('GameScreen', () => {
     await user.click(screen.getByTestId('hand-card-0'))
     const unitTile = within(screen.getByTestId('player-ground-units')).getByTestId(/^board-unit-u\d+$/)
     expect(unitTile).toHaveAttribute('data-upgrade-target', 'true')
+    // …and the prompt says what the highlight is for (#370), naming the upgrade being placed.
+    const prompt = screen.getByTestId('action-prompt')
+    expect(prompt).toHaveTextContent(/choose a unit to attach/i)
+    expect(within(prompt).getByTestId('card-ref')).toHaveTextContent('Test Upgrade')
 
     // Click the unit to attach; the log records it and the upgrade renders on the unit.
     await user.click(unitTile)
-    expect(within(screen.getByTestId('game-log')).getByText(/test upgrade.*cheap unit/i)).toBeInTheDocument()
+    // Card names are now their own elements (hover-to-zoom refs), so match the entry's whole
+    // text rather than a single text node.
+    expect(screen.getByTestId('game-log').textContent).toMatch(/test upgrade.*cheap unit/i)
     expect(within(screen.getByTestId('player-ground-units')).getByTestId(/^board-unit-upgrades-u\d+$/)).toBeInTheDocument()
   })
 

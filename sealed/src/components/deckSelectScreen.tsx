@@ -14,7 +14,7 @@ interface Props {
 }
 
 const ERROR_MESSAGES: Record<ParseDeckError, string> = {
-  'invalid-json': "Couldn't read that — check you've pasted the ProtectThePod JSON export.",
+  'invalid-json': "Couldn't read that. Check you've pasted the ProtectThePod JSON export.",
   'invalid-format': "That JSON doesn't look like a deck export.",
   'missing-leader': 'Deck must include exactly 1 leader.',
   'missing-base': 'Deck must include exactly 1 base.',
