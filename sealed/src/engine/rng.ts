@@ -27,6 +27,14 @@ export function seededShuffle<T>(arr: T[], seed: number): T[] {
   return out
 }
 
+/**
+ * One number in [0, 1) drawn from a seed, without carrying a generator around. For callers
+ * that need a single value from the state's seed (the AI's move pick) rather than a stream.
+ */
+export function seededUnit(seed: number): number {
+  return mulberry32(seed)()
+}
+
 /** Advance the stored seed after consuming randomness (golden-ratio step). */
 export function nextSeed(seed: number): number {
   return (seed + 0x9e3779b9) >>> 0

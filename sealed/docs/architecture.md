@@ -42,12 +42,18 @@ Design properties that matter for later epics:
 - **States are plain JSON.** `GameState` round-trips through `JSON.stringify`; the
   static card db hangs off the state but is shared *by reference* between successive
   states, so cloning is cheap for tree search (E5 MCTS).
-- **Determinism is injectable and serialisable.** The initial shuffle and AI rng are
-  injectable parameters; in-game randomness (mulligan reshuffles) draws from a seeded
-  PRNG whose seed lives ON GameState (`rngSeed`, advanced per use) — so records replay
-  bit-identically.
+- **Determinism is serialisable, and the AI is part of it.** The initial shuffle is an
+  injectable parameter; everything after it draws from a seeded PRNG whose seed lives ON
+  GameState (`rngSeed`). `resolve` advances that seed **once per action** — whether or not
+  the action consumed randomness — so the seed is a function of the action sequence alone.
+  `randomAi(state)` draws its pick from that seed, making **the AI's move a pure function of
+  the state**: the same position always draws the same reply, while any different line of play
+  carries a different seed and is free to diverge. Opponents are swappable via
+  `UseGameOptions.ai` (tests inject a passive one; smarter rungs slot in the same way).
 - **Replayability.** A `GameRecord` stores the initial state plus every action;
-  replaying them through `resolve` reproduces the game exactly (E7 training data).
+  replaying them through `resolve` reproduces the game exactly (E7 training data). This holds
+  only because the AI is state-seeded — an AI drawing from `Math.random` would make every
+  saved record diverge on replay.
 
 Rules verified against the full Comprehensive Rules v7.0: setup (§5.2 incl.
 mulligan), action phase/initiative (§1.15, §5.4), regroup (§5.5), attack timing
@@ -113,6 +119,22 @@ per-phase event log (`phaseEvents`) all live on the state, JSON-serialisable. Ab
 `useGame` reads live state from a ref inside `act` (not a setState updater) so that
 under React `StrictMode` — which double-invokes updaters in dev — each action logs
 and drives the AI exactly once.
+
+**Undo** (#366) keeps a snapshot of the state, log length and move-list length taken before
+**each individual action**, the AI's included. `undo()` rewinds to the last snapshot the human
+took, which drops the AI's reply along with the player's move, and truncates the move list so
+an undone move can never reach a saved record. Depth is unlimited — you can rewind to the
+opening mulligan. Two deliberate constraints:
+
+- **It is not an `Action`.** It lives on the hook's return value, so it cannot appear in
+  `legalMoves` and the AI cannot pick it — which would otherwise loop forever.
+- **It stops at the end of the game**, because the record has been written by then and
+  rewinding past it would leave the saved game disagreeing with the screen.
+
+Replaying an undone action reproduces the same AI reply, per the determinism contract above —
+that is what makes undo useful for pinning down a defect rather than a way to re-roll. The
+per-action granularity is finer than `undo` currently needs; it is the substrate for stepping
+through history from the log.
 
 ## UI (GameScreen)
 

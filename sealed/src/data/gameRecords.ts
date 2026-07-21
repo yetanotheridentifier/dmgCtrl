@@ -29,3 +29,33 @@ export async function saveGameRecord(record: Omit<GameRecord, 'id'>): Promise<Ga
 export async function listGameRecords(): Promise<GameRecord[]> {
   return db.games.orderBy('endedAt').reverse().toArray()
 }
+
+/**
+ * Wipe every saved game, returning how many went. Touches only `games` — the card cache and
+ * saved decks survive, so nothing needs re-hydrating afterwards.
+ *
+ * Reachable from the devtools console as `window.__sealedClearGames()` (see
+ * docs/operations.md). It exists because records written before the AI became a pure function
+ * of state (#366) cannot be replayed: that opponent drew from `Math.random`, so re-resolving a
+ * stored move list diverges from the stored final state, making those records useless as
+ * training data and misleading as bug reports.
+ */
+export async function clearGameRecords(): Promise<number> {
+  const count = await db.games.count()
+  await db.games.clear()
+  return count
+}
+
+declare global {
+  interface Window {
+    __sealedClearGames: () => Promise<number>
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.__sealedClearGames = async () => {
+    const cleared = await clearGameRecords()
+    console.info(`[sealed] cleared ${cleared} game record${cleared === 1 ? '' : 's'}`)
+    return cleared
+  }
+}

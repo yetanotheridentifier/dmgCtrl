@@ -27,7 +27,11 @@ import { TOKEN_MANDALORIAN } from './tokenUnits'
  */
 export function resolve(state: GameState, action: Action): GameState {
   const next = resolveAction(state, action)
-  return next.winner !== null ? next : checkWin(sweepStateBasedDefeats(next))
+  // Advance the randomness stream once per action, whether or not this action consumed any.
+  // Keeping the step here — rather than wherever a consumer happens to draw — is what makes a
+  // move list replay to an identical state: the seed depends only on the sequence of actions.
+  const stepped = { ...next, rngSeed: nextSeed(next.rngSeed) }
+  return stepped.winner !== null ? stepped : checkWin(sweepStateBasedDefeats(stepped))
 }
 
 function resolveAction(state: GameState, action: Action): GameState {

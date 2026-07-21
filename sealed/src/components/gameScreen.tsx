@@ -840,7 +840,7 @@ function PlayerBar({ state, hand, action }: { state: GameState; hand: ReactNode;
 }
 
 export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOptions }: Props) {
-  const { status, errorDetail, gameState, legal, log, act, rematch } = useGame(deck, opponentDeck, gameOptions)
+  const { status, errorDetail, gameState, legal, log, act, undo, canUndo, rematch } = useGame(deck, opponentDeck, gameOptions)
   // Board affordance: click an actionable friendly unit to select it,
   // then click a highlighted target to attack. Any action clears the selection.
   const [selectedAttacker, setSelectedAttacker] = useState<string | null>(null)
@@ -851,10 +851,14 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   // it, then click a highlighted target unit.
   const [leaderSelected, setLeaderSelected] = useState(false)
 
-  function actAndClear(action: Action) {
+  function clearSelections() {
     setSelectedAttacker(null)
     setSelectedUpgrade(null)
     setLeaderSelected(false)
+  }
+
+  function actAndClear(action: Action) {
+    clearSelections()
     act(action)
   }
 
@@ -1147,6 +1151,18 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         ))}
         {declineChoice === undefined && menuActions.length === 0 && legal.length === 0 && gameState.winner === null && (
           <span className="text-center text-xs text-ink-faint">Opponent…</span>
+        )}
+        {/* Not a game action — it takes back your last one, and the AI's reply with it. Muted
+            and set apart from the action buttons, and absent (not disabled) with nothing to
+            undo, so it never reads as a move you could make. */}
+        {canUndo && (
+          <button
+            data-testid="undo-btn"
+            onClick={() => { clearSelections(); undo() }}
+            className="mt-1.5 rounded-xl border-2 border-line/60 px-3 py-1.5 text-xs text-ink-faint hover:text-ink"
+          >
+            Undo
+          </button>
         )}
       </div>
     )

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { db } from '../data/db'
-import { saveGameRecord, listGameRecords } from '../data/gameRecords'
+import { saveGameRecord, listGameRecords, clearGameRecords } from '../data/gameRecords'
 import { state } from './helpers/engineFixtures'
 
 describe('game records', () => {
@@ -55,5 +55,48 @@ describe('game records', () => {
   it('keeps the cards table intact across the schema upgrade', async () => {
     await db.cards.put({ id: 'TST_X', json: { Name: 'X' }, fetchedAt: 1 })
     expect(await db.cards.get('TST_X')).toBeDefined()
+  })
+
+  /**
+   * Console escape hatch for wiping training data — reachable as `__sealedClearGames()`
+   * alongside `__sealedLogs()`. Records written before the AI became state-seeded (#366)
+   * do not replay faithfully, so there has to be a supported way to start clean.
+   */
+  describe('clearGameRecords', () => {
+    const base = {
+      playerDeckName: 'A',
+      opponentDeckName: 'B',
+      winner: 'player' as const,
+      startedAt: 1,
+      endedAt: 10,
+      initialState: state(),
+      moves: [],
+      finalState: state(),
+    }
+
+    it('removes every record and reports how many it deleted', async () => {
+      await saveGameRecord(base)
+      await saveGameRecord(base)
+
+      expect(await clearGameRecords()).toBe(2)
+      expect(await listGameRecords()).toHaveLength(0)
+    })
+
+    it('is safe to run when there is nothing to clear', async () => {
+      expect(await clearGameRecords()).toBe(0)
+    })
+
+    it('leaves the card cache alone — decks must not need re-hydrating', async () => {
+      await db.cards.put({ id: 'TST_KEEP', json: { Name: 'Keep' }, fetchedAt: 1 })
+      await saveGameRecord(base)
+
+      await clearGameRecords()
+
+      expect(await db.cards.get('TST_KEEP')).toBeDefined()
+    })
+
+    it('is exposed on window for console use', () => {
+      expect(typeof window.__sealedClearGames).toBe('function')
+    })
   })
 })
