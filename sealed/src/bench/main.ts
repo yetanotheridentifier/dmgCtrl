@@ -4,6 +4,8 @@ import { openDb, saveReport, DEFAULT_DB_PATH } from './store'
 import { writeFailures, FAILURES_DIR } from './reports'
 import { runSweep } from './sweep'
 import type { SweepReport } from './sweep'
+import { runGeneralisation } from './generalisation'
+import type { GeneralisationReport } from './generalisation'
 
 /**
  * The bench command line: `npm run bench --prefix sealed -- [--games N] [--seed N] [aiA] [aiB]`.
@@ -29,6 +31,8 @@ interface Args {
   gamesSet: boolean
   seed: number
   sweep: boolean
+  generalise: boolean
+  aiExplicit: boolean
   aiA: string
   aiB: string
 }
@@ -39,17 +43,19 @@ function parseArgs(argv: string[]): Args {
   let gamesSet = false
   let seed = 1
   let sweep = false
+  let generalise = false
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--games') { games = Number(argv[++i]); gamesSet = true }
     else if (arg === '--seed') seed = Number(argv[++i])
     else if (arg === '--sweep') sweep = true
+    else if (arg === '--generalise') generalise = true
     else if (arg.startsWith('--')) throw new Error(`Unknown flag: ${arg}`)
     else positional.push(arg)
   }
   if (!Number.isFinite(games) || games < 1) throw new Error(`--games must be a positive integer`)
   if (!Number.isFinite(seed)) throw new Error(`--seed must be a number`)
-  return { games, gamesSet, seed, sweep, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, sweep, generalise, aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
@@ -124,18 +130,62 @@ function runSweepMode(args: Args): void {
   if (report.dropped > 0) process.exit(1)
 }
 
+function formatGeneralisation(report: GeneralisationReport, wallMs: number): string {
+  const lo = Math.max(0, report.overallWinRateA - report.overallCi)
+  const hi = Math.min(1, report.overallWinRateA + report.overallCi)
+  const lines = [
+    '',
+    `dmgCtrl generalisation  (engine ${report.buildTag})`,
+    `${report.aiA} vs ${report.aiB}   ${report.decks} decks × ${report.gamesPerDeck} games`,
+    '',
+    row(`overall win rate (${report.aiA})`, `${pct(report.overallWinRateA)}  ± ${pct(report.overallCi)}   (${pct(lo)} – ${pct(hi)})`),
+    row('completed / dropped', `${report.completed} / ${report.dropped}`),
+    row('wall clock', `${(wallMs / 1000).toFixed(1)}s`),
+    '',
+    `  per deck (weakest first for ${report.aiA}):`,
+  ]
+  for (const d of report.perDeck) {
+    const margin = `${d.avgMargin >= 0 ? '+' : ''}${d.avgMargin.toFixed(0)}`
+    lines.push(`    ${pct(d.winRateA).padStart(6)}  ±${pct(d.winCi).padStart(6)}  margin ${margin.padStart(4)}   ${d.deck}`)
+  }
+  lines.push('')
+  return lines.join('\n')
+}
+
+function runGeneraliseMode(args: Args): void {
+  // Default to "the AI under test vs random"; explicit names override.
+  const aiA = args.aiExplicit ? args.aiA : 'greedy'
+  const aiB = args.aiExplicit ? args.aiB : 'random'
+  const gamesPerDeck = args.gamesSet ? args.games : 20
+  const start = Date.now()
+  let report: GeneralisationReport
+  try {
+    report = runGeneralisation({ gamesPerDeck, seed: args.seed, aiA, aiB })
+  } catch (err) {
+    console.error(`bench: ${(err as Error).message}`)
+    process.exit(2)
+    return
+  }
+  console.log(formatGeneralisation(report, Date.now() - start))
+  const written = writeFailures(`generalise-${new Date().toISOString()}`, report.droppedGames)
+  if (written.length > 0) console.log(row('reproductions', `${written.length} file(s) in ${FAILURES_DIR}/`))
+  console.log('')
+  if (report.dropped > 0) process.exit(1)
+}
+
 function main(): void {
   let args: Args
   try {
     args = parseArgs(process.argv.slice(2))
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
-    console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N] [--sweep] [aiA] [aiB]')
+    console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N] [--sweep|--generalise] [aiA] [aiB]')
     process.exit(2)
     return
   }
 
   if (args.sweep) { runSweepMode(args); return }
+  if (args.generalise) { runGeneraliseMode(args); return }
 
   let report: BenchReport
   const start = Date.now()

@@ -32,8 +32,16 @@ replayable fixture):
 npm run bench --prefix sealed -- --sweep --games 20 --seed 42
 ```
 
-Full guide, output format, data model, the coverage sweep and how to add an AI:
-[ai-benchmark.md](ai-benchmark.md).
+And a **generalisation diagnostic** (`--generalise`) that plays one AI against another across the
+coverage decks and reports the per-deck win rate (weakest first), to see where an AI is weak and
+whether a new version beats the current one:
+
+```bash
+npm run bench --prefix sealed -- --generalise --games 40 --seed 42   # greedy vs random by default
+```
+
+Full guide, output format, data model, the coverage sweep, the generalisation diagnostic and how to
+add an AI: [ai-benchmark.md](ai-benchmark.md).
 
 `npm run check` is the one-shot validation gate: it auto-increments `BUILD_TAG`
 (`src/buildTag.ts`) via `scripts/bumpBuild.mjs`, then runs the tests, `tsc -b`

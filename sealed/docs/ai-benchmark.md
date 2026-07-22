@@ -120,6 +120,21 @@ penalty-free, realistically curved deck for a leader, respecting rarity mix and 
 union covers the pool). The generator is deliberately separate from the bench so a future
 "play a random representative deck" setup feature can reuse it.
 
+## Generalisation diagnostic
+
+`--generalise` plays one AI against another across the whole coverage deck set and reports the first
+AI's win rate **per deck** (weakest first), so you can see which decks (and therefore card mechanics)
+it handles worst rather than hiding that in an aggregate:
+
+```bash
+npm run bench --prefix sealed -- --generalise --games 40 --seed 42   # greedy vs random by default
+```
+
+It answers "is the AI overfit to one deck, and is there anything to hand-tune?" with data. Against
+`random`, greedy sits at ~100% on every deck (random cannot punish its flaws), which is exactly why
+the useful gradient comes from measuring a *new* AI against the *current* one here, not against
+random.
+
 ## Where results go: the SQLite database
 
 Every run is saved to a local SQLite database at `bench-results/bench.db` (both `bench-results/` and
