@@ -39,10 +39,9 @@ describe('runBench', () => {
   })
 
   it('records every dropped game and mirrors it in the provisional flag', () => {
-    // On the current engine a mirror run can hang (the Bothan-5 whenFriendlyUnitDefeated capture
-    // raises a choice the active player cannot answer). The harness must never hide that: every drop
-    // is counted, recorded with its seed for reproduction, and marks the run provisional. Once that
-    // defect is fixed this run goes clean on its own, no test change needed.
+    // A dropped game (an engine defect that hangs or throws) must never be hidden: it is counted,
+    // recorded with its seed for reproduction, and marks the run provisional. This holds however
+    // clean the current engine is, so the invariant is asserted rather than a fixed drop count.
     const report = runBench({ games: 6, seed: 123, aiA: 'random', aiB: 'random' })
     expect(report.failures.length).toBe(report.dropped)
     expect(report.provisional).toBe(report.dropped > 0)
