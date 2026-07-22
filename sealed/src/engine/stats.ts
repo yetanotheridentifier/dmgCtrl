@@ -53,17 +53,33 @@ function withUpgrades(state: GameState, unit: UnitState, stat: 'power' | 'hp'): 
 
 
 /**
+ * Instance+stat keys whose conditional modifier is currently being evaluated. A modifier that reads
+ * other units' effective power (Kelleran Beq: "+1/+0 per other unit with 0 power") can ask, via that
+ * other unit, for THIS unit's power again; without a guard two such units recurse forever and blow
+ * the stack (#408). While a key is in flight, a nested request for the same key contributes 0, which
+ * breaks the cycle and cannot affect a non-cyclic computation (that never re-enters the same key).
+ */
+const computingModifier = new Set<string>()
+
+/**
  * Conditional stat deltas from the unit's own card definition and each attached
  * upgrade's — e.g. Pointless to Resist's −3 power while attacking a base.
  */
 function statModifiers(state: GameState, unit: UnitState, ctx: StatContext, stat: 'power' | 'hp'): number {
-  let total = 0
-  // Includes cards lent for a single attack (Support, Improvised Identity, and the attack-granting
-  // events), so a rider's stat bonus applies for exactly that attack.
-  for (const cardId of [unit.cardId, ...unit.upgrades.map(u => u.cardId), ...(unit.grantedAbilityCardIds ?? [])]) {
-    total += getCardDefinition(cardId)?.statModifier?.(state, unit, ctx)?.[stat] ?? 0
+  const key = `${unit.instanceId}:${stat}`
+  if (computingModifier.has(key)) return 0
+  computingModifier.add(key)
+  try {
+    let total = 0
+    // Includes cards lent for a single attack (Support, Improvised Identity, and the attack-granting
+    // events), so a rider's stat bonus applies for exactly that attack.
+    for (const cardId of [unit.cardId, ...unit.upgrades.map(u => u.cardId), ...(unit.grantedAbilityCardIds ?? [])]) {
+      total += getCardDefinition(cardId)?.statModifier?.(state, unit, ctx)?.[stat] ?? 0
+    }
+    return total
+  } finally {
+    computingModifier.delete(key)
   }
-  return total
 }
 
 export function effectivePower(state: GameState, unit: UnitState, ctx: StatContext = {}): number {
