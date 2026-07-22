@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "bench": "tsx src/bench/main.ts",
     "check": "node scripts/bumpBuild.mjs && vitest run && tsc -b && eslint ."
   },
   "dependencies": {
@@ -24,6 +25,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^26.1.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
@@ -35,6 +37,7 @@
     "jsdom": "^29.1.1",
     "marked": "^18.0.5",
     "tailwindcss": "^4.1.0",
+    "tsx": "^4.23.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.3",
     "vite": "^8.0.13",

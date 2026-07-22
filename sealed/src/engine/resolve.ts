@@ -31,7 +31,28 @@ export function resolve(state: GameState, action: Action): GameState {
   // Keeping the step here — rather than wherever a consumer happens to draw — is what makes a
   // move list replay to an identical state: the seed depends only on the sequence of actions.
   const stepped = { ...next, rngSeed: nextSeed(next.rngSeed) }
-  return stepped.winner !== null ? stepped : checkWin(sweepStateBasedDefeats(stepped))
+  return stepped.winner !== null ? stepped : settleChoiceControl(checkWin(sweepStateBasedDefeats(stepped)))
+}
+
+/**
+ * Final safety net after the per-action defeat sweep. That sweep can fire a reactive trigger
+ * (`whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`, `whenDefeated`) that raises a "may" choice
+ * controlled by the NON-active player — Bothan-5 offering to capture when its controller's unit dies
+ * on the opponent's turn is the canonical case. `choiceMoves` only serves the active player's
+ * choices, so such a choice is unanswerable and the game hangs (found by the AI bench, #390).
+ *
+ * Hand control to a controller who can answer, remembering who to return to (`pendingResumeActive`)
+ * unless an earlier interjection already set it. This only ever fires on an otherwise-stuck position
+ * — one where the active player controls NONE of the pending choices, which is exactly the set of
+ * states that currently have no legal move — so it cannot disturb a turn that was progressing.
+ */
+function settleChoiceControl(state: GameState): GameState {
+  if (state.winner !== null || !hasPendingChoices(state)) return state
+  const actor = state.activePlayer
+  if (state.pendingChoices!.some(c => c.controller === actor)) return state
+  const controller = state.pendingChoices![0].controller
+  if (controller === actor) return state
+  return { ...state, activePlayer: controller, pendingResumeActive: state.pendingResumeActive ?? actor }
 }
 
 function resolveAction(state: GameState, action: Action): GameState {
