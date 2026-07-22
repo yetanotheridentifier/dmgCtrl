@@ -24,7 +24,16 @@ part of `npm test` (a large run is hundreds of thousands of `resolve` calls) and
 npm run bench --prefix sealed -- --games 1000 --seed 42 random random
 ```
 
-Full guide, output format, data model and how to add an AI: [ai-benchmark.md](ai-benchmark.md).
+It also has a **coverage sweep** (`--sweep`) that plays across a generated deck set covering every
+card in the pool, fuzzing the whole set for hangs and throws (each dropped game is saved as a
+replayable fixture):
+
+```bash
+npm run bench --prefix sealed -- --sweep --games 20 --seed 42
+```
+
+Full guide, output format, data model, the coverage sweep and how to add an AI:
+[ai-benchmark.md](ai-benchmark.md).
 
 `npm run check` is the one-shot validation gate: it auto-increments `BUILD_TAG`
 (`src/buildTag.ts`) via `scripts/bumpBuild.mjs`, then runs the tests, `tsc -b`

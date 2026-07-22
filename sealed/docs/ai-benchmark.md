@@ -99,6 +99,27 @@ position plus every move, in the exact `{ initialState, moves }` shape the bug-r
 replay it, and step through to the exact move where things went wrong, then file it as a bug. This is
 how the bench found and pinned two real hangs during its own construction.
 
+## Coverage sweep: whole-pool fuzzing
+
+The default bench plays one fixed deck, so it only exercises the ~30 cards in that deck. The
+**coverage sweep** plays across a generated set of legal, realistic decks whose union touches **every
+card in the set**, turning the bench into a fuzzer over the whole pool:
+
+```bash
+npm run bench --prefix sealed -- --sweep [--games N] [--seed N] [ai]
+```
+
+`--games` is games *per deck* (default 5); `ai` defaults to `random`, which is fast and pokes card
+interactions broadly (the best bug-finder). It reports how many decks and games ran, how many cards
+were exercised, and any dropped game, writing each as a replayable fixture. A drop here is a
+**finding**, a hang or throw in some card, not a failure of the sweep.
+
+The decks come from `deckgen/generateDeck.ts` (a reusable primitive that builds one legal,
+penalty-free, realistically curved deck for a leader, respecting rarity mix and aspect balance, see
+`deckgen/rules.ts`) orchestrated by `bench/coverageDecks.ts` (which picks leaders and bases so the
+union covers the pool). The generator is deliberately separate from the bench so a future
+"play a random representative deck" setup feature can reuse it.
+
 ## Where results go: the SQLite database
 
 Every run is saved to a local SQLite database at `bench-results/bench.db` (both `bench-results/` and
