@@ -1,5 +1,6 @@
 import type { Ai } from './types'
 import { randomAi } from './randomAi'
+import { greedyAi } from './greedyAi'
 
 /**
  * The named-AI registry: the single place that knows which opponents exist. The bench addresses
@@ -8,6 +9,7 @@ import { randomAi } from './randomAi'
  */
 export const AIS: Record<string, Ai> = {
   random: randomAi,
+  greedy: greedyAi,
 }
 
 /** The names the CLI and any picker can offer. */

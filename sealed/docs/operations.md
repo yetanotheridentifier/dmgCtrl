@@ -242,8 +242,10 @@ field names, update `SwuCard` (`data/cards.ts`) and `normaliseCard`
   `(state) => Action | null` choosing from `legalMoves(state)`, drawing any
   randomness from `state.rngSeed` so games stay replayable. Register it by name in
   `ai/registry.ts`, then measure it with `npm run bench` (see
-  [ai-benchmark.md](ai-benchmark.md)). Swap it into the app via `UseGameOptions.ai`.
-  Move to a Web Worker (T5.4) before MCTS.
+  [ai-benchmark.md](ai-benchmark.md)). **Deploy** a model by setting `OPPONENT_AI` in
+  `src/config.ts` to its registered name and redeploying (a reviewed one-line change, not a
+  user choice); tests still inject their own via `UseGameOptions.ai`. Move to a Web Worker
+  (T5.4) before MCTS. The current deployed model is `greedy` (one-ply, beats `random` ~100%).
 - **Abilities/keywords**: extend `EngineCard` with parsed ability data in
   `cardDb.ts`, generate/resolve in `legalMoves.ts`/`resolve.ts`. Keep both pure.
 - **Schema changes**: `GameState` changes ripple into `engineFixtures.ts` and the

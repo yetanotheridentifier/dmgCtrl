@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { AIS, aiNames, resolveAi } from '../ai/registry'
 import { randomAi } from '../ai/randomAi'
+import { greedyAi } from '../ai/greedyAi'
 
 /**
  * The named-AI registry is the single seam every opponent hangs off: the bench addresses AIs by
@@ -15,6 +16,7 @@ describe('AI registry', () => {
 
   it('resolves a known name to its function', () => {
     expect(resolveAi('random')).toBe(randomAi)
+    expect(resolveAi('greedy')).toBe(greedyAi)
   })
 
   it('rejects an unknown name with a message that lists the valid ones', () => {

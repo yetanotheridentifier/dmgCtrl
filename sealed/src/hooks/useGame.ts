@@ -11,7 +11,7 @@ import type { Action } from '../engine/actions'
 import type { GameState, PlayerId } from '../engine/types'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
-import { randomAi } from '../ai/randomAi'
+import { opponentAi } from '../config'
 import { setupAi } from '../ai/setupAi'
 import { describeActionParts, partsText } from '../utils/describeAction'
 import type { DescribePart } from '../utils/describeAction'
@@ -122,7 +122,7 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
 
   const rng = options.rng ?? Math.random
   const shuffle = options.shuffle ?? fisherYates
-  const ai = options.ai ?? randomAi
+  const ai = options.ai ?? opponentAi
 
   const initialStateRef = useRef<GameState | null>(null)
   const movesRef = useRef<MoveRecord[]>([])

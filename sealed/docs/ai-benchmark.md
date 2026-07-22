@@ -31,16 +31,20 @@ Everything is optional:
 - `--games N` how many games to play (default 100).
 - `--seed N` the run's seed (default 1). The same seed reproduces the run exactly.
 - `aiA aiB` the two AIs by name (default `random random`). `aiA` plays the "player" seat, `aiB` the
-  "opponent" seat. Currently `random` is the only registered AI; `greedy` and others join the list as
-  they are built.
+  "opponent" seat. The registered AIs are `random` (rung 0, uniform) and `greedy` (rung 1, one-ply);
+  more join the list as they are built.
 
 Examples:
 
 ```bash
 npm run bench --prefix sealed                                  # 100 games, random vs random
 npm run bench --prefix sealed -- --games 1000 --seed 42        # a big, reproducible run
-npm run bench --prefix sealed -- --games 500 greedy random     # once greedy exists
+npm run bench --prefix sealed -- --games 1000 greedy random    # measure the greedy AI
 ```
+
+Recorded baselines (mirror deck, so purely AI skill): `random` vs `random` sits at 50% (the harness
+self-check), and `greedy` vs `random` is ~100% over 1000 games, the one-ply scorer demolishing
+uniform-random play.
 
 Note the `--` after the script name: it tells npm to pass the flags through to the bench rather than
 eat them itself.

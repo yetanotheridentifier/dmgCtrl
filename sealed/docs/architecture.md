@@ -50,7 +50,10 @@ Design properties that matter for later epics:
   the state**: the same position always draws the same reply, while any different line of play
   carries a different seed and is free to diverge. Opponents are swappable via
   `UseGameOptions.ai` (tests inject a passive one; smarter rungs slot in the same way), and are
-  addressed by name through the registry in `ai/registry.ts`.
+  addressed by name through the registry in `ai/registry.ts`. The **deployed** opponent is a single
+  config constant, `OPPONENT_AI` in `src/config.ts` (currently `greedy`): shipping a new model is a
+  one-line change plus a redeploy, deliberately a reviewed deployment setting rather than a user
+  choice.
 - **Measurability.** Because the AI is pure and seeded, a headless harness can play thousands of
   games between two named AIs and report reproducible win rates. That harness (`src/bench/`, run with
   `npm run bench`) is the yardstick for the AI series; see [ai-benchmark.md](ai-benchmark.md).
