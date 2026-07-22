@@ -49,7 +49,11 @@ Design properties that matter for later epics:
   `randomAi(state)` draws its pick from that seed, making **the AI's move a pure function of
   the state**: the same position always draws the same reply, while any different line of play
   carries a different seed and is free to diverge. Opponents are swappable via
-  `UseGameOptions.ai` (tests inject a passive one; smarter rungs slot in the same way).
+  `UseGameOptions.ai` (tests inject a passive one; smarter rungs slot in the same way), and are
+  addressed by name through the registry in `ai/registry.ts`.
+- **Measurability.** Because the AI is pure and seeded, a headless harness can play thousands of
+  games between two named AIs and report reproducible win rates. That harness (`src/bench/`, run with
+  `npm run bench`) is the yardstick for the AI series; see [ai-benchmark.md](ai-benchmark.md).
 - **Replayability.** A `GameRecord` stores the initial state plus every action;
   replaying them through `resolve` reproduces the game exactly (E7 training data). This holds
   only because the AI is state-seeded: an AI drawing from `Math.random` would make every

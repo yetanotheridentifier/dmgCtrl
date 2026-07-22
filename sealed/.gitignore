@@ -1,3 +1,6 @@
 node_modules
 dist
 *.tsbuildinfo
+
+# AI bench generated results (SQLite db + failure fixtures)
+bench-results/

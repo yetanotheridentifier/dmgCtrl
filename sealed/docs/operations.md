@@ -10,7 +10,21 @@ npm --prefix sealed run test:watch # TDD loop
 npm --prefix sealed run lint       # eslint
 npx --prefix sealed tsc -b         # typecheck (also part of build)
 npm run check --prefix sealed      # validation gate: bump build tag, test, tsc, eslint
+npm run bench --prefix sealed      # AI benchmark: play many games between two AIs, report win rates
 ```
+
+### AI benchmark
+
+`npm run bench` is the headless yardstick for the AI opponents: it plays many full games between two
+named AIs and reports win rate (with a confidence interval), base-damage margin, game length and
+throughput, saving each run to a local SQLite database (`sealed/bench-results/bench.db`). It is not
+part of `npm test` (a large run is hundreds of thousands of `resolve` calls) and needs no server.
+
+```bash
+npm run bench --prefix sealed -- --games 1000 --seed 42 random random
+```
+
+Full guide, output format, data model and how to add an AI: [ai-benchmark.md](ai-benchmark.md).
 
 `npm run check` is the one-shot validation gate: it auto-increments `BUILD_TAG`
 (`src/buildTag.ts`) via `scripts/bumpBuild.mjs`, then runs the tests, `tsc -b`
@@ -226,8 +240,10 @@ field names, update `SwuCard` (`data/cards.ts`) and `normaliseCard`
 
 - **Smarter AI (T5.2+)**: implement alongside `ai/randomAi.ts`; the contract is
   `(state) => Action | null` choosing from `legalMoves(state)`, drawing any
-  randomness from `state.rngSeed` so games stay replayable. Swap it in via
-  `UseGameOptions.ai`. Move to a Web Worker (T5.4) before MCTS.
+  randomness from `state.rngSeed` so games stay replayable. Register it by name in
+  `ai/registry.ts`, then measure it with `npm run bench` (see
+  [ai-benchmark.md](ai-benchmark.md)). Swap it into the app via `UseGameOptions.ai`.
+  Move to a Web Worker (T5.4) before MCTS.
 - **Abilities/keywords**: extend `EngineCard` with parsed ability data in
   `cardDb.ts`, generate/resolve in `legalMoves.ts`/`resolve.ts`. Keep both pure.
 - **Schema changes**: `GameState` changes ripple into `engineFixtures.ts` and the
@@ -239,6 +255,7 @@ field names, update `SwuCard` (`data/cards.ts`) and `normaliseCard`
 
 - `sealed/docs/architecture.md`: system design (this folder)
 - `sealed/docs/operations.md`: this file
+- `sealed/docs/ai-benchmark.md`: the AI benchmark harness (`npm run bench`), output, data model
 - `sealed/docs/userGuide.md`: user guide, **imported at build time as the in-app
   Help page**, so editing it updates the app's help content
 - `sealed/README.md`: quick orientation + decisions log

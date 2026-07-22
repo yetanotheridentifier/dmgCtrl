@@ -82,8 +82,10 @@ export function runBench(config: BenchConfig): BenchReport {
     if (result.status === 'dropped') {
       failures.push({ gameIndex: i, seed: result.seed, reason: result.dropReason! })
     } else {
-      // Bound memory over a long run: a completed game's move list is not needed once counted.
+      // Bound memory over a long run: a completed game's moves and starting position are not needed
+      // once counted. Only dropped games are kept whole, to be written out as replayable fixtures.
       result.moves = []
+      result.initialState = null
     }
     games.push(result)
   }

@@ -1,5 +1,5 @@
 import type { Action } from '../engine/actions'
-import type { CardDb, PlayerId } from '../engine/types'
+import type { CardDb, GameState, PlayerId } from '../engine/types'
 import type { ParsedDeck } from '../utils/parseProtectThePod'
 import type { Ai } from '../ai/types'
 import { initGame } from '../engine/initGame'
@@ -31,6 +31,11 @@ export interface GameResult {
   durationMs: number
   /** The moves played, retained so a dropped game can be replayed. */
   moves: MoveRecord[]
+  /**
+   * The starting position, so a dropped game becomes a replayable fixture ({ initialState, moves }).
+   * `runBench` clears it for completed games to bound memory over a long run.
+   */
+  initialState: GameState | null
 }
 
 export interface PlayGameOptions {
@@ -78,6 +83,8 @@ export function playGame(opts: PlayGameOptions): GameResult {
     shuffle,
     rngSeed: opts.seed,
   })
+  // `resolve` is immutable, so this reference stays the untouched starting position for replay.
+  const initialState = state
 
   const moves: MoveRecord[] = []
   const start = performance.now()
@@ -131,5 +138,6 @@ export function playGame(opts: PlayGameOptions): GameResult {
     margin: baseDamage.opponent - baseDamage.player,
     durationMs: performance.now() - start,
     moves,
+    initialState,
   }
 }
