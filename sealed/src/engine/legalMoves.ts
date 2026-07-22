@@ -278,7 +278,9 @@ function choiceMoves(state: GameState): Action[] {
     switch (choice.kind) {
       case 'ambush': {
         const unit = p.units.find(u => u.instanceId === choice.unitId)
-        if (unit) {
+        // Only a ready unit can attack: it may have been exhausted (e.g. by another granted attack)
+        // before this ambush was answered, matching the guards on mayAttack / mayAttackAnyUnit / support.
+        if (unit && !unit.exhausted) {
           for (const e of enemyAttackTargets(state, unit).targets) {
             moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'unit', instanceId: e.instanceId }, choiceId: choice.id })
           }
