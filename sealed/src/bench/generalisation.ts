@@ -5,6 +5,7 @@ import { buildCardDb } from '../engine/cardDb'
 import { nextSeed } from '../engine/rng'
 import { BUILD_TAG } from '../buildTag'
 import { resolveAi } from '../ai/registry'
+import type { Ai } from '../ai/types'
 import { wilsonInterval } from './stats'
 import { buildCoverageDecks } from './coverageDecks'
 import { playGame } from './selfPlay'
@@ -69,10 +70,22 @@ export interface GeneralisationReport {
 const mean = (xs: number[]): number => (xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length)
 
 export function runGeneralisation(config: GeneralisationConfig): GeneralisationReport {
+  return runGeneralisationWith(resolveAi(config.aiA), resolveAi(config.aiB), config.aiA, config.aiB, config)
+}
+
+/**
+ * The core: play two AI FUNCTIONS against each other across the coverage decks. Used directly by the
+ * weight tuner, which builds candidate greedy AIs on the fly rather than registering them by name.
+ */
+export function runGeneralisationWith(
+  aiA: Ai,
+  aiB: Ai,
+  labelA: string,
+  labelB: string,
+  config: { gamesPerDeck: number; seed: number; stepCeiling?: number; timeoutMs?: number },
+): GeneralisationReport {
   const { decks } = buildCoverageDecks(POOL, config.seed)
   const cardDb = buildCardDb(POOL)
-  const aiA = resolveAi(config.aiA)
-  const aiB = resolveAi(config.aiB)
 
   let seed = config.seed
   const perDeck: DeckResult[] = []
@@ -127,8 +140,8 @@ export function runGeneralisation(config: GeneralisationConfig): GeneralisationR
 
   return {
     buildTag: BUILD_TAG,
-    aiA: config.aiA,
-    aiB: config.aiB,
+    aiA: labelA,
+    aiB: labelB,
     decks: decks.length,
     gamesPerDeck: config.gamesPerDeck,
     totalGames: decks.length * config.gamesPerDeck,
