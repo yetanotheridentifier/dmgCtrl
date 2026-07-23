@@ -6,6 +6,11 @@ import { runSweep } from './sweep'
 import type { SweepReport } from './sweep'
 import { runGeneralisation } from './generalisation'
 import type { GeneralisationReport } from './generalisation'
+import { buildMatchupDecks } from './matchupDecks'
+import { runMatchupMatrix } from './matrix'
+import { saveMatrix, deckStrength, leaderStrength, baseStrength, type StrengthRow } from './store'
+import { writeMatrixCsv } from './reports'
+import { resolveAi } from '../ai/registry'
 
 /**
  * The bench command line: `npm run bench --prefix sealed -- [--games N] [--seed N] [aiA] [aiB]`.
@@ -32,6 +37,7 @@ interface Args {
   seed: number
   sweep: boolean
   generalise: boolean
+  matrix: boolean
   aiExplicit: boolean
   aiA: string
   aiB: string
@@ -44,18 +50,20 @@ function parseArgs(argv: string[]): Args {
   let seed = 1
   let sweep = false
   let generalise = false
+  let matrix = false
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--games') { games = Number(argv[++i]); gamesSet = true }
     else if (arg === '--seed') seed = Number(argv[++i])
     else if (arg === '--sweep') sweep = true
     else if (arg === '--generalise') generalise = true
+    else if (arg === '--matrix') matrix = true
     else if (arg.startsWith('--')) throw new Error(`Unknown flag: ${arg}`)
     else positional.push(arg)
   }
   if (!Number.isFinite(games) || games < 1) throw new Error(`--games must be a positive integer`)
   if (!Number.isFinite(seed)) throw new Error(`--seed must be a number`)
-  return { games, gamesSet, seed, sweep, generalise, aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, sweep, generalise, matrix, aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
@@ -184,19 +192,72 @@ function runGeneraliseMode(args: Args): void {
   if (report.dropped > 0) process.exit(1)
 }
 
+function strengthTable(title: string, rows: StrengthRow[], limit?: number): string[] {
+  const shown = limit ? rows.slice(0, limit) : rows
+  const lines = [`  ${title}:`]
+  for (const r of shown) {
+    const margin = `${r.avgMargin >= 0 ? '+' : ''}${r.avgMargin.toFixed(1)}`
+    lines.push(`    ${pct(r.winRate).padStart(6)}  margin ${margin.padStart(5)}   ${r.key}`)
+  }
+  return lines
+}
+
+function runMatrixMode(args: Args): void {
+  const model = args.aiExplicit ? args.aiA : 'greedy'
+  const gamesPerCell = args.gamesSet ? args.games : 10
+  const decks = buildMatchupDecks()
+  const cells = decks.length * decks.length
+  console.log(`\nmatchup matrix: ${model}, ${decks.length} decks (${cells} cells), ${gamesPerCell} games/cell, seed ${args.seed}`)
+  console.log(`about ${(decks.length * (decks.length + 1) / 2 * gamesPerCell).toLocaleString()} games to play; this takes a while...\n`)
+
+  const start = Date.now()
+  const result = runMatchupMatrix(decks, resolveAi(model), model, { gamesPerCell, seed: args.seed })
+  const db = openDb(DEFAULT_DB_PATH)
+  const runId = saveMatrix(db, result)
+  const csvPath = writeMatrixCsv(runId, result.cells)
+  const wall = ((Date.now() - start) / 1000).toFixed(0)
+
+  const lines = [
+    '',
+    `dmgCtrl matchup matrix  (engine ${result.buildTag})`,
+    row('model', model),
+    row('decks / cells', `${result.deckCount} / ${cells}`),
+    row('games per cell', `${result.gamesPerCell}`),
+    row('dropped', `${result.dropped}`),
+    row('wall clock', `${wall}s`),
+    row('saved run', `${runId}  ->  ${DEFAULT_DB_PATH}`),
+    '',
+    ...strengthTable('strongest decks', deckStrength(db, runId), 8),
+    '',
+    ...strengthTable('weakest decks', deckStrength(db, runId).slice().reverse(), 8),
+    '',
+    ...strengthTable('by leader (strongest first)', leaderStrength(db, runId)),
+    '',
+    ...strengthTable('by base aspect', baseStrength(db, runId)),
+    '',
+    '  full matrix:',
+    `    spreadsheet:  sealed/${csvPath}  (pivot deck_a rows x deck_b cols on win_rate_a)`,
+    `    sqlite:       sealed/${DEFAULT_DB_PATH}, table "matchups", run_id='${runId}'`,
+    '',
+  ]
+  console.log(lines.join('\n'))
+  if (result.dropped > 0) process.exit(1)
+}
+
 function main(): void {
   let args: Args
   try {
     args = parseArgs(process.argv.slice(2))
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
-    console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N] [--sweep|--generalise] [aiA] [aiB]')
+    console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N] [--sweep|--generalise|--matrix] [aiA] [aiB]')
     process.exit(2)
     return
   }
 
   if (args.sweep) { runSweepMode(args); return }
   if (args.generalise) { runGeneraliseMode(args); return }
+  if (args.matrix) { runMatrixMode(args); return }
 
   let report: BenchReport
   const start = Date.now()
