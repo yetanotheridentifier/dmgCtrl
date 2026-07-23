@@ -31,8 +31,9 @@ Everything is optional:
 - `--games N` how many games to play (default 100).
 - `--seed N` the run's seed (default 1). The same seed reproduces the run exactly.
 - `aiA aiB` the two AIs by name (default `random random`). `aiA` plays the "player" seat, `aiB` the
-  "opponent" seat. The registered AIs are `random` (rung 0, uniform) and `greedy` (rung 1, one-ply);
-  more join the list as they are built.
+  "opponent" seat. Registered AIs: `random` (rung 0, uniform), `greedy` (rung 1, one-ply, the
+  deployed model), and `greedy-baseline` (the frozen pre-#392 greedy, kept only as a fixed reference
+  for tuning). More join the list as they are built.
 
 Examples:
 
@@ -123,8 +124,8 @@ union covers the pool). The generator is deliberately separate from the bench so
 ## Generalisation diagnostic
 
 `--generalise` plays one AI against another across the whole coverage deck set and reports the first
-AI's win rate **per deck** (weakest first), so you can see which decks (and therefore card mechanics)
-it handles worst rather than hiding that in an aggregate:
+AI's win rate broken down **by leader, by base aspect, and per deck** (each weakest-first), so you can
+see which leaders / mechanics it handles worst rather than hiding that in an aggregate:
 
 ```bash
 npm run bench --prefix sealed -- --generalise --games 40 --seed 42   # greedy vs random by default
@@ -134,6 +135,20 @@ It answers "is the AI overfit to one deck, and is there anything to hand-tune?" 
 `random`, greedy sits at ~100% on every deck (random cannot punish its flaws), which is exactly why
 the useful gradient comes from measuring a *new* AI against the *current* one here, not against
 random.
+
+## Tuning evaluation weights
+
+The greedy evaluation's weights are parameterised (`ai/evaluate.ts: EvalWeights`). `npm run tune`
+sweeps candidate weights, measuring each against the frozen `greedy-baseline` across the coverage
+decks, so weights are chosen from data rather than guessed:
+
+```bash
+npm run tune --prefix sealed -- --games 100 4,2,1,4 3,2,1,4 6,2,1,3   # unit,power,hp,base per config
+```
+
+It prints each config's win rate vs baseline (higher is better) and its wall clock. The current
+deployed weights were chosen this way (see `DEFAULT_WEIGHTS`); to change the model, re-sweep, set the
+winning weights, and redeploy.
 
 ## Where results go: the SQLite database
 

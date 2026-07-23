@@ -142,11 +142,22 @@ function formatGeneralisation(report: GeneralisationReport, wallMs: number): str
     row('completed / dropped', `${report.completed} / ${report.dropped}`),
     row('wall clock', `${(wallMs / 1000).toFixed(1)}s`),
     '',
-    `  per deck (weakest first for ${report.aiA}):`,
   ]
+  const margin = (m: number): string => `${m >= 0 ? '+' : ''}${m.toFixed(0)}`
+
+  lines.push(`  by leader (weakest first for ${report.aiA}):`)
+  for (const g of report.perLeader) {
+    lines.push(`    ${pct(g.winRateA).padStart(6)}  ±${pct(g.winCi).padStart(6)}  margin ${margin(g.avgMargin).padStart(4)}   ${g.key} (${g.decks} deck${g.decks === 1 ? '' : 's'})`)
+  }
+  lines.push('')
+  lines.push(`  by base aspect (weakest first for ${report.aiA}):`)
+  for (const g of report.perBase) {
+    lines.push(`    ${pct(g.winRateA).padStart(6)}  ±${pct(g.winCi).padStart(6)}  margin ${margin(g.avgMargin).padStart(4)}   ${g.key} (${g.decks} deck${g.decks === 1 ? '' : 's'})`)
+  }
+  lines.push('')
+  lines.push(`  per deck (weakest first for ${report.aiA}):`)
   for (const d of report.perDeck) {
-    const margin = `${d.avgMargin >= 0 ? '+' : ''}${d.avgMargin.toFixed(0)}`
-    lines.push(`    ${pct(d.winRateA).padStart(6)}  ±${pct(d.winCi).padStart(6)}  margin ${margin.padStart(4)}   ${d.deck}`)
+    lines.push(`    ${pct(d.winRateA).padStart(6)}  ±${pct(d.winCi).padStart(6)}  margin ${margin(d.avgMargin).padStart(4)}   ${d.deck}`)
   }
   lines.push('')
   return lines.join('\n')
