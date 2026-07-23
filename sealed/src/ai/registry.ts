@@ -1,6 +1,6 @@
 import type { Ai } from './types'
 import { randomAi } from './randomAi'
-import { greedyAi } from './greedyAi'
+import { greedyAi, greedyBaselineAi } from './greedyAi'
 
 /**
  * The named-AI registry: the single place that knows which opponents exist. The bench addresses
@@ -10,6 +10,9 @@ import { greedyAi } from './greedyAi'
 export const AIS: Record<string, Ai> = {
   random: randomAi,
   greedy: greedyAi,
+  // Frozen pre-#392 greedy: a fixed reference for measuring the live greedy in the generalisation
+  // diagnostic (a moving comparison needs a stationary baseline).
+  'greedy-baseline': greedyBaselineAi,
 }
 
 /** The names the CLI and any picker can offer. */

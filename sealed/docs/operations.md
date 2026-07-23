@@ -40,8 +40,23 @@ whether a new version beats the current one:
 npm run bench --prefix sealed -- --generalise --games 40 --seed 42   # greedy vs random by default
 ```
 
-Full guide, output format, data model, the coverage sweep, the generalisation diagnostic and how to
-add an AI: [ai-benchmark.md](ai-benchmark.md).
+To tune the greedy evaluation weights, `npm run tune` sweeps candidate weights against the frozen
+baseline across the coverage decks:
+
+```bash
+npm run tune --prefix sealed -- --games 100 4,2,1,4 3,2,1,4   # unit,power,hp,base per config
+```
+
+The **matchup matrix** (`--matrix`) measures deck strength and matchups: every leader paired with
+every base aspect (72 decks), played deck-vs-deck under one model, stored in SQLite and exported to
+CSV (~30-40 min):
+
+```bash
+npm run bench --prefix sealed -- --matrix --games 14 --seed 42 greedy
+```
+
+Full guide, output format, data model, the coverage sweep, the generalisation diagnostic, weight
+tuning and how to add an AI: [ai-benchmark.md](ai-benchmark.md).
 
 `npm run check` is the one-shot validation gate: it auto-increments `BUILD_TAG`
 (`src/buildTag.ts`) via `scripts/bumpBuild.mjs`, then runs the tests, `tsc -b`

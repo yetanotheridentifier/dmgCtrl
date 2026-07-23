@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { BenchReport } from './runBench'
+import type { MatrixResult } from './matrix'
 
 /**
  * Bench results in a local SQLite database, via Node's built-in `node:sqlite` (no dependency). Two
@@ -47,6 +48,30 @@ const SCHEMA = `
     status        TEXT    NOT NULL,
     drop_reason   TEXT,
     PRIMARY KEY (run_id, game_index)
+  );
+  CREATE TABLE IF NOT EXISTS matrix_runs (
+    run_id         TEXT PRIMARY KEY,
+    started_at     TEXT    NOT NULL,
+    build_tag      TEXT    NOT NULL,
+    model          TEXT    NOT NULL,
+    deck_count     INTEGER NOT NULL,
+    games_per_cell INTEGER NOT NULL,
+    seed           INTEGER NOT NULL,
+    dropped        INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS matchups (
+    run_id      TEXT    NOT NULL,
+    deck_a      TEXT    NOT NULL,
+    deck_b      TEXT    NOT NULL,
+    leader_a    TEXT    NOT NULL,
+    base_a      TEXT    NOT NULL,
+    leader_b    TEXT    NOT NULL,
+    base_b      TEXT    NOT NULL,
+    games       INTEGER NOT NULL,
+    wins_a      INTEGER NOT NULL,
+    win_rate_a  REAL    NOT NULL,
+    avg_margin  REAL    NOT NULL,
+    PRIMARY KEY (run_id, deck_a, deck_b)
   );
 `
 
@@ -153,4 +178,53 @@ export function listRuns(db: DatabaseSync): RunRow[] {
 /** Every game of one run, in play order. */
 export function gamesForRun(db: DatabaseSync, runId: string): GameRow[] {
   return (db.prepare(`SELECT * FROM games WHERE run_id = ? ORDER BY game_index`).all(runId) as Record<string, unknown>[]).map(mapGame)
+}
+
+// --- Matchup matrix -------------------------------------------------------
+
+/** Persist a matchup matrix (one run) as a metadata row plus one row per ordered deck pair. */
+export function saveMatrix(db: DatabaseSync, result: MatrixResult): string {
+  const startedAt = new Date().toISOString()
+  const runId = `matrix-${startedAt}-${randomUUID().slice(0, 8)}`
+  db.prepare(
+    `INSERT INTO matrix_runs (run_id, started_at, build_tag, model, deck_count, games_per_cell, seed, dropped)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(runId, startedAt, result.buildTag, result.model, result.deckCount, result.gamesPerCell, result.seed, result.dropped)
+
+  const insert = db.prepare(
+    `INSERT INTO matchups (run_id, deck_a, deck_b, leader_a, base_a, leader_b, base_b, games, wins_a, win_rate_a, avg_margin)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+  for (const c of result.cells) {
+    insert.run(runId, c.aLabel, c.bLabel, c.leaderA, c.baseA, c.leaderB, c.baseB, c.games, c.winsA, c.winRateA, c.avgMargin)
+  }
+  return runId
+}
+
+export interface StrengthRow {
+  key: string
+  winRate: number
+  avgMargin: number
+  games: number
+}
+
+function strength(db: DatabaseSync, column: string, runId: string): StrengthRow[] {
+  const rows = db.prepare(
+    `SELECT ${column} AS key, AVG(win_rate_a) AS win_rate, AVG(avg_margin) AS avg_margin, SUM(games) AS games
+     FROM matchups WHERE run_id = ? GROUP BY ${column} ORDER BY win_rate DESC`,
+  ).all(runId) as Record<string, unknown>[]
+  return rows.map(r => ({ key: str(r.key), winRate: num(r.win_rate), avgMargin: num(r.avg_margin), games: num(r.games) }))
+}
+
+/** Each deck's average win rate across all opponents (its overall strength under this model). */
+export function deckStrength(db: DatabaseSync, runId: string): StrengthRow[] {
+  return strength(db, 'deck_a', runId)
+}
+/** Each leader's average win rate across all decks and opponents. */
+export function leaderStrength(db: DatabaseSync, runId: string): StrengthRow[] {
+  return strength(db, 'leader_a', runId)
+}
+/** Each base aspect's average win rate across all decks and opponents. */
+export function baseStrength(db: DatabaseSync, runId: string): StrengthRow[] {
+  return strength(db, 'base_a', runId)
 }

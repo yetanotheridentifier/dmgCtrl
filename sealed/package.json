@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "bench": "tsx src/bench/main.ts",
+    "tune": "tsx src/bench/tune.ts",
     "check": "node scripts/bumpBuild.mjs && vitest run && tsc -b && eslint ."
   },
   "dependencies": {

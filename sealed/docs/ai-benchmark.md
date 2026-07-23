@@ -31,8 +31,9 @@ Everything is optional:
 - `--games N` how many games to play (default 100).
 - `--seed N` the run's seed (default 1). The same seed reproduces the run exactly.
 - `aiA aiB` the two AIs by name (default `random random`). `aiA` plays the "player" seat, `aiB` the
-  "opponent" seat. The registered AIs are `random` (rung 0, uniform) and `greedy` (rung 1, one-ply);
-  more join the list as they are built.
+  "opponent" seat. Registered AIs: `random` (rung 0, uniform), `greedy` (rung 1, one-ply, the
+  deployed model), and `greedy-baseline` (the frozen pre-#392 greedy, kept only as a fixed reference
+  for tuning). More join the list as they are built.
 
 Examples:
 
@@ -123,8 +124,8 @@ union covers the pool). The generator is deliberately separate from the bench so
 ## Generalisation diagnostic
 
 `--generalise` plays one AI against another across the whole coverage deck set and reports the first
-AI's win rate **per deck** (weakest first), so you can see which decks (and therefore card mechanics)
-it handles worst rather than hiding that in an aggregate:
+AI's win rate broken down **by leader, by base aspect, and per deck** (each weakest-first), so you can
+see which leaders / mechanics it handles worst rather than hiding that in an aggregate:
 
 ```bash
 npm run bench --prefix sealed -- --generalise --games 40 --seed 42   # greedy vs random by default
@@ -134,6 +135,62 @@ It answers "is the AI overfit to one deck, and is there anything to hand-tune?" 
 `random`, greedy sits at ~100% on every deck (random cannot punish its flaws), which is exactly why
 the useful gradient comes from measuring a *new* AI against the *current* one here, not against
 random.
+
+## Tuning evaluation weights
+
+The greedy evaluation's weights are parameterised (`ai/evaluate.ts: EvalWeights`). `npm run tune`
+sweeps candidate weights, measuring each against the frozen `greedy-baseline` across the coverage
+decks, so weights are chosen from data rather than guessed:
+
+```bash
+npm run tune --prefix sealed -- --games 100 4,2,1,4 3,2,1,4 6,2,1,3   # unit,power,hp,base per config
+```
+
+It prints each config's win rate vs baseline (higher is better) and its wall clock. The current
+deployed weights were chosen this way (see `DEFAULT_WEIGHTS`); to change the model, re-sweep, set the
+winning weights, and redeploy.
+
+## Matchup matrix
+
+`--matrix` measures **deck strength** and **matchups**. It builds an even deck set (every one of the
+18 leaders paired with each of the 4 base aspects = 72 decks, `bench/matchupDecks.ts`) and, under one
+fixed AI model, plays every deck against every deck (mirrors included). First player is alternated so
+seat advantage cancels, which means "i vs j" already measures "j vs i", so only the upper triangle is
+played and the rest derived.
+
+```bash
+npm run bench --prefix sealed -- --matrix --games 14 --seed 42 greedy   # ~14 games/cell => ~1000/deck
+```
+
+`--games` is games *per cell*; a whole run is ~30-40 min at 14. It prints strongest/weakest decks,
+by-leader and by-base strength (each deck's average win rate across all opponents), saves every
+ordered pair to the SQLite `matchups` table, and exports the full matrix to
+`bench-results/matrix-<run>.csv`. It answers two questions:
+
+- **Which decks are strongest** (for a fixed model): the deck-strength ranking, or `AVG(win_rate_a)`
+  grouped by `deck_a`.
+- **Which decks improve or degrade as the model changes**: run the matrix for two models (e.g.
+  `greedy` and `greedy-baseline`, or before/after a tune) and diff their rows.
+
+### Interrogating a matrix
+
+The friendliest path is the **CSV**: open `matrix-<run>.csv` in a spreadsheet and pivot `deck_a`
+(rows) x `deck_b` (columns) on `win_rate_a` to see the whole grid. For queries, the DB is standard
+SQLite (`bench-results/bench.db`); open it with **DB Browser for SQLite** (GUI), install the `sqlite3`
+CLI, or use Node. Useful SQL (works in any of them):
+
+```sql
+-- deck strength for a run (find the run_id in the matrix_runs table)
+SELECT deck_a, ROUND(AVG(win_rate_a), 3) AS strength FROM matchups WHERE run_id = ? GROUP BY deck_a ORDER BY strength DESC;
+-- by leader
+SELECT leader_a, ROUND(AVG(win_rate_a), 3) AS strength FROM matchups WHERE run_id = ? GROUP BY leader_a ORDER BY strength DESC;
+-- a specific matchup
+SELECT win_rate_a, avg_margin FROM matchups WHERE run_id = ? AND deck_a = ? AND deck_b = ?;
+-- model comparison: how each deck's strength changed between two runs
+SELECT a.deck_a, ROUND(AVG(a.win_rate_a) - AVG(b.win_rate_a), 3) AS delta
+FROM matchups a JOIN matchups b ON a.deck_a = b.deck_a AND a.deck_b = b.deck_b
+WHERE a.run_id = ? AND b.run_id = ? GROUP BY a.deck_a ORDER BY delta;
+```
 
 ## Where results go: the SQLite database
 
