@@ -315,8 +315,16 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
   // attack only if there's an enemy to hit; otherwise the unit just enters exhausted, as normal.
   const inPlay = (): UnitState => next.players[owner].units.find(u => u.instanceId === newUnit.instanceId)!
   const exhaust = () => { next = updatePlayer(next, owner, { units: next.players[owner].units.map(u => (u.instanceId === newUnit.instanceId ? { ...u, exhausted: true } : u)) }) }
+  const readyUp = () => { next = updatePlayer(next, owner, { units: next.players[owner].units.map(u => (u.instanceId === newUnit.instanceId ? { ...u, exhausted: false } : u)) }) }
   if (unitHasKeyword(next, inPlay(), 'Ambush')) {
     if (enemyAttackTargets(next, inPlay()).targets.length > 0) {
+      // Ambush always enters the unit ready so it can immediately attack, whether Ambush is printed
+      // (already handled by `ambush` above) or only granted CONDITIONALLY once the unit is actually
+      // in play (AT-ST Raider, Mandalorian Flagship, #412). The early `entersWith` check cannot see a
+      // conditional grant: it runs before the unit exists, and a condition like "another non-unique
+      // unit" looks the unit up by instance id. Correct it here against the live keyword set, which
+      // does see it.
+      if (inPlay().exhausted) readyUp()
       next = pushChoice(next, { kind: 'ambush', id: newUnit.instanceId, controller: owner, unitId: newUnit.instanceId })
     } else if (!inPlay().exhausted) {
       exhaust() // no target → settle into a normal exhausted entry
