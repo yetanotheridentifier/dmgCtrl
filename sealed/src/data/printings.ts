@@ -2,6 +2,7 @@ import { db } from './db'
 import { cardId, SWU_DB_API } from './cards'
 import type { SwuCard } from './cards'
 import { logger } from './log'
+import { bundledCanonicalId } from './bundledPrintings'
 
 /**
  * Printings, and why card identity has to be canonical.
@@ -15,8 +16,18 @@ import { logger } from './log'
  * The fix is to canonicalise the id during hydration, so the engine only ever sees one id per
  * card. The printing's own art is kept, so you still see the card you own.
  *
- * The join is `Type|Name|Subtitle`, because the set listing returns Normal printings only and
- * therefore cannot be joined on number. Verified unambiguous for ASH: 264 rows, 264 distinct keys.
+ * Two tiers. First, a bundled static map (`bundledPrintings.ts`, `scripts/generatePrintingMap.mjs`)
+ * generated from a set's FULL printing listing, resolved synchronously with no IndexedDB or
+ * network dependency. Second, for anything not bundled (another set, or a printing released since
+ * the map was last generated), the dynamic path below: cache first, then a network fetch of the
+ * set's Normal-only listing, joined by `Type|Name|Subtitle` since the listing cannot be joined on
+ * number. That join was verified unambiguous for ASH across its full 925-row printing list, not
+ * just the 264 Normal rows (#389): every variant joins to exactly one Normal row.
+ *
+ * #389 was this dynamic path's failure mode: `indexFromCache` returns a `Map` as soon as ANY Normal
+ * card for the set is cached, even if incomplete, so an incomplete cache silently prevented the
+ * (correct, complete) network fetch from ever running. The bundled tier removes that race entirely
+ * for anything it covers.
  */
 
 /** Identity of a card across its printings. */
@@ -90,6 +101,13 @@ export async function canonicaliseCards(cards: SwuCard[]): Promise<{ map: Map<st
   for (const card of cards) {
     const id = cardId(card.Set, card.Number)
     if (map.has(id)) continue
+
+    const bundled = bundledCanonicalId(id)
+    if (bundled) {
+      map.set(id, bundled)
+      continue
+    }
+
     const index = await printingIndex(card.Set, indexes)
     if (!index) {
       map.set(id, id)

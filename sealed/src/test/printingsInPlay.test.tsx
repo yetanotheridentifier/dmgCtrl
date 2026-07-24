@@ -91,16 +91,24 @@ describe('printings play as the card, not as a vanilla body', () => {
     expect(barriss.length < 2 || asking).toBe(true)
   })
 
-  /** Offline: the game must still start, with the affected cards named rather than hidden. */
+  /**
+   * Offline: the game must still start, with the affected cards named rather than hidden. Uses a
+   * made-up set (`ZZZ`) rather than real ASH ids: ASH now has a bundled printing map (#389) that
+   * resolves Barriss's real ids with no cache or network involved at all, so this scenario (no index
+   * reachable) can only still arise for a set that isn't bundled.
+   */
   it('plays on and reports the cards when no printing index is available', async () => {
+    const barrissHyperspaceZzz: SwuCard = { ...BARRISS_NORMAL, Set: 'ZZZ', Number: '308', VariantType: 'Hyperspace' }
+    const deck: SavedDeck = { ...HYPERSPACE_DECK, cards: [{ id: 'ZZZ_308', count: 4 }, { id: 'ASH_099', count: 26 }] }
+
     await db.cards.clear()
-    await seed([BARRISS_HYPERSPACE, LEADER, BASE, CHAFF]) // no Normal Barriss anywhere
+    await seed([LEADER, BASE, CHAFF, barrissHyperspaceZzz]) // no Normal Barriss anywhere for ZZZ
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
 
-    const { result } = renderHook(() => useGame(HYPERSPACE_DECK, HYPERSPACE_DECK, OPTS))
+    const { result } = renderHook(() => useGame(deck, deck, OPTS))
     await waitFor(() => expect(result.current.status).toBe('playing'))
 
     expect(result.current.unresolvedPrintings.map(u => u.name)).toContain('Barriss Offee')
-    expect(result.current.gameState!.players.player.hand).toContain('ASH_308') // unchanged, plays vanilla
+    expect(result.current.gameState!.players.player.hand).toContain('ZZZ_308') // unchanged, plays vanilla
   })
 })
