@@ -3,4 +3,4 @@
  * browser running?" is answerable at a glance. Shown bottom-right in dev, and at
  * the foot of the Help page in prod.
  */
-export const BUILD_TAG = 'b371'
+export const BUILD_TAG = 'b373'
