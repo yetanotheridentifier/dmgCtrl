@@ -163,9 +163,8 @@ npm run bench --prefix sealed -- --matrix --games 14 --seed 42 greedy   # ~14 ga
 ```
 
 `--games` is games *per cell*; a whole run is ~30-40 min at 14. It prints strongest/weakest decks,
-by-leader and by-base strength (each deck's average win rate across all opponents), saves every
-ordered pair to the SQLite `matchups` table, and exports the full matrix to
-`bench-results/matrix-<run>.csv`. It answers two questions:
+by-leader and by-base strength (each deck's average win rate across all opponents) and saves every
+ordered pair to the SQLite `matchups` table. It answers two questions:
 
 - **Which decks are strongest** (for a fixed model): the deck-strength ranking, or `AVG(win_rate_a)`
   grouped by `deck_a`.
@@ -174,10 +173,8 @@ ordered pair to the SQLite `matchups` table, and exports the full matrix to
 
 ### Interrogating a matrix
 
-The friendliest path is the **CSV**: open `matrix-<run>.csv` in a spreadsheet and pivot `deck_a`
-(rows) x `deck_b` (columns) on `win_rate_a` to see the whole grid. For queries, the DB is standard
-SQLite (`bench-results/bench.db`); open it with **DB Browser for SQLite** (GUI), install the `sqlite3`
-CLI, or use Node. Useful SQL (works in any of them):
+The results live in the SQLite DB (`bench-results/bench.db`, standard format): open it with a VS Code
+SQLite extension, **DB Browser for SQLite**, the `sqlite3` CLI, or Node. Useful SQL:
 
 ```sql
 -- deck strength for a run (find the run_id in the matrix_runs table)

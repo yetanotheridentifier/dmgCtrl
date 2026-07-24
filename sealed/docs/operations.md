@@ -48,8 +48,8 @@ npm run tune --prefix sealed -- --games 100 4,2,1,4 3,2,1,4   # unit,power,hp,ba
 ```
 
 The **matchup matrix** (`--matrix`) measures deck strength and matchups: every leader paired with
-every base aspect (72 decks), played deck-vs-deck under one model, stored in SQLite and exported to
-CSV (~30-40 min):
+every base aspect (72 decks), played deck-vs-deck under one model, stored in the SQLite `matchups`
+table (~30-40 min):
 
 ```bash
 npm run bench --prefix sealed -- --matrix --games 14 --seed 42 greedy

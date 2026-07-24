@@ -9,7 +9,6 @@ import type { GeneralisationReport } from './generalisation'
 import { buildMatchupDecks } from './matchupDecks'
 import { runMatchupMatrix } from './matrix'
 import { saveMatrix, deckStrength, leaderStrength, baseStrength, type StrengthRow } from './store'
-import { writeMatrixCsv } from './reports'
 import { resolveAi } from '../ai/registry'
 
 /**
@@ -214,7 +213,6 @@ function runMatrixMode(args: Args): void {
   const result = runMatchupMatrix(decks, resolveAi(model), model, { gamesPerCell, seed: args.seed })
   const db = openDb(DEFAULT_DB_PATH)
   const runId = saveMatrix(db, result)
-  const csvPath = writeMatrixCsv(runId, result.cells)
   const wall = ((Date.now() - start) / 1000).toFixed(0)
 
   const lines = [
@@ -235,9 +233,7 @@ function runMatrixMode(args: Args): void {
     '',
     ...strengthTable('by base aspect', baseStrength(db, runId)),
     '',
-    '  full matrix:',
-    `    spreadsheet:  sealed/${csvPath}  (pivot deck_a rows x deck_b cols on win_rate_a)`,
-    `    sqlite:       sealed/${DEFAULT_DB_PATH}, table "matchups", run_id='${runId}'`,
+    `  full matrix: sealed/${DEFAULT_DB_PATH}, table "matchups", run_id='${runId}'`,
     '',
   ]
   console.log(lines.join('\n'))
