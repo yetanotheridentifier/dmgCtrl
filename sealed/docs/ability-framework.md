@@ -443,9 +443,19 @@ Phased into independently-deployable chunks; each groups a primitive with the le
   `targetInstanceId` picks a unit. Vane **front** = "a base" (either); deployed **back** = "the
   defending unit or a base" (the defender is the attack's target when it's a unit). Mandatory.
 - **Vane** front is a target-less `usable`-gated action (offered when ≥1 upgrade) raising the upgrade
-  choice **mandatory** (`optional:false`, no Cancel, since the action's already committed); the deployed
-  back's On Attack raises it **optional** (`optional:true`, Cancel = decline). Retired the old
-  board-select `mayDefeatUpgradeForBase` choice and the `firstCardUpgrade` helper.
+  choice **mandatory** (`optional:false`); the deployed back's On Attack raises it **optional**
+  (`optional:true`). Retired the old board-select `mayDefeatUpgradeForBase` choice and the
+  `firstCardUpgrade` helper.
+- **Two-step picker, and where its decline actually lives (#416).** `selectUpgradeToDefeat` (and the
+  unique-rule's `selectUpgradeToReturn`-alike) is driven as two UI steps in `gameScreen.tsx`: step one
+  highlights every candidate's host unit on the board; clicking one opens `CardSelectOverlay` on just
+  that unit's upgrades (step two). **Step two's Cancel button only resets back to step one** (re-pick
+  a host): it does not dispatch `skipTrigger`, so it is not a decline and must not be described as
+  one. For an `optional:true` choice, the real decline is the `skipTrigger` move, surfaced as the
+  ordinary **Decline** button in the action column at **step one** (before a host is picked), where the
+  step-two overlay's full-screen modal can't hide it. A mandatory choice has no `skipTrigger` at all,
+  so nothing needs to reach it. Get this pattern right for any future two-step optional picker: the
+  overlay's own Cancel is navigation, not the ability's answer.
 - **`CardSelectOverlay`** (`gameScreen.tsx`) is a reusable centre-screen card picker: **click the
   (highlighted) card itself** to select it, plus a Cancel shown only when `onCancel` is given (the
   optional case). Token art included. Extensible for any future "select a card / card type" effect.

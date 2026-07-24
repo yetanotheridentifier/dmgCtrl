@@ -121,6 +121,8 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       return ['choose a number']
     case 'selectUnitToSteal':
       return ['choose an enemy unit to take control of']
+    case 'peekTopDiscard':
+      return ['choose a deck to look at the top card of']
     case 'multiPick': {
       // Optional chaining is deliberate: this is decoration over the board, and a malformed
       // choice must degrade to a vaguer prompt rather than throwing and blanking the screen.

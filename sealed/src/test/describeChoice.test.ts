@@ -75,6 +75,12 @@ describe('describeChoiceParts', () => {
     expect(prompt({ kind: 'selectUnitToSteal', id: 'c', controller: 'player', targets: ['u1'] } as unknown as PendingChoice)).toMatch(/control/i)
   })
 
+  /** #388: this fell through to the generic "choose a target on the board" default, which is
+   *  wrong for a deck choice with no board target at all. */
+  it('prompts for choosing which deck to look at (Reanimated Night Trooper)', () => {
+    expect(prompt({ kind: 'peekTopDiscard', id: 'c', controller: 'player', decks: ['player', 'opponent'] } as unknown as PendingChoice)).toMatch(/deck/i)
+  })
+
   it('still reads sensibly when the choice records no source (see #374)', () => {
     // selectUnitToDefeat has no source field — the prompt must not imply one.
     const parts = describeChoiceParts(s, sample.selectUnitToDefeat)

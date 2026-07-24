@@ -469,8 +469,14 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'peekTopDiscard': {
-        // Reanimated Night Trooper: discard the top of a chosen deck (with cards), or decline.
+        // Reanimated Night Trooper: look at the top of a chosen deck (with cards), or decline.
         for (const deck of choice.decks) if (state.players[deck].deck.length > 0) moves.push({ type: 'acceptChoice', choiceId: choice.id, baseTarget: deck })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'mayDiscardTop': {
+        // Having looked, discard the revealed card or leave it on top.
+        moves.push({ type: 'acceptChoice', choiceId: choice.id })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }

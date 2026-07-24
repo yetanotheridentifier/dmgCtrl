@@ -42,6 +42,25 @@ describe('describeAction — pending choice labels', () => {
   })
 
   /**
+   * #388: choosing a deck must read as "look", not "discard" — the button used to name the top
+   * card before it had ever been revealed, and called it a discard when it was only a look.
+   */
+  it('labels choosing a deck to look at (Reanimated Night Trooper, stage 1)', () => {
+    const s = withChoice({ kind: 'peekTopDiscard', id: 'x', controller: 'player', decks: ['player', 'opponent'] })
+    expect(describeAction(s, 'player', { type: 'acceptChoice', choiceId: 'x', baseTarget: 'player' })).toBe('Look at your deck')
+    expect(describeAction(s, 'player', { type: 'acceptChoice', choiceId: 'x', baseTarget: 'opponent' })).toBe("Look at opponent's deck")
+  })
+
+  it('labels discarding the revealed card, and leaving it as "Leave" (stage 2)', () => {
+    const s = withChoice(
+      { kind: 'mayDiscardTop', id: 'x', controller: 'player', deck: 'opponent', cardId: 'REBELUNIT' },
+      { REBELUNIT: card({ id: 'REBELUNIT', name: 'Rebel Trooper', type: 'unit' }) },
+    )
+    expect(describeAction(s, 'player', { type: 'acceptChoice', choiceId: 'x' })).toBe('Discard Rebel Trooper')
+    expect(describeAction(s, 'player', { type: 'skipTrigger', choiceId: 'x' })).toBe('Leave')
+  })
+
+  /**
    * Kinds with no label rendered as a bare "Accept" and, worse, leaked their internal name as
    * "Skip <kind>" (#379, #380). Two identical Accept buttons for Treacherous Minefield's arena
    * choice read as one button per unit, which is what the report described.

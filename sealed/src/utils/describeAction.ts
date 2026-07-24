@@ -165,6 +165,8 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       // once, and identical buttons make it unclear which one you are turning down.
       if (choice.kind === 'support') return 'Decline support'
       if (choice.kind === 'ambush') return "Don't ambush"
+      // Having looked at the revealed card (#388), the decline reads as "leave it", not "decline".
+      if (choice.kind === 'mayDiscardTop') return 'Leave'
       // Never fall through to the kind's internal name: "Skip mayPlayUnitFromDiscard" reached
       // players (#379/#380). An unlabelled decline is still a decline.
       return 'Decline'
@@ -207,10 +209,14 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Return ${target ?? 'unit'} to hand`
       }
+      // #388: choosing a deck only looks at it — naming the top card here (before it is actually
+      // revealed) and calling it a discard both misdescribed what this button does.
       if (choice.kind === 'peekTopDiscard' && action.baseTarget) {
-        const top = state.players[action.baseTarget].deck[0]
-        const name = top ? state.cards[top]?.name ?? top : 'card'
-        return `Discard ${name} (${action.baseTarget === by ? 'your' : "opponent's"} deck)`
+        return `Look at ${action.baseTarget === by ? 'your' : "opponent's"} deck`
+      }
+      if (choice.kind === 'mayDiscardTop') {
+        const name = state.cards[choice.cardId]?.name ?? 'card'
+        return `Discard ${name}`
       }
       if (choice.kind === 'nameCard') return `Name ${action.cardName ?? 'a card'}`
       if (choice.kind === 'mayDefeatSelfSearch') return `Defeat ${anyUnitName(state, choice.unitId) ?? 'this unit'} & search`
