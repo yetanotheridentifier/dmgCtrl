@@ -510,9 +510,13 @@ export type PendingChoice =
   // Hold Them Off: pick the unit that will deal the damage; its power becomes the pool to spread
   // among units in its own arena.
   | { kind: 'selectDistributeSource'; id: string; controller: PlayerId; targets: string[] }
-  // Reanimated Night Trooper: having looked at the top of each deck in `decks`, you may discard
-  // one deck's top card (`acceptChoice`'s `baseTarget` picks the deck), or decline.
+  // Reanimated Night Trooper, stage 1 (#388): choose which deck to look at (`acceptChoice`'s
+  // `baseTarget` picks one of `decks`), or decline outright. Choosing a deck reveals its top card
+  // rather than discarding it — that decision is the follow-up `mayDiscardTop` choice below.
   | { kind: 'peekTopDiscard'; id: string; controller: PlayerId; decks: PlayerId[] }
+  // Reanimated Night Trooper, stage 2: the top card of `deck` (`cardId`) is now revealed. Accept
+  // discards it; decline leaves it on top.
+  | { kind: 'mayDiscardTop'; id: string; controller: PlayerId; deck: PlayerId; cardId: string }
   // Look at `target`'s hand (Imperial Defector / Remnant Lookouts) — the controller sees it
   // revealed. View-only unless `mayDiscard`, when the controller may discard one of the target's
   // cards (an `acceptChoice` with its hand index); `thenDraw` then has the target draw a card.

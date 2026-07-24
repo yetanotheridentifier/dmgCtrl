@@ -1143,6 +1143,16 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === lookChoice.id)
       : []
 
+    // A "may discard the revealed top card" choice (Reanimated Night Trooper, stage 2, #388):
+    // having chosen which deck to look at, its top card is shown in the same centre-screen
+    // overlay, with Discard/Leave underneath — not the action menu.
+    const discardTopChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'mayDiscardTop' }> => c.kind === 'mayDiscardTop' && c.controller === 'player',
+    )
+    const discardTopActions = discardTopChoice
+      ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === discardTopChoice.id)
+      : []
+
     // A "search" reveal (Improvised Identity): its discard picks live in the
     // centre-screen overlay, not the action menu.
     const searchChoice = gameState.pendingChoices?.find(
@@ -1233,11 +1243,17 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // "Play a unit from hand" accepts are clicked on the hand card, not the menu.
     const isHandPlay = (a: Action) => a.type === 'acceptChoice' && a.handIndex !== undefined
     const menuActions = gameState.winner === null
-      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !nameCardActions.includes(a) && !fromDiscardActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
+      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !discardTopActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !nameCardActions.includes(a) && !fromDiscardActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
       : []
     // The board-target decline and the hand-discard decline share one button (only one
     // choice is active at a time). "Done" for the repeatable multiPick, else "Decline".
-    const declineButton = declineChoice ?? discardDecline ?? handPlayDecline
+    // An optional "defeat an upgrade" choice (Clan Vizsla Soldier, Vane's On Attack, #416): the
+    // two-step host-then-upgrade picker's own Cancel only steps back to re-pick a host, it never
+    // declines the ability, so an optional instance needs its own reachable decline. Shown here
+    // (step one, before a host is picked) rather than in the step-two overlay, which is a
+    // full-screen modal that would hide this button anyway.
+    const upgradeDefeatDecline = selectUpgradeActions.find(a => a.type === 'skipTrigger')
+    const declineButton = declineChoice ?? discardDecline ?? handPlayDecline ?? upgradeDefeatDecline
     // Distribute HUD (Ninth Sister damage / Helgait tokens): how much of the pool is allocated.
     const distribute = targetChoice?.kind === 'distributeDamage' || targetChoice?.kind === 'distributeTokens' ? targetChoice : undefined
     const repeatable = targetChoice?.kind === 'multiPick' || targetChoice?.kind === 'distributeDamage' || targetChoice?.kind === 'distributeTokens'
@@ -1289,6 +1305,25 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       choiceOverlay = (
         <CardChoiceOverlay card={gameState.cards[lookChoice.cardId]} cardId={lookChoice.cardId} prompt="Look at the top card of your deck">
           {lookActions.map((action, i) => (
+            <button
+              key={i}
+              data-testid={`choice-btn-${i}`}
+              onClick={() => actAndClear(action)}
+              className="rounded-xl border-2 border-accent px-4 py-2 text-sm text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10"
+            >
+              {describeAction(gameState, 'player', action)}
+            </button>
+          ))}
+        </CardChoiceOverlay>
+      )
+    } else if (discardTopChoice) {
+      choiceOverlay = (
+        <CardChoiceOverlay
+          card={gameState.cards[discardTopChoice.cardId]}
+          cardId={discardTopChoice.cardId}
+          prompt={`Look at the top of ${discardTopChoice.deck === 'player' ? 'your' : "opponent's"} deck`}
+        >
+          {discardTopActions.map((action, i) => (
             <button
               key={i}
               data-testid={`choice-btn-${i}`}

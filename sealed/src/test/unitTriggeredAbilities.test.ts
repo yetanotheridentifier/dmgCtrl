@@ -245,6 +245,18 @@ describe('Clan Vizsla Soldier (165): may defeat an upgrade', () => {
   it('no upgrades in play → no choice', () => {
     expect(defeat('ASH_165', { oppUnits: [unit('e', 'FILLER', { arena: 'ground' })] }).pendingChoices ?? []).toHaveLength(0)
   })
+
+  /**
+   * #416: genuinely optional — declining is a legal move, and it leaves the upgrade untouched.
+   * The engine already got this right; the bug was that the UI had no way to reach the decline.
+   */
+  it('may decline, leaving the upgrade in place', () => {
+    const s = defeat('ASH_165', { oppUnits: [unit('e', 'FILLER', { arena: 'ground', upgrades: [{ cardId: 'UPG', owner: 'opponent' }] })] })
+    expect(legalMoves(s).some(m => m.type === 'skipTrigger' && m.choiceId === s.pendingChoices![0].id)).toBe(true)
+    const done = resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id })
+    expect(U(done, 'e').upgrades).toHaveLength(1) // untouched
+    expect(done.pendingChoices ?? []).toHaveLength(0)
+  })
 })
 
 describe('Moff Gideon (097): return a non-unique Imperial from discard', () => {
@@ -322,19 +334,56 @@ describe('Reanimated Night Trooper (045): peek & maybe discard a deck top', () =
     },
   })
 
-  it('may discard the top card of a chosen deck', () => {
+  /**
+   * #388: choosing a deck must only REVEAL its top card, not discard it outright — the old
+   * one-step accept did both at once, so there was no way to look and then leave it. Choosing a
+   * deck turns the choice into `mayDiscardTop`, carrying the card actually revealed.
+   */
+  it('choosing a deck only reveals its top card, without discarding yet', () => {
     const s = dealDamageToUnit(board(), 't', 1)
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'peekTopDiscard', decks: ['player', 'opponent'] })
-    const done = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, baseTarget: 'opponent' })
+    const looked = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, baseTarget: 'opponent' })
+    expect(looked.pendingChoices?.[0]).toMatchObject({ kind: 'mayDiscardTop', deck: 'opponent', cardId: 'REBELUNIT' })
+    expect(looked.players.opponent.deck).toEqual(['REBELUNIT', 'IMPUNIT']) // untouched: only revealed, not discarded
+  })
+
+  it('may discard the revealed card after looking', () => {
+    const s = dealDamageToUnit(board(), 't', 1)
+    const looked = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, baseTarget: 'opponent' })
+    const done = resolve(looked, { type: 'acceptChoice', choiceId: looked.pendingChoices![0].id })
     expect(done.players.opponent.deck).toEqual(['IMPUNIT'])
     expect(done.players.opponent.discard).toContain('REBELUNIT')
   })
 
-  it('may decline (look only)', () => {
+  it('may leave the revealed card on top instead', () => {
+    const s = dealDamageToUnit(board(), 't', 1)
+    const looked = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, baseTarget: 'opponent' })
+    const done = resolve(looked, { type: 'skipTrigger', choiceId: looked.pendingChoices![0].id })
+    expect(done.players.opponent.deck).toEqual(['REBELUNIT', 'IMPUNIT'])
+    expect(done.players.opponent.discard).not.toContain('REBELUNIT')
+    expect(done.pendingChoices ?? []).toHaveLength(0)
+  })
+
+  it('may decline outright, before choosing a deck at all', () => {
     const s = dealDamageToUnit(board(), 't', 1)
     const done = resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id })
     expect(done.players.player.deck).toEqual(['FILLER', 'ZEROPOW'])
     expect(done.players.opponent.deck).toEqual(['REBELUNIT', 'IMPUNIT'])
+  })
+
+  it('offers a deck pick per eligible deck (plus decline), then discard-or-leave once revealed', () => {
+    const s = dealDamageToUnit(board(), 't', 1)
+    const stage1 = legalMoves(s)
+    expect(stage1).toHaveLength(3) // look at your deck, look at opponent's, decline
+    expect(stage1.filter(m => m.type === 'acceptChoice')).toHaveLength(2)
+    expect(stage1.filter(m => m.type === 'skipTrigger')).toHaveLength(1)
+
+    const looked = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, baseTarget: 'opponent' })
+    const stage2 = legalMoves(looked)
+    expect(stage2).toEqual([
+      { type: 'acceptChoice', choiceId: looked.pendingChoices![0].id },
+      { type: 'skipTrigger', choiceId: looked.pendingChoices![0].id },
+    ])
   })
 })
 

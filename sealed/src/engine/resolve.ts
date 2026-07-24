@@ -1181,11 +1181,19 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       break
     }
     case 'peekTopDiscard': {
-      // Reanimated Night Trooper: discard the top card of the chosen deck.
+      // Reanimated Night Trooper (#388): choosing a deck reveals its top card — raise the
+      // follow-up choice rather than discarding immediately, so "look, then decide" is a real
+      // two-step interaction instead of a blind discard.
       if (baseTarget) {
         const p = next.players[baseTarget]
-        if (p.deck.length > 0) next = updatePlayer(next, baseTarget, { deck: p.deck.slice(1), discard: [...p.discard, p.deck[0]] })
+        if (p.deck.length > 0) next = pushChoice(next, { kind: 'mayDiscardTop', id: choice.id, controller: choice.controller, deck: baseTarget, cardId: p.deck[0] })
       }
+      break
+    }
+    case 'mayDiscardTop': {
+      // The revealed card is discarded (or, on decline via skipTrigger, simply left in place).
+      const p = next.players[choice.deck]
+      if (p.deck.length > 0) next = updatePlayer(next, choice.deck, { deck: p.deck.slice(1), discard: [...p.discard, p.deck[0]] })
       break
     }
     case 'lookAtHand': {
