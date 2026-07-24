@@ -268,6 +268,18 @@ worker, so new sets work as soon as SWUDB serves them. If SWUDB changes its payl
 field names, update `SwuCard` (`data/cards.ts`) and `normaliseCard`
 (`engine/cardDb.ts`); both are test-covered.
 
+When a set gains card-ability support (or FFG ships a new print run for one that already has a
+bundled map), generate/refresh its printing map so every printing resolves offline with no
+cache/network dependency (#389):
+
+```bash
+node scripts/generatePrintingMap.mjs ASH
+```
+
+Writes `src/data/printingMaps/<set>.json`; import it in `data/bundledPrintings.ts` if it's a new
+set. The script warns and omits any printing it cannot join to a Normal row rather than guessing,
+so those fall back to the existing dynamic (cache/network) path.
+
 ## Extending the engine (post-spike epics)
 
 - **Smarter AI (T5.2+)**: implement alongside `ai/randomAi.ts`; the contract is

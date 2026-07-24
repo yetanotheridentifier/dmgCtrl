@@ -10,17 +10,23 @@ import type { SwuCard } from '../data/cards'
  * unregistered and played vanilla (#382-#385).
  *
  * The set listing returns Normal printings only, so `Type|Name|Subtitle` is the join back.
+ *
+ * Fixtures below use a made-up set (`ZZZ`) rather than real ASH ids, deliberately: ASH now has a
+ * bundled printing map (`data/printingMaps/ash.json`, #389) that resolves its real ids before any
+ * of this cache/network machinery runs, so a fixture using real ASH ids would no longer be
+ * exercising the dynamic path these tests are about. The bundled fast path itself, using real ASH
+ * ids, is covered separately below and in `bundledPrintings.test.ts`.
  */
 
 const NORMAL: SwuCard[] = [
-  { Set: 'ASH', Number: '044', Name: 'Barriss Offee', Type: 'Unit', VariantType: 'Normal' } as SwuCard,
-  { Set: 'ASH', Number: '045', Name: 'Reanimated Night Trooper', Type: 'Unit', VariantType: 'Normal' } as SwuCard,
+  { Set: 'ZZZ', Number: '044', Name: 'Barriss Offee', Type: 'Unit', VariantType: 'Normal' } as SwuCard,
+  { Set: 'ZZZ', Number: '045', Name: 'Reanimated Night Trooper', Type: 'Unit', VariantType: 'Normal' } as SwuCard,
   // A name shared by a leader and a unit: the key has to include the type.
-  { Set: 'ASH', Number: '011', Name: 'Cad Bane', Type: 'Leader', Subtitle: 'He Who Gets Paid', VariantType: 'Normal' } as SwuCard,
-  { Set: 'ASH', Number: '120', Name: 'Cad Bane', Type: 'Unit', VariantType: 'Normal' } as SwuCard,
+  { Set: 'ZZZ', Number: '011', Name: 'Cad Bane', Type: 'Leader', Subtitle: 'He Who Gets Paid', VariantType: 'Normal' } as SwuCard,
+  { Set: 'ZZZ', Number: '120', Name: 'Cad Bane', Type: 'Unit', VariantType: 'Normal' } as SwuCard,
 ]
 
-const hyperspaceBarriss = { Set: 'ASH', Number: '308', Name: 'Barriss Offee', Type: 'Unit', VariantType: 'Hyperspace' } as SwuCard
+const hyperspaceBarriss = { Set: 'ZZZ', Number: '308', Name: 'Barriss Offee', Type: 'Unit', VariantType: 'Hyperspace' } as SwuCard
 
 describe('printingKey', () => {
   it('keys on type, name and subtitle so printings of one card agree', () => {
@@ -35,17 +41,17 @@ describe('printingKey', () => {
 describe('buildPrintingIndex', () => {
   it('maps each card to its Normal printing’s id', () => {
     const index = buildPrintingIndex(NORMAL)
-    expect(index.get(printingKey(hyperspaceBarriss))).toBe('ASH_044')
+    expect(index.get(printingKey(hyperspaceBarriss))).toBe('ZZZ_044')
   })
 
   it('ignores non-Normal rows, so a variant can never become the canonical id', () => {
     const index = buildPrintingIndex([hyperspaceBarriss, ...NORMAL])
-    expect(index.get(printingKey(hyperspaceBarriss))).toBe('ASH_044')
+    expect(index.get(printingKey(hyperspaceBarriss))).toBe('ZZZ_044')
   })
 })
 
 describe('canonicaliseCards', () => {
-  const unknown = { Set: 'ASH', Number: '999', Name: 'Not In This Set', Type: 'Unit', VariantType: 'Hyperspace' } as SwuCard
+  const unknown = { Set: 'ZZZ', Number: '999', Name: 'Not In This Set', Type: 'Unit', VariantType: 'Hyperspace' } as SwuCard
 
   beforeEach(async () => {
     await db.cards.clear()
@@ -55,8 +61,8 @@ describe('canonicaliseCards', () => {
 
   it('rewrites a variant id to its Normal printing, from the card cache', async () => {
     const { map, unresolved } = await canonicaliseCards([hyperspaceBarriss, NORMAL[1]])
-    expect(map.get('ASH_308')).toBe('ASH_044')
-    expect(map.get('ASH_045')).toBe('ASH_045') // already canonical
+    expect(map.get('ZZZ_308')).toBe('ZZZ_044')
+    expect(map.get('ZZZ_045')).toBe('ZZZ_045') // already canonical
     expect(unresolved).toEqual([])
   })
 
@@ -66,7 +72,7 @@ describe('canonicaliseCards', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const { map } = await canonicaliseCards([hyperspaceBarriss])
-    expect(map.get('ASH_308')).toBe('ASH_044')
+    expect(map.get('ZZZ_308')).toBe('ZZZ_044')
     expect(fetchMock).toHaveBeenCalledOnce()
   })
 
@@ -80,14 +86,14 @@ describe('canonicaliseCards', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
 
     const { map, unresolved } = await canonicaliseCards([hyperspaceBarriss])
-    expect(map.get('ASH_308')).toBe('ASH_308')
-    expect(unresolved).toEqual([{ id: 'ASH_308', name: 'Barriss Offee', reason: 'no-index' }])
+    expect(map.get('ZZZ_308')).toBe('ZZZ_308')
+    expect(unresolved).toEqual([{ id: 'ZZZ_308', name: 'Barriss Offee', reason: 'no-index' }])
   })
 
   it('reports a card the index does not know, without failing the others', async () => {
     const { map, unresolved } = await canonicaliseCards([unknown, hyperspaceBarriss])
-    expect(map.get('ASH_308')).toBe('ASH_044') // the rest still resolve
-    expect(unresolved.map(u => u.id)).toEqual(['ASH_999'])
+    expect(map.get('ZZZ_308')).toBe('ZZZ_044') // the rest still resolve
+    expect(unresolved.map(u => u.id)).toEqual(['ZZZ_999'])
     expect(unresolved[0].reason).toBe('unknown-card')
   })
 
@@ -98,5 +104,33 @@ describe('canonicaliseCards', () => {
 
     await canonicaliseCards([hyperspaceBarriss, NORMAL[1], NORMAL[0]])
     expect(fetchMock).toHaveBeenCalledOnce()
+  })
+})
+
+/**
+ * The bundled fast path (#389): a known ASH printing resolves without ever touching the card cache
+ * or the network. The actual bug was an INCOMPLETE cache silently short-circuiting the dynamic
+ * fallback before it reached the network (a non-empty but incomplete `Map` isn't `undefined`, so
+ * `??` never fell through), so bundling removes that race for every id we ship data for. Uses the
+ * exact three printings from #389's filed report.
+ */
+describe('canonicaliseCards, bundled ASH fast path (#389)', () => {
+  const barrissHyperspace = { Set: 'ASH', Number: '308', Name: 'Barriss Offee', Subtitle: 'Redeeming Herself', Type: 'Unit', VariantType: 'Hyperspace' } as SwuCard
+  const barrissHyperspaceFoil = { Set: 'ASH', Number: '546', Name: 'Barriss Offee', Subtitle: 'Redeeming Herself', Type: 'Unit', VariantType: 'Hyperspace Foil' } as SwuCard
+  const covertBelieversHyperspace = { Set: 'ASH', Number: '344', Name: 'Covert Believers', Type: 'Unit', VariantType: 'Hyperspace' } as SwuCard
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('resolves real ASH variants with an empty cache and no network, even offline', async () => {
+    await db.cards.clear()
+    vi.stubGlobal('fetch', vi.fn(() => {
+      throw new Error('must not be called: a bundled id should never need cache or network')
+    }))
+
+    const { map, unresolved } = await canonicaliseCards([barrissHyperspace, barrissHyperspaceFoil, covertBelieversHyperspace])
+    expect(map.get('ASH_308')).toBe('ASH_044')
+    expect(map.get('ASH_546')).toBe('ASH_044')
+    expect(map.get('ASH_344')).toBe('ASH_080')
+    expect(unresolved).toEqual([])
   })
 })
