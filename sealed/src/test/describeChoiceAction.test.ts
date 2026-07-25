@@ -35,6 +35,35 @@ describe('describeAction — pending choice labels', () => {
     expect(describeAction(s, 'player', { type: 'acceptChoice', choiceId: 'x', targetInstanceId: 'u1' })).toBe('Play Blaster free on TST_U1')
   })
 
+  /**
+   * #387: the label branched on the STAGE (have we picked the friendly unit yet?) rather than on
+   * `mode`, so Diplomatic Pageantry, which EXHAUSTS, told the player it would "Sacrifice" and then
+   * "Defeat" their units. "Sacrifice" is not a mechanic in this game or in SWU, and appeared
+   * nowhere else in the codebase.
+   */
+  describe('selectPair labels follow the mode, not the stage', () => {
+    const pair = (mode: 'defeat' | 'exhaust') =>
+      withChoice({ kind: 'selectPair', id: 'x', controller: 'player', friendlyTargets: ['u1'], enemyTargets: ['e1'], mode })
+
+    it('says Exhaust at both stages when the mode is exhaust (Diplomatic Pageantry)', () => {
+      const stage1 = pair('exhaust')
+      expect(describeAction(stage1, 'player', { type: 'acceptChoice', choiceId: 'x', targetInstanceId: 'u1' })).toBe('Exhaust TST_U1')
+
+      const stage2 = withChoice({ kind: 'selectPair', id: 'x', controller: 'player', friendlyTargets: ['u1'], enemyTargets: ['e1'], mode: 'exhaust', chosenFriendly: 'u1' })
+      expect(describeAction(stage2, 'player', { type: 'acceptChoice', choiceId: 'x', targetInstanceId: 'u1' })).toBe('Exhaust TST_U1')
+    })
+
+    it('says Defeat at both stages when the mode is defeat (Chimaera)', () => {
+      expect(describeAction(pair('defeat'), 'player', { type: 'acceptChoice', choiceId: 'x', targetInstanceId: 'u1' })).toBe('Defeat TST_U1')
+    })
+
+    it('never says "Sacrifice"', () => {
+      for (const mode of ['defeat', 'exhaust'] as const) {
+        expect(describeAction(pair(mode), 'player', { type: 'acceptChoice', choiceId: 'x', targetInstanceId: 'u1' })).not.toMatch(/sacrifice/i)
+      }
+    })
+  })
+
   it('labels the DDC Defender damage-and-exhaust choice', () => {
     const s = withChoice({ kind: 'mayDamageExhaust', id: 'x', controller: 'player', unitId: 'u1', arena: 'ground' })
     expect(describeAction(s, 'player', { type: 'acceptChoice', choiceId: 'x', targetInstanceId: 'u1' })).toBe('Deal 1 & exhaust TST_U1')

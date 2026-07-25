@@ -1,4 +1,5 @@
 import type { EngineCard, GameState, KeywordInstance, PlayerId, UnitState, CombatContext, DamageSource } from './types'
+import { abilityCardIds } from './types'
 import type { AttackTarget } from './actions'
 
 /**
@@ -102,6 +103,13 @@ export interface AbilityDef {
  */
 export interface CardDefinition {
   abilities?: AbilityDef[]
+  /**
+   * For the `GRANT_*` pseudo cards only: the REAL card this ability carrier belongs to. They are
+   * internal ability holders with no entry in the card database, so a choice attributed to one
+   * could never be named to the player (#374). Naming the owning card instead is what the player
+   * actually needs to understand why they are being asked.
+   */
+  sourceCardId?: string
   /** Upgrades only: may this card attach to `target`? Default (no hook) = any unit. */
   attachRestriction?: (state: GameState, target: UnitState) => boolean
   /** Cost delta when playing this card (upgrades: `target` is the attach target). */
@@ -295,7 +303,7 @@ export interface ActionAbilityDef {
  *  source card id and per-card index so callers can address and track each one. */
 export function unitActionAbilities(unit: UnitState): { cardId: string; index: number; ability: ActionAbilityDef }[] {
   const out: { cardId: string; index: number; ability: ActionAbilityDef }[] = []
-  for (const cardId of [unit.cardId, ...unit.upgrades.map(u => u.cardId)]) {
+  for (const cardId of abilityCardIds(unit)) {
     const defs = registry.get(cardId)?.actionAbilities ?? []
     defs.forEach((ability, index) => out.push({ cardId, index, ability }))
   }
@@ -364,6 +372,33 @@ export function getAbilities(cardId: string): AbilityDef[] {
 }
 
 /**
+ * Stamp every choice raised between `before` and `after` with the card that raised it (#374).
+ *
+ * Diffs choice IDS rather than array length, because an effect can remove choices as well as add
+ * them. A choice that already carries a source keeps it, so the MOST SPECIFIC source wins: a nested
+ * effect stamps first, and the outer wrapper then leaves its work alone.
+ *
+ * Returns `after` by reference when nothing changed, which `runTrigger` documents as its contract.
+ */
+export function stampChoiceSource(before: GameState, after: GameState, source: DamageSource): GameState {
+  const pending = after.pendingChoices
+  if (!pending || pending.length === 0) return after
+  const existing = new Set((before.pendingChoices ?? []).map(c => c.id))
+  let changed = false
+  const stamped = pending.map(c => {
+    if (c.source || existing.has(c.id)) return c
+    changed = true
+    return { ...c, source }
+  })
+  return changed ? { ...after, pendingChoices: stamped } : after
+}
+
+/** Run one ability effect, attributing whatever choices it raises to the card it belongs to. */
+function runEffect(state: GameState, effect: (s: GameState, ctx: EffectContext) => GameState, ctx: EffectContext): GameState {
+  return stampChoiceSource(state, effect(state, ctx), { cardId: ctx.cardId, controller: ctx.owner })
+}
+
+/**
  * Fire every ability on `ctx.cardId` registered for `point`, in registration order.
  * Returns the input state unchanged (same reference) when nothing fires.
  */
@@ -371,7 +406,7 @@ export function runTrigger(state: GameState, point: TriggerPoint, ctx: EffectCon
   let next = state
   for (const ability of getAbilities(ctx.cardId)) {
     if (ability.trigger === point) {
-      next = ability.effect(next, ctx)
+      next = runEffect(next, ability.effect, ctx)
     }
   }
   return next
@@ -387,7 +422,7 @@ export function runLeaderTrigger(state: GameState, point: TriggerPoint, owner: P
   if (leader.deployed) return state
   let next = state
   for (const ability of registry.get(leader.cardId)?.leaderAbilities?.abilities ?? []) {
-    if (ability.trigger === point) next = ability.effect(next, { owner, cardId: leader.cardId, ...extra })
+    if (ability.trigger === point) next = runEffect(next, ability.effect, { owner, cardId: leader.cardId, ...extra })
   }
   return next
 }
@@ -405,7 +440,7 @@ function auraGrantedAbilityCards(state: GameState, unit: UnitState, owner: Playe
   const out: string[] = []
   for (const side of ['player', 'opponent'] as PlayerId[]) {
     for (const source of state.players[side].units) {
-      for (const cardId of [source.cardId, ...source.upgrades.map(u => u.cardId)]) {
+      for (const cardId of abilityCardIds(source)) {
         out.push(...(getCardDefinition(cardId)?.grantsAbilities?.(state, source, unit, side === owner) ?? []))
       }
     }
@@ -424,9 +459,7 @@ export function runUnitTrigger(
   // The unit's own card, its upgrades, any cards whose abilities are granted for this attack
   // (Improvised Identity), and any granted by an aura in play (Bo-Katan's Gauntlet).
   const cardIds = [
-    unit.cardId,
-    ...unit.upgrades.map(u => u.cardId),
-    ...(unit.grantedAbilityCardIds ?? []),
+    ...abilityCardIds(unit),
     ...auraGrantedAbilityCards(state, unit, owner),
     // Abilities handed over for the phase by a lasting effect (Treacherous Minefield).
     ...(state.lastingEffects ?? []).flatMap(e => (e.targetInstanceId === unit.instanceId ? e.abilityCardIds ?? [] : [])),
@@ -434,7 +467,8 @@ export function runUnitTrigger(
   for (const cardId of cardIds) {
     for (const ability of getAbilities(cardId)) {
       if (ability.trigger === point) {
-        next = ability.effect(next, { owner, cardId, sourceInstanceId: unit.instanceId, ...extra })
+        // `cardId` is the loop's, so an upgrade's ability is attributed to the upgrade, not the host.
+        next = runEffect(next, ability.effect, { owner, cardId, sourceInstanceId: unit.instanceId, ...extra })
       }
     }
   }

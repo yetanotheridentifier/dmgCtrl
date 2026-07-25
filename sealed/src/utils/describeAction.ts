@@ -148,6 +148,8 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayDamageExhaust') return 'Decline'
       if (choice.kind === 'mayAttack') return "Don't attack"
       if (choice.kind === 'distributeDamage' || choice.kind === 'distributeTokens' || choice.kind === 'lookAtHand' || choice.kind === 'searchPlayFree' || choice.kind === 'dealOwnBaseForDiscount') return 'Done'
+      // Acknowledging a reveal that matched nothing (#413), and passing on Reforge's search.
+      if (choice.kind === 'searchDraw' || choice.kind === 'search' || choice.kind === 'searchPlayUpgrade') return 'Done'
       if (choice.kind === 'mayDoubleTokens') return "Don't"
       if (choice.kind === 'returnFriendlyUnit' || choice.kind === 'peekTopDiscard' || choice.kind === 'maySelfDamageHealBase' || choice.kind === 'mayExhaustLeaderBuffSelf') return "Don't"
       if (choice.kind === 'playUnitFromHand') return "Don't play"
@@ -191,6 +193,11 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'searchDraw' && action.deckIndex !== undefined) {
         const cardId = choice.revealed[action.deckIndex]
         return `Draw ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
+      }
+      // Reforge: had no label at all, so its buttons read as a bare "Accept".
+      if (choice.kind === 'searchPlayUpgrade' && action.deckIndex !== undefined) {
+        const cardId = choice.revealed[action.deckIndex]
+        return `Play ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
       }
       if (choice.kind === 'variableStrike') {
         const found = action.targetInstanceId ? [...state.players.player.units, ...state.players.opponent.units].find(u => u.instanceId === action.targetInstanceId) : undefined
@@ -303,9 +310,12 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const name = state.cards[choice.cardId]?.name ?? 'card'
         return (action.optionIndex ?? 0) === 0 ? `Bottom ${name}, heal ${choice.heal}` : `Return ${name} to hand`
       }
+      // The verb comes from `mode`, which is what the engine actually applies to both units. It
+      // used to come from the STAGE, so Diplomatic Pageantry (exhaust) promised to "Sacrifice" and
+      // then "Defeat" (#387). The target name already distinguishes the two picks.
       if (choice.kind === 'selectPair') {
-        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
-        return choice.chosenFriendly === undefined ? `Sacrifice ${target ?? 'unit'}` : `Defeat ${target ?? 'unit'}`
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : 'unit'
+        return `${choice.mode === 'exhaust' ? 'Exhaust' : 'Defeat'} ${target}`
       }
       if (choice.kind === 'selectUpgradeToReturn') {
         const pick = choice.candidates[action.optionIndex ?? 0]

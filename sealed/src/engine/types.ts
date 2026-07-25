@@ -84,10 +84,11 @@ export interface UnitState {
    */
   grantedKeywords?: KeywordInstance[]
   /**
-   * Card ids whose full abilities (keywords + triggered) this unit has been granted
-   * for a single attack (Improvised Identity). Like `grantedKeywords`, set only
-   * during that attack and cleared immediately after. `unitKeywords`/`runUnitTrigger`
-   * include them.
+   * Card ids whose full abilities this unit has been granted for a single attack (Support,
+   * Improvised Identity). Like `grantedKeywords`, set only during that attack and cleared
+   * immediately after. Read them via `abilityCardIds`, which every ability lookup goes through so
+   * that EVERY category of ability is lent, not just the ones whose hook happened to remember to
+   * check (#417). Abilities only: printed traits do not travel.
    */
   grantedAbilityCardIds?: string[]
   /**
@@ -179,6 +180,26 @@ export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUn
   if (grant.trait && !card.traits.some(t => t.toLowerCase() === grant.trait!.toLowerCase())) return false
   if (grant.maxPower !== undefined && (card.power ?? 0) > grant.maxPower) return false
   return true
+}
+
+/**
+ * Every card that supplies this unit's abilities: its own card, each attached upgrade, and any card
+ * lent to it for a single attack (Support, Improvised Identity).
+ *
+ * The ONE definition of that set. It used to be spelled out at each lookup site, and the spellings
+ * drifted: only some included the lent cards, so an ability whose hook happened to live at a
+ * granted-blind site was silently never lent. Scion Shuttle's `aura` and Red Leader's
+ * `attacksEitherArena` were both lost that way (#417). Route every ability lookup through here.
+ *
+ * Duplicates are deliberate and must not be collapsed: two copies of the same upgrade on one host,
+ * or a Support source whose card matches the borrower's, each apply their ability again, and
+ * keyword numerals stack (CR).
+ *
+ * Printed TRAITS are deliberately not covered by this: Support lends "this unit's other abilities",
+ * and a trait is not an ability. Only a `grantedTraits` hook lends traits.
+ */
+export function abilityCardIds(unit: UnitState): string[] {
+  return [unit.cardId, ...unit.upgrades.map(u => u.cardId), ...(unit.grantedAbilityCardIds ?? [])]
 }
 
 export interface GameState {
@@ -350,13 +371,26 @@ export interface PhaseEvents {
 }
 
 /**
+ * Every pending choice also carries `source`: the card that RAISED it, so a prompt can say why the
+ * player is being asked (#374). It is stamped automatically by the ability dispatcher rather than
+ * passed at each of the ~185 `pushChoice` call sites, and inherited by follow-up choices.
+ *
+ * A distributive conditional, not a plain intersection: `(A | B) & C` collapses the union, which
+ * would break the ~19 `Extract<PendingChoice, { kind: 'x' }>` lookups across the UI and tests.
+ * Distributing keeps `PendingChoice` a genuine union of already-stamped variants, so `Extract`,
+ * `switch (choice.kind)` narrowing and exhaustiveness all keep working.
+ */
+export type PendingChoice = WithChoiceSource<ChoiceVariant>
+type WithChoiceSource<T> = T extends unknown ? T & { source?: DamageSource } : never
+
+/**
  * A decision the resolver pauses on until its `controller` picks an option or skips.
  * `id` addresses the choice so the controller can resolve several simultaneous ones
  * in an order of their choosing (CR: the active player orders simultaneous triggers).
  * `resumeAtInitiative` marks choices raised at round-start readying (`whenReadies`) —
  * once the queue drains, play resumes with the initiative holder, not `advanceTurn`.
  */
-export type PendingChoice =
+type ChoiceVariant =
   | { kind: 'ambush'; id: string; controller: PlayerId; unitId: string }
   | { kind: 'support'; id: string; controller: PlayerId; unitId: string }
   | { kind: 'payOrExhaust'; id: string; controller: PlayerId; unitId: string; cost: number; resumeAtInitiative?: boolean }

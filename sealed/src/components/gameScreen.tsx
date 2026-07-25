@@ -386,15 +386,19 @@ export function CardSelectOverlay({ state, prompt, items, onPick, onCancel }: {
  * "Search" reveal overlay — the private "look at the top N" for Improvised Identity: each
  * revealed ground unit gets a Discard button; the rest are dimmed. A thin wrapper over `CardGridOverlay`.
  */
-export function SearchRevealOverlay({ state, choice, onPick }: {
+export function SearchRevealOverlay({ state, choice, onPick, onDone }: {
   state: GameState
   choice: Extract<PendingChoice, { kind: 'search' }>
   onPick: (deckIndex: number) => void
+  /** Given only when nothing is pickable (#413): the reveal is shown, and Done dismisses it. */
+  onDone?: () => void
 }) {
   return (
     <CardGridOverlay
       idPrefix="search"
-      prompt={`Look at the top ${choice.revealed.length}: discard a ground unit`}
+      prompt={onDone
+        ? `Look at the top ${choice.revealed.length}: no ground unit to discard`
+        : `Look at the top ${choice.revealed.length}: discard a ground unit`}
       cardsById={state.cards}
       items={choice.revealed.map((cardId, i) => {
         const c = state.cards[cardId]
@@ -403,6 +407,11 @@ export function SearchRevealOverlay({ state, choice, onPick }: {
           ? { cardId, key: i, testId: `search-pick-${i}`, actionLabel: 'Discard', onSelect: () => onPick(i) }
           : { cardId, key: i, dimmed: true }
       })}
+      footer={onDone && (
+        <button data-testid="search-done" onClick={onDone} className="rounded-xl border-2 border-line/60 px-4 py-1.5 text-xs text-ink-dim hover:text-ink">
+          Done
+        </button>
+      )}
     />
   )
 }
@@ -412,20 +421,29 @@ export function SearchRevealOverlay({ state, choice, onPick }: {
  * trait-matching ones get a Draw button, the rest are dimmed. Mandatory (a match exists). A thin
  * wrapper over `CardGridOverlay`.
  */
-export function SearchDrawOverlay({ state, choice, onPick }: {
+export function SearchDrawOverlay({ state, choice, onPick, onDone }: {
   state: GameState
   choice: Extract<PendingChoice, { kind: 'searchDraw' }>
   onPick: (deckIndex: number) => void
+  /** Given only when nothing matched (#413): the cards are shown, and Done bottoms them. */
+  onDone?: () => void
 }) {
   const eligible = new Set(choice.eligibleIndices)
   return (
     <CardGridOverlay
       idPrefix="search-draw"
-      prompt={`Search the top ${choice.revealed.length}: draw a card sharing a Trait`}
+      prompt={onDone
+        ? `Search the top ${choice.revealed.length}: no match, these go to the bottom`
+        : `Search the top ${choice.revealed.length}: draw a match`}
       cardsById={state.cards}
       items={choice.revealed.map((cardId, i) => eligible.has(i)
         ? { cardId, key: i, testId: `search-draw-pick-${i}`, actionLabel: 'Draw', onSelect: () => onPick(i) }
         : { cardId, key: i, dimmed: true })}
+      footer={onDone && (
+        <button data-testid="search-draw-done" onClick={onDone} className="rounded-xl border-2 border-line/60 px-4 py-1.5 text-xs text-ink-dim hover:text-ink">
+          Done
+        </button>
+      )}
     />
   )
 }
@@ -486,6 +504,39 @@ export function SearchPlayFreeOverlay({ state, choice, onPick, onDone }: {
         : { cardId, key: i, dimmed: true })}
       footer={
         <button data-testid="search-free-done" onClick={onDone} className="rounded-xl border-2 border-line/60 px-4 py-1.5 text-xs text-ink-dim hover:text-ink">
+          Done
+        </button>
+      }
+    />
+  )
+}
+
+/**
+ * "Search for an upgrade to attach" overlay (Reforge): reveals the searched cards; the ones that
+ * can actually be taken get a Play button, the rest are dimmed. Which are playable is decided by
+ * the LEGAL MOVES rather than by `eligibleIndices`, because an eligible upgrade may still be
+ * unaffordable after the discount. A Done button passes. A thin wrapper over `CardGridOverlay`.
+ */
+export function SearchPlayUpgradeOverlay({ state, choice, playableIndices, onPick, onDone }: {
+  state: GameState
+  choice: Extract<PendingChoice, { kind: 'searchPlayUpgrade' }>
+  playableIndices: number[]
+  onPick: (deckIndex: number) => void
+  onDone: () => void
+}) {
+  const playable = new Set(playableIndices)
+  return (
+    <CardGridOverlay
+      idPrefix="search-upgrade"
+      prompt={playable.size > 0
+        ? `Search the top ${choice.revealed.length}: play an upgrade, ${choice.discount} less`
+        : `Search the top ${choice.revealed.length}: nothing to attach, these go back`}
+      cardsById={state.cards}
+      items={choice.revealed.map((cardId, i) => playable.has(i)
+        ? { cardId, key: i, testId: `search-upgrade-pick-${i}`, actionLabel: 'Play', onSelect: () => onPick(i) }
+        : { cardId, key: i, dimmed: true })}
+      footer={
+        <button data-testid="search-upgrade-done" onClick={onDone} className="rounded-xl border-2 border-line/60 px-4 py-1.5 text-xs text-ink-dim hover:text-ink">
           Done
         </button>
       }
@@ -1158,7 +1209,8 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     const searchChoice = gameState.pendingChoices?.find(
       (c): c is Extract<PendingChoice, { kind: 'search' }> => c.kind === 'search' && c.controller === 'player',
     )
-    const searchActions = searchChoice ? legal.filter(a => a.type === 'acceptChoice' && a.choiceId === searchChoice.id) : []
+    // Both the picks and, when nothing is pickable (#413), the acknowledge that dismisses the reveal.
+    const searchActions = searchChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === searchChoice.id) : []
 
     // A "look at an opponent's hand" choice (Imperial Defector / Remnant Lookouts): its
     // discard picks + Done live in the reveal overlay, not the action menu.
@@ -1171,13 +1223,21 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     const searchDrawChoice = gameState.pendingChoices?.find(
       (c): c is Extract<PendingChoice, { kind: 'searchDraw' }> => c.kind === 'searchDraw' && c.controller === 'player',
     )
-    const searchDrawActions = searchDrawChoice ? legal.filter(a => a.type === 'acceptChoice' && a.choiceId === searchDrawChoice.id) : []
+    const searchDrawActions = searchDrawChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === searchDrawChoice.id) : []
 
     // A "search & play space units for free" choice (Admiral Ackbar): picks + Done in the overlay.
     const searchFreeChoice = gameState.pendingChoices?.find(
       (c): c is Extract<PendingChoice, { kind: 'searchPlayFree' }> => c.kind === 'searchPlayFree' && c.controller === 'player',
     )
     const searchFreeActions = searchFreeChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === searchFreeChoice.id) : []
+
+    // A "search for an upgrade to attach" choice (Reforge): picks + Done in the overlay. Which
+    // cards are actually playable comes from the legal moves, since an eligible upgrade can still
+    // be unaffordable after the discount.
+    const searchUpgradeChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'searchPlayUpgrade' }> => c.kind === 'searchPlayUpgrade' && c.controller === 'player',
+    )
+    const searchUpgradeActions = searchUpgradeChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === searchUpgradeChoice.id) : []
 
     // A "name a card" choice (Ryder Azadi): resolved in a text-input overlay, not the menu.
     const nameCardChoice = gameState.pendingChoices?.find(
@@ -1243,7 +1303,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // "Play a unit from hand" accepts are clicked on the hand card, not the menu.
     const isHandPlay = (a: Action) => a.type === 'acceptChoice' && a.handIndex !== undefined
     const menuActions = gameState.winner === null
-      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !discardTopActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !nameCardActions.includes(a) && !fromDiscardActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
+      ? legal.filter(a => !CLICK_HANDLED.includes(a.type) && !lookActions.includes(a) && !discardTopActions.includes(a) && !searchActions.includes(a) && !lookHandActions.includes(a) && !searchDrawActions.includes(a) && !searchFreeActions.includes(a) && !searchUpgradeActions.includes(a) && !nameCardActions.includes(a) && !fromDiscardActions.includes(a) && !choiceBoardActions.includes(a) && !selectUpgradeActions.includes(a) && !resourceUpgradeActions.includes(a) && !uniqueActions.includes(a) && !isHandPlay(a) && a !== discardDecline && a !== handPlayDecline)
       : []
     // The board-target decline and the hand-discard decline share one button (only one
     // choice is active at a time). "Done" for the repeatable multiPick, else "Decline".
@@ -1341,6 +1401,11 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           state={gameState}
           choice={searchChoice}
           onPick={deckIndex => actAndClear({ type: 'acceptChoice', choiceId: searchChoice.id, deckIndex })}
+          // Only offered when there is nothing to discard, which is exactly when the engine
+          // makes the acknowledge legal (#413).
+          onDone={searchActions.some(a => a.type === 'skipTrigger')
+            ? () => actAndClear({ type: 'skipTrigger', choiceId: searchChoice.id })
+            : undefined}
         />
       )
     } else if (lookHandChoice) {
@@ -1358,6 +1423,9 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           state={gameState}
           choice={searchDrawChoice}
           onPick={deckIndex => actAndClear({ type: 'acceptChoice', choiceId: searchDrawChoice.id, deckIndex })}
+          onDone={searchDrawActions.some(a => a.type === 'skipTrigger')
+            ? () => actAndClear({ type: 'skipTrigger', choiceId: searchDrawChoice.id })
+            : undefined}
         />
       )
     } else if (searchFreeChoice) {
@@ -1367,6 +1435,16 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           choice={searchFreeChoice}
           onPick={deckIndex => actAndClear({ type: 'acceptChoice', choiceId: searchFreeChoice.id, deckIndex })}
           onDone={() => actAndClear({ type: 'skipTrigger', choiceId: searchFreeChoice.id })}
+        />
+      )
+    } else if (searchUpgradeChoice) {
+      choiceOverlay = (
+        <SearchPlayUpgradeOverlay
+          state={gameState}
+          choice={searchUpgradeChoice}
+          playableIndices={searchUpgradeActions.flatMap(a => (a.type === 'acceptChoice' && a.deckIndex !== undefined ? [a.deckIndex] : []))}
+          onPick={deckIndex => actAndClear({ type: 'acceptChoice', choiceId: searchUpgradeChoice.id, deckIndex })}
+          onDone={() => actAndClear({ type: 'skipTrigger', choiceId: searchUpgradeChoice.id })}
         />
       )
     } else if (nameCardChoice) {

@@ -489,12 +489,27 @@ describe('When Played — search top 5 for a trait match (Clan Wren Loyalist)', 
     expect(s1.pendingChoices ?? []).toHaveLength(0)
   })
 
-  it('with no trait match, bottoms all five and draws nothing (no choice)', () => {
+  /**
+   * #413: with no match the five cards used to be bottomed silently, with no choice raised, so the
+   * player never saw them. They are entitled to: a search is private information, and knowing which
+   * five just went to the bottom is most of its value. The reveal now always happens, and is
+   * dismissed with an acknowledge move.
+   */
+  it('with no trait match, still reveals all five before bottoming them', () => {
     // Clan Wren is Mandalorian, but no Mandalorian/other-controlled-trait card is in the top 5.
     const s = play('ASH_107', { deck: ['NEUTRAL', 'NEUTRAL', 'NEUTRAL', 'NEUTRAL', 'NEUTRAL', 'EXTRA'] })
-    expect(s.pendingChoices ?? []).toHaveLength(0)
-    expect(s.players.player.hand).toEqual([]) // nothing drawn
-    expect(s.players.player.deck).toEqual(['EXTRA', 'NEUTRAL', 'NEUTRAL', 'NEUTRAL', 'NEUTRAL', 'NEUTRAL'])
+    expect(s.pendingChoices?.[0]).toMatchObject({
+      kind: 'searchDraw',
+      revealed: ['NEUTRAL', 'NEUTRAL', 'NEUTRAL', 'NEUTRAL', 'NEUTRAL'],
+      eligibleIndices: [],
+    })
+    // A mandatory kind with nothing to pick would otherwise have zero legal moves and deadlock.
+    expect(legalMoves(s).length).toBeGreaterThan(0)
+
+    const done = resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id })
+    expect(done.players.player.hand).toEqual([]) // nothing drawn
+    expect(done.players.player.deck).toEqual(['EXTRA', 'NEUTRAL', 'NEUTRAL', 'NEUTRAL', 'NEUTRAL', 'NEUTRAL'])
+    expect(done.pendingChoices ?? []).toHaveLength(0)
   })
 
   it('searches fewer than 5 when the deck is short', () => {
@@ -583,11 +598,16 @@ describe('When Played — Admiral Ackbar (110): self-defeat, then search and pla
     expect(s.players.player.deck).toEqual(['SPACE2', 'SPACE3'])
   })
 
-  it('with no eligible space unit, defeats Ackbar and searches nothing (no choice)', () => {
+  /** #413: nothing playable still reveals the window, then returns it to the deck bottom. */
+  it('with no eligible space unit, still reveals the search before returning the cards', () => {
     const s = accept(play('ASH_110', { deck: ['GROUND2', 'SPACE6', 'GROUND2'] }))
     expect(s.players.player.units.some(u => u.cardId === 'ASH_110')).toBe(false)
-    expect(s.pendingChoices ?? []).toHaveLength(0)
-    expect(s.players.player.deck).toEqual(['GROUND2', 'SPACE6', 'GROUND2'])
+    expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'searchPlayFree', eligibleIndices: [] })
+    expect(legalMoves(s).length).toBeGreaterThan(0)
+
+    const done = resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id })
+    expect(done.players.player.deck).toEqual(['GROUND2', 'SPACE6', 'GROUND2'])
+    expect(done.pendingChoices ?? []).toHaveLength(0)
   })
 
   it('a freely-played unit still triggers its own When Played', () => {

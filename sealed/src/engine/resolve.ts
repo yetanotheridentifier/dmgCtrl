@@ -1,11 +1,11 @@
 import type { Action, AttackTarget } from './actions'
 import type { GameState, PlayerId, UnitState } from './types'
 import type { PendingChoice, UpgradeRef } from './types'
-import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice } from './types'
+import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds } from './types'
 import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
-import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, type TriggerPoint, type EffectContext } from './abilities'
+import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, stampChoiceSource, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, sweepStateBasedDefeats, preventionOffer } from './combat'
 import { exhaustUnit, findUnit, giveToken, fireUpgradeAttached, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, searchCount, bottomTopCards, returnUpgradeToHand } from './effects'
 import { seededShuffle, nextSeed } from './rng'
@@ -146,10 +146,18 @@ function resolveAction(state: GameState, action: Action): GameState {
     // Choices are not action-phase-only: `whenReadies` raises them at round start and
     // `whenRegroupStarts` during regroup (Alphabet Squadron U-Wing). Gating them on the
     // action phase would deadlock those — there'd be no legal move.
-    case 'skipTrigger':
-      return resolveSkip(state, action.choiceId)
-    case 'acceptChoice':
-      return resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex, action.baseTarget, action.handIndex, action.cardName)
+    // Answering a choice often chains a follow-up ("if you do, ..."). Those are raised outside any
+    // ability effect, so the dispatcher cannot attribute them; instead they INHERIT the answered
+    // choice's source, which carries the original card down an arbitrarily long chain (#374).
+    case 'skipTrigger': {
+      const parent = action.choiceId ? findChoice(state, action.choiceId) : activeChoice(state)
+      return inheritSource(state, resolveSkip(state, action.choiceId), parent)
+    }
+    case 'acceptChoice': {
+      const parent = findChoice(state, action.choiceId)
+      const next = resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex, action.baseTarget, action.handIndex, action.cardName)
+      return inheritSource(state, next, parent)
+    }
     case 'resourceCard':
       return requirePhase(state, 'regroup', () => regroupChoice(state, action.handIndex))
     case 'skipResource':
@@ -161,6 +169,20 @@ function resolveAction(state: GameState, action: Action): GameState {
     case 'setupResource':
       return requirePhase(state, 'setup', () => setupResourceChoice(state, action.handIndex))
   }
+}
+
+/**
+ * Pass a resolved choice's source on to whatever it raised. No source, nothing to inherit.
+ *
+ * The resolved choice's own id is treated as absent, because `resolveAccept` removes it first: a
+ * choice bearing that id afterwards is a RE-OFFER (repeatable picks like `multiPick`,
+ * `distributeDamage` and `dealOwnBaseForDiscount` re-push themselves under the same id), and it
+ * needs the source just as much as a brand-new follow-up does.
+ */
+function inheritSource(before: GameState, after: GameState, parent: PendingChoice | undefined): GameState {
+  if (!parent?.source) return after
+  const withoutParent = { ...before, pendingChoices: (before.pendingChoices ?? []).filter(c => c.id !== parent.id) }
+  return stampChoiceSource(withoutParent, after, parent.source)
 }
 
 function requirePhase(state: GameState, phase: GameState['phase'], fn: () => GameState): GameState {
@@ -384,8 +406,8 @@ function startAckbarSearch(state: GameState, owner: PlayerId, choiceId: string):
   const revealed = p.deck.slice(0, 10)
   const rest = p.deck.slice(10)
   const eligibleIndices = ackbarEligible(state, revealed, 5)
-  if (eligibleIndices.length === 0) return updatePlayer(state, owner, { deck: [...rest, ...revealed] })
-  // Pull the searched window out of the deck; leftover cards return to the bottom when the choice ends.
+  // Pull the searched window out of the deck; leftover cards return to the bottom when the choice
+  // ends. Raised even when nothing is playable (#413), so the player sees what they looked at.
   const pulled = updatePlayer(state, owner, { deck: rest })
   return pushChoice(pulled, { kind: 'searchPlayFree', id: choiceId, controller: owner, revealed, eligibleIndices, budget: 5 })
 }
@@ -446,9 +468,17 @@ function playEvent(state: GameState, handIndex: number): GameState {
  */
 function openSupportChoice(state: GameState, owner: PlayerId, sourceInstanceId: string): GameState {
   const others = state.players[owner].units.filter(u => u.instanceId !== sourceInstanceId && !u.exhausted)
-  return others.length > 0
-    ? pushChoice(state, { kind: 'support', id: sourceInstanceId, controller: owner, unitId: sourceInstanceId })
-    : state
+  if (others.length === 0) return state
+  // Record the source card as well as the instance: the Support unit can leave play before the
+  // choice is answered, and an instance id that no longer resolves cannot name anything (#374).
+  const sourceCardId = state.players[owner].units.find(u => u.instanceId === sourceInstanceId)?.cardId
+  return pushChoice(state, {
+    kind: 'support',
+    id: sourceInstanceId,
+    controller: owner,
+    unitId: sourceInstanceId,
+    ...(sourceCardId ? { source: { cardId: sourceCardId, controller: owner } } : {}),
+  })
 }
 
 /** Strip transient per-attack grants (Support keywords, and Improvised Identity's
@@ -534,9 +564,10 @@ function mayDamageFollowUps(state: GameState, choice: PendingChoice & { kind: 'm
     const depth = source ? searchCount(next, source.unit, choice.thenSearchDraw) : choice.thenSearchDraw
     const revealed = next.players[owner].deck.slice(0, depth)
     const eligibleIndices = revealed.flatMap((cardId, i) => (next.cards[cardId]?.type === 'unit' ? [i] : []))
-    next = eligibleIndices.length === 0
-      ? bottomTopCards(next, owner, revealed.length) // no unit revealed → they all go to the bottom
-      : pushChoice(next, { kind: 'searchDraw', id: `${choice.id}-search`, controller: owner, revealed, eligibleIndices })
+    // Revealed even with no unit among them (#413); acknowledging bottoms them all.
+    if (revealed.length > 0) {
+      next = pushChoice(next, { kind: 'searchDraw', id: `${choice.id}-search`, controller: owner, revealed, eligibleIndices })
+    }
   }
   return next
 }
@@ -568,9 +599,21 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
       units: next.players[choice.controller].units.map(u => (u.instanceId === choice.unitId ? { ...u, exhausted: true } : u)),
     })
   }
-  // Admiral Ackbar: stopping the search returns the still-held revealed cards to the deck bottom.
-  if (choice.kind === 'searchPlayFree') {
+  // Admiral Ackbar / Eye of Sion: stopping returns the still-held revealed cards to the deck bottom.
+  // Reforge's search holds its window out of the deck the same way, and used to have no branch
+  // here at all, so passing on it silently DELETED up to 8 cards from the deck.
+  if (choice.kind === 'searchPlayFree' || choice.kind === 'searchPlayUpgrade') {
     next = updatePlayer(next, choice.controller, { deck: [...next.players[choice.controller].deck, ...choice.revealed] })
+  }
+  // A reveal that matched nothing (#413): the cards were only looked at, never taken out of the
+  // deck, so acknowledging moves them from the top to the bottom.
+  if (choice.kind === 'searchDraw') {
+    next = bottomTopCards(next, choice.controller, choice.revealed.length)
+  }
+  // Improvised Identity revealed no ground unit to discard: its cards stay where they are (the card
+  // says nothing about bottoming them), and the optional attack it gates still follows.
+  if (choice.kind === 'search') {
+    next = pushChoice(next, { kind: 'mayAttack', id: choice.unitId, controller: choice.controller, unitId: choice.unitId })
   }
   // Enoch: stopping grants the discount for the damage dealt to your base so far.
   if (choice.kind === 'dealOwnBaseForDiscount') {
@@ -678,6 +721,9 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       const pick = choice.candidates[optionIndex ?? 0]
       if (!pick) break
       const upgradeOwner = findUnit(next, pick.unitId)?.unit.upgrades[pick.upgradeIndex]?.owner
+      // A token is defeated rather than returned (#401), so it never reaches a hand and must not
+      // be offered for free replay: the card does not exist to replay.
+      const wasToken = next.cards[pick.cardId]?.type === 'token'
       next = returnUpgradeToHand(next, pick.unitId, pick.upgradeIndex)
       if (choice.thenShield) {
         // Full of Surprises: "Give a Shield token to a unit" — a separate effect, any unit.
@@ -687,7 +733,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         }
         break
       }
-      if (upgradeOwner === choice.controller) {
+      if (upgradeOwner === choice.controller && !wasToken) {
         const targets = inPlayUnits(next).map(u => u.instanceId)
         if (targets.length > 0) {
           next = pushChoice(next, { kind: 'mayPlayUpgradeFree', id: `${choice.id}-free`, controller: choice.controller, cardId: pick.cardId, targets })
@@ -750,7 +796,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       // The Mandalorian: pay the preventer's own cost (defeat a Shield), then cancel the damage.
       const preventer = findUnit(next, choice.preventerId)
       if (preventer) {
-        for (const cardId of [preventer.unit.cardId, ...preventer.unit.upgrades.map(u => u.cardId)]) {
+        for (const cardId of abilityCardIds(preventer.unit)) {
           const pay = getCardDefinition(cardId)?.payPreventionCost
           if (pay) { next = pay(next, preventer.unit); break }
         }
@@ -898,13 +944,12 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
             const restriction = getCardDefinition(cardId)?.attachRestriction
             return !restriction || restriction(next, host.unit) ? [i] : []
           })
-          next = eligibleIndices.length === 0
-            ? bottomTopCards(next, owner, revealed.length)
-            : updatePlayer(
-                pushChoice(next, { kind: 'searchPlayUpgrade', id: `${choice.id}-reforge`, controller: owner, unitId: pick.unitId, revealed, eligibleIndices, discount: search.discount }),
-                owner,
-                { deck: next.players[owner].deck.slice(revealed.length) }, // held out until the choice resolves
-              )
+          // Raised even with no attachable upgrade among them (#413), so the player sees the window.
+          next = updatePlayer(
+            pushChoice(next, { kind: 'searchPlayUpgrade', id: `${choice.id}-reforge`, controller: owner, unitId: pick.unitId, revealed, eligibleIndices, discount: search.discount }),
+            owner,
+            { deck: next.players[owner].deck.slice(revealed.length) }, // held out until the choice resolves
+          )
         }
         const spec = choice.then
         if (spec) {
@@ -965,7 +1010,8 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       // Mos Espa Watermonger: "if you do, discard a card" — only when a card was actually drawn.
       const drew = next.players[choice.controller].hand.length - handBefore
       if (choice.thenDiscard && drew > 0) {
-        next = pushChoice(next, { kind: 'selectDiscard', id: choice.id, controller: choice.controller, count: Math.min(choice.thenDiscard, next.players[choice.controller].hand.length) })
+        // Same id as its parent, so the stamper reads it as pre-existing: carry the source over.
+        next = pushChoice(next, { kind: 'selectDiscard', id: choice.id, controller: choice.controller, count: Math.min(choice.thenDiscard, next.players[choice.controller].hand.length), source: choice.source })
       }
       break
     }
@@ -976,7 +1022,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         next = discardFromHand(next, choice.controller, handIndex)
         const remaining = choice.count - 1
         if (remaining > 0 && next.players[choice.controller].hand.length > 0) {
-          next = pushChoice(next, { kind: 'selectDiscard', id: choice.id, controller: choice.controller, count: remaining, optional: choice.optional, then: choice.then })
+          next = pushChoice(next, { ...choice, count: remaining })
         } else if (choice.then && discardedId !== undefined) {
           if ('distributeDamageTo' in choice.then) {
             // Ninth Sister: "deal damage equal to its cost divided among any units".
@@ -1140,9 +1186,10 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       const guessedCost = optionIndex ?? 0
       const revealed = next.players[owner].deck.slice(0, 5)
       const eligibleIndices = revealed.map((_, i) => i) // "search for a card" — any card qualifies
-      next = eligibleIndices.length === 0
-        ? bottomTopCards(next, owner, revealed.length)
-        : pushChoice(next, { kind: 'searchDraw', id: `${choice.id}-search`, controller: owner, revealed, eligibleIndices, guessedCost })
+      // Only an empty deck reveals nothing; with cards there is always something to show (#413).
+      if (revealed.length > 0) {
+        next = pushChoice(next, { kind: 'searchDraw', id: `${choice.id}-search`, controller: owner, revealed, eligibleIndices, guessedCost })
+      }
       break
     }
     case 'selectDistributeSource': {
@@ -1331,20 +1378,22 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
           const remaining = choice.spec.remaining - 1
           if (choice.spec.mode === 'giveAdvantage') {
             next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
-            if (remaining > 0 && targets.length > 0) next = pushChoice(next, { kind: 'multiPick', id: choice.id, controller: choice.controller, targets, spec: { mode: 'giveAdvantage', remaining } })
+            // Spread the choice so it carries its `source` across the re-offer: it keeps the same
+            // id, so the stamper reads it as pre-existing and will not re-attribute it (#374).
+            if (remaining > 0 && targets.length > 0) next = pushChoice(next, { ...choice, targets, spec: { mode: 'giveAdvantage', remaining } })
           } else {
             const amount = choice.spec.amount
             next = dealDamageToUnit(next, targetInstanceId, amount)
             next = checkWin(next)
             if (next.winner !== null) return next
-            if (remaining > 0 && targets.length > 0) next = pushChoice(next, { kind: 'multiPick', id: choice.id, controller: choice.controller, targets, spec: { mode: 'dealEach', amount, remaining } })
+            if (remaining > 0 && targets.length > 0) next = pushChoice(next, { ...choice, targets, spec: { mode: 'dealEach', amount, remaining } })
           }
         } else if (choice.spec.mode === 'exhaust') {
           // Keep Them Talking: exhaust up to N of the eligible units.
           next = exhaustUnit(next, targetInstanceId)
           const targets = choice.targets.filter(id => id !== targetInstanceId)
           const remaining = choice.spec.remaining - 1
-          if (remaining > 0 && targets.length > 0) next = pushChoice(next, { kind: 'multiPick', id: choice.id, controller: choice.controller, targets, spec: { mode: 'exhaust', remaining } })
+          if (remaining > 0 && targets.length > 0) next = pushChoice(next, { ...choice, targets, spec: { mode: 'exhaust', remaining } })
         } else {
           const found = findUnit(next, targetInstanceId)
           const remHp = found ? Math.max(0, effectiveHp(next, found.unit) - found.unit.damage) : 0
@@ -1359,7 +1408,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
             const u = findUnit(next, id)?.unit
             return u !== undefined && effectiveHp(next, u) - u.damage <= budget
           })
-          if (budget > 0 && targets.length > 0) next = pushChoice(next, { kind: 'multiPick', id: choice.id, controller: choice.controller, targets, spec: { mode: 'defeatForToken', budget, token: choice.spec.token } })
+          if (budget > 0 && targets.length > 0) next = pushChoice(next, { ...choice, targets, spec: { mode: 'defeatForToken', budget, token: choice.spec.token } })
         }
       }
       break
@@ -1596,7 +1645,7 @@ function useAbility(state: GameState, instanceId: string, cardId: string, index:
       ),
     })
   }
-  next = ability.effect(next, { owner, cardId, sourceInstanceId: instanceId })
+  next = stampChoiceSource(next, ability.effect(next, { owner, cardId, sourceInstanceId: instanceId }), { cardId, controller: owner })
   next = checkWin(next)
   if (next.winner !== null) return next
   return hasPendingChoices(next) ? next : advanceTurn(resetPasses(next))
@@ -1616,7 +1665,7 @@ function useLeaderAbility(state: GameState, index: number, targetInstanceId?: st
 
   const paid = ability.cost ? payCost(p, ability.cost) : p
   let next = updatePlayer(state, owner, { ...paid, leader: { ...p.leader, exhausted: true } })
-  next = ability.effect(next, { owner, cardId: p.leader.cardId, targetInstanceId })
+  next = stampChoiceSource(next, ability.effect(next, { owner, cardId: p.leader.cardId, targetInstanceId }), { cardId: p.leader.cardId, controller: owner })
   next = checkWin(next)
   if (next.winner !== null) return next
   next = handOffOpponentChoice(next, owner)
@@ -1639,8 +1688,10 @@ function finishDistribution(state: GameState, choice: PendingChoice & { kind: 'd
   const opponent = opponentOf(choice.controller)
   const revealed = state.players[opponent].deck.slice(0, distributed * 2)
   const eligibleIndices = revealed.flatMap((cardId, i) => (state.cards[cardId]?.type === 'event' ? [i] : []))
-  // No event among them → they all go to the bottom and nothing is drawn.
-  if (eligibleIndices.length === 0) return bottomTopCards(state, opponent, revealed.length)
+  // Raised even with no event among them (#413). This search belongs to the OPPONENT, so it is
+  // their own deck they see: the overlays are gated on the choice's controller, so nothing of
+  // theirs is shown to the player who triggered it.
+  if (revealed.length === 0) return state
   const pushed = pushChoice(state, { kind: 'searchDraw', id: `${choice.id}-oppsearch`, controller: opponent, revealed, eligibleIndices })
   return handOffOpponentChoice(pushed, choice.controller)
 }

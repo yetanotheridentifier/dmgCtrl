@@ -1,5 +1,5 @@
 import type { DamageSource, GameState, NextUnitGrant, PlayerId, UnitState } from './types'
-import { updatePlayer, pushChoice, recordBaseDamaged, recordUpgradeDefeated, recordUnitLeftPlay } from './types'
+import { updatePlayer, pushChoice, recordBaseDamaged, recordUpgradeDefeated, recordUnitLeftPlay, abilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { EffectContext, TriggerPoint } from './abilities'
@@ -12,7 +12,7 @@ import { getCardDefinition, runUnitTrigger } from './abilities'
  */
 export function searchCount(state: GameState, unit: UnitState, baseCount: number): number {
   let n = baseCount
-  for (const cardId of [unit.cardId, ...unit.upgrades.map(u => u.cardId)]) {
+  for (const cardId of abilityCardIds(unit)) {
     n *= getCardDefinition(cardId)?.searchModifier?.(state, unit) ?? 1
   }
   return n
@@ -105,7 +105,7 @@ export function baseDamageAfterPrevention(state: GameState, player: PlayerId, am
   if (damageIsUnpreventable(state, source)) return amount
   let out = amount
   for (const u of state.players[player].units) {
-    for (const cid of [u.cardId, ...u.upgrades.map(x => x.cardId)]) {
+    for (const cid of abilityCardIds(u)) {
       const hook = getCardDefinition(cid)?.preventBaseDamage
       if (hook) out = hook(state, u, out)
     }
@@ -120,7 +120,7 @@ export function baseDamageAfterPrevention(state: GameState, player: PlayerId, am
 export function damageIsUnpreventable(state: GameState, source?: DamageSource): boolean {
   if (!source) return false
   return state.players[source.controller].units.some(u =>
-    [u.cardId, ...u.upgrades.map(x => x.cardId)].some(id => getCardDefinition(id)?.makesDamageUnpreventable?.(state, u, source) ?? false),
+    abilityCardIds(u).some(id => getCardDefinition(id)?.makesDamageUnpreventable?.(state, u, source) ?? false),
   )
 }
 
@@ -171,7 +171,7 @@ export function createTokenUnits(state: GameState, owner: PlayerId, tokenCardId:
   for (let i = 0; i < count; i++) next = createTokenUnit(next, owner, tokenCardId)
   if (count <= 0) return next
   const replacer = next.players[owner].units.find(u =>
-    [u.cardId, ...u.upgrades.map(x => x.cardId)].some(id => getCardDefinition(id)?.doublesTokenCreation?.(next, u) ?? false),
+    abilityCardIds(u).some(id => getCardDefinition(id)?.doublesTokenCreation?.(next, u) ?? false),
   )
   return replacer
     ? pushChoice(next, { kind: 'mayDoubleTokens', id: `${replacer.instanceId}-double`, controller: owner, unitId: replacer.instanceId, token: tokenCardId, count })
@@ -369,16 +369,20 @@ export function defeatUpgradeAt(state: GameState, instanceId: string, index: num
 }
 
 /**
- * Return the upgrade at `index` to **its owner's** hand (Jabba the Hutt) — which may not be
- * the host unit's controller. Token upgrades can't go to a hand, so they simply cease to exist.
- * Fires "a friendly upgrade was defeated"? No — returning is not defeating, so no trigger.
+ * Return the upgrade at `index` to **its owner's** hand (Jabba the Hutt, Full of Surprises), which
+ * may not be the host unit's controller.
+ *
+ * A TOKEN upgrade has no card to put in a hand, so it is DEFEATED instead (#401). That routes
+ * through `defeatUpgradeAt`, so "when a friendly upgrade is defeated" fires for the token's owner;
+ * it used to be deleted silently, firing nothing. Returning a real card is still not a defeat, so
+ * that path fires no trigger.
  */
 export function returnUpgradeToHand(state: GameState, instanceId: string, index: number): GameState {
   const found = findUnit(state, instanceId)
   const removed = found?.unit.upgrades[index]
   if (!found || !removed) return state
+  if (state.cards[removed.cardId]?.type === 'token') return defeatUpgradeAt(state, instanceId, index)
   const next = patchUnit(state, found.owner, instanceId, u => ({ ...u, upgrades: u.upgrades.filter((_, i) => i !== index) }))
-  if (state.cards[removed.cardId]?.type === 'token') return next
   const op = next.players[removed.owner]
   return { ...next, players: { ...next.players, [removed.owner]: { ...op, hand: [...op.hand, removed.cardId] } } }
 }

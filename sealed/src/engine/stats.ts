@@ -1,5 +1,5 @@
 import type { GameState, UnitState, CombatContext, PlayerId } from './types'
-import { lastingEffectTotals } from './types'
+import { lastingEffectTotals, abilityCardIds } from './types'
 import { unitHasKeyword, unitKeywordValue, auraContributions } from './keywords'
 import { getCardDefinition } from './abilities'
 
@@ -31,7 +31,7 @@ export interface StatContext {
  */
 export function friendlyAdvantageInert(state: GameState, owner: PlayerId): boolean {
   return state.players[owner].units.some(u =>
-    [u.cardId, ...u.upgrades.map(x => x.cardId)].some(id => getCardDefinition(id)?.suppressesFriendlyAdvantage?.(state, u) ?? false),
+    abilityCardIds(u).some(id => getCardDefinition(id)?.suppressesFriendlyAdvantage?.(state, u) ?? false),
   )
 }
 
@@ -73,7 +73,7 @@ function statModifiers(state: GameState, unit: UnitState, ctx: StatContext, stat
     let total = 0
     // Includes cards lent for a single attack (Support, Improvised Identity, and the attack-granting
     // events), so a rider's stat bonus applies for exactly that attack.
-    for (const cardId of [unit.cardId, ...unit.upgrades.map(u => u.cardId), ...(unit.grantedAbilityCardIds ?? [])]) {
+    for (const cardId of abilityCardIds(unit)) {
       total += getCardDefinition(cardId)?.statModifier?.(state, unit, ctx)?.[stat] ?? 0
     }
     return total

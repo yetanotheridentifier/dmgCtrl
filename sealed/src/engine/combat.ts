@@ -1,5 +1,5 @@
 import type { DamageSource, GameState, PendingChoice, PlayerId, UnitState } from './types'
-import { opponentOf, updatePlayer, recordUnitDefeated, recordUnitDamaged, recordUnitLeftPlay, pushChoice } from './types'
+import { opponentOf, updatePlayer, recordUnitDefeated, recordUnitDamaged, recordUnitLeftPlay, pushChoice, abilityCardIds } from './types'
 import { effectiveHp } from './stats'
 import type { StatContext } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
@@ -10,7 +10,7 @@ import { fireUpgradesDefeated, fireUnitsTrigger, damageIsUnpreventable, releaseC
 /** Product of the damage multipliers the unit's card and upgrades contribute. */
 function damageMultiplier(state: GameState, unit: UnitState): number {
   let m = 1
-  for (const cardId of [unit.cardId, ...unit.upgrades.map(u => u.cardId)]) {
+  for (const cardId of abilityCardIds(unit)) {
     m *= getCardDefinition(cardId)?.damageMultiplier?.(state, unit) ?? 1
   }
   return m
@@ -172,7 +172,7 @@ export function preventionOffer(state: GameState, targetId: string, source?: Dam
     const target = state.players[owner].units.find(u => u.instanceId === targetId)
     if (!target) continue
     for (const self of state.players[owner].units) {
-      const able = [self.cardId, ...self.upgrades.map(u => u.cardId)]
+      const able = abilityCardIds(self)
         .some(id => getCardDefinition(id)?.canPreventDamage?.(state, self, target) ?? false)
       if (able) return { preventerId: self.instanceId, controller: owner }
     }

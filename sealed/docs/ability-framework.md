@@ -456,6 +456,25 @@ Phased into independently-deployable chunks; each groups a primitive with the le
   step-two overlay's full-screen modal can't hide it. A mandatory choice has no `skipTrigger` at all,
   so nothing needs to reach it. Get this pattern right for any future two-step optional picker: the
   overlay's own Cancel is navigation, not the ability's answer.
+- **Which upgrades an effect may target (#401).** Card text asks this three different ways, and
+  hand-rolled scans kept conflating them, so there is now one helper, `upgradeCandidates(s, filter)`
+  in `cardDefinitions.ts`, with the side filters named apart:
+
+  | Text | Filter | Cards |
+  | --- | --- | --- |
+  | "a friendly upgrade" | `owner` (who PLAYED it) | Vane, Pegasus Tri-Wing, Exploit Advantage |
+  | "an upgrade on a friendly unit" | `hostController` (who controls the HOST) | Reforge |
+  | "an upgrade" | neither | Clan Vizsla Soldier, Jabba, Full of Surprises |
+
+  Owner and host controller genuinely differ: an opponent can attach an upgrade to your unit and it
+  stays theirs (#378). Conflating them is what made Pegasus Tri-Wing and Exploit Advantage offer the
+  wrong set. **Token upgrades are candidates by default** (they are upgrades, they cost 0), so pass
+  `cardsOnly` only where a real card is genuinely needed.
+
+  A token targeted by a **return to hand** is **defeated** instead, since there is no card to put in
+  a hand. `returnUpgradeToHand` routes it through `defeatUpgradeAt` so
+  `whenFriendlyUpgradeDefeated` fires for the token's owner; it used to delete the token in silence.
+  Anything that offers a free replay of the returned card must skip that branch for tokens.
 - **`CardSelectOverlay`** (`gameScreen.tsx`) is a reusable centre-screen card picker: **click the
   (highlighted) card itself** to select it, plus a Cancel shown only when `onCancel` is given (the
   optional case). Token art included. Extensible for any future "select a card / card type" effect.
@@ -543,9 +562,25 @@ Phased into independently-deployable chunks; each groups a primitive with the le
 - **The Mandalorian (014)** front: `whenTakeInitiative` → may pay 1, draw 1. Deployed back: `onAttack`
   → if you have the initiative, may draw 1 (free). (Support keyword comes from the card DB.)
 
-**Support generalized (#348):** Support now lends the source's **full abilities** (keywords +
-triggered), not just keywords. The chosen attacker gets `grantedAbilityCardIds: [sourceCardId]` (the
-same path Improvised Identity uses), so it fires the source's combat abilities for that attack.
+**Support generalized (#348, completed by #417):** Support lends the source's **full abilities**.
+The chosen attacker gets `grantedAbilityCardIds: [sourceCardId]` (the same path Improvised Identity
+uses), so it fires the source's combat abilities for that attack.
+
+> "Full abilities" originally meant only keywords + triggered abilities, and that is exactly how it
+> broke. The engine spelled out "which cards supply this unit's abilities" at ~16 separate lookup
+> sites and only 5 remembered to include the lent cards, so an ability whose hook happened to live
+> at a granted-blind site was silently never lent. Scion Shuttle's `aura` and Red Leader's
+> `attacksEitherArena` both vanished on a Support attack (#417).
+>
+> There is now ONE definition, **`abilityCardIds(unit)`** in `engine/types.ts`, returning
+> `[cardId, ...upgrades, ...grantedAbilityCardIds]`. Every ability lookup goes through it. Add a new
+> hook and it inherits correct Support behaviour for free; hand-roll the array again and the class
+> of bug comes back.
+>
+> Two deliberate exclusions: printed **traits** are not abilities, so `unitTraits` reads the unit's
+> own card for those (only a `grantedTraits` hook lends traits); and duplicates in the list are
+> **intentional**, since two copies of an upgrade, or a Support source sharing the borrower's card,
+> each apply again and keyword numerals stack (CR).
 `openSupportChoice` is shared by playing a Support unit **and deploying a Support leader**
 (`deployLeader`; its dispatch now holds the turn while the support attack resolves). This unblocks
 the Mandalorian's and Ahsoka's Support. (The granted card includes the harmless Support keyword,
@@ -727,3 +762,53 @@ naming (Admiral Ackbar, Clan Wren Loyalist, Crix Madine, Imperial Defector, Remn
 Azadi, Jod Na Nawood, Jabba, Purrgil Ultra, Queen Soruna, Trask Walker), and cards whose second
 ability needs an unbuilt trigger / choice-on-defeat (Flarestar, The Twins, Chimaera, Zeb Orrelios,
 Boba Fett's Rancor, Justifier, Pegasus Tri-Wing).
+
+## A search always shows what it looked at (#413)
+
+A search that matched nothing used to bottom the cards silently, raising no choice, so the player
+never saw them. That is information they are entitled to: a search is private, and knowing which
+cards just went to the bottom is most of its value. Every search now raises its choice even with an
+empty `eligibleIndices`; only an empty deck reveals nothing.
+
+The trap is that `search` and `searchDraw` are **mandatory** kinds with no decline, so revealing an
+empty match without adding a move leaves **zero legal moves and hangs the game**. The rule is
+therefore: **offer the acknowledge only when nothing is eligible**, which keeps a real pick
+mandatory. It is enforced in `legalMoves` and honoured in `resolveSkip`.
+
+What acknowledging does depends on whether the window was pulled out of the deck:
+
+| Kind | Window | Acknowledging |
+| --- | --- | --- |
+| `searchDraw` | left in deck | bottoms the revealed cards |
+| `search` | left in deck | leaves them in place, then runs the follow-up attack |
+| `searchPlayFree` | pulled out | returns them to the bottom |
+| `searchPlayUpgrade` | pulled out | returns them to the bottom |
+
+`searchPlayUpgrade` had no `resolveSkip` branch at all, so passing on Reforge **deleted up to 8
+cards from the deck**; it also had no overlay, so it fell through to the action menu. Both fixed.
+
+## Every choice can name the card that raised it (#374)
+
+A prompt should be able to say *why* the player is being asked something, which matters most when
+the choice came from the opponent's card. 44 of 71 choice kinds carried no source reference.
+
+Threading one through by hand was never going to hold: there are **~185 `pushChoice` call sites**.
+But there are only **five** places an ability effect is invoked, and each already knows its card, so
+the source is **stamped automatically**:
+
+- `PendingChoice` gained `source?: DamageSource` via a **distributive conditional**
+  (`T extends unknown ? T & { source? } : never`). A plain intersection would collapse the union and
+  break every `Extract<PendingChoice, { kind: 'x' }>` in the UI.
+- `stampChoiceSource(before, after, source)` diffs choice **ids**, not array length, because an
+  effect can remove choices as well as add them. A choice that already has a source keeps it, so the
+  most specific source wins when effects nest.
+- Follow-ups raised while ANSWERING a choice inherit the answered choice's source, which carries the
+  original card down an arbitrarily long chain. The resolved choice's own id counts as absent there,
+  because repeatable picks (`multiPick`, `distributeDamage`, `dealOwnBaseForDiscount`) re-offer
+  themselves under the same id and need the source too.
+- A `GRANT_*` pseudo card is an internal ability carrier with no card-database entry, so it declares
+  `sourceCardId` naming the real card it belongs to, and prompts show that instead.
+
+The guarantee is a test, not a convention: `choiceSource.test.ts` plays the whole coverage deck set
+and asserts every choice it observes can name a source. A new card that raises a choice the
+dispatcher cannot attribute fails it.

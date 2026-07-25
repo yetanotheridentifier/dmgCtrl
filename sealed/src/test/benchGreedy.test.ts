@@ -8,9 +8,11 @@ import { runBench } from '../bench/runBench'
  * tanks greedy, not to pin an exact rate.
  */
 describe('greedy vs random benchmark', () => {
+  // Plays 40 real games, so it needs more than vitest's 5s default once the suite is running them
+  // in parallel and competing for CPU.
   it('beats random by a wide margin over a seeded run', () => {
     const report = runBench({ games: 40, seed: 7, aiA: 'greedy', aiB: 'random' })
     expect(report.dropped).toBe(0)
     expect(report.winRateA).toBeGreaterThan(0.75)
-  })
+  }, 30_000)
 })
