@@ -21,6 +21,12 @@ const VADER_UNIT: SwuCard = {
 }
 
 describe('normaliseCard', () => {
+  /** No rules meaning, but the AI's card valuation reads it (#393). */
+  it('carries rarity through when the source has it, and omits it when it does not', () => {
+    expect(normaliseCard({ ...VADER_UNIT, Rarity: 'Legendary' }).rarity).toBe('Legendary')
+    expect(normaliseCard(VADER_UNIT).rarity).toBeUndefined()
+  })
+
   it('normalises a unit card', () => {
     const card = normaliseCard(VADER_UNIT)
     expect(card).toEqual({

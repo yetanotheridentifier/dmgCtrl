@@ -66,6 +66,9 @@ export function normaliseCard(card: SwuCard): EngineCard {
     ...(card.FrontArt !== undefined && { frontArt: card.FrontArt }),
     ...(card.BackArt !== undefined && { backArt: card.BackArt }),
     ...(card.FrontText !== undefined && { text: card.FrontText }),
+    // No rules meaning; read by the AI's card valuation (#393). The card cache stores the raw
+    // SWUDB payload and normalises on read, so already-cached sets pick this up with no migration.
+    ...(card.Rarity !== undefined && { rarity: card.Rarity }),
   }
   // Last: override any values the source data gets wrong (read off the printed card).
   return { ...normalised, ...CARD_DATA_CORRECTIONS[id] }
