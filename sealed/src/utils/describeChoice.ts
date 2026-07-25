@@ -1,4 +1,5 @@
 import type { GameState, PendingChoice, PlayerId } from '../engine/types'
+import { getCardDefinition } from '../engine/abilities'
 import type { DescribePart } from './describeAction'
 
 /**
@@ -15,17 +16,30 @@ export const BOARD_TARGET_KINDS = [
   'selectDamageTarget', 'selectHealTarget', 'selectUnitToExhaust', 'attachResourceUpgrade',
   'selectUnitToDefeat', 'selectUniqueUnitToDefeat', 'opponentGivesAdvantage', 'mayGiveTokens',
   'multiPick', 'distributeDamage', 'distributeTokens', 'variableStrike', 'healForAdvantage',
-  'returnFriendlyUnit',
+  'returnFriendlyUnit', 'selectPair',
 ] as const
 
 export type BoardTargetKind = (typeof BOARD_TARGET_KINDS)[number]
 
-function cardRef(state: GameState, cardId: string | undefined, controller: PlayerId): DescribePart[] {
+function cardRef(state: GameState, rawId: string | undefined, controller: PlayerId): DescribePart[] {
+  // A `GRANT_*` ability carrier is not a real card and has no database entry, so name the card it
+  // belongs to instead. That is the card the player actually played (#374).
+  const cardId = rawId ? getCardDefinition(rawId)?.sourceCardId ?? rawId : undefined
   const name = cardId ? state.cards[cardId]?.name : undefined
   return cardId && name ? [{ cardId, controller, text: name }] : []
 }
 
-/** The card that raised this choice, where the choice records one at all (see #374). */
+/**
+ * The card that raised this choice. Every choice can name one now that the ability dispatcher
+ * stamps `source` automatically (#374); the `unitId` branch is preferred where present because it
+ * resolves to the live in-play card, which is more specific than the stamp.
+ *
+ * Exported so a test can assert the guarantee holds for every choice a real game raises.
+ */
+export function choiceSourceRef(state: GameState, choice: PendingChoice): DescribePart[] {
+  return sourceRef(state, choice)
+}
+
 function sourceRef(state: GameState, choice: PendingChoice): DescribePart[] {
   const controller = choice.controller
   if ('unitId' in choice && typeof choice.unitId === 'string') {
@@ -123,6 +137,13 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       return ['choose an enemy unit to take control of']
     case 'peekTopDiscard':
       return ['choose a deck to look at the top card of']
+    case 'selectPair': {
+      // Two picks in sequence, so the prompt has to say WHICH one is being asked for now (#387).
+      const verb = choice.mode === 'exhaust' ? 'exhaust' : 'defeat'
+      return choice.chosenFriendly === undefined
+        ? [`choose one of your units to ${verb}`]
+        : [`choose an enemy unit to ${verb}`]
+    }
     case 'multiPick': {
       // Optional chaining is deliberate: this is decoration over the board, and a malformed
       // choice must degrade to a vaguer prompt rather than throwing and blanking the screen.

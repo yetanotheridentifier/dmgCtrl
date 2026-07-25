@@ -1,4 +1,5 @@
 import ashSet from '../fixtures/ashSet.json'
+import baylanExhaust from '../fixtures/reports/baylanExhaust.json'
 import minefieldArenaChoice from '../fixtures/reports/minefieldArenaChoice.json'
 import vaneFriendlyUpgrade from '../fixtures/reports/vaneFriendlyUpgrade.json'
 import vaneFriendlyUpgradeCards from '../fixtures/reports/vaneFriendlyUpgradeCards.json'
@@ -31,7 +32,7 @@ const ashCards = ashSet as SwuCard[]
  * Filed reports, keyed by name. Imported rather than read from disk so they are typechecked and
  * bundled the same way the other fixtures are; add an entry when a new report is worth keeping.
  */
-const REPORTS: Record<string, unknown> = { minefieldArenaChoice, vaneFriendlyUpgrade }
+const REPORTS: Record<string, unknown> = { baylanExhaust, minefieldArenaChoice, vaneFriendlyUpgrade }
 
 /**
  * Card data a report needs from outside ASH, since the bundled fixture is ASH only. Keyed by the
@@ -88,6 +89,18 @@ export function replaySteps(report: Report, extra: SwuCard[] = []): GameState[] 
 export function replay(report: Report, extra: SwuCard[] = []): GameState {
   const states = replaySteps(report, extra)
   return states[states.length - 1]
+}
+
+/**
+ * The state after the first `moveCount` moves.
+ *
+ * A report's move list was recorded against the BUGGY behaviour, so a fix that raises a choice the
+ * reporter never saw makes the tail unreplayable: their next move answers a position that no longer
+ * exists. Stop at the move the report is actually about and assert there. Diverging afterwards is
+ * the fix working, not the fixture rotting.
+ */
+export function replayUpTo(report: Report, moveCount: number, extra: SwuCard[] = []): GameState {
+  return replay({ ...report, moves: report.moves.slice(0, moveCount) }, extra)
 }
 
 /** A report filed under `fixtures/reports/`, by name. */

@@ -1,5 +1,5 @@
 import type { GameState, KeywordInstance, UnitState, CombatContext } from './types'
-import { lastingEffectTotals } from './types'
+import { lastingEffectTotals, abilityCardIds } from './types'
 import { getCardDefinition } from './abilities'
 
 /** Keyword lookups against the static card db. */
@@ -46,16 +46,12 @@ export function unitKeywords(state: GameState, unit: UnitState): KeywordInstance
  * effects. No aura contributions and no removals — the recursion-safe base an aura can inspect.
  */
 function baseKeywordList(state: GameState, unit: UnitState): KeywordInstance[] {
-  const out: KeywordInstance[] = [
-    ...(state.cards[unit.cardId]?.keywords ?? []),
-    ...conditionalKeywordsOf(state, unit.cardId, unit),
-  ]
-  for (const { cardId } of unit.upgrades) {
+  const out: KeywordInstance[] = []
+  // Own card, each upgrade, and any card lent for this attack, each contributing its printed AND
+  // its conditional keywords. A lent card used to contribute printed keywords only, so a
+  // conditional keyword on a borrowed card was silently dropped (#417).
+  for (const cardId of abilityCardIds(unit)) {
     out.push(...(state.cards[cardId]?.keywords ?? []), ...conditionalKeywordsOf(state, cardId, unit))
-  }
-  // Cards whose full abilities are granted for one attack (Improvised Identity).
-  for (const cardId of unit.grantedAbilityCardIds ?? []) {
-    out.push(...(state.cards[cardId]?.keywords ?? []))
   }
   out.push(...(unit.grantedKeywords ?? []))
   out.push(...lastingEffectTotals(state, unit.instanceId).keywords)
@@ -75,7 +71,7 @@ export function nonAuraKeywordNames(state: GameState, unit: UnitState): Set<stri
 /** Keyword names conditionally removed from a unit by its own card or an upgrade. */
 function suppressedKeywordsOf(state: GameState, unit: UnitState): Set<string> {
   const names = new Set<string>()
-  for (const cardId of [unit.cardId, ...unit.upgrades.map(u => u.cardId)]) {
+  for (const cardId of abilityCardIds(unit)) {
     for (const name of getCardDefinition(cardId)?.suppressedKeywords?.(state, unit) ?? []) names.add(name)
   }
   return names
@@ -92,7 +88,7 @@ export function unitKeywordValue(state: GameState, unit: UnitState, name: string
 
 /** True if this unit (its card or an upgrade) makes an attacker lose Overwhelm while it defends. */
 export function unitNegatesOverwhelm(state: GameState, unit: UnitState): boolean {
-  return [unit.cardId, ...unit.upgrades.map(u => u.cardId)].some(id => getCardDefinition(id)?.negatesOverwhelm?.(state, unit) ?? false)
+  return abilityCardIds(unit).some(id => getCardDefinition(id)?.negatesOverwhelm?.(state, unit) ?? false)
 }
 
 /**
@@ -101,35 +97,35 @@ export function unitNegatesOverwhelm(state: GameState, unit: UnitState): boolean
  * Support gains his first strike too.
  */
 export function unitDealsDamageFirst(state: GameState, unit: UnitState): boolean {
-  return [unit.cardId, ...unit.upgrades.map(u => u.cardId), ...(unit.grantedAbilityCardIds ?? [])]
+  return abilityCardIds(unit)
     .some(id => getCardDefinition(id)?.dealsDamageFirst?.(state, unit) ?? false)
 }
 
 /** True if this unit's excess combat damage spills onto another unit rather than the base (Wipe Them Out). */
 export function unitSpillsExcessToUnit(state: GameState, unit: UnitState): boolean {
-  return [unit.cardId, ...unit.upgrades.map(u => u.cardId), ...(unit.grantedAbilityCardIds ?? [])]
+  return abilityCardIds(unit)
     .some(id => getCardDefinition(id)?.spillsExcessToUnit?.(state, unit) ?? false)
 }
 
 /** True if any of the unit's cards forbids it attacking bases (Wicket). */
 export function unitCannotAttackBases(state: GameState, unit: UnitState): boolean {
-  return [unit.cardId, ...unit.upgrades.map(u => u.cardId)].some(id => getCardDefinition(id)?.cannotAttackBases?.(state, unit) ?? false)
+  return abilityCardIds(unit).some(id => getCardDefinition(id)?.cannotAttackBases?.(state, unit) ?? false)
 }
 
 /** True if the unit currently can't be attacked (Tatooine Repulsor Train). */
 export function unitCannotBeAttacked(state: GameState, unit: UnitState): boolean {
-  return [unit.cardId, ...unit.upgrades.map(u => u.cardId)].some(id => getCardDefinition(id)?.cannotBeAttacked?.(state, unit) ?? false)
+  return abilityCardIds(unit).some(id => getCardDefinition(id)?.cannotBeAttacked?.(state, unit) ?? false)
 }
 
 /** True if the unit may attack enemy units in either arena (Red Leader). */
 export function unitAttacksEitherArena(state: GameState, unit: UnitState): boolean {
-  return [unit.cardId, ...unit.upgrades.map(u => u.cardId)].some(id => getCardDefinition(id)?.attacksEitherArena?.(state, unit) ?? false)
+  return abilityCardIds(unit).some(id => getCardDefinition(id)?.attacksEitherArena?.(state, unit) ?? false)
 }
 
 /** A unit's traits — its card's plus any granted by an upgrade (The Darksaber → Mandalorian). */
 export function unitTraits(state: GameState, unit: UnitState): string[] {
   const out = [...(state.cards[unit.cardId]?.traits ?? [])]
-  for (const cardId of [unit.cardId, ...unit.upgrades.map(u => u.cardId)]) {
+  for (const cardId of abilityCardIds(unit)) {
     out.push(...(getCardDefinition(cardId)?.grantedTraits?.(state, unit) ?? []))
   }
   return out
@@ -155,7 +151,7 @@ export function auraContributions(state: GameState, target: UnitState, combat?: 
   for (const owner of ['player', 'opponent'] as const) {
     const sameController = owner === targetOwner
     for (const source of state.players[owner].units) {
-      for (const cardId of [source.cardId, ...source.upgrades.map(u => u.cardId)]) {
+      for (const cardId of abilityCardIds(source)) {
         const contrib = getCardDefinition(cardId)?.aura?.(state, source, target, sameController, combat)
         if (contrib) {
           power += contrib.power ?? 0
@@ -172,5 +168,5 @@ export function auraContributions(state: GameState, target: UnitState, combat?: 
 /** True if this unit is a leader unit — natively, or made one by an upgrade (The Darksaber). */
 export function isLeaderUnit(state: GameState, unit: UnitState): boolean {
   if (unit.isLeader) return true
-  return [unit.cardId, ...unit.upgrades.map(u => u.cardId)].some(id => getCardDefinition(id)?.makesLeaderUnit?.(state, unit) ?? false)
+  return abilityCardIds(unit).some(id => getCardDefinition(id)?.makesLeaderUnit?.(state, unit) ?? false)
 }

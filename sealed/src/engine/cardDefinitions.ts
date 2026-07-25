@@ -1,12 +1,12 @@
 import type { EffectContext } from './abilities'
 import { registerCard } from './abilities'
-import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, bottomTopCards, exhaustReadyResource, readyResource, readyUnit } from './effects'
+import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit } from './effects'
 import { dealDamageToUnit, defeatUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
 import { discardUnitsMatching } from './resolve'
 import { TOKEN_MANDALORIAN, isTokenCard } from './tokenUnits'
-import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, markAbilityUsed } from './types'
+import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, markAbilityUsed, updatePlayer } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets } from './legalMoves'
 import { canAfford } from './resources'
 import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, unitHasKeyword, unitKeywords } from './keywords'
@@ -64,11 +64,9 @@ registerCard('ASH_230', { // Improvised Identity — attach to a ground unit
       if (!found) return s
       const owner = ctx.owner
       const revealed = s.players[owner].deck.slice(0, searchCount(s, found.unit, 3))
-      const groundUnit = (cardId: string) => { const c = s.cards[cardId]; return c?.type === 'unit' && c.arena === 'ground' }
-      // No ground unit revealed → skip the discard, straight to the optional attack (no grant).
-      if (!revealed.some(groundUnit)) {
-        return pushChoice(s, { kind: 'mayAttack', id: ctx.sourceInstanceId!, controller: owner, unitId: ctx.sourceInstanceId! })
-      }
+      // Always reveal, even when no ground unit is among them (#413): the player looked at these
+      // cards and is entitled to see them. Acknowledging without a pick goes straight on to the
+      // optional attack with no grant, which is what used to happen silently.
       return pushChoice(s, { kind: 'search', id: ctx.sourceInstanceId!, controller: owner, unitId: ctx.sourceInstanceId!, revealed })
     },
   }],
@@ -264,17 +262,49 @@ registerCard('ASH_014', { // The Mandalorian — front take-initiative draw; dep
 })
 
 /**
- * Every upgrade the player OWNS, card upgrades and tokens alike, as defeatable candidates.
+ * Which upgrades in play an effect may target. The ONE place that question is answered, because
+ * card text asks it three different ways and hand-rolled scans kept conflating them (#401):
  *
- * Ownership, not the host unit's controller: an opponent can attach an upgrade to your unit
- * (Deadly Vulnerability), and it stays theirs — which is why `UpgradeAttachment` carries `owner`,
- * and why it returns to their discard when defeated. Scanning your own units alone offered those
- * as "friendly" (#378). Tokens are stamped with the receiving unit's controller, so your own
- * Shields and Advantage still qualify.
+ * - "a friendly upgrade"          → `owner`, the player who PLAYED it (#378)
+ * - "an upgrade on a friendly unit" → `hostController`, whoever controls the host (Reforge)
+ * - "an upgrade"                  → neither filter: anything in play, either side
+ *
+ * Ownership and host controller genuinely differ: an opponent can attach an upgrade to your unit
+ * (Deadly Vulnerability) and it stays theirs, which is why `UpgradeAttachment` carries `owner` and
+ * why it returns to THEIR discard when defeated.
+ *
+ * Token upgrades (Shield / Advantage / Experience) are always included: they are upgrades, they
+ * cost 0, and "defeat an upgrade" can legally take one. No card in the set says otherwise, so there
+ * is no cards-only option to get wrong.
  */
+interface UpgradeFilter {
+  /** The player who played the upgrade. */
+  owner?: PlayerId
+  /** The controller of the unit the upgrade is attached to. */
+  hostController?: PlayerId
+  /** Printed cost cap. Tokens are cost 0, so they always satisfy one. */
+  maxCost?: number
+}
+
+const upgradeCandidates = (s: GameState, filter: UpgradeFilter = {}): UpgradeRef[] => {
+  const out: UpgradeRef[] = []
+  for (const side of ['player', 'opponent'] as PlayerId[]) {
+    if (filter.hostController !== undefined && side !== filter.hostController) continue
+    for (const u of s.players[side].units) {
+      u.upgrades.forEach((up, i) => {
+        if (filter.owner !== undefined && up.owner !== filter.owner) return
+        const c = s.cards[up.cardId]
+        if (filter.maxCost !== undefined && (c?.cost ?? 0) > filter.maxCost) return
+        out.push({ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId })
+      })
+    }
+  }
+  return out
+}
+
+/** "A friendly upgrade": every upgrade the player OWNS, card upgrades and tokens alike. */
 const friendlyUpgradeCandidates = (s: GameState, owner: PlayerId): UpgradeRef[] =>
-  allUnits(s).flatMap(u => u.upgrades.flatMap((up, i) =>
-    up.owner === owner ? [{ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId }] : []))
+  upgradeCandidates(s, { owner })
 
 const BOTH_BASES: PlayerId[] = ['player', 'opponent']
 
@@ -949,8 +979,9 @@ registerCard('ASH_107', whenPlayed('Search the top 5 cards of your deck for a ca
   const revealed = s.players[owner].deck.slice(0, 5)
   const myTraits = new Set(s.players[owner].units.flatMap(u => unitTraits(s, u).map(t => t.toLowerCase())))
   const eligibleIndices = revealed.flatMap((cardId, i) => (s.cards[cardId]?.traits.some(t => myTraits.has(t.toLowerCase())) ? [i] : []))
-  // No trait match among the top cards → they all go to the bottom and nothing is drawn.
-  if (eligibleIndices.length === 0) return bottomTopCards(s, owner, revealed.length)
+  // Reveal even with no trait match (#413): acknowledging bottoms them all and draws nothing, but
+  // the player gets to see which five went to the bottom. Only an empty deck reveals nothing.
+  if (revealed.length === 0) return s
   return pushChoice(s, { kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: owner, revealed, eligibleIndices })
 }))
 
@@ -1017,9 +1048,8 @@ registerCard('ASH_043', { // Corona Four — On Attack debuff + When Defeated de
   ],
 })
 
-// Every upgrade in play (both sides) — the "defeat an upgrade" candidate set (Clan Vizsla Soldier).
-const allUpgradeCandidates = (s: GameState): UpgradeRef[] =>
-  allUnits(s).flatMap(u => u.upgrades.map((up, i) => ({ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId })))
+// "An upgrade": every upgrade in play, either side, tokens included (Clan Vizsla Soldier).
+const allUpgradeCandidates = (s: GameState): UpgradeRef[] => upgradeCandidates(s)
 
 registerCard('ASH_165', whenDefeated('You may defeat an upgrade.', (s, ctx) => { // Clan Vizsla Soldier
   const candidates = allUpgradeCandidates(s)
@@ -1352,7 +1382,7 @@ registerCard('ASH_079', { // Koska Reeves
 // ── Units needing a chained follow-up choice or a real "[Exhaust]" action cost ──────────
 
 registerCard('ASH_171', whenPlayed('You may defeat a friendly upgrade. If you do, ready this unit.', (s, ctx) => { // Pegasus Tri-Wing
-  const candidates = s.players[ctx.owner].units.flatMap(u => u.upgrades.map((up, i) => ({ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId })))
+  const candidates = friendlyUpgradeCandidates(s, ctx.owner)
   return candidates.length === 0 ? s : pushChoice(s, {
     kind: 'selectUpgradeToDefeat',
     id: ctx.sourceInstanceId!,
@@ -1462,8 +1492,11 @@ registerCard('ASH_245', { // Eye of Sion
         const c = s.cards[cardId]
         return c?.type === 'unit' && c.cost <= budget ? [i] : []
       })
-      if (eligibleIndices.length === 0) return bottomTopCards(s, ctx.owner, revealed.length)
-      return pushChoice(s, {
+      // Pull the searched window OUT of the deck, as Ackbar's search does: `searchPlayFree` both
+      // bottoms its leftovers and returns them on a pass, so leaving them in place duplicated them.
+      // Reveal even when nothing is playable (#413), so the player sees what they looked at.
+      const pulled = updatePlayer(s, ctx.owner, { deck: s.players[ctx.owner].deck.slice(revealed.length) })
+      return pushChoice(pulled, {
         kind: 'searchPlayFree',
         id: ctx.sourceInstanceId!,
         controller: ctx.owner,
@@ -1554,9 +1587,10 @@ registerCard('ASH_052', { // Chimaera
 
 registerCard('ASH_042', { // Jabba the Hutt
   abilities: [{ trigger: 'whenPlayed', description: "You may return an upgrade to its owner's hand. If it's returned to your hand, you may play it for free.", effect: (s, ctx) => {
-    // Token upgrades can't go to a hand, so only card upgrades are candidates.
-    const candidates = allUnits(s).flatMap(u => u.upgrades.flatMap((up, i) =>
-      s.cards[up.cardId]?.type === 'upgrade' ? [{ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId }] : []))
+    // "An upgrade": either side, tokens included. A token has no card to put in a hand, so
+    // returning one defeats it instead (see `returnUpgradeToHand`), which is a legal and useful
+    // play against an enemy Shield.
+    const candidates = upgradeCandidates(s)
     return candidates.length ? pushChoice(s, { kind: 'selectUpgradeToReturn', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates }) : s
   } }],
 })
@@ -1647,6 +1681,7 @@ registerCard('ASH_149', { // Eviscerator
  */
 const GRANT_MANDO_ON_DEFEAT = 'GRANT_MANDO_ON_DEFEAT'
 registerCard(GRANT_MANDO_ON_DEFEAT, {
+  sourceCardId: 'ASH_063', // Bo-Katan's Gauntlet
   abilities: [{ trigger: 'whenDefeated', description: 'Create a Mandalorian token.', effect: (s, ctx) => createTokenUnit(s, ctx.owner, TOKEN_MANDALORIAN) }],
 })
 
@@ -1817,7 +1852,7 @@ registerCard('ASH_103', whenPlayed('Defeat a friendly Imperial unit. If you do, 
 }))
 
 registerCard('ASH_246', whenPlayed('Defeat a friendly upgrade. If you do, draw 2 cards.', (s, ctx) => { // Exploit Advantage
-  const candidates = s.players[ctx.owner].units.flatMap(u => u.upgrades.map((up, i) => ({ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId })))
+  const candidates = friendlyUpgradeCandidates(s, ctx.owner)
   return candidates.length
     ? pushChoice(s, { kind: 'selectUpgradeToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true, thenDraw: 2 })
     : s
@@ -1845,10 +1880,9 @@ registerCard('ASH_236', whenPlayed("Return a friendly non-leader unit to its own
 }))
 
 registerCard('ASH_232', whenPlayed("Return an upgrade that costs 2 or less to its owner's hand. Give a Shield token to a unit.", (s, ctx) => { // Full of Surprises
-  const candidates = allUnits(s).flatMap(u => u.upgrades.flatMap((up, i) => {
-    const c = s.cards[up.cardId]
-    return c?.type === 'upgrade' && c.cost <= 2 ? [{ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId }] : []
-  }))
+  // "An upgrade that costs 2 or less": either side, and tokens qualify at cost 0. A token cannot go
+  // to a hand, so returning one defeats it instead (see `returnUpgradeToHand`).
+  const candidates = upgradeCandidates(s, { maxCost: 2 })
   return candidates.length
     ? pushChoice(s, { kind: 'selectUpgradeToReturn', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, thenShield: true })
     : s
@@ -1943,6 +1977,7 @@ registerCard('ASH_200', whenPlayed('Choose a non-leader unit. Give that unit -3/
 
 const GRANT_RASH_ACTION = 'GRANT_RASH_ACTION'
 registerCard(GRANT_RASH_ACTION, {
+  sourceCardId: 'ASH_162', // Rash Action
   statModifier: (_s, _u, ctx) => (ctx.attacking ? { power: 1 } : {}),
   abilities: [{
     trigger: 'onAttackEnd',
@@ -1957,6 +1992,7 @@ registerCard(GRANT_RASH_ACTION, {
 
 const GRANT_FOLLOW_ME = 'GRANT_FOLLOW_ME'
 registerCard(GRANT_FOLLOW_ME, {
+  sourceCardId: 'ASH_184', // Follow Me!
   abilities: [{
     trigger: 'onAttackEnd',
     description: 'After completing the attack, give 3 Advantage tokens to a unit.',
@@ -1971,6 +2007,7 @@ registerCard(GRANT_FOLLOW_ME, {
 
 const GRANT_MASTERSTROKE = 'GRANT_MASTERSTROKE'
 registerCard(GRANT_MASTERSTROKE, {
+  sourceCardId: 'ASH_234', // Masterstroke
   // +1/+0 per unit the defending player has in this unit's arena.
   statModifier: (s, u, ctx) => {
     if (!ctx.attacking) return {}
@@ -1981,7 +2018,7 @@ registerCard(GRANT_MASTERSTROKE, {
 })
 
 const GRANT_WIPE_THEM_OUT = 'GRANT_WIPE_THEM_OUT'
-registerCard(GRANT_WIPE_THEM_OUT, { spillsExcessToUnit: () => true })
+registerCard(GRANT_WIPE_THEM_OUT, { sourceCardId: 'ASH_137', spillsExcessToUnit: () => true }) // Wipe Them Out
 
 /** "Attack with a unit", lending it `grantCardId`'s rider for that attack. */
 const attackWithRider = (description: string, grantCardId: string) =>
@@ -1999,6 +2036,7 @@ registerCard('ASH_137', attackWithRider('Attack with a unit. For this attack, yo
 /** The ability Treacherous Minefield hands to every unit in the chosen arena for the phase. */
 const GRANT_MINEFIELD = 'GRANT_MINEFIELD'
 registerCard(GRANT_MINEFIELD, {
+  sourceCardId: 'ASH_186', // Treacherous Minefield
   abilities: [{ trigger: 'onAttack', description: 'Deal 2 damage to this unit.', effect: (s, ctx) => dealDamageToUnit(s, ctx.sourceInstanceId!, 2) }],
 })
 
@@ -2006,8 +2044,10 @@ registerCard('ASH_186', whenPlayed('Choose an arena. For this phase, each unit i
   pushChoice(s, { kind: 'selectArenaToGrant', id: ctx.sourceInstanceId!, controller: ctx.owner, grantCardId: GRANT_MINEFIELD })))
 
 registerCard('ASH_090', whenPlayed('Defeat an upgrade on a friendly unit. If you do, search the top 8 cards of your deck for an upgrade that can attach to that unit, reveal it, and play it on that unit. It costs 4 less.', (s, ctx) => { // Reforge
-  const candidates = s.players[ctx.owner].units.flatMap(u => u.upgrades.flatMap((up, i) =>
-    s.cards[up.cardId]?.type === 'upgrade' ? [{ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId }] : []))
+  // "On a friendly unit" is keyed on the HOST's controller, not the upgrade's owner, so this one is
+  // deliberately different from the "a friendly upgrade" cards. The SIDE is all that differs:
+  // "defeat an upgrade" takes tokens here just as it does for Vane and Clan Vizsla Soldier.
+  const candidates = upgradeCandidates(s, { hostController: ctx.owner })
   return candidates.length
     ? pushChoice(s, { kind: 'selectUpgradeToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true, thenSearchUpgrade: { depth: 8, discount: 4 } })
     : s

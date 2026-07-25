@@ -34,6 +34,7 @@ describe('describeChoiceParts', () => {
     mayGiveTokens: { kind: 'mayGiveTokens', id: 'c', controller: 'player', token: 'SHIELD', count: 2, targets: ['u1'] },
     returnFriendlyUnit: { kind: 'returnFriendlyUnit', id: 'c', controller: 'player', targets: ['u1'] },
     healForAdvantage: { kind: 'healForAdvantage', id: 'c', controller: 'player', targets: ['u1'], maxHeal: 2 },
+    selectPair: { kind: 'selectPair', id: 'c', controller: 'player', friendlyTargets: ['u1'], enemyTargets: ['u2'], mode: 'exhaust' },
   }
 
   it('gives every board-target kind a prompt — never blank, never the raw kind name', () => {
@@ -79,6 +80,19 @@ describe('describeChoiceParts', () => {
    *  wrong for a deck choice with no board target at all. */
   it('prompts for choosing which deck to look at (Reanimated Night Trooper)', () => {
     expect(prompt({ kind: 'peekTopDiscard', id: 'c', controller: 'player', decks: ['player', 'opponent'] } as unknown as PendingChoice)).toMatch(/deck/i)
+  })
+
+  /**
+   * #387: selectPair had no prompt at all, so a two-stage pick showed the generic default and gave
+   * the player no way to tell which of the two picks was being asked for.
+   */
+  it('says which side to pick and what will happen to it, per stage and per mode', () => {
+    const pair = (mode: 'defeat' | 'exhaust', chosenFriendly?: string): PendingChoice =>
+      ({ kind: 'selectPair', id: 'c', controller: 'player', friendlyTargets: ['u1'], enemyTargets: ['u2'], mode, chosenFriendly })
+    expect(prompt(pair('exhaust'))).toMatch(/your units to exhaust/i)
+    expect(prompt(pair('exhaust', 'u1'))).toMatch(/enemy unit to exhaust/i)
+    expect(prompt(pair('defeat'))).toMatch(/your units to defeat/i)
+    expect(prompt(pair('defeat', 'u1'))).toMatch(/enemy unit to defeat/i)
   })
 
   it('still reads sensibly when the choice records no source (see #374)', () => {

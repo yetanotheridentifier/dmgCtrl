@@ -234,8 +234,12 @@ The board is drawn with art-dominant cards, not text rows:
   no response, and has nothing on screen explaining why. It stays silent for the base actions
   (playing a card, choosing an attacker):
   those are self-evident, and a permanent prompt would train the player to ignore the panel.
-  Where a choice records the card that raised it the prompt leads with that card; most kinds
-  cannot yet, see #374. The panel is **absolutely positioned and `pointer-events-none`**: in
+  The prompt leads with the card that raised the choice. **Every** choice can name one (#374): the
+  ability dispatcher stamps `PendingChoice.source` automatically at the five places an effect is
+  invoked, rather than it being passed at each of the ~185 `pushChoice` call sites, and follow-up
+  choices inherit it from the choice being answered. `choiceSource.test.ts` plays the whole coverage
+  deck set and fails if any choice reaches a player unattributed. The panel is **absolutely
+  positioned and `pointer-events-none`**: in
   flow it reflowed the whole board every time it appeared or cleared, and being click-through
   lets it sit over the play area without stealing a click meant for a card. `CardRef` sets
   `pointer-events-auto` on itself so references inside it stay hoverable. Its fill uses

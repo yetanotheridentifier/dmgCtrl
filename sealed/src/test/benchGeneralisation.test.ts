@@ -25,9 +25,11 @@ describe('runGeneralisation', () => {
     }
   })
 
+  // Replays the whole sweep a second time, so it needs more than vitest's 5s default once the
+  // suite is running files in parallel and competing for CPU.
   it('is deterministic', () => {
     const again = runGeneralisation({ gamesPerDeck: 2, seed: 5, aiA: 'greedy', aiB: 'random' })
     expect(again.overallWinRateA).toBe(report.overallWinRateA)
     expect(again.perDeck.map(d => d.winRateA)).toEqual(report.perDeck.map(d => d.winRateA))
-  })
+  }, 30_000)
 })

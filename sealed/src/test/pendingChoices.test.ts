@@ -270,9 +270,20 @@ describe('Improvised Identity (ASH_230) — action: search, discard, may attack'
     expect(declined.activePlayer).toBe('opponent')
   })
 
-  it('skips straight to may-attack (no grant) when no ground unit is revealed', () => {
+  /**
+   * #413: with no ground unit revealed the search used to be skipped silently, straight to the
+   * attack. The player still looked at those cards, so they are shown first; acknowledging then
+   * leads to the same ungranted attack.
+   */
+  it('still reveals the search when no ground unit is among the cards, then offers the attack', () => {
     const next = resolve(board(['EV', 'EV', 'EV']), use)
-    expect(next.pendingChoices?.[0]).toMatchObject({ kind: 'mayAttack', unitId: 'u1' })
-    expect(next.pendingChoices?.[0]).not.toHaveProperty('grantCardId', expect.anything())
+    expect(next.pendingChoices?.[0]).toMatchObject({ kind: 'search', unitId: 'u1', revealed: ['EV', 'EV', 'EV'] })
+    expect(legalMoves(next).length).toBeGreaterThan(0)
+
+    const done = resolve(next, { type: 'skipTrigger', choiceId: next.pendingChoices![0].id })
+    expect(done.pendingChoices?.[0]).toMatchObject({ kind: 'mayAttack', unitId: 'u1' })
+    expect(done.pendingChoices?.[0]).not.toHaveProperty('grantCardId', expect.anything())
+    // The card says nothing about bottoming them, so they stay where they were.
+    expect(done.players.player.deck.slice(0, 3)).toEqual(['EV', 'EV', 'EV'])
   })
 })

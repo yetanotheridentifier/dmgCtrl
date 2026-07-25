@@ -1,5 +1,5 @@
 import type { DamageSource, GameState, NextUnitGrant, PlayerId, UnitState } from './types'
-import { updatePlayer, pushChoice, recordBaseDamaged, recordUpgradeDefeated, recordUnitLeftPlay } from './types'
+import { updatePlayer, pushChoice, recordBaseDamaged, recordUpgradeDefeated, recordUnitLeftPlay, abilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { EffectContext, TriggerPoint } from './abilities'
@@ -12,7 +12,7 @@ import { getCardDefinition, runUnitTrigger } from './abilities'
  */
 export function searchCount(state: GameState, unit: UnitState, baseCount: number): number {
   let n = baseCount
-  for (const cardId of [unit.cardId, ...unit.upgrades.map(u => u.cardId)]) {
+  for (const cardId of abilityCardIds(unit)) {
     n *= getCardDefinition(cardId)?.searchModifier?.(state, unit) ?? 1
   }
   return n
@@ -83,13 +83,21 @@ export function dealDamageToBase(state: GameState, player: PlayerId, amount: num
 }
 
 /**
- * Defeat the upgrades that were attached to units leaving play, firing "when a friendly upgrade is
- * defeated" for each affected owner (Zeb Orrelios / Baylan Skoll). Fired once per owner, not
- * per upgrade — a unit dying with three upgrades is one reaction per controller.
+ * Settle a set of upgrades being defeated: mark the phase for Baylan Skoll and fire "when a friendly
+ * upgrade is defeated" (Zeb Orrelios).
+ *
+ * `upgradeOwners` carries ONE ENTRY PER UPGRADE, not one per player, and the trigger fires once for
+ * each. Zeb reads "When a friendly upgrade is defeated: Deal 1 damage to a base" with no
+ * once-each-round clause, and this set states that limit whenever it applies, so a unit dying with
+ * three upgrades really is three reactions. Duplicate ids are de-collided by `pushChoice`, so each
+ * firing leaves its own answerable choice.
+ *
+ * An upgrade belongs to whoever PLAYED it, not to the host's controller (#378), so a mixed stack
+ * reaches each side's watchers separately.
  */
-export function fireUpgradesDefeated(state: GameState, owners: PlayerId[]): GameState {
+export function fireUpgradesDefeated(state: GameState, upgradeOwners: PlayerId[]): GameState {
   let next = state
-  for (const owner of [...new Set(owners)]) {
+  for (const owner of upgradeOwners) {
     next = recordUpgradeDefeated(next, owner)
     next = fireUnitsTrigger(next, 'whenFriendlyUpgradeDefeated', owner)
   }
@@ -105,7 +113,7 @@ export function baseDamageAfterPrevention(state: GameState, player: PlayerId, am
   if (damageIsUnpreventable(state, source)) return amount
   let out = amount
   for (const u of state.players[player].units) {
-    for (const cid of [u.cardId, ...u.upgrades.map(x => x.cardId)]) {
+    for (const cid of abilityCardIds(u)) {
       const hook = getCardDefinition(cid)?.preventBaseDamage
       if (hook) out = hook(state, u, out)
     }
@@ -120,7 +128,7 @@ export function baseDamageAfterPrevention(state: GameState, player: PlayerId, am
 export function damageIsUnpreventable(state: GameState, source?: DamageSource): boolean {
   if (!source) return false
   return state.players[source.controller].units.some(u =>
-    [u.cardId, ...u.upgrades.map(x => x.cardId)].some(id => getCardDefinition(id)?.makesDamageUnpreventable?.(state, u, source) ?? false),
+    abilityCardIds(u).some(id => getCardDefinition(id)?.makesDamageUnpreventable?.(state, u, source) ?? false),
   )
 }
 
@@ -171,7 +179,7 @@ export function createTokenUnits(state: GameState, owner: PlayerId, tokenCardId:
   for (let i = 0; i < count; i++) next = createTokenUnit(next, owner, tokenCardId)
   if (count <= 0) return next
   const replacer = next.players[owner].units.find(u =>
-    [u.cardId, ...u.upgrades.map(x => x.cardId)].some(id => getCardDefinition(id)?.doublesTokenCreation?.(next, u) ?? false),
+    abilityCardIds(u).some(id => getCardDefinition(id)?.doublesTokenCreation?.(next, u) ?? false),
   )
   return replacer
     ? pushChoice(next, { kind: 'mayDoubleTokens', id: `${replacer.instanceId}-double`, controller: owner, unitId: replacer.instanceId, token: tokenCardId, count })
@@ -330,6 +338,30 @@ export function discardFromHand(state: GameState, owner: PlayerId, handIndex: nu
 }
 
 /**
+ * Defeat EVERY `tokenCardId` token on a unit: the "it was spent" form (#419).
+ *
+ * A Shield soaking damage and an Advantage token finishing a combat are both DEFEATS, as each token
+ * card says, so they must settle the same consequences a card-upgrade's defeat does: the phase is
+ * marked for Baylan Skoll and "when a friendly upgrade is defeated" fires (Zeb Orrelios) for each
+ * token's OWNER, who need not be the host's controller. They were previously filtered out of the
+ * `upgrades` array in place, which settled nothing. Tokens cease to exist, so nothing is discarded.
+ *
+ * One reaction per token, as `fireUpgradesDefeated` does throughout: spending three Advantage
+ * tokens on one attack defeats three upgrades, so Zeb Orrelios fires three times.
+ */
+export function defeatTokensOn(state: GameState, owner: PlayerId, instanceId: string, tokenCardId: string): GameState {
+  const host = state.players[owner].units.find(u => u.instanceId === instanceId)
+  const spent = host?.upgrades.filter(a => a.cardId === tokenCardId) ?? []
+  if (spent.length === 0) return state
+  const next = updatePlayer(state, owner, {
+    units: state.players[owner].units.map(u =>
+      u.instanceId === instanceId ? { ...u, upgrades: u.upgrades.filter(a => a.cardId !== tokenCardId) } : u,
+    ),
+  })
+  return fireUpgradesDefeated(next, spent.map(a => a.owner))
+}
+
+/**
  * Defeat the first upgrade with `cardId` on a unit: remove it from the unit;
  * a card-upgrade goes to its OWNER's discard, a token simply ceases to exist. A no-op
  * if the unit or upgrade is gone (e.g. the host was already defeated). Used by
@@ -369,16 +401,20 @@ export function defeatUpgradeAt(state: GameState, instanceId: string, index: num
 }
 
 /**
- * Return the upgrade at `index` to **its owner's** hand (Jabba the Hutt) — which may not be
- * the host unit's controller. Token upgrades can't go to a hand, so they simply cease to exist.
- * Fires "a friendly upgrade was defeated"? No — returning is not defeating, so no trigger.
+ * Return the upgrade at `index` to **its owner's** hand (Jabba the Hutt, Full of Surprises), which
+ * may not be the host unit's controller.
+ *
+ * A TOKEN upgrade has no card to put in a hand, so it is DEFEATED instead (#401). That routes
+ * through `defeatUpgradeAt`, so "when a friendly upgrade is defeated" fires for the token's owner;
+ * it used to be deleted silently, firing nothing. Returning a real card is still not a defeat, so
+ * that path fires no trigger.
  */
 export function returnUpgradeToHand(state: GameState, instanceId: string, index: number): GameState {
   const found = findUnit(state, instanceId)
   const removed = found?.unit.upgrades[index]
   if (!found || !removed) return state
+  if (state.cards[removed.cardId]?.type === 'token') return defeatUpgradeAt(state, instanceId, index)
   const next = patchUnit(state, found.owner, instanceId, u => ({ ...u, upgrades: u.upgrades.filter((_, i) => i !== index) }))
-  if (state.cards[removed.cardId]?.type === 'token') return next
   const op = next.players[removed.owner]
   return { ...next, players: { ...next.players, [removed.owner]: { ...op, hand: [...op.hand, removed.cardId] } } }
 }

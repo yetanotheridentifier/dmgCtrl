@@ -1,6 +1,6 @@
 import type { Action } from './actions'
 import type { EngineCard, GameState, HandCardRef, PlayerId, ResourceUpgradeRef, UnitState } from './types'
-import { opponentOf, hasPendingChoices, nextUnitGrantMatches } from './types'
+import { opponentOf, hasPendingChoices, nextUnitGrantMatches, abilityCardIds } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { unitHasKeyword, unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena } from './keywords'
 import { getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions } from './abilities'
@@ -38,7 +38,7 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   ]
   // A unit may provide its aspect icons while its controller pays costs — The Darksaber.
   for (const u of p.units) {
-    for (const cardId of [u.cardId, ...u.upgrades.map(x => x.cardId)]) {
+    for (const cardId of abilityCardIds(u)) {
       provided.push(...(getCardDefinition(cardId)?.providesAspects?.(state, u) ?? []))
     }
   }
@@ -59,7 +59,7 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   let waivePenalty = false
   const discountCtx = { owner: playerId, card, target }
   for (const u of p.units) {
-    for (const cid of [u.cardId, ...u.upgrades.map(x => x.cardId)]) {
+    for (const cid of abilityCardIds(u)) {
       const def = getCardDefinition(cid)
       discount += def?.costDiscount?.(state, u, discountCtx) ?? 0
       if (def?.waivesAspectPenalty?.(state, u, discountCtx)) waivePenalty = true
@@ -337,12 +337,15 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'search': {
-        // Improvised Identity: pick which revealed ground unit to discard (mandatory —
-        // the choice is only raised when at least one is present).
+        // Improvised Identity: pick which revealed ground unit to discard. Mandatory while one is
+        // present; with none, the reveal is shown anyway (#413) and the only move is to acknowledge
+        // it. Gating the skip on emptiness is what keeps "mandatory when there IS a pick" true.
+        const before = moves.length
         choice.revealed.forEach((cid, i) => {
           const c = state.cards[cid]
           if (c?.type === 'unit' && c.arena === 'ground') moves.push({ type: 'acceptChoice', choiceId: choice.id, deckIndex: i })
         })
+        if (moves.length === before) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'mayAdvantageEach':
@@ -488,8 +491,11 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'searchDraw': {
-        // Clan Wren Loyalist: draw one of the trait-matching revealed cards. Mandatory (a match exists).
+        // Clan Wren Loyalist: draw one of the matching revealed cards. Mandatory while a match
+        // exists; with none, the reveal is still shown (#413) and the only move is to acknowledge
+        // it, which bottoms them. Without this the choice would have NO legal move and deadlock.
         for (const deckIndex of choice.eligibleIndices) moves.push({ type: 'acceptChoice', choiceId: choice.id, deckIndex })
+        if (choice.eligibleIndices.length === 0) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'mayDefeatSelfSearch': {
