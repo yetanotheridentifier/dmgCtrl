@@ -273,9 +273,9 @@ registerCard('ASH_014', { // The Mandalorian — front take-initiative draw; dep
  * (Deadly Vulnerability) and it stays theirs, which is why `UpgradeAttachment` carries `owner` and
  * why it returns to THEIR discard when defeated.
  *
- * Token upgrades (Shield / Advantage / Experience) are included by default: they are upgrades, they
- * cost 0, and "defeat an upgrade" can legally take one. Only pass `cardsOnly` where the effect
- * genuinely needs a real card.
+ * Token upgrades (Shield / Advantage / Experience) are always included: they are upgrades, they
+ * cost 0, and "defeat an upgrade" can legally take one. No card in the set says otherwise, so there
+ * is no cards-only option to get wrong.
  */
 interface UpgradeFilter {
   /** The player who played the upgrade. */
@@ -284,8 +284,6 @@ interface UpgradeFilter {
   hostController?: PlayerId
   /** Printed cost cap. Tokens are cost 0, so they always satisfy one. */
   maxCost?: number
-  /** Drop token upgrades. */
-  cardsOnly?: boolean
 }
 
 const upgradeCandidates = (s: GameState, filter: UpgradeFilter = {}): UpgradeRef[] => {
@@ -296,7 +294,6 @@ const upgradeCandidates = (s: GameState, filter: UpgradeFilter = {}): UpgradeRef
       u.upgrades.forEach((up, i) => {
         if (filter.owner !== undefined && up.owner !== filter.owner) return
         const c = s.cards[up.cardId]
-        if (filter.cardsOnly && c?.type !== 'upgrade') return
         if (filter.maxCost !== undefined && (c?.cost ?? 0) > filter.maxCost) return
         out.push({ unitId: u.instanceId, upgradeIndex: i, cardId: up.cardId })
       })
@@ -2048,9 +2045,9 @@ registerCard('ASH_186', whenPlayed('Choose an arena. For this phase, each unit i
 
 registerCard('ASH_090', whenPlayed('Defeat an upgrade on a friendly unit. If you do, search the top 8 cards of your deck for an upgrade that can attach to that unit, reveal it, and play it on that unit. It costs 4 less.', (s, ctx) => { // Reforge
   // "On a friendly unit" is keyed on the HOST's controller, not the upgrade's owner, so this one is
-  // deliberately different from the "a friendly upgrade" cards. Card upgrades only: the effect
-  // replaces the defeated upgrade with another from the deck.
-  const candidates = upgradeCandidates(s, { hostController: ctx.owner, cardsOnly: true })
+  // deliberately different from the "a friendly upgrade" cards. The SIDE is all that differs:
+  // "defeat an upgrade" takes tokens here just as it does for Vane and Clan Vizsla Soldier.
+  const candidates = upgradeCandidates(s, { hostController: ctx.owner })
   return candidates.length
     ? pushChoice(s, { kind: 'selectUpgradeToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true, thenSearchUpgrade: { depth: 8, discount: 4 } })
     : s

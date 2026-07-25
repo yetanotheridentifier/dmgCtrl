@@ -83,13 +83,21 @@ export function dealDamageToBase(state: GameState, player: PlayerId, amount: num
 }
 
 /**
- * Defeat the upgrades that were attached to units leaving play, firing "when a friendly upgrade is
- * defeated" for each affected owner (Zeb Orrelios / Baylan Skoll). Fired once per owner, not
- * per upgrade — a unit dying with three upgrades is one reaction per controller.
+ * Settle a set of upgrades being defeated: mark the phase for Baylan Skoll and fire "when a friendly
+ * upgrade is defeated" (Zeb Orrelios).
+ *
+ * `upgradeOwners` carries ONE ENTRY PER UPGRADE, not one per player, and the trigger fires once for
+ * each. Zeb reads "When a friendly upgrade is defeated: Deal 1 damage to a base" with no
+ * once-each-round clause, and this set states that limit whenever it applies, so a unit dying with
+ * three upgrades really is three reactions. Duplicate ids are de-collided by `pushChoice`, so each
+ * firing leaves its own answerable choice.
+ *
+ * An upgrade belongs to whoever PLAYED it, not to the host's controller (#378), so a mixed stack
+ * reaches each side's watchers separately.
  */
-export function fireUpgradesDefeated(state: GameState, owners: PlayerId[]): GameState {
+export function fireUpgradesDefeated(state: GameState, upgradeOwners: PlayerId[]): GameState {
   let next = state
-  for (const owner of [...new Set(owners)]) {
+  for (const owner of upgradeOwners) {
     next = recordUpgradeDefeated(next, owner)
     next = fireUnitsTrigger(next, 'whenFriendlyUpgradeDefeated', owner)
   }
@@ -327,6 +335,30 @@ export function discardFromHand(state: GameState, owner: PlayerId, handIndex: nu
     ...state,
     players: { ...state.players, [owner]: { ...p, hand: p.hand.filter((_, i) => i !== handIndex), discard: [...p.discard, cardId] } },
   }
+}
+
+/**
+ * Defeat EVERY `tokenCardId` token on a unit: the "it was spent" form (#419).
+ *
+ * A Shield soaking damage and an Advantage token finishing a combat are both DEFEATS, as each token
+ * card says, so they must settle the same consequences a card-upgrade's defeat does: the phase is
+ * marked for Baylan Skoll and "when a friendly upgrade is defeated" fires (Zeb Orrelios) for each
+ * token's OWNER, who need not be the host's controller. They were previously filtered out of the
+ * `upgrades` array in place, which settled nothing. Tokens cease to exist, so nothing is discarded.
+ *
+ * One reaction per token, as `fireUpgradesDefeated` does throughout: spending three Advantage
+ * tokens on one attack defeats three upgrades, so Zeb Orrelios fires three times.
+ */
+export function defeatTokensOn(state: GameState, owner: PlayerId, instanceId: string, tokenCardId: string): GameState {
+  const host = state.players[owner].units.find(u => u.instanceId === instanceId)
+  const spent = host?.upgrades.filter(a => a.cardId === tokenCardId) ?? []
+  if (spent.length === 0) return state
+  const next = updatePlayer(state, owner, {
+    units: state.players[owner].units.map(u =>
+      u.instanceId === instanceId ? { ...u, upgrades: u.upgrades.filter(a => a.cardId !== tokenCardId) } : u,
+    ),
+  })
+  return fireUpgradesDefeated(next, spent.map(a => a.owner))
 }
 
 /**

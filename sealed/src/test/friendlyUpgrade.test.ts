@@ -116,4 +116,24 @@ describe('"a friendly upgrade" is owner-keyed; "on a friendly unit" is host-keye
     expect(choice.candidates.map(c => c.cardId)).toEqual(['THEIR_UP'])
     expect(choice.candidates[0].unitId).toBe('mine') // on YOUR unit, though they own it
   })
+
+  /**
+   * Reforge says "defeat an upgrade", exactly as Vane and Clan Vizsla Soldier do, and a token is an
+   * upgrade you can defeat. Only the SIDE it reads differs, so token upgrades belong here too.
+   */
+  it('Reforge offers a token on a friendly unit', () => {
+    const board = crossedBoard('ASH_090')
+    const withToken = {
+      ...board,
+      players: {
+        ...board.players,
+        player: {
+          ...board.players.player,
+          units: [unit('mine', 'BODY', { arena: 'ground', upgrades: [{ cardId: TOKEN_SHIELD, owner: 'player' as const }] })],
+        },
+      },
+    }
+    const played = resolve(withToken, { type: 'playEvent', handIndex: 0 })
+    expect(upgradeChoice(played)!.candidates.map(c => c.cardId)).toEqual([TOKEN_SHIELD])
+  })
 })

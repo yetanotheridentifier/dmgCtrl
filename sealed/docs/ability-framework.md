@@ -468,13 +468,46 @@ Phased into independently-deployable chunks; each groups a primitive with the le
 
   Owner and host controller genuinely differ: an opponent can attach an upgrade to your unit and it
   stays theirs (#378). Conflating them is what made Pegasus Tri-Wing and Exploit Advantage offer the
-  wrong set. **Token upgrades are candidates by default** (they are upgrades, they cost 0), so pass
-  `cardsOnly` only where a real card is genuinely needed.
+  wrong set. **Token upgrades are always candidates** (they are upgrades, they cost 0, and "defeat an
+  upgrade" can legally take one). The **side** is the only axis any card in the set varies on, so
+  there is deliberately no cards-only option to get wrong: Reforge reads the host rather than the
+  owner, but takes tokens exactly as Vane and Clan Vizsla Soldier do.
 
   A token targeted by a **return to hand** is **defeated** instead, since there is no card to put in
   a hand. `returnUpgradeToHand` routes it through `defeatUpgradeAt` so
   `whenFriendlyUpgradeDefeated` fires for the token's owner; it used to delete the token in silence.
   Anything that offers a free replay of the returned card must skip that branch for tokens.
+- **A spent token is a defeated upgrade (#419, #376).** Both token cards say so: a Shield that soaks
+  damage is defeated, and an Advantage token is defeated once its unit finishes attacking or
+  defending. Three sites removed them by filtering the `upgrades` array in place and so settled none
+  of the consequences, which is the same shape as the two entries above and as #417.
+
+  | Site | What spends the token |
+  | --- | --- |
+  | `applyUnitDamage` (`combat.ts`) | a Shield soaking an instance of damage |
+  | `consumeAdvantage` (`resolve.ts`) | Advantage, when its unit completes an attack or defence |
+  | Saboteur's pre-combat step (`resolve.ts`) | the defender's Shields, defeated before damage |
+
+  All three now go through `fireUpgradesDefeated`, which is the single place an upgrade's defeat is
+  settled: it marks the phase for **Baylan Skoll** ("if a friendly upgrade was defeated this phase")
+  and fires `whenFriendlyUpgradeDefeated` for **Zeb Orrelios**, for each token's OWNER rather than
+  the host's controller. The two whole-unit forms share `defeatTokensOn` (`effects.ts`); the shield
+  soak sits inside a damage batch, so it hands its owners to `finishDefeats` instead and settles in
+  the same pass as the upgrades that went down with their hosts.
+
+  The exception is **Eviscerator**: "(They aren't defeated after combat.)" means the tokens are never
+  spent, so nothing is defeated and nothing fires.
+- **One trigger per upgrade, not per event (#376).** `fireUpgradesDefeated` takes **one entry per
+  upgrade defeated**, not one per player, and fires for each. Zeb Orrelios reads "When a friendly
+  upgrade is defeated: Deal 1 damage to a base" with no once-each-round clause, and this set states
+  that limit whenever it applies, so a unit dying with three upgrades really is three reactions and
+  three lots of damage. It used to collapse them to one per owner, which is why Zeb looked like he
+  was not firing at all when the upgrades were tokens spent together.
+
+  Repeated firings push choices sharing a source instance id, which is safe because **`pushChoice`
+  already de-collides ids** (suffixing `#1`, `#2`), so each firing leaves its own answerable choice
+  rather than overwriting the last. Any future trigger that can fire more than once for one event
+  gets this for free; do not hand-roll a counter into the id.
 - **`CardSelectOverlay`** (`gameScreen.tsx`) is a reusable centre-screen card picker: **click the
   (highlighted) card itself** to select it, plus a Cancel shown only when `onCancel` is given (the
   optional case). Token art included. Extensible for any future "select a card / card type" effect.

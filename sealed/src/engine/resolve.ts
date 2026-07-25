@@ -7,7 +7,7 @@ import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, stampChoiceSource, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, sweepStateBasedDefeats, preventionOffer } from './combat'
-import { exhaustUnit, findUnit, giveToken, fireUpgradeAttached, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, searchCount, bottomTopCards, returnUpgradeToHand } from './effects'
+import { exhaustUnit, findUnit, giveToken, fireUpgradeAttached, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait } from './keywords'
@@ -1804,18 +1804,15 @@ function pass(state: GameState): GameState {
  * combat; a no-op if the unit has no Advantage token (or was defeated).
  */
 function consumeAdvantage(state: GameState, owner: PlayerId, instanceId: string): GameState {
-  const p = state.players[owner]
-  const unit = p.units.find(u => u.instanceId === instanceId)
+  const unit = state.players[owner].units.find(u => u.instanceId === instanceId)
   if (!unit || !hasToken(unit.upgrades, TOKEN_ADVANTAGE)) return state
-  // "They aren't defeated after combat" (Eviscerator) — inert tokens stay put.
+  // "They aren't defeated after combat" (Eviscerator): inert tokens stay put, and nothing is
+  // defeated, so no reaction fires either.
   if (friendlyAdvantageInert(state, owner)) return state
   // A unit's next attack/defence removes ALL its Advantage tokens (each gave +1/0), unless
-  // another ability says otherwise.
-  return updatePlayer(state, owner, {
-    units: p.units.map(u =>
-      u.instanceId === instanceId ? { ...u, upgrades: u.upgrades.filter(a => a.cardId !== TOKEN_ADVANTAGE) } : u,
-    ),
-  })
+  // another ability says otherwise. Spending one DEFEATS it (#419), so this goes through the
+  // shared defeat path rather than filtering the array: Baylan Skoll and Zeb Orrelios both watch.
+  return defeatTokensOn(state, owner, instanceId, TOKEN_ADVANTAGE)
 }
 
 /** Fire "When Attack Ends" abilities on the attacker (card + upgrades), if it
@@ -1969,11 +1966,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   // Saboteur: when this unit attacks, defeat the defending unit's Shields before combat damage
   // (CR 6.3.2b) — not optional, so a shield can't soak the hit. (Sentinel-ignoring is in legalMoves.)
   const preCombat = unitHasKeyword(state, attacker, 'Saboteur') && hasToken(defenderBefore.upgrades, TOKEN_SHIELD)
-    ? updatePlayer(state, enemyId, {
-        units: state.players[enemyId].units.map(u =>
-          u.instanceId === defenderBefore.instanceId ? { ...u, upgrades: u.upgrades.filter(a => a.cardId !== TOKEN_SHIELD) } : u,
-        ),
-      })
+    ? defeatTokensOn(state, enemyId, defenderBefore.instanceId, TOKEN_SHIELD)
     : state
   const defender = preCombat.players[enemyId].units.find(u => u.instanceId === target.instanceId)!
 
