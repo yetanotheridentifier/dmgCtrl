@@ -2,6 +2,7 @@ import type { GameState, PlayerId } from '../engine/types'
 import { opponentOf } from '../engine/types'
 import { effectivePower, effectiveHp } from '../engine/stats'
 import { handValue, DEFAULT_HAND_WEIGHTS, type HandWeights } from './handValue'
+import { role, type Role } from './race'
 
 /**
  * Board evaluation for the greedy AI (#391), unit-count-centred for trades (#392): a single number,
@@ -32,6 +33,22 @@ import { handValue, DEFAULT_HAND_WEIGHTS, type HandWeights } from './handValue'
 /** A decisive result outweighs any reachable material score. */
 const WIN = 1_000_000
 
+/**
+ * A board evaluation.
+ *
+ * `asRole` is the role of the seat being scored **for the whole decision**, and passing it is not
+ * optional in spirit: the caller must fix the role ONCE from the position it is deciding in, then
+ * score every candidate with it.
+ *
+ * Deriving the role per candidate instead was measured and is badly wrong. Greedy scores
+ * `evaluate(resolve(state, move), me)`, and **32.5% of decisions have candidate moves landing in
+ * different roles**, so their scores would be computed with different weight sets and would not be
+ * comparable. That silently rewards whichever move flips the role, regardless of merit, and it gets
+ * worse as `roleShift` grows: 44.2% at shift 1 down to 26.3% at shift 4 against a role-blind AI.
+ * Fixing the role per decision is what makes role awareness coherent at all.
+ */
+export type Evaluator = (state: GameState, me: PlayerId, asRole?: Role) => number
+
 export interface EvalWeights {
   base: number // per point of damage on a base (the win condition)
   unit: number // per unit in play (the dominant board term)
@@ -60,6 +77,11 @@ export interface EvalWeights {
    * flat, because the whole judgement is how much you were giving up.
    */
   claimCost: number
+  /**
+   * How far the aggressor and defender roles pull the weights apart (#395). See `roleAdjusted`.
+   * Zero disables role awareness entirely, which is the control the sweep measures against.
+   */
+  roleShift: number
   /** Private half: what the scored seat's own hand is worth (#393). See `handValue`. */
   hand: HandWeights
 }
@@ -85,6 +107,10 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   // always-claim failure mode and measured 41.1%.
   initiative: 2,
   claimCost: 3,
+  // Swept (#395). A small shift is all the data supports: 1 and 2 tie, 3 and 4 are worse, and the
+  // effect is modest at 51.4% +/- 0.9% over ~11,340 games (three matched-power seeds: 50.2%, 52.8%,
+  // 51.2%) against a role-blind AI. Roughly a third of what #393 or #394 each returned.
+  roleShift: 1,
   hand: DEFAULT_HAND_WEIGHTS,
 }
 
@@ -105,6 +131,36 @@ function boardPresence(state: GameState, id: PlayerId, w: EvalWeights): number {
 
 function readyUnits(state: GameState, id: PlayerId): number {
   return state.players[id].units.filter(u => !u.exhausted).length
+}
+
+/**
+ * Bend the weights toward the role the scored seat is currently playing (#395).
+ *
+ * A single fixed evaluation cannot play both sides of a matchup: the same board is good news for the
+ * aggressor and bad news for the defender. The role comes from the RACE (`ai/race.ts`), not from
+ * board advantage, because board power is not damage that can reach a base. Measured over 132 games,
+ * the faster clock at round 3 went on to win 68.0% of the time against 62.0% for the board leader,
+ * and 80.5% by round 5.
+ *
+ * - The **aggressor** is winning the race, so it pushes damage and is readier to ignore trades.
+ * - The **defender** is losing it, so it values trades and board clearing (the Sealed control plan,
+ *   where removal is scarce) and wants the initiative, which is #394's own steer.
+ *
+ * Weights stay INTEGER so `publicScore` does, which is what keeps #393's private hand term a
+ * tie-break. Clamped at zero so a large shift can never make a player's own units read as a
+ * liability.
+ */
+function roleAdjusted(state: GameState, me: PlayerId, w: EvalWeights, asRole?: Role): EvalWeights {
+  if (w.roleShift === 0) return w
+  const r = asRole ?? role(state, me)
+  if (r === 'neutral') return w
+  const shift = r === 'aggressor' ? w.roleShift : -w.roleShift
+  return {
+    ...w,
+    base: Math.max(0, w.base + shift),
+    unit: Math.max(0, w.unit - shift),
+    initiative: r === 'defender' ? w.initiative + w.roleShift : w.initiative,
+  }
 }
 
 /**
@@ -190,16 +246,26 @@ export function resourceValue(state: GameState, id: PlayerId, w: EvalWeights): n
 }
 
 /**
- * The zero-sum half: everything both players can see, including hand SIZE but never hand contents.
- * Split out so the invariant `publicScore(s, me) === -publicScore(s, foe)` stays testable now that
- * `evaluate` carries a private term on top.
+ * The half built only from what both players can see, including hand SIZE but never hand contents.
+ *
+ * Zero-sum **while both seats read the same role**, which is every neutral position and any
+ * symmetric one. Role awareness (#395) deliberately breaks it otherwise: an aggressor and a defender
+ * are meant to price the same board differently, and that is the entire premise of #395. Greedy only
+ * ever scores from the acting seat, so one ply is unaffected; anything scoring BOTH seats (#400,
+ * #425) must call `evaluate(s, foe)` rather than negating.
+ *
+ * Split out from `evaluate` so the remaining invariants (zero-sum in the neutral case, and
+ * integer-valued always) stay directly testable now that a private term rides on top.
  */
-export function makePublicScore(w: EvalWeights): (state: GameState, me: PlayerId) => number {
-  return (state, me) => {
+export function makePublicScore(w0: EvalWeights): Evaluator {
+  return (state, me, asRole) => {
     if (state.winner === me) return WIN
     if (state.winner === 'draw') return 0
     if (state.winner !== null) return -WIN
 
+    // Weights are bent by the role the scored seat is playing. `asRole` is the caller's role for the
+    // WHOLE decision; see the note on `Evaluator` for why deriving it per candidate is wrong.
+    const w = roleAdjusted(state, me, w0, asRole)
     const foe = opponentOf(me)
     const baseTerm = w.base * (state.players[foe].base.damage - state.players[me].base.damage)
     const board = boardPresence(state, me, w) - boardPresence(state, foe, w)
@@ -237,12 +303,12 @@ const squash = (x: number): number => x / (x + HAND_SQUASH)
  * 39.8% at moderate, 26.0% at large), because it applies to EVERY decision while only fixing one.
  * Bounding it below the resolution of the public score keeps the fix and removes the distortion.
  */
-export function makeEvaluate(w: EvalWeights): (state: GameState, me: PlayerId) => number {
+export function makeEvaluate(w: EvalWeights): Evaluator {
   const publicHalf = makePublicScore(w)
-  return (state, me) => {
+  return (state, me, asRole) => {
     // A decided game has no hand worth valuing, and the private term must not blur the WIN cliff.
-    if (state.winner !== null) return publicHalf(state, me)
-    return publicHalf(state, me) + squash(handValue(state, me, w.hand))
+    if (state.winner !== null) return publicHalf(state, me, asRole)
+    return publicHalf(state, me, asRole) + squash(handValue(state, me, w.hand))
   }
 }
 

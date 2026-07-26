@@ -5,6 +5,7 @@ import { writeFailures, FAILURES_DIR } from './reports'
 import { runSweep } from './sweep'
 import type { SweepReport } from './sweep'
 import { runDecisions } from './decisions'
+import { runAiMatchups } from './aiMatchups'
 import type { DecisionReport } from './decisions'
 import { runGeneralisation } from './generalisation'
 import type { GeneralisationReport } from './generalisation'
@@ -40,6 +41,7 @@ interface Args {
   generalise: boolean
   matrix: boolean
   decisions: boolean
+  matchups: boolean
   aiExplicit: boolean
   aiA: string
   aiB: string
@@ -54,6 +56,7 @@ function parseArgs(argv: string[]): Args {
   let generalise = false
   let matrix = false
   let decisions = false
+  let matchups = false
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--games') { games = Number(argv[++i]); gamesSet = true }
@@ -62,12 +65,13 @@ function parseArgs(argv: string[]): Args {
     else if (arg === '--generalise') generalise = true
     else if (arg === '--matrix') matrix = true
     else if (arg === '--decisions') decisions = true
+    else if (arg === '--matchups') matchups = true
     else if (arg.startsWith('--')) throw new Error(`Unknown flag: ${arg}`)
     else positional.push(arg)
   }
   if (!Number.isFinite(games) || games < 1) throw new Error(`--games must be a positive integer`)
   if (!Number.isFinite(seed)) throw new Error(`--seed must be a number`)
-  return { games, gamesSet, seed, sweep, generalise, matrix, decisions, aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, sweep, generalise, matrix, decisions, matchups, aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
@@ -227,6 +231,14 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     row('cheap chances taken', i.cheapOffered === 0 ? 'n/a' : `${i.cheapTaken} of ${i.cheapOffered} = ${pct(i.cheapTaken / i.cheapOffered)}`),
     row('ready units forfeited', `${i.avgForfeitedWhenClaimed.toFixed(1)} avg per mid-phase claim`),
   )
+  const r2 = report.role
+  lines.push(
+    '',
+    '  role, sampled once a round from the player seat (read off the race, not board advantage)',
+    row('aggressor / defender', r2.samples === 0 ? 'n/a' : `${r2.aggressor} / ${r2.defender}  (${pct(r2.neutral / r2.samples)} neutral)`),
+    row('role flips', `${r2.flipsPerGame.toFixed(2)} per game`),
+    row('a side fully walled', r2.samples === 0 ? 'n/a' : `${pct(r2.walledSamples / r2.samples)} of samples (reach 0)`),
+  )
   lines.push('', row('wall clock', `${(wallMs / 1000).toFixed(1)}s`), '')
   return lines.join('\n')
 }
@@ -243,6 +255,42 @@ function runDecisionsMode(args: Args): void {
     return
   }
   console.log(formatDecisions(report, Date.now() - start))
+}
+
+function runMatchupsMode(args: Args): void {
+  const aiA = args.aiExplicit ? args.aiA : 'greedy'
+  const aiB = args.aiExplicit && args.aiB !== 'random' ? args.aiB : 'greedy-baseline'
+  const gamesPerCell = args.gamesSet ? args.games : 4
+  // One base per leader: every ORDERED pair must be played here, so 72 decks would be 5184 cells.
+  const decks = buildMatchupDecks(undefined, 1)
+  console.log(`\nAI matchups: ${aiA} vs ${aiB}, ${decks.length} decks (${decks.length ** 2} cells), ${gamesPerCell} games/cell, seed ${args.seed}\n`)
+
+  const start = Date.now()
+  let report
+  try {
+    report = runAiMatchups(decks, resolveAi(aiA), resolveAi(aiB), aiA, aiB, { gamesPerCell, seed: args.seed })
+  } catch (err) {
+    console.error(`bench: ${(err as Error).message}`)
+    process.exit(2)
+    return
+  }
+
+  const lines = [
+    '',
+    `dmgCtrl AI matchups  (engine ${report.buildTag})`,
+    row(`overall (${report.aiA})`, `${pct(report.overallWinRateA)}  ± ${pct(report.overallCi)}   (${report.totalGames} games)`),
+    row('dropped', `${report.dropped}`),
+    row('wall clock', `${((Date.now() - start) / 1000).toFixed(0)}s`),
+    '',
+    `  worst matchups for ${report.aiA} (its deck vs theirs):`,
+    ...report.cells.slice(0, 8).map(c => `    ${pct(c.winRateA).padStart(6)}   ${c.aLabel}  vs  ${c.bLabel}`),
+    '',
+    `  best matchups for ${report.aiA}:`,
+    ...report.cells.slice(-8).reverse().map(c => `    ${pct(c.winRateA).padStart(6)}   ${c.aLabel}  vs  ${c.bLabel}`),
+    '',
+  ]
+  console.log(lines.join('\n'))
+  if (report.dropped > 0) process.exit(1)
 }
 
 function strengthTable(title: string, rows: StrengthRow[], limit?: number): string[] {
@@ -300,7 +348,7 @@ function main(): void {
     args = parseArgs(process.argv.slice(2))
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
-    console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N] [--sweep|--generalise|--matrix|--decisions] [aiA] [aiB]')
+    console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N] [--sweep|--generalise|--matrix|--decisions|--matchups] [aiA] [aiB]')
     process.exit(2)
     return
   }
@@ -309,6 +357,7 @@ function main(): void {
   if (args.generalise) { runGeneraliseMode(args); return }
   if (args.matrix) { runMatrixMode(args); return }
   if (args.decisions) { runDecisionsMode(args); return }
+  if (args.matchups) { runMatchupsMode(args); return }
 
   let report: BenchReport
   const start = Date.now()

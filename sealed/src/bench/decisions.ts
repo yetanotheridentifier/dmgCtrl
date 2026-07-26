@@ -11,6 +11,7 @@ import { BUILD_TAG } from '../buildTag'
 import { evaluate } from '../ai/evaluate'
 import { resolveAi } from '../ai/registry'
 import { setupAi } from '../ai/setupAi'
+import { role, reachSteady, type Role } from '../ai/race'
 import { buildCoverageDecks } from './coverageDecks'
 
 /**
@@ -83,6 +84,24 @@ export interface InitiativeStat {
   avgForfeitedWhenClaimed: number
 }
 
+/**
+ * Which role the AI is playing, sampled once per round (#395), and #319's evidence that the role is
+ * read off the live board rather than fixed at deck load.
+ *
+ * `flipsPerGame` is the thrash detector: the role is meant to move when the race genuinely changes,
+ * not every time a point of damage lands. `walledSamples` counts positions where a side's reach is
+ * zero, which is the case board advantage is blindest to and the reason the role is read off the
+ * clock instead.
+ */
+export interface RoleStat {
+  aggressor: number
+  defender: number
+  neutral: number
+  flipsPerGame: number
+  walledSamples: number
+  samples: number
+}
+
 export interface DecisionReport {
   buildTag: string
   ai: string
@@ -90,6 +109,7 @@ export interface DecisionReport {
   stats: DecisionStat[]
   resourcing: ResourcingStat
   initiative: InitiativeStat
+  role: RoleStat
 }
 
 interface Tally {
@@ -121,6 +141,10 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   let cheapTaken = 0
   let forfeited = 0
   let forfeitedCount = 0
+  const roleCount = { aggressor: 0, defender: 0, neutral: 0 }
+  let roleFlips = 0
+  let walledSamples = 0
+  let roleSamples = 0
 
   decks.forEach((deck, d) => {
     for (let g = 0; g < config.gamesPerDeck; g++) {
@@ -129,13 +153,17 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       const shuffle = <T,>(arr: T[]): T[] => { shuffleSeed.v = nextSeed(shuffleSeed.v); return seededShuffle(arr, shuffleSeed.v) }
       let s: GameState = initGame(deck, deck, cardDb, { firstPlayer: g % 2 === 0 ? 'player' : 'opponent', shuffle, rngSeed: seed })
       games++
+      let lastRole: Exclude<Role, 'neutral'> | null = null
+      let sampledRound = 0
 
       for (let i = 0; i < ceiling && s.winner === null; i++) {
         const moves = legalMoves(s)
         if (moves.length === 0) break
         const me = s.activePlayer
-        // The same scoring the greedy driver does, so a tie here is a tie there.
-        const scored = moves.map(m => ({ m, v: evaluate(resolve(s, m), me) }))
+        // The role is fixed once per decision, exactly as the greedy driver does it, so a tie here
+        // is a tie there.
+        const asRole = role(s, me)
+        const scored = moves.map(m => ({ m, v: evaluate(resolve(s, m), me, asRole) }))
         const best = Math.max(...scored.map(x => x.v))
 
         const record = (tally: Tally, subset: typeof scored): void => {
@@ -159,6 +187,21 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           // The opponent has already passed, so claiming ends the phase (CR 1.15.5c) and they gain
           // nothing from your silence. Still costs your own remaining actions, hence "cheap".
           if (s.consecutivePasses >= 1) cheapOffered++
+        }
+
+        // Sample the role once a round from the player's seat, so the split is not weighted by how
+        // many actions a side happened to take.
+        if (s.phase === 'action' && s.round !== sampledRound) {
+          sampledRound = s.round
+          roleSamples++
+          const r = role(s, 'player')
+          roleCount[r]++
+          if (reachSteady(s, 'player') === 0 || reachSteady(s, 'opponent') === 0) walledSamples++
+          // Neutral is not a flip, it is the road between the two, so only committed roles count.
+          if (r !== 'neutral') {
+            if (lastRole !== null && r !== lastRole) roleFlips++
+            lastRole = r
+          }
         }
 
         const action = setupAi(s) ?? ai(s)
@@ -208,6 +251,12 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       cheapOffered,
       cheapTaken,
       avgForfeitedWhenClaimed: forfeitedCount === 0 ? 0 : forfeited / forfeitedCount,
+    },
+    role: {
+      ...roleCount,
+      flipsPerGame: games === 0 ? 0 : roleFlips / games,
+      walledSamples,
+      samples: roleSamples,
     },
   }
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { publicScore, initiativeValue, makeEvaluate, DEFAULT_WEIGHTS } from '../ai/evaluate'
+import { role } from '../ai/race'
 import { makeGreedyAi } from '../ai/greedyAi'
 import '../engine/cardDefinitions'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
@@ -105,8 +106,14 @@ describe('the greedy AI weighs the claim against what it forfeits', () => {
 })
 
 describe('the public half stays well formed', () => {
+  /**
+   * Zero-sum holds while both seats read the same ROLE (#395 bends the weights otherwise, on
+   * purpose). Equal boards keep both neutral, so the initiative terms are tested against the
+   * invariant rather than against role asymmetry.
+   */
   it('is zero-sum with the initiative terms, including a one-sided claim', () => {
-    const s = held('player', { initiativeTakenBy: 'player' }, 3)
+    const s = held('player', { initiativeTakenBy: 'player' }, 3, 3)
+    expect(role(s, 'player')).toBe('neutral')
     expect(publicScore(s, 'player') + publicScore(s, 'opponent')).toBe(0)
   })
 

@@ -170,6 +170,33 @@ and so read as behaviour rather than as a gap:
   is the sharpest single number in #394: it fell from **2.5 to 0.2**, meaning the bot now claims when
   it has little left to do rather than throwing away a board full of attackers.
 
+## AI versus AI, per matchup (#319)
+
+`--generalise` plays **mirrors**: both seats get the same deck, so it can report per deck but never
+"pool X against pool Y". `--matrix` plays **one AI against itself** to measure deck strength.
+Neither answers "which matchups does this AI improve", which is #319's acceptance bar and #395's
+whole claim.
+
+```bash
+npm run bench --prefix sealed -- --matchups [--games N] [--seed N] aiA aiB
+```
+
+Every **ordered** pair of 18 decks (one per leader), aiA on the first deck and aiB on the second,
+seats alternated so first-player advantage cancels. Ordered rather than the triangle `matrix.ts`
+uses, because with two different AIs "A on deck i vs B on deck j" is a different experiment from its
+reverse; that symmetry trick is only valid when both seats play identically. 18 decks keeps it to 324
+cells and about a minute; 72 would be over 5000.
+
+**A trap worth knowing about.** The first version took the *first* base for each leader, which
+handed all 18 decks an Aggression base. On that set greedy measured **49.1%** against the frozen
+baseline; on an aspect-rotated set of the same size it measures **53.9% ± 2.7%**. A single-aspect
+sample is not a matchup sample, and it was very nearly reported as a real result.
+
+Note the mirror harness reads higher on the same comparison (60.0% ± 3.3%). That is expected rather
+than contradictory: in a mirror both AIs face identical decks so pure skill shows, whereas across
+matchups deck strength adds variance that a stronger AI cannot always overcome, compressing the rate
+toward 50%. Quote both, and say which is which.
+
 ## Tuning evaluation weights
 
 The greedy evaluation's weights are parameterised (`ai/evaluate.ts: EvalWeights`). `npm run tune`
@@ -299,7 +326,10 @@ All under `src/bench/` and `src/ai/`, pure and framework-free except the command
   abilities, rarity, aspects, uniqueness). Standalone so #396 and #398 can reuse it.
 - `ai/handValue.ts` what a hand is worth to the player holding it: private information, so it is only
   ever applied to the seat being scored (see below).
+- `ai/race.ts` reach, clock and role: who gets to lethal first, computed through the rules' own
+  `enemyAttackTargets`. Standalone so #398 and #425 can reuse it.
 - `bench/decisions.ts` the blind-spot diagnostic behind `--decisions`.
+- `bench/aiMatchups.ts` AI-vs-AI across every ordered deck pair, behind `--matchups`.
 - `bench/decks.ts` the fixed sealed deck, built deterministically from the ASH snapshot. For now the
   same deck plays both sides (a mirror), which removes deck strength as a variable. The runner already
   takes two decks, so deck-versus-deck comparisons are a fixture change away, not a code change.
@@ -320,8 +350,13 @@ It is zero-sum: `publicScore(s, me) === -publicScore(s, foe)`, and `aiEvaluate.t
 **`handValue`** reads card identities, which are hidden. It is therefore applied to the scored seat
 **only**: subtracting the opponent's would be peeking at their hand. `evaluate` is consequently
 subjective rather than zero-sum, which costs nothing at one ply because greedy only ever scores from
-the acting seat. **Anything scoring a position from both seats (#400's pessimistic minimax) must
-call `evaluate(s, foe)` rather than negating `evaluate(s, me)`.**
+the acting seat. **Anything scoring a position from both seats (#400's pessimistic minimax, #425's
+two-ply) must call `evaluate(s, foe)` rather than negating `evaluate(s, me)`.**
+
+Zero-sum narrowed a **second** time with #395: role-aware weights mean the two seats price the same
+board differently whenever they read different roles, which is that ticket's entire premise. The
+invariant is now **zero-sum while both seats share a role**, and integer-valued always.
+`aiEvaluate.test.ts` pins both, and asserts the asymmetry deliberately rather than tolerating it.
 
 The private half is admitted **as a tie-break only**, and that is a guarantee rather than a tuning
 choice. Every public weight and quantity is an integer, so `publicScore` is integer-valued; squashing
@@ -341,6 +376,53 @@ principled, but a bomb's hand value and its board value are the same order of ma
 ~28 of hand value to gain ~28 of board made the bot **refuse to play its own bombs**. The second
 shows why the bound is needed at all: an unbounded term applies to *every* decision while only
 fixing one, so its distortion grows with its weight (39.8% at moderate weights, 26.0% at large).
+
+## Reading the role from the race (#395)
+
+The AI had no concept of whether it was the aggressor or the defender: it maximised the same fixed
+function from both seats. #395 gives it a role, and reads that role off **who gets to lethal first**
+rather than off board advantage.
+
+That distinction is the ticket. **Board power is not damage that can reach a base.** A control
+player who plays a Sentinel adds one point of power and kills nothing, yet stops the opponent's clock
+dead. Measured over 132 games, at round 3:
+
+| Signal | Went on to win |
+| --- | --- |
+| Faster **clock** | **68.0%** |
+| Board leader (control) | 62.0% |
+| Faster clock, measured at round 5 | 80.5% |
+
+`ai/race.ts` computes reach through **`enemyAttackTargets`**, the same function the rules use to
+decide what a unit may attack, so Sentinel, Saboteur, arena, Hidden and "cannot be attacked" are
+resolved once and not re-derived. Overwhelm tramples past a wall, Restore lengthens the attacker's
+clock, and the clock splits "this round" (ready units only) from the steady rate, which is what makes
+it a race rather than an average. A second copy of that logic in the AI would drift from the rules
+the way the ability lookups did in #417.
+
+**Result: 51.4% ± 0.9%** over ~11,340 games against a role-blind AI (three matched-power seeds:
+50.2%, 52.8%, 51.2%). Real, but roughly a third of what #393 or #394 each returned, and higher shifts
+are worse, so the effect is fragile.
+
+### The bug worth remembering: the role belongs to the DECISION
+
+The first implementation derived the role from each candidate's *resulting* state, which is the
+natural place to put it and is badly wrong. Greedy scores `evaluate(resolve(state, move), me)`, and
+**32.5% of decisions have candidate moves landing in different roles**, so their scores were
+computed with different weight sets and were not comparable. It silently rewarded whichever move
+flipped the role, and it got worse as the shift grew:
+
+| roleShift | per-candidate role | role fixed per decision |
+| --- | --- | --- |
+| 1 | 44.2% | 48.9% |
+| 2 | 39.4% | 48.9% |
+| 3 | 32.7% | 47.4% |
+| 4 | 26.3% | 41.8% |
+
+`makeGreedyAi` now fixes the role once from the position it is deciding in and passes it to every
+candidate via the `Evaluator`'s `asRole` parameter. That is a correctness fix, not a tuning one, and
+it made the whole thing 30% faster as a side effect. Any future context-dependent weighting must do
+the same.
 
 ## Pricing the initiative (#394)
 

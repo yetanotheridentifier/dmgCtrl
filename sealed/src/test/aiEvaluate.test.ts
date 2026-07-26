@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { evaluate, publicScore } from '../ai/evaluate'
+import { role } from '../ai/race'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 
 /**
@@ -23,15 +24,41 @@ describe('evaluate', () => {
     expect(evaluate(won, 'player')).toBeGreaterThan(evaluate(material, 'player'))
   })
 
-  it('is zero-sum over the public terms: the two seats see equal and opposite scores', () => {
+  /**
+   * Zero-sum, now scoped twice over.
+   *
+   * It covers the PUBLIC terms only (#393 put hand contents in a private, perspective-relative
+   * half), and it holds only while **both seats read the same role** (#395 bends the weights toward
+   * aggressor or defender, and pricing the same board differently from the two seats is that
+   * ticket's entire premise). Both seats are neutral here, so the invariant applies.
+   */
+  it('is zero-sum over the public terms when both seats share a role', () => {
     const s = state({
       players: {
         player: player({ units: [unit('u1', 'TST_U1')], hand: ['TST_U1'], base: { cardId: 'TST_B', damage: 3 } }),
-        opponent: player({ units: [unit('e1', 'TST_U2')], base: { cardId: 'TST_B', damage: 1 } }),
+        opponent: player({ units: [unit('e1', 'TST_U1')], base: { cardId: 'TST_B', damage: 3 } }),
       },
     })
+    expect(role(s, 'player'), 'the fixture must be role-neutral for this invariant to apply').toBe('neutral')
     // Sum rather than negate, so a symmetric position scoring 0 does not trip the +0 vs -0 quirk.
     expect(publicScore(s, 'player') + publicScore(s, 'opponent')).toBe(0)
+  })
+
+  /**
+   * And the flip side, asserted rather than merely tolerated: when the seats read different roles,
+   * they are SUPPOSED to price the board differently. A single fixed evaluation cannot play both
+   * sides of a matchup, which is what #395 exists to fix.
+   */
+  it('deliberately is not zero-sum when the seats read different roles', () => {
+    const s = state({
+      players: {
+        player: player({ units: [unit('u1', 'TST_U1'), unit('u2', 'TST_U1')] }),
+        opponent: player(),
+      },
+    })
+    expect(role(s, 'player')).toBe('aggressor')
+    expect(role(s, 'opponent')).toBe('defender')
+    expect(publicScore(s, 'player') + publicScore(s, 'opponent')).not.toBe(0)
   })
 
   /**
