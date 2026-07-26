@@ -7,13 +7,17 @@ import { getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions
 import './cardDefinitions' // side effect: registers all real card behaviours
 
 /**
- * The enemy units `attacker` (a unit controlled by the active player) may attack,
- * and whether Sentinel locks the attack onto them (so the base is off-limits).
- * Sentinel forces the attack; Hidden removes a unit as a target unless it also has
- * Sentinel; Saboteur ignores Sentinel.
+ * The enemy units `attacker` may attack, and whether Sentinel locks the attack onto them (so the
+ * base is off-limits). Sentinel forces the attack; Hidden removes a unit as a target unless it also
+ * has Sentinel; Saboteur ignores Sentinel.
+ *
+ * `owner` is who controls `attacker`, defaulting to the active player, which is every rules call
+ * site. It is explicit so the AI can ask the same question of BOTH seats when reading the race
+ * (#395): whether a unit's damage can actually reach a base is exactly this calculation, and a
+ * second copy of it in the AI would drift from the rules the way the ability lookups did in #417.
  */
-export function enemyAttackTargets(state: GameState, attacker: UnitState): { targets: UnitState[]; sentinelLocked: boolean } {
-  const enemy = state.players[opponentOf(state.activePlayer)]
+export function enemyAttackTargets(state: GameState, attacker: UnitState, owner: PlayerId = state.activePlayer): { targets: UnitState[]; sentinelLocked: boolean } {
+  const enemy = state.players[opponentOf(owner)]
   // Normally same-arena only; Red Leader reaches either arena.
   const inRange = unitAttacksEitherArena(state, attacker) ? enemy.units : enemy.units.filter(e => e.arena === attacker.arena)
   // Hidden hides a unit (unless it has Sentinel); "can't be attacked" (Tatooine Repulsor Train)

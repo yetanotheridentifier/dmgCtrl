@@ -1,11 +1,12 @@
 import type { Action } from '../engine/actions'
-import type { GameState, PlayerId } from '../engine/types'
+import type { GameState } from '../engine/types'
 import type { Ai } from './types'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
 import { seededUnit } from '../engine/rng'
-import { evaluate } from './evaluate'
+import { evaluate, type Evaluator } from './evaluate'
 import { evaluateBaseline } from './evaluateBaseline'
+import { role } from './race'
 
 /**
  * Rung-1 opponent: one-ply greedy. For each legal move, apply it and score the resulting board from
@@ -19,16 +20,22 @@ import { evaluateBaseline } from './evaluateBaseline'
  * so replays and saved records reproduce exactly. The scoring `resolve` calls advance the seed only
  * on their own discarded copies; the real seed advances once, when the chosen move is applied.
  */
-export function makeGreedyAi(evaluate: (state: GameState, me: PlayerId) => number): Ai {
+export function makeGreedyAi(evaluate: Evaluator): Ai {
   return (state: GameState): Action | null => {
     const moves = legalMoves(state)
     if (moves.length === 0) return null
 
     const me = state.activePlayer
+    // The role is fixed ONCE, from the position being decided in, and every candidate is scored with
+    // it (#395). Letting each candidate derive its own role compares scores computed with different
+    // weight sets: 32.5% of decisions have candidates landing in different roles, and doing it that
+    // way measured 44.2% down to 26.3% against a role-blind AI as the shift grew. Computing it once
+    // is also far cheaper than once per candidate.
+    const asRole = role(state, me)
     let best = -Infinity
     const bestMoves: Action[] = []
     for (const move of moves) {
-      const score = evaluate(resolve(state, move), me)
+      const score = evaluate(resolve(state, move), me, asRole)
       if (score > best) {
         best = score
         bestMoves.length = 0
