@@ -156,13 +156,19 @@ the AI banked a card chosen uniformly at random from an average hand of 4.5, abo
 game per side, because `evaluate` read only `hand.length` and every `resourceCard` move therefore
 scored identically. That is invisible in a win rate and unmissable here. It now sits near 0%.
 
-The remaining rates are the roadmap: initiative is still ~21% ties (#394), attacks ~9% (#392),
-which card to play ~6%. A decision the evaluation cannot see shows up here long before it shows up
-in a win rate.
+The remaining rates are the roadmap: attacks ~10% (#392), which card to play ~6%. Initiative was
+~21% before #394 and is now ~16%. A decision the evaluation cannot see shows up here long before it
+shows up in a win rate.
 
-It also reports **regroup banking** separately: how often the AI banks versus skips, and the mean
-pool size at each. That is not a tie, it is a strict public preference, so it reads as behaviour
-rather than as a gap; the skip rate is currently 0% by construction (see the negative result below).
+Two behaviours are reported separately, because they are strict public preferences rather than ties
+and so read as behaviour rather than as a gap:
+
+- **regroup banking**: banks versus skips, and the mean pool at each. The skip rate is 0% by
+  construction (see the negative result below).
+- **initiative**: how often it claims, how often it takes the *cheap* window where the opponent has
+  already passed, and the mean ready units it still had when it claimed mid-phase. The last of those
+  is the sharpest single number in #394: it fell from **2.5 to 0.2**, meaning the bot now claims when
+  it has little left to do rather than throwing away a board full of attackers.
 
 ## Tuning evaluation weights
 
@@ -335,6 +341,54 @@ principled, but a bomb's hand value and its board value are the same order of ma
 ~28 of hand value to gain ~28 of board made the bot **refuse to play its own bombs**. The second
 shows why the bound is needed at all: an unbounded term applies to *every* decision while only
 fixing one, so its distortion grows with its weight (39.8% at moderate weights, 26.0% at large).
+
+## Pricing the initiative (#394)
+
+`evaluate` read neither `initiative` nor `initiativeTakenBy`, so the AI had **no representation of
+turn order at all**: 21% of 5930 offers tied with the best move and were settled by a coin flip. It
+declined a cheap claim two times in three and made 465 expensive ones, each forfeiting an average of
+2.5 developing actions.
+
+Both halves of the decision are **public**, so unlike #393's hand value this lives in `publicScore`
+and is *allowed* to outrank other moves, which it has to be to ever justify giving up a turn:
+
+```
+initiativeValue(me) = w.initiative * (initiative === me ? +1 : -1)     // acting first next round
+                    - w.claimCost  * forfeitedTempo(me)                // I sit out the rest of it
+                    + w.claimCost  * forfeitedTempo(foe)
+```
+
+`forfeitedTempo` is a player's ready units while `phase === 'action' && initiativeTakenBy === them`.
+That guard is what makes the cheap window fall out **without hardcoding CR 1.15.5c**: claiming into a
+passed opponent ends the phase (`takeInitiative` calls `enterRegroup`), so the resulting state is not
+in the action phase and nothing is charged.
+
+Worth noting the ticket's framing that claiming after their pass "costs nothing" is not quite right.
+Claiming *always* forfeits your own remaining actions; what the cheap window avoids is the usual
+penalty of sitting out while the opponent keeps playing.
+
+**Result: 52.9% ± 1.9%** over 5040 games against the same AI with both weights at 0, confirmed across
+three seeds (52.5%, 54.5%, 52.9%). Behaviour moved as intended: cheap chances taken 31% to 58%, and
+ready units forfeited per mid-phase claim 2.5 to 0.2.
+
+The sweep is the interesting part:
+
+| initiative | claimCost | win rate vs off |
+| --- | --- | --- |
+| 4 | **0** | **41.1%**, the always-claim failure mode, exactly as the ticket predicts |
+| 0 | 3 | 50.0%, cost with no benefit is inert |
+| **2** | **3** | **52.9%** shipped |
+| 4 | 3 | 46.8% |
+| 6 | 3 | 35.4% |
+| 8 | 4 | 29.4% |
+
+Turn order is worth **far less than it looks**: raising the bonus is monotonically worse, because the
+bot buys initiative by giving up whole turns. The `claimCost: 0` control is worth keeping in any
+re-sweep, since it demonstrates the opportunity-cost term rather than the bonus is what makes this
+work.
+
+Out of scope and deferred to the search (#398/#400): "claim when it converts to lethal, or denies
+the opponent lethal" needs to see next round, which one ply cannot.
 
 ## A measured negative result: concave resource value (#393 iteration 2)
 

@@ -56,6 +56,24 @@ describe('runDecisions', () => {
     expect(skipped, 'a flat pool never CHOOSES to decline a resource').toBe(0)
   })
 
+  /**
+   * #394's readout, and the guard against its two named failure modes. Never-claim and always-claim
+   * are both wrong however good the win rate looks, so the raw counts are asserted rather than a
+   * score. Claiming forfeits the rest of your round, so a low mean of forfeited ready units is the
+   * sign the cost term is doing its job.
+   */
+  it('claims the initiative sometimes, but never always and never not at all', () => {
+    const { offered, taken, cheapOffered, cheapTaken, avgForfeitedWhenClaimed } = report.initiative
+    expect(offered).toBeGreaterThan(0)
+    expect(taken, 'never-claim is a failure mode').toBeGreaterThan(0)
+    expect(taken, 'always-claim is the other failure mode').toBeLessThan(offered)
+    // The cheap window (opponent already passed) should be taken far more often than not.
+    expect(cheapOffered).toBeGreaterThan(0)
+    expect(cheapTaken / cheapOffered).toBeGreaterThan(0.5)
+    // It should mostly claim when it had little left to do: pre-#394 this averaged 2.5.
+    expect(avgForfeitedWhenClaimed).toBeLessThan(1)
+  })
+
   it('is deterministic for a given seed', () => {
     expect(runDecisions({ gamesPerDeck: 1, seed: 4242 })).toEqual(report)
   }, 30_000)

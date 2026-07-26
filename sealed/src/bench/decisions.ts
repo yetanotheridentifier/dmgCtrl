@@ -63,12 +63,33 @@ export interface ResourcingStat {
   avgPoolWhenSkipped: number
 }
 
+/**
+ * What the AI does with the initiative (#394). Claiming makes you pass for the rest of the round, so
+ * the question is always "is turn order worth more than what I still had to do".
+ *
+ * `cheap` is the window where the opponent has already passed: claiming then ends the phase
+ * outright, so they gain nothing from your silence. It still costs your own remaining actions, which
+ * is why it is called cheap rather than free.
+ *
+ * The named failure modes are never-claim and always-claim, so both raw counts are reported rather
+ * than a rate alone.
+ */
+export interface InitiativeStat {
+  offered: number
+  taken: number
+  cheapOffered: number
+  cheapTaken: number
+  /** Mean ready units the claimant still had when it claimed mid-phase: what it gave up. */
+  avgForfeitedWhenClaimed: number
+}
+
 export interface DecisionReport {
   buildTag: string
   ai: string
   games: number
   stats: DecisionStat[]
   resourcing: ResourcingStat
+  initiative: InitiativeStat
 }
 
 interface Tally {
@@ -94,6 +115,12 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   let skipped = 0
   let bankedPool = 0
   let skippedPool = 0
+  let initOffered = 0
+  let initTaken = 0
+  let cheapOffered = 0
+  let cheapTaken = 0
+  let forfeited = 0
+  let forfeitedCount = 0
 
   decks.forEach((deck, d) => {
     for (let g = 0; g < config.gamesPerDeck; g++) {
@@ -128,6 +155,10 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           initiative.offered++
           initiative.candidates += 1
           if (init.v === best) initiative.tied++
+          initOffered++
+          // The opponent has already passed, so claiming ends the phase (CR 1.15.5c) and they gain
+          // nothing from your silence. Still costs your own remaining actions, hence "cheap".
+          if (s.consecutivePasses >= 1) cheapOffered++
         }
 
         const action = setupAi(s) ?? ai(s)
@@ -138,6 +169,11 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         const couldBank = s.players[me].hand.length > 0
         if (action.type === 'resourceCard' && s.phase === 'regroup') { banked++; bankedPool += pool }
         if (action.type === 'skipResource' && couldBank) { skipped++; skippedPool += pool }
+        if (action.type === 'takeInitiative') {
+          initTaken++
+          if (s.consecutivePasses >= 1) cheapTaken++
+          else { forfeitedCount++; forfeited += s.players[me].units.filter(u => !u.exhausted).length }
+        }
         s = resolve(s, action)
       }
     }
@@ -165,6 +201,13 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       skipped,
       avgPoolWhenBanked: banked === 0 ? 0 : bankedPool / banked,
       avgPoolWhenSkipped: skipped === 0 ? 0 : skippedPool / skipped,
+    },
+    initiative: {
+      offered: initOffered,
+      taken: initTaken,
+      cheapOffered,
+      cheapTaken,
+      avgForfeitedWhenClaimed: forfeitedCount === 0 ? 0 : forfeited / forfeitedCount,
     },
   }
 }
