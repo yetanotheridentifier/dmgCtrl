@@ -43,6 +43,12 @@ export interface EngineCard {
   backArt?: string
   /** Rules/ability text (SWUDB FrontText); shown in the textual card fallback. */
   text?: string
+  /**
+   * Printed rarity (SWUDB Rarity): Common, Uncommon, Rare, Legendary, Special. No rules meaning,
+   * but it is the designers' own statement of how strong a card is, which the AI uses to judge a
+   * card's worth in hand (#393). Absent for tokens and any source data that omits it.
+   */
+  rarity?: string
 }
 
 export type CardDb = Readonly<Record<string, EngineCard>>

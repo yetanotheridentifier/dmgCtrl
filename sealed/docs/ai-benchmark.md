@@ -136,6 +136,34 @@ It answers "is the AI overfit to one deck, and is there anything to hand-tune?" 
 the useful gradient comes from measuring a *new* AI against the *current* one here, not against
 random.
 
+## Decision quality: finding blind spots (#393)
+
+Win rate is a blunt instrument for diagnosing an evaluation. It moves a point or two over hundreds
+of games and says nothing about *why*. `--decisions` measures something far sharper: how often the
+evaluation has **no opinion at all**.
+
+```bash
+npm run bench --prefix sealed -- --decisions [--games N] [--seed N] [ai]
+```
+
+It plays across the coverage decks and, at every position, scores each candidate move exactly as the
+greedy driver does. When every candidate scores the same, the seeded tie-break picks one at random:
+that is a **blind spot**, not a close call. It reports the tie rate per decision kind, with the mean
+number of options so the rate can be read against how much was at stake.
+
+This is what diagnosed #393. Before the fix, **100% of 1417 regroup resource picks were ties**:
+the AI banked a card chosen uniformly at random from an average hand of 4.5, about five times a
+game per side, because `evaluate` read only `hand.length` and every `resourceCard` move therefore
+scored identically. That is invisible in a win rate and unmissable here. It now sits near 0%.
+
+The remaining rates are the roadmap: initiative is still ~21% ties (#394), attacks ~9% (#392),
+which card to play ~6%. A decision the evaluation cannot see shows up here long before it shows up
+in a win rate.
+
+It also reports **regroup banking** separately: how often the AI banks versus skips, and the mean
+pool size at each. That is not a tie, it is a strict public preference, so it reads as behaviour
+rather than as a gap; the skip rate is currently 0% by construction (see the negative result below).
+
 ## Tuning evaluation weights
 
 The greedy evaluation's weights are parameterised (`ai/evaluate.ts: EvalWeights`). `npm run tune`
@@ -261,6 +289,11 @@ to know the AI exists. This registry is the single seam the entire AI series han
 All under `src/bench/` and `src/ai/`, pure and framework-free except the command entry point:
 
 - `ai/types.ts`, `ai/registry.ts` the `Ai` shape and the named-AI registry.
+- `ai/cardValue.ts` what a card is worth if you get to cast it (cost, stats, keywords, implemented
+  abilities, rarity, aspects, uniqueness). Standalone so #396 and #398 can reuse it.
+- `ai/handValue.ts` what a hand is worth to the player holding it: private information, so it is only
+  ever applied to the seat being scored (see below).
+- `bench/decisions.ts` the blind-spot diagnostic behind `--decisions`.
 - `bench/decks.ts` the fixed sealed deck, built deterministically from the ASH snapshot. For now the
   same deck plays both sides (a mirror), which removes deck strength as a variable. The runner already
   takes two decks, so deck-versus-deck comparisons are a fixture change away, not a code change.
@@ -270,6 +303,74 @@ All under `src/bench/` and `src/ai/`, pure and framework-free except the command
 - `bench/store.ts` the SQLite persistence.
 - `bench/reports.ts` writing a dropped game out as a replayable fixture.
 - `bench/main.ts` the command line: the only impure file (reads arguments, prints, saves).
+
+## Public and private evaluation, and the tie-break rule (#393)
+
+`evaluate` has two halves, and the split is a hidden-information boundary, not a tidiness one.
+
+**`publicScore`** reads only what both players can see, hand SIZE included but never hand contents.
+It is zero-sum: `publicScore(s, me) === -publicScore(s, foe)`, and `aiEvaluate.test.ts` pins that.
+
+**`handValue`** reads card identities, which are hidden. It is therefore applied to the scored seat
+**only**: subtracting the opponent's would be peeking at their hand. `evaluate` is consequently
+subjective rather than zero-sum, which costs nothing at one ply because greedy only ever scores from
+the acting seat. **Anything scoring a position from both seats (#400's pessimistic minimax) must
+call `evaluate(s, foe)` rather than negating `evaluate(s, me)`.**
+
+The private half is admitted **as a tie-break only**, and that is a guarantee rather than a tuning
+choice. Every public weight and quantity is an integer, so `publicScore` is integer-valued; squashing
+hand value into `[0, 1)` makes it strictly incapable of overriding a public preference. It can only
+order moves the public half rates equally, exactly the blind spot `--decisions` measures.
+
+That bound was arrived at by measurement, and it matters:
+
+| Hand term | Win rate vs the same AI with the term off |
+| --- | --- |
+| Scaled by the best castable card's value | **40.5%** |
+| Flat bonus, competing with the board score | 49.9% |
+| Flat bonus, bounded below public resolution | **53.5% ± 1.9%** (5040 games) |
+
+The first is instructive. Scaling the "I have a play" bonus by the card's own value seems more
+principled, but a bomb's hand value and its board value are the same order of magnitude, so giving up
+~28 of hand value to gain ~28 of board made the bot **refuse to play its own bombs**. The second
+shows why the bound is needed at all: an unbounded term applies to *every* decision while only
+fixing one, so its distortion grows with its weight (39.8% at moderate weights, 26.0% at large).
+
+## A measured negative result: concave resource value (#393 iteration 2)
+
+Recorded so nobody spends an evening re-deriving it.
+
+The greedy AI banks a card at **every** regroup, because banking is a flat public **+1**
+(`resource` 3 minus `card` 2) however deep its pool already is. That looks wrong late on: you draw 2
+at regroup either way, so banking is "+1 resource against +1 card retained", and once the pool
+already casts what you hold, the card should be the better half of that trade. The published
+guidance agrees, and it has a real threshold behind it: deployment needs *controlling* resources
+equal to the leader's cost (CR 2.6.1), so "resource until you can deploy your leader" is a resource
+count, not a feeling.
+
+So `resourceValue` (`ai/evaluate.ts`) was built to make the marginal resource cheaper past a knee,
+with the knee rising to the leader's deploy cost while it is undeployed. **The mechanism works**:
+`--decisions` showed the skip rate move from 0% to 12.5%, every skip at a pool of exactly the knee.
+
+**It did not win.** Against the identical AI with a flat pool, across the coverage decks:
+
+| saturation | surplus | win rate vs flat |
+| --- | --- | --- |
+| 7 | 1 | **49.7% ± 1.9%** (5040 games) |
+| 8 | 0 and 1 | 47.6% ± 3.4% |
+| 6 | 0 and 1 | 46.1% ± 3.4% |
+| 5 | 0 and 1 | 45.6% ± 3.4% |
+
+Monotone in the knee: the more concavity, the worse. It ships **flat** (`resourceSurplus` equal to
+`resource`, which also makes `saturation` inert), and the mechanism is kept only so the question can
+be re-asked cheaply.
+
+Two things are worth carrying forward. First, the obvious explanation is wrong: the bot does **not**
+spend its pool late, committing a mean of 5.9 per round against pools of 7 to 8, so idle resources
+are genuinely real and the premise was not the problem. Second, the likeliest reading is that
+resource count also proxies development and tempo for *every other* decision, so flattening it costs
+more signal than the one regroup decision it buys. That is worth re-testing after **#395**, where a
+role-aware evaluation may separate the two.
 
 ## A note on trusting numbers while the engine still has bugs
 

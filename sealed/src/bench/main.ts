@@ -4,6 +4,8 @@ import { openDb, saveReport, DEFAULT_DB_PATH } from './store'
 import { writeFailures, FAILURES_DIR } from './reports'
 import { runSweep } from './sweep'
 import type { SweepReport } from './sweep'
+import { runDecisions } from './decisions'
+import type { DecisionReport } from './decisions'
 import { runGeneralisation } from './generalisation'
 import type { GeneralisationReport } from './generalisation'
 import { buildMatchupDecks } from './matchupDecks'
@@ -37,6 +39,7 @@ interface Args {
   sweep: boolean
   generalise: boolean
   matrix: boolean
+  decisions: boolean
   aiExplicit: boolean
   aiA: string
   aiB: string
@@ -50,6 +53,7 @@ function parseArgs(argv: string[]): Args {
   let sweep = false
   let generalise = false
   let matrix = false
+  let decisions = false
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--games') { games = Number(argv[++i]); gamesSet = true }
@@ -57,12 +61,13 @@ function parseArgs(argv: string[]): Args {
     else if (arg === '--sweep') sweep = true
     else if (arg === '--generalise') generalise = true
     else if (arg === '--matrix') matrix = true
+    else if (arg === '--decisions') decisions = true
     else if (arg.startsWith('--')) throw new Error(`Unknown flag: ${arg}`)
     else positional.push(arg)
   }
   if (!Number.isFinite(games) || games < 1) throw new Error(`--games must be a positive integer`)
   if (!Number.isFinite(seed)) throw new Error(`--seed must be a number`)
-  return { games, gamesSet, seed, sweep, generalise, matrix, aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, sweep, generalise, matrix, decisions, aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
@@ -191,6 +196,47 @@ function runGeneraliseMode(args: Args): void {
   if (report.dropped > 0) process.exit(1)
 }
 
+function formatDecisions(report: DecisionReport, wallMs: number): string {
+  const lines = [
+    '',
+    `dmgCtrl decision quality  (engine ${report.buildTag})`,
+    `${report.ai}, ${report.games} games across the coverage decks`,
+    '',
+    '  a TIE is a decision the evaluation cannot see: every candidate scores the same, so the',
+    '  seeded tie-break picks one at random. High tie rates are blind spots, not close calls.',
+    '',
+    '    tied   offered   avg options   decision',
+  ]
+  for (const s of report.stats) {
+    const tieRate = s.offered === 0 ? '  n/a' : pct(s.tied / s.offered).padStart(6)
+    lines.push(`  ${tieRate}   ${String(s.offered).padStart(7)}   ${s.avgCandidates.toFixed(1).padStart(11)}   ${s.label}`)
+  }
+  const r = report.resourcing
+  const total = r.banked + r.skipped
+  lines.push(
+    '',
+    '  regroup banking (a strict public preference, so not a tie: this is behaviour, not a gap)',
+    row('banked', `${r.banked}  (avg pool ${r.avgPoolWhenBanked.toFixed(1)})`),
+    row('skipped', total === 0 ? '0' : `${r.skipped} = ${pct(r.skipped / total)}  (avg pool ${r.avgPoolWhenSkipped.toFixed(1)})`),
+  )
+  lines.push('', row('wall clock', `${(wallMs / 1000).toFixed(1)}s`), '')
+  return lines.join('\n')
+}
+
+function runDecisionsMode(args: Args): void {
+  const gamesPerDeck = args.gamesSet ? args.games : 3
+  const start = Date.now()
+  let report: DecisionReport
+  try {
+    report = runDecisions({ gamesPerDeck, seed: args.seed, aiName: args.aiExplicit ? args.aiA : 'greedy' })
+  } catch (err) {
+    console.error(`bench: ${(err as Error).message}`)
+    process.exit(2)
+    return
+  }
+  console.log(formatDecisions(report, Date.now() - start))
+}
+
 function strengthTable(title: string, rows: StrengthRow[], limit?: number): string[] {
   const shown = limit ? rows.slice(0, limit) : rows
   const lines = [`  ${title}:`]
@@ -246,7 +292,7 @@ function main(): void {
     args = parseArgs(process.argv.slice(2))
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
-    console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N] [--sweep|--generalise|--matrix] [aiA] [aiB]')
+    console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N] [--sweep|--generalise|--matrix|--decisions] [aiA] [aiB]')
     process.exit(2)
     return
   }
@@ -254,6 +300,7 @@ function main(): void {
   if (args.sweep) { runSweepMode(args); return }
   if (args.generalise) { runGeneraliseMode(args); return }
   if (args.matrix) { runMatrixMode(args); return }
+  if (args.decisions) { runDecisionsMode(args); return }
 
   let report: BenchReport
   const start = Date.now()
