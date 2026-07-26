@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { runDecisions } from '../bench/decisions'
+import { DEFAULT_WEIGHTS } from '../ai/evaluate'
 import '../engine/cardDefinitions'
 
 /**
@@ -38,6 +39,23 @@ describe('runDecisions', () => {
   })
 
   // Plays the coverage deck set twice over, so well past vitest's 5s default.
+  /**
+   * The readout that let #393 iteration 2 be judged. Banking is a flat public +1 at every regroup,
+   * so the shipped AI never skips: 0% is the correct current number, not a broken measurement. A
+   * concave pool moved it to 12.5% (all at a pool of exactly the knee) and still lost, so the flat
+   * weights stayed. This asserts the instrument reports the behaviour, whatever the weights say.
+   */
+  it('reports whether the AI banks or skips, and at what pool size', () => {
+    const { banked, skipped, avgPoolWhenBanked } = report.resourcing
+    expect(banked).toBeGreaterThan(0)
+    expect(avgPoolWhenBanked).toBeGreaterThan(0)
+    // Flat pool value (`resourceSurplus === resource`) means banking always wins by exactly +1, and
+    // the private hand term is bounded below 1, so it can never flip that. Forced skips (an empty
+    // hand leaves no other legal move) are excluded, or this would be a few percent of phantoms.
+    expect(DEFAULT_WEIGHTS.resourceSurplus).toBe(DEFAULT_WEIGHTS.resource)
+    expect(skipped, 'a flat pool never CHOOSES to decline a resource').toBe(0)
+  })
+
   it('is deterministic for a given seed', () => {
     expect(runDecisions({ gamesPerDeck: 1, seed: 4242 })).toEqual(report)
   }, 30_000)

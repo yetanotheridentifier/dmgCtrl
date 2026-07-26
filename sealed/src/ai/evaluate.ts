@@ -38,7 +38,19 @@ export interface EvalWeights {
   power: number // per point of a unit's effective power
   hp: number // per point of a unit's remaining HP (light, so damage is progress not a big loss)
   card: number // per card in hand (public: hand SIZE is visible to both players)
-  resource: number // per resource in the pool (total, not ready: resources ready again each round)
+  resource: number // per resource in the pool up to the knee (total, not ready: all ready each round)
+  /**
+   * Per resource ABOVE the knee. Lower than `resource`, which is what makes the pool's value
+   * concave: once you can already cast what you hold, banking another card buys nothing and the card
+   * is worth more. Below `card` means the bot stops banking; at or above it, it never does.
+   */
+  resourceSurplus: number
+  /**
+   * Pool size at which resources stop being fully valuable. Grounded in the pool rather than taste:
+   * ASH's non-leader costs have p90 = 6, and only 21 of 238 cards cost 7 or more, so 7 resources
+   * casts 91% of the set. Raised to the leader's deploy cost while it is still undeployed.
+   */
+  saturation: number
   readyUnit: number // per ready (unexhausted) unit, a light tempo term
   /** Private half: what the scored seat's own hand is worth (#393). See `handValue`. */
   hand: HandWeights
@@ -54,6 +66,10 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   hp: 1,
   card: 2,
   resource: 3,
+  // MEASURED NEUTRAL AT BEST: equal to `resource`, i.e. the pool is deliberately shipped FLAT.
+  // See the concavity note above `resourceValue` before changing this.
+  resourceSurplus: 3,
+  saturation: 7,
   readyUnit: 1,
   hand: DEFAULT_HAND_WEIGHTS,
 }
@@ -78,6 +94,53 @@ function readyUnits(state: GameState, id: PlayerId): number {
 }
 
 /**
+ * What a player's resource pool is worth, optionally with the marginal resource getting cheaper past
+ * a knee.
+ *
+ * ## Shipped FLAT, and that is a measured result (#393 iteration 2)
+ *
+ * The theory was sound and the behaviour worked: a flat rate makes banking a card worth a fixed
+ * public +1 at every regroup, so the bot banks one EVERY round of every game, which is wrong late on
+ * (you draw 2 at regroup either way, so banking is "+1 resource against +1 card retained"). Setting
+ * `resourceSurplus` below `card` made it skip 12.5% of regroups, all at a pool of exactly the knee.
+ *
+ * It did not win. Against the identical AI with a flat pool, across the coverage decks:
+ *
+ *   saturation 7, surplus 1  : 49.7% +/- 1.9%  (5040 games)  -> neutral
+ *   saturation 8, surplus 0/1: 47.6% +/- 3.4%
+ *   saturation 6, surplus 0/1: 46.1% +/- 3.4%
+ *   saturation 5, surplus 0/1: 45.6% +/- 3.4%  -> significantly worse
+ *
+ * Monotone in the knee: the more concavity, the worse. So it is left flat (`resourceSurplus` equal
+ * to `resource`, which also makes `saturation` inert) and the mechanism is kept only so the question
+ * can be re-asked cheaply.
+ *
+ * Worth re-testing after #395: measurement showed the bot already leaves 1-2 resources UNSPENT per
+ * round late on (mean spend 5.9 against pools of 7-8), so idle resources are real and the idea is
+ * not obviously wrong. The likeliest reading is that resource count also proxies development and
+ * tempo for every other decision, and flattening it costs more signal than the one regroup decision
+ * it fixes. A role-aware evaluation may separate those.
+ *
+ * The knee rises to the leader's deploy cost while the leader is still in the base zone, which
+ * encodes "always resource until you can deploy your leader". That gate really is a resource COUNT:
+ * `legalMoves.ts` deploys on CONTROLLING resources equal to the leader's cost (CR 2.6.1, controlled
+ * rather than spent). The printed cost is the right number for all 18 ASH leaders, including the two
+ * with custom `deployCondition`s: Bo-Katan's gate is `resources + Mandalorians >= 10` against a
+ * printed 10, and Grogu never deploys this way and costs 4, which collapses to the default.
+ *
+ * PUBLIC, so it belongs in the zero-sum half: you can see the opponent's resource row and their
+ * leader. Each side is measured against its own leader, which keeps the term antisymmetric.
+ */
+export function resourceValue(state: GameState, id: PlayerId, w: EvalWeights): number {
+  const p = state.players[id]
+  const leaderCost = state.cards[p.leader.cardId]?.cost ?? 0
+  const knee = p.leader.deployed ? w.saturation : Math.max(w.saturation, leaderCost)
+  const pool = p.resources.length
+  const full = Math.min(pool, knee)
+  return w.resource * full + w.resourceSurplus * (pool - full)
+}
+
+/**
  * The zero-sum half: everything both players can see, including hand SIZE but never hand contents.
  * Split out so the invariant `publicScore(s, me) === -publicScore(s, foe)` stays testable now that
  * `evaluate` carries a private term on top.
@@ -92,7 +155,7 @@ export function makePublicScore(w: EvalWeights): (state: GameState, me: PlayerId
     const baseTerm = w.base * (state.players[foe].base.damage - state.players[me].base.damage)
     const board = boardPresence(state, me, w) - boardPresence(state, foe, w)
     const cards = w.card * (state.players[me].hand.length - state.players[foe].hand.length)
-    const resources = w.resource * (state.players[me].resources.length - state.players[foe].resources.length)
+    const resources = resourceValue(state, me, w) - resourceValue(state, foe, w)
     const tempo = w.readyUnit * (readyUnits(state, me) - readyUnits(state, foe))
 
     return baseTerm + board + cards + resources + tempo

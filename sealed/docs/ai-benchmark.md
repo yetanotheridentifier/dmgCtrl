@@ -160,6 +160,10 @@ The remaining rates are the roadmap: initiative is still ~21% ties (#394), attac
 which card to play ~6%. A decision the evaluation cannot see shows up here long before it shows up
 in a win rate.
 
+It also reports **regroup banking** separately: how often the AI banks versus skips, and the mean
+pool size at each. That is not a tie, it is a strict public preference, so it reads as behaviour
+rather than as a gap; the skip rate is currently 0% by construction (see the negative result below).
+
 ## Tuning evaluation weights
 
 The greedy evaluation's weights are parameterised (`ai/evaluate.ts: EvalWeights`). `npm run tune`
@@ -331,6 +335,42 @@ principled, but a bomb's hand value and its board value are the same order of ma
 ~28 of hand value to gain ~28 of board made the bot **refuse to play its own bombs**. The second
 shows why the bound is needed at all: an unbounded term applies to *every* decision while only
 fixing one, so its distortion grows with its weight (39.8% at moderate weights, 26.0% at large).
+
+## A measured negative result: concave resource value (#393 iteration 2)
+
+Recorded so nobody spends an evening re-deriving it.
+
+The greedy AI banks a card at **every** regroup, because banking is a flat public **+1**
+(`resource` 3 minus `card` 2) however deep its pool already is. That looks wrong late on: you draw 2
+at regroup either way, so banking is "+1 resource against +1 card retained", and once the pool
+already casts what you hold, the card should be the better half of that trade. The published
+guidance agrees, and it has a real threshold behind it: deployment needs *controlling* resources
+equal to the leader's cost (CR 2.6.1), so "resource until you can deploy your leader" is a resource
+count, not a feeling.
+
+So `resourceValue` (`ai/evaluate.ts`) was built to make the marginal resource cheaper past a knee,
+with the knee rising to the leader's deploy cost while it is undeployed. **The mechanism works**:
+`--decisions` showed the skip rate move from 0% to 12.5%, every skip at a pool of exactly the knee.
+
+**It did not win.** Against the identical AI with a flat pool, across the coverage decks:
+
+| saturation | surplus | win rate vs flat |
+| --- | --- | --- |
+| 7 | 1 | **49.7% ± 1.9%** (5040 games) |
+| 8 | 0 and 1 | 47.6% ± 3.4% |
+| 6 | 0 and 1 | 46.1% ± 3.4% |
+| 5 | 0 and 1 | 45.6% ± 3.4% |
+
+Monotone in the knee: the more concavity, the worse. It ships **flat** (`resourceSurplus` equal to
+`resource`, which also makes `saturation` inert), and the mechanism is kept only so the question can
+be re-asked cheaply.
+
+Two things are worth carrying forward. First, the obvious explanation is wrong: the bot does **not**
+spend its pool late, committing a mean of 5.9 per round against pools of 7 to 8, so idle resources
+are genuinely real and the premise was not the problem. Second, the likeliest reading is that
+resource count also proxies development and tempo for *every other* decision, so flattening it costs
+more signal than the one regroup decision it buys. That is worth re-testing after **#395**, where a
+role-aware evaluation may separate the two.
 
 ## A note on trusting numbers while the engine still has bugs
 

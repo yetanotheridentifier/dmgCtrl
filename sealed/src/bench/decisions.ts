@@ -47,11 +47,28 @@ export interface DecisionStat {
   avgCandidates: number
 }
 
+/**
+ * Whether the AI banks a card at regroup, and at what pool size. Separate from the tie counts
+ * because this is not a blind spot: it is a strict public preference, so it reads as a behaviour
+ * rather than an absence of one.
+ *
+ * Counts only regroups where there was actually a card to bank. An empty hand leaves `skipResource`
+ * as the sole legal move (`legalMoves.ts: regroupPhaseMoves`), and a forced move is not a decision:
+ * including those put a few percent of phantom "skips" in the numbers at absurd pool sizes.
+ */
+export interface ResourcingStat {
+  banked: number
+  skipped: number
+  avgPoolWhenBanked: number
+  avgPoolWhenSkipped: number
+}
+
 export interface DecisionReport {
   buildTag: string
   ai: string
   games: number
   stats: DecisionStat[]
+  resourcing: ResourcingStat
 }
 
 interface Tally {
@@ -73,6 +90,10 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   const attacks = empty()
   const plays = empty()
   let games = 0
+  let banked = 0
+  let skipped = 0
+  let bankedPool = 0
+  let skippedPool = 0
 
   decks.forEach((deck, d) => {
     for (let g = 0; g < config.gamesPerDeck; g++) {
@@ -111,6 +132,12 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
 
         const action = setupAi(s) ?? ai(s)
         if (!action) break
+        // Pool size BEFORE the decision, so "skipped at 8" means it already held 8. Skipping with
+        // an empty hand is forced, not chosen, so it is not counted.
+        const pool = s.players[me].resources.length
+        const couldBank = s.players[me].hand.length > 0
+        if (action.type === 'resourceCard' && s.phase === 'regroup') { banked++; bankedPool += pool }
+        if (action.type === 'skipResource' && couldBank) { skipped++; skippedPool += pool }
         s = resolve(s, action)
       }
     }
@@ -133,5 +160,11 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       stat('which attack', attacks),
       stat('which card to play', plays),
     ],
+    resourcing: {
+      banked,
+      skipped,
+      avgPoolWhenBanked: banked === 0 ? 0 : bankedPool / banked,
+      avgPoolWhenSkipped: skipped === 0 ? 0 : skippedPool / skipped,
+    },
   }
 }

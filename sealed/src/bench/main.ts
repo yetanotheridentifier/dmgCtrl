@@ -211,6 +211,14 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     const tieRate = s.offered === 0 ? '  n/a' : pct(s.tied / s.offered).padStart(6)
     lines.push(`  ${tieRate}   ${String(s.offered).padStart(7)}   ${s.avgCandidates.toFixed(1).padStart(11)}   ${s.label}`)
   }
+  const r = report.resourcing
+  const total = r.banked + r.skipped
+  lines.push(
+    '',
+    '  regroup banking (a strict public preference, so not a tie: this is behaviour, not a gap)',
+    row('banked', `${r.banked}  (avg pool ${r.avgPoolWhenBanked.toFixed(1)})`),
+    row('skipped', total === 0 ? '0' : `${r.skipped} = ${pct(r.skipped / total)}  (avg pool ${r.avgPoolWhenSkipped.toFixed(1)})`),
+  )
   lines.push('', row('wall clock', `${(wallMs / 1000).toFixed(1)}s`), '')
   return lines.join('\n')
 }
