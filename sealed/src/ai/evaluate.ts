@@ -52,6 +52,14 @@ export interface EvalWeights {
    */
   saturation: number
   readyUnit: number // per ready (unexhausted) unit, a light tempo term
+  /** Value of holding the initiative, i.e. of acting first next round (#394). */
+  initiative: number
+  /**
+   * Per ready unit forfeited by having claimed the initiative this round (#394). Claiming makes you
+   * pass for the rest of the round, so this is what that costs. Scaled by ready units rather than
+   * flat, because the whole judgement is how much you were giving up.
+   */
+  claimCost: number
   /** Private half: what the scored seat's own hand is worth (#393). See `handValue`. */
   hand: HandWeights
 }
@@ -71,6 +79,12 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   resourceSurplus: 3,
   saturation: 7,
   readyUnit: 1,
+  // Swept (#394). Turn order is worth far less than it first looks: raising `initiative` is
+  // monotonically worse (2 -> 52.5%, 4 -> 46.8%, 6 -> 35.4%, 8 -> 29.4% against the same AI with
+  // both terms at 0), because the bot buys it by giving up whole turns. `claimCost: 0` is the
+  // always-claim failure mode and measured 41.1%.
+  initiative: 2,
+  claimCost: 3,
   hand: DEFAULT_HAND_WEIGHTS,
 }
 
@@ -91,6 +105,41 @@ function boardPresence(state: GameState, id: PlayerId, w: EvalWeights): number {
 
 function readyUnits(state: GameState, id: PlayerId): number {
   return state.players[id].units.filter(u => !u.exhausted).length
+}
+
+/**
+ * Ready units a player has effectively forfeited by claiming the initiative this round.
+ *
+ * Claiming makes you pass for the rest of the round: `advanceTurn` (`resolve.ts`) skips the
+ * claimant's turns while `initiativeTakenBy` names them. So everything still ready is wasted.
+ *
+ * The `phase` guard is what makes the cheap window fall out WITHOUT hardcoding CR 1.15.5c. Claiming
+ * into an opponent who has already passed ends the action phase outright (`takeInitiative` calls
+ * `enterRegroup` when `consecutivePasses >= 1`), so the resulting state is no longer in the action
+ * phase and nobody has actions left to lose. A mid-phase claim leaves `phase === 'action'` with the
+ * flag set, and is charged.
+ */
+function forfeitedTempo(state: GameState, id: PlayerId): number {
+  if (state.phase !== 'action' || state.initiativeTakenBy !== id) return 0
+  return readyUnits(state, id)
+}
+
+/**
+ * What the initiative is worth to `me`: the value of acting first next round, less what claiming it
+ * costs whoever claimed (#394).
+ *
+ * PUBLIC on both halves, so it belongs in the zero-sum score and is allowed to outrank other moves,
+ * which it has to be to ever justify giving up a turn. That is the opposite of the hand term, which
+ * is hidden information and therefore bounded to a tie-break.
+ *
+ * Note the ticket's "claiming after their pass costs nothing" is not quite right: it always costs
+ * you your own remaining actions. What the cheap window avoids is the usual penalty of sitting out
+ * while the opponent keeps playing, and that is what `forfeitedTempo` prices.
+ */
+export function initiativeValue(state: GameState, me: PlayerId, w: EvalWeights): number {
+  const foe = opponentOf(me)
+  const holding = w.initiative * (state.initiative === me ? 1 : -1)
+  return holding - w.claimCost * forfeitedTempo(state, me) + w.claimCost * forfeitedTempo(state, foe)
 }
 
 /**
@@ -157,8 +206,9 @@ export function makePublicScore(w: EvalWeights): (state: GameState, me: PlayerId
     const cards = w.card * (state.players[me].hand.length - state.players[foe].hand.length)
     const resources = resourceValue(state, me, w) - resourceValue(state, foe, w)
     const tempo = w.readyUnit * (readyUnits(state, me) - readyUnits(state, foe))
+    const initiative = initiativeValue(state, me, w)
 
-    return baseTerm + board + cards + resources + tempo
+    return baseTerm + board + cards + resources + tempo + initiative
   }
 }
 

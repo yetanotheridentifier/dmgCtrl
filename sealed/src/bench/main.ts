@@ -219,6 +219,14 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     row('banked', `${r.banked}  (avg pool ${r.avgPoolWhenBanked.toFixed(1)})`),
     row('skipped', total === 0 ? '0' : `${r.skipped} = ${pct(r.skipped / total)}  (avg pool ${r.avgPoolWhenSkipped.toFixed(1)})`),
   )
+  const i = report.initiative
+  lines.push(
+    '',
+    '  initiative (claiming forfeits the rest of your round; "cheap" = they already passed)',
+    row('claimed', i.offered === 0 ? '0' : `${i.taken} of ${i.offered} = ${pct(i.taken / i.offered)}`),
+    row('cheap chances taken', i.cheapOffered === 0 ? 'n/a' : `${i.cheapTaken} of ${i.cheapOffered} = ${pct(i.cheapTaken / i.cheapOffered)}`),
+    row('ready units forfeited', `${i.avgForfeitedWhenClaimed.toFixed(1)} avg per mid-phase claim`),
+  )
   lines.push('', row('wall clock', `${(wallMs / 1000).toFixed(1)}s`), '')
   return lines.join('\n')
 }
