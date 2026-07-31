@@ -168,6 +168,22 @@ and so read as behaviour rather than as a gap:
   is the clearest read on whether the AI is claiming sensibly: low means it claims when it has little
   left to do, high means it is throwing away a board full of attackers.
 
+### Half-resolved scoring
+
+The same run reports how often a candidate move is scored **before its action has finished**. Some
+moves leave a choice owed: a when-played effect whose target is unpicked, or an attack suspended on
+the defender's "may prevent damage". Either way the evaluation reads a partial board.
+
+The split is by **who owes the answer**, because that decides the fix. An answer we owe can be
+finished on the spot by resolving the chain; one the opponent owes has to be resolved pessimistically;
+and a choice like `support`, which opens a whole extra attack, is a second action rather than an
+unfinished first one. Reported at three granularities (candidates scored, positions where any
+candidate is affected, and moves actually chosen) plus the choice kinds driving each side, since one
+card causing all of it is a different problem from a broad spread.
+
+Current rates: **we** owe the answer in 42.9% of positions and 11.3% of chosen moves; the opponent
+owes it in 5.1% and 0.5%.
+
 ## AI versus AI, per matchup
 
 `--generalise` plays **mirrors**: both seats get the same deck, so it can report per deck but never

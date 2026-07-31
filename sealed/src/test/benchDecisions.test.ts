@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { runDecisions } from '../bench/decisions'
+import { runDecisions, classifyResolution } from '../bench/decisions'
 import { DEFAULT_WEIGHTS } from '../ai/evaluate'
+import { state } from './helpers/engineFixtures'
+import type { PendingChoice } from '../engine/types'
 import '../engine/cardDefinitions'
 
 /**
@@ -74,7 +76,82 @@ describe('runDecisions', () => {
     expect(avgForfeitedWhenClaimed).toBeLessThan(1)
   })
 
+  /**
+   * Sizes the search work before any of it is built. Greedy scores the state a candidate move
+   * produces, but some moves do not finish resolving: they leave a choice owed, either by the
+   * opponent (an attack suspending on "may prevent damage") or by the mover itself (a when-played
+   * effect whose target has not been picked). Either way the score is read off a half-resolved
+   * board.
+   *
+   * The two counts point at different fixes, so they are reported separately: an opponent-owed
+   * answer wants pessimistic resolution, a self-owed one wants the mover's own sequence expanded.
+   */
+  it('counts candidate moves that leave a choice owed, split by who owes it', () => {
+    const s = report.suspended
+    expect(s.positions, 'decisions observed').toBeGreaterThan(0)
+    expect(s.candidates).toBeGreaterThanOrEqual(s.positions)
+
+    // Each split is a subset of the whole, at both candidate and position granularity.
+    expect(s.opponentAnswers + s.selfAnswers).toBeLessThanOrEqual(s.candidates)
+    expect(s.positionsWithOpponentAnswer).toBeLessThanOrEqual(s.positions)
+    expect(s.positionsWithSelfAnswer).toBeLessThanOrEqual(s.positions)
+    expect(s.chosenOpponentAnswer).toBeLessThanOrEqual(s.positionsWithOpponentAnswer)
+    expect(s.chosenSelfAnswer).toBeLessThanOrEqual(s.positionsWithSelfAnswer)
+
+    // A when-played effect that asks the mover something is common enough that zero would mean the
+    // instrument is broken rather than that the game lacks them.
+    expect(s.selfAnswers, 'self-owed answers are everywhere in this card pool').toBeGreaterThan(0)
+
+    // Naming the kinds is what turns a rate into a decision: one card driving it all is a very
+    // different ticket from a broad spread, and on our own side a chain we can finish on the spot
+    // is a different fix from an `ambush` that opens a whole second action.
+    for (const ks of [s.opponentChoiceKinds, s.selfChoiceKinds]) {
+      expect(ks.every(k => k.count > 0)).toBe(true)
+      expect([...ks].sort((a, b) => b.count - a.count)).toEqual(ks)
+    }
+    expect(s.selfChoiceKinds.reduce((n, k) => n + k.count, 0)).toBe(s.selfAnswers)
+    expect(s.opponentChoiceKinds.reduce((n, k) => n + k.count, 0)).toBe(s.opponentAnswers)
+  })
+
   it('is deterministic for a given seed', () => {
     expect(runDecisions({ gamesPerDeck: 1, seed: 4242 })).toEqual(report)
   }, 30_000)
+})
+
+/**
+ * The classifier the counts above are built from, tested directly so the rates cannot quietly drift
+ * on a mis-read of who owes what. `activePlayer` is not enough on its own: the engine hands the turn
+ * to the opponent when it raises a choice they control, so a state with them to move may be an
+ * unfinished action rather than a completed one.
+ */
+describe('classifyResolution', () => {
+  const choice = (controller: 'player' | 'opponent'): PendingChoice =>
+    ({ kind: 'selectUnitToDefeat', id: 'c', controller, targets: ['u1'] })
+
+  it('calls a fully resolved state complete', () => {
+    expect(classifyResolution(state({ activePlayer: 'opponent' }), 'player')).toEqual({ kind: 'complete' })
+  })
+
+  it('reports a choice the mover still owes', () => {
+    const s = state({ pendingChoices: [choice('player')] })
+    expect(classifyResolution(s, 'player')).toEqual({ kind: 'self', choiceKind: 'selectUnitToDefeat' })
+  })
+
+  it('reports a choice handed to the opponent mid-action', () => {
+    // The engine flips activePlayer to them so they can answer, then hands control back.
+    const s = state({ activePlayer: 'opponent', pendingChoices: [choice('opponent')] })
+    expect(classifyResolution(s, 'player')).toEqual({ kind: 'opponent', choiceKind: 'selectUnitToDefeat' })
+  })
+
+  /** A finished game is scored terminally, so an unanswered choice on it is not a half-resolution. */
+  it('calls a won game complete even with a choice left pending', () => {
+    const s = state({ winner: 'player', pendingChoices: [choice('opponent')] })
+    expect(classifyResolution(s, 'player')).toEqual({ kind: 'complete' })
+  })
+
+  /** Both owed: the opponent's is the one that blocks, so it wins the classification. */
+  it('prefers the opponent when both owe an answer', () => {
+    const s = state({ activePlayer: 'opponent', pendingChoices: [choice('player'), choice('opponent')] })
+    expect(classifyResolution(s, 'player')).toMatchObject({ kind: 'opponent' })
+  })
 })
