@@ -4,7 +4,7 @@
  * (`implementedCards.test.ts`) that asserts these ids exactly match the registered ASH cards.
  *
  * Leaders are two-sided: `front` = the undeployed leader ability, `back` = the deployed
- * (leader-unit) ability. A `false` marks a side still to come (see the ability-framework doc).
+ * (leader-unit) ability. A `false` marks a side still to come (see `docs/abilities.md`).
  */
 
 export interface LeaderStatus {

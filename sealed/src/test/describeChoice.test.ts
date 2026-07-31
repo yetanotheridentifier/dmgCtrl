@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { describeChoiceParts, BOARD_TARGET_KINDS } from '../utils/describeChoice'
 import { partsText } from '../utils/describeAction'
 import { state, player, card, CARDS, unit } from './helpers/engineFixtures'
-import type { GameState, PendingChoice } from '../engine/types'
+import type { GameState, PendingChoice, PlayerId } from '../engine/types'
 
 function board(): GameState {
   return state({
@@ -50,6 +50,31 @@ describe('describeChoiceParts', () => {
   it('states the amount for a damage choice', () => {
     expect(prompt(sample.mayDamage)).toMatch(/2 damage/i)
     expect(prompt(sample.selectDamageTarget)).toMatch(/3 damage/i)
+  })
+
+  /**
+   * The wording has to follow BOTH target lists. "Deal 2 damage to a base" (Yellow Aces Bomber)
+   * offers no unit targets at all, so a prompt reading "unit or base" invites a click that cannot
+   * be made.
+   */
+  it('names only the target types actually on offer', () => {
+    const damage = (unitTargets: string[], baseTargets: PlayerId[]): string =>
+      prompt({ kind: 'selectDamageTarget', id: 'c', controller: 'player', amount: 2, unitTargets, baseTargets } as PendingChoice)
+
+    expect(damage([], ['player', 'opponent'])).toMatch(/choose a base/i)
+    expect(damage([], ['player', 'opponent'])).not.toMatch(/unit/i)
+    expect(damage(['u1'], [])).toMatch(/choose a unit/i)
+    expect(damage(['u1'], [])).not.toMatch(/base/i)
+    expect(damage(['u1'], ['opponent'])).toMatch(/unit or base/i)
+  })
+
+  it('does the same for a heal choice', () => {
+    const heal = (unitTargets: string[], baseTargets: PlayerId[]): string =>
+      prompt({ kind: 'selectHealTarget', id: 'c', controller: 'player', amount: 2, unitTargets, baseTargets } as PendingChoice)
+
+    expect(heal([], ['player'])).toMatch(/choose a base/i)
+    expect(heal([], ['player'])).not.toMatch(/unit/i)
+    expect(heal(['u1'], [])).not.toMatch(/base/i)
   })
 
   it('names the token being handed out', () => {

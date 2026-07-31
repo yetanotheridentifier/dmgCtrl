@@ -98,7 +98,7 @@ Plain `npm --prefix sealed run dev` alone still works too, at
 
 **Tab favicon**: dev shows the **white** dmgCtrl icon, prod the **blue** one, so
 the dev tab is easy to tell apart (`src/favicon.ts`, driven by `import.meta.env.DEV`;
-static blue fallback in `index.html`). Both icons live in `sealed/public/` (#329).
+static blue fallback in `index.html`). Both icons live in `sealed/public/`.
 
 ## Build & deploy (prod: https://dmgctrl.app/sealed)
 
@@ -207,7 +207,7 @@ Or by hand: **Application → IndexedDB → dmgctrl-sealed → games → Clear o
 All three touch only `games`. Imported decks (localStorage) and the card cache are untouched, so
 nothing needs re-hydrating afterwards and your decks stay put.
 
-**When you need to:** records written before the AI became state-seeded (#366) **do not replay
+**When you need to:** records written before the AI became state-seeded **do not replay
 faithfully**, because that opponent drew from `Math.random`, so re-resolving the stored move list
 diverges from the stored final state. Records are the substrate for E7 training, so clear the
 store once before collecting anything you intend to train on. Records written since are exact
@@ -249,8 +249,7 @@ need the worker healthy.
 When chasing a load failure, first make sure you're running current code:
 the app shows a **build tag** (e.g. `b58`, the `BUILD_TAG` constant in
 `src/buildTag.ts`, auto-bumped by `npm run check`). In dev it's a small badge in
-the **bottom-right corner**; in prod it sits at the foot of the **Help** page
-(#332). If the browser shows an older tag, restart the dev servers and
+the **bottom-right corner**; in prod it sits at the foot of the **Help** page. If the browser shows an older tag, restart the dev servers and
 hard-reload (Ctrl+Shift+R). Known
 upstream state (2026-07): SWUDB card detail 502s on the ASH bases
 (ASH_019/020/023 confirmed); all recover via the swuapi fallback.
@@ -270,7 +269,7 @@ field names, update `SwuCard` (`data/cards.ts`) and `normaliseCard`
 
 When a set gains card-ability support (or FFG ships a new print run for one that already has a
 bundled map), generate/refresh its printing map so every printing resolves offline with no
-cache/network dependency (#389):
+cache/network dependency:
 
 ```bash
 node scripts/generatePrintingMap.mjs ASH
@@ -280,18 +279,16 @@ Writes `src/data/printingMaps/<set>.json`; import it in `data/bundledPrintings.t
 set. The script warns and omits any printing it cannot join to a Normal row rather than guessing,
 so those fall back to the existing dynamic (cache/network) path.
 
-## Extending the engine (post-spike epics)
+## Extending the engine
 
-- **Smarter AI (T5.2+)**: implement alongside `ai/randomAi.ts`; the contract is
-  `(state) => Action | null` choosing from `legalMoves(state)`, drawing any
-  randomness from `state.rngSeed` so games stay replayable. Register it by name in
-  `ai/registry.ts`, then measure it with `npm run bench` (see
-  [ai-benchmark.md](ai-benchmark.md)). **Deploy** a model by setting `OPPONENT_AI` in
-  `src/config.ts` to its registered name and redeploying (a reviewed one-line change, not a
-  user choice); tests still inject their own via `UseGameOptions.ai`. Move to a Web Worker
-  (T5.4) before MCTS. The current deployed model is `greedy` (one-ply, beats `random` ~100%).
-- **Abilities/keywords**: extend `EngineCard` with parsed ability data in
-  `cardDb.ts`, generate/resolve in `legalMoves.ts`/`resolve.ts`. Keep both pure.
+- **A new AI**: implement `(state) => Action | null`, choosing from `legalMoves(state)` and drawing
+  any randomness from `state.rngSeed` so games stay replayable. Register it by name in
+  `ai/registry.ts`, then measure it with `npm run bench` (see [ai-benchmark.md](ai-benchmark.md)).
+  **Deploy** by setting `OPPONENT_AI` in `src/config.ts` to its registered name and redeploying: a
+  reviewed one-line change, not a user choice. Tests inject their own via `UseGameOptions.ai`. The
+  deployed model is `greedy`.
+- **Card behaviour**: register it in `engine/cardDefinitions.ts`; see
+  [abilities.md](abilities.md).
 - **Schema changes**: `GameState` changes ripple into `engineFixtures.ts` and the
   JSON round-trip test; the compiler walks you through every site.
 - **New Dexie tables**: add a new `this.version(n).stores({...})` block in
@@ -299,10 +296,4 @@ so those fall back to the existing dynamic (cache/network) path.
 
 ## Docs
 
-- `sealed/docs/architecture.md`: system design (this folder)
-- `sealed/docs/operations.md`: this file
-- `sealed/docs/ai-benchmark.md`: the AI benchmark harness (`npm run bench`), output, data model
-- `sealed/docs/userGuide.md`: user guide, **imported at build time as the in-app
-  Help page**, so editing it updates the app's help content
-- `sealed/README.md`: quick orientation + decisions log
-- `docs/swu-ai-handoff.html` (repo root): original build plan / epic roadmap
+See [README.md](README.md) for the full map of this folder.
