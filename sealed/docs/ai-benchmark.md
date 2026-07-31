@@ -239,6 +239,15 @@ It prints each config's win rate vs baseline (higher is better) and its wall clo
 deployed weights were chosen this way (see `DEFAULT_WEIGHTS`); to change the model, re-sweep, set the
 winning weights, and redeploy.
 
+Candidates are built by `makeTunedGreedy`, the same factory that builds the deployed bot. That is
+deliberate and load-bearing: a tuner that assembles its own AI drifts from the real one the moment
+the driver changes, and then measures weights for a bot nobody plays.
+
+**The frozen baseline is running out of resolution as a reference.** The deployed model now beats it
+81.9% ± 3.7%, so weight differences have limited room to show before the ceiling. Before the next
+weight sweep, move the reference to `greedy-flat` or take a fresh frozen snapshot; a tuner that
+cannot separate its candidates reports noise with a confidence interval on it.
+
 ## Matchup matrix
 
 `--matrix` measures **deck strength** and **matchups**. It builds an even deck set (every one of the

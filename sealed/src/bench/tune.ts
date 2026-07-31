@@ -1,5 +1,5 @@
-import { DEFAULT_WEIGHTS, makeEvaluate } from '../ai/evaluate'
-import { makeGreedyAi, greedyBaselineAi } from '../ai/greedyAi'
+import { DEFAULT_WEIGHTS } from '../ai/evaluate'
+import { makeTunedGreedy, greedyBaselineAi } from '../ai/greedyAi'
 import { runGeneralisationWith } from './generalisation'
 
 /**
@@ -50,7 +50,8 @@ function main(): void {
   console.log('  unit power hp base    win% vs baseline   time')
   for (const c of configs) {
     const weights = { ...DEFAULT_WEIGHTS, unit: c.unit, power: c.power, hp: c.hp, base: c.base }
-    const candidate = makeGreedyAi(makeEvaluate(weights))
+    // Built exactly as the shipped bot is, or the tuning is for an AI nobody plays.
+    const candidate = makeTunedGreedy(weights)
     const start = Date.now()
     const report = runGeneralisationWith(candidate, greedyBaselineAi, 'candidate', 'baseline', { gamesPerDeck: games, seed })
     const secs = ((Date.now() - start) / 1000).toFixed(0)

@@ -4,7 +4,7 @@ import type { Ai } from './types'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
 import { seededUnit } from '../engine/rng'
-import { evaluate, type Evaluator } from './evaluate'
+import { evaluate, makeEvaluate, DEFAULT_WEIGHTS, type Evaluator, type EvalWeights } from './evaluate'
 import { evaluateBaseline } from './evaluateBaseline'
 import { makeQuiescent } from './search'
 import { role } from './race'
@@ -50,8 +50,20 @@ export function makeGreedyAi(evaluate: Evaluator): Ai {
   }
 }
 
+/**
+ * Build the shipped bot from a weight set: the evaluation, wrapped in quiescent scoring, driven by
+ * one ply.
+ *
+ * The single construction site on purpose. The weight tuner builds its own AI from candidate weights,
+ * so without this it drifts from the deployed one whenever the driver changes, and then spends a
+ * night tuning weights for a bot nobody plays.
+ */
+export function makeTunedGreedy(weights: EvalWeights): Ai {
+  return makeGreedyAi(makeQuiescent(makeEvaluate(weights)))
+}
+
 /** The live greedy AI: unit-count-centred evaluation (#392), scored only on finished actions (#400). */
-export const greedyAi = makeGreedyAi(makeQuiescent(evaluate))
+export const greedyAi = makeTunedGreedy(DEFAULT_WEIGHTS)
 
 /** Greedy with the identical evaluation but scoring half-resolved actions, so quiescence can be
  *  measured in isolation. Kept registered rather than built ad hoc for a run, because the comparison
