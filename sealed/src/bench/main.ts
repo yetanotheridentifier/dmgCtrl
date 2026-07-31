@@ -239,6 +239,24 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     row('role flips', `${r2.flipsPerGame.toFixed(2)} per game`),
     row('a side fully walled', r2.samples === 0 ? 'n/a' : `${pct(r2.walledSamples / r2.samples)} of samples (reach 0)`),
   )
+  const su = report.suspended
+  const rate = (n: number, d: number): string => (d === 0 ? 'n/a' : `${n} of ${d} = ${pct(n / d)}`)
+  const topKinds = (ks: Array<{ kind: string; count: number }>): string =>
+    ks.length === 0 ? 'none seen' : ks.slice(0, 4).map(k => `${k.kind} ${k.count}`).join(', ')
+  lines.push(
+    '',
+    '  half-resolved scoring: a candidate move that leaves a choice owed is scored before the',
+    '  action finishes. Who owes it decides the fix: theirs wants their reply resolved, ours wants',
+    '  our own sequence expanded.',
+    row('positions, theirs owed', rate(su.positionsWithOpponentAnswer, su.positions)),
+    row('positions, ours owed', rate(su.positionsWithSelfAnswer, su.positions)),
+    row('candidates, theirs owed', rate(su.opponentAnswers, su.candidates)),
+    row('candidates, ours owed', rate(su.selfAnswers, su.candidates)),
+    row('chosen move, theirs owed', rate(su.chosenOpponentAnswer, su.positions)),
+    row('chosen move, ours owed', rate(su.chosenSelfAnswer, su.positions)),
+    row('their choice kinds', topKinds(su.opponentChoiceKinds)),
+    row('our choice kinds', topKinds(su.selfChoiceKinds)),
+  )
   lines.push('', row('wall clock', `${(wallMs / 1000).toFixed(1)}s`), '')
   return lines.join('\n')
 }

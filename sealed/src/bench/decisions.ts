@@ -1,7 +1,8 @@
 import ashSet from '../test/fixtures/ashSet.json'
 import '../engine/cardDefinitions' // side effect: registers every implemented card ability
 import type { SwuCard } from '../data/cards'
-import type { GameState } from '../engine/types'
+import type { GameState, PlayerId } from '../engine/types'
+import { opponentOf } from '../engine/types'
 import { buildCardDb } from '../engine/cardDb'
 import { initGame } from '../engine/initGame'
 import { legalMoves } from '../engine/legalMoves'
@@ -9,6 +10,7 @@ import { resolve } from '../engine/resolve'
 import { seededShuffle, nextSeed } from '../engine/rng'
 import { BUILD_TAG } from '../buildTag'
 import { evaluate } from '../ai/evaluate'
+import { makeQuiescent } from '../ai/search'
 import { resolveAi } from '../ai/registry'
 import { setupAi } from '../ai/setupAi'
 import { role, reachSteady, type Role } from '../ai/race'
@@ -102,6 +104,74 @@ export interface RoleStat {
   samples: number
 }
 
+/**
+ * How far a candidate move actually resolved. Greedy scores the state a move produces, but not every
+ * move finishes: some leave a choice owed before the action is complete, so the score is read off a
+ * half-resolved board.
+ *
+ * Who owes it decides which fix applies, so the two are never merged. An opponent-owed answer needs
+ * their reply resolved pessimistically; a self-owed one needs the mover's own sequence expanded.
+ */
+export type Resolution =
+  | { kind: 'complete' }
+  | { kind: 'self'; choiceKind: string }
+  | { kind: 'opponent'; choiceKind: string }
+
+/**
+ * Classify the state a candidate move produced, from the mover's seat.
+ *
+ * `activePlayer` alone cannot answer this. The engine hands the turn to the opponent when an action
+ * raises a choice they control (`handOffOpponentChoice`), so a state with them to move may be an
+ * unfinished action rather than a completed one. Read the choice owners instead.
+ *
+ * A finished game is complete whatever is left pending: `evaluate` scores it terminally, so nothing
+ * downstream would look at the choice.
+ */
+export function classifyResolution(next: GameState, me: PlayerId): Resolution {
+  if (next.winner !== null) return { kind: 'complete' }
+  const choices = next.pendingChoices ?? []
+  // The opponent's is the one that BLOCKS, so it classifies the state when both are owed.
+  const theirs = choices.find(c => c.controller === opponentOf(me))
+  if (theirs) return { kind: 'opponent', choiceKind: theirs.kind }
+  const mine = choices.find(c => c.controller === me)
+  return mine ? { kind: 'self', choiceKind: mine.kind } : { kind: 'complete' }
+}
+
+/**
+ * How often the evaluation is applied to a half-resolved board, which sizes the search work before
+ * any of it is built.
+ *
+ * Candidate-level counts say how much of the search space is affected; position-level counts say how
+ * many DECISIONS could be mis-ranked by it, which is the number that matters, since a position where
+ * nothing suspends is scored correctly however many suspending moves exist elsewhere. `chosen*`
+ * counts how often the AI committed to such a move, the narrowest reading of the same thing.
+ */
+export interface SuspendedStat {
+  /** Candidate moves scored, across decisions with more than one option. */
+  candidates: number
+  /** Of those, how many left the OPPONENT owing an answer. */
+  opponentAnswers: number
+  /** Of those, how many left the mover owing an answer. */
+  selfAnswers: number
+  /** Decisions with more than one candidate. */
+  positions: number
+  /** Of those, how many had at least one opponent-owed candidate. */
+  positionsWithOpponentAnswer: number
+  /** Of those, how many had at least one self-owed candidate. */
+  positionsWithSelfAnswer: number
+  /** Decisions where the move actually chosen left the opponent owing an answer. */
+  chosenOpponentAnswer: number
+  /** Decisions where the move actually chosen left the mover owing an answer. */
+  chosenSelfAnswer: number
+  /** Opponent-owed choice kinds, most frequent first. One card driving it all is a different ticket
+   *  from a broad spread, so the rate alone is not enough to act on. */
+  opponentChoiceKinds: Array<{ kind: string; count: number }>
+  /** Self-owed choice kinds, most frequent first. These separate the two candidate fixes: a chain
+   *  the mover can finish on the spot needs the chain resolved, an `ambush` that opens a fresh
+   *  attack needs a real second action expanded. */
+  selfChoiceKinds: Array<{ kind: string; count: number }>
+}
+
 export interface DecisionReport {
   buildTag: string
   ai: string
@@ -110,6 +180,7 @@ export interface DecisionReport {
   resourcing: ResourcingStat
   initiative: InitiativeStat
   role: RoleStat
+  suspended: SuspendedStat
 }
 
 interface Tally {
@@ -119,6 +190,16 @@ interface Tally {
 }
 
 const empty = (): Tally => ({ offered: 0, tied: 0, candidates: 0 })
+
+/** The greedy driver's own scoring function, so a tie measured here is a tie it would coin-flip. */
+const score = makeQuiescent(evaluate)
+
+/** Choice kinds, most frequent first. Count then name, so the order is stable across runs rather
+ *  than following insertion. */
+const rank = (counts: Map<string, number>): Array<{ kind: string; count: number }> =>
+  [...counts]
+    .map(([kind, count]) => ({ kind, count }))
+    .sort((a, b) => b.count - a.count || a.kind.localeCompare(b.kind))
 
 export function runDecisions(config: DecisionConfig): DecisionReport {
   const { decks } = buildCoverageDecks(POOL, config.seed)
@@ -145,6 +226,18 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   let roleFlips = 0
   let walledSamples = 0
   let roleSamples = 0
+  const suspended = {
+    candidates: 0,
+    opponentAnswers: 0,
+    selfAnswers: 0,
+    positions: 0,
+    positionsWithOpponentAnswer: 0,
+    positionsWithSelfAnswer: 0,
+    chosenOpponentAnswer: 0,
+    chosenSelfAnswer: 0,
+  }
+  const opponentKinds = new Map<string, number>()
+  const selfKinds = new Map<string, number>()
 
   decks.forEach((deck, d) => {
     for (let g = 0; g < config.gamesPerDeck; g++) {
@@ -163,7 +256,13 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         // The role is fixed once per decision, exactly as the greedy driver does it, so a tie here
         // is a tie there.
         const asRole = role(s, me)
-        const scored = moves.map(m => ({ m, v: evaluate(resolve(s, m), me, asRole) }))
+        const scored = moves.map(m => {
+          const next = resolve(s, m)
+          // Scored with quiescence, as the greedy driver does, so a tie counted here is a tie there.
+          // The half-resolution counts alongside are taken from the RAW state, since they measure how
+          // often quiescence has anything to do rather than what it concluded.
+          return { m, v: score(next, me, asRole), r: classifyResolution(next, me) }
+        })
         const best = Math.max(...scored.map(x => x.v))
 
         const record = (tally: Tally, subset: typeof scored): void => {
@@ -175,6 +274,28 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         record(resourcing, scored.filter(x => x.m.type === 'resourceCard'))
         record(attacks, scored.filter(x => x.m.type === 'attack'))
         record(plays, scored.filter(x => x.m.type === 'playUnit' || x.m.type === 'playEvent' || x.m.type === 'playUpgrade'))
+
+        // How much of what gets scored is a half-resolved board. A single forced move is not a
+        // decision, so it cannot be mis-ranked against anything and is excluded, matching `record`.
+        if (scored.length >= 2) {
+          suspended.positions++
+          suspended.candidates += scored.length
+          let anyOpponent = false
+          let anySelf = false
+          for (const { r } of scored) {
+            if (r.kind === 'opponent') {
+              suspended.opponentAnswers++
+              anyOpponent = true
+              opponentKinds.set(r.choiceKind, (opponentKinds.get(r.choiceKind) ?? 0) + 1)
+            } else if (r.kind === 'self') {
+              suspended.selfAnswers++
+              anySelf = true
+              selfKinds.set(r.choiceKind, (selfKinds.get(r.choiceKind) ?? 0) + 1)
+            }
+          }
+          if (anyOpponent) suspended.positionsWithOpponentAnswer++
+          if (anySelf) suspended.positionsWithSelfAnswer++
+        }
 
         // Initiative is a single move, so "tied" means tied with the best alternative: the position
         // where the seeded tie-break decides whether to forfeit the rest of the round.
@@ -206,6 +327,13 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
 
         const action = setupAi(s) ?? ai(s)
         if (!action) break
+        // What the AI actually committed to. Greedy returns one of the `moves` objects, so the
+        // classification is already computed; `setupAi` builds its own, so fall back to resolving.
+        if (scored.length >= 2) {
+          const chosen = scored.find(x => x.m === action)?.r ?? classifyResolution(resolve(s, action), me)
+          if (chosen.kind === 'opponent') suspended.chosenOpponentAnswer++
+          if (chosen.kind === 'self') suspended.chosenSelfAnswer++
+        }
         // Pool size BEFORE the decision, so "skipped at 8" means it already held 8. Skipping with
         // an empty hand is forced, not chosen, so it is not counted.
         const pool = s.players[me].resources.length
@@ -257,6 +385,11 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       flipsPerGame: games === 0 ? 0 : roleFlips / games,
       walledSamples,
       samples: roleSamples,
+    },
+    suspended: {
+      ...suspended,
+      opponentChoiceKinds: rank(opponentKinds),
+      selfChoiceKinds: rank(selfKinds),
     },
   }
 }

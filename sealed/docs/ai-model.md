@@ -12,6 +12,43 @@ initiative and answering triggers, with no per-card rules.
 
 Ties break from `state.rngSeed`, never `Math.random`, so replays and saved records reproduce exactly.
 
+## Quiescent scoring: only finished actions are evaluated
+
+A move that raises a choice has **not finished resolving**. A when-played effect has picked no
+target, a mandatory unique defeat has not happened, a suspended attack has not dealt its damage.
+Scoring that board ranks the move on a position nobody will ever play from.
+
+`ai/search.ts` wraps the evaluation so the owed chain is resolved first: **max** over our own
+answers, since they are an opportunity, and **min** over the opponent's, since they are a threat.
+Whose turn it is comes from `state.activePlayer`, because the engine hands the turn over when an
+action raises a choice the opponent controls and `legalMoves` enumerates only the active player's
+answers. It stops the moment nothing is owed, so it never looks past the end of the action it was
+given.
+
+It is a decorator over any `Evaluator`, not a change to `evaluate`, so the greedy driver takes either
+one and a measurement isolates it.
+
+**Worth 76.7% and 78.4% ± 2.9% across two seeds (1700 mirror games) and 72.7% ± 3.4% on the
+conservative matchup harness (648 games), against the identical evaluation scoring half-resolved
+boards.** By some distance the largest single improvement in the series, because it is a correction
+rather than a refinement: 11.3% of the moves the bot committed to were ranked on a fiction.
+
+The starkest case was the unique rule. Playing a second copy of a unique raises a **mandatory**
+defeat, and the board was scored with both copies still on it, so a duplicate 3/3 read about 13
+points too high and the bot paid a real card for a unit it had to defeat immediately.
+
+Two properties worth keeping:
+
+- **It costs about 2.5x wall clock** (420 games in 74.7s against 29.8s), which is roughly 2.5ms per
+  decision. That is comfortably inside interactive play, so no Web Worker is needed for this depth.
+- **A node budget bounds the worst case**, defaulting well above observed chains. `support` fans out
+  across every ready unit and every legal target, so the cap is a safety rail against the card pool,
+  not a tuning knob. Exhausting it scores the board where it stopped, degrading to the old answer
+  rather than a wrong one.
+
+`greedy-flat` in the registry is the same AI without this, kept so the comparison can be re-run as
+the evaluation changes underneath it.
+
 ## The two halves of `evaluate`
 
 The split is a **hidden-information boundary**, not a tidiness one.
