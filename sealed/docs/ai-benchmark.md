@@ -32,7 +32,7 @@ Everything is optional:
 - `--seed N` the run's seed (default 1). The same seed reproduces the run exactly.
 - `aiA aiB` the two AIs by name (default `random random`). `aiA` plays the "player" seat, `aiB` the
   "opponent" seat. Registered AIs: `random` (rung 0, uniform), `greedy` (rung 1, one-ply, the
-  deployed model), and `greedy-baseline` (the frozen pre-#392 greedy, kept only as a fixed reference
+  deployed model), and `greedy-baseline` (a frozen early greedy, kept only as a fixed reference
   for tuning). More join the list as they are built.
 
 Examples:
@@ -136,7 +136,7 @@ It answers "is the AI overfit to one deck, and is there anything to hand-tune?" 
 the useful gradient comes from measuring a *new* AI against the *current* one here, not against
 random.
 
-## Decision quality: finding blind spots (#393)
+## Decision quality: finding blind spots
 
 Win rate is a blunt instrument for diagnosing an evaluation. It moves a point or two over hundreds
 of games and says nothing about *why*. `--decisions` measures something far sharper: how often the
@@ -151,31 +151,29 @@ greedy driver does. When every candidate scores the same, the seeded tie-break p
 that is a **blind spot**, not a close call. It reports the tie rate per decision kind, with the mean
 number of options so the rate can be read against how much was at stake.
 
-This is what diagnosed #393. Before the fix, **100% of 1417 regroup resource picks were ties**:
-the AI banked a card chosen uniformly at random from an average hand of 4.5, about five times a
-game per side, because `evaluate` read only `hand.length` and every `resourceCard` move therefore
-scored identically. That is invisible in a win rate and unmissable here. It now sits near 0%.
+This is the sharpest diagnostic in the harness, because a blind spot is invisible in a win rate. A
+term the evaluation lacks entirely shows up here as a 100% tie rate on the decision it should be
+deciding, long before it shows up as lost games.
 
-The remaining rates are the roadmap: attacks ~10% (#392), which card to play ~6%. Initiative was
-~21% before #394 and is now ~16%. A decision the evaluation cannot see shows up here long before it
-shows up in a win rate.
+Current rates: attacks ~10%, initiative ~16%, which card to play ~6%, regroup card choice near 0%.
+See [planned-work.md](planned-work.md) for what that ordering implies.
 
 Two behaviours are reported separately, because they are strict public preferences rather than ties
 and so read as behaviour rather than as a gap:
 
 - **regroup banking**: banks versus skips, and the mean pool at each. The skip rate is 0% by
-  construction (see the negative result below).
+  construction, since the pool is valued flat.
 - **initiative**: how often it claims, how often it takes the *cheap* window where the opponent has
-  already passed, and the mean ready units it still had when it claimed mid-phase. The last of those
-  is the sharpest single number in #394: it fell from **2.5 to 0.2**, meaning the bot now claims when
-  it has little left to do rather than throwing away a board full of attackers.
+  already passed, and the mean ready units it still had when it claimed mid-phase. That last number
+  is the clearest read on whether the AI is claiming sensibly: low means it claims when it has little
+  left to do, high means it is throwing away a board full of attackers.
 
-## AI versus AI, per matchup (#319)
+## AI versus AI, per matchup
 
 `--generalise` plays **mirrors**: both seats get the same deck, so it can report per deck but never
 "pool X against pool Y". `--matrix` plays **one AI against itself** to measure deck strength.
-Neither answers "which matchups does this AI improve", which is #319's acceptance bar and #395's
-whole claim.
+Neither answers "which matchups does this AI improve", which is what a role-aware or matchup-
+sensitive change actually claims.
 
 ```bash
 npm run bench --prefix sealed -- --matchups [--games N] [--seed N] aiA aiB
@@ -301,33 +299,11 @@ Two tables, joined on `run_id`.
 The full move list is not stored for completed games (that would be gigabytes over a big run); only
 dropped games are kept whole, and those go to the `failures/` files above.
 
-## Adding a new AI
-
-An AI is just a function from game state to a move, `Ai = (state) => Action | null` (`ai/types.ts`).
-Every opponent wears that one shape. To make a new one runnable by name, add a single line to the
-registry (`ai/registry.ts`):
-
-```ts
-export const AIS: Record<string, Ai> = {
-  random: randomAi,
-  greedy: greedyAi,   // <- the whole change
-}
-```
-
-From then on `npm run bench -- ... greedy random` just works, and nothing else in the codebase needs
-to know the AI exists. This registry is the single seam the entire AI series hangs off.
-
 ## The pieces
 
-All under `src/bench/` and `src/ai/`, pure and framework-free except the command entry point:
+All under `src/bench/`, pure and framework-free except the command entry point. The AI itself lives
+in `src/ai/` and is described in [ai-model.md](ai-model.md).
 
-- `ai/types.ts`, `ai/registry.ts` the `Ai` shape and the named-AI registry.
-- `ai/cardValue.ts` what a card is worth if you get to cast it (cost, stats, keywords, implemented
-  abilities, rarity, aspects, uniqueness). Standalone so #396 and #398 can reuse it.
-- `ai/handValue.ts` what a hand is worth to the player holding it: private information, so it is only
-  ever applied to the seat being scored (see below).
-- `ai/race.ts` reach, clock and role: who gets to lethal first, computed through the rules' own
-  `enemyAttackTargets`. Standalone so #398 and #425 can reuse it.
 - `bench/decisions.ts` the blind-spot diagnostic behind `--decisions`.
 - `bench/aiMatchups.ts` AI-vs-AI across every ordered deck pair, behind `--matchups`.
 - `bench/decks.ts` the fixed sealed deck, built deterministically from the ASH snapshot. For now the
@@ -339,174 +315,6 @@ All under `src/bench/` and `src/ai/`, pure and framework-free except the command
 - `bench/store.ts` the SQLite persistence.
 - `bench/reports.ts` writing a dropped game out as a replayable fixture.
 - `bench/main.ts` the command line: the only impure file (reads arguments, prints, saves).
-
-## Public and private evaluation, and the tie-break rule (#393)
-
-`evaluate` has two halves, and the split is a hidden-information boundary, not a tidiness one.
-
-**`publicScore`** reads only what both players can see, hand SIZE included but never hand contents.
-It is zero-sum: `publicScore(s, me) === -publicScore(s, foe)`, and `aiEvaluate.test.ts` pins that.
-
-**`handValue`** reads card identities, which are hidden. It is therefore applied to the scored seat
-**only**: subtracting the opponent's would be peeking at their hand. `evaluate` is consequently
-subjective rather than zero-sum, which costs nothing at one ply because greedy only ever scores from
-the acting seat. **Anything scoring a position from both seats (#400's pessimistic minimax, #425's
-two-ply) must call `evaluate(s, foe)` rather than negating `evaluate(s, me)`.**
-
-Zero-sum narrowed a **second** time with #395: role-aware weights mean the two seats price the same
-board differently whenever they read different roles, which is that ticket's entire premise. The
-invariant is now **zero-sum while both seats share a role**, and integer-valued always.
-`aiEvaluate.test.ts` pins both, and asserts the asymmetry deliberately rather than tolerating it.
-
-The private half is admitted **as a tie-break only**, and that is a guarantee rather than a tuning
-choice. Every public weight and quantity is an integer, so `publicScore` is integer-valued; squashing
-hand value into `[0, 1)` makes it strictly incapable of overriding a public preference. It can only
-order moves the public half rates equally, exactly the blind spot `--decisions` measures.
-
-That bound was arrived at by measurement, and it matters:
-
-| Hand term | Win rate vs the same AI with the term off |
-| --- | --- |
-| Scaled by the best castable card's value | **40.5%** |
-| Flat bonus, competing with the board score | 49.9% |
-| Flat bonus, bounded below public resolution | **53.5% ± 1.9%** (5040 games) |
-
-The first is instructive. Scaling the "I have a play" bonus by the card's own value seems more
-principled, but a bomb's hand value and its board value are the same order of magnitude, so giving up
-~28 of hand value to gain ~28 of board made the bot **refuse to play its own bombs**. The second
-shows why the bound is needed at all: an unbounded term applies to *every* decision while only
-fixing one, so its distortion grows with its weight (39.8% at moderate weights, 26.0% at large).
-
-## Reading the role from the race (#395)
-
-The AI had no concept of whether it was the aggressor or the defender: it maximised the same fixed
-function from both seats. #395 gives it a role, and reads that role off **who gets to lethal first**
-rather than off board advantage.
-
-That distinction is the ticket. **Board power is not damage that can reach a base.** A control
-player who plays a Sentinel adds one point of power and kills nothing, yet stops the opponent's clock
-dead. Measured over 132 games, at round 3:
-
-| Signal | Went on to win |
-| --- | --- |
-| Faster **clock** | **68.0%** |
-| Board leader (control) | 62.0% |
-| Faster clock, measured at round 5 | 80.5% |
-
-`ai/race.ts` computes reach through **`enemyAttackTargets`**, the same function the rules use to
-decide what a unit may attack, so Sentinel, Saboteur, arena, Hidden and "cannot be attacked" are
-resolved once and not re-derived. Overwhelm tramples past a wall, Restore lengthens the attacker's
-clock, and the clock splits "this round" (ready units only) from the steady rate, which is what makes
-it a race rather than an average. A second copy of that logic in the AI would drift from the rules
-the way the ability lookups did in #417.
-
-**Result: 51.4% ± 0.9%** over ~11,340 games against a role-blind AI (three matched-power seeds:
-50.2%, 52.8%, 51.2%). Real, but roughly a third of what #393 or #394 each returned, and higher shifts
-are worse, so the effect is fragile.
-
-### The bug worth remembering: the role belongs to the DECISION
-
-The first implementation derived the role from each candidate's *resulting* state, which is the
-natural place to put it and is badly wrong. Greedy scores `evaluate(resolve(state, move), me)`, and
-**32.5% of decisions have candidate moves landing in different roles**, so their scores were
-computed with different weight sets and were not comparable. It silently rewarded whichever move
-flipped the role, and it got worse as the shift grew:
-
-| roleShift | per-candidate role | role fixed per decision |
-| --- | --- | --- |
-| 1 | 44.2% | 48.9% |
-| 2 | 39.4% | 48.9% |
-| 3 | 32.7% | 47.4% |
-| 4 | 26.3% | 41.8% |
-
-`makeGreedyAi` now fixes the role once from the position it is deciding in and passes it to every
-candidate via the `Evaluator`'s `asRole` parameter. That is a correctness fix, not a tuning one, and
-it made the whole thing 30% faster as a side effect. Any future context-dependent weighting must do
-the same.
-
-## Pricing the initiative (#394)
-
-`evaluate` read neither `initiative` nor `initiativeTakenBy`, so the AI had **no representation of
-turn order at all**: 21% of 5930 offers tied with the best move and were settled by a coin flip. It
-declined a cheap claim two times in three and made 465 expensive ones, each forfeiting an average of
-2.5 developing actions.
-
-Both halves of the decision are **public**, so unlike #393's hand value this lives in `publicScore`
-and is *allowed* to outrank other moves, which it has to be to ever justify giving up a turn:
-
-```
-initiativeValue(me) = w.initiative * (initiative === me ? +1 : -1)     // acting first next round
-                    - w.claimCost  * forfeitedTempo(me)                // I sit out the rest of it
-                    + w.claimCost  * forfeitedTempo(foe)
-```
-
-`forfeitedTempo` is a player's ready units while `phase === 'action' && initiativeTakenBy === them`.
-That guard is what makes the cheap window fall out **without hardcoding CR 1.15.5c**: claiming into a
-passed opponent ends the phase (`takeInitiative` calls `enterRegroup`), so the resulting state is not
-in the action phase and nothing is charged.
-
-Worth noting the ticket's framing that claiming after their pass "costs nothing" is not quite right.
-Claiming *always* forfeits your own remaining actions; what the cheap window avoids is the usual
-penalty of sitting out while the opponent keeps playing.
-
-**Result: 52.9% ± 1.9%** over 5040 games against the same AI with both weights at 0, confirmed across
-three seeds (52.5%, 54.5%, 52.9%). Behaviour moved as intended: cheap chances taken 31% to 58%, and
-ready units forfeited per mid-phase claim 2.5 to 0.2.
-
-The sweep is the interesting part:
-
-| initiative | claimCost | win rate vs off |
-| --- | --- | --- |
-| 4 | **0** | **41.1%**, the always-claim failure mode, exactly as the ticket predicts |
-| 0 | 3 | 50.0%, cost with no benefit is inert |
-| **2** | **3** | **52.9%** shipped |
-| 4 | 3 | 46.8% |
-| 6 | 3 | 35.4% |
-| 8 | 4 | 29.4% |
-
-Turn order is worth **far less than it looks**: raising the bonus is monotonically worse, because the
-bot buys initiative by giving up whole turns. The `claimCost: 0` control is worth keeping in any
-re-sweep, since it demonstrates the opportunity-cost term rather than the bonus is what makes this
-work.
-
-Out of scope and deferred to the search (#398/#400): "claim when it converts to lethal, or denies
-the opponent lethal" needs to see next round, which one ply cannot.
-
-## A measured negative result: concave resource value (#393 iteration 2)
-
-Recorded so nobody spends an evening re-deriving it.
-
-The greedy AI banks a card at **every** regroup, because banking is a flat public **+1**
-(`resource` 3 minus `card` 2) however deep its pool already is. That looks wrong late on: you draw 2
-at regroup either way, so banking is "+1 resource against +1 card retained", and once the pool
-already casts what you hold, the card should be the better half of that trade. The published
-guidance agrees, and it has a real threshold behind it: deployment needs *controlling* resources
-equal to the leader's cost (CR 2.6.1), so "resource until you can deploy your leader" is a resource
-count, not a feeling.
-
-So `resourceValue` (`ai/evaluate.ts`) was built to make the marginal resource cheaper past a knee,
-with the knee rising to the leader's deploy cost while it is undeployed. **The mechanism works**:
-`--decisions` showed the skip rate move from 0% to 12.5%, every skip at a pool of exactly the knee.
-
-**It did not win.** Against the identical AI with a flat pool, across the coverage decks:
-
-| saturation | surplus | win rate vs flat |
-| --- | --- | --- |
-| 7 | 1 | **49.7% ± 1.9%** (5040 games) |
-| 8 | 0 and 1 | 47.6% ± 3.4% |
-| 6 | 0 and 1 | 46.1% ± 3.4% |
-| 5 | 0 and 1 | 45.6% ± 3.4% |
-
-Monotone in the knee: the more concavity, the worse. It ships **flat** (`resourceSurplus` equal to
-`resource`, which also makes `saturation` inert), and the mechanism is kept only so the question can
-be re-asked cheaply.
-
-Two things are worth carrying forward. First, the obvious explanation is wrong: the bot does **not**
-spend its pool late, committing a mean of 5.9 per round against pools of 7 to 8, so idle resources
-are genuinely real and the premise was not the problem. Second, the likeliest reading is that
-resource count also proxies development and tempo for *every other* decision, so flattening it costs
-more signal than the one regroup decision it buys. That is worth re-testing after **#395**, where a
-role-aware evaluation may separate the two.
 
 ## A note on trusting numbers while the engine still has bugs
 

@@ -1,5 +1,7 @@
 import ashSet from '../fixtures/ashSet.json'
 import baylanExhaust from '../fixtures/reports/baylanExhaust.json'
+import exhaustedLeaderDraw from '../fixtures/reports/exhaustedLeaderDraw.json'
+import haulcraftPrompt from '../fixtures/reports/haulcraftPrompt.json'
 import minefieldArenaChoice from '../fixtures/reports/minefieldArenaChoice.json'
 import vaneFriendlyUpgrade from '../fixtures/reports/vaneFriendlyUpgrade.json'
 import vaneFriendlyUpgradeCards from '../fixtures/reports/vaneFriendlyUpgradeCards.json'
@@ -32,7 +34,7 @@ const ashCards = ashSet as SwuCard[]
  * Filed reports, keyed by name. Imported rather than read from disk so they are typechecked and
  * bundled the same way the other fixtures are; add an entry when a new report is worth keeping.
  */
-const REPORTS: Record<string, unknown> = { baylanExhaust, minefieldArenaChoice, vaneFriendlyUpgrade }
+const REPORTS: Record<string, unknown> = { baylanExhaust, exhaustedLeaderDraw, haulcraftPrompt, minefieldArenaChoice, vaneFriendlyUpgrade }
 
 /**
  * Card data a report needs from outside ASH, since the bundled fixture is ASH only. Keyed by the

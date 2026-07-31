@@ -169,6 +169,8 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'ambush') return "Don't ambush"
       // Having looked at the revealed card (#388), the decline reads as "leave it", not "decline".
       if (choice.kind === 'mayDiscardTop') return 'Leave'
+      // Declining a prevention means the damage lands, which "Decline" alone does not convey (#422).
+      if (choice.kind === 'mayPreventDamage') return 'Take the damage'
       // Never fall through to the kind's internal name: "Skip mayPlayUnitFromDiscard" reached
       // players (#379/#380). An unlabelled decline is still a decline.
       return 'Decline'
@@ -177,6 +179,9 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       const choice = findChoice(state, action.choiceId)
       if (!choice) return 'Accept'
       if (choice.kind === 'payOrExhaust') return `Pay ${choice.cost}`
+      // "Accept" said nothing about what was being accepted, on a choice the player had no reason
+      // to expect at all: it interrupts on the OPPONENT's damage (#422).
+      if (choice.kind === 'mayPreventDamage') return `Prevent ${choice.amount}`
       if (choice.kind === 'mayPlayTopFree') {
         const name = state.cards[choice.cardId]?.name ?? 'card'
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
