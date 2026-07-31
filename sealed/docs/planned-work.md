@@ -9,71 +9,55 @@ The AI's remaining blind spots are measured, not guessed. `npm run bench --prefi
 --decisions` reports how often every candidate move scores identically, so the seeded tie-break
 picks at random:
 
-| Decision | Frequency | Coin-flip rate | Options |
-| --- | --- | --- | --- |
-| Attacks | ~34/game | 10.4% | 8.4 |
-| Answering a pending choice | ~6/game | 26.8% | 6.5 |
-| Initiative | ~9/game | 16.5% | n/a |
-| Which card to play | ~23/game | 5.8% | 4.9 |
+| Decision | Coin-flip rate | Options |
+| --- | --- | --- |
+| Initiative | 18.2% | n/a |
+| Which card to play | 7.4% | 4.7 |
+| Attacks | 1.6% | 7.8 |
+| Regroup: which card | 0.1% | 4.8 |
 
 ### One search, three policies
 
-The three remaining search tickets are not three features. They are **one bounded tree search over
-`legalMoves`** where a node's owner is `state.activePlayer`, differing only in what happens when that
-owner is not us:
+The search tickets are not separate features. They are **one bounded tree search over `legalMoves`**
+where a node's owner is `state.activePlayer`, differing only in what happens when that owner is not
+us:
 
 | Ticket | At an opponent node | Depth |
 | --- | --- | --- |
-| #400 | minimise our evaluation | the intervening-choice chain only |
+| #400 (shipped) | minimise our evaluation | the owed-choice chain only |
 | #410 | null move (pass), continue our own sequence | our own actions, budgeted |
 | #425 | minimise our evaluation | one full reply |
 
-So they share `ai/search.ts`: determinism, the node budget and the leaf-scoring rule live in one
-place, and each ticket is a measurement rather than a separate implementation. It also makes #425's
-standing question (does two-ply justify its cost, given MCTS supersedes it?) a config flag rather
-than a new bot.
+They share `ai/search.ts`: determinism, the node budget and the leaf-scoring rule live in one place,
+and each ticket is a measurement rather than a separate implementation. It also makes #425's standing
+question (does two-ply justify its cost, given MCTS supersedes it?) a config flag rather than a new
+bot.
 
-### Measured: who owes the unresolved answer
+### #400 quiescent scoring: shipped
 
-`--decisions` reports how often a candidate move is scored before its action has finished, split by
-who owes the outstanding choice. Over 210 games, 14,536 decisions, 142,640 candidates:
+Measuring who owes the unresolved answer decided the order, and inverted it. The pessimistic half
+that #400 originally scoped touched 5.1% of positions; the same recursion pointed at our **own** owed
+choices touched 42.9%. So the ticket became "never score a half-resolved action", both sides at once.
 
-| | positions | candidates | chosen move |
-| --- | --- | --- | --- |
-| **We** owe the answer | **42.9%** | 18.5% | **11.3%** |
-| **They** owe the answer | 5.1% | 1.3% | 0.5% |
+**76.7% and 78.4% ± 2.9% across two seeds (1700 mirror games), 72.7% ± 3.4% on the matchup harness.**
+The largest single improvement in the series, because it corrects a fiction rather than refining a
+judgement. See [ai-model.md](ai-model.md) for the model and its properties.
 
-Our own owed choices, by kind: `mayLastingBuff` 8929, `selectUniqueUnitToDefeat` 3615, `support`
-1762, `mayDamage` 1037. Theirs are a thin spread: `mayGiveTokens` 421, `damageAnyBases` 399,
-`mayPreventDamage` 284, `peekTopDiscard` 281.
+### The order from here
 
-Two things follow.
-
-**The pessimistic half is a footnote and the self half is the main event.** Modelling the opponent's
-intervening choices touches 5.1% of decisions and 0.5% of actual moves. Finishing our own action
-before scoring it touches 42.9% and 11.3%.
-
-**`selectUniqueUnitToDefeat` at 3615 is a live blunder, not a horizon effect.** Playing a second copy
-of a unique raises a mandatory defeat choice, and greedy scores the board with **both copies still on
-it**: `unit` 4 plus power and HP, so a duplicate 3/3 reads about 13 points too high. The bot is
-paying real cards for a unit it is about to be forced to defeat.
-
-### The order
-
-1. **#400 quiescent scoring.** Never score a half-resolved action: expand the owed-choice chain
-   before evaluating, taking the max over ours and the min over theirs. Both sides at once, because
-   it is one recursion and the ticket already owns the pessimistic half. Bounded by the chain, so it
-   needs no beam and no budget, and it is where the measurement says the value is.
-2. **#410 own-turn beam.** The genuinely expensive part: expanding **separate actions**, with a null
-   move for the opponent, beam width K over depth, role fixed once at the root. Note `support` (1762)
-   sits on this side of the line rather than in quiescence, since it opens a whole extra attack. The
-   null-move assumption is where the strength comes from and where it leaks: it is what makes a
+1. **#410 own-turn beam.** The genuinely expensive part: expanding **separate actions**, with a null
+   move for the opponent, beam width K over depth, role fixed once at the root. The null-move
+   assumption is where the strength comes from and where it leaks: it is what makes a
    sacrifice-into-Sentinel look right, and what will over-value lines the opponent can interrupt.
-3. **#425 opponent reply.** The same pessimism one level wider, beam-limited to the top candidates.
+2. **#425 opponent reply.** The same pessimism one level wider, beam-limited to the top candidates.
 
-Quiescence still goes first for the original reason as well: a beam scores hundreds of leaves where
-greedy scored a dozen, so **any half-resolved leaf scoring is inherited and multiplied**. Fix leaf
-scoring before deepening.
+**Re-measure before starting #410.** Quiescence moved every rate it touches: attack ties fell from
+10.2% to 1.6%, and attacks were the blind spot #410 was sized against. Its case now rests on the
+multi-step lines themselves rather than on a tie rate, so take the numbers again first.
+
+**Measure four configurations, not two.** #410 is optimistic (the opponent does nothing) while #425
+is pessimistic (they do the worst visible thing). Those pull in opposite directions and may not
+compose additively, so the matrix is: neither, #410 alone, #425 alone, both.
 
 **Measure four configurations, not two.** #410 is optimistic (the opponent does nothing) while #400
 and #425 are pessimistic (they do the worst visible thing). Those pull in opposite directions and may

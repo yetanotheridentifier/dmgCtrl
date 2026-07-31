@@ -10,6 +10,7 @@ import { resolve } from '../engine/resolve'
 import { seededShuffle, nextSeed } from '../engine/rng'
 import { BUILD_TAG } from '../buildTag'
 import { evaluate } from '../ai/evaluate'
+import { makeQuiescent } from '../ai/search'
 import { resolveAi } from '../ai/registry'
 import { setupAi } from '../ai/setupAi'
 import { role, reachSteady, type Role } from '../ai/race'
@@ -190,6 +191,9 @@ interface Tally {
 
 const empty = (): Tally => ({ offered: 0, tied: 0, candidates: 0 })
 
+/** The greedy driver's own scoring function, so a tie measured here is a tie it would coin-flip. */
+const score = makeQuiescent(evaluate)
+
 /** Choice kinds, most frequent first. Count then name, so the order is stable across runs rather
  *  than following insertion. */
 const rank = (counts: Map<string, number>): Array<{ kind: string; count: number }> =>
@@ -254,7 +258,10 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         const asRole = role(s, me)
         const scored = moves.map(m => {
           const next = resolve(s, m)
-          return { m, v: evaluate(next, me, asRole), r: classifyResolution(next, me) }
+          // Scored with quiescence, as the greedy driver does, so a tie counted here is a tie there.
+          // The half-resolution counts alongside are taken from the RAW state, since they measure how
+          // often quiescence has anything to do rather than what it concluded.
+          return { m, v: score(next, me, asRole), r: classifyResolution(next, me) }
         })
         const best = Math.max(...scored.map(x => x.v))
 

@@ -6,6 +6,7 @@ import { resolve } from '../engine/resolve'
 import { seededUnit } from '../engine/rng'
 import { evaluate, type Evaluator } from './evaluate'
 import { evaluateBaseline } from './evaluateBaseline'
+import { makeQuiescent } from './search'
 import { role } from './race'
 
 /**
@@ -49,8 +50,13 @@ export function makeGreedyAi(evaluate: Evaluator): Ai {
   }
 }
 
-/** The live greedy AI (unit-count-centred evaluation, #392). */
-export const greedyAi = makeGreedyAi(evaluate)
+/** The live greedy AI: unit-count-centred evaluation (#392), scored only on finished actions (#400). */
+export const greedyAi = makeGreedyAi(makeQuiescent(evaluate))
+
+/** Greedy with the identical evaluation but scoring half-resolved actions, so quiescence can be
+ *  measured in isolation. Kept registered rather than built ad hoc for a run, because the comparison
+ *  is re-run every time the evaluation changes underneath it. */
+export const greedyFlatAi = makeGreedyAi(evaluate)
 
 /** The frozen pre-#392 greedy, kept only as a fixed comparison point for the generalisation runs. */
 export const greedyBaselineAi = makeGreedyAi(evaluateBaseline)

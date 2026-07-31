@@ -31,9 +31,14 @@ Everything is optional:
 - `--games N` how many games to play (default 100).
 - `--seed N` the run's seed (default 1). The same seed reproduces the run exactly.
 - `aiA aiB` the two AIs by name (default `random random`). `aiA` plays the "player" seat, `aiB` the
-  "opponent" seat. Registered AIs: `random` (rung 0, uniform), `greedy` (rung 1, one-ply, the
-  deployed model), and `greedy-baseline` (a frozen early greedy, kept only as a fixed reference
-  for tuning). More join the list as they are built.
+  "opponent" seat. Registered AIs:
+  - `random` rung 0, uniform.
+  - `greedy` rung 1, one-ply with quiescent scoring. The deployed model.
+  - `greedy-baseline` a frozen early greedy, kept only as a fixed reference for tuning.
+  - `greedy-flat` the live model minus quiescent scoring. Unlike the baseline it tracks every other
+    evaluation change, which is what makes it a control for that one feature rather than a snapshot.
+
+  More join the list as they are built.
 
 Examples:
 
@@ -155,8 +160,12 @@ This is the sharpest diagnostic in the harness, because a blind spot is invisibl
 term the evaluation lacks entirely shows up here as a 100% tie rate on the decision it should be
 deciding, long before it shows up as lost games.
 
-Current rates: attacks ~10%, initiative ~16%, which card to play ~6%, regroup card choice near 0%.
+Current rates: initiative ~18%, which card to play ~7%, attacks ~2%, regroup card choice near 0%.
 See [planned-work.md](planned-work.md) for what that ordering implies.
+
+Attacks were the highest-volume blind spot at ~10% until scoring became quiescent, which is what a
+tie rate is for: an attack that suspended on a choice used to be scored before it had done anything,
+so it scored the same as every other attack that suspended.
 
 Two behaviours are reported separately, because they are strict public preferences rather than ties
 and so read as behaviour rather than as a gap:
@@ -181,8 +190,13 @@ unfinished first one. Reported at three granularities (candidates scored, positi
 candidate is affected, and moves actually chosen) plus the choice kinds driving each side, since one
 card causing all of it is a different problem from a broad spread.
 
-Current rates: **we** owe the answer in 42.9% of positions and 11.3% of chosen moves; the opponent
-owes it in 5.1% and 0.5%.
+Current rates: **we** owe the answer in 33.8% of positions and 17.0% of chosen moves; the opponent
+owes it in 4.6% and 0.4%.
+
+These are counted on the **raw** state a move produces, so they measure how often quiescence has
+something to do, not what it concluded. The chosen-move rate going **up** as the positions rate came
+down is the fix showing its work: the AI used to avoid cards whose when-played effect it could not
+see, and now it plays them.
 
 ## AI versus AI, per matchup
 
