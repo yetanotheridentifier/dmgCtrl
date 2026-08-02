@@ -69,29 +69,40 @@ guessing by a wide margin.
    all three harnesses, and the wall clock no longer decides a game's fate. An AI measured against
    itself reads 49.99% over six seeds, against 49.67% before. See
    [ai-benchmark.md](ai-benchmark.md).
-3. **#432 hidden-information sizing.** Both cheap measurements are **done**, over 1260 games.
-   Lethal is available to the opponent in 6.6% of decisions and is **nearly absent before round 5**
-   (twice in 60,749 decisions), so the initiative-lethal rules are narrow. Of the positions where
-   they could finish, **76.6% were unavoidable**, and the remaining avoidable ones carry a 10.5 point
-   loss-rate penalty at five standard errors.
+3. ~~**#432 hidden-information sizing.**~~ Done, over 1260 games, and the planned oracle was dropped
+   as unnecessary. A **one-action** lethal is available to the opponent in 2.2% of decisions and is
+   **absent before round 5** (twice in 60,749 decisions across rounds 1 to 4), so the
+   initiative-lethal rules are narrow. Of the positions where they could finish, **82% were
+   unavoidable**; the 408 avoidable ones carry a **22.1 point** loss-rate penalty at 7.8 standard
+   errors, a ceiling of roughly +6.4 points.
 
-   **All of it is public**, so the headroom belongs to a deeper public search rather than to a belief
-   model, which raises the bar for #434 to #436 considerably. The next step is a **public tap-out
-   gate A/B** rather than the oracle originally scoped: it turns a correlation into a measured win
-   rate, ships on its own merits if it wins, and cleanly separates "cannot search" from "cannot see
-   their hand".
+   **All of it is public**, so the headroom belongs to evaluation and search, not to a belief model,
+   which raises the bar for #434 to #436 considerably.
 
-Then the search work:
+   Two corrections came out of it and both matter more than the numbers. Lethal was first measured as
+   **aggregate** reach across ready units, which overstated it threefold: players alternate actions,
+   so three units totalling lethal is three of our actions with three of theirs in between.
+   `canFinishThisAction` is the strict reading and the only one a single ply can guarantee. And there
+   is no "this turn" in this game, which is what re-scoped #433 below.
 
-4. **#433 `hasLethal`.** A shared one-turn lethal solver, perfect information. #410 needs it
-   regardless of what #432 says.
+Then, in order:
+
+4. **#443 lethal exposure.** The cheap public term the sizing pointed at: prefer a move that does not
+   leave the opponent able to kill us with one attack. It cancels itself in the 82% of positions
+   where every move is exposed, and it rewards playing the answer (a Sentinel, an exhaust, a removal)
+   because that makes the check false. Symmetric, integer and public, so it disturbs no invariant.
 5. **#410 own-turn beam.** Expanding **separate actions**, with a null move for the opponent, beam
    width K over depth, role fixed once at the root. The null-move assumption is where the strength
    comes from and where it leaks. **Its original justification is gone**: it was sized on attack ties
-   at 10.2%, now 1.6% after quiescence. It now rests on initiative (18.2% ties, the largest remaining
-   blind spot) and on the multi-step lines themselves, which need a scripted position rather than a
-   rate.
-6. **#425 opponent reply**, public information only. The cheap first step.
+   at 10.2%, now 1.7% after quiescence. It now rests on initiative (18.2% ties, ~7.4 coin flips a
+   game, the largest remaining blind spot) and on the multi-step lines themselves, which need a
+   scripted position rather than a rate.
+6. **#433 lethal, as a terminal condition of #410**, not a standalone solver. "Can I win this turn"
+   assumes the opponent does nothing, which is #410's null-move assumption, so this is that search
+   with a different finish line. What it adds over `canFinishThisAction` is the **hand**: a burn
+   event, a pump, a when-played base hit, or clearing a Sentinel then swinging. (Ambush is not a
+   closer: `legalMoves` only ever offers it unit targets, so it reaches a base solely via Overwhelm.)
+7. **#425 opponent reply**, public information only. The cheap first step.
 
 **Measure four configurations, not two.** #410 is optimistic (the opponent does nothing) while #425
 is pessimistic (they do the worst visible thing). Those pull in opposite directions and may not
@@ -99,8 +110,10 @@ compose additively, so the matrix is: neither, #410 alone, #425 alone, both.
 
 ### The opponent model, gated
 
-#434 pool, #435 sampler, #436 `P(lethal)`, #437 calibration, #438 learned priors, #439 PIMC. All
-**gated on #432**: they are the heaviest machinery in the series, and their originally proposed first
+#434 pool, #435 sampler, #436 `P(lethal)`, #437 calibration, #438 learned priors, #439 PIMC. The
+gate is now **whatever #443 and #410 fail to recover**, which is a harder bar than #432 originally
+set: the belief model does not need to beat zero, it needs to beat the public version. They are the
+heaviest machinery in the series, and their originally proposed first
 customer (the carried initiative rules) is the weakest term in the evaluation, worth 2 to 3 points in
 total. If the belief model is built, its first customer should be the **general tap-out risk gate**,
 which applies to every action-phase decision rather than the ~9 initiative decisions a game.

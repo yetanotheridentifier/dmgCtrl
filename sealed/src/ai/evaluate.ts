@@ -2,7 +2,7 @@ import type { GameState, PlayerId } from '../engine/types'
 import { opponentOf } from '../engine/types'
 import { effectivePower, effectiveHp } from '../engine/stats'
 import { handValue, DEFAULT_HAND_WEIGHTS, type HandWeights } from './handValue'
-import { role, type Role } from './race'
+import { role, canFinishThisAction, type Role } from './race'
 
 /**
  * Board evaluation for the greedy AI (#391), unit-count-centred for trades (#392): a single number,
@@ -82,6 +82,22 @@ export interface EvalWeights {
    * Zero disables role awareness entirely, which is the control the sweep measures against.
    */
   roleShift: number
+  /**
+   * Being one enemy action away from death, and having them one action away from ours (#443).
+   *
+   * Applied symmetrically, so `publicScore` stays zero-sum, and it reads only the board, so it stays
+   * public. Two properties make it unusually well behaved:
+   *
+   * - **It cancels where it cannot help.** 82% of exposed positions are exposed under EVERY legal
+   *   move, and an identical penalty on every candidate changes no ranking. It discriminates only in
+   *   the 18% where a real choice exists, with no special-casing.
+   * - **It rewards the answer, not just the retreat.** Playing a Sentinel, exhausting the attacker or
+   *   killing it all make the check false, so those moves score better for free.
+   *
+   * A weight rather than a prohibition: sometimes every move is exposed, and sometimes accepting it
+   * is right. A winning move still scores WIN, so the bot never refuses a win to stay safe.
+   */
+  lethalExposure: number
   /** Private half: what the scored seat's own hand is worth (#393). See `handValue`. */
   hand: HandWeights
 }
@@ -119,6 +135,10 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   // effect is modest at 51.4% +/- 0.9% over ~11,340 games (three matched-power seeds: 50.2%, 52.8%,
   // 51.2%) against a role-blind AI. Roughly a third of what #393 or #394 each returned.
   roleShift: 1,
+  // #443. Sized to outweigh a good trade (a strong unit is worth roughly 20 here) without
+  // approaching a win, then swept. Measured before building: the 408 avoidable exposures across 1260
+  // games carried a 22.1 point loss-rate penalty, 68.9% against a 46.8% baseline.
+  lethalExposure: 24,
   hand: DEFAULT_HAND_WEIGHTS,
 }
 
@@ -281,8 +301,12 @@ export function makePublicScore(w0: EvalWeights): Evaluator {
     const resources = resourceValue(state, me, w) - resourceValue(state, foe, w)
     const tempo = w.readyUnit * (readyUnits(state, me) - readyUnits(state, foe))
     const initiative = initiativeValue(state, me, w)
+    // Symmetric, so this stays zero-sum: being one action from killing them is worth exactly what
+    // being one action from death costs.
+    const exposure = w.lethalExposure
+      * ((canFinishThisAction(state, me) ? 1 : 0) - (canFinishThisAction(state, foe) ? 1 : 0))
 
-    return baseTerm + board + cards + resources + tempo + initiative
+    return baseTerm + board + cards + resources + tempo + initiative + exposure
   }
 }
 
