@@ -69,11 +69,17 @@ guessing by a wide margin.
    all three harnesses, and the wall clock no longer decides a game's fate. An AI measured against
    itself reads 49.99% over six seeds, against 49.67% before. See
    [ai-benchmark.md](ai-benchmark.md).
-3. **#432 hidden-information sizing.** Measurement 1 is **done**: lethal is available to the
-   opponent in 6.6% of decisions, about five a game, and is **nearly absent before round 5** (2 of
-   the 10,135 decisions in rounds 1 to 4). So the initiative-lethal rules are narrow, while the
-   tap-out risk gate survives as the better customer for a lethal check. Measurement 2, the
-   perfect-information upper bound, still gates the belief model.
+3. **#432 hidden-information sizing.** Both cheap measurements are **done**, over 1260 games.
+   Lethal is available to the opponent in 6.6% of decisions and is **nearly absent before round 5**
+   (twice in 60,749 decisions), so the initiative-lethal rules are narrow. Of the positions where
+   they could finish, **76.6% were unavoidable**, and the remaining avoidable ones carry a 10.5 point
+   loss-rate penalty at five standard errors.
+
+   **All of it is public**, so the headroom belongs to a deeper public search rather than to a belief
+   model, which raises the bar for #434 to #436 considerably. The next step is a **public tap-out
+   gate A/B** rather than the oracle originally scoped: it turns a correlation into a measured win
+   rate, ships on its own merits if it wins, and cleanly separates "cannot search" from "cannot see
+   their hand".
 
 Then the search work:
 

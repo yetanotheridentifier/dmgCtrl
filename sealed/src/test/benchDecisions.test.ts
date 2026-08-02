@@ -154,6 +154,21 @@ describe('runDecisions', () => {
     }
   })
 
+  /**
+   * The headroom a tap-out risk gate could actually recover (#432). Not "how often could they
+   * finish", which includes positions already lost, but "how often did the bot walk into a lethal it
+   * had a legal move to avoid", and how often that preceded losing the game.
+   */
+  it('reports avoidable lethal exposure and what it cost', () => {
+    const e = report.exposure
+    expect(e.decisions).toBeGreaterThan(0)
+    expect(e.avoidable).toBeLessThanOrEqual(e.exposed)
+    expect(e.exposed).toBeLessThanOrEqual(e.decisions)
+    expect(e.lostAfterAvoidable).toBeLessThanOrEqual(e.gamesWithAvoidable)
+    expect(e.gamesWithAvoidable).toBeLessThanOrEqual(e.games)
+    expect(e.losses).toBeLessThanOrEqual(e.games)
+  })
+
   it('is deterministic for a given seed', () => {
     expect(runDecisions({ gamesPerDeck: 1, seed: 4242 })).toEqual(report)
   }, 120_000)

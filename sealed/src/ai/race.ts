@@ -115,6 +115,32 @@ export function canFinishNow(state: GameState, seat: PlayerId): boolean {
   return clock(state, seat) === 1
 }
 
+/** Base HP `seat` still has to get through, or 0 once the base is already dead. */
+function remainingBase(state: GameState, seat: PlayerId): number {
+  const base = state.players[opponentOf(seat)].base
+  return Math.max(0, (state.cards[base.cardId]?.hp ?? 30) - base.damage)
+}
+
+/**
+ * Can `seat` win with a **single action**?
+ *
+ * Strictly stronger than `canFinishNow`, and the difference is not a detail. Players alternate
+ * actions, so attacking with three units costs three of your actions with three of theirs in
+ * between: an aggregate reach of 12 against a 12 HP base is not a kill, it is an intention the
+ * opponent gets three chances to answer.
+ *
+ * One ply can only ever guarantee this version (see `takesLethal.test.ts`), so it is the honest
+ * denominator for "the AI had a win available and took it".
+ *
+ * Still blind to the hand, so it remains a lower bound: an event finisher, an Ambush unit or a pump
+ * can all win in one action and none of them are visible here.
+ */
+export function canFinishThisAction(state: GameState, seat: PlayerId): boolean {
+  const remaining = remainingBase(state, seat)
+  if (remaining <= 0) return false
+  return state.players[seat].units.some(u => !u.exhausted && unitReach(state, seat, u) >= remaining)
+}
+
 /**
  * Who is the beatdown, read off the live board. Integer rounds give a natural deadband: the role
  * only moves when the clocks genuinely separate, so a single point of damage cannot flip it.

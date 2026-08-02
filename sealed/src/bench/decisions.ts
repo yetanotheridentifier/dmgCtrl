@@ -13,7 +13,7 @@ import { evaluate } from '../ai/evaluate'
 import { makeQuiescent } from '../ai/search'
 import { resolveAi } from '../ai/registry'
 import { setupAi } from '../ai/setupAi'
-import { role, reachSteady, canFinishNow, type Role } from '../ai/race'
+import { role, reachSteady, canFinishNow, canFinishThisAction, type Role } from '../ai/race'
 import { buildCoverageDecks } from './coverageDecks'
 
 /**
@@ -184,12 +184,61 @@ export interface SuspendedStat {
  */
 export interface LethalStat {
   decisions: number
-  /** Decisions where the acting seat could finish the enemy base with what it has ready. */
+  /** Decisions where the acting seat's ready units AGGREGATE to lethal. */
   ours: number
-  /** Decisions where the opponent could finish the acting seat's base with what THEY have ready. */
+  /** Decisions where the opponent's ready units aggregate to lethal. */
   theirs: number
+  /**
+   * The strict readings: a **single action** finishes it. Players alternate, so an aggregate spread
+   * over three units is three attacks with three opponent replies in between, not a kill. One ply
+   * can only guarantee the single-action version, so this is the honest denominator.
+   */
+  oursOneAction: number
+  theirsOneAction: number
   /** Split by round: a rate concentrated late is worth much less than one spread through the game. */
   byRound: Array<{ round: number; decisions: number; ours: number; theirs: number }>
+}
+
+/**
+ * Whether a decision walked into a lethal it could have avoided.
+ *
+ * `unavoidable` is the distinction that matters: if every legal move leaves the opponent able to
+ * finish, the position is already lost and a risk gate recovers nothing. Counting those as headroom
+ * would inflate the case for the whole belief-model programme.
+ */
+export function classifyExposure(chosenExposed: boolean, anyCandidateSafe: boolean): 'safe' | 'avoidable' | 'unavoidable' {
+  if (!chosenExposed) return 'safe'
+  return anyCandidateSafe ? 'avoidable' : 'unavoidable'
+}
+
+/**
+ * Headroom for a tap-out risk gate (#432): not how often the opponent *could* finish, but how often
+ * the AI **chose** to let them when it had a legal alternative, and what that cost.
+ *
+ * Needs no oracle, which is the point of measuring it this way. It also splits the question the
+ * belief model is really being asked: exposure visible on the public board is a SEARCH failure that
+ * two-ply fixes with no hidden information, and only what is left can justify sampling a hand.
+ */
+export interface ExposureStat {
+  decisions: number
+  /** The chosen move left the opponent able to finish. */
+  exposed: number
+  /** Of those, a legal move existed that would not have. */
+  avoidable: number
+  /** Of those, every legal move led there anyway: already lost, nothing to recover. */
+  unavoidable: number
+  games: number
+  /** Games decided rather than drawn, the denominator for what a gate could have saved. */
+  losses: number
+  /** Seat-games (two per game) where that seat made at least one avoidable exposure. */
+  gamesWithAvoidable: number
+  /** Of those, how many that seat lost. */
+  lostAfterAvoidable: number
+  /** Seat-games with no avoidable exposure: the control. */
+  gamesWithoutAvoidable: number
+  /** Of those, how many that seat lost. The gap against `lostAfterAvoidable` is the whole finding,
+   *  because "39% of losses followed one" means nothing without knowing the base rate. */
+  lostWithoutAvoidable: number
 }
 
 export interface DecisionReport {
@@ -202,6 +251,7 @@ export interface DecisionReport {
   role: RoleStat
   suspended: SuspendedStat
   lethal: LethalStat
+  exposure: ExposureStat
 }
 
 interface Tally {
@@ -261,6 +311,12 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   const opponentKinds = new Map<string, number>()
   const selfKinds = new Map<string, number>()
   const lethalByRound = new Map<number, { decisions: number; ours: number; theirs: number }>()
+  let oursOneAction = 0
+  let theirsOneAction = 0
+  const exposure = {
+    decisions: 0, exposed: 0, avoidable: 0, unavoidable: 0, games: 0, losses: 0,
+    gamesWithAvoidable: 0, lostAfterAvoidable: 0, gamesWithoutAvoidable: 0, lostWithoutAvoidable: 0,
+  }
 
   decks.forEach((deck, d) => {
     for (let g = 0; g < config.gamesPerDeck; g++) {
@@ -271,6 +327,8 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       games++
       let lastRole: Exclude<Role, 'neutral'> | null = null
       let sampledRound = 0
+      // Per seat, so an exposure can be charged to whoever made it when the game is decided.
+      const avoidableBy: Record<PlayerId, boolean> = { player: false, opponent: false }
 
       for (let i = 0; i < ceiling && s.winner === null; i++) {
         const moves = legalMoves(s)
@@ -279,12 +337,17 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         // The role is fixed once per decision, exactly as the greedy driver does it, so a tie here
         // is a tie there.
         const asRole = role(s, me)
+        const foe = opponentOf(me)
         const scored = moves.map(m => {
           const next = resolve(s, m)
           // Scored with quiescence, as the greedy driver does, so a tie counted here is a tie there.
           // The half-resolution counts alongside are taken from the RAW state, since they measure how
           // often quiescence has anything to do rather than what it concluded.
-          return { m, v: score(next, me, asRole), r: classifyResolution(next, me) }
+          // Exposure uses the STRICT reading: handing them a kill they can take with one action,
+          // before we act again. The aggregate reading counts lines needing several of their actions
+          // with several of ours in between, which is a threat rather than a kill, and it inflated
+          // this measurement threefold.
+          return { m, v: score(next, me, asRole), r: classifyResolution(next, me), exposed: canFinishThisAction(next, foe) }
         })
         const best = Math.max(...scored.map(x => x.v))
 
@@ -345,6 +408,8 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           bucket.decisions++
           if (canFinishNow(s, me)) bucket.ours++
           if (canFinishNow(s, opponentOf(me))) bucket.theirs++
+          if (canFinishThisAction(s, me)) oursOneAction++
+          if (canFinishThisAction(s, opponentOf(me))) theirsOneAction++
           lethalByRound.set(s.round, bucket)
         }
 
@@ -371,6 +436,16 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           const chosen = scored.find(x => x.m === action)?.r ?? classifyResolution(resolve(s, action), me)
           if (chosen.kind === 'opponent') suspended.chosenOpponentAnswer++
           if (chosen.kind === 'self') suspended.chosenSelfAnswer++
+
+          // Did this move hand them lethal, and was there a legal move that would not have? A forced
+          // move is excluded above, because "unavoidable" is already its whole answer.
+          const picked = scored.find(x => x.m === action)
+          const chosenExposed = picked ? picked.exposed : canFinishThisAction(resolve(s, action), foe)
+          const verdict = classifyExposure(chosenExposed, scored.some(x => !x.exposed))
+          exposure.decisions++
+          if (verdict !== 'safe') exposure.exposed++
+          if (verdict === 'avoidable') { exposure.avoidable++; avoidableBy[me] = true }
+          if (verdict === 'unavoidable') exposure.unavoidable++
         }
         // Pool size BEFORE the decision, so "skipped at 8" means it already held 8. Skipping with
         // an empty hand is forced, not chosen, so it is not counted.
@@ -384,6 +459,21 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           else { forfeitedCount++; forfeited += s.players[me].units.filter(u => !u.exhausted).length }
         }
         s = resolve(s, action)
+      }
+
+      // Charge each seat's avoidable exposures against whether that seat actually lost. A gate can
+      // only ever recover games where the exposure preceded the defeat.
+      exposure.games++
+      const loser = s.winner === 'player' ? 'opponent' : s.winner === 'opponent' ? 'player' : null
+      if (loser !== null) exposure.losses++
+      for (const seat of ['player', 'opponent'] as PlayerId[]) {
+        if (avoidableBy[seat]) {
+          exposure.gamesWithAvoidable++
+          if (seat === loser) exposure.lostAfterAvoidable++
+        } else {
+          exposure.gamesWithoutAvoidable++
+          if (seat === loser) exposure.lostWithoutAvoidable++
+        }
       }
     }
   })
@@ -434,7 +524,10 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       decisions: [...lethalByRound.values()].reduce((n, b) => n + b.decisions, 0),
       ours: [...lethalByRound.values()].reduce((n, b) => n + b.ours, 0),
       theirs: [...lethalByRound.values()].reduce((n, b) => n + b.theirs, 0),
+      oursOneAction,
+      theirsOneAction,
       byRound: [...lethalByRound].sort(([a], [b]) => a - b).map(([round, b]) => ({ round, ...b })),
     },
+    exposure,
   }
 }

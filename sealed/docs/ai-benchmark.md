@@ -219,9 +219,54 @@ rules' own targeting rather than a second damage sum).
 It is the ceiling on every rule built over a lethal solver: an initiative-lethal rule or a tap-out
 risk gate can only fire as often as lethal exists.
 
-Current rates: **we** could finish in 5.9% of decisions, **they** could in 6.6%, which is about five
-decisions a game. Almost all of it is late: rounds 1 to 4 hold two thirds of all decisions and
-produce lethal in **2 of 10,135**, rising to 11.5% at round 5 and 31.2% at round 6.
+**Read the one-action figure, not the aggregate.** `canFinishNow` sums every ready unit, but players
+alternate actions, so three units totalling lethal is three of your actions with three of theirs in
+between: a threat, not a kill. `canFinishThisAction` asks whether a single unit can do it alone,
+which is the only thing one ply can guarantee, and it is three times rarer.
+
+Current rates over 1260 games:
+
+| | Aggregate | One action |
+| --- | --- | --- |
+| We could finish | 5.8% | **1.7%** |
+| They could finish | 6.6% | **2.2%** |
+
+Almost all of it is late. Rounds 1 to 4 hold two thirds of all decisions and produce lethal **twice
+in 60,749**, rising to 11.5% at round 5 and peaking near 33% at round 7. That one is arithmetic
+rather than measurement: bases are ~30 HP and no early board approaches it.
+
+### Avoidable exposure
+
+The same run asks the sharper question: not how often the opponent *could* finish, but how often the
+AI **chose** to let them when a legal move existed that would not have. That is the headroom a
+tap-out risk gate could recover, and it needs no opponent model to measure.
+
+Measured with the **one-action** predicate, since that is what the opponent can take before we act
+again.
+
+| | |
+| --- | --- |
+| Decisions handing them lethal | 2.5% |
+| ...of which **unavoidable** | **82.0%** |
+| ...of which avoidable | 18.0%, so 408 decisions in 89,546 |
+| Seat loss rate, made an avoidable exposure | 68.9% |
+| Seat loss rate, made none | 46.8% |
+
+**Four fifths of exposures are unavoidable**: every legal move led there, the position was already
+lost, and no gate recovers it. That is why the raw "they could finish" rate overstates the
+opportunity.
+
+The 22.1 point loss-rate gap is 7.8 standard errors. Read it as **correlation**: an avoidable
+exposure is plausibly a symptom of a losing position rather than its cause, and the safe alternative
+may be bad for other reasons. The optimistic ceiling is about +6.4 points of win rate, concentrated
+in a few hundred decisions rather than spread thin.
+
+Worth knowing that measuring this with the aggregate predicate gave 7.4% exposure and a 10.5 point
+gap: a threefold higher rate with less than half the effect. Slow threats counted as kills dilute
+exactly the signal the measure exists to find.
+
+Both halves are measured from **public** information, so this headroom belongs to a deeper public
+search rather than to any hidden-information model.
 
 Two things to hold onto when reading it:
 

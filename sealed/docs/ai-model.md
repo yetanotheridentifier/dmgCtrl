@@ -12,6 +12,20 @@ initiative and answering triggers, with no per-card rules.
 
 Ties break from `state.rngSeed`, never `Math.random`, so replays and saved records reproduce exactly.
 
+## A win in one action is always taken
+
+`evaluate` returns +/-WIN = 1,000,000 for a decided game, while every other term is a small weight
+times a board-sized quantity. No reachable material score approaches a million, so **a move that wins
+is always the unique maximum** and the driver must pick it. That is arithmetic, not tuning, and
+`takesLethal.test.ts` pins it: capping the evaluation, normalising it, or letting the private hand
+term escape its `[0, 1)` bound would each quietly turn "certain win" into "quite a good move".
+
+The guarantee stops at **one action**. A lethal needing two attacks is not one action, and since
+players alternate, the opponent acts in between and may remove the attacker, gain a Shield or put up
+a Sentinel. One ply can start such a sequence but cannot promise it. `ai/race.ts` distinguishes the
+two directly: `canFinishThisAction` (one unit, guaranteed) against `canFinishNow` (aggregate reach,
+an intention).
+
 ## Quiescent scoring: only finished actions are evaluated
 
 A move that raises a choice has **not finished resolving**. A when-played effect has picked no

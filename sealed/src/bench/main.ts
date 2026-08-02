@@ -264,9 +264,24 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     '  lethal availability: the ceiling on every rule built over a lethal solver. "theirs" is what a',
     '  tap-out risk gate would be protecting against.',
     row('we could finish now', rate(le.ours, le.decisions)),
+    row('  in ONE action', rate(le.oursOneAction, le.decisions)),
     row('they could finish now', rate(le.theirs, le.decisions)),
+    row('  in ONE action', rate(le.theirsOneAction, le.decisions)),
     row('theirs, rounds 1 to 4', rate(early.t, early.d)),
     row('by round (theirs)', le.byRound.map(r => `r${r.round} ${pct(r.decisions === 0 ? 0 : r.theirs / r.decisions)}`).join('  ')),
+  )
+  const ex = report.exposure
+  lines.push(
+    '',
+    '  avoidable exposure: the headroom a tap-out risk gate could actually recover. "Unavoidable"',
+    '  means every legal move led there, so the position was already lost and a gate saves nothing.',
+    row('handed them lethal', rate(ex.exposed, ex.decisions)),
+    row('  of which avoidable', rate(ex.avoidable, ex.exposed)),
+    row('  of which unavoidable', rate(ex.unavoidable, ex.exposed)),
+    '  Per SEAT (two per game): a seat that made one, against one that did not. The gap is the',
+    '  finding; the raw rate on its own says nothing without the base rate beside it.',
+    row('loss rate, made one', rate(ex.lostAfterAvoidable, ex.gamesWithAvoidable)),
+    row('loss rate, made none', rate(ex.lostWithoutAvoidable, ex.gamesWithoutAvoidable)),
   )
   lines.push('', row('wall clock', `${(wallMs / 1000).toFixed(1)}s`), '')
   return lines.join('\n')
