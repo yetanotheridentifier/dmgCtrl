@@ -39,8 +39,9 @@ points too high and the bot paid a real card for a unit it had to defeat immedia
 
 Two properties worth keeping:
 
-- **It costs about 2.5x wall clock** (420 games in 74.7s against 29.8s), which is roughly 2.5ms per
-  decision. That is comfortably inside interactive play, so no Web Worker is needed for this depth.
+- **It costs about 2.5x wall clock**: 420 games in 74.7s against 29.8s, so a few hundred games a
+  minute either way. A single decision stays far inside interactive latency at this depth, so no Web
+  Worker is needed for it.
 - **A node budget bounds the worst case**, defaulting well above observed chains. `support` fans out
   across every ready unit and every legal target, so the cap is a safety rail against the card pool,
   not a tuning knob. Exhausting it scores the board where it stopped, degrading to the old answer
@@ -97,10 +98,31 @@ The board term is built around what decides trades: unit **count** is the bigges
 Remaining HP counts lightly, so damage reads as progress toward removal without a
 surviving-but-damaged unit looking like a large loss. Only defeating a unit is the real swing.
 
+### Banking: `resource` must exceed `card`
+
+The sharpest constraint in the weight set, and the only cliff rather than a curve. Banking at regroup
+swaps a card for a resource, so the sign of that decision is `resource - card` and nothing else. A
+5x5 grid over both weights, 840 games a cell, depends on the **difference alone** and never on either
+magnitude:
+
+| `resource - card` | Win rate | Behaviour |
+| --- | --- | --- |
+| ≥ 1 | ~50% | banks; `resource=6, card=0` is no better than `resource=3, card=2` |
+| 0 | **15.8%** | banking is an exact tie, so the seeded coin flip decides it |
+| ≤ −1 | **1.8%** | never banks, so never builds a pool |
+
+Two dimensions collapse to one binary condition. Either weight can be re-tuned freely while the gap
+holds, and `resourceValue.test.ts` asserts it, because losing 98% of games is not a tuning
+regression.
+
 ### The resource pool is flat
 
-`resourceSurplus` equals `resource`, which also makes `saturation` inert. A concave pool, valuing
-surplus resources below the `card` weight, is implemented and switched off.
+`resourceSurplus` equals `resource`, which also makes `saturation` **algebraically** inert:
+`resourceValue` collapses to `resource × pool` when the two rates are equal, so the knee cancels out.
+Sweeping `saturation` alone therefore cannot move anything, and measuring it produced four identical
+numbers.
+
+A concave pool, valuing surplus resources below the `card` weight, is implemented and switched off.
 
 It works behaviourally: it makes the bot skip 12.5% of regroups, all at a pool of exactly the knee.
 It measured **49.7% ± 1.9%** over 5040 games against a flat pool, and worse as the knee lowered
@@ -110,6 +132,12 @@ the question can be re-asked cheaply.
 Worth knowing if it is revisited: the bot does leave 1 to 2 resources unspent per round late on
 (mean spend 5.9 against pools of 7 to 8), so idle resources are real and the premise was not the
 problem.
+
+A `resourceSurplus` × `saturation` grid re-measured this after quiescent scoring landed and it still
+does not pay. Concavity costs in proportion to how hard the knee bites (49.7% at surplus 1 with the
+knee at 4, converging to flat as the knee rises out of reach), while **convexity does nothing at
+all**: valuing surplus above the full rate changes no decision, because banking is already always
+chosen.
 
 ### The hand
 
@@ -131,6 +159,18 @@ value the same size, so the bot refuses to play its own bombs: **40.5%**. It is 
 sides, and both bounds are tests: below what the board pays for the cheapest body, above the
 discounted value of the best uncastable card in the pool.
 
+Two properties of the private half fall out of its design rather than its tuning, and a
+`canAct` × `hold` grid confirmed both exactly, to four decimal places:
+
+- **`hold`'s magnitude cannot matter, only its sign.** It scales a sum inside a term that is squashed
+  into `[0, 1)` and used only to break public ties, and a monotone scalar cannot reorder a tie-break.
+  0.12 and 0.4 measure identically; **0 measures 46.6%**, because the ordering collapses and the coin
+  flip returns.
+- **`canAct` is inert in self-play.** It is flat over the whole hand, so it cancels between candidate
+  moves unless one of them spends the last castable card. Values 0, 3 and 6 change no decision at any
+  `hold` setting. It is a guard against a rare position rather than a working term, and its measured
+  contribution is zero.
+
 ### Initiative
 
 Claiming the initiative makes you pass for the rest of the round, so the model prices both halves:
@@ -150,6 +190,33 @@ Turn order is worth **far less than it looks**. Raising `initiative` is monotoni
 4, 35.4% at 6, 29.4% at 8), because the bot buys it by giving up whole turns. A bonus with no cost
 term is the always-claim failure mode and measures 41.1%; a cost with no bonus is inert at 50.0%.
 Both halves are load-bearing.
+
+**The two weights interact, and the interaction is the point.** The higher `initiative`, the more
+`claimCost` it takes to pay for it (840 games a cell, and the shipped pair is `1 / 2`):
+
+| | `claimCost` 0 | 2 | 3 | 5 |
+| --- | --- | --- | --- | --- |
+| `initiative` 0 | 48.9% | 47.7% | 47.6% | 47.6% |
+| `initiative` 1 *(shipped)* | 50.6% | **50.7%** | 50.2% | 50.2% |
+| `initiative` 2 | 47.0% | 50.0% | 50.1% | 50.0% |
+| `initiative` 3 | 46.1% | 48.0% | 49.3% | 50.0% |
+
+`initiative: 3` needs `claimCost: 5` just to reach parity, while `initiative: 1` is fine even at
+`claimCost: 0`: a cheap valuation of turn order needs no brake, an expensive one does. The
+`initiative: 0` row is uniformly worst, which is the direct evidence that the term earns its place.
+
+The pair moved from `2 / 3` to `1 / 2` on this evidence, confirmed by six paired seeds at 8400 games
+each: **+0.62%, positive on every seed** (+0.45, +0.51, +0.97, +0.13, +0.88, +0.80 against a matched
+control) over 100,800 games. Small, but it is the only weight change a 146-cell grid and roughly half
+a million games could find, which is the more useful fact: **the weight set is at a local optimum and
+further strength has to come from new information rather than re-weighting.**
+
+One thing left untested: at `initiative: 1` the brake may be doing little, since `claimCost: 0`
+measured 50.6% against the shipped cell's 50.7%. That deserves its own A/B rather than an assumption.
+
+A constraint worth knowing before anyone sweeps finer: `publicScore` must stay integer-valued so the
+private hand term remains a tie-break, so `initiative` can be 1 or 2 but never 1.5. If the true
+optimum lies between them, the model cannot express it.
 
 ### Role: read the race, not the board
 

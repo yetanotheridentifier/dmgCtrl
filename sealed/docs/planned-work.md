@@ -9,12 +9,16 @@ The AI's remaining blind spots are measured, not guessed. `npm run bench --prefi
 --decisions` reports how often every candidate move scores identically, so the seeded tie-break
 picks at random:
 
-| Decision | Coin-flip rate | Options |
-| --- | --- | --- |
-| Initiative | 18.2% | n/a |
-| Which card to play | 7.4% | 4.7 |
-| Attacks | 1.6% | 7.8 |
-| Regroup: which card | 0.1% | 4.8 |
+| Decision | Coin-flip rate | Options | Coin flips per game |
+| --- | --- | --- | --- |
+| Initiative | 18.2% | n/a | **~7.4** |
+| Which card to play | 7.4% | 4.6 | ~1.5 |
+| Answering a choice | 7.4% | 8.7 | ~0.9 |
+| Attacks | 1.7% | 7.8 | ~0.5 |
+| Regroup: which card | 0.1% | 4.8 | ~0 |
+
+The last column is what actually ranks the work: a rate is meaningless without how often the decision
+arises. **Initiative is the largest remaining blind spot by a wide margin.**
 
 ### One search, three policies
 
@@ -43,21 +47,58 @@ choices touched 42.9%. So the ticket became "never score a half-resolved action"
 The largest single improvement in the series, because it corrects a fiction rather than refining a
 judgement. See [ai-model.md](ai-model.md) for the model and its properties.
 
+### Weight tuning is closed
+
+A 146-cell interaction grid plus 8400-game validation across multiple seeds found the weight set at a
+local optimum. **Further strength must come from new information, not from re-weighting what is
+there.** The measured constraints are in [ai-model.md](ai-model.md); the tool is `npm run tune`.
+
+The sweep also showed *why* so much of the model is inert: a one-ply evaluation only ever compares
+candidates from one position, so any term equal across them cancels exactly. Several weights are not
+dead but **dormant**, pricing futures that one ply cannot see. #430 makes that testable.
+
 ### The order from here
 
-1. **#410 own-turn beam.** The genuinely expensive part: expanding **separate actions**, with a null
-   move for the opponent, beam width K over depth, role fixed once at the root. The null-move
-   assumption is where the strength comes from and where it leaks: it is what makes a
-   sacrifice-into-Sentinel look right, and what will over-value lines the opponent can interrupt.
-2. **#425 opponent reply.** The same pessimism one level wider, beam-limited to the top candidates.
+Three cheap measurements first, because the last two rounds of work both showed that measuring beats
+guessing by a wide margin.
 
-**Re-measure before starting #410.** Quiescence moved every rate it touches: attack ties fell from
-10.2% to 1.6%, and attacks were the blind spot #410 was sized against. Its case now rests on the
-multi-step lines themselves rather than on a tie rate, so take the numbers again first.
+1. **#430 term sensitivity.** Which evaluation terms actually vary across candidates. Minutes of
+   compute, and it would have predicted every null result in the 400,000-game sweep. Also the gate
+   for deciding which dormant terms wake up after lookahead.
+2. **#431 bench harness fixes.** A seat bias of a few tenths (an AI measured against itself reads
+   49.4% to 50.0%) and load-dependent results from a wall-clock timeout. Both corrupt any A/B
+   measuring under a point, which is all of the remaining work.
+3. **#432 hidden-information sizing.** How often lethal is even available, and the
+   perfect-information upper bound: an AI with a cheating oracle onto the opponent's hand against the
+   honest one. That is the ceiling on anything a belief model could buy.
+
+Then the search work:
+
+4. **#433 `hasLethal`.** A shared one-turn lethal solver, perfect information. #410 needs it
+   regardless of what #432 says.
+5. **#410 own-turn beam.** Expanding **separate actions**, with a null move for the opponent, beam
+   width K over depth, role fixed once at the root. The null-move assumption is where the strength
+   comes from and where it leaks. **Its original justification is gone**: it was sized on attack ties
+   at 10.2%, now 1.6% after quiescence. It now rests on initiative (18.2% ties, the largest remaining
+   blind spot) and on the multi-step lines themselves, which need a scripted position rather than a
+   rate.
+6. **#425 opponent reply**, public information only. The cheap first step.
 
 **Measure four configurations, not two.** #410 is optimistic (the opponent does nothing) while #425
 is pessimistic (they do the worst visible thing). Those pull in opposite directions and may not
 compose additively, so the matrix is: neither, #410 alone, #425 alone, both.
+
+### The opponent model, gated
+
+#434 pool, #435 sampler, #436 `P(lethal)`, #437 calibration, #438 learned priors, #439 PIMC. All
+**gated on #432**: they are the heaviest machinery in the series, and their originally proposed first
+customer (the carried initiative rules) is the weakest term in the evaluation, worth 2 to 3 points in
+total. If the belief model is built, its first customer should be the **general tap-out risk gate**,
+which applies to every action-phase decision rather than the ~9 initiative decisions a game.
+
+#432 also settles a question that should not be decided by accident: the opponent's deck comes from
+our own generator, so a sampler could draw from the true generating distribution instead of inferring
+from revealed aspects. More accurate, arguably legitimate, but a different honesty claim.
 
 **Measure four configurations, not two.** #410 is optimistic (the opponent does nothing) while #400
 and #425 are pessimistic (they do the worst visible thing). Those pull in opposite directions and may

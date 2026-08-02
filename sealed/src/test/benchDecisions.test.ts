@@ -21,7 +21,19 @@ describe('runDecisions', () => {
       'initiative: take it',
       'which attack',
       'which card to play',
+      'answering a choice',
     ])
+  })
+
+  /**
+   * Answering a pending choice is its own decision kind and was going unmeasured, which left the
+   * optional-abilities work with no way to size itself. It is the one kind where the candidates are
+   * not actions the player chose to have: the card handed them a menu.
+   */
+  it('measures how well the evaluation separates the answers to a choice', () => {
+    const answering = report.stats.find(s => s.label === 'answering a choice')!
+    expect(answering.offered, 'choices with more than one answer are common').toBeGreaterThan(0)
+    expect(answering.avgCandidates).toBeGreaterThan(1)
   })
 
   it('actually plays games and observes each decision', () => {
@@ -113,9 +125,11 @@ describe('runDecisions', () => {
     expect(s.opponentChoiceKinds.reduce((n, k) => n + k.count, 0)).toBe(s.opponentAnswers)
   })
 
+  // Two full passes of the diagnostic, and quiescent scoring made each one about 2.5x dearer, so the
+  // budget is generous: this guards determinism, and a slow machine failing it teaches nothing.
   it('is deterministic for a given seed', () => {
     expect(runDecisions({ gamesPerDeck: 1, seed: 4242 })).toEqual(report)
-  }, 30_000)
+  }, 120_000)
 })
 
 /**

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { makeQuiescent } from '../ai/search'
-import { evaluate } from '../ai/evaluate'
-import { greedyAi, greedyFlatAi } from '../ai/greedyAi'
+import { evaluate, DEFAULT_WEIGHTS } from '../ai/evaluate'
+import { greedyAi, greedyFlatAi, makeTunedGreedy } from '../ai/greedyAi'
 import { resolve } from '../engine/resolve'
 import { state, player, card, unit, ready, CARDS } from './helpers/engineFixtures'
 import type { GameState, PendingChoice } from '../engine/types'
@@ -154,6 +154,16 @@ describe('greedy no longer pays for a duplicate unique', () => {
    */
   it('the same AI without quiescence still falls for it, which is the measurement', () => {
     expect(greedyFlatAi(position())).toMatchObject({ type: 'playUnit', handIndex: 0 })
+  })
+
+  /**
+   * The weight tuner builds its own AI from candidate weights, so it can silently drift from the
+   * shipped one: it did exactly that the moment quiescence landed, and would have spent a night
+   * tuning weights for a bot nobody plays. One factory builds both, and this pins that it composes
+   * quiescence rather than just the evaluation.
+   */
+  it('builds the tuner’s candidate the same way as the shipped bot', () => {
+    expect(makeTunedGreedy(DEFAULT_WEIGHTS)(position())).toMatchObject({ type: 'playUnit', handIndex: 1 })
   })
 
   it('scores the duplicate below simply passing, because it is a card for nothing', () => {

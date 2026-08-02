@@ -2,7 +2,7 @@ import ashSet from '../test/fixtures/ashSet.json'
 import '../engine/cardDefinitions' // side effect: registers every implemented card ability
 import type { SwuCard } from '../data/cards'
 import type { GameState, PlayerId } from '../engine/types'
-import { opponentOf } from '../engine/types'
+import { opponentOf, hasPendingChoices } from '../engine/types'
 import { buildCardDb } from '../engine/cardDb'
 import { initGame } from '../engine/initGame'
 import { legalMoves } from '../engine/legalMoves'
@@ -211,6 +211,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   const initiative = empty()
   const attacks = empty()
   const plays = empty()
+  const answering = empty()
   let games = 0
   let banked = 0
   let skipped = 0
@@ -274,6 +275,10 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         record(resourcing, scored.filter(x => x.m.type === 'resourceCard'))
         record(attacks, scored.filter(x => x.m.type === 'attack'))
         record(plays, scored.filter(x => x.m.type === 'playUnit' || x.m.type === 'playEvent' || x.m.type === 'playUpgrade'))
+        // With a choice outstanding, `legalMoves` returns nothing BUT its answers, so the whole
+        // candidate set is the decision. The one kind where the options were handed to the player by
+        // a card rather than chosen, which is why it is measured separately from the plays above.
+        if (hasPendingChoices(s)) record(answering, scored)
 
         // How much of what gets scored is a half-resolved board. A single forced move is not a
         // decision, so it cannot be mis-ranked against anything and is excluded, matching `record`.
@@ -366,6 +371,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       stat('initiative: take it', initiative),
       stat('which attack', attacks),
       stat('which card to play', plays),
+      stat('answering a choice', answering),
     ],
     resourcing: {
       banked,
