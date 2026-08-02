@@ -69,9 +69,11 @@ guessing by a wide margin.
    all three harnesses, and the wall clock no longer decides a game's fate. An AI measured against
    itself reads 49.99% over six seeds, against 49.67% before. See
    [ai-benchmark.md](ai-benchmark.md).
-3. **#432 hidden-information sizing.** How often lethal is even available, and the
-   perfect-information upper bound: an AI with a cheating oracle onto the opponent's hand against the
-   honest one. That is the ceiling on anything a belief model could buy.
+3. **#432 hidden-information sizing.** Measurement 1 is **done**: lethal is available to the
+   opponent in 6.6% of decisions, about five a game, and is **nearly absent before round 5** (2 of
+   the 10,135 decisions in rounds 1 to 4). So the initiative-lethal rules are narrow, while the
+   tap-out risk gate survives as the better customer for a lethal check. Measurement 2, the
+   perfect-information upper bound, still gates the belief model.
 
 Then the search work:
 

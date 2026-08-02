@@ -210,6 +210,27 @@ and so read as behaviour rather than as a gap:
   is the clearest read on whether the AI is claiming sensibly: low means it claims when it has little
   left to do, high means it is throwing away a board full of attackers.
 
+### Lethal availability
+
+The same run reports how often either seat could finish the enemy base with what it already has
+ready, via `canFinishNow` (a clock of 1, so Sentinel, Saboteur, arena and Hidden resolve through the
+rules' own targeting rather than a second damage sum).
+
+It is the ceiling on every rule built over a lethal solver: an initiative-lethal rule or a tap-out
+risk gate can only fire as often as lethal exists.
+
+Current rates: **we** could finish in 5.9% of decisions, **they** could in 6.6%, which is about five
+decisions a game. Almost all of it is late: rounds 1 to 4 hold two thirds of all decisions and
+produce lethal in **2 of 10,135**, rising to 11.5% at round 5 and 31.2% at round 6.
+
+Two things to hold onto when reading it:
+
+- **It under-counts.** Only damage that can already connect is seen, so a line needing a card played
+  first, an event finisher or a when-played trigger is invisible. Early-game lethal is the figure to
+  trust least, since it would most likely come from a burn event rather than from board damage.
+- **"They could finish" is not "the bot blundered".** Many such positions are already lost. The rate
+  bounds how often a risk gate is *live*, not how often it would *help*.
+
 ### Half-resolved scoring
 
 The same run reports how often a candidate move is scored **before its action has finished**. Some

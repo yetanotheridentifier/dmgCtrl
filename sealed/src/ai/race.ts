@@ -99,6 +99,23 @@ export function clock(state: GameState, owner: PlayerId): number {
 }
 
 /**
+ * Can `seat` finish the enemy base with what it already has ready?
+ *
+ * A clock of 1 is exactly that statement, so this is a name for a reading rather than a second
+ * damage calculation, and it inherits the race model's targeting for free: Sentinel, Saboteur, arena
+ * and Hidden all resolve through the rules' own function, so a wall in the way correctly makes it
+ * false.
+ *
+ * **An approximation, deliberately.** It sees damage that can already connect, so it under-counts a
+ * line needing a card played first, an event finisher, or a when-played trigger. That is the right
+ * trade for a sizing instrument: it answers "how often could a lethal rule ever fire" for the price
+ * of a comparison, and #433's one-turn solver replaces it with a real search.
+ */
+export function canFinishNow(state: GameState, seat: PlayerId): boolean {
+  return clock(state, seat) === 1
+}
+
+/**
  * Who is the beatdown, read off the live board. Integer rounds give a natural deadband: the role
  * only moves when the clocks genuinely separate, so a single point of damage cannot flip it.
  *

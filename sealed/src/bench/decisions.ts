@@ -13,7 +13,7 @@ import { evaluate } from '../ai/evaluate'
 import { makeQuiescent } from '../ai/search'
 import { resolveAi } from '../ai/registry'
 import { setupAi } from '../ai/setupAi'
-import { role, reachSteady, type Role } from '../ai/race'
+import { role, reachSteady, canFinishNow, type Role } from '../ai/race'
 import { buildCoverageDecks } from './coverageDecks'
 
 /**
@@ -172,6 +172,26 @@ export interface SuspendedStat {
   selfChoiceKinds: Array<{ kind: string; count: number }>
 }
 
+/**
+ * How often a lethal line is available at all (#432).
+ *
+ * The ceiling on every rule built over a lethal solver: "claim the initiative when it converts to
+ * lethal", "claim when it denies theirs", and the tap-out risk gate can each only fire as often as
+ * lethal exists. Measuring it with `canFinishNow` costs a comparison, where learning it after
+ * building a solver and a sampled belief model on top would cost several tickets.
+ *
+ * `theirs` is the one that sizes the risk gate: it is the position the bot would be walking into.
+ */
+export interface LethalStat {
+  decisions: number
+  /** Decisions where the acting seat could finish the enemy base with what it has ready. */
+  ours: number
+  /** Decisions where the opponent could finish the acting seat's base with what THEY have ready. */
+  theirs: number
+  /** Split by round: a rate concentrated late is worth much less than one spread through the game. */
+  byRound: Array<{ round: number; decisions: number; ours: number; theirs: number }>
+}
+
 export interface DecisionReport {
   buildTag: string
   ai: string
@@ -181,6 +201,7 @@ export interface DecisionReport {
   initiative: InitiativeStat
   role: RoleStat
   suspended: SuspendedStat
+  lethal: LethalStat
 }
 
 interface Tally {
@@ -239,6 +260,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   }
   const opponentKinds = new Map<string, number>()
   const selfKinds = new Map<string, number>()
+  const lethalByRound = new Map<number, { decisions: number; ours: number; theirs: number }>()
 
   decks.forEach((deck, d) => {
     for (let g = 0; g < config.gamesPerDeck; g++) {
@@ -313,6 +335,17 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           // The opponent has already passed, so claiming ends the phase (CR 1.15.5c) and they gain
           // nothing from your silence. Still costs your own remaining actions, hence "cheap".
           if (s.consecutivePasses >= 1) cheapOffered++
+        }
+
+        // Lethal availability, from the ACTING seat: "could I finish now" and "could they finish me
+        // now". Counted per decision rather than per round, because that is the unit a risk gate
+        // would act on.
+        {
+          const bucket = lethalByRound.get(s.round) ?? { decisions: 0, ours: 0, theirs: 0 }
+          bucket.decisions++
+          if (canFinishNow(s, me)) bucket.ours++
+          if (canFinishNow(s, opponentOf(me))) bucket.theirs++
+          lethalByRound.set(s.round, bucket)
         }
 
         // Sample the role once a round from the player's seat, so the split is not weighted by how
@@ -396,6 +429,12 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       ...suspended,
       opponentChoiceKinds: rank(opponentKinds),
       selfChoiceKinds: rank(selfKinds),
+    },
+    lethal: {
+      decisions: [...lethalByRound.values()].reduce((n, b) => n + b.decisions, 0),
+      ours: [...lethalByRound.values()].reduce((n, b) => n + b.ours, 0),
+      theirs: [...lethalByRound.values()].reduce((n, b) => n + b.theirs, 0),
+      byRound: [...lethalByRound].sort(([a], [b]) => a - b).map(([round, b]) => ({ round, ...b })),
     },
   }
 }

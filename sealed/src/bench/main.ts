@@ -257,6 +257,17 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     row('their choice kinds', topKinds(su.opponentChoiceKinds)),
     row('our choice kinds', topKinds(su.selfChoiceKinds)),
   )
+  const le = report.lethal
+  const early = le.byRound.filter(r => r.round <= 4).reduce((n, r) => ({ d: n.d + r.decisions, t: n.t + r.theirs }), { d: 0, t: 0 })
+  lines.push(
+    '',
+    '  lethal availability: the ceiling on every rule built over a lethal solver. "theirs" is what a',
+    '  tap-out risk gate would be protecting against.',
+    row('we could finish now', rate(le.ours, le.decisions)),
+    row('they could finish now', rate(le.theirs, le.decisions)),
+    row('theirs, rounds 1 to 4', rate(early.t, early.d)),
+    row('by round (theirs)', le.byRound.map(r => `r${r.round} ${pct(r.decisions === 0 ? 0 : r.theirs / r.decisions)}`).join('  ')),
+  )
   lines.push('', row('wall clock', `${(wallMs / 1000).toFixed(1)}s`), '')
   return lines.join('\n')
 }

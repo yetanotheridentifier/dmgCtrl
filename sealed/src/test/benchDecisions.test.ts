@@ -127,6 +127,33 @@ describe('runDecisions', () => {
 
   // Two full passes of the diagnostic, and quiescent scoring made each one about 2.5x dearer, so the
   // budget is generous: this guards determinism, and a slow machine failing it teaches nothing.
+  /**
+   * Sizing for the lethal work (#432): how often a lethal line is available at all. Every rule built
+   * on a lethal solver (#433) can only fire as often as this, so if it is vanishingly rare the
+   * initiative-lethal rules and the tap-out risk gate are both low value, and that is much cheaper to
+   * learn here than after building a solver and a belief model on top.
+   */
+  it('reports how often either seat could finish the enemy base', () => {
+    const l = report.lethal
+    expect(l.decisions).toBeGreaterThan(0)
+    expect(l.ours).toBeLessThanOrEqual(l.decisions)
+    expect(l.theirs).toBeLessThanOrEqual(l.decisions)
+    // A game ends by someone finishing a base, so lethal must exist somewhere.
+    expect(l.ours, 'lethal never available to the acting seat would mean the measure is broken').toBeGreaterThan(0)
+  })
+
+  /** A rate concentrated in round 7+ matters far less than one spread through the game. */
+  it('breaks lethal availability down by round, summing to the totals', () => {
+    const l = report.lethal
+    expect(l.byRound.length).toBeGreaterThan(1)
+    expect(l.byRound.reduce((n, r) => n + r.decisions, 0)).toBe(l.decisions)
+    expect(l.byRound.reduce((n, r) => n + r.ours, 0)).toBe(l.ours)
+    expect(l.byRound.reduce((n, r) => n + r.theirs, 0)).toBe(l.theirs)
+    for (let i = 1; i < l.byRound.length; i++) {
+      expect(l.byRound[i].round).toBeGreaterThan(l.byRound[i - 1].round)
+    }
+  })
+
   it('is deterministic for a given seed', () => {
     expect(runDecisions({ gamesPerDeck: 1, seed: 4242 })).toEqual(report)
   }, 120_000)
