@@ -1,4 +1,5 @@
-import { writeFileSync } from 'node:fs'
+import { writeFileSync, mkdirSync } from 'node:fs'
+import { dirname, resolve as resolvePath } from 'node:path'
 import { DEFAULT_WEIGHTS, type EvalWeights } from '../ai/evaluate'
 import { DEFAULT_HAND_WEIGHTS } from '../ai/handValue'
 import { makeTunedGreedy } from '../ai/greedyAi'
@@ -60,6 +61,9 @@ export function weightsFrom(overrides: Partial<Record<WeightKey, number>>): Eval
 /** `key=v,key=v` into overrides, rejecting an unknown weight rather than silently ignoring it. */
 export function parseAssignments(spec: string): Partial<Record<WeightKey, number>> {
   const out: Partial<Record<WeightKey, number>> = {}
+  // `specOf` renders the shipped weights as "defaults", and an unattended sweep feeds its own
+  // ranked specs back in, so the round trip has to accept it rather than die on an unknown weight.
+  if (spec === 'defaults') return out
   for (const pair of spec.split(',')) {
     const [key, raw] = pair.split('=')
     const value = Number(raw)
@@ -90,6 +94,66 @@ export function expandAxes(axes: Array<{ key: WeightKey; values: number[] }>, pi
 export function describeConfig(config: TuneConfig): string {
   const parts = Object.entries(config.overrides).map(([k, v]) => `${k}=${v}`)
   return parts.length === 0 ? '(defaults)' : parts.join(' ')
+}
+
+/**
+ * Append one measured config to the results file, creating the directory if it is missing.
+ *
+ * **A failed write must never lose a measurement.** Each row costs minutes of compute, so this
+ * reports the problem and lets the sweep carry on rather than aborting: the first version threw
+ * ENOENT after a completed 840-game run and took the whole overnight sweep down with it, one config
+ * into each stream.
+ *
+ * Prefer an absolute `--out`: `npm run --prefix sealed` runs with `sealed/` as the working
+ * directory, so a relative path lands there rather than where it was typed.
+ */
+export function appendRow(out: string, row: object): void {
+  const file = resolvePath(out)
+  try {
+    mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, `${JSON.stringify(row)}\n`, { flag: 'a' })
+  } catch (err) {
+    console.error(`  ! could not append to ${file}: ${(err as Error).message}`)
+  }
+}
+
+/**
+ * A sibling `.tsv` of `winRate <tab> ci <tab> spec`, written alongside the JSON.
+ *
+ * It exists so an unattended sweep can pick its own validation candidates: `sort -rn` ranks it and
+ * the third column is a **re-runnable config spec**, not a display label. Selecting from the JSON
+ * would need a parser in the middle of a shell pipeline, which is one more thing to go wrong at 3am.
+ */
+export function appendTsv(out: string, winRate: number, ci: number, spec: string): void {
+  const file = resolvePath(out).replace(/\.jsonl?$/, '') + '.tsv'
+  try {
+    mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, `${winRate.toFixed(4)}\t${ci.toFixed(4)}\t${spec}\n`, { flag: 'a' })
+  } catch (err) {
+    console.error(`  ! could not append to ${file}: ${(err as Error).message}`)
+  }
+}
+
+/**
+ * A config as it would be typed back in: `unit=5,hp=1.5`. Empty means the shipped weights.
+ *
+ * **Weights already at their shipped value are dropped**, so configs that describe the same AI get
+ * the same spec. Without that, a sweep that ranks and re-runs its own winners spends its validation
+ * budget measuring one AI several times: `unit=4,hp=1.5`, `power=2,hp=1.5` and `unit=4,power=2,hp=1.5`
+ * are all just `hp=1.5` when `unit` and `power` are already 4 and 2, and three of eight validation
+ * slots went on that before this existed.
+ */
+export function specOf(config: TuneConfig): string {
+  const shipped = weightsFrom({})
+  const parts: string[] = []
+  for (const [key, value] of Object.entries(config.overrides)) {
+    if (value === undefined) continue
+    const current = key === 'hand.canAct' ? shipped.hand.canAct
+      : key === 'hand.hold' ? shipped.hand.hold
+      : shipped[key as keyof Omit<EvalWeights, 'hand'>]
+    if (value !== current) parts.push(`${key}=${value}`)
+  }
+  return parts.length === 0 ? 'defaults' : parts.join(',')
 }
 
 interface Args {
@@ -161,12 +225,12 @@ function main(): void {
     console.log(`  ${win.toFixed(1).padStart(5)}%  ± ${ci.toFixed(1)}%  ${String(report.completed).padStart(5)}  ${secs.toFixed(0).padStart(4)}s  ${label}${drop}`)
 
     if (args.out) {
-      const row = {
+      appendRow(args.out, {
         buildTag: BUILD_TAG, vs: args.vs, seed: args.seed, gamesPerDeck: args.games,
-        config: config.overrides, label, winRate: report.overallWinRateA, ci: report.overallCi,
-        completed: report.completed, dropped: report.dropped, seconds: secs,
-      }
-      writeFileSync(args.out, `${JSON.stringify(row)}\n`, { flag: 'a' })
+        config: config.overrides, label, spec: specOf(config), winRate: report.overallWinRateA,
+        ci: report.overallCi, completed: report.completed, dropped: report.dropped, seconds: secs,
+      })
+      appendTsv(args.out, report.overallWinRateA, report.overallCi, specOf(config))
     }
   }
   console.log('')

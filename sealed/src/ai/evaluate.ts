@@ -101,12 +101,20 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   resourceSurplus: 3,
   saturation: 7,
   readyUnit: 1,
-  // Swept (#394). Turn order is worth far less than it first looks: raising `initiative` is
-  // monotonically worse (2 -> 52.5%, 4 -> 46.8%, 6 -> 35.4%, 8 -> 29.4% against the same AI with
-  // both terms at 0), because the bot buys it by giving up whole turns. `claimCost: 0` is the
-  // always-claim failure mode and measured 41.1%.
-  initiative: 2,
-  claimCost: 3,
+  // Swept twice. Turn order is worth far less than it first looks: raising `initiative` is
+  // monotonically worse (4 -> 46.8%, 6 -> 35.4%, 8 -> 29.4% against the same AI with both terms at
+  // 0), because the bot buys it by giving up whole turns. `claimCost: 0` is the always-claim failure
+  // mode and measured 41.1%.
+  //
+  // The two INTERACT: the higher `initiative`, the more `claimCost` it takes to pay for it. At 3 it
+  // needs a cost of 5 just to reach parity, while at 1 it is fine even at 0. Lowered from 2/3 after
+  // a 146-cell grid put the best cell here, and six paired seeds at 8400 games each confirmed it at
+  // +0.62% (positive on all six, 100,800 games).
+  //
+  // Untested: at `initiative: 1` the brake may be doing little, since `claimCost: 0` measured 50.6%
+  // against this cell's 50.7%. Worth its own A/B before assuming the cost term still earns its place.
+  initiative: 1,
+  claimCost: 2,
   // Swept (#395). A small shift is all the data supports: 1 and 2 tie, 3 and 4 are worse, and the
   // effect is modest at 51.4% +/- 0.9% over ~11,340 games (three matched-power seeds: 50.2%, 52.8%,
   // 51.2%) against a role-blind AI. Roughly a third of what #393 or #394 each returned.

@@ -125,9 +125,11 @@ describe('runDecisions', () => {
     expect(s.opponentChoiceKinds.reduce((n, k) => n + k.count, 0)).toBe(s.opponentAnswers)
   })
 
+  // Two full passes of the diagnostic, and quiescent scoring made each one about 2.5x dearer, so the
+  // budget is generous: this guards determinism, and a slow machine failing it teaches nothing.
   it('is deterministic for a given seed', () => {
     expect(runDecisions({ gamesPerDeck: 1, seed: 4242 })).toEqual(report)
-  }, 30_000)
+  }, 120_000)
 })
 
 /**

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { publicScore, resourceValue, makeEvaluate, DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { makeGreedyAi, greedyAi } from '../ai/greedyAi'
+import { makeQuiescent } from '../ai/search'
 import '../engine/cardDefinitions'
 import { state, player, card, ready, CARDS } from './helpers/engineFixtures'
 import type { GameState } from '../engine/types'
@@ -117,6 +118,38 @@ describe('the shipped weights keep the pool flat', () => {
   it('so the AI still banks a card at every regroup, deep pool or not', () => {
     expect(greedyAi(regroup(2))?.type).toBe('resourceCard')
     expect(greedyAi(regroup(DEFAULT_WEIGHTS.saturation + 3))?.type).toBe('resourceCard')
+  })
+})
+
+/**
+ * The sharpest constraint in the whole weight set, and the only one that is a cliff rather than a
+ * curve.
+ *
+ * Banking at regroup swaps a card for a resource, so the sign of that decision is `resource - card`
+ * and nothing else. A 5x5 grid over both weights (840 games a cell) depends on the DIFFERENCE alone,
+ * never on either magnitude:
+ *
+ * | difference | win rate | behaviour |
+ * | --- | --- | --- |
+ * | >= 1 | ~50% | banks, and `resource=6,card=0` is no better than `resource=3,card=2` |
+ * | 0 | 15.8% | banking is an exact tie, so a coin flip decides it (three cells: 15.7, 16.0, 15.8) |
+ * | <= -1 | 1.8% | never banks, never builds a pool (two cells: 1.9, 1.7) |
+ *
+ * Losing 98% of games is not a tuning regression, so this is asserted rather than left to a comment.
+ * Either weight may be re-tuned freely as long as the gap holds.
+ */
+describe('the banking decision: resource must outvalue a card', () => {
+  it('keeps a strictly positive gap between a resource and a card', () => {
+    expect(DEFAULT_WEIGHTS.resource).toBeGreaterThan(DEFAULT_WEIGHTS.card)
+  })
+
+  it('and the AI banks, which is what that gap buys', () => {
+    expect(greedyAi(regroup(4))?.type).toBe('resourceCard')
+  })
+
+  it('closing the gap stops it banking, which is the 15.8% failure', () => {
+    const tied = { ...DEFAULT_WEIGHTS, card: DEFAULT_WEIGHTS.resource }
+    expect(makeGreedyAi(makeQuiescent(makeEvaluate(tied)))(regroup(4))?.type).not.toBe('resourceCard')
   })
 })
 

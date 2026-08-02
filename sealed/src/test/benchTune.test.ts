@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { parseArgs, parseAssignments, expandAxes, weightsFrom, describeConfig } from '../bench/tune'
+import { readFileSync, rmSync, existsSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { parseArgs, parseAssignments, expandAxes, weightsFrom, describeConfig, appendRow, appendTsv, specOf } from '../bench/tune'
 import { DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { DEFAULT_HAND_WEIGHTS } from '../ai/handValue'
 
@@ -58,6 +61,80 @@ describe('tune argument parsing', () => {
     expect(args.games).toBe(20)
     expect(args.configs).toHaveLength(1)
     expect(describeConfig(args.configs[0])).toBe('(defaults)')
+  })
+
+  /**
+   * Each row costs minutes of compute, so the write must not be able to destroy one. The first
+   * version threw ENOENT on a missing directory AFTER a completed 840-game run, and took every
+   * stream of an overnight sweep down with it one config in.
+   */
+  it('creates the results directory rather than losing a finished measurement', () => {
+    const dir = join(tmpdir(), `tune-test-${process.pid}`, 'nested')
+    const file = join(dir, 'out.jsonl')
+    try {
+      appendRow(file, { label: 'unit=6', winRate: 0.51 })
+      appendRow(file, { label: 'unit=7', winRate: 0.49 })
+      const lines = readFileSync(file, 'utf8').trim().split('\n')
+      expect(lines).toHaveLength(2) // appends rather than overwriting
+      expect(JSON.parse(lines[0]).label).toBe('unit=6')
+    } finally {
+      rmSync(join(tmpdir(), `tune-test-${process.pid}`), { recursive: true, force: true })
+    }
+  })
+
+  /**
+   * The unattended sweep ranks this file and feeds column 3 straight back in as a config, so the
+   * spec must be re-runnable rather than pretty. A display label with spaces in it would be parsed
+   * as several arguments and silently measure the wrong thing.
+   */
+  it('writes a sortable TSV whose spec can be fed back in as a config', () => {
+    const dir = join(tmpdir(), `tune-tsv-${process.pid}`)
+    const file = join(dir, 'r.jsonl')
+    try {
+      appendTsv(file, 0.5312, 0.0198, 'unit=5,hp=1.5')
+      const line = readFileSync(join(dir, 'r.tsv'), 'utf8').trim()
+      const [win, ci, spec] = line.split('\t')
+      expect(Number(win)).toBeCloseTo(0.5312)
+      expect(Number(ci)).toBeCloseTo(0.0198)
+      expect(spec).toBe('unit=5,hp=1.5')
+      expect(spec).not.toMatch(/\s/) // a space would split into two argv entries
+      expect(describeConfig({ overrides: parseAssignments(spec) })).toBe('unit=5 hp=1.5')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('renders a config as a comma-joined spec, and the shipped weights as "defaults"', () => {
+    expect(specOf({ overrides: { unit: 5, hp: 1.5 } })).toBe('unit=5,hp=1.5')
+    expect(specOf({ overrides: {} })).toBe('defaults')
+  })
+
+  /** The sweep ranks its own output and re-runs the winners, so every spec it emits must parse. */
+  it('round-trips every spec it emits, "defaults" included', () => {
+    for (const overrides of [{ unit: 5, hp: 1.5 }, { 'hand.hold': 0.25 }, {}]) {
+      expect(parseAssignments(specOf({ overrides }))).toEqual(overrides)
+    }
+    expect(parseArgs(['defaults']).configs).toHaveLength(1)
+  })
+
+  /**
+   * Three of eight validation slots once went on the same AI spelled three ways, because dedupe
+   * compared spec strings while `unit=4` and `power=2` are simply the shipped values.
+   */
+  it('gives one spec to configs that describe the same AI', () => {
+    const asShipped = { unit: DEFAULT_WEIGHTS.unit, power: DEFAULT_WEIGHTS.power }
+    expect(specOf({ overrides: { ...asShipped, hp: 1.5 } })).toBe('hp=1.5')
+    expect(specOf({ overrides: { unit: DEFAULT_WEIGHTS.unit, hp: 1.5 } })).toBe('hp=1.5')
+    expect(specOf({ overrides: { hp: 1.5 } })).toBe('hp=1.5')
+    expect(specOf({ overrides: asShipped })).toBe('defaults')
+    // The nested hand weights collapse the same way.
+    expect(specOf({ overrides: { 'hand.canAct': DEFAULT_HAND_WEIGHTS.canAct, hp: 1.5 } })).toBe('hp=1.5')
+  })
+
+  it('reports an unwritable path without aborting the sweep', () => {
+    // A directory where a file should be: mkdir succeeds, the write cannot.
+    expect(() => appendRow(tmpdir(), { label: 'x' })).not.toThrow()
+    expect(existsSync(tmpdir())).toBe(true)
   })
 
   it('reads explicit configs, games, seed and reference', () => {
