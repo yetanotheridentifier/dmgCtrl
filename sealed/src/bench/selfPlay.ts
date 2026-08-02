@@ -48,12 +48,28 @@ export interface PlayGameOptions {
   firstPlayer: PlayerId
   /** Abort a game that will not terminate. Real games are a few hundred moves; a cycle blows past. */
   stepCeiling?: number
-  /** Abort a game whose moves keep coming but wall-clock time runs away (a slow hang). */
+  /**
+   * Accepted and ignored.
+   *
+   * This used to abort a game whose wall-clock time ran away, which made a RESULT depend on how busy
+   * the machine was: two byte-identical sweep configs measured 0.4964 and 0.4965, one game apart in
+   * 8400, because a loaded box dropped a game an idle one finished. Determinism is a stated
+   * invariant, and `stepCeiling` already bounds the work deterministically.
+   *
+   * Kept in the signature so existing callers still compile, and so the reason is documented where
+   * someone would otherwise reintroduce it.
+   *
+   * @deprecated wall-clock time no longer affects the outcome; use `stepCeiling`.
+   */
   timeoutMs?: number
 }
 
+/**
+ * A few hundred moves is a real game, so this is generous by two orders of magnitude and only ever
+ * catches a genuine cycle. It is the ONLY guard allowed to decide a game's fate, because it is a
+ * function of the seed rather than of the machine.
+ */
 const DEFAULT_STEP_CEILING = 50_000
-const DEFAULT_TIMEOUT_MS = 10_000
 
 /**
  * A seeded shuffle that advances its own seed each call, so both decks (and any later shuffle) draw
@@ -75,7 +91,6 @@ function makeSeededShuffle(seed: number): <T>(arr: T[]) => T[] {
  */
 export function playGame(opts: PlayGameOptions): GameResult {
   const stepCeiling = opts.stepCeiling ?? DEFAULT_STEP_CEILING
-  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const shuffle = makeSeededShuffle(opts.seed)
 
   let state = initGame(opts.deckPlayer, opts.deckOpponent, opts.cardDb, {
@@ -97,11 +112,6 @@ export function playGame(opts: PlayGameOptions): GameResult {
       if (steps >= stepCeiling) {
         status = 'dropped'
         dropReason = 'nonterminating'
-        break
-      }
-      if (performance.now() - start > timeoutMs) {
-        status = 'dropped'
-        dropReason = 'timeout'
         break
       }
       const active = state.activePlayer

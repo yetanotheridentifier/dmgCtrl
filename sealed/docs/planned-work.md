@@ -65,9 +65,10 @@ guessing by a wide margin.
 1. **#430 term sensitivity.** Which evaluation terms actually vary across candidates. Minutes of
    compute, and it would have predicted every null result in the 400,000-game sweep. Also the gate
    for deciding which dormant terms wake up after lookahead.
-2. **#431 bench harness fixes.** A seat bias of a few tenths (an AI measured against itself reads
-   49.4% to 50.0%) and load-dependent results from a wall-clock timeout. Both corrupt any A/B
-   measuring under a point, which is all of the remaining work.
+2. ~~**#431 bench harness fixes.**~~ Done. Seats and first player now alternate independently across
+   all three harnesses, and the wall clock no longer decides a game's fate. An AI measured against
+   itself reads 49.99% over six seeds, against 49.67% before. See
+   [ai-benchmark.md](ai-benchmark.md).
 3. **#432 hidden-information sizing.** How often lethal is even available, and the
    perfect-information upper bound: an AI with a cheating oracle onto the opponent's hand against the
    honest one. That is the ceiling on anything a belief model could buy.

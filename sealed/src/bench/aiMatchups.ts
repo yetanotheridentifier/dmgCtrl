@@ -6,6 +6,7 @@ import { nextSeed } from '../engine/rng'
 import { BUILD_TAG } from '../buildTag'
 import type { Ai } from '../ai/types'
 import { playGame } from './selfPlay'
+import { seating, resultForA } from './seating'
 import { wilsonInterval } from './stats'
 import type { MatchupDeck } from './matchupDecks'
 
@@ -77,21 +78,22 @@ export function runAiMatchups(
       let completed = 0
       for (let g = 0; g < config.gamesPerCell; g++) {
         seed = nextSeed(seed)
-        // aiA always holds the `player` seat and deckA; only who moves first alternates.
+        // Each AI keeps its own deck, but they swap SEATS on an independent cycle from who moves
+        // first, so neither advantage settles on one side.
+        const seats = seating(g)
         const r = playGame({
-          deckPlayer: deckA.deck,
-          deckOpponent: deckB.deck,
+          deckPlayer: seats.swapped ? deckB.deck : deckA.deck,
+          deckOpponent: seats.swapped ? deckA.deck : deckB.deck,
           cardDb,
-          aiPlayer: aiA,
-          aiOpponent: aiB,
+          aiPlayer: seats.swapped ? aiB : aiA,
+          aiOpponent: seats.swapped ? aiA : aiB,
           seed,
-          firstPlayer: g % 2 === 0 ? 'player' : 'opponent',
+          firstPlayer: seats.firstPlayer,
           stepCeiling: config.stepCeiling,
-          timeoutMs: config.timeoutMs,
         })
         if (r.status !== 'completed') { dropped++; continue }
         completed++
-        if (r.winner === 'player') winsA++
+        if (resultForA(r, seats).won) winsA++
       }
       totalWins += winsA
       totalGames += completed
