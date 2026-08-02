@@ -14,11 +14,39 @@ comes out every time, move for move. That is what makes a benchmark meaningful: 
 the opening dice roll, every in-game decision) is fixed by the run's seed. Re-run with the same seed
 and you get identical numbers.
 
-The built-in sanity check is **random versus random**. Both sides play the same deck, so it is a
+The built-in sanity check is **any AI against itself**. Both sides play the same deck, so it is a
 mirror match and should be a coin flip. If the reported win rate sits on 50% (within its confidence
 interval), the harness itself is unbiased and you can trust it to measure real differences. If it
 drifted off 50%, something in the engine or the runner would be skewing results, and no later AI
 number could be believed.
+
+**Run this check at the precision you intend to measure at.** It is only meaningful against the
+effects you care about: 840 games gives +/-3.4%, which cannot see a bias a third of that size. The
+seat defect below was invisible at that width and obvious at 8400 games.
+
+### Seats and first player both alternate
+
+`bench/seating.ts` cycles **seat** and **first player** on independent axes, so neither advantage
+settles on one side. Independence is the point: flipping both together is balanced but useless,
+because only two of the four combinations occur and seat stays confounded with turn order.
+
+This matters because it was wrong. Every harness used to pin `aiA` to the `player` seat, and an AI
+measured against itself read a mean of **49.67%** across six seeds at 8400 games each, five of the
+six below 50. It now reads **49.99%**.
+
+The spread is the sharper evidence. A binomial at 8400 games has an expected standard deviation of
+0.55 points; the corrected readings measure 0.59, while the old ones measured **0.30, tighter than
+chance allows**. The seat was deciding more of the outcome than the games were.
+
+Two consequences worth knowing when reading older numbers:
+
+- **Differences are unaffected.** Anything measured as candidate-minus-control cancels the bias, so
+  the tuning result (+0.62%) stands as recorded.
+- **Absolute win rates against a reference are understated by roughly a third of a point.**
+
+`margin` is seat-relative (`baseDamage.opponent - baseDamage.player`), so it is negated when the
+seats swap. `resultForA` owns that, because a wrongly-signed margin is silent: it still looks like a
+plausible number.
 
 ## Running it
 
@@ -252,6 +280,10 @@ the driver changes, and then measures weights for a bot nobody plays.
 81.9% ± 3.7%, so weight differences have limited room to show before the ceiling. Before the next
 weight sweep, move the reference to `greedy-flat` or take a fresh frozen snapshot; a tuner that
 cannot separate its candidates reports noise with a confidence interval on it.
+
+A paired control row (measuring the shipped weights alongside each candidate) is **no longer needed**
+now that the seats alternate. It was how the seat bias got cancelled by hand, and it doubled the cost
+of every comparison.
 
 ## Matchup matrix
 
