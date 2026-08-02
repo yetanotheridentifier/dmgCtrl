@@ -9,12 +9,16 @@ The AI's remaining blind spots are measured, not guessed. `npm run bench --prefi
 --decisions` reports how often every candidate move scores identically, so the seeded tie-break
 picks at random:
 
-| Decision | Coin-flip rate | Options |
-| --- | --- | --- |
-| Initiative | 18.2% | n/a |
-| Which card to play | 7.4% | 4.7 |
-| Attacks | 1.6% | 7.8 |
-| Regroup: which card | 0.1% | 4.8 |
+| Decision | Coin-flip rate | Options | Coin flips per game |
+| --- | --- | --- | --- |
+| Initiative | 18.2% | n/a | **~7.4** |
+| Which card to play | 7.4% | 4.6 | ~1.5 |
+| Answering a choice | 7.4% | 8.7 | ~0.9 |
+| Attacks | 1.7% | 7.8 | ~0.5 |
+| Regroup: which card | 0.1% | 4.8 | ~0 |
+
+The last column is what actually ranks the work: a rate is meaningless without how often the decision
+arises. **Initiative is the largest remaining blind spot by a wide margin.**
 
 ### One search, three policies
 

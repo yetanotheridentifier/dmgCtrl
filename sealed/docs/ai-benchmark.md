@@ -160,8 +160,13 @@ This is the sharpest diagnostic in the harness, because a blind spot is invisibl
 term the evaluation lacks entirely shows up here as a 100% tie rate on the decision it should be
 deciding, long before it shows up as lost games.
 
-Current rates: initiative ~18%, which card to play ~7%, attacks ~2%, regroup card choice near 0%.
-See [planned-work.md](planned-work.md) for what that ordering implies.
+Current rates: initiative 18.2%, answering a choice 7.4%, which card to play 7.4%, attacks 1.7%,
+regroup card choice 0.1%. See [planned-work.md](planned-work.md) for what that ordering implies.
+
+**Read the rate against how often the decision comes up**, or the ordering misleads. Initiative is
+offered about 40 times a game, so 18.2% is roughly 7 coin flips a game; answering a choice comes up
+about 12 times for 0.9; attacks are frequent but now decided, at 0.5. Initiative is the largest
+remaining blind spot by a wide margin.
 
 Attacks were the highest-volume blind spot at ~10% until scoring became quiescent, which is what a
 tie rate is for: an attack that suspended on a choice used to be scored before it had done anything,
@@ -190,8 +195,8 @@ unfinished first one. Reported at three granularities (candidates scored, positi
 candidate is affected, and moves actually chosen) plus the choice kinds driving each side, since one
 card causing all of it is a different problem from a broad spread.
 
-Current rates: **we** owe the answer in 33.8% of positions and 17.0% of chosen moves; the opponent
-owes it in 4.6% and 0.4%.
+Current rates: **we** owe the answer in 33.7% of positions and 16.7% of chosen moves; the opponent
+owes it in 4.6% and 0.3%.
 
 These are counted on the **raw** state a move produces, so they measure how often quiescence has
 something to do, not what it concluded. The chosen-move rate going **up** as the positions rate came
