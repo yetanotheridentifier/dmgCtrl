@@ -10,6 +10,8 @@ import { wilsonInterval } from './stats'
 import { buildCoverageDecks } from './coverageDecks'
 import { playGame } from './selfPlay'
 import type { DropReason, GameResult } from './selfPlay'
+import { seating, resultForA } from './seating'
+import type { OutcomeForA } from './seating'
 
 /**
  * Generalisation diagnostic (#408 follow-up): play `aiA` against `aiB` on each coverage deck and
@@ -122,36 +124,42 @@ export function runGeneralisationWith(
 
   for (const deck of decks) {
     const results: GameResult[] = []
+    const outcomes: OutcomeForA[] = []
     for (let g = 0; g < config.gamesPerDeck; g++) {
       seed = nextSeed(seed)
+      // Seat and first player both cycle, independently, so neither advantage lands on one AI.
+      const seats = seating(g)
       const result = playGame({
         deckPlayer: deck,
         deckOpponent: deck,
         cardDb,
-        aiPlayer: aiA,
-        aiOpponent: aiB,
+        aiPlayer: seats.swapped ? aiB : aiA,
+        aiOpponent: seats.swapped ? aiA : aiB,
         seed,
-        firstPlayer: g % 2 === 0 ? 'player' : 'opponent',
+        firstPlayer: seats.firstPlayer,
         stepCeiling: config.stepCeiling,
-        timeoutMs: config.timeoutMs,
       })
       results.push(result)
+      // The raw result stays untouched, because a dropped game is replayed from it and must keep the
+      // seats it was actually played with. aiA's view is kept alongside instead.
+      if (result.status === 'completed') outcomes.push(resultForA(result, seats))
       if (result.status === 'dropped') {
         failures.push({ deck: deck.name, seed: result.seed, reason: result.dropReason! })
         droppedGames.push(result)
       }
     }
 
+    // Everything below reads `outcomes`, which is already from aiA's seat, never the raw winner.
     const done = results.filter(r => r.status === 'completed')
-    const winsA = done.filter(r => r.winner === 'player').length
-    const draws = done.filter(r => r.winner === 'draw').length
+    const winsA = outcomes.filter(o => o.won).length
+    const draws = outcomes.filter(o => o.draw).length
     const ci = wilsonInterval(winsA, done.length)
     totalWinsA += winsA
     totalCompleted += done.length
 
     const leaderName = byId.get(deck.leader)?.Name ?? deck.leader
     const baseAspect = (byId.get(deck.base)?.Aspects ?? [])[0] ?? '?'
-    const marginSum = done.reduce((s, r) => s + r.margin, 0)
+    const marginSum = outcomes.reduce((s, o) => s + o.margin, 0)
     bump(leaderAgg, leaderName, winsA, done.length, marginSum)
     bump(baseAgg, baseAspect, winsA, done.length, marginSum)
 
@@ -166,7 +174,7 @@ export function runGeneralisationWith(
       winRateA: done.length === 0 ? 0 : winsA / done.length,
       winCi: ci.halfWidth,
       drawRate: done.length === 0 ? 0 : draws / done.length,
-      avgMargin: mean(done.map(r => r.margin)),
+      avgMargin: mean(outcomes.map(o => o.margin)),
     })
   }
 

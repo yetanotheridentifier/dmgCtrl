@@ -36,6 +36,28 @@ describe('playGame', () => {
     expect(r.moveCount).toBeGreaterThan(1)
   })
 
+  /**
+   * A result must not depend on how busy the machine is. The drop decision used to consult a
+   * wall-clock timeout, so a loaded box dropped games an idle one completed: two byte-identical
+   * sweep configs measured 0.4964 and 0.4965, a one-game difference in 8400. Determinism is a stated
+   * invariant, and a number that moves with CPU load is not a measurement.
+   *
+   * `stepCeiling` is the deterministic guard and is the only one allowed to decide a game's fate.
+   */
+  it('ignores the wall clock entirely, so load cannot change the outcome', () => {
+    const normal = playGame({ ...base, seed: 11 })
+    // An impossible time budget: if the clock still gated anything, this would drop instantly.
+    const starved = playGame({ ...base, seed: 11, timeoutMs: 0 })
+    expect(starved.status).toBe('completed')
+    expect(stable(starved)).toEqual(stable(normal))
+  })
+
+  it('still stops a non-terminating game, by step count rather than by clock', () => {
+    const r = playGame({ ...base, seed: 11, stepCeiling: 5 })
+    expect(r.status).toBe('dropped')
+    expect(r.dropReason).toBe('nonterminating')
+  })
+
   it('is deterministic: same seed, identical game', () => {
     const a = playGame({ ...base, seed: 7 })
     const b = playGame({ ...base, seed: 7 })

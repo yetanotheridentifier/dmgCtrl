@@ -6,6 +6,7 @@ import { nextSeed } from '../engine/rng'
 import { BUILD_TAG } from '../buildTag'
 import type { Ai } from '../ai/types'
 import { playGame } from './selfPlay'
+import { seating, resultForA } from './seating'
 import type { MatchupDeck } from './matchupDecks'
 
 /**
@@ -73,22 +74,26 @@ export function runMatchupMatrix(
       let marginSum = 0
       for (let g = 0; g < config.gamesPerCell; g++) {
         seed = nextSeed(seed)
+        // One AI plays both sides, so the seat advantage lands on a DECK. Swapping which deck sits
+        // in the player seat is what makes the reverse-matchup derivation below sound: it assumes
+        // the two directions are the same games, which an uncancelled seat bias would falsify.
+        const seats = seating(g)
         const r = playGame({
-          deckPlayer: decks[i].deck,
-          deckOpponent: decks[j].deck,
+          deckPlayer: seats.swapped ? decks[j].deck : decks[i].deck,
+          deckOpponent: seats.swapped ? decks[i].deck : decks[j].deck,
           cardDb,
           aiPlayer: ai,
           aiOpponent: ai,
           seed,
-          firstPlayer: g % 2 === 0 ? 'player' : 'opponent',
+          firstPlayer: seats.firstPlayer,
           stepCeiling: config.stepCeiling,
-          timeoutMs: config.timeoutMs,
         })
         if (r.status !== 'completed') { dropped++; continue }
         completed++
-        if (r.winner === 'player') winsA++
-        else if (r.winner === 'opponent') winsB++
-        marginSum += r.margin // from deck i's (the player seat's) perspective
+        const forI = resultForA(r, seats) // "A" here is deck i
+        if (forI.won) winsA++
+        else if (!forI.draw) winsB++
+        marginSum += forI.margin // from deck i's perspective, whichever seat it took
       }
       const avgMargin = completed === 0 ? 0 : marginSum / completed
       cells.push(cell(decks[i], decks[j], completed, winsA, avgMargin))
