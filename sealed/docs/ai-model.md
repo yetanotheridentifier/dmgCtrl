@@ -64,6 +64,66 @@ Two properties worth keeping:
 `greedy-flat` in the registry is the same AI without this, kept so the comparison can be re-run as
 the evaluation changes underneath it.
 
+## Own-turn lookahead: the beam
+
+One ply scores each move in isolation, so it can never play a line whose first step is a loss.
+Sacrificing a chump into a Sentinel to clear the path is the canonical case: the sacrifice is simply
+bad, and the payoff arrives two actions later.
+
+The beam expands a sequence of **our own** actions and values a move by the best board its follow-ups
+reach. It ships at **width 4, depth 3**, and measures **60.0%** against one-ply greedy over three
+seeds and 2580 games (57.5%, 59.0%, 63.5%), where greedy against itself reads 50.4%.
+
+### The null-move assumption
+
+Players alternate single actions, so continuing our own sequence means pretending the opponent does
+nothing in between. **That assumption, not the search, is where the strength comes from and where it
+leaks.** Since the beam maximises over leaves, it systematically prefers the branch most dependent on
+the assumption holding.
+
+It models this format better than it sounds. There is no instant-speed interaction and a played unit
+arrives exhausted, so an opponent cannot answer mid-sequence with a card they have just cast. Their
+whole in-sequence toolkit is: attack with something already ready, play an event, play an Ambush
+unit, deploy their leader (which arrives ready, and is the largest of these), or claim.
+
+The null move is the real `pass` action rather than a rewrite of `activePlayer`, which is safe because
+every real action resets the pass counter before handing the turn over, so alternating our-action and
+their-pass never reaches the two-pass phase end. The search never passes on our own behalf.
+
+### Three properties that are not obvious
+
+- **Each root keeps its own beam.** A single global frontier would defeat the purpose: these lines
+  open with a move that is bad in isolation, so trimming by immediate score prunes exactly the roots
+  worth exploring. Per-root beams cost roughly `roots × width × depth` instead of `width × depth`, and
+  that is the price of the feature working rather than an optimisation left unclaimed.
+- **Decisive scores are discounted by depth.** Without it the beam is indifferent between winning now
+  and winning in three actions, since both score WIN. A deferred win is certain only if the opponent
+  really does nothing. The discount touches decided boards only, so it reorders no material judgement.
+- **The beam expands actions; quiescence owns the chains.** `resolveChain` settles an owed choice and
+  returns the board, so depth counts genuine actions. Otherwise a `support` chain would consume beam
+  width and depth would mean something different in every position.
+
+### Width and depth
+
+Depth does the work; width barely matters and is mildly harmful past 4.
+
+| | Win rate | ms/decision |
+| --- | --- | --- |
+| depth 2 (any width) | 54.0% | |
+| width 2, depth 3 | 59.2% | 62 |
+| **width 4, depth 3** | **60.0%** | **85** |
+| width 8, depth 3 | 56.1% | 122 |
+
+Width is provably irrelevant at depth 2, where the trim is never used, and every depth-2 cell returns
+bit-identical numbers. Width 8 losing to width 4 is consistent with the optimism story: a wider beam
+keeps more mediocre states, and a max over more leaves is more optimistic.
+
+**Depth 4 is better and is deliberately not shipped.** It measures 59.4% against depth 3's 57.5% on
+the same seed, but only once the node budget is raised: at the default budget it reports 54.4%,
+because the rail truncates it. It costs 2.45x, and its value rests on four consecutive opponent
+non-actions, which is exactly what a modelled reply changes. The decision belongs with the reply
+policy rather than before it.
+
 ## The two halves of `evaluate`
 
 The split is a **hidden-information boundary**, not a tidiness one.
@@ -294,6 +354,14 @@ Three properties keep it from disturbing anything else:
 The reading is a lower bound. `canFinishThisAction` sees only damage already on the board, so an
 event finisher, an Ambush unit or a pump in hand is invisible to it. Closing that gap is search, not
 a weight.
+
+Two of the gaps are **public** rather than hidden, and are worth knowing before the bound is trusted.
+A leader deploys **ready** and deploys on resources controlled rather than spent, so an undeployed
+leader is a ready attacker its owner can produce at will; deploying is itself an action, so it is
+normally a two-action line, but a leader granted Ambush on deploy swings in the same action. And a
+few units ready themselves while some events ready an exhausted one, so `exhausted` is not the last
+word on whether a body can attack again this round. Both are narrow enough not to earn a term, and
+both make the race model under-read a player who is about to deploy.
 
 ### Role: read the race, not the board
 

@@ -58,6 +58,21 @@ and search rather than to a belief model. This is the gate on #434 to #439 below
 when-played base hit is invisible to it, so both the lethal readout and the shipped exposure term are
 lower bounds. Closing that gap is search, which is #433.
 
+Two of the gaps are **public**: a leader deploys ready, so an undeployed leader is an attacker its
+owner can produce at will, and a few units ready themselves while some events ready an exhausted one.
+Neither earns a term, and both make the race model under-read a player about to deploy.
+
+### Some of what the model knows may be standing in for search
+
+`lethalExposure` is a static proxy for "they can kill me next action"; `role` is a static proxy for
+trajectory. A deeper search computes both directly, so their measured value should **shrink** as depth
+rises, and once #425 models the reply, `lethalExposure` risks double-counting outright.
+
+That decides what transfers between search configurations. Changes that add **information the search
+cannot get** carry over; changes that **proxy for search** do not. `--terms` is the instrument: watch
+the Bearing column for those two terms as depth rises. It is recorded on #447 so it can be judged
+rather than argued.
+
 ## One search, several policies
 
 The search tickets are not separate features. They are **one bounded tree search over `legalMoves`**
@@ -77,20 +92,23 @@ bot.
 
 ## Next up
 
-1. **#410 own-turn beam.** Expanding **separate actions**, with a null move for the opponent, beam
-   width K over depth, role fixed once at the root. The null-move assumption is where the strength
-   comes from and where it leaks. **Its original justification is gone**: it was sized on attack ties
-   at 10.2%, now 1.7% once quiescent scoring landed. It now rests on initiative (the table above) and
-   on the multi-step lines themselves, which need a scripted position rather than a rate.
-2. **#433 lethal, as a terminal condition of #410**, not a standalone solver. "Can I win this turn"
+1. **#433 lethal, as a terminal condition of #410**, not a standalone solver. "Can I win this turn"
    assumes the opponent does nothing, which is #410's null-move assumption, so this is that search
    with a different finish line. What it adds is the **hand**: a burn event, a pump, a when-played
    base hit, or clearing a Sentinel then swinging. (Ambush is not a closer: `legalMoves` only ever
    offers it unit targets, so it reaches a base solely via Overwhelm.)
-3. **#425 opponent reply**, public information only. The cheap first step into pessimistic search.
+2. **#425 opponent reply**, public information only. The cheap first step into pessimistic search.
+3. **#446 claim the initiative when it converts to lethal.** Split out of #410, which could not build
+   it: the check is `hasLethal` from #433, and it needs the sequence to continue across a **round
+   boundary** rather than to the end of a turn. Initiative is still the largest single tie at 18.2%,
+   ~7.4 coin flips a game.
 4. **Re-run `--terms`** once the matrix lands, and compare against the pre-registered predictions on
    #430: `resourceSurplus`, `saturation`, `hand.canAct` and `roleShift` should start mattering if they
    were dormant. Anything still flat is dead and can be deleted.
+5. **#447 final search configuration**, after #425 and not before. Depth, width and reply policy get
+   chosen jointly, because they are not independent: depth 4 measured **better** than the shipped
+   depth 3 and was banked rather than shipped, since its value rests on four consecutive opponent
+   non-actions and #425 is what changes that.
 
 **Measure four configurations, not two.** #410 is optimistic (the opponent does nothing) while #425
 is pessimistic (they do the worst visible thing). Those pull in opposite directions and may not
