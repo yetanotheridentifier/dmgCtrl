@@ -5,6 +5,8 @@ import { writeFailures, FAILURES_DIR } from './reports'
 import { runSweep } from './sweep'
 import type { SweepReport } from './sweep'
 import { runDecisions } from './decisions'
+import { runTerms } from './terms'
+import type { TermReport } from './terms'
 import { runAiMatchups } from './aiMatchups'
 import type { DecisionReport } from './decisions'
 import { runGeneralisation } from './generalisation'
@@ -41,6 +43,7 @@ interface Args {
   generalise: boolean
   matrix: boolean
   decisions: boolean
+  terms: boolean
   matchups: boolean
   aiExplicit: boolean
   aiA: string
@@ -56,6 +59,7 @@ function parseArgs(argv: string[]): Args {
   let generalise = false
   let matrix = false
   let decisions = false
+  let terms = false
   let matchups = false
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
@@ -65,13 +69,14 @@ function parseArgs(argv: string[]): Args {
     else if (arg === '--generalise') generalise = true
     else if (arg === '--matrix') matrix = true
     else if (arg === '--decisions') decisions = true
+    else if (arg === '--terms') terms = true
     else if (arg === '--matchups') matchups = true
     else if (arg.startsWith('--')) throw new Error(`Unknown flag: ${arg}`)
     else positional.push(arg)
   }
   if (!Number.isFinite(games) || games < 1) throw new Error(`--games must be a positive integer`)
   if (!Number.isFinite(seed)) throw new Error(`--seed must be a number`)
-  return { games, gamesSet, seed, sweep, generalise, matrix, decisions, matchups, aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, sweep, generalise, matrix, decisions, terms, matchups, aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
@@ -301,6 +306,56 @@ function runDecisionsMode(args: Args): void {
   console.log(formatDecisions(report, Date.now() - start))
 }
 
+/**
+ * Term sensitivity (#430). Two columns, because they answer different questions: a weight whose
+ * quantity never varies is dead, while one that varies but is never pivotal is live and simply not
+ * worth tuning. The second is the 400,000-game sweep's null result, in minutes.
+ */
+function runTermsMode(args: Args): void {
+  const gamesPerDeck = args.gamesSet ? args.games : 1
+  const start = Date.now()
+  let report: TermReport
+  try {
+    report = runTerms({ gamesPerDeck, seed: args.seed })
+  } catch (err) {
+    console.error(`bench: ${(err as Error).message}`)
+    process.exit(2)
+    return
+  }
+
+  const rate = (n: number): string => pct(report.decisions === 0 ? 0 : n / report.decisions)
+  const lines = [
+    '',
+    `dmgCtrl term sensitivity  (engine ${report.buildTag})`,
+    row('games', `${report.games}`),
+    row('decisions', `${report.decisions}`),
+    '',
+    '  VARIES: the quantity differs across candidates, so the term can influence the ranking at all.',
+    '  PIVOTAL: a nudge changes the pick, i.e. the weight is worth sweeping.',
+    '  BEARING: setting it to zero changes the pick, i.e. it cannot simply be deleted.',
+    '  The last two differ: a tie-break whose ordering survives rescaling is bearing but not pivotal.',
+    '  n/a means the weight prices no quantity: saturation splits the pool, roleShift bends other',
+    '  weights, so for those only the perturbation columns are findings.',
+    '',
+    `  ${'weight'.padEnd(16)}${'step'.padStart(6)}${'varies'.padStart(9)}${'pivotal'.padStart(9)}` +
+    `${'bearing'.padStart(9)}${'spread'.padStart(9)}   by kind (bearing)`,
+  ]
+  // Load-bearing first: what the model is actually using leads, and the dead weights sink.
+  for (const s of [...report.stats].sort((a, b) => b.loadBearing - a.loadBearing || b.pivotal - a.pivotal)) {
+    const kinds = s.byKind
+      .filter(k => k.decisions > 0)
+      .map(k => `${k.kind} ${pct(k.loadBearing / k.decisions)}`)
+      .join('  ')
+    lines.push(
+      `  ${s.weight.padEnd(16)}${String(s.step).padStart(6)}${(s.hasQuantity ? rate(s.varies) : 'n/a').padStart(9)}` +
+      `${rate(s.pivotal).padStart(9)}${rate(s.loadBearing).padStart(9)}` +
+      `${(s.hasQuantity ? s.spread.toFixed(1) : 'n/a').padStart(9)}   ${kinds}`,
+    )
+  }
+  lines.push('', row('wall clock', `${((Date.now() - start) / 1000).toFixed(1)}s`), '')
+  console.log(lines.join('\n'))
+}
+
 function runMatchupsMode(args: Args): void {
   const aiA = args.aiExplicit ? args.aiA : 'greedy'
   const aiB = args.aiExplicit && args.aiB !== 'random' ? args.aiB : 'greedy-baseline'
@@ -392,7 +447,7 @@ function main(): void {
     args = parseArgs(process.argv.slice(2))
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
-    console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N] [--sweep|--generalise|--matrix|--decisions|--matchups] [aiA] [aiB]')
+    console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N] [--sweep|--generalise|--matrix|--decisions|--terms|--matchups] [aiA] [aiB]')
     process.exit(2)
     return
   }
@@ -401,6 +456,7 @@ function main(): void {
   if (args.generalise) { runGeneraliseMode(args); return }
   if (args.matrix) { runMatrixMode(args); return }
   if (args.decisions) { runDecisionsMode(args); return }
+  if (args.terms) { runTermsMode(args); return }
   if (args.matchups) { runMatchupsMode(args); return }
 
   let report: BenchReport

@@ -74,7 +74,12 @@ Examples:
 npm run bench --prefix sealed                                  # 100 games, random vs random
 npm run bench --prefix sealed -- --games 1000 --seed 42        # a big, reproducible run
 npm run bench --prefix sealed -- --games 1000 greedy random    # measure the greedy AI
+npm run bench --prefix sealed -- --decisions                   # where the evaluation has no opinion
+npm run bench --prefix sealed -- --terms --games 3             # which weights can matter at all
 ```
+
+`--terms` re-scores every decision once per weight per perturbation, so it costs roughly 30 times a
+plain pass: 3 games a deck is ~20 minutes and is plenty for rates of this size.
 
 Recorded baselines (mirror deck, so purely AI skill): `random` vs `random` sits at 50% (the harness
 self-check), and `greedy` vs `random` is ~100% over 1000 games, the one-ply scorer demolishing
@@ -298,6 +303,69 @@ These are counted on the **raw** state a move produces, so they measure how ofte
 something to do, not what it concluded. The chosen-move rate going **up** as the positions rate came
 down is the fix showing its work: the AI used to avoid cards whose when-played effect it could not
 see, and now it plays them.
+
+## Term sensitivity: which weights can matter
+
+`--terms` reports, per evaluation weight, whether it can influence a decision at all. It exists
+because a 146-cell grid and 8400-game validation spent roughly 400,000 games discovering that most of
+the weight set was at a local optimum, and a few minutes of instrumentation says which weights could
+ever have moved.
+
+The mechanism is that one ply only compares candidates from a **single** position. The score is
+`sum_k w_k * q_k(candidate)`, so a term whose quantity is equal across those candidates adds the same
+constant to every score and cancels exactly, whatever its weight.
+
+Three columns, because no one of them is enough:
+
+| Column | Question | Method |
+| --- | --- | --- |
+| **Varies** | Can the term influence the ranking at all? | Does `q_k` take more than one value across the candidates |
+| **Pivotal** | Is the weight worth sweeping? | Does a nudge of a quarter of its value change the pick |
+| **Bearing** | Can the weight be deleted? | Does setting it to zero change the pick |
+
+The last two are not the same question, and the gap between them is the reason both are reported. A
+tie-break whose ordering survives rescaling is bearing but never pivotal. Conversely a weight can be
+pivotal without being bearing, when what matters is its **difference** from another weight and zeroing
+it leaves that difference the same sign.
+
+`saturation` and `roleShift` price no quantity: the first decides how the pool is split between two
+rates, the second bends other weights. They report `n/a` under Varies, and only the perturbation
+columns are findings for them. Reporting a bare 0 there would say the opposite of the truth for
+`roleShift`, which is bearing in 4.4% of decisions.
+
+Over 126 games and 8503 decisions:
+
+| Weight | Varies | Pivotal | Bearing | Spread |
+| --- | --- | --- | --- | --- |
+| `base` | 44.7% | 10.5% | **23.1%** | 3.0 |
+| `power` | 64.1% | 12.8% | 18.0% | 4.1 |
+| `resource` | 14.3% | 8.9% | 14.2% | 1.0 |
+| `hand.hold` | 57.7% | **0.0%** | 13.8% | 13.9 |
+| `hp` | 59.0% | 14.9% | 8.9% | 4.3 |
+| `unit` | 52.1% | 3.4% | 6.3% | 1.4 |
+| `roleShift` | n/a | 8.1% | 4.4% | n/a |
+| `card` | 53.9% | 13.3% | **2.9%** | 1.0 |
+| `readyUnit` | 53.1% | 4.9% | 2.3% | 1.1 |
+| `initiative` | 28.9% | 3.1% | 1.9% | 2.0 |
+| `claimCost` | 43.0% | 1.0% | 1.8% | 2.3 |
+| `resourceSurplus` | 1.9% | 1.6% | 1.7% | 1.0 |
+| `lethalExposure` | 3.4% | 0.1% | 1.0% | 1.0 |
+| `hand.canAct` | 5.5% | 0.0% | 0.1% | 1.0 |
+| `saturation` | n/a | 0.0% | **0.0%** | n/a |
+
+Read Pivotal as "the decision is sensitive to this weight", not "there is improvement available
+here". `card` scores 13.3% largely by creating ties: at `card: 3` the banking gate `resource - card`
+reaches exactly 0, which is the measured 15.8% catastrophe rather than an opportunity.
+
+**The two perturbation columns overlap for any weight shipped at 1.** The step is a quarter of the
+weight floored at 1, so for `hp`, `readyUnit`, `initiative` and `roleShift` the downward nudge lands
+on zero and Pivotal already contains Bearing. That is a property of integer weights that small rather
+than a defect: the only neighbours of 1 are 0 and 2, so "tune it down" and "delete it" are the same
+experiment. For every other weight the columns are independent.
+
+The by-kind breakout is what makes the resource terms legible. `resource` is bearing in **89.2%** of
+regroup decisions and 0.1% of action-phase ones; `hand.hold` in **75.9%** of regroups. Averaged into a
+single number both would look mild.
 
 ## AI versus AI, per matchup
 

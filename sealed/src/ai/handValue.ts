@@ -69,20 +69,40 @@ function pool(state: GameState, me: PlayerId): number {
   return state.players[me].resources.length
 }
 
-/** What `me`'s hand is worth to them. */
-export function handValue(state: GameState, me: PlayerId, w: HandWeights): number {
+/**
+ * The two quantities the hand weights price, before either weight is applied (#430).
+ *
+ * Separated so the term-sensitivity diagnostic can ask whether they VARY across the candidate moves.
+ * `canAct` is expected to be flat: it is a property of the whole hand, so every candidate reads the
+ * same unless one spends the last castable card. That is why sweeping it over 0, 3 and 6 changed no
+ * decision at all, and the diagnostic has to be able to show it rather than assume it.
+ */
+export interface HandQuantities {
+  /** 1 if any card in hand is castable now, else 0. */
+  canAct: number
+  /** Total held value, each card discounted by how soon it can be cast. */
+  hold: number
+}
+
+export function handQuantities(state: GameState, me: PlayerId): HandQuantities {
   const p = state.players[me]
   const r = pool(state, me)
-  let held = 0
-  let canAct = false
+  let hold = 0
+  let canAct = 0
 
   for (const id of p.hand) {
     const card = state.cards[id]
     if (!card) continue
     const cost = effectiveCost(state, me, card)
-    held += cardValue(state, me, card) * reach(cost, r)
-    if (cost <= r) canAct = true
+    hold += cardValue(state, me, card) * reach(cost, r)
+    if (cost <= r) canAct = 1
   }
 
-  return (canAct ? w.canAct : 0) + w.hold * held
+  return { canAct, hold }
+}
+
+/** What `me`'s hand is worth to them. */
+export function handValue(state: GameState, me: PlayerId, w: HandWeights): number {
+  const q = handQuantities(state, me)
+  return w.canAct * q.canAct + w.hold * q.hold
 }

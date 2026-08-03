@@ -24,15 +24,24 @@ identically, so the seeded tie-break picks at random:
 
 The last column is what ranks the work: a rate is meaningless without how often the decision arises.
 
-### Re-weighting is exhausted
+### Re-weighting is exhausted, and only one weight is dead
 
 A 146-cell interaction grid plus 8400-game validation across multiple seeds put the weight set at a
 local optimum. **Further strength must come from new information, not from re-weighting what is
 there.** The measured constraints live in [ai-model.md](ai-model.md); the tool is `npm run tune`.
 
-The sweep also showed *why* so much of the model is inert. A one-ply evaluation only ever compares
-candidates from one position, so any term equal across them cancels exactly. Several weights are not
-dead but **dormant**, pricing futures that one ply cannot see. #430 makes that testable.
+Term sensitivity (`--terms`) now says which weights could ever have moved, over 8503 decisions. One
+ply only compares candidates from a single position, so a term equal across them cancels exactly.
+**`saturation` is the only genuinely dead weight**: no quantity, nothing when nudged, nothing when
+switched off. `hand.canAct` is nearly so at 0.1%.
+
+Everything else earns its place, but not the way a sweep would suggest. `hand.hold` has the widest-
+varying quantity in the model and **no rescaling of it changes any decision**, while switching it off
+changes 75.9% of regroups: load-bearing and untunable at once. That is the shape of the null sweep
+result, and it is why "can it be deleted" is reported separately from "is it worth sweeping".
+
+The rest are expected to be **dormant rather than dead**, pricing futures one ply cannot see.
+Re-running `--terms` after lookahead is how the two are told apart.
 
 ### The hidden information is small, and what matters is public
 
@@ -68,20 +77,20 @@ bot.
 
 ## Next up
 
-1. **#430 term sensitivity.** Which evaluation terms actually vary across candidates. Minutes of
-   compute, and it would have predicted every null result in the 400,000-game sweep. Also the gate
-   for deciding which dormant terms wake up after lookahead.
-2. **#410 own-turn beam.** Expanding **separate actions**, with a null move for the opponent, beam
+1. **#410 own-turn beam.** Expanding **separate actions**, with a null move for the opponent, beam
    width K over depth, role fixed once at the root. The null-move assumption is where the strength
    comes from and where it leaks. **Its original justification is gone**: it was sized on attack ties
    at 10.2%, now 1.7% once quiescent scoring landed. It now rests on initiative (the table above) and
    on the multi-step lines themselves, which need a scripted position rather than a rate.
-3. **#433 lethal, as a terminal condition of #410**, not a standalone solver. "Can I win this turn"
+2. **#433 lethal, as a terminal condition of #410**, not a standalone solver. "Can I win this turn"
    assumes the opponent does nothing, which is #410's null-move assumption, so this is that search
    with a different finish line. What it adds is the **hand**: a burn event, a pump, a when-played
    base hit, or clearing a Sentinel then swinging. (Ambush is not a closer: `legalMoves` only ever
    offers it unit targets, so it reaches a base solely via Overwhelm.)
-4. **#425 opponent reply**, public information only. The cheap first step into pessimistic search.
+3. **#425 opponent reply**, public information only. The cheap first step into pessimistic search.
+4. **Re-run `--terms`** once the matrix lands, and compare against the pre-registered predictions on
+   #430: `resourceSurplus`, `saturation`, `hand.canAct` and `roleShift` should start mattering if they
+   were dormant. Anything still flat is dead and can be deleted.
 
 **Measure four configurations, not two.** #410 is optimistic (the opponent does nothing) while #425
 is pessimistic (they do the worst visible thing). Those pull in opposite directions and may not
