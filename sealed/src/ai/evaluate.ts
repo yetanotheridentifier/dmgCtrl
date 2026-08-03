@@ -142,19 +142,32 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   hand: DEFAULT_HAND_WEIGHTS,
 }
 
+/** The three board quantities, before any weight is applied. Separated so the term breakdown and the
+ *  score itself count bodies, power and HP exactly once, in one place. */
+interface Presence {
+  units: number
+  power: number
+  hp: number
+}
+
+function presence(state: GameState, id: PlayerId): Presence {
+  const out: Presence = { units: 0, power: 0, hp: 0 }
+  for (const unit of state.players[id].units) {
+    out.units++
+    out.power += effectivePower(state, unit)
+    out.hp += Math.max(0, effectiveHp(state, unit) - unit.damage)
+  }
+  return out
+}
+
 /**
  * Board value of a player's units: a fixed bonus per body (unit count), plus power, plus a light
  * remaining-HP term. Deployed leaders live in `units`, so they count too. Defeating a unit removes
  * its whole contribution (the real trade swing); chipping only shaves the small HP part.
  */
 function boardPresence(state: GameState, id: PlayerId, w: EvalWeights): number {
-  let total = 0
-  for (const unit of state.players[id].units) {
-    total += w.unit
-    total += w.power * effectivePower(state, unit)
-    total += w.hp * Math.max(0, effectiveHp(state, unit) - unit.damage)
-  }
-  return total
+  const p = presence(state, id)
+  return w.unit * p.units + w.power * p.power + w.hp * p.hp
 }
 
 function readyUnits(state: GameState, id: PlayerId): number {
@@ -265,12 +278,23 @@ export function initiativeValue(state: GameState, me: PlayerId, w: EvalWeights):
  * leader. Each side is measured against its own leader, which keeps the term antisymmetric.
  */
 export function resourceValue(state: GameState, id: PlayerId, w: EvalWeights): number {
+  const { full, surplus } = resourceSplit(state, id, w)
+  return w.resource * full + w.resourceSurplus * surplus
+}
+
+/**
+ * The pool either side of the knee. This is where `saturation` lives, and it is the reason
+ * `saturation` has no term of its own: it is not a price, it decides how many resources are charged
+ * at `resource` and how many at `resourceSurplus`. While those two rates are equal the split cannot
+ * change any total, which is exactly why the shipped flat pool makes the knee algebraically inert.
+ */
+function resourceSplit(state: GameState, id: PlayerId, w: EvalWeights): { full: number; surplus: number } {
   const p = state.players[id]
   const leaderCost = state.cards[p.leader.cardId]?.cost ?? 0
   const knee = p.leader.deployed ? w.saturation : Math.max(w.saturation, leaderCost)
   const pool = p.resources.length
   const full = Math.min(pool, knee)
-  return w.resource * full + w.resourceSurplus * (pool - full)
+  return { full, surplus: pool - full }
 }
 
 /**
@@ -307,6 +331,72 @@ export function makePublicScore(w0: EvalWeights): Evaluator {
       * ((canFinishThisAction(state, me) ? 1 : 0) - (canFinishThisAction(state, foe) ? 1 : 0))
 
     return baseTerm + board + cards + resources + tempo + initiative + exposure
+  }
+}
+
+/** One linear term: the quantity on the board, and the price it is charged at. */
+export interface Term {
+  quantity: number
+  weight: number
+}
+
+/** The linear coefficients, i.e. every public weight that prices a quantity. `saturation` and
+ *  `roleShift` are absent by construction: neither is a price. See `resourceSplit` and `roleAdjusted`. */
+export type LinearTermKey =
+  | 'base' | 'unit' | 'power' | 'hp' | 'card' | 'resource' | 'resourceSurplus'
+  | 'readyUnit' | 'initiative' | 'claimCost' | 'lethalExposure'
+
+/**
+ * `publicScore` broken into `weight x quantity` per term (#430), for the term-sensitivity diagnostic.
+ *
+ * ## Why this exists
+ *
+ * One ply only ever compares candidates from a SINGLE position, so a term whose quantity is equal
+ * across those candidates adds the same constant to every score and cancels exactly, whatever its
+ * weight. Separating quantity from weight is what makes "this term cannot influence anything" a
+ * measurable claim rather than an argument.
+ *
+ * ## The contract
+ *
+ * **Summing `weight * quantity` over these terms must equal `makePublicScore(w)(state, me, asRole)`
+ * exactly**, for every undecided position. It is a second reading of the same arithmetic, kept
+ * separate so scoring stays a plain sum with nothing to allocate, and `benchTerms.test.ts` pins the
+ * two together over real boards rather than fixtures.
+ *
+ * Undecided only: a finished game short-circuits to +/-WIN before any term is computed, so there is
+ * nothing to decompose.
+ *
+ * Weights are reported ROLE-ADJUSTED, because those are the prices actually charged.
+ */
+export function publicBreakdown(
+  state: GameState,
+  me: PlayerId,
+  w0: EvalWeights,
+  asRole?: Role,
+): Record<LinearTermKey, Term> {
+  const w = roleAdjusted(state, me, w0, asRole)
+  const foe = opponentOf(me)
+  const mine = presence(state, me)
+  const theirs = presence(state, foe)
+  const myPool = resourceSplit(state, me, w)
+  const theirPool = resourceSplit(state, foe, w)
+
+  return {
+    base: { weight: w.base, quantity: state.players[foe].base.damage - state.players[me].base.damage },
+    unit: { weight: w.unit, quantity: mine.units - theirs.units },
+    power: { weight: w.power, quantity: mine.power - theirs.power },
+    hp: { weight: w.hp, quantity: mine.hp - theirs.hp },
+    card: { weight: w.card, quantity: state.players[me].hand.length - state.players[foe].hand.length },
+    resource: { weight: w.resource, quantity: myPool.full - theirPool.full },
+    resourceSurplus: { weight: w.resourceSurplus, quantity: myPool.surplus - theirPool.surplus },
+    readyUnit: { weight: w.readyUnit, quantity: readyUnits(state, me) - readyUnits(state, foe) },
+    initiative: { weight: w.initiative, quantity: state.initiative === me ? 1 : -1 },
+    // Charged to whoever claimed, so the quantity is their forfeited tempo less ours.
+    claimCost: { weight: w.claimCost, quantity: forfeitedTempo(state, foe) - forfeitedTempo(state, me) },
+    lethalExposure: {
+      weight: w.lethalExposure,
+      quantity: (canFinishThisAction(state, me) ? 1 : 0) - (canFinishThisAction(state, foe) ? 1 : 0),
+    },
   }
 }
 

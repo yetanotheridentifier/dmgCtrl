@@ -113,6 +113,37 @@ The board term is built around what decides trades: unit **count** is the bigges
 Remaining HP counts lightly, so damage reads as progress toward removal without a
 surviving-but-damaged unit looking like a large loss. Only defeating a unit is the real swing.
 
+### Which weights are actually doing work
+
+Measured directly rather than inferred from win rate, by `npm run bench --prefix sealed -- --terms`
+over 8503 decisions. A weight matters at one ply only if its quantity differs across the candidates
+being compared, since an equal term adds the same constant to every score and cancels.
+
+`base`, `power`, `resource` and `hand.hold` carry the model: each changes the chosen move in 14% to
+23% of decisions when switched off. At the other end, **`saturation` changes nothing at all**, in any
+column, which is what a genuinely dead weight looks like. `hand.canAct` is close behind at 0.1%.
+
+Two results are worth holding onto because they contradict the obvious reading:
+
+- **`hand.hold` is load-bearing but not tunable.** It has the widest-varying quantity in the model, a
+  spread of 13.9, and rescaling it changes **no** decision, because the hand term is squashed into
+  `[0, 1)` and scaling is nearly a monotone transform of its own ordering. Switching it off changes
+  13.8% of decisions overall and **75.9% of regroups**. It cannot be tuned and must not be deleted.
+- **`card` is the mirror image**: sensitive to a nudge (13.3%) but barely load-bearing (2.9%). What
+  matters is its difference from `resource`, and zeroing it leaves that difference the right sign.
+  Its apparent sensitivity is the banking cliff below, not headroom.
+
+`claimCost` varies in 43.0% of decisions and changes the pick in 1.0%, which is the "live but not
+worth tuning" quadrant and independent support for the note under Initiative that at
+`initiative: 1` the brake may be doing little.
+
+`lethalExposure` is bearing in only 1.0% of decisions, which is not in tension with the +3.8 points
+it measured: it is rare and decisive rather than broad, exactly as the exposure sizing predicted.
+
+Several weights are expected to be **dormant rather than dead**, pricing futures that one ply has no
+way to see. Re-running this after lookahead lands is how the two are told apart, and the claim to
+test is the Bearing column rather than Varies.
+
 ### Banking: `resource` must exceed `card`
 
 The sharpest constraint in the weight set, and the only cliff rather than a curve. Banking at regroup
@@ -135,7 +166,8 @@ regression.
 `resourceSurplus` equals `resource`, which also makes `saturation` **algebraically** inert:
 `resourceValue` collapses to `resource × pool` when the two rates are equal, so the knee cancels out.
 Sweeping `saturation` alone therefore cannot move anything, and measuring it produced four identical
-numbers.
+numbers. Term sensitivity confirms it from the other direction: `saturation` changes no decision when
+nudged and none when switched off entirely.
 
 A concave pool, valuing surplus resources below the `card` weight, is implemented and switched off.
 
