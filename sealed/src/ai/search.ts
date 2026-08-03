@@ -1,9 +1,13 @@
 import type { GameState, PlayerId } from '../engine/types'
+import type { Action } from '../engine/actions'
 import type { Evaluator } from './evaluate'
+import type { Ai } from './types'
 import type { Role } from './race'
 import { hasPendingChoices } from '../engine/types'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
+import { seededUnit } from '../engine/rng'
+import { role } from './race'
 
 /**
  * Quiescent scoring: never evaluate a half-resolved action.
@@ -96,4 +100,199 @@ function quiesce(
   }
   // Every branch was cut by the budget before scoring anything: fall back rather than return ±∞.
   return Number.isFinite(best) ? best : inner(state, me, asRole)
+}
+
+/**
+ * Drive an owed choice chain to completion and return the BOARD, where `quiesce` returns the score.
+ *
+ * The own-turn beam expands separate ACTIONS and leaves the chains to quiescence. Without this it
+ * would expand choice answers as though they were actions, and a `support` chain (1762 of them across
+ * 210 games) would eat the beam width, so "depth 3" would mean something different in every position.
+ *
+ * At each step it takes the answer whose full `quiesce` score is best (ours) or worst (theirs), so
+ * the board it lands on is the one quiescence already priced. That agreement is asserted directly in
+ * `aiBeam.test.ts`: expanding from a board other than the one we scored would be a quiet lie.
+ */
+export function resolveChain(
+  state: GameState,
+  me: PlayerId,
+  asRole: Role | undefined,
+  inner: Evaluator,
+  budget: { left: number },
+): GameState {
+  if (state.winner !== null || !hasPendingChoices(state)) return state
+
+  const moves = legalMoves(state)
+  if (moves.length === 0 || budget.left <= 0) return state
+
+  const maximising = state.activePlayer === me
+  let chosen: GameState | null = null
+  let bestScore = maximising ? -Infinity : Infinity
+  for (const move of moves) {
+    if (budget.left <= 0) break
+    budget.left--
+    const child = resolve(state, move)
+    const score = quiesce(child, me, asRole, inner, budget)
+    if (maximising ? score > bestScore : score < bestScore) {
+      bestScore = score
+      chosen = child
+    }
+  }
+  return chosen === null ? state : resolveChain(chosen, me, asRole, inner, budget)
+}
+
+/**
+ * How far and how wide the own-turn beam looks.
+ *
+ * `depth` counts OUR OWN actions, so depth 1 is plain one-ply greedy and the beam is a strict
+ * generalisation of it. `nodes` is a safety rail in the same spirit as `QuiescenceLimits`: running
+ * out degrades to the shallower answer, never to a wrong one.
+ */
+export interface BeamLimits {
+  width: number
+  depth: number
+  nodes: number
+}
+
+export const DEFAULT_BEAM_LIMITS: BeamLimits = { width: 4, depth: 3, nodes: 10_000 }
+
+/**
+ * Own-turn self-lookahead (#410): value a move by the best board its own follow-ups can reach.
+ *
+ * ## The null-move assumption
+ *
+ * Players alternate single actions, so continuing our own sequence means pretending the opponent does
+ * nothing in between. **That assumption, not the search, is where the strength comes from and where
+ * it leaks.** It is what lets a sacrifice into a Sentinel be valued by the base damage it unlocks,
+ * and it is also what will over-value a line the opponent could interrupt. Since the beam maximises
+ * over leaves, it systematically prefers the branch most dependent on that assumption holding.
+ *
+ * It is a better model of THIS format than it sounds. There is no instant-speed interaction, and a
+ * played unit arrives exhausted, so an opponent cannot answer mid-sequence with a card they have just
+ * cast. Their whole in-sequence toolkit is: attack with something already ready, play an event, play
+ * an Ambush unit, deploy their leader (which arrives READY and is the largest of these), or claim.
+ * Sealed pools are thin on all of them. The assumption should still be expected to degrade against a
+ * stronger opponent, which is what the #425 matrix is for.
+ *
+ * The null move is the real `pass` action rather than a rewrite of `state.activePlayer`, so
+ * end-of-turn processing stays honest. That is safe because every real action calls `resetPasses`
+ * before handing the turn over, so alternating our-action / their-pass never reaches the two-pass
+ * phase end. **The search never passes on our own behalf**; `pass` stays available at the root, where
+ * it is a genuine candidate.
+ *
+ * ## Each root keeps its own beam
+ *
+ * A single global frontier would defeat the entire purpose. The lines this exists to find open with a
+ * move that is BAD in isolation, so trimming the frontier by immediate score prunes exactly those
+ * roots before their payoff is ever seen. The scripted position in `aiBeam.test.ts` opens with a
+ * sacrifice scoring well below the locally best move, and a global beam drops it at once.
+ *
+ * So every root move is expanded and carries its own top-`width` frontier. That costs roughly
+ * `roots x width x depth` resolves rather than `width x depth`, and it is the price of the feature
+ * working at all rather than an optimisation left on the table.
+ *
+ * Role is fixed once at the root and threaded to every leaf (#395), and the seeded tie-break stays at
+ * the root only, so the search is deterministic.
+ */
+export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_LIMITS): Ai {
+  return (state: GameState): Action | null => {
+    const moves = legalMoves(state)
+    if (moves.length === 0) return null
+
+    const me = state.activePlayer
+    const asRole = role(state, me)
+    const budget = { left: limits.nodes }
+
+    let best = -Infinity
+    const bestMoves: Action[] = []
+    for (const move of moves) {
+      const value = reachableValue(state, move, me, asRole, inner, limits, budget)
+      if (value > best) {
+        best = value
+        bestMoves.length = 0
+        bestMoves.push(move)
+      } else if (value === best) {
+        bestMoves.push(move)
+      }
+    }
+    return bestMoves[Math.floor(seededUnit(state.rngSeed) * bestMoves.length)]
+  }
+}
+
+/**
+ * Score a leaf, preferring the FASTEST win and the slowest loss.
+ *
+ * Without this the beam is indifferent between winning now and winning in three actions, because both
+ * score WIN and the tie-break then picks arbitrarily. That indifference is exactly the null-move
+ * assumption showing its teeth: a deferred win is certain only if the opponent really does nothing,
+ * and they get a turn in between to remove the attacker or gain the life.
+ *
+ * The adjustment touches DECIDED boards only, so it cannot reorder any material judgement. A whole
+ * point of discount would rival `readyUnit`, which is why it is not applied to ordinary scores.
+ */
+function valueAt(board: GameState, me: PlayerId, asRole: Role | undefined, inner: Evaluator, depth: number): number {
+  const raw = inner(board, me, asRole)
+  // A draw scores 0 from either side, so there is no sign to preserve and nothing to prefer.
+  if (board.winner === null || raw === 0) return raw
+  return raw > 0 ? raw - depth : raw + depth
+}
+
+/** Hand the turn back to us by passing for the OPPONENT, or `null` if that ends the sequence. */
+function ourTurnAgain(state: GameState, me: PlayerId, budget: { left: number }): GameState | null {
+  if (state.activePlayer === me) return state
+  if (budget.left <= 0) return null
+  budget.left--
+  const passed = resolve(state, { type: 'pass' })
+  // Their pass can end the phase outright, and a phase boundary is where this policy stops claiming
+  // anything: continuing across a round is #446's problem, not this one.
+  if (passed.winner !== null || passed.phase !== 'action' || passed.activePlayer !== me) return null
+  return passed
+}
+
+/** The best board reachable from `move` using only our own follow-up actions. */
+function reachableValue(
+  state: GameState,
+  move: Action,
+  me: PlayerId,
+  asRole: Role | undefined,
+  inner: Evaluator,
+  limits: BeamLimits,
+  budget: { left: number },
+): number {
+  if (budget.left <= 0) return inner(resolve(state, move), me, asRole)
+  budget.left--
+
+  // Beam nodes are always settled boards, so depth counts actions rather than choice answers.
+  const root = resolveChain(resolve(state, move), me, asRole, inner, budget)
+  let best = valueAt(root, me, asRole, inner, 1)
+  let frontier: GameState[] = [root]
+
+  for (let d = 1; d < limits.depth; d++) {
+    if (budget.left <= 0) break
+    const children: Array<{ board: GameState; value: number }> = []
+
+    for (const node of frontier) {
+      if (node.winner !== null || node.phase !== 'action') continue
+      const ours = ourTurnAgain(node, me, budget)
+      if (ours === null) continue
+
+      for (const next of legalMoves(ours)) {
+        // Passing on our own behalf would hand the search a turn the real game never gives it.
+        if (next.type === 'pass') continue
+        if (budget.left <= 0) break
+        budget.left--
+        const board = resolveChain(resolve(ours, next), me, asRole, inner, budget)
+        const value = valueAt(board, me, asRole, inner, d + 1)
+        if (value > best) best = value
+        children.push({ board, value })
+      }
+    }
+
+    if (children.length === 0) break
+    // Sort is stable, so equal scores keep `legalMoves` order and the trim is deterministic.
+    children.sort((a, b) => b.value - a.value)
+    frontier = children.slice(0, limits.width).map(c => c.board)
+  }
+
+  return best
 }

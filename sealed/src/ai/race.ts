@@ -134,6 +134,19 @@ function remainingBase(state: GameState, seat: PlayerId): number {
  *
  * Still blind to the hand, so it remains a lower bound: an event finisher, an Ambush unit or a pump
  * can all win in one action and none of them are visible here.
+ *
+ * It is also blind to two things that are fully PUBLIC, which is worth knowing before trusting it:
+ *
+ * - **An undeployed leader.** Leaders deploy READY (CR 3.4.4) and deploy on resources CONTROLLED
+ *   rather than spent, so a leader is a ready attacker its owner can produce at will. Deploying is
+ *   itself the action, so it is usually a two-action line and correctly excluded here, but a leader
+ *   granted Ambush on deploy attacks as part of the same action and is a genuine one-action miss.
+ * - **Ready effects.** A handful of units ready themselves and some events ready an exhausted unit,
+ *   so `exhausted` is not the last word on whether a body can still attack this round.
+ *
+ * Neither is worth a term of its own: both are narrow, and the estimate exists to rank two clocks
+ * cheaply rather than to be right in every position. They are recorded so the bound is read as a
+ * bound.
  */
 export function canFinishThisAction(state: GameState, seat: PlayerId): boolean {
   const remaining = remainingBase(state, seat)

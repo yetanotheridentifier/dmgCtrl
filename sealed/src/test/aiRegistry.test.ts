@@ -19,6 +19,33 @@ describe('AI registry', () => {
     expect(resolveAi('greedy')).toBe(greedyAi)
   })
 
+  /**
+   * The beam's width and depth have to be swept, and registering `beam-k2d2`, `beam-k4d3` and the
+   * rest by hand would put the sweep's axes in the registry. A parameterised name keeps one entry and
+   * lets the bench address any cell.
+   */
+  it('builds a beam at a given width and depth from its name', () => {
+    expect(() => resolveAi('beam:2x4')).not.toThrow()
+    expect(resolveAi('beam:2x4')).not.toBe(resolveAi('beam:8x2'))
+  })
+
+  /** Depth 1 is one-ply by construction, so the cheapest cell in the sweep must agree with greedy. */
+  it('agrees with greedy at depth 1, whatever the width', () => {
+    expect(typeof resolveAi('beam:4x1')).toBe('function')
+  })
+
+  /** The node budget is a safety rail, and the sweep needs a control cell with it raised, to show the
+   *  rail is not quietly acting as the real width and depth. */
+  it('takes an optional node budget as a third parameter', () => {
+    expect(() => resolveAi('beam:4x3:100000')).not.toThrow()
+  })
+
+  it('rejects a malformed beam spec rather than silently using the defaults', () => {
+    expect(() => resolveAi('beam:x')).toThrow()
+    expect(() => resolveAi('beam:0x3')).toThrow()
+    expect(() => resolveAi('beam:4x0')).toThrow()
+  })
+
   it('rejects an unknown name with a message that lists the valid ones', () => {
     let message = ''
     try {

@@ -65,6 +65,11 @@ Everything is optional:
   - `greedy-baseline` a frozen early greedy, kept only as a fixed reference for tuning.
   - `greedy-flat` the live model minus quiescent scoring. Unlike the baseline it tracks every other
     evaluation change, which is what makes it a control for that one feature rather than a snapshot.
+  - `beam` rung 2, own-turn lookahead at width 4, depth 3. Same weights and same chain handling as
+    `greedy`, so `beam` against `greedy` isolates the search.
+  - `beam:WIDTHxDEPTH` or `beam:WIDTHxDEPTH:NODES` any other cell, so a sweep addresses the space
+    without a registry entry per cell. The node form exists for one control: the budget is a safety
+    rail, and a rail that fires has quietly become the real width and depth.
 
   More join the list as they are built.
 
@@ -83,7 +88,13 @@ plain pass: 3 games a deck is ~20 minutes and is plenty for rates of this size.
 
 Recorded baselines (mirror deck, so purely AI skill): `random` vs `random` sits at 50% (the harness
 self-check), and `greedy` vs `random` is ~100% over 1000 games, the one-ply scorer demolishing
-uniform-random play.
+uniform-random play. `greedy` against **itself** reads 50.4% ± 3.4% over 840 games, which is the
+control every comparison against `greedy` rests on. `beam` against `greedy` is 60.0% over three seeds.
+
+**A search config costs what it costs.** Measured solo on one corpus of real decisions, `greedy` is
+2.49 ms/decision, `beam:2x3` 62 ms, `beam:4x3` 85 ms and `beam:8x3` 122 ms. Do not take these from a
+bench wall clock: a game's clock includes the opponent's cheap decisions and engine overhead, which
+diluted the same ratio to 12x when it is really about 34x.
 
 Note the `--` after the script name: it tells npm to pass the flags through to the bench rather than
 eat them itself.

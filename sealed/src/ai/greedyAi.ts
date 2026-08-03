@@ -6,7 +6,7 @@ import { resolve } from '../engine/resolve'
 import { seededUnit } from '../engine/rng'
 import { evaluate, makeEvaluate, DEFAULT_WEIGHTS, type Evaluator, type EvalWeights } from './evaluate'
 import { evaluateBaseline } from './evaluateBaseline'
-import { makeQuiescent } from './search'
+import { makeQuiescent, makeBeamAi, type BeamLimits } from './search'
 import { role } from './race'
 
 /**
@@ -72,3 +72,16 @@ export const greedyFlatAi = makeGreedyAi(evaluate)
 
 /** The frozen pre-#392 greedy, kept only as a fixed comparison point for the generalisation runs. */
 export const greedyBaselineAi = makeGreedyAi(evaluateBaseline)
+
+/**
+ * Own-turn self-lookahead (#410) on the shipped evaluation: the same weights and the same quiescent
+ * chain handling as `greedy`, differing only in expanding our own follow-up actions.
+ *
+ * Built here rather than in `search.ts` so there is still one construction site per bot, and so an
+ * A/B against `greedy` isolates the beam and nothing else.
+ */
+export function makeBeamGreedy(weights: EvalWeights, limits?: BeamLimits): Ai {
+  return makeBeamAi(makeEvaluate(weights), limits)
+}
+
+export const beamAi = makeBeamGreedy(DEFAULT_WEIGHTS)
