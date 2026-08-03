@@ -43,7 +43,7 @@ export type Role = 'aggressor' | 'defender' | 'neutral'
  * which tramples the excess through to the base. The smallest reachable Sentinel is used for that,
  * since the attacker picks its target and would choose the cheapest way through.
  */
-function unitReach(state: GameState, owner: PlayerId, unit: UnitState): number {
+export function unitReach(state: GameState, owner: PlayerId, unit: UnitState): number {
   if (unitCannotAttackBases(state, unit)) return 0
   const power = effectivePower(state, unit, { attacking: true, attackingBase: true })
   if (power <= 0) return 0
@@ -116,7 +116,7 @@ export function canFinishNow(state: GameState, seat: PlayerId): boolean {
 }
 
 /** Base HP `seat` still has to get through, or 0 once the base is already dead. */
-function remainingBase(state: GameState, seat: PlayerId): number {
+export function remainingBase(state: GameState, seat: PlayerId): number {
   const base = state.players[opponentOf(seat)].base
   return Math.max(0, (state.cards[base.cardId]?.hp ?? 30) - base.damage)
 }
