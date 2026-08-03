@@ -210,6 +210,74 @@ and so read as behaviour rather than as a gap:
   is the clearest read on whether the AI is claiming sensibly: low means it claims when it has little
   left to do, high means it is throwing away a board full of attackers.
 
+### Lethal availability
+
+The same run reports how often either seat could finish the enemy base with what it already has
+ready, via `canFinishNow` (a clock of 1, so Sentinel, Saboteur, arena and Hidden resolve through the
+rules' own targeting rather than a second damage sum).
+
+It is the ceiling on every rule built over a lethal solver: an initiative-lethal rule or a tap-out
+risk gate can only fire as often as lethal exists.
+
+**Read the one-action figure, not the aggregate.** `canFinishNow` sums every ready unit, but players
+alternate actions, so three units totalling lethal is three of your actions with three of theirs in
+between: a threat, not a kill. `canFinishThisAction` asks whether a single unit can do it alone,
+which is the only thing one ply can guarantee, and it is three times rarer.
+
+Current rates over 1260 games:
+
+| | Aggregate | One action |
+| --- | --- | --- |
+| We could finish | 5.8% | **1.7%** |
+| They could finish | 6.6% | **2.2%** |
+
+Almost all of it is late. Rounds 1 to 4 hold two thirds of all decisions and produce lethal **twice
+in 60,749**, rising to 11.5% at round 5 and peaking near 33% at round 7. That one is arithmetic
+rather than measurement: bases are ~30 HP and no early board approaches it.
+
+### Avoidable exposure
+
+The same run asks the sharper question: not how often the opponent *could* finish, but how often the
+AI **chose** to let them when a legal move existed that would not have. That is the headroom a
+tap-out risk gate could recover, and it needs no opponent model to measure.
+
+Measured with the **one-action** predicate, since that is what the opponent can take before we act
+again. Every decision is classified `safe`, `avoidable` or `unavoidable`.
+
+| | Before `lethalExposure` | Shipped |
+| --- | --- | --- |
+| Decisions handing them lethal | 2.5% | 2.5% |
+| ...of which **unavoidable** | 82.0% | **86.3%** |
+| ...of which avoidable | 18.0%, so 408 in 89,546 | 13.7% |
+| Seat loss rate, made an avoidable exposure | 68.9% | 44.0% |
+| Seat loss rate, made none | 46.8% | 50.8% |
+
+**Most exposures are unavoidable**: every legal move led there, the position was already lost, and no
+evaluation term recovers it. That is why the raw "they could finish" rate overstates the opportunity,
+and why the total barely moves while the avoidable share falls.
+
+The 22.1 point loss-rate gap in the first column was 7.8 standard errors, and it is what
+`lethalExposure` was built against. It has since disappeared: read the disappearance rather than the
+reversal, because the shipped column rests on only 50 seat-games. Treat the gap as **correlation**
+either way. An avoidable exposure is plausibly a symptom of a losing position rather than its cause,
+and the term's actual worth is the +3.8 points its own A/B measured, not the ceiling this readout
+suggested.
+
+Worth knowing that measuring this with the aggregate predicate gave 7.4% exposure and a 10.5 point
+gap: a threefold higher rate with less than half the effect. Slow threats counted as kills dilute
+exactly the signal the measure exists to find.
+
+Both halves are measured from **public** information, so this headroom belongs to a deeper public
+search rather than to any hidden-information model.
+
+Two things to hold onto when reading it:
+
+- **It under-counts.** Only damage that can already connect is seen, so a line needing a card played
+  first, an event finisher or a when-played trigger is invisible. Early-game lethal is the figure to
+  trust least, since it would most likely come from a burn event rather than from board damage.
+- **"They could finish" is not "the bot blundered".** Many such positions are already lost. The rate
+  bounds how often a risk gate is *live*, not how often it would *help*.
+
 ### Half-resolved scoring
 
 The same run reports how often a candidate move is scored **before its action has finished**. Some

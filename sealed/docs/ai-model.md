@@ -12,6 +12,20 @@ initiative and answering triggers, with no per-card rules.
 
 Ties break from `state.rngSeed`, never `Math.random`, so replays and saved records reproduce exactly.
 
+## A win in one action is always taken
+
+`evaluate` returns +/-WIN = 1,000,000 for a decided game, while every other term is a small weight
+times a board-sized quantity. No reachable material score approaches a million, so **a move that wins
+is always the unique maximum** and the driver must pick it. That is arithmetic, not tuning, and
+`takesLethal.test.ts` pins it: capping the evaluation, normalising it, or letting the private hand
+term escape its `[0, 1)` bound would each quietly turn "certain win" into "quite a good move".
+
+The guarantee stops at **one action**. A lethal needing two attacks is not one action, and since
+players alternate, the opponent acts in between and may remove the attacker, gain a Shield or put up
+a Sentinel. One ply can start such a sequence but cannot promise it. `ai/race.ts` distinguishes the
+two directly: `canFinishThisAction` (one unit, guaranteed) against `canFinishNow` (aggregate reach,
+an intention).
+
 ## Quiescent scoring: only finished actions are evaluated
 
 A move that raises a choice has **not finished resolving**. A when-played effect has picked no
@@ -92,6 +106,7 @@ Public terms, in `ai/evaluate.ts`:
 | `resource`, `resourceSurplus`, `saturation` | the resource pool, see below |
 | `readyUnit` | a light tempo term |
 | `initiative`, `claimCost` | turn order, see below |
+| `lethalExposure` | handing the opponent a one-action kill, see below |
 | `roleShift` | how far the role bends the weights, see below |
 
 The board term is built around what decides trades: unit **count** is the biggest swing, then power.
@@ -217,6 +232,36 @@ measured 50.6% against the shipped cell's 50.7%. That deserves its own A/B rathe
 A constraint worth knowing before anyone sweeps finer: `publicScore` must stay integer-valued so the
 private hand term remains a tie-break, so `initiative` can be 1 or 2 but never 1.5. If the true
 optimum lies between them, the model cannot express it.
+
+### Lethal exposure
+
+The defensive mirror of "a win in one action is always taken": prefer a move that does not leave the
+**opponent** able to win with a single action. `lethalExposure` scores the difference between the two
+seats' `canFinishThisAction` readings, so it is symmetric, integer and public.
+
+It is worth **+3.8 points**. Removing it (`lethalExposure=0`) measures 46.5%, 46.5% and 45.7% against
+the shipped model over three seeds of ~8500 games each, well outside the ±1.1% intervals. The
+response curve is monotone and saturates early: 0 → 46.6%, 8 → 49.3%, 16 → 49.9%, 24 → 50.4%,
+32 → 50.6%, 48 → 50.6% at 840 games a cell. **24** ships. A confirmation of 32 at ~8500 games gave
+50.35% and 50.33%, which is inside noise on both seeds, so the top of the curve is flat rather than
+still climbing.
+
+Behaviourally it moves what it was built to move: the **avoidable** share of exposures falls from
+18.0% to 13.7%, and the loss-rate penalty for making one disappears. Total exposure barely moves,
+because 86% of exposures are unavoidable, and no evaluation term can help there.
+
+Three properties keep it from disturbing anything else:
+
+- **It cancels where every move is exposed.** An identical penalty on all candidates leaves the
+  ordering untouched, which is why the unavoidable 86% costs nothing and no special case is needed.
+- **It cannot outvote a win.** `WIN` is 1,000,000, so avoiding exposure never declines a kill.
+- **The cost is immaterial**: 0.071 ms on a 4.4 ms decision, 1.6%, measured over an identical corpus
+  of 2932 real decision states. The predicate is called twice per `publicScore` and quiescence scores
+  many candidates per decision, so this was worth checking rather than assuming.
+
+The reading is a lower bound. `canFinishThisAction` sees only damage already on the board, so an
+event finisher, an Ambush unit or a pump in hand is invisible to it. Closing that gap is search, not
+a weight.
 
 ### Role: read the race, not the board
 
