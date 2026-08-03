@@ -3,11 +3,16 @@
 Where the next session picks up. **This is the only doc that tracks tickets and history**; every
 other file describes what the software does now.
 
-## Next up
+Shipped work is not recorded here. Evidence from it is, but only where it decides what to build next.
 
-The AI's remaining blind spots are measured, not guessed. `npm run bench --prefix sealed --
---decisions` reports how often every candidate move scores identically, so the seeded tie-break
-picks at random:
+## What the evidence says
+
+Four findings shape the whole order below.
+
+### Initiative is the largest blind spot
+
+`npm run bench --prefix sealed -- --decisions` reports how often every candidate move scores
+identically, so the seeded tie-break picks at random:
 
 | Decision | Coin-flip rate | Options | Coin flips per game |
 | --- | --- | --- | --- |
@@ -17,10 +22,34 @@ picks at random:
 | Attacks | 1.7% | 7.8 | ~0.5 |
 | Regroup: which card | 0.1% | 4.8 | ~0 |
 
-The last column is what actually ranks the work: a rate is meaningless without how often the decision
-arises. **Initiative is the largest remaining blind spot by a wide margin.**
+The last column is what ranks the work: a rate is meaningless without how often the decision arises.
 
-### One search, three policies
+### Re-weighting is exhausted
+
+A 146-cell interaction grid plus 8400-game validation across multiple seeds put the weight set at a
+local optimum. **Further strength must come from new information, not from re-weighting what is
+there.** The measured constraints live in [ai-model.md](ai-model.md); the tool is `npm run tune`.
+
+The sweep also showed *why* so much of the model is inert. A one-ply evaluation only ever compares
+candidates from one position, so any term equal across them cancels exactly. Several weights are not
+dead but **dormant**, pricing futures that one ply cannot see. #430 makes that testable.
+
+### The hidden information is small, and what matters is public
+
+A one-action lethal is available to the opponent in **2.2%** of decisions and is **absent before
+round 5** (twice in 60,749 decisions across rounds 1 to 4). Of the positions where they could finish,
+**86% are unavoidable**: every legal move leads there and no policy recovers them.
+
+Every part of that was measured from **public** information, so the headroom belongs to evaluation
+and search rather than to a belief model. This is the gate on #434 to #439 below.
+
+### What a one-ply lethal check cannot see
+
+`canFinishThisAction` reads only damage already on the board. An event finisher, a pump, or a
+when-played base hit is invisible to it, so both the lethal readout and the shipped exposure term are
+lower bounds. Closing that gap is search, which is #433.
+
+## One search, several policies
 
 The search tickets are not separate features. They are **one bounded tree search over `legalMoves`**
 where a node's owner is `state.activePlayer`, differing only in what happens when that owner is not
@@ -33,108 +62,54 @@ us:
 | #425 | minimise our evaluation | one full reply |
 
 They share `ai/search.ts`: determinism, the node budget and the leaf-scoring rule live in one place,
-and each ticket is a measurement rather than a separate implementation. It also makes #425's standing
+so each ticket is a measurement rather than a separate implementation. It also makes #425's standing
 question (does two-ply justify its cost, given MCTS supersedes it?) a config flag rather than a new
 bot.
 
-### #400 quiescent scoring: shipped
-
-Measuring who owes the unresolved answer decided the order, and inverted it. The pessimistic half
-that #400 originally scoped touched 5.1% of positions; the same recursion pointed at our **own** owed
-choices touched 42.9%. So the ticket became "never score a half-resolved action", both sides at once.
-
-**76.7% and 78.4% ± 2.9% across two seeds (1700 mirror games), 72.7% ± 3.4% on the matchup harness.**
-The largest single improvement in the series, because it corrects a fiction rather than refining a
-judgement. See [ai-model.md](ai-model.md) for the model and its properties.
-
-### Weight tuning is closed
-
-A 146-cell interaction grid plus 8400-game validation across multiple seeds found the weight set at a
-local optimum. **Further strength must come from new information, not from re-weighting what is
-there.** The measured constraints are in [ai-model.md](ai-model.md); the tool is `npm run tune`.
-
-The sweep also showed *why* so much of the model is inert: a one-ply evaluation only ever compares
-candidates from one position, so any term equal across them cancels exactly. Several weights are not
-dead but **dormant**, pricing futures that one ply cannot see. #430 makes that testable.
-
-### The order from here
-
-Three cheap measurements first, because the last two rounds of work both showed that measuring beats
-guessing by a wide margin.
+## Next up
 
 1. **#430 term sensitivity.** Which evaluation terms actually vary across candidates. Minutes of
    compute, and it would have predicted every null result in the 400,000-game sweep. Also the gate
    for deciding which dormant terms wake up after lookahead.
-2. ~~**#431 bench harness fixes.**~~ Done. Seats and first player now alternate independently across
-   all three harnesses, and the wall clock no longer decides a game's fate. An AI measured against
-   itself reads 49.99% over six seeds, against 49.67% before. See
-   [ai-benchmark.md](ai-benchmark.md).
-3. ~~**#432 hidden-information sizing.**~~ Done, over 1260 games, and the planned oracle was dropped
-   as unnecessary. A **one-action** lethal is available to the opponent in 2.2% of decisions and is
-   **absent before round 5** (twice in 60,749 decisions across rounds 1 to 4), so the
-   initiative-lethal rules are narrow. Of the positions where they could finish, **82% were
-   unavoidable**; the 408 avoidable ones carry a **22.1 point** loss-rate penalty at 7.8 standard
-   errors, a ceiling of roughly +6.4 points.
-
-   **All of it is public**, so the headroom belongs to evaluation and search, not to a belief model,
-   which raises the bar for #434 to #436 considerably.
-
-   Two corrections came out of it and both matter more than the numbers. Lethal was first measured as
-   **aggregate** reach across ready units, which overstated it threefold: players alternate actions,
-   so three units totalling lethal is three of our actions with three of theirs in between.
-   `canFinishThisAction` is the strict reading and the only one a single ply can guarantee. And there
-   is no "this turn" in this game, which is what re-scoped #433 below.
-
-Then, in order:
-
-4. **#443 lethal exposure.** The cheap public term the sizing pointed at: prefer a move that does not
-   leave the opponent able to kill us with one attack. It cancels itself in the 82% of positions
-   where every move is exposed, and it rewards playing the answer (a Sentinel, an exhaust, a removal)
-   because that makes the check false. Symmetric, integer and public, so it disturbs no invariant.
-5. **#410 own-turn beam.** Expanding **separate actions**, with a null move for the opponent, beam
+2. **#410 own-turn beam.** Expanding **separate actions**, with a null move for the opponent, beam
    width K over depth, role fixed once at the root. The null-move assumption is where the strength
    comes from and where it leaks. **Its original justification is gone**: it was sized on attack ties
-   at 10.2%, now 1.7% after quiescence. It now rests on initiative (18.2% ties, ~7.4 coin flips a
-   game, the largest remaining blind spot) and on the multi-step lines themselves, which need a
-   scripted position rather than a rate.
-6. **#433 lethal, as a terminal condition of #410**, not a standalone solver. "Can I win this turn"
+   at 10.2%, now 1.7% once quiescent scoring landed. It now rests on initiative (the table above) and
+   on the multi-step lines themselves, which need a scripted position rather than a rate.
+3. **#433 lethal, as a terminal condition of #410**, not a standalone solver. "Can I win this turn"
    assumes the opponent does nothing, which is #410's null-move assumption, so this is that search
-   with a different finish line. What it adds over `canFinishThisAction` is the **hand**: a burn
-   event, a pump, a when-played base hit, or clearing a Sentinel then swinging. (Ambush is not a
-   closer: `legalMoves` only ever offers it unit targets, so it reaches a base solely via Overwhelm.)
-7. **#425 opponent reply**, public information only. The cheap first step.
+   with a different finish line. What it adds is the **hand**: a burn event, a pump, a when-played
+   base hit, or clearing a Sentinel then swinging. (Ambush is not a closer: `legalMoves` only ever
+   offers it unit targets, so it reaches a base solely via Overwhelm.)
+4. **#425 opponent reply**, public information only. The cheap first step into pessimistic search.
 
 **Measure four configurations, not two.** #410 is optimistic (the opponent does nothing) while #425
 is pessimistic (they do the worst visible thing). Those pull in opposite directions and may not
 compose additively, so the matrix is: neither, #410 alone, #425 alone, both.
 
-### The opponent model, gated
-
-#434 pool, #435 sampler, #436 `P(lethal)`, #437 calibration, #438 learned priors, #439 PIMC. The
-gate is now **whatever #443 and #410 fail to recover**, which is a harder bar than #432 originally
-set: the belief model does not need to beat zero, it needs to beat the public version. They are the
-heaviest machinery in the series, and their originally proposed first
-customer (the carried initiative rules) is the weakest term in the evaluation, worth 2 to 3 points in
-total. If the belief model is built, its first customer should be the **general tap-out risk gate**,
-which applies to every action-phase decision rather than the ~9 initiative decisions a game.
-
-#432 also settles a question that should not be decided by accident: the opponent's deck comes from
-our own generator, so a sampler could draw from the true generating distribution instead of inferring
-from revealed aspects. More accurate, arguably legitimate, but a different honesty claim.
-
-**Measure four configurations, not two.** #410 is optimistic (the opponent does nothing) while #400
-and #425 are pessimistic (they do the worst visible thing). Those pull in opposite directions and may
-not compose additively, so the matrix is: neither, #410 alone, #425 alone, both.
-
-### Then re-measure before building any more evaluation terms
+## Gated on the search matrix
 
 **#396** (optional abilities and tokens) and **#398** (hand and resource optionality) are both "value
-something whose payoff arrives later", and search covers the part of "later" inside its horizon. Both
-are now gated: land the search matrix, re-run `--decisions`, build only what still ties. The residue
-is genuinely latent value, a Shield's worth being what it will prevent, held removal being worth the
-target it has not met yet.
+something whose payoff arrives later", and search covers the part of "later" inside its horizon. Land
+the matrix, re-run `--decisions`, build only what still ties. The residue is genuinely latent value: a
+Shield's worth being what it will prevent, held removal being worth the target it has not met yet.
 
 That is the heuristic baseline. Stop there before ML.
+
+## Gated on the baseline: the opponent model
+
+#434 pool, #435 sampler, #436 `P(lethal)`, #437 calibration, #438 learned priors, #439 PIMC.
+
+The gate is **whatever the public search fails to recover**. The belief model does not need to beat
+zero, it needs to beat the public version, and it is the heaviest machinery in the series. Its
+originally proposed first customer, the carried initiative rules, is the weakest term in the
+evaluation and worth 2 to 3 points in total. If it is built, the first customer should be the
+**general tap-out risk gate**, which applies to every action-phase decision rather than the ~9
+initiative decisions a game.
+
+One design question to settle deliberately rather than by accident: the opponent's deck comes from
+our own generator, so a sampler could draw from the true generating distribution instead of inferring
+from revealed aspects. More accurate, arguably legitimate, but a different honesty claim.
 
 ## After the baseline
 
@@ -160,6 +135,17 @@ That is the heuristic baseline. Stop there before ML.
   the receiving player; the upgrade check separately keys on the upgrade's owner rather than the
   controlling unit's controller, which is wrong for a stolen unit carrying one. Raising a mandatory
   choice during regroup needs thought before either is built.
+
+## How to measure a change
+
+Two rules, both learned the hard way.
+
+- **Default a new weight to off, then sweep upward.** Shipping the default before the A/B ran once
+  inverted the whole reading, because the candidate was then the ablation and below 50% meant better.
+  It also put an unproven term in the shipped model for the length of the run.
+- **Measure a lethal or a threat as a single action.** Players alternate actions, so aggregate reach
+  across ready units is an intention the opponent gets several chances to answer, not a kill. Reading
+  it as aggregate overstated lethal threefold and diluted the very signal being looked for.
 
 ## Tried and rejected
 

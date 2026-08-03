@@ -34,6 +34,21 @@ describe('tune argument parsing', () => {
   })
 
   /**
+   * Every shipped weight must be tunable. The key list was hardcoded once, and adding a weight to
+   * the evaluation without adding it here meant an overnight sweep rejected every job and measured
+   * nothing at all.
+   */
+  it('can sweep every weight the model actually ships', () => {
+    for (const key of Object.keys(DEFAULT_WEIGHTS)) {
+      if (key === 'hand') continue
+      expect(() => parseAssignments(`${key}=1`), key).not.toThrow()
+    }
+    for (const key of Object.keys(DEFAULT_HAND_WEIGHTS)) {
+      expect(() => parseAssignments(`hand.${key}=1`), key).not.toThrow()
+    }
+  })
+
+  /**
    * The cross product is the whole point of the tool: two weights swept separately can each look
    * flat while their combination is not.
    */

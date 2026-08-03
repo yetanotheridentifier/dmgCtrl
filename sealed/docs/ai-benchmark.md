@@ -242,24 +242,26 @@ AI **chose** to let them when a legal move existed that would not have. That is 
 tap-out risk gate could recover, and it needs no opponent model to measure.
 
 Measured with the **one-action** predicate, since that is what the opponent can take before we act
-again.
+again. Every decision is classified `safe`, `avoidable` or `unavoidable`.
 
-| | |
-| --- | --- |
-| Decisions handing them lethal | 2.5% |
-| ...of which **unavoidable** | **82.0%** |
-| ...of which avoidable | 18.0%, so 408 decisions in 89,546 |
-| Seat loss rate, made an avoidable exposure | 68.9% |
-| Seat loss rate, made none | 46.8% |
+| | Before `lethalExposure` | Shipped |
+| --- | --- | --- |
+| Decisions handing them lethal | 2.5% | 2.5% |
+| ...of which **unavoidable** | 82.0% | **86.3%** |
+| ...of which avoidable | 18.0%, so 408 in 89,546 | 13.7% |
+| Seat loss rate, made an avoidable exposure | 68.9% | 44.0% |
+| Seat loss rate, made none | 46.8% | 50.8% |
 
-**Four fifths of exposures are unavoidable**: every legal move led there, the position was already
-lost, and no gate recovers it. That is why the raw "they could finish" rate overstates the
-opportunity.
+**Most exposures are unavoidable**: every legal move led there, the position was already lost, and no
+evaluation term recovers it. That is why the raw "they could finish" rate overstates the opportunity,
+and why the total barely moves while the avoidable share falls.
 
-The 22.1 point loss-rate gap is 7.8 standard errors. Read it as **correlation**: an avoidable
-exposure is plausibly a symptom of a losing position rather than its cause, and the safe alternative
-may be bad for other reasons. The optimistic ceiling is about +6.4 points of win rate, concentrated
-in a few hundred decisions rather than spread thin.
+The 22.1 point loss-rate gap in the first column was 7.8 standard errors, and it is what
+`lethalExposure` was built against. It has since disappeared: read the disappearance rather than the
+reversal, because the shipped column rests on only 50 seat-games. Treat the gap as **correlation**
+either way. An avoidable exposure is plausibly a symptom of a losing position rather than its cause,
+and the term's actual worth is the +3.8 points its own A/B measured, not the ceiling this readout
+suggested.
 
 Worth knowing that measuring this with the aggregate predicate gave 7.4% exposure and a 10.5 point
 gap: a threefold higher rate with less than half the effect. Slow threats counted as kills dilute

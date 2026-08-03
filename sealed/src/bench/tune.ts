@@ -35,11 +35,18 @@ import { BUILD_TAG } from '../buildTag'
 /** Every scalar weight, including the nested hand weights addressed as `hand.canAct` / `hand.hold`. */
 type WeightKey = keyof Omit<EvalWeights, 'hand'> | 'hand.canAct' | 'hand.hold'
 
+/**
+ * Derived from the shipped weights rather than listed by hand, so a new weight is sweepable the
+ * moment it exists.
+ *
+ * This was a hardcoded list once. Adding `lethalExposure` to the evaluation and forgetting it here
+ * meant an overnight sweep rejected every job and measured nothing: the guard fired correctly, but
+ * the list should never have been a second place to remember.
+ */
 const SCALAR_KEYS: WeightKey[] = [
-  'base', 'unit', 'power', 'hp', 'card', 'resource', 'resourceSurplus',
-  'saturation', 'readyUnit', 'initiative', 'claimCost', 'roleShift',
-  'hand.canAct', 'hand.hold',
-]
+  ...Object.keys(DEFAULT_WEIGHTS).filter(k => k !== 'hand'),
+  ...Object.keys(DEFAULT_HAND_WEIGHTS).map(k => `hand.${k}`),
+] as WeightKey[]
 
 export interface TuneConfig {
   overrides: Partial<Record<WeightKey, number>>
