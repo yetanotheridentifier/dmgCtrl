@@ -3,6 +3,9 @@ import ashSet from './fixtures/ashSet.json'
 import type { SwuCard } from '../data/cards'
 import { UNIT_GROUPS } from '../data/implementedCards'
 import { normaliseCard, buildCardDb } from '../engine/cardDb'
+// The keyword-only rule and the implemented-keyword list live with the triage tool, so this test
+// and `npm run bench -- --triage` can never disagree about what "plays as printed" means.
+import { IMPLEMENTED_KEYWORDS, residualAbility } from '../bench/triage'
 import { registeredCardIds } from '../engine/abilities'
 import '../engine/cardDefinitions' // side effect: registers every implemented card
 import { resolve } from '../engine/resolve'
@@ -20,15 +23,7 @@ import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 const SET = ashSet as unknown as SwuCard[]
 const UNITS = SET.filter(c => c.Type === 'Unit')
 const byName = new Map(UNITS.map(c => [c.Name, c])) // unit names are unique within the set
-const IMPLEMENTED_KEYWORDS = new Set(['Ambush', 'Grit', 'Overwhelm', 'Raid', 'Restore', 'Saboteur', 'Sentinel', 'Shielded', 'Hidden', 'Support'])
 const keywordOnly = UNIT_GROUPS.find(g => g.id === 'keyword')!.units
-
-/** Ability text left after removing keyword names and their (parenthetical) reminders — empty ⇒ keyword-only. */
-function residualAbility(c: SwuCard): string {
-  let t = (c.FrontText ?? '').trim().replace(/\([^)]*\)/g, '')
-  for (const k of c.Keywords ?? []) t = t.replace(new RegExp(`\\b${k.trim()}\\b(\\s+\\d+)?`, 'gi'), '')
-  return t.replace(/[\s.,]+/g, ' ').trim()
-}
 
 describe('Keyword-only units — no engine work needed', () => {
   it('each entry is a real ASH unit card', () => {

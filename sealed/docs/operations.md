@@ -55,8 +55,16 @@ table (~30-40 min):
 npm run bench --prefix sealed -- --matrix --games 14 --seed 42 greedy
 ```
 
-Full guide, output format, data model, the coverage sweep, the generalisation diagnostic, weight
-tuning and how to add an AI: [ai-benchmark.md](ai-benchmark.md).
+The **card triage** (`--triage`) is not an AI mode: it classifies a card pool by what the engine
+cannot yet express, so a newly released set can be sized without reading every card by hand. It
+fetches each set live from the card API, so it works on release day with no fixture:
+
+```bash
+npm run bench --prefix sealed -- --triage LAW SEC
+```
+
+Full guide, output format, data model, the coverage sweep, the generalisation diagnostic, the card
+triage, weight tuning and how to add an AI: [ai-benchmark.md](ai-benchmark.md).
 
 `npm run check` is the one-shot validation gate: it auto-increments `BUILD_TAG`
 (`src/buildTag.ts`) via `scripts/bumpBuild.mjs`, then runs the tests, `tsc -b`
