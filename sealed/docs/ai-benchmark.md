@@ -170,6 +170,66 @@ penalty-free, realistically curved deck for a leader, respecting rarity mix and 
 union covers the pool). The generator is deliberately separate from the bench so a future
 "play a random representative deck" setup feature can reuse it.
 
+## Card triage: sizing an unimplemented set
+
+`--triage` classifies a card pool by **what the engine cannot yet express**, so a newly released set
+can be sized without reading 260 cards by hand:
+
+```bash
+npm run bench --prefix sealed -- --triage LAW SEC
+```
+
+It fetches each set live from the card API (one request per set returns the whole set), so it works
+on release day with no fixture. It reports:
+
+- **Buckets**: vanilla, keyword-only on implemented keywords, otherwise-vanilla but held back by an
+  unimplemented keyword, and cards with real ability text.
+- **Blockers**, each with the cards it unlocks **on its own** and the cards it touches at all. The
+  sole-unlock column is the ordering signal: a mechanic unlocking thirty cards is a different ticket
+  from one unlocking two.
+- **Batch sizing**: the trigger-head distribution over cards blocked by nothing, which is how to cut
+  them into workable groups when no mechanic divides them.
+- **Fallout probes**: cards classified as buildable that nonetheless want a human reading.
+
+The tool's model of the engine lives in three lists in `bench/triage.ts`: implemented keywords,
+dispatched trigger points, and unexpressible mechanics. **They shrink as mechanics land.** When
+Experience tokens ship, delete that entry and every card it was blocking reclassifies itself.
+
+### Why there are fallout probes
+
+The blocker list catches new *nouns*: a token type, a zone, a card type. It cannot catch a card
+using familiar nouns in an unfamiliar *shape*. `SEC_145 Confidence in Victory` reads as ordinary
+text, yet needs a play restriction, a delayed check at regroup, and an alternate win condition. The
+probes flag such cards for reading rather than reclassifying them, and they are deliberately noisy:
+several probe shapes are already supported, because the point is to surface cards worth a second
+look rather than to be precise about which.
+
+**This is triage, not a specification.** It is reliable about clusters and relative sizes; every card
+still needs reading before it is built.
+
+### The ASH anchor
+
+`benchTriage.test.ts` asserts the tool's "plays as printed" count for ASH equals the 47 that
+`data/implementedCards.ts` records by hand. Two independent derivations agreeing is what makes the
+tool's numbers for other sets trustworthy, and the test fails if either drifts.
+
+### Card identity, variants and reprints
+
+Only Normal printings are counted. A card is printed several ways (Hyperspace, foil, showcase and
+so on), each with its own collector number, so counting them all would multiply the pool. Identity
+within a set is type, name and subtitle: the same key `data/printings.ts` canonicalises with, and
+asserted equal to it by test. Type is load-bearing, since a leader and a unit can share a name with
+no subtitle to separate them.
+
+De-duplication is **within** a set, never across. A card reprinted in a later set is a separate card
+id and abilities register per id, so both printings are work. IBH is the within-set case, reprinting
+single cards at up to three collector numbers, so its 104 printed slots are 51 real cards.
+
+Cross-set reprints are reported separately, because one implementation covers every id it appears
+under. Across the nine unimplemented sets that is 29 cards with ability text, covering 30 extra card
+ids for no extra work. Reprints skew vanilla, since they exist mostly to balance sealed pools, and a
+printing's rarity can differ without affecting any of this: the engine does not read rarity.
+
 ## Generalisation diagnostic
 
 `--generalise` plays one AI against another across the whole coverage deck set and reports the first
@@ -537,6 +597,9 @@ in `src/ai/` and is described in [ai-model.md](ai-model.md).
 - `bench/stats.ts` the Wilson confidence interval.
 - `bench/store.ts` the SQLite persistence.
 - `bench/reports.ts` writing a dropped game out as a replayable fixture.
+- `bench/triage.ts` the card-pool classifier behind `--triage`. Pure, apart from `fetchSets`. Holds
+  the tool's model of the engine: implemented keywords, dispatched trigger points, unexpressible
+  mechanics. Those lists shrink as mechanics land.
 - `bench/main.ts` the command line: the only impure file (reads arguments, prints, saves).
 
 ## A note on trusting numbers while the engine still has bugs
