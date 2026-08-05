@@ -177,9 +177,69 @@ npm run bench --prefix sealed -- --sweep [--games N] [--seed N] [ai]
 ```
 
 `--games` is games *per deck* (default 5); `ai` defaults to `random`, which is fast and pokes card
-interactions broadly (the best bug-finder). It reports how many decks and games ran, how many cards
-were exercised, and any dropped game, writing each as a replayable fixture. A drop here is a
-**finding**, a hang or throw in some card, not a failure of the sweep.
+interactions broadly (the best bug-finder). It reports the coverage numbers below and any dropped
+game, writing each as a replayable fixture. A drop here is a **finding**, a hang or throw in some
+card, not a failure of the sweep.
+
+### Decked, drawn, played: three different claims
+
+A card being in a deck is availability, not evidence. It can sit in every deck of the sweep, never be
+drawn, and prove nothing about itself. The sweep therefore reports three numbers, and card
+implementation work rests on the third:
+
+- **cards decked**: deck-able cards the deck set includes. ASH's 264 cards are 18 leaders, 8 bases
+  and 238 deck-able, and the generated set includes all 238.
+- **cards drawn**: of those, how many reached a hand.
+- **cards played**: how many were actually played. Cards decked but never played are **listed by id**
+  rather than summarised, so a stubborn one can be chased.
+
+Leaders and bases are counted apart, because both are in play from the first turn. Folding them in
+would credit two free cards per deck. A leader is reported as deployed only when it actually
+deploys, which is the only way its deployed side runs.
+
+An uncovered card is **not** a failure and does not affect the exit code. It is a fact about what the
+run reached. Dropped games are the failure signal.
+
+### Several seeds beat a longer run
+
+`--seed` takes a list. Every deck plays `--games` games under each seed, and coverage is the
+**union** across them:
+
+```bash
+npm run bench --prefix sealed -- --sweep --games 5 --seed 42,43,44
+```
+
+This is the shape to use, because tail coverage is **seed-luck rather than run length**. One game a
+deck plays 207 of 238 cards (87%); five plays 237 (99.6%); and raising it to 40 still leaves one card
+on seed 42 while covering everything on seed 99. Five games across three seeds reaches **238 of 238
+in 630 games and about five seconds**, which is the sweep worth standardising on.
+
+Each seed is an independent chain, so adding one extends the evidence instead of reshuffling what the
+earlier seeds did, and the seed list is printed and reported so any result can be reproduced exactly.
+The deck set itself is generated once from the first seed: regenerating it per seed would change
+which cards are decked at all, and the union would no longer measure one pool.
+
+If a card still resists, chase that card rather than raising the counts. `uncovered` names it, sorted
+by set and then by collector number as a number, so `TS26_3` sorts before `TS26_10` rather than after
+it as a plain string sort would have it.
+
+### How coverage is measured
+
+`bench/playCoverage.ts` reads **state** rather than interpreting actions. A card reaches play by
+several routes (from hand, from the resource zone, from the deck, discounted from hand), several of
+them arriving as an `acceptChoice` whose fields mean different things per pending choice. A card
+sitting in play got there by being played, whichever route it took, so state is the stable signal.
+
+Two cases need the action instead, because they leave no trace between moves: an **event**, which
+never persists, and anything that **enters and leaves play inside a single action**, since coverage
+is observed between actions. A card whose defeat is a *choice* is not that case: answering the choice
+is its own action, so there is an observation point while the card is still in play.
+
+**Where it is unsure it does not credit the card.** Under-counting yields a false "uncovered", which
+is visible and gets investigated. Over-counting yields a false "covered", which is a silent lie.
+
+Tracking is off by default and the sweep turns it on: it costs a set-union per step, and the AI
+benchmark plays hundreds of thousands of games where the answer is never read.
 
 The decks come from `deckgen/generateDeck.ts` (a reusable primitive that builds one legal,
 penalty-free, realistically curved deck for a leader, respecting rarity mix and aspect balance, see
