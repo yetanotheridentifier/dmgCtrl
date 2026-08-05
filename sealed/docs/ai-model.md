@@ -124,6 +124,46 @@ because the rail truncates it. It costs 2.45x, and its value rests on four conse
 non-actions, which is exactly what a modelled reply changes. The decision belongs with the reply
 policy rather than before it.
 
+## Lethal detection
+
+`ai/lethal.ts` answers "can this seat win from here using only its own actions", under the same
+null-move assumption as the beam. `hasLethal` returns whether a line exists; `findLethal` returns the
+move that opens the **shortest** one.
+
+Under that assumption most of the question is closed form. Aggregate ready reach IS a kill, because
+the attacks are taken consecutively while the opponent passes, so `attacksToFinish` settles it by
+counting rather than searching. Search only adds what the board cannot show: the **hand** (a burn
+event, a pump), the **leader** (which deploys ready and is not in `units` until it does), and
+**Sentinel clearing**, where one attack removes a blocker so the rest can reach.
+
+Measured over 36,384 decisions: lethal exists in **6.6%**, of which 4.8 points are the closed form and
+the shipped beam already finds 5.8 points. The beam misses a win in **0.9% to 1.5%** of decisions,
+depending on how deep the solver is allowed to look.
+
+**It is not wired into the bot**, and that is a measured decision rather than an omission. As an
+override in front of the beam it scored 50.1%, 51.4% and 50.8% over three seeds and 2580 games:
+**+0.8 points, the same sign every time, and indistinguishable from neutral.** Separating an effect
+that small from zero would take roughly 10,000 games. It remains as a primitive because the initiative
+work needs it.
+
+Three properties are worth keeping in mind if it is ever revisited:
+
+- **It is a lower bound.** Pruning and the node budget can each make it miss a line, so `false` means
+  "none found within budget". An exhaustive oracle run against it on real positions found **zero**
+  missed lines in 1,200 checks, so the bound is tight in practice.
+- **It must return the fastest kill, not any kill.** Returning whichever line came first measured
+  **47.8%**, losing two points, because a five-action line hands the opponent five chances to answer
+  while a two-action line hands them two. This is the same rule the beam's depth discount encodes.
+- **Existence and shortest-line are separate questions.** One full-depth pass answers the first; only
+  if it succeeds is it worth deepening iteratively for the second. Doing both unconditionally cost
+  **509 ms** a call against **151 ms**, because a line exists in only ~12% of the positions the gate
+  admits.
+
+A gate keeps it off the decisions where it cannot pay: before round 4 (lethal has never once been
+observed in rounds 1 to 3), and where a single action already wins (`WIN` dominates, so the driver is
+proven to take it). That skips ~45% of decisions and, measured against an ungated run, cost **zero**
+winnable positions.
+
 ## The two halves of `evaluate`
 
 The split is a **hidden-information boundary**, not a tidiness one.

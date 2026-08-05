@@ -7,6 +7,8 @@ import type { SweepReport } from './sweep'
 import { runDecisions } from './decisions'
 import { runTerms } from './terms'
 import type { TermReport } from './terms'
+import { runLethal } from './lethal'
+import type { LethalReport } from './lethal'
 import { runAiMatchups } from './aiMatchups'
 import type { DecisionReport } from './decisions'
 import { runGeneralisation } from './generalisation'
@@ -44,6 +46,9 @@ interface Args {
   matrix: boolean
   decisions: boolean
   terms: boolean
+  lethal: boolean
+  /** Solver depth for `--lethal`. Undefined means the shipped default. */
+  depth?: number
   matchups: boolean
   aiExplicit: boolean
   aiA: string
@@ -60,6 +65,8 @@ function parseArgs(argv: string[]): Args {
   let matrix = false
   let decisions = false
   let terms = false
+  let lethal = false
+  let depth: number | undefined
   let matchups = false
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
@@ -70,13 +77,16 @@ function parseArgs(argv: string[]): Args {
     else if (arg === '--matrix') matrix = true
     else if (arg === '--decisions') decisions = true
     else if (arg === '--terms') terms = true
+    else if (arg === '--lethal') lethal = true
+    else if (arg === '--depth') depth = Number(argv[++i])
     else if (arg === '--matchups') matchups = true
     else if (arg.startsWith('--')) throw new Error(`Unknown flag: ${arg}`)
     else positional.push(arg)
   }
   if (!Number.isFinite(games) || games < 1) throw new Error(`--games must be a positive integer`)
   if (!Number.isFinite(seed)) throw new Error(`--seed must be a number`)
-  return { games, gamesSet, seed, sweep, generalise, matrix, decisions, terms, matchups, aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  if (depth !== undefined && (!Number.isFinite(depth) || depth < 1)) throw new Error('--depth must be a positive integer')
+  return { games, gamesSet, seed, sweep, generalise, matrix, decisions, terms, lethal, depth, matchups, aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
@@ -356,6 +366,70 @@ function runTermsMode(args: Args): void {
   console.log(lines.join('\n'))
 }
 
+/**
+ * Lethal solver sizing (#433). The headline is `beam missed`, not `lethal found`: a win the shipped
+ * bot already plays is not headroom, and attacks-only lethal is closed form rather than search.
+ */
+function runLethalMode(args: Args): void {
+  const gamesPerDeck = args.gamesSet ? args.games : 1
+  const start = Date.now()
+  let report: LethalReport
+  try {
+    // Sampled hard: the first run checked 60 positions a seed and found three disagreements it could
+    // not classify. Correctness is the risk in this ticket, so it gets the compute.
+    //
+    // The node budget scales with depth. A fixed rail would bind before the depth did and the sweep
+    // would report a flat curve for the wrong reason, which is exactly what the #410 screen did.
+    report = runLethal({
+      gamesPerDeck,
+      seed: args.seed,
+      oracleSamples: 400,
+      oracleStride: 5,
+      solverDepth: args.depth,
+      solverNodes: args.depth === undefined ? undefined : Math.max(4000, args.depth * 4000),
+    })
+  } catch (err) {
+    console.error(`bench: ${(err as Error).message}`)
+    process.exit(2)
+    return
+  }
+
+  const le = report.lethal
+  const found = le.attacksOnly + le.searchOnly
+  const rate = (n: number): string => `${pct(report.decisions === 0 ? 0 : n / report.decisions)}  (${n})`
+  const lines = [
+    '',
+    `dmgCtrl lethal solver sizing  (engine ${report.buildTag})`,
+    row('games', `${report.games}`),
+    row('decisions', `${report.decisions}`),
+    row('solver depth / nodes', `${report.solverDepth} / ${report.solverNodes}`),
+    '',
+    row('lethal found', rate(found)),
+    row('  attacks alone', `${rate(le.attacksOnly)}   closed form, the search added nothing`),
+    row('  needed search', `${rate(le.searchOnly)}   the hand, the leader, or a Sentinel cleared`),
+    '',
+    row('beam already saw it', rate(le.beamSaw)),
+    row('BEAM MISSED IT', `${rate(le.beamMissed)}   <- the only headroom here`),
+    '',
+    row('gate skipped', `${rate(report.gate.skipped)}   compute saved`),
+    row('  had lethal', `${report.gate.skippedWithLethal}   fine if the beam wins them anyway`),
+    row('  COST A WIN', `${report.gate.skippedCostingAWin}   <- must be zero`),
+    '',
+    row('oracle checked', `${report.oracle.checked}`),
+    row('  SOLVER MISSED', `${report.oracle.solverMissed}   <- a real defect: pruning lost a line`),
+    row('  solver found extra', `${report.oracle.solverExtra}   expected: owed answers cost it budget, not depth`),
+    row('  with choice pending', `${report.oracle.disagreedWithChoicePending}   of the disagreements above`),
+    row('ms per solver call', report.msPerCall.toFixed(2)),
+    '',
+    '  by round (decisions / lethal / beam missed):',
+    `    ${report.byRound.map(r => `r${r.round} ${r.decisions}/${r.lethal}/${r.beamMissed}`).join('  ')}`,
+    '',
+    row('wall clock', `${((Date.now() - start) / 1000).toFixed(1)}s`),
+    '',
+  ]
+  console.log(lines.join('\n'))
+}
+
 function runMatchupsMode(args: Args): void {
   const aiA = args.aiExplicit ? args.aiA : 'greedy'
   const aiB = args.aiExplicit && args.aiB !== 'random' ? args.aiB : 'greedy-baseline'
@@ -447,7 +521,7 @@ function main(): void {
     args = parseArgs(process.argv.slice(2))
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
-    console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N] [--sweep|--generalise|--matrix|--decisions|--terms|--matchups] [aiA] [aiB]')
+    console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N] [--sweep|--generalise|--matrix|--decisions|--terms|--lethal|--matchups] [aiA] [aiB]')
     process.exit(2)
     return
   }
@@ -457,6 +531,7 @@ function main(): void {
   if (args.matrix) { runMatrixMode(args); return }
   if (args.decisions) { runDecisionsMode(args); return }
   if (args.terms) { runTermsMode(args); return }
+  if (args.lethal) { runLethalMode(args); return }
   if (args.matchups) { runMatchupsMode(args); return }
 
   let report: BenchReport

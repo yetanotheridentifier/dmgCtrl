@@ -70,6 +70,13 @@ Everything is optional:
   - `beam:WIDTHxDEPTH` or `beam:WIDTHxDEPTH:NODES` any other cell, so a sweep addresses the space
     without a registry entry per cell. The node form exists for one control: the budget is a safety
     rail, and a rail that fires has quietly become the real width and depth.
+  - `beam-lethal` / `beam-lethal:WIDTHxBEAMDEPTHxSOLVERDEPTH` the beam with a lethal override in
+    front of it. Measured at **+0.8 points** and **not shipped**; kept registered so it can be
+    re-measured. Outside the gate it returns exactly what `beam` returns, which is what makes an A/B
+    between them one feature rather than two configurations.
+
+`OPPONENT_AI` in `src/config.ts` decides what the app ships, independently of any of this. The bench
+takes its AIs by name on the command line and never reads it.
 
   More join the list as they are built.
 
@@ -81,7 +88,14 @@ npm run bench --prefix sealed -- --games 1000 --seed 42        # a big, reproduc
 npm run bench --prefix sealed -- --games 1000 greedy random    # measure the greedy AI
 npm run bench --prefix sealed -- --decisions                   # where the evaluation has no opinion
 npm run bench --prefix sealed -- --terms --games 3             # which weights can matter at all
+npm run bench --prefix sealed -- --lethal --games 2 --depth 5  # what a lethal solver would add
 ```
+
+`--lethal` sizes a lethal solver against the shipped beam. Its headline is **`beam missed`**, not
+`lethal found`: a win the bot already plays is not headroom, and attacks-only lethal is closed form
+rather than search. It also scores the **gate** (what it skips, and whether any of that cost a
+winnable position) and runs an exhaustive **oracle** against the pruned search on real positions,
+since a pruned line makes the answer wrong rather than imprecise, and does so silently.
 
 `--terms` re-scores every decision once per weight per perturbation, so it costs roughly 30 times a
 plain pass: 3 games a deck is ~20 minutes and is plenty for rates of this size.

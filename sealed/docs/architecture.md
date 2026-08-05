@@ -4,6 +4,22 @@ Standalone desktop web app for playing SWU Sealed against an AI opponent. Lives 
 `dmgctrl.app/sealed` (Vite `base: '/sealed/'`), deliberately separate from the dmgCtrl PWA.
 Build plan and epic breakdown: `docs/swu-ai-handoff.html` (repo root).
 
+## Desktop browser only
+
+**Sealed targets a desktop browser and nothing else.** It renders and plays on a phone, but the
+layout needs more screen than a phone has, so the experience is poor. Adapting it is a redesign
+rather than a set of breakpoints, and it is not currently planned.
+
+Two consequences worth knowing before optimising anything:
+
+- **The AI's compute budget is generous.** A desktop CPU absorbs a search that a mid-range phone
+  would not, so per-decision cost is measured against a budget of hundreds of milliseconds rather
+  than tens. A Web Worker, which exists to keep a phone's UI responsive under a blocking search, is
+  therefore not a prerequisite for shipping a deeper model here.
+- **This is not part of the PWA.** The PWA (X-Wing, SWU tracking, Kill Team) is mobile-first and
+  lives at the site root; Sealed only borrows its dev server and origin. See
+  [operations.md](operations.md) for how the two interact.
+
 ## Components &amp; integration
 
 ![Component and integration diagram: UI → hooks/AI → pure rules engine → data/network, with external card sources](diagrams/components.svg)

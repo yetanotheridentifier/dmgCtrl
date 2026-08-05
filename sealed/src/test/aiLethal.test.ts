@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { hasLethal, attacksToFinish, DEFAULT_LETHAL_LIMITS } from '../ai/lethal'
+import {
+  hasLethal, findLethal, attacksToFinish, shouldSearchLethal,
+  DEFAULT_LETHAL_LIMITS, DEFAULT_LETHAL_GATE,
+} from '../ai/lethal'
 import { canFinishNow, canFinishThisAction } from '../ai/race'
 import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
@@ -193,6 +196,163 @@ describe('hasLethal agrees with brute force', () => {
       expect(hasLethal(s, 'player', { ...DEFAULT_LETHAL_LIMITS, depth })).toBe(bruteForceLethal(s, 'player', depth))
     })
   }
+})
+
+describe('findLethal returns the move, not just the verdict', () => {
+  /**
+   * `hasLethal` answers #446's question ("would acting first convert to lethal"), but PLAYING a
+   * lethal line needs the first action of it. Same search, reporting the root that succeeded.
+   */
+  it('returns a move that actually leads to a win when followed', () => {
+    const s = position(['SMALL', 'FINISHER'], ['WALL'])
+    let cur = s
+    for (let i = 0; i < DEFAULT_LETHAL_LIMITS.depth && cur.winner === null; i++) {
+      if (cur.activePlayer !== 'player') { cur = resolve(cur, { type: 'pass' }); continue }
+      const move = findLethal(cur, 'player')
+      expect(move, `a line existed at step ${i}`).not.toBeNull()
+      cur = resolve(cur, move!)
+    }
+    expect(cur.winner).toBe('player')
+  })
+
+  /**
+   * **Regression.** `findLethal` was briefly a second entry point duplicating the traversal, and the
+   * copy lost the rule that answering an owed choice costs budget but not depth. The search then ran
+   * a ply shallower in exactly the positions that rule exists for, and the bench oracle caught it as
+   * two missed lines. Both answers now come from one traversal.
+   *
+   * Playing a second copy of a unique raises a MANDATORY defeat, so this position owes an answer
+   * before anything else can happen, and the line still needs its full depth afterwards.
+   */
+  it('does not spend depth on an owed answer', () => {
+    const withUnique = {
+      ...cards,
+      UNIQ: card({ id: 'UNIQ', type: 'unit', arena: 'ground', cost: 1, power: 3, hp: 3, unique: true }),
+    }
+    const s = state({
+      cards: withUnique,
+      players: {
+        player: player({
+          resources: ready(4),
+          hand: ['UNIQ'],
+          units: [unit('u0', 'UNIQ'), unit('u1', 'HALF'), unit('u2', 'HALF')],
+        }),
+        opponent: player({ base: { cardId: 'TINY_BASE', damage: 0 } }),
+      },
+    })
+    // Two HALF at 5 power each already cover the 9 HP base, so a line exists whatever is played.
+    expect(hasLethal(s, 'player')).toBe(true)
+    expect(findLethal(s, 'player')).not.toBeNull()
+  })
+
+  /**
+   * **The shortest line, not the first one found.**
+   *
+   * Under the null move a 2-action win and a 5-action win look identical, because the opponent does
+   * nothing in either. In a real game the longer line hands them five chances to gain a Shield, drop
+   * a Sentinel or kill the attacker. Returning whichever line `legalMoves` order happened to reach
+   * first measured **47.8%** against the plain beam, losing about two points, because it replaced the
+   * beam's fastest-win choice with an arbitrary one.
+   *
+   * The beam has preferred the fastest win since #410, via a depth discount on decisive scores. This
+   * is the same rule, arrived at the same way: by measuring the cost of not having it.
+   *
+   * Here a 6 HP Sentinel blocks a base on 3. FINISHER kills the wall alone, so the win is two actions;
+   * the two SMALLs together also kill it, which wins in three. The units are ordered so the slow line
+   * comes first in move order.
+   */
+  it('prefers the shortest line when several reach a win', () => {
+    const withWall6 = {
+      ...cards,
+      WALL6: card({ id: 'WALL6', type: 'unit', arena: 'ground', cost: 2, power: 1, hp: 6, keywords: [{ name: 'Sentinel' }] }),
+    }
+    const s = state({
+      cards: withWall6,
+      players: {
+        player: player({
+          resources: ready(0),
+          units: [unit('slow0', 'SMALL'), unit('slow1', 'SMALL'), unit('fast', 'FINISHER')],
+        }),
+        opponent: player({ base: { cardId: 'TINY_BASE', damage: 6 }, units: [unit('w', 'WALL6')] }),
+      },
+    })
+    expect(hasLethal(s, 'player'), 'both lines exist').toBe(true)
+    expect(findLethal(s, 'player')).toMatchObject({ type: 'attack', attackerId: 'fast' })
+  })
+
+  it('returns null exactly when there is no line', () => {
+    expect(findLethal(position(['SMALL']), 'player')).toBeNull()
+    expect(findLethal(position(['FINISHER']), 'player')).not.toBeNull()
+  })
+
+  /** One search, two entry points: a disagreement would mean the bot and #446 have different ideas
+   *  of what lethal means, which is the duplication this ticket was re-scoped to avoid. */
+  it('agrees with hasLethal on every scripted position', () => {
+    const cases = [
+      position(['FINISHER']),
+      position(['HALF', 'HALF']),
+      position(['SMALL']),
+      position(['SMALL', 'FINISHER'], ['WALL']),
+      position(['SMALL', 'FINISHER'], ['TOUGH_WALL']),
+      position([], [], { resources: 6, baseDamage: 5 }),
+    ]
+    for (const s of cases) {
+      expect(findLethal(s, 'player') !== null).toBe(hasLethal(s, 'player'))
+    }
+  })
+})
+
+describe('the gate', () => {
+  /**
+   * The solver costs 200 to 350 ms a call, so it must not run where it cannot pay. The gate is
+   * measured rather than trusted: a gate that skips a real line is the same class of silent failure
+   * as pruning that loses one.
+   */
+  it('does not search before the round lethal becomes arithmetically possible', () => {
+    // A position that genuinely needs the search: behind a Sentinel, so no single action wins and the
+    // obvious-win gate cannot mask what the round gate is doing.
+    const needsSearch = position(['SMALL', 'FINISHER'], ['WALL'])
+    expect(shouldSearchLethal({ ...needsSearch, round: 2 }, 'player', DEFAULT_LETHAL_GATE)).toBe(false)
+    expect(shouldSearchLethal({ ...needsSearch, round: 5 }, 'player', DEFAULT_LETHAL_GATE)).toBe(true)
+  })
+
+  /**
+   * Round 4 is the earliest lethal was ever observed (15, 9 and 6 cases on three of six seeds, and
+   * exactly zero across all of rounds 1 to 3 in 36,384 decisions). A gate at 5 would throw those
+   * away, so the default sits at 4.
+   */
+  it('defaults to round 4, the earliest lethal was ever seen', () => {
+    expect(DEFAULT_LETHAL_GATE.minRound).toBe(4)
+  })
+
+  /**
+   * When one ready unit already finishes the base, `evaluate` returns WIN and the greedy driver is
+   * PROVEN to take it (`takesLethal.test.ts`). Searching would spend 300 ms confirming what the
+   * evaluation cannot get wrong.
+   */
+  it('does not search when a single action already wins', () => {
+    const obvious = { ...position(['FINISHER']), round: 6 }
+    expect(canFinishThisAction(obvious, 'player'), 'precondition').toBe(true)
+    expect(shouldSearchLethal(obvious, 'player', DEFAULT_LETHAL_GATE)).toBe(false)
+  })
+
+  /**
+   * The power bound is OFF by default and that is deliberate. It bounds damage by POWER, while a burn
+   * event deals damage with none, and a burn event is one of the three things this solver exists to
+   * find. Available as an option so its false-skip rate can be measured rather than assumed.
+   */
+  it('leaves the power bound off by default, because a burn event has no power', () => {
+    expect(DEFAULT_LETHAL_GATE.powerBound).toBe(false)
+    const hopeless = { ...position(['SMALL']), round: 6 }
+    expect(shouldSearchLethal(hopeless, 'player', DEFAULT_LETHAL_GATE)).toBe(true)
+    expect(shouldSearchLethal(hopeless, 'player', { ...DEFAULT_LETHAL_GATE, powerBound: true })).toBe(false)
+  })
+
+  /** A gate that skipped everything would look like a free speedup and quietly disable the feature. */
+  it('still lets a real line through with every gate enabled', () => {
+    const s = { ...position(['SMALL', 'FINISHER'], ['WALL']), round: 6 }
+    expect(shouldSearchLethal(s, 'player', { minRound: 4, skipWhenSingleAction: true, powerBound: true })).toBe(true)
+  })
 })
 
 describe('hasLethal behaves like the rest of the search', () => {

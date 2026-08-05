@@ -56,7 +56,13 @@ and search rather than to a belief model. This is the gate on #434 to #439 below
 
 `canFinishThisAction` reads only damage already on the board. An event finisher, a pump, or a
 when-played base hit is invisible to it, so both the lethal readout and the shipped exposure term are
-lower bounds. Closing that gap is search, which is #433.
+lower bounds.
+
+**A real solver closes that gap and it is worth very little.** `ai/lethal.ts` sees the hand, the
+leader and Sentinel-clearing lines, and the shipped beam still finds 5.8 of the 6.6 points of lethal
+that exists. Wired in as an override it measured **+0.8 points** over three seeds and 2580 games:
+same sign every time, indistinguishable from neutral, and not shipped. The beam was already
+converting these wins.
 
 Two of the gaps are **public**: a leader deploys ready, so an undeployed leader is an attacker its
 owner can produce at will, and a few units ready themselves while some events ready an exhausted one.
@@ -92,20 +98,19 @@ bot.
 
 ## Next up
 
-1. **#433 lethal, as a terminal condition of #410**, not a standalone solver. "Can I win this turn"
-   assumes the opponent does nothing, which is #410's null-move assumption, so this is that search
-   with a different finish line. What it adds is the **hand**: a burn event, a pump, a when-played
-   base hit, or clearing a Sentinel then swinging. (Ambush is not a closer: `legalMoves` only ever
-   offers it unit targets, so it reaches a base solely via Overwhelm.)
-2. **#425 opponent reply**, public information only. The cheap first step into pessimistic search.
-3. **#446 claim the initiative when it converts to lethal.** Split out of #410, which could not build
-   it: the check is `hasLethal` from #433, and it needs the sequence to continue across a **round
-   boundary** rather than to the end of a turn. Initiative is still the largest single tie at 18.2%,
-   ~7.4 coin flips a game.
-4. **Re-run `--terms`** once the matrix lands, and compare against the pre-registered predictions on
+1. **#425 opponent reply**, public information only. The cheap first step into pessimistic search, and
+   the counterweight to the beam's optimism: the beam maximises over leaves, so it systematically
+   prefers the branch most dependent on the opponent doing nothing. It also unblocks #447 and is the
+   gate on the whole belief-model programme.
+2. **#446 claim the initiative when it converts to lethal.** `hasLethal` from #433 now exists, so the
+   only thing left to build is continuing the sequence across a **round boundary** rather than to the
+   end of a turn. Initiative is still the largest single tie at 18.2%, ~7.4 coin flips a game. Temper
+   expectations: #433 showed lethal detection itself is worth only ~+0.8 points, and this applies it
+   to a narrower slice.
+3. **Re-run `--terms`** once the matrix lands, and compare against the pre-registered predictions on
    #430: `resourceSurplus`, `saturation`, `hand.canAct` and `roleShift` should start mattering if they
    were dormant. Anything still flat is dead and can be deleted.
-5. **#447 final search configuration**, after #425 and not before. Depth, width and reply policy get
+4. **#447 final search configuration**, after #425 and not before. Depth, width and reply policy get
    chosen jointly, because they are not independent: depth 4 measured **better** than the shipped
    depth 3 and was banked rather than shipped, since its value rests on four consecutive opponent
    non-actions and #425 is what changes that.
@@ -151,9 +156,12 @@ from revealed aspects. More accurate, arguably legitimate, but a different hones
   after-deploy rate becomes a #425 behaviour readout. What remains is recognising when **we** pin
   their leader and holding the unit ready, which no board-score maximiser finds because holding is a
   non-action. Unsized, so measure before building.
-- **Web Worker** for the AI, needed before shipping anything deeper than one ply **in-app**.
-  Benchmarks are headless, so measure the whole search matrix first and build the Worker only if the
-  winning configuration needs it.
+- **Web Worker** for the AI. **Downgraded, and probably unnecessary.** It existed to stop a blocking
+  search freezing a phone's UI, and Sealed is desktop only, where ~85 ms a decision reads as instant
+  on the main thread. `beam` ships without one. Revisit only if a winning configuration lands in the
+  hundreds of milliseconds, or if the mobile adaptation below ever happens.
+- **Mobile and PWA adaptation** (#482). Sealed plays on a phone but the layout needs more screen than
+  one has. A redesign rather than breakpoints, and it would reinstate the Web Worker question.
 - **Token-unit art**, and a permanent set for ASH tokens.
 - **Unique rule on change of control.** The rule itself is built for both units and upgrades, and is
   per-player, but `takeControlOfUnit` never re-checks it. Two cases slip through: stealing a unique

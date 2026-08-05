@@ -6,7 +6,11 @@ import { resolve } from '../engine/resolve'
 import { seededUnit } from '../engine/rng'
 import { evaluate, makeEvaluate, DEFAULT_WEIGHTS, type Evaluator, type EvalWeights } from './evaluate'
 import { evaluateBaseline } from './evaluateBaseline'
-import { makeQuiescent, makeBeamAi, type BeamLimits } from './search'
+import { makeQuiescent, makeBeamAi, DEFAULT_BEAM_LIMITS, type BeamLimits } from './search'
+import {
+  findLethal, shouldSearchLethal, DEFAULT_LETHAL_LIMITS, DEFAULT_LETHAL_GATE,
+  type LethalLimits, type LethalGate,
+} from './lethal'
 import { role } from './race'
 
 /**
@@ -85,3 +89,35 @@ export function makeBeamGreedy(weights: EvalWeights, limits?: BeamLimits): Ai {
 }
 
 export const beamAi = makeBeamGreedy(DEFAULT_WEIGHTS)
+
+/**
+ * The beam with a lethal override in front of it (#433).
+ *
+ * The beam finds most wins already: measured over 36,384 decisions it misses a line in 0.31% of
+ * decisions at matched depth, rising to 1.15% when the solver is allowed depth 6. So this is a narrow
+ * override, and its safety property is that **outside that slice it is exactly the beam**. A bot that
+ * played differently in ordinary positions could not be A/B-ed as one feature.
+ *
+ * The gate is not an optimisation, it is part of the design. The solver costs 200 to 350 ms a call
+ * once its budget stops binding, which is several times a whole beam decision, so running it
+ * everywhere would cost more than simply deepening the beam. Gated to the rounds where lethal is
+ * arithmetically possible, it pays only where it can win.
+ */
+export function makeLethalBeam(
+  weights: EvalWeights,
+  beamLimits: BeamLimits = DEFAULT_BEAM_LIMITS,
+  lethalLimits: LethalLimits = DEFAULT_LETHAL_LIMITS,
+  gate: LethalGate = DEFAULT_LETHAL_GATE,
+): Ai {
+  const beam = makeBeamAi(makeEvaluate(weights), beamLimits)
+  return (state: GameState): Action | null => {
+    const me = state.activePlayer
+    if (shouldSearchLethal(state, me, gate)) {
+      const kill = findLethal(state, me, lethalLimits)
+      if (kill !== null) return kill
+    }
+    return beam(state)
+  }
+}
+
+export const lethalBeamAi = makeLethalBeam(DEFAULT_WEIGHTS)
