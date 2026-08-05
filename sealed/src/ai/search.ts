@@ -206,7 +206,7 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
     let best = -Infinity
     const bestMoves: Action[] = []
     for (const move of moves) {
-      const value = reachableValue(state, move, me, asRole, inner, limits, budget)
+      const { best: value } = reachableFrom(state, move, me, asRole, inner, limits, budget)
       if (value > best) {
         best = value
         bestMoves.length = 0
@@ -249,8 +249,20 @@ function ourTurnAgain(state: GameState, me: PlayerId, budget: { left: number }):
   return passed
 }
 
-/** The best board reachable from `move` using only our own follow-up actions. */
-function reachableValue(
+/** What a root move reaches: its best board, and whether any leaf below it was an outright win. */
+interface Reach {
+  best: number
+  won: boolean
+}
+
+/**
+ * The best board reachable from `move` using only our own follow-up actions.
+ *
+ * `won` rides along rather than being computed by a second traversal, so `beamReachesWin` reports on
+ * exactly the search the bot runs. A parallel implementation would drift, and the whole point of that
+ * function is to measure the SHIPPED discipline against #433's lethal search.
+ */
+function reachableFrom(
   state: GameState,
   move: Action,
   me: PlayerId,
@@ -258,13 +270,17 @@ function reachableValue(
   inner: Evaluator,
   limits: BeamLimits,
   budget: { left: number },
-): number {
-  if (budget.left <= 0) return inner(resolve(state, move), me, asRole)
+): Reach {
+  if (budget.left <= 0) {
+    const board = resolve(state, move)
+    return { best: inner(board, me, asRole), won: board.winner === me }
+  }
   budget.left--
 
   // Beam nodes are always settled boards, so depth counts actions rather than choice answers.
   const root = resolveChain(resolve(state, move), me, asRole, inner, budget)
   let best = valueAt(root, me, asRole, inner, 1)
+  let won = root.winner === me
   let frontier: GameState[] = [root]
 
   for (let d = 1; d < limits.depth; d++) {
@@ -284,6 +300,7 @@ function reachableValue(
         const board = resolveChain(resolve(ours, next), me, asRole, inner, budget)
         const value = valueAt(board, me, asRole, inner, d + 1)
         if (value > best) best = value
+        if (board.winner === me) won = true
         children.push({ board, value })
       }
     }
@@ -294,5 +311,34 @@ function reachableValue(
     frontier = children.slice(0, limits.width).map(c => c.board)
   }
 
-  return best
+  return { best, won }
+}
+
+/**
+ * Does the SHIPPED search find a win from here?
+ *
+ * Built for #433's measurement rather than for play. "How often does the lethal solver find a win the
+ * bot misses" can only be answered against the beam's real discipline: it trims by evaluation score,
+ * so a winning line whose setup step scores badly can be pruned even though the depth would reach it.
+ * A lethal-shaped search prunes on damage relevance instead and keeps such lines.
+ *
+ * Answers for `me`, taking the null move first if it is not their turn, so it asks the same question
+ * as `hasLethal` and the two are comparable.
+ */
+export function beamReachesWin(
+  state: GameState,
+  me: PlayerId,
+  inner: Evaluator,
+  limits: BeamLimits = DEFAULT_BEAM_LIMITS,
+): boolean {
+  const budget = { left: limits.nodes }
+  const ours = ourTurnAgain(state, me, budget)
+  if (ours === null) return false
+
+  const asRole = role(ours, me)
+  for (const move of legalMoves(ours)) {
+    if (move.type === 'pass') continue
+    if (reachableFrom(ours, move, me, asRole, inner, limits, budget).won) return true
+  }
+  return false
 }

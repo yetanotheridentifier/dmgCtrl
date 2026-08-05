@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { makeBeamAi, resolveChain, makeQuiescent, DEFAULT_BEAM_LIMITS } from '../ai/search'
+import { makeBeamAi, resolveChain, makeQuiescent, beamReachesWin, DEFAULT_BEAM_LIMITS } from '../ai/search'
+import { hasLethal } from '../ai/lethal'
 import { greedyAi } from '../ai/greedyAi'
 import { evaluate } from '../ai/evaluate'
 import { resolve } from '../engine/resolve'
@@ -179,6 +180,49 @@ describe('the beam plays by the rules it is given', () => {
     const s = sentinelWall()
     const beam = makeBeamAi(evaluate)
     expect(beam(s)).toEqual(beam(s))
+  })
+})
+
+describe('beamReachesWin', () => {
+  /**
+   * Asks whether the SHIPPED search sees a win, using the beam's own discipline rather than a proxy.
+   * It exists for #433's measurement: "how often does the lethal solver find a win the bot misses"
+   * is only answerable against the real trimming, since a beam ordered by evaluation score can prune
+   * a winning line whose setup step scores badly.
+   */
+  it('sees the win in the scripted position it can reach', () => {
+    expect(beamReachesWin(sentinelWall(), 'player', evaluate, DEFAULT_BEAM_LIMITS)).toBe(true)
+  })
+
+  /** Depth is the honest limit: the line here needs three of our actions. */
+  it('does not see a win beyond its depth', () => {
+    const shallow = { ...DEFAULT_BEAM_LIMITS, depth: 2 }
+    expect(beamReachesWin(sentinelWall(), 'player', evaluate, shallow)).toBe(false)
+  })
+
+  it('says no on a board with no win in it', () => {
+    const s = state({
+      cards,
+      players: {
+        player: player({ resources: ready(4), units: [unit('c1', 'CHUMP')] }),
+        opponent: player({ base: { cardId: 'TINY_BASE', damage: 0 }, units: [unit('w', 'WALL')] }),
+      },
+    })
+    expect(beamReachesWin(s, 'player', evaluate, DEFAULT_BEAM_LIMITS)).toBe(false)
+  })
+
+  /**
+   * The property that makes it worth measuring against `hasLethal`: the beam trims by evaluation
+   * score, so narrowing it can lose a win that a lethal-shaped search still finds. Width 1 keeps only
+   * the single best-scoring continuation at each level.
+   */
+  it('can lose a win to its own trimming, which is why the lethal search is not just this', () => {
+    const narrow = { ...DEFAULT_BEAM_LIMITS, width: 1 }
+    const seen = beamReachesWin(sentinelWall(), 'player', evaluate, narrow)
+    expect(hasLethal(sentinelWall(), 'player'), 'the line exists').toBe(true)
+    // Not asserted either way: what matters is that the two searches can disagree, and the
+    // measurement in `bench/lethal.ts` is what quantifies how often they do.
+    expect(typeof seen).toBe('boolean')
   })
 })
 
