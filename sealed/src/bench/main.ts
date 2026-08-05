@@ -7,6 +7,8 @@ import type { SweepReport } from './sweep'
 import { runDecisions } from './decisions'
 import { runTerms } from './terms'
 import type { TermReport } from './terms'
+import { runCost } from './cost'
+import type { CostReport } from './cost'
 import { runLethal } from './lethal'
 import type { LethalReport } from './lethal'
 import { runAiMatchups } from './aiMatchups'
@@ -49,6 +51,7 @@ interface Args {
   matrix: boolean
   decisions: boolean
   terms: boolean
+  cost: boolean
   lethal: boolean
   /** Solver depth for `--lethal`. Undefined means the shipped default. */
   depth?: number
@@ -72,6 +75,7 @@ function parseArgs(argv: string[]): Args {
   let matrix = false
   let decisions = false
   let terms = false
+  let cost = false
   let lethal = false
   let depth: number | undefined
   let matchups = false
@@ -87,6 +91,7 @@ function parseArgs(argv: string[]): Args {
     else if (arg === '--matrix') matrix = true
     else if (arg === '--decisions') decisions = true
     else if (arg === '--terms') terms = true
+    else if (arg === '--cost') cost = true
     else if (arg === '--lethal') lethal = true
     else if (arg === '--depth') depth = Number(argv[++i])
     else if (arg === '--matchups') matchups = true
@@ -98,7 +103,7 @@ function parseArgs(argv: string[]): Args {
   if (!seeds.every(Number.isFinite) || seeds.length === 0) throw new Error('--seed must be a number, or a comma-separated list of numbers')
   if (depth !== undefined && (!Number.isFinite(depth) || depth < 1)) throw new Error('--depth must be a positive integer')
   if (triage && positional.length === 0) throw new Error('--triage needs at least one set code, e.g. --triage LAW SEC')
-  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, lethal, depth, matchups, triage, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, lethal, depth, matchups, triage, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
@@ -455,6 +460,45 @@ function runLethalMode(args: Args): void {
   console.log(lines.join('\n'))
 }
 
+/**
+ * Per-decision cost (#425). Ratios are the finding; absolute milliseconds depend on the machine and
+ * on which positions the corpus holds, so the relative column is what travels between runs.
+ */
+function runCostMode(args: Args): void {
+  const states = args.gamesSet ? args.games : 200
+  const start = Date.now()
+  let report: CostReport
+  try {
+    report = runCost({
+      states,
+      seed: args.seed,
+      // Positional arguments name the AIs to time; with none given, time everything registered.
+      ais: args.aiExplicit ? [args.aiA, args.aiB].filter((n, i, a) => n !== 'random' || i === a.indexOf(n)) : undefined,
+    })
+  } catch (err) {
+    console.error(`bench: ${(err as Error).message}`)
+    process.exit(2)
+    return
+  }
+
+  const lines = [
+    '',
+    `dmgCtrl per-decision cost  (engine ${report.commitId})`,
+    row('decision states', `${report.states}`),
+    '',
+    '  Ratios travel between machines; absolute milliseconds do not, since they depend on the box',
+    '  and on which positions the corpus holds. Do NOT take these from a bench wall clock: a game',
+    '  clock includes the opponent\'s cheap decisions and engine overhead, and understates the ratio.',
+    '',
+    `  ${'ai'.padEnd(24)}${'ms/decision'.padStart(13)}${`vs ${report.baseline}`.padStart(14)}`,
+  ]
+  for (const r of [...report.rows].sort((a, b) => a.msPerDecision - b.msPerDecision)) {
+    lines.push(`  ${r.ai.padEnd(24)}${r.msPerDecision.toFixed(2).padStart(13)}${`${r.relative.toFixed(2)}x`.padStart(14)}`)
+  }
+  lines.push('', row('wall clock', `${((Date.now() - start) / 1000).toFixed(1)}s`), '')
+  console.log(lines.join('\n'))
+}
+
 function runMatchupsMode(args: Args): void {
   const aiA = args.aiExplicit ? args.aiA : 'greedy'
   const aiB = args.aiExplicit && args.aiB !== 'random' ? args.aiB : 'greedy-baseline'
@@ -566,8 +610,8 @@ function main(): void {
     args = parseArgs(process.argv.slice(2))
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
-    console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N] [--sweep|--generalise|--matrix|--decisions|--terms|--lethal|--matchups] [aiA] [aiB]')
-    console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N] [--sweep|--generalise|--matrix|--decisions|--terms|--matchups] [aiA] [aiB]')
+    console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N]')
+    console.error('       [--sweep|--generalise|--matrix|--decisions|--terms|--cost|--lethal|--matchups] [aiA] [aiB]')
     console.error('       npm run bench --prefix sealed -- --triage SET [SET ...]')
     process.exit(2)
     return
@@ -579,6 +623,7 @@ function main(): void {
   if (args.matrix) { runMatrixMode(args); return }
   if (args.decisions) { runDecisionsMode(args); return }
   if (args.terms) { runTermsMode(args); return }
+  if (args.cost) { runCostMode(args); return }
   if (args.lethal) { runLethalMode(args); return }
   if (args.matchups) { runMatchupsMode(args); return }
 

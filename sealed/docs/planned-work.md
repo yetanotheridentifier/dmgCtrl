@@ -102,6 +102,16 @@ bot.
    the counterweight to the beam's optimism: the beam maximises over leaves, so it systematically
    prefers the branch most dependent on the opponent doing nothing. It also unblocks #447 and is the
    gate on the whole belief-model programme.
+
+   It is a **policy swap at the `ourTurnAgain` seam**, not a new recursion, which is what collapsing
+   the three search tickets into one bought. Bound it with **alpha-beta rather than by trimming
+   candidates**: trimming by pre-expansion score prunes the moves whose value only appears after the
+   reply, which is the error #410 already paid for, while alpha-beta never changes the answer.
+
+   It carries two pieces of instrumentation the programme needs anyway: a **`--cost` mode**, because
+   per-decision cost has been hand-measured three times and misreported twice from bench wall clocks
+   (12x when it was 34x, 42 ms when it was 200 ms), and a **leader-death readout**, because the claim
+   that this subsumes #397's direct pinning rests on that 2.5% rate falling.
 2. **#446 claim the initiative when it converts to lethal.** `hasLethal` from #433 now exists, so the
    only thing left to build is continuing the sequence across a **round boundary** rather than to the
    end of a turn. Initiative is still the largest single tie at 18.2%, ~7.4 coin flips a game. Temper
