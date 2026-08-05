@@ -6,6 +6,7 @@ import { initGame } from '../engine/initGame'
 import { resolve } from '../engine/resolve'
 import { seededShuffle, nextSeed } from '../engine/rng'
 import { setupAi } from '../ai/setupAi'
+import { newCoverage, observeAction, observeState } from './playCoverage'
 
 /** Why a game was abandoned instead of counted. Each is a distinct engine-defect signature. */
 export type DropReason = 'nonterminating' | 'timeout' | 'stuck' | 'threw'
@@ -31,6 +32,15 @@ export interface GameResult {
   durationMs: number
   /** The moves played, retained so a dropped game can be replayed. */
   moves: MoveRecord[]
+  /**
+   * Per-card play coverage, empty unless `trackCoverage` was set. Deck-card ids only: leaders are
+   * reported in `leadersDeployed`, since they are in play from the first turn.
+   */
+  cardsPlayed: string[]
+  /** Card ids that reached a hand. A card decked but never drawn appears in neither list. */
+  cardsDrawn: string[]
+  /** Leader ids that deployed, which is the only way a leader's deployed side runs. */
+  leadersDeployed: string[]
   /**
    * The starting position, so a dropped game becomes a replayable fixture ({ initialState, moves }).
    * `runBench` clears it for completed games to bound memory over a long run.
@@ -62,6 +72,12 @@ export interface PlayGameOptions {
    * @deprecated wall-clock time no longer affects the outcome; use `stepCeiling`.
    */
   timeoutMs?: number
+  /**
+   * Track which cards were drawn and played. Off by default: it costs a set-union per step, and the
+   * AI benchmark plays hundreds of thousands of games where the answer is never read. The coverage
+   * sweep turns it on.
+   */
+  trackCoverage?: boolean
 }
 
 /**
@@ -107,6 +123,8 @@ export function playGame(opts: PlayGameOptions): GameResult {
   let dropReason: DropReason | null = null
   let steps = 0
 
+  const coverage = opts.trackCoverage ? newCoverage() : null
+
   try {
     while (state.winner === null) {
       if (steps >= stepCeiling) {
@@ -114,6 +132,7 @@ export function playGame(opts: PlayGameOptions): GameResult {
         dropReason = 'nonterminating'
         break
       }
+      if (coverage) observeState(coverage, state)
       const active = state.activePlayer
       const ai = active === 'player' ? opts.aiPlayer : opts.aiOpponent
       const action = setupAi(state) ?? ai(state)
@@ -122,6 +141,8 @@ export function playGame(opts: PlayGameOptions): GameResult {
         dropReason = 'stuck'
         break
       }
+      // Read the action against the state it was chosen in: a hand index means nothing afterwards.
+      if (coverage) observeAction(coverage, state, action)
       moves.push({ by: active, action })
       state = resolve(state, action)
       steps++
@@ -130,6 +151,10 @@ export function playGame(opts: PlayGameOptions): GameResult {
     status = 'dropped'
     dropReason = 'threw'
   }
+
+  // The loop observes before acting, so the final position has not been seen yet. A unit played by
+  // the winning move would otherwise be missed.
+  if (coverage) observeState(coverage, state)
 
   const baseDamage: Record<PlayerId, number> = {
     player: state.players.player.base.damage,
@@ -149,5 +174,8 @@ export function playGame(opts: PlayGameOptions): GameResult {
     durationMs: performance.now() - start,
     moves,
     initialState,
+    cardsPlayed: coverage ? [...coverage.played] : [],
+    cardsDrawn: coverage ? [...coverage.drawn] : [],
+    leadersDeployed: coverage ? [...coverage.leadersDeployed] : [],
   }
 }

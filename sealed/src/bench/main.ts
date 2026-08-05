@@ -42,6 +42,8 @@ interface Args {
   games: number
   gamesSet: boolean
   seed: number
+  /** Every seed given. Only the sweep uses more than the first. */
+  seeds: number[]
   sweep: boolean
   generalise: boolean
   matrix: boolean
@@ -64,6 +66,7 @@ function parseArgs(argv: string[]): Args {
   let games = 100
   let gamesSet = false
   let seed = 1
+  let seeds = [1]
   let sweep = false
   let generalise = false
   let matrix = false
@@ -76,7 +79,9 @@ function parseArgs(argv: string[]): Args {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--games') { games = Number(argv[++i]); gamesSet = true }
-    else if (arg === '--seed') seed = Number(argv[++i])
+    // `--seed 1,2,3` runs the sweep under each seed and unions the coverage. Other modes take the
+    // first, so a list is harmless rather than an error where it has no meaning.
+    else if (arg === '--seed') { seeds = argv[++i].split(',').map(Number); seed = seeds[0] }
     else if (arg === '--sweep') sweep = true
     else if (arg === '--generalise') generalise = true
     else if (arg === '--matrix') matrix = true
@@ -90,10 +95,10 @@ function parseArgs(argv: string[]): Args {
     else positional.push(arg)
   }
   if (!Number.isFinite(games) || games < 1) throw new Error(`--games must be a positive integer`)
-  if (!Number.isFinite(seed)) throw new Error(`--seed must be a number`)
+  if (!seeds.every(Number.isFinite) || seeds.length === 0) throw new Error('--seed must be a number, or a comma-separated list of numbers')
   if (depth !== undefined && (!Number.isFinite(depth) || depth < 1)) throw new Error('--depth must be a positive integer')
   if (triage && positional.length === 0) throw new Error('--triage needs at least one set code, e.g. --triage LAW SEC')
-  return { games, gamesSet, seed, sweep, generalise, matrix, decisions, terms, lethal, depth, matchups, triage, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, lethal, depth, matchups, triage, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
@@ -131,14 +136,27 @@ function formatSweep(report: SweepReport, wallMs: number, aiName: string): strin
   const lines = [
     '',
     `dmgCtrl coverage sweep  (engine ${report.commitId})`,
-    `${report.decks} decks × ${report.gamesPerDeck} games   ${aiName} mirror`,
+    `${report.decks} decks × ${report.gamesPerDeck} games × ${report.seeds.length} seed(s)   ${aiName} mirror`,
     '',
+    row('seeds', report.seeds.join(', ')),
     row('total games', `${report.totalGames}`),
     row('completed / dropped', `${report.completed} / ${report.dropped}`),
-    row('cards exercised', `${report.cardsExercised}`),
+    row('cards decked', `${report.cardsDecked}`),
+    row('cards drawn', `${report.cardsDrawn}`),
+    row('cards played', `${report.cardsPlayed}  (${pct(report.cardsPlayed / Math.max(1, report.cardsDecked))} of decked)`),
+    row('leaders / deployed', `${report.leaders} / ${report.leadersDeployed}`),
+    row('bases', `${report.bases}`),
     row('wall clock', `${(wallMs / 1000).toFixed(1)}s`),
     '',
   ]
+  if (report.uncovered.length > 0) {
+    // Not a failure: a card the run never reached is a fact about the run, and the card tickets
+    // assert against this list themselves.
+    lines.push(`  ${report.uncovered.length} card(s) decked but never played:`)
+    for (const id of report.uncovered.slice(0, 40)) lines.push(`    ${id}`)
+    if (report.uncovered.length > 40) lines.push(`    ... and ${report.uncovered.length - 40} more`)
+    lines.push('')
+  }
   if (report.dropped > 0) {
     lines.push(`  ⚠ ${report.dropped} game(s) dropped across the pool:`)
     for (const f of report.failures.slice(0, 40)) lines.push(`    ${f.deck}  seed ${f.seed}  ${f.reason}`)
@@ -155,7 +173,7 @@ function runSweepMode(args: Args): void {
   const start = Date.now()
   let report: SweepReport
   try {
-    report = runSweep({ gamesPerDeck, seed: args.seed, aiName: args.aiA })
+    report = runSweep({ gamesPerDeck, seeds: args.seeds, aiName: args.aiA })
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
     process.exit(2)

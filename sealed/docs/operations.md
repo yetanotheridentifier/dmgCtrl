@@ -29,8 +29,12 @@ card in the pool, fuzzing the whole set for hangs and throws (each dropped game 
 replayable fixture):
 
 ```bash
-npm run bench --prefix sealed -- --sweep --games 20 --seed 42
+npm run bench --prefix sealed -- --sweep --games 5 --seed 42,43,44
 ```
+
+`--seed` takes a list, and coverage is the union across them. Five games a deck on three seeds plays
+every card in the pool in a few seconds; one long single-seed run does not, because the last card or
+two is seed-luck rather than run length.
 
 And a **generalisation diagnostic** (`--generalise`) that plays one AI against another across the
 coverage decks and reports the per-deck win rate (weakest first), to see where an AI is weak and
