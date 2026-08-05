@@ -314,7 +314,8 @@ describe('GameScreen', () => {
       const report = writeText.mock.calls[0][0] as string
       expect(report).toContain('After the initiative.')
       expect(report).toContain('"initialState"') // the replay payload rides along
-      expect(report).toMatch(/Build/)
+      expect(report).toMatch(/Release/)
+      expect(report).toMatch(/Commit/)
 
       const url = new URL(open.mock.calls[0][0] as string)
       expect(url.searchParams.get('title')).toBe('bug: Game hung')

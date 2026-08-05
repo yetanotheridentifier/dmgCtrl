@@ -17,7 +17,10 @@ describe('bench store', () => {
     const runs = listRuns(db)
     expect(runs).toHaveLength(1)
     expect(runs[0].runId).toBe(runId)
-    expect(runs[0].buildTag).toBe(report.buildTag)
+    // The column is still `build_tag`, but it now holds a commit id rather than the old counter.
+    // Renaming it needs a migration, and pre-change rows hold `bN` values that cannot be mapped to a
+    // commit, so those rows stay engine-ambiguous by design (#480).
+    expect(runs[0].commitId).toBe(report.commitId)
     expect(runs[0].gamesRequested).toBe(3)
     expect(runs[0].completed + runs[0].dropped).toBe(3)
     expect(runs[0].winRateA).toBeCloseTo(report.winRateA, 5)

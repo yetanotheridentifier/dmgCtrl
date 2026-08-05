@@ -4,15 +4,22 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "identity": "node scripts/buildIdentity.mjs",
+    "prepare": "node scripts/buildIdentity.mjs",
+    "predev": "node scripts/buildIdentity.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/buildIdentity.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "pretest": "node scripts/buildIdentity.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
+    "prebench": "node scripts/buildIdentity.mjs",
     "bench": "tsx src/bench/main.ts",
+    "pretune": "node scripts/buildIdentity.mjs",
     "tune": "tsx src/bench/tune.ts",
-    "check": "node scripts/bumpBuild.mjs && vitest run && tsc -b && eslint ."
+    "check": "node scripts/buildIdentity.mjs && vitest run && tsc -b && eslint ."
   },
   "dependencies": {
     "dexie": "^4.4.4",

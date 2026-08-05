@@ -1,4 +1,4 @@
-import { BUILD_TAG } from '../buildTag'
+import { COMMIT_ID } from '../buildIdentity'
 import { nextSeed } from '../engine/rng'
 import { resolveAi } from '../ai/registry'
 import { wilsonInterval } from './stats'
@@ -25,7 +25,7 @@ export interface Failure {
 
 export interface BenchReport {
   /** Engine build the run was measured under: every number is only meaningful against this. */
-  buildTag: string
+  commitId: string
   aiA: string
   aiB: string
   seed: number
@@ -100,7 +100,7 @@ export function runBench(config: BenchConfig): BenchReport {
   const totalMs = games.reduce((ms, g) => ms + g.durationMs, 0)
 
   return {
-    buildTag: BUILD_TAG,
+    commitId: COMMIT_ID,
     aiA: config.aiA,
     aiB: config.aiB,
     seed: config.seed,

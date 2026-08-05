@@ -17,7 +17,7 @@ const log = [
 ]
 
 const report = (over: Partial<Parameters<typeof buildReportMarkdown>[0]> = {}) =>
-  buildReportMarkdown({ description: 'It hung after I took the initiative.', buildTag: 'b324', isDev: false, log, initialState, moves, ...over })
+  buildReportMarkdown({ description: 'It hung after I took the initiative.', release: '324', commitId: '3f2a1c7', isDev: false, log, initialState, moves, ...over })
 
 describe('reportTitle', () => {
   it('prefixes "bug: " so reports sort with the rest', () => {
@@ -73,8 +73,14 @@ describe('buildReportMarkdown', () => {
     expect(report()).toContain('It hung after I took the initiative.')
   })
 
-  it('records the build tag and which environment it came from', () => {
-    expect(report()).toMatch(/b324/)
+  /**
+   * Both identifiers, because they serve different halves of a support conversation: the reporter
+   * quotes the release, and the commit id is what pins the code. One without the other leaves either
+   * an unusable number or one nobody can read out.
+   */
+  it('records both build identifiers and which environment it came from', () => {
+    expect(report()).toMatch(/324/)
+    expect(report()).toMatch(/3f2a1c7/)
     expect(report()).toMatch(/prod/i)
     expect(report({ isDev: true })).toMatch(/dev/i)
   })
@@ -132,8 +138,10 @@ describe('buildReportMarkdown', () => {
   })
 
   it('copes with an empty description and an empty game', () => {
-    const md = buildReportMarkdown({ description: '', buildTag: 'b1', isDev: true, log: [], initialState: null, moves: [] })
-    expect(md).toContain('b1')
+    const md = buildReportMarkdown({ description: '', release: 'dev-3f2a1c7', commitId: '3f2a1c7-dirty', isDev: true, log: [], initialState: null, moves: [] })
+    expect(md).toContain('dev-3f2a1c7')
+    // A dirty tree belongs to no commit, and a report from one has to say so.
+    expect(md).toContain('3f2a1c7-dirty')
     expect(md).toMatch(/no game in progress/i)
   })
 })

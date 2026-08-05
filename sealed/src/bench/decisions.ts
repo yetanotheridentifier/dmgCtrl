@@ -8,7 +8,7 @@ import { initGame } from '../engine/initGame'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
 import { seededShuffle, nextSeed } from '../engine/rng'
-import { BUILD_TAG } from '../buildTag'
+import { COMMIT_ID } from '../buildIdentity'
 import { evaluate } from '../ai/evaluate'
 import { makeQuiescent } from '../ai/search'
 import { resolveAi } from '../ai/registry'
@@ -242,7 +242,7 @@ export interface ExposureStat {
 }
 
 export interface DecisionReport {
-  buildTag: string
+  commitId: string
   ai: string
   games: number
   stats: DecisionStat[]
@@ -486,7 +486,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   })
 
   return {
-    buildTag: BUILD_TAG,
+    commitId: COMMIT_ID,
     ai: config.aiName ?? 'greedy',
     games,
     stats: [

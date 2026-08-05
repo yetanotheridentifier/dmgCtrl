@@ -14,7 +14,7 @@ import { publicBreakdown, makeEvaluate, DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { DEFAULT_HAND_WEIGHTS, handQuantities } from '../ai/handValue'
 import { makeQuiescent } from '../ai/search'
 import { role } from '../ai/race'
-import { BUILD_TAG } from '../buildTag'
+import { COMMIT_ID } from '../buildIdentity'
 import { buildCoverageDecks } from './coverageDecks'
 import { SCALAR_KEYS, weightsFrom, type WeightKey } from './tune'
 
@@ -115,7 +115,7 @@ export interface TermStat {
 }
 
 export interface TermReport {
-  buildTag: string
+  commitId: string
   games: number
   /** Decisions with a real choice. A single forced move cannot be mis-ranked against anything. */
   decisions: number
@@ -343,5 +343,5 @@ export function runTerms(config: TermConfig): TermReport {
     }
   })
 
-  return { buildTag: BUILD_TAG, games, decisions, stats }
+  return { commitId: COMMIT_ID, games, decisions, stats }
 }

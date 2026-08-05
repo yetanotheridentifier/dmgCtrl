@@ -3,7 +3,7 @@ import DeckSelectScreen from './components/deckSelectScreen'
 import GameScreen from './components/gameScreen'
 import HelpScreen from './components/helpScreen'
 import type { SavedDeck } from './data/deckStore'
-import { BUILD_TAG } from './buildTag'
+import { RELEASE } from './buildIdentity'
 import { isDev } from './env'
 
 type Screen = 'decks' | 'game' | 'help'
@@ -74,7 +74,7 @@ export default function App() {
           style={{ position: 'fixed', right: 8, bottom: 8, zIndex: 50 }}
           className="text-[10px] text-ink-faint"
         >
-          {BUILD_TAG}
+          {RELEASE}
         </div>
       )}
     </div>

@@ -17,10 +17,12 @@ describe('App shell', () => {
     expect(screen.getByRole('heading', { name: /dmgctrl/i })).toBeInTheDocument()
   })
 
-  it('shows the build tag (dev: fixed bottom-right badge), not in the header', () => {
+  it('shows the release (dev: fixed bottom-right badge), not in the header', () => {
     render(<App />)
     const tag = screen.getByTestId('build-tag')
-    expect(tag).toHaveTextContent(/b\d+/)
+    // A release number in CI, or a `dev-` marker locally. Never a bare counter: that was the old
+    // BUILD_TAG, which said nothing about which code was running.
+    expect(tag).toHaveTextContent(/^(dev-[0-9a-f]+|\d+)$/)
     expect(tag).toHaveStyle({ position: 'fixed', right: '8px', bottom: '8px' })
     // In dev the tag is a corner badge, no longer inside the header.
     expect(within(screen.getByRole('banner')).queryByTestId('build-tag')).toBeNull()

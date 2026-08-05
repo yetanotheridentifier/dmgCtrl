@@ -18,7 +18,13 @@ export interface ReportLogEntry {
 
 export interface ReportInput {
   description: string
-  buildTag: string
+  /**
+   * Both identifiers, because they serve different halves of a support conversation: the reporter
+   * quotes the **release**, and the **commit id** is what actually pins the code that produced the
+   * bug. A `-dirty` commit id means the build had uncommitted changes and belongs to no commit.
+   */
+  release: string
+  commitId: string
   isDev: boolean
   log: ReportLogEntry[]
   /** Null before a game has loaded, when there is nothing to replay. */
@@ -65,7 +71,7 @@ function replayPayload(initialState: GameState | null, moves: ReportInput['moves
   return JSON.stringify({ initialState: { ...initialState, cards: undefined }, moves })
 }
 
-export function buildReportMarkdown({ description, buildTag, isDev, log, initialState, moves, unresolvedPrintings = [] }: ReportInput): string {
+export function buildReportMarkdown({ description, release, commitId, isDev, log, initialState, moves, unresolvedPrintings = [] }: ReportInput): string {
   const payload = replayPayload(initialState, moves)
   const logLines = log.map(e => `${e.by === 'player' ? 'You' : 'Opp'}  ${e.text}`).join('\n')
 
@@ -74,7 +80,8 @@ export function buildReportMarkdown({ description, buildTag, isDev, log, initial
     description.trim() || '_No description given._',
     '',
     '### Environment',
-    `- Build: \`${buildTag}\``,
+    `- Release: \`${release}\``,
+    `- Commit: \`${commitId}\``,
     `- Environment: ${isDev ? 'dev' : 'prod'}`,
     `- Reported: ${new Date().toISOString()}`,
     '',

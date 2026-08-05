@@ -130,8 +130,11 @@ random vs random   1000 games   seed 42
   ✓ clean run
 ```
 
-- **engine bNNN** the build tag the run was measured under. Every result is only comparable to others
-  from the same (or a known) engine build, so it is stamped on every run and stored in the database.
+- **engine** the commit the run was measured under, git-derived and unique. Every result is only
+  comparable to others from the same engine, so it is stamped on every run and stored in the
+  database. A **`-dirty`** suffix means the tree had uncommitted changes, so the run belongs to no
+  commit and is not reproducible from one. See the build identity section in
+  [operations.md](operations.md).
 - **win rate (± confidence)** how often seat A won, over completed games. The `±` is the margin of
   error (a 95% Wilson confidence interval): the true win rate is very likely within that band. **More
   games shrink the band.** At 1000 games it is about ±3%; at 20 games it is ±20%, which is too wide to
@@ -568,7 +571,7 @@ Two tables, joined on `run_id`.
 | --- | --- |
 | `run_id` | primary key: the start timestamp plus a short random suffix |
 | `started_at` | ISO timestamp |
-| `build_tag` | engine build the run was measured under |
+| `build_tag` | the commit the run was measured under. Rows written before build identity landed hold the old `bN` counter and are engine-ambiguous: the mapping to a commit never existed |
 | `ai_a`, `ai_b` | the two AI names |
 | `seed` | the run seed (reproduces the whole run) |
 | `games_requested` | how many games were asked for |
@@ -621,6 +624,7 @@ in `src/ai/` and is described in [ai-model.md](ai-model.md).
 Comparisons under a shared engine are robust: both AIs play the same engine, and in a mirror most
 defects hurt both sides equally, so they largely cancel in a head-to-head. Absolute numbers and
 fine-grained tuning decisions are more fragile, so treat any run made before the defect list is clean
-as provisional, and re-run after fixes (it costs seconds). The `build_tag` stamped on every run is
-what lets you tell which engine a number came from. Re-running is cheap, so nothing is ever "thrown
-away" by a faulty evaluation; at worst a design decision made on a biased comparison is revisited.
+as provisional, and re-run after fixes (it costs seconds). The commit id stamped on every run is what
+lets you tell which engine a number came from, and a `-dirty` one tells you the run cannot be tied to
+a commit at all. Re-running is cheap, so nothing is ever "thrown away" by a faulty evaluation; at
+worst a design decision made on a biased comparison is revisited.

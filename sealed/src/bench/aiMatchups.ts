@@ -3,7 +3,7 @@ import '../engine/cardDefinitions' // side effect: registers every implemented c
 import type { SwuCard } from '../data/cards'
 import { buildCardDb } from '../engine/cardDb'
 import { nextSeed } from '../engine/rng'
-import { BUILD_TAG } from '../buildTag'
+import { COMMIT_ID } from '../buildIdentity'
 import type { Ai } from '../ai/types'
 import { playGame } from './selfPlay'
 import { seating, resultForA } from './seating'
@@ -44,7 +44,7 @@ export interface AiMatchupCell {
 }
 
 export interface AiMatchupReport {
-  buildTag: string
+  commitId: string
   aiA: string
   aiB: string
   deckCount: number
@@ -109,7 +109,7 @@ export function runAiMatchups(
 
   const overall = wilsonInterval(totalWins, totalGames)
   return {
-    buildTag: BUILD_TAG,
+    commitId: COMMIT_ID,
     aiA: nameA,
     aiB: nameB,
     deckCount: decks.length,

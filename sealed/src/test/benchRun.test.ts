@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { runBench } from '../bench/runBench'
 import type { BenchReport } from '../bench/runBench'
-import { BUILD_TAG } from '../buildTag'
+import { COMMIT_ID } from '../buildIdentity'
 
 /**
  * The run layer plays N games, alternating who holds the initiative so first-player advantage
@@ -30,7 +30,7 @@ describe('runBench', () => {
   it('reports a coherent aggregate over a small random-vs-random run', () => {
     const report = runBench({ games: 6, seed: 123, aiA: 'random', aiB: 'random' })
     expect(report.completed + report.dropped).toBe(6)
-    expect(report.buildTag).toBe(BUILD_TAG)
+    expect(report.commitId).toBe(COMMIT_ID)
     expect(report.winRateA).toBeGreaterThanOrEqual(0)
     expect(report.winRateA).toBeLessThanOrEqual(1)
     expect(report.winCi).toBeGreaterThan(0)
