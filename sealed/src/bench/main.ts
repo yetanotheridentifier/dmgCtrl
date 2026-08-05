@@ -17,6 +17,7 @@ import { buildMatchupDecks } from './matchupDecks'
 import { runMatchupMatrix } from './matrix'
 import { saveMatrix, deckStrength, leaderStrength, baseStrength, type StrengthRow } from './store'
 import { resolveAi } from '../ai/registry'
+import { fetchSets, formatTriage, triage } from './triage'
 
 /**
  * The bench command line: `npm run bench --prefix sealed -- [--games N] [--seed N] [aiA] [aiB]`.
@@ -50,6 +51,9 @@ interface Args {
   /** Solver depth for `--lethal`. Undefined means the shipped default. */
   depth?: number
   matchups: boolean
+  triage: boolean
+  /** Set codes for `--triage`, taken from the positional arguments. */
+  sets: string[]
   aiExplicit: boolean
   aiA: string
   aiB: string
@@ -68,6 +72,7 @@ function parseArgs(argv: string[]): Args {
   let lethal = false
   let depth: number | undefined
   let matchups = false
+  let triage = false
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--games') { games = Number(argv[++i]); gamesSet = true }
@@ -80,6 +85,7 @@ function parseArgs(argv: string[]): Args {
     else if (arg === '--lethal') lethal = true
     else if (arg === '--depth') depth = Number(argv[++i])
     else if (arg === '--matchups') matchups = true
+    else if (arg === '--triage') triage = true
     else if (arg.startsWith('--')) throw new Error(`Unknown flag: ${arg}`)
     else positional.push(arg)
   }
@@ -87,6 +93,8 @@ function parseArgs(argv: string[]): Args {
   if (!Number.isFinite(seed)) throw new Error(`--seed must be a number`)
   if (depth !== undefined && (!Number.isFinite(depth) || depth < 1)) throw new Error('--depth must be a positive integer')
   return { games, gamesSet, seed, sweep, generalise, matrix, decisions, terms, lethal, depth, matchups, aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  if (triage && positional.length === 0) throw new Error('--triage needs at least one set code, e.g. --triage LAW SEC')
+  return { games, gamesSet, seed, sweep, generalise, matrix, decisions, terms, matchups, triage, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
@@ -515,6 +523,26 @@ function runMatrixMode(args: Args): void {
   if (result.dropped > 0) process.exit(1)
 }
 
+/**
+ * `--triage LAW SEC`: classify a card pool by what the engine cannot yet express.
+ *
+ * Fetches live rather than from a fixture, because the point of the tool is sizing a set on the day
+ * it releases. Network failure is fatal and says which set failed.
+ */
+async function runTriageMode(args: Args): Promise<void> {
+  let pool
+  try {
+    pool = await fetchSets(args.sets)
+  } catch (err) {
+    console.error(`bench: ${(err as Error).message}`)
+    process.exit(2)
+    return
+  }
+  console.log('')
+  console.log(formatTriage(triage(pool)).join('\n'))
+  console.log('')
+}
+
 function main(): void {
   let args: Args
   try {
@@ -522,10 +550,13 @@ function main(): void {
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
     console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N] [--sweep|--generalise|--matrix|--decisions|--terms|--lethal|--matchups] [aiA] [aiB]')
+    console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N] [--sweep|--generalise|--matrix|--decisions|--terms|--matchups] [aiA] [aiB]')
+    console.error('       npm run bench --prefix sealed -- --triage SET [SET ...]')
     process.exit(2)
     return
   }
 
+  if (args.triage) { void runTriageMode(args); return }
   if (args.sweep) { runSweepMode(args); return }
   if (args.generalise) { runGeneraliseMode(args); return }
   if (args.matrix) { runMatrixMode(args); return }

@@ -148,6 +148,63 @@ from revealed aspects. More accurate, arguably legitimate, but a different hones
 - **Epic 7 data pipeline** (#403 export, #404 consent, #405 collection Worker, #406 training store).
   #403 is small and would let a self-play corpus accumulate from the current bot immediately.
 
+## The card programme (parallel stream)
+
+ASH is implemented. The other nine sets are not: 1,960 distinct cards, triaged by what the engine
+cannot yet express rather than by how hard the text looks. The triage is repeatable:
+`npm run bench --prefix sealed -- --triage LAW SEC` classifies any pool, fetching live, so the next
+set can be sized on release day. See `ai-benchmark.md`.
+
+It runs on its own branch alongside the AI work and shares nothing with it except `buildTag.ts`,
+which conflicts on every merge. **Resolve it by taking the higher number**: `bumpBuild.mjs`
+increments from whatever the file holds, so taking the lower side reissues tags that have already
+been used.
+
+**The programme is 27 tickets, #451 to #477.** GitHub holds them; this section holds only the shape.
+
+Three prerequisites block everything, none of them card work:
+
+- **#451** the sweep counts cards *decked*, not cards *played*, so per-card coverage is currently
+  unbackable and every acceptance criterion below rests on it.
+- **#452** the sweep pool is hard-wired to ASH. Tickets are cut per mechanic, so every group's cards
+  span all nine sets and a coverage run needs a multi-set pool.
+- **#478** the setup panel counts registered cards for ASH only, and the test that keeps the manifest
+  honest filters to `ASH_` ids first. The first card registered outside ASH is therefore invisible
+  and nothing fails. It bites on the first card of #453.
+
+Then two phases:
+
+- **Phase 1 (#453 to #460), 1,073 cards blocked by nothing.** 65% of the pool is expressible with the
+  primitives already in `engine/effects.ts`. Cut by trigger point, since no mechanic divides cards
+  that need none. Events (#453) are the largest and most uniform batch.
+- **Phase 2 (#461 to #476), 487 cards blocked by exactly one mechanic each**, ordered by how many
+  cards each unlocks on its own.
+
+**Batches shrink, never grow.** A card that turns out not to fit its batch is lifted into #477 and the
+batch ships without it. The classification is regex triage over ability prose: it catches new nouns
+but not familiar nouns in an unfamiliar shape. `SEC_145 Confidence in Victory` reads as ordinary text
+yet needs a play restriction, a delayed regroup check and an alternate win condition. Roughly 40 cards
+are expected to fall out this way.
+
+Three findings worth keeping, because they contradict the assumptions the programme started from:
+
+- **Experience tokens are the largest single unlock at 89 cards, and were unplanned.** They are
+  printed in every set and are, with Shield, the most common token in the game. `implementedCards.ts`
+  already records ASH as 3 of 4 tokens for exactly this reason.
+- **Resource manipulation is near the bottom at 15 cards, not the top.** Most resource prose is
+  `resourceTopOfDeck`, ready and exhaust, which all exist. What does matter is *playing a card out of
+  the resource zone* (#468), which gates Smuggle and Plot, roughly 50 cards. `The Armorer` already
+  does it for upgrades; the gap is that `payCost` exhausts resources in array order with no choice,
+  which strands a resource the player meant to play.
+- **Bounty is gated behind capture**, not resources: "when this unit is defeated **or captured**".
+
+The 292 vanilla and keyword-only cards need no ticket. That count reconciles exactly, set by set, with
+`PLAYABLE_AS_PRINTED` in `data/implementedCards.ts`, so both figures are corroborated.
+
+29 cards with ability text are printed in more than one set, covering 30 extra card ids for no extra
+work: abilities register per id, so one implementation serves every printing. Reprints skew vanilla,
+existing mostly to balance sealed pools, so the win is real but small.
+
 ## Deferred
 
 - **#397 offensive pinning.** Its direct-pinning half is cut: two-ply (#425) computes "do not deploy
