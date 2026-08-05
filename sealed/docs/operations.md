@@ -9,7 +9,7 @@ npm --prefix sealed test           # test suite
 npm --prefix sealed run test:watch # TDD loop
 npm --prefix sealed run lint       # eslint
 npx --prefix sealed tsc -b         # typecheck (also part of build)
-npm run check --prefix sealed      # validation gate: bump build tag, test, tsc, eslint
+npm run check --prefix sealed      # validation gate: build identity, test, tsc, eslint
 npm run bench --prefix sealed      # AI benchmark: play many games between two AIs, report win rates
 ```
 
@@ -66,12 +66,41 @@ npm run bench --prefix sealed -- --triage LAW SEC
 Full guide, output format, data model, the coverage sweep, the generalisation diagnostic, the card
 triage, weight tuning and how to add an AI: [ai-benchmark.md](ai-benchmark.md).
 
-`npm run check` is the one-shot validation gate: it auto-increments `BUILD_TAG`
-(`src/buildTag.ts`) via `scripts/bumpBuild.mjs`, then runs the tests, `tsc -b`
-and `eslint .` in sequence, stopping at the first failure. Prefer it over bumping
-the tag by hand.
+`npm run check` is the one-shot validation gate: it regenerates the build identity, then runs the
+tests, `tsc -b` and `eslint .` in sequence, stopping at the first failure.
 
 The root `npm test` runs all three suites (main app, proxy worker, sealed).
+
+## Build identity: two identifiers, two audiences
+
+`src/buildIdentity.ts` is **generated and gitignored**, written by `scripts/buildIdentity.mjs` before
+every dev server, build, test, bench and tune run (npm `pre` hooks), and on `npm install`.
+
+| | Local | CI | Audience |
+| --- | --- | --- | --- |
+| `COMMIT_ID` | `3f2a1c7`, or `3f2a1c7-dirty` | `github.sha`, short | machine |
+| `RELEASE` | `dev-3f2a1c7` | `github.run_number` | human |
+
+**`COMMIT_ID` identifies the code.** It is stamped on every bench run and stored in the SQLite `runs`
+table, so a measurement is attributable to real code. A **`-dirty`** suffix means the tree had
+uncommitted changes and the run belongs to no commit at all, which matters because most AI
+measurement happens exactly there.
+
+**`RELEASE` is what a person reads out.** It is issued once by the deployment pipeline, so it is
+monotonic and cannot collide. A local build shows `dev-` so it can never be mistaken for a release.
+The bug report carries both.
+
+The file is generated rather than tracked for a specific reason. It used to be a hand-maintained
+counter bumped by `npm run check`, so two branches incremented it independently and **the same tag
+was issued to different code**, with no merge involved. An untracked file cannot do that, and cannot
+conflict on merge either.
+
+Two consequences worth knowing:
+
+- **Rows in `runs` from before this change carry the old `bN` counter** and cannot be mapped to a
+  commit, because the mapping never existed. Treat them as engine-ambiguous rather than inventing one.
+- The column is still named `build_tag`. Renaming it needs a migration for no gain; what it holds
+  changed, and that is recorded here.
 
 ### Serving at https://dev.dmgctrl.app/sealed (dev)
 
@@ -254,11 +283,10 @@ changed, redeploy it (`npx wrangler deploy` in `proxy/`). The client-side
 fallback covers base cards even against a broken worker, but other card types
 need the worker healthy.
 
-When chasing a load failure, first make sure you're running current code:
-the app shows a **build tag** (e.g. `b58`, the `BUILD_TAG` constant in
-`src/buildTag.ts`, auto-bumped by `npm run check`). In dev it's a small badge in
-the **bottom-right corner**; in prod it sits at the foot of the **Help** page. If the browser shows an older tag, restart the dev servers and
-hard-reload (Ctrl+Shift+R). Known
+When chasing a load failure, first make sure you're running current code: the app shows the
+**release** (see build identity below). In dev it's a small badge in the
+**bottom-right corner**; in prod it sits at the foot of the **Help** page. If the browser shows an
+older one, restart the dev servers and hard-reload (Ctrl+Shift+R). Known
 upstream state (2026-07): SWUDB card detail 502s on the ASH bases
 (ASH_019/020/023 confirmed); all recover via the swuapi fallback.
 

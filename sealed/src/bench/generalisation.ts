@@ -3,7 +3,7 @@ import '../engine/cardDefinitions' // side effect: registers every implemented c
 import type { SwuCard } from '../data/cards'
 import { buildCardDb } from '../engine/cardDb'
 import { nextSeed } from '../engine/rng'
-import { BUILD_TAG } from '../buildTag'
+import { COMMIT_ID } from '../buildIdentity'
 import { resolveAi } from '../ai/registry'
 import type { Ai } from '../ai/types'
 import { wilsonInterval } from './stats'
@@ -65,7 +65,7 @@ export interface Failure {
 }
 
 export interface GeneralisationReport {
-  buildTag: string
+  commitId: string
   aiA: string
   aiB: string
   decks: number
@@ -195,7 +195,7 @@ export function runGeneralisationWith(
   const perBase = toGroups(baseAgg)
 
   return {
-    buildTag: BUILD_TAG,
+    commitId: COMMIT_ID,
     aiA: labelA,
     aiB: labelB,
     decks: decks.length,

@@ -1,5 +1,5 @@
 import userGuideHtml from '../../docs/userGuide.md'
-import { BUILD_TAG } from '../buildTag'
+import { RELEASE } from '../buildIdentity'
 import { isDev } from '../env'
 
 interface Props {
@@ -31,7 +31,7 @@ export default function HelpScreen({ onBack }: Props) {
       {/* Build marker lives here in prod; in dev it's a corner badge. */}
       {!isDev() && (
         <p data-testid="build-tag" className="mt-8 text-[10px] text-ink-faint">
-          {BUILD_TAG}
+          {RELEASE}
         </p>
       )}
     </div>

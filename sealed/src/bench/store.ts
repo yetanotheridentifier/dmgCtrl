@@ -78,7 +78,7 @@ const SCHEMA = `
 export interface RunRow {
   runId: string
   startedAt: string
-  buildTag: string
+  commitId: string
   aiA: string
   aiB: string
   seed: number
@@ -127,7 +127,7 @@ export function saveReport(db: DatabaseSync, report: BenchReport): string {
       dropped, provisional, win_rate_a, win_ci, draw_rate, avg_margin, avg_rounds, moves_per_sec)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
-    runId, startedAt, report.buildTag, report.aiA, report.aiB, report.seed, report.gamesRequested,
+    runId, startedAt, report.commitId, report.aiA, report.aiB, report.seed, report.gamesRequested,
     report.completed, report.dropped, report.provisional ? 1 : 0, report.winRateA, report.winCi,
     report.drawRate, report.avgMargin, report.avgRounds, report.movesPerSec,
   )
@@ -152,7 +152,7 @@ const str = (v: unknown): string => String(v)
 
 function mapRun(r: Record<string, unknown>): RunRow {
   return {
-    runId: str(r.run_id), startedAt: str(r.started_at), buildTag: str(r.build_tag),
+    runId: str(r.run_id), startedAt: str(r.started_at), commitId: str(r.build_tag),
     aiA: str(r.ai_a), aiB: str(r.ai_b), seed: num(r.seed), gamesRequested: num(r.games_requested),
     completed: num(r.completed), dropped: num(r.dropped), provisional: num(r.provisional) === 1,
     winRateA: num(r.win_rate_a), winCi: num(r.win_ci), drawRate: num(r.draw_rate),
@@ -189,7 +189,7 @@ export function saveMatrix(db: DatabaseSync, result: MatrixResult): string {
   db.prepare(
     `INSERT INTO matrix_runs (run_id, started_at, build_tag, model, deck_count, games_per_cell, seed, dropped)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(runId, startedAt, result.buildTag, result.model, result.deckCount, result.gamesPerCell, result.seed, result.dropped)
+  ).run(runId, startedAt, result.commitId, result.model, result.deckCount, result.gamesPerCell, result.seed, result.dropped)
 
   const insert = db.prepare(
     `INSERT INTO matchups (run_id, deck_a, deck_b, leader_a, base_a, leader_b, base_b, games, wins_a, win_rate_a, avg_margin)

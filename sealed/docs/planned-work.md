@@ -155,10 +155,9 @@ cannot yet express rather than by how hard the text looks. The triage is repeata
 `npm run bench --prefix sealed -- --triage LAW SEC` classifies any pool, fetching live, so the next
 set can be sized on release day. See `ai-benchmark.md`.
 
-It runs on its own branch alongside the AI work and shares nothing with it except `buildTag.ts`,
-which conflicts on every merge. **Resolve it by taking the higher number**: `bumpBuild.mjs`
-increments from whatever the file holds, so taking the lower side reissues tags that have already
-been used.
+It runs on its own branch alongside the AI work and now shares nothing with it. The build tag used to
+conflict on every merge; it is generated and untracked since #480, so that class of conflict is gone
+rather than automated around.
 
 **The programme is 27 tickets, #451 to #477.** GitHub holds them; this section holds only the shape.
 

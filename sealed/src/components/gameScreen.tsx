@@ -12,7 +12,7 @@ import { describeChoiceParts, BOARD_TARGET_KINDS } from '../utils/describeChoice
 import { upgradeHostIds } from '../utils/upgradeHosts'
 import { buildReportMarkdown, issueUrl } from '../utils/bugReport'
 import { BugReportOverlay, BugIcon } from './bugReportOverlay'
-import { BUILD_TAG } from '../buildTag'
+import { RELEASE, COMMIT_ID } from '../buildIdentity'
 import { isDev } from '../env'
 import { orderUnits } from './boardLayout'
 import { outcomeBanner } from './outcome'
@@ -966,7 +966,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
 
   async function submitReport(title: string, description: string) {
     const { initialState, moves } = replayData()
-    const markdown = buildReportMarkdown({ description, buildTag: BUILD_TAG, isDev: isDev(), log, initialState, moves, unresolvedPrintings })
+    const markdown = buildReportMarkdown({ description, release: RELEASE, commitId: COMMIT_ID, isDev: isDev(), log, initialState, moves, unresolvedPrintings })
     try {
       await navigator.clipboard.writeText(markdown)
     } catch {

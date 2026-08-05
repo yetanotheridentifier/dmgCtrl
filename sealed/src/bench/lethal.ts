@@ -16,7 +16,7 @@ import {
   hasLethal, attacksToFinish, shouldSearchLethal,
   DEFAULT_LETHAL_LIMITS, DEFAULT_LETHAL_GATE, type LethalGate,
 } from '../ai/lethal'
-import { BUILD_TAG } from '../buildTag'
+import { COMMIT_ID } from '../buildIdentity'
 import { buildCoverageDecks } from './coverageDecks'
 
 /**
@@ -124,7 +124,7 @@ export interface GateCheck {
 }
 
 export interface LethalReport {
-  buildTag: string
+  commitId: string
   games: number
   decisions: number
   gate: GateCheck
@@ -265,7 +265,7 @@ export function runLethal(config: LethalConfig): LethalReport {
   })
 
   return {
-    buildTag: BUILD_TAG,
+    commitId: COMMIT_ID,
     games,
     decisions,
     solverDepth,

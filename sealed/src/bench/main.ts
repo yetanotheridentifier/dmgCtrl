@@ -105,7 +105,7 @@ function format(report: BenchReport, wallMs: number): string {
   const hi = Math.min(1, report.winRateA + report.winCi)
   const lines = [
     '',
-    `dmgCtrl AI bench  (engine ${report.buildTag})`,
+    `dmgCtrl AI bench  (engine ${report.commitId})`,
     `${report.aiA} vs ${report.aiB}   ${report.gamesRequested} games   seed ${report.seed}`,
     '',
     row(`win rate (${report.aiA}/A)`, `${pct(report.winRateA)}  ± ${pct(report.winCi)}   (${pct(lo)} – ${pct(hi)})`),
@@ -130,7 +130,7 @@ function format(report: BenchReport, wallMs: number): string {
 function formatSweep(report: SweepReport, wallMs: number, aiName: string): string {
   const lines = [
     '',
-    `dmgCtrl coverage sweep  (engine ${report.buildTag})`,
+    `dmgCtrl coverage sweep  (engine ${report.commitId})`,
     `${report.decks} decks × ${report.gamesPerDeck} games   ${aiName} mirror`,
     '',
     row('total games', `${report.totalGames}`),
@@ -173,7 +173,7 @@ function formatGeneralisation(report: GeneralisationReport, wallMs: number): str
   const hi = Math.min(1, report.overallWinRateA + report.overallCi)
   const lines = [
     '',
-    `dmgCtrl generalisation  (engine ${report.buildTag})`,
+    `dmgCtrl generalisation  (engine ${report.commitId})`,
     `${report.aiA} vs ${report.aiB}   ${report.decks} decks × ${report.gamesPerDeck} games`,
     '',
     row(`overall win rate (${report.aiA})`, `${pct(report.overallWinRateA)}  ± ${pct(report.overallCi)}   (${pct(lo)} – ${pct(hi)})`),
@@ -225,7 +225,7 @@ function runGeneraliseMode(args: Args): void {
 function formatDecisions(report: DecisionReport, wallMs: number): string {
   const lines = [
     '',
-    `dmgCtrl decision quality  (engine ${report.buildTag})`,
+    `dmgCtrl decision quality  (engine ${report.commitId})`,
     `${report.ai}, ${report.games} games across the coverage decks`,
     '',
     '  a TIE is a decision the evaluation cannot see: every candidate scores the same, so the',
@@ -343,7 +343,7 @@ function runTermsMode(args: Args): void {
   const rate = (n: number): string => pct(report.decisions === 0 ? 0 : n / report.decisions)
   const lines = [
     '',
-    `dmgCtrl term sensitivity  (engine ${report.buildTag})`,
+    `dmgCtrl term sensitivity  (engine ${report.commitId})`,
     row('games', `${report.games}`),
     row('decisions', `${report.decisions}`),
     '',
@@ -406,7 +406,7 @@ function runLethalMode(args: Args): void {
   const rate = (n: number): string => `${pct(report.decisions === 0 ? 0 : n / report.decisions)}  (${n})`
   const lines = [
     '',
-    `dmgCtrl lethal solver sizing  (engine ${report.buildTag})`,
+    `dmgCtrl lethal solver sizing  (engine ${report.commitId})`,
     row('games', `${report.games}`),
     row('decisions', `${report.decisions}`),
     row('solver depth / nodes', `${report.solverDepth} / ${report.solverNodes}`),
@@ -457,7 +457,7 @@ function runMatchupsMode(args: Args): void {
 
   const lines = [
     '',
-    `dmgCtrl AI matchups  (engine ${report.buildTag})`,
+    `dmgCtrl AI matchups  (engine ${report.commitId})`,
     row(`overall (${report.aiA})`, `${pct(report.overallWinRateA)}  ± ${pct(report.overallCi)}   (${report.totalGames} games)`),
     row('dropped', `${report.dropped}`),
     row('wall clock', `${((Date.now() - start) / 1000).toFixed(0)}s`),
@@ -499,7 +499,7 @@ function runMatrixMode(args: Args): void {
 
   const lines = [
     '',
-    `dmgCtrl matchup matrix  (engine ${result.buildTag})`,
+    `dmgCtrl matchup matrix  (engine ${result.commitId})`,
     row('model', model),
     row('decks / cells', `${result.deckCount} / ${cells}`),
     row('games per cell', `${result.gamesPerCell}`),

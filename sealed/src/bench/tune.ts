@@ -5,7 +5,7 @@ import { DEFAULT_HAND_WEIGHTS } from '../ai/handValue'
 import { makeTunedGreedy } from '../ai/greedyAi'
 import { resolveAi } from '../ai/registry'
 import { runGeneralisationWith } from './generalisation'
-import { BUILD_TAG } from '../buildTag'
+import { COMMIT_ID } from '../buildIdentity'
 
 /**
  * Weight tuner: measure candidate evaluation weights against a reference AI across the coverage
@@ -216,7 +216,7 @@ function main(): void {
   }
 
   const reference = resolveAi(args.vs)
-  console.log(`\ntuning ${args.configs.length} config(s) vs ${args.vs}, ${args.games} games/deck, seed ${args.seed}  (engine ${BUILD_TAG})`)
+  console.log(`\ntuning ${args.configs.length} config(s) vs ${args.vs}, ${args.games} games/deck, seed ${args.seed}  (engine ${COMMIT_ID})`)
   console.log(`above 50% beats the reference\n`)
   console.log('   win%      ci    games  time  config')
 
@@ -233,7 +233,7 @@ function main(): void {
 
     if (args.out) {
       appendRow(args.out, {
-        buildTag: BUILD_TAG, vs: args.vs, seed: args.seed, gamesPerDeck: args.games,
+        commitId: COMMIT_ID, vs: args.vs, seed: args.seed, gamesPerDeck: args.games,
         config: config.overrides, label, spec: specOf(config), winRate: report.overallWinRateA,
         ci: report.overallCi, completed: report.completed, dropped: report.dropped, seconds: secs,
       })

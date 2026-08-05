@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event'
 vi.mock('../env', () => ({ isDev: () => false }))
 
 import HelpScreen from '../components/helpScreen'
-import { BUILD_TAG } from '../buildTag'
+import { RELEASE } from '../buildIdentity'
 
 describe('HelpScreen', () => {
   it('renders the user guide content', () => {
@@ -23,7 +23,7 @@ describe('HelpScreen', () => {
 
   it('shows the build tag at the foot of the page in prod', () => {
     render(<HelpScreen onBack={vi.fn()} />)
-    expect(screen.getByTestId('build-tag')).toHaveTextContent(BUILD_TAG)
+    expect(screen.getByTestId('build-tag')).toHaveTextContent(RELEASE)
   })
 
   it('back button returns to the previous screen', async () => {
