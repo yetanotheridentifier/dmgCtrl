@@ -92,9 +92,8 @@ function parseArgs(argv: string[]): Args {
   if (!Number.isFinite(games) || games < 1) throw new Error(`--games must be a positive integer`)
   if (!Number.isFinite(seed)) throw new Error(`--seed must be a number`)
   if (depth !== undefined && (!Number.isFinite(depth) || depth < 1)) throw new Error('--depth must be a positive integer')
-  return { games, gamesSet, seed, sweep, generalise, matrix, decisions, terms, lethal, depth, matchups, aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
   if (triage && positional.length === 0) throw new Error('--triage needs at least one set code, e.g. --triage LAW SEC')
-  return { games, gamesSet, seed, sweep, generalise, matrix, decisions, terms, matchups, triage, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, sweep, generalise, matrix, decisions, terms, lethal, depth, matchups, triage, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`

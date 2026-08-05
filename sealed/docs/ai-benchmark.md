@@ -61,12 +61,12 @@ Everything is optional:
 - `aiA aiB` the two AIs by name (default `random random`). `aiA` plays the "player" seat, `aiB` the
   "opponent" seat. Registered AIs:
   - `random` rung 0, uniform.
-  - `greedy` rung 1, one-ply with quiescent scoring. The deployed model.
+  - `greedy` rung 1, one-ply with quiescent scoring. The reference most results are quoted against.
   - `greedy-baseline` a frozen early greedy, kept only as a fixed reference for tuning.
   - `greedy-flat` the live model minus quiescent scoring. Unlike the baseline it tracks every other
     evaluation change, which is what makes it a control for that one feature rather than a snapshot.
-  - `beam` rung 2, own-turn lookahead at width 4, depth 3. Same weights and same chain handling as
-    `greedy`, so `beam` against `greedy` isolates the search.
+  - `beam` rung 2, own-turn lookahead at width 4, depth 3. **The deployed model.** Same weights and
+    same chain handling as `greedy`, so `beam` against `greedy` isolates the search.
   - `beam:WIDTHxDEPTH` or `beam:WIDTHxDEPTH:NODES` any other cell, so a sweep addresses the space
     without a registry entry per cell. The node form exists for one control: the budget is a safety
     rail, and a rail that fires has quietly become the real width and depth.
@@ -75,10 +75,10 @@ Everything is optional:
     re-measured. Outside the gate it returns exactly what `beam` returns, which is what makes an A/B
     between them one feature rather than two configurations.
 
+  More join the list as they are built.
+
 `OPPONENT_AI` in `src/config.ts` decides what the app ships, independently of any of this. The bench
 takes its AIs by name on the command line and never reads it.
-
-  More join the list as they are built.
 
 Examples:
 
