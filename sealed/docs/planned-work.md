@@ -24,11 +24,17 @@ identically, so the seeded tie-break picks at random:
 
 The last column is what ranks the work: a rate is meaningless without how often the decision arises.
 
-### Re-weighting is exhausted, and only one weight is dead
+### Re-weighting was exhausted AT ONE PLY, which is no longer the bot
 
 A 146-cell interaction grid plus 8400-game validation across multiple seeds put the weight set at a
-local optimum. **Further strength must come from new information, not from re-weighting what is
-there.** The measured constraints live in [ai-model.md](ai-model.md); the tool is `npm run tune`.
+local optimum, and that stood as "further strength must come from new information, not from
+re-weighting". **It measured a one-ply evaluator.** The evaluation is now the leaf function inside a
+depth-3 minimax with an opponent reply at every level, and the optimum for a leaf function is not the
+optimum for a bot that plays its own scores directly.
+
+So the conclusion is correct for what it measured and does not transfer. **#487** re-tests it against
+the shipped search, after #447 settles the configuration. The measured constraints live in
+[ai-model.md](ai-model.md); the tool is `npm run tune`.
 
 Term sensitivity (`--terms`) now says which weights could ever have moved, over 8503 decisions. One
 ply only compares candidates from a single position, so a term equal across them cancels exactly.
@@ -121,24 +127,26 @@ bot.
    sweep. `beam-reply` ships at depth 3 and **the depth curve was still climbing** (54.5, 64.7, 67.4
    against a reply-blind beam). Depth 4 with a reply costs roughly 180 ms a decision, which desktop
    absorbs. Width is the other axis and has never been swept alongside a reply.
-2. **#446 claim the initiative when it converts to lethal.** `hasLethal` from #433 now exists, so the
-   only thing left to build is continuing the sequence across a **round boundary** rather than to the
-   end of a turn. Initiative is still the largest single tie at 18.2%, ~7.4 coin flips a game. Temper
-   expectations: #433 showed lethal detection itself is worth only ~+0.8 points, and this applies it
-   to a narrower slice.
-3. **Re-run `--terms`** once the matrix lands, and compare against the pre-registered predictions on
-   #430: `resourceSurplus`, `saturation`, `hand.canAct` and `roleShift` should start mattering if they
-   were dormant. Anything still flat is dead and can be deleted.
-**Measure four configurations, not two.** The beam is optimistic (the opponent does nothing) while the
-reply policy is pessimistic (they do the worst visible thing). Those pull in opposite directions and
-may not compose additively, so the matrix is: neither, beam alone, reply alone, both. Depth 4 also
-measured **better** than the shipped depth 3 and was banked rather than shipped, because its value
-rested on four consecutive opponent non-actions, which is precisely what a reply policy removes.
+2. **#487 re-tune the weights for the shipped search**, after #447 and not before. See above: the
+   "re-weighting is exhausted" result measured a one-ply evaluator, and #430 identified exactly why
+   several weights could not matter there. This is the largest unexamined lever, and it is expensive,
+   so size it with `--cost` before sweeping anything.
+3. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
+   moves with a **one-ply** scorer, so it currently reports term sensitivity for a bot we no longer
+   ship; testing #430's pre-registered prediction needs the perturbations driven through the real
+   search. That also makes it roughly 70x more expensive, so scope it to the weights the prediction
+   names. The payoff grew: `lethalExposure` and `role` are proxies for search, and a reply policy
+   computes the first directly, so this is now a route to **deleting** model complexity.
+4. **#446 claim the initiative when it converts to lethal**, and **measure its headroom first**. #433
+   sized lethal detection at +0.8 against a bot that has since improved by 17 points, so the rate that
+   justified this has probably shrunk. An hour of measurement could retire the ticket.
 
-## Gated on the search matrix
+## Gated on the search, and the gate moved away from them
 
 **#396** (optional abilities and tokens) and **#398** (hand and resource optionality) are both "value
-something whose payoff arrives later", and search covers the part of "later" inside its horizon. Land
+something whose payoff arrives later", and search covers the part of "later" inside its horizon. That
+horizon grew considerably with `beam-reply`, so the residue should be smaller than when these were
+scoped. Re-run `--decisions` and see what still ties before building either. Land
 the matrix, re-run `--decisions`, build only what still ties. The residue is genuinely latent value: a
 Shield's worth being what it will prevent, held removal being worth the target it has not met yet.
 
