@@ -138,22 +138,38 @@ bot.
    decisions for `beam` and 8.5% for `beam-reply`. A raised-budget control cell is still worth
    carrying, but the earlier depth-4 result is much less confounded by the rail than it looked.
 
-   What the rail measurement did turn up is a separate defect worth its own ticket: the search shares
-   one budget between resolving owed choices and expanding the beam, and **the chain takes 80% to 98%
-   of it**. Raising the budget twentyfold moves the beam's own spend from 128 nodes to 135 while the
-   chain's goes from 510 to 6885, so a raised rail costs ten times as much and buys no search at all.
-   Where the rail fires it is starving the lookahead at exactly the complicated positions.
-2. **#487 re-tune the weights for the shipped search**, after #447 and not before. See above: the
+   What the rail measurement did turn up is **#488**: the search shares one budget between resolving
+   owed choices and expanding the beam, and **the chain takes 80% to 98% of it**. Raising the budget
+   twentyfold moves the beam's own spend from 128 nodes to 135 while the chain's goes from 510 to
+   6885, so a raised rail costs ten times as much and buys no search at all. Where the rail fires it
+   is starving the lookahead at exactly the complicated positions.
+
+   **Sizing, and why the two remaining axes are not the same experiment.** A game runs ~96 decisions a
+   side (derived from #410's 840 games in 5055s at known per-decision costs), so an A/B costs
+   `games × 96 × (costA + costB)`. To ±1%, roughly 9600 games:
+
+   | experiment | per-game cost | core-hours to ±1% |
+   | --- | --- | --- |
+   | width 8 vs width 4 | 0.225 s | **~58** |
+   | depth 4 vs depth 3 | 1.625 s | **~416** |
+
+   Width is seven times cheaper to resolve, so it is the one to run first even though its effect is
+   smaller. Both are single-threaded, and the dev machine has 16 cores, so sharding by seed across 12
+   of them turns those into ~5 and ~35 wall hours. Neither needs cloud compute.
+2. **#488 separate the chain and beam budgets**, before either A/B above. It changes what the bot
+   plays on 4% to 8.5% of decisions, so a long run started before it would have to be repeated. Small
+   to build, and it makes every subsequent cost figure mean what it says.
+3. **#487 re-tune the weights for the shipped search**, after #447 and not before. See above: the
    "re-weighting is exhausted" result measured a one-ply evaluator, and #430 identified exactly why
    several weights could not matter there. This is the largest unexamined lever, and it is expensive,
    so size it with `--cost` before sweeping anything.
-3. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
+4. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
    moves with a **one-ply** scorer, so it currently reports term sensitivity for a bot we no longer
    ship; testing #430's pre-registered prediction needs the perturbations driven through the real
    search. That also makes it roughly 70x more expensive, so scope it to the weights the prediction
    names. The payoff grew: `lethalExposure` and `role` are proxies for search, and a reply policy
    computes the first directly, so this is now a route to **deleting** model complexity.
-4. **#446 claim the initiative when it converts to lethal**, and **measure its headroom first**. #433
+5. **#446 claim the initiative when it converts to lethal**, and **measure its headroom first**. #433
    sized lethal detection at +0.8 against a bot that has since improved by 17 points, so the rate that
    justified this has probably shrunk. An hour of measurement could retire the ticket.
 
@@ -269,7 +285,7 @@ existing mostly to balance sealed pools, so the win is real but small.
 
 ## How to measure a change
 
-Two rules, both learned the hard way.
+Rules learned the hard way.
 
 - **Default a new weight to off, then sweep upward.** Shipping the default before the A/B ran once
   inverted the whole reading, because the candidate was then the ablation and below 50% meant better.
@@ -277,6 +293,13 @@ Two rules, both learned the hard way.
 - **Measure a lethal or a threat as a single action.** Players alternate actions, so aggregate reach
   across ready units is an intention the opponent gets several chances to answer, not a kill. Reading
   it as aggregate overstated lethal threefold and diluted the very signal being looked for.
+- **A corpus is filled game by game, so a short one is all openings.** Anything read off one is
+  measuring turn three. This has now produced three wrong readings: a search costing 142.6 ms measured
+  5.8 ms at 30 states, and a width whose real effect is 2.7% of decisions measured 0.5% at 200. Use
+  1000 states for a rate, 200 for a cost, and never compare two numbers taken at different depths.
+- **A cost ratio does not tell you what is consuming the budget.** Raising the node rail made a search
+  ten times slower, which read as the rail truncating nearly every decision. It truncates 4%. The
+  difference was a heavy tail, and only a counter (`--budget`) could tell the two apart.
 
 ## Tried and rejected
 
