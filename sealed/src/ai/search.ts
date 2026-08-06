@@ -182,7 +182,39 @@ function quiesce(
  * the board it lands on is the one quiescence already priced. That agreement is asserted directly in
  * `aiBeam.test.ts`: expanding from a board other than the one we scored would be a quiet lie.
  */
+/**
+ * Drive an owed chain, spending at most `cap` of the shared pool on it.
+ *
+ * One-ply greedy has always worked this way: `makeQuiescent` hands EVERY candidate its own fresh
+ * 256-node budget, so a runaway `support` fan-out costs 256 and the next candidate starts clean. The
+ * beam dropped that by taking a raw evaluator and letting every chain in the decision draw on one
+ * pool. Measured, the chain then takes 71.5% to 98% of it: 943 nodes of 1318, leaving the lookahead
+ * 376, and raising the pool twentyfold moves the beam's share from 128 to 135 while the chain's goes
+ * to 6885.
+ *
+ * The cap restores that discipline **without raising the ceiling**. The pool is unchanged, so a
+ * decision can do no more work than before; a single chain simply cannot take all of it, and what it
+ * does not take is still there for the search.
+ *
+ * The sub-budget is a real object rather than a running comparison so the cap composes with the pool:
+ * a chain gets the smaller of its allowance and whatever is actually left, and can never overdraw.
+ */
 export function resolveChain(
+  state: GameState,
+  me: PlayerId,
+  asRole: Role | undefined,
+  inner: Evaluator,
+  budget: SearchBudget,
+  cap = Infinity,
+): GameState {
+  const sub: SearchBudget = { left: Math.min(cap, budget.left), chain: 0, beam: 0 }
+  const settled = driveChain(state, me, asRole, inner, sub)
+  budget.left -= sub.chain
+  budget.chain += sub.chain
+  return settled
+}
+
+function driveChain(
   state: GameState,
   me: PlayerId,
   asRole: Role | undefined,
@@ -207,7 +239,10 @@ export function resolveChain(
       chosen = child
     }
   }
-  return chosen === null ? state : resolveChain(chosen, me, asRole, inner, budget)
+  // Recurses on `driveChain`, not `resolveChain`: the allowance covers the WHOLE chain, so settling
+  // one link and finding another owed must keep drawing on the same sub-budget rather than claiming a
+  // fresh one and defeating the cap.
+  return chosen === null ? state : driveChain(chosen, me, asRole, inner, budget)
 }
 
 /**
@@ -237,6 +272,19 @@ export interface BeamLimits {
   nodes: number
   reply: ReplyPolicy
   /**
+   * The most any ONE owed chain may take from `nodes`.
+   *
+   * `nodes` is the decision's whole allowance and is shared with chain resolution, which without this
+   * takes 71.5% to 98% of it and leaves the lookahead starved on exactly the complicated positions.
+   * The cap does not raise the ceiling: worst-case work per decision is unchanged, and what a chain
+   * is not allowed to take stays available to the search.
+   *
+   * Defaults to the allowance one-ply quiescence has always given each candidate, since this is the
+   * discipline the beam lost rather than a new parameter. Typical chains cost about 2.5 nodes, so it
+   * sits ~100x above normal play and bites only on a fan-out that was going to run away.
+   */
+  chainNodes?: number
+  /**
    * Prune replies that cannot change the answer. On by default; `false` forces the exhaustive search,
    * which exists so a test can assert the two agree.
    *
@@ -258,7 +306,9 @@ export interface BeamLimits {
   alphaBeta?: boolean
 }
 
-export const DEFAULT_BEAM_LIMITS: BeamLimits = { width: 4, depth: 3, nodes: 10_000, reply: 'null' }
+export const DEFAULT_BEAM_LIMITS: BeamLimits = {
+  width: 4, depth: 3, nodes: 10_000, reply: 'null', chainNodes: DEFAULT_QUIESCENCE_LIMITS.nodes,
+}
 
 /**
  * Own-turn self-lookahead (#410): value a move by the best board its own follow-ups can reach.
@@ -378,6 +428,7 @@ function applyReply(
   budget: SearchBudget,
   alpha: number,
   margin: number,
+  chainCap: number,
 ): GameState {
   if (policy === 'null') return state
   const foe = opponentOf(me)
@@ -394,7 +445,7 @@ function applyReply(
   for (const move of moves) {
     if (budget.left <= 0) break
     spendBeam(budget)
-    const next = resolveChain(resolve(state, move), me, asRole, inner, budget)
+    const next = resolveChain(resolve(state, move), me, asRole, inner, budget, chainCap)
     const score = minimising ? inner(next, me, asRole) : inner(next, foe, foeRole)
     if (minimising ? score < best : score > best) {
       best = score
@@ -452,12 +503,13 @@ function reachableFrom(
 
   // Beam nodes are always settled boards, so depth counts actions rather than choice answers. Under a
   // reply policy the board scored is the one AFTER their answer, which is the whole of two-ply.
-  const settled = resolveChain(resolve(state, move), me, asRole, inner, budget)
+  const chainCap = limits.chainNodes ?? Infinity
+  const settled = resolveChain(resolve(state, move), me, asRole, inner, budget, chainCap)
   // See `alphaBeta`: a cut is only a valid bound for pessimistic play, and only on a board nothing is
   // expanded past. At depth 1 the root board is such a board; deeper it is continued from.
   const cutting = limits.alphaBeta !== false && limits.reply === 'pessimistic'
   const rootAlpha = cutting && limits.depth === 1 ? alpha : -Infinity
-  const root = applyReply(settled, me, asRole, inner, limits.reply, budget, rootAlpha, 1)
+  const root = applyReply(settled, me, asRole, inner, limits.reply, budget, rootAlpha, 1, chainCap)
   let best = valueAt(root, me, asRole, inner, 1)
   let won = root.winner === me
   let frontier: GameState[] = [root]
@@ -479,11 +531,11 @@ function reachableFrom(
         if (next.type === 'pass') continue
         if (budget.left <= 0) break
         spendBeam(budget)
-        const played = resolveChain(resolve(ours, next), me, asRole, inner, budget)
+        const played = resolveChain(resolve(ours, next), me, asRole, inner, budget, chainCap)
         // No alpha at an interior level: there a branch's value is the MAX over its leaves, so a poor
         // reply at this node says nothing about what the branch can still reach. `best` rather than
         // the caller's alpha, because it is the tighter of the two and both bound this root.
-        const board = applyReply(played, me, asRole, inner, limits.reply, budget, last && cutting ? best : -Infinity, d + 1)
+        const board = applyReply(played, me, asRole, inner, limits.reply, budget, last && cutting ? best : -Infinity, d + 1, chainCap)
         const value = valueAt(board, me, asRole, inner, d + 1)
         if (value > best) best = value
         if (board.winner === me) won = true
