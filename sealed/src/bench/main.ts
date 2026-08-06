@@ -8,6 +8,7 @@ import { runDecisions } from './decisions'
 import { runTerms } from './terms'
 import type { TermReport } from './terms'
 import { runCost } from './cost'
+import { runBudget, type BudgetReport } from './budget'
 import type { CostReport } from './cost'
 import { runLethal } from './lethal'
 import type { LethalReport } from './lethal'
@@ -52,6 +53,7 @@ interface Args {
   decisions: boolean
   terms: boolean
   cost: boolean
+  budget: boolean
   lethal: boolean
   /** Solver depth for `--lethal`. Undefined means the shipped default. */
   depth?: number
@@ -60,6 +62,13 @@ interface Args {
   /** Set codes for `--triage`, taken from the positional arguments. */
   sets: string[]
   aiExplicit: boolean
+  /**
+   * Every AI named positionally. The head-to-head modes take the first two; `--cost` and `--budget`
+   * compare a whole sweep over one corpus, which is the entire point of those modes, so they take the
+   * lot. Timing a sweep two at a time would re-measure the baseline in each process and give up the
+   * shared JIT warm-up.
+   */
+  ais: string[]
   aiA: string
   aiB: string
 }
@@ -76,6 +85,7 @@ function parseArgs(argv: string[]): Args {
   let decisions = false
   let terms = false
   let cost = false
+  let budget = false
   let lethal = false
   let depth: number | undefined
   let matchups = false
@@ -92,6 +102,7 @@ function parseArgs(argv: string[]): Args {
     else if (arg === '--decisions') decisions = true
     else if (arg === '--terms') terms = true
     else if (arg === '--cost') cost = true
+    else if (arg === '--budget') budget = true
     else if (arg === '--lethal') lethal = true
     else if (arg === '--depth') depth = Number(argv[++i])
     else if (arg === '--matchups') matchups = true
@@ -103,7 +114,7 @@ function parseArgs(argv: string[]): Args {
   if (!seeds.every(Number.isFinite) || seeds.length === 0) throw new Error('--seed must be a number, or a comma-separated list of numbers')
   if (depth !== undefined && (!Number.isFinite(depth) || depth < 1)) throw new Error('--depth must be a positive integer')
   if (triage && positional.length === 0) throw new Error('--triage needs at least one set code, e.g. --triage LAW SEC')
-  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, lethal, depth, matchups, triage, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, matchups, triage, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
@@ -478,8 +489,9 @@ function runCostMode(args: Args): void {
     report = runCost({
       states,
       seed: args.seed,
-      // Positional arguments name the AIs to time; with none given, time everything registered.
-      ais: args.aiExplicit ? [args.aiA, args.aiB].filter((n, i, a) => n !== 'random' || i === a.indexOf(n)) : undefined,
+      // Every positional name, not just the first two: a sweep is timed in one process over one
+      // corpus, or the comparison it exists to make is lost.
+      ais: args.aiExplicit ? args.ais : undefined,
     })
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
@@ -500,6 +512,54 @@ function runCostMode(args: Args): void {
   ]
   for (const r of [...report.rows].sort((a, b) => a.msPerDecision - b.msPerDecision)) {
     lines.push(`  ${r.ai.padEnd(24)}${r.msPerDecision.toFixed(2).padStart(13)}${`${r.relative.toFixed(2)}x`.padStart(14)}`)
+  }
+  lines.push('', row('wall clock', `${((Date.now() - start) / 1000).toFixed(1)}s`), '')
+  console.log(lines.join('\n'))
+}
+
+/**
+ * Whether the node rail is firing (#447), so a sweep can carry a control cell rather than hope.
+ *
+ * The corpus wants to be LARGE here for the same reason `--cost` does. It is played from the opening,
+ * so a small one holds only opening positions, where few units are on the board, few moves are legal
+ * and the budget is never troubled. That is not evidence the rail is idle, only that it is idle on
+ * turn one.
+ */
+function runBudgetMode(args: Args): void {
+  const states = args.gamesSet ? args.games : 200
+  const start = Date.now()
+  let report: BudgetReport
+  try {
+    report = runBudget({ states, seed: args.seed, ais: args.aiExplicit ? args.ais : ['beam', 'beam-reply'] })
+  } catch (err) {
+    console.error(`bench: ${(err as Error).message}`)
+    process.exit(2)
+    return
+  }
+
+  const lines = [
+    '',
+    `dmgCtrl search budget  (engine ${report.commitId})`,
+    row('decision states', `${report.states}`),
+    '',
+    '  "exhausted" is the share of decisions where the budget ran out, so the move played is a',
+    '  truncated search\'s answer. Any cell of a depth or width sweep that exhausts is measuring the',
+    '  rail rather than the axis being swept.',
+    '',
+    '  "chain" is budget spent resolving owed choices, "beam" is expanding actions and replies. They',
+    '  share one pool, so a large chain share means the lookahead is being starved by choice',
+    '  resolution and raising the rail treats the symptom.',
+    '',
+    `  ${'ai'.padEnd(26)}${'exhausted'.padStart(11)}${'avg spend'.padStart(12)}${'chain'.padStart(11)}${'beam'.padStart(11)}${'chain %'.padStart(10)}`,
+  ]
+  for (const r of report.rows) {
+    lines.push(
+      `  ${r.ai.padEnd(26)}${pct(r.exhaustedRate).padStart(11)}${r.avgSpend.toFixed(0).padStart(12)}` +
+      `${r.avgChain.toFixed(0).padStart(11)}${r.avgBeam.toFixed(0).padStart(11)}${pct(r.chainShare).padStart(10)}`,
+    )
+  }
+  if (report.skipped.length > 0) {
+    lines.push('', `  no beam search, nothing to report: ${report.skipped.join(', ')}`)
   }
   lines.push('', row('wall clock', `${((Date.now() - start) / 1000).toFixed(1)}s`), '')
   console.log(lines.join('\n'))
@@ -617,7 +677,7 @@ function main(): void {
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
     console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N]')
-    console.error('       [--sweep|--generalise|--matrix|--decisions|--terms|--cost|--lethal|--matchups] [aiA] [aiB]')
+    console.error('       [--sweep|--generalise|--matrix|--decisions|--terms|--cost|--budget|--lethal|--matchups] [ai ...]')
     console.error('       npm run bench --prefix sealed -- --triage SET [SET ...]')
     process.exit(2)
     return
@@ -630,6 +690,7 @@ function main(): void {
   if (args.decisions) { runDecisionsMode(args); return }
   if (args.terms) { runTermsMode(args); return }
   if (args.cost) { runCostMode(args); return }
+  if (args.budget) { runBudgetMode(args); return }
   if (args.lethal) { runLethalMode(args); return }
   if (args.matchups) { runMatchupsMode(args); return }
 

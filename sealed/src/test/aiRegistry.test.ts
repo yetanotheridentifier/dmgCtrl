@@ -2,6 +2,21 @@ import { describe, it, expect } from 'vitest'
 import { AIS, aiNames, resolveAi } from '../ai/registry'
 import { randomAi } from '../ai/randomAi'
 import { greedyAi } from '../ai/greedyAi'
+import { lastSearchTrace } from '../ai/search'
+import { state, player, card, unit, ready, CARDS } from './helpers/engineFixtures'
+import '../engine/cardDefinitions'
+
+/** A position with enough on it that a search has something to spend its budget on. */
+function decisionState() {
+  const cards = { ...CARDS, BIG: card({ id: 'BIG', type: 'unit', arena: 'ground', cost: 2, power: 5, hp: 5 }) }
+  return state({
+    cards,
+    players: {
+      player: player({ hand: ['BIG', 'BIG'], resources: ready(6), units: [unit('u1', 'BIG'), unit('u2', 'BIG')] }),
+      opponent: player({ units: [unit('e1', 'BIG')] }),
+    },
+  })
+}
 
 /**
  * The named-AI registry is the single seam every opponent hangs off: the bench addresses AIs by
@@ -60,6 +75,34 @@ describe('AI registry', () => {
   it('rejects an unknown reply policy rather than silently picking one', () => {
     expect(() => resolveAi('reply:optimistic')).toThrow()
     expect(() => resolveAi('reply:')).toThrow()
+  })
+
+  /**
+   * The reply cells need a node budget for the same reason the beam cells do, and until now they
+   * could not have one: every `reply:` spec was pinned at the 10,000-node default, so the raised-rail
+   * control cell #447 requires was not expressible. Since the rail turns out to fire routinely (a
+   * cell costs ten times as much once it is lifted), that omission was hiding the binding constraint
+   * on every reply configuration measured so far.
+   */
+  it('takes a node budget on a reply cell, so the rail can be lifted off it', () => {
+    expect(() => resolveAi('reply:pessimistic:4x3:200000')).not.toThrow()
+    expect(() => resolveAi('reply:selfish:8x4:200000')).not.toThrow()
+  })
+
+  /** Parsing the budget is not enough: it has to reach the search, or the control cell measures the
+   *  default rail under a different name. */
+  it('threads that budget through to the search itself', () => {
+    const s = decisionState()
+    resolveAi('reply:pessimistic:2x2:777')(s)
+    expect(lastSearchTrace()?.nodes).toBe(777)
+
+    resolveAi('reply:pessimistic:2x2:999999')(s)
+    expect(lastSearchTrace()?.nodes).toBe(999999)
+  })
+
+  it('rejects a malformed node budget on a reply cell', () => {
+    expect(() => resolveAi('reply:pessimistic:4x3:0')).toThrow()
+    expect(() => resolveAi('reply:pessimistic:0x3:1000')).toThrow()
   })
 
   it('rejects an unknown name with a message that lists the valid ones', () => {

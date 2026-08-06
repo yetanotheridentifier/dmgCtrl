@@ -51,6 +51,76 @@ export interface QuiescenceLimits {
 export const DEFAULT_QUIESCENCE_LIMITS: QuiescenceLimits = { nodes: 256 }
 
 /**
+ * The shared node budget, and where it went.
+ *
+ * `left` is the rail. The two counters exist because the pool is shared between driving owed choice
+ * chains and expanding the beam, and **the chain wins it**: measured over 200 real decisions, `beam`
+ * spends 510 of its 638 nodes on chains and only 128 on lookahead, and raising the rail twentyfold
+ * moves the beam's share to 135 while the chain's grows to 6885.
+ *
+ * That is why a raised budget costs ten times as much and plays no better. It also means the rail,
+ * when it does fire (4.0% of decisions for `beam`, 8.5% for `beam-reply`), starves the search rather
+ * than trimming it: the candidates reached with nothing left are scored by a bare `resolve`, which is
+ * the half-resolved reading quiescence exists to prevent.
+ */
+export interface SearchBudget {
+  left: number
+  /** Nodes spent driving owed choice chains: `resolveChain` and the quiescence inside it. */
+  chain: number
+  /** Nodes spent expanding our own follow-up actions and the opponent's replies. */
+  beam: number
+}
+
+export function searchBudget(nodes: number): SearchBudget {
+  return { left: nodes, chain: 0, beam: 0 }
+}
+
+function spendChain(budget: SearchBudget): void {
+  budget.left--
+  budget.chain++
+}
+
+function spendBeam(budget: SearchBudget): void {
+  budget.left--
+  budget.beam++
+}
+
+/** What the last `makeBeamAi` decision cost, so a run can report the rail instead of inferring it. */
+export interface SearchTrace {
+  /** The budget the decision started with. */
+  nodes: number
+  /** What was left of it. */
+  left: number
+  chain: number
+  beam: number
+  /** The budget ran out, so the move returned is the truncated search's answer. */
+  exhausted: boolean
+}
+
+let trace: SearchTrace | null = null
+
+/**
+ * The budget accounting for the most recent decision, or `null` before any.
+ *
+ * Module state rather than a parameter on purpose: it keeps the hot path's signatures unchanged, and
+ * it works for every AI the registry can build, including the pre-constructed named ones. Single
+ * threaded and overwritten per decision, so a reader must take it immediately after the move.
+ */
+export function lastSearchTrace(): SearchTrace | null {
+  return trace
+}
+
+/**
+ * Forget the last decision's accounting.
+ *
+ * A measurement needs to tell "this AI ran no beam search" from "it ran one and left the trace
+ * looking healthy". Clearing before each decision makes a `null` afterwards mean the first.
+ */
+export function clearSearchTrace(): void {
+  trace = null
+}
+
+/**
  * Wrap an evaluation so it resolves any owed choice chain before scoring.
  *
  * A decorator rather than a change to `evaluate`, because that keeps the A/B honest: the same greedy
@@ -70,8 +140,7 @@ export function makeQuiescent(inner: Evaluator, limits: QuiescenceLimits = DEFAU
   return (state, me, asRole) => {
     // A shared, decrementing budget rather than a depth cap: a wide chain and a deep one cost the
     // same thing, and only the total matters. Traversal is deterministic, so where it bites is too.
-    const budget = { left: limits.nodes }
-    return quiesce(state, me, asRole, inner, budget)
+    return quiesce(state, me, asRole, inner, searchBudget(limits.nodes))
   }
 }
 
@@ -80,7 +149,7 @@ function quiesce(
   me: PlayerId,
   asRole: Role | undefined,
   inner: Evaluator,
-  budget: { left: number },
+  budget: SearchBudget,
 ): number {
   // A decided game is scored terminally; whatever is left pending will never be answered.
   if (state.winner !== null || !hasPendingChoices(state)) return inner(state, me, asRole)
@@ -94,7 +163,7 @@ function quiesce(
   let best = maximising ? -Infinity : Infinity
   for (const move of moves) {
     if (budget.left <= 0) break
-    budget.left--
+    spendChain(budget)
     const score = quiesce(resolve(state, move), me, asRole, inner, budget)
     best = maximising ? Math.max(best, score) : Math.min(best, score)
   }
@@ -118,7 +187,7 @@ export function resolveChain(
   me: PlayerId,
   asRole: Role | undefined,
   inner: Evaluator,
-  budget: { left: number },
+  budget: SearchBudget,
 ): GameState {
   if (state.winner !== null || !hasPendingChoices(state)) return state
 
@@ -130,7 +199,7 @@ export function resolveChain(
   let bestScore = maximising ? -Infinity : Infinity
   for (const move of moves) {
     if (budget.left <= 0) break
-    budget.left--
+    spendChain(budget)
     const child = resolve(state, move)
     const score = quiesce(child, me, asRole, inner, budget)
     if (maximising ? score > bestScore : score < bestScore) {
@@ -171,11 +240,20 @@ export interface BeamLimits {
    * Prune replies that cannot change the answer. On by default; `false` forces the exhaustive search,
    * which exists so a test can assert the two agree.
    *
-   * **Only sound for `pessimistic` at depth 1.** There it is textbook alpha: once a candidate's worst
-   * reply is already no better than the best root secured elsewhere, that candidate is dead and the
-   * remaining replies cannot revive it. Deeper, a root's value is the MAX over leaves below it, so a
-   * bad immediate reply says nothing about the branch; and `selfish` maximises a different function,
-   * so our alpha is not a bound on it. In both cases the pruning is simply not applied.
+   * **Only sound for `pessimistic`, and only where a board is a leaf.** It is textbook alpha: once a
+   * candidate's worst reply is already no better than the best secured elsewhere, that candidate is
+   * dead and the remaining replies cannot revive it. `selfish` maximises a different function, so our
+   * alpha is not a bound on it at all, and the pruning is simply not applied.
+   *
+   * Two places qualify, and the middle of the search does not:
+   *
+   * - **The root board at depth 1**, where nothing is expanded past it.
+   * - **The deepest level of the beam**, whose boards feed `valueAt` and the winner check and are
+   *   never continued from. That level holds most of the nodes, which makes it the only honest lever
+   *   on the cost of a deep configuration.
+   *
+   * At any interior level a branch's value is the MAX over everything below it, so a bad immediate
+   * reply bounds nothing, and cutting would also change which board the frontier continues from.
    */
   alphaBeta?: boolean
 }
@@ -222,12 +300,15 @@ export const DEFAULT_BEAM_LIMITS: BeamLimits = { width: 4, depth: 3, nodes: 10_0
  */
 export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_LIMITS): Ai {
   return (state: GameState): Action | null => {
+    const budget = searchBudget(limits.nodes)
     const moves = legalMoves(state)
-    if (moves.length === 0) return null
+    if (moves.length === 0) {
+      trace = { nodes: limits.nodes, left: budget.left, chain: 0, beam: 0, exhausted: false }
+      return null
+    }
 
     const me = state.activePlayer
     const asRole = role(state, me)
-    const budget = { left: limits.nodes }
 
     let best = -Infinity
     const bestMoves: Action[] = []
@@ -241,6 +322,15 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
       } else if (value === best) {
         bestMoves.push(move)
       }
+    }
+    // Recorded before returning, so a caller can ask what this decision cost and whether the rail cut
+    // it short. Overwritten every decision: it describes the last one, never a running total.
+    trace = {
+      nodes: limits.nodes,
+      left: budget.left,
+      chain: budget.chain,
+      beam: budget.beam,
+      exhausted: budget.left <= 0,
     }
     return bestMoves[Math.floor(seededUnit(state.rngSeed) * bestMoves.length)]
   }
@@ -285,8 +375,9 @@ function applyReply(
   asRole: Role | undefined,
   inner: Evaluator,
   policy: ReplyPolicy,
-  budget: { left: number },
+  budget: SearchBudget,
   alpha: number,
+  margin: number,
 ): GameState {
   if (policy === 'null') return state
   const foe = opponentOf(me)
@@ -302,27 +393,27 @@ function applyReply(
 
   for (const move of moves) {
     if (budget.left <= 0) break
-    budget.left--
+    spendBeam(budget)
     const next = resolveChain(resolve(state, move), me, asRole, inner, budget)
     const score = minimising ? inner(next, me, asRole) : inner(next, foe, foeRole)
     if (minimising ? score < best : score > best) {
       best = score
       chosen = next
     }
-    // Alpha cut. The margin of 1 is not caution, it is arithmetic: the caller scores this board with
-    // `valueAt`, which discounts a DECIDED board by the depth (1 here), so `best` and the value the
-    // caller computes can differ by exactly 1. Cutting a point early keeps the pruning provably
+    // Alpha cut. The margin is not caution, it is arithmetic: the caller scores this board with
+    // `valueAt`, which discounts a DECIDED board by its depth, so `best` and the value the caller
+    // computes can differ by exactly that much. Cutting that much early keeps the pruning provably
     // answer-preserving rather than nearly so.
-    if (minimising && best <= alpha - 1) break
+    if (minimising && best <= alpha - margin) break
   }
   return chosen ?? state
 }
 
 /** Hand the turn back to us by passing for the OPPONENT, or `null` if that ends the sequence. */
-function ourTurnAgain(state: GameState, me: PlayerId, budget: { left: number }): GameState | null {
+function ourTurnAgain(state: GameState, me: PlayerId, budget: SearchBudget): GameState | null {
   if (state.activePlayer === me) return state
   if (budget.left <= 0) return null
-  budget.left--
+  spendBeam(budget)
   const passed = resolve(state, { type: 'pass' })
   // Their pass can end the phase outright, and a phase boundary is where this policy stops claiming
   // anything: continuing across a round is #446's problem, not this one.
@@ -350,27 +441,32 @@ function reachableFrom(
   asRole: Role | undefined,
   inner: Evaluator,
   limits: BeamLimits,
-  budget: { left: number },
+  budget: SearchBudget,
   alpha: number,
 ): Reach {
   if (budget.left <= 0) {
     const board = resolve(state, move)
     return { best: inner(board, me, asRole), won: board.winner === me }
   }
-  budget.left--
+  spendBeam(budget)
 
   // Beam nodes are always settled boards, so depth counts actions rather than choice answers. Under a
   // reply policy the board scored is the one AFTER their answer, which is the whole of two-ply.
   const settled = resolveChain(resolve(state, move), me, asRole, inner, budget)
-  // See `alphaBeta`: the cut is only a valid bound for pessimistic play at depth 1.
-  const prunable = limits.alphaBeta !== false && limits.depth === 1 && limits.reply === 'pessimistic'
-  const root = applyReply(settled, me, asRole, inner, limits.reply, budget, prunable ? alpha : -Infinity)
+  // See `alphaBeta`: a cut is only a valid bound for pessimistic play, and only on a board nothing is
+  // expanded past. At depth 1 the root board is such a board; deeper it is continued from.
+  const cutting = limits.alphaBeta !== false && limits.reply === 'pessimistic'
+  const rootAlpha = cutting && limits.depth === 1 ? alpha : -Infinity
+  const root = applyReply(settled, me, asRole, inner, limits.reply, budget, rootAlpha, 1)
   let best = valueAt(root, me, asRole, inner, 1)
   let won = root.winner === me
   let frontier: GameState[] = [root]
 
   for (let d = 1; d < limits.depth; d++) {
     if (budget.left <= 0) break
+    // The deepest level is expanded but never continued from, so its boards are ordinary leaves: the
+    // frontier built from them would be discarded unread, and alpha is a real bound on them.
+    const last = d === limits.depth - 1
     const children: Array<{ board: GameState; value: number }> = []
 
     for (const node of frontier) {
@@ -382,19 +478,20 @@ function reachableFrom(
         // Passing on our own behalf would hand the search a turn the real game never gives it.
         if (next.type === 'pass') continue
         if (budget.left <= 0) break
-        budget.left--
+        spendBeam(budget)
         const played = resolveChain(resolve(ours, next), me, asRole, inner, budget)
-        // No alpha here: below the root a branch's value is the MAX over its leaves, so a poor reply
-        // at this node says nothing about what the branch can still reach.
-        const board = applyReply(played, me, asRole, inner, limits.reply, budget, -Infinity)
+        // No alpha at an interior level: there a branch's value is the MAX over its leaves, so a poor
+        // reply at this node says nothing about what the branch can still reach. `best` rather than
+        // the caller's alpha, because it is the tighter of the two and both bound this root.
+        const board = applyReply(played, me, asRole, inner, limits.reply, budget, last && cutting ? best : -Infinity, d + 1)
         const value = valueAt(board, me, asRole, inner, d + 1)
         if (value > best) best = value
         if (board.winner === me) won = true
-        children.push({ board, value })
+        if (!last) children.push({ board, value })
       }
     }
 
-    if (children.length === 0) break
+    if (last || children.length === 0) break
     // Sort is stable, so equal scores keep `legalMoves` order and the trim is deterministic.
     children.sort((a, b) => b.value - a.value)
     frontier = children.slice(0, limits.width).map(c => c.board)
@@ -420,15 +517,18 @@ export function beamReachesWin(
   inner: Evaluator,
   limits: BeamLimits = DEFAULT_BEAM_LIMITS,
 ): boolean {
-  const budget = { left: limits.nodes }
+  const budget = searchBudget(limits.nodes)
   const ours = ourTurnAgain(state, me, budget)
   if (ours === null) return false
 
+  // Asking whether a win EXISTS, so nothing may be pruned on value: alpha bounds the SCORE a branch
+  // can reach, and a cut leaf that happened to be a win would go unrecorded. Passing `-Infinity` is
+  // no longer enough on its own, since the deepest level now cuts against its own running best.
+  const exhaustive = { ...limits, alphaBeta: false }
   const asRole = role(ours, me)
   for (const move of legalMoves(ours)) {
     if (move.type === 'pass') continue
-    // Asking whether a win EXISTS, so nothing may be pruned on value.
-    if (reachableFrom(ours, move, me, asRole, inner, limits, budget, -Infinity).won) return true
+    if (reachableFrom(ours, move, me, asRole, inner, exhaustive, budget, -Infinity).won) return true
   }
   return false
 }

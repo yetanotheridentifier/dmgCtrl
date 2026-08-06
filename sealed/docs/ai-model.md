@@ -56,10 +56,17 @@ Two properties worth keeping:
 - **It costs about 2.5x wall clock**: 420 games in 74.7s against 29.8s, so a few hundred games a
   minute either way. A single decision stays far inside interactive latency at this depth, so no Web
   Worker is needed for it.
-- **A node budget bounds the worst case**, defaulting well above observed chains. `support` fans out
-  across every ready unit and every legal target, so the cap is a safety rail against the card pool,
-  not a tuning knob. Exhausting it scores the board where it stopped, degrading to the old answer
-  rather than a wrong one.
+- **A node budget bounds the worst case.** `support` fans out across every ready unit and every legal
+  target, so the cap is a safety rail against the card pool, not a tuning knob. Exhausting it scores
+  the board where it stopped, degrading to the old answer rather than a wrong one.
+
+The search shares that one budget between resolving owed chains and expanding the beam, and **the
+chain takes nearly all of it**. Over 200 real decisions `beam` spends 510 of its 638 nodes on chains
+and 128 on lookahead; raising the rail twentyfold moves the chain's share to 6885 and the beam's to
+135. So a raised budget costs about ten times as much per decision and buys no extra search. The rail
+itself fires on **4.0%** of decisions for `beam` and **8.5%** for the shipped `beam-reply`, and where
+it fires it starves the lookahead rather than trimming it. `--budget` reports all of this; do not
+infer it from a wall clock, which reads the heavy tail as if it were the common case.
 
 `greedy-flat` in the registry is the same AI without this, kept so the comparison can be re-run as
 the evaluation changes underneath it.
@@ -117,6 +124,25 @@ Depth does the work; width barely matters and is mildly harmful past 4.
 Width is provably irrelevant at depth 2, where the trim is never used, and every depth-2 cell returns
 bit-identical numbers. Width 8 losing to width 4 is consistent with the optimism story: a wider beam
 keeps more mediocre states, and a max over more leaves is more optimistic.
+
+**Width 4 sits at the point of diminishing returns**, which is visible without playing a game.
+Measured over 1000 real decisions alongside a pessimistic reply, how often each width picks a
+different move from the shipped width 4:
+
+| width | 1 | 2 | **4** | 8 | 16 |
+| --- | --- | --- | --- | --- | --- |
+| moves changed | 6.0% | 3.4% | — | 2.7% | 3.3% |
+
+Narrowing changes more than widening, so below 4 the trim is removing options that matter and above it
+mostly is not. Cost moves even less: 108, 110 and 115 ms a decision at widths 2, 4 and 8, since an
+eightfold width rise buys only +53% beam spend (322 to 492 nodes). The frontier is usually smaller
+than the cap, so the cap is not what bounds the search.
+
+**Read a disagreement rate off a deep corpus or not at all.** The same measurement over 200 states
+reported 0.5% for width 8 rather than 2.7%, understating every rate about fivefold, because a corpus
+is filled game by game and a short one is nothing but openings where few units are in play and the
+beam has little to choose between. This is the same hazard that makes a small `--cost` corpus report
+5.8 ms for a search that costs 142.6 ms.
 
 **Depth 4 is better and is deliberately not shipped.** It measures 59.4% against depth 3's 57.5% on
 the same seed, but only once the node budget is raised: at the default budget it reports 54.4%,
@@ -179,11 +205,26 @@ The obvious saving is to expand replies only for the top-scoring candidates. Tha
 the beam already paid for: trimming by pre-expansion score prunes the moves whose value only appears
 **after** the reply, which is the entire reason for looking at replies.
 
-Alpha-beta never changes the answer, only the work. The cut carries a **margin of 1**, which is
-arithmetic rather than caution: leaves are scored with a depth discount on decided boards, so the
-running minimum and the value the caller computes can differ by exactly one point. It applies only to
-`pessimistic` at depth 1, because deeper a branch's value is the max over its leaves, and `selfish`
-maximises a different function so our bound does not hold on it.
+Alpha-beta never changes the answer, only the work. The cut carries a **margin equal to the board's
+depth**, which is arithmetic rather than caution: leaves are scored with a depth discount on decided
+boards, so the running minimum and the value the caller computes can differ by exactly that much.
+
+It applies to `pessimistic` only, since `selfish` maximises a different function and our bound does
+not hold on it, and then only where a board is a **leaf**: the root board at depth 1, and the deepest
+level of the beam, whose boards feed the score and the winner check but are never continued from. At
+any interior level a branch's value is the max over everything below it, so a poor immediate reply
+bounds nothing, and cutting would also change which board the frontier continues from.
+
+Measured over 200 real decisions, the deepest-level cut saves **10.8% of nodes and about 8% of wall
+clock** at the shipped width 4, depth 3. It saves **nothing at depth 4**, so it is not the lever that
+makes a deeper configuration affordable.
+
+It is answer-preserving in the way that matters and not quite in the way it sounds: over those 200
+decisions the pruned and exhaustive searches chose differently exactly once, on a position where the
+**node budget** ran out. Both searches draw on one rail and the cheaper one gets further down it, so
+where the rail binds they legitimately see different amounts of the tree. On every decision that
+completed within budget they agreed. Anything asking whether a win **exists** rather than what it
+scores must still turn the pruning off outright, which is what `beamReachesWin` does.
 
 ## Lethal detection
 

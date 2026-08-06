@@ -74,7 +74,9 @@ Everything is optional:
     rail, and a rail that fires has quietly become the real width and depth.
   - `reply:pessimistic` / `reply:selfish` two-ply: our move, the opponent's best answer, then score.
     The bare form is depth 1, which is this policy on its own; `reply:POLICY:WIDTHxDEPTH` combines it
-    with the own-turn beam, which is #447's question rather than a shipped configuration.
+    with the own-turn beam, and `reply:POLICY:WIDTHxDEPTH:NODES` sets the budget as well. A reply
+    expands every legal answer at every level, so it drains the budget faster than a `beam:` cell of
+    the same shape and the node form matters more here, not less.
   - `beam-lethal` / `beam-lethal:WIDTHxBEAMDEPTHxSOLVERDEPTH` the beam with a lethal override in
     front of it. Measured at **+0.8 points** and **not shipped**; kept registered so it can be
     re-measured. Outside the gate it returns exactly what `beam` returns, which is what makes an A/B
@@ -114,8 +116,12 @@ control every comparison against `greedy` rests on. `beam` against `greedy` is 6
 
 ```bash
 npm run bench --prefix sealed -- --cost --games 200          # every registered AI
-npm run bench --prefix sealed -- --cost greedy reply:pessimistic
+npm run bench --prefix sealed -- --cost greedy beam beam-reply reply:pessimistic:4x4:200000
 ```
+
+Name as many AIs as the sweep has cells: they are timed in one process over one corpus, which is the
+whole point. Splitting a sweep across invocations re-measures the baseline each time and gives up the
+shared warm-up.
 
 It times every AI over one **identical** corpus of real decision states, collected once with a fixed
 driver before any timing starts. **Ratios travel between machines; absolute milliseconds do not**,
@@ -138,6 +144,35 @@ To estimate how long a run will take, scale a **comparable measured run** by the
 than multiplying a per-decision figure by a guessed decision count. Be sure the anchor really is
 comparable: mistaking a `beam` vs `greedy` run for `beam` vs `beam` halves its average cost per
 decision and throws the estimate out by two.
+
+Measured over 200 states: `greedy` 1.9 ms, `beam` 61 ms (33x), `beam-reply` 130 ms (70x),
+`reply:pessimistic:4x4:200000` **1495 ms (802x)**.
+
+### Is the node rail firing? `--budget`
+
+```bash
+npm run bench --prefix sealed -- --budget --games 200 beam beam-reply beam:4x3:200000
+```
+
+A cell whose budget runs out is measuring the rail rather than the width and depth in its name, and
+that has cost a real result before: #410's first screen reported depth 4 as **worse** than depth 3
+purely because the rail truncated it, and lifting the rail reversed the finding. So any sweep over
+depth or width carries a raised-budget control cell, and this mode says whether it was needed.
+
+**A wall clock answers this question wrongly.** Raising `nodes` from 10,000 to 200,000 costs ten times
+as much per decision at depth 3, and also at depth 1 where the beam expands nothing, which reads as a
+search being cut short everywhere. Measured, the rail fires on **4.0%** of decisions for `beam` and
+**8.5%** for `beam-reply`. The tenfold cost is a heavy tail: a few positions with an enormous choice
+fan-out expand to fill whatever budget is offered.
+
+The **chain / beam split** is the part worth acting on. Both draw on one pool and the chain takes 80%
+to 98% of it, so raising the rail buys cost and no lookahead: across a twentyfold rise the beam's own
+spend goes 128, 130, 135 while the chain's goes 510, 2108, 6885. Where the rail does fire it is
+starving the search at exactly the complicated positions, and the candidates left over are scored
+half-resolved.
+
+Use at least ~200 states here too. The corpus is filled game by game, so a small one is all openings,
+where the budget is never troubled and every cell reports 0%.
 
 Note the `--` after the script name: it tells npm to pass the flags through to the bench rather than
 eat them itself.
@@ -741,6 +776,9 @@ All under `src/bench/`, pure and framework-free except the command entry point. 
 in `src/ai/` and is described in [ai-model.md](ai-model.md).
 
 - `bench/decisions.ts` the blind-spot diagnostic behind `--decisions`.
+- `bench/cost.ts` per-decision timing over one identical corpus, behind `--cost`.
+- `bench/budget.ts` node-rail exhaustion and the chain/beam split, behind `--budget`. Shares
+  `cost.ts`'s corpus, so the two modes describe the same positions.
 - `bench/aiMatchups.ts` AI-vs-AI across every ordered deck pair, behind `--matchups`.
 - `bench/decks.ts` the fixed sealed deck, built deterministically from the ASH snapshot. For now the
   same deck plays both sides (a mirror), which removes deck strength as a variable. The runner already
