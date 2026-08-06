@@ -21,10 +21,17 @@ describe('deployment config', () => {
    * Deliberately brittle. Changing the shipped model should fail this test and force the diff to be
    * reviewed, which is the whole point of keeping the setting a single reviewed constant.
    *
-   * `beam` is one-ply greedy plus own-turn lookahead, and beats plain `greedy` 60.0% over three seeds
-   * and 2580 games. It costs ~85 ms a decision, affordable because Sealed is a desktop browser app.
+   * `beam-reply` is own-turn lookahead with the opponent's minimising reply at every level. It beats
+   * plain `beam` 67.4% over three seeds and 2580 games, at ~143 ms a decision, which a desktop
+   * browser absorbs.
    */
-  it('currently deploys the beam model', () => {
-    expect(OPPONENT_AI).toBe('beam')
+  it('currently deploys the beam-reply model', () => {
+    expect(OPPONENT_AI).toBe('beam-reply')
+  })
+
+  /** A shipped model needs a stable name, not a spec string: `resolveAi` accepts parameterised forms
+   *  like `reply:pessimistic:4x3`, but those are for sweeps and would not appear here. */
+  it('ships a named model rather than a sweep spec', () => {
+    expect(aiNames()).toContain(OPPONENT_AI)
   })
 })

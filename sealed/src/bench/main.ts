@@ -318,6 +318,12 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
   const ex = report.exposure
   lines.push(
     '',
+    '  leader deploys: a leader is a large investment and re-deploying costs the epic action, so',
+    '  losing one straight away is among the most expensive mistakes available. #425 claims to',
+    '  subsume #397 direct pinning, and this rate falling is the evidence for that claim.',
+    row('leaders deployed', `${report.leader.deploys}`),
+    row('  died within a round', rate(report.leader.diedSoon, report.leader.deploys)),
+    '',
     '  avoidable exposure: the headroom a tap-out risk gate could actually recover. "Unavoidable"',
     '  means every legal move led there, so the position was already lost and a gate saves nothing.',
     row('handed them lethal', rate(ex.exposed, ex.decisions)),

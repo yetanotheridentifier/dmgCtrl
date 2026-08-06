@@ -169,6 +169,16 @@ describe('runDecisions', () => {
     expect(e.losses).toBeLessThanOrEqual(e.games)
   })
 
+  /**
+   * #425 claims to subsume #397's direct pinning: "do not deploy into a board that kills it" is what
+   * a reply policy computes, so the hand-coded term should not be built. That claim rests on this
+   * rate falling, and without the readout #397 would be closed on an argument rather than evidence.
+   */
+  it('reports how often a deployed leader dies straight away', () => {
+    expect(report.leader.deploys, 'leaders do get deployed').toBeGreaterThan(0)
+    expect(report.leader.diedSoon).toBeLessThanOrEqual(report.leader.deploys)
+  })
+
   it('is deterministic for a given seed', () => {
     expect(runDecisions({ gamesPerDeck: 1, seed: 4242 })).toEqual(report)
   }, 120_000)
