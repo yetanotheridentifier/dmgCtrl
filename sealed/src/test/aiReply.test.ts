@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { makeBeamAi, DEFAULT_BEAM_LIMITS } from '../ai/search'
+import { makeBeamAi, lastSearchTrace, DEFAULT_BEAM_LIMITS } from '../ai/search'
 import { greedyAi, beamAi } from '../ai/greedyAi'
 import { evaluate } from '../ai/evaluate'
 import { state, player, card, unit, ready, CARDS } from './helpers/engineFixtures'
@@ -44,6 +44,31 @@ function crackBack(): GameState {
     players: {
       player: player({ hand: ['SPIKE', 'WALL'], resources: ready(2), units: [] }),
       opponent: player({ units: [unit('p', 'PUNISHER')] }),
+    },
+  })
+}
+
+/**
+ * A position with real branching on both sides: several of our actions, and several answers to each.
+ * Cost is a property of boards like this, so a claim about pruning has to be made on one.
+ *
+ * Kept as small as still branches. The tests below run an EXHAUSTIVE control, which has to search
+ * everything the cut skips, so this fixture sets the cost of the slowest tests in the file.
+ */
+function branching(): GameState {
+  return state({
+    cards,
+    players: {
+      player: player({
+        hand: ['SPIKE', 'WALL'],
+        resources: ready(4),
+        units: [unit('a1', 'SPIKE'), unit('a2', 'PUNISHER')],
+      }),
+      opponent: player({
+        hand: ['WALL'],
+        resources: ready(4),
+        units: [unit('d1', 'PUNISHER'), unit('d2', 'SPIKE')],
+      }),
     },
   })
 }
@@ -125,6 +150,64 @@ describe('alpha-beta', () => {
         expect(pruned(s), `${policy} disagreed with the exhaustive search`).toEqual(exhaustive(s))
       }
     }
+  })
+
+  /**
+   * The cut extends to the DEEPEST level of the beam, and to nowhere in between.
+   *
+   * At an interior node a branch's value is the max over everything below it, so a poor reply there
+   * bounds nothing and pruning on it would change the answer. The last level is different: those
+   * boards feed `valueAt` and the winner check and are never continued from, so the frontier built
+   * out of them is discarded unused. That makes them ordinary leaves, where alpha is a real bound.
+   *
+   * It is worth the care because that level holds most of the nodes: it is the only honest lever on
+   * the cost of the deeper cells #447 sweeps, and #425's warning against the alternative (trimming
+   * candidates by pre-expansion score) still stands, since that prunes the moves whose value only
+   * appears after the reply.
+   */
+  it('cuts at the deepest level too, and still never changes the answer', () => {
+    // `branching` carries the weight: on a position with one opponent unit the cut hardly fires, so
+    // agreement there would be agreement about doing nothing. It is also the expensive one, since the
+    // exhaustive control has to search what the cut is skipping, so it runs at depth 2 only. Depth 3
+    // is covered on the cheap positions, and on `branching` by the saving test below.
+    const cheap = [crackBack(), { ...crackBack(), round: 5 }]
+    const busy = [branching(), { ...branching(), rngSeed: 991 }]
+    for (const policy of ['pessimistic', 'selfish'] as const) {
+      for (const depth of [2, 3]) {
+        // Width 2 keeps the control affordable. The cut is applied per node over the opponent's
+        // replies, so it is exercised the same at any width; what width changes is how long the
+        // search WITHOUT it takes.
+        const limits = { ...DEFAULT_BEAM_LIMITS, width: 2, depth, reply: policy, nodes: 1_000_000 }
+        const pruned = makeBeamAi(evaluate, limits)
+        const exhaustive = makeBeamAi(evaluate, { ...limits, alphaBeta: false })
+        for (const s of depth === 2 ? [...cheap, ...busy] : cheap) {
+          expect(pruned(s), `${policy} at depth ${depth} disagreed with the exhaustive search`)
+            .toEqual(exhaustive(s))
+        }
+      }
+    }
+  })
+
+  /**
+   * And it has to actually save something, or it is a claim rather than an optimisation.
+   *
+   * `crackBack` is too small to show it: the opponent has one unit, so there are barely any replies
+   * to skip. The saving is a property of a branching position, which is also the only kind where the
+   * cost of a deep configuration matters.
+   */
+  it('spends fewer nodes for that same answer', () => {
+    const limits = { ...DEFAULT_BEAM_LIMITS, width: 2, depth: 3, reply: 'pessimistic' as const, nodes: 1_000_000 }
+    const s = branching()
+
+    const pruned = makeBeamAi(evaluate, limits)
+    const move = pruned(s)
+    const prunedSpend = lastSearchTrace()!.nodes - lastSearchTrace()!.left
+
+    const exhaustive = makeBeamAi(evaluate, { ...limits, alphaBeta: false })
+    expect(exhaustive(s)).toEqual(move)
+    const exhaustiveSpend = lastSearchTrace()!.nodes - lastSearchTrace()!.left
+
+    expect(prunedSpend).toBeLessThan(exhaustiveSpend)
   })
 })
 

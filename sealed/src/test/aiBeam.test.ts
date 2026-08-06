@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { makeBeamAi, resolveChain, makeQuiescent, beamReachesWin, DEFAULT_BEAM_LIMITS } from '../ai/search'
+import { makeBeamAi, resolveChain, makeQuiescent, beamReachesWin, searchBudget, DEFAULT_BEAM_LIMITS } from '../ai/search'
 import { hasLethal } from '../ai/lethal'
 import { greedyAi } from '../ai/greedyAi'
 import { evaluate } from '../ai/evaluate'
@@ -242,13 +242,13 @@ describe('resolveChain', () => {
     for (const move of legalMoves(s)) {
       const raw = resolve(s, move)
       const asRole = role(s, 'player')
-      const settled = resolveChain(raw, 'player', asRole, evaluate, { left: 256 })
+      const settled = resolveChain(raw, 'player', asRole, evaluate, searchBudget(256))
       expect(evaluate(settled, 'player', asRole)).toBe(quiescent(raw, 'player', asRole))
     }
   })
 
   it('leaves a board with nothing owed exactly as it found it', () => {
     const s = sentinelWall()
-    expect(resolveChain(s, 'player', 'neutral', evaluate, { left: 256 })).toBe(s)
+    expect(resolveChain(s, 'player', 'neutral', evaluate, searchBudget(256))).toBe(s)
   })
 })

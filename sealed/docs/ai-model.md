@@ -56,10 +56,17 @@ Two properties worth keeping:
 - **It costs about 2.5x wall clock**: 420 games in 74.7s against 29.8s, so a few hundred games a
   minute either way. A single decision stays far inside interactive latency at this depth, so no Web
   Worker is needed for it.
-- **A node budget bounds the worst case**, defaulting well above observed chains. `support` fans out
-  across every ready unit and every legal target, so the cap is a safety rail against the card pool,
-  not a tuning knob. Exhausting it scores the board where it stopped, degrading to the old answer
-  rather than a wrong one.
+- **A node budget bounds the worst case.** `support` fans out across every ready unit and every legal
+  target, so the cap is a safety rail against the card pool, not a tuning knob. Exhausting it scores
+  the board where it stopped, degrading to the old answer rather than a wrong one.
+
+The search shares that one budget between resolving owed chains and expanding the beam, and **the
+chain takes nearly all of it**. Over 200 real decisions `beam` spends 510 of its 638 nodes on chains
+and 128 on lookahead; raising the rail twentyfold moves the chain's share to 6885 and the beam's to
+135. So a raised budget costs about ten times as much per decision and buys no extra search. The rail
+itself fires on **4.0%** of decisions for `beam` and **8.5%** for the shipped `beam-reply`, and where
+it fires it starves the lookahead rather than trimming it. `--budget` reports all of this; do not
+infer it from a wall clock, which reads the heavy tail as if it were the common case.
 
 `greedy-flat` in the registry is the same AI without this, kept so the comparison can be re-run as
 the evaluation changes underneath it.
@@ -179,11 +186,26 @@ The obvious saving is to expand replies only for the top-scoring candidates. Tha
 the beam already paid for: trimming by pre-expansion score prunes the moves whose value only appears
 **after** the reply, which is the entire reason for looking at replies.
 
-Alpha-beta never changes the answer, only the work. The cut carries a **margin of 1**, which is
-arithmetic rather than caution: leaves are scored with a depth discount on decided boards, so the
-running minimum and the value the caller computes can differ by exactly one point. It applies only to
-`pessimistic` at depth 1, because deeper a branch's value is the max over its leaves, and `selfish`
-maximises a different function so our bound does not hold on it.
+Alpha-beta never changes the answer, only the work. The cut carries a **margin equal to the board's
+depth**, which is arithmetic rather than caution: leaves are scored with a depth discount on decided
+boards, so the running minimum and the value the caller computes can differ by exactly that much.
+
+It applies to `pessimistic` only, since `selfish` maximises a different function and our bound does
+not hold on it, and then only where a board is a **leaf**: the root board at depth 1, and the deepest
+level of the beam, whose boards feed the score and the winner check but are never continued from. At
+any interior level a branch's value is the max over everything below it, so a poor immediate reply
+bounds nothing, and cutting would also change which board the frontier continues from.
+
+Measured over 200 real decisions, the deepest-level cut saves **10.8% of nodes and about 8% of wall
+clock** at the shipped width 4, depth 3. It saves **nothing at depth 4**, so it is not the lever that
+makes a deeper configuration affordable.
+
+It is answer-preserving in the way that matters and not quite in the way it sounds: over those 200
+decisions the pruned and exhaustive searches chose differently exactly once, on a position where the
+**node budget** ran out. Both searches draw on one rail and the cheaper one gets further down it, so
+where the rail binds they legitimately see different amounts of the tree. On every decision that
+completed within budget they agreed. Anything asking whether a win **exists** rather than what it
+scores must still turn the pruning off outright, which is what `beamReachesWin` does.
 
 ## Lethal detection
 

@@ -65,14 +65,20 @@ export function aiNames(): string[] {
 const BEAM_SPEC = /^beam:(\d+)x(\d+)(?::(\d+))?$/
 
 /**
- * `reply:POLICY` or `reply:POLICY:WIDTHxDEPTH`, for the opponent-reply policies (#425).
+ * `reply:POLICY`, `reply:POLICY:WIDTHxDEPTH` or `reply:POLICY:WIDTHxDEPTH:NODES`, for the
+ * opponent-reply policies (#425).
  *
  * `reply:pessimistic` on its own is **two-ply**: one of our moves, their best answer, then score.
- * That is this ticket standalone, and the form the A/B against `beam` uses. Adding a width and depth
- * combines it with the own-turn beam, which is #447's question rather than this one's, so the
- * combination is addressable but deliberately not a shipped name.
+ * That is #425 standalone, and the form the A/B against `beam` uses. Adding a width and depth
+ * combines it with the own-turn beam, which is #447's question.
+ *
+ * The node budget matters more here than on a `beam:` cell, not less. A reply expands every legal
+ * answer at every level, so it draws on the shared rail far faster, and until this field existed
+ * every reply configuration was pinned at the 10,000-node default. Lifting the rail off one cell
+ * changes its cost tenfold, so that default was the binding constraint on the deployed model rather
+ * than the width and depth its name advertises.
  */
-const REPLY_SPEC = /^reply:(pessimistic|selfish)(?::(\d+)x(\d+))?$/
+const REPLY_SPEC = /^reply:(pessimistic|selfish)(?::(\d+)x(\d+)(?::(\d+))?)?$/
 
 /**
  * `beam-lethal:WIDTHxBEAMDEPTH:SOLVERDEPTH`, so a run can address the beam and the lethal override
@@ -109,8 +115,11 @@ export function resolveAi(name: string): Ai {
     // is never reached), which is why the bare form takes neither.
     const width = reply[2] === undefined ? DEFAULT_BEAM_LIMITS.width : Number(reply[2])
     const depth = reply[3] === undefined ? 1 : Number(reply[3])
-    if (width < 1 || depth < 1) throw new Error(`Reply AI "${name}" needs width and depth of at least 1`)
-    return makeBeamGreedy(DEFAULT_WEIGHTS, { width, depth, nodes: DEFAULT_BEAM_LIMITS.nodes, reply: policy })
+    const nodes = reply[4] === undefined ? DEFAULT_BEAM_LIMITS.nodes : Number(reply[4])
+    if (width < 1 || depth < 1 || nodes < 1) {
+      throw new Error(`Reply AI "${name}" needs width, depth and nodes of at least 1`)
+    }
+    return makeBeamGreedy(DEFAULT_WEIGHTS, { width, depth, nodes, reply: policy })
   }
 
   const spec = BEAM_SPEC.exec(name)
@@ -126,5 +135,8 @@ export function resolveAi(name: string): Ai {
     return makeBeamGreedy(DEFAULT_WEIGHTS, { width, depth, nodes, reply: DEFAULT_BEAM_LIMITS.reply })
   }
 
-  throw new Error(`Unknown AI "${name}". Available: ${aiNames().join(', ')}, or beam:WIDTHxDEPTH[:NODES]`)
+  throw new Error(
+    `Unknown AI "${name}". Available: ${aiNames().join(', ')}, ` +
+    'or beam:WIDTHxDEPTH[:NODES], or reply:POLICY[:WIDTHxDEPTH[:NODES]]',
+  )
 }

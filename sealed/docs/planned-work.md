@@ -125,8 +125,24 @@ bot.
 
 1. **#447 the search configuration**, brought forward, and now with a specific question rather than a
    sweep. `beam-reply` ships at depth 3 and **the depth curve was still climbing** (54.5, 64.7, 67.4
-   against a reply-blind beam). Depth 4 with a reply costs roughly 180 ms a decision, which desktop
-   absorbs. Width is the other axis and has never been swept alongside a reply.
+   against a reply-blind beam). Width is the other axis and has never been swept alongside a reply.
+
+   The instrumentation for it is built, and it moved the numbers this ticket has to plan around.
+   **Depth 4 with a reply costs 1495 ms a decision, not the ~180 ms estimated from a wall clock**:
+   802x greedy, against `beam-reply`'s 70x. A/B sizing has to start from that.
+
+   Two things are now known that were assumptions. **Alpha-beta is not the lever.** It is sound at the
+   deepest level of the beam as well as at depth 1, and measured there it saves 10.8% of nodes at the
+   shipped configuration and **nothing at all at depth 4**, so it does not make a deeper cell
+   affordable. And **the node rail is not quietly setting the width and depth**: it fires on 4.0% of
+   decisions for `beam` and 8.5% for `beam-reply`. A raised-budget control cell is still worth
+   carrying, but the earlier depth-4 result is much less confounded by the rail than it looked.
+
+   What the rail measurement did turn up is a separate defect worth its own ticket: the search shares
+   one budget between resolving owed choices and expanding the beam, and **the chain takes 80% to 98%
+   of it**. Raising the budget twentyfold moves the beam's own spend from 128 nodes to 135 while the
+   chain's goes from 510 to 6885, so a raised rail costs ten times as much and buys no search at all.
+   Where the rail fires it is starving the lookahead at exactly the complicated positions.
 2. **#487 re-tune the weights for the shipped search**, after #447 and not before. See above: the
    "re-weighting is exhausted" result measured a one-ply evaluator, and #430 identified exactly why
    several weights could not matter there. This is the largest unexamined lever, and it is expensive,
