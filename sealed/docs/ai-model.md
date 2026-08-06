@@ -124,6 +124,67 @@ because the rail truncates it. It costs 2.45x, and its value rests on four conse
 non-actions, which is exactly what a modelled reply changes. The decision belongs with the reply
 policy rather than before it.
 
+## The opponent's reply
+
+The beam assumes the opponent does nothing between our actions. That assumption is what makes a
+multi-step line of ours look playable, and it is also where the model leaks: since the beam maximises
+over leaves, it systematically prefers the branch most dependent on the assumption holding.
+
+A **reply policy** replaces the null move with the opponent's best answer, so the board scored is one
+they have had a say in. It is a parameter of the same search rather than a second one, which is what
+collapsing the three search tickets into one bought:
+
+| Policy | The opponent |
+| --- | --- |
+| `null` | does nothing. Optimistic. This is the beam. |
+| `pessimistic` | does the most inconvenient thing we can see: `min(evaluate(s, me))` |
+| `selfish` | plays their own read of the race: `argmax(evaluate(s, foe))` |
+
+The last two differ because role-adjusted weights are **not** zero-sum: an aggressor and a defender
+price the same board differently by design.
+
+**Looking one move ahead at the opponent beats looking three moves ahead at yourself.** Two-ply at
+depth 1 measures **54.5%** against a reply-blind beam over three seeds and 2580 games, above 50 on
+every seed. `selfish` measures 53.2% on the same runs, so pure pessimism leads, though not separably
+at that width.
+
+### Depth and pessimism compose, and that was not the expectation
+
+The worry was that they would cancel: one policy is optimistic and the other pessimistic, so stacking
+them could land anywhere. They are strongly **super-additive**.
+
+| Against a reply-blind beam | Mean over 2580 games |
+| --- | --- |
+| reply only (depth 1) | 54.5% |
+| reply + depth 2 | 64.7% |
+| **reply + depth 3 (shipped)** | **67.4% ± 1.9%** |
+
+Depth without a reply is worth +10 (beam over greedy). Depth **on top of** a reply is worth +12.9. The
+reason is that a reply at every level makes the search proper minimax, so depth compounds rather than
+extending lines that only work if the opponent cooperates. The curve is still climbing at depth 3.
+
+Three measurements cross-check: beam beats greedy 60.0%, reply beats beam 54.5%, so reply should beat
+greedy by about 64.5%. Measured directly, **64.4%**.
+
+Two properties keep it honest:
+
+- **Never negate.** `evaluate` stopped being zero-sum when the private hand term landed, so the
+  opponent's side is scored with `evaluate(s, foe)` directly. `-evaluate(s, me)` would read their hand.
+- **Their role is fixed once**, from the position they are deciding in, the same discipline #395
+  imposed on ours. Deriving it per candidate compares scores computed with different weight sets.
+
+### Bounded by alpha-beta, not by trimming
+
+The obvious saving is to expand replies only for the top-scoring candidates. That is exactly the error
+the beam already paid for: trimming by pre-expansion score prunes the moves whose value only appears
+**after** the reply, which is the entire reason for looking at replies.
+
+Alpha-beta never changes the answer, only the work. The cut carries a **margin of 1**, which is
+arithmetic rather than caution: leaves are scored with a depth discount on decided boards, so the
+running minimum and the value the caller computes can differ by exactly one point. It applies only to
+`pessimistic` at depth 1, because deeper a branch's value is the max over its leaves, and `selfish`
+maximises a different function so our bound does not hold on it.
+
 ## Lethal detection
 
 `ai/lethal.ts` answers "can this seat win from here using only its own actions", under the same

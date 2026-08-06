@@ -46,6 +46,22 @@ describe('AI registry', () => {
     expect(() => resolveAi('beam:4x0')).toThrow()
   })
 
+  /**
+   * The bare form is two-ply: our move, their answer, score. Combining it with the own-turn beam is
+   * addressable but is #447's question, not #425's, so it needs an explicit width and depth.
+   */
+  it('builds the reply policies, defaulting to two-ply', () => {
+    expect(() => resolveAi('reply:pessimistic')).not.toThrow()
+    expect(() => resolveAi('reply:selfish')).not.toThrow()
+    expect(() => resolveAi('reply:pessimistic:4x3')).not.toThrow()
+    expect(resolveAi('reply:pessimistic')).not.toBe(resolveAi('reply:selfish'))
+  })
+
+  it('rejects an unknown reply policy rather than silently picking one', () => {
+    expect(() => resolveAi('reply:optimistic')).toThrow()
+    expect(() => resolveAi('reply:')).toThrow()
+  })
+
   it('rejects an unknown name with a message that lists the valid ones', () => {
     let message = ''
     try {

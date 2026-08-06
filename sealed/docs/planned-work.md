@@ -68,6 +68,25 @@ Two of the gaps are **public**: a leader deploys ready, so an undeployed leader 
 owner can produce at will, and a few units ready themselves while some events ready an exhausted one.
 Neither earns a term, and both make the race model under-read a player about to deploy.
 
+### Pessimism and depth compose, and that decided the shipped model
+
+A reply alone (depth 1) beats a reply-blind beam by 4.5 points, so **one move of looking at the
+opponent beats three moves of looking at yourself**. Stacking them was expected to be fraught, since
+one policy is optimistic and the other pessimistic. They are strongly **super-additive**:
+
+| Against a reply-blind beam | Mean over 2580 games |
+| --- | --- |
+| reply only | 54.5% |
+| reply + depth 2 | 64.7% |
+| **reply + depth 3, shipped as `beam-reply`** | **67.4%** |
+
+Depth without a reply was worth +10; depth on top of a reply is worth +12.9. With a reply at every
+level the search is proper minimax, so depth compounds instead of extending lines that need the
+opponent to cooperate. **The curve is still climbing at depth 3**, which is now #447's question.
+
+`min(evaluate(s, me))` leads `argmax(evaluate(s, foe))` by about a point at both depths, not separably
+at this width.
+
 ### Some of what the model knows may be standing in for search
 
 `lethalExposure` is a static proxy for "they can kill me next action"; `role` is a static proxy for
@@ -98,10 +117,10 @@ bot.
 
 ## Next up
 
-1. **#425 opponent reply**, public information only. The cheap first step into pessimistic search, and
-   the counterweight to the beam's optimism: the beam maximises over leaves, so it systematically
-   prefers the branch most dependent on the opponent doing nothing. It also unblocks #447 and is the
-   gate on the whole belief-model programme.
+1. **#447 the search configuration**, brought forward, and now with a specific question rather than a
+   sweep. `beam-reply` ships at depth 3 and **the depth curve was still climbing** (54.5, 64.7, 67.4
+   against a reply-blind beam). Depth 4 with a reply costs roughly 180 ms a decision, which desktop
+   absorbs. Width is the other axis and has never been swept alongside a reply.
 2. **#446 claim the initiative when it converts to lethal.** `hasLethal` from #433 now exists, so the
    only thing left to build is continuing the sequence across a **round boundary** rather than to the
    end of a turn. Initiative is still the largest single tie at 18.2%, ~7.4 coin flips a game. Temper
@@ -110,14 +129,11 @@ bot.
 3. **Re-run `--terms`** once the matrix lands, and compare against the pre-registered predictions on
    #430: `resourceSurplus`, `saturation`, `hand.canAct` and `roleShift` should start mattering if they
    were dormant. Anything still flat is dead and can be deleted.
-4. **#447 final search configuration**, after #425 and not before. Depth, width and reply policy get
-   chosen jointly, because they are not independent: depth 4 measured **better** than the shipped
-   depth 3 and was banked rather than shipped, since its value rests on four consecutive opponent
-   non-actions and #425 is what changes that.
-
-**Measure four configurations, not two.** #410 is optimistic (the opponent does nothing) while #425
-is pessimistic (they do the worst visible thing). Those pull in opposite directions and may not
-compose additively, so the matrix is: neither, #410 alone, #425 alone, both.
+**Measure four configurations, not two.** The beam is optimistic (the opponent does nothing) while the
+reply policy is pessimistic (they do the worst visible thing). Those pull in opposite directions and
+may not compose additively, so the matrix is: neither, beam alone, reply alone, both. Depth 4 also
+measured **better** than the shipped depth 3 and was banked rather than shipped, because its value
+rested on four consecutive opponent non-actions, which is precisely what a reply policy removes.
 
 ## Gated on the search matrix
 

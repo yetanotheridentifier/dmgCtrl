@@ -65,11 +65,16 @@ Everything is optional:
   - `greedy-baseline` a frozen early greedy, kept only as a fixed reference for tuning.
   - `greedy-flat` the live model minus quiescent scoring. Unlike the baseline it tracks every other
     evaluation change, which is what makes it a control for that one feature rather than a snapshot.
-  - `beam` rung 2, own-turn lookahead at width 4, depth 3. **The deployed model.** Same weights and
-    same chain handling as `greedy`, so `beam` against `greedy` isolates the search.
+  - `beam` rung 2, own-turn lookahead at width 4, depth 3, assuming the opponent does nothing. Same
+    weights and same chain handling as `greedy`, so `beam` against `greedy` isolates the search.
+  - `beam-reply` rung 3, the same beam with the opponent's minimising reply at every level.
+    **The deployed model**, and it beats `beam` 67.4% over three seeds.
   - `beam:WIDTHxDEPTH` or `beam:WIDTHxDEPTH:NODES` any other cell, so a sweep addresses the space
     without a registry entry per cell. The node form exists for one control: the budget is a safety
     rail, and a rail that fires has quietly become the real width and depth.
+  - `reply:pessimistic` / `reply:selfish` two-ply: our move, the opponent's best answer, then score.
+    The bare form is depth 1, which is this policy on its own; `reply:POLICY:WIDTHxDEPTH` combines it
+    with the own-turn beam, which is #447's question rather than a shipped configuration.
   - `beam-lethal` / `beam-lethal:WIDTHxBEAMDEPTHxSOLVERDEPTH` the beam with a lethal override in
     front of it. Measured at **+0.8 points** and **not shipped**; kept registered so it can be
     re-measured. Outside the gate it returns exactly what `beam` returns, which is what makes an A/B
@@ -105,13 +110,68 @@ self-check), and `greedy` vs `random` is ~100% over 1000 games, the one-ply scor
 uniform-random play. `greedy` against **itself** reads 50.4% ± 3.4% over 840 games, which is the
 control every comparison against `greedy` rests on. `beam` against `greedy` is 60.0% over three seeds.
 
-**A search config costs what it costs.** Measured solo on one corpus of real decisions, `greedy` is
-2.49 ms/decision, `beam:2x3` 62 ms, `beam:4x3` 85 ms and `beam:8x3` 122 ms. Do not take these from a
-bench wall clock: a game's clock includes the opponent's cheap decisions and engine overhead, which
-diluted the same ratio to 12x when it is really about 34x.
+**A search config costs what it costs**, and `--cost` is how to find out:
+
+```bash
+npm run bench --prefix sealed -- --cost --games 200          # every registered AI
+npm run bench --prefix sealed -- --cost greedy reply:pessimistic
+```
+
+It times every AI over one **identical** corpus of real decision states, collected once with a fixed
+driver before any timing starts. **Ratios travel between machines; absolute milliseconds do not**,
+since they depend on the box and on which positions the corpus holds, so the report divides by
+`greedy` rather than leaving the reader to.
+
+**Use at least ~200 states, and distrust a small run entirely.** The corpus is filled game by game, so
+a small one is nothing but openings, where few units are in play and every search is cheap. At 30
+states a depth-3 minimax measured **5.8 ms/decision**; at 200 states the same configuration measured
+**142.6 ms**. That is not noise, it is a different question being answered, and note it distorts the
+**ratios** as well as the absolutes, because a shallow and a deep search converge when there is
+nothing to search. Filling from a wider spread of decks rather than consecutively would reduce this
+and is worth doing before the next large sweep.
+
+Do **not** take a per-decision cost from a bench wall clock. A game's clock includes the opponent's
+cheap decisions and the engine's own work, which diluted the same ratio to 12x when it was really 34x,
+and made a 200 ms search look like 42 ms. Both errors cost real time before this mode existed.
+
+To estimate how long a run will take, scale a **comparable measured run** by the cost ratio rather
+than multiplying a per-decision figure by a guessed decision count. Be sure the anchor really is
+comparable: mistaking a `beam` vs `greedy` run for `beam` vs `beam` halves its average cost per
+decision and throws the estimate out by two.
 
 Note the `--` after the script name: it tells npm to pass the flags through to the bench rather than
 eat them itself.
+
+## Running a long sweep unattended
+
+Validation runs are hours long, so they outlive a terminal, a session and sometimes the machine.
+Three conventions, each of which exists because its absence cost a run.
+
+**Detach properly.** `setsid npm run bench ... > log 2>&1 &` per job, from a script. A job tied to a
+terminal dies with it.
+
+**Make it resumable, and know the granularity.** A driver script skips any log already ending in a
+`wall clock` line, so a restart costs one job rather than the set. It is **per job, not per game**: an
+interrupted 3-hour run restarts from game 0. That is the wrong granularity for the longest runs and
+worth improving if they get longer.
+
+**Never write a waiter that matches itself.** This is the one that bites:
+
+```bash
+while pgrep -f "tsx src/bench/main" > /dev/null; do sleep 60; done   # WRONG: never exits
+while pgrep -f "[t]sx src/bench/main" > /dev/null; do sleep 60; done # correct
+```
+
+`pgrep -f` searches full command lines, and the waiter's own command line **contains the pattern**, so
+it matches itself and waits forever. The bracket makes the pattern not match its own text while still
+matching the target. A whole night's queued work was lost to this: the jobs it was waiting for had
+finished, and it never noticed.
+
+**Sleep does not stop a run, but it does corrupt the clock.** A suspended process resumes exactly
+where it was, so nothing is lost or repeated. But a bench `wall clock` comes from `Date.now()` and so
+includes the suspended time: runs have reported 6.9 and 15.4 hours for 2.3 hours of compute. Win rates
+are unaffected, because the harness has no wall-clock timeout by design (see the seat and determinism
+notes above). **Treat a wall clock spanning an overnight gap as unusable and the win rate as fine.**
 
 ## Reading the output
 
@@ -387,6 +447,22 @@ Current rates over 1260 games:
 Almost all of it is late. Rounds 1 to 4 hold two thirds of all decisions and produce lethal **twice
 in 60,749**, rising to 11.5% at round 5 and peaking near 33% at round 7. That one is arithmetic
 rather than measurement: bases are ~30 HP and no early board approaches it.
+
+### Leader deploys, and why the rate is not a quality signal
+
+The run reports how often a deployed leader is defeated before the end of the following round:
+**17.7%** for a reply-blind beam, **18.4%** with the opponent's reply modelled. It was built to test a
+claim that modelling the reply would subsume a hand-coded "do not deploy into a punish" rule, and it
+does not support it.
+
+**But the metric cannot support it either way, and that is the more useful finding.** A leader's value
+is largely in the deploy itself, so losing one afterwards is often a purchase rather than a mistake:
+trading it to stop base damage, to remove a unit holding lethal, or to clear a Sentinel are all
+correct plays that this counts as a death. The readout cannot separate a leader thrown away from one
+spent well, so a rate on its own says very little.
+
+Treat it as a **behaviour readout**: useful for noticing a large change between models, not for
+judging one. A rule about deploying into a punish needs a measure of the punish, not of the death.
 
 ### Avoidable exposure
 

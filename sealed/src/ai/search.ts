@@ -3,7 +3,7 @@ import type { Action } from '../engine/actions'
 import type { Evaluator } from './evaluate'
 import type { Ai } from './types'
 import type { Role } from './race'
-import { hasPendingChoices } from '../engine/types'
+import { hasPendingChoices, opponentOf } from '../engine/types'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
 import { seededUnit } from '../engine/rng'
@@ -148,13 +148,39 @@ export function resolveChain(
  * generalisation of it. `nodes` is a safety rail in the same spirit as `QuiescenceLimits`: running
  * out degrades to the shallower answer, never to a wrong one.
  */
+/**
+ * What the opponent is assumed to do between our actions (#425).
+ *
+ * - `null` they do nothing. Optimistic, and what makes a multi-step line of ours look playable. This
+ *   is #410's assumption and the shipped `beam`.
+ * - `pessimistic` they do the most inconvenient thing we can see: `min(evaluate(s, me))`.
+ * - `selfish` they play their own read of the race: `argmax(evaluate(s, foe))`. Weaker as a safety
+ *   guarantee, more realistic, and what an eventual MCTS would do.
+ *
+ * The last two differ because role-adjusted weights are **not** zero-sum: an aggressor and a defender
+ * price the same board differently by design. Which is better is a measurement, not a principle.
+ */
+export type ReplyPolicy = 'null' | 'pessimistic' | 'selfish'
+
 export interface BeamLimits {
   width: number
   depth: number
   nodes: number
+  reply: ReplyPolicy
+  /**
+   * Prune replies that cannot change the answer. On by default; `false` forces the exhaustive search,
+   * which exists so a test can assert the two agree.
+   *
+   * **Only sound for `pessimistic` at depth 1.** There it is textbook alpha: once a candidate's worst
+   * reply is already no better than the best root secured elsewhere, that candidate is dead and the
+   * remaining replies cannot revive it. Deeper, a root's value is the MAX over leaves below it, so a
+   * bad immediate reply says nothing about the branch; and `selfish` maximises a different function,
+   * so our alpha is not a bound on it. In both cases the pruning is simply not applied.
+   */
+  alphaBeta?: boolean
 }
 
-export const DEFAULT_BEAM_LIMITS: BeamLimits = { width: 4, depth: 3, nodes: 10_000 }
+export const DEFAULT_BEAM_LIMITS: BeamLimits = { width: 4, depth: 3, nodes: 10_000, reply: 'null' }
 
 /**
  * Own-turn self-lookahead (#410): value a move by the best board its own follow-ups can reach.
@@ -206,7 +232,8 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
     let best = -Infinity
     const bestMoves: Action[] = []
     for (const move of moves) {
-      const { best: value } = reachableFrom(state, move, me, asRole, inner, limits, budget)
+      // `best` so far is alpha: a candidate that cannot beat it need not be finished.
+      const { best: value } = reachableFrom(state, move, me, asRole, inner, limits, budget, best)
       if (value > best) {
         best = value
         bestMoves.length = 0
@@ -235,6 +262,60 @@ function valueAt(board: GameState, me: PlayerId, asRole: Role | undefined, inner
   // A draw scores 0 from either side, so there is no sign to preserve and nothing to prefer.
   if (board.winner === null || raw === 0) return raw
   return raw > 0 ? raw - depth : raw + depth
+}
+
+/**
+ * Let the opponent answer, and return the board we should actually be scoring.
+ *
+ * Under `null` this is a no-op and the shipped beam's behaviour is untouched, which is what makes an
+ * A/B between policies measure one feature. Under a reply policy it advances past their turn by
+ * playing their best answer rather than passing for them, so the continuation and the leaf both see
+ * a board the opponent has had a say in.
+ *
+ * **Never negate.** `evaluate` stopped being zero-sum when the private hand term landed: it is
+ * `publicScore` plus a term applied to the scored seat alone. `-evaluate(s, me)` would read the
+ * opponent's hand, so their side is scored with `evaluate(s, foe)` directly.
+ *
+ * Their role is fixed once from the position THEY are deciding in, the same discipline #395 imposed
+ * on ours, because deriving it per candidate compares scores computed with different weight sets.
+ */
+function applyReply(
+  state: GameState,
+  me: PlayerId,
+  asRole: Role | undefined,
+  inner: Evaluator,
+  policy: ReplyPolicy,
+  budget: { left: number },
+  alpha: number,
+): GameState {
+  if (policy === 'null') return state
+  const foe = opponentOf(me)
+  if (state.winner !== null || state.phase !== 'action' || state.activePlayer !== foe) return state
+
+  const moves = legalMoves(state)
+  if (moves.length === 0) return state
+
+  const foeRole = policy === 'selfish' ? role(state, foe) : undefined
+  const minimising = policy === 'pessimistic'
+  let chosen: GameState | null = null
+  let best = minimising ? Infinity : -Infinity
+
+  for (const move of moves) {
+    if (budget.left <= 0) break
+    budget.left--
+    const next = resolveChain(resolve(state, move), me, asRole, inner, budget)
+    const score = minimising ? inner(next, me, asRole) : inner(next, foe, foeRole)
+    if (minimising ? score < best : score > best) {
+      best = score
+      chosen = next
+    }
+    // Alpha cut. The margin of 1 is not caution, it is arithmetic: the caller scores this board with
+    // `valueAt`, which discounts a DECIDED board by the depth (1 here), so `best` and the value the
+    // caller computes can differ by exactly 1. Cutting a point early keeps the pruning provably
+    // answer-preserving rather than nearly so.
+    if (minimising && best <= alpha - 1) break
+  }
+  return chosen ?? state
 }
 
 /** Hand the turn back to us by passing for the OPPONENT, or `null` if that ends the sequence. */
@@ -270,6 +351,7 @@ function reachableFrom(
   inner: Evaluator,
   limits: BeamLimits,
   budget: { left: number },
+  alpha: number,
 ): Reach {
   if (budget.left <= 0) {
     const board = resolve(state, move)
@@ -277,8 +359,12 @@ function reachableFrom(
   }
   budget.left--
 
-  // Beam nodes are always settled boards, so depth counts actions rather than choice answers.
-  const root = resolveChain(resolve(state, move), me, asRole, inner, budget)
+  // Beam nodes are always settled boards, so depth counts actions rather than choice answers. Under a
+  // reply policy the board scored is the one AFTER their answer, which is the whole of two-ply.
+  const settled = resolveChain(resolve(state, move), me, asRole, inner, budget)
+  // See `alphaBeta`: the cut is only a valid bound for pessimistic play at depth 1.
+  const prunable = limits.alphaBeta !== false && limits.depth === 1 && limits.reply === 'pessimistic'
+  const root = applyReply(settled, me, asRole, inner, limits.reply, budget, prunable ? alpha : -Infinity)
   let best = valueAt(root, me, asRole, inner, 1)
   let won = root.winner === me
   let frontier: GameState[] = [root]
@@ -297,7 +383,10 @@ function reachableFrom(
         if (next.type === 'pass') continue
         if (budget.left <= 0) break
         budget.left--
-        const board = resolveChain(resolve(ours, next), me, asRole, inner, budget)
+        const played = resolveChain(resolve(ours, next), me, asRole, inner, budget)
+        // No alpha here: below the root a branch's value is the MAX over its leaves, so a poor reply
+        // at this node says nothing about what the branch can still reach.
+        const board = applyReply(played, me, asRole, inner, limits.reply, budget, -Infinity)
         const value = valueAt(board, me, asRole, inner, d + 1)
         if (value > best) best = value
         if (board.winner === me) won = true
@@ -338,7 +427,8 @@ export function beamReachesWin(
   const asRole = role(ours, me)
   for (const move of legalMoves(ours)) {
     if (move.type === 'pass') continue
-    if (reachableFrom(ours, move, me, asRole, inner, limits, budget).won) return true
+    // Asking whether a win EXISTS, so nothing may be pruned on value.
+    if (reachableFrom(ours, move, me, asRole, inner, limits, budget, -Infinity).won) return true
   }
   return false
 }

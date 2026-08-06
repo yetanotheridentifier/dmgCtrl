@@ -1,6 +1,6 @@
 import type { Ai } from './types'
 import { randomAi } from './randomAi'
-import { greedyAi, greedyBaselineAi, greedyFlatAi, beamAi, lethalBeamAi, makeBeamGreedy, makeLethalBeam } from './greedyAi'
+import { greedyAi, greedyBaselineAi, greedyFlatAi, beamAi, beamReplyAi, lethalBeamAi, makeBeamGreedy, makeLethalBeam } from './greedyAi'
 import { DEFAULT_BEAM_LIMITS } from './search'
 import { DEFAULT_LETHAL_LIMITS } from './lethal'
 import { DEFAULT_WEIGHTS } from './evaluate'
@@ -23,6 +23,17 @@ export const AIS: Record<string, Ai> = {
   // `greedy` isolates the search. Optimistic by construction (it assumes the opponent does nothing),
   // which is why it is measured alongside a pessimistic policy rather than on its own.
   beam: beamAi,
+  /**
+   * The beam with the opponent's minimising reply at every level: width 4, depth 3, `pessimistic`.
+   * **The deployed model.**
+   *
+   * Beats plain `beam` by **17 points** (67.4% over three seeds and 2580 games) at 142.6 ms a
+   * decision. The two ingredients compose far better than either alone: depth without a reply is
+   * worth +10 against `greedy`, and depth ON TOP of a reply is worth +12.9 against `beam`. With a
+   * reply at every level the search is proper minimax, so depth compounds instead of building lines
+   * that only work if the opponent cooperates.
+   */
+  'beam-reply': beamReplyAi,
   /**
    * The beam with a lethal override in front of it, gated to the rounds where lethal is possible.
    * Outside that slice it is exactly `beam`, which is what makes an A/B between them one feature.
@@ -54,6 +65,16 @@ export function aiNames(): string[] {
 const BEAM_SPEC = /^beam:(\d+)x(\d+)(?::(\d+))?$/
 
 /**
+ * `reply:POLICY` or `reply:POLICY:WIDTHxDEPTH`, for the opponent-reply policies (#425).
+ *
+ * `reply:pessimistic` on its own is **two-ply**: one of our moves, their best answer, then score.
+ * That is this ticket standalone, and the form the A/B against `beam` uses. Adding a width and depth
+ * combines it with the own-turn beam, which is #447's question rather than this one's, so the
+ * combination is addressable but deliberately not a shipped name.
+ */
+const REPLY_SPEC = /^reply:(pessimistic|selfish)(?::(\d+)x(\d+))?$/
+
+/**
  * `beam-lethal:WIDTHxBEAMDEPTH:SOLVERDEPTH`, so a run can address the beam and the lethal override
  * independently. They are swept separately on purpose: the beam pays its cost on every decision while
  * the gated solver pays only where lethal is arithmetically possible, so the right depth for one is
@@ -74,11 +95,22 @@ export function resolveAi(name: string): Ai {
     }
     return makeLethalBeam(
       DEFAULT_WEIGHTS,
-      { width, depth: beamDepth, nodes: DEFAULT_BEAM_LIMITS.nodes },
+      { width, depth: beamDepth, nodes: DEFAULT_BEAM_LIMITS.nodes, reply: DEFAULT_BEAM_LIMITS.reply },
       // Scaled with depth, so the rail does not silently become the real depth. A flat budget made
       // the solver look four times cheaper than it is, and the #410 screen call depth 4 worse than 3.
       { depth: solverDepth, nodes: Math.max(DEFAULT_LETHAL_LIMITS.nodes, solverDepth * 4000) },
     )
+  }
+
+  const reply = REPLY_SPEC.exec(name)
+  if (reply) {
+    const policy = reply[1] as 'pessimistic' | 'selfish'
+    // Depth 1 is two-ply: our move, their answer, score. Width is irrelevant there (the beam's trim
+    // is never reached), which is why the bare form takes neither.
+    const width = reply[2] === undefined ? DEFAULT_BEAM_LIMITS.width : Number(reply[2])
+    const depth = reply[3] === undefined ? 1 : Number(reply[3])
+    if (width < 1 || depth < 1) throw new Error(`Reply AI "${name}" needs width and depth of at least 1`)
+    return makeBeamGreedy(DEFAULT_WEIGHTS, { width, depth, nodes: DEFAULT_BEAM_LIMITS.nodes, reply: policy })
   }
 
   const spec = BEAM_SPEC.exec(name)
@@ -91,7 +123,7 @@ export function resolveAi(name: string): Ai {
     if (width < 1 || depth < 1 || nodes < 1) {
       throw new Error(`Beam "${name}" needs width, depth and nodes of at least 1`)
     }
-    return makeBeamGreedy(DEFAULT_WEIGHTS, { width, depth, nodes })
+    return makeBeamGreedy(DEFAULT_WEIGHTS, { width, depth, nodes, reply: DEFAULT_BEAM_LIMITS.reply })
   }
 
   throw new Error(`Unknown AI "${name}". Available: ${aiNames().join(', ')}, or beam:WIDTHxDEPTH[:NODES]`)

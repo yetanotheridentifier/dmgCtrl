@@ -241,11 +241,29 @@ export interface ExposureStat {
   lostWithoutAvoidable: number
 }
 
+/**
+ * Deploying the leader into a board that answers it (#397, re-homed to #425).
+ *
+ * #425 claims to **subsume** #397's direct-pinning half: "do not deploy into a board that kills it"
+ * is exactly what a reply policy computes, so a hand-coded power-versus-HP term would duplicate the
+ * search and then need keeping consistent with it. That claim rests on this rate falling, so without
+ * the readout #397 would be closed on an argument rather than evidence.
+ *
+ * A leader is a large investment and re-deploying costs the epic action, so losing one immediately is
+ * among the most expensive mistakes available.
+ */
+export interface LeaderStat {
+  deploys: number
+  /** Deployed leaders defeated before the end of the round after the one they arrived in. */
+  diedSoon: number
+}
+
 export interface DecisionReport {
   commitId: string
   ai: string
   games: number
   stats: DecisionStat[]
+  leader: LeaderStat
   resourcing: ResourcingStat
   initiative: InitiativeStat
   role: RoleStat
@@ -313,6 +331,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   const lethalByRound = new Map<number, { decisions: number; ours: number; theirs: number }>()
   let oursOneAction = 0
   let theirsOneAction = 0
+  const leader: LeaderStat = { deploys: 0, diedSoon: 0 }
   const exposure = {
     decisions: 0, exposed: 0, avoidable: 0, unavoidable: 0, games: 0, losses: 0,
     gamesWithAvoidable: 0, lostAfterAvoidable: 0, gamesWithoutAvoidable: 0, lostWithoutAvoidable: 0,
@@ -329,6 +348,13 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       let sampledRound = 0
       // Per seat, so an exposure can be charged to whoever made it when the game is decided.
       const avoidableBy: Record<PlayerId, boolean> = { player: false, opponent: false }
+      /**
+       * Leaders inside their "did it survive arriving" window. **Per game.** Declared alongside the
+       * other accumulators once, and a watch left open when a game ended carried into the next one,
+       * where its instance id no longer existed and was counted as a death. That read 72% against a
+       * known baseline of 2.5%, which is the only reason it was caught.
+       */
+      const watching: Array<{ seat: PlayerId; instanceId: string; until: number }> = []
 
       for (let i = 0; i < ceiling && s.winner === null; i++) {
         const moves = legalMoves(s)
@@ -459,6 +485,23 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           else { forfeitedCount++; forfeited += s.players[me].units.filter(u => !u.exhausted).length }
         }
         s = resolve(s, action)
+
+        // A deployed leader is a large investment, and re-deploying costs the epic action, so losing
+        // one straight away is among the most expensive mistakes available. Watch each one until the
+        // end of the round AFTER it arrived, which is the window a reply policy should protect.
+        if (action.type === 'deployLeader') {
+          const arrived = s.players[me].units.find(u => u.isLeader)
+          if (arrived) {
+            leader.deploys++
+            watching.push({ seat: me, instanceId: arrived.instanceId, until: s.round + 1 })
+          }
+        }
+        for (let w = watching.length - 1; w >= 0; w--) {
+          const watch = watching[w]
+          const alive = s.players[watch.seat].units.some(u => u.instanceId === watch.instanceId)
+          if (!alive) { leader.diedSoon++; watching.splice(w, 1) }
+          else if (s.round > watch.until) watching.splice(w, 1) // survived the window
+        }
       }
 
       // Charge each seat's avoidable exposures against whether that seat actually lost. A gate can
@@ -496,6 +539,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       stat('which card to play', plays),
       stat('answering a choice', answering),
     ],
+    leader,
     resourcing: {
       banked,
       skipped,

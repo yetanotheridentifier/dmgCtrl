@@ -91,6 +91,14 @@ export function makeBeamGreedy(weights: EvalWeights, limits?: BeamLimits): Ai {
 export const beamAi = makeBeamGreedy(DEFAULT_WEIGHTS)
 
 /**
+ * The shipped model: the beam with the opponent's minimising reply at every level (#425).
+ *
+ * Same weights, same width and depth as `beam`, differing only in what the opponent is assumed to do
+ * between our actions. That is the whole change, and it is worth **17 points**.
+ */
+export const beamReplyAi = makeBeamGreedy(DEFAULT_WEIGHTS, { ...DEFAULT_BEAM_LIMITS, reply: 'pessimistic' })
+
+/**
  * The beam with a lethal override in front of it (#433).
  *
  * The beam finds most wins already: measured over 36,384 decisions it misses a line in 0.31% of
