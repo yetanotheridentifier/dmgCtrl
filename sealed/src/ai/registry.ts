@@ -1,6 +1,9 @@
 import type { Ai } from './types'
 import { randomAi } from './randomAi'
-import { greedyAi, greedyBaselineAi, greedyFlatAi, beamAi, beamReplyAi, lethalBeamAi, makeBeamGreedy, makeLethalBeam } from './greedyAi'
+import {
+  greedyAi, greedyBaselineAi, greedyFlatAi, beamAi, beamReplyAi, beamReplySharedAi, lethalBeamAi,
+  makeBeamGreedy, makeLethalBeam,
+} from './greedyAi'
 import { DEFAULT_BEAM_LIMITS } from './search'
 import { DEFAULT_LETHAL_LIMITS } from './lethal'
 import { DEFAULT_WEIGHTS } from './evaluate'
@@ -34,6 +37,14 @@ export const AIS: Record<string, Ai> = {
    * that only work if the opponent cooperates.
    */
   'beam-reply': beamReplyAi,
+  /**
+   * `beam-reply` with the per-chain allowance removed: one shared pool, as before #488. The control
+   * for that change and nothing else, in the same spirit as `greedy-flat`.
+   *
+   * Without the cap, chain resolution takes 71.5% of the budget and the lookahead gets 376 nodes; with
+   * it, 59.2% and 493. Exhaustion falls from 8.5% to 6.0% of decisions and the move changes on 2.0%.
+   */
+  'beam-reply-shared': beamReplySharedAi,
   /**
    * The beam with a lethal override in front of it, gated to the rounds where lethal is possible.
    * Outside that slice it is exactly `beam`, which is what makes an A/B between them one feature.

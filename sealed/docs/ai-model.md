@@ -60,13 +60,34 @@ Two properties worth keeping:
   target, so the cap is a safety rail against the card pool, not a tuning knob. Exhausting it scores
   the board where it stopped, degrading to the old answer rather than a wrong one.
 
-The search shares that one budget between resolving owed chains and expanding the beam, and **the
-chain takes nearly all of it**. Over 200 real decisions `beam` spends 510 of its 638 nodes on chains
-and 128 on lookahead; raising the rail twentyfold moves the chain's share to 6885 and the beam's to
-135. So a raised budget costs about ten times as much per decision and buys no extra search. The rail
-itself fires on **4.0%** of decisions for `beam` and **8.5%** for the shipped `beam-reply`, and where
-it fires it starves the lookahead rather than trimming it. `--budget` reports all of this; do not
-infer it from a wall clock, which reads the heavy tail as if it were the common case.
+The search shares that one budget between resolving owed chains and expanding the beam, and the chain
+will take nearly all of it if allowed to. Raising the rail twentyfold moves the beam's own spend from
+128 nodes to 135 while the chain's goes from 510 to 6885, so a bigger budget costs about ten times as
+much per decision and buys no extra search. `--budget` reports this; do not infer it from a wall
+clock, which reads the heavy tail as if it were the common case.
+
+**So no single chain may take more than `chainNodes` of the pool**, defaulting to the 256 that
+one-ply quiescence has always given each candidate. This is the discipline the beam lost by taking a
+raw evaluator rather than a new parameter: `greedy` hands every candidate a fresh budget, so a runaway
+`support` fan-out costs 256 and the next candidate starts clean.
+
+The cap does not raise the ceiling, so worst-case work per decision is unchanged and what a chain is
+not allowed to take stays available to the search. Measured over 200 decisions for `beam-reply`:
+
+| | shared pool | per-chain cap |
+| --- | --- | --- |
+| budget exhausted | 8.5% | **6.0%** |
+| chain nodes | 943 | 715 |
+| beam nodes | 376 | **493** |
+| chain share | 71.5% | **59.2%** |
+| cost vs `greedy` | 67x | **66x** |
+
+A typical chain costs about 2.5 nodes, so the cap sits ~100x above normal play and bites only on a
+fan-out that was going to run away. It changes the chosen move on **2.0%** of decisions.
+
+It is a trade rather than a free win: a chain capped at 256 may pick a worse answer than one allowed
+thousands, so beam completeness is bought with chain thoroughness. `beam-reply-shared` in the registry
+is the control that measures it.
 
 `greedy-flat` in the registry is the same AI without this, kept so the comparison can be re-run as
 the evaluation changes underneath it.

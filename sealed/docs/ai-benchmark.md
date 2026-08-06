@@ -69,6 +69,9 @@ Everything is optional:
     weights and same chain handling as `greedy`, so `beam` against `greedy` isolates the search.
   - `beam-reply` rung 3, the same beam with the opponent's minimising reply at every level.
     **The deployed model**, and it beats `beam` 67.4% over three seeds.
+  - `beam-reply-shared` the deployed model with the per-chain allowance removed, so one shared pool
+    serves both chain resolution and the beam. The control for that change and nothing else, in the
+    same spirit as `greedy-flat`, and it tracks every other change rather than being a snapshot.
   - `beam:WIDTHxDEPTH` or `beam:WIDTHxDEPTH:NODES` any other cell, so a sweep addresses the space
     without a registry entry per cell. The node form exists for one control: the budget is a safety
     rail, and a rail that fires has quietly become the real width and depth.
@@ -147,6 +150,38 @@ decision and throws the estimate out by two.
 
 Measured over 200 states: `greedy` 1.9 ms, `beam` 61 ms (33x), `beam-reply` 130 ms (70x),
 `reply:pessimistic:4x4:200000` **1495 ms (802x)**.
+
+### Long runs: `--shard`
+
+```bash
+npm run bench --prefix sealed -- --shard 12 --games 800 --seed 4880 beam-reply beam-reply-shared
+```
+
+The bench is single-threaded and the machine has 16 cores, so a run that would take 58 or 416
+core-hours takes a twelfth of that in wall clock. This is why the AI work needs no cloud compute: the
+experiments were never large, only serial.
+
+Shards split by **seed**, not by dividing one seed's games. Every shard is therefore a valid
+standalone run, exactly like the existing three-seed results, and the per-shard column is worth
+reading: a finding that holds across independent seeds is far stronger than one long run, and a shard
+disagreeing with the rest is a signal rather than something to average away.
+
+**Pooling sums the games; it never averages the rates.** An unweighted mean is correct only when every
+shard completed the same number of games, and shards drop games, so the mean would silently
+over-weight whichever shard lost the most. Summing is also the only way to get one interval over the
+whole run instead of a mean of twelve wide ones.
+
+Two mechanical points behind it, both of which broke the first time:
+
+- **Children run `tsx src/bench/main.ts` directly, not `npm run bench`.** The npm script regenerates
+  `src/buildIdentity.ts` first, and a dozen processes rewriting one module while others import it is
+  a race that eventually reads a half-written file.
+- **The database had to be made safe for concurrent writers.** With the defaults, twelve concurrent
+  three-game runs lost **six of them** to `SQLITE_BUSY` at the final save, after the games had been
+  played. See "Where results go" below.
+
+Shards run under `nice`, so interactive work keeps priority. Expect the test suite to be slow while a
+run is going, and treat a timeout-only failure then as contention rather than a regression.
 
 ### Is the node rail firing? `--budget`
 
@@ -732,6 +767,21 @@ sqlite3 sealed/bench-results/bench.db \
    FROM runs ORDER BY started_at DESC LIMIT 10;"
 ```
 
+### Safe for concurrent shards
+
+A sharded run has every process writing here within moments of the others, and the SQLite defaults
+lose most of them. Twelve concurrent three-game runs produced **six `SQLITE_BUSY` failures** at the
+final save, discarding runs whose games had already been played. Three settings prevent it:
+
+- **`busy_timeout` of 30 seconds.** Without it a writer that finds the database locked fails on the
+  spot rather than waiting for a write that takes milliseconds.
+- **WAL journalling**, so a reader is not blocked by the writer and the exclusive window is short.
+  Not applied to `:memory:`, which the test suite uses and which has no journal file.
+- **One transaction per report.** A run is a row plus up to a thousand game rows; inserting them
+  separately took and released the lock a thousand times, the widest possible collision window. It is
+  also atomicity: a failure part way through used to leave a run row carrying only some of its games,
+  which reads exactly like a complete run of fewer games.
+
 ### Data model
 
 Two tables, joined on `run_id`.
@@ -779,6 +829,7 @@ in `src/ai/` and is described in [ai-model.md](ai-model.md).
 - `bench/cost.ts` per-decision timing over one identical corpus, behind `--cost`.
 - `bench/budget.ts` node-rail exhaustion and the chain/beam split, behind `--budget`. Shares
   `cost.ts`'s corpus, so the two modes describe the same positions.
+- `bench/shard.ts` running one A/B as N processes over N seeds and pooling them, behind `--shard`.
 - `bench/aiMatchups.ts` AI-vs-AI across every ordered deck pair, behind `--matchups`.
 - `bench/decks.ts` the fixed sealed deck, built deterministically from the ASH snapshot. For now the
   same deck plays both sides (a mirror), which removes deck strength as a variable. The runner already
