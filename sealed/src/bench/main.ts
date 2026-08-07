@@ -9,6 +9,7 @@ import { runTerms } from './terms'
 import type { TermReport } from './terms'
 import { runCost } from './cost'
 import { runBudget, type BudgetReport } from './budget'
+import { runShards, poolShards } from './shard'
 import type { CostReport } from './cost'
 import { runLethal } from './lethal'
 import type { LethalReport } from './lethal'
@@ -58,6 +59,8 @@ interface Args {
   /** Solver depth for `--lethal`. Undefined means the shipped default. */
   depth?: number
   matchups: boolean
+  /** Run the head-to-head as N parallel single-threaded processes over N seeds, and pool them. */
+  shards?: number
   triage: boolean
   /** Set codes for `--triage`, taken from the positional arguments. */
   sets: string[]
@@ -89,6 +92,7 @@ function parseArgs(argv: string[]): Args {
   let lethal = false
   let depth: number | undefined
   let matchups = false
+  let shards: number | undefined
   let triage = false
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
@@ -106,6 +110,7 @@ function parseArgs(argv: string[]): Args {
     else if (arg === '--lethal') lethal = true
     else if (arg === '--depth') depth = Number(argv[++i])
     else if (arg === '--matchups') matchups = true
+    else if (arg === '--shard') shards = Number(argv[++i])
     else if (arg === '--triage') triage = true
     else if (arg.startsWith('--')) throw new Error(`Unknown flag: ${arg}`)
     else positional.push(arg)
@@ -114,7 +119,8 @@ function parseArgs(argv: string[]): Args {
   if (!seeds.every(Number.isFinite) || seeds.length === 0) throw new Error('--seed must be a number, or a comma-separated list of numbers')
   if (depth !== undefined && (!Number.isFinite(depth) || depth < 1)) throw new Error('--depth must be a positive integer')
   if (triage && positional.length === 0) throw new Error('--triage needs at least one set code, e.g. --triage LAW SEC')
-  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, matchups, triage, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  if (shards !== undefined && (!Number.isFinite(shards) || shards < 1)) throw new Error('--shard must be a positive integer')
+  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, matchups, shards, triage, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
@@ -565,6 +571,49 @@ function runBudgetMode(args: Args): void {
   console.log(lines.join('\n'))
 }
 
+/**
+ * The head-to-head as N parallel processes over N seeds, pooled (#447, #488).
+ *
+ * Each shard is a valid standalone run, so the per-shard column is worth reading: a finding that
+ * holds across independent seeds is much stronger than one long run, and a single shard disagreeing
+ * with the rest is a signal rather than noise to be averaged away.
+ */
+async function runShardMode(args: Args): Promise<void> {
+  const shards = args.shards ?? 1
+  const start = Date.now()
+  console.log(
+    `\n${args.aiA} vs ${args.aiB}   ${shards} shards x ${args.games} games ` +
+    `= ${shards * args.games} games   seeds ${args.seed} to ${args.seed + shards - 1}\n`,
+  )
+
+  const results = await runShards({
+    shards, games: args.games, baseSeed: args.seed, aiA: args.aiA, aiB: args.aiB,
+  })
+
+  const good = results.filter(r => r.exitCode === 0 || r.completed > 0)
+  const pooled = poolShards(good)
+  const lo = Math.max(0, pooled.winRateA - pooled.winCi)
+  const hi = Math.min(1, pooled.winRateA + pooled.winCi)
+
+  const lines = ['  per shard:']
+  for (const r of results) {
+    const note = r.exitCode === 0 ? '' : `   <- exit ${r.exitCode}`
+    lines.push(`    seed ${String(r.seed).padStart(5)}  ${pct(r.winRateA).padStart(6)}  ` +
+      `${String(r.completed).padStart(5)} completed, ${r.dropped} dropped${note}`)
+  }
+  const failed = results.filter(r => r.exitCode !== 0)
+  lines.push(
+    '',
+    row(`pooled win rate (${args.aiA})`, `${pct(pooled.winRateA)}  ± ${pct(pooled.winCi)}   (${pct(lo)} – ${pct(hi)})`),
+    row('games pooled', `${pooled.wins} wins of ${pooled.completed}`),
+    row('shards failed', `${failed.length} of ${results.length}`),
+    row('wall clock', `${((Date.now() - start) / 1000).toFixed(1)}s`),
+    '',
+  )
+  console.log(lines.join('\n'))
+  if (failed.length > 0) process.exit(1)
+}
+
 function runMatchupsMode(args: Args): void {
   const aiA = args.aiExplicit ? args.aiA : 'greedy'
   const aiB = args.aiExplicit && args.aiB !== 'random' ? args.aiB : 'greedy-baseline'
@@ -693,6 +742,7 @@ function main(): void {
   if (args.budget) { runBudgetMode(args); return }
   if (args.lethal) { runLethalMode(args); return }
   if (args.matchups) { runMatchupsMode(args); return }
+  if (args.shards !== undefined) { void runShardMode(args); return }
 
   let report: BenchReport
   const start = Date.now()

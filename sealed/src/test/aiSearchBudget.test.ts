@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { makeBeamAi, resolveChain, searchBudget, lastSearchTrace, DEFAULT_BEAM_LIMITS } from '../ai/search'
+import {
+  makeBeamAi, resolveChain, searchBudget, lastSearchTrace,
+  DEFAULT_BEAM_LIMITS, DEFAULT_QUIESCENCE_LIMITS,
+} from '../ai/search'
 import { evaluate } from '../ai/evaluate'
 import { state, player, card, unit, ready, CARDS } from './helpers/engineFixtures'
 import type { GameState, PendingChoice } from '../engine/types'
@@ -22,6 +25,9 @@ const cards = {
   ...CARDS,
   BIG: card({ id: 'BIG', type: 'unit', arena: 'ground', cost: 2, power: 5, hp: 5 }),
   SMALL: card({ id: 'SMALL', type: 'unit', arena: 'ground', cost: 2, power: 1, hp: 1 }),
+  // Playing a second copy raises a mandatory defeat choice, which is a chain the beam CREATES rather
+  // than one it is handed at the root.
+  UNIQ: card({ id: 'UNIQ', type: 'unit', arena: 'ground', cost: 1, power: 2, hp: 2, unique: true }),
 }
 
 /** Enough of a board that the beam has real work to do, rather than two legal moves. */
@@ -72,6 +78,96 @@ describe('search budget accounting', () => {
     expect(resolveChain(s, 'player', undefined, evaluate, budget)).toBe(s)
     expect(budget.chain).toBe(0)
     expect(budget.left).toBe(256)
+  })
+})
+
+/**
+ * The per-chain allowance (#488).
+ *
+ * `greedy` already had this right and the beam dropped it. `makeQuiescent` gives EVERY candidate its
+ * own fresh 256-node budget, so one runaway chain costs 256 and the next candidate starts clean.
+ * `makeBeamGreedy` passes a raw evaluator instead, so every chain in the decision draws on one pool
+ * and the pool is gone by the time the lookahead wants it: 943 of 1318 nodes go on chains, and the
+ * beam gets 376.
+ *
+ * The cap restores greedy's discipline **without raising the ceiling**. The pool stays at its old
+ * size, so a decision can do no more work than before; a single chain simply cannot take all of it.
+ * That is what makes this cost-neutral by construction rather than a trade of cost for correctness.
+ *
+ * The trade it IS making: a chain capped at 256 may pick a worse answer than one allowed thousands.
+ * Beam completeness is being bought with chain thoroughness, which is why it needs an A/B and can
+ * come back negative.
+ */
+describe('the per-chain allowance', () => {
+  /** Four answers, each settling immediately, so the chain's cost is exactly countable. */
+  const fourWayChoice = (): GameState => state({
+    cards,
+    players: {
+      player: player({ units: [unit('u1', 'SMALL')] }),
+      opponent: player({
+        units: [unit('e1', 'BIG'), unit('e2', 'SMALL'), unit('e3', 'BIG'), unit('e4', 'SMALL')],
+      }),
+    },
+    pendingChoices: [
+      { kind: 'selectUnitToDefeat', id: 'c', controller: 'player', targets: ['e1', 'e2', 'e3', 'e4'] } as PendingChoice,
+    ],
+  })
+
+  it('spends the whole chain when no cap is given', () => {
+    const budget = searchBudget(256)
+    resolveChain(fourWayChoice(), 'player', undefined, evaluate, budget)
+    // The exact figure is engine detail (how many answers `legalMoves` offers, and whether settling
+    // one raises another); what this pins is that an uncapped chain runs past the cap used below.
+    expect(budget.chain).toBeGreaterThan(2)
+  })
+
+  it('caps what one chain may take from the shared pool', () => {
+    const budget = searchBudget(256)
+    resolveChain(fourWayChoice(), 'player', undefined, evaluate, budget, 2)
+    expect(budget.chain).toBe(2)
+  })
+
+  /** The cap bounds one chain, not the decision: the parent still has the rest to spend elsewhere,
+   *  which is the entire point. */
+  it('leaves the rest of the pool for the beam', () => {
+    const budget = searchBudget(256)
+    resolveChain(fourWayChoice(), 'player', undefined, evaluate, budget, 2)
+    expect(budget.left).toBe(254)
+  })
+
+  /** It can never overdraw the parent, however generous the cap. */
+  it('never spends more than the pool has left', () => {
+    const budget = searchBudget(3)
+    resolveChain(fourWayChoice(), 'player', undefined, evaluate, budget, 1000)
+    expect(budget.chain).toBeLessThanOrEqual(3)
+    expect(budget.left).toBeGreaterThanOrEqual(0)
+  })
+
+  it('defaults to the same allowance one-ply quiescence already uses', () => {
+    expect(DEFAULT_BEAM_LIMITS.chainNodes).toBe(DEFAULT_QUIESCENCE_LIMITS.nodes)
+  })
+
+  /** Parsing a cap is not enough: it has to reach `resolveChain` from the beam's limits, or the
+   *  shipped bot keeps the shared pool under a new name. */
+  it('is threaded from the beam limits into the chains it drives', () => {
+    // Playing a second copy of a unique raises a MANDATORY defeat choice, so this is a chain a beam
+    // candidate creates rather than one handed to it.
+    const duplicateUnique = (): GameState => state({
+      cards,
+      players: {
+        player: player({ hand: ['UNIQ'], resources: ready(4), units: [unit('u1', 'UNIQ'), unit('u2', 'BIG')] }),
+        opponent: player({ units: [unit('e1', 'BIG')] }),
+      },
+    })
+
+    const limits = { ...DEFAULT_BEAM_LIMITS, nodes: 1_000_000 }
+    makeBeamAi(evaluate, { ...limits, chainNodes: 1 })(duplicateUnique())
+    const capped = lastSearchTrace()!.chain
+
+    makeBeamAi(evaluate, { ...limits, chainNodes: 1_000 })(duplicateUnique())
+    const uncapped = lastSearchTrace()!.chain
+
+    expect(capped).toBeLessThan(uncapped)
   })
 })
 

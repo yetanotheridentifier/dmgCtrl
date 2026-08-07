@@ -105,6 +105,16 @@ describe('AI registry', () => {
     expect(() => resolveAi('reply:pessimistic:0x3:1000')).toThrow()
   })
 
+  /**
+   * The control for #488, registered rather than built for a run. A frozen snapshot would drift from
+   * the shipped bot and end up measuring two differences at once, which is the mistake `greedy-flat`
+   * was created to avoid.
+   */
+  it('offers the shared-pool control, differing from the shipped bot in one thing', () => {
+    expect(aiNames()).toContain('beam-reply-shared')
+    expect(resolveAi('beam-reply-shared')).not.toBe(resolveAi('beam-reply'))
+  })
+
   it('rejects an unknown name with a message that lists the valid ones', () => {
     let message = ''
     try {

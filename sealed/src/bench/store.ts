@@ -109,19 +109,59 @@ export interface GameRow {
   dropReason: string | null
 }
 
+/**
+ * How long a writer waits for a busy database before giving up.
+ *
+ * A long A/B is run as N single-threaded processes over N seeds and pooled, so every shard writes
+ * here within moments of the others finishing. On the defaults that loses half of them: twelve
+ * concurrent runs produced six `SQLITE_BUSY` failures, each one discarding a completed run at the
+ * final step. A write takes milliseconds, so waiting is always the right answer; 30 seconds is far
+ * beyond any real contention and still bounded.
+ */
+const BUSY_TIMEOUT_MS = 30_000
+
 /** Open (creating if absent) the database at `path`, ensuring the schema exists. */
 export function openDb(path: string): DatabaseSync {
-  if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true })
+  const inMemory = path === ':memory:'
+  if (!inMemory) mkdirSync(dirname(path), { recursive: true })
   const db = new DatabaseSync(path)
+  db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`)
+  // WAL is a property of the database file, so it neither applies to nor is accepted by `:memory:`,
+  // which the whole test suite uses. It lets readers carry on during a write and shortens the
+  // exclusive window, which is what makes concurrent shards practical.
+  if (!inMemory) db.exec('PRAGMA journal_mode = WAL')
   db.exec(SCHEMA)
   return db
 }
 
-/** Persist one report as a run row plus its game rows. Returns the generated run id. */
+/**
+ * Persist one report as a run row plus its game rows. Returns the generated run id.
+ *
+ * **One transaction**, for two independent reasons. A run is a row plus up to a thousand game rows,
+ * and inserting them separately takes and releases the write lock a thousand times, which is the
+ * widest possible window for a concurrent shard to collide with. It is also atomicity: a failure part
+ * way through used to leave a run row carrying only some of its games, which reads exactly like a
+ * complete run of fewer games and would quietly corrupt any comparison drawn from it.
+ *
+ * `BEGIN IMMEDIATE` rather than a deferred begin: it takes the write lock up front, so contention is
+ * resolved by `busy_timeout` waiting here rather than by failing half way through the batch.
+ */
 export function saveReport(db: DatabaseSync, report: BenchReport): string {
   const startedAt = new Date().toISOString()
   const runId = `${startedAt}-${randomUUID().slice(0, 8)}`
 
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    writeReport(db, runId, startedAt, report)
+    db.exec('COMMIT')
+  } catch (err) {
+    db.exec('ROLLBACK')
+    throw err
+  }
+  return runId
+}
+
+function writeReport(db: DatabaseSync, runId: string, startedAt: string, report: BenchReport): void {
   db.prepare(
     `INSERT INTO runs (run_id, started_at, build_tag, ai_a, ai_b, seed, games_requested, completed,
       dropped, provisional, win_rate_a, win_ci, draw_rate, avg_margin, avg_rounds, moves_per_sec)
@@ -143,8 +183,6 @@ export function saveReport(db: DatabaseSync, report: BenchReport): string {
       g.baseDamage.player, g.baseDamage.opponent, g.margin, g.status, g.dropReason,
     )
   })
-
-  return runId
 }
 
 const num = (v: unknown): number => Number(v)
