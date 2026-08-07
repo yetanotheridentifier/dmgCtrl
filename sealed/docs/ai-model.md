@@ -165,6 +165,11 @@ mostly is not. Cost moves even less: 108, 110 and 115 ms a decision at widths 2,
 eightfold width rise buys only +53% beam spend (322 to 492 nodes). The frontier is usually smaller
 than the cap, so the cap is not what bounds the search.
 
+**Measured, and the axis is closed. Width 8 scores 49.5% ± 1.1% against width 4** over 8400 games and
+12 seeds, no games dropped, with six shards either side of 50%. Widening does not help. Narrowing is
+not worth testing either: width 2 costs 108 ms against width 4's 110, so even an exactly equal result
+would save 2% of compute. **Width 4 stands, and neither direction needs re-running.**
+
 **Read a disagreement rate off a deep corpus or not at all.** The same measurement over 200 states
 reported 0.5% for width 8 rather than 2.7%, understating every rate about fivefold, because a corpus
 is filled game by game and a short one is nothing but openings where few units are in play and the

@@ -148,29 +148,46 @@ bot.
    side (derived from #410's 840 games in 5055s at known per-decision costs), so an A/B costs
    `games × 96 × (costA + costB)`. To ±1%, roughly 9600 games:
 
-   Sizing is now **anchored on a real sharded run** rather than on core-hours, because core-hours
-   mislead here: `nproc` reports 16 but the machine is **8 physical cores with hyperthreading**, and
-   12 shards on 8 cores run at roughly two thirds speed each. A predicted 5.4 hours took **8.8**.
+   **Width is settled and closed** (see the width and depth section above): 49.5% +/- 1.1% over 8400
+   games, six shards either side of 50%. Depth is what remains.
 
-   The anchor: **9600 games of a 0.252 s-per-decision matchup took 8.8 wall hours at 12 shards.**
-   Scale by the combined per-decision cost of whatever is being compared.
+   ### Sizing a long run
 
-   **Memory now binds as well as cores, which it did not used to.** A `beam-reply` shard is about
-   **365 MB** resident, not the ~53 MB a `greedy` one took, so twelve shards is ~4.4 GB of 7.8 GB and
-   the machine sits at roughly 600 MB free and lightly into swap. It is stable there, but the headroom
-   is gone. **Measure per-worker RSS on a short run before committing a long one at a new
-   configuration**, and drop the shard count if it is above ~500 MB. Depth 4 holds a deeper frontier
-   per root and should be expected to want more. A shard killed by the OOM killer forty hours into a
-   fifty-six hour run is an expensive way to discover this.
+   **Never from per-decision costs, and never from core-hours.** Both understate, and they do so
+   independently:
 
-   | experiment | combined cost/decision | wall hours to ±1% |
+   - `nproc` reports 16, but the machine is **8 physical cores with hyperthreading**. Core-hour
+     arithmetic put one run at 5.4 hours and it took 8.8.
+   - **`--cost` understates real in-game cost by about 1.66x**, even at 200 corpus states. The corpus
+     is filled game by game, so it under-samples the late, busy boards where a search is most
+     expensive. This is the same trap that reports 5.8 ms at 30 states for a search costing 142.6 ms,
+     still biting at 200.
+   - **It understates RATIOS as well as absolutes.** Width 8 measured 5% dearer than width 4 on the
+     corpus and ran **14.6%** dearer over real games, because width only binds when the frontier is
+     large, which happens late. Expect depth to be understated by at least as much.
+
+   So scale from a **measured run of similar shape**. Two anchors now exist, both at 12 shards:
+
+   | measured run | games | per game |
    | --- | --- | --- |
-   | width 8 vs width 4 | 0.225 s | **~8** |
-   | depth 4 vs depth 3 | 1.621 s | **~56** |
+   | `beam-reply` vs `beam-reply-shared` | 9600 | 39.6 s |
+   | `reply:pessimistic:8x3` vs `beam-reply` | 8400 | 44.6 s |
 
-   Width is an overnight run. Depth is two and a half days, or 14 hours if ±2% will do, which is
-   marginal against an effect that looked like +2 points. Still local work; still not worth building
-   cloud infrastructure for.
+   On that basis **depth 4 to +/-1% is 65 to 75 wall hours**, not the ~56 the per-decision arithmetic
+   gave. Three days rather than two and a half, and the upper end assumes the ratio is understated as
+   much as width's was.
+
+   ### Memory binds; cores do not
+
+   A `beam-reply` shard holds about **365 MB** resident, growing slowly with runtime (~12 MB over two
+   hours). Twelve shards is ~4.4 GB of 7.8 GB, leaving ~400 MB free and lightly into swap. Meanwhile
+   `vmstat` shows **22% idle CPU** with `wa` and `st` both zero: there is core headroom we cannot use,
+   because memory runs out first.
+
+   **Measure per-worker RSS on a short run before committing a long one at a new configuration**, and
+   reduce the shard count above ~500 MB a worker. Depth 4 holds a deeper frontier per root and should
+   want more. A shard killed by the OOM killer forty hours into a seventy-hour run would surface only
+   as a pooled result quietly short of the games requested.
 2. **#487 re-tune the weights for the shipped search**, after #447 and not before. See above: the
    "re-weighting is exhausted" result measured a one-ply evaluator, and #430 identified exactly why
    several weights could not matter there. This is the largest unexamined lever, and it is expensive,
@@ -347,6 +364,12 @@ Rules learned the hard way.
 Recorded so nobody spends an evening re-deriving a null result. All measured against the identical
 AI with the change switched off, across the coverage decks.
 
+- **A wider beam.** Width 8 alongside a pessimistic reply measured **49.5% ± 1.1%** against the
+  shipped width 4 over 8400 games and 12 seeds, six shards either side of 50%. Predicted as a null
+  beforehand, from the move-disagreement curve: width 8 changes only 2.7% of decisions, and narrowing
+  changes more than widening (3.4% at width 2, 6.0% at width 1), which puts width 4 at diminishing
+  returns. **Narrowing is not worth testing either**, since width 2 costs 108 ms against width 4's
+  110: even an exactly equal result would save 2% of compute. The axis is closed in both directions.
 - **Concave resource pool.** Valuing surplus resources below the `card` weight made the bot skip
   12.5% of regroups, all at a pool of exactly the knee. It measured **49.7% ± 1.9%** over 5040 games,
   and worse as the knee lowered (46.1% at 6, 45.6% at 5). The pool ships flat. Worth re-testing after

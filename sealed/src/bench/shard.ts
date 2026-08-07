@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process'
+import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { wilsonInterval } from './stats'
 
 /**
@@ -62,6 +64,42 @@ export interface ShardConfig {
   aiB: string
 }
 
+/** Where a run's per-shard results and logs live, one directory per run. */
+export const SHARD_DIR = 'bench-results/shards'
+
+/**
+ * Identify a run by what makes it that run: the two AIs, the games per shard, and the first seed.
+ *
+ * **Shard count is deliberately excluded.** Resuming an interrupted run with a different shard count
+ * is a reasonable thing to want (memory pressure is the obvious reason), and keying on it would
+ * orphan every result already on disk.
+ *
+ * AI specs carry colons, which are legal in a name and a nuisance in a path, so everything outside a
+ * conservative set is replaced rather than escaped.
+ */
+export function shardRunKey(config: ShardConfig): string {
+  const safe = (s: string): string => s.replace(/[^A-Za-z0-9._-]/g, '_')
+  return `${safe(config.aiA)}__vs__${safe(config.aiB)}__g${config.games}__s${config.baseSeed}`
+}
+
+/**
+ * Which seeds still need playing, given what is already on disk.
+ *
+ * A shard counts as done only if it exited cleanly **and played something**. An OOM kill can leave a
+ * process that exited zero having completed nothing, and treating that as finished would silently
+ * shrink the pooled total, which is the failure this whole mechanism exists to prevent.
+ *
+ * Results for seeds outside the current run are ignored rather than trusted: a longer earlier run
+ * leaves files behind, and letting them satisfy a shorter one would pool two different experiments.
+ */
+export function pendingSeeds(config: ShardConfig, done: ShardResult[]): number[] {
+  const finished = new Set(
+    done.filter(r => r.exitCode === 0 && r.completed > 0).map(r => r.seed),
+  )
+  return Array.from({ length: config.shards }, (_, i) => config.baseSeed + i)
+    .filter(seed => !finished.has(seed))
+}
+
 const WIN_RATE = /win rate \([^)]*\)\s*:\s*([\d.]+)%/
 const COMPLETED = /completed \/ dropped\s*:\s*(\d+) \/ (\d+)/
 
@@ -78,23 +116,88 @@ export function parseShardOutput(text: string, seed: number, exitCode: number): 
   }
 }
 
-/** Spawn every shard at once and resolve when all have finished. */
+/**
+ * Combine banked results with freshly run ones into the run's full set.
+ *
+ * Kept separate from `runShards` and tested directly, because getting it wrong is **silent**: a
+ * resumed run that pooled only its fresh shards would report a win rate over a fraction of the games,
+ * with a plausibly wider interval and nothing to indicate anything was missing. That is a worse
+ * failure than the crash it is recovering from.
+ *
+ * Fresh always wins over banked for the same seed, since a seed is only re-run because its banked
+ * result was unusable.
+ */
+export function mergeShardResults(
+  config: ShardConfig,
+  banked: ShardResult[],
+  fresh: ShardResult[],
+): ShardResult[] {
+  const inRun = new Set(Array.from({ length: config.shards }, (_, i) => config.baseSeed + i))
+  const bySeed = new Map<number, ShardResult>()
+  for (const r of banked) if (inRun.has(r.seed)) bySeed.set(r.seed, r)
+  for (const r of fresh) if (inRun.has(r.seed)) bySeed.set(r.seed, r)
+  return [...bySeed.values()].sort((a, b) => a.seed - b.seed)
+}
+
+/** Read whatever this run has already completed, ignoring anything unreadable. */
+export function loadShardResults(dir: string): ShardResult[] {
+  if (!existsSync(dir)) return []
+  const out: ShardResult[] = []
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith('.json')) continue
+    try {
+      out.push(JSON.parse(readFileSync(join(dir, file), 'utf8')) as ShardResult)
+    } catch {
+      // A file half-written when the machine died is not a result. Re-running its seed is correct.
+    }
+  }
+  return out
+}
+
+/**
+ * Spawn the outstanding shards and resolve when all have finished.
+ *
+ * Two things a long run cannot do without, both learned from the 8.7-hour width A/B and both aimed at
+ * the 65 to 75 hour depth run:
+ *
+ * - **Each shard's output is streamed to a file as it arrives.** Buffering it in memory until exit
+ *   meant a multi-day run gave no signal at all: no way to tell 20% done from 80%, or slow from hung.
+ * - **Each result is written the moment its shard finishes.** Losing sixty hours because shard nine
+ *   was OOM-killed is bad; losing it silently, as a pooled total quietly short of the games
+ *   requested, is worse.
+ *
+ * Re-running the identical command resumes: finished shards are skipped, failed ones repeat.
+ */
 export async function runShards(config: ShardConfig): Promise<ShardResult[]> {
-  const jobs = Array.from({ length: config.shards }, (_, i) => {
-    const seed = config.baseSeed + i
+  const dir = join(SHARD_DIR, shardRunKey(config))
+  mkdirSync(dir, { recursive: true })
+
+  const banked = loadShardResults(dir)
+  const todo = pendingSeeds(config, banked)
+
+  const jobs = todo.map(seed => {
     const args = [
       'src/bench/main.ts', '--games', String(config.games), '--seed', String(seed),
       config.aiA, config.aiB,
     ]
     return new Promise<ShardResult>(resolve => {
+      const log = createWriteStream(join(dir, `seed-${seed}.log`), { flags: 'a' })
       // `nice` so a long run yields to interactive work: the suite times out under a saturated
       // machine, and a shard that finishes an hour later costs nothing.
       const child = spawn('nice', ['-n', '10', 'npx', 'tsx', ...args], { cwd: process.cwd() })
       let out = ''
-      child.stdout.on('data', d => { out += String(d) })
-      child.stderr.on('data', d => { out += String(d) })
-      child.on('close', code => resolve(parseShardOutput(out, seed, code ?? 1)))
+      const take = (d: unknown): void => { out += String(d); log.write(String(d)) }
+      child.stdout.on('data', take)
+      child.stderr.on('data', take)
+      child.on('close', code => {
+        log.end()
+        const result = parseShardOutput(out, seed, code ?? 1)
+        // Written before resolving, so a parent that dies next still leaves this shard banked.
+        writeFileSync(join(dir, `seed-${seed}.json`), JSON.stringify(result, null, 2))
+        resolve(result)
+      })
     })
   })
-  return Promise.all(jobs)
+
+  return mergeShardResults(config, banked, await Promise.all(jobs))
 }
