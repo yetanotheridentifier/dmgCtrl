@@ -89,6 +89,12 @@ It is a trade rather than a free win: a chain capped at 256 may pick a worse ans
 thousands, so beam completeness is bought with chain thoroughness. `beam-reply-shared` in the registry
 is the control that measures it.
 
+**Measured, the trade is neutral on strength: 49.7% ± 1.0% over 9600 games** (12 seeds, no games
+dropped), so the cap is kept for the cheaper, better-bounded search rather than for a win rate. Do not
+expect points from it, and do not read the null as a reason to remove it: it is what stops one
+`support` fan-out consuming a decision's whole budget, and it is what makes the budget mean the search
+rather than the card pool.
+
 `greedy-flat` in the registry is the same AI without this, kept so the comparison can be re-run as
 the evaluation changes underneath it.
 

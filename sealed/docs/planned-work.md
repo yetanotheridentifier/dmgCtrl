@@ -148,28 +148,32 @@ bot.
    side (derived from #410's 840 games in 5055s at known per-decision costs), so an A/B costs
    `games × 96 × (costA + costB)`. To ±1%, roughly 9600 games:
 
-   | experiment | per-game cost | core-hours to ±1% |
-   | --- | --- | --- |
-   | width 8 vs width 4 | 0.225 s | **~58** |
-   | depth 4 vs depth 3 | 1.625 s | **~416** |
+   Sizing is now **anchored on a real sharded run** rather than on core-hours, because core-hours
+   mislead here: `nproc` reports 16 but the machine is **8 physical cores with hyperthreading**, and
+   12 shards on 8 cores run at roughly two thirds speed each. A predicted 5.4 hours took **8.8**.
 
-   Width is seven times cheaper to resolve, so it is the one to run first even though its effect is
-   smaller. Both are single-threaded, and the dev machine has 16 cores, so sharding by seed across 12
-   of them turns those into ~5 and ~35 wall hours. Neither needs cloud compute.
-2. **#488 separate the chain and beam budgets**, before either A/B above. It changes what the bot
-   plays on 4% to 8.5% of decisions, so a long run started before it would have to be repeated. Small
-   to build, and it makes every subsequent cost figure mean what it says.
-3. **#487 re-tune the weights for the shipped search**, after #447 and not before. See above: the
+   The anchor: **9600 games of a 0.252 s-per-decision matchup took 8.8 wall hours at 12 shards.**
+   Scale by the combined per-decision cost of whatever is being compared.
+
+   | experiment | combined cost/decision | wall hours to ±1% |
+   | --- | --- | --- |
+   | width 8 vs width 4 | 0.225 s | **~8** |
+   | depth 4 vs depth 3 | 1.621 s | **~56** |
+
+   Width is an overnight run. Depth is two and a half days, or 14 hours if ±2% will do, which is
+   marginal against an effect that looked like +2 points. Still local work; still not worth building
+   cloud infrastructure for.
+2. **#487 re-tune the weights for the shipped search**, after #447 and not before. See above: the
    "re-weighting is exhausted" result measured a one-ply evaluator, and #430 identified exactly why
    several weights could not matter there. This is the largest unexamined lever, and it is expensive,
    so size it with `--cost` before sweeping anything.
-4. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
+3. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
    moves with a **one-ply** scorer, so it currently reports term sensitivity for a bot we no longer
    ship; testing #430's pre-registered prediction needs the perturbations driven through the real
    search. That also makes it roughly 70x more expensive, so scope it to the weights the prediction
    names. The payoff grew: `lethalExposure` and `role` are proxies for search, and a reply policy
    computes the first directly, so this is now a route to **deleting** model complexity.
-5. **#446 claim the initiative when it converts to lethal**, and **measure its headroom first**. #433
+4. **#446 claim the initiative when it converts to lethal**, and **measure its headroom first**. #433
    sized lethal detection at +0.8 against a bot that has since improved by 17 points, so the rate that
    justified this has probably shrunk. An hour of measurement could retire the ticket.
 
@@ -183,6 +187,35 @@ the matrix, re-run `--decisions`, build only what still ties. The residue is gen
 Shield's worth being what it will prevent, held removal being worth the target it has not met yet.
 
 That is the heuristic baseline. Stop there before ML.
+
+### What ML would look like, and why the GPU sits idle until then
+
+The machine has an **RTX 2080 Max-Q (8 GB)** and CUDA works under WSL2 (`/dev/dxg` and `libcuda.so`
+are present). It is untouched by any current work, and that is correct rather than wasteful.
+
+**The search cannot use it.** A GPU runs 32 threads in lockstep, so it needs many threads doing the
+same operation on regular data. `resolve` is the opposite: a large switch over action types, card
+abilities dispatched as registered closures, and a fresh object graph allocated per call. Divergent
+branches serialise, closures do not compile to kernels, and the state is not a flat array. GPU game
+simulation works for bitboard games, where a position is a few 64-bit words; the card-ability system
+is exactly the part of this engine that cannot vectorise, and it is the part worth keeping.
+
+**MCTS plus a network is where it fits**, in the standard split: tree search and self-play generation
+on CPU, batched position evaluation on GPU. The network replaces the random playout with a value
+estimate and a policy over moves.
+
+Two things to carry forward rather than re-derive:
+
+- **MCTS probably arrives with the network, not before it.** Classic MCTS wants thousands of cheap
+  playouts a move; `resolve` gives a few hundred nodes per 126 ms. Naive MCTS here could easily be
+  weaker than the shipped beam for want of samples. The network is what removes the need to play
+  games out, which makes this one piece of work rather than two.
+- **CPU and GPU share a thermal budget on a Max-Q laptop.** The GPU idles at 61 C purely from a
+  saturated CPU. Generation and training will throttle each other, so expect alternating phases
+  rather than both flat out.
+
+The sharded bench harness is already the CPU half of this: seeded reproducibility, drop
+classification, pooled results. Not a detour.
 
 ## Gated on the baseline: the opponent model
 
