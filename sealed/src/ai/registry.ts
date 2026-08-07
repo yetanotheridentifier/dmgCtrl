@@ -4,7 +4,7 @@ import {
   greedyAi, greedyBaselineAi, greedyFlatAi, beamAi, beamReplyAi, beamReplySharedAi, lethalBeamAi,
   makeBeamGreedy, makeLethalBeam,
 } from './greedyAi'
-import { DEFAULT_BEAM_LIMITS } from './search'
+import { DEFAULT_BEAM_LIMITS, type BeamLimits } from './search'
 import { DEFAULT_LETHAL_LIMITS } from './lethal'
 import { DEFAULT_WEIGHTS } from './evaluate'
 
@@ -99,6 +99,49 @@ const REPLY_SPEC = /^reply:(pessimistic|selfish)(?::(\d+)x(\d+)(?::(\d+))?)?$/
  */
 const LETHAL_BEAM_SPEC = /^beam-lethal:(\d+)x(\d+):(\d+)$/
 
+/**
+ * The limits a `beam:` or `reply:` cell names, or `null` if the name is neither.
+ *
+ * **Spreads `DEFAULT_BEAM_LIMITS` first, and that is the point.** Building the limits field by field
+ * meant every new `BeamLimits` field silently defaulted to `undefined` for spec cells while the
+ * shipped bot got it. `chainNodes` (#488) did exactly that: `reply:pessimistic:8x3` differed from
+ * `beam-reply` in width AND the per-chain allowance, so a width A/B between them would have measured
+ * two changes and attributed both to width.
+ *
+ * Exported so the grammar is directly assertable. A sweep's baseline cell has to BE the shipped
+ * configuration, and inferring that through a decision trace is a weaker check than reading it.
+ */
+export function beamLimitsFor(name: string): BeamLimits | null {
+  const reply = REPLY_SPEC.exec(name)
+  if (reply) {
+    const policy = reply[1] as 'pessimistic' | 'selfish'
+    // Depth 1 is two-ply: our move, their answer, score. Width is irrelevant there (the beam's trim
+    // is never reached), which is why the bare form takes neither.
+    const width = reply[2] === undefined ? DEFAULT_BEAM_LIMITS.width : Number(reply[2])
+    const depth = reply[3] === undefined ? 1 : Number(reply[3])
+    const nodes = reply[4] === undefined ? DEFAULT_BEAM_LIMITS.nodes : Number(reply[4])
+    if (width < 1 || depth < 1 || nodes < 1) {
+      throw new Error(`Reply AI "${name}" needs width, depth and nodes of at least 1`)
+    }
+    return { ...DEFAULT_BEAM_LIMITS, width, depth, nodes, reply: policy }
+  }
+
+  const spec = BEAM_SPEC.exec(name)
+  if (spec) {
+    const width = Number(spec[1])
+    const depth = Number(spec[2])
+    const nodes = spec[3] === undefined ? DEFAULT_BEAM_LIMITS.nodes : Number(spec[3])
+    // A zero width or depth would search nothing while still looking like a configured beam, which is
+    // the kind of thing that silently costs a night of measurement.
+    if (width < 1 || depth < 1 || nodes < 1) {
+      throw new Error(`Beam "${name}" needs width, depth and nodes of at least 1`)
+    }
+    return { ...DEFAULT_BEAM_LIMITS, width, depth, nodes }
+  }
+
+  return null
+}
+
 /** Look up an AI by name, failing loudly (and helpfully) on a typo rather than silently. */
 export function resolveAi(name: string): Ai {
   const ai = AIS[name]
@@ -112,39 +155,15 @@ export function resolveAi(name: string): Ai {
     }
     return makeLethalBeam(
       DEFAULT_WEIGHTS,
-      { width, depth: beamDepth, nodes: DEFAULT_BEAM_LIMITS.nodes, reply: DEFAULT_BEAM_LIMITS.reply },
+      { ...DEFAULT_BEAM_LIMITS, width, depth: beamDepth },
       // Scaled with depth, so the rail does not silently become the real depth. A flat budget made
       // the solver look four times cheaper than it is, and the #410 screen call depth 4 worse than 3.
       { depth: solverDepth, nodes: Math.max(DEFAULT_LETHAL_LIMITS.nodes, solverDepth * 4000) },
     )
   }
 
-  const reply = REPLY_SPEC.exec(name)
-  if (reply) {
-    const policy = reply[1] as 'pessimistic' | 'selfish'
-    // Depth 1 is two-ply: our move, their answer, score. Width is irrelevant there (the beam's trim
-    // is never reached), which is why the bare form takes neither.
-    const width = reply[2] === undefined ? DEFAULT_BEAM_LIMITS.width : Number(reply[2])
-    const depth = reply[3] === undefined ? 1 : Number(reply[3])
-    const nodes = reply[4] === undefined ? DEFAULT_BEAM_LIMITS.nodes : Number(reply[4])
-    if (width < 1 || depth < 1 || nodes < 1) {
-      throw new Error(`Reply AI "${name}" needs width, depth and nodes of at least 1`)
-    }
-    return makeBeamGreedy(DEFAULT_WEIGHTS, { width, depth, nodes, reply: policy })
-  }
-
-  const spec = BEAM_SPEC.exec(name)
-  if (spec) {
-    const width = Number(spec[1])
-    const depth = Number(spec[2])
-    const nodes = spec[3] === undefined ? DEFAULT_BEAM_LIMITS.nodes : Number(spec[3])
-    // A zero width or depth would search nothing while still looking like a configured beam, which is
-    // the kind of thing that silently costs a night of measurement.
-    if (width < 1 || depth < 1 || nodes < 1) {
-      throw new Error(`Beam "${name}" needs width, depth and nodes of at least 1`)
-    }
-    return makeBeamGreedy(DEFAULT_WEIGHTS, { width, depth, nodes, reply: DEFAULT_BEAM_LIMITS.reply })
-  }
+  const limits = beamLimitsFor(name)
+  if (limits) return makeBeamGreedy(DEFAULT_WEIGHTS, limits)
 
   throw new Error(
     `Unknown AI "${name}". Available: ${aiNames().join(', ')}, ` +
