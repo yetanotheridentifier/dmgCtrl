@@ -157,9 +157,21 @@ Measured over 200 states: `greedy` 1.9 ms, `beam` 61 ms (33x), `beam-reply` 130 
 npm run bench --prefix sealed -- --shard 12 --games 800 --seed 4880 beam-reply beam-reply-shared
 ```
 
-The bench is single-threaded and the machine has 16 cores, so a run that would take 58 or 416
-core-hours takes a twelfth of that in wall clock. This is why the AI work needs no cloud compute: the
-experiments were never large, only serial.
+The bench is single-threaded, so a run that would take 58 or 416 core-hours takes a fraction of that
+in wall clock. This is why the AI work needs no cloud compute: the experiments were never large, only
+serial.
+
+**Size a run from a measured run, not from core-hours.** `nproc` reports 16 but the machine is 8
+physical cores with hyperthreading, so twelve shards each run at roughly two thirds speed and the
+effective parallelism is about **7.3x**, not 12. Core-hour arithmetic put one run at 5.4 hours and it
+took 8.8. The usable anchor is **9600 games of a 0.252 s-per-decision matchup in 8.8 wall hours at 12
+shards**; scale by the combined per-decision cost of the pair being compared.
+
+**Check memory before a long run at a new configuration.** A `beam-reply` shard holds about **365 MB**
+resident, against ~53 MB for a `greedy` one, so twelve shards is ~4.4 GB of 7.8 GB: stable, but with
+roughly 600 MB free and lightly into swap. Cores used to bind and memory did not; both do now. Run a
+short job first, read per-worker RSS, and reduce the shard count above ~500 MB a worker. A deeper
+search holds a larger frontier per root and should be expected to want more.
 
 Shards split by **seed**, not by dividing one seed's games. Every shard is therefore a valid
 standalone run, exactly like the existing three-seed results, and the per-shard column is worth

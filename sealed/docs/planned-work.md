@@ -155,6 +155,14 @@ bot.
    The anchor: **9600 games of a 0.252 s-per-decision matchup took 8.8 wall hours at 12 shards.**
    Scale by the combined per-decision cost of whatever is being compared.
 
+   **Memory now binds as well as cores, which it did not used to.** A `beam-reply` shard is about
+   **365 MB** resident, not the ~53 MB a `greedy` one took, so twelve shards is ~4.4 GB of 7.8 GB and
+   the machine sits at roughly 600 MB free and lightly into swap. It is stable there, but the headroom
+   is gone. **Measure per-worker RSS on a short run before committing a long one at a new
+   configuration**, and drop the shard count if it is above ~500 MB. Depth 4 holds a deeper frontier
+   per root and should be expected to want more. A shard killed by the OOM killer forty hours into a
+   fifty-six hour run is an expensive way to discover this.
+
    | experiment | combined cost/decision | wall hours to ±1% |
    | --- | --- | --- |
    | width 8 vs width 4 | 0.225 s | **~8** |
