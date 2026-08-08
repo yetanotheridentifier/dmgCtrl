@@ -95,6 +95,18 @@ export interface SearchTrace {
   beam: number
   /** The budget ran out, so the move returned is the truncated search's answer. */
   exhausted: boolean
+  /**
+   * What the search valued each root candidate at, in `legalMoves` order.
+   *
+   * For the blind-spot diagnostic (#494), which asks whether every candidate scored the same and the
+   * tie-break therefore chose at random. That question has always been answered with a separate
+   * one-ply scorer, so it described a bot we stopped shipping; these are the numbers the deployed
+   * search actually acted on.
+   *
+   * **The ordering is load-bearing.** The diagnostic subsets candidates by decision type, so any
+   * order other than `legalMoves`' would attribute one decision's spread to another.
+   */
+  candidates: number[]
 }
 
 let trace: SearchTrace | null = null
@@ -353,7 +365,7 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
     const budget = searchBudget(limits.nodes)
     const moves = legalMoves(state)
     if (moves.length === 0) {
-      trace = { nodes: limits.nodes, left: budget.left, chain: 0, beam: 0, exhausted: false }
+      trace = { nodes: limits.nodes, left: budget.left, chain: 0, beam: 0, exhausted: false, candidates: [] }
       return null
     }
 
@@ -362,9 +374,11 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
 
     let best = -Infinity
     const bestMoves: Action[] = []
+    const candidates: number[] = []
     for (const move of moves) {
       // `best` so far is alpha: a candidate that cannot beat it need not be finished.
       const { best: value } = reachableFrom(state, move, me, asRole, inner, limits, budget, best)
+      candidates.push(value)
       if (value > best) {
         best = value
         bestMoves.length = 0
@@ -381,6 +395,7 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
       chain: budget.chain,
       beam: budget.beam,
       exhausted: budget.left <= 0,
+      candidates,
     }
     return bestMoves[Math.floor(seededUnit(state.rngSeed) * bestMoves.length)]
   }
