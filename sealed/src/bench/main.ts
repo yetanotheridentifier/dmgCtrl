@@ -9,7 +9,8 @@ import { runTerms } from './terms'
 import type { TermReport } from './terms'
 import { runCost } from './cost'
 import { runBudget, type BudgetReport } from './budget'
-import { runShards, poolShards } from './shard'
+import { join } from 'node:path'
+import { runShards, poolShards, pendingSeeds, loadShardResults, shardRunKey, SHARD_DIR } from './shard'
 import type { CostReport } from './cost'
 import { runLethal } from './lethal'
 import type { LethalReport } from './lethal'
@@ -581,14 +582,22 @@ function runBudgetMode(args: Args): void {
 async function runShardMode(args: Args): Promise<void> {
   const shards = args.shards ?? 1
   const start = Date.now()
+  const config = { shards, games: args.games, baseSeed: args.seed, aiA: args.aiA, aiB: args.aiB }
+  const dir = join(SHARD_DIR, shardRunKey(config))
+  const todo = pendingSeeds(config, loadShardResults(dir))
+
   console.log(
     `\n${args.aiA} vs ${args.aiB}   ${shards} shards x ${args.games} games ` +
     `= ${shards * args.games} games   seeds ${args.seed} to ${args.seed + shards - 1}\n`,
   )
+  // Say so loudly. A resumed run that looked like a fresh one would invite someone to wonder why a
+  // three-day job finished in twenty minutes.
+  if (todo.length < shards) {
+    console.log(`  RESUMING: ${shards - todo.length} shard(s) already complete, ${todo.length} to run`)
+  }
+  console.log(`  per-shard logs and results: ${dir}/\n`)
 
-  const results = await runShards({
-    shards, games: args.games, baseSeed: args.seed, aiA: args.aiA, aiB: args.aiB,
-  })
+  const results = await runShards(config)
 
   const good = results.filter(r => r.exitCode === 0 || r.completed > 0)
   const pooled = poolShards(good)

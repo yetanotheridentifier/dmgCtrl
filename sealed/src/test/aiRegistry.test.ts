@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { AIS, aiNames, resolveAi } from '../ai/registry'
+import { AIS, aiNames, resolveAi, beamLimitsFor } from '../ai/registry'
 import { randomAi } from '../ai/randomAi'
 import { greedyAi } from '../ai/greedyAi'
-import { lastSearchTrace } from '../ai/search'
+import { lastSearchTrace, DEFAULT_BEAM_LIMITS } from '../ai/search'
 import { state, player, card, unit, ready, CARDS } from './helpers/engineFixtures'
 import '../engine/cardDefinitions'
 
@@ -113,6 +113,31 @@ describe('AI registry', () => {
   it('offers the shared-pool control, differing from the shipped bot in one thing', () => {
     expect(aiNames()).toContain('beam-reply-shared')
     expect(resolveAi('beam-reply-shared')).not.toBe(resolveAi('beam-reply'))
+  })
+
+  /**
+   * A sweep cell must differ from the shipped bot in **only** the axis being swept.
+   *
+   * Every spec cell used to build its limits field by field, so a new `BeamLimits` field defaulted to
+   * `undefined` for `beam:` and `reply:` cells while the shipped bot got it. When `chainNodes` landed
+   * (#488) that silently made `reply:pessimistic:8x3` differ from `beam-reply` in two ways at once,
+   * width AND the per-chain allowance, which would have confounded #447's width A/B end to end.
+   *
+   * Spreading the defaults means the next field added is inherited rather than dropped.
+   */
+  it('gives a spec cell every default the shipped bot has', () => {
+    expect(beamLimitsFor('reply:pessimistic:8x3')?.chainNodes).toBe(DEFAULT_BEAM_LIMITS.chainNodes)
+    expect(beamLimitsFor('beam:8x3')?.chainNodes).toBe(DEFAULT_BEAM_LIMITS.chainNodes)
+  })
+
+  /** The baseline cell of a sweep has to BE the shipped configuration, or the sweep has no anchor. */
+  it('names exactly the shipped configuration when the spec matches it', () => {
+    expect(beamLimitsFor('reply:pessimistic:4x3')).toEqual({ ...DEFAULT_BEAM_LIMITS, reply: 'pessimistic' })
+    expect(beamLimitsFor('beam:4x3')).toEqual(DEFAULT_BEAM_LIMITS)
+  })
+
+  it('has no beam limits for a name that is not a beam cell', () => {
+    expect(beamLimitsFor('greedy')).toBeNull()
   })
 
   it('rejects an unknown name with a message that lists the valid ones', () => {

@@ -33,8 +33,8 @@ depth-3 minimax with an opponent reply at every level, and the optimum for a lea
 optimum for a bot that plays its own scores directly.
 
 So the conclusion is correct for what it measured and does not transfer. **#487** re-tests it against
-the shipped search, after #447 settles the configuration. The measured constraints live in
-[ai-model.md](ai-model.md); the tool is `npm run tune`.
+the shipped search, and is now unblocked: the configuration is settled at width 4, depth 3. The
+measured constraints live in [ai-model.md](ai-model.md); the tool is `npm run tune`.
 
 Term sensitivity (`--terms`) now says which weights could ever have moved, over 8503 decisions. One
 ply only compares candidates from a single position, so a term equal across them cancels exactly.
@@ -88,7 +88,11 @@ one policy is optimistic and the other pessimistic. They are strongly **super-ad
 
 Depth without a reply was worth +10; depth on top of a reply is worth +12.9. With a reply at every
 level the search is proper minimax, so depth compounds instead of extending lines that need the
-opponent to cooperate. **The curve is still climbing at depth 3**, which is now #447's question.
+opponent to cooperate.
+
+**The curve peaks there.** Depth 4 was measured at matched budgets and lost, 47.6% ± 1.0% over 9600
+games with every shard below 50%, so the gains run +10.2, +2.7, then negative. Width is flat over the
+same range. **The search configuration is settled: width 4, depth 3, pessimistic reply.**
 
 `min(evaluate(s, me))` leads `argmax(evaluate(s, foe))` by about a point at both depths, not separably
 at this width.
@@ -101,8 +105,13 @@ rises, and once #425 models the reply, `lethalExposure` risks double-counting ou
 
 That decides what transfers between search configurations. Changes that add **information the search
 cannot get** carry over; changes that **proxy for search** do not. `--terms` is the instrument: watch
-the Bearing column for those two terms as depth rises. It is recorded on #447 so it can be judged
-rather than argued.
+the Bearing column for those two terms.
+
+The prediction is now harder to test than when it was written, because depth is fixed: the search will
+not get deeper, so the "as depth rises" comparison is unavailable. What remains testable is the
+absolute reading at the shipped depth, which is enough to decide whether either term still earns its
+place. #493 supplies the counter-example worth holding onto: a token is information the search
+demonstrably **cannot** recover, since stripping a Shield leaves a board that scores identically.
 
 ## One search, several policies
 
@@ -123,59 +132,65 @@ bot.
 
 ## Next up
 
-1. **#447 the search configuration**, brought forward, and now with a specific question rather than a
-   sweep. `beam-reply` ships at depth 3 and **the depth curve was still climbing** (54.5, 64.7, 67.4
-   against a reply-blind beam). Width is the other axis and has never been swept alongside a reply.
-
-   The instrumentation for it is built, and it moved the numbers this ticket has to plan around.
-   **Depth 4 with a reply costs 1495 ms a decision, not the ~180 ms estimated from a wall clock**:
-   802x greedy, against `beam-reply`'s 70x. A/B sizing has to start from that.
-
-   Two things are now known that were assumptions. **Alpha-beta is not the lever.** It is sound at the
-   deepest level of the beam as well as at depth 1, and measured there it saves 10.8% of nodes at the
-   shipped configuration and **nothing at all at depth 4**, so it does not make a deeper cell
-   affordable. And **the node rail is not quietly setting the width and depth**: it fires on 4.0% of
-   decisions for `beam` and 8.5% for `beam-reply`. A raised-budget control cell is still worth
-   carrying, but the earlier depth-4 result is much less confounded by the rail than it looked.
-
-   What the rail measurement did turn up is **#488**: the search shares one budget between resolving
-   owed choices and expanding the beam, and **the chain takes 80% to 98% of it**. Raising the budget
-   twentyfold moves the beam's own spend from 128 nodes to 135 while the chain's goes from 510 to
-   6885, so a raised rail costs ten times as much and buys no search at all. Where the rail fires it
-   is starving the lookahead at exactly the complicated positions.
-
-   **Sizing, and why the two remaining axes are not the same experiment.** A game runs ~96 decisions a
-   side (derived from #410's 840 games in 5055s at known per-decision costs), so an A/B costs
-   `games × 96 × (costA + costB)`. To ±1%, roughly 9600 games:
-
-   Sizing is now **anchored on a real sharded run** rather than on core-hours, because core-hours
-   mislead here: `nproc` reports 16 but the machine is **8 physical cores with hyperthreading**, and
-   12 shards on 8 cores run at roughly two thirds speed each. A predicted 5.4 hours took **8.8**.
-
-   The anchor: **9600 games of a 0.252 s-per-decision matchup took 8.8 wall hours at 12 shards.**
-   Scale by the combined per-decision cost of whatever is being compared.
-
-   | experiment | combined cost/decision | wall hours to ±1% |
-   | --- | --- | --- |
-   | width 8 vs width 4 | 0.225 s | **~8** |
-   | depth 4 vs depth 3 | 1.621 s | **~56** |
-
-   Width is an overnight run. Depth is two and a half days, or 14 hours if ±2% will do, which is
-   marginal against an effect that looked like +2 points. Still local work; still not worth building
-   cloud infrastructure for.
-2. **#487 re-tune the weights for the shipped search**, after #447 and not before. See above: the
-   "re-weighting is exhausted" result measured a one-ply evaluator, and #430 identified exactly why
-   several weights could not matter there. This is the largest unexamined lever, and it is expensive,
-   so size it with `--cost` before sweeping anything.
-3. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
+1. **#494 re-measure the blind spots** against the bot that now ships. About an hour, and it gates
+   four tickets that all carry the same instruction: land the search, re-run `--decisions`, build only
+   what still ties. The search has landed. Every rate the AI backlog rests on was measured against
+   one-ply greedy, which is roughly 27 points weaker than `beam-reply`. It could retire #446 outright
+   and it sizes #493 and #397 for the first time. Cheapest high-value work outstanding.
+2. **#493 the evaluation cannot see a token.** A Shield prevents a whole instance of damage, so
+   stripping one leaves a board that scores **identically**: pinging is not undervalued, it is
+   indistinguishable from doing nothing while its costs are counted in full. Found in live play. Gate
+   on #494's shield rates before inventing a weight.
+3. **#487 re-tune the weights for the shipped search.** Unblocked, now that the configuration is
+   settled and there is a fixed target to tune against. The "re-weighting is exhausted" result
+   measured a one-ply evaluator, and #430 identified exactly why several weights could not matter
+   there. The largest unexamined lever, and much cheaper than it was: #488 cut deep-search cost
+   roughly sixfold. Re-size it with `--cost` before sweeping.
+4. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
    moves with a **one-ply** scorer, so it currently reports term sensitivity for a bot we no longer
    ship; testing #430's pre-registered prediction needs the perturbations driven through the real
    search. That also makes it roughly 70x more expensive, so scope it to the weights the prediction
    names. The payoff grew: `lethalExposure` and `role` are proxies for search, and a reply policy
    computes the first directly, so this is now a route to **deleting** model complexity.
-4. **#446 claim the initiative when it converts to lethal**, and **measure its headroom first**. #433
+5. **#446 claim the initiative when it converts to lethal**, and **measure its headroom first**. #433
    sized lethal detection at +0.8 against a bot that has since improved by 17 points, so the rate that
-   justified this has probably shrunk. An hour of measurement could retire the ticket.
+   justified this has probably shrunk. #494 answers this as a side effect.
+
+## Running a long experiment
+
+Operational knowledge, kept here because every one of these was learned by getting it wrong.
+
+**Size from a measured run, never from per-decision costs or core-hours.** Both understate,
+independently:
+
+- `nproc` reports 16, but the machine is **8 physical cores with hyperthreading**. Core-hour
+  arithmetic put one run at 5.4 hours and it took 8.8.
+- **`--cost` understates real in-game cost by 1.65x to 1.90x**, even at 200 corpus states, because the
+  corpus is filled game by game and under-samples the late, busy boards where search is most
+  expensive. The same trap reports 5.8 ms at 30 states for a search costing 142.6 ms.
+- **It understates RATIOS as well as absolutes.** Width 8 measured 5% dearer than width 4 on the
+  corpus and ran **14.6%** dearer over real games, because width only binds when the frontier is
+  large, which happens late.
+
+Three anchors now exist. Scale from whichever is closest in shape:
+
+| measured run | games | shards | per game |
+| --- | --- | --- | --- |
+| `beam-reply` vs `beam-reply-shared` | 9600 | 12 | 39.6 s |
+| `reply:pessimistic:8x3` vs `beam-reply` | 8400 | 12 | 44.6 s |
+| `4x4:200000` vs `4x3:200000` | 9600 | 10 | 67.6 s |
+
+**Memory binds before cores do.** During a 12-shard run `vmstat` showed 22% idle CPU with `wa` and
+`st` both zero: core headroom exists and cannot be used, because memory runs out first.
+
+**Size shards on projected END-of-run RSS, never on the opening measurement.** A worker starts around
+220 MB and reaches 450 to 460 MB over eighteen hours, roughly doubling. Growth decelerates (17 MB/hour
+early, 7 MB/hour later), so a linear extrapolation from the first hour over-predicts, and a reading
+from the first minute badly under-predicts. Ten shards fits; twelve would not have.
+
+**There is no progress signal.** A shard prints nothing until it finishes, so the per-shard log files
+stay empty for the whole run and a multi-day job cannot be distinguished from a hung one. Emitting a
+periodic line from `runBench` is outstanding work on #492.
 
 ## Gated on the search, and the gate moved away from them
 
@@ -339,6 +354,21 @@ Rules learned the hard way.
 Recorded so nobody spends an evening re-deriving a null result. All measured against the identical
 AI with the change switched off, across the coverage decks.
 
+- **A deeper beam.** Depth 4 alongside a pessimistic reply, at a node budget matched so that neither
+  cell exhausts, measured **47.6% ± 1.0%** against depth 3 over 9600 games and 10 seeds, with **every
+  shard below 50%**. Not a null: depth 4 is about 2.4 points **worse**, and costs 1.48x more per
+  decision. An earlier reading of 59.4% against 57.5% was taken without a reply policy and at
+  mismatched budgets, and both differences mattered. The depth curve alongside a reply peaks at 3
+  (+10.2, then +2.7, then negative), and the likely cause is that pessimism compounds: four
+  most-inconvenient opponent replies in succession model a player far stronger than the one being
+  faced. **Do not revisit without changing the reply policy**; the natural test is whether `selfish`
+  degrades less at depth 4.
+- **A wider beam.** Width 8 alongside a pessimistic reply measured **49.5% ± 1.1%** against the
+  shipped width 4 over 8400 games and 12 seeds, six shards either side of 50%. Predicted as a null
+  beforehand, from the move-disagreement curve: width 8 changes only 2.7% of decisions, and narrowing
+  changes more than widening (3.4% at width 2, 6.0% at width 1), which puts width 4 at diminishing
+  returns. **Narrowing is not worth testing either**, since width 2 costs 108 ms against width 4's
+  110: even an exactly equal result would save 2% of compute. The axis is closed in both directions.
 - **Concave resource pool.** Valuing surplus resources below the `card` weight made the bot skip
   12.5% of regroups, all at a pool of exactly the knee. It measured **49.7% ± 1.9%** over 5040 games,
   and worse as the knee lowered (46.1% at 6, 45.6% at 5). The pool ships flat. Worth re-testing after
