@@ -176,11 +176,25 @@ is filled game by game and a short one is nothing but openings where few units a
 beam has little to choose between. This is the same hazard that makes a small `--cost` corpus report
 5.8 ms for a search that costs 142.6 ms.
 
-**Depth 4 is better and is deliberately not shipped.** It measures 59.4% against depth 3's 57.5% on
-the same seed, but only once the node budget is raised: at the default budget it reports 54.4%,
-because the rail truncates it. It costs 2.45x, and its value rests on four consecutive opponent
-non-actions, which is exactly what a modelled reply changes. The decision belongs with the reply
-policy rather than before it.
+**Depth 4 is worse than depth 3, and the depth curve is not monotonic.** Measured at matched node
+budgets alongside a pessimistic reply: **47.6% ± 1.0%** over 9600 games and 10 seeds, with **every
+shard below 50%**. It also costs 1.48x more per decision, so it is worse and dearer.
+
+That reverses an earlier reading of 59.4% against 57.5%, which was taken **without a reply policy and
+at mismatched budgets** (depth 4 at 200,000 nodes against depth 3 at the default 10,000). Both
+differences mattered, and the second is why the comparison here matches budgets: at 200,000 neither
+depth exhausts, so only depth varies.
+
+The depth curve alongside a reply therefore peaks at 3, and its shape was already visible: +10.2 from
+depth 1 to 2, +2.7 from 2 to 3, then negative.
+
+**The likely cause is that pessimism compounds.** The reply policy assumes the opponent plays the most
+inconvenient move available at every level. Four of those in succession models an opponent far
+stronger than the one actually being played, so the search declines lines that are only bad if the
+opponent finds four consecutive perfect answers. This is a hypothesis rather than a measured
+mechanism; the test would be whether `selfish`, which is less pessimistic, degrades less at depth 4.
+Worth knowing before MCTS, which does not use a fixed pessimistic reply and so should not inherit the
+limit.
 
 ## The opponent's reply
 
