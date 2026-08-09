@@ -341,6 +341,14 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     row('  the bot took it', shieldRate(sh.removals, sh.removalAvailable)),
     row('shields seen', `${sh.shieldsSeen} across those decisions`),
     row('holding one ourselves', shieldRate(sh.decisionsHoldingShield, report.exposure.decisions)),
+    '',
+    '  the lockout: a Sentinel forces every attacker in its arena onto itself, so a Shield on one',
+    '  closes the lane rather than absorbing a hit. Consecutive rounds is the figure that matters:',
+    '  one round is noise, four is a lost game.',
+    row('shielded blockers seen', `${sh.shieldedBlockers}`),
+    row('fully locked out', shieldRate(sh.lockedOut, report.exposure.decisions)),
+    row('rounds locked', shieldRate(sh.lockedRounds, sh.roundsSampled)),
+    row('longest lockout', `${sh.longestLockout} consecutive rounds in one game`),
   )
 
   const le = report.lethal
