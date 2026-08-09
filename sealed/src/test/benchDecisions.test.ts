@@ -152,11 +152,18 @@ describe('runDecisions', () => {
     expect(sh.shieldedBlockers).toBeGreaterThanOrEqual(0)
   })
 
-  it('counts decisions where a shielded blocker locks every attacker', () => {
+  /**
+   * **A lane is an arena, and measuring board-wide instead understates it drastically.** A shielded
+   * Sentinel in ground shuts ground and leaves space alone, so "is every attacker locked" reports
+   * open whenever one unit stands in the other arena. Measured that way the rate was 0.3% of
+   * decisions and never lasted a round, which contradicted what play-testers were reporting.
+   */
+  it('counts a shut lane separately from a shut board', () => {
     const sh = report.shields
-    expect(sh.lockedOut).toBeGreaterThanOrEqual(0)
-    // A full lockout is a special case of facing a shield at all.
-    expect(sh.lockedOut).toBeLessThanOrEqual(sh.decisionsFacingShield)
+    // Both lanes shut is a strict special case of one lane shut, which is a special case of facing
+    // a shield at all. If that ordering ever breaks, the arena split is wrong.
+    expect(sh.lockedOut).toBeLessThanOrEqual(sh.laneLocked)
+    expect(sh.laneLocked).toBeLessThanOrEqual(sh.decisionsFacingShield)
   })
 
   /**

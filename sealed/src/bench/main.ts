@@ -346,7 +346,8 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     '  closes the lane rather than absorbing a hit. Consecutive rounds is the figure that matters:',
     '  one round is noise, four is a lost game.',
     row('shielded blockers seen', `${sh.shieldedBlockers}`),
-    row('fully locked out', shieldRate(sh.lockedOut, report.exposure.decisions)),
+    row('a LANE shut', shieldRate(sh.laneLocked, report.exposure.decisions)),
+    row('  both lanes shut', shieldRate(sh.lockedOut, report.exposure.decisions)),
     row('rounds locked', shieldRate(sh.lockedRounds, sh.roundsSampled)),
     row('longest lockout', `${sh.longestLockout} consecutive rounds in one game`),
   )

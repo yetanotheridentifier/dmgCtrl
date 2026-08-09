@@ -312,10 +312,15 @@ export interface ShieldStat {
    */
   shieldedBlockers: number
   /**
-   * Decisions where **every** ready attacker we have is Sentinel-locked onto a shielded unit, so no
-   * damage of ours can land anywhere. This is the reported defect, as opposed to the general
-   * undervaluing that measured 15.8% and swept to a null.
+   * Decisions where at least **one arena** is shut: every ready attacker we have there is
+   * Sentinel-forced onto a shielded unit, so no damage of ours reaches that lane's base.
+   *
+   * **This is the reported defect.** Measuring it board-wide instead (below) puts it at 0.3% of
+   * decisions, because a single unit in the other arena reports the board as open while the lane in
+   * question is shut for the rest of the game.
    */
+  laneLocked: number
+  /** Decisions where **every** arena we can attack in is shut, so nothing of ours lands anywhere. */
   lockedOut: number
   /** Rounds sampled once each from the player seat, the denominator for the two below. */
   roundsSampled: number
@@ -388,19 +393,33 @@ function shieldedBlockersAgainst(s: GameState, seat: PlayerId): number {
 }
 
 /**
- * Is every attacker this seat has locked onto a shielded unit?
+ * Which arenas is this seat shut out of by a shielded Sentinel?
  *
- * "Locked out" means no damage of ours can land anywhere: each ready attacker is Sentinel-forced, and
- * every target it is forced onto carries a Shield. Requires at least one ready attacker, since a seat
- * with nothing to attack with is not being blocked, it is simply empty.
+ * **Per arena, because a lane is an arena.** A shielded Sentinel in ground locks ground attackers and
+ * leaves space untouched, so asking "is every attacker on the board locked" reports "not locked"
+ * whenever a single unit stands in the other arena. Measured that way the rate came out at 0.3% of
+ * decisions and never lasting a round, which contradicted what play-testers were reporting. The
+ * complaint is that **one lane** closes, and that is what this counts.
+ *
+ * A lane needs at least one ready attacker of ours to be shut: an empty arena is not blocked.
  */
+function lockedLanes(s: GameState, seat: PlayerId): Array<'ground' | 'space'> {
+  const shut = (arena: 'ground' | 'space'): boolean => {
+    const ready = s.players[seat].units.filter(u => !u.exhausted && u.arena === arena)
+    if (ready.length === 0) return false
+    return ready.every(u => {
+      const { targets, sentinelLocked } = enemyAttackTargets(s, u, seat)
+      return sentinelLocked && targets.length > 0 && targets.every(isShielded)
+    })
+  }
+  return (['ground', 'space'] as const).filter(shut)
+}
+
+/** Every arena this seat can attack in is shut: no damage of ours lands anywhere. */
 function lockedOutBy(s: GameState, seat: PlayerId): boolean {
-  const ready = s.players[seat].units.filter(u => !u.exhausted)
-  if (ready.length === 0) return false
-  return ready.every(u => {
-    const { targets, sentinelLocked } = enemyAttackTargets(s, u, seat)
-    return sentinelLocked && targets.length > 0 && targets.every(isShielded)
-  })
+  const arenas = (['ground', 'space'] as const)
+    .filter(a => s.players[seat].units.some(u => !u.exhausted && u.arena === a))
+  return arenas.length > 0 && lockedLanes(s, seat).length === arenas.length
 }
 
 /** Choice kinds, most frequent first. Count then name, so the order is stable across runs rather
@@ -419,7 +438,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
 
   const shields: ShieldStat = {
     decisionsFacingShield: 0, removalAvailable: 0, removals: 0, shieldsSeen: 0, decisionsHoldingShield: 0,
-    shieldedBlockers: 0, lockedOut: 0, roundsSampled: 0, lockedRounds: 0, longestLockout: 0,
+    shieldedBlockers: 0, laneLocked: 0, lockedOut: 0, roundsSampled: 0, lockedRounds: 0, longestLockout: 0,
   }
   const resourcing = empty()
   const initiative = empty()
@@ -547,6 +566,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           }
           if (shieldsOn(s, me) > 0) shields.decisionsHoldingShield++
           shields.shieldedBlockers += shieldedBlockersAgainst(s, me)
+          if (lockedLanes(s, me).length > 0) shields.laneLocked++
           if (lockedOutBy(s, me)) shields.lockedOut++
         }
 
@@ -556,7 +576,9 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         if (s.phase === 'action' && s.round !== lockSampledRound) {
           lockSampledRound = s.round
           shields.roundsSampled++
-          if (lockedOutBy(s, 'player')) {
+          // Duration tracks the LANE reading, since a lane shut for four rounds is the lost game;
+          // a board-wide lockout is a rarer and stricter event.
+          if (lockedLanes(s, 'player').length > 0) {
             shields.lockedRounds++
             lockRun++
             if (lockRun > shields.longestLockout) shields.longestLockout = lockRun
