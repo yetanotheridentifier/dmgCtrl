@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { runDecisions, classifyResolution } from '../bench/decisions'
+import { runDecisions, classifyResolution, sameAction } from '../bench/decisions'
 import { DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { state } from './helpers/engineFixtures'
 import type { PendingChoice } from '../engine/types'
@@ -107,6 +107,31 @@ describe('runDecisions', () => {
     const sh = report.shields
     expect(sh.removalAvailable).toBeGreaterThanOrEqual(sh.removals)
     expect(sh.removalAvailable).toBeLessThanOrEqual(sh.decisionsFacingShield)
+  })
+
+  /**
+   * **The chosen move is never the same object as the candidate it matches.**
+   *
+   * The diagnostic calls `legalMoves` to build its candidate list and the AI calls it again inside
+   * itself, so the two arrays hold structurally identical but distinct objects. Measured over 40 real
+   * positions with both `greedy` and `beam-reply`: reference match 0/40, value match 40/40.
+   *
+   * Every counter that asks "did the AI pick this candidate" must therefore compare by value. The
+   * existing ones survived only because they carry a `?? recompute` fallback that was quietly doing
+   * all the work; a new counter written without one read exactly zero across 2,359 opportunities and
+   * looked like a spectacular finding.
+   */
+  it('matches a chosen move to its candidate by value, since references never match', () => {
+    expect(sameAction({ type: 'pass' }, { type: 'pass' })).toBe(true)
+    expect(sameAction(
+      { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' } },
+      { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' } },
+    )).toBe(true)
+    expect(sameAction({ type: 'pass' }, { type: 'takeInitiative' })).toBe(false)
+    expect(sameAction(
+      { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' } },
+      { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e2' } },
+    )).toBe(false)
   })
 
   it('actually plays games and observes each decision', () => {

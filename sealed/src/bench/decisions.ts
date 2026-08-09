@@ -2,6 +2,7 @@ import ashSet from '../test/fixtures/ashSet.json'
 import '../engine/cardDefinitions' // side effect: registers every implemented card ability
 import type { SwuCard } from '../data/cards'
 import type { GameState, PlayerId } from '../engine/types'
+import type { Action } from '../engine/actions'
 import { opponentOf, hasPendingChoices } from '../engine/types'
 import { buildCardDb } from '../engine/cardDb'
 import { initGame } from '../engine/initGame'
@@ -331,6 +332,22 @@ const empty = (): Tally => ({ offered: 0, tied: 0, tiedSearch: 0, candidates: 0 
 /** The greedy driver's own scoring function, so a tie measured here is a tie it would coin-flip. */
 const score = makeQuiescent(evaluate)
 
+/**
+ * Is this the candidate the AI chose?
+ *
+ * **By value, because the references never match.** The diagnostic builds its candidate list from its
+ * own `legalMoves` call and the AI makes another inside itself, so the two arrays hold structurally
+ * identical but distinct objects. Measured across 40 real positions with `greedy` and `beam-reply`:
+ * reference match 0/40, value match 40/40.
+ *
+ * The older counters here survived that only because each carries a `?? recompute` fallback which was
+ * silently doing all the work. A shield counter written without one reported the bot never stripping
+ * a shield in 2,359 opportunities, which read as a dramatic finding and was arithmetic.
+ */
+export function sameAction(a: Action, b: Action): boolean {
+  return a === b || JSON.stringify(a) === JSON.stringify(b)
+}
+
 /** How many shields a seat's units are carrying. */
 function shieldsOn(s: GameState, seat: PlayerId): number {
   return s.players[seat].units.reduce(
@@ -473,7 +490,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
             shields.shieldsSeen += theirs
             const strips = scored.filter(x => shieldsOn(resolve(s, x.m), foe) < theirs)
             if (strips.length > 0) shields.removalAvailable++
-            if (strips.some(x => x.m === action)) shields.removals++
+            if (strips.some(x => sameAction(x.m, action))) shields.removals++
           }
           if (shieldsOn(s, me) > 0) shields.decisionsHoldingShield++
         }
@@ -556,16 +573,17 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           }
         }
 
-        // What the AI actually committed to. Greedy returns one of the `moves` objects, so the
-        // classification is already computed; `setupAi` builds its own, so fall back to resolving.
+        // What the AI actually committed to. Matched by VALUE: the AI's own `legalMoves` call returns
+        // different objects from ours, so a reference comparison never matches. `setupAi` builds an
+        // action that is not in `moves` at all, hence the fallback.
         if (scored.length >= 2) {
-          const chosen = scored.find(x => x.m === action)?.r ?? classifyResolution(resolve(s, action), me)
+          const chosen = scored.find(x => sameAction(x.m, action))?.r ?? classifyResolution(resolve(s, action), me)
           if (chosen.kind === 'opponent') suspended.chosenOpponentAnswer++
           if (chosen.kind === 'self') suspended.chosenSelfAnswer++
 
           // Did this move hand them lethal, and was there a legal move that would not have? A forced
           // move is excluded above, because "unavoidable" is already its whole answer.
-          const picked = scored.find(x => x.m === action)
+          const picked = scored.find(x => sameAction(x.m, action))
           const chosenExposed = picked ? picked.exposed : canFinishThisAction(resolve(s, action), foe)
           const verdict = classifyExposure(chosenExposed, scored.some(x => !x.exposed))
           exposure.decisions++
