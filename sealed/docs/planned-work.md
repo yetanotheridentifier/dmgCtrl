@@ -132,29 +132,42 @@ bot.
 
 ## Next up
 
-1. **#494 re-measure the blind spots** against the bot that now ships. About an hour, and it gates
-   four tickets that all carry the same instruction: land the search, re-run `--decisions`, build only
-   what still ties. The search has landed. Every rate the AI backlog rests on was measured against
-   one-ply greedy, which is roughly 27 points weaker than `beam-reply`. It could retire #446 outright
-   and it sizes #493 and #397 for the first time. Cheapest high-value work outstanding.
-2. **#493 the evaluation cannot see a token.** A Shield prevents a whole instance of damage, so
-   stripping one leaves a board that scores **identically**: pinging is not undervalued, it is
-   indistinguishable from doing nothing while its costs are counted in full. Found in live play. Gate
-   on #494's shield rates before inventing a weight.
+1. **#493 the evaluation cannot see a token.** A Shield prevents a whole instance of damage, so
+   stripping one leaves a board that scores **identically**: the strip is not undervalued, it is
+   indistinguishable from doing nothing while its costs are counted in full.
+
+   Measured over 420 games: **15.8%** of decisions face a shielded enemy, a strip is available on
+   42.6% of those, and the bot takes it **7.4%** of the time against **random's 17.9%**. Less than
+   half as often as chance, which is avoidance rather than indifference. The search does not rescue
+   it. Build Shield and Advantage; Experience is already visible through `power` and `hp`.
+2. **Break search ties with the one-ply score**, before either #396 or #398 writes a new term.
+
+   The same run found the search **tying more often than one ply**: resourcing 0.6% to 5.4%,
+   card-play 6.7% to 11.8%. A beam values a move by the best board it can reach, so candidates whose
+   lines converge inside the horizon come out equal even when they differ immediately, and the bot
+   then coin-flips away a preference one ply actually had. Falling back to the one-ply score costs
+   almost nothing, applies to 5-12% of decisions, and is a strict improvement if that signal is worth
+   anything. Measure it on its own so it is not confounded with #493.
 3. **#487 re-tune the weights for the shipped search.** Unblocked, now that the configuration is
    settled and there is a fixed target to tune against. The "re-weighting is exhausted" result
    measured a one-ply evaluator, and #430 identified exactly why several weights could not matter
    there. The largest unexamined lever, and much cheaper than it was: #488 cut deep-search cost
    roughly sixfold. Re-size it with `--cost` before sweeping.
-4. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
+4. **#396 and #398, whose gates have now cleared.** Both said "land the search, re-run `--decisions`,
+   build only what still ties". Measured: the search contributes **nothing** to choice answering
+   (11.4% one ply, 11.3% searched, over 5,878 decisions averaging 6.6 options), and it makes
+   resourcing and card-play **worse**. Neither is subsumed. Do the tie-break above first, since it
+   may absorb part of both.
+5. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
    moves with a **one-ply** scorer, so it currently reports term sensitivity for a bot we no longer
    ship; testing #430's pre-registered prediction needs the perturbations driven through the real
    search. That also makes it roughly 70x more expensive, so scope it to the weights the prediction
    names. The payoff grew: `lethalExposure` and `role` are proxies for search, and a reply policy
    computes the first directly, so this is now a route to **deleting** model complexity.
-5. **#446 claim the initiative when it converts to lethal**, and **measure its headroom first**. #433
-   sized lethal detection at +0.8 against a bot that has since improved by 17 points, so the rate that
-   justified this has probably shrunk. #494 answers this as a side effect.
+6. **#446 claim the initiative when it converts to lethal.** Headroom measured and thin: lethal is
+   available to us on 4.3% of decisions, to them on 5.2%, and **0.0% before round 5** (1 occurrence in
+   20,112 early-game decisions, rising to 14-21% only from round 6). Everything built on a lethal
+   solver acts on the back half of the game and a 4-5% slice. Behind the four items above.
 
 ## Running a long experiment
 
