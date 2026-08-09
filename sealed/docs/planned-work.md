@@ -172,13 +172,18 @@ independently:
   corpus and ran **14.6%** dearer over real games, because width only binds when the frontier is
   large, which happens late.
 
-Three anchors now exist. Scale from whichever is closest in shape:
+**An anchor only transfers to a run of the same shape.** Sizing `--decisions` from the A/B anchors
+below overestimated it **threefold**: those play matchup decks and average ~192 decisions a game,
+while `--decisions` plays the coverage decks and averages ~134. Borrowing an inflation factor derived
+from sharded A/B runs on top of that compounded the error. Match the mode and the deck set, or measure
+a short run first.
 
-| measured run | games | shards | per game |
-| --- | --- | --- | --- |
-| `beam-reply` vs `beam-reply-shared` | 9600 | 12 | 39.6 s |
-| `reply:pessimistic:8x3` vs `beam-reply` | 8400 | 12 | 44.6 s |
-| `4x4:200000` vs `4x3:200000` | 9600 | 10 | 67.6 s |
+| measured run | mode | games | shards | per game |
+| --- | --- | --- | --- | --- |
+| `beam-reply` vs `beam-reply-shared` | A/B | 9600 | 12 | 39.6 s |
+| `reply:pessimistic:8x3` vs `beam-reply` | A/B | 8400 | 12 | 44.6 s |
+| `4x4:200000` vs `4x3:200000` | A/B | 9600 | 10 | 67.6 s |
+| `beam-reply` | `--decisions` | 420 | 1 | **15.0 s** |
 
 **Memory binds before cores do.** During a 12-shard run `vmstat` showed 22% idle CPU with `wa` and
 `st` both zero: core headroom exists and cannot be used, because memory runs out first.
@@ -188,9 +193,15 @@ Three anchors now exist. Scale from whichever is closest in shape:
 early, 7 MB/hour later), so a linear extrapolation from the first hour over-predicts, and a reading
 from the first minute badly under-predicts. Ten shards fits; twelve would not have.
 
-**There is no progress signal.** A shard prints nothing until it finishes, so the per-shard log files
-stay empty for the whole run and a multi-day job cannot be distinguished from a hung one. Emitting a
-periodic line from `runBench` is outstanding work on #492.
+**There is no progress signal.** `runBench` and `runDecisions` print nothing until they finish, so the
+per-shard log plumbing carries nothing: an 18-hour run left every log file at 0 bytes, and an
+unsharded `--decisions` run writes only its npm preamble. The pipe is connected to a silent source.
+
+What can be checked mid-run is **liveness, not progress**: `ps -o etime=,time=,pcpu=,rss=` on a worker
+shows whether it is still getting a full core and whether its heap is growing. That distinguishes
+"working" from "hung", and nothing more. Estimating completion currently requires either a **completed
+run of the same shape** to subtract from, or CPU-time-against-predicted-work arithmetic, which is
+weak. Emitting a periodic line from `runBench` is the top outstanding item on #492.
 
 ## Gated on the search, and the gate moved away from them
 
