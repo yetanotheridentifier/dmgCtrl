@@ -355,11 +355,42 @@ Public terms, in `ai/evaluate.ts`:
 | `readyUnit` | a light tempo term |
 | `initiative`, `claimCost` | turn order, see below |
 | `lethalExposure` | handing the opponent a one-action kill, see below |
+| `shield` | per Shield token, **shipped at 0**, see below |
 | `roleShift` | how far the role bends the weights, see below |
 
 The board term is built around what decides trades: unit **count** is the biggest swing, then power.
 Remaining HP counts lightly, so damage reads as progress toward removal without a
 surviving-but-damaged unit looking like a large loss. Only defeating a unit is the real swing.
+
+### Shields are invisible, and making them visible does not help
+
+A token's **stat line decides whether the evaluation can see it**. Attached upgrades add their printed
+power and HP, so Experience (1/1) and Advantage (1/0) already reach the model through `power` and
+`hp`. A Shield is printed **0/0** and works through a damage-prevention hook, so nothing any term
+reads changes when one is stripped: the board holds the same units at the same HP and **scores
+identically**, while the attack's cost is counted in full.
+
+The behavioural consequence is measurable. The bot strips an available Shield on **7.4%** of the
+decisions where it could, against **17.9%** for uniform-random play. Adding a `shield` term moves that
+directly: at weight 6 the rate becomes 18.2%.
+
+**It does not win games.** Against the shipped bot, over 5,500 games a cell:
+
+| `shield` | win rate |
+| --- | --- |
+| 3 | 50.0% ± 1.3% |
+| 8 | **48.2% ± 1.3%**, every shard below 50% |
+
+Flat at 3, harmful at 8, so the gradient runs downward from zero and there is no peak to find. The
+term ships at **0** and is kept only because it costs nothing measurable (112.18 ms a decision against
+112.20 before it existed) and is the only way to re-measure.
+
+The likely reason is that a flat per-token weight prices every Shield the same and so buys
+**indiscriminate** strips, when the real value is entirely contextual: large when the strip enables a
+kill this action, nil otherwise. That is the latent-value shape, and a contextual version is the only
+route worth revisiting. Note also that stripping less often than random is not by itself an error:
+random strips by accident, not because it is right, and an action spent stripping is an action not
+spent elsewhere.
 
 ### Which weights are actually doing work
 
