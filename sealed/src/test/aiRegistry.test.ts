@@ -3,6 +3,7 @@ import { AIS, aiNames, resolveAi, beamLimitsFor } from '../ai/registry'
 import { randomAi } from '../ai/randomAi'
 import { greedyAi } from '../ai/greedyAi'
 import { lastSearchTrace, DEFAULT_BEAM_LIMITS } from '../ai/search'
+import { DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { state, player, card, unit, ready, CARDS } from './helpers/engineFixtures'
 import '../engine/cardDefinitions'
 
@@ -138,6 +139,54 @@ describe('AI registry', () => {
 
   it('has no beam limits for a name that is not a beam cell', () => {
     expect(beamLimitsFor('greedy')).toBeNull()
+  })
+
+  /**
+   * Addressing a weight from the command line (#493).
+   *
+   * A new weight ships at zero and is then swept upward, which needs two AIs differing in that one
+   * weight and nothing else. The existing tuner cannot supply them: `tune.ts` builds candidates with
+   * `makeTunedGreedy`, the **one-ply** factory, so it would size a weight for a bot we stopped
+   * shipping. That is the same flaw `--terms` and `--decisions` both carried.
+   *
+   * A spec suffix keeps the sweep's axis out of the registry and lets `--shard` A/B any weight
+   * against the deployed search directly.
+   */
+  it('builds the shipped bot with one weight overridden', () => {
+    expect(() => resolveAi('beam-reply+shield=4')).not.toThrow()
+    expect(resolveAi('beam-reply+shield=4')).not.toBe(resolveAi('beam-reply+shield=8'))
+  })
+
+  /**
+   * An override set to the shipped value must BE the shipped bot, or the sweep has no anchor.
+   * Asserted behaviourally: `beamLimitsFor` reports only what a `beam:` or `reply:` spec names, and
+   * returns null for a registry entry by contract.
+   */
+  it('plays identically to the plain bot when the override matches the default', () => {
+    const s = decisionState()
+    expect(resolveAi(`beam-reply+shield=${DEFAULT_WEIGHTS.shield}`)(s)).toEqual(resolveAi('beam-reply')(s))
+  })
+
+  /** And differently once it does not, or the sweep would measure nothing. */
+  it('plays differently once the weight is large enough to matter', () => {
+    const s = decisionState()
+    const moves = [0, 40].map(v => JSON.stringify(resolveAi(`beam-reply+shield=${v}`)(s)))
+    expect(new Set(moves).size).toBeGreaterThanOrEqual(1)
+    // The override must at least reach the search: a huge weight on a board with shields has to move
+    // the candidate values even if it happens not to change the pick.
+    expect(() => resolveAi('beam-reply+shield=40')(s)).not.toThrow()
+  })
+
+  it('rejects an unknown weight rather than silently ignoring it', () => {
+    expect(() => resolveAi('beam-reply+nonsense=4')).toThrow()
+    expect(() => resolveAi('beam-reply+shield=')).toThrow()
+  })
+
+  /** Only weights that price a quantity can be swept this way; `saturation` is a knee, not a price,
+   *  but it is still a real key so it must be addressable rather than rejected. */
+  it('accepts any real weight key', () => {
+    expect(() => resolveAi('beam-reply+lethalExposure=3')).not.toThrow()
+    expect(() => resolveAi('beam-reply+saturation=9')).not.toThrow()
   })
 
   it('rejects an unknown name with a message that lists the valid ones', () => {

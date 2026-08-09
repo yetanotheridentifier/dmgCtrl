@@ -6,7 +6,7 @@ import {
 } from './greedyAi'
 import { DEFAULT_BEAM_LIMITS, type BeamLimits } from './search'
 import { DEFAULT_LETHAL_LIMITS } from './lethal'
-import { DEFAULT_WEIGHTS } from './evaluate'
+import { DEFAULT_WEIGHTS, type EvalWeights } from './evaluate'
 
 /**
  * The named-AI registry: the single place that knows which opponents exist. The bench addresses
@@ -100,6 +100,33 @@ const REPLY_SPEC = /^reply:(pessimistic|selfish)(?::(\d+)x(\d+)(?::(\d+))?)?$/
 const LETHAL_BEAM_SPEC = /^beam-lethal:(\d+)x(\d+):(\d+)$/
 
 /**
+ * `NAME+WEIGHT=VALUE`, so a single evaluation weight can be swept against the deployed search.
+ *
+ * A new weight ships at zero and is then swept upward, which needs two AIs differing in that weight
+ * and nothing else. The existing tuner cannot supply them: `tune.ts` builds candidates with
+ * `makeTunedGreedy`, the **one-ply** factory, so it would size a weight for a bot we stopped
+ * shipping. That is the same flaw `--terms` and `--decisions` both carried, and #487 exists to fix
+ * it properly; this is the narrow version that unblocks a single-weight A/B today.
+ *
+ * `beam-reply+shield=4` against plain `beam-reply` is exactly one difference, and `--shard` can run
+ * it. Negatives are allowed: a term can be worth measuring in either direction.
+ */
+const WEIGHT_OVERRIDE = /^(.+)\+([A-Za-z][A-Za-z0-9]*)=(-?\d+(?:\.\d+)?)$/
+
+/** Split `NAME+WEIGHT=VALUE` into the AI name and the override, validating the key exists. */
+function splitWeightOverride(name: string): { base: string; overrides?: Partial<EvalWeights> } {
+  const m = WEIGHT_OVERRIDE.exec(name)
+  if (!m) return { base: name }
+  const [, base, key, raw] = m
+  // Checked against the real weight set rather than a hardcoded list, so a typo fails loudly instead
+  // of being silently dropped and measured as "no difference".
+  if (!(key in DEFAULT_WEIGHTS)) {
+    throw new Error(`Unknown weight "${key}" in "${name}". Valid: ${Object.keys(DEFAULT_WEIGHTS).join(', ')}`)
+  }
+  return { base, overrides: { [key]: Number(raw) } as Partial<EvalWeights> }
+}
+
+/**
  * The limits a `beam:` or `reply:` cell names, or `null` if the name is neither.
  *
  * **Spreads `DEFAULT_BEAM_LIMITS` first, and that is the point.** Building the limits field by field
@@ -112,6 +139,8 @@ const LETHAL_BEAM_SPEC = /^beam-lethal:(\d+)x(\d+):(\d+)$/
  * configuration, and inferring that through a decision trace is a weaker check than reading it.
  */
 export function beamLimitsFor(name: string): BeamLimits | null {
+  const { base } = splitWeightOverride(name)
+  name = base
   const reply = REPLY_SPEC.exec(name)
   if (reply) {
     const policy = reply[1] as 'pessimistic' | 'selfish'
@@ -146,6 +175,18 @@ export function beamLimitsFor(name: string): BeamLimits | null {
 export function resolveAi(name: string): Ai {
   const ai = AIS[name]
   if (ai) return ai
+
+  // `NAME+WEIGHT=VALUE` rebuilds the named bot with one weight changed. Handled before the specs so
+  // the suffix composes with all of them, and separately from the registry lookup because a named
+  // entry is a prebuilt singleton that cannot carry different weights.
+  const weighted = splitWeightOverride(name)
+  if (weighted.overrides) {
+    const weights = { ...DEFAULT_WEIGHTS, ...weighted.overrides }
+    const limits = beamLimitsFor(weighted.base)
+      ?? (AIS[weighted.base] ? { ...DEFAULT_BEAM_LIMITS, reply: 'pessimistic' as const } : null)
+    if (limits === null) throw new Error(`Cannot override a weight on "${weighted.base}"`)
+    return makeBeamGreedy(weights, limits)
+  }
 
   const lethalSpec = LETHAL_BEAM_SPEC.exec(name)
   if (lethalSpec) {
