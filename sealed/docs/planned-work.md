@@ -132,39 +132,35 @@ bot.
 
 ## Next up
 
-1. **#493 the evaluation cannot see a token.** A Shield prevents a whole instance of damage, so
-   stripping one leaves a board that scores **identically**: the strip is not undervalued, it is
-   indistinguishable from doing nothing while its costs are counted in full.
+1. **Break search ties with the one-ply score**, before either #396 or #398 writes a new term.
 
-   Measured over 420 games: **15.8%** of decisions face a shielded enemy, a strip is available on
-   42.6% of those, and the bot takes it **7.4%** of the time against **random's 17.9%**. Less than
-   half as often as chance, which is avoidance rather than indifference. The search does not rescue
-   it. Build Shield and Advantage; Experience is already visible through `power` and `hp`.
-2. **Break search ties with the one-ply score**, before either #396 or #398 writes a new term.
-
-   The same run found the search **tying more often than one ply**: resourcing 0.6% to 5.4%,
+   `--decisions` found the search **tying more often than one ply**: resourcing 0.6% to 5.4%,
    card-play 6.7% to 11.8%. A beam values a move by the best board it can reach, so candidates whose
    lines converge inside the horizon come out equal even when they differ immediately, and the bot
    then coin-flips away a preference one ply actually had. Falling back to the one-ply score costs
    almost nothing, applies to 5-12% of decisions, and is a strict improvement if that signal is worth
-   anything. Measure it on its own so it is not confounded with #493.
-3. **#487 re-tune the weights for the shipped search.** Unblocked, now that the configuration is
+   anything.
+
+   It is also now the **only** unexplored cheap lever: the token term was measured and rejected, so
+   the next candidates after this are the weight re-tune and the two residue tickets, all of which are
+   larger.
+2. **#487 re-tune the weights for the shipped search.** Unblocked, now that the configuration is
    settled and there is a fixed target to tune against. The "re-weighting is exhausted" result
    measured a one-ply evaluator, and #430 identified exactly why several weights could not matter
    there. The largest unexamined lever, and much cheaper than it was: #488 cut deep-search cost
    roughly sixfold. Re-size it with `--cost` before sweeping.
-4. **#396 and #398, whose gates have now cleared.** Both said "land the search, re-run `--decisions`,
+3. **#396 and #398, whose gates have now cleared.** Both said "land the search, re-run `--decisions`,
    build only what still ties". Measured: the search contributes **nothing** to choice answering
    (11.4% one ply, 11.3% searched, over 5,878 decisions averaging 6.6 options), and it makes
    resourcing and card-play **worse**. Neither is subsumed. Do the tie-break above first, since it
    may absorb part of both.
-5. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
+4. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
    moves with a **one-ply** scorer, so it currently reports term sensitivity for a bot we no longer
    ship; testing #430's pre-registered prediction needs the perturbations driven through the real
    search. That also makes it roughly 70x more expensive, so scope it to the weights the prediction
    names. The payoff grew: `lethalExposure` and `role` are proxies for search, and a reply policy
    computes the first directly, so this is now a route to **deleting** model complexity.
-6. **#446 claim the initiative when it converts to lethal.** Headroom measured and thin: lethal is
+5. **#446 claim the initiative when it converts to lethal.** Headroom measured and thin: lethal is
    available to us on 4.3% of decisions, to them on 5.2%, and **0.0% before round 5** (1 occurrence in
    20,112 early-game decisions, rising to 14-21% only from round 6). Everything built on a lethal
    solver acts on the back half of the game and a 4-5% slice. Behind the four items above.
@@ -378,6 +374,18 @@ Rules learned the hard way.
 Recorded so nobody spends an evening re-deriving a null result. All measured against the identical
 AI with the change switched off, across the coverage decks.
 
+- **A `shield` term.** The evaluation genuinely cannot see a Shield (printed 0/0, works through a
+  prevention hook, so a strip leaves a board scoring identically), and the bot strips one on **7.4%**
+  of opportunities against random play's **17.9%**. Making it visible does not win: **50.0% ± 1.3%**
+  at weight 3 and **48.2% ± 1.3%** at weight 8 over 5,500 games a cell, with every shard below 50% at
+  weight 8. Flat then harmful, so no peak exists above zero. The term stays in the code at 0 because
+  it costs nothing measurable and is the only way to re-measure.
+
+  Two lessons worth more than the result. **A flat per-token weight buys indiscriminate strips**,
+  when the value is entirely contextual: large when the strip enables a kill this action, nil
+  otherwise. Only a contextual version is worth revisiting. And **"worse than random" was an
+  overstatement on my part**: random strips by accident rather than correctly, so stripping less often
+  than chance is not by itself evidence of an error.
 - **A deeper beam.** Depth 4 alongside a pessimistic reply, at a node budget matched so that neither
   cell exhausts, measured **47.6% ± 1.0%** against depth 3 over 9600 games and 10 seeds, with **every
   shard below 50%**. Not a null: depth 4 is about 2.4 points **worse**, and costs 1.48x more per

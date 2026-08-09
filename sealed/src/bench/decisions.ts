@@ -1,12 +1,13 @@
 import ashSet from '../test/fixtures/ashSet.json'
 import '../engine/cardDefinitions' // side effect: registers every implemented card ability
 import type { SwuCard } from '../data/cards'
-import type { GameState, PlayerId } from '../engine/types'
+import type { GameState, PlayerId, UnitState } from '../engine/types'
 import type { Action } from '../engine/actions'
 import { opponentOf, hasPendingChoices } from '../engine/types'
 import { buildCardDb } from '../engine/cardDb'
 import { initGame } from '../engine/initGame'
-import { legalMoves } from '../engine/legalMoves'
+import { legalMoves, enemyAttackTargets } from '../engine/legalMoves'
+import { unitHasKeyword } from '../engine/keywords'
 import { resolve } from '../engine/resolve'
 import { seededShuffle, nextSeed } from '../engine/rng'
 import { COMMIT_ID } from '../buildIdentity'
@@ -303,6 +304,33 @@ export interface ShieldStat {
   shieldsSeen: number
   /** Decisions where one of OUR units carried a shield, the other side of the same blindness. */
   decisionsHoldingShield: number
+
+  /**
+   * Shielded enemy **Sentinels**, summed over decisions. A Sentinel forces every attacker in its
+   * arena onto itself, so a Shield on one is categorically different from a Shield on a body: it
+   * closes a lane rather than absorbing a hit.
+   */
+  shieldedBlockers: number
+  /**
+   * Decisions where at least **one arena** is shut: every ready attacker we have there is
+   * Sentinel-forced onto a shielded unit, so no damage of ours reaches that lane's base.
+   *
+   * **This is the reported defect.** Measuring it board-wide instead (below) puts it at 0.3% of
+   * decisions, because a single unit in the other arena reports the board as open while the lane in
+   * question is shut for the rest of the game.
+   */
+  laneLocked: number
+  /** Decisions where **every** arena we can attack in is shut, so nothing of ours lands anywhere. */
+  lockedOut: number
+  /** Rounds sampled once each from the player seat, the denominator for the two below. */
+  roundsSampled: number
+  /** Of those, rounds in which the seat was fully locked out. */
+  lockedRounds: number
+  /**
+   * Longest run of consecutive locked rounds **within a single game**. The figure that decides
+   * whether this is structural: one round is noise, four is a lost game.
+   */
+  longestLockout: number
 }
 
 export interface DecisionReport {
@@ -356,6 +384,44 @@ function shieldsOn(s: GameState, seat: PlayerId): number {
   )
 }
 
+const isShielded = (u: UnitState): boolean => u.upgrades.some(up => up.cardId === TOKEN_SHIELD)
+
+/** Enemy Sentinels carrying a Shield: the ones that can close a lane rather than absorb a hit. */
+function shieldedBlockersAgainst(s: GameState, seat: PlayerId): number {
+  return s.players[opponentOf(seat)].units
+    .filter(u => isShielded(u) && unitHasKeyword(s, u, 'Sentinel')).length
+}
+
+/**
+ * Which arenas is this seat shut out of by a shielded Sentinel?
+ *
+ * **Per arena, because a lane is an arena.** A shielded Sentinel in ground locks ground attackers and
+ * leaves space untouched, so asking "is every attacker on the board locked" reports "not locked"
+ * whenever a single unit stands in the other arena. Measured that way the rate came out at 0.3% of
+ * decisions and never lasting a round, which contradicted what play-testers were reporting. The
+ * complaint is that **one lane** closes, and that is what this counts.
+ *
+ * A lane needs at least one ready attacker of ours to be shut: an empty arena is not blocked.
+ */
+function lockedLanes(s: GameState, seat: PlayerId): Array<'ground' | 'space'> {
+  const shut = (arena: 'ground' | 'space'): boolean => {
+    const ready = s.players[seat].units.filter(u => !u.exhausted && u.arena === arena)
+    if (ready.length === 0) return false
+    return ready.every(u => {
+      const { targets, sentinelLocked } = enemyAttackTargets(s, u, seat)
+      return sentinelLocked && targets.length > 0 && targets.every(isShielded)
+    })
+  }
+  return (['ground', 'space'] as const).filter(shut)
+}
+
+/** Every arena this seat can attack in is shut: no damage of ours lands anywhere. */
+function lockedOutBy(s: GameState, seat: PlayerId): boolean {
+  const arenas = (['ground', 'space'] as const)
+    .filter(a => s.players[seat].units.some(u => !u.exhausted && u.arena === a))
+  return arenas.length > 0 && lockedLanes(s, seat).length === arenas.length
+}
+
 /** Choice kinds, most frequent first. Count then name, so the order is stable across runs rather
  *  than following insertion. */
 const rank = (counts: Map<string, number>): Array<{ kind: string; count: number }> =>
@@ -372,6 +438,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
 
   const shields: ShieldStat = {
     decisionsFacingShield: 0, removalAvailable: 0, removals: 0, shieldsSeen: 0, decisionsHoldingShield: 0,
+    shieldedBlockers: 0, laneLocked: 0, lockedOut: 0, roundsSampled: 0, lockedRounds: 0, longestLockout: 0,
   }
   const resourcing = empty()
   const initiative = empty()
@@ -433,6 +500,11 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
        */
       const watching: Array<{ seat: PlayerId; instanceId: string; until: number }> = []
 
+      // Per game, for the same reason: a lockout run must reset between games or the "longest run"
+      // would be a run across the whole corpus rather than within one game.
+      let lockSampledRound = -1
+      let lockRun = 0
+
       for (let i = 0; i < ceiling && s.winner === null; i++) {
         const moves = legalMoves(s)
         if (moves.length === 0) break
@@ -493,6 +565,26 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
             if (strips.some(x => sameAction(x.m, action))) shields.removals++
           }
           if (shieldsOn(s, me) > 0) shields.decisionsHoldingShield++
+          shields.shieldedBlockers += shieldedBlockersAgainst(s, me)
+          if (lockedLanes(s, me).length > 0) shields.laneLocked++
+          if (lockedOutBy(s, me)) shields.lockedOut++
+        }
+
+        // Lockout duration, sampled once a round from ONE seat so the figure is rounds rather than
+        // actions. `lockRun` is declared per game below; a watch list declared outside the game loop
+        // once reported a leader-death rate of 72.3% against a true 17.7%.
+        if (s.phase === 'action' && s.round !== lockSampledRound) {
+          lockSampledRound = s.round
+          shields.roundsSampled++
+          // Duration tracks the LANE reading, since a lane shut for four rounds is the lost game;
+          // a board-wide lockout is a rarer and stricter event.
+          if (lockedLanes(s, 'player').length > 0) {
+            shields.lockedRounds++
+            lockRun++
+            if (lockRun > shields.longestLockout) shields.longestLockout = lockRun
+          } else {
+            lockRun = 0
+          }
         }
 
         record(resourcing, withSearch.filter(x => x.m.type === 'resourceCard'))

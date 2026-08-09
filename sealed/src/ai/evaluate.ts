@@ -1,6 +1,7 @@
 import type { GameState, PlayerId } from '../engine/types'
 import { opponentOf } from '../engine/types'
 import { effectivePower, effectiveHp } from '../engine/stats'
+import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { handValue, DEFAULT_HAND_WEIGHTS, type HandWeights } from './handValue'
 import { role, canFinishThisAction, type Role } from './race'
 
@@ -69,6 +70,24 @@ export interface EvalWeights {
    */
   saturation: number
   readyUnit: number // per ready (unexhausted) unit, a light tempo term
+  /**
+   * Per Shield token, ours minus theirs (#493).
+   *
+   * **The one token the evaluation cannot otherwise see, and its stat line is why.** Attached
+   * upgrades add their printed power and HP, so Experience (1/1) and Advantage (1/0) already reach
+   * the model through `power` and `hp`. A Shield is printed **0/0** and works through a
+   * damage-prevention hook, so without this term it changes nothing anything reads.
+   *
+   * The consequence is worse than under-valuing it. A Shield absorbs a whole instance of damage, so
+   * the board after a strip holds the same units at the same HP and differs only by an unscored
+   * token: it scores **identically**, making the strip indistinguishable from doing nothing while the
+   * attack's cost is counted in full. Measured over 420 games, the bot strips an available Shield
+   * 7.4% of the time against random play's 17.9%, which is avoidance rather than indifference.
+   *
+   * Flat per token rather than "what it will prevent", matching how every other board term here is
+   * priced. A refinement scaled by the incoming threat is only worth trying if flat measures positive.
+   */
+  shield: number
   /** Value of holding the initiative, i.e. of acting first next round (#394). */
   initiative: number
   /**
@@ -117,6 +136,9 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   resourceSurplus: 3,
   saturation: 7,
   readyUnit: 1,
+  // #493. OFF until swept, per the rule that a new weight ships at zero: shipping a default before
+  // its A/B ran once inverted a whole reading, because the candidate was then the ablation.
+  shield: 0,
   // Swept twice. Turn order is worth far less than it first looks: raising `initiative` is
   // monotonically worse (4 -> 46.8%, 6 -> 35.4%, 8 -> 29.4% against the same AI with both terms at
   // 0), because the bot buys it by giving up whole turns. `claimCost: 0` is the always-claim failure
@@ -168,6 +190,14 @@ function presence(state: GameState, id: PlayerId): Presence {
 function boardPresence(state: GameState, id: PlayerId, w: EvalWeights): number {
   const p = presence(state, id)
   return w.unit * p.units + w.power * p.power + w.hp * p.hp
+}
+
+/** Shield tokens a seat is carrying, counted per token rather than per shielded unit. */
+function shields(state: GameState, id: PlayerId): number {
+  return state.players[id].units.reduce(
+    (n, u) => n + u.upgrades.filter(up => up.cardId === TOKEN_SHIELD).length,
+    0,
+  )
 }
 
 function readyUnits(state: GameState, id: PlayerId): number {
@@ -324,13 +354,16 @@ export function makePublicScore(w0: EvalWeights): Evaluator {
     const cards = w.card * (state.players[me].hand.length - state.players[foe].hand.length)
     const resources = resourceValue(state, me, w) - resourceValue(state, foe, w)
     const tempo = w.readyUnit * (readyUnits(state, me) - readyUnits(state, foe))
+    // Symmetric like every other board term, so the public half stays zero-sum: a Shield is worth
+    // exactly what it costs the other seat.
+    const shielding = w.shield * (shields(state, me) - shields(state, foe))
     const initiative = initiativeValue(state, me, w)
     // Symmetric, so this stays zero-sum: being one action from killing them is worth exactly what
     // being one action from death costs.
     const exposure = w.lethalExposure
       * ((canFinishThisAction(state, me) ? 1 : 0) - (canFinishThisAction(state, foe) ? 1 : 0))
 
-    return baseTerm + board + cards + resources + tempo + initiative + exposure
+    return baseTerm + board + cards + resources + tempo + shielding + initiative + exposure
   }
 }
 
@@ -344,7 +377,7 @@ export interface Term {
  *  `roleShift` are absent by construction: neither is a price. See `resourceSplit` and `roleAdjusted`. */
 export type LinearTermKey =
   | 'base' | 'unit' | 'power' | 'hp' | 'card' | 'resource' | 'resourceSurplus'
-  | 'readyUnit' | 'initiative' | 'claimCost' | 'lethalExposure'
+  | 'readyUnit' | 'shield' | 'initiative' | 'claimCost' | 'lethalExposure'
 
 /**
  * `publicScore` broken into `weight x quantity` per term (#430), for the term-sensitivity diagnostic.
@@ -390,6 +423,7 @@ export function publicBreakdown(
     resource: { weight: w.resource, quantity: myPool.full - theirPool.full },
     resourceSurplus: { weight: w.resourceSurplus, quantity: myPool.surplus - theirPool.surplus },
     readyUnit: { weight: w.readyUnit, quantity: readyUnits(state, me) - readyUnits(state, foe) },
+    shield: { weight: w.shield, quantity: shields(state, me) - shields(state, foe) },
     initiative: { weight: w.initiative, quantity: state.initiative === me ? 1 : -1 },
     // Charged to whoever claimed, so the quantity is their forfeited tempo less ours.
     claimCost: { weight: w.claimCost, quantity: forfeitedTempo(state, foe) - forfeitedTempo(state, me) },

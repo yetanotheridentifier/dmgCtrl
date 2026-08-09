@@ -134,6 +134,53 @@ describe('runDecisions', () => {
     )).toBe(false)
   })
 
+  /**
+   * The shielded-Sentinel lockout (#493 follow-up), which is the defect play-testers actually report.
+   *
+   * A Sentinel forces every attacker in its arena onto itself. Give it a Shield and the bot cannot
+   * remove it, because stripping leaves a board scoring identically, so **the lane is closed for the
+   * rest of the game** and no base damage gets through it. That is structural, unlike the general
+   * "shields are undervalued" reading, which measured 15.8% of decisions and swept to a null.
+   *
+   * The number that decides how hard to push a fix is **consecutive rounds locked**: one round is
+   * noise, four is a lost game.
+   */
+  it('separates shielded blockers from shielded units generally', () => {
+    const sh = report.shields
+    // Every blocker is a shielded enemy unit, so it cannot exceed the total seen.
+    expect(sh.shieldedBlockers).toBeLessThanOrEqual(sh.shieldsSeen)
+    expect(sh.shieldedBlockers).toBeGreaterThanOrEqual(0)
+  })
+
+  /**
+   * **A lane is an arena, and measuring board-wide instead understates it drastically.** A shielded
+   * Sentinel in ground shuts ground and leaves space alone, so "is every attacker locked" reports
+   * open whenever one unit stands in the other arena. Measured that way the rate was 0.3% of
+   * decisions and never lasted a round, which contradicted what play-testers were reporting.
+   */
+  it('counts a shut lane separately from a shut board', () => {
+    const sh = report.shields
+    // Both lanes shut is a strict special case of one lane shut, which is a special case of facing
+    // a shield at all. If that ordering ever breaks, the arena split is wrong.
+    expect(sh.lockedOut).toBeLessThanOrEqual(sh.laneLocked)
+    expect(sh.laneLocked).toBeLessThanOrEqual(sh.decisionsFacingShield)
+  })
+
+  /**
+   * Sampled once a round from one seat, not per decision, so the figure is rounds rather than
+   * actions. Per-game state must be built inside the game loop: a watch list declared outside one
+   * once reported a leader-death rate of 72.3% against a true 17.7%.
+   */
+  it('measures how long a lockout persists, in rounds', () => {
+    const sh = report.shields
+    expect(sh.roundsSampled).toBeGreaterThan(0)
+    expect(sh.lockedRounds).toBeLessThanOrEqual(sh.roundsSampled)
+    expect(sh.longestLockout).toBeLessThanOrEqual(sh.lockedRounds)
+    // A run cannot exceed the rounds in a single game, so a figure near `roundsSampled` across many
+    // games would mean the per-game reset leaked.
+    expect(sh.longestLockout).toBeLessThan(sh.roundsSampled)
+  })
+
   it('actually plays games and observes each decision', () => {
     expect(report.games).toBeGreaterThan(0)
     for (const s of report.stats) expect(s.offered, s.label).toBeGreaterThan(0)
