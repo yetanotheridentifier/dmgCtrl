@@ -132,29 +132,42 @@ bot.
 
 ## Next up
 
-1. **#494 re-measure the blind spots** against the bot that now ships. About an hour, and it gates
-   four tickets that all carry the same instruction: land the search, re-run `--decisions`, build only
-   what still ties. The search has landed. Every rate the AI backlog rests on was measured against
-   one-ply greedy, which is roughly 27 points weaker than `beam-reply`. It could retire #446 outright
-   and it sizes #493 and #397 for the first time. Cheapest high-value work outstanding.
-2. **#493 the evaluation cannot see a token.** A Shield prevents a whole instance of damage, so
-   stripping one leaves a board that scores **identically**: pinging is not undervalued, it is
-   indistinguishable from doing nothing while its costs are counted in full. Found in live play. Gate
-   on #494's shield rates before inventing a weight.
+1. **#493 the evaluation cannot see a token.** A Shield prevents a whole instance of damage, so
+   stripping one leaves a board that scores **identically**: the strip is not undervalued, it is
+   indistinguishable from doing nothing while its costs are counted in full.
+
+   Measured over 420 games: **15.8%** of decisions face a shielded enemy, a strip is available on
+   42.6% of those, and the bot takes it **7.4%** of the time against **random's 17.9%**. Less than
+   half as often as chance, which is avoidance rather than indifference. The search does not rescue
+   it. Build Shield and Advantage; Experience is already visible through `power` and `hp`.
+2. **Break search ties with the one-ply score**, before either #396 or #398 writes a new term.
+
+   The same run found the search **tying more often than one ply**: resourcing 0.6% to 5.4%,
+   card-play 6.7% to 11.8%. A beam values a move by the best board it can reach, so candidates whose
+   lines converge inside the horizon come out equal even when they differ immediately, and the bot
+   then coin-flips away a preference one ply actually had. Falling back to the one-ply score costs
+   almost nothing, applies to 5-12% of decisions, and is a strict improvement if that signal is worth
+   anything. Measure it on its own so it is not confounded with #493.
 3. **#487 re-tune the weights for the shipped search.** Unblocked, now that the configuration is
    settled and there is a fixed target to tune against. The "re-weighting is exhausted" result
    measured a one-ply evaluator, and #430 identified exactly why several weights could not matter
    there. The largest unexamined lever, and much cheaper than it was: #488 cut deep-search cost
    roughly sixfold. Re-size it with `--cost` before sweeping.
-4. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
+4. **#396 and #398, whose gates have now cleared.** Both said "land the search, re-run `--decisions`,
+   build only what still ties". Measured: the search contributes **nothing** to choice answering
+   (11.4% one ply, 11.3% searched, over 5,878 decisions averaging 6.6 options), and it makes
+   resourcing and card-play **worse**. Neither is subsumed. Do the tie-break above first, since it
+   may absorb part of both.
+5. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
    moves with a **one-ply** scorer, so it currently reports term sensitivity for a bot we no longer
    ship; testing #430's pre-registered prediction needs the perturbations driven through the real
    search. That also makes it roughly 70x more expensive, so scope it to the weights the prediction
    names. The payoff grew: `lethalExposure` and `role` are proxies for search, and a reply policy
    computes the first directly, so this is now a route to **deleting** model complexity.
-5. **#446 claim the initiative when it converts to lethal**, and **measure its headroom first**. #433
-   sized lethal detection at +0.8 against a bot that has since improved by 17 points, so the rate that
-   justified this has probably shrunk. #494 answers this as a side effect.
+6. **#446 claim the initiative when it converts to lethal.** Headroom measured and thin: lethal is
+   available to us on 4.3% of decisions, to them on 5.2%, and **0.0% before round 5** (1 occurrence in
+   20,112 early-game decisions, rising to 14-21% only from round 6). Everything built on a lethal
+   solver acts on the back half of the game and a 4-5% slice. Behind the four items above.
 
 ## Running a long experiment
 
@@ -172,13 +185,18 @@ independently:
   corpus and ran **14.6%** dearer over real games, because width only binds when the frontier is
   large, which happens late.
 
-Three anchors now exist. Scale from whichever is closest in shape:
+**An anchor only transfers to a run of the same shape.** Sizing `--decisions` from the A/B anchors
+below overestimated it **threefold**: those play matchup decks and average ~192 decisions a game,
+while `--decisions` plays the coverage decks and averages ~134. Borrowing an inflation factor derived
+from sharded A/B runs on top of that compounded the error. Match the mode and the deck set, or measure
+a short run first.
 
-| measured run | games | shards | per game |
-| --- | --- | --- | --- |
-| `beam-reply` vs `beam-reply-shared` | 9600 | 12 | 39.6 s |
-| `reply:pessimistic:8x3` vs `beam-reply` | 8400 | 12 | 44.6 s |
-| `4x4:200000` vs `4x3:200000` | 9600 | 10 | 67.6 s |
+| measured run | mode | games | shards | per game |
+| --- | --- | --- | --- | --- |
+| `beam-reply` vs `beam-reply-shared` | A/B | 9600 | 12 | 39.6 s |
+| `reply:pessimistic:8x3` vs `beam-reply` | A/B | 8400 | 12 | 44.6 s |
+| `4x4:200000` vs `4x3:200000` | A/B | 9600 | 10 | 67.6 s |
+| `beam-reply` | `--decisions` | 420 | 1 | **15.0 s** |
 
 **Memory binds before cores do.** During a 12-shard run `vmstat` showed 22% idle CPU with `wa` and
 `st` both zero: core headroom exists and cannot be used, because memory runs out first.
@@ -188,9 +206,15 @@ Three anchors now exist. Scale from whichever is closest in shape:
 early, 7 MB/hour later), so a linear extrapolation from the first hour over-predicts, and a reading
 from the first minute badly under-predicts. Ten shards fits; twelve would not have.
 
-**There is no progress signal.** A shard prints nothing until it finishes, so the per-shard log files
-stay empty for the whole run and a multi-day job cannot be distinguished from a hung one. Emitting a
-periodic line from `runBench` is outstanding work on #492.
+**There is no progress signal.** `runBench` and `runDecisions` print nothing until they finish, so the
+per-shard log plumbing carries nothing: an 18-hour run left every log file at 0 bytes, and an
+unsharded `--decisions` run writes only its npm preamble. The pipe is connected to a silent source.
+
+What can be checked mid-run is **liveness, not progress**: `ps -o etime=,time=,pcpu=,rss=` on a worker
+shows whether it is still getting a full core and whether its heap is growing. That distinguishes
+"working" from "hung", and nothing more. Estimating completion currently requires either a **completed
+run of the same shape** to subtract from, or CPU-time-against-predicted-work arithmetic, which is
+weak. Emitting a periodic line from `runBench` is the top outstanding item on #492.
 
 ## Gated on the search, and the gate moved away from them
 

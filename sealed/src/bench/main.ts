@@ -272,11 +272,20 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     '  a TIE is a decision the evaluation cannot see: every candidate scores the same, so the',
     '  seeded tie-break picks one at random. High tie rates are blind spots, not close calls.',
     '',
-    '    tied   offered   avg options   decision',
+    '  "1-ply" is a fixed one-ply scorer, comparable with every historical run. "search" is the AI',
+    '  actually being measured, read off the values its own search computed. They differ in BOTH',
+    '  directions: a beam separates moves one ply cannot tell apart, and also ties moves one ply',
+    '  scores differently, when their lines converge inside the horizon. "search" is the rate at',
+    '  which the bot under test coin-flips, and is the one to act on.',
+    '',
+    '    1-ply   search   offered   avg options   decision',
   ]
   for (const s of report.stats) {
-    const tieRate = s.offered === 0 ? '  n/a' : pct(s.tied / s.offered).padStart(6)
-    lines.push(`  ${tieRate}   ${String(s.offered).padStart(7)}   ${s.avgCandidates.toFixed(1).padStart(11)}   ${s.label}`)
+    const rate = (n: number): string => (s.offered === 0 ? '  n/a' : pct(n / s.offered).padStart(6))
+    lines.push(
+      `  ${rate(s.tied)}   ${rate(s.tiedSearch)}   ${String(s.offered).padStart(7)}   ` +
+      `${s.avgCandidates.toFixed(1).padStart(11)}   ${s.label}`,
+    )
   }
   const r = report.resourcing
   const total = r.banked + r.skipped
@@ -320,6 +329,20 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     row('their choice kinds', topKinds(su.opponentChoiceKinds)),
     row('our choice kinds', topKinds(su.selfChoiceKinds)),
   )
+  const sh = report.shields
+  const shieldRate = (n: number, d: number): string => (d === 0 ? 'n/a' : `${n} of ${d} = ${pct(n / d)}`)
+  lines.push(
+    '',
+    '  shields: a Shield absorbs one whole instance of damage, so a move that strips one leaves a',
+    '  board scoring IDENTICALLY under an evaluation with no token term. The strip reads as a wasted',
+    '  action while its cost is counted in full.',
+    row('decisions facing a shield', shieldRate(sh.decisionsFacingShield, report.exposure.decisions)),
+    row('  a strip was available', shieldRate(sh.removalAvailable, sh.decisionsFacingShield)),
+    row('  the bot took it', shieldRate(sh.removals, sh.removalAvailable)),
+    row('shields seen', `${sh.shieldsSeen} across those decisions`),
+    row('holding one ourselves', shieldRate(sh.decisionsHoldingShield, report.exposure.decisions)),
+  )
+
   const le = report.lethal
   const early = le.byRound.filter(r => r.round <= 4).reduce((n, r) => ({ d: n.d + r.decisions, t: n.t + r.theirs }), { d: 0, t: 0 })
   lines.push(

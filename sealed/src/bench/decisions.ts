@@ -2,6 +2,7 @@ import ashSet from '../test/fixtures/ashSet.json'
 import '../engine/cardDefinitions' // side effect: registers every implemented card ability
 import type { SwuCard } from '../data/cards'
 import type { GameState, PlayerId } from '../engine/types'
+import type { Action } from '../engine/actions'
 import { opponentOf, hasPendingChoices } from '../engine/types'
 import { buildCardDb } from '../engine/cardDb'
 import { initGame } from '../engine/initGame'
@@ -10,7 +11,8 @@ import { resolve } from '../engine/resolve'
 import { seededShuffle, nextSeed } from '../engine/rng'
 import { COMMIT_ID } from '../buildIdentity'
 import { evaluate } from '../ai/evaluate'
-import { makeQuiescent } from '../ai/search'
+import { makeQuiescent, lastSearchTrace, clearSearchTrace } from '../ai/search'
+import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { resolveAi } from '../ai/registry'
 import { setupAi } from '../ai/setupAi'
 import { role, reachSteady, canFinishNow, canFinishThisAction, type Role } from '../ai/race'
@@ -37,6 +39,12 @@ export interface DecisionConfig {
   seed: number
   aiName?: string
   stepCeiling?: number
+  /**
+   * Play only the first N coverage decks. For tests, which need the mechanism exercised rather than
+   * the rates: a searching AI over all 44 decks is a quarter-hour, which does not belong in a suite.
+   * Omit it for a real run, where the whole pool is the point.
+   */
+  deckLimit?: number
 }
 
 /** One kind of decision, and how often the evaluation had nothing to say about it. */
@@ -44,8 +52,23 @@ export interface DecisionStat {
   label: string
   /** Positions where this decision was offered with more than one candidate. */
   offered: number
-  /** Of those, how many had every candidate scoring identically (a coin flip). */
+  /** Of those, how many had every candidate scoring identically under **one ply** (a coin flip). */
   tied: number
+  /**
+   * The same count under the **AI actually being diagnosed**, taken from the values its search
+   * computed rather than from a separate scorer.
+   *
+   * Equal to `tied` for a one-ply AI, which has no search to break anything. For a searching AI the
+   * gap between the columns is the measurement, and it runs **both ways**: a beam values a move by
+   * the best board its follow-ups reach, so it separates moves one ply cannot tell apart AND ties
+   * moves one ply scores differently, when their lines converge inside the horizon.
+   *
+   * So this is not a refinement of `tied` and is not bounded by it. It is the rate at which the
+   * **shipped bot** coin-flips, which is the blind spot that matters. #396 and #398 were told to
+   * re-ask that question once the search landed, and it could not be asked before, because the tie
+   * was always computed one-ply whatever AI was named.
+   */
+  tiedSearch: number
   /** Mean number of candidates, so a tie rate can be read against how much was at stake. */
   avgCandidates: number
 }
@@ -258,11 +281,36 @@ export interface LeaderStat {
   diedSoon: number
 }
 
+/**
+ * Shields, and whether the bot ever strips one (#493).
+ *
+ * A Shield prevents a whole instance of damage, so a ping that removes one leaves the same units at
+ * the same HP and differs only by a token no evaluation term reads. The resulting board scores
+ * **identically**, which makes the strip indistinguishable from doing nothing while the attack's cost
+ * (exhausting the attacker, exposing it to a counter) is counted in full.
+ *
+ * These rates decide whether that is worth fixing. Rare shields retire the ticket cheaply; common
+ * shields with a low strip rate confirm at scale what was first seen in live play.
+ */
+export interface ShieldStat {
+  /** Decisions taken with at least one shielded enemy unit on the board. */
+  decisionsFacingShield: number
+  /** Of those, decisions where some legal move would have removed a shield. */
+  removalAvailable: number
+  /** Of those, decisions where the bot actually took one. */
+  removals: number
+  /** Shielded enemy units present, summed over decisions, so "how many" can be read alongside. */
+  shieldsSeen: number
+  /** Decisions where one of OUR units carried a shield, the other side of the same blindness. */
+  decisionsHoldingShield: number
+}
+
 export interface DecisionReport {
   commitId: string
   ai: string
   games: number
   stats: DecisionStat[]
+  shields: ShieldStat
   leader: LeaderStat
   resourcing: ResourcingStat
   initiative: InitiativeStat
@@ -275,13 +323,38 @@ export interface DecisionReport {
 interface Tally {
   offered: number
   tied: number
+  tiedSearch: number
   candidates: number
 }
 
-const empty = (): Tally => ({ offered: 0, tied: 0, candidates: 0 })
+const empty = (): Tally => ({ offered: 0, tied: 0, tiedSearch: 0, candidates: 0 })
 
 /** The greedy driver's own scoring function, so a tie measured here is a tie it would coin-flip. */
 const score = makeQuiescent(evaluate)
+
+/**
+ * Is this the candidate the AI chose?
+ *
+ * **By value, because the references never match.** The diagnostic builds its candidate list from its
+ * own `legalMoves` call and the AI makes another inside itself, so the two arrays hold structurally
+ * identical but distinct objects. Measured across 40 real positions with `greedy` and `beam-reply`:
+ * reference match 0/40, value match 40/40.
+ *
+ * The older counters here survived that only because each carries a `?? recompute` fallback which was
+ * silently doing all the work. A shield counter written without one reported the bot never stripping
+ * a shield in 2,359 opportunities, which read as a dramatic finding and was arithmetic.
+ */
+export function sameAction(a: Action, b: Action): boolean {
+  return a === b || JSON.stringify(a) === JSON.stringify(b)
+}
+
+/** How many shields a seat's units are carrying. */
+function shieldsOn(s: GameState, seat: PlayerId): number {
+  return s.players[seat].units.reduce(
+    (n, u) => n + u.upgrades.filter(up => up.cardId === TOKEN_SHIELD).length,
+    0,
+  )
+}
 
 /** Choice kinds, most frequent first. Count then name, so the order is stable across runs rather
  *  than following insertion. */
@@ -291,11 +364,15 @@ const rank = (counts: Map<string, number>): Array<{ kind: string; count: number 
     .sort((a, b) => b.count - a.count || a.kind.localeCompare(b.kind))
 
 export function runDecisions(config: DecisionConfig): DecisionReport {
-  const { decks } = buildCoverageDecks(POOL, config.seed)
+  const all = buildCoverageDecks(POOL, config.seed)
+  const decks = config.deckLimit === undefined ? all.decks : all.decks.slice(0, config.deckLimit)
   const cardDb = buildCardDb(POOL)
   const ai = resolveAi(config.aiName ?? 'greedy')
   const ceiling = config.stepCeiling ?? 4000
 
+  const shields: ShieldStat = {
+    decisionsFacingShield: 0, removalAvailable: 0, removals: 0, shieldsSeen: 0, decisionsHoldingShield: 0,
+  }
   const resourcing = empty()
   const initiative = empty()
   const attacks = empty()
@@ -364,6 +441,18 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         // is a tie there.
         const asRole = role(s, me)
         const foe = opponentOf(me)
+
+        // Taken BEFORE scoring, because the AI's own valuation of each candidate is a by-product of
+        // asking it to move, and that valuation is what the search column reports. `setupAi` decides
+        // setup without consulting any evaluation, so there is nothing to read there and the search
+        // column falls back to the one-ply values.
+        const forced = setupAi(s)
+        clearSearchTrace()
+        const action = forced ?? ai(s)
+        if (!action) break
+        const searched = forced ? null : lastSearchTrace()?.candidates ?? null
+        const searchValue = (i: number): number => (searched && searched.length === moves.length ? searched[i] : NaN)
+
         const scored = moves.map(m => {
           const next = resolve(s, m)
           // Scored with quiescence, as the greedy driver does, so a tie counted here is a tie there.
@@ -377,19 +466,42 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         })
         const best = Math.max(...scored.map(x => x.v))
 
-        const record = (tally: Tally, subset: typeof scored): void => {
+        const record = (tally: Tally, subset: Array<(typeof scored)[number] & { sv: number }>): void => {
           if (subset.length < 2) return
           tally.offered++
           tally.candidates += subset.length
-          if (new Set(subset.map(x => x.v)).size === 1) tally.tied++
+          const tiedOnePly = new Set(subset.map(x => x.v)).size === 1
+          if (tiedOnePly) tally.tied++
+          // With no search to read, the searching column is the one-ply one rather than a silent
+          // zero, which would read as "the search breaks every tie" for an AI that does not search.
+          const svs = subset.map(x => x.sv)
+          const usable = svs.every(v => !Number.isNaN(v))
+          if (usable ? new Set(svs).size === 1 : tiedOnePly) tally.tiedSearch++
         }
-        record(resourcing, scored.filter(x => x.m.type === 'resourceCard'))
-        record(attacks, scored.filter(x => x.m.type === 'attack'))
-        record(plays, scored.filter(x => x.m.type === 'playUnit' || x.m.type === 'playEvent' || x.m.type === 'playUpgrade'))
+        const withSearch = scored.map((x, i) => ({ ...x, sv: searchValue(i) }))
+        // Shields (#493). Counted from the ACTING seat, so "facing" means shields in the way of the
+        // player about to move. A strip is a move after which they hold fewer than before: the token
+        // is spent by the engine's prevention hook, never by an explicit action, so it can only be
+        // observed by comparing the resulting board rather than by inspecting the move.
+        {
+          const theirs = shieldsOn(s, foe)
+          if (theirs > 0) {
+            shields.decisionsFacingShield++
+            shields.shieldsSeen += theirs
+            const strips = scored.filter(x => shieldsOn(resolve(s, x.m), foe) < theirs)
+            if (strips.length > 0) shields.removalAvailable++
+            if (strips.some(x => sameAction(x.m, action))) shields.removals++
+          }
+          if (shieldsOn(s, me) > 0) shields.decisionsHoldingShield++
+        }
+
+        record(resourcing, withSearch.filter(x => x.m.type === 'resourceCard'))
+        record(attacks, withSearch.filter(x => x.m.type === 'attack'))
+        record(plays, withSearch.filter(x => x.m.type === 'playUnit' || x.m.type === 'playEvent' || x.m.type === 'playUpgrade'))
         // With a choice outstanding, `legalMoves` returns nothing BUT its answers, so the whole
         // candidate set is the decision. The one kind where the options were handed to the player by
         // a card rather than chosen, which is why it is measured separately from the plays above.
-        if (hasPendingChoices(s)) record(answering, scored)
+        if (hasPendingChoices(s)) record(answering, withSearch)
 
         // How much of what gets scored is a half-resolved board. A single forced move is not a
         // decision, so it cannot be mis-ranked against anything and is excluded, matching `record`.
@@ -415,11 +527,18 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
 
         // Initiative is a single move, so "tied" means tied with the best alternative: the position
         // where the seeded tie-break decides whether to forfeit the rest of the round.
-        const init = scored.find(x => x.m.type === 'takeInitiative')
+        const init = withSearch.find(x => x.m.type === 'takeInitiative')
         if (init) {
           initiative.offered++
           initiative.candidates += 1
           if (init.v === best) initiative.tied++
+          // Same question of the search: is claiming indistinguishable from the best alternative?
+          const svs = withSearch.map(x => x.sv)
+          if (svs.every(v => !Number.isNaN(v))) {
+            if (init.sv === Math.max(...svs)) initiative.tiedSearch++
+          } else if (init.v === best) {
+            initiative.tiedSearch++
+          }
           initOffered++
           // The opponent has already passed, so claiming ends the phase (CR 1.15.5c) and they gain
           // nothing from your silence. Still costs your own remaining actions, hence "cheap".
@@ -454,18 +573,17 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           }
         }
 
-        const action = setupAi(s) ?? ai(s)
-        if (!action) break
-        // What the AI actually committed to. Greedy returns one of the `moves` objects, so the
-        // classification is already computed; `setupAi` builds its own, so fall back to resolving.
+        // What the AI actually committed to. Matched by VALUE: the AI's own `legalMoves` call returns
+        // different objects from ours, so a reference comparison never matches. `setupAi` builds an
+        // action that is not in `moves` at all, hence the fallback.
         if (scored.length >= 2) {
-          const chosen = scored.find(x => x.m === action)?.r ?? classifyResolution(resolve(s, action), me)
+          const chosen = scored.find(x => sameAction(x.m, action))?.r ?? classifyResolution(resolve(s, action), me)
           if (chosen.kind === 'opponent') suspended.chosenOpponentAnswer++
           if (chosen.kind === 'self') suspended.chosenSelfAnswer++
 
           // Did this move hand them lethal, and was there a legal move that would not have? A forced
           // move is excluded above, because "unavoidable" is already its whole answer.
-          const picked = scored.find(x => x.m === action)
+          const picked = scored.find(x => sameAction(x.m, action))
           const chosenExposed = picked ? picked.exposed : canFinishThisAction(resolve(s, action), foe)
           const verdict = classifyExposure(chosenExposed, scored.some(x => !x.exposed))
           exposure.decisions++
@@ -525,6 +643,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
     label,
     offered: t.offered,
     tied: t.tied,
+    tiedSearch: t.tiedSearch,
     avgCandidates: t.offered === 0 ? 0 : t.candidates / t.offered,
   })
 
@@ -539,6 +658,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       stat('which card to play', plays),
       stat('answering a choice', answering),
     ],
+    shields,
     leader,
     resourcing: {
       banked,

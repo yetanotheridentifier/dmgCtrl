@@ -4,6 +4,7 @@ import {
   DEFAULT_BEAM_LIMITS, DEFAULT_QUIESCENCE_LIMITS,
 } from '../ai/search'
 import { evaluate } from '../ai/evaluate'
+import { legalMoves } from '../engine/legalMoves'
 import { state, player, card, unit, ready, CARDS } from './helpers/engineFixtures'
 import type { GameState, PendingChoice } from '../engine/types'
 import '../engine/cardDefinitions'
@@ -211,6 +212,49 @@ describe('lastSearchTrace', () => {
     generous(busy())
     expect(lastSearchTrace()?.exhausted).toBe(false)
     expect(lastSearchTrace()?.nodes).toBe(1_000_000)
+  })
+
+  /**
+   * The value the search gave each root candidate (#494).
+   *
+   * `--decisions` measures blind spots by asking "did every candidate score the same, so the
+   * tie-break picked at random". It has always answered that with a **one-ply** scorer held in a
+   * module constant, so pointing it at `beam-reply` would walk the shipped bot's positions while
+   * still reporting one-ply's opinion of them: a third thing that answers nobody's question.
+   *
+   * Exposing the values the search actually computed costs nothing (the root loop already has them)
+   * and lets the diagnostic report both, which is the real question #396 asks: how many of the ties
+   * one ply cannot break does the search break?
+   */
+  it('reports a value for every root candidate', () => {
+    const s = busy()
+    const ai = makeBeamAi(evaluate, { ...DEFAULT_BEAM_LIMITS, nodes: 1_000_000 })
+    ai(s)
+    expect(lastSearchTrace()!.candidates).toHaveLength(legalMoves(s).length)
+  })
+
+  /**
+   * **Aligned with `legalMoves`, which is the property the diagnostic depends on.** It subsets
+   * candidates by decision type (attacks, plays, resourcing), so a values array in any other order
+   * would silently attribute one decision's spread to another.
+   */
+  it('aligns those values with legalMoves order', () => {
+    const s = busy()
+    const ai = makeBeamAi(evaluate, { ...DEFAULT_BEAM_LIMITS, nodes: 1_000_000 })
+    const chosen = ai(s)
+    const trace = lastSearchTrace()!
+
+    const index = legalMoves(s).findIndex(m => JSON.stringify(m) === JSON.stringify(chosen))
+    expect(index).toBeGreaterThanOrEqual(0)
+    // The move played must be one the search rated best. If the array were misordered this would
+    // hold only by luck.
+    expect(trace.candidates[index]).toBe(Math.max(...trace.candidates))
+  })
+
+  it('reports no candidates when there was no decision to make', () => {
+    const ai = makeBeamAi(evaluate, DEFAULT_BEAM_LIMITS)
+    ai(state({ cards, players: { player: player(), opponent: player() }, winner: 'player' }))
+    expect(lastSearchTrace()!.candidates).toEqual([])
   })
 
   /** The counters have to account for the budget exactly, or the split cannot be read as a share of

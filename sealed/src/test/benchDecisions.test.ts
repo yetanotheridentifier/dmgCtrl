@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { runDecisions, classifyResolution } from '../bench/decisions'
+import { runDecisions, classifyResolution, sameAction } from '../bench/decisions'
 import { DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { state } from './helpers/engineFixtures'
 import type { PendingChoice } from '../engine/types'
@@ -34,6 +34,104 @@ describe('runDecisions', () => {
     const answering = report.stats.find(s => s.label === 'answering a choice')!
     expect(answering.offered, 'choices with more than one answer are common').toBeGreaterThan(0)
     expect(answering.avgCandidates).toBeGreaterThan(1)
+  })
+
+  /**
+   * A tie must be measured against the AI being diagnosed (#494).
+   *
+   * The tie rate was always computed with a **one-ply** scorer held in a module constant, whichever
+   * AI was named. Pointing the diagnostic at `beam-reply` therefore walked the shipped bot's
+   * positions while reporting one ply's opinion of them, which answers neither "what does one ply
+   * miss" nor "what does the shipped bot miss".
+   *
+   * Both are now reported. The pair is the point: the gap between them is how many of the ties one
+   * ply cannot break the search does break, which is exactly the question #396 and #398 were told to
+   * re-ask once the search landed.
+   */
+  /**
+   * **A search both breaks ties and creates them**, which is not what I assumed writing this.
+   *
+   * The obvious expectation is that deeper search can only refine one ply's opinion, so `tiedSearch`
+   * should never exceed `tied`. Measured, it does. A beam values a move by the best board its
+   * follow-ups reach, so two moves that one ply scores differently can converge on the same best
+   * position inside the horizon and come out **equal**. Looking further can collapse distinct options
+   * into equivalence as well as separate equivalent ones.
+   *
+   * That makes the pair worth more, not less. `tiedSearch` is the rate at which the **shipped bot**
+   * coin-flips, which is the blind spot that matters, and it is not bounded by one ply's.
+   */
+  it('reports both columns, which need not agree in either direction', () => {
+    // `deckLimit` and a shallow beam keep this to seconds. The mechanism is what is under test, not
+    // the rates: a real run uses all 44 decks and the shipped configuration.
+    const searched = runDecisions({ gamesPerDeck: 1, seed: 4242, aiName: 'beam:4x2', deckLimit: 3 })
+    const answering = searched.stats.find(s => s.label === 'answering a choice')!
+    expect(answering.offered).toBeGreaterThan(0)
+    for (const s of searched.stats) {
+      expect(s.tiedSearch, s.label).toBeGreaterThanOrEqual(0)
+      expect(s.tiedSearch, s.label).toBeLessThanOrEqual(s.offered)
+    }
+  })
+
+  /** A one-ply AI has no search of its own, so the two columns must agree exactly rather than one
+   *  quietly reporting zero. */
+  it('reports identical columns for a one-ply AI', () => {
+    for (const s of report.stats) {
+      expect(s.tiedSearch, s.label).toBe(s.tied)
+    }
+  })
+
+  /**
+   * Shields, and whether the bot ever strips one (#493).
+   *
+   * A Shield prevents a whole instance of damage, so after a ping the board has the same units at the
+   * same HP and the only difference is a token no evaluation term reads. The board scores
+   * **identically**, which makes stripping a Shield indistinguishable from doing nothing while the
+   * cost of the attack is counted in full.
+   *
+   * These counters decide whether #493 is worth building. If shielded units barely appear in this
+   * pool the ticket dies cheaply; if they are common and the strip rate is low, the live-play
+   * observation is confirmed at scale.
+   */
+  it('counts shields it faced and shields it removed', () => {
+    const sh = report.shields
+    expect(sh.decisionsFacingShield).toBeGreaterThanOrEqual(0)
+    expect(sh.removals).toBeGreaterThanOrEqual(0)
+    // A removal can only happen at a decision that faced one.
+    expect(sh.removals).toBeLessThanOrEqual(sh.decisionsFacingShield)
+    expect(sh.decisionsFacingShield).toBeLessThanOrEqual(report.exposure.decisions)
+  })
+
+  /** Whether the strip was even available matters more than whether it happened: declining an
+   *  impossible play is not a blind spot. */
+  it('counts the decisions where a strip was actually on offer', () => {
+    const sh = report.shields
+    expect(sh.removalAvailable).toBeGreaterThanOrEqual(sh.removals)
+    expect(sh.removalAvailable).toBeLessThanOrEqual(sh.decisionsFacingShield)
+  })
+
+  /**
+   * **The chosen move is never the same object as the candidate it matches.**
+   *
+   * The diagnostic calls `legalMoves` to build its candidate list and the AI calls it again inside
+   * itself, so the two arrays hold structurally identical but distinct objects. Measured over 40 real
+   * positions with both `greedy` and `beam-reply`: reference match 0/40, value match 40/40.
+   *
+   * Every counter that asks "did the AI pick this candidate" must therefore compare by value. The
+   * existing ones survived only because they carry a `?? recompute` fallback that was quietly doing
+   * all the work; a new counter written without one read exactly zero across 2,359 opportunities and
+   * looked like a spectacular finding.
+   */
+  it('matches a chosen move to its candidate by value, since references never match', () => {
+    expect(sameAction({ type: 'pass' }, { type: 'pass' })).toBe(true)
+    expect(sameAction(
+      { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' } },
+      { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' } },
+    )).toBe(true)
+    expect(sameAction({ type: 'pass' }, { type: 'takeInitiative' })).toBe(false)
+    expect(sameAction(
+      { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e1' } },
+      { type: 'attack', attackerId: 'u1', target: { kind: 'unit', instanceId: 'e2' } },
+    )).toBe(false)
   })
 
   it('actually plays games and observes each decision', () => {
