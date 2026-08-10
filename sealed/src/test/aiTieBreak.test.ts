@@ -1,18 +1,28 @@
 import { describe, it, expect } from 'vitest'
+import ashSet from './fixtures/ashSet.json'
+import type { SwuCard } from '../data/cards'
 import { makeBeamAi, lastSearchTrace, DEFAULT_BEAM_LIMITS } from '../ai/search'
 import { evaluate, makeEvaluate, DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { legalMoves } from '../engine/legalMoves'
 import { state, player, card, unit, ready, CARDS } from './helpers/engineFixtures'
 import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
+import { buildCardDb } from '../engine/cardDb'
+import { buildCoverageDecks } from '../bench/coverageDecks'
+import { initGame } from '../engine/initGame'
+import { resolve } from '../engine/resolve'
+import { seededShuffle, nextSeed } from '../engine/rng'
+import { setupAi } from '../ai/setupAi'
+import { greedyAi } from '../ai/greedyAi'
 import type { GameState } from '../engine/types'
 import '../engine/cardDefinitions'
 
 /**
  * Second opinion on a tie (#499, #396, #398).
  *
- * A tie is a decision the search cannot see: every candidate scores the same and the seeded tie-break
- * picks one at random. Measured over 420 games with the shipped bot, that is **11.3%** of choice
- * answers, 5.4% of resourcing and 11.8% of card plays.
+ * A tie is a decision the search cannot see: candidates score the same and the seeded tie-break picks
+ * one at random. **The firing condition is a tie for the LEAD**, which is much commoner than the
+ * whole-slate tie the older columns count: 32.0% of decisions against 5-12%, over 3,469 searched
+ * decisions with the shipped bot. Tied sets average 3.2 candidates and one measured decision tied 239.
  *
  * The shielded-Sentinel lockout showed why no evaluation term can help. Both candidates peak on the
  * **same end state at the same depth**, differing only in the route, and a max over reachable boards
@@ -57,6 +67,34 @@ const ordinary = (): GameState => state({
 })
 
 const shipped = { ...DEFAULT_BEAM_LIMITS, reply: 'pessimistic' as const, nodes: 200_000 }
+
+/** Real positions, walked with greedy so the states are the ones the bot actually meets. Scripted
+ *  fixtures would only prove a property on the shapes I thought to write. */
+function corpus(limit: number): GameState[] {
+  const { decks } = buildCoverageDecks(ashSet as unknown as SwuCard[], 42)
+  const cardDb = buildCardDb(ashSet as unknown as SwuCard[])
+  const states: GameState[] = []
+  let seed = 42
+
+  for (const deck of decks.slice(0, 3)) {
+    if (states.length >= limit) break
+    seed = nextSeed(seed)
+    let s = seed
+    let g = initGame(deck, deck, cardDb, {
+      firstPlayer: 'player',
+      shuffle: <T,>(arr: T[]): T[] => { s = nextSeed(s); return seededShuffle(arr, s) },
+      rngSeed: seed,
+    })
+    while (g.winner === null && states.length < limit) {
+      const action = setupAi(g) ?? greedyAi(g)
+      if (!action) break
+      // Only decisions: a single legal move has no lead to tie for and would pad the corpus.
+      if (legalMoves(g).length > 1) states.push(g)
+      g = resolve(g, action)
+    }
+  }
+  return states
+}
 
 describe('breaking a tie with a second opinion', () => {
   it('changes nothing when no tie-break is configured', () => {
@@ -135,6 +173,36 @@ describe('breaking a tie with a second opinion', () => {
    * The trace must say how often this fires, because that rate is the whole cost/benefit case: a
    * second opinion on 5% of decisions is cheap, on 60% it is a second bot.
    */
+  /**
+   * **The measurement's own load-bearing assumption.** The firing rate is read off `tiedCandidates`,
+   * and the root search prunes with alpha-beta, so a pruned candidate returns a truncated value rather
+   * than its true one. If that ever rounded a near-miss up to the lead, or dropped a genuine tie below
+   * it, every rate quoted from this counter would be wrong in an invisible direction.
+   *
+   * The margin in the reply cut is what makes it safe, and a margin is an argument. This is the
+   * assertion: over real positions the count must not move when pruning is switched off.
+   */
+  it('counts the same ties with alpha-beta pruning off', () => {
+    // Deliberately small. The property holds at any width and depth, and this file runs inside a
+    // parallel suite where an expensive case pushes unrelated marginal tests over their timeouts.
+    const limits = { ...DEFAULT_BEAM_LIMITS, reply: 'pessimistic' as const, width: 2, depth: 2 }
+    const pruned = makeBeamAi(evaluate, limits)
+    const exhaustive = makeBeamAi(evaluate, { ...limits, alphaBeta: false })
+    let compared = 0
+    for (const s of corpus(40)) {
+      pruned(s)
+      const a = lastSearchTrace()!.tiedCandidates
+      exhaustive(s)
+      const b = lastSearchTrace()!.tiedCandidates
+      // An exhausted budget truncates both searches at different points, so a mismatch there says
+      // nothing about pruning. Those decisions are excluded rather than allowed to fail the check.
+      if (lastSearchTrace()!.exhausted) continue
+      compared++
+      expect(a).toBe(b)
+    }
+    expect(compared, 'the corpus must actually exercise the comparison').toBeGreaterThan(20)
+  }, 120_000)
+
   it('reports how many candidates tied', () => {
     const ai = makeBeamAi(makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach: 12 }), {
       ...shipped, tieBreak: { reply: 'null' },

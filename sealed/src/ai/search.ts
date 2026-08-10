@@ -498,8 +498,21 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
  * with that power would be a different bot rather than a tie-break.
  *
  * Its own budget, because the main search may have spent most of the pool getting here and a
- * tie-break starved of nodes would return noise. It is affordable: ties are 5% to 12% of decisions
- * and only the tied candidates are re-searched, usually two or three of them.
+ * tie-break starved of nodes would return noise.
+ *
+ * **It fires far more often than the whole-slate tie columns imply, and still costs little.** Ties for
+ * the LEAD are 32.0% of decisions against those columns' 5-12%, because sharing the top is a much
+ * weaker condition than every candidate scoring alike. Firing sets average 3.2 candidates, which comes
+ * to **+13.4% more root searches** across a run: the decisions that fire are mostly small ones.
+ *
+ * A fan-out cap is optional rather than structural, which is the opposite of what the widest tie
+ * suggests. One decision tied **239** candidates, but wide ties are 2.3% of firings and a cap at 8
+ * only moves the overhead from +13.4% to +11.2%. The 239 is an answer-a-choice decision, the kind
+ * where a card deals out a combinatorial menu; ordinary moves top out around 26.
+ *
+ * All of that is an **upper bound** on the real cost, since it counts roots rather than nodes:
+ * `reply: 'null'` expands no replies and is much cheaper per root than the pessimistic search that
+ * found the tie.
  *
  * Still deterministic. If the second opinion also ties, the survivors go back to the seeded pick.
  */

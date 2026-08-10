@@ -333,11 +333,75 @@ export interface ShieldStat {
   longestLockout: number
 }
 
+/**
+ * How often a second opinion on a tie would be consulted, and how much it would re-search (#499).
+ *
+ * **Not the same question as `DecisionStat.tiedSearch`**, which counts decisions where *every*
+ * candidate scored alike. A tie-break fires whenever more than one candidate ties **for the lead**,
+ * which is a far weaker condition and therefore a much larger number. Quoting the whole-slate rate as
+ * a firing rate would understate the cost of the feature, possibly by a lot.
+ *
+ * Read off `SearchTrace.tiedCandidates`, which the search records on every decision whether or not a
+ * tie-break is configured, so the price can be measured before it is paid.
+ */
+export interface TieStat {
+  /** Decisions with more than one candidate where a search actually ran: the denominator. Zero for a
+   *  one-ply AI, which has no lead to tie for. */
+  searched: number
+  /** Of those, decisions where more than one candidate tied for the lead. */
+  fired: number
+  /**
+   * Tied candidates summed over firing decisions. **This is the cost**, not `fired`: a firing decision
+   * re-searches its whole tied set, so a rare tie between six moves can cost more than a common one
+   * between two.
+   */
+  tiedTotal: number
+  /** Root candidates summed over the same decisions, so the fan-out reads as a fraction of the work
+   *  the main search already did. */
+  rootsWhenFired: number
+  /**
+   * Root candidates over **all** searched decisions. The honest denominator for overhead: the main
+   * search does `rootsSearched` root searches and a tie-break adds `tiedTotal` on top, so their ratio
+   * is the extra work in root-searches. Dividing by `fired` instead flatters it, because the
+   * decisions that fire are not the average decision.
+   */
+  rootsSearched: number
+  /** Most candidates ever tied in one decision: the worst case behind the mean. */
+  widest: number
+  /**
+   * `tiedTotal` with each decision's tied set capped at {@link TIE_FANOUT_CAP}, which sizes the cheap
+   * version of the feature.
+   *
+   * Worth its own counter because the mean hides the tail badly: a handful of decisions tie hundreds
+   * of candidates, and re-searching those costs more than every ordinary tie put together. The gap
+   * between this and `tiedTotal` is what a cap buys.
+   */
+  tiedTotalCapped: number
+  /** Firing decisions whose tied set exceeds the cap: how often a cap would bite at all. */
+  firedWide: number
+  /**
+   * Split by decision kind, because a coin flip between two attacks can lose a unit and one between
+   * two resource picks usually cannot. Classified by the move actually chosen.
+   *
+   * `widest` is carried per kind so the worst case can be attributed rather than just reported. A tie
+   * of a few hundred candidates is either a real property of one decision kind or an arithmetic
+   * error, and the two look identical in a single global maximum.
+   */
+  byKind: Array<{ kind: string; searched: number; fired: number; tiedTotal: number; widest: number }>
+}
+
+/**
+ * The fan-out a capped tie-break would allow. Not a tuned value and not wired into the search: it
+ * exists so `tiedTotalCapped` reports against a stated number rather than an implied one.
+ */
+export const TIE_FANOUT_CAP = 8
+
 export interface DecisionReport {
   commitId: string
   ai: string
   games: number
   stats: DecisionStat[]
+  ties: TieStat
   shields: ShieldStat
   leader: LeaderStat
   resourcing: ResourcingStat
@@ -422,6 +486,27 @@ function lockedOutBy(s: GameState, seat: PlayerId): boolean {
   return arenas.length > 0 && lockedLanes(s, seat).length === arenas.length
 }
 
+/**
+ * What kind of decision this was, for the tie split. Classified by the move actually chosen, since a
+ * tied set can hold moves of several types and one label has to be picked.
+ *
+ * `pass` is separated rather than folded into "other" because passing is the move the reply-passivity
+ * work is about: a coin flip that lands on it is the shape of the reported defect.
+ */
+function decisionKind(s: GameState, action: Action): string {
+  // A pending choice hands the candidates to the player rather than the player choosing to have them,
+  // so it classifies the decision whatever the answer's action type is.
+  if (hasPendingChoices(s)) return 'answer'
+  switch (action.type) {
+    case 'attack': return 'attack'
+    case 'playUnit': case 'playEvent': case 'playUpgrade': return 'play'
+    case 'resourceCard': case 'skipResource': return 'resource'
+    case 'takeInitiative': return 'initiative'
+    case 'pass': return 'pass'
+    default: return 'other'
+  }
+}
+
 /** Choice kinds, most frequent first. Count then name, so the order is stable across runs rather
  *  than following insertion. */
 const rank = (counts: Map<string, number>): Array<{ kind: string; count: number }> =>
@@ -472,6 +557,11 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   }
   const opponentKinds = new Map<string, number>()
   const selfKinds = new Map<string, number>()
+  const ties = {
+    searched: 0, fired: 0, tiedTotal: 0, rootsWhenFired: 0, rootsSearched: 0,
+    widest: 0, tiedTotalCapped: 0, firedWide: 0,
+  }
+  const tieKinds = new Map<string, { searched: number; fired: number; tiedTotal: number; widest: number }>()
   const lethalByRound = new Map<number, { decisions: number; ours: number; theirs: number }>()
   let oursOneAction = 0
   let theirsOneAction = 0
@@ -522,8 +612,33 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         clearSearchTrace()
         const action = forced ?? ai(s)
         if (!action) break
-        const searched = forced ? null : lastSearchTrace()?.candidates ?? null
+        const trace = forced ? null : lastSearchTrace()
+        const searched = trace?.candidates ?? null
         const searchValue = (i: number): number => (searched && searched.length === moves.length ? searched[i] : NaN)
+
+        // How often a second opinion would be consulted (#499). Guarded on the candidate count
+        // matching, so a trace left by some inner search rather than this decision cannot be read as
+        // if it described these moves.
+        if (trace && moves.length >= 2 && trace.candidates.length === moves.length) {
+          const kind = decisionKind(s, action)
+          const bucket = tieKinds.get(kind) ?? { searched: 0, fired: 0, tiedTotal: 0, widest: 0 }
+          ties.searched++
+          ties.rootsSearched += moves.length
+          bucket.searched++
+          if (trace.tiedCandidates > 1) {
+            ties.fired++
+            // The tied SET is the charge: a tie-break re-searches all of them, not one.
+            ties.tiedTotal += trace.tiedCandidates
+            ties.tiedTotalCapped += Math.min(trace.tiedCandidates, TIE_FANOUT_CAP)
+            if (trace.tiedCandidates > TIE_FANOUT_CAP) ties.firedWide++
+            ties.rootsWhenFired += moves.length
+            if (trace.tiedCandidates > ties.widest) ties.widest = trace.tiedCandidates
+            bucket.fired++
+            bucket.tiedTotal += trace.tiedCandidates
+            if (trace.tiedCandidates > bucket.widest) bucket.widest = trace.tiedCandidates
+          }
+          tieKinds.set(kind, bucket)
+        }
 
         const scored = moves.map(m => {
           const next = resolve(s, m)
@@ -750,6 +865,12 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       stat('which card to play', plays),
       stat('answering a choice', answering),
     ],
+    ties: {
+      ...ties,
+      byKind: [...tieKinds]
+        .map(([kind, b]) => ({ kind, ...b }))
+        .sort((a, b) => b.fired - a.fired || a.kind.localeCompare(b.kind)),
+    },
     shields,
     leader,
     resourcing: {

@@ -4,7 +4,7 @@ import { openDb, saveReport, DEFAULT_DB_PATH } from './store'
 import { writeFailures, FAILURES_DIR } from './reports'
 import { runSweep } from './sweep'
 import type { SweepReport } from './sweep'
-import { runDecisions } from './decisions'
+import { runDecisions, TIE_FANOUT_CAP } from './decisions'
 import { runTerms } from './terms'
 import type { TermReport } from './terms'
 import { runCost } from './cost'
@@ -329,6 +329,33 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     row('their choice kinds', topKinds(su.opponentChoiceKinds)),
     row('our choice kinds', topKinds(su.selfChoiceKinds)),
   )
+  const ti = report.ties
+  lines.push(
+    '',
+    '  search ties: how often more than one candidate tied FOR THE LEAD, so the seeded pick decided.',
+    '  Not the same as the tied columns above, which need the whole slate to score alike. This is the',
+    '  rate a second opinion would fire at, and the tied SET is what it re-searches, so the cost is',
+    '  the fan-out rather than the rate.',
+  )
+  if (ti.searched === 0) {
+    lines.push(row('ties for the lead', 'n/a (this AI runs no search)'))
+  } else {
+    lines.push(
+      row('ties for the lead', rate(ti.fired, ti.searched)),
+      row('candidates re-searched', `${ti.tiedTotal} = ${(ti.tiedTotal / Math.max(1, ti.fired)).toFixed(1)} avg per firing`),
+      row('  as a share of roots', ti.rootsWhenFired === 0 ? 'n/a' : pct(ti.tiedTotal / ti.rootsWhenFired) + ' of the roots in those decisions'),
+      // Extra root searches against the root searches the main search already does. An upper bound on
+      // cost, not the cost: a cheaper second opinion (a null reply, one ply) prices each root lower.
+      row('  overhead in roots', ti.rootsSearched === 0 ? 'n/a' : `+${pct(ti.tiedTotal / ti.rootsSearched)} over the whole run`),
+      row('widest tie', `${ti.widest} candidates` +
+        (ti.byKind.some(k => k.widest === ti.widest) ? ` (${ti.byKind.find(k => k.widest === ti.widest)!.kind})` : '')),
+      row('  widest by kind', ti.byKind.filter(k => k.fired > 0).map(k => `${k.kind} ${k.widest}`).join('  ')),
+      row(`  capped at ${TIE_FANOUT_CAP}`, `${ti.tiedTotalCapped} re-searches (+${pct(ti.tiedTotalCapped / Math.max(1, ti.rootsSearched))}), ` +
+        `${rate(ti.firedWide, ti.fired)} of ties bite the cap`),
+      row('by kind', ti.byKind.map(k => `${k.kind} ${pct(k.searched === 0 ? 0 : k.fired / k.searched)}`).join('  ')),
+    )
+  }
+
   const sh = report.shields
   const shieldRate = (n: number, d: number): string => (d === 0 ? 'n/a' : `${n} of ${d} = ${pct(n / d)}`)
   lines.push(

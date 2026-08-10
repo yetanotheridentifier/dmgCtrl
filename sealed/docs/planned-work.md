@@ -132,18 +132,25 @@ bot.
 
 ## Next up
 
-1. **Break search ties with the one-ply score**, before either #396 or #398 writes a new term.
+1. **Choose and A/B the second opinion for search ties**, before either #396 or #398 writes a new
+   term. The mechanism is built (`BeamLimits.tieBreak`, off by default); which model to ask is open.
 
-   `--decisions` found the search **tying more often than one ply**: resourcing 0.6% to 5.4%,
-   card-play 6.7% to 11.8%. A beam values a move by the best board it can reach, so candidates whose
-   lines converge inside the horizon come out equal even when they differ immediately, and the bot
-   then coin-flips away a preference one ply actually had. Falling back to the one-ply score costs
-   almost nothing, applies to 5-12% of decisions, and is a strict improvement if that signal is worth
-   anything.
+   A beam values a move by the best board it can reach, so candidates whose lines converge inside the
+   horizon come out equal even when they differ immediately, and the bot then coin-flips.
 
-   It is also now the **only** unexplored cheap lever: the token term was measured and rejected, so
-   the next candidates after this are the weight re-tune and the two residue tickets, all of which are
-   larger.
+   **One ply is not the answer, despite being the obvious one.** In the shielded-Sentinel lockout it
+   prefers passing, 52 to 43, which is the defect. What separates that position is `reply: 'null'`,
+   scoring the acting line 56.1 against 52: when the worst case cannot tell two moves apart, the
+   upside can. That is one position, so it justifies an A/B rather than a decision.
+
+   **Sized.** Ties for the LEAD are 32.0% of decisions, not the 5-12% the whole-slate tie columns
+   imply, and firing sets average 3.2 candidates. That is **+13.4% more root searches** over a run,
+   and an upper bound on the real cost, since a `null`-reply second opinion is much cheaper per root
+   than the pessimistic search that found the tie. A fan-out cap is optional: wide ties are 2.3% of
+   firings and capping at 8 only reaches +11.2%. Affordable, so the question is whether it helps.
+
+   Gate on **non-inferiority**: the lockout is a position self-play barely reaches, so a correct fix
+   cannot be expected to show up as a win rate.
 2. **#487 re-tune the weights for the shipped search.** Unblocked, now that the configuration is
    settled and there is a fixed target to tune against. The "re-weighting is exhausted" result
    measured a one-ply evaluator, and #430 identified exactly why several weights could not matter
@@ -153,7 +160,8 @@ bot.
    build only what still ties". Measured: the search contributes **nothing** to choice answering
    (11.4% one ply, 11.3% searched, over 5,878 decisions averaging 6.6 options), and it makes
    resourcing and card-play **worse**. Neither is subsumed. Do the tie-break above first, since it
-   may absorb part of both.
+   may absorb part of both: answering ties for the lead on 36.1% of decisions, second only to
+   attacks, and it is the kind where the candidates were handed to the bot rather than chosen.
 4. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
    moves with a **one-ply** scorer, so it currently reports term sensitivity for a bot we no longer
    ship; testing #430's pre-registered prediction needs the perturbations driven through the real

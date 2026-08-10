@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { runDecisions, classifyResolution, sameAction } from '../bench/decisions'
+import { runDecisions, classifyResolution, sameAction, TIE_FANOUT_CAP } from '../bench/decisions'
 import { DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { state } from './helpers/engineFixtures'
 import type { PendingChoice } from '../engine/types'
@@ -11,6 +11,16 @@ import '../engine/cardDefinitions'
  * candidate scoring the same so the seeded tie-break chose at random. That was 100% of regroup
  * resource picks, and it is the number a fix has to move.
  */
+/**
+ * One searching run, shared by everything below that needs one. `deckLimit` and a shallow beam keep
+ * it to seconds; the mechanism is what is under test, not the rates, and a real run uses all 44 decks
+ * with the shipped configuration.
+ *
+ * Shared rather than repeated per describe because a searching pass is by far the most expensive
+ * thing in this suite, and a second copy of it pushed unrelated marginal tests over their timeouts.
+ */
+const searched = runDecisions({ gamesPerDeck: 1, seed: 4242, aiName: 'beam:4x2', deckLimit: 3 })
+
 describe('runDecisions', () => {
   // One game per deck keeps this quick; the numbers are stable enough to assert on.
   const report = runDecisions({ gamesPerDeck: 1, seed: 4242 })
@@ -61,9 +71,6 @@ describe('runDecisions', () => {
    * coin-flips, which is the blind spot that matters, and it is not bounded by one ply's.
    */
   it('reports both columns, which need not agree in either direction', () => {
-    // `deckLimit` and a shallow beam keep this to seconds. The mechanism is what is under test, not
-    // the rates: a real run uses all 44 decks and the shipped configuration.
-    const searched = runDecisions({ gamesPerDeck: 1, seed: 4242, aiName: 'beam:4x2', deckLimit: 3 })
     const answering = searched.stats.find(s => s.label === 'answering a choice')!
     expect(answering.offered).toBeGreaterThan(0)
     for (const s of searched.stats) {
@@ -327,6 +334,98 @@ describe('runDecisions', () => {
   it('is deterministic for a given seed', () => {
     expect(runDecisions({ gamesPerDeck: 1, seed: 4242 })).toEqual(report)
   }, 120_000)
+
+  /**
+   * A one-ply AI runs no search, so there is no lead to tie for. Zero rather than a fabricated number:
+   * the existing `tied` column is the whole answer for greedy, and reporting a second one here would
+   * invite reading a tie-break's firing rate off a bot that cannot have one.
+   */
+  it('reports no search ties for a one-ply AI', () => {
+    expect(report.ties.searched).toBe(0)
+    expect(report.ties.fired).toBe(0)
+  })
+})
+
+/**
+ * How often a tie-break would fire, and how much it would re-search (#499).
+ *
+ * The existing `tied` / `tiedSearch` columns count decisions where **every** candidate scored alike.
+ * That is not the firing condition. A second opinion is consulted whenever more than one candidate
+ * ties **for the lead**, which happens far more often than a whole-slate tie and is the number the
+ * cost case rests on: a second search over two candidates in 5% of decisions is loose change, over
+ * six candidates in half of them it is a second bot.
+ *
+ * Read off `tiedCandidates`, which the search records for every decision whether or not a tie-break
+ * is configured, so the rate can be measured before deciding to pay for it.
+ */
+describe('tie-break firing rate', () => {
+  const t = searched.ties
+
+  it('counts decisions where more than one candidate tied for the lead', () => {
+    expect(t.searched, 'a searching AI leaves a trace on every decision').toBeGreaterThan(0)
+    expect(t.fired).toBeGreaterThan(0)
+    expect(t.fired).toBeLessThanOrEqual(t.searched)
+  })
+
+  /**
+   * The fan-out, which is the cost half. A firing decision re-searches its tied candidates, so the
+   * charge is `tiedTotal` extra root searches, not `fired` of them.
+   */
+  it('reports how many candidates get re-searched', () => {
+    expect(t.tiedTotal, 'each firing decision ties at least two').toBeGreaterThanOrEqual(2 * t.fired)
+    expect(t.rootsWhenFired, 'the tied set is a subset of the roots').toBeGreaterThanOrEqual(t.tiedTotal)
+    expect(t.widest).toBeGreaterThanOrEqual(2)
+  })
+
+  /**
+   * Overhead needs the roots from **every** searched decision, not just the firing ones. Charging
+   * `tiedTotal` against `rootsWhenFired` answers "how much of a firing decision gets redone", which
+   * is a different and much friendlier question than "what does the feature cost".
+   */
+  it('reports the roots the main search covered, as the overhead denominator', () => {
+    expect(t.rootsSearched).toBeGreaterThanOrEqual(t.rootsWhenFired)
+    expect(t.rootsSearched, 'a searched decision has at least two roots').toBeGreaterThanOrEqual(2 * t.searched)
+  })
+
+  /**
+   * **The mean hides the tail, and here the tail is most of the cost.** A handful of decisions tie
+   * hundreds of candidates, so a cap changes the price of the feature far more than the firing rate
+   * suggests. Reported against a stated cap rather than an implied one.
+   */
+  it('sizes a capped tie-break separately from an uncapped one', () => {
+    expect(t.tiedTotalCapped).toBeLessThanOrEqual(t.tiedTotal)
+    expect(t.tiedTotalCapped).toBeLessThanOrEqual(TIE_FANOUT_CAP * t.fired)
+    expect(t.firedWide).toBeLessThanOrEqual(t.fired)
+    // The two counters must agree about whether the cap bit at all.
+    if (t.widest <= TIE_FANOUT_CAP) {
+      expect(t.tiedTotalCapped).toBe(t.tiedTotal)
+      expect(t.firedWide).toBe(0)
+    } else {
+      expect(t.firedWide).toBeGreaterThan(0)
+      expect(t.tiedTotalCapped).toBeLessThan(t.tiedTotal)
+    }
+  })
+
+  /**
+   * Split by decision kind, because the value of a second opinion is not uniform. A coin flip between
+   * two attacks can lose a unit; one between two resource picks usually cannot.
+   */
+  it('splits the firing rate by decision kind', () => {
+    expect(t.byKind.length).toBeGreaterThan(0)
+    expect(t.byKind.reduce((n, k) => n + k.fired, 0)).toBe(t.fired)
+    expect(t.byKind.reduce((n, k) => n + k.searched, 0)).toBe(t.searched)
+    for (const k of t.byKind) {
+      expect(k.fired, k.kind).toBeLessThanOrEqual(k.searched)
+      expect(k.tiedTotal, k.kind).toBeGreaterThanOrEqual(2 * k.fired)
+      expect(k.widest, k.kind).toBeLessThanOrEqual(t.widest)
+      if (k.fired === 0) expect(k.widest, k.kind).toBe(0)
+    }
+    // The worst case must be attributable, or a startling maximum cannot be told from an arithmetic
+    // error. Exactly one kind holds it, and it is the global figure.
+    expect(Math.max(...t.byKind.map(k => k.widest))).toBe(t.widest)
+    // Most frequent first, so the readout is stable across runs rather than following insertion.
+    expect([...t.byKind].sort((a, b) => b.fired - a.fired || a.kind.localeCompare(b.kind))).toEqual(t.byKind)
+  })
 })
 
 /**
