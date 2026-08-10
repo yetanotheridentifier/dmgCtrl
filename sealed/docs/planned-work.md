@@ -141,7 +141,20 @@ bot.
    **One ply is not the answer, despite being the obvious one.** In the shielded-Sentinel lockout it
    prefers passing, 52 to 43, which is the defect. What separates that position is `reply: 'null'`,
    scoring the acting line 56.1 against 52: when the worst case cannot tell two moves apart, the
-   upside can. That is one position, so it justifies an A/B rather than a decision.
+   upside can.
+
+   **Screened at 80 games against the shipped bot**, paired on identical seeds, with a
+   `beam-reply` self-play control landing on exactly 50.0%:
+
+   | arm | win rate | 95% CI |
+   | --- | --- | --- |
+   | `beam-reply/tie=reply:null` | 55.0% | 44.3 - 65.7 |
+   | `beam-reply+blockedReach=12` | **25.0%** | 15.7 - 34.3 |
+   | both together | 26.3% | 16.8 - 35.7 |
+
+   The tie-break is **not distinguishable from neutral and certainly not harmful**, so it earns a
+   properly sized non-inferiority run. It is a mechanism looking for a justification, though: on its
+   own it does not fire in the lockout at all, so it currently fixes nothing.
 
    **Sized, and cheap.** Ties for the LEAD are 32.0% of decisions, not the 5-12% the whole-slate tie
    columns imply, and firing sets average 3.2 candidates: +13.4% more root searches over a run. In
@@ -152,11 +165,14 @@ bot.
    A fan-out cap is optional: wide ties are 2.3% of firings and capping at 8 only reaches +11.2% in
    roots. Nothing here is a cost objection, so the only open question is whether it helps.
 
-   Address a cell as `beam-reply/tie=reply:null`, which composes with `+WEIGHT=VALUE`, so
-   `beam-reply+blockedReach=12/tie=reply:null` is the combination that escapes the lockout.
+   Address a cell as `beam-reply/tie=reply:null`, which composes with `+WEIGHT=VALUE`. Sizing for the
+   full run is measured: **42.9 s/game at 10 shards**, so ~2,500 games for a +/-1.9 interval is about
+   three hours. Gate on **non-inferiority**, since a tie-break changes a third of decisions slightly
+   rather than any decision decisively.
 
-   Gate on **non-inferiority**: the lockout is a position self-play barely reaches, so a correct fix
-   cannot be expected to show up as a win rate.
+   **The lockout itself is unsolved and needs a different route.** The only known way to make it a tie
+   is `blockedReach: 12`, and that weight is triple the value of a whole unit on a scale where every
+   other weight is 1 to 7. In-scale values do not create the tie, so this is not a tuning problem.
 2. **#487 re-tune the weights for the shipped search.** Unblocked, now that the configuration is
    settled and there is a fixed target to tune against. The "re-weighting is exhausted" result
    measured a one-ply evaluator, and #430 identified exactly why several weights could not matter
@@ -440,3 +456,14 @@ AI with the change switched off, across the coverage decks.
 - **Scaling the "I have a play" hand bonus by the card's value.** A bomb's hand value and its board
   value are the same order of magnitude, so the bot refused to play its own bombs. **40.5%**. The
   bonus is flat.
+- **A `blockedReach` term at the weight that solves the lockout.** Pricing the base damage a shielded
+  Sentinel denies each round is the only known way to turn the scripted lockout into a tie, but it
+  takes a weight of **12** to do it, and that measured **25.0%** (CI 15.7-34.3) against the shipped
+  bot over 80 games, with a `beam-reply` self-play control on exactly 50.0%. The combination with a
+  tie-break measured 26.3%, i.e. the weight dominates and the tie-break neither helps nor rescues it.
+
+  **Read the weight against the scale, not against the position it solves.** Every other weight is 1
+  to 7, so 12 is triple the value of a whole unit, and with `blockedReachCap: 10` the term contributes
+  up to 120 points on a board where a unit is worth 4. That check costs seconds and was not done: the
+  scripted position was allowed to name the weight. In-scale values do not create the tie at all, so
+  this is not a tuning problem and a smaller version is not worth sweeping. The term stays at 0.

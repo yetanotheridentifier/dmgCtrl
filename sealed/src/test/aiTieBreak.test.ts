@@ -118,9 +118,16 @@ describe('breaking a tie with a second opinion', () => {
   })
 
   /**
-   * **Together they work, and neither does alone.** `blockedReach` pulls passing down from 52 to a
-   * dead tie at 43; the second opinion then separates the tie the way the optimistic model already
-   * could. That is the fix, and it is why five single-lever attempts all failed.
+   * **Together they escape the lockout, and the combination still must not ship.**
+   *
+   * `blockedReach` pulls passing down from 52 to a dead tie at 43, and the second opinion then
+   * separates it the way the optimistic model already could. That is a real mechanism and this test
+   * pins it. It is **not** a fix: at weight 12 the term measures **25.0%** against the shipped bot
+   * over 80 games, with a 50.0% self-play control, because 12 is triple the value of a whole unit on
+   * a scale where every other weight is 1 to 7.
+   *
+   * Kept as a mechanism test because the tie-break half is sound in isolation (55.0%, CI 44.3-65.7).
+   * What is dead is using an out-of-scale weight to manufacture the tie.
    */
   it('escapes the lockout once blocked reach has made it a tie', () => {
     const weights = makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach: 12 })

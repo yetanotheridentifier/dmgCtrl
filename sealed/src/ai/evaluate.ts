@@ -102,6 +102,17 @@ export interface EvalWeights {
    * **Capped** at `blockedReachCap`, because a canny opponent blocks a lane, holds a second Sentinel
    * back, and drops it once the tempo has been spent clearing the first. Removing a blocker must
    * never be worth more than about two actions.
+   *
+   * **Ships at zero, and the value that solves the lockout is not shippable.** Escaping the scripted
+   * shielded-Sentinel position needs a weight of 12, which measured **25.0%** against the shipped bot
+   * (80 games, against a 50.0% self-play control). That is unsurprising once it is read against the
+   * scale rather than the position: every other weight here is 1 to 7, so 12 is triple the value of a
+   * whole unit, and with a cap of 10 the term contributes up to 120 points on a board where a unit is
+   * worth 4. It dominates the evaluation.
+   *
+   * So a weight large enough to break the lockout tie is necessarily large enough to distort
+   * everything else. Any revival needs a different route to that position, not a smaller version of
+   * this one: in-scale values do not create the tie at all.
    */
   blockedReach: number
   /** Ceiling on the denied-reach quantity, in points of base damage. See `blockedReach`. */
