@@ -170,18 +170,37 @@ bot.
    three hours. Gate on **non-inferiority**, since a tie-break changes a third of decisions slightly
    rather than any decision decisively.
 
-2. **Size a proper run for gated `blockedReach`.** The term is now gated to **shielded** blockers,
-   which is the case the evaluation genuinely cannot see: an unshielded Sentinel is answerable by
-   attacking it and the material terms already price that. Gating took the weight-12 A/B from 25.0% to
-   **48.8%**, against a matched self-play control of 48.8% (39 of 80 each, seeds 9200-9209).
+2. **Run the sized A/B for `blockedReach: 1` plus a null-reply tie-break.** This is the lockout fix,
+   and it is now made of parts that are each defensible.
 
-   Level, not inert: the gated term still changes **12 of 300 (4.0%)** of decisions. Those are
-   different findings and a win rate cannot separate them, so it is measured directly and pinned.
+   The term is gated to **shielded** blockers, the case the evaluation genuinely cannot see: an
+   unshielded Sentinel is answerable by attacking it, and the material terms already price that.
+   Ungated it was live on 24.2% of decisions and measured 25.0%; gated it screens level with the
+   control.
 
-   So 80 games says "no longer harmful" and cannot say more. What it needs is a properly sized run,
-   and a reason to prefer it: it currently buys a scripted position and 4% of decisions moving in an
-   unknown direction. The weight is still out of scale at 12, and a sweep of in-scale values is only
-   worth running if they still create the lockout tie, which has not been checked.
+   The weight is **1**, at the bottom of the model's scale beside `hp`. It works because the term
+   **removes an option rather than outweighing one**: at weight 0 the passing line's best reachable
+   board scores 52 against acting's 43, and pricing a blocked lane at all drops that line to a 43
+   board it could already reach. Every weight from 1 to 16 lands on the identical tie, so 12 was never
+   required, and weight 1 disturbs a quarter as much (3 of 200 decisions against 11).
+
+   **Both halves are needed at every weight.** The term only creates the tie; without a second opinion
+   the seeded pick still passes. That is why five single-lever attempts failed.
+
+   Screened at 80 games on seeds 9200-9209 against a matched `beam-reply` self-play control of 48.8%:
+
+   | arm | wins | win rate |
+   | --- | --- | --- |
+   | control | 39/80 | 48.8% |
+   | `+blockedReach=1` | 39/80 | 48.8% |
+   | `+blockedReach=12` | 39/80 | 48.8% |
+   | `+blockedReach=1/tie=reply:null` | 36/80 | 45.0% |
+   | `+blockedReach=12/tie=reply:null` | 37/80 | 46.3% |
+
+   **Everything here is inside noise at n=80** (+/-10.7). The tie-break measured 55.0% on seeds
+   9100-9109 and 45.0% here, which is what a wide interval looks like rather than a trend. Nothing is
+   shippable on this evidence: it needs ~2,500 games (about three hours at 42.9 s/game over 10 shards)
+   gated on **non-inferiority**, since the lockout is a position self-play barely reaches.
 3. **#487 re-tune the weights for the shipped search.** Unblocked, now that the configuration is
    settled and there is a fixed target to tune against. The "re-weighting is exhausted" result
    measured a one-ply evaluator, and #430 identified exactly why several weights could not matter
