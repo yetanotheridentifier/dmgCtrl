@@ -112,6 +112,8 @@ export interface SearchTrace {
    * `BeamLimits.explain` is set.
    */
   lines?: SearchLine[]
+  /** How many candidates tied for the lead, so the seeded pick or the tie-break decided between them. */
+  tiedCandidates: number
 }
 
 /** How a root candidate earned its value: the best board it reached, and the moves that got there. */
@@ -341,6 +343,26 @@ export interface BeamLimits {
    */
   explain?: boolean
   /**
+   * Search overrides used to re-rank candidates that tied, or absent for no tie-break (#499).
+   *
+   * A tie is a decision the search cannot see: every candidate scores the same and the seeded
+   * tie-break picks at random. That is 11.3% of choice answers, 5.4% of resourcing and 11.8% of card
+   * plays for the shipped bot.
+   *
+   * No evaluation term can fix the ones that matter. In the shielded-Sentinel lockout both candidates
+   * peak on the **same end state at the same depth**, differing only in the route, and a max over
+   * reachable boards discards the route. What separates them is a **different search**: under
+   * `reply: 'null'` the acting line beats passing 56.1 to 52, while `pessimistic` ties them at 43.
+   *
+   * Pluggable rather than fixed, because the right second opinion is a per-case question. `{ reply:
+   * 'null' }` asks the optimist when the pessimist is silent; `{ depth: 1 }` is the one-ply tie-break
+   * proposed for #396 and #398, which is measurably wrong for the lockout.
+   *
+   * **Only ever applied to candidates that already tied for the lead.** A second opinion allowed to
+   * overrule a clear winner is a different bot, not a tie-break.
+   */
+  tieBreak?: Partial<BeamLimits>
+  /**
    * The most any ONE owed chain may take from `nodes`.
    *
    * `nodes` is the decision's whole allowance and is shared with chain resolution, which without this
@@ -422,7 +444,10 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
     const budget = searchBudget(limits.nodes)
     const moves = legalMoves(state)
     if (moves.length === 0) {
-      trace = { nodes: limits.nodes, left: budget.left, chain: 0, beam: 0, exhausted: false, candidates: [] }
+      trace = {
+        nodes: limits.nodes, left: budget.left, chain: 0, beam: 0, exhausted: false,
+        candidates: [], tiedCandidates: 0,
+      }
       return null
     }
 
@@ -456,9 +481,51 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
       exhausted: budget.left <= 0,
       candidates,
       lines: limits.explain === true ? lines : undefined,
+      tiedCandidates: bestMoves.length,
     }
-    return bestMoves[Math.floor(seededUnit(state.rngSeed) * bestMoves.length)]
+
+    const finalists = limits.tieBreak && bestMoves.length > 1
+      ? breakTie(state, bestMoves, me, asRole, inner, limits)
+      : bestMoves
+    return finalists[Math.floor(seededUnit(state.rngSeed) * finalists.length)]
   }
+}
+
+/**
+ * Re-rank candidates that tied, using a second search, and return whichever now lead.
+ *
+ * Given only the tied moves, so it can never overrule a candidate that already won: a second opinion
+ * with that power would be a different bot rather than a tie-break.
+ *
+ * Its own budget, because the main search may have spent most of the pool getting here and a
+ * tie-break starved of nodes would return noise. It is affordable: ties are 5% to 12% of decisions
+ * and only the tied candidates are re-searched, usually two or three of them.
+ *
+ * Still deterministic. If the second opinion also ties, the survivors go back to the seeded pick.
+ */
+function breakTie(
+  state: GameState,
+  tied: Action[],
+  me: PlayerId,
+  asRole: Role | undefined,
+  inner: Evaluator,
+  limits: BeamLimits,
+): Action[] {
+  const second: BeamLimits = { ...limits, ...limits.tieBreak, tieBreak: undefined, explain: false }
+  const budget = searchBudget(second.nodes)
+  let best = -Infinity
+  const winners: Action[] = []
+  for (const move of tied) {
+    const { best: value } = reachableFrom(state, move, me, asRole, inner, second, budget, best)
+    if (value > best) {
+      best = value
+      winners.length = 0
+      winners.push(move)
+    } else if (value === best) {
+      winners.push(move)
+    }
+  }
+  return winners.length > 0 ? winners : tied
 }
 
 /**
