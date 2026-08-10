@@ -642,7 +642,10 @@ function reachableFrom(
     if (last || children.length === 0) break
     // Sort is stable, so equal scores keep `legalMoves` order and the trim is deterministic.
     children.sort((a, b) => b.value - a.value)
-    frontier = children.slice(0, limits.width).map(c => ({ board: c.board, path: c.path }))
+    // The children already carry `board` and `path`, so reuse them rather than allocating a fresh
+    // wrapper per surviving node: that re-wrap cost the shipped bot measurable time for a diagnostic
+    // it never turns on.
+    frontier = children.slice(0, limits.width)
   }
 
   return { best, won, line: explaining ? { value: best, peakDepth, path: peakPath } : undefined }

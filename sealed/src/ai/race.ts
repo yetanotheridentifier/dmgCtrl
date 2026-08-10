@@ -72,6 +72,33 @@ export function reachSteady(state: GameState, owner: PlayerId): number {
   return sumReach(state, owner, state.players[owner].units)
 }
 
+/**
+ * Base damage a Sentinel is denying `owner` each round (#499).
+ *
+ * `reachSteady` already returns zero for a locked attacker, but zero cannot say **how much** is being
+ * denied, and that difference is the entire value of removing the blocker. Without it a lane shut for
+ * the rest of the game and a lane that is merely empty score the same.
+ *
+ * Diagnosed rather than assumed. The principal-variation readout showed the acting line and the
+ * passing line peaking at the **same level**, both with the blocker dead, so no discount on later
+ * boards could reorder them: the tie has to be broken at that level, and those two boards differ only
+ * in whether the lane is open.
+ *
+ * Reuses `unitReach` for both readings rather than reimplementing targeting, so Sentinel, Saboteur,
+ * Overwhelm and arena rules stay in one place. A unit that could never attack a base contributes
+ * nothing to either side of the subtraction and so cannot register as blocked.
+ */
+export function blockedReach(state: GameState, owner: PlayerId): number {
+  return state.players[owner].units.reduce((n, u) => {
+    if (unitCannotAttackBases(state, u)) return n
+    const { sentinelLocked } = enemyAttackTargets(state, u, owner)
+    if (!sentinelLocked) return n
+    // What it would land unblocked, minus whatever Overwhelm already tramples through.
+    const free = effectivePower(state, u, { attacking: true, attackingBase: true })
+    return n + Math.max(0, free - unitReach(state, owner, u))
+  }, 0)
+}
+
 /** Total Restore across a player's units: healing their own base each round. */
 function restorePerRound(state: GameState, owner: PlayerId): number {
   return state.players[owner].units.reduce(
