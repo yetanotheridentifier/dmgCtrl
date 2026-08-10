@@ -3,6 +3,7 @@ import { opponentOf } from '../engine/types'
 import { enemyAttackTargets } from '../engine/legalMoves'
 import { effectivePower, effectiveHp } from '../engine/stats'
 import { unitHasKeyword, unitKeywordValue, unitCannotAttackBases, unitNegatesOverwhelm } from '../engine/keywords'
+import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 
 /**
  * The race: who gets to lethal first (#395).
@@ -73,7 +74,7 @@ export function reachSteady(state: GameState, owner: PlayerId): number {
 }
 
 /**
- * Base damage a Sentinel is denying `owner` each round (#499).
+ * Base damage a **shielded** Sentinel is denying `owner` each round (#499).
  *
  * `reachSteady` already returns zero for a locked attacker, but zero cannot say **how much** is being
  * denied, and that difference is the entire value of removing the blocker. Without it a lane shut for
@@ -84,6 +85,21 @@ export function reachSteady(state: GameState, owner: PlayerId): number {
  * boards could reorder them: the tie has to be broken at that level, and those two boards differ only
  * in whether the lane is open.
  *
+ * ## Gated to shielded blockers, because the ungated version measured 25.0%
+ *
+ * Pricing reach denied by *any* Sentinel put the term on **24.2%** of decisions while the lockout it
+ * was written for is **2.1%**: 92% of its firings were a board-wide bias against Sentinels. At a mean
+ * quantity of 6.6 and weight 12 that is ~79 points where a whole unit is worth 4, and it measured
+ * 25.0% against the shipped bot (against a 50.0% self-play control).
+ *
+ * The gate follows from why the term was needed at all. An unshielded Sentinel is **answerable**:
+ * attacking it lowers its HP, and the material terms already price that, so the bot needs no help. A
+ * shielded one is the blind spot, because a Shield absorbs a whole instance of damage through a
+ * prevention hook, so a strip leaves a board scoring identically and the lane stays shut.
+ *
+ * `targets.every` rather than `some`, because one unshielded target means the lane is answerable: we
+ * can hit that one. Requiring a non-empty target list keeps "no Sentinel here" out of the count.
+ *
  * Reuses `unitReach` for both readings rather than reimplementing targeting, so Sentinel, Saboteur,
  * Overwhelm and arena rules stay in one place. A unit that could never attack a base contributes
  * nothing to either side of the subtraction and so cannot register as blocked.
@@ -91,8 +107,10 @@ export function reachSteady(state: GameState, owner: PlayerId): number {
 export function blockedReach(state: GameState, owner: PlayerId): number {
   return state.players[owner].units.reduce((n, u) => {
     if (unitCannotAttackBases(state, u)) return n
-    const { sentinelLocked } = enemyAttackTargets(state, u, owner)
+    const { targets, sentinelLocked } = enemyAttackTargets(state, u, owner)
     if (!sentinelLocked) return n
+    // Only blockers the evaluation cannot otherwise see. See the gate note above.
+    if (targets.length === 0 || !targets.every(t => t.upgrades.some(up => up.cardId === TOKEN_SHIELD))) return n
     // What it would land unblocked, minus whatever Overwhelm already tramples through.
     const free = effectivePower(state, u, { attacking: true, attackingBase: true })
     return n + Math.max(0, free - unitReach(state, owner, u))

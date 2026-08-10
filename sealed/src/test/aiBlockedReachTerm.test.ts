@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { makePublicScore, publicBreakdown, DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { state, player, card, unit, CARDS } from './helpers/engineFixtures'
+import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import type { GameState } from '../engine/types'
 import '../engine/cardDefinitions'
 
@@ -26,11 +27,16 @@ const cards = {
   GRUNT: card({ id: 'GRUNT', type: 'unit', arena: 'ground', cost: 2, power: 4, hp: 4 }),
 }
 
+/**
+ * The blocker is **shielded**, because the quantity is gated to blockers the evaluation cannot
+ * otherwise see. An unshielded Sentinel is answerable by attacking it and the material terms already
+ * price that; pricing it here too put the term on 24.2% of decisions and measured 25.0%.
+ */
 const blocked = (): GameState => state({
   cards,
   players: {
     player: player({ units: [unit('u1', 'GRUNT')] }),
-    opponent: player({ units: [unit('w', 'WALL')] }),
+    opponent: player({ units: [unit('w', 'WALL', { upgrades: [{ cardId: TOKEN_SHIELD, owner: 'opponent' }] })] }),
   },
 })
 
@@ -92,7 +98,7 @@ describe('the blocked-reach term', () => {
       cards,
       players: {
         player: player({ units: Array.from({ length: 6 }, (_, i) => unit(`u${i}`, 'GRUNT')) }),
-        opponent: player({ units: [unit('w', 'WALL')] }),
+        opponent: player({ units: [unit('w', 'WALL', { upgrades: [{ cardId: TOKEN_SHIELD, owner: 'opponent' }] })] }),
       },
     })
     const weights = { ...DEFAULT_WEIGHTS, blockedReach: 4, roleShift: 0 }

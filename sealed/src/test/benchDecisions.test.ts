@@ -88,6 +88,36 @@ describe('runDecisions', () => {
   })
 
   /**
+   * **How often a term is live, against how often the situation it was written for occurs.**
+   *
+   * `blockedReach` was written for the shielded-Sentinel lockout, a lane shut for the rest of the
+   * game, measured at 2.1% of decisions. But the quantity keys on `sentinelLocked`, which is true
+   * whenever ANY enemy Sentinel forces our attackers, shielded or not. If those two rates are far
+   * apart the term is not the narrow gate it was designed as, and at weight 12 it measured 25.0%
+   * against the shipped bot.
+   *
+   * The general lesson is the reason this is a permanent counter rather than a probe: a new term must
+   * be read against how often it is live and how large it gets, not only against the position that
+   * motivated it.
+   */
+  it('reports how often blocked reach is live, against how often a lane is shut', () => {
+    const b = report.blockedReach
+    expect(b.decisions).toBeGreaterThan(0)
+    expect(b.active).toBeLessThanOrEqual(b.decisions)
+    // A shut lane is a strict special case of the term being live, so this ordering must hold or the
+    // two are measuring different things and neither can be read against the other.
+    expect(b.activeAndLaneShut).toBeLessThanOrEqual(b.active)
+    expect(b.widestQuantity).toBeGreaterThanOrEqual(0)
+    if (b.active === 0) expect(b.widestQuantity).toBe(0)
+    else expect(b.widestQuantity).toBeGreaterThan(0)
+
+    // **The quantity must be the one the evaluation prices.** The cap applies to each side before the
+    // difference, so a capped quantity can never exceed the cap. Differencing the raw reach instead
+    // reported 26 against a cap of 10, and every contribution figure read off that would be inflated.
+    expect(b.widestQuantity, 'a capped quantity cannot exceed the cap').toBeLessThanOrEqual(DEFAULT_WEIGHTS.blockedReachCap)
+  })
+
+  /**
    * Shields, and whether the bot ever strips one (#493).
    *
    * A Shield prevents a whole instance of damage, so after a ping the board has the same units at the

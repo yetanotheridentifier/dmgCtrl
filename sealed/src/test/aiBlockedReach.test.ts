@@ -32,6 +32,13 @@ const cards = {
 const shielded = (id: string, cardId: string): ReturnType<typeof unit> =>
   unit(id, cardId, { upgrades: [{ cardId: TOKEN_SHIELD, owner: 'opponent' }] })
 
+/**
+ * The standard blocker, **shielded**, because the quantity is gated to blockers the evaluation cannot
+ * otherwise see. An unshielded Sentinel is answerable by attacking it, and the material terms already
+ * price that; pricing it here as well put the term on 24.2% of decisions and measured 25.0%.
+ */
+const wall = (id = 'w'): ReturnType<typeof unit> => shielded(id, 'WALL')
+
 function board(mine: ReturnType<typeof unit>[], theirs: ReturnType<typeof unit>[]): GameState {
   return state({
     cards,
@@ -48,13 +55,13 @@ describe('blockedReach', () => {
 
   /** The case the whole ticket is about: a Sentinel denies every point our attacker had. */
   it('is the reach a Sentinel denies', () => {
-    const s = board([unit('u1', 'GRUNT')], [unit('w', 'WALL')])
+    const s = board([unit('u1', 'GRUNT')], [wall()])
     expect(reachSteady(s, 'player'), 'locked, so no base damage lands').toBe(0)
     expect(blockedReach(s, 'player'), 'and 4 points of it are being denied').toBe(4)
   })
 
   it('sums across every attacker the blocker locks', () => {
-    const s = board([unit('u1', 'GRUNT'), unit('u2', 'GRUNT')], [unit('w', 'WALL')])
+    const s = board([unit('u1', 'GRUNT'), unit('u2', 'GRUNT')], [wall()])
     expect(blockedReach(s, 'player')).toBe(8)
   })
 
@@ -66,31 +73,38 @@ describe('blockedReach', () => {
   it('ignores attackers the blocker cannot reach', () => {
     // `unit()` reads the arena from the shared CARDS table, not from this file's `cards`, so a
     // locally defined space card silently lands in ground unless the arena is given explicitly.
-    const s = board([unit('u1', 'GRUNT'), unit('f1', 'FLYER', { arena: 'space' })], [unit('w', 'WALL')])
+    const s = board([unit('u1', 'GRUNT'), unit('f1', 'FLYER', { arena: 'space' })], [wall()])
     expect(blockedReach(s, 'player'), 'only the ground attacker is denied').toBe(4)
   })
 
   /** Saboteur ignores Sentinel, so nothing of its reach is being denied. */
   it('does not count an attacker that can walk past the blocker', () => {
-    const s = board([unit('s1', 'SABO')], [unit('w', 'WALL')])
+    const s = board([unit('s1', 'SABO')], [wall()])
     expect(reachSteady(s, 'player')).toBe(3)
     expect(blockedReach(s, 'player')).toBe(0)
   })
 
   /**
-   * A Shield does not change the quantity: the reach denied is the same whether the blocker has one.
-   * What a Shield changes is how long the denial lasts, which is a matter for how the term is priced
-   * and for the search, not for this measurement.
+   * **The Shield is the gate, which is the reverse of what this test used to assert.**
+   *
+   * It originally held that a Shield does not change the quantity, on the reasoning that the reach
+   * denied is the same either way and the Shield only affects how long the denial lasts. True as
+   * arithmetic, and wrong as a term: pricing every Sentinel put it on 24.2% of decisions against a
+   * 2.1% lockout and measured 25.0% against the shipped bot.
+   *
+   * An unshielded Sentinel is answerable, so the material terms already cover it. Only the shielded
+   * one is invisible, and only it is priced.
    */
-  it('reads the same whether or not the blocker carries a Shield', () => {
+  it('prices a shielded blocker and ignores one that can be killed', () => {
     const plain = board([unit('u1', 'GRUNT')], [unit('w', 'WALL')])
     const withShield = board([unit('u1', 'GRUNT')], [shielded('w', 'WALL')])
-    expect(blockedReach(withShield, 'player')).toBe(blockedReach(plain, 'player'))
+    expect(blockedReach(plain, 'player')).toBe(0)
+    expect(blockedReach(withShield, 'player')).toBe(4)
   })
 
   /** Removing the blocker is what the bot has to be able to see paying off. */
   it('falls to zero once the blocker is gone', () => {
-    const blocked = board([unit('u1', 'GRUNT')], [unit('w', 'WALL')])
+    const blocked = board([unit('u1', 'GRUNT')], [wall()])
     const clear = board([unit('u1', 'GRUNT')], [])
     expect(blockedReach(blocked, 'player')).toBeGreaterThan(0)
     expect(blockedReach(clear, 'player')).toBe(0)
@@ -98,7 +112,7 @@ describe('blockedReach', () => {
 
   /** Exhausted units still count: the denial is about the steady rate, matching `reachSteady`. */
   it('counts an exhausted attacker, like the steady reach does', () => {
-    const s = board([unit('u1', 'GRUNT', { exhausted: true })], [unit('w', 'WALL')])
+    const s = board([unit('u1', 'GRUNT', { exhausted: true })], [wall()])
     expect(blockedReach(s, 'player')).toBe(4)
   })
 })

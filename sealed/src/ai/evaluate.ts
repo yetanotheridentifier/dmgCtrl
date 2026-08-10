@@ -226,8 +226,14 @@ function boardPresence(state: GameState, id: PlayerId, w: EvalWeights): number {
   return w.unit * p.units + w.power * p.power + w.hp * p.hp
 }
 
-/** Denied reach, capped. See `blockedReach` for why the ceiling is not optional. */
-function blockedFor(state: GameState, id: PlayerId, w: EvalWeights): number {
+/**
+ * Denied reach, capped. See `blockedReach` for why the ceiling is not optional.
+ *
+ * Exported so a diagnostic reports the quantity the evaluation actually prices. Differencing the
+ * UNCAPPED reach instead reported a largest quantity of 26 against a cap of 10, which is a number the
+ * model never sees.
+ */
+export function blockedFor(state: GameState, id: PlayerId, w: EvalWeights): number {
   return Math.min(blockedReach(state, id), w.blockedReachCap)
 }
 

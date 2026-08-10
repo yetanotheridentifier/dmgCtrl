@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { wilsonInterval } from './stats'
+import { COMMIT_ID } from '../buildIdentity'
 
 /**
  * Run one A/B as N single-threaded processes and pool the result (#447, #488).
@@ -28,6 +29,15 @@ export interface ShardResult {
   dropped: number
   /** Non-zero means the shard failed outright and contributed nothing. */
   exitCode: number
+  /**
+   * The engine build that produced this result.
+   *
+   * Load-bearing for resuming, not decoration. The run key is built from the AI names, the game count
+   * and the seed, none of which change when the code does, so without this a re-run after an
+   * evaluation change finds every shard complete, replays the old numbers in 0.0s and reports them as
+   * the new measurement. Absent on results banked before this field existed.
+   */
+  commitId?: string
 }
 
 export interface PooledResult {
@@ -91,10 +101,16 @@ export function shardRunKey(config: ShardConfig): string {
  *
  * Results for seeds outside the current run are ignored rather than trusted: a longer earlier run
  * leaves files behind, and letting them satisfy a shorter one would pool two different experiments.
+ *
+ * **And neither may results produced by different code.** The run key cannot see a code change, so a
+ * re-run after editing an evaluation term found ten complete shards, replayed the previous numbers in
+ * 0.0s and presented them as the new measurement. It matched the earlier run's win rate to the game,
+ * which is the only reason it was noticed. A mismatched or missing stamp re-runs the shard: resuming
+ * an interrupted run of the SAME code, which is what this exists for, is unaffected.
  */
 export function pendingSeeds(config: ShardConfig, done: ShardResult[]): number[] {
   const finished = new Set(
-    done.filter(r => r.exitCode === 0 && r.completed > 0).map(r => r.seed),
+    done.filter(r => r.exitCode === 0 && r.completed > 0 && r.commitId === COMMIT_ID).map(r => r.seed),
   )
   return Array.from({ length: config.shards }, (_, i) => config.baseSeed + i)
     .filter(seed => !finished.has(seed))
@@ -113,6 +129,8 @@ export function parseShardOutput(text: string, seed: number, exitCode: number): 
     completed: counts ? Number(counts[1]) : 0,
     dropped: counts ? Number(counts[2]) : 0,
     exitCode,
+    // Stamped so a later resume can tell whether this result describes the code now running.
+    commitId: COMMIT_ID,
   }
 }
 

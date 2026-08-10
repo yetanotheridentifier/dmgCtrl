@@ -11,7 +11,7 @@ import { unitHasKeyword } from '../engine/keywords'
 import { resolve } from '../engine/resolve'
 import { seededShuffle, nextSeed } from '../engine/rng'
 import { COMMIT_ID } from '../buildIdentity'
-import { evaluate } from '../ai/evaluate'
+import { evaluate, blockedFor, DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { makeQuiescent, lastSearchTrace, clearSearchTrace } from '../ai/search'
 import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { resolveAi } from '../ai/registry'
@@ -396,12 +396,40 @@ export interface TieStat {
  */
 export const TIE_FANOUT_CAP = 8
 
+/**
+ * How often the `blockedReach` term is live, against how often the situation it was written for
+ * actually occurs (#499).
+ *
+ * The term prices the base damage an enemy Sentinel denies us each round, and was motivated by the
+ * shielded-Sentinel lockout: a lane shut for the rest of the game, which is 2.1% of decisions. But the
+ * quantity keys on `sentinelLocked`, true whenever **any** enemy Sentinel forces our attackers,
+ * shielded or not. The gap between the two rates is the difference between a narrow gate and a
+ * board-wide bias against Sentinels.
+ *
+ * Kept as a permanent counter because the mistake generalises: at weight 12 this measured 25.0%
+ * against the shipped bot, and reading the weight against the model's scale (every other weight is 1
+ * to 7) plus the quantity against its frequency would both have predicted it.
+ */
+export interface BlockedReachStat {
+  /** Decisions observed, the denominator. */
+  decisions: number
+  /** Of those, decisions where the quantity is non-zero, so the term moves the score at all. */
+  active: number
+  /** Of those, decisions where a lane is genuinely shut: the case the term was written for. */
+  activeAndLaneShut: number
+  /** Summed magnitude, so a mean contribution can be read against the weight. */
+  totalQuantity: number
+  /** Largest magnitude seen. Against `blockedReachCap` this says how often the ceiling binds. */
+  widestQuantity: number
+}
+
 export interface DecisionReport {
   commitId: string
   ai: string
   games: number
   stats: DecisionStat[]
   ties: TieStat
+  blockedReach: BlockedReachStat
   shields: ShieldStat
   leader: LeaderStat
   resourcing: ResourcingStat
@@ -561,6 +589,9 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
     searched: 0, fired: 0, tiedTotal: 0, rootsWhenFired: 0, rootsSearched: 0,
     widest: 0, tiedTotalCapped: 0, firedWide: 0,
   }
+  const blocked: BlockedReachStat = {
+    decisions: 0, active: 0, activeAndLaneShut: 0, totalQuantity: 0, widestQuantity: 0,
+  }
   const tieKinds = new Map<string, { searched: number; fired: number; tiedTotal: number; widest: number }>()
   const lethalByRound = new Map<number, { decisions: number; ours: number; theirs: number }>()
   let oursOneAction = 0
@@ -680,6 +711,21 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
             if (strips.some(x => sameAction(x.m, action))) shields.removals++
           }
           if (shieldsOn(s, me) > 0) shields.decisionsHoldingShield++
+
+          // How live the term is, against how often the lockout it was written for occurs.
+          //
+          // Through `blockedFor`, so this is the quantity the evaluation prices. The cap applies to
+          // EACH SIDE before the difference, and differencing the raw reach instead reported a
+          // largest quantity of 26 against a cap of 10: a measurement of something the model cannot
+          // see, and it would have inflated every contribution figure read off it.
+          blocked.decisions++
+          const denied = Math.abs(blockedFor(s, foe, DEFAULT_WEIGHTS) - blockedFor(s, me, DEFAULT_WEIGHTS))
+          if (denied > 0) {
+            blocked.active++
+            blocked.totalQuantity += denied
+            if (denied > blocked.widestQuantity) blocked.widestQuantity = denied
+            if (lockedLanes(s, me).length > 0) blocked.activeAndLaneShut++
+          }
           shields.shieldedBlockers += shieldedBlockersAgainst(s, me)
           if (lockedLanes(s, me).length > 0) shields.laneLocked++
           if (lockedOutBy(s, me)) shields.lockedOut++
@@ -871,6 +917,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         .map(([kind, b]) => ({ kind, ...b }))
         .sort((a, b) => b.fired - a.fired || a.kind.localeCompare(b.kind)),
     },
+    blockedReach: blocked,
     shields,
     leader,
     resourcing: {

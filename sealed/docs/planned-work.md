@@ -170,27 +170,36 @@ bot.
    three hours. Gate on **non-inferiority**, since a tie-break changes a third of decisions slightly
    rather than any decision decisively.
 
-   **The lockout itself is unsolved and needs a different route.** The only known way to make it a tie
-   is `blockedReach: 12`, and that weight is triple the value of a whole unit on a scale where every
-   other weight is 1 to 7. In-scale values do not create the tie, so this is not a tuning problem.
-2. **#487 re-tune the weights for the shipped search.** Unblocked, now that the configuration is
+2. **Size a proper run for gated `blockedReach`.** The term is now gated to **shielded** blockers,
+   which is the case the evaluation genuinely cannot see: an unshielded Sentinel is answerable by
+   attacking it and the material terms already price that. Gating took the weight-12 A/B from 25.0% to
+   **48.8%**, against a matched self-play control of 48.8% (39 of 80 each, seeds 9200-9209).
+
+   Level, not inert: the gated term still changes **12 of 300 (4.0%)** of decisions. Those are
+   different findings and a win rate cannot separate them, so it is measured directly and pinned.
+
+   So 80 games says "no longer harmful" and cannot say more. What it needs is a properly sized run,
+   and a reason to prefer it: it currently buys a scripted position and 4% of decisions moving in an
+   unknown direction. The weight is still out of scale at 12, and a sweep of in-scale values is only
+   worth running if they still create the lockout tie, which has not been checked.
+3. **#487 re-tune the weights for the shipped search.** Unblocked, now that the configuration is
    settled and there is a fixed target to tune against. The "re-weighting is exhausted" result
    measured a one-ply evaluator, and #430 identified exactly why several weights could not matter
    there. The largest unexamined lever, and much cheaper than it was: #488 cut deep-search cost
    roughly sixfold. Re-size it with `--cost` before sweeping.
-3. **#396 and #398, whose gates have now cleared.** Both said "land the search, re-run `--decisions`,
+4. **#396 and #398, whose gates have now cleared.** Both said "land the search, re-run `--decisions`,
    build only what still ties". Measured: the search contributes **nothing** to choice answering
    (11.4% one ply, 11.3% searched, over 5,878 decisions averaging 6.6 options), and it makes
    resourcing and card-play **worse**. Neither is subsumed. Do the tie-break above first, since it
    may absorb part of both: answering ties for the lead on 36.1% of decisions, second only to
    attacks, and it is the kind where the candidates were handed to the bot rather than chosen.
-4. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
+5. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
    moves with a **one-ply** scorer, so it currently reports term sensitivity for a bot we no longer
    ship; testing #430's pre-registered prediction needs the perturbations driven through the real
    search. That also makes it roughly 70x more expensive, so scope it to the weights the prediction
    names. The payoff grew: `lethalExposure` and `role` are proxies for search, and a reply policy
    computes the first directly, so this is now a route to **deleting** model complexity.
-5. **#446 claim the initiative when it converts to lethal.** Headroom measured and thin: lethal is
+6. **#446 claim the initiative when it converts to lethal.** Headroom measured and thin: lethal is
    available to us on 4.3% of decisions, to them on 5.2%, and **0.0% before round 5** (1 occurrence in
    20,112 early-game decisions, rising to 14-21% only from round 6). Everything built on a lethal
    solver acts on the back half of the game and a 4-5% slice. Behind the four items above.
@@ -223,6 +232,15 @@ a short run first.
 | `reply:pessimistic:8x3` vs `beam-reply` | A/B | 8400 | 12 | 44.6 s |
 | `4x4:200000` vs `4x3:200000` | A/B | 9600 | 10 | 67.6 s |
 | `beam-reply` | `--decisions` | 420 | 1 | **15.0 s** |
+
+**A resumed shard run checks the commit, and seeds are consumed per experiment.** The run key is built
+from the AI names, the game count and the base seed, so it cannot see a code change. Re-running an A/B
+after editing an evaluation term therefore found ten complete shards, replayed the previous numbers in
+**0.0s** and reported them as the new measurement, matching the earlier run game for game. Results now
+carry a `commitId` and a mismatch re-runs the shard, so resuming an interrupted run of the same code
+still works. The practical consequence: **a seed range is spent once per AI-name pair**, so a re-run
+of the same names after a code change needs a fresh base seed, and a matched control at those new
+seeds if the old one is to be compared against.
 
 **Memory binds before cores do.** During a 12-shard run `vmstat` showed 22% idle CPU with `wa` and
 `st` both zero: core headroom exists and cannot be used, because memory runs out first.
@@ -456,14 +474,17 @@ AI with the change switched off, across the coverage decks.
 - **Scaling the "I have a play" hand bonus by the card's value.** A bomb's hand value and its board
   value are the same order of magnitude, so the bot refused to play its own bombs. **40.5%**. The
   bonus is flat.
-- **A `blockedReach` term at the weight that solves the lockout.** Pricing the base damage a shielded
-  Sentinel denies each round is the only known way to turn the scripted lockout into a tie, but it
-  takes a weight of **12** to do it, and that measured **25.0%** (CI 15.7-34.3) against the shipped
-  bot over 80 games, with a `beam-reply` self-play control on exactly 50.0%. The combination with a
-  tie-break measured 26.3%, i.e. the weight dominates and the tie-break neither helps nor rescues it.
+- **An UNGATED `blockedReach` term.** Pricing the reach denied by *any* Sentinel measured **25.0%**
+  (CI 15.7-34.3) against the shipped bot at weight 12, over 80 games with a self-play control on
+  exactly 50.0%. Adding a tie-break did not rescue it (26.3%).
 
-  **Read the weight against the scale, not against the position it solves.** Every other weight is 1
-  to 7, so 12 is triple the value of a whole unit, and with `blockedReachCap: 10` the term contributes
-  up to 120 points on a board where a unit is worth 4. That check costs seconds and was not done: the
-  scripted position was allowed to name the weight. In-scale values do not create the tie at all, so
-  this is not a tuning problem and a smaller version is not worth sweeping. The term stays at 0.
+  Two independent reasons, both checkable in seconds and neither checked at the time. **The weight was
+  out of scale:** every other weight is 1 to 7, so 12 is triple a whole unit, and with
+  `blockedReachCap: 10` the term reaches 120 points where a unit is worth 4. **And the quantity was
+  far commoner than the defect:** it keyed on `sentinelLocked`, true for any Sentinel, so it was live
+  on **24.2%** of decisions against a 2.1% lockout, at a mean quantity of 6.6. A scripted position was
+  allowed to name the weight, and nobody asked how often the term would fire.
+
+  Gating it to **shielded** blockers fixes both symptoms and is what ships (at weight 0 still): see
+  Next up. Read a new term against the model's scale and against how often it is live, not only
+  against the position that motivated it.

@@ -5,6 +5,7 @@ import { writeFailures, FAILURES_DIR } from './reports'
 import { runSweep } from './sweep'
 import type { SweepReport } from './sweep'
 import { runDecisions, TIE_FANOUT_CAP } from './decisions'
+import { DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { runTerms } from './terms'
 import type { TermReport } from './terms'
 import { runCost } from './cost'
@@ -355,6 +356,18 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
       row('by kind', ti.byKind.map(k => `${k.kind} ${pct(k.searched === 0 ? 0 : k.fired / k.searched)}`).join('  ')),
     )
   }
+
+  const br = report.blockedReach
+  lines.push(
+    '',
+    '  blocked reach: how often the term is LIVE, against how often the lockout it was written for',
+    '  occurs. The quantity keys on sentinelLocked, true for ANY enemy Sentinel, so a wide gap here',
+    '  means a board-wide bias against Sentinels rather than the narrow gate it was designed as.',
+    row('term is live', rate(br.active, br.decisions)),
+    row('  and a lane IS shut', rate(br.activeAndLaneShut, br.active)),
+    row('mean quantity when live', br.active === 0 ? 'n/a' : (br.totalQuantity / br.active).toFixed(1)),
+    row('largest quantity', `${br.widestQuantity}  (cap ${DEFAULT_WEIGHTS.blockedReachCap})`),
+  )
 
   const sh = report.shields
   const shieldRate = (n: number, d: number): string => (d === 0 ? 'n/a' : `${n} of ${d} = ${pct(n / d)}`)
