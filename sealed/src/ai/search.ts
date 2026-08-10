@@ -510,9 +510,10 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
  * only moves the overhead from +13.4% to +11.2%. The 239 is an answer-a-choice decision, the kind
  * where a card deals out a combinatorial menu; ordinary moves top out around 26.
  *
- * All of that is an **upper bound** on the real cost, since it counts roots rather than nodes:
- * `reply: 'null'` expands no replies and is much cheaper per root than the pessimistic search that
- * found the tie.
+ * Roots overstate it badly, though, because a second opinion prices each root lower than the search
+ * that found the tie. Timed over an identical corpus, `reply: 'null'` costs **+2.1%** per decision
+ * (203.73 ms against 199.51 ms) and a depth-1 second opinion is inside the noise of a single timing
+ * pass. Against a +13.4% bound in roots, the feature is cheap; whether it helps is the open question.
  *
  * Still deterministic. If the second opinion also ties, the survivors go back to the seeded pick.
  */

@@ -96,7 +96,9 @@ export const beamAi = makeBeamGreedy(DEFAULT_WEIGHTS)
  * Same weights, same width and depth as `beam`, differing only in what the opponent is assumed to do
  * between our actions. That is the whole change, and it is worth **17 points**.
  */
-export const beamReplyAi = makeBeamGreedy(DEFAULT_WEIGHTS, { ...DEFAULT_BEAM_LIMITS, reply: 'pessimistic' })
+export const BEAM_REPLY_LIMITS: BeamLimits = { ...DEFAULT_BEAM_LIMITS, reply: 'pessimistic' }
+
+export const beamReplyAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_LIMITS)
 
 /**
  * The shipped model with the per-chain allowance removed, so #488 can be measured on its own.
@@ -108,10 +110,9 @@ export const beamReplyAi = makeBeamGreedy(DEFAULT_WEIGHTS, { ...DEFAULT_BEAM_LIM
  * `chainNodes: undefined` is the pre-#488 behaviour: one shared pool, from which chain resolution
  * takes 71.5% to 98% and the lookahead gets what is left.
  */
-export const beamReplySharedAi = makeBeamGreedy(
-  DEFAULT_WEIGHTS,
-  { ...DEFAULT_BEAM_LIMITS, reply: 'pessimistic', chainNodes: undefined },
-)
+export const BEAM_REPLY_SHARED_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, chainNodes: undefined }
+
+export const beamReplySharedAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_SHARED_LIMITS)
 
 /**
  * The beam with a lethal override in front of it (#433).

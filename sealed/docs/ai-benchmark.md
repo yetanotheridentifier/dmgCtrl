@@ -87,6 +87,22 @@ Everything is optional:
 
   More join the list as they are built.
 
+  Two suffixes compose with any of the above, so an A/B cell is a name rather than a registry entry:
+
+  - `+WEIGHT=VALUE` rebuilds the bot with one evaluation weight changed, e.g.
+    `beam-reply+blockedReach=12`. A new weight ships at zero and is swept upward, which needs two AIs
+    differing in that weight and nothing else. An unknown weight is rejected rather than dropped.
+  - `/tie=FIELD:VALUE[,FIELD:VALUE]` names the **second opinion** consulted when candidates tie for
+    the lead, e.g. `beam-reply/tie=reply:null` or `beam-reply/tie=reply:null,depth:2`. Fields are
+    `reply`, `width`, `depth` and `nodes`; only the tied candidates are re-searched, so this can never
+    overrule a candidate that won outright. It fires on 32.0% of decisions and costs **+2.1%** per
+    decision with a null reply, because a second opinion prices each root lower than the search that
+    found the tie. Note that `depth:1` inherits the reply policy, so a genuinely one-ply second
+    opinion is `tie=depth:1,reply:null`.
+
+  Both reject a typo loudly. A suffix that parsed to nothing would run the shipped bot under the
+  candidate's name and report "no difference", which is the most expensive way a sweep can fail.
+
 `OPPONENT_AI` in `src/config.ts` decides what the app ships, independently of any of this. The bench
 takes its AIs by name on the command line and never reads it.
 

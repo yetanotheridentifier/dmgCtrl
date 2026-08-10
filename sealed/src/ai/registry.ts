@@ -2,7 +2,7 @@ import type { Ai } from './types'
 import { randomAi } from './randomAi'
 import {
   greedyAi, greedyBaselineAi, greedyFlatAi, beamAi, beamReplyAi, beamReplySharedAi, lethalBeamAi,
-  makeBeamGreedy, makeLethalBeam,
+  makeBeamGreedy, makeLethalBeam, BEAM_REPLY_LIMITS, BEAM_REPLY_SHARED_LIMITS,
 } from './greedyAi'
 import { DEFAULT_BEAM_LIMITS, type BeamLimits } from './search'
 import { DEFAULT_LETHAL_LIMITS } from './lethal'
@@ -113,6 +113,82 @@ const LETHAL_BEAM_SPEC = /^beam-lethal:(\d+)x(\d+):(\d+)$/
  */
 const WEIGHT_OVERRIDE = /^(.+)\+([A-Za-z][A-Za-z0-9]*)=(-?\d+(?:\.\d+)?)$/
 
+/**
+ * `NAME/tie=FIELD:VALUE[,FIELD:VALUE...]`, naming the second opinion consulted when candidates tie
+ * for the lead (#499).
+ *
+ * `key:value` pairs rather than a positional form, because a tie-break is a `Partial` of the search
+ * limits and usually sets one field. A positional grammar would need a slot per field and a
+ * convention meaning "leave this one alone".
+ *
+ * Addressable because it has to be measurable: ties for the lead are 32.0% of decisions, so `--cost`
+ * has a real question to answer, and `--shard` needs to A/B `beam-reply/tie=reply:null` against plain
+ * `beam-reply` as exactly one difference.
+ */
+const TIE_BREAK_SPEC = /^(.+)\/tie=(.*)$/
+
+/** The fields a second opinion may set, and how to read each one. Anything else is a typo. */
+const TIE_BREAK_FIELDS = ['reply', 'width', 'depth', 'nodes'] as const
+
+/**
+ * The tie-break a name asks for, or `null` if it asks for none.
+ *
+ * Exported so the grammar is directly assertable, for the same reason `beamLimitsFor` is: a spec that
+ * silently parses to nothing would run the shipped bot under a tie-break's name and report "no
+ * difference", which is the most expensive way this can fail.
+ */
+export function tieBreakFor(name: string): Partial<BeamLimits> | null {
+  const m = TIE_BREAK_SPEC.exec(name)
+  if (!m) return null
+  const spec = m[2]
+  if (spec.trim() === '') throw new Error(`Empty tie-break in "${name}". Try /tie=reply:null`)
+
+  const tieBreak: Partial<BeamLimits> = {}
+  for (const part of spec.split(',')) {
+    const [key, ...rest] = part.split(':')
+    const value = rest.join(':')
+    // `find` rather than `includes`, so the result carries the literal union and the numeric branch
+    // below indexes `BeamLimits` by a known key instead of by an arbitrary string.
+    const field = TIE_BREAK_FIELDS.find(f => f === key)
+    if (field === undefined) {
+      throw new Error(`Unknown tie-break field "${key}" in "${name}". Valid: ${TIE_BREAK_FIELDS.join(', ')}`)
+    }
+    if (field === 'reply') {
+      if (value !== 'null' && value !== 'pessimistic' && value !== 'selfish') {
+        throw new Error(`Unknown tie-break reply policy "${value}" in "${name}". Valid: null, pessimistic, selfish`)
+      }
+      tieBreak.reply = value
+    } else {
+      const n = Number(value)
+      // A non-numeric value parses to NaN, which would sail through a `< 1` check and reach the search
+      // as a silently broken limit.
+      if (!Number.isInteger(n) || n < 1) {
+        throw new Error(`Tie-break "${field}" in "${name}" needs a whole number of at least 1, got "${value}"`)
+      }
+      tieBreak[field] = n
+    }
+  }
+  return tieBreak
+}
+
+/**
+ * The limits behind a **registered** beam name, so a suffix can rebuild that bot rather than an
+ * approximation of it.
+ *
+ * Reads the same constants the AIs are built from, never a restatement of them. The weight-override
+ * path previously resolved every registry name to the shipped pessimistic configuration, which made
+ * `beam+shield=4` a pessimistic bot wearing an optimistic name: an A/B against `beam` would have
+ * measured the reply policy alongside the weight.
+ */
+export function namedLimitsFor(name: string): BeamLimits | null {
+  const named: Record<string, BeamLimits> = {
+    beam: DEFAULT_BEAM_LIMITS,
+    'beam-reply': BEAM_REPLY_LIMITS,
+    'beam-reply-shared': BEAM_REPLY_SHARED_LIMITS,
+  }
+  return named[name] ?? null
+}
+
 /** Split `NAME+WEIGHT=VALUE` into the AI name and the override, validating the key exists. */
 function splitWeightOverride(name: string): { base: string; overrides?: Partial<EvalWeights> } {
   const m = WEIGHT_OVERRIDE.exec(name)
@@ -176,14 +252,27 @@ export function resolveAi(name: string): Ai {
   const ai = AIS[name]
   if (ai) return ai
 
+  // `/tie=...` is stripped first so it composes with every other suffix and spec: the remainder is an
+  // ordinary name, and the tie-break is folded into whatever limits that name resolves to.
+  const tieBreak = tieBreakFor(name)
+  if (tieBreak) {
+    const base = TIE_BREAK_SPEC.exec(name)![1]
+    const weighted = splitWeightOverride(base)
+    const limits = beamLimitsFor(weighted.base) ?? namedLimitsFor(weighted.base)
+    if (limits === null) throw new Error(`Cannot add a tie-break to "${weighted.base}"`)
+    return makeBeamGreedy({ ...DEFAULT_WEIGHTS, ...weighted.overrides }, { ...limits, tieBreak })
+  }
+
   // `NAME+WEIGHT=VALUE` rebuilds the named bot with one weight changed. Handled before the specs so
   // the suffix composes with all of them, and separately from the registry lookup because a named
   // entry is a prebuilt singleton that cannot carry different weights.
   const weighted = splitWeightOverride(name)
   if (weighted.overrides) {
     const weights = { ...DEFAULT_WEIGHTS, ...weighted.overrides }
-    const limits = beamLimitsFor(weighted.base)
-      ?? (AIS[weighted.base] ? { ...DEFAULT_BEAM_LIMITS, reply: 'pessimistic' as const } : null)
+    // The name's OWN limits, not the shipped ones. Falling back to a pessimistic default made
+    // `beam+shield=4` an optimistic name on a pessimistic bot, so an A/B against `beam` would have
+    // measured the reply policy as well as the weight.
+    const limits = beamLimitsFor(weighted.base) ?? namedLimitsFor(weighted.base)
     if (limits === null) throw new Error(`Cannot override a weight on "${weighted.base}"`)
     return makeBeamGreedy(weights, limits)
   }
@@ -208,6 +297,7 @@ export function resolveAi(name: string): Ai {
 
   throw new Error(
     `Unknown AI "${name}". Available: ${aiNames().join(', ')}, ` +
-    'or beam:WIDTHxDEPTH[:NODES], or reply:POLICY[:WIDTHxDEPTH[:NODES]]',
+    'or beam:WIDTHxDEPTH[:NODES], or reply:POLICY[:WIDTHxDEPTH[:NODES]]. ' +
+    'Suffixes: +WEIGHT=VALUE, /tie=FIELD:VALUE[,FIELD:VALUE]',
   )
 }

@@ -143,11 +143,17 @@ bot.
    scoring the acting line 56.1 against 52: when the worst case cannot tell two moves apart, the
    upside can. That is one position, so it justifies an A/B rather than a decision.
 
-   **Sized.** Ties for the LEAD are 32.0% of decisions, not the 5-12% the whole-slate tie columns
-   imply, and firing sets average 3.2 candidates. That is **+13.4% more root searches** over a run,
-   and an upper bound on the real cost, since a `null`-reply second opinion is much cheaper per root
-   than the pessimistic search that found the tie. A fan-out cap is optional: wide ties are 2.3% of
-   firings and capping at 8 only reaches +11.2%. Affordable, so the question is whether it helps.
+   **Sized, and cheap.** Ties for the LEAD are 32.0% of decisions, not the 5-12% the whole-slate tie
+   columns imply, and firing sets average 3.2 candidates: +13.4% more root searches over a run. In
+   time that comes to **+2.1% per decision** for a `null`-reply second opinion (203.73 ms against
+   199.51 ms over an identical corpus), because a second opinion prices each root lower than the
+   search that found the tie. A depth-1 second opinion is inside the noise of a single timing pass.
+
+   A fan-out cap is optional: wide ties are 2.3% of firings and capping at 8 only reaches +11.2% in
+   roots. Nothing here is a cost objection, so the only open question is whether it helps.
+
+   Address a cell as `beam-reply/tie=reply:null`, which composes with `+WEIGHT=VALUE`, so
+   `beam-reply+blockedReach=12/tie=reply:null` is the combination that escapes the lockout.
 
    Gate on **non-inferiority**: the lockout is a position self-play barely reaches, so a correct fix
    cannot be expected to show up as a win rate.
