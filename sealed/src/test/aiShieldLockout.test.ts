@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { beamReplyAi } from '../ai/greedyAi'
 import { makeBeamAi, lastSearchTrace, DEFAULT_BEAM_LIMITS } from '../ai/search'
-import { evaluate } from '../ai/evaluate'
+import { evaluate, makeEvaluate, DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { legalMoves } from '../engine/legalMoves'
+import { blockedReach } from '../ai/race'
 import { resolve } from '../engine/resolve'
 import { state, player, card, unit, CARDS } from './helpers/engineFixtures'
 import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
@@ -219,6 +220,79 @@ describe('the shielded-Sentinel lockout', () => {
     // strip line has the Sentinel dead and the lane open, while the pass line does not. Nothing in
     // the evaluation distinguishes those two boards today, which is precisely the blocked-reach gap.
     expect([strip.peakDepth, pass.peakDepth]).toEqual([2, 2])
+  })
+
+  /**
+   * **Pricing the denied reach moves it, and is the first thing that has (#499).**
+   *
+   * Without the term, passing scores 52 against the strip's 43 and wins comfortably. With it, passing
+   * falls to **43: a dead tie**. The penalty lands on the pass line's peak, where the lane is still
+   * shut, and not on the strip line's, where the Sentinel is dead.
+   *
+   * A tie is still not a fix. The seeded tie-break then chooses at random, which is why asserting the
+   * *move* still fails while the *values* have converged. But every earlier candidate (a Shield
+   * weight, limiting reply depth, discounting later boards) left the gap untouched at 9 points, so
+   * this is the first lever that engages the defect at all.
+   */
+  it('closes the gap between passing and stripping', () => {
+    const s = lockout()
+    const moves = legalMoves(s)
+    const valuesAt = (blockedReachWeight: number): number[] => {
+      makeBeamAi(makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach: blockedReachWeight }), {
+        ...DEFAULT_BEAM_LIMITS, depth: 3, reply: 'pessimistic', nodes: 200_000,
+      })(s)
+      return lastSearchTrace()!.candidates
+    }
+    const passAt = moves.findIndex(m => m.type === 'pass')
+    const stripAt = moves.findIndex(m => m.type === 'attack' && m.attackerId === 'chump')
+
+    const off = valuesAt(0)
+    const on = valuesAt(12)
+    const gap = (v: number[]): number => v[passAt] - v[stripAt]
+
+    expect(gap(off), 'passing wins comfortably without the term').toBeGreaterThan(0)
+    expect(gap(on), 'and the term closes the gap entirely').toBe(0)
+    // It works by penalising the passing line, not by flattering the strip.
+    expect(on[stripAt]).toBe(off[stripAt])
+    expect(on[passAt]).toBeLessThan(off[passAt])
+  })
+
+  /**
+   * Why a 12-point weight only moves the gap by 9 (#499).
+   *
+   * The peak boards are what the two candidates are actually being judged on, so the question is what
+   * `blockedReach` reads on each of them. If the passing line's peak has the lane already open, the
+   * term cannot separate them however heavy it gets, and a bigger weight in an A/B would be wasted.
+   */
+  it('is judged on peak boards where the lane state differs', () => {
+    const s = lockout()
+    const moves = legalMoves(s)
+    makeBeamAi(makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach: 12 }), {
+      ...DEFAULT_BEAM_LIMITS, depth: 3, reply: 'pessimistic', nodes: 200_000, explain: true,
+    })(s)
+    const lines = lastSearchTrace()!.lines!
+    const at = (pred: (m: (typeof moves)[number]) => boolean) => lines[moves.findIndex(pred)]
+
+    const pass = at(m => m.type === 'pass')
+    const strip = at(m => m.type === 'attack' && m.attackerId === 'chump')
+
+    // Both read zero. The strip line's because the Sentinel is dead. The passing line's needs
+    // explaining, and there are only two ways for denied reach to be zero.
+    expect(blockedReach(strip.board, 'player')).toBe(0)
+    expect(blockedReach(pass.board, 'player')).toBe(0)
+
+    const shape = (b: typeof pass.board) => ({
+      sentinel: b.players.opponent.units.some(u => u.instanceId === 'wall'),
+      units: b.players.player.units.length,
+    })
+
+    // **Both peaks are the same end state**: Sentinel dead, chump spent. The passing line simply
+    // arrives there by a different ordering, and both peak at the same level.
+    //
+    // That is why no evaluation term can settle this. A term keyed on the end state cancels, because
+    // the end state is identical; a discount on later boards cancels, because the depths are equal.
+    // The candidates differ in the ROUTE, and a max over reachable boards discards the route.
+    expect(shape(pass.board)).toEqual(shape(strip.board))
   })
 
   /** And having stripped it, it finishes the job rather than wandering off. */

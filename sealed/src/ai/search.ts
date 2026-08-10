@@ -122,6 +122,15 @@ export interface SearchLine {
   peakDepth: number
   /** Our own moves down to that peak, opening with the root candidate. One per level. */
   path: Action[]
+  /**
+   * The peak board itself.
+   *
+   * The path alone cannot reproduce it: the opponent's replies happen between our moves and are not
+   * recorded, so replaying our own actions lands somewhere else entirely. Carrying the board is the
+   * only way to ask what was actually true at the peak, which is the question that matters when two
+   * candidates score alike.
+   */
+  board: GameState
 }
 
 let trace: SearchTrace | null = null
@@ -598,6 +607,7 @@ function reachableFrom(
   const explaining = limits.explain === true
   let peakDepth = 1
   let peakPath: Action[] = explaining ? [move] : []
+  let peakBoard = root
   let frontier: Array<{ board: GameState; path: Action[] }> = [{ board: root, path: peakPath }]
 
   for (let d = 1; d < limits.depth; d++) {
@@ -633,6 +643,7 @@ function reachableFrom(
           best = value
           peakDepth = d + 1
           peakPath = path
+          peakBoard = board
         }
         if (board.winner === me) won = true
         if (!last) children.push({ board, value, path })
@@ -648,7 +659,11 @@ function reachableFrom(
     frontier = children.slice(0, limits.width)
   }
 
-  return { best, won, line: explaining ? { value: best, peakDepth, path: peakPath } : undefined }
+  return {
+    best,
+    won,
+    line: explaining ? { value: best, peakDepth, path: peakPath, board: peakBoard } : undefined,
+  }
 }
 
 /**
