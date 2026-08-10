@@ -368,6 +368,20 @@ Rules learned the hard way.
 - **A cost ratio does not tell you what is consuming the budget.** Raising the node rail made a search
   ten times slower, which read as the rail truncating nearly every decision. It truncates 4%. The
   difference was a heavy tail, and only a counter (`--budget`) could tell the two apart.
+- **Self-play cannot measure a strategy neither side plays.** A shielded Sentinel shutting a lane is
+  something a human builds on purpose. Bench decks are generated and both seats are the same bot, so
+  it appears in **0.5%** of decisions and never lasts a round, while play-testers hit it constantly.
+  Defects of that shape need a **scripted position** as the acceptance criterion, and an A/B gated on
+  **non-inferiority**: expecting a win rate the bench structurally cannot show will fail a correct
+  fix. This is why #410 and #425 used `sentinelWall` and `crackBack` before their A/Bs.
+- **Measure the complaint, not a proxy for it.** "A shield is present" (15.8% of decisions) is not "a
+  lane is shut" (0.5%), and a board-wide reading is not a per-arena one. A precise measurement of the
+  wrong quantity reads as a null and retires a real defect.
+- **Diagnose before fixing, and build the instrument if the diagnosis will not come.** Four
+  consecutive explanations for the lockout were wrong, each argued from the code rather than measured.
+  `BeamLimits.explain` records the principal variation behind every root candidate, and answered it in
+  one run: both the acting and the passing line peak at the same level, so any discount on later
+  boards shifts them equally and cannot reorder them. Reach for it before the third hypothesis.
 
 ## Tried and rejected
 

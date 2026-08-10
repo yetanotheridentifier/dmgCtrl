@@ -490,6 +490,30 @@ It answers "is the AI overfit to one deck, and is there anything to hand-tune?" 
 the useful gradient comes from measuring a *new* AI against the *current* one here, not against
 random.
 
+## Why did it play that? The principal variation
+
+Not a bench mode: a flag on the search itself, for diagnosing a single position.
+
+```ts
+makeBeamAi(evaluate, { ...DEFAULT_BEAM_LIMITS, explain: true })(position)
+lastSearchTrace()!.lines   // one per root candidate, in legalMoves order
+```
+
+Each line reports the candidate's **value**, the **level its peak was found at**, and **our moves down
+to that peak**. Off by default, because tracking the path allocates per frontier node.
+
+**A bare value explains nothing**, because a root move is worth the max over every board it can reach,
+so two moves can score alike for completely different reasons. Four consecutive wrong explanations for
+one defect came from inferring the line from two numbers and a mental model of `ai/search.ts`; this
+settled it in one run.
+
+The reading that mattered there: the acting line and the passing line **peaked at the same level**,
+which is why discounting later boards could not reorder them, and why the tie has to be broken by the
+evaluation telling those two boards apart.
+
+Read it in a test rather than printing it. An assertion is checkable and fails loudly if the search's
+behaviour drifts; console output is neither.
+
 ## Decision quality: finding blind spots
 
 Win rate is a blunt instrument for diagnosing an evaluation. It moves a point or two over hundreds
