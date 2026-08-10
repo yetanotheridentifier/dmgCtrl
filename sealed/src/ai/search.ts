@@ -295,6 +295,19 @@ export interface BeamLimits {
    */
   replyDepth?: number
   /**
+   * Per level of depth, subtracted from every UNDECIDED board's score (#499). Zero is the behaviour
+   * before this existed.
+   *
+   * The search has no time preference: reaching a given position at action 3 scores exactly what
+   * reaching it at action 1 does, so **delay is free**. The only thing pushing the other way is the
+   * reply, which charges for each action taken and therefore penalises acting rather than waiting.
+   * That is the shape of the reported passivity: passing costs nothing and postpones everything.
+   *
+   * Decided boards keep their own `±depth` handling, which is a different concern (win soonest, lose
+   * latest) and would double-count if this were applied on top.
+   */
+  timePreference?: number
+  /**
    * The most any ONE owed chain may take from `nodes`.
    *
    * `nodes` is the decision's whole allowance and is shared with chain resolution, which without this
@@ -423,10 +436,20 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
  * The adjustment touches DECIDED boards only, so it cannot reorder any material judgement. A whole
  * point of discount would rival `readyUnit`, which is why it is not applied to ordinary scores.
  */
-function valueAt(board: GameState, me: PlayerId, asRole: Role | undefined, inner: Evaluator, depth: number): number {
+function valueAt(
+  board: GameState,
+  me: PlayerId,
+  asRole: Role | undefined,
+  inner: Evaluator,
+  depth: number,
+  timePreference = 0,
+): number {
   const raw = inner(board, me, asRole)
+  // An undecided board is worth slightly less the later it arrives, so the same outcome reached
+  // sooner wins. Without it, delay is free and the search has no reason to hurry.
+  if (board.winner === null) return raw - timePreference * depth
   // A draw scores 0 from either side, so there is no sign to preserve and nothing to prefer.
-  if (board.winner === null || raw === 0) return raw
+  if (raw === 0) return raw
   return raw > 0 ? raw - depth : raw + depth
 }
 
@@ -539,7 +562,7 @@ function reachableFrom(
   const cutting = limits.alphaBeta !== false && limits.reply === 'pessimistic'
   const rootAlpha = cutting && limits.depth === 1 ? alpha : -Infinity
   const root = applyReply(settled, me, asRole, inner, replyAt(1), budget, rootAlpha, 1, chainCap)
-  let best = valueAt(root, me, asRole, inner, 1)
+  let best = valueAt(root, me, asRole, inner, 1, limits.timePreference)
   let won = root.winner === me
   let frontier: GameState[] = [root]
 
@@ -569,7 +592,7 @@ function reachableFrom(
         const policy = replyAt(d + 1)
         const leafAlpha = last && cutting && policy === 'pessimistic' ? best : -Infinity
         const board = applyReply(played, me, asRole, inner, policy, budget, leafAlpha, d + 1, chainCap)
-        const value = valueAt(board, me, asRole, inner, d + 1)
+        const value = valueAt(board, me, asRole, inner, d + 1, limits.timePreference)
         if (value > best) best = value
         if (board.winner === me) won = true
         if (!last) children.push({ board, value })

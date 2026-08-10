@@ -166,6 +166,23 @@ describe('the shielded-Sentinel lockout', () => {
     expect(noReply[stripAt]).toBeGreaterThan(noReply[passAt])
   })
 
+  /**
+   * **A time preference does not escape the lockout either**, measured at 0, 0.5, 1, 2, 4, 8 and 12.
+   *
+   * The reasoning that motivated it still holds: `valueAt` discounts only DECIDED boards, so an
+   * undecided position reached at action 3 scores exactly what it scores at action 1 and delay is
+   * free. That is a real gap. It is simply not what causes this.
+   *
+   * Recorded so the next person does not re-derive it. The knob is `timePreference` on `BeamLimits`,
+   * defaulting to 0.
+   */
+  it('is not escaped by making the search prefer sooner outcomes', () => {
+    const strong = makeBeamAi(evaluate, {
+      ...DEFAULT_BEAM_LIMITS, depth: 3, reply: 'pessimistic', nodes: 200_000, timePreference: 12,
+    })
+    expect(strong(lockout())).toMatchObject({ type: 'pass' })
+  })
+
   /** And having stripped it, it finishes the job rather than wandering off. */
   it('kills the Sentinel once the Shield is down', () => {
     const stripped = resolve(lockout(), attackWith('chump') as never)
