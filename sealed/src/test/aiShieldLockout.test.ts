@@ -183,6 +183,44 @@ describe('the shielded-Sentinel lockout', () => {
     expect(strong(lockout())).toMatchObject({ type: 'pass' })
   })
 
+  /**
+   * The principal variation behind each candidate, which is what four wrong hypotheses were missing.
+   *
+   * Written as assertions rather than printed output so the reasoning is checkable and cannot drift:
+   * if the search's behaviour changes, this fails and says how.
+   */
+  it('shows why passing wins: both lines reach the same peak', () => {
+    const s = lockout()
+    const moves = legalMoves(s)
+    makeBeamAi(evaluate, {
+      ...DEFAULT_BEAM_LIMITS, depth: 3, reply: 'pessimistic', nodes: 200_000, explain: true,
+    })(s)
+    const lines = lastSearchTrace()!.lines!
+
+    const at = (pred: (m: (typeof moves)[number]) => boolean) => lines[moves.findIndex(pred)]
+    const pass = at(m => m.type === 'pass')
+    const strip = at(m => m.type === 'attack' && m.attackerId === 'chump')
+
+    // The defect: doing nothing is valued above the only move that opens the lane.
+    expect(pass.value).toBeGreaterThan(strip.value)
+
+    // And the explanation. If passing peaked at level 1, the reply was never charged to it. If it
+    // peaked deeper, the pass line recovered by doing later what the strip line does now, which is
+    // the "delay is free" reading and the one the numbers actually support.
+    expect(pass.peakDepth, 'where passing earns its value').toBeGreaterThan(1)
+
+    // **Both peak at level 2**, and that single fact explains the failed fixes.
+    //
+    // A time preference discounts later boards, so two peaks at the SAME level shift by the same
+    // amount and the ordering cannot change. That is why it did nothing at any value up to 12: not a
+    // wrong idea, just inapplicable here.
+    //
+    // It also says what a fix must do: break the tie BETWEEN TWO LEVEL-2 BOARDS. At that level the
+    // strip line has the Sentinel dead and the lane open, while the pass line does not. Nothing in
+    // the evaluation distinguishes those two boards today, which is precisely the blocked-reach gap.
+    expect([strip.peakDepth, pass.peakDepth]).toEqual([2, 2])
+  })
+
   /** And having stripped it, it finishes the job rather than wandering off. */
   it('kills the Sentinel once the Shield is down', () => {
     const stripped = resolve(lockout(), attackWith('chump') as never)

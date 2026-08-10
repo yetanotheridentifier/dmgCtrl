@@ -107,6 +107,21 @@ export interface SearchTrace {
    * order other than `legalMoves`' would attribute one decision's spread to another.
    */
   candidates: number[]
+  /**
+   * The principal variation behind each candidate, in `legalMoves` order. Only present when
+   * `BeamLimits.explain` is set.
+   */
+  lines?: SearchLine[]
+}
+
+/** How a root candidate earned its value: the best board it reached, and the moves that got there. */
+export interface SearchLine {
+  /** Same number as the matching entry in `candidates`. */
+  value: number
+  /** The level the peak was found at. 1 means the move was judged on its immediate result. */
+  peakDepth: number
+  /** Our own moves down to that peak, opening with the root candidate. One per level. */
+  path: Action[]
 }
 
 let trace: SearchTrace | null = null
@@ -308,6 +323,15 @@ export interface BeamLimits {
    */
   timePreference?: number
   /**
+   * Record the principal variation behind each root candidate, for diagnosis (#499). Off by default,
+   * because tracking the path allocates per frontier node and the shipped bot should not pay for it.
+   *
+   * A root move's value is the max over every board reachable from it, so a bare value explains
+   * nothing about WHY. Four wrong hypotheses about the shielded-Sentinel lockout came from having to
+   * infer the line from two numbers and a mental model of this file.
+   */
+  explain?: boolean
+  /**
    * The most any ONE owed chain may take from `nodes`.
    *
    * `nodes` is the decision's whole allowance and is shared with chain resolution, which without this
@@ -399,10 +423,12 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
     let best = -Infinity
     const bestMoves: Action[] = []
     const candidates: number[] = []
+    const lines: SearchLine[] = []
     for (const move of moves) {
       // `best` so far is alpha: a candidate that cannot beat it need not be finished.
-      const { best: value } = reachableFrom(state, move, me, asRole, inner, limits, budget, best)
+      const { best: value, line } = reachableFrom(state, move, me, asRole, inner, limits, budget, best)
       candidates.push(value)
+      if (line) lines.push(line)
       if (value > best) {
         best = value
         bestMoves.length = 0
@@ -420,6 +446,7 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
       beam: budget.beam,
       exhausted: budget.left <= 0,
       candidates,
+      lines: limits.explain === true ? lines : undefined,
     }
     return bestMoves[Math.floor(seededUnit(state.rngSeed) * bestMoves.length)]
   }
@@ -525,6 +552,8 @@ function ourTurnAgain(state: GameState, me: PlayerId, budget: SearchBudget): Gam
 interface Reach {
   best: number
   won: boolean
+  /** Present only when `limits.explain` is set. */
+  line?: SearchLine
 }
 
 /**
@@ -564,16 +593,22 @@ function reachableFrom(
   const root = applyReply(settled, me, asRole, inner, replyAt(1), budget, rootAlpha, 1, chainCap)
   let best = valueAt(root, me, asRole, inner, 1, limits.timePreference)
   let won = root.winner === me
-  let frontier: GameState[] = [root]
+  // Path tracking only when explaining: it allocates per frontier node, and the shipped bot should
+  // not pay for a diagnostic.
+  const explaining = limits.explain === true
+  let peakDepth = 1
+  let peakPath: Action[] = explaining ? [move] : []
+  let frontier: Array<{ board: GameState; path: Action[] }> = [{ board: root, path: peakPath }]
 
   for (let d = 1; d < limits.depth; d++) {
     if (budget.left <= 0) break
     // The deepest level is expanded but never continued from, so its boards are ordinary leaves: the
     // frontier built from them would be discarded unread, and alpha is a real bound on them.
     const last = d === limits.depth - 1
-    const children: Array<{ board: GameState; value: number }> = []
+    const children: Array<{ board: GameState; value: number; path: Action[] }> = []
 
-    for (const node of frontier) {
+    for (const entry of frontier) {
+      const node = entry.board
       if (node.winner !== null || node.phase !== 'action') continue
       const ours = ourTurnAgain(node, me, budget)
       if (ours === null) continue
@@ -593,19 +628,24 @@ function reachableFrom(
         const leafAlpha = last && cutting && policy === 'pessimistic' ? best : -Infinity
         const board = applyReply(played, me, asRole, inner, policy, budget, leafAlpha, d + 1, chainCap)
         const value = valueAt(board, me, asRole, inner, d + 1, limits.timePreference)
-        if (value > best) best = value
+        const path = explaining ? [...entry.path, next] : entry.path
+        if (value > best) {
+          best = value
+          peakDepth = d + 1
+          peakPath = path
+        }
         if (board.winner === me) won = true
-        if (!last) children.push({ board, value })
+        if (!last) children.push({ board, value, path })
       }
     }
 
     if (last || children.length === 0) break
     // Sort is stable, so equal scores keep `legalMoves` order and the trim is deterministic.
     children.sort((a, b) => b.value - a.value)
-    frontier = children.slice(0, limits.width).map(c => c.board)
+    frontier = children.slice(0, limits.width).map(c => ({ board: c.board, path: c.path }))
   }
 
-  return { best, won }
+  return { best, won, line: explaining ? { value: best, peakDepth, path: peakPath } : undefined }
 }
 
 /**
