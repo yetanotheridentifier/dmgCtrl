@@ -284,6 +284,17 @@ export interface BeamLimits {
   nodes: number
   reply: ReplyPolicy
   /**
+   * How many of OUR actions deep the opponent's reply is modelled, before falling back to the null
+   * move (#499). `undefined` models it at every level, which is the behaviour before this existed.
+   *
+   * The reply assumes the opponent takes the single most inconvenient action available. Applying that
+   * once is a useful safety margin; applying it three or four times in succession models a player who
+   * punishes optimally every time, which is not the player being faced. Suspected of making the bot
+   * refuse to act at all: in the scripted lockout it plays `pass` under `pessimistic` at any shield
+   * weight, and plays the correct line under `null`.
+   */
+  replyDepth?: number
+  /**
    * The most any ONE owed chain may take from `nodes`.
    *
    * `nodes` is the decision's whole allowance and is shared with chain resolution, which without this
@@ -522,9 +533,12 @@ function reachableFrom(
   const settled = resolveChain(resolve(state, move), me, asRole, inner, budget, chainCap)
   // See `alphaBeta`: a cut is only a valid bound for pessimistic play, and only on a board nothing is
   // expanded past. At depth 1 the root board is such a board; deeper it is continued from.
+  // Beyond `replyDepth` the opponent is assumed to do nothing rather than to punish optimally again.
+  const replyAt = (level: number): ReplyPolicy =>
+    (limits.replyDepth === undefined || level <= limits.replyDepth ? limits.reply : 'null')
   const cutting = limits.alphaBeta !== false && limits.reply === 'pessimistic'
   const rootAlpha = cutting && limits.depth === 1 ? alpha : -Infinity
-  const root = applyReply(settled, me, asRole, inner, limits.reply, budget, rootAlpha, 1, chainCap)
+  const root = applyReply(settled, me, asRole, inner, replyAt(1), budget, rootAlpha, 1, chainCap)
   let best = valueAt(root, me, asRole, inner, 1)
   let won = root.winner === me
   let frontier: GameState[] = [root]
@@ -550,7 +564,11 @@ function reachableFrom(
         // No alpha at an interior level: there a branch's value is the MAX over its leaves, so a poor
         // reply at this node says nothing about what the branch can still reach. `best` rather than
         // the caller's alpha, because it is the tighter of the two and both bound this root.
-        const board = applyReply(played, me, asRole, inner, limits.reply, budget, last && cutting ? best : -Infinity, d + 1, chainCap)
+        // The cut is only a bound while this level is actually minimising; past `replyDepth` the
+        // reply is a no-op and alpha would be meaningless.
+        const policy = replyAt(d + 1)
+        const leafAlpha = last && cutting && policy === 'pessimistic' ? best : -Infinity
+        const board = applyReply(played, me, asRole, inner, policy, budget, leafAlpha, d + 1, chainCap)
         const value = valueAt(board, me, asRole, inner, d + 1)
         if (value > best) best = value
         if (board.winner === me) won = true
