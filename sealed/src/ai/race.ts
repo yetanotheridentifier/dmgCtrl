@@ -117,6 +117,41 @@ export function blockedReach(state: GameState, owner: PlayerId): number {
   }, 0)
 }
 
+/** Base damage the shielded blockers shutting our lanes deal us each round. */
+function blockerOutput(state: GameState, owner: PlayerId): number {
+  const foe = opponentOf(owner)
+  return state.players[foe].units
+    .filter(u => u.upgrades.some(up => up.cardId === TOKEN_SHIELD) && unitHasKeyword(state, u, 'Sentinel'))
+    .reduce((n, u) => n + effectivePower(state, u, { attacking: true, attackingBase: true }), 0)
+}
+
+/**
+ * What clearing a shielded blocker is actually worth to `owner`: the damage it **denies** us plus the
+ * damage it **deals** us, for as long as the game has left to run (#499).
+ *
+ * ## Why the blocker's own output belongs here
+ *
+ * A blocker is not only a wall, it is an attacker. Over the filed report the blocker denied 22 and
+ * dealt 8, against a bot that lost by 3, so denial alone understates it. It also separates two walls
+ * that denial cannot tell apart: a 4/3 Sentinel is urgent, and a 0/3 Sentinel that threatens nothing
+ * is not, which is why delaying against one of those was the right call in a second filed game.
+ *
+ * ## Why there is no clock multiplier, having tried one
+ *
+ * Scaling this by the rounds the game has left is the obvious next move, and it was built and
+ * measured. It **never discriminates**: every live reading lands above the cap, on the filed report
+ * and across a 1,160-decision corpus alike, so the horizon only rescaled the quantity by about 4x and
+ * a weight already does that. The ordering it was meant to correct is invisible behind the ceiling.
+ *
+ * Gated to shielded blockers: an unshielded Sentinel is answerable by attacking it and the material
+ * terms already price that.
+ */
+export function lockoutSwing(state: GameState, owner: PlayerId): number {
+  const denied = blockedReach(state, owner)
+  if (denied === 0) return 0
+  return denied + blockerOutput(state, owner)
+}
+
 /** Total Restore across a player's units: healing their own base each round. */
 function restorePerRound(state: GameState, owner: PlayerId): number {
   return state.players[owner].units.reduce(

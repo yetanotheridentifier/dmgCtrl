@@ -4,6 +4,7 @@ import exhaustedLeaderDraw from '../fixtures/reports/exhaustedLeaderDraw.json'
 import haulcraftPrompt from '../fixtures/reports/haulcraftPrompt.json'
 import minefieldArenaChoice from '../fixtures/reports/minefieldArenaChoice.json'
 import shieldedSentinelLockout from '../fixtures/reports/shieldedSentinelLockout.json'
+import shieldedSentinelPing from '../fixtures/reports/shieldedSentinelPing.json'
 import vaneFriendlyUpgrade from '../fixtures/reports/vaneFriendlyUpgrade.json'
 import vaneFriendlyUpgradeCards from '../fixtures/reports/vaneFriendlyUpgradeCards.json'
 import { buildCardDb } from '../../engine/cardDb'
@@ -37,7 +38,7 @@ const ashCards = ashSet as SwuCard[]
  */
 const REPORTS: Record<string, unknown> = {
   baylanExhaust, exhaustedLeaderDraw, haulcraftPrompt, minefieldArenaChoice, shieldedSentinelLockout,
-  vaneFriendlyUpgrade,
+  shieldedSentinelPing, vaneFriendlyUpgrade,
 }
 
 /**

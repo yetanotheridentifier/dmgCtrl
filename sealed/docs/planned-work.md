@@ -170,8 +170,12 @@ bot.
    three hours. Gate on **non-inferiority**, since a tie-break changes a third of decisions slightly
    rather than any decision decisively.
 
-2. **The shielded-Sentinel lockout is still open**, and the obvious fix has been measured and
-   rejected (see Tried and rejected). What is known, so the next attempt does not restart:
+2. **The shielded-Sentinel lockout: a candidate is built and screened, and the ship call is open.**
+   `blockedReach: 2` over the `lockoutSwing` quantity. What is known, so nothing is re-derived:
+
+   **It may be a stopgap.** The term exists only because the search cannot see past the round
+   boundary, and clearing a blocker pays out next round. If #446's round-boundary extension lands,
+   re-ask the lockout on the fixture before keeping this: the search may find the payoff unaided.
 
    The defect is real and worse than the bench suggests. A filed report (`shieldedSentinelLockout`)
    has the bot decline the strip **19 times in one game** with its ground lane shut for around twenty
@@ -184,10 +188,21 @@ bot.
    token no term reads, while the attack's cost (exhausting the attacker, exposing it to a counter) is
    priced in full. All visible cost, no visible benefit.
 
-   What is left to try is a **contextual** value rather than a flat one, which is the same conclusion
-   the `shield` term reached: the worth of a strip is large when it opens a lane this action and nil
-   otherwise, and both rejected terms priced the state instead of the opening. Gate any next attempt
-   on the report fixture's strip rate, not on a win rate.
+   The current candidate adds the **blocker's own output** to the denial (`lockoutSwing`). On the
+   filed report it strips **11 of 18 at weight 2 and first acts in round 4**, against 1 of 18 in round
+   6 at shipped weights, and against 10 of 18 for the rejected flat version at weight 3.
+
+   **Screened and passed, which is weaker than it sounds.** Pre-registered before the run: stop if the
+   point estimate falls below 47.0%. `beam-reply+blockedReach=2` measured **49.6% +/- 3.3%
+   (46.3% - 52.8%)** over 900 games and 10 shards, seeds 9500-9509, no shards failed.
+
+   That clears the bar, and 900 games cannot distinguish 49% from 50%, so it is evidence against a
+   large regression and **not** evidence of parity. Read alongside the 9,600-game result for the
+   previous quantity (49.6% +/- 1.0%), the fair summary is: no measurement has separated any version
+   of this term from neutral, in either direction.
+
+   **The term is live on 0.5% of decisions**, measured over a 1,160-decision corpus. That cuts both
+   ways: it makes a large hidden cost implausible, and it means self-play will never score the fix.
 3. **#487 re-tune the weights for the shipped search.** Unblocked, now that the configuration is
    settled and there is a fixed target to tune against. The "re-weighting is exhausted" result
    measured a one-ply evaluator, and #430 identified exactly why several weights could not matter

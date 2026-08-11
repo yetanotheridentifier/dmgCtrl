@@ -3,7 +3,7 @@ import { opponentOf } from '../engine/types'
 import { effectivePower, effectiveHp } from '../engine/stats'
 import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { handValue, DEFAULT_HAND_WEIGHTS, type HandWeights } from './handValue'
-import { role, canFinishThisAction, blockedReach, type Role } from './race'
+import { role, canFinishThisAction, lockoutSwing, type Role } from './race'
 
 /**
  * Board evaluation for the greedy AI (#391), unit-count-centred for trades (#392): a single number,
@@ -89,39 +89,48 @@ export interface EvalWeights {
    */
   shield: number
   /**
-   * Per point of base damage a Sentinel is denying us each round, ours minus theirs (#499).
+   * Per point of the **lockout swing**, ours minus theirs (#499). The quantity is
+   * {@link lockoutSwing}: what a shielded blocker denies us plus what it deals us, over the rounds
+   * the game has left.
    *
    * `reachSteady` already returns zero for a locked attacker, but zero cannot distinguish a lane shut
    * for the rest of the game from a lane that is simply empty. Without this, killing a blocker is
-   * worth its body and nothing more, and the bot will sit behind a shielded Sentinel indefinitely
-   * rather than spend two actions clearing it.
+   * worth its body and nothing more, and the bot sits behind a shielded Sentinel indefinitely rather
+   * than spend two actions clearing it.
+   *
+   * **Two flat versions were measured and rejected before this one**, and both failed on shape:
+   *
+   * - **Ungated** (any Sentinel, per round): live on 24.2% of decisions against a 2.1% lockout, and
+   *   it measured **25.0%**. It was a board-wide bias against Sentinels.
+   * - **Gated but flat** (shielded blockers, per round): **49.6% +/- 1.0%** over 9,600 games, missing
+   *   a pre-registered 49.0% bound with 6 of 10 shards below 50%.
+   *
+   * The second is why the quantity is now a stream. Denied reach rises as locked units accumulate
+   * while the value of clearing falls as the game runs out, so a per-round reading is loudest when the
+   * bot is already dead and quietest when acting would have saved it. That ordering is backwards and
+   * no weight repairs it.
+   *
+   * **What the bot is actually being paid to overcome.** Refusing is materially correct: the Shield
+   * absorbs the whole attack so the blocker takes nothing, the counter kills the attacker, and the
+   * board is a body down for a token. Measured at a steady 11 to 12 points across a filed game. The
+   * bot is not blind to the Shield, it strips the moment the strip is cheap; what it cannot see is
+   * that the lane pays out in later rounds, which is exactly what this quantity supplies.
    *
    * **Bent hard by role.** Grinding down a blocker while the other lane could win the race is a
    * losing habit, so this matters to the defender and barely at all to the aggressor.
    *
    * **Capped** at `blockedReachCap`, because a canny opponent blocks a lane, holds a second Sentinel
    * back, and drops it once the tempo has been spent clearing the first. Removing a blocker must
-   * never be worth more than about two actions.
-   *
-   * **Ships at zero, and stays there: measured and rejected.** At weight 3, the efficient point, it
-   * measured **49.6% +/- 1.0% (48.6% - 50.6%)** against the shipped bot over 9,600 games, missing a
-   * pre-registered non-inferiority bound of 49.0% with 6 of 10 shards below 50%. Consistent with
-   * neutral, and equally consistent with a small real cost.
-   *
-   * It is not a bad term, which is why it is still here. It lifts the strip rate on the filed
-   * shielded-Sentinel report from 1 of 18 to 10 of 18, and the **gate** is what makes it defensible:
-   * an unshielded Sentinel is answerable by attacking it and the material terms already price that,
-   * so pricing it here as well was double counting. Ungated it was live on 24.2% of decisions against
-   * a 2.1% lockout and measured 25.0%.
-   *
-   * What it cannot do is pay for itself. The quantity prices a **state** (a lane is shut) when the
-   * value is in an **opening** (this action unshuts it), which is the same conclusion the `shield`
-   * term reached: flat per-token pricing buys indiscriminate attacks. A contextual version is the
-   * revival worth attempting; a different weight is not, since the strip rate plateaus at 3 while
-   * disturbance keeps rising.
+   * never be worth more than about two bodies.
    */
   blockedReach: number
-  /** Ceiling on the denied-reach quantity, in points of base damage. See `blockedReach`. */
+  /**
+   * Ceiling on the lockout swing, in points of base damage. See `blockedReach`.
+   *
+   * Raised from 10 with the quantity: a per-round reading topped out around 10, while a swing over
+   * four rounds runs to the twenties. 24 is about two bodies at weight 1, which is the trade the term
+   * exists to authorise and the most it should ever buy.
+   */
   blockedReachCap: number
   /** Value of holding the initiative, i.e. of acting first next round (#394). */
   initiative: number
@@ -178,7 +187,7 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   blockedReach: 0,
   // Two attackers' worth of denied reach. Above this, clearing a blocker starts to justify the tempo
   // that a held-back second Sentinel exists to punish.
-  blockedReachCap: 10,
+  blockedReachCap: 24,
   // Swept twice. Turn order is worth far less than it first looks: raising `initiative` is
   // monotonically worse (4 -> 46.8%, 6 -> 35.4%, 8 -> 29.4% against the same AI with both terms at
   // 0), because the bot buys it by giving up whole turns. `claimCost: 0` is the always-claim failure
@@ -233,14 +242,14 @@ function boardPresence(state: GameState, id: PlayerId, w: EvalWeights): number {
 }
 
 /**
- * Denied reach, capped. See `blockedReach` for why the ceiling is not optional.
+ * The lockout swing, capped. See `blockedReach` for why the ceiling is not optional.
  *
  * Exported so a diagnostic reports the quantity the evaluation actually prices. Differencing the
- * UNCAPPED reach instead reported a largest quantity of 26 against a cap of 10, which is a number the
+ * UNCAPPED value instead reported a largest quantity of 26 against a cap of 10, which is a number the
  * model never sees.
  */
 export function blockedFor(state: GameState, id: PlayerId, w: EvalWeights): number {
-  return Math.min(blockedReach(state, id), w.blockedReachCap)
+  return Math.min(lockoutSwing(state, id), w.blockedReachCap)
 }
 
 /** Shield tokens a seat is carrying, counted per token rather than per shielded unit. */
