@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
 import { dealDamageToUnit } from '../engine/combat'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
-import { drawCards, dealDamageToBase, defeatUpgradeAt } from '../engine/effects'
-import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
+import { drawCards, dealDamageToBase, defeatUpgradeAt, giveTokens } from '../engine/effects'
+import { TOKEN_ADVANTAGE, TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 import type { GameState } from '../engine/types'
 
@@ -138,6 +138,78 @@ describe('whenUpgradeAttached — Sabine Wren (208)', () => {
     })
     const played = resolve(board, { type: 'playUpgrade', handIndex: 0, targetInstanceId: 'g' })
     expect(played.pendingChoices ?? []).toHaveLength(0)
+  })
+
+  /**
+   * **"When 1 or more upgrades attach" is one trigger per attach event, whatever the count** (#498).
+   *
+   * Printed text: "When 1 or more upgrades attach to this unit (including from Shielded): You may
+   * exhaust a ground unit." Reported from prod: Zeb put 3 Advantage on Sabine in one go and she
+   * raised three choices (`u18`, `u18#1`, `u18#2`), letting the opponent exhaust two units off a
+   * single play. Two judges confirm the reading is per trigger, not per token.
+   *
+   * `giveTokens` is the batching seam: attach all N, then fire once.
+   */
+  it('fires once for a batch of tokens, however many attach', () => {
+    const board = state({
+      cards: S,
+      players: {
+        player: player({ units: [unit('sw', 'ASH_208', { arena: 'ground' })] }),
+        opponent: player(),
+      },
+    })
+    const granted = giveTokens(board, 'sw', TOKEN_ADVANTAGE, 3)
+    expect(U(granted, 'sw').upgrades.filter(u => u.cardId === TOKEN_ADVANTAGE), 'all three still attach').toHaveLength(3)
+    expect(granted.pendingChoices ?? [], 'but only one trigger').toHaveLength(1)
+  })
+
+  /** Two separate grants are two events, so they fire twice. Per trigger, not per action. */
+  it('fires again for a second, separate grant', () => {
+    const board = state({
+      cards: S,
+      players: {
+        player: player({ units: [unit('sw', 'ASH_208', { arena: 'ground' })] }),
+        opponent: player(),
+      },
+    })
+    const twice = giveTokens(giveTokens(board, 'sw', TOKEN_ADVANTAGE, 2), 'sw', TOKEN_ADVANTAGE, 2)
+    expect(twice.pendingChoices ?? []).toHaveLength(2)
+  })
+
+  /** Granting nothing is not an attach event, so it must neither attach nor fire. */
+  it('does nothing at all for a count of zero', () => {
+    const board = state({
+      cards: S,
+      players: {
+        player: player({ units: [unit('sw', 'ASH_208', { arena: 'ground' })] }),
+        opponent: player(),
+      },
+    })
+    const none = giveTokens(board, 'sw', TOKEN_ADVANTAGE, 0)
+    expect(U(none, 'sw').upgrades).toHaveLength(0)
+    expect(none.pendingChoices ?? []).toHaveLength(0)
+  })
+
+  /**
+   * **The real two-event case.** Unfettered Ambition attaching is one event; the Advantage its own
+   * effect then grants is a second. So Sabine fires exactly **twice**, not once per token: the card
+   * counts non-Advantage upgrades, so with a Shield and this upgrade on her it grants two at once.
+   */
+  it('fires twice for an upgrade whose own effect then grants tokens', () => {
+    const cards = { ...S, ASH_182: card({ id: 'ASH_182', type: 'upgrade', cost: 1, power: 0, hp: 0 }) }
+    const board = state({
+      cards,
+      players: {
+        player: player({
+          hand: ['ASH_182'],
+          resources: ready(10),
+          units: [unit('sw', 'ASH_208', { arena: 'ground', upgrades: [{ cardId: TOKEN_SHIELD, owner: 'player' }] })],
+        }),
+        opponent: player(),
+      },
+    })
+    const played = resolve(board, { type: 'playUpgrade', handIndex: 0, targetInstanceId: 'sw' })
+    expect(played.pendingChoices ?? [], 'the attach, then the grant it causes').toHaveLength(2)
   })
 })
 

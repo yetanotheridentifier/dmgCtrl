@@ -7,7 +7,7 @@ import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, stampChoiceSource, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, sweepStateBasedDefeats, preventionOffer } from './combat'
-import { exhaustUnit, findUnit, giveToken, fireUpgradeAttached, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn } from './effects'
+import { exhaustUnit, findUnit, giveToken, giveTokens, fireUpgradeAttached, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait } from './keywords'
@@ -550,7 +550,7 @@ function mayDamageFollowUps(state: GameState, choice: PendingChoice & { kind: 'm
   if (choice.rewardIfDefeated && !findUnit(next, targetInstanceId)) {
     const reward = choice.rewardIfDefeated
     if ('instanceId' in reward) {
-      for (let i = 0; i < reward.count; i++) next = giveToken(next, reward.instanceId, TOKEN_ADVANTAGE)
+      next = giveTokens(next, reward.instanceId, TOKEN_ADVANTAGE, reward.count)
     } else {
       // Justifier: give Advantage to a chosen unit.
       const targets = [...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId)
@@ -846,7 +846,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       // Emperor Palpatine: give the chosen unit an Advantage token per other friendly unit.
       if (targetInstanceId) {
         const others = next.players[choice.controller].units.filter(u => u.instanceId !== targetInstanceId).length
-        for (let i = 0; i < others; i++) next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+        next = giveTokens(next, targetInstanceId, TOKEN_ADVANTAGE, others)
       }
       break
     case 'mayExhaustLeaderForAdvantage': {
@@ -883,7 +883,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       break
     case 'mayGiveTokens':
       // Give `count` of a token to the chosen unit — Attendant Navigator, Anakin, Trexler.
-      if (targetInstanceId) for (let i = 0; i < choice.count; i++) next = giveToken(next, targetInstanceId, choice.token)
+      if (targetInstanceId) next = giveTokens(next, targetInstanceId, choice.token, choice.count)
       break
     case 'mayExhaustLeaderGiveAdvantage': {
       // Ezra front: exhaust the (undeployed) leader to give the chosen unit an Advantage token.
@@ -1301,7 +1301,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         const healed = found ? Math.min(choice.maxHeal, found.unit.damage) : 0
         if (healed > 0) {
           next = healUnit(next, targetInstanceId, healed)
-          for (let i = 0; i < healed; i++) next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+          next = giveTokens(next, targetInstanceId, TOKEN_ADVANTAGE, healed)
         }
       }
       break
@@ -1366,7 +1366,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'opponentGivesAdvantage':
       // Sabine front: the opponent gives `count` Advantage tokens to their chosen unit.
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
-        for (let i = 0; i < choice.count; i++) next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
+        next = giveTokens(next, targetInstanceId, TOKEN_ADVANTAGE, choice.count)
       }
       break
     case 'multiPick':

@@ -66,6 +66,17 @@ unit fire on other units' attacks:
 `onAttackEnd` still fires if the attacker was defeated in the combat (CR 7.6), falling back to its
 last-known state with its upgrades.
 
+Two triggers fire **once per event, not once per item**, matching cards worded "1 or more":
+
+- **`whenUpgradeAttached`** fires once however many upgrades attach together. Giving a unit three
+  Advantage tokens is one event, so Sabine Wren offers one exhaust, not three. The boundary is one
+  call to `giveTokens`, which attaches the whole batch and then fires: an upgrade attaching and that
+  upgrade's own effect then granting tokens are two separate events and do fire twice.
+- **`whenDrawCards`** fires once per draw, however many cards it drew.
+
+Granting tokens one at a time in a loop therefore fires these triggers repeatedly and is a bug; use
+`giveTokens` with a count.
+
 ## Static hooks
 
 Card-type-agnostic, all on `CardDefinition`:
