@@ -357,6 +357,27 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     )
   }
 
+  const ad = report.advantage
+  const spent = ad.spentAttacking + ad.spentDefending + ad.spentOther
+  lines.push(
+    '',
+    '  Advantage: a 1/0 token, so the evaluation SEES it through power. What it gets wrong is the',
+    '  timing: the token lasts only until its unit next completes an attack or defence, and the whole',
+    '  stack goes at once. Prevalence is the gate here, against Shield\'s 15.8%.',
+    row('a token in play', rate(ad.decisionsWithAny, ad.decisions)),
+    row('  a decision turns on one', rate(ad.decisionsOnCarrier, ad.decisions)),
+    row('tokens seen', `${ad.tokensSeen}, largest stack ${ad.maxStack}`),
+    row('spent attacking', rate(ad.spentAttacking, Math.max(1, spent))),
+    row('spent DEFENDING', rate(ad.spentDefending, Math.max(1, spent)) + '  (the permanent model misses these)'),
+    row('spent otherwise', rate(ad.spentOther, Math.max(1, spent))),
+    row('died unspent', `${ad.diedUnspent}  (never worth anything, but scored the whole time)`),
+    row('  ours, wasted', `${ad.diedUnspentOurs}`),
+    row('  theirs, denied', `${ad.diedUnspentTheirs}  (killed the carrier; with "spent defending",`
+      + ' this is the whole of trading to strip their Advantage)'),
+    row('token grants answered', `${ad.grantChoices}`),
+    row('  no preferred recipient', rate(ad.grantChoicesAllEqual, ad.grantChoices)),
+  )
+
   const br = report.blockedReach
   lines.push(
     '',
