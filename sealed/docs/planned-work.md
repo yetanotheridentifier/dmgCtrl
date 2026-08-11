@@ -170,37 +170,24 @@ bot.
    three hours. Gate on **non-inferiority**, since a tie-break changes a third of decisions slightly
    rather than any decision decisively.
 
-2. **Run the sized A/B for `blockedReach: 1` plus a null-reply tie-break.** This is the lockout fix,
-   and it is now made of parts that are each defensible.
+2. **The shielded-Sentinel lockout is still open**, and the obvious fix has been measured and
+   rejected (see Tried and rejected). What is known, so the next attempt does not restart:
 
-   The term is gated to **shielded** blockers, the case the evaluation genuinely cannot see: an
-   unshielded Sentinel is answerable by attacking it, and the material terms already price that.
-   Ungated it was live on 24.2% of decisions and measured 25.0%; gated it screens level with the
-   control.
+   The defect is real and worse than the bench suggests. A filed report (`shieldedSentinelLockout`)
+   has the bot decline the strip **19 times in one game** with its ground lane shut for around twenty
+   consecutive decisions, where the bench measures a shut lane on 2.1% of decisions and never lasting
+   more than a single round. Self-play cannot see this, so **do not expect a win rate to score any
+   fix for it**: a perfect one is worth a fraction of a point.
 
-   The weight is **1**, at the bottom of the model's scale beside `hp`. It works because the term
-   **removes an option rather than outweighing one**: at weight 0 the passing line's best reachable
-   board scores 52 against acting's 43, and pricing a blocked lane at all drops that line to a 43
-   board it could already reach. Every weight from 1 to 16 lands on the identical tie, so 12 was never
-   required, and weight 1 disturbs a quarter as much (3 of 200 decisions against 11).
+   The cause is priced, not mysterious. Stripping runs a consistent **11 to 12 points behind** passing
+   all game, because removing a Shield leaves the same units at the same HP and differs only by a
+   token no term reads, while the attack's cost (exhausting the attacker, exposing it to a counter) is
+   priced in full. All visible cost, no visible benefit.
 
-   **Both halves are needed at every weight.** The term only creates the tie; without a second opinion
-   the seeded pick still passes. That is why five single-lever attempts failed.
-
-   Screened at 80 games on seeds 9200-9209 against a matched `beam-reply` self-play control of 48.8%:
-
-   | arm | wins | win rate |
-   | --- | --- | --- |
-   | control | 39/80 | 48.8% |
-   | `+blockedReach=1` | 39/80 | 48.8% |
-   | `+blockedReach=12` | 39/80 | 48.8% |
-   | `+blockedReach=1/tie=reply:null` | 36/80 | 45.0% |
-   | `+blockedReach=12/tie=reply:null` | 37/80 | 46.3% |
-
-   **Everything here is inside noise at n=80** (+/-10.7). The tie-break measured 55.0% on seeds
-   9100-9109 and 45.0% here, which is what a wide interval looks like rather than a trend. Nothing is
-   shippable on this evidence: it needs ~2,500 games (about three hours at 42.9 s/game over 10 shards)
-   gated on **non-inferiority**, since the lockout is a position self-play barely reaches.
+   What is left to try is a **contextual** value rather than a flat one, which is the same conclusion
+   the `shield` term reached: the worth of a strip is large when it opens a lane this action and nil
+   otherwise, and both rejected terms priced the state instead of the opening. Gate any next attempt
+   on the report fixture's strip rate, not on a win rate.
 3. **#487 re-tune the weights for the shipped search.** Unblocked, now that the configuration is
    settled and there is a fixed target to tune against. The "re-weighting is exhausted" result
    measured a one-ply evaluator, and #430 identified exactly why several weights could not matter
@@ -504,6 +491,26 @@ AI with the change switched off, across the coverage decks.
   on **24.2%** of decisions against a 2.1% lockout, at a mean quantity of 6.6. A scripted position was
   allowed to name the weight, and nobody asked how often the term would fire.
 
-  Gating it to **shielded** blockers fixes both symptoms and is what ships (at weight 0 still): see
-  Next up. Read a new term against the model's scale and against how often it is live, not only
-  against the position that motivated it.
+  Read a new term against the model's scale and against how often it is live, not only against the
+  position that motivated it.
+- **A GATED `blockedReach` term, at the weight that works.** Gating to **shielded** blockers is the
+  right narrowing (an unshielded Sentinel is answerable by attacking it, and the material terms
+  already price that), and it removed the catastrophic loss: 25.0% became 48.8% at 80 games. The term
+  changes real decisions rather than being inert, and on the filed report it lifts the strip rate from
+  **1 of 18 to 10 of 18**.
+
+  It still does not ship. `beam-reply+blockedReach=3` measured **49.6% +/- 1.0% (48.6% - 50.6%)** over
+  9,600 games and 10 seeds, no games dropped, against a pre-registered rule requiring a lower bound at
+  or above 49.0%. Inconclusive: consistent with neutral and equally consistent with a 1.4-point cost,
+  with 6 of 10 shards below 50%. **The term stays at 0.**
+
+  Weight 3 is the efficient point and was chosen by mechanism, not by win rate: the strip rate on the
+  filed report plateaus there (10 of 18, the same as weight 12) while disturbance keeps climbing (1.5%
+  of decisions at weight 1, 5.5% at weight 12). Do not sweep weights on win rate to refine this; the
+  differences are far below what 9,600 games can resolve.
+
+  Two fixture artefacts to distrust if this is revisited. The scripted lockout in `aiTieBreak.test.ts`
+  turns into a **tie** at any non-zero weight and needs the tie-break to convert it; the real boards
+  are an 11-point deficit that the term tips **on its own**, and there the tie-break scores one strip
+  *fewer* at every weight. A scripted position told us the weight (12) and the mechanism (tie-break),
+  and was wrong about both.
