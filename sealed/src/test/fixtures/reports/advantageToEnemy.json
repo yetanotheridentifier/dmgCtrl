@@ -1,0 +1,667 @@
+{
+  "initialState": {
+    "players": {
+      "player": {
+        "leader": {
+          "cardId": "ASH_011",
+          "deployed": false,
+          "epicActionUsed": false,
+          "exhausted": false
+        },
+        "base": {
+          "cardId": "ASH_020",
+          "damage": 0
+        },
+        "hand": [
+          "ASH_075",
+          "ASH_071",
+          "ASH_172",
+          "ASH_089",
+          "ASH_068",
+          "ASH_083"
+        ],
+        "deck": [
+          "ASH_237",
+          "ASH_174",
+          "ASH_046",
+          "ASH_076",
+          "ASH_074",
+          "ASH_240",
+          "ASH_073",
+          "ASH_141",
+          "ASH_039",
+          "ASH_174",
+          "ASH_165",
+          "ASH_166",
+          "ASH_165",
+          "ASH_188",
+          "ASH_169",
+          "ASH_068",
+          "ASH_069",
+          "ASH_149",
+          "ASH_184",
+          "ASH_048",
+          "ASH_142",
+          "ASH_242",
+          "ASH_238",
+          "ASH_180"
+        ],
+        "discard": [],
+        "resources": [],
+        "units": []
+      },
+      "opponent": {
+        "leader": {
+          "cardId": "ASH_013",
+          "deployed": false,
+          "epicActionUsed": false,
+          "exhausted": false
+        },
+        "base": {
+          "cardId": "ASH_026",
+          "damage": 0
+        },
+        "hand": [
+          "ASH_171",
+          "ASH_250",
+          "ASH_184",
+          "ASH_209",
+          "ASH_067",
+          "ASH_159"
+        ],
+        "deck": [
+          "ASH_161",
+          "ASH_227",
+          "ASH_164",
+          "ASH_067",
+          "ASH_174",
+          "ASH_157",
+          "ASH_213",
+          "ASH_201",
+          "ASH_225",
+          "ASH_213",
+          "ASH_154",
+          "ASH_169",
+          "ASH_223",
+          "ASH_167",
+          "ASH_205",
+          "ASH_168",
+          "ASH_164",
+          "ASH_171",
+          "ASH_178",
+          "ASH_254",
+          "ASH_165",
+          "ASH_228",
+          "ASH_166",
+          "ASH_162",
+          "ASH_181",
+          "ASH_135",
+          "ASH_040",
+          "ASH_207"
+        ],
+        "discard": [],
+        "resources": [],
+        "units": []
+      }
+    },
+    "initiative": "opponent",
+    "initiativeTakenBy": null,
+    "activePlayer": "opponent",
+    "phase": "setup",
+    "round": 1,
+    "consecutivePasses": 0,
+    "regroupResourced": {
+      "player": false,
+      "opponent": false
+    },
+    "instanceCounter": 1,
+    "rngSeed": 766671584,
+    "setupStage": "mulligan",
+    "winner": null
+  },
+  "moves": [
+    {
+      "by": "opponent",
+      "action": {
+        "type": "keepHand"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "keepHand"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "setupResource",
+        "handIndex": 3
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "setupResource",
+        "handIndex": 4
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "setupResource",
+        "handIndex": 5
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "setupResource",
+        "handIndex": 3
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "playUnit",
+        "handIndex": 1
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "skipTrigger",
+        "choiceId": "u1"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "useLeaderAbility",
+        "index": 0,
+        "targetInstanceId": "u1"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "pass"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "playUnit",
+        "handIndex": 3
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "takeInitiative"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "pass"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "resourceCard",
+        "handIndex": 1
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "resourceCard",
+        "handIndex": 0
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "playUnit",
+        "handIndex": 0
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "attack",
+        "attackerId": "u2",
+        "target": {
+          "kind": "unit",
+          "instanceId": "u1"
+        }
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "pass"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "useLeaderAbility",
+        "index": 0,
+        "targetInstanceId": "u3"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "takeInitiative"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "playUnit",
+        "handIndex": 0
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "acceptChoice",
+        "choiceId": "u4-wp",
+        "targetInstanceId": "u3"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "playUnit",
+        "handIndex": 1
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "pass"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "resourceCard",
+        "handIndex": 2
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "resourceCard",
+        "handIndex": 2
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "playUnit",
+        "handIndex": 2
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "attack",
+        "attackerId": "u5",
+        "target": {
+          "kind": "base"
+        }
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "pass"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "attack",
+        "attackerId": "u4",
+        "target": {
+          "kind": "base"
+        }
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "pass"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "useLeaderAbility",
+        "index": 0,
+        "targetInstanceId": "u6"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "pass"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "playUnit",
+        "handIndex": 2
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "takeInitiative"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "pass"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "resourceCard",
+        "handIndex": 3
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "resourceCard",
+        "handIndex": 2
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "deployLeader"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "playUnit",
+        "handIndex": 1
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "acceptChoice",
+        "choiceId": "u9",
+        "targetInstanceId": "u6"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "attack",
+        "attackerId": "u8",
+        "target": {
+          "kind": "unit",
+          "instanceId": "u7"
+        }
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "useLeaderAbility",
+        "index": 0,
+        "targetInstanceId": "u8"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "playUnit",
+        "handIndex": 3
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "attack",
+        "attackerId": "u5",
+        "target": {
+          "kind": "unit",
+          "instanceId": "u8"
+        }
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "pass"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "attack",
+        "attackerId": "u4",
+        "target": {
+          "kind": "base"
+        }
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "takeInitiative"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "pass"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "resourceCard",
+        "handIndex": 3
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "resourceCard",
+        "handIndex": 2
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "attack",
+        "attackerId": "u10",
+        "target": {
+          "kind": "base"
+        }
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "skipTrigger",
+        "choiceId": "u10"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "skipTrigger",
+        "choiceId": "ASH_013-attackEnd"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "useLeaderAbility",
+        "index": 0,
+        "targetInstanceId": "u10"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "playUnit",
+        "handIndex": 3
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "deployLeader"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "pass"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "attack",
+        "attackerId": "u12",
+        "target": {
+          "kind": "base"
+        }
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "acceptChoice",
+        "choiceId": "u12",
+        "targetInstanceId": "u10"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "pass"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "attack",
+        "attackerId": "u9",
+        "target": {
+          "kind": "unit",
+          "instanceId": "u10"
+        }
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "pass"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "attack",
+        "attackerId": "u4",
+        "target": {
+          "kind": "unit",
+          "instanceId": "u11"
+        }
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "pass"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "playUnit",
+        "handIndex": 0
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "pass"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "playUnit",
+        "handIndex": 1
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "takeInitiative"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "pass"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "resourceCard",
+        "handIndex": 4
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "resourceCard",
+        "handIndex": 1
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "playUnit",
+        "handIndex": 1
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "acceptChoice",
+        "choiceId": "u15",
+        "targetInstanceId": "u13"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "pass"
+      }
+    }
+  ]
+}
