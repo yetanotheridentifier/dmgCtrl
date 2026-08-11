@@ -2,6 +2,7 @@ import ashSet from '../fixtures/ashSet.json'
 import baylanExhaust from '../fixtures/reports/baylanExhaust.json'
 import exhaustedLeaderDraw from '../fixtures/reports/exhaustedLeaderDraw.json'
 import haulcraftPrompt from '../fixtures/reports/haulcraftPrompt.json'
+import advantageToEnemy from '../fixtures/reports/advantageToEnemy.json'
 import minefieldArenaChoice from '../fixtures/reports/minefieldArenaChoice.json'
 import shieldedSentinelLockout from '../fixtures/reports/shieldedSentinelLockout.json'
 import shieldedSentinelPing from '../fixtures/reports/shieldedSentinelPing.json'
@@ -37,8 +38,8 @@ const ashCards = ashSet as SwuCard[]
  * bundled the same way the other fixtures are; add an entry when a new report is worth keeping.
  */
 const REPORTS: Record<string, unknown> = {
-  baylanExhaust, exhaustedLeaderDraw, haulcraftPrompt, minefieldArenaChoice, shieldedSentinelLockout,
-  shieldedSentinelPing, vaneFriendlyUpgrade,
+  advantageToEnemy, baylanExhaust, exhaustedLeaderDraw, haulcraftPrompt, minefieldArenaChoice,
+  shieldedSentinelLockout, shieldedSentinelPing, vaneFriendlyUpgrade,
 }
 
 /**
