@@ -42,19 +42,38 @@ function patchUnit(state: GameState, owner: PlayerId, instanceId: string, patch:
   }
 }
 
-/** Attach a token upgrade (Shield/Experience/Advantage) to a unit, owned by its controller. */
-export function giveToken(state: GameState, instanceId: string, tokenId: string): GameState {
+/**
+ * Attach `count` token upgrades (Shield/Experience/Advantage) to a unit, owned by its controller.
+ *
+ * **All of them attach, then the trigger fires once** (#498). Sabine Wren reads "When 1 or more
+ * upgrades attach to this unit", so a three-token grant is one event, not three. Granting them
+ * one-at-a-time raised three separate choices on prod and let the opponent exhaust two units off a
+ * single Zeb play.
+ *
+ * The boundary is one **call**, which is one trigger's worth of attaching. Two separate effects each
+ * granting in the same action are two events and fire twice, which is the reading two judges
+ * confirmed: Unfettered Ambition attaching, then its own effect granting Advantage, is two.
+ *
+ * A count of zero is not an attach event, so it neither attaches nor fires.
+ */
+export function giveTokens(state: GameState, instanceId: string, tokenId: string, count: number): GameState {
   const found = findUnit(state, instanceId)
-  if (!found) return state
-  const next = patchUnit(state, found.owner, instanceId, u => ({ ...u, upgrades: [...u.upgrades, { cardId: tokenId, owner: found.owner }] }))
+  if (!found || count <= 0) return state
+  const tokens = Array.from({ length: count }, () => ({ cardId: tokenId, owner: found.owner }))
+  const next = patchUnit(state, found.owner, instanceId, u => ({ ...u, upgrades: [...u.upgrades, ...tokens] }))
   return fireUpgradeAttached(next, instanceId)
+}
+
+/** Attach a single token upgrade. See {@link giveTokens} for why the count-many form exists. */
+export function giveToken(state: GameState, instanceId: string, tokenId: string): GameState {
+  return giveTokens(state, instanceId, tokenId, 1)
 }
 
 /**
  * Fire "when 1 or more upgrades attach to this unit" (Sabine Wren) on the receiving unit.
  * Called from every attach site: token grants (here), `playUpgrade`, and a Shielded entry.
- * Note: granting N tokens one-at-a-time fires it N times — fine for the current card, which is a
- * "may", but a future "exactly once per attach event" card would need batching.
+ * Batching is {@link giveTokens}' job: this fires once per call, so callers granting several tokens
+ * must attach them together rather than in a loop.
  */
 export function fireUpgradeAttached(state: GameState, instanceId: string, upgradePlayed = false): GameState {
   const found = findUnit(state, instanceId)

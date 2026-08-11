@@ -1,6 +1,6 @@
 import type { EffectContext } from './abilities'
 import { registerCard } from './abilities'
-import { giveToken, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit } from './effects'
+import { giveToken, giveTokens, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit } from './effects'
 import { dealDamageToUnit, defeatUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
@@ -91,7 +91,7 @@ registerCard('ASH_182', { // Unfettered Ambition — Advantage per non-Advantage
       if (!found) return s
       const n = found.unit.upgrades.filter(u => s.cards[u.cardId]?.name !== 'Advantage').length
       let next = s
-      for (let i = 0; i < n; i++) next = giveToken(next, ctx.sourceInstanceId!, TOKEN_ADVANTAGE)
+      next = giveTokens(next, ctx.sourceInstanceId!, TOKEN_ADVANTAGE, n)
       return next
     },
   }],
@@ -225,7 +225,7 @@ registerCard('ASH_015', { // Emperor Palpatine — front (undeployed) + deployed
       effect: (s, ctx) => {
         const others = s.players[ctx.owner].units.filter(u => u.instanceId !== ctx.targetInstanceId).length
         let next = s
-        for (let i = 0; i < others; i++) next = giveToken(next, ctx.targetInstanceId!, TOKEN_ADVANTAGE)
+        next = giveTokens(next, ctx.targetInstanceId!, TOKEN_ADVANTAGE, others)
         return next
       },
     }],
@@ -807,12 +807,6 @@ registerCard('ASH_040', { // Poe Dameron — all units lose Sentinel
 })
 
 // ── Units — "When Played" effects ──────────────────────────────
-/** Give `n` copies of a token to a unit. */
-const giveTokens = (s: GameState, id: string, token: string, n: number): GameState => {
-  let next = s
-  for (let i = 0; i < n; i++) next = giveToken(next, id, token)
-  return next
-}
 const whenPlayed = (description: string, effect: (s: GameState, ctx: { owner: PlayerId; cardId: string; sourceInstanceId?: string }) => GameState) => ({
   abilities: [{ trigger: 'whenPlayed' as const, description, effect }],
 })
