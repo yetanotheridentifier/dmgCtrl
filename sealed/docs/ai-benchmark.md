@@ -38,15 +38,52 @@ The spread is the sharper evidence. A binomial at 8400 games has an expected sta
 0.55 points; the corrected readings measure 0.59, while the old ones measured **0.30, tighter than
 chance allows**. The seat was deciding more of the outcome than the games were.
 
+**The head-to-head A/B kept the defect for longer than the rest.** The seating fix reached
+`generalisation`, `aiMatchups` and `matrix` but not `runBench`, which is the path `--shard` and every
+head-to-head result go through: it went on pinning `aiA` to the `player` seat and alternating only who
+moved first. Self-play controls through it read 50.0%, 48.8% and 46.3% on three seed sets, pooling to
+**48.3%** where an unbiased harness gives 50. It uses `seating` now.
+
 Two consequences worth knowing when reading older numbers:
 
 - **Differences are unaffected.** Anything measured as candidate-minus-control cancels the bias, so
-  the tuning result (+0.62%) stands as recorded.
-- **Absolute win rates against a reference are understated by roughly a third of a point.**
+  the tuning result (+0.62%) stands as recorded, and so does any A/B run against a matched control at
+  the same seeds.
+- **Absolute win rates against a reference are understated by roughly a third of a point.** For
+  head-to-head numbers that predate the `runBench` fix, treat them as directional rather than exactly
+  reproducible: the ordering stands, the decimals do not.
 
 `margin` is seat-relative (`baseDamage.opponent - baseDamage.player`), so it is negated when the
 seats swap. `resultForA` owns that, because a wrongly-signed margin is silent: it still looks like a
 plausible number.
+
+### The deck population decides what can be measured at all
+
+`--decks` chooses what a head-to-head plays over: `mirror` (the default) or `coverage`. Both seats
+always play the same list either way, so it stays a mirror match.
+
+**`mirror` is one fixed deck of the first 30 aspect-matching units, and a term whose cards are not
+among them cannot fire.** It then reports neutral, which is indistinguishable from a genuine null
+result. Measured on that deck against the coverage decks:
+
+| | mirror | coverage |
+| --- | --- | --- |
+| an Advantage token in play | **0.0%** | 20.7% |
+| a shielded Sentinel in play | **0.0%** | ~2% |
+| a Shield token in play | 18.1% | ~17% |
+
+Shields are common there and Sentinels exist, but the two never coincide. Two terms were swept for
+hours against a population that could not express them, and both returned the harness's own
+identical-bot baseline rather than a measurement.
+
+So: **before sweeping a weight, confirm its quantity actually varies in the population you are about
+to run**. `--decisions` and `--terms` walk the coverage decks, so their prevalence numbers do not
+transfer to a `mirror` A/B. Deck and seat are decoupled by playing each deck for a whole four-game
+seating cycle: cycling decks per game would pin each deck to one seat whenever the counts share a
+factor, and 44 decks against a 4-game cycle does.
+
+The deck source is part of the shard run key when it is not the default, so a coverage run can never
+pool with mirror results.
 
 ## Running it
 

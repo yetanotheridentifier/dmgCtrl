@@ -13,6 +13,7 @@ import { runBudget, type BudgetReport } from './budget'
 import { join } from 'node:path'
 import { runShards, poolShards, pendingSeeds, loadShardResults, shardRunKey, SHARD_DIR } from './shard'
 import type { CostReport } from './cost'
+import type { DeckSource } from './decks'
 import { runLethal } from './lethal'
 import type { LethalReport } from './lethal'
 import { runAiMatchups } from './aiMatchups'
@@ -64,6 +65,8 @@ interface Args {
   /** Run the head-to-head as N parallel single-threaded processes over N seeds, and pool them. */
   shards?: number
   triage: boolean
+  /** Deck population for the A/B: `mirror` (default) or `coverage`. See `DeckSource`. */
+  decks?: DeckSource
   /** Set codes for `--triage`, taken from the positional arguments. */
   sets: string[]
   aiExplicit: boolean
@@ -96,6 +99,7 @@ function parseArgs(argv: string[]): Args {
   let matchups = false
   let shards: number | undefined
   let triage = false
+  let decks: DeckSource | undefined
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--games') { games = Number(argv[++i]); gamesSet = true }
@@ -113,6 +117,11 @@ function parseArgs(argv: string[]): Args {
     else if (arg === '--depth') depth = Number(argv[++i])
     else if (arg === '--matchups') matchups = true
     else if (arg === '--shard') shards = Number(argv[++i])
+    else if (arg === '--decks') {
+      const v = argv[++i]
+      if (v !== 'mirror' && v !== 'coverage') throw new Error(`--decks must be mirror or coverage, got "${v}"`)
+      decks = v
+    }
     else if (arg === '--triage') triage = true
     else if (arg.startsWith('--')) throw new Error(`Unknown flag: ${arg}`)
     else positional.push(arg)
@@ -122,7 +131,7 @@ function parseArgs(argv: string[]): Args {
   if (depth !== undefined && (!Number.isFinite(depth) || depth < 1)) throw new Error('--depth must be a positive integer')
   if (triage && positional.length === 0) throw new Error('--triage needs at least one set code, e.g. --triage LAW SEC')
   if (shards !== undefined && (!Number.isFinite(shards) || shards < 1)) throw new Error('--shard must be a positive integer')
-  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, matchups, shards, triage, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, matchups, shards, triage, decks, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
@@ -356,6 +365,27 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
       row('by kind', ti.byKind.map(k => `${k.kind} ${pct(k.searched === 0 ? 0 : k.fired / k.searched)}`).join('  ')),
     )
   }
+
+  const ad = report.advantage
+  const spent = ad.spentAttacking + ad.spentDefending + ad.spentOther
+  lines.push(
+    '',
+    '  Advantage: a 1/0 token, so the evaluation SEES it through power. What it gets wrong is the',
+    '  timing: the token lasts only until its unit next completes an attack or defence, and the whole',
+    '  stack goes at once. Prevalence is the gate here, against Shield\'s 15.8%.',
+    row('a token in play', rate(ad.decisionsWithAny, ad.decisions)),
+    row('  a decision turns on one', rate(ad.decisionsOnCarrier, ad.decisions)),
+    row('tokens seen', `${ad.tokensSeen}, largest stack ${ad.maxStack}`),
+    row('spent attacking', rate(ad.spentAttacking, Math.max(1, spent))),
+    row('spent DEFENDING', rate(ad.spentDefending, Math.max(1, spent)) + '  (the permanent model misses these)'),
+    row('spent otherwise', rate(ad.spentOther, Math.max(1, spent))),
+    row('died unspent', `${ad.diedUnspent}  (never worth anything, but scored the whole time)`),
+    row('  ours, wasted', `${ad.diedUnspentOurs}`),
+    row('  theirs, denied', `${ad.diedUnspentTheirs}  (killed the carrier; with "spent defending",`
+      + ' this is the whole of trading to strip their Advantage)'),
+    row('token grants answered', `${ad.grantChoices}`),
+    row('  no preferred recipient', rate(ad.grantChoicesAllEqual, ad.grantChoices)),
+  )
 
   const br = report.blockedReach
   lines.push(
@@ -654,7 +684,7 @@ function runBudgetMode(args: Args): void {
 async function runShardMode(args: Args): Promise<void> {
   const shards = args.shards ?? 1
   const start = Date.now()
-  const config = { shards, games: args.games, baseSeed: args.seed, aiA: args.aiA, aiB: args.aiB }
+  const config = { shards, games: args.games, baseSeed: args.seed, aiA: args.aiA, aiB: args.aiB, decks: args.decks }
   const dir = join(SHARD_DIR, shardRunKey(config))
   const todo = pendingSeeds(config, loadShardResults(dir))
 
@@ -828,7 +858,7 @@ function main(): void {
   let report: BenchReport
   const start = Date.now()
   try {
-    report = runBench({ games: args.games, seed: args.seed, aiA: args.aiA, aiB: args.aiB })
+    report = runBench({ games: args.games, seed: args.seed, aiA: args.aiA, aiB: args.aiB, decks: args.decks })
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
     process.exit(2)

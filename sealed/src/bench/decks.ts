@@ -3,6 +3,7 @@ import type { SwuCard } from '../data/cards'
 import type { CardDb } from '../engine/types'
 import type { ParsedDeck } from '../utils/parseProtectThePod'
 import { buildCardDb } from '../engine/cardDb'
+import { buildCoverageDecks } from './coverageDecks'
 import '../engine/cardDefinitions' // side effect: registers every implemented card ability
 
 /**
@@ -52,4 +53,29 @@ export function buildBenchDeck(cards: SwuCard[]): ParsedDeck {
 /** The deck plus a card database covering the whole set, ready to hand to `initGame`. */
 export function benchInputs(): { deck: ParsedDeck; cardDb: CardDb } {
   return { deck: buildBenchDeck(SET), cardDb: buildCardDb(SET) }
+}
+
+/**
+ * Which deck population an A/B plays over.
+ *
+ * **This decides what can be measured at all.** `mirror` is one fixed deck of the first 30
+ * aspect-matching units, and a term whose cards are not among those 30 cannot fire: it reports
+ * neutral rather than failing, which is indistinguishable from a genuine null. Measured on the mirror
+ * deck: Advantage tokens appear on **0.0%** of decisions against 20.7% on the coverage decks, and a
+ * shielded Sentinel on **0.0%** against roughly 2%.
+ *
+ * `mirror` stays the default so every historical result keeps its meaning.
+ */
+export type DeckSource = 'mirror' | 'coverage'
+
+/**
+ * The decks an A/B will play, and the card database behind them.
+ *
+ * Both seats always play the SAME list, whichever source is chosen, so the comparison stays a mirror
+ * match and any deck-strength difference cancels by construction.
+ */
+export function benchDeckSet(source: DeckSource, seed: number): { decks: ParsedDeck[]; cardDb: CardDb } {
+  const cardDb = buildCardDb(SET)
+  if (source === 'mirror') return { decks: [buildBenchDeck(SET)], cardDb }
+  return { decks: buildCoverageDecks(SET, seed).decks, cardDb }
 }

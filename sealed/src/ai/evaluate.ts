@@ -1,7 +1,7 @@
 import type { GameState, PlayerId } from '../engine/types'
 import { opponentOf } from '../engine/types'
 import { effectivePower, effectiveHp } from '../engine/stats'
-import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
+import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { handValue, DEFAULT_HAND_WEIGHTS, type HandWeights } from './handValue'
 import { role, canFinishThisAction, lockoutSwing, type Role } from './race'
 
@@ -54,6 +54,38 @@ export interface EvalWeights {
   base: number // per point of damage on a base (the win condition)
   unit: number // per unit in play (the dominant board term)
   power: number // per point of a unit's effective power
+  /**
+   * Per Advantage token, replacing `power` for the points those tokens contribute.
+   *
+   * Advantage is a 1/0 token, so it already reaches the evaluation through `power`. What is wrong is
+   * the rate: **printed power is a recurring stream and a token is a single payment.** A unit with 3
+   * power deals 3 every time it attacks; a token deals 1 once and is then spent, along with the rest
+   * of its stack. Charging both at `power` over-values the token by roughly the attacks the unit has
+   * left in it.
+   *
+   * **Ships equal to `power`, which is a deliberate break from the ship-at-zero convention.** Zero
+   * would assert a token is worthless, which is a large change rather than a neutral one; equality
+   * reproduces today's behaviour exactly and the sweep runs downward.
+   *
+   * Measured over 3,982 decisions before this existed: a token is in play on 20.7%, a decision turns
+   * on a carrier on 8.3%, 76% of tokens are eventually spent (80% of those attacking, only 4.6%
+   * defending), and 23.5% die with their unit having delivered nothing.
+   */
+  advantage: number
+  /**
+   * Per Advantage token on an **exhausted** carrier, replacing `advantage` for those.
+   *
+   * A ready carrier can spend the token this round; an exhausted one readies at regroup, which is a
+   * round away and past the search's horizon, and the opponent gets a turn in between to kill it
+   * first. Under a pessimistic reply that is what the search assumes will happen.
+   *
+   * The lethal side needs no help here: `canFinishThisAction` already filters exhausted units out, so
+   * an exhausted carrier's tokens never counted toward finishing this round. This closes the gap in
+   * the **material** term, where `presence` sums power across ready and exhausted units alike.
+   *
+   * Ships equal to `power`, so the split is a no-op until swept.
+   */
+  advantageExhausted: number
   hp: number // per point of a unit's remaining HP (light, so damage is progress not a big loss)
   card: number // per card in hand (public: hand SIZE is visible to both players)
   resource: number // per resource in the pool up to the knee (total, not ready: all ready each round)
@@ -172,6 +204,9 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   base: 4,
   unit: 4,
   power: 2,
+  // Equal to `power`: a no-op until swept downward. See the field docs for why not zero.
+  advantage: 2,
+  advantageExhausted: 2,
   hp: 1,
   card: 2,
   resource: 3,
@@ -219,16 +254,52 @@ interface Presence {
   units: number
   power: number
   hp: number
+  /** Advantage tokens on ready carriers, repriced off `power`. See {@link advantageCorrection}. */
+  advantage: number
+  /** Advantage tokens on exhausted carriers, which cannot spend them this round. */
+  advantageExhausted: number
 }
 
-function presence(state: GameState, id: PlayerId): Presence {
-  const out: Presence = { units: 0, power: 0, hp: 0 }
+/**
+ * `countAdvantage` is off on the hot path whenever the Advantage rates equal `power`, which is how
+ * they ship. Counting tokens means walking every unit's upgrade array on **every evaluation**, and
+ * the correction it feeds is provably zero at those weights: work for nothing. `blockedReach` is
+ * guarded for the same reason, and it was expensive enough to time out a test before it was.
+ */
+function presence(state: GameState, id: PlayerId, countAdvantage: boolean): Presence {
+  const out: Presence = { units: 0, power: 0, hp: 0, advantage: 0, advantageExhausted: 0 }
   for (const unit of state.players[id].units) {
     out.units++
     out.power += effectivePower(state, unit)
     out.hp += Math.max(0, effectiveHp(state, unit) - unit.damage)
+    if (!countAdvantage) continue
+    const tokens = unit.upgrades.filter(u => u.cardId === TOKEN_ADVANTAGE).length
+    if (unit.exhausted) out.advantageExhausted += tokens
+    else out.advantage += tokens
   }
   return out
+}
+
+/** Whether either Advantage rate differs from `power`, i.e. whether the correction can be non-zero. */
+const advantagePriced = (w: EvalWeights): boolean =>
+  w.advantage !== w.power || w.advantageExhausted !== w.power
+
+/**
+ * Reprice Advantage tokens from `power` to `advantage`.
+ *
+ * Written as a **correction on top of the existing power sum** rather than by excluding tokens from
+ * it. Two reasons. It is provably a no-op when the weights are equal, which is how it ships, so the
+ * change cannot move the bot until it is deliberately swept. And it does not assume each token
+ * contributes exactly +1 to `effectivePower`: whatever the stats pipeline says power is, that stands,
+ * and this only adjusts the rate the tokens within it are charged at.
+ *
+ * Advantage lasts until its unit next completes an attack or defence, so printed power is a recurring
+ * stream and a token is a single payment. Charging both at `w.power` over-values the token by roughly
+ * the number of attacks the unit has left.
+ */
+function advantageCorrection(p: Presence, w: EvalWeights): number {
+  return (w.advantage - w.power) * p.advantage
+    + (w.advantageExhausted - w.power) * p.advantageExhausted
 }
 
 /**
@@ -237,8 +308,8 @@ function presence(state: GameState, id: PlayerId): Presence {
  * its whole contribution (the real trade swing); chipping only shaves the small HP part.
  */
 function boardPresence(state: GameState, id: PlayerId, w: EvalWeights): number {
-  const p = presence(state, id)
-  return w.unit * p.units + w.power * p.power + w.hp * p.hp
+  const p = presence(state, id, advantagePriced(w))
+  return w.unit * p.units + w.power * p.power + w.hp * p.hp + advantageCorrection(p, w)
 }
 
 /**
@@ -451,7 +522,8 @@ export interface Term {
 /** The linear coefficients, i.e. every public weight that prices a quantity. `saturation` and
  *  `roleShift` are absent by construction: neither is a price. See `resourceSplit` and `roleAdjusted`. */
 export type LinearTermKey =
-  | 'base' | 'unit' | 'power' | 'hp' | 'card' | 'resource' | 'resourceSurplus'
+  | 'base' | 'unit' | 'power' | 'advantage' | 'advantageExhausted' | 'hp' | 'card' | 'resource'
+  | 'resourceSurplus'
   | 'readyUnit' | 'shield' | 'blockedReach' | 'initiative' | 'claimCost' | 'lethalExposure'
 
 /**
@@ -484,8 +556,10 @@ export function publicBreakdown(
 ): Record<LinearTermKey, Term> {
   const w = roleAdjusted(state, me, w0, asRole)
   const foe = opponentOf(me)
-  const mine = presence(state, me)
-  const theirs = presence(state, foe)
+  // Always counted here: this is the diagnostic, not the hot path, and a term reporting a silent zero
+  // because of an optimisation would be worse than the cost it saves.
+  const mine = presence(state, me, true)
+  const theirs = presence(state, foe, true)
   const myPool = resourceSplit(state, me, w)
   const theirPool = resourceSplit(state, foe, w)
 
@@ -493,6 +567,13 @@ export function publicBreakdown(
     base: { weight: w.base, quantity: state.players[foe].base.damage - state.players[me].base.damage },
     unit: { weight: w.unit, quantity: mine.units - theirs.units },
     power: { weight: w.power, quantity: mine.power - theirs.power },
+    // The correction, carried at its own rate so the identity holds: `power` already charged these
+    // tokens at `w.power`, and this pays the difference. Zero quantity contribution when equal.
+    advantage: { weight: w.advantage - w.power, quantity: mine.advantage - theirs.advantage },
+    advantageExhausted: {
+      weight: w.advantageExhausted - w.power,
+      quantity: mine.advantageExhausted - theirs.advantageExhausted,
+    },
     hp: { weight: w.hp, quantity: mine.hp - theirs.hp },
     card: { weight: w.card, quantity: state.players[me].hand.length - state.players[foe].hand.length },
     resource: { weight: w.resource, quantity: myPool.full - theirPool.full },

@@ -13,7 +13,7 @@ import { seededShuffle, nextSeed } from '../engine/rng'
 import { COMMIT_ID } from '../buildIdentity'
 import { evaluate, blockedFor, DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { makeQuiescent, lastSearchTrace, clearSearchTrace } from '../ai/search'
-import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
+import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { resolveAi } from '../ai/registry'
 import { setupAi } from '../ai/setupAi'
 import { role, reachSteady, canFinishNow, canFinishThisAction, type Role } from '../ai/race'
@@ -423,12 +423,126 @@ export interface BlockedReachStat {
   widestQuantity: number
 }
 
+/**
+ * Where Advantage tokens are and where they go (#497).
+ *
+ * Unlike a Shield, Advantage is **not** invisible: it is a 1/0 token, so it feeds `power` through
+ * `withUpgrades` and counts toward lethal. What the evaluation gets wrong is the **timing**. Advantage
+ * lasts only until its unit next completes an attack or defence, and `consumeAdvantage` then clears
+ * the whole stack, so three tokens are +3 power for exactly one attack and are scored as a permanent
+ * +3 until then.
+ *
+ * The gate this exists to settle: Shield prevalence was 15.8% of decisions, which is what justified
+ * pricing it. If Advantage is rare here, #497 closes without a weight.
+ */
+export interface AdvantageStat {
+  decisions: number
+  /** Decisions with a token in play on either side: the prevalence headline. */
+  decisionsWithAny: number
+  /** Tokens in play, summed over decisions, so "how many" reads alongside "how often". */
+  tokensSeen: number
+  /** Most on a single unit at once. The mis-timing scales with the stack, so this bounds the error. */
+  maxStack: number
+  /** Decisions where some candidate move attacks WITH a carrier or attacks one. */
+  decisionsOnCarrier: number
+  /** Tokens spent by their unit attacking. */
+  spentAttacking: number
+  /** Tokens spent by their unit defending: the case a permanent model gets most wrong, because the
+   *  owner never chose to spend them. */
+  spentDefending: number
+  /** Spent by something other than the combat the action resolved: an ability, a cost, a cleanup. */
+  spentOther: number
+  /** Tokens that left play on a defeated unit, never spent. Pure phantom value while they sat there. */
+  diedUnspent: number
+  /** Of those, tokens the acting seat lost with its own carrier. */
+  diedUnspentOurs: number
+  /**
+   * Of those, tokens removed by killing the other seat's carrier.
+   *
+   * With `spentDefending`, this is the whole of "did we trade to strip their Advantage". Pooling the
+   * two sides would hide the difference between wasting our own tokens and denying theirs, which are
+   * opposite outcomes.
+   */
+  diedUnspentTheirs: number
+  /** Token-grant choices the bot answered. */
+  grantChoices: number
+  /**
+   * Of those, how many had every candidate scoring identically, so the recipient was a coin flip.
+   *
+   * The second symptom, found on #501: `power` sums across a side, so +N lands the same wherever it
+   * goes and the model cannot prefer arming a 1-cost unit over a leader.
+   */
+  grantChoicesAllEqual: number
+}
+
+/** Advantage tokens per unit instance, across both seats. */
+function advantageByUnit(s: GameState): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const seat of ['player', 'opponent'] as PlayerId[]) {
+    for (const u of s.players[seat].units) {
+      const n = u.upgrades.filter(a => a.cardId === TOKEN_ADVANTAGE).length
+      if (n > 0) out.set(u.instanceId, n)
+    }
+  }
+  return out
+}
+
+/** How the Advantage tokens that left play during one action were spent. */
+export interface AdvantageSpend {
+  attacking: number
+  defending: number
+  other: number
+  died: number
+  /** Of `died`, those on the ACTING seat's own units: tokens we lost. */
+  diedMine: number
+  /** Of `died`, those on the other seat's units: tokens we removed by killing the carrier.
+   *  With `defending`, this is the whole of "did we trade to strip their Advantage". */
+  diedTheirs: number
+}
+
+/**
+ * Attribute every Advantage token that disappeared across one resolved action.
+ *
+ * Read from the boards rather than instrumented into `consumeAdvantage`, so the diagnostic cannot
+ * drift from the engine: whatever actually removed a token is counted, however it was removed. The
+ * attacker and the defender are taken from the action, which is what separates the two spend routes.
+ */
+export function advantageSpend(before: GameState, after: GameState, action: Action): AdvantageSpend {
+  const out: AdvantageSpend = { attacking: 0, defending: 0, other: 0, died: 0, diedMine: 0, diedTheirs: 0 }
+  const was = advantageByUnit(before)
+  if (was.size === 0) return out
+  const now = advantageByUnit(after)
+  const alive = new Set([...after.players.player.units, ...after.players.opponent.units].map(u => u.instanceId))
+  const mine = new Set(before.players[before.activePlayer].units.map(u => u.instanceId))
+
+  const attackerId = action.type === 'attack' ? action.attackerId : undefined
+  const defenderId = action.type === 'attack' && action.target.kind === 'unit' ? action.target.instanceId : undefined
+
+  for (const [id, before_] of was) {
+    if (!alive.has(id)) {
+      out.died += before_
+      // Whose token it was, read from the seat that acted: killing THEIR carrier strips it, losing
+      // OUR carrier wastes it. The two are opposite outcomes and must not pool.
+      if (mine.has(id)) out.diedMine += before_
+      else out.diedTheirs += before_
+      continue
+    }
+    const gone = before_ - (now.get(id) ?? 0)
+    if (gone <= 0) continue
+    if (id === attackerId) out.attacking += gone
+    else if (id === defenderId) out.defending += gone
+    else out.other += gone
+  }
+  return out
+}
+
 export interface DecisionReport {
   commitId: string
   ai: string
   games: number
   stats: DecisionStat[]
   ties: TieStat
+  advantage: AdvantageStat
   blockedReach: BlockedReachStat
   shields: ShieldStat
   leader: LeaderStat
@@ -592,6 +706,12 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   const blocked: BlockedReachStat = {
     decisions: 0, active: 0, activeAndLaneShut: 0, totalQuantity: 0, widestQuantity: 0,
   }
+  const advantage: AdvantageStat = {
+    decisions: 0, decisionsWithAny: 0, tokensSeen: 0, maxStack: 0, decisionsOnCarrier: 0,
+    spentAttacking: 0, spentDefending: 0, spentOther: 0,
+    diedUnspent: 0, diedUnspentOurs: 0, diedUnspentTheirs: 0,
+    grantChoices: 0, grantChoicesAllEqual: 0,
+  }
   const tieKinds = new Map<string, { searched: number; fired: number; tiedTotal: number; widest: number }>()
   const lethalByRound = new Map<number, { decisions: number; ours: number; theirs: number }>()
   let oursOneAction = 0
@@ -711,6 +831,32 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
             if (strips.some(x => sameAction(x.m, action))) shields.removals++
           }
           if (shieldsOn(s, me) > 0) shields.decisionsHoldingShield++
+
+          // Advantage prevalence (#497). Counted on the same decisions as the shield counters so the
+          // two rates are directly comparable: Shield's 15.8% is the bar this has to clear.
+          {
+            const carried = advantageByUnit(s)
+            advantage.decisions++
+            if (carried.size > 0) {
+              advantage.decisionsWithAny++
+              for (const n of carried.values()) {
+                advantage.tokensSeen += n
+                if (n > advantage.maxStack) advantage.maxStack = n
+              }
+              // "Turns on a carrier": some candidate attacks WITH one, or attacks one.
+              const touches = moves.some(m => m.type === 'attack'
+                && (carried.has(m.attackerId)
+                  || (m.target.kind === 'unit' && carried.has(m.target.instanceId))))
+              if (touches) advantage.decisionsOnCarrier++
+            }
+            // Who to arm, when the model has no preference (#501). Scored one-ply, matching the
+            // `tied` column, so the two read on the same basis.
+            const grant = (s.pendingChoices ?? []).find(c => c.kind === 'mayGiveTokens')
+            if (grant && grant.controller === me && scored.length >= 2) {
+              advantage.grantChoices++
+              if (new Set(scored.map(x => x.v)).size === 1) advantage.grantChoicesAllEqual++
+            }
+          }
 
           // How live the term is, against how often the lockout it was written for occurs.
           //
@@ -855,7 +1001,20 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           if (s.consecutivePasses >= 1) cheapTaken++
           else { forfeitedCount++; forfeited += s.players[me].units.filter(u => !u.exhausted).length }
         }
+        const beforeAction = s
         s = resolve(s, action)
+
+        // Where the tokens went (#497). Diffed across the resolve rather than instrumented into
+        // `consumeAdvantage`, so however a token leaves play it is still counted.
+        {
+          const spend = advantageSpend(beforeAction, s, action)
+          advantage.spentAttacking += spend.attacking
+          advantage.spentDefending += spend.defending
+          advantage.spentOther += spend.other
+          advantage.diedUnspent += spend.died
+          advantage.diedUnspentOurs += spend.diedMine
+          advantage.diedUnspentTheirs += spend.diedTheirs
+        }
 
         // A deployed leader is a large investment, and re-deploying costs the epic action, so losing
         // one straight away is among the most expensive mistakes available. Watch each one until the
@@ -917,6 +1076,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         .map(([kind, b]) => ({ kind, ...b }))
         .sort((a, b) => b.fired - a.fired || a.kind.localeCompare(b.kind)),
     },
+    advantage,
     blockedReach: blocked,
     shields,
     leader,

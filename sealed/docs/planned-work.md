@@ -136,13 +136,7 @@ Ordered on one principle: **correctness, then structure, then calibration.** A w
 against whatever the engine and the horizon happen to be, so anything that changes those has to land
 first or the sweep is repeated.
 
-1. **#497 value Advantage as one-shot.** Cheap, and it now has two symptoms rather than one. The
-   calibration error is small by the ticket's own argument (one point of power on a term weighted 2),
-   but the same gap makes the model unable to tell **recipients** apart: offered three enemy units to
-   arm, all three score identically, because `power` is summed across a side. Arming a 1-cost unit is
-   far cheaper than arming a leader, and only the one-shot reading separates them. Measure before
-   building, as the ticket says.
-2. **#446 give the bot a horizon.** The structural item, and worth more than the rule it is scoped
+1. **#446 give the bot a horizon.** The structural item, and worth more than the rule it is scoped
    for. **The search stops dead at the round boundary** (`search.ts` drops any node that leaves the
    action phase), so no board it can reach ever contains next round's damage. Every proxy term for
    out-of-horizon value exists because of this.
@@ -153,14 +147,14 @@ first or the sweep is repeated.
 
    **Re-ask the lockout the moment it works.** If the search can extend one round, the strip line
    finally contains its own payoff and `blockedReach` may be deletable rather than shippable.
-3. **#492 generalise sharding**, immediately before the largest sweep in the project rather than
+2. **#492 generalise sharding**, immediately before the largest sweep in the project rather than
    after it.
-4. **#487 re-tune the weights for the shipped search.** Last, deliberately. A re-tune is calibration
+3. **#487 re-tune the weights for the shipped search.** Last, deliberately. A re-tune is calibration
    against a fixed target, so doing it before #446 means doing it twice. The "re-weighting is
    exhausted" result measured a one-ply evaluator, and #430 identified why several weights could not
    matter there. Still the largest unexamined lever, and much cheaper than it was: #488 cut
    deep-search cost roughly sixfold. Re-size with `--cost` before sweeping.
-5. **#396 and #398, whose gates have cleared.** Both said "land the search, re-run `--decisions`,
+4. **#396 and #398, whose gates have cleared.** Both said "land the search, re-run `--decisions`,
    build only what still ties". Measured: the search contributes **nothing** to choice answering
    (11.4% one ply, 11.3% searched, over 5,878 decisions averaging 6.6 options), and it makes
    resourcing and card-play **worse**. Neither is subsumed.
@@ -170,7 +164,7 @@ first or the sweep is repeated.
    a mechanism looking for a justification: 55.0% on one 80-game seed set and 45.0% on another, which
    is what a wide interval looks like. Answering ties for the lead on 36.1% of decisions, second only
    to attacks, so if anything justifies it, it is these two tickets.
-6. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
+5. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
    moves with a **one-ply** scorer, so it currently reports term sensitivity for a bot we no longer
    ship; testing #430's pre-registered prediction needs the perturbations driven through the real
    search. That also makes it roughly 70x more expensive, so scope it to the weights the prediction
@@ -469,6 +463,27 @@ AI with the change switched off, across the coverage decks.
 - **Scaling the "I have a play" hand bonus by the card's value.** A bomb's hand value and its board
   value are the same order of magnitude, so the bot refused to play its own bombs. **40.5%**. The
   bonus is flat.
+- **Pricing Advantage as the one-off it is.** The premise is correct: the token lasts only until its
+  unit next completes an attack or defence and the whole stack goes at once, so printed power is a
+  recurring stream and a token is a single payment. Prevalence cleared the gate at **20.7%** of
+  decisions against Shield's 15.8%.
+
+  Two shapes, both shipping as no-ops and swept downward. Flat (`advantage`) measured 47.5% at weight
+  1 and 42.5% at 0 against a 47.5% control. A readiness split (`advantageExhausted`, discounting only
+  carriers that cannot spend the token this round) measured 52.5% at weight 1, which did not survive
+  contact with a real sample: **49.6% +/- 2.3% over 1,800 games**.
+
+  **Why it fails despite the premise:** 76% of tokens are eventually spent, so they do deliver their
+  point of power. The honest discount is therefore small, a small discount changes about 1% of
+  decisions and measures nothing, and a large one measurably hurts.
+
+  Both weights stay at their no-op defaults, **guarded on the hot path**: counting tokens on every
+  evaluation measured around 1% per decision for a correction that is provably zero at those weights.
+
+  Two lessons. The ticket predicted that spending on **defence** was the worst case; it is 4.6%, while
+  tokens that are **never used at all** are 23.5%. And a promising screen result is not a result: the
+  52.5% arm and a flat arm that landed exactly on the control each changed **8 of 600 decisions**, so
+  equal causes gave opposite effects.
 - **An UNGATED `blockedReach` term.** Pricing the reach denied by *any* Sentinel measured **25.0%**
   (CI 15.7-34.3) against the shipped bot at weight 12, over 80 games with a self-play control on
   exactly 50.0%. Adding a tie-break did not rescue it (26.3%).

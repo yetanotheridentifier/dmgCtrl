@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { runDecisions, classifyResolution, sameAction, TIE_FANOUT_CAP } from '../bench/decisions'
+import { runDecisions, classifyResolution, sameAction, advantageSpend, TIE_FANOUT_CAP } from '../bench/decisions'
 import { DEFAULT_WEIGHTS } from '../ai/evaluate'
-import { state } from './helpers/engineFixtures'
-import type { PendingChoice } from '../engine/types'
+import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
+import { state, player, card, unit, CARDS } from './helpers/engineFixtures'
+import type { GameState, PendingChoice } from '../engine/types'
+import type { Action } from '../engine/actions'
 import '../engine/cardDefinitions'
 
 /**
@@ -115,6 +117,39 @@ describe('runDecisions', () => {
     // difference, so a capped quantity can never exceed the cap. Differencing the raw reach instead
     // reported 26 against a cap of 10, and every contribution figure read off that would be inflated.
     expect(b.widestQuantity, 'a capped quantity cannot exceed the cap').toBeLessThanOrEqual(DEFAULT_WEIGHTS.blockedReachCap)
+  })
+
+  /**
+   * Advantage prevalence, the gate on #497 (#497).
+   *
+   * The ticket closes itself if Advantage is rare: Shield prevalence was **15.8%** of decisions and
+   * that is what made pricing it worth attempting. These counters answer the same question for a
+   * token the evaluation already sees but mis-times.
+   */
+  it('reports how present Advantage is, and where the tokens go', () => {
+    const a = report.advantage
+    expect(a.decisions).toBeGreaterThan(0)
+    expect(a.decisionsWithAny).toBeLessThanOrEqual(a.decisions)
+    expect(a.decisionsOnCarrier).toBeLessThanOrEqual(a.decisionsWithAny)
+    // A decision that sees any token sees at least one.
+    expect(a.tokensSeen).toBeGreaterThanOrEqual(a.decisionsWithAny)
+    if (a.decisionsWithAny > 0) expect(a.maxStack).toBeGreaterThan(0)
+    else expect(a.maxStack).toBe(0)
+    for (const n of [a.spentAttacking, a.spentDefending, a.spentOther, a.diedUnspent]) {
+      expect(n).toBeGreaterThanOrEqual(0)
+    }
+    // The two sides of a death must account for all of it, or the denial rate is unreadable.
+    expect(a.diedUnspentOurs + a.diedUnspentTheirs).toBe(a.diedUnspent)
+  })
+
+  /**
+   * The second symptom, from #501: `power` is summed across a side, so every recipient of a token
+   * grant scores alike and the bot coin-flips over who to arm. This counts how often that happens.
+   */
+  it('reports how often a token grant has no preferred recipient', () => {
+    const a = report.advantage
+    expect(a.grantChoicesAllEqual).toBeLessThanOrEqual(a.grantChoices)
+    expect(a.grantChoices).toBeLessThanOrEqual(a.decisions)
   })
 
   /**
@@ -455,6 +490,78 @@ describe('tie-break firing rate', () => {
     expect(Math.max(...t.byKind.map(k => k.widest))).toBe(t.widest)
     // Most frequent first, so the readout is stable across runs rather than following insertion.
     expect([...t.byKind].sort((a, b) => b.fired - a.fired || a.kind.localeCompare(b.kind))).toEqual(t.byKind)
+  })
+})
+
+/**
+ * Where an Advantage token went (#497).
+ *
+ * Advantage is +1/0 **until the unit next completes an attack or defence**, and `consumeAdvantage`
+ * then clears the whole stack at once. The evaluation scores it as a durable stat, so it over-values
+ * a carrier, and the error scales with the stack: three tokens are +3 power for exactly one attack.
+ *
+ * Attribution matters more than the total. Spending on **defence** is the case the permanent model
+ * gets most wrong, and a token that leaves play with a defeated unit was never worth anything at all.
+ */
+describe('advantageSpend', () => {
+  const cards = {
+    ...CARDS,
+    BODY: card({ id: 'BODY', type: 'unit', arena: 'ground', cost: 2, power: 2, hp: 4 }),
+  }
+  const withAdv = (id: string, n: number) =>
+    unit(id, 'BODY', { arena: 'ground', upgrades: Array.from({ length: n }, () => ({ cardId: TOKEN_ADVANTAGE, owner: 'player' as const })) })
+
+  const board = (mine: ReturnType<typeof unit>[], theirs: ReturnType<typeof unit>[]): GameState =>
+    state({ cards, players: { player: player({ units: mine }), opponent: player({ units: theirs }) } })
+
+  const attack = (attackerId: string, targetId: string): Action =>
+    ({ type: 'attack', attackerId, target: { kind: 'unit', instanceId: targetId } })
+
+  it('charges the attacker\'s whole stack to attacking', () => {
+    const before = board([withAdv('a', 2)], [unit('d', 'BODY', { arena: 'ground' })])
+    const after = board([unit('a', 'BODY', { arena: 'ground' })], [unit('d', 'BODY', { arena: 'ground' })])
+    expect(advantageSpend(before, after, attack('a', 'd'))).toMatchObject({ attacking: 2, defending: 0, died: 0 })
+  })
+
+  /** The defender spends too, and this is the half a permanent model never sees coming. */
+  it('charges the defender\'s stack to defending', () => {
+    const before = board([unit('a', 'BODY', { arena: 'ground' })], [withAdv('d', 1)])
+    const after = board([unit('a', 'BODY', { arena: 'ground' })], [unit('d', 'BODY', { arena: 'ground' })])
+    expect(advantageSpend(before, after, attack('a', 'd'))).toMatchObject({ attacking: 0, defending: 1, died: 0 })
+  })
+
+  /**
+   * A token that leaves play on a defeated unit was pure phantom value: never spent, never useful.
+   *
+   * **Split by side**, because the two are opposite outcomes: killing their carrier denies them the
+   * tokens, losing ours wastes them. `player` acts by default in the fixture, so a defeated
+   * `opponent` carrier is a denial.
+   */
+  it('counts tokens that died with their unit, and whose they were', () => {
+    const before = board([unit('a', 'BODY', { arena: 'ground' })], [withAdv('d', 3)])
+    const after = board([unit('a', 'BODY', { arena: 'ground' })], [])
+    expect(advantageSpend(before, after, attack('a', 'd')))
+      .toMatchObject({ died: 3, diedTheirs: 3, diedMine: 0, defending: 0 })
+  })
+
+  it('charges a carrier we lost to our own side of the ledger', () => {
+    const before = board([withAdv('a', 2)], [unit('d', 'BODY', { arena: 'ground' })])
+    const after = board([], [unit('d', 'BODY', { arena: 'ground' })])
+    expect(advantageSpend(before, after, attack('a', 'd')))
+      .toMatchObject({ died: 2, diedMine: 2, diedTheirs: 0 })
+  })
+
+  it('reports nothing when no token moves', () => {
+    const before = board([withAdv('a', 2)], [unit('d', 'BODY', { arena: 'ground' })])
+    expect(advantageSpend(before, before, attack('a', 'd')))
+      .toMatchObject({ attacking: 0, defending: 0, other: 0, died: 0 })
+  })
+
+  /** Spent by something other than the combat this action resolved: an ability, a cost, a cleanup. */
+  it('files a spend it cannot attribute to the combat as other', () => {
+    const before = board([withAdv('x', 1)], [unit('d', 'BODY', { arena: 'ground' })])
+    const after = board([unit('x', 'BODY', { arena: 'ground' })], [unit('d', 'BODY', { arena: 'ground' })])
+    expect(advantageSpend(before, after, { type: 'pass' })).toMatchObject({ other: 1, attacking: 0 })
   })
 })
 
