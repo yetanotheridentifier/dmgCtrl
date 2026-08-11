@@ -132,35 +132,95 @@ bot.
 
 ## Next up
 
-1. **Break search ties with the one-ply score**, before either #396 or #398 writes a new term.
+1. **Choose and A/B the second opinion for search ties**, before either #396 or #398 writes a new
+   term. The mechanism is built (`BeamLimits.tieBreak`, off by default); which model to ask is open.
 
-   `--decisions` found the search **tying more often than one ply**: resourcing 0.6% to 5.4%,
-   card-play 6.7% to 11.8%. A beam values a move by the best board it can reach, so candidates whose
-   lines converge inside the horizon come out equal even when they differ immediately, and the bot
-   then coin-flips away a preference one ply actually had. Falling back to the one-ply score costs
-   almost nothing, applies to 5-12% of decisions, and is a strict improvement if that signal is worth
-   anything.
+   A beam values a move by the best board it can reach, so candidates whose lines converge inside the
+   horizon come out equal even when they differ immediately, and the bot then coin-flips.
 
-   It is also now the **only** unexplored cheap lever: the token term was measured and rejected, so
-   the next candidates after this are the weight re-tune and the two residue tickets, all of which are
-   larger.
-2. **#487 re-tune the weights for the shipped search.** Unblocked, now that the configuration is
+   **One ply is not the answer, despite being the obvious one.** In the shielded-Sentinel lockout it
+   prefers passing, 52 to 43, which is the defect. What separates that position is `reply: 'null'`,
+   scoring the acting line 56.1 against 52: when the worst case cannot tell two moves apart, the
+   upside can.
+
+   **Screened at 80 games against the shipped bot**, paired on identical seeds, with a
+   `beam-reply` self-play control landing on exactly 50.0%:
+
+   | arm | win rate | 95% CI |
+   | --- | --- | --- |
+   | `beam-reply/tie=reply:null` | 55.0% | 44.3 - 65.7 |
+   | `beam-reply+blockedReach=12` | **25.0%** | 15.7 - 34.3 |
+   | both together | 26.3% | 16.8 - 35.7 |
+
+   The tie-break is **not distinguishable from neutral and certainly not harmful**, so it earns a
+   properly sized non-inferiority run. It is a mechanism looking for a justification, though: on its
+   own it does not fire in the lockout at all, so it currently fixes nothing.
+
+   **Sized, and cheap.** Ties for the LEAD are 32.0% of decisions, not the 5-12% the whole-slate tie
+   columns imply, and firing sets average 3.2 candidates: +13.4% more root searches over a run. In
+   time that comes to **+2.1% per decision** for a `null`-reply second opinion (203.73 ms against
+   199.51 ms over an identical corpus), because a second opinion prices each root lower than the
+   search that found the tie. A depth-1 second opinion is inside the noise of a single timing pass.
+
+   A fan-out cap is optional: wide ties are 2.3% of firings and capping at 8 only reaches +11.2% in
+   roots. Nothing here is a cost objection, so the only open question is whether it helps.
+
+   Address a cell as `beam-reply/tie=reply:null`, which composes with `+WEIGHT=VALUE`. Sizing for the
+   full run is measured: **42.9 s/game at 10 shards**, so ~2,500 games for a +/-1.9 interval is about
+   three hours. Gate on **non-inferiority**, since a tie-break changes a third of decisions slightly
+   rather than any decision decisively.
+
+2. **The shielded-Sentinel lockout: a candidate is built and screened, and the ship call is open.**
+   `blockedReach: 2` over the `lockoutSwing` quantity. What is known, so nothing is re-derived:
+
+   **It may be a stopgap.** The term exists only because the search cannot see past the round
+   boundary, and clearing a blocker pays out next round. If #446's round-boundary extension lands,
+   re-ask the lockout on the fixture before keeping this: the search may find the payoff unaided.
+
+   The defect is real and worse than the bench suggests. A filed report (`shieldedSentinelLockout`)
+   has the bot decline the strip **19 times in one game** with its ground lane shut for around twenty
+   consecutive decisions, where the bench measures a shut lane on 2.1% of decisions and never lasting
+   more than a single round. Self-play cannot see this, so **do not expect a win rate to score any
+   fix for it**: a perfect one is worth a fraction of a point.
+
+   The cause is priced, not mysterious. Stripping runs a consistent **11 to 12 points behind** passing
+   all game, because removing a Shield leaves the same units at the same HP and differs only by a
+   token no term reads, while the attack's cost (exhausting the attacker, exposing it to a counter) is
+   priced in full. All visible cost, no visible benefit.
+
+   The current candidate adds the **blocker's own output** to the denial (`lockoutSwing`). On the
+   filed report it strips **11 of 18 at weight 2 and first acts in round 4**, against 1 of 18 in round
+   6 at shipped weights, and against 10 of 18 for the rejected flat version at weight 3.
+
+   **Screened and passed, which is weaker than it sounds.** Pre-registered before the run: stop if the
+   point estimate falls below 47.0%. `beam-reply+blockedReach=2` measured **49.6% +/- 3.3%
+   (46.3% - 52.8%)** over 900 games and 10 shards, seeds 9500-9509, no shards failed.
+
+   That clears the bar, and 900 games cannot distinguish 49% from 50%, so it is evidence against a
+   large regression and **not** evidence of parity. Read alongside the 9,600-game result for the
+   previous quantity (49.6% +/- 1.0%), the fair summary is: no measurement has separated any version
+   of this term from neutral, in either direction.
+
+   **The term is live on 0.5% of decisions**, measured over a 1,160-decision corpus. That cuts both
+   ways: it makes a large hidden cost implausible, and it means self-play will never score the fix.
+3. **#487 re-tune the weights for the shipped search.** Unblocked, now that the configuration is
    settled and there is a fixed target to tune against. The "re-weighting is exhausted" result
    measured a one-ply evaluator, and #430 identified exactly why several weights could not matter
    there. The largest unexamined lever, and much cheaper than it was: #488 cut deep-search cost
    roughly sixfold. Re-size it with `--cost` before sweeping.
-3. **#396 and #398, whose gates have now cleared.** Both said "land the search, re-run `--decisions`,
+4. **#396 and #398, whose gates have now cleared.** Both said "land the search, re-run `--decisions`,
    build only what still ties". Measured: the search contributes **nothing** to choice answering
    (11.4% one ply, 11.3% searched, over 5,878 decisions averaging 6.6 options), and it makes
    resourcing and card-play **worse**. Neither is subsumed. Do the tie-break above first, since it
-   may absorb part of both.
-4. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
+   may absorb part of both: answering ties for the lead on 36.1% of decisions, second only to
+   attacks, and it is the kind where the candidates were handed to the bot rather than chosen.
+5. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
    moves with a **one-ply** scorer, so it currently reports term sensitivity for a bot we no longer
    ship; testing #430's pre-registered prediction needs the perturbations driven through the real
    search. That also makes it roughly 70x more expensive, so scope it to the weights the prediction
    names. The payoff grew: `lethalExposure` and `role` are proxies for search, and a reply policy
    computes the first directly, so this is now a route to **deleting** model complexity.
-5. **#446 claim the initiative when it converts to lethal.** Headroom measured and thin: lethal is
+6. **#446 claim the initiative when it converts to lethal.** Headroom measured and thin: lethal is
    available to us on 4.3% of decisions, to them on 5.2%, and **0.0% before round 5** (1 occurrence in
    20,112 early-game decisions, rising to 14-21% only from round 6). Everything built on a lethal
    solver acts on the back half of the game and a 4-5% slice. Behind the four items above.
@@ -193,6 +253,15 @@ a short run first.
 | `reply:pessimistic:8x3` vs `beam-reply` | A/B | 8400 | 12 | 44.6 s |
 | `4x4:200000` vs `4x3:200000` | A/B | 9600 | 10 | 67.6 s |
 | `beam-reply` | `--decisions` | 420 | 1 | **15.0 s** |
+
+**A resumed shard run checks the commit, and seeds are consumed per experiment.** The run key is built
+from the AI names, the game count and the base seed, so it cannot see a code change. Re-running an A/B
+after editing an evaluation term therefore found ten complete shards, replayed the previous numbers in
+**0.0s** and reported them as the new measurement, matching the earlier run game for game. Results now
+carry a `commitId` and a mismatch re-runs the shard, so resuming an interrupted run of the same code
+still works. The practical consequence: **a seed range is spent once per AI-name pair**, so a re-run
+of the same names after a code change needs a fresh base seed, and a matched control at those new
+seeds if the old one is to be compared against.
 
 **Memory binds before cores do.** During a 12-shard run `vmstat` showed 22% idle CPU with `wa` and
 `st` both zero: core headroom exists and cannot be used, because memory runs out first.
@@ -368,6 +437,20 @@ Rules learned the hard way.
 - **A cost ratio does not tell you what is consuming the budget.** Raising the node rail made a search
   ten times slower, which read as the rail truncating nearly every decision. It truncates 4%. The
   difference was a heavy tail, and only a counter (`--budget`) could tell the two apart.
+- **Self-play cannot measure a strategy neither side plays.** A shielded Sentinel shutting a lane is
+  something a human builds on purpose. Bench decks are generated and both seats are the same bot, so
+  it appears in **0.5%** of decisions and never lasts a round, while play-testers hit it constantly.
+  Defects of that shape need a **scripted position** as the acceptance criterion, and an A/B gated on
+  **non-inferiority**: expecting a win rate the bench structurally cannot show will fail a correct
+  fix. This is why #410 and #425 used `sentinelWall` and `crackBack` before their A/Bs.
+- **Measure the complaint, not a proxy for it.** "A shield is present" (15.8% of decisions) is not "a
+  lane is shut" (0.5%), and a board-wide reading is not a per-arena one. A precise measurement of the
+  wrong quantity reads as a null and retires a real defect.
+- **Diagnose before fixing, and build the instrument if the diagnosis will not come.** Four
+  consecutive explanations for the lockout were wrong, each argued from the code rather than measured.
+  `BeamLimits.explain` records the principal variation behind every root candidate, and answered it in
+  one run: both the acting and the passing line peak at the same level, so any discount on later
+  boards shifts them equally and cannot reorder them. Reach for it before the third hypothesis.
 
 ## Tried and rejected
 
@@ -412,3 +495,37 @@ AI with the change switched off, across the coverage decks.
 - **Scaling the "I have a play" hand bonus by the card's value.** A bomb's hand value and its board
   value are the same order of magnitude, so the bot refused to play its own bombs. **40.5%**. The
   bonus is flat.
+- **An UNGATED `blockedReach` term.** Pricing the reach denied by *any* Sentinel measured **25.0%**
+  (CI 15.7-34.3) against the shipped bot at weight 12, over 80 games with a self-play control on
+  exactly 50.0%. Adding a tie-break did not rescue it (26.3%).
+
+  Two independent reasons, both checkable in seconds and neither checked at the time. **The weight was
+  out of scale:** every other weight is 1 to 7, so 12 is triple a whole unit, and with
+  `blockedReachCap: 10` the term reaches 120 points where a unit is worth 4. **And the quantity was
+  far commoner than the defect:** it keyed on `sentinelLocked`, true for any Sentinel, so it was live
+  on **24.2%** of decisions against a 2.1% lockout, at a mean quantity of 6.6. A scripted position was
+  allowed to name the weight, and nobody asked how often the term would fire.
+
+  Read a new term against the model's scale and against how often it is live, not only against the
+  position that motivated it.
+- **A GATED `blockedReach` term, at the weight that works.** Gating to **shielded** blockers is the
+  right narrowing (an unshielded Sentinel is answerable by attacking it, and the material terms
+  already price that), and it removed the catastrophic loss: 25.0% became 48.8% at 80 games. The term
+  changes real decisions rather than being inert, and on the filed report it lifts the strip rate from
+  **1 of 18 to 10 of 18**.
+
+  It still does not ship. `beam-reply+blockedReach=3` measured **49.6% +/- 1.0% (48.6% - 50.6%)** over
+  9,600 games and 10 seeds, no games dropped, against a pre-registered rule requiring a lower bound at
+  or above 49.0%. Inconclusive: consistent with neutral and equally consistent with a 1.4-point cost,
+  with 6 of 10 shards below 50%. **The term stays at 0.**
+
+  Weight 3 is the efficient point and was chosen by mechanism, not by win rate: the strip rate on the
+  filed report plateaus there (10 of 18, the same as weight 12) while disturbance keeps climbing (1.5%
+  of decisions at weight 1, 5.5% at weight 12). Do not sweep weights on win rate to refine this; the
+  differences are far below what 9,600 games can resolve.
+
+  Two fixture artefacts to distrust if this is revisited. The scripted lockout in `aiTieBreak.test.ts`
+  turns into a **tie** at any non-zero weight and needs the tie-break to convert it; the real boards
+  are an 11-point deficit that the term tips **on its own**, and there the tie-break scores one strip
+  *fewer* at every weight. A scripted position told us the weight (12) and the mechanism (tie-break),
+  and was wrong about both.

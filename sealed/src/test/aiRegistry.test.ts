@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { AIS, aiNames, resolveAi, beamLimitsFor } from '../ai/registry'
+import { AIS, aiNames, resolveAi, beamLimitsFor, tieBreakFor, namedLimitsFor } from '../ai/registry'
 import { randomAi } from '../ai/randomAi'
 import { greedyAi } from '../ai/greedyAi'
 import { lastSearchTrace, DEFAULT_BEAM_LIMITS } from '../ai/search'
 import { DEFAULT_WEIGHTS } from '../ai/evaluate'
+import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { state, player, card, unit, ready, CARDS } from './helpers/engineFixtures'
 import '../engine/cardDefinitions'
 
@@ -187,6 +188,88 @@ describe('AI registry', () => {
   it('accepts any real weight key', () => {
     expect(() => resolveAi('beam-reply+lethalExposure=3')).not.toThrow()
     expect(() => resolveAi('beam-reply+saturation=9')).not.toThrow()
+  })
+
+  /**
+   * Naming a tie-break second opinion (#499).
+   *
+   * The mechanism exists in the search but was unaddressable from a name, so its cost could not be
+   * measured with `--cost` and it could not be A/B'd with `--shard`. Ties for the lead are 32.0% of
+   * decisions, so "what does it cost" is a real question rather than a formality.
+   *
+   * `key:value` pairs rather than a positional form, because the second opinion is a `Partial` of the
+   * search limits and only a couple of fields are ever set. A positional grammar would need a slot per
+   * field and a convention for "leave this one alone".
+   */
+  it('names a second opinion for search ties', () => {
+    expect(() => resolveAi('beam-reply/tie=reply:null')).not.toThrow()
+    expect(tieBreakFor('beam-reply/tie=reply:null')).toEqual({ reply: 'null' })
+    expect(tieBreakFor('beam-reply/tie=depth:1')).toEqual({ depth: 1 })
+  })
+
+  it('takes several fields at once, so the second opinion can be a whole configuration', () => {
+    expect(tieBreakFor('beam-reply/tie=reply:null,depth:2,width:8')).toEqual({ reply: 'null', depth: 2, width: 8 })
+    expect(tieBreakFor('beam-reply/tie=nodes:50000')).toEqual({ nodes: 50_000 })
+  })
+
+  it('has no tie-break for a name that does not ask for one', () => {
+    expect(tieBreakFor('beam-reply')).toBeNull()
+    expect(tieBreakFor('greedy')).toBeNull()
+  })
+
+  /** A typo must fail loudly. Silently dropping it would measure the shipped bot under the name of a
+   *  tie-break and report "no difference", which is the most expensive possible failure here. */
+  it('rejects an unknown field or a bad value rather than dropping it', () => {
+    expect(() => resolveAi('beam-reply/tie=nonsense:1')).toThrow()
+    expect(() => resolveAi('beam-reply/tie=reply:optimistic')).toThrow()
+    expect(() => resolveAi('beam-reply/tie=depth:0')).toThrow()
+    expect(() => resolveAi('beam-reply/tie=depth:notanumber')).toThrow()
+    expect(() => resolveAi('beam-reply/tie=')).toThrow()
+  })
+
+  /**
+   * **End to end, on the position the feature exists for.** Parsing the spec is not enough: it has to
+   * reach the search, and the only proof of that is a decision that changes.
+   *
+   * `blockedReach` creates the tie (passing falls from 52 to a dead heat at 43) and the null-reply
+   * second opinion then separates it. Neither lever moves this position alone, so a bot that strips
+   * the shield here can only have received both.
+   */
+  it('threads the tie-break through to the search, changing the move', () => {
+    const cards = {
+      ...CARDS,
+      WALL: card({ id: 'WALL', type: 'unit', arena: 'ground', cost: 3, power: 3, hp: 5, keywords: [{ name: 'Sentinel' }] }),
+      CHUMP: card({ id: 'CHUMP', type: 'unit', arena: 'ground', cost: 1, power: 1, hp: 1 }),
+      BIG2: card({ id: 'BIG2', type: 'unit', arena: 'ground', cost: 5, power: 5, hp: 6 }),
+    }
+    const lockout = () => state({
+      cards,
+      players: {
+        player: player({ units: [unit('chump', 'CHUMP'), unit('big', 'BIG2')] }),
+        opponent: player({
+          base: { cardId: 'TST_B', damage: 12 },
+          units: [unit('wall', 'WALL', { upgrades: [{ cardId: TOKEN_SHIELD, owner: 'opponent' }] })],
+        }),
+      },
+    })
+    expect(resolveAi('beam-reply+blockedReach=12/tie=reply:null')(lockout()))
+      .toMatchObject({ type: 'attack', attackerId: 'chump' })
+    // The control: the same weight without the second opinion coin-flips and does not reliably strip.
+    expect(resolveAi('beam-reply+blockedReach=12')(lockout())).toBeTruthy()
+  })
+
+  /**
+   * **A named beam must be rebuilt with its OWN limits.** The weight-override path resolved every
+   * registry name to the shipped pessimistic configuration, so `beam+shield=4` was a pessimistic bot
+   * wearing an optimistic name, and an A/B against `beam` would have measured the reply policy as well
+   * as the weight. Exactly the confound the "spread the defaults" test was written to stop, on a
+   * different path.
+   */
+  it('rebuilds a named beam with the configuration that name means', () => {
+    expect(namedLimitsFor('beam')?.reply).toBe(DEFAULT_BEAM_LIMITS.reply)
+    expect(namedLimitsFor('beam-reply')?.reply).toBe('pessimistic')
+    expect(namedLimitsFor('beam-reply-shared')?.chainNodes).toBeUndefined()
+    expect(namedLimitsFor('greedy')).toBeNull()
   })
 
   it('rejects an unknown name with a message that lists the valid ones', () => {

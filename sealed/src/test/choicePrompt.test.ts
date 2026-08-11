@@ -121,7 +121,11 @@ describe('no choice raised in real games falls back to the generic prompt', () =
 
     expect(kindsSeen.size, 'the sweep must exercise a broad set of choice kinds').toBeGreaterThan(20)
     expect([...offenders.entries()], 'these kinds reached a player with no real instruction').toEqual([])
-  }, 60_000)
+    // Plays all 44 coverage decks to a finish, so the runtime tracks whatever else the parallel suite
+    // is doing: measured at 28s alone, 61s under a full run and 83s with a bench alongside. The
+    // assertion is about prompt coverage, not speed, so the budget is generous rather than tight. A
+    // tight one here fails on load and teaches nothing about the thing under test.
+  }, 180_000)
 
   /**
    * Both halves together, which is the outcome #374 actually asked for: the prompt reads

@@ -3,7 +3,7 @@ import { opponentOf } from '../engine/types'
 import { effectivePower, effectiveHp } from '../engine/stats'
 import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { handValue, DEFAULT_HAND_WEIGHTS, type HandWeights } from './handValue'
-import { role, canFinishThisAction, type Role } from './race'
+import { role, canFinishThisAction, lockoutSwing, type Role } from './race'
 
 /**
  * Board evaluation for the greedy AI (#391), unit-count-centred for trades (#392): a single number,
@@ -88,6 +88,50 @@ export interface EvalWeights {
    * priced. A refinement scaled by the incoming threat is only worth trying if flat measures positive.
    */
   shield: number
+  /**
+   * Per point of the **lockout swing**, ours minus theirs (#499). The quantity is
+   * {@link lockoutSwing}: what a shielded blocker denies us plus what it deals us, over the rounds
+   * the game has left.
+   *
+   * `reachSteady` already returns zero for a locked attacker, but zero cannot distinguish a lane shut
+   * for the rest of the game from a lane that is simply empty. Without this, killing a blocker is
+   * worth its body and nothing more, and the bot sits behind a shielded Sentinel indefinitely rather
+   * than spend two actions clearing it.
+   *
+   * **Two flat versions were measured and rejected before this one**, and both failed on shape:
+   *
+   * - **Ungated** (any Sentinel, per round): live on 24.2% of decisions against a 2.1% lockout, and
+   *   it measured **25.0%**. It was a board-wide bias against Sentinels.
+   * - **Gated but flat** (shielded blockers, per round): **49.6% +/- 1.0%** over 9,600 games, missing
+   *   a pre-registered 49.0% bound with 6 of 10 shards below 50%.
+   *
+   * The second is why the quantity is now a stream. Denied reach rises as locked units accumulate
+   * while the value of clearing falls as the game runs out, so a per-round reading is loudest when the
+   * bot is already dead and quietest when acting would have saved it. That ordering is backwards and
+   * no weight repairs it.
+   *
+   * **What the bot is actually being paid to overcome.** Refusing is materially correct: the Shield
+   * absorbs the whole attack so the blocker takes nothing, the counter kills the attacker, and the
+   * board is a body down for a token. Measured at a steady 11 to 12 points across a filed game. The
+   * bot is not blind to the Shield, it strips the moment the strip is cheap; what it cannot see is
+   * that the lane pays out in later rounds, which is exactly what this quantity supplies.
+   *
+   * **Bent hard by role.** Grinding down a blocker while the other lane could win the race is a
+   * losing habit, so this matters to the defender and barely at all to the aggressor.
+   *
+   * **Capped** at `blockedReachCap`, because a canny opponent blocks a lane, holds a second Sentinel
+   * back, and drops it once the tempo has been spent clearing the first. Removing a blocker must
+   * never be worth more than about two bodies.
+   */
+  blockedReach: number
+  /**
+   * Ceiling on the lockout swing, in points of base damage. See `blockedReach`.
+   *
+   * Raised from 10 with the quantity: a per-round reading topped out around 10, while a swing over
+   * four rounds runs to the twenties. 24 is about two bodies at weight 1, which is the trade the term
+   * exists to authorise and the most it should ever buy.
+   */
+  blockedReachCap: number
   /** Value of holding the initiative, i.e. of acting first next round (#394). */
   initiative: number
   /**
@@ -139,6 +183,11 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   // #493. OFF until swept, per the rule that a new weight ships at zero: shipping a default before
   // its A/B ran once inverted a whole reading, because the candidate was then the ablation.
   shield: 0,
+  // #499. OFF until swept, per the rule that a new weight ships at zero.
+  blockedReach: 0,
+  // Two attackers' worth of denied reach. Above this, clearing a blocker starts to justify the tempo
+  // that a held-back second Sentinel exists to punish.
+  blockedReachCap: 24,
   // Swept twice. Turn order is worth far less than it first looks: raising `initiative` is
   // monotonically worse (4 -> 46.8%, 6 -> 35.4%, 8 -> 29.4% against the same AI with both terms at
   // 0), because the bot buys it by giving up whole turns. `claimCost: 0` is the always-claim failure
@@ -192,6 +241,17 @@ function boardPresence(state: GameState, id: PlayerId, w: EvalWeights): number {
   return w.unit * p.units + w.power * p.power + w.hp * p.hp
 }
 
+/**
+ * The lockout swing, capped. See `blockedReach` for why the ceiling is not optional.
+ *
+ * Exported so a diagnostic reports the quantity the evaluation actually prices. Differencing the
+ * UNCAPPED value instead reported a largest quantity of 26 against a cap of 10, which is a number the
+ * model never sees.
+ */
+export function blockedFor(state: GameState, id: PlayerId, w: EvalWeights): number {
+  return Math.min(lockoutSwing(state, id), w.blockedReachCap)
+}
+
 /** Shield tokens a seat is carrying, counted per token rather than per shielded unit. */
 function shields(state: GameState, id: PlayerId): number {
   return state.players[id].units.reduce(
@@ -231,6 +291,15 @@ function roleAdjusted(state: GameState, me: PlayerId, w: EvalWeights, asRole?: R
     base: Math.max(0, w.base + shift),
     unit: Math.max(0, w.unit - shift),
     initiative: r === 'defender' ? w.initiative + w.roleShift : w.initiative,
+    // Race first, control second (#499). The defender cannot win the race and must remove the
+    // blocker; the aggressor should be racing in the other lane rather than grinding.
+    //
+    // **Zero stays zero.** An additive bend on a weight shipped at 0 quietly switches it on for one
+    // role, which would put an unmeasured term in the shipped model and break the rule that a new
+    // weight defaults to off until swept.
+    blockedReach: w.blockedReach === 0
+      ? 0
+      : r === 'defender' ? w.blockedReach + w.roleShift : Math.max(0, w.blockedReach - w.roleShift),
   }
 }
 
@@ -357,13 +426,19 @@ export function makePublicScore(w0: EvalWeights): Evaluator {
     // Symmetric like every other board term, so the public half stays zero-sum: a Shield is worth
     // exactly what it costs the other seat.
     const shielding = w.shield * (shields(state, me) - shields(state, foe))
+    // Guarded, unlike the other terms: `blockedReach` runs the targeting rules per unit, which is far
+    // dearer than the array scans the rest do. Computing it while the weight is 0 slowed the suite
+    // enough to time a test out. Same reasoning as `roleAdjusted` returning early on `roleShift: 0`.
+    const denied = w.blockedReach === 0
+      ? 0
+      : w.blockedReach * (blockedFor(state, foe, w) - blockedFor(state, me, w))
     const initiative = initiativeValue(state, me, w)
     // Symmetric, so this stays zero-sum: being one action from killing them is worth exactly what
     // being one action from death costs.
     const exposure = w.lethalExposure
       * ((canFinishThisAction(state, me) ? 1 : 0) - (canFinishThisAction(state, foe) ? 1 : 0))
 
-    return baseTerm + board + cards + resources + tempo + shielding + initiative + exposure
+    return baseTerm + board + cards + resources + tempo + shielding + denied + initiative + exposure
   }
 }
 
@@ -377,7 +452,7 @@ export interface Term {
  *  `roleShift` are absent by construction: neither is a price. See `resourceSplit` and `roleAdjusted`. */
 export type LinearTermKey =
   | 'base' | 'unit' | 'power' | 'hp' | 'card' | 'resource' | 'resourceSurplus'
-  | 'readyUnit' | 'shield' | 'initiative' | 'claimCost' | 'lethalExposure'
+  | 'readyUnit' | 'shield' | 'blockedReach' | 'initiative' | 'claimCost' | 'lethalExposure'
 
 /**
  * `publicScore` broken into `weight x quantity` per term (#430), for the term-sensitivity diagnostic.
@@ -424,6 +499,7 @@ export function publicBreakdown(
     resourceSurplus: { weight: w.resourceSurplus, quantity: myPool.surplus - theirPool.surplus },
     readyUnit: { weight: w.readyUnit, quantity: readyUnits(state, me) - readyUnits(state, foe) },
     shield: { weight: w.shield, quantity: shields(state, me) - shields(state, foe) },
+    blockedReach: { weight: w.blockedReach, quantity: blockedFor(state, foe, w) - blockedFor(state, me, w) },
     initiative: { weight: w.initiative, quantity: state.initiative === me ? 1 : -1 },
     // Charged to whoever claimed, so the quantity is their forfeited tempo less ours.
     claimCost: { weight: w.claimCost, quantity: forfeitedTempo(state, foe) - forfeitedTempo(state, me) },

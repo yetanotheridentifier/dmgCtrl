@@ -107,6 +107,32 @@ export interface SearchTrace {
    * order other than `legalMoves`' would attribute one decision's spread to another.
    */
   candidates: number[]
+  /**
+   * The principal variation behind each candidate, in `legalMoves` order. Only present when
+   * `BeamLimits.explain` is set.
+   */
+  lines?: SearchLine[]
+  /** How many candidates tied for the lead, so the seeded pick or the tie-break decided between them. */
+  tiedCandidates: number
+}
+
+/** How a root candidate earned its value: the best board it reached, and the moves that got there. */
+export interface SearchLine {
+  /** Same number as the matching entry in `candidates`. */
+  value: number
+  /** The level the peak was found at. 1 means the move was judged on its immediate result. */
+  peakDepth: number
+  /** Our own moves down to that peak, opening with the root candidate. One per level. */
+  path: Action[]
+  /**
+   * The peak board itself.
+   *
+   * The path alone cannot reproduce it: the opponent's replies happen between our moves and are not
+   * recorded, so replaying our own actions lands somewhere else entirely. Carrying the board is the
+   * only way to ask what was actually true at the peak, which is the question that matters when two
+   * candidates score alike.
+   */
+  board: GameState
 }
 
 let trace: SearchTrace | null = null
@@ -284,6 +310,59 @@ export interface BeamLimits {
   nodes: number
   reply: ReplyPolicy
   /**
+   * How many of OUR actions deep the opponent's reply is modelled, before falling back to the null
+   * move (#499). `undefined` models it at every level, which is the behaviour before this existed.
+   *
+   * The reply assumes the opponent takes the single most inconvenient action available. Applying that
+   * once is a useful safety margin; applying it three or four times in succession models a player who
+   * punishes optimally every time, which is not the player being faced. Suspected of making the bot
+   * refuse to act at all: in the scripted lockout it plays `pass` under `pessimistic` at any shield
+   * weight, and plays the correct line under `null`.
+   */
+  replyDepth?: number
+  /**
+   * Per level of depth, subtracted from every UNDECIDED board's score (#499). Zero is the behaviour
+   * before this existed.
+   *
+   * The search has no time preference: reaching a given position at action 3 scores exactly what
+   * reaching it at action 1 does, so **delay is free**. The only thing pushing the other way is the
+   * reply, which charges for each action taken and therefore penalises acting rather than waiting.
+   * That is the shape of the reported passivity: passing costs nothing and postpones everything.
+   *
+   * Decided boards keep their own `±depth` handling, which is a different concern (win soonest, lose
+   * latest) and would double-count if this were applied on top.
+   */
+  timePreference?: number
+  /**
+   * Record the principal variation behind each root candidate, for diagnosis (#499). Off by default,
+   * because tracking the path allocates per frontier node and the shipped bot should not pay for it.
+   *
+   * A root move's value is the max over every board reachable from it, so a bare value explains
+   * nothing about WHY. Four wrong hypotheses about the shielded-Sentinel lockout came from having to
+   * infer the line from two numbers and a mental model of this file.
+   */
+  explain?: boolean
+  /**
+   * Search overrides used to re-rank candidates that tied, or absent for no tie-break (#499).
+   *
+   * A tie is a decision the search cannot see: every candidate scores the same and the seeded
+   * tie-break picks at random. That is 11.3% of choice answers, 5.4% of resourcing and 11.8% of card
+   * plays for the shipped bot.
+   *
+   * No evaluation term can fix the ones that matter. In the shielded-Sentinel lockout both candidates
+   * peak on the **same end state at the same depth**, differing only in the route, and a max over
+   * reachable boards discards the route. What separates them is a **different search**: under
+   * `reply: 'null'` the acting line beats passing 56.1 to 52, while `pessimistic` ties them at 43.
+   *
+   * Pluggable rather than fixed, because the right second opinion is a per-case question. `{ reply:
+   * 'null' }` asks the optimist when the pessimist is silent; `{ depth: 1 }` is the one-ply tie-break
+   * proposed for #396 and #398, which is measurably wrong for the lockout.
+   *
+   * **Only ever applied to candidates that already tied for the lead.** A second opinion allowed to
+   * overrule a clear winner is a different bot, not a tie-break.
+   */
+  tieBreak?: Partial<BeamLimits>
+  /**
    * The most any ONE owed chain may take from `nodes`.
    *
    * `nodes` is the decision's whole allowance and is shared with chain resolution, which without this
@@ -365,7 +444,10 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
     const budget = searchBudget(limits.nodes)
     const moves = legalMoves(state)
     if (moves.length === 0) {
-      trace = { nodes: limits.nodes, left: budget.left, chain: 0, beam: 0, exhausted: false, candidates: [] }
+      trace = {
+        nodes: limits.nodes, left: budget.left, chain: 0, beam: 0, exhausted: false,
+        candidates: [], tiedCandidates: 0,
+      }
       return null
     }
 
@@ -375,10 +457,12 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
     let best = -Infinity
     const bestMoves: Action[] = []
     const candidates: number[] = []
+    const lines: SearchLine[] = []
     for (const move of moves) {
       // `best` so far is alpha: a candidate that cannot beat it need not be finished.
-      const { best: value } = reachableFrom(state, move, me, asRole, inner, limits, budget, best)
+      const { best: value, line } = reachableFrom(state, move, me, asRole, inner, limits, budget, best)
       candidates.push(value)
+      if (line) lines.push(line)
       if (value > best) {
         best = value
         bestMoves.length = 0
@@ -396,9 +480,66 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
       beam: budget.beam,
       exhausted: budget.left <= 0,
       candidates,
+      lines: limits.explain === true ? lines : undefined,
+      tiedCandidates: bestMoves.length,
     }
-    return bestMoves[Math.floor(seededUnit(state.rngSeed) * bestMoves.length)]
+
+    const finalists = limits.tieBreak && bestMoves.length > 1
+      ? breakTie(state, bestMoves, me, asRole, inner, limits)
+      : bestMoves
+    return finalists[Math.floor(seededUnit(state.rngSeed) * finalists.length)]
   }
+}
+
+/**
+ * Re-rank candidates that tied, using a second search, and return whichever now lead.
+ *
+ * Given only the tied moves, so it can never overrule a candidate that already won: a second opinion
+ * with that power would be a different bot rather than a tie-break.
+ *
+ * Its own budget, because the main search may have spent most of the pool getting here and a
+ * tie-break starved of nodes would return noise.
+ *
+ * **It fires far more often than the whole-slate tie columns imply, and still costs little.** Ties for
+ * the LEAD are 32.0% of decisions against those columns' 5-12%, because sharing the top is a much
+ * weaker condition than every candidate scoring alike. Firing sets average 3.2 candidates, which comes
+ * to **+13.4% more root searches** across a run: the decisions that fire are mostly small ones.
+ *
+ * A fan-out cap is optional rather than structural, which is the opposite of what the widest tie
+ * suggests. One decision tied **239** candidates, but wide ties are 2.3% of firings and a cap at 8
+ * only moves the overhead from +13.4% to +11.2%. The 239 is an answer-a-choice decision, the kind
+ * where a card deals out a combinatorial menu; ordinary moves top out around 26.
+ *
+ * Roots overstate it badly, though, because a second opinion prices each root lower than the search
+ * that found the tie. Timed over an identical corpus, `reply: 'null'` costs **+2.1%** per decision
+ * (203.73 ms against 199.51 ms) and a depth-1 second opinion is inside the noise of a single timing
+ * pass. Against a +13.4% bound in roots, the feature is cheap; whether it helps is the open question.
+ *
+ * Still deterministic. If the second opinion also ties, the survivors go back to the seeded pick.
+ */
+function breakTie(
+  state: GameState,
+  tied: Action[],
+  me: PlayerId,
+  asRole: Role | undefined,
+  inner: Evaluator,
+  limits: BeamLimits,
+): Action[] {
+  const second: BeamLimits = { ...limits, ...limits.tieBreak, tieBreak: undefined, explain: false }
+  const budget = searchBudget(second.nodes)
+  let best = -Infinity
+  const winners: Action[] = []
+  for (const move of tied) {
+    const { best: value } = reachableFrom(state, move, me, asRole, inner, second, budget, best)
+    if (value > best) {
+      best = value
+      winners.length = 0
+      winners.push(move)
+    } else if (value === best) {
+      winners.push(move)
+    }
+  }
+  return winners.length > 0 ? winners : tied
 }
 
 /**
@@ -412,10 +553,20 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
  * The adjustment touches DECIDED boards only, so it cannot reorder any material judgement. A whole
  * point of discount would rival `readyUnit`, which is why it is not applied to ordinary scores.
  */
-function valueAt(board: GameState, me: PlayerId, asRole: Role | undefined, inner: Evaluator, depth: number): number {
+function valueAt(
+  board: GameState,
+  me: PlayerId,
+  asRole: Role | undefined,
+  inner: Evaluator,
+  depth: number,
+  timePreference = 0,
+): number {
   const raw = inner(board, me, asRole)
+  // An undecided board is worth slightly less the later it arrives, so the same outcome reached
+  // sooner wins. Without it, delay is free and the search has no reason to hurry.
+  if (board.winner === null) return raw - timePreference * depth
   // A draw scores 0 from either side, so there is no sign to preserve and nothing to prefer.
-  if (board.winner === null || raw === 0) return raw
+  if (raw === 0) return raw
   return raw > 0 ? raw - depth : raw + depth
 }
 
@@ -491,6 +642,8 @@ function ourTurnAgain(state: GameState, me: PlayerId, budget: SearchBudget): Gam
 interface Reach {
   best: number
   won: boolean
+  /** Present only when `limits.explain` is set. */
+  line?: SearchLine
 }
 
 /**
@@ -522,21 +675,31 @@ function reachableFrom(
   const settled = resolveChain(resolve(state, move), me, asRole, inner, budget, chainCap)
   // See `alphaBeta`: a cut is only a valid bound for pessimistic play, and only on a board nothing is
   // expanded past. At depth 1 the root board is such a board; deeper it is continued from.
+  // Beyond `replyDepth` the opponent is assumed to do nothing rather than to punish optimally again.
+  const replyAt = (level: number): ReplyPolicy =>
+    (limits.replyDepth === undefined || level <= limits.replyDepth ? limits.reply : 'null')
   const cutting = limits.alphaBeta !== false && limits.reply === 'pessimistic'
   const rootAlpha = cutting && limits.depth === 1 ? alpha : -Infinity
-  const root = applyReply(settled, me, asRole, inner, limits.reply, budget, rootAlpha, 1, chainCap)
-  let best = valueAt(root, me, asRole, inner, 1)
+  const root = applyReply(settled, me, asRole, inner, replyAt(1), budget, rootAlpha, 1, chainCap)
+  let best = valueAt(root, me, asRole, inner, 1, limits.timePreference)
   let won = root.winner === me
-  let frontier: GameState[] = [root]
+  // Path tracking only when explaining: it allocates per frontier node, and the shipped bot should
+  // not pay for a diagnostic.
+  const explaining = limits.explain === true
+  let peakDepth = 1
+  let peakPath: Action[] = explaining ? [move] : []
+  let peakBoard = root
+  let frontier: Array<{ board: GameState; path: Action[] }> = [{ board: root, path: peakPath }]
 
   for (let d = 1; d < limits.depth; d++) {
     if (budget.left <= 0) break
     // The deepest level is expanded but never continued from, so its boards are ordinary leaves: the
     // frontier built from them would be discarded unread, and alpha is a real bound on them.
     const last = d === limits.depth - 1
-    const children: Array<{ board: GameState; value: number }> = []
+    const children: Array<{ board: GameState; value: number; path: Action[] }> = []
 
-    for (const node of frontier) {
+    for (const entry of frontier) {
+      const node = entry.board
       if (node.winner !== null || node.phase !== 'action') continue
       const ours = ourTurnAgain(node, me, budget)
       if (ours === null) continue
@@ -550,21 +713,38 @@ function reachableFrom(
         // No alpha at an interior level: there a branch's value is the MAX over its leaves, so a poor
         // reply at this node says nothing about what the branch can still reach. `best` rather than
         // the caller's alpha, because it is the tighter of the two and both bound this root.
-        const board = applyReply(played, me, asRole, inner, limits.reply, budget, last && cutting ? best : -Infinity, d + 1, chainCap)
-        const value = valueAt(board, me, asRole, inner, d + 1)
-        if (value > best) best = value
+        // The cut is only a bound while this level is actually minimising; past `replyDepth` the
+        // reply is a no-op and alpha would be meaningless.
+        const policy = replyAt(d + 1)
+        const leafAlpha = last && cutting && policy === 'pessimistic' ? best : -Infinity
+        const board = applyReply(played, me, asRole, inner, policy, budget, leafAlpha, d + 1, chainCap)
+        const value = valueAt(board, me, asRole, inner, d + 1, limits.timePreference)
+        const path = explaining ? [...entry.path, next] : entry.path
+        if (value > best) {
+          best = value
+          peakDepth = d + 1
+          peakPath = path
+          peakBoard = board
+        }
         if (board.winner === me) won = true
-        if (!last) children.push({ board, value })
+        if (!last) children.push({ board, value, path })
       }
     }
 
     if (last || children.length === 0) break
     // Sort is stable, so equal scores keep `legalMoves` order and the trim is deterministic.
     children.sort((a, b) => b.value - a.value)
-    frontier = children.slice(0, limits.width).map(c => c.board)
+    // The children already carry `board` and `path`, so reuse them rather than allocating a fresh
+    // wrapper per surviving node: that re-wrap cost the shipped bot measurable time for a diagnostic
+    // it never turns on.
+    frontier = children.slice(0, limits.width)
   }
 
-  return { best, won }
+  return {
+    best,
+    won,
+    line: explaining ? { value: best, peakDepth, path: peakPath, board: peakBoard } : undefined,
+  }
 }
 
 /**

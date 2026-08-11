@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { poolShards, shardRunKey, pendingSeeds, mergeShardResults, type ShardResult } from '../bench/shard'
+import { COMMIT_ID } from '../buildIdentity'
 
 /**
  * Pooling a sharded A/B (#488, #447).
@@ -93,7 +94,7 @@ describe('resuming a sharded run', () => {
   })
 
   it('skips a shard that already completed', () => {
-    const done = [{ seed: 4911, winRateA: 0.5, completed: 700, dropped: 0, exitCode: 0 }]
+    const done = [{ seed: 4911, winRateA: 0.5, completed: 700, dropped: 0, exitCode: 0, commitId: COMMIT_ID }]
     expect(pendingSeeds(config, done)).toEqual([4910, 4912, 4913])
   })
 
@@ -110,6 +111,34 @@ describe('resuming a sharded run', () => {
     expect(pendingSeeds(config, done)).toContain(4911)
   })
 
+  /**
+   * **Results from different code must never satisfy a resume.**
+   *
+   * The run key is built from the AI names, the game count and the seed, none of which change when
+   * the code does. So re-running an A/B after changing an evaluation term found ten complete shards,
+   * replayed the OLD numbers in 0.0s, and reported them as the new measurement. It produced a win
+   * rate identical to the previous run's to the game, which is the only reason it was caught.
+   *
+   * That is worse than a wasted run: it silently answers a question that was never asked, and here it
+   * would have retired a viable change on evidence that predated it.
+   */
+  it('re-runs a shard produced by different code', () => {
+    const done = [{ seed: 4911, winRateA: 0.5, completed: 700, dropped: 0, exitCode: 0, commitId: 'deadbee' }]
+    expect(pendingSeeds(config, done)).toContain(4911)
+  })
+
+  /** Same code, interrupted run: this is the case resuming exists for and it must still work. */
+  it('keeps a shard produced by the code now running', () => {
+    const done = [{ seed: 4911, winRateA: 0.5, completed: 700, dropped: 0, exitCode: 0, commitId: COMMIT_ID }]
+    expect(pendingSeeds(config, done)).not.toContain(4911)
+  })
+
+  /** A result banked before the stamp existed cannot be shown to match, so it is not trusted. */
+  it('re-runs a shard banked without a commit stamp', () => {
+    const done = [{ seed: 4911, winRateA: 0.5, completed: 700, dropped: 0, exitCode: 0 }]
+    expect(pendingSeeds(config, done)).toContain(4911)
+  })
+
   /** Results from a longer previous run must not silently satisfy a shorter one, or the pooled total
    *  would mix two different experiments. */
   it('ignores a result for a seed outside this run', () => {
@@ -119,7 +148,7 @@ describe('resuming a sharded run', () => {
 
   it('has nothing left to do when every shard completed', () => {
     const done = [4910, 4911, 4912, 4913].map(seed =>
-      ({ seed, winRateA: 0.5, completed: 700, dropped: 0, exitCode: 0 }))
+      ({ seed, winRateA: 0.5, completed: 700, dropped: 0, exitCode: 0, commitId: COMMIT_ID }))
     expect(pendingSeeds(config, done)).toEqual([])
   })
 

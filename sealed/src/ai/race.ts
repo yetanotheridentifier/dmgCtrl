@@ -3,6 +3,7 @@ import { opponentOf } from '../engine/types'
 import { enemyAttackTargets } from '../engine/legalMoves'
 import { effectivePower, effectiveHp } from '../engine/stats'
 import { unitHasKeyword, unitKeywordValue, unitCannotAttackBases, unitNegatesOverwhelm } from '../engine/keywords'
+import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 
 /**
  * The race: who gets to lethal first (#395).
@@ -70,6 +71,85 @@ export function reachThisRound(state: GameState, owner: PlayerId): number {
 /** Base damage `owner` lands in a full round once everything has readied at regroup. */
 export function reachSteady(state: GameState, owner: PlayerId): number {
   return sumReach(state, owner, state.players[owner].units)
+}
+
+/**
+ * Base damage a **shielded** Sentinel is denying `owner` each round (#499).
+ *
+ * `reachSteady` already returns zero for a locked attacker, but zero cannot say **how much** is being
+ * denied, and that difference is the entire value of removing the blocker. Without it a lane shut for
+ * the rest of the game and a lane that is merely empty score the same.
+ *
+ * Diagnosed rather than assumed. The principal-variation readout showed the acting line and the
+ * passing line peaking at the **same level**, both with the blocker dead, so no discount on later
+ * boards could reorder them: the tie has to be broken at that level, and those two boards differ only
+ * in whether the lane is open.
+ *
+ * ## Gated to shielded blockers, because the ungated version measured 25.0%
+ *
+ * Pricing reach denied by *any* Sentinel put the term on **24.2%** of decisions while the lockout it
+ * was written for is **2.1%**: 92% of its firings were a board-wide bias against Sentinels. At a mean
+ * quantity of 6.6 and weight 12 that is ~79 points where a whole unit is worth 4, and it measured
+ * 25.0% against the shipped bot (against a 50.0% self-play control).
+ *
+ * The gate follows from why the term was needed at all. An unshielded Sentinel is **answerable**:
+ * attacking it lowers its HP, and the material terms already price that, so the bot needs no help. A
+ * shielded one is the blind spot, because a Shield absorbs a whole instance of damage through a
+ * prevention hook, so a strip leaves a board scoring identically and the lane stays shut.
+ *
+ * `targets.every` rather than `some`, because one unshielded target means the lane is answerable: we
+ * can hit that one. Requiring a non-empty target list keeps "no Sentinel here" out of the count.
+ *
+ * Reuses `unitReach` for both readings rather than reimplementing targeting, so Sentinel, Saboteur,
+ * Overwhelm and arena rules stay in one place. A unit that could never attack a base contributes
+ * nothing to either side of the subtraction and so cannot register as blocked.
+ */
+export function blockedReach(state: GameState, owner: PlayerId): number {
+  return state.players[owner].units.reduce((n, u) => {
+    if (unitCannotAttackBases(state, u)) return n
+    const { targets, sentinelLocked } = enemyAttackTargets(state, u, owner)
+    if (!sentinelLocked) return n
+    // Only blockers the evaluation cannot otherwise see. See the gate note above.
+    if (targets.length === 0 || !targets.every(t => t.upgrades.some(up => up.cardId === TOKEN_SHIELD))) return n
+    // What it would land unblocked, minus whatever Overwhelm already tramples through.
+    const free = effectivePower(state, u, { attacking: true, attackingBase: true })
+    return n + Math.max(0, free - unitReach(state, owner, u))
+  }, 0)
+}
+
+/** Base damage the shielded blockers shutting our lanes deal us each round. */
+function blockerOutput(state: GameState, owner: PlayerId): number {
+  const foe = opponentOf(owner)
+  return state.players[foe].units
+    .filter(u => u.upgrades.some(up => up.cardId === TOKEN_SHIELD) && unitHasKeyword(state, u, 'Sentinel'))
+    .reduce((n, u) => n + effectivePower(state, u, { attacking: true, attackingBase: true }), 0)
+}
+
+/**
+ * What clearing a shielded blocker is actually worth to `owner`: the damage it **denies** us plus the
+ * damage it **deals** us, for as long as the game has left to run (#499).
+ *
+ * ## Why the blocker's own output belongs here
+ *
+ * A blocker is not only a wall, it is an attacker. Over the filed report the blocker denied 22 and
+ * dealt 8, against a bot that lost by 3, so denial alone understates it. It also separates two walls
+ * that denial cannot tell apart: a 4/3 Sentinel is urgent, and a 0/3 Sentinel that threatens nothing
+ * is not, which is why delaying against one of those was the right call in a second filed game.
+ *
+ * ## Why there is no clock multiplier, having tried one
+ *
+ * Scaling this by the rounds the game has left is the obvious next move, and it was built and
+ * measured. It **never discriminates**: every live reading lands above the cap, on the filed report
+ * and across a 1,160-decision corpus alike, so the horizon only rescaled the quantity by about 4x and
+ * a weight already does that. The ordering it was meant to correct is invisible behind the ceiling.
+ *
+ * Gated to shielded blockers: an unshielded Sentinel is answerable by attacking it and the material
+ * terms already price that.
+ */
+export function lockoutSwing(state: GameState, owner: PlayerId): number {
+  const denied = blockedReach(state, owner)
+  if (denied === 0) return 0
+  return denied + blockerOutput(state, owner)
 }
 
 /** Total Restore across a player's units: healing their own base each round. */

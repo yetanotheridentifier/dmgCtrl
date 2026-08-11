@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { makeBeamAi, lastSearchTrace, DEFAULT_BEAM_LIMITS } from '../ai/search'
+import { legalMoves } from '../engine/legalMoves'
 import { greedyAi, beamAi } from '../ai/greedyAi'
 import { evaluate } from '../ai/evaluate'
 import { state, player, card, unit, ready, CARDS } from './helpers/engineFixtures'
@@ -86,6 +87,63 @@ describe('reply-blindness, and the fix', () => {
   it('the reply policy plays the one that survives it', () => {
     const s = crackBack()
     expect(twoPly(s)).toMatchObject({ type: 'playUnit', handIndex: 1 }) // WALL
+  })
+})
+
+/**
+ * Passing must not be modelled as free (#499).
+ *
+ * The reply exists to price what the opponent does after our move. **Passing is a move**: it hands
+ * them the turn just as an attack does, so it must be priced the same way. If it is not, the search
+ * sees every action punished and doing nothing as costless, and concludes that doing nothing is best.
+ *
+ * That is the shape of the passivity reported from live play, where the bot sits on `pass` while a
+ * shielded Sentinel holds a lane shut. Under `reply: 'null'` it plays the correct line; under
+ * `pessimistic` it passes at any shield weight, and limiting the reply to the first level does not
+ * help, so a single mispriced `pass` is enough to cause it.
+ */
+describe('passing is a move, and the opponent still answers it', () => {
+  /** A position where the opponent unambiguously has something unpleasant to do if handed the turn. */
+  function theirTurnHurts(): GameState {
+    return state({
+      cards,
+      players: {
+        player: player({ units: [unit('u1', 'WALL')] }),
+        opponent: player({ units: [unit('e1', 'PUNISHER')] }),
+      },
+    })
+  }
+
+  it('prices the opponent a real answer when we pass', () => {
+    const s = theirTurnHurts()
+    const ai = makeBeamAi(evaluate, { ...DEFAULT_BEAM_LIMITS, depth: 3, reply: 'pessimistic', nodes: 200_000 })
+    ai(s)
+    const values = lastSearchTrace()!.candidates
+    const passIndex = legalMoves(s).findIndex(m => m.type === 'pass')
+    expect(passIndex, 'the fixture must offer a pass').toBeGreaterThanOrEqual(0)
+
+    // Handing them the turn cannot leave us exactly where we started: they have a ready attacker and
+    // a base to hit. If `pass` scores the static value, the reply was never applied to it.
+    expect(values[passIndex]).toBeLessThan(evaluate(s, 'player'))
+  })
+
+  /**
+   * The asymmetry, stated directly. Whatever the reply costs an action, it must cost `pass` too,
+   * or the search acquires a preference for inaction that has nothing to do with the position.
+   */
+  it('does not make inaction cheaper than action by construction', () => {
+    const s = theirTurnHurts()
+    const withReply = makeBeamAi(evaluate, { ...DEFAULT_BEAM_LIMITS, depth: 3, reply: 'pessimistic', nodes: 200_000 })
+    withReply(s)
+    const pessimistic = lastSearchTrace()!.candidates
+
+    const noReply = makeBeamAi(evaluate, { ...DEFAULT_BEAM_LIMITS, depth: 3, reply: 'null', nodes: 200_000 })
+    noReply(s)
+    const nullPolicy = lastSearchTrace()!.candidates
+
+    const passIndex = legalMoves(s).findIndex(m => m.type === 'pass')
+    // Turning the reply on must move `pass` by something, exactly as it moves the action candidates.
+    expect(pessimistic[passIndex]).not.toBe(nullPolicy[passIndex])
   })
 })
 
