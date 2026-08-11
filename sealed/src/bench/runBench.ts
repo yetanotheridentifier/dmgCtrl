@@ -2,7 +2,11 @@ import { COMMIT_ID } from '../buildIdentity'
 import { nextSeed } from '../engine/rng'
 import { resolveAi } from '../ai/registry'
 import { wilsonInterval } from './stats'
-import { benchInputs } from './decks'
+import { benchDeckSet, type DeckSource } from './decks'
+import { seating, resultForA } from './seating'
+
+/** Games per full seat / first-player cycle. See `seating`. */
+const SEATING_CYCLE = 4
 import { playGame } from './selfPlay'
 import type { DropReason, GameResult } from './selfPlay'
 
@@ -15,6 +19,12 @@ export interface BenchConfig {
   aiB: string
   stepCeiling?: number
   timeoutMs?: number
+  /**
+   * Which deck population to play over. Defaults to `mirror`, the single fixed deck every historical
+   * result was measured on. `coverage` is what makes a term measurable when its cards are not among
+   * the mirror deck's 30 units. See {@link DeckSource}.
+   */
+  decks?: DeckSource
 }
 
 export interface Failure {
@@ -34,13 +44,20 @@ export interface BenchReport {
   dropped: number
   /** True if any game dropped: the aggregate is then provisional, not a clean result. */
   provisional: boolean
-  /** Win rate of the player seat (aiA), over completed games only. */
+  /** Win rate of aiA, over completed games only, read from whichever seat it occupied. */
   winRateA: number
   drawRate: number
   /** Half-width of the 95% confidence band on winRateA: the +/- you can quote. */
   winCi: number
-  /** Mean base-damage margin from the player seat's view, over completed games. */
+  /** Mean base-damage margin from aiA's view, over completed games. */
   avgMargin: number
+  /** Which deck population was played. Results from different sources are not comparable. */
+  decks: DeckSource
+  /** How many distinct decks the run actually reached. */
+  decksUsed: number
+  /** Games with aiA in the opponent seat. Half the total, and the check that the seat advantage is
+   *  actually being cancelled rather than merely intended to be. */
+  seatsSwapped: number
   avgRounds: number
   movesPerSec: number
   failures: Failure[]
@@ -56,28 +73,44 @@ const mean = (xs: number[]): number => (xs.length === 0 ? 0 : xs.reduce((a, b) =
  * and its seed is recorded so the failure can be reproduced and filed.
  */
 export function runBench(config: BenchConfig): BenchReport {
-  const { deck, cardDb } = benchInputs()
-  const aiPlayer = resolveAi(config.aiA)
-  const aiOpponent = resolveAi(config.aiB)
+  const source = config.decks ?? 'mirror'
+  const { decks, cardDb } = benchDeckSet(source, config.seed)
+  const aiA = resolveAi(config.aiA)
+  const aiB = resolveAi(config.aiB)
 
   const games: GameResult[] = []
   const failures: Failure[] = []
+  const wonByA: boolean[] = []
+  const marginsForA: number[] = []
   let seed = config.seed
+  let seatsSwapped = 0
 
   for (let i = 0; i < config.games; i++) {
     seed = nextSeed(seed)
-    const firstPlayer = i % 2 === 0 ? 'player' : 'opponent'
+    // Seat and first player vary on independent cycles, so neither advantage settles on one side.
+    // Before this, `aiA` sat in the `player` seat every game and only the first move alternated,
+    // which left a bias big enough to read 49.4% for an AI measured against itself.
+    const seats = seating(i)
+    if (seats.swapped) seatsSwapped++
+    // A whole seating cycle per deck. Cycling decks by `i % decks.length` instead would pin each deck
+    // to one seat whenever the counts share a factor, and 44 decks against a 4-game cycle does.
+    const deck = decks[Math.floor(i / SEATING_CYCLE) % decks.length]
     const result = playGame({
       deckPlayer: deck,
       deckOpponent: deck,
       cardDb,
-      aiPlayer,
-      aiOpponent,
+      aiPlayer: seats.swapped ? aiB : aiA,
+      aiOpponent: seats.swapped ? aiA : aiB,
       seed,
-      firstPlayer,
+      firstPlayer: seats.firstPlayer,
       stepCeiling: config.stepCeiling,
       timeoutMs: config.timeoutMs,
     })
+    if (result.status === 'completed') {
+      const forA = resultForA(result, seats)
+      wonByA.push(forA.won)
+      marginsForA.push(forA.margin)
+    }
 
     if (result.status === 'dropped') {
       failures.push({ gameIndex: i, seed: result.seed, reason: result.dropReason! })
@@ -92,7 +125,8 @@ export function runBench(config: BenchConfig): BenchReport {
 
   const done = games.filter(g => g.status === 'completed')
   const completed = done.length
-  const winsA = done.filter(g => g.winner === 'player').length
+  // Read from aiA's seat, not from the `player` seat: half the games have them swapped.
+  const winsA = wonByA.filter(Boolean).length
   const draws = done.filter(g => g.winner === 'draw').length
   const ci = wilsonInterval(winsA, completed)
 
@@ -111,7 +145,10 @@ export function runBench(config: BenchConfig): BenchReport {
     winRateA: completed === 0 ? 0 : winsA / completed,
     drawRate: completed === 0 ? 0 : draws / completed,
     winCi: ci.halfWidth,
-    avgMargin: mean(done.map(g => g.margin)),
+    avgMargin: mean(marginsForA),
+    decks: source,
+    decksUsed: Math.min(decks.length, Math.max(1, Math.ceil(config.games / SEATING_CYCLE))),
+    seatsSwapped,
     avgRounds: mean(done.map(g => g.rounds)),
     movesPerSec: totalMs === 0 ? 0 : totalMoves / (totalMs / 1000),
     failures,

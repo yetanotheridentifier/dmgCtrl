@@ -3,6 +3,7 @@ import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, wr
 import { join } from 'node:path'
 import { wilsonInterval } from './stats'
 import { COMMIT_ID } from '../buildIdentity'
+import type { DeckSource } from './decks'
 
 /**
  * Run one A/B as N single-threaded processes and pool the result (#447, #488).
@@ -72,6 +73,12 @@ export interface ShardConfig {
   baseSeed: number
   aiA: string
   aiB: string
+  /**
+   * Deck population. Part of the run key, because results from different populations must never pool:
+   * a term absent from the mirror deck reports neutral there and fires on the coverage decks, so
+   * merging the two would average a real measurement with a vacuous one.
+   */
+  decks?: DeckSource
 }
 
 /** Where a run's per-shard results and logs live, one directory per run. */
@@ -89,7 +96,10 @@ export const SHARD_DIR = 'bench-results/shards'
  */
 export function shardRunKey(config: ShardConfig): string {
   const safe = (s: string): string => s.replace(/[^A-Za-z0-9._-]/g, '_')
-  return `${safe(config.aiA)}__vs__${safe(config.aiB)}__g${config.games}__s${config.baseSeed}`
+  // The deck source is only in the key when it is not the default, so every existing run directory
+  // keeps its name and remains resumable.
+  const decks = config.decks && config.decks !== 'mirror' ? `__d${safe(config.decks)}` : ''
+  return `${safe(config.aiA)}__vs__${safe(config.aiB)}__g${config.games}__s${config.baseSeed}${decks}`
 }
 
 /**
@@ -196,6 +206,7 @@ export async function runShards(config: ShardConfig): Promise<ShardResult[]> {
   const jobs = todo.map(seed => {
     const args = [
       'src/bench/main.ts', '--games', String(config.games), '--seed', String(seed),
+      ...(config.decks ? ['--decks', config.decks] : []),
       config.aiA, config.aiB,
     ]
     return new Promise<ShardResult>(resolve => {

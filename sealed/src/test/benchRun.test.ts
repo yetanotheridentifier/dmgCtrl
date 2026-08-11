@@ -51,10 +51,21 @@ describe('runBench', () => {
     }
   })
 
-  it('alternates who moves first across games', () => {
+  /**
+   * **Seat and first player vary on independent cycles**, so four games cover all four combinations
+   * exactly once.
+   *
+   * This replaces an assertion that `firstPlayer` alternated every single game, which described the
+   * old scheme: `aiA` sat in the `player` seat always and only the first move moved. That left the
+   * seat advantage uncancelled, and an AI measured against itself read 49.4% to 50.0% rather than
+   * 50%. Alternating both together would be no better: only two of the four combinations would ever
+   * occur, and seat advantage would stay perfectly confounded with first-player advantage.
+   */
+  it('covers every seat and first-player combination over four games', () => {
     const report = runBench({ games: 4, seed: 55, aiA: 'random', aiB: 'random' })
-    expect(report.games[0].firstPlayer).not.toBe(report.games[1].firstPlayer)
-    expect(report.games[1].firstPlayer).not.toBe(report.games[2].firstPlayer)
+    const combos = report.games.map((g, i) => `${g.firstPlayer}:${i % 2 === 1 ? 'swapped' : 'straight'}`)
+    expect(new Set(combos).size, 'all four, each once').toBe(4)
+    expect(report.seatsSwapped).toBe(2)
   })
 
   it('is reproducible: same config, identical aggregate', () => {
