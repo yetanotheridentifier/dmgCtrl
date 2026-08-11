@@ -55,6 +55,9 @@ export interface BenchReport {
   decks: DeckSource
   /** How many distinct decks the run actually reached. */
   decksUsed: number
+  /** The deck this run opened on. Seed-offset, so sharded runs cover different decks rather than all
+   *  replaying the same few; also the quickest way to tell two runs apart in a log. */
+  firstDeck: string
   /** Games with aiA in the opponent seat. Half the total, and the check that the seat advantage is
    *  actually being cancelled rather than merely intended to be. */
   seatsSwapped: number
@@ -84,6 +87,8 @@ export function runBench(config: BenchConfig): BenchReport {
   const marginsForA: number[] = []
   let seed = config.seed
   let seatsSwapped = 0
+  // Non-negative, and stable for a given seed so a run stays reproducible.
+  const deckOffset = ((config.seed % decks.length) + decks.length) % decks.length
 
   for (let i = 0; i < config.games; i++) {
     seed = nextSeed(seed)
@@ -94,7 +99,11 @@ export function runBench(config: BenchConfig): BenchReport {
     if (seats.swapped) seatsSwapped++
     // A whole seating cycle per deck. Cycling decks by `i % decks.length` instead would pin each deck
     // to one seat whenever the counts share a factor, and 44 decks against a 4-game cycle does.
-    const deck = decks[Math.floor(i / SEATING_CYCLE) % decks.length]
+    //
+    // Offset by the run's seed so shards do not all play the same decks. Without it a sharded screen
+    // covers only `games / 4` decks however many shards it runs, because the index depends on the
+    // game number alone: ten shards of eight games would play the same two decks ten times over.
+    const deck = decks[(deckOffset + Math.floor(i / SEATING_CYCLE)) % decks.length]
     const result = playGame({
       deckPlayer: deck,
       deckOpponent: deck,
@@ -148,6 +157,7 @@ export function runBench(config: BenchConfig): BenchReport {
     avgMargin: mean(marginsForA),
     decks: source,
     decksUsed: Math.min(decks.length, Math.max(1, Math.ceil(config.games / SEATING_CYCLE))),
+    firstDeck: decks[deckOffset % decks.length].name,
     seatsSwapped,
     avgRounds: mean(done.map(g => g.rounds)),
     movesPerSec: totalMs === 0 ? 0 : totalMoves / (totalMs / 1000),

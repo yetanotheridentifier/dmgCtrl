@@ -118,6 +118,48 @@ describe('the Advantage weight', () => {
     }
   })
 
+  /**
+   * **A separate rate for a carrier that cannot use the token yet.**
+   *
+   * A ready carrier can spend its Advantage this round, so it counts toward finishing now. An
+   * exhausted one cannot: it readies at regroup, which is a round away and past the search's horizon,
+   * and the opponent gets a turn in between to kill it first. Under a pessimistic reply that is
+   * exactly what the search assumes.
+   *
+   * Both rates ship equal to `power`, so the split is a no-op until swept. Note the lethal side is
+   * already correct without this: `canFinishThisAction` filters exhausted units out, so an exhausted
+   * carrier's tokens never counted toward lethal. The gap this closes is in the material term only.
+   */
+  it('prices a token on an exhausted carrier separately', () => {
+    const readyCarrier = board('BODY', 2)
+    const tiredCarrier = state({
+      cards,
+      players: {
+        player: player({ units: [unit('u', 'BODY', { arena: 'ground', exhausted: true, upgrades: adv(2) })] }),
+        opponent: player(),
+      },
+    })
+    const at = (advantageExhausted: number, s: GameState): number =>
+      makePublicScore({ ...DEFAULT_WEIGHTS, advantageExhausted, roleShift: 0 })(s, 'player', 'neutral')
+
+    expect(DEFAULT_WEIGHTS.advantageExhausted, 'ships as a no-op').toBe(DEFAULT_WEIGHTS.power)
+    // Discounting the exhausted rate must move the tired carrier and leave the ready one alone.
+    expect(at(0, tiredCarrier)).toBeLessThan(at(DEFAULT_WEIGHTS.power, tiredCarrier))
+    expect(at(0, readyCarrier)).toBe(at(DEFAULT_WEIGHTS.power, readyCarrier))
+  })
+
+  /** And the ready rate must not touch an exhausted carrier, or the two are not separable at all. */
+  it('keeps the two rates independent', () => {
+    const tired = state({
+      cards,
+      players: {
+        player: player({ units: [unit('u', 'BODY', { arena: 'ground', exhausted: true, upgrades: adv(3) })] }),
+        opponent: player(),
+      },
+    })
+    expect(scoreAt(0, tired)).toBe(scoreAt(DEFAULT_WEIGHTS.power, tired))
+  })
+
   /** Counted per token, so a stack of five is priced as five one-offs rather than a flat bonus. */
   it('scales with the size of the stack', () => {
     const one = scoreAt(0, board('BODY', 1))

@@ -71,4 +71,20 @@ describe('the A/B harness', () => {
     expect(report.seatsSwapped, 'still balanced across the deck change').toBe(4)
     expect(report.decksUsed, 'two decks over eight games, four games each').toBe(2)
   })
+
+  /**
+   * **Different seeds must start on different decks**, or sharding buys no deck coverage at all.
+   *
+   * The deck index runs off the game number, so without a seed offset every shard of an N-game run
+   * plays the same `N / 4` decks: ten shards of eight games would cover two decks, ten times over. A
+   * screen could then miss a term's cards entirely while looking like a full run.
+   */
+  it('starts different seeds on different decks', () => {
+    const a = runBench({ games: 4, seed: 1, aiA: 'random', aiB: 'random', decks: 'coverage' })
+    const b = runBench({ games: 4, seed: 2, aiA: 'random', aiB: 'random', decks: 'coverage' })
+    expect(a.firstDeck).not.toBe(b.firstDeck)
+    // The mirror source has one deck, so every seed necessarily starts on it.
+    const m = runBench({ games: 4, seed: 1, aiA: 'random', aiB: 'random' })
+    expect(m.decksUsed).toBe(1)
+  })
 })
