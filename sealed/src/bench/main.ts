@@ -1,6 +1,6 @@
 import { runBench } from './runBench'
 import type { BenchReport } from './runBench'
-import { openDb, saveReport, DEFAULT_DB_PATH } from './store'
+import { openDb, saveReport, saveExperiment, listExperiments, DEFAULT_DB_PATH } from './store'
 import { writeFailures, FAILURES_DIR } from './reports'
 import { runSweep } from './sweep'
 import type { SweepReport } from './sweep'
@@ -13,6 +13,7 @@ import { runBudget, type BudgetReport } from './budget'
 import { join } from 'node:path'
 import { runShards, poolShards, pendingSeeds, loadShardResults, shardRunKey, SHARD_DIR } from './shard'
 import { renderStatus, loadAllProgress, preflight } from './status'
+import { pairedDifference, renderPaired } from './paired'
 import type { CostReport } from './cost'
 import type { DeckSource } from './decks'
 import { runLethal } from './lethal'
@@ -66,6 +67,8 @@ interface Args {
   /** Run the head-to-head as N parallel single-threaded processes over N seeds, and pool them. */
   shards?: number
   status: boolean
+  control: boolean
+  history: boolean
   triage: boolean
   /** Deck population for the A/B: `mirror` (default) or `coverage`. See `DeckSource`. */
   decks?: DeckSource
@@ -101,6 +104,8 @@ function parseArgs(argv: string[]): Args {
   let matchups = false
   let shards: number | undefined
   let status = false
+  let control = false
+  let history = false
   let triage = false
   let decks: DeckSource | undefined
   for (let i = 0; i < argv.length; i++) {
@@ -121,6 +126,8 @@ function parseArgs(argv: string[]): Args {
     else if (arg === '--matchups') matchups = true
     else if (arg === '--shard') shards = Number(argv[++i])
     else if (arg === '--status') status = true
+    else if (arg === '--control') control = true
+    else if (arg === '--history') history = true
     else if (arg === '--decks') {
       const v = argv[++i]
       if (v !== 'mirror' && v !== 'coverage') throw new Error(`--decks must be mirror or coverage, got "${v}"`)
@@ -135,7 +142,7 @@ function parseArgs(argv: string[]): Args {
   if (depth !== undefined && (!Number.isFinite(depth) || depth < 1)) throw new Error('--depth must be a positive integer')
   if (triage && positional.length === 0) throw new Error('--triage needs at least one set code, e.g. --triage LAW SEC')
   if (shards !== undefined && (!Number.isFinite(shards) || shards < 1)) throw new Error('--shard must be a positive integer')
-  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, matchups, shards, status, triage, decks, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, matchups, shards, status, control, history, triage, decks, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
@@ -778,11 +785,80 @@ async function runShardMode(args: Args): Promise<void> {
     row(`pooled win rate (${args.aiA})`, `${pct(pooled.winRateA)}  ± ${pct(pooled.winCi)}   (${pct(lo)} – ${pct(hi)})`),
     row('games pooled', `${pooled.wins} wins of ${pooled.completed}`),
     row('shards failed', `${failed.length} of ${results.length}`),
-    row('wall clock', `${((Date.now() - start) / 1000).toFixed(1)}s`),
-    '',
   )
+
+  // The control is the same baseline played against ITSELF, on the same seeds, the same games per
+  // shard and the same decks: one difference between the two runs, which is the arm. It gets its own
+  // run directory (its `aiA` differs), so it banks and resumes independently.
+  if (args.control) {
+    console.log(lines.join('\n'))
+    console.log(`\n  now the control: ${args.aiB} vs ${args.aiB} on the same ${shards} seeds\n`)
+    const controlResults = await runShards({ ...config, aiA: args.aiB })
+    const paired = pairedDifference(results, controlResults)
+    const ctlPooled = poolShards(controlResults.filter(r => r.exitCode === 0 || r.completed > 0))
+
+    // Persisted as ONE row: the comparison is the evidence, and storing the two runs without the
+    // relationship between them is what left a +2.35 result living only in a ticket comment.
+    const db = openDb(DEFAULT_DB_PATH)
+    const experimentId = saveExperiment(db, {
+      armSpec: args.aiA,
+      controlSpec: args.aiB,
+      decks: args.decks ?? 'mirror',
+      baseSeed: args.seed,
+      shards,
+      gamesPerShard: args.games,
+      arm: results,
+      control: controlResults,
+      paired,
+    })
+    db.close()
+
+    lines.length = 0
+    lines.push(
+      row(`pooled win rate (${args.aiB} control)`, `${pct(ctlPooled.winRateA)}  (${ctlPooled.wins} of ${ctlPooled.completed})`),
+      ...renderPaired(args.aiA, args.aiB, paired),
+      row('saved experiment', `${experimentId}  →  ${DEFAULT_DB_PATH}`),
+    )
+  }
+
+  lines.push(row('wall clock', `${((Date.now() - start) / 1000).toFixed(1)}s`), '')
   console.log(lines.join('\n'))
   if (failed.length > 0) process.exit(1)
+}
+
+/**
+ * Every comparison an arm has ever been in, newest first.
+ *
+ * The query that justifies storing experiments at all: **a store nobody queries is worse than none**,
+ * because it implies a coverage it does not deliver. Filtered by substring so a family is one question
+ * (`--history tie=reply` covers every tie-break arm ever run), and the paired difference leads, because
+ * a raw win rate without its control is the reading that inverted a live result.
+ */
+function runHistoryMode(args: Args): void {
+  const db = openDb(DEFAULT_DB_PATH)
+  const needle = args.ais[0] ?? ''
+  const rows = listExperiments(db).filter(r => r.armSpec.includes(needle) || r.controlSpec.includes(needle))
+  db.close()
+
+  if (rows.length === 0) {
+    console.log(`\nno experiments${needle ? ` matching "${needle}"` : ''} in ${DEFAULT_DB_PATH}\n`)
+    return
+  }
+  const lines = [`\nexperiments${needle ? ` matching "${needle}"` : ''}  (${rows.length})\n`]
+  for (const r of rows) {
+    const diff = `${r.pairedMean >= 0 ? '+' : ''}${(r.pairedMean * 100).toFixed(2)}`
+    const t = r.pairedT === null ? 'n/a' : r.pairedT.toFixed(2)
+    lines.push(
+      `  ${r.significant ? 'SIGNIFICANT' : 'not sig.   '}  ${diff.padStart(7)} points   t=${t} (${r.pairedDf} df)`,
+      `      ${r.armSpec}`,
+      `      vs ${r.controlSpec}   [${r.decks}]   ${r.shardCount} x ${r.gamesPerShard} games   seed ${r.baseSeed}`,
+      `      arm ${pct(r.armGames === 0 ? 0 : r.armWins / r.armGames)} of ${r.armGames}   ` +
+        `control ${pct(r.controlGames === 0 ? 0 : r.controlWins / r.controlGames)} of ${r.controlGames}` +
+        `   build ${r.buildTag}   ${r.startedAt}`,
+      '',
+    )
+  }
+  console.log(lines.join('\n'))
 }
 
 function runMatchupsMode(args: Args): void {
@@ -915,6 +991,7 @@ function main(): void {
   if (args.matchups) { runMatchupsMode(args); return }
   // Read-only, and deliberately ahead of every mode: asking what is running must never start anything.
   if (args.status) { console.log(renderStatus(loadAllProgress(), Date.now())); return }
+  if (args.history) { runHistoryMode(args); return }
   if (args.shards !== undefined) { void runShardMode(args); return }
 
   let report: BenchReport

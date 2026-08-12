@@ -4,6 +4,8 @@ import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { BenchReport } from './runBench'
 import type { MatrixResult } from './matrix'
+import type { PairedResult } from './paired'
+import { COMMIT_ID } from '../buildIdentity'
 
 /**
  * Bench results in a local SQLite database, via Node's built-in `node:sqlite` (no dependency). Two
@@ -73,7 +75,57 @@ const SCHEMA = `
     avg_margin  REAL    NOT NULL,
     PRIMARY KEY (run_id, deck_a, deck_b)
   );
+  CREATE TABLE IF NOT EXISTS experiments (
+    experiment_id   TEXT PRIMARY KEY,
+    started_at      TEXT    NOT NULL,
+    build_tag       TEXT    NOT NULL,
+    arm_spec        TEXT    NOT NULL,
+    control_spec    TEXT    NOT NULL,
+    decks           TEXT    NOT NULL,
+    base_seed       INTEGER NOT NULL,
+    shard_count     INTEGER NOT NULL,
+    games_per_shard INTEGER NOT NULL,
+    arm_wins        INTEGER NOT NULL,
+    arm_games       INTEGER NOT NULL,
+    control_wins    INTEGER NOT NULL,
+    control_games   INTEGER NOT NULL,
+    paired_mean     REAL    NOT NULL,
+    paired_sd       REAL    NOT NULL,
+    paired_t        REAL,
+    paired_df       INTEGER NOT NULL,
+    significant     INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS experiment_shards (
+    experiment_id TEXT    NOT NULL,
+    seed          INTEGER NOT NULL,
+    arm_rate      REAL    NOT NULL,
+    control_rate  REAL    NOT NULL,
+    diff          REAL    NOT NULL,
+    PRIMARY KEY (experiment_id, seed)
+  );
 `
+
+/**
+ * Columns added after the table shipped. `CREATE TABLE IF NOT EXISTS` cannot add one, so an existing
+ * database needs an explicit, idempotent `ALTER`.
+ *
+ * `decks` is the one that matters. Without it, a mirror result and a coverage result are
+ * indistinguishable in the store, and a term whose cards are absent from the mirror deck reports
+ * neutral there while firing on coverage. That is a correctness hole rather than a missing field.
+ */
+const MIGRATIONS: Array<{ table: string; column: string; ddl: string }> = [
+  { table: 'runs', column: 'decks', ddl: `ALTER TABLE runs ADD COLUMN decks TEXT NOT NULL DEFAULT 'mirror'` },
+  { table: 'runs', column: 'games_per_shard', ddl: 'ALTER TABLE runs ADD COLUMN games_per_shard INTEGER' },
+]
+
+/** Apply any column a live database is missing. Reading the schema is cheaper than tracking a version
+ *  number, and cannot disagree with what is actually there. */
+function migrate(db: DatabaseSync): void {
+  for (const m of MIGRATIONS) {
+    const cols = db.prepare(`PRAGMA table_info(${m.table})`).all() as Array<{ name: string }>
+    if (cols.length > 0 && !cols.some(c => c.name === m.column)) db.exec(m.ddl)
+  }
+}
 
 export interface RunRow {
   runId: string
@@ -131,6 +183,7 @@ export function openDb(path: string): DatabaseSync {
   // exclusive window, which is what makes concurrent shards practical.
   if (!inMemory) db.exec('PRAGMA journal_mode = WAL')
   db.exec(SCHEMA)
+  migrate(db)
   return db
 }
 
@@ -265,4 +318,126 @@ export function leaderStrength(db: DatabaseSync, runId: string): StrengthRow[] {
 /** Each base aspect's average win rate across all decks and opponents. */
 export function baseStrength(db: DatabaseSync, runId: string): StrengthRow[] {
   return strength(db, 'base_a', runId)
+}
+
+/**
+ * One arm-versus-control comparison, which is the unit of evidence rather than the run.
+ *
+ * The store held runs and had no concept of this. Of the search tie-break work, the pooled 51.1% over
+ * 2,040 games was in no row (each shard is its own `runs` row and the pool was computed and printed),
+ * the 48.7% control was twelve rows nothing marked as a control, and the **+2.35 paired difference
+ * that settled it existed nowhere**. Logging runs more diligently would have preserved the misleading
+ * number and lost the decisive one.
+ */
+export interface ExperimentInput {
+  armSpec: string
+  controlSpec: string
+  decks: string
+  baseSeed: number
+  shards: number
+  gamesPerShard: number
+  arm: Array<{ winRateA: number; completed: number }>
+  control: Array<{ winRateA: number; completed: number }>
+  paired: PairedResult
+}
+
+export interface ExperimentRow {
+  experimentId: string
+  startedAt: string
+  buildTag: string
+  armSpec: string
+  controlSpec: string
+  decks: string
+  baseSeed: number
+  shardCount: number
+  gamesPerShard: number
+  armWins: number
+  armGames: number
+  controlWins: number
+  controlGames: number
+  pairedMean: number
+  pairedSd: number
+  pairedT: number | null
+  pairedDf: number
+  significant: boolean
+}
+
+/** Wins recovered as an exact integer: `winRateA` is `wins / completed` by construction. */
+const tally = (shards: Array<{ winRateA: number; completed: number }>): { wins: number; games: number } => ({
+  wins: shards.reduce((n, s) => n + Math.round(s.winRateA * s.completed), 0),
+  games: shards.reduce((n, s) => n + s.completed, 0),
+})
+
+/**
+ * Persist a comparison and its per-shard pairs, in one transaction.
+ *
+ * The pairs are kept because **every conclusion revised today was revised on the same games**: a
+ * stored experiment that cannot be re-analysed is a screenshot. `paired_t` is nullable, since a single
+ * pair has no spread to estimate and inventing a `t` there would be worse than admitting it.
+ */
+export function saveExperiment(db: DatabaseSync, input: ExperimentInput): string {
+  const startedAt = new Date().toISOString()
+  const experimentId = `exp-${startedAt}-${randomUUID().slice(0, 8)}`
+  const a = tally(input.arm)
+  const c = tally(input.control)
+  const p = input.paired
+
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    db.prepare(
+      `INSERT INTO experiments (experiment_id, started_at, build_tag, arm_spec, control_spec, decks,
+        base_seed, shard_count, games_per_shard, arm_wins, arm_games, control_wins, control_games,
+        paired_mean, paired_sd, paired_t, paired_df, significant)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      experimentId, startedAt, COMMIT_ID, input.armSpec, input.controlSpec, input.decks,
+      input.baseSeed, input.shards, input.gamesPerShard, a.wins, a.games, c.wins, c.games,
+      p.mean, p.sd, p.t === null || !Number.isFinite(p.t) ? null : p.t, p.df, p.significant ? 1 : 0,
+    )
+    const insert = db.prepare(
+      `INSERT INTO experiment_shards (experiment_id, seed, arm_rate, control_rate, diff) VALUES (?,?,?,?,?)`,
+    )
+    for (const s of p.perSeed) insert.run(experimentId, s.seed, s.arm, s.control, s.diff)
+    db.exec('COMMIT')
+  } catch (e) {
+    db.exec('ROLLBACK')
+    throw e
+  }
+  return experimentId
+}
+
+const mapExperiment = (r: Record<string, unknown>): ExperimentRow => ({
+  experimentId: str(r.experiment_id),
+  startedAt: str(r.started_at),
+  buildTag: str(r.build_tag),
+  armSpec: str(r.arm_spec),
+  controlSpec: str(r.control_spec),
+  decks: str(r.decks),
+  baseSeed: num(r.base_seed),
+  shardCount: num(r.shard_count),
+  gamesPerShard: num(r.games_per_shard),
+  armWins: num(r.arm_wins),
+  armGames: num(r.arm_games),
+  controlWins: num(r.control_wins),
+  controlGames: num(r.control_games),
+  pairedMean: num(r.paired_mean),
+  pairedSd: num(r.paired_sd),
+  pairedT: r.paired_t === null ? null : num(r.paired_t),
+  pairedDf: num(r.paired_df),
+  significant: num(r.significant) === 1,
+})
+
+/** Every comparison, newest first, so the history reads as one. */
+export function listExperiments(db: DatabaseSync): ExperimentRow[] {
+  return (db.prepare(
+    `SELECT * FROM experiments ORDER BY started_at DESC, rowid DESC`,
+  ).all() as Record<string, unknown>[]).map(mapExperiment)
+}
+
+/** The per-shard pairs behind one experiment, so it can be re-analysed without re-running it. */
+export function experimentsFor(db: DatabaseSync, experimentId: string): Array<{ seed: number; armRate: number; controlRate: number; diff: number }> {
+  return (db.prepare(
+    `SELECT seed, arm_rate, control_rate, diff FROM experiment_shards WHERE experiment_id = ? ORDER BY seed`,
+  ).all(experimentId) as Record<string, unknown>[])
+    .map(r => ({ seed: num(r.seed), armRate: num(r.arm_rate), controlRate: num(r.control_rate), diff: num(r.diff) }))
 }

@@ -275,6 +275,57 @@ standalone run, exactly like the existing three-seed results, and the per-shard 
 reading: a finding that holds across independent seeds is far stronger than one long run, and a shard
 disagreeing with the rest is a signal rather than something to average away.
 
+### The matched control: `--control`
+
+```bash
+npm run bench --prefix sealed -- --shard 12 --games 168 --seed 9001 --decks coverage \
+  'beam-reply/tie=reply:null' beam-reply --control
+```
+
+Runs the arm, then runs **`aiB` against itself** on the same seeds, the same games per shard and the
+same decks, and reports the **paired difference with its `t`** as the headline. The control gets its
+own run directory, so it banks and resumes independently.
+
+**Use it for every A/B.** Reading an arm against a fixed 50% inverts results:
+
+| the same 2,040 games, read against | difference | verdict |
+| --- | --- | --- |
+| a theoretical 50% | +1.1 | not significant, abandon |
+| its own matched control | **+2.35** | t = 4.94, 11 df, **p < 0.001** |
+
+Pairing by seed is what makes it sharp rather than merely correct. A seed fixes the decks and the
+shuffles, and deck variance dominates the coverage pool: raw per-shard rates spanned 44.7% to 54.7%
+while the paired differences had a standard deviation of 1.65 points. It is also immune to whatever
+causes the sub-50 baseline, because both sides carry it equally.
+
+Significance is judged against a **tabulated** two-sided 5% critical value rather than a computed
+p-value. Shard counts are small (ten and twelve are typical), which is exactly where the t
+distribution departs most from the normal, and an approximation that is slightly generous there would
+flatter every marginal result this exists to judge.
+
+### The evidence store
+
+`--control` writes the comparison to `bench-results/bench.db` as **one `experiments` row** plus its
+per-shard pairs, and `--history <substring>` reads them back:
+
+```bash
+npm run bench --prefix sealed -- --history 'tie=reply'
+```
+
+**The comparison is the unit of evidence, not the run.** The store previously held runs only, which
+meant that of a completed tie-break experiment the pooled rate was in no row (each shard is its own
+`runs` row and the pool was computed and printed), the control was twelve rows nothing marked as a
+control, and the paired difference that settled it was nowhere at all. A store that logged runs more
+diligently would have kept the misleading number and lost the decisive one.
+
+The per-shard pairs are kept because **conclusions get revised on the same games**, so a stored
+experiment that cannot be re-analysed is a screenshot.
+
+`runs` also carries `decks` now. Its absence was a correctness hole rather than a missing field: a term
+whose cards are not in the mirror deck reports neutral there while firing on coverage, so two
+populations must never read as comparable. Existing databases are migrated by an idempotent `ALTER`,
+since `CREATE TABLE IF NOT EXISTS` cannot add a column.
+
 ### Watching a run: `--status`
 
 ```bash
