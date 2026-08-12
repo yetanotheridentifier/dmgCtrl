@@ -96,7 +96,26 @@ export const beamAi = makeBeamGreedy(DEFAULT_WEIGHTS)
  * Same weights, same width and depth as `beam`, differing only in what the opponent is assumed to do
  * between our actions. That is the whole change, and it is worth **17 points**.
  */
-export const BEAM_REPLY_LIMITS: BeamLimits = { ...DEFAULT_BEAM_LIMITS, reply: 'pessimistic' }
+/**
+ * `tieBreak` is measured, not assumed. When the pessimistic search rates several candidates equal,
+ * the optimistic model is asked which has the better upside, and that is worth **+2.35 points**
+ * (t = 4.94 on 11 df, p < 0.001, 11 of 12 shards positive, 2,040 games against a control on the same
+ * seeds) for **+2.1%** per decision.
+ *
+ * Two earlier runs read +5.0 and +4.9 on smaller samples; those are overestimates regressing toward
+ * +2.35 as the sample grew, so quote the largest run.
+ *
+ * **Only against a matched control.** Identical bots measure 48.6% and 48.7% on two independent seed
+ * blocks, so read against a theoretical 50% the same run reads +1.1 and non-significant. Consulting an
+ * optimistic model *only between candidates the pessimistic search has already declared equal* is
+ * evidently not the same as playing optimistically, which loses 17 points.
+ *
+ * Unrestricted: restricting it to answer, play and resource measured indistinguishable (+4.25 against
+ * +4.9), so the simpler form ships.
+ */
+export const BEAM_REPLY_LIMITS: BeamLimits = {
+  ...DEFAULT_BEAM_LIMITS, reply: 'pessimistic', tieBreak: { reply: 'null' },
+}
 
 export const beamReplyAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_LIMITS)
 

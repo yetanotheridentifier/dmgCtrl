@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { runDecisions, classifyResolution, sameAction, advantageSpend, TIE_FANOUT_CAP } from '../bench/decisions'
+import {
+  runDecisions, classifyResolution, sameAction, advantageSpend, initiativeOutlook, TIE_FANOUT_CAP,
+  optionalTriggerSplit, randomAcceptChance, pinsLeader,
+} from '../bench/decisions'
 import { DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { state, player, card, unit, CARDS } from './helpers/engineFixtures'
-import type { GameState, PendingChoice } from '../engine/types'
+import type { GameState, PendingChoice, UnitState } from '../engine/types'
 import type { Action } from '../engine/actions'
 import '../engine/cardDefinitions'
 
@@ -140,6 +143,109 @@ describe('runDecisions', () => {
     }
     // The two sides of a death must account for all of it, or the denial rate is unreadable.
     expect(a.diedUnspentOurs + a.diedUnspentTheirs).toBe(a.diedUnspent)
+  })
+
+  /**
+   * The ceiling on #446's rule, before any mechanism is built.
+   *
+   * The rule can only fire where claiming is offered AND acting first next round changes the outcome.
+   * Lethal is available on 4.3% of decisions and **0.0% before round 5**, so the conjunction is what
+   * decides whether the rule is worth building at all, separately from the horizon that would enable
+   * it.
+   */
+  it('bounds how often claiming the initiative could convert or deny a win', () => {
+    const h = report.initiativeHorizon
+    expect(h.offered).toBeGreaterThan(0)
+    for (const n of [h.weFinishNext, h.theyFinishNext, h.bothFinishNext, h.theyOnly, h.lethalNow]) {
+      expect(n).toBeLessThanOrEqual(h.offered)
+    }
+    // The race case is a subset of each side's own case, and the denial case excludes it.
+    expect(h.bothFinishNext).toBeLessThanOrEqual(Math.min(h.weFinishNext, h.theyFinishNext))
+    expect(h.theyOnly + h.bothFinishNext).toBe(h.theyFinishNext)
+    // Live counts strip out positions we could simply win this round instead.
+    expect(h.conversionLive).toBeLessThanOrEqual(h.bothFinishNext)
+    expect(h.denialLive).toBeLessThanOrEqual(h.theyOnly)
+  })
+
+  /**
+   * **Prevalence is not a defect**, and this is the counter that separates the two.
+   *
+   * Phase 0 measured the denial case at **10.4%** of claim offers and the conversion case at 2.6%,
+   * both far above the 0.5% abandon threshold. That says the situation arises, not that the bot gets
+   * it wrong: it already claims on 12.1% of offers, so if those claims ARE the denial cases there is
+   * nothing here to build.
+   *
+   * Skipping this step has been expensive twice. Shields are present on 15.8% of decisions and the
+   * term still measured harmful; Advantage on 20.7%, and six arms over 1,800 games found nothing.
+   * What actually diagnosed #493 was a rate read against a baseline: strips a Shield **7.4%** against
+   * random's 17.9%.
+   *
+   * `quiet` is that baseline, and it has to come from the same run. It is the claim rate where no
+   * horizon case is live at all, so the comparison is within-population and needs no second bot.
+   */
+  it('cross-tabs the horizon cases against what the bot actually did', () => {
+    const h = report.initiativeHorizon
+    // A claim can only be counted where the case was live, or the rate has no denominator.
+    expect(h.conversionClaimed).toBeLessThanOrEqual(h.conversionLive)
+    expect(h.denialClaimed).toBeLessThanOrEqual(h.denialLive)
+    expect(h.quietClaimed).toBeLessThanOrEqual(h.quietOffers)
+    // The three buckets partition the offers that are not already won: conversion, denial, and the
+    // quiet remainder. Without that, a rate in one bucket cannot be read against another.
+    expect(h.conversionLive + h.denialLive + h.quietOffers).toBe(h.offered - h.lethalNow - h.weOnlyLive)
+    // And every claim counted in a bucket is a claim the initiative tally saw.
+    expect(h.conversionClaimed + h.denialClaimed + h.quietClaimed).toBeLessThanOrEqual(report.initiative.taken)
+  })
+
+  /**
+   * Does the bot ever say no? (#396)
+   *
+   * The ticket names the degenerate case directly: "the bot always accepting every optional trigger,
+   * which is what happens if declining is never scored favourably". It has never been checked. An
+   * optional trigger is a decision where `skipTrigger` is legal, so accepting is visible as choosing
+   * anything else.
+   *
+   * The raw accept rate says nothing on its own, which is the lesson from the shield strip rate. The
+   * baseline here is exact rather than measured: a uniform picker takes one of `n` candidates, exactly
+   * one of which declines, so its expected accept rate is `(n-1)/n` summed over the decisions. No
+   * second run, and no sampling error in the control.
+   */
+  it('reports how often the bot declines an optional trigger, against a uniform picker', () => {
+    const t = report.triggers
+    expect(t.offered).toBeGreaterThan(0)
+    expect(t.accepted).toBeLessThanOrEqual(t.offered)
+    // The uniform baseline is a count of decisions, so it lives on the same scale as `accepted`.
+    expect(t.randomExpected).toBeGreaterThan(0)
+    expect(t.randomExpected).toBeLessThanOrEqual(t.offered)
+    // Exactly one decline among n candidates, so a uniform picker accepts strictly more often than
+    // never and strictly less often than always.
+    expect(t.randomExpected).toBeLessThan(t.offered)
+    // Split by kind, because one card dealing out a menu is a different ticket from a broad bias.
+    expect(t.byKind.reduce((n, k) => n + k.offered, 0)).toBe(t.offered)
+    expect(t.byKind.reduce((n, k) => n + k.accepted, 0)).toBe(t.accepted)
+    for (const k of t.byKind) expect(k.accepted, k.kind).toBeLessThanOrEqual(k.offered)
+    expect([...t.byKind].sort((a, b) => b.offered - a.offered || a.kind.localeCompare(b.kind))).toEqual(t.byKind)
+  })
+
+  /**
+   * Offensive pinning (#397), sized for the first time.
+   *
+   * The sizing question the ticket has carried unanswered since it was written: **how often does the
+   * bot hold a unit that could defeat an enemy leader on deployment, and how often does it instead
+   * attack with that unit?** Holding a unit ready to threaten is a non-action, and a board-score
+   * maximiser always prefers the attack that moves the score now.
+   *
+   * `deployedIntoPin` is the one that decides whether self-play can measure this at all. If the
+   * opponent deploys into a pin regardless, neither side is playing around the threat, and a bench
+   * that cannot show the strategy being punished cannot reward it either.
+   */
+  it('sizes how often a pin is held, spent, or walked into', () => {
+    const p = report.pin
+    expect(p.decisions).toBeGreaterThanOrEqual(0)
+    expect(p.pinAvailable).toBeLessThanOrEqual(p.decisions)
+    // Spending a pin means attacking with a unit that held one, so it needs one to have been there.
+    expect(p.pinSpent).toBeLessThanOrEqual(p.pinAvailable)
+    expect(p.deployedIntoPin).toBeLessThanOrEqual(p.deploys)
+    if (p.pinAvailable === 0) expect(p.pinSpent).toBe(0)
   })
 
   /**
@@ -490,6 +596,176 @@ describe('tie-break firing rate', () => {
     expect(Math.max(...t.byKind.map(k => k.widest))).toBe(t.widest)
     // Most frequent first, so the readout is stable across runs rather than following insertion.
     expect([...t.byKind].sort((a, b) => b.fired - a.fired || a.kind.localeCompare(b.kind))).toEqual(t.byKind)
+  })
+})
+
+/**
+ * What claiming the initiative could be worth next round (#446, phase 0).
+ *
+ * Claiming makes you act first in the round **after** this one, and the search stops dead at the round
+ * boundary, so its whole value is out of sight. That is why "initiative: take it" is the largest tie
+ * in the model at **15.3%** of 2,164 offers, roughly 7.5 coin flips a game: not a weighting failure,
+ * a horizon one.
+ *
+ * These counters bound the rule before any mechanism is built. Everything readies at regroup, so
+ * `reachSteady` is what a side can land next round.
+ */
+describe('initiativeOutlook', () => {
+  const cards = {
+    ...CARDS,
+    HITTER: card({ id: 'HITTER', type: 'unit', arena: 'ground', cost: 2, power: 6, hp: 4 }),
+  }
+  /** `mine` and `theirs` are unit powers; the damage figures set how close each base is to dying. */
+  const board = (mine: number[], theirs: number[], myDamage: number, theirDamage: number): GameState =>
+    state({
+      cards,
+      players: {
+        player: player({
+          base: { cardId: 'TST_B', damage: myDamage },
+          units: mine.map((_, i) => unit(`m${i}`, 'HITTER', { arena: 'ground' })),
+        }),
+        opponent: player({
+          base: { cardId: 'TST_B', damage: theirDamage },
+          units: theirs.map((_, i) => unit(`t${i}`, 'HITTER', { arena: 'ground' })),
+        }),
+      },
+    })
+
+  it('sees nothing coming when neither side can reach a base', () => {
+    const o = initiativeOutlook(board([], [], 0, 0), 'player')
+    expect(o).toMatchObject({ weFinishNext: false, theyFinishNext: false })
+  })
+
+  /** Two 6-power units against a base on 20 of 30 damage: 12 reach against 10 remaining. */
+  it('reports that we finish next round once our steady reach covers what is left', () => {
+    const o = initiativeOutlook(board([6, 6], [], 0, 20), 'player')
+    expect(o.weFinishNext).toBe(true)
+    expect(o.theyFinishNext).toBe(false)
+  })
+
+  it('reports the mirror for the opponent', () => {
+    const o = initiativeOutlook(board([], [6, 6], 20, 0), 'player')
+    expect(o.weFinishNext).toBe(false)
+    expect(o.theyFinishNext).toBe(true)
+  })
+
+  /**
+   * **Both sides lethal next round is the conversion case**: whoever acts first wins, so claiming
+   * decides the game rather than merely helping.
+   */
+  it('reports both when acting first decides it', () => {
+    const o = initiativeOutlook(board([6, 6], [6, 6], 20, 20), 'player')
+    expect(o.weFinishNext && o.theyFinishNext).toBe(true)
+  })
+
+  /** Already able to finish this round makes claiming moot: we would simply win instead. */
+  it('flags a position we could already win outright', () => {
+    expect(initiativeOutlook(board([6, 6], [], 0, 25), 'player').lethalNow).toBe(true)
+  })
+})
+
+/**
+ * Optional triggers, and whether the bot can say no (#396).
+ *
+ * A "may" ability reaches the AI as a pending choice whose legal answers include `skipTrigger`. That
+ * makes accepting and declining observable without a per-kind table: the decline is one candidate,
+ * everything else accepts.
+ *
+ * The split is taken from the candidate list rather than from the choice kind, so a card that offers
+ * several ways to accept is counted once as an offer and once as an accept, not once per option.
+ */
+describe('optionalTriggerSplit', () => {
+  const accept = (choiceId: string, targetInstanceId?: string): Action =>
+    ({ type: 'acceptChoice', choiceId, targetInstanceId })
+
+  it('finds no optional trigger where declining is not on offer', () => {
+    expect(optionalTriggerSplit([accept('c1', 'u1'), accept('c1', 'u2')]))
+      .toEqual({ declines: 0, accepts: 2 })
+  })
+
+  /** A mandatory choice offers several answers and no decline, so it is not this decision at all. */
+  it('does not treat a forced choice as an optional trigger', () => {
+    const split = optionalTriggerSplit([accept('c1', 'u1'), accept('c1', 'u2'), accept('c1', 'u3')])
+    expect(split.declines).toBe(0)
+  })
+
+  it('separates the decline from the ways of accepting', () => {
+    expect(optionalTriggerSplit([{ type: 'skipTrigger' }, accept('c1', 'u1'), accept('c1', 'u2')]))
+      .toEqual({ declines: 1, accepts: 2 })
+  })
+
+  /** A bare yes/no is the commonest shape and must still register as one of each. */
+  it('handles a plain yes or no', () => {
+    expect(optionalTriggerSplit([{ type: 'skipTrigger', choiceId: 'c1' }, accept('c1')]))
+      .toEqual({ declines: 1, accepts: 1 })
+  })
+
+  /**
+   * A uniform picker takes one candidate at random, so with exactly one decline among `n` it accepts
+   * `(n - 1) / n` of the time. That is the control this measurement is read against, and it is
+   * arithmetic rather than a second run: no sampling error, no seat bias, nothing to pool.
+   */
+  it('gives a uniform picker an exact accept probability', () => {
+    expect(randomAcceptChance({ declines: 1, accepts: 1 })).toBeCloseTo(0.5)
+    expect(randomAcceptChance({ declines: 1, accepts: 3 })).toBeCloseTo(0.75)
+    // Nothing to decide is not a decision, so it contributes no expectation either way.
+    expect(randomAcceptChance({ declines: 0, accepts: 2 })).toBe(0)
+  })
+})
+
+/**
+ * Offensive pinning (#397): are we holding a unit that would kill their leader if it deployed?
+ *
+ * A leader deploys into the **ground** arena, ready and undamaged (CR 3.4.4), so the threat is any
+ * ready ground unit of ours whose power covers the leader's deployed HP. This is the piece no search
+ * reaches, because the value is in NOT attacking, and a board-score maximiser has no candidate for
+ * "keep this ready".
+ *
+ * `TST_L` deploys as a 4/7, so a 7-power unit pins it and a 6-power one does not.
+ */
+describe('pinsLeader', () => {
+  const cards = {
+    ...CARDS,
+    PIN: card({ id: 'PIN', type: 'unit', arena: 'ground', cost: 4, power: 7, hp: 4 }),
+    SMALL: card({ id: 'SMALL', type: 'unit', arena: 'ground', cost: 2, power: 6, hp: 4 }),
+    FLYER: card({ id: 'FLYER', type: 'unit', arena: 'space', cost: 4, power: 7, hp: 4 }),
+  }
+  /** Their leader is undeployed and affordable unless overridden, so the pin is live by default. */
+  const board = (mine: UnitState[], leader: Partial<GameState['players']['player']['leader']> = {}): GameState =>
+    state({
+      cards,
+      players: {
+        player: player({ units: mine }),
+        opponent: player({
+          leader: { cardId: 'TST_L', deployed: false, epicActionUsed: false, exhausted: false, ...leader },
+          resources: Array.from({ length: 6 }, (_, i) => ({ cardId: 'TST_U1', exhausted: false, id: `r${i}` })),
+        }),
+      },
+    })
+
+  it('reports a ready unit whose power covers the deployed leader', () => {
+    expect(pinsLeader(board([unit('p', 'PIN', { arena: 'ground' })]), 'player')).toEqual(['p'])
+  })
+
+  it('does not count a unit that would leave the leader alive', () => {
+    expect(pinsLeader(board([unit('s', 'SMALL', { arena: 'ground' })]), 'player')).toEqual([])
+  })
+
+  /** An exhausted unit threatens nothing: it cannot answer the deploy. */
+  it('does not count an exhausted unit', () => {
+    expect(pinsLeader(board([unit('p', 'PIN', { arena: 'ground', exhausted: true })]), 'player')).toEqual([])
+  })
+
+  /** A leader arrives on the ground, so a space unit of any size cannot reach it. */
+  it('does not count a unit in the wrong arena', () => {
+    expect(pinsLeader(board([unit('f', 'FLYER', { arena: 'space' })]), 'player')).toEqual([])
+  })
+
+  /** Already deployed, or the epic action already spent: there is no deploy left to threaten. */
+  it('reports nothing once the leader can no longer deploy', () => {
+    const pin = [unit('p', 'PIN', { arena: 'ground' })]
+    expect(pinsLeader(board(pin, { deployed: true }), 'player')).toEqual([])
+    expect(pinsLeader(board(pin, { epicActionUsed: true }), 'player')).toEqual([])
   })
 })
 

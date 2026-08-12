@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import ashSet from './fixtures/ashSet.json'
 import type { SwuCard } from '../data/cards'
 import { makeBeamAi, lastSearchTrace, DEFAULT_BEAM_LIMITS } from '../ai/search'
+import { BEAM_REPLY_LIMITS } from '../ai/greedyAi'
 import { evaluate, makeEvaluate, DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { legalMoves } from '../engine/legalMoves'
 import { state, player, card, unit, ready, CARDS } from './helpers/engineFixtures'
@@ -95,6 +96,44 @@ function corpus(limit: number): GameState[] {
   }
   return states
 }
+
+/**
+ * **The shipped bot consults a second opinion on a tie, and that is a measured decision.**
+ *
+ * Three runs, each against a control on the same seeds and the same coverage decks:
+ *
+ * | | games | arm | control | paired |
+ * | --- | --- | --- | --- | --- |
+ * | screen | 80 | 55.0% | 50.0% | +5.0 |
+ * | run 2 | 800 | 53.5% | 48.6% | +4.9 |
+ * | **run 3** | **2,040** | **51.1%** | **48.7%** | **+2.35** |
+ *
+ * Run 3 is the estimate to quote: **+2.35 points, t = 4.94 on 11 df, p < 0.001, with 11 of 12 shards
+ * positive**. The earlier, larger-looking figures are small-sample overestimates regressing toward it.
+ *
+ * **The control is what makes this readable, and reading against a theoretical 50% inverts the
+ * answer.** Identical bots measured 48.6% and 48.7% on two independent seed blocks, so against 50%
+ * run 3 reads as +1.1 and not significant; against its own control it is +2.35 at p < 0.001. Draws do
+ * not explain the gap (~1 game in 2,040) and neither can any evaluation weight, since a control is the
+ * same bot on both sides. Whatever its cause, the paired difference is immune to it, which is exactly
+ * why every A/B needs its matched control.
+ *
+ * Cost is +2.1% per decision (203.73 ms against 199.51 ms over an identical corpus).
+ *
+ * Note it fixes no specific reported defect: it does **not** fire on the shielded-Sentinel lockout,
+ * where passing wins outright. Its case is the aggregate, and the aggregate is why it ships.
+ */
+describe('the shipped configuration', () => {
+  it('consults an optimistic second opinion when candidates tie for the lead', () => {
+    expect(BEAM_REPLY_LIMITS.tieBreak).toEqual({ reply: 'null' })
+  })
+
+  /** Unrestricted: measured indistinguishable from restricting it to answer, play and resource
+   *  (+4.25 against +4.9 on run 2, five of ten shards byte-identical), so the simpler form ships. */
+  it('applies it to every decision kind', () => {
+    expect(BEAM_REPLY_LIMITS.tieBreak?.tieKinds).toBeUndefined()
+  })
+})
 
 describe('breaking a tie with a second opinion', () => {
   it('changes nothing when no tie-break is configured', () => {
@@ -209,6 +248,49 @@ describe('breaking a tie with a second opinion', () => {
     }
     expect(compared, 'the corpus must actually exercise the comparison').toBeGreaterThan(20)
   }, 120_000)
+
+  /**
+   * **Restricting the second opinion to decision kinds it should help.**
+   *
+   * Ties for the lead are not evenly spread, and neither is the case for a second opinion. #396 and
+   * #398 are both about decisions whose value lies beyond the horizon, and the search demonstrably
+   * makes those ties WORSE rather than better: resourcing went 0.6% to 5.4% and card play 6.7% to
+   * 11.8% when the beam landed, because a beam values a move by the best board it can reach and
+   * candidates whose lines converge inside three actions come out equal.
+   *
+   * Measured tie-for-lead rates by kind: attack 39.5%, answer 36.1%, play 33.4%, pass 31.0%,
+   * resource 24.5%, initiative 11.5%. Restricting is what makes "does a second opinion help the kinds
+   * those tickets care about" a separate question from "does it help everywhere", and the two can
+   * disagree.
+   */
+  it('fires only on the decision kinds it names', () => {
+    const weights = makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach: 12 })
+    // The lockout tie is between an attack and a pass, so naming an unrelated kind must silence it.
+    const everywhere = makeBeamAi(weights, { ...shipped, tieBreak: { reply: 'null' } })
+    const elsewhere = makeBeamAi(weights, { ...shipped, tieBreak: { reply: 'null', tieKinds: ['resource'] } })
+    const here = makeBeamAi(weights, { ...shipped, tieBreak: { reply: 'null', tieKinds: ['attack'] } })
+
+    expect(everywhere(lockout())).toMatchObject({ type: 'attack', attackerId: 'chump' })
+    expect(here(lockout()), 'named, so it still fires').toMatchObject({ type: 'attack', attackerId: 'chump' })
+    // Not named, so the seeded pick decides again, exactly as with no tie-break at all.
+    expect(elsewhere(lockout())).toEqual(makeBeamAi(weights, shipped)(lockout()))
+  })
+
+  /** An empty restriction is not the same as no restriction: naming nothing silences it everywhere,
+   *  rather than quietly meaning "all kinds", which would make a typo look like a working arm. */
+  it('fires nowhere when the named set is empty', () => {
+    const weights = makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach: 12 })
+    const none = makeBeamAi(weights, { ...shipped, tieBreak: { reply: 'null', tieKinds: [] } })
+    expect(none(lockout())).toEqual(makeBeamAi(weights, shipped)(lockout()))
+  })
+
+  /** With no restriction the behaviour is unchanged, so every existing measurement keeps its meaning. */
+  it('applies everywhere when no kinds are named', () => {
+    const weights = makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach: 12 })
+    const plain = makeBeamAi(weights, { ...shipped, tieBreak: { reply: 'null' } })
+    const undef = makeBeamAi(weights, { ...shipped, tieBreak: { reply: 'null', tieKinds: undefined } })
+    expect(undef(lockout())).toEqual(plain(lockout()))
+  })
 
   it('reports how many candidates tied', () => {
     const ai = makeBeamAi(makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach: 12 }), {

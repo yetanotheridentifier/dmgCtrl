@@ -4,7 +4,7 @@ import {
   greedyAi, greedyBaselineAi, greedyFlatAi, beamAi, beamReplyAi, beamReplySharedAi, lethalBeamAi,
   makeBeamGreedy, makeLethalBeam, BEAM_REPLY_LIMITS, BEAM_REPLY_SHARED_LIMITS,
 } from './greedyAi'
-import { DEFAULT_BEAM_LIMITS, type BeamLimits } from './search'
+import { DEFAULT_BEAM_LIMITS, TIE_DECISION_KINDS, type BeamLimits } from './search'
 import { DEFAULT_LETHAL_LIMITS } from './lethal'
 import { DEFAULT_WEIGHTS, type EvalWeights } from './evaluate'
 
@@ -128,7 +128,7 @@ const WEIGHT_OVERRIDE = /^(.+)\+([A-Za-z][A-Za-z0-9]*)=(-?\d+(?:\.\d+)?)$/
 const TIE_BREAK_SPEC = /^(.+)\/tie=(.*)$/
 
 /** The fields a second opinion may set, and how to read each one. Anything else is a typo. */
-const TIE_BREAK_FIELDS = ['reply', 'width', 'depth', 'nodes'] as const
+const TIE_BREAK_FIELDS = ['reply', 'width', 'depth', 'nodes', 'kinds'] as const
 
 /**
  * The tie-break a name asks for, or `null` if it asks for none.
@@ -158,6 +158,20 @@ export function tieBreakFor(name: string): Partial<BeamLimits> | null {
         throw new Error(`Unknown tie-break reply policy "${value}" in "${name}". Valid: null, pessimistic, selfish`)
       }
       tieBreak.reply = value
+    } else if (field === 'kinds') {
+      // Pipe-separated, since the comma already separates fields. Validated against the search's own
+      // vocabulary rather than a restatement of it: a kind the search never produces would silence
+      // the arm while the name still reads as configured.
+      const named = value.split('|').filter(k => k !== '')
+      if (named.length === 0) {
+        throw new Error(`Empty tie-break kinds in "${name}". Valid: ${TIE_DECISION_KINDS.join(', ')}`)
+      }
+      for (const k of named) {
+        if (!TIE_DECISION_KINDS.some(valid => valid === k)) {
+          throw new Error(`Unknown decision kind "${k}" in "${name}". Valid: ${TIE_DECISION_KINDS.join(', ')}`)
+        }
+      }
+      tieBreak.tieKinds = named
     } else {
       const n = Number(value)
       // A non-numeric value parses to NaN, which would sail through a `< 1` check and reach the search

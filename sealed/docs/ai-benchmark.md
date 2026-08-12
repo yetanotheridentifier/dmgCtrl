@@ -53,6 +53,40 @@ Two consequences worth knowing when reading older numbers:
   head-to-head numbers that predate the `runBench` fix, treat them as directional rather than exactly
   reproducible: the ordering stands, the decimals do not.
 
+### Always run the matched control, and quote the paired difference
+
+**Over the coverage decks, `beam-reply` against itself does not read 50%.** Two independent seed
+blocks through the fixed `runBench`:
+
+| seeds | games | win rate (A) |
+| --- | --- | --- |
+| 7717-7726 | 800 | 48.6% |
+| 9001-9012 | 2,040 | 48.7% |
+
+Pooled, 1,383 of 2,840 = 48.70%, which is 1.4 SE below 50 and **not individually significant**. Two
+blocks agreeing within 0.1 points is suggestive, not conclusive, so treat the residual as open rather
+than as an established bias. Draws do not explain it (one draw in 2,040 games) and no evaluation
+weight can, because a control is the same bot on both sides and any weight change cancels.
+
+**Read an arm against its own control, never against a theoretical 50%.** The size of this matters
+more than it looks, because it inverts live results. The search tie-break over 2,040 games:
+
+| read against | difference | verdict |
+| --- | --- | --- |
+| theoretical 50% | +1.1 | not significant |
+| its matched control | **+2.35** | t = 4.94, df 11, **p < 0.001** |
+
+Same games, opposite conclusion.
+
+The paired form is also **immune to whatever causes the residual**, since it compares arm and control
+on matched seeds, and therefore matched decks and shuffles. It removes deck variance, which dominates
+on the coverage pool: across twelve shards the paired differences had a standard deviation of 1.65
+points where the raw per-shard win rates spanned 44.7% to 54.7%.
+
+**Keep games-per-shard a multiple of four.** `SEATING_CYCLE` is 4, so 170 games per shard leaves two
+games covering only two of the four seat and first-player combinations. Arm and control carry it
+identically, so a paired figure stays safe, but it is the same class of defect as the seat bias above.
+
 `margin` is seat-relative (`baseDamage.opponent - baseDamage.player`), so it is negated when the
 seats swap. `resultForA` owns that, because a wrongly-signed margin is silent: it still looks like a
 plausible number.

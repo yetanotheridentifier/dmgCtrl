@@ -3,7 +3,9 @@ import { opponentOf } from '../engine/types'
 import { effectivePower, effectiveHp } from '../engine/stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { handValue, DEFAULT_HAND_WEIGHTS, type HandWeights } from './handValue'
-import { role, canFinishThisAction, lockoutSwing, type Role } from './race'
+import {
+  role, canFinishThisAction, canFinishNow, lockoutSwing, reachSteady, remainingBase, type Role,
+} from './race'
 
 /**
  * Board evaluation for the greedy AI (#391), unit-count-centred for trades (#392): a single number,
@@ -167,6 +169,12 @@ export interface EvalWeights {
   /** Value of holding the initiative, i.e. of acting first next round (#394). */
   initiative: number
   /**
+   * Extra value for holding the initiative when the holder is the side facing lethal next round
+   * (#446), so acting first is their one chance to answer it. Zero elsewhere, which is what separates
+   * it from raising `initiative`: that is flat and measured monotonically harmful.
+   */
+  initiativeHorizon: number
+  /**
    * Per ready unit forfeited by having claimed the initiative this round (#394). Claiming makes you
    * pass for the rest of the round, so this is what that costs. Scaled by ready units rather than
    * flat, because the whole judgement is how much you were giving up.
@@ -237,6 +245,11 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   // against this cell's 50.7%. Worth its own A/B before assuming the cost term still earns its place.
   initiative: 1,
   claimCost: 2,
+  // #446. OFF until swept, per the rule that a new weight ships at zero. Conditional where the flat
+  // `initiative` weight above is not: it pays only on the 13.0% of claim offers where the holder is
+  // the side facing lethal next round, which is the case the search cannot see across the round
+  // boundary. The flat version of the same idea is monotonically harmful, so the sweep starts low.
+  initiativeHorizon: 0,
   // Swept (#395). A small shift is all the data supports: 1 and 2 tie, 3 and 4 are worse, and the
   // effect is modest at 51.4% +/- 0.9% over ~11,340 games (three matched-power seeds: 50.2%, 52.8%,
   // 51.2%) against a role-blind AI. Roughly a third of what #393 or #394 each returned.
@@ -406,7 +419,39 @@ function forfeitedTempo(state: GameState, id: PlayerId): number {
 export function initiativeValue(state: GameState, me: PlayerId, w: EvalWeights): number {
   const foe = opponentOf(me)
   const holding = w.initiative * (state.initiative === me ? 1 : -1)
-  return holding - w.claimCost * forfeitedTempo(state, me) + w.claimCost * forfeitedTempo(state, foe)
+  return holding + horizonValue(state, me, w)
+    - w.claimCost * forfeitedTempo(state, me) + w.claimCost * forfeitedTempo(state, foe)
+}
+
+/**
+ * Extra value for holding the initiative when acting first next round is the difference (#446).
+ *
+ * The search stops dead at the round boundary, so the whole of turn order is out of sight, and "take
+ * it" is the largest tie in the model at **15.3%** of 2,164 offers. Raising the flat `initiative`
+ * weight is a measured dead end (4 -> 46.8%, 6 -> 35.4%, 8 -> 29.4%), because it buys turn order with
+ * whole turns everywhere rather than where it matters.
+ *
+ * The predicate is the one that was measured: the **holder of the initiative is the side facing lethal
+ * next round**, so acting first is their chance to answer it. That is 13.0% of claim offers, split
+ * 10.4% denial and 2.6% conversion, and it is silent on the rest.
+ *
+ * **Seat-relative on purpose.** Asking "can the opponent finish me" would not survive a seat swap, and
+ * `publicScore` has to stay zero-sum or a pessimistic reply is minimising a different function from
+ * the one the root maximises. Written as holder-threatened, the term negates cleanly.
+ *
+ * Guarded at zero so the deployed configuration pays nothing: `reachSteady` and `canFinishNow` are far
+ * too expensive for an unconditional call on this path.
+ */
+function horizonValue(state: GameState, me: PlayerId, w: EvalWeights): number {
+  if (w.initiativeHorizon === 0) return 0
+  const threatened = (seat: PlayerId): number => {
+    if (state.initiative !== seat) return 0
+    // Able to finish this round makes it moot: we would simply win rather than buy turn order.
+    if (canFinishNow(state, seat)) return 0
+    const other = opponentOf(seat)
+    return reachSteady(state, other) >= remainingBase(state, other) ? 1 : 0
+  }
+  return w.initiativeHorizon * (threatened(me) - threatened(opponentOf(me)))
 }
 
 /**
