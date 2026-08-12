@@ -12,6 +12,7 @@ import { runCost } from './cost'
 import { runBudget, type BudgetReport } from './budget'
 import { join } from 'node:path'
 import { runShards, poolShards, pendingSeeds, loadShardResults, shardRunKey, SHARD_DIR } from './shard'
+import { renderStatus, loadAllProgress, preflight } from './status'
 import type { CostReport } from './cost'
 import type { DeckSource } from './decks'
 import { runLethal } from './lethal'
@@ -64,6 +65,7 @@ interface Args {
   matchups: boolean
   /** Run the head-to-head as N parallel single-threaded processes over N seeds, and pool them. */
   shards?: number
+  status: boolean
   triage: boolean
   /** Deck population for the A/B: `mirror` (default) or `coverage`. See `DeckSource`. */
   decks?: DeckSource
@@ -98,6 +100,7 @@ function parseArgs(argv: string[]): Args {
   let depth: number | undefined
   let matchups = false
   let shards: number | undefined
+  let status = false
   let triage = false
   let decks: DeckSource | undefined
   for (let i = 0; i < argv.length; i++) {
@@ -117,6 +120,7 @@ function parseArgs(argv: string[]): Args {
     else if (arg === '--depth') depth = Number(argv[++i])
     else if (arg === '--matchups') matchups = true
     else if (arg === '--shard') shards = Number(argv[++i])
+    else if (arg === '--status') status = true
     else if (arg === '--decks') {
       const v = argv[++i]
       if (v !== 'mirror' && v !== 'coverage') throw new Error(`--decks must be mirror or coverage, got "${v}"`)
@@ -131,7 +135,7 @@ function parseArgs(argv: string[]): Args {
   if (depth !== undefined && (!Number.isFinite(depth) || depth < 1)) throw new Error('--depth must be a positive integer')
   if (triage && positional.length === 0) throw new Error('--triage needs at least one set code, e.g. --triage LAW SEC')
   if (shards !== undefined && (!Number.isFinite(shards) || shards < 1)) throw new Error('--shard must be a positive integer')
-  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, matchups, shards, triage, decks, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, matchups, shards, status, triage, decks, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
@@ -746,6 +750,8 @@ async function runShardMode(args: Args): Promise<void> {
     `\n${args.aiA} vs ${args.aiB}   ${shards} shards x ${args.games} games ` +
     `= ${shards * args.games} games   seeds ${args.seed} to ${args.seed + shards - 1}\n`,
   )
+  // Cheap checks, stated before hours are spent rather than discovered afterwards.
+  for (const warning of preflight({ shards, games: args.games })) console.log(`  WARNING: ${warning}\n`)
   // Say so loudly. A resumed run that looked like a fresh one would invite someone to wonder why a
   // three-day job finished in twenty minutes.
   if (todo.length < shards) {
@@ -907,6 +913,8 @@ function main(): void {
   if (args.budget) { runBudgetMode(args); return }
   if (args.lethal) { runLethalMode(args); return }
   if (args.matchups) { runMatchupsMode(args); return }
+  // Read-only, and deliberately ahead of every mode: asking what is running must never start anything.
+  if (args.status) { console.log(renderStatus(loadAllProgress(), Date.now())); return }
   if (args.shards !== undefined) { void runShardMode(args); return }
 
   let report: BenchReport

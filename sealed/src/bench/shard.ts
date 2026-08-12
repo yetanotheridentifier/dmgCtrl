@@ -4,6 +4,9 @@ import { join } from 'node:path'
 import { wilsonInterval } from './stats'
 import { COMMIT_ID } from '../buildIdentity'
 import type { DeckSource } from './decks'
+import { SHARD_DIR, makeManifest, writeStatusFile } from './status'
+
+export { SHARD_DIR }
 
 /**
  * Run one A/B as N single-threaded processes and pool the result (#447, #488).
@@ -80,9 +83,6 @@ export interface ShardConfig {
    */
   decks?: DeckSource
 }
-
-/** Where a run's per-shard results and logs live, one directory per run. */
-export const SHARD_DIR = 'bench-results/shards'
 
 /**
  * Identify a run by what makes it that run: the two AIs, the games per shard, and the first seed.
@@ -200,6 +200,12 @@ export async function runShards(config: ShardConfig): Promise<ShardResult[]> {
   const dir = join(SHARD_DIR, shardRunKey(config))
   mkdirSync(dir, { recursive: true })
 
+  // The manifest is what makes progress readable by anything other than this process. The run key
+  // deliberately excludes the shard count so a run can resume at a different one, which means the
+  // result files alone can never say how many shards were expected, and a subset of them looks exactly
+  // like a finished run. Written before the first child starts, so `--status` sees a run immediately.
+  writeFileSync(join(dir, 'run.json'), JSON.stringify(makeManifest(config, shardRunKey(config)), null, 2))
+
   const banked = loadShardResults(dir)
   const todo = pendingSeeds(config, banked)
 
@@ -223,6 +229,9 @@ export async function runShards(config: ShardConfig): Promise<ShardResult[]> {
         const result = parseShardOutput(out, seed, code ?? 1)
         // Written before resolving, so a parent that dies next still leaves this shard banked.
         writeFileSync(join(dir, `seed-${seed}.json`), JSON.stringify(result, null, 2))
+        // Refresh the at-a-glance view every time a shard lands, so a file left open in an editor
+        // tracks a multi-hour run without anyone having to ask it to.
+        writeStatusFile()
         resolve(result)
       })
     })

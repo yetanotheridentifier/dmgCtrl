@@ -6,7 +6,9 @@ import { benchDeckSet, type DeckSource } from './decks'
 import { seating, resultForA } from './seating'
 
 /** Games per full seat / first-player cycle. See `seating`. */
-const SEATING_CYCLE = 4
+/** Seat and first player cycle on independent axes, so four games cover all four combinations once.
+ *  Exported so a pre-flight check can warn about a games-per-shard that leaves a partial cycle. */
+export const SEATING_CYCLE = 4
 import { playGame } from './selfPlay'
 import type { DropReason, GameResult } from './selfPlay'
 

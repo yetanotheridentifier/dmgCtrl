@@ -260,10 +260,43 @@ roughly 600 MB free and lightly into swap. Cores used to bind and memory did not
 short job first, read per-worker RSS, and reduce the shard count above ~500 MB a worker. A deeper
 search holds a larger frontier per root and should be expected to want more.
 
+**`--games` is per shard, and the wall clock is set by that rather than by the total.** `--shard 10
+--games 80` plays 800 games, and takes as long as one shard needs for 80. Reading it as the total
+turned a 30-minute estimate into 4.3 hours.
+
+**Keep `--games` a multiple of four.** Seat and first player cycle on independent axes with a period of
+`SEATING_CYCLE = 4`, so a remainder leaves a tail of games covering only some of the four
+combinations. A pre-flight check warns and names the two nearest safe values. It biases an arm and its
+control identically, so a paired figure survives it, but it is the same class of defect as the seat
+bias that made self-play read 48.3%.
+
 Shards split by **seed**, not by dividing one seed's games. Every shard is therefore a valid
 standalone run, exactly like the existing three-seed results, and the per-shard column is worth
 reading: a finding that holds across independent seeds is far stronger than one long run, and a shard
 disagreeing with the rest is a signal rather than something to average away.
+
+### Watching a run: `--status`
+
+```bash
+npm run bench --prefix sealed -- --status
+```
+
+Read-only, and safe at any time: it starts nothing. Per run it reports shards done of total, games
+played of total, **measured** seconds per game, and a projected finish, all from files already on disk.
+
+Every run also rewrites `bench-results/STATUS.md` as each shard lands, so a long run can be watched
+from an open editor tab rather than by asking.
+
+**An incomplete run is labelled `PARTIAL` and shows no pooled rate.** A subset of shards looks exactly
+like a finished run, and both of us have drawn a conclusion from one. The completeness of a run cannot
+be inferred from its result files either, because `shardRunKey` deliberately excludes the shard count
+so a run can resume at a different one, so each run writes a `run.json` manifest at launch and that is
+what makes "9 of 12" knowable at all.
+
+A shard counts as done only if it is this run's: within the seed range, stamped with this build, exited
+cleanly, and having played something. Those are the same four conditions `pendingSeeds` uses to decide
+what to re-run, and they must agree, or progress would show a run as further along than a resume would
+find it.
 
 **Pooling sums the games; it never averages the rates.** An unweighted mean is correct only when every
 shard completed the same number of games, and shards drop games, so the mean would silently
