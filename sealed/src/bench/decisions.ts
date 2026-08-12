@@ -8,6 +8,8 @@ import { buildCardDb } from '../engine/cardDb'
 import { initGame } from '../engine/initGame'
 import { legalMoves, enemyAttackTargets } from '../engine/legalMoves'
 import { unitHasKeyword } from '../engine/keywords'
+import { effectivePower } from '../engine/stats'
+import { getCardDefinition } from '../engine/abilities'
 import { resolve } from '../engine/resolve'
 import { seededShuffle, nextSeed } from '../engine/rng'
 import { COMMIT_ID } from '../buildIdentity'
@@ -475,6 +477,189 @@ export interface AdvantageStat {
   grantChoicesAllEqual: number
 }
 
+/**
+ * What each side could do next round, at a decision where claiming the initiative is on offer (#446).
+ *
+ * Claiming makes you act first in the round **after** this one, and the search stops at the round
+ * boundary, so the whole value of the decision is out of sight. That is why "initiative: take it" is
+ * the largest tie in the model, at 15.3% of 2,164 offers.
+ *
+ * Everything readies at regroup, so `reachSteady` is what a side can land next round. Deliberately
+ * ignores the two cards each player draws: they are unknown to a player at the moment of choosing,
+ * and reading them off the deck would be information the bot should not have.
+ */
+export interface InitiativeOutlook {
+  /** Our steady reach covers what is left of their base, so acting first next round wins. */
+  weFinishNext: boolean
+  /** Theirs covers ours. */
+  theyFinishNext: boolean
+  /** We can already finish this round, so claiming is moot: we would simply win instead. */
+  lethalNow: boolean
+}
+
+/** Base damage still needed to finish `seat`. */
+function baseRemaining(state: GameState, seat: PlayerId): number {
+  const base = state.players[seat].base
+  return (state.cards[base.cardId]?.hp ?? 30) - base.damage
+}
+
+export function initiativeOutlook(state: GameState, me: PlayerId): InitiativeOutlook {
+  const foe = opponentOf(me)
+  return {
+    weFinishNext: reachSteady(state, me) >= baseRemaining(state, foe),
+    theyFinishNext: reachSteady(state, foe) >= baseRemaining(state, me),
+    lethalNow: canFinishNow(state, me),
+  }
+}
+
+/**
+ * The ceiling on #446's rule: how often claiming could convert a win, or deny one.
+ *
+ * Sized before the mechanism is built, because the rule fires only where claiming is offered **and**
+ * acting first next round changes the outcome. Lethal is available on 4.3% of decisions and 0.0%
+ * before round 5, so that conjunction may be very small even though the initiative tie is large.
+ */
+export interface InitiativeHorizonStat {
+  /** Decisions where claiming was a legal move. */
+  offered: number
+  weFinishNext: number
+  theyFinishNext: number
+  /** Both: whoever acts first wins, so claiming decides the game. The conversion case. */
+  bothFinishNext: number
+  /** They can finish and we cannot: denial is the only out. The inverse case. */
+  theyOnly: number
+  /** Positions we could already finish this round, where claiming is moot. */
+  lethalNow: number
+  /** The conversion case, excluding positions we could already win outright. */
+  conversionLive: number
+  /** The denial case, excluding the same. */
+  denialLive: number
+  /** We finish and they do not, so the initiative is a convenience rather than the game. */
+  weOnlyLive: number
+  /** Neither side finishes next round: the baseline population, and the control for the two below. */
+  quietOffers: number
+  /**
+   * How often the bot actually claimed in each bucket.
+   *
+   * **The prevalence figures alone cannot say whether anything is wrong.** The bot claims on 12.1% of
+   * offers already; if those claims are the denial cases, the rule is redundant. Reading a rate
+   * against a baseline is what diagnosed #493 (strips a Shield 7.4% against random's 17.9%) and what
+   * was missing when a 15.8% shield prevalence and a 20.7% Advantage prevalence each bought a term
+   * that measured nothing.
+   *
+   * `quietClaimed / quietOffers` is that baseline, drawn from the same run and the same population, so
+   * no second bot and no pooling is involved.
+   */
+  conversionClaimed: number
+  denialClaimed: number
+  weOnlyClaimed: number
+  quietClaimed: number
+}
+
+/**
+ * Whether the bot can decline an optional ability (#396).
+ *
+ * A "may" trigger reaches the AI as a pending choice whose legal answers include `skipTrigger`, so
+ * accepting and declining are observable from the candidate list without a table of ~70 choice kinds.
+ * The ticket names the failure mode directly: "the bot always accepting every optional trigger, which
+ * is what happens if declining is never scored favourably".
+ *
+ * `randomExpected` is the control. A uniform picker takes one of `n` candidates and exactly one of
+ * them declines, so its expected accept count is the sum of `(n - 1) / n`. That is arithmetic rather
+ * than a second run: exact, unbiased, and free.
+ */
+export interface TriggerStat {
+  /** Decisions where a decline and at least one accept were both legal. */
+  offered: number
+  /** Of those, decisions where the bot chose anything other than the decline. */
+  accepted: number
+  /** Expected accepts for a uniform picker over the same decisions. */
+  randomExpected: number
+  /** Of those, decisions where every candidate scored alike, so the choice was a coin flip anyway. */
+  tied: number
+  /** Per choice kind, most offered first: one card dealing out a menu is a different finding from a
+   *  broad bias, and the aggregate cannot tell them apart. */
+  byKind: Array<{ kind: string; offered: number; accepted: number; randomExpected: number }>
+}
+
+/**
+ * Offensive pinning (#397), sized for the first time.
+ *
+ * Holding a unit ready to threaten an undeployed leader is a **non-action**, and a board-score
+ * maximiser always prefers the attack that moves the score now. No amount of depth finds it, because
+ * the search is choosing between actions and this is the value of not taking one. That makes it one of
+ * the few items that cannot be subsumed by search, and it has never been measured.
+ *
+ * `deployedIntoPin` is the one that decides whether self-play can measure it at all. A strategy
+ * neither side plays cannot be rewarded by a bench: if the opponent deploys into a pin regardless,
+ * holding the unit wins nothing here however right it is in a real game.
+ */
+export interface PinStat {
+  /** Decisions taken while the enemy leader could still deploy. */
+  decisions: number
+  /** Of those, decisions where some ready ground unit of ours would defeat it on arrival. */
+  pinAvailable: number
+  /** Of those, decisions where the bot attacked with a pinning unit, spending the threat. */
+  pinSpent: number
+  /** Total pinning units across `pinAvailable`, for a mean. */
+  pinnersTotal: number
+  /** Leader deploys observed. */
+  deploys: number
+  /** Of those, deploys made while the other seat held a pin on the arriving leader. */
+  deployedIntoPin: number
+}
+
+/**
+ * Split a candidate list into the ways of declining and the ways of accepting.
+ *
+ * Taken from the candidates rather than from the choice kind, so a card offering several ways to say
+ * yes counts as one offer and one accept rather than one per option. A list with no decline is a
+ * mandatory choice and not this decision at all.
+ */
+export function optionalTriggerSplit(moves: Action[]): { declines: number; accepts: number } {
+  let declines = 0
+  for (const m of moves) if (m.type === 'skipTrigger') declines++
+  return { declines, accepts: moves.length - declines }
+}
+
+/**
+ * What a uniform picker would do with the same candidates: accept unless it happens to land on the
+ * decline. Zero when there is nothing to decline, so a non-decision adds no expectation either way.
+ */
+export function randomAcceptChance(split: { declines: number; accepts: number }): number {
+  const n = split.declines + split.accepts
+  if (split.declines === 0 || split.accepts === 0 || n === 0) return 0
+  return split.accepts / n
+}
+
+/**
+ * Our ready units that would defeat the enemy leader if it deployed right now (#397).
+ *
+ * A leader arrives in the **ground** arena, ready and undamaged (CR 3.4.4), so the threat is any ready
+ * ground unit whose power covers the leader's deployed HP. Exhausted units and the wrong arena
+ * threaten nothing.
+ *
+ * Returns empty once there is no deploy left to threaten, mirroring `legalMoves`: already deployed, or
+ * the epic action spent, or the cost not controlled. Deploy conditions are read through the card
+ * definition for the same reason, so a custom one (Bo-Katan) is not silently treated as affordable.
+ */
+export function pinsLeader(state: GameState, me: PlayerId): string[] {
+  const foe = opponentOf(me)
+  const their = state.players[foe].leader
+  if (their.deployed || their.epicActionUsed) return []
+  const leaderCard = state.cards[their.cardId]
+  if (!leaderCard) return []
+  const condition = getCardDefinition(their.cardId)?.deployCondition
+  const canDeploy = condition ? condition(state, foe) : state.players[foe].resources.length >= leaderCard.cost
+  if (!canDeploy) return []
+
+  const hp = leaderCard.hp ?? 0
+  if (hp <= 0) return []
+  return state.players[me].units
+    .filter(u => !u.exhausted && u.arena === 'ground' && effectivePower(state, u, { attacking: true }) >= hp)
+    .map(u => u.instanceId)
+}
+
 /** Advantage tokens per unit instance, across both seats. */
 function advantageByUnit(s: GameState): Map<string, number> {
   const out = new Map<string, number>()
@@ -542,6 +727,9 @@ export interface DecisionReport {
   games: number
   stats: DecisionStat[]
   ties: TieStat
+  initiativeHorizon: InitiativeHorizonStat
+  triggers: TriggerStat
+  pin: PinStat
   advantage: AdvantageStat
   blockedReach: BlockedReachStat
   shields: ShieldStat
@@ -705,6 +893,16 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   }
   const blocked: BlockedReachStat = {
     decisions: 0, active: 0, activeAndLaneShut: 0, totalQuantity: 0, widestQuantity: 0,
+  }
+  const horizon: InitiativeHorizonStat = {
+    offered: 0, weFinishNext: 0, theyFinishNext: 0, bothFinishNext: 0, theyOnly: 0,
+    lethalNow: 0, conversionLive: 0, denialLive: 0, weOnlyLive: 0, quietOffers: 0,
+    conversionClaimed: 0, denialClaimed: 0, weOnlyClaimed: 0, quietClaimed: 0,
+  }
+  const triggers = { offered: 0, accepted: 0, randomExpected: 0, tied: 0 }
+  const triggerKinds = new Map<string, { offered: number; accepted: number; randomExpected: number }>()
+  const pin: PinStat = {
+    decisions: 0, pinAvailable: 0, pinSpent: 0, pinnersTotal: 0, deploys: 0, deployedIntoPin: 0,
   }
   const advantage: AdvantageStat = {
     decisions: 0, decisionsWithAny: 0, tokensSeen: 0, maxStack: 0, decisionsOnCarrier: 0,
@@ -902,6 +1100,47 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         // a card rather than chosen, which is why it is measured separately from the plays above.
         if (hasPendingChoices(s)) record(answering, withSearch)
 
+        // Can the bot say no? (#396) An optional trigger is a decision offering both a decline and at
+        // least one accept. Counted per decision, not per option: a card with five ways to say yes is
+        // still one chance to say no.
+        {
+          const split = optionalTriggerSplit(moves)
+          if (split.declines > 0 && split.accepts > 0) {
+            const chance = randomAcceptChance(split)
+            const accepted = action.type !== 'skipTrigger'
+            triggers.offered++
+            triggers.randomExpected += chance
+            if (accepted) triggers.accepted++
+            if (new Set(scored.map(x => x.v)).size === 1) triggers.tied++
+            const kind = (s.pendingChoices ?? []).find(c => c.controller === me)?.kind ?? 'unknown'
+            const bucket = triggerKinds.get(kind) ?? { offered: 0, accepted: 0, randomExpected: 0 }
+            bucket.offered++
+            bucket.randomExpected += chance
+            if (accepted) bucket.accepted++
+            triggerKinds.set(kind, bucket)
+          }
+        }
+
+        // Offensive pinning (#397). `pinSpent` is the behaviour the ticket predicts: the bot attacks
+        // with the unit that was holding the threat, because attacking moves the score now and holding
+        // is a non-action no search has a candidate for.
+        {
+          const pinners = pinsLeader(s, me)
+          const theirLeader = s.players[foe].leader
+          if (!theirLeader.deployed && !theirLeader.epicActionUsed) pin.decisions++
+          if (pinners.length > 0) {
+            pin.pinAvailable++
+            pin.pinnersTotal += pinners.length
+            if (action.type === 'attack' && pinners.includes(action.attackerId)) pin.pinSpent++
+          }
+          // Whether the OTHER seat is playing around our threat. If leaders deploy into a pin anyway,
+          // self-play cannot show the strategy being punished, so it cannot reward holding one either.
+          if (action.type === 'deployLeader') {
+            pin.deploys++
+            if (pinsLeader(s, foe).length > 0) pin.deployedIntoPin++
+          }
+        }
+
         // How much of what gets scored is a half-resolved board. A single forced move is not a
         // decision, so it cannot be mis-ranked against anything and is excluded, matching `record`.
         if (scored.length >= 2) {
@@ -928,6 +1167,38 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         // where the seeded tie-break decides whether to forfeit the rest of the round.
         const init = withSearch.find(x => x.m.type === 'takeInitiative')
         if (init) {
+          // What claiming could be worth next round (#446). Counted here rather than per decision,
+          // because the rule can only ever fire where claiming is actually on offer.
+          {
+            const o = initiativeOutlook(s, me)
+            horizon.offered++
+            if (o.weFinishNext) horizon.weFinishNext++
+            if (o.theyFinishNext) horizon.theyFinishNext++
+            if (o.lethalNow) horizon.lethalNow++
+            if (o.weFinishNext && o.theyFinishNext) horizon.bothFinishNext++
+            else if (o.theyFinishNext) horizon.theyOnly++
+
+            // The cross-tab: prevalence says the situation arises, this says whether the bot gets it
+            // wrong. Four buckets partitioning the offers we could not simply win outright, each with
+            // the claim rate beside it, so the two live cases can be read against the quiet baseline
+            // from the same population rather than against a second run.
+            const claimed = action.type === 'takeInitiative'
+            if (!o.lethalNow) {
+              if (o.weFinishNext && o.theyFinishNext) {
+                horizon.conversionLive++
+                if (claimed) horizon.conversionClaimed++
+              } else if (o.theyFinishNext) {
+                horizon.denialLive++
+                if (claimed) horizon.denialClaimed++
+              } else if (o.weFinishNext) {
+                horizon.weOnlyLive++
+                if (claimed) horizon.weOnlyClaimed++
+              } else {
+                horizon.quietOffers++
+                if (claimed) horizon.quietClaimed++
+              }
+            }
+          }
           initiative.offered++
           initiative.candidates += 1
           if (init.v === best) initiative.tied++
@@ -1076,6 +1347,14 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         .map(([kind, b]) => ({ kind, ...b }))
         .sort((a, b) => b.fired - a.fired || a.kind.localeCompare(b.kind)),
     },
+    initiativeHorizon: horizon,
+    triggers: {
+      ...triggers,
+      byKind: [...triggerKinds]
+        .map(([kind, b]) => ({ kind, ...b }))
+        .sort((a, b) => b.offered - a.offered || a.kind.localeCompare(b.kind)),
+    },
+    pin,
     advantage,
     blockedReach: blocked,
     shields,

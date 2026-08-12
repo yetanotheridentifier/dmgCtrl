@@ -210,6 +210,49 @@ describe('breaking a tie with a second opinion', () => {
     expect(compared, 'the corpus must actually exercise the comparison').toBeGreaterThan(20)
   }, 120_000)
 
+  /**
+   * **Restricting the second opinion to decision kinds it should help.**
+   *
+   * Ties for the lead are not evenly spread, and neither is the case for a second opinion. #396 and
+   * #398 are both about decisions whose value lies beyond the horizon, and the search demonstrably
+   * makes those ties WORSE rather than better: resourcing went 0.6% to 5.4% and card play 6.7% to
+   * 11.8% when the beam landed, because a beam values a move by the best board it can reach and
+   * candidates whose lines converge inside three actions come out equal.
+   *
+   * Measured tie-for-lead rates by kind: attack 39.5%, answer 36.1%, play 33.4%, pass 31.0%,
+   * resource 24.5%, initiative 11.5%. Restricting is what makes "does a second opinion help the kinds
+   * those tickets care about" a separate question from "does it help everywhere", and the two can
+   * disagree.
+   */
+  it('fires only on the decision kinds it names', () => {
+    const weights = makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach: 12 })
+    // The lockout tie is between an attack and a pass, so naming an unrelated kind must silence it.
+    const everywhere = makeBeamAi(weights, { ...shipped, tieBreak: { reply: 'null' } })
+    const elsewhere = makeBeamAi(weights, { ...shipped, tieBreak: { reply: 'null', tieKinds: ['resource'] } })
+    const here = makeBeamAi(weights, { ...shipped, tieBreak: { reply: 'null', tieKinds: ['attack'] } })
+
+    expect(everywhere(lockout())).toMatchObject({ type: 'attack', attackerId: 'chump' })
+    expect(here(lockout()), 'named, so it still fires').toMatchObject({ type: 'attack', attackerId: 'chump' })
+    // Not named, so the seeded pick decides again, exactly as with no tie-break at all.
+    expect(elsewhere(lockout())).toEqual(makeBeamAi(weights, shipped)(lockout()))
+  })
+
+  /** An empty restriction is not the same as no restriction: naming nothing silences it everywhere,
+   *  rather than quietly meaning "all kinds", which would make a typo look like a working arm. */
+  it('fires nowhere when the named set is empty', () => {
+    const weights = makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach: 12 })
+    const none = makeBeamAi(weights, { ...shipped, tieBreak: { reply: 'null', tieKinds: [] } })
+    expect(none(lockout())).toEqual(makeBeamAi(weights, shipped)(lockout()))
+  })
+
+  /** With no restriction the behaviour is unchanged, so every existing measurement keeps its meaning. */
+  it('applies everywhere when no kinds are named', () => {
+    const weights = makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach: 12 })
+    const plain = makeBeamAi(weights, { ...shipped, tieBreak: { reply: 'null' } })
+    const undef = makeBeamAi(weights, { ...shipped, tieBreak: { reply: 'null', tieKinds: undefined } })
+    expect(undef(lockout())).toEqual(plain(lockout()))
+  })
+
   it('reports how many candidates tied', () => {
     const ai = makeBeamAi(makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach: 12 }), {
       ...shipped, tieBreak: { reply: 'null' },

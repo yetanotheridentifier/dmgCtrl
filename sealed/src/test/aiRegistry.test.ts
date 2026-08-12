@@ -212,6 +212,27 @@ describe('AI registry', () => {
     expect(tieBreakFor('beam-reply/tie=nodes:50000')).toEqual({ nodes: 50_000 })
   })
 
+  /**
+   * `kinds:` restricts the second opinion to named decision kinds, so "does it help the decisions
+   * #396 and #398 are about" is a separate arm from "does it help everywhere". Pipe-separated, since
+   * the comma already separates fields.
+   */
+  it('restricts the second opinion to named decision kinds', () => {
+    expect(tieBreakFor('beam-reply/tie=reply:null,kinds:answer|play|resource'))
+      .toEqual({ reply: 'null', tieKinds: ['answer', 'play', 'resource'] })
+    expect(tieBreakFor('beam-reply/tie=reply:null,kinds:attack'))
+      .toEqual({ reply: 'null', tieKinds: ['attack'] })
+    expect(() => resolveAi('beam-reply/tie=reply:null,kinds:answer')).not.toThrow()
+  })
+
+  /** A misspelt kind silences the arm everywhere while still looking configured, which is the same
+   *  expensive failure as a misspelt field. */
+  it('rejects a decision kind that does not exist', () => {
+    expect(() => resolveAi('beam-reply/tie=reply:null,kinds:answers')).toThrow()
+    expect(() => resolveAi('beam-reply/tie=reply:null,kinds:')).toThrow()
+    expect(() => resolveAi('beam-reply/tie=reply:null,kinds:play|nonsense')).toThrow()
+  })
+
   it('has no tie-break for a name that does not ask for one', () => {
     expect(tieBreakFor('beam-reply')).toBeNull()
     expect(tieBreakFor('greedy')).toBeNull()

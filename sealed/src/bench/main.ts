@@ -366,6 +366,60 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     )
   }
 
+  const ih = report.initiativeHorizon
+  lines.push(
+    '',
+    '  initiative, looking one round ahead: claiming makes you act first NEXT round, which the search',
+    '  cannot see at all (it stops at the round boundary). That is why "take it" is the largest tie in',
+    '  the model. These bound how often claiming could decide the game rather than merely help.',
+    row('claiming offered', `${ih.offered}`),
+    row('we finish next round', rate(ih.weFinishNext, ih.offered)),
+    row('they finish next round', rate(ih.theyFinishNext, ih.offered)),
+    row('BOTH: order decides it', rate(ih.bothFinishNext, ih.offered) + '  (the conversion case)'),
+    row('  and not already won', rate(ih.conversionLive, ih.offered)),
+    row('theirs only: deny or lose', rate(ih.theyOnly, ih.offered) + '  (the denial case)'),
+    row('  and not already won', rate(ih.denialLive, ih.offered)),
+    row('could just win this round', rate(ih.lethalNow, ih.offered)),
+    '',
+    '  and what the bot DID about it. Prevalence says the situation arises; only this says whether the',
+    '  bot gets it wrong. "quiet" is the control: the claim rate where no horizon case is live at all,',
+    '  from the same population. A denial rate at or below quiet is a blind spot; well above it means',
+    '  the behaviour is already there and needs no rule.',
+    row('claimed, conversion', rate(ih.conversionClaimed, ih.conversionLive)),
+    row('claimed, DENIAL', rate(ih.denialClaimed, ih.denialLive)),
+    row('claimed, we finish only', rate(ih.weOnlyClaimed, ih.weOnlyLive)),
+    row('claimed, quiet (control)', rate(ih.quietClaimed, ih.quietOffers)),
+  )
+
+  const tr = report.triggers
+  lines.push(
+    '',
+    '  optional triggers: a "may" ability offers a decline among its answers, so declining is visible',
+    '  without a table of ~70 choice kinds. The named failure mode is a bot that accepts everything,',
+    '  which is what happens if declining is never scored favourably. The control is exact rather than',
+    '  measured: a uniform picker takes one of n candidates and exactly one of them declines.',
+    row('optional triggers offered', `${tr.offered}`),
+    row('the bot accepted', rate(tr.accepted, tr.offered)),
+    row('a uniform picker would', tr.offered === 0 ? 'n/a' : pct(tr.randomExpected / tr.offered)),
+    row('  all answers scored alike', rate(tr.tied, tr.offered)),
+    row('by kind', tr.byKind.slice(0, 4).map(k => `${k.kind} ${pct(k.offered === 0 ? 0 : k.accepted / k.offered)} of ${k.offered}`).join(', ') || 'none'),
+  )
+
+  const pn = report.pin
+  lines.push(
+    '',
+    '  offensive pinning: holding a ready unit that would kill their leader on arrival. This is a',
+    '  NON-action, so no depth reaches it: the search chooses between actions and this is the value of',
+    '  not taking one. "deployed into a pin" decides whether self-play can measure it at all, since a',
+    '  bench where the threat is never respected cannot reward holding it.',
+    row('their leader can deploy', `${pn.decisions}`),
+    row('  we hold a pin', rate(pn.pinAvailable, pn.decisions)),
+    row('  mean pinning units', pn.pinAvailable === 0 ? 'n/a' : (pn.pinnersTotal / pn.pinAvailable).toFixed(1)),
+    row('  and we SPENT it', rate(pn.pinSpent, pn.pinAvailable) + '  (attacked with the pinning unit)'),
+    row('leader deploys seen', `${pn.deploys}`),
+    row('  deployed into a pin', rate(pn.deployedIntoPin, pn.deploys)),
+  )
+
   const ad = report.advantage
   const spent = ad.spentAttacking + ad.spentDefending + ad.spentOther
   lines.push(

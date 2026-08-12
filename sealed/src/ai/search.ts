@@ -363,6 +363,22 @@ export interface BeamLimits {
    */
   tieBreak?: Partial<BeamLimits>
   /**
+   * Decision kinds this second opinion applies to, or absent for all of them.
+   *
+   * Ties for the lead are not spread evenly and neither is the case for consulting a second model:
+   * attack 39.5%, answer 36.1%, play 33.4%, pass 31.0%, resource 24.5%, initiative 11.5%. #396 and
+   * #398 are specifically about decisions whose value lies past the horizon, and the beam makes those
+   * ties WORSE rather than better (resourcing 0.6% to 5.4%, card play 6.7% to 11.8%), because a
+   * candidate is valued by the best board it reaches and converging lines come out equal.
+   *
+   * So "does a second opinion help the decisions those tickets are about" has to be askable separately
+   * from "does it help everywhere". An **empty** list silences it rather than meaning all, so a typo
+   * cannot quietly produce a working arm under a restricted name.
+   *
+   * Only meaningful inside `tieBreak`; ignored on the outer limits.
+   */
+  tieKinds?: string[]
+  /**
    * The most any ONE owed chain may take from `nodes`.
    *
    * `nodes` is the decision's whole allowance and is shared with chain resolution, which without this
@@ -485,10 +501,50 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
     }
 
     const finalists = limits.tieBreak && bestMoves.length > 1
+      && tieBreakApplies(state, bestMoves, limits.tieBreak.tieKinds)
       ? breakTie(state, bestMoves, me, asRole, inner, limits)
       : bestMoves
     return finalists[Math.floor(seededUnit(state.rngSeed) * finalists.length)]
   }
+}
+
+/**
+ * The decision kinds a tie-break may be restricted to.
+ *
+ * The same vocabulary the `--decisions` tie split reports, so a rate read off that readout names the
+ * arm that would act on it. Exported for the registry to validate against, rather than restated there:
+ * a spec that parses to a kind the search never produces would silence the arm while looking
+ * configured, which is the most expensive way this can fail.
+ */
+export const TIE_DECISION_KINDS = ['attack', 'answer', 'play', 'resource', 'initiative', 'pass', 'other'] as const
+
+/** One move's kind. Matches `decisionKind` in the diagnostic, less the pending-choice case, which is
+ *  a property of the position rather than of any single candidate. */
+function kindOfMove(m: Action): string {
+  switch (m.type) {
+    case 'attack': return 'attack'
+    case 'playUnit': case 'playEvent': case 'playUpgrade': return 'play'
+    case 'resourceCard': case 'skipResource': return 'resource'
+    case 'takeInitiative': return 'initiative'
+    case 'pass': return 'pass'
+    default: return 'other'
+  }
+}
+
+/**
+ * Whether a restricted second opinion applies to this decision.
+ *
+ * A pending choice classifies the whole decision as `answer` however its candidates are typed, because
+ * the card handed the player a menu rather than the player choosing to have one. Otherwise a tied set
+ * can hold several kinds at once (an attack against a pass is the commonest), and **any** named kind
+ * being present is enough: the restriction exists to spend the second opinion where it helps, not to
+ * demand a homogeneous tie, which would almost never fire.
+ */
+function tieBreakApplies(state: GameState, tied: Action[], kinds: string[] | undefined): boolean {
+  if (kinds === undefined) return true
+  if (kinds.length === 0) return false
+  if (hasPendingChoices(state)) return kinds.includes('answer')
+  return tied.some(m => kinds.includes(kindOfMove(m)))
 }
 
 /**
