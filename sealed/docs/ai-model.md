@@ -238,6 +238,34 @@ extending lines that only work if the opponent cooperates. The curve is still cl
 Three measurements cross-check: beam beats greedy 60.0%, reply beats beam 54.5%, so reply should beat
 greedy by about 64.5%. Measured directly, **64.4%**.
 
+### On a tie, the optimist gets a say
+
+The pessimistic search rates candidates equal on **32.0%** of decisions (a tie for the LEAD, which is
+far commoner than every candidate scoring alike). The shipped bot then re-searches only those tied
+candidates under `reply: 'null'` and takes whichever now leads.
+
+Worth **+2.35 points** (t = 4.94 on 11 df, p < 0.001, 11 of 12 shards positive, 2,040 games against a
+control on the same seeds) for **+2.1%** per decision. Two smaller runs read +5.0 and +4.9; those are
+small-sample overestimates regressing toward +2.35, so quote the largest.
+
+Three properties make it a tie-break rather than a second bot:
+
+- **Only tied candidates are re-searched.** A second opinion able to overrule a clear winner would be a
+  different bot. Consulting the optimist *only where the pessimist is silent* is not the same as playing
+  optimistically, which loses 17 points.
+- **Still deterministic.** If the second opinion also ties, the survivors go back to the seeded pick.
+- **Applied everywhere.** Restricting it to answer, play and resource measured indistinguishable
+  (+4.25 against +4.9 on matched seeds, five of ten shards byte-identical), so the simpler form ships.
+  The benefit does concentrate in those kinds; including attacks and passes simply costs nothing.
+
+**It fixes no specific reported defect.** It does not fire on the shielded-Sentinel lockout at all,
+where passing wins outright 52 to 43; that tie only exists once `blockedReach` prices it, and the weight
+which creates it measures 25.0%. The case for this is the aggregate.
+
+One ply is **not** the right second opinion, which was the original proposal: it prefers passing in that
+same lockout, while `reply: 'null'` separates it 56.1 to 52. When the worst case cannot tell two moves
+apart, the upside can.
+
 Two properties keep it honest:
 
 - **Never negate.** `evaluate` stopped being zero-sum when the private hand term landed, so the
@@ -543,6 +571,38 @@ measured 50.6% against the shipped cell's 50.7%. That deserves its own A/B rathe
 A constraint worth knowing before anyone sweeps finer: `publicScore` must stay integer-valued so the
 private hand term remains a tie-break, so `initiative` can be 1 or 2 but never 1.5. If the true
 optimum lies between them, the model cannot express it.
+
+#### Making it conditional does not rescue it either
+
+Claiming makes you act first in the round **after** this one, and the search stops dead at the round
+boundary, so the whole value of turn order is out of sight. That is why "initiative: take it" is the
+largest tie in the model, at **15.3%** of 2,164 offers, roughly 7.5 coin flips a game.
+
+The bot is measurably blind to it. Claim rate by what the next round actually held:
+
+| | claimed | of |
+| --- | --- | --- |
+| both sides lethal next round (order decides it) | 21.1% | 57 |
+| they are lethal and we are not (deny or lose) | 15.1% | 225 |
+| we are lethal and they are not | 9.5% | 95 |
+| **neither (the control)** | **12.3%** | **1,677** |
+
+A chi-square across the four is ~5.9 on 3 df against a 7.8 critical value: **flat**. The bot claims at
+about the same rate whether or not it is about to be killed. The denial case is four times commoner
+than the conversion case, which is the opposite of the intuition that initiative matters most in a
+race.
+
+`initiativeHorizon` prices exactly that predicate (the holder of the initiative is the side facing
+lethal next round, 13.0% of offers, zero elsewhere) and **ships at 0** because it does not pay:
+**+1.87 at weight 3, fading to +1.0 at weight 6**, with the two weights indistinguishable from each
+other, so there is no reliable gradient. It also costs **65-70% more wall clock**, because the
+predicate calls `reachSteady` and `canFinishNow` on the `evaluate` hot path. A zero guard means the
+shipped configuration pays none of that.
+
+The lesson generalises past this term. Four attempts to price a beyond-horizon effect have now returned
+nothing: `blockedReach`, Advantage-as-one-shot, this, and a per-kind restriction on the tie-break. Every
+premise was correct and every **evaluation term** was worth approximately nothing. The one intervention
+that measured was a **search** change, comparing candidates differently rather than repricing a board.
 
 ### Lethal exposure
 

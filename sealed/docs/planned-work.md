@@ -136,34 +136,59 @@ Ordered on one principle: **correctness, then structure, then calibration.** A w
 against whatever the engine and the horizon happen to be, so anything that changes those has to land
 first or the sweep is repeated.
 
-1. **#446 give the bot a horizon.** The structural item, and worth more than the rule it is scoped
-   for. **The search stops dead at the round boundary** (`search.ts` drops any node that leaves the
-   action phase), so no board it can reach ever contains next round's damage. Every proxy term for
-   out-of-horizon value exists because of this.
+1. **#446 give the bot a horizon: the mechanism, not the rule.** The rule this ticket is named for has
+   been built and rejected, and the structural item survives it.
 
-   Its own headroom is thin: lethal is available to us on 4.3% of decisions, to them on 5.2%, and
-   **0.0% before round 5** (1 occurrence in 20,112 early-game decisions). Build it for the mechanism.
-   #433 has landed, so the dependency is satisfied.
+   **The search stops dead at the round boundary** (`search.ts` drops any node that leaves the action
+   phase), so no board it can reach ever contains next round's damage. Every proxy term for
+   out-of-horizon value exists because of this, and **four of them have now measured nothing**:
+   `blockedReach`, Advantage-as-one-shot, `initiativeHorizon`, and a per-kind tie-break restriction.
+   Every premise was correct and every evaluation term was worth approximately nothing.
+
+   The blindness is measured rather than assumed. The claim rate is **flat across all four horizon
+   buckets** (conversion 21.1%, denial 15.1%, we-finish-only 9.5%, quiet control 12.3%; chi-square ~5.9
+   on 3 df against 7.8), so the bot does not discriminate at all. The denial case, "they are lethal
+   next round and we are not", is 10.4% of claim offers and **four times commoner** than the conversion
+   case the ticket is named after.
+
+   Pricing that predicate directly gives +1.87 at weight 3 fading to +1.0 at weight 6, for 65-70% more
+   compute. So build the horizon; do not price another proxy for it.
+
+   The hidden-information rule is settled: the two cards drawn at regroup are **not** read (one may be
+   assumed resourceable). `drawCards` slices a fully-ordered deck held in state, so a search crossing
+   regroup would otherwise see both players' actual draws. Deck-composition probabilities are
+   deliberately out of scope: knowable, but not worth the cost here.
 
    **Re-ask the lockout the moment it works.** If the search can extend one round, the strip line
    finally contains its own payoff and `blockedReach` may be deletable rather than shippable.
 2. **#492 generalise sharding**, immediately before the largest sweep in the project rather than
-   after it.
+   after it. It has picked up a second requirement that matters more than the first: **every A/B runs
+   its matched control and reports the paired difference as the headline.** Identical bots measure
+   48.6% and 48.7% over the coverage decks on two independent seed blocks, and reading an arm against a
+   theoretical 50% inverts live results (the tie-break reads +1.1 and non-significant against 50%,
+   +2.35 at p < 0.001 against its own control). Also warn when games-per-shard is not a multiple of
+   `SEATING_CYCLE`.
 3. **#487 re-tune the weights for the shipped search.** Last, deliberately. A re-tune is calibration
    against a fixed target, so doing it before #446 means doing it twice. The "re-weighting is
    exhausted" result measured a one-ply evaluator, and #430 identified why several weights could not
    matter there. Still the largest unexamined lever, and much cheaper than it was: #488 cut
    deep-search cost roughly sixfold. Re-size with `--cost` before sweeping.
-4. **#396 and #398, whose gates have cleared.** Both said "land the search, re-run `--decisions`,
-   build only what still ties". Measured: the search contributes **nothing** to choice answering
-   (11.4% one ply, 11.3% searched, over 5,878 decisions averaging 6.6 options), and it makes
-   resourcing and card-play **worse**. Neither is subsumed.
+4. **#396 and #398 are ready to close, and the tie-break they were waiting for has shipped.** Both
+   said "land the search, re-run `--decisions`, build only what still ties". Measured: the search
+   contributes **nothing** to choice answering (11.4% one ply, 11.3% searched), and it makes resourcing
+   and card-play **worse**. Neither was subsumed, and the answer turned out to be a search change
+   rather than a term.
 
-   A **tie-break** mechanism exists for these (`BeamLimits.tieBreak`, off by default, addressable as
-   `beam-reply/tie=reply:null`). It fires on 32.0% of decisions and costs +2.1% a decision, and it is
-   a mechanism looking for a justification: 55.0% on one 80-game seed set and 45.0% on another, which
-   is what a wide interval looks like. Answering ties for the lead on 36.1% of decisions, second only
-   to attacks, so if anything justifies it, it is these two tickets.
+   The tie-break is now the default in `BEAM_REPLY_LIMITS`: **+2.35 points** (t = 4.94, df 11,
+   p < 0.001, 2,040 games against a matched control) for +2.1% a decision. Restricting it to
+   answer/play/resource measured indistinguishable, which confirms the benefit lives in exactly the
+   decisions these two tickets name.
+
+   What remains in each is small. **#396**: its named always-accept failure mode is refuted (the bot
+   declines 12% of optional triggers against a uniform picker's 29.5%, and varies 71% to 91% by kind),
+   and both token-value routes it depended on returned null. **#398**: the unbuilt idea worth keeping
+   is the public escape hatch, since resource count and hand SIZE are public and so "I am holding up
+   three resources" may legitimately outrank the board score where "I hold Vanquish" cannot.
 5. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
    moves with a **one-ply** scorer, so it currently reports term sensitivity for a bot we no longer
    ship; testing #430's pre-registered prediction needs the perturbations driven through the real
@@ -424,6 +449,30 @@ Rules learned the hard way.
 
 Recorded so nobody spends an evening re-deriving a null result. All measured against the identical
 AI with the change switched off, across the coverage decks.
+
+- **A conditional initiative term (`initiativeHorizon`).** Prices holding the initiative when the
+  holder is the side facing lethal next round, which is 13.0% of claim offers and zero elsewhere.
+  Measured **+1.87 at weight 3 and +1.0 at weight 6**, the two indistinguishable from each other, so
+  no reliable gradient, at **65-70% more wall clock** because the predicate calls `reachSteady` and
+  `canFinishNow` on the `evaluate` hot path. Stays at 0 with a zero guard, so the shipped bot pays
+  nothing.
+
+  The premise survives the result and is worth keeping: the bot's claim rate is **flat across all four
+  horizon buckets**, so the blindness is real. Pricing it is what failed. Build the horizon instead.
+- **Offensive pinning (#397).** Holding a ready unit that would kill an enemy leader on deployment is
+  the one behaviour no depth can reach, since the value is in *not* acting. It is also far too rare to
+  measure: **17 decisions in 44 games (0.8%)**, of which the bot spent the pin on 3. Leaders deploy
+  around 7-8 HP and most units are power 2-5, so single-unit pins barely exist in this pool. The
+  opponent also deploys into a pin 8.1% of the time, so neither side plays around the threat and
+  self-play could not reward it even if it were built.
+- **Restricting the search tie-break by decision kind.** `kinds:answer|play|resource` measured **+4.25
+  against the unrestricted +4.9** on matched seeds, with five of ten shards byte-identical. No
+  detectable difference, so the simpler unrestricted form ships. Useful as a diagnostic (it confirms
+  the benefit concentrates in those kinds) rather than as a configuration.
+- **One ply as the second opinion**, which `planned-work.md` itself recommended for #396 and #398. It
+  gets the shielded-Sentinel lockout wrong, preferring passing 52 to 43, where `reply: 'null'`
+  separates the same position 56.1 to 52. When the worst case cannot tell two moves apart, the upside
+  can.
 
 - **A `shield` term.** The evaluation genuinely cannot see a Shield (printed 0/0, works through a
   prevention hook, so a strip leaves a board scoring identically), and the bot strips one on **7.4%**

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import ashSet from './fixtures/ashSet.json'
 import type { SwuCard } from '../data/cards'
 import { makeBeamAi, lastSearchTrace, DEFAULT_BEAM_LIMITS } from '../ai/search'
+import { BEAM_REPLY_LIMITS } from '../ai/greedyAi'
 import { evaluate, makeEvaluate, DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { legalMoves } from '../engine/legalMoves'
 import { state, player, card, unit, ready, CARDS } from './helpers/engineFixtures'
@@ -95,6 +96,44 @@ function corpus(limit: number): GameState[] {
   }
   return states
 }
+
+/**
+ * **The shipped bot consults a second opinion on a tie, and that is a measured decision.**
+ *
+ * Three runs, each against a control on the same seeds and the same coverage decks:
+ *
+ * | | games | arm | control | paired |
+ * | --- | --- | --- | --- | --- |
+ * | screen | 80 | 55.0% | 50.0% | +5.0 |
+ * | run 2 | 800 | 53.5% | 48.6% | +4.9 |
+ * | **run 3** | **2,040** | **51.1%** | **48.7%** | **+2.35** |
+ *
+ * Run 3 is the estimate to quote: **+2.35 points, t = 4.94 on 11 df, p < 0.001, with 11 of 12 shards
+ * positive**. The earlier, larger-looking figures are small-sample overestimates regressing toward it.
+ *
+ * **The control is what makes this readable, and reading against a theoretical 50% inverts the
+ * answer.** Identical bots measured 48.6% and 48.7% on two independent seed blocks, so against 50%
+ * run 3 reads as +1.1 and not significant; against its own control it is +2.35 at p < 0.001. Draws do
+ * not explain the gap (~1 game in 2,040) and neither can any evaluation weight, since a control is the
+ * same bot on both sides. Whatever its cause, the paired difference is immune to it, which is exactly
+ * why every A/B needs its matched control.
+ *
+ * Cost is +2.1% per decision (203.73 ms against 199.51 ms over an identical corpus).
+ *
+ * Note it fixes no specific reported defect: it does **not** fire on the shielded-Sentinel lockout,
+ * where passing wins outright. Its case is the aggregate, and the aggregate is why it ships.
+ */
+describe('the shipped configuration', () => {
+  it('consults an optimistic second opinion when candidates tie for the lead', () => {
+    expect(BEAM_REPLY_LIMITS.tieBreak).toEqual({ reply: 'null' })
+  })
+
+  /** Unrestricted: measured indistinguishable from restricting it to answer, play and resource
+   *  (+4.25 against +4.9 on run 2, five of ten shards byte-identical), so the simpler form ships. */
+  it('applies it to every decision kind', () => {
+    expect(BEAM_REPLY_LIMITS.tieBreak?.tieKinds).toBeUndefined()
+  })
+})
 
 describe('breaking a tie with a second opinion', () => {
   it('changes nothing when no tie-break is configured', () => {

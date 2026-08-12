@@ -98,14 +98,23 @@ describe('the filed shielded-Sentinel lockout', () => {
 
   /**
    * **The defect, pinned against the configuration that actually ships.** `blockedReach` defaults to
-   * zero and `beam-reply` carries no tie-break, so the fix being present in the codebase changes
-   * nothing until it is switched on. That is why the reporter still saw this on a build containing it.
+   * zero, so the term being present in the codebase changes nothing. That is why the reporter still
+   * saw this on a build containing it.
+   *
+   * **The tie-break now ships and does not rescue it either**, which was predicted rather than
+   * discovered: a second opinion is consulted only between candidates that already tied for the lead,
+   * and here passing wins outright (52 to 43). The tie only exists once `blockedReach` prices it, and
+   * that weight measured 25.0% at the value which creates it.
+   *
+   * So the +2.35 points the tie-break earns are an aggregate effect across ordinary decisions, and
+   * this position is evidence that it fixes no specific reported defect. Both facts belong in the same
+   * assertion, or the win rate reads as a fix for something it never touches.
    */
   it('barely ever strips at the weights the app ships', () => {
     expect(OPPONENT_AI).toBe('beam-reply')
     expect(DEFAULT_WEIGHTS.blockedReach, 'the term ships off').toBe(0)
-    expect((BEAM_REPLY_LIMITS as { tieBreak?: unknown }).tieBreak, 'and so does the tie-break').toBeUndefined()
-    expect(stripsAt(0), 'the reported behaviour: it almost never strips').toBeLessThanOrEqual(2)
+    expect(BEAM_REPLY_LIMITS.tieBreak, 'the tie-break ships on').toEqual({ reply: 'null' })
+    expect(stripsAt(0), 'and the reported behaviour survives it: still almost never strips').toBeLessThanOrEqual(2)
   }, 120_000)
 
   /**
