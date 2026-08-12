@@ -19,6 +19,7 @@ const F = {
   GRD: card({ id: 'GRD', type: 'unit', arena: 'ground', power: 2, hp: 5 }),
   SPC: card({ id: 'SPC', type: 'unit', arena: 'space', power: 2, hp: 5 }),
   SENTINEL_GRD: card({ id: 'SENTINEL_GRD', type: 'unit', arena: 'ground', power: 2, hp: 5, keywords: [{ name: 'Sentinel' }] }),
+  SENTINEL_SPC: card({ id: 'SENTINEL_SPC', type: 'unit', arena: 'space', power: 2, hp: 5, keywords: [{ name: 'Sentinel' }] }),
 }
 const attacks = (s: GameState, attackerId: string) =>
   legalMoves(s).filter((a): a is Extract<Action, { type: 'attack' }> => a.type === 'attack' && a.attackerId === attackerId)
@@ -64,6 +65,48 @@ describe('Red Leader (037) — may attack units in either arena', () => {
       },
     })
     expect(targetsOf(s, 'n')).toEqual(['base', 'sp'])
+  })
+
+  /**
+   * **Reaching into an arena is not being in it.**
+   *
+   * Sentinel reads "Enemy units **in this arena** must attack a Sentinel when they attack you", so the
+   * forcing is scoped by the SENTINEL's arena and applies to the units standing in it. Red Leader is a
+   * space unit; being able to attack into the ground arena does not place it there, so a ground
+   * Sentinel must not lock it.
+   *
+   * Reported from live play: a player holding Red Leader could not attack the base while the space
+   * lane was open, because the widened target list swept a ground Sentinel into the forcing set.
+   */
+  const withSentinel = (sentinel: ReturnType<typeof unit>) => state({
+    cards: F,
+    players: {
+      player: player({ units: [unit('r', 'ASH_037', { arena: 'space' })] }),
+      opponent: player({ units: [sentinel, unit('sp', 'SPC', { arena: 'space' })] }),
+    },
+  })
+
+  it('is not locked by a Sentinel in the OTHER arena', () => {
+    const s = withSentinel(unit('gs', 'SENTINEL_GRD', { arena: 'ground' }))
+    // Still reaches everything, base included: nothing in the space arena is forcing it.
+    expect(targetsOf(s, 'r')).toEqual(['base', 'gs', 'sp'])
+  })
+
+  it('IS locked by a Sentinel in its own arena', () => {
+    const s = withSentinel(unit('ss', 'SENTINEL_SPC', { arena: 'space' }))
+    expect(targetsOf(s, 'r')).toEqual(['ss'])
+  })
+
+  /** A ground Sentinel still locks a ground attacker, which is the rule the fix must not weaken. */
+  it('still locks an ordinary attacker standing in the Sentinel\'s arena (control)', () => {
+    const s = state({
+      cards: F,
+      players: {
+        player: player({ units: [unit('g', 'GRD', { arena: 'ground' })] }),
+        opponent: player({ units: [unit('gs', 'SENTINEL_GRD', { arena: 'ground' }), unit('other', 'GRD', { arena: 'ground' })] }),
+      },
+    })
+    expect(targetsOf(s, 'g')).toEqual(['gs'])
   })
 })
 

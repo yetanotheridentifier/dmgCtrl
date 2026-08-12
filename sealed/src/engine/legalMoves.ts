@@ -23,7 +23,13 @@ export function enemyAttackTargets(state: GameState, attacker: UnitState, owner:
   // Hidden hides a unit (unless it has Sentinel); "can't be attacked" (Tatooine Repulsor Train)
   // removes it entirely — including as a forced Sentinel target.
   const attackable = inRange.filter(e => (!e.hidden || unitHasKeyword(state, e, 'Sentinel')) && !unitCannotBeAttacked(state, e))
-  const sentinels = attackable.filter(e => unitHasKeyword(state, e, 'Sentinel'))
+  // **Sentinel forces only from the attacker's OWN arena**, because it reads "Enemy units in this
+  // arena must attack a Sentinel when they attack you": the forcing is scoped by where the attacker
+  // STANDS, not by what it can reach. The arena filter is a no-op for an ordinary attacker, whose
+  // targets are same-arena already, and matters only for a unit that reaches across (Red Leader).
+  // Without it, widening the target list also widened the lock, and a ground Sentinel took the base
+  // away from a space attacker while the space lane was open.
+  const sentinels = attackable.filter(e => e.arena === attacker.arena && unitHasKeyword(state, e, 'Sentinel'))
   const sentinelLocked = sentinels.length > 0 && !unitHasKeyword(state, attacker, 'Saboteur')
   return { targets: sentinelLocked ? sentinels : attackable, sentinelLocked }
 }
