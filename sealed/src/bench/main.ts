@@ -1,6 +1,6 @@
 import { runBench } from './runBench'
 import type { BenchReport } from './runBench'
-import { openDb, saveReport, saveExperiment, listExperiments, DEFAULT_DB_PATH } from './store'
+import { openDb, saveReport, saveExperiment, listExperiments, saveTermRun, DEFAULT_DB_PATH } from './store'
 import { writeFailures, FAILURES_DIR } from './reports'
 import { runSweep } from './sweep'
 import type { SweepReport } from './sweep'
@@ -566,6 +566,7 @@ function runTermsMode(args: Args): void {
   const gamesPerDeck = args.gamesSet ? args.games : 1
   const start = Date.now()
   let report: TermReport
+  let termRunId: string
   try {
     // Naming a searching model is ~60x a one-ply pass unless the weights are narrowed, since every
     // perturbation becomes a full search per decision. Say so before spending the evening on it.
@@ -574,6 +575,11 @@ function runTermsMode(args: Args): void {
       console.log('        Narrow it with --weights key1,key2 unless you mean to run for hours.\n')
     }
     report = runTerms({ gamesPerDeck, seed: args.seed, model: args.aiExplicit ? args.aiA : undefined, weights: args.weights })
+    // Persisted, because "has this weight woken up since the search landed?" is a question about two
+    // readings taken months apart, and until now every one of them printed to a terminal and vanished.
+    const db = openDb(DEFAULT_DB_PATH)
+    termRunId = saveTermRun(db, args.aiExplicit ? args.aiA : 'one-ply', report)
+    db.close()
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
     process.exit(2)
@@ -584,8 +590,10 @@ function runTermsMode(args: Args): void {
   const lines = [
     '',
     `dmgCtrl term sensitivity  (engine ${report.commitId})`,
+    row('model', args.aiExplicit ? args.aiA : 'one-ply (default)'),
     row('games', `${report.games}`),
     row('decisions', `${report.decisions}`),
+    row('saved run', `${termRunId}  ->  ${DEFAULT_DB_PATH}`),
     '',
     '  VARIES: the quantity differs across candidates, so the term can influence the ranking at all.',
     '  PIVOTAL: a nudge changes the pick, i.e. the weight is worth sweeping.',

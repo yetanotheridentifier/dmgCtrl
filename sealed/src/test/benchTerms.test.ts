@@ -121,9 +121,24 @@ describe('the perturbation step', () => {
    * shipped weight, floored at the resolution the score can actually see.
    */
   it('scales with the weight, so a big weight gets a real nudge', () => {
-    expect(stepFor('lethalExposure')).toBe(6) // 24 / 4
-    expect(stepFor('saturation')).toBe(2) // 7 / 4, rounded
-    expect(stepFor('base')).toBe(1) // 4 / 4
+    expect(stepFor('lethalExposure')).toBe(12) // 48 / 4
+    expect(stepFor('saturation')).toBe(2) // 7 / 4, rounded. Not a price, so it did not double.
+    expect(stepFor('base')).toBe(2) // 8 / 4
+  })
+
+  /**
+   * **Doubling the prices doubled the steps too, which is the point of doing it.**
+   *
+   * A quarter of the shipped value, floored at 1, meant `readyUnit` at 1 could only ever be nudged by
+   * a whole unit of itself: a 100% perturbation, which tests "is this weight roughly right" rather
+   * than "is it exactly right". At 2 the step is still 1, but that is now a **half** step in the old
+   * units, so the sweep can ask a finer question.
+   */
+  it('gives the smallest weights a finer step than before doubling', () => {
+    expect(DEFAULT_WEIGHTS.readyUnit).toBe(2)
+    expect(stepFor('readyUnit')).toBe(1) // half a step in the units the old sweeps used
+    expect(DEFAULT_WEIGHTS.roleShift).toBe(2)
+    expect(stepFor('roleShift')).toBe(1)
   })
 
   /** `publicScore` is integer-valued, so a sub-integer nudge to an integer weight could never move
