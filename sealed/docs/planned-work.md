@@ -182,13 +182,18 @@ first or the sweep is repeated.
    reads back what the child wrote, and reports each completion so its caller can bank it. The
    head-to-head is one caller, supplying `seedJobs` as its split and `poolShards` as its merge.
 
-   **Left: phase 4, the matrix.** Shard it by `--shard-index K --shard-count N`, each child dealing
-   itself every Nth pair, rather than the parent handing over 2,628 pairs on a command line.
-   Self-dealing also keeps each child independently re-runnable, which is what resumption depends on.
-   The matrix is this ticket's original justification: 169 hours serial against roughly 23 sharded, and
-   it has never been run. There is no golden output to diff against, so the property to assert is that
-   the dealt subsets partition the pair set exactly, at several shard counts including ones sharing a
-   factor with the deck count.
+   **The matrix shards too**, by `--shard-index K --shard-count N`, each child dealing itself every
+   Nth pair rather than the parent handing over 2,628 pairs on a command line.
+
+   A golden comparison turned out to be possible after all, and it changed the design. Each pair's
+   games are now seeded from the pair rather than from one seed advanced as the loop goes, so a pair
+   plays the same games wherever it runs and a **sharded matrix is identical to a serial one, cell for
+   cell** (verified at 72 decks and 5,184 cells, zero differing). Without that, a child playing every
+   Nth pair would have played different games and no sharded result could ever have been checked.
+
+   **All that is left is to run it.** That is a scheduling decision, not a code change: at 10 games a
+   cell it is roughly 23 hours sharded against 169 serial. Per-cell numbers are noise at that size
+   (±50% at 4 games); the readable aggregates are deck strength (±5.8%) and leader strength (±2.9%).
 
    The reason the control half outranked the sharding half: identical bots measure **48.6% and 48.7%**
    over the coverage decks on two independent seed blocks, so reading an arm against a theoretical 50%

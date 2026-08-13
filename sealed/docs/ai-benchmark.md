@@ -275,6 +275,31 @@ standalone run, exactly like the existing three-seed results, and the per-shard 
 reading: a finding that holds across independent seeds is far stronger than one long run, and a shard
 disagreeing with the rest is a signal rather than something to average away.
 
+### Sharding the matchup matrix
+
+```bash
+npm run bench --prefix sealed -- --matrix --shard 10 --games 10 --seed 42 beam-reply
+```
+
+`--matrix` alone still runs serially. With `--shard N` the parent spawns N children, each told only
+`--shard-index K --shard-count N`, and each **deals itself every Nth pair**. The parent never hands
+over a pair list: 2,628 pairs do not fit on a command line, and self-dealing keeps every child
+independently re-runnable.
+
+**Dealt round-robin, never sliced.** The enumeration is `for i, for j >= i`, so a contiguous split by
+`i` would give the first shard 72 pairs and the last one a single pair, and that shard alone would set
+the wall clock.
+
+**A sharded matrix is identical to a serial one, cell for cell.** Each pair's games are seeded from the
+pair (`pairSeed(base, i, j)`) rather than from a single seed advanced as the loop goes, so a pair plays
+the same games wherever it runs. Verified at full size: 72 decks, 5,184 cells, zero differing. Without
+per-pair seeds a child playing every Nth pair would play different games and no sharded result could
+ever be checked against a serial one.
+
+A child writes its cells and saves nothing; only the merged run reaches the database. **If any shard
+fails, nothing is saved at all**, because a partial matrix is indistinguishable from a whole one with
+quiet gaps, and every row and leader average read off it would be wrong without saying so.
+
 ### The matched control: `--control`
 
 ```bash

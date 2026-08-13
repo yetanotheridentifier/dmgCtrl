@@ -55,23 +55,71 @@ function cell(a: MatchupDeck, b: MatchupDeck, games: number, wins: number, margi
   }
 }
 
+/**
+ * Every unordered deck pair, or the subset belonging to one shard.
+ *
+ * **Dealt round-robin, never sliced.** The enumeration is `for i, for j >= i`, so a contiguous split
+ * by `i` gives the first shard the 72 pairs of row 0 and the last shard a single pair: one shard would
+ * run an order of magnitude longer than the rest and set the wall clock by itself.
+ *
+ * A child is told only its index and the count, so it deals itself its share. The alternative, the
+ * parent handing over an explicit pair list, does not fit on a command line at 2,628 pairs, and it
+ * would stop a shard being independently re-runnable, which is what resumption depends on.
+ */
+export function dealPairs(deckCount: number, shardIndex = 0, shardCount = 1): Array<[number, number]> {
+  const out: Array<[number, number]> = []
+  let n = 0
+  for (let i = 0; i < deckCount; i++) {
+    for (let j = i; j < deckCount; j++) {
+      if (n % shardCount === shardIndex) out.push([i, j])
+      n++
+    }
+  }
+  return out
+}
+
+/**
+ * The seed a pair's games start from, derived from the pair rather than from iteration order.
+ *
+ * **This is what makes a sharded matrix comparable with a serial one.** The loop used to advance a
+ * single shared seed as it went, so a pair's games depended on how many pairs had run before it: a
+ * child playing every Nth pair would play different games, and no sharded result could ever be
+ * checked against a serial one. Deriving from `(base, i, j)` removes the ordering dependency, so a
+ * pair also becomes independently re-runnable for investigation.
+ *
+ * The multipliers are the usual odd 32-bit mixing constants, chosen only to spread neighbouring pairs
+ * apart; `i` and `j` are mixed differently so `(3, 7)` and `(7, 3)` do not collide.
+ */
+export function pairSeed(base: number, i: number, j: number): number {
+  const mixed = ((base ^ Math.imul(i + 1, 0x9E3779B1) ^ Math.imul(j + 1, 0x85EBCA77)) >>> 0) || 1
+  return nextSeed(mixed)
+}
+
 export function runMatchupMatrix(
   decks: MatchupDeck[],
   ai: Ai,
   model: string,
-  config: { gamesPerCell: number; seed: number; stepCeiling?: number; timeoutMs?: number },
+  config: {
+    gamesPerCell: number
+    seed: number
+    stepCeiling?: number
+    timeoutMs?: number
+    /** Which share of the pairs to play. Defaults to all of them. */
+    shardIndex?: number
+    shardCount?: number
+  },
 ): MatrixResult {
   const cardDb = buildCardDb(POOL)
   const cells: MatchupCell[] = []
-  let seed = config.seed
   let dropped = 0
 
-  for (let i = 0; i < decks.length; i++) {
-    for (let j = i; j < decks.length; j++) {
+  for (const [i, j] of dealPairs(decks.length, config.shardIndex ?? 0, config.shardCount ?? 1)) {
+    {
       let winsA = 0
       let winsB = 0
       let completed = 0
       let marginSum = 0
+      let seed = pairSeed(config.seed, i, j)
       for (let g = 0; g < config.gamesPerCell; g++) {
         seed = nextSeed(seed)
         // One AI plays both sides, so the seat advantage lands on a DECK. Swapping which deck sits
