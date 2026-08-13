@@ -2,8 +2,9 @@ import { writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, resolve as resolvePath } from 'node:path'
 import { DEFAULT_WEIGHTS, type EvalWeights } from '../ai/evaluate'
 import { DEFAULT_HAND_WEIGHTS } from '../ai/handValue'
-import { makeTunedGreedy } from '../ai/greedyAi'
-import { resolveAi } from '../ai/registry'
+import { makeTunedGreedy, makeBeamGreedy } from '../ai/greedyAi'
+import { resolveAi, namedLimitsFor } from '../ai/registry'
+import type { Ai } from '../ai/types'
 import { runGeneralisationWith } from './generalisation'
 import { COMMIT_ID } from '../buildIdentity'
 
@@ -12,7 +13,7 @@ import { COMMIT_ID } from '../buildIdentity'
  * decks, so weights are chosen from data rather than guessed.
  *
  * ```
- * npm run tune --prefix sealed -- [--games N] [--seed N] [--vs AI] [--out FILE]
+ * npm run tune --prefix sealed -- [--games N] [--seed N] [--model AI] [--vs AI] [--out FILE]
  *                                 [--axis key=v1,v2,..] [--set key=v] [key=v,key=v ...]
  * ```
  *
@@ -22,14 +23,21 @@ import { COMMIT_ID } from '../buildIdentity'
  * - `--set` pins a weight for every config in the run, so an axis can be swept at a non-default
  *   setting of another.
  * - A bare `key=v,key=v` argument is one explicit config, for hand-picked combinations.
- * - `--vs` is the reference (default `greedy`, the deployed model). **A candidate above 50% beats
- *   what ships.** The frozen `greedy-baseline` is a poor reference now that the deployed model beats
- *   it 81.9%: candidates pile up against the ceiling and their differences vanish into it.
+ * - `--model` is what a candidate IS, with its weights bent (default `beam-reply`, the deployed bot).
+ * - `--vs` is the reference (default `beam-reply`). **A candidate above 50% beats what ships.** The
+ *   frozen `greedy-baseline` is a poor reference now that the deployed model beats it 81.9%:
+ *   candidates pile up against the ceiling and their differences vanish into it.
  * - `--out` appends one JSON line per config, so a long sweep survives being interrupted and several
  *   sweeps can run in parallel into different files.
  *
- * Candidates are built by `makeTunedGreedy`, the same factory that builds the deployed bot, so the
- * tuner cannot drift from the AI it is tuning.
+ * **Candidates are the named model with bent weights, taking its limits from the registry**, so they
+ * track any later change to width, depth, reply policy or tie-break. Both defaults were `greedy` and
+ * candidates were built one-ply by `makeTunedGreedy`, which meant a sweep sized weights for a bot we
+ * stopped shipping: the evaluation is now the leaf of a depth-3 minimax rather than the thing that
+ * picks the move, and the optimum for a leaf is not the optimum for a bot playing its own scores.
+ *
+ * **A sweep at the deployed model is ~250x dearer per game than at `greedy`** (0.164 s/game against
+ * 38.5 to 54). Size it with `--cost` and screen before committing; see #487.
  */
 
 /** Every scalar weight, including the nested hand weights addressed as `hand.canAct` / `hand.hold`. */
@@ -163,10 +171,32 @@ export function specOf(config: TuneConfig): string {
   return parts.length === 0 ? 'defaults' : parts.join(',')
 }
 
+/**
+ * A candidate: the named model, with its evaluation weights bent.
+ *
+ * **It must BE the shipped bot, not a one-ply stand-in.** Candidates were built with
+ * `makeTunedGreedy`, which is `makeGreedyAi(makeQuiescent(makeEvaluate(w)))`: no beam and no opponent
+ * reply. The evaluation is now the leaf of a depth-3 minimax rather than the thing that picks the
+ * move, and the optimum for a leaf function is not the optimum for a bot that plays its own scores
+ * directly, so a sweep through the old factory would have sized weights for a bot we stopped
+ * shipping.
+ *
+ * Limits come from the registry rather than being restated here, so a candidate tracks the model
+ * through any later change to width, depth, reply policy or tie-break. A model with no beam limits
+ * (`greedy`, `random`) falls back to the one-ply factory, which is correct for those.
+ */
+export function buildCandidate(model: string, overrides: Partial<Record<WeightKey, number>>): Ai {
+  const weights = weightsFrom(overrides)
+  const limits = namedLimitsFor(model)
+  return limits ? makeBeamGreedy(weights, limits) : makeTunedGreedy(weights)
+}
+
 interface Args {
   games: number
   seed: number
   vs: string
+  /** The AI a candidate IS, with its weights bent. Defaults to the deployed bot. */
+  model: string
   out?: string
   configs: TuneConfig[]
 }
@@ -174,7 +204,11 @@ interface Args {
 export function parseArgs(argv: string[]): Args {
   let games = 20
   let seed = 42
-  let vs = 'greedy'
+  // Both default to the bot that actually ships. They were `greedy`, and documented as "the deployed
+  // model", which stopped being true when the beam landed: a sweep tuned a one-ply evaluator against
+  // a one-ply reference and reported the answer with a confidence interval on it.
+  let vs = 'beam-reply'
+  let model = 'beam-reply'
   let out: string | undefined
   const axes: Array<{ key: WeightKey; values: number[] }> = []
   const pinned: Partial<Record<WeightKey, number>> = {}
@@ -185,6 +219,7 @@ export function parseArgs(argv: string[]): Args {
     if (arg === '--games') games = Number(argv[++i])
     else if (arg === '--seed') seed = Number(argv[++i])
     else if (arg === '--vs') vs = argv[++i]
+    else if (arg === '--model') model = argv[++i]
     else if (arg === '--out') out = argv[++i]
     else if (arg === '--set') Object.assign(pinned, parseAssignments(argv[++i]))
     else if (arg === '--axis') {
@@ -202,7 +237,9 @@ export function parseArgs(argv: string[]): Args {
     // against the reference. That is the tuner's self-check and should read ~50% against `greedy`.
     configs.push({ overrides: { ...pinned } })
   }
-  return { games, seed, vs, out, configs }
+  // Resolved eagerly so a typo fails before a sweep starts rather than after the first cell.
+  resolveAi(model)
+  return { games, seed, vs, model, out, configs }
 }
 
 function main(): void {
@@ -221,7 +258,7 @@ function main(): void {
   console.log('   win%      ci    games  time  config')
 
   for (const config of args.configs) {
-    const candidate = makeTunedGreedy(weightsFrom(config.overrides))
+    const candidate = buildCandidate(args.model, config.overrides)
     const start = Date.now()
     const report = runGeneralisationWith(candidate, reference, 'candidate', args.vs, { gamesPerDeck: args.games, seed: args.seed })
     const secs = (Date.now() - start) / 1000
