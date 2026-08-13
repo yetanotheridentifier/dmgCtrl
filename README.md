@@ -1,8 +1,13 @@
 # dmgCtrl
 
-A mobile-first progressive web app for tracking game state in tabletop games, supporting Star Wars: Unlimited and Star Wars X-Wing.
+Two applications in one repository:
 
-**Live app:** https://yetanotheridentifier.github.io/dmgCtrl/
+- **The tracker** — a mobile-first progressive web app for tracking game state in tabletop games, supporting Star Wars: Unlimited and Star Wars X-Wing.
+  **Live:** https://yetanotheridentifier.github.io/dmgCtrl/
+- **Sealed** (`sealed/`) — a playable digital Star Wars: Unlimited sealed-deck game: a full rules engine, card abilities, and a searching AI opponent with its own benchmark harness. Desktop browser only.
+  **Live:** https://dmgctrl.app/sealed
+
+They are separate npm projects with separate dependencies, build steps and docs. Most changes touch one or the other, not both.
 
 ---
 
@@ -32,23 +37,41 @@ The app will appear on your home screen and open full screen without any browser
 - GitHub CLI — [cli.github.com](https://cli.github.com)
 
 ### Setup
+
+There are no npm workspaces, so each project installs its own dependencies. All three are needed before `npm test` will run, because it shells into `proxy` and `sealed`.
+
 ```bash
 gh repo clone yetanotheridentifier/dmgCtrl
 cd dmgCtrl
 npm install --legacy-peer-deps
+npm install --prefix proxy
+npm install --prefix sealed
 ```
 
 ### Run locally
+
+The tracker:
+
 ```bash
-npm run dev
+npm run dev          # http://localhost:5173/dmgCtrl/
 ```
 
-Open [http://localhost:5173/dmgCtrl/](http://localhost:5173/dmgCtrl/) in your browser.
+Sealed, or both at once:
+
+```bash
+npm run dev:sealed   # sealed only, http://localhost:5174/
+npm run dev:all      # both: sealed on 5174, tracker on 5173 over https, proxying /sealed
+```
+
+`dev:all` is the one to use when working on Sealed as it is actually served, at `https://localhost:5173/sealed/`. Ctrl+C stops both.
 
 ### Test
 ```bash
-npm test
+npm test                        # all three suites: tracker, proxy, sealed
+npm run check --prefix sealed   # sealed's own gate: tests, tsc -b and eslint in sequence
 ```
+
+`npm run check` is what to run before handing over a sealed change. It regenerates the build identity first, then stops at the first failure.
 
 ### Deploy
 All changes pushed to `main` are automatically built and deployed via GitHub Actions. Deployment takes approximately one minute — progress is visible in the **Actions** tab of the repository.
@@ -60,6 +83,26 @@ git push
 ---
 
 ## Documentation
+
+Each application has its own docs, and they do not overlap: `docs/` is the tracker's, `sealed/docs/` is Sealed's.
+
+### Sealed
+
+Start at [sealed/docs/README.md](sealed/docs/README.md), which maps one file per concern.
+
+| Document | Description |
+|---|---|
+| [sealed/docs/architecture.md](sealed/docs/architecture.md) | System shape, rules engine, data model, runtime flow, storage, network |
+| [sealed/docs/abilities.md](sealed/docs/abilities.md) | How a card's behaviour is declared, registered and dispatched |
+| [sealed/docs/choices.md](sealed/docs/choices.md) | Pending choices: raising, answering, prompts, the guarantees |
+| [sealed/docs/keywords-effects.md](sealed/docs/keywords-effects.md) | Stats pipeline, auras, lasting effects, token defeats, targeting |
+| [sealed/docs/ai-model.md](sealed/docs/ai-model.md) | What the opponent AI thinks: terms, weights, invariants |
+| [sealed/docs/ai-benchmark.md](sealed/docs/ai-benchmark.md) | The benchmark harness and its modes |
+| [sealed/docs/operations.md](sealed/docs/operations.md) | Local dev, build, deploy, support playbook, diagnostics |
+| [sealed/docs/planned-work.md](sealed/docs/planned-work.md) | What is next, what is deferred, what was tried and rejected |
+| [sealed/docs/userGuide.md](sealed/docs/userGuide.md) | How the game plays, and the in-app Help page at build time |
+
+### The tracker
 
 | Document | Description |
 |---|---|

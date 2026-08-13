@@ -12,17 +12,22 @@ Four findings shape the whole order below.
 ### Initiative is the largest blind spot
 
 `npm run bench --prefix sealed -- --decisions` reports how often every candidate move scores
-identically, so the seeded tie-break picks at random:
+identically, so the seeded tie-break picks at random. Against the shipped `beam-reply` over 44 games on
+the coverage decks:
 
-| Decision | Coin-flip rate | Options | Coin flips per game |
-| --- | --- | --- | --- |
-| Initiative | 18.2% | n/a | **~7.4** |
-| Which card to play | 7.4% | 4.6 | ~1.5 |
-| Answering a choice | 7.4% | 8.7 | ~0.9 |
-| Attacks | 1.7% | 7.8 | ~0.5 |
-| Regroup: which card | 0.1% | 4.8 | ~0 |
+| Decision | Coin-flip rate | Offered | Options | Coin flips per game |
+| --- | --- | --- | --- | --- |
+| Initiative: take it | **15.3%** | 2,164 | n/a | **~7.5** |
+| Answering a choice | 13.5% | 665 | 5.9 | ~2.0 |
+| Which card to play | 9.5% | 1,226 | 4.1 | ~2.6 |
+| Which attack | 5.5% | 1,529 | 5.9 | ~1.9 |
+| Regroup: which card | 4.2% | 550 | 4.8 | ~0.5 |
 
 The last column is what ranks the work: a rate is meaningless without how often the decision arises.
+
+A **tie for the LEAD** is much commoner than the whole slate scoring alike, and it is the rate a second
+opinion fires at: 32.0% of all decisions, by kind attack 39.5%, answer 36.1%, play 33.4%, pass 31.0%,
+resource 24.5%, initiative 11.5%.
 
 ### Re-weighting was exhausted AT ONE PLY, which is no longer the bot
 
@@ -161,13 +166,27 @@ first or the sweep is repeated.
 
    **Re-ask the lockout the moment it works.** If the search can extend one round, the strip line
    finally contains its own payoff and `blockedReach` may be deletable rather than shippable.
-2. **#492 generalise sharding**, immediately before the largest sweep in the project rather than
-   after it. It has picked up a second requirement that matters more than the first: **every A/B runs
-   its matched control and reports the paired difference as the headline.** Identical bots measure
-   48.6% and 48.7% over the coverage decks on two independent seed blocks, and reading an arm against a
-   theoretical 50% inverts live results (the tie-break reads +1.1 and non-significant against 50%,
-   +2.35 at p < 0.001 against its own control). Also warn when games-per-shard is not a multiple of
-   `SEATING_CYCLE`.
+2. **#492 generalise sharding. IN PROGRESS: phases 0 to 2 have landed, 3 and 4 remain.**
+
+   Immediately before the largest sweep in the project rather than after it, and it picked up a second
+   requirement that matters more than the original one.
+
+   **Done.** `--status` and `bench-results/STATUS.md` report shards done, games played, measured
+   seconds per game and a projected finish, and never present a partial run as a result. `--control`
+   runs the baseline against itself on the same seeds and reports the **paired difference with its
+   `t`** as the headline, storing the comparison as one `experiments` row plus its per-shard pairs,
+   readable with `--history`. `--out FILE` replaced regexing the child's printed report. Pre-flight
+   warns when games-per-shard is not a multiple of `SEATING_CYCLE`.
+
+   **Left.** `spawnShards` generalised so head-to-head is one caller among several, and the matrix
+   sharded by `--shard-index K --shard-count N` with each child dealing itself every Nth pair. The
+   matrix is the original justification: 169 hours serial against roughly 23 sharded, and it has never
+   been run.
+
+   The reason the control half outranked the sharding half: identical bots measure **48.6% and 48.7%**
+   over the coverage decks on two independent seed blocks, so reading an arm against a theoretical 50%
+   inverts live results. The tie-break reads +1.1 and non-significant against 50, and +2.35 at
+   p < 0.001 against its own control, on the same games.
 3. **#487 re-tune the weights for the shipped search.** Last, deliberately. A re-tune is calibration
    against a fixed target, so doing it before #446 means doing it twice. The "re-weighting is
    exhausted" result measured a one-ply evaluator, and #430 identified why several weights could not
@@ -189,6 +208,14 @@ first or the sweep is repeated.
    and both token-value routes it depended on returned null. **#398**: the unbuilt idea worth keeping
    is the public escape hatch, since resource count and hand SIZE are public and so "I am holding up
    three resources" may legitimately outrank the board score where "I hold Vanquish" cannot.
+5. **#397 offensive pinning closes on prevalence.** The structural argument was the best of the three
+   AI-refinement tickets and still holds: holding a unit ready to threaten a leader is a **non-action**,
+   so no depth reaches it. It is simply too rare to build or measure. Sized for the first time at **17
+   decisions in 44 games (0.8%)**, of which the bot spent the pin on 3. Leaders deploy around 7-8 HP
+   and most units are power 2-5, so single-unit pins barely exist in this pool. The opponent also
+   deploys into a pin 8.1% of the time, so neither side plays around the threat and self-play could not
+   reward the behaviour even if it were built. The counters stay in `--decisions` so the verdict is
+   re-checkable if the card pool changes.
 5. **Re-run `--terms`**, with two caveats discovered since it was scheduled. The instrument picks
    moves with a **one-ply** scorer, so it currently reports term sensitivity for a bot we no longer
    ship; testing #430's pre-registered prediction needs the perturbations driven through the real
@@ -220,7 +247,24 @@ measurement waiting to be taken. **Re-open it after #446** either way.
 
 ## Running a long experiment
 
-Operational knowledge, kept here because every one of these was learned by getting it wrong.
+Operational knowledge, kept here because every one of these was learned by getting it wrong. The
+day-to-day commands live in [operations.md](operations.md); what follows is the sizing and the traps.
+
+**Always pass `--control`, and quote the paired difference.** Identical bots read 48.6% and 48.7% over
+the coverage decks on two independent seed blocks, so a fixed 50% baseline is wrong by more than most
+effects being hunted. The same 2,040 games read +1.1 and non-significant against 50, and +2.35 at
+p < 0.001 against a control on the same seeds. Pairing also removes deck variance, which dominates the
+coverage pool: raw per-shard rates spanned 44.7% to 54.7% while the paired differences had a standard
+deviation of 1.65 points.
+
+**`--games` is per shard.** `--shard 10 --games 80` is 800 games, and the wall clock is set by the 80.
+Reading it as the total turned a 30-minute estimate into 4.3 hours. Keep it a multiple of four
+(`SEATING_CYCLE`); a pre-flight check warns.
+
+**Watch it with `--status`, not by reading shard files.** A subset of shards looks exactly like a
+finished run, and both a conclusion and a "jumped the gun" have come from reading one. `--status`
+always states completeness, and `bench-results/STATUS.md` is rewritten as each shard lands so a run can
+be followed from an editor tab.
 
 **Size from a measured run, never from per-decision costs or core-hours.** Both understate,
 independently:

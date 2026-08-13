@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+// `readFileSync` is used for both banked results and a child's `--out` payload.
 import { join } from 'node:path'
 import { wilsonInterval } from './stats'
 import { COMMIT_ID } from '../buildIdentity'
@@ -126,21 +127,57 @@ export function pendingSeeds(config: ShardConfig, done: ShardResult[]): number[]
     .filter(seed => !finished.has(seed))
 }
 
-const WIN_RATE = /win rate \([^)]*\)\s*:\s*([\d.]+)%/
-const COMPLETED = /completed \/ dropped\s*:\s*(\d+) \/ (\d+)/
+/** What a child writes with `--out`: the numbers a parent needs to pool and to resume, nothing more.
+ *  The per-game rows are already in the database and no parent reads them. */
+export interface ShardPayload {
+  seed: number
+  winRateA: number
+  completed: number
+  dropped: number
+  commitId: string
+}
 
-/** Read a child's report off its output, so a shard that failed to save is still counted. */
-export function parseShardOutput(text: string, seed: number, exitCode: number): ShardResult {
-  const rate = WIN_RATE.exec(text)
-  const counts = COMPLETED.exec(text)
+/** Project a finished report down to what the parent will read back. */
+export function shardPayload(report: { winRateA: number; completed: number; dropped: number; commitId: string }, seed: number): ShardPayload {
   return {
     seed,
-    winRateA: rate ? Number(rate[1]) / 100 : 0,
-    completed: counts ? Number(counts[1]) : 0,
-    dropped: counts ? Number(counts[2]) : 0,
+    winRateA: report.winRateA,
+    completed: report.completed,
+    dropped: report.dropped,
+    commitId: report.commitId,
+  }
+}
+
+const isPayload = (v: unknown): v is ShardPayload => {
+  if (typeof v !== 'object' || v === null) return false
+  const p = v as Record<string, unknown>
+  return typeof p.winRateA === 'number' && typeof p.completed === 'number' && typeof p.dropped === 'number'
+}
+
+/**
+ * Turn a child's payload into this run's result, adding the exit code only the parent knows.
+ *
+ * **Replaces regexing the child's printed report.** That worked for two numbers and could not scale to
+ * a mode returning 2,628 cells, and it silently coupled what a run measured to how the report was
+ * worded. A missing or malformed payload is recorded as a failed shard with no games rather than
+ * guessed at: `pendingSeeds` then re-runs it, where inventing a rate would quietly shrink the pooled
+ * total, which is the failure this whole mechanism exists to prevent.
+ *
+ * The parent's seed wins over the payload's. The file is named for the seed the parent asked for, so a
+ * disagreement is a mismatch to correct rather than to propagate.
+ */
+export function shardResultFrom(payload: unknown, seed: number, exitCode: number): ShardResult {
+  if (!isPayload(payload)) {
+    return { seed, winRateA: 0, completed: 0, dropped: 0, exitCode, commitId: COMMIT_ID }
+  }
+  return {
+    seed,
+    winRateA: payload.winRateA,
+    completed: payload.completed,
+    dropped: payload.dropped,
     exitCode,
     // Stamped so a later resume can tell whether this result describes the code now running.
-    commitId: COMMIT_ID,
+    commitId: typeof payload.commitId === 'string' ? payload.commitId : COMMIT_ID,
   }
 }
 
@@ -210,8 +247,15 @@ export async function runShards(config: ShardConfig): Promise<ShardResult[]> {
   const todo = pendingSeeds(config, banked)
 
   const jobs = todo.map(seed => {
+    // The child writes its own numbers here; the parent reads the file rather than the console.
+    //
+    // Deliberately NOT a `.json` extension. `loadShardResults` and the progress scanner both glob
+    // `*.json` in this directory, and a payload picked up as a banked result would carry no exit code:
+    // it would count as an extra seed in the progress total and as unfinished work in `pendingSeeds`.
+    const payloadPath = join(dir, `seed-${seed}.out`)
     const args = [
       'src/bench/main.ts', '--games', String(config.games), '--seed', String(seed),
+      '--out', payloadPath,
       ...(config.decks ? ['--decks', config.decks] : []),
       config.aiA, config.aiB,
     ]
@@ -220,13 +264,20 @@ export async function runShards(config: ShardConfig): Promise<ShardResult[]> {
       // `nice` so a long run yields to interactive work: the suite times out under a saturated
       // machine, and a shard that finishes an hour later costs nothing.
       const child = spawn('nice', ['-n', '10', 'npx', 'tsx', ...args], { cwd: process.cwd() })
-      let out = ''
-      const take = (d: unknown): void => { out += String(d); log.write(String(d)) }
+      // Still streamed to the log, because a multi-day run needs a readable trace. It is no longer
+      // PARSED: what a run measured must not depend on how its report is worded.
+      const take = (d: unknown): void => { log.write(String(d)) }
       child.stdout.on('data', take)
       child.stderr.on('data', take)
       child.on('close', code => {
         log.end()
-        const result = parseShardOutput(out, seed, code ?? 1)
+        let payload: unknown = null
+        try {
+          payload = JSON.parse(readFileSync(payloadPath, 'utf8'))
+        } catch {
+          // Never written, or written half way. Either way this shard has no result.
+        }
+        const result = shardResultFrom(payload, seed, code ?? 1)
         // Written before resolving, so a parent that dies next still leaves this shard banked.
         writeFileSync(join(dir, `seed-${seed}.json`), JSON.stringify(result, null, 2))
         // Refresh the at-a-glance view every time a shard lands, so a file left open in an editor

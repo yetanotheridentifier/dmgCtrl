@@ -10,8 +10,9 @@ import { runTerms } from './terms'
 import type { TermReport } from './terms'
 import { runCost } from './cost'
 import { runBudget, type BudgetReport } from './budget'
-import { join } from 'node:path'
-import { runShards, poolShards, pendingSeeds, loadShardResults, shardRunKey, SHARD_DIR } from './shard'
+import { dirname, join } from 'node:path'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { runShards, poolShards, pendingSeeds, loadShardResults, shardRunKey, shardPayload, SHARD_DIR } from './shard'
 import { renderStatus, loadAllProgress, preflight } from './status'
 import { pairedDifference, renderPaired } from './paired'
 import type { CostReport } from './cost'
@@ -69,6 +70,8 @@ interface Args {
   status: boolean
   control: boolean
   history: boolean
+  /** Write this run's structured result here, for a parent process to read back. */
+  out?: string
   triage: boolean
   /** Deck population for the A/B: `mirror` (default) or `coverage`. See `DeckSource`. */
   decks?: DeckSource
@@ -106,6 +109,7 @@ function parseArgs(argv: string[]): Args {
   let status = false
   let control = false
   let history = false
+  let out: string | undefined
   let triage = false
   let decks: DeckSource | undefined
   for (let i = 0; i < argv.length; i++) {
@@ -128,6 +132,7 @@ function parseArgs(argv: string[]): Args {
     else if (arg === '--status') status = true
     else if (arg === '--control') control = true
     else if (arg === '--history') history = true
+    else if (arg === '--out') out = argv[++i]
     else if (arg === '--decks') {
       const v = argv[++i]
       if (v !== 'mirror' && v !== 'coverage') throw new Error(`--decks must be mirror or coverage, got "${v}"`)
@@ -142,7 +147,7 @@ function parseArgs(argv: string[]): Args {
   if (depth !== undefined && (!Number.isFinite(depth) || depth < 1)) throw new Error('--depth must be a positive integer')
   if (triage && positional.length === 0) throw new Error('--triage needs at least one set code, e.g. --triage LAW SEC')
   if (shards !== undefined && (!Number.isFinite(shards) || shards < 1)) throw new Error('--shard must be a positive integer')
-  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, matchups, shards, status, control, history, triage, decks, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, matchups, shards, status, control, history, out, triage, decks, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
@@ -1004,6 +1009,14 @@ function main(): void {
     return
   }
   console.log(format(report, Date.now() - start))
+
+  // Written before the database save, so a shard whose save fails is still counted by its parent.
+  // This is what replaced regexing the printed report: what a run measured no longer depends on how
+  // that report is worded.
+  if (args.out !== undefined) {
+    mkdirSync(dirname(args.out), { recursive: true })
+    writeFileSync(args.out, JSON.stringify(shardPayload(report, args.seed), null, 2))
+  }
 
   const runId = saveReport(openDb(DEFAULT_DB_PATH), report)
   const written = writeFailures(runId, report.games)

@@ -67,6 +67,48 @@ fetches each set live from the card API, so it works on release day with no fixt
 npm run bench --prefix sealed -- --triage LAW SEC
 ```
 
+#### Comparing two AIs: always with `--control`
+
+A long comparison runs as N parallel single-threaded processes (`--shard`), one per seed, and
+`--control` additionally plays the baseline against **itself** on the same seeds:
+
+```bash
+npm run bench --prefix sealed -- 'beam-reply+someWeight=3' beam-reply \
+  --games 168 --shard 12 --seed 9001 --decks coverage --control
+```
+
+**`--games` is per shard**, so that is 2,016 games a side, and the wall clock is set by the 168 rather
+than by the total. Keep it a multiple of four; a pre-flight check warns if not.
+
+**The paired difference is the result, not the win rate.** Identical bots do not measure 50% over the
+coverage decks (48.6% and 48.7% on two independent seed blocks), so an arm read against a theoretical
+50% can invert: one arm reads +1.1 and non-significant against 50, and +2.35 at p < 0.001 against its
+own control on the same games.
+
+Each comparison is stored as one row and read back with `--history`:
+
+```bash
+npm run bench --prefix sealed -- --history 'tie=reply'
+```
+
+#### Watching a long run
+
+```bash
+npm run bench --prefix sealed -- --status      # read-only, starts nothing
+```
+
+Reports, per run, shards done of total, games played, **measured** seconds per game and a projected
+finish. Every sharded run also rewrites `sealed/bench-results/STATUS.md` as each shard lands, so a
+multi-hour run can be followed from an open editor tab.
+
+**An incomplete run is labelled `PARTIAL` and shows no pooled rate.** A subset of shards looks exactly
+like a finished run and has been mistaken for one more than once.
+
+A run resumes by re-running the identical command: finished shards are skipped, failed ones repeat.
+Results carry a `commitId`, so a re-run after a code change re-plays rather than replaying stale
+numbers as new ones. The practical consequence is that **a seed range is spent once per AI-name pair**:
+after a code change, use a fresh base seed, and a fresh control at those seeds.
+
 Full guide, output format, data model, the coverage sweep, the generalisation diagnostic, the card
 triage, weight tuning and how to add an AI: [ai-benchmark.md](ai-benchmark.md).
 
@@ -255,6 +297,25 @@ store once before collecting anything you intend to train on. Records written si
 replays, and there's a test pinning that (`deterministicReplay.test.ts`).
 
 ## Diagnostics & logging
+
+### Where bench artefacts live
+
+All under `sealed/bench-results/`, which is gitignored, so none of it appears in `git status`:
+
+| path | what |
+| --- | --- |
+| `bench.db` | every run, and every `--control` comparison as an `experiments` row |
+| `STATUS.md` | at-a-glance progress, rewritten as each shard lands |
+| `shards/<run-key>/run.json` | the manifest: shards requested, games per shard, base seed, build |
+| `shards/<run-key>/seed-N.json` | that shard's banked result, written the moment it finishes |
+| `shards/<run-key>/seed-N.log` | that shard's streamed output, for following or post-mortem |
+| `shards/<run-key>/seed-N.out` | the child's structured result, read by the parent |
+
+A run directory is keyed by the AI names, games per shard, base seed and deck source, but **not** by
+shard count, so an interrupted run can resume at a different one. Deleting a run directory forces a
+full re-run; deleting a single `seed-N.json` re-runs just that shard.
+
+### The app
 
 The app keeps a capped in-memory diagnostic log (`src/data/log.ts`). Every entry
 also mirrors to the devtools console with a `[sealed]` prefix.
