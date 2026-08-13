@@ -8,6 +8,7 @@ import { runDecisions, TIE_FANOUT_CAP } from './decisions'
 import { DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { runTerms } from './terms'
 import type { TermReport } from './terms'
+import type { WeightKey } from './tune'
 import { runCost } from './cost'
 import { runBudget, type BudgetReport } from './budget'
 import { dirname, join } from 'node:path'
@@ -75,6 +76,8 @@ interface Args {
   history: boolean
   /** Write this run's structured result here, for a parent process to read back. */
   out?: string
+  /** Restrict `--terms` to these weights. A precondition for a searching model, not an optimisation. */
+  weights?: WeightKey[]
   /** This child's share of a partitioned mode: it deals itself every `shardCount`-th unit of work. */
   shardIndex?: number
   shardCount?: number
@@ -116,6 +119,7 @@ function parseArgs(argv: string[]): Args {
   let control = false
   let history = false
   let out: string | undefined
+  let weights: WeightKey[] | undefined
   let shardIndex: number | undefined
   let shardCount: number | undefined
   let triage = false
@@ -141,6 +145,7 @@ function parseArgs(argv: string[]): Args {
     else if (arg === '--control') control = true
     else if (arg === '--history') history = true
     else if (arg === '--out') out = argv[++i]
+    else if (arg === '--weights') weights = argv[++i].split(',').map(w => w.trim()).filter(Boolean) as WeightKey[]
     else if (arg === '--shard-index') shardIndex = Number(argv[++i])
     else if (arg === '--shard-count') shardCount = Number(argv[++i])
     else if (arg === '--decks') {
@@ -157,7 +162,7 @@ function parseArgs(argv: string[]): Args {
   if (depth !== undefined && (!Number.isFinite(depth) || depth < 1)) throw new Error('--depth must be a positive integer')
   if (triage && positional.length === 0) throw new Error('--triage needs at least one set code, e.g. --triage LAW SEC')
   if (shards !== undefined && (!Number.isFinite(shards) || shards < 1)) throw new Error('--shard must be a positive integer')
-  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, matchups, shards, status, control, history, out, shardIndex, shardCount, triage, decks, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, matchups, shards, status, control, history, out, weights, shardIndex, shardCount, triage, decks, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
@@ -562,7 +567,13 @@ function runTermsMode(args: Args): void {
   const start = Date.now()
   let report: TermReport
   try {
-    report = runTerms({ gamesPerDeck, seed: args.seed })
+    // Naming a searching model is ~60x a one-ply pass unless the weights are narrowed, since every
+    // perturbation becomes a full search per decision. Say so before spending the evening on it.
+    if (args.aiExplicit && args.weights === undefined) {
+      console.log('\n  NOTE: perturbing every weight through a searching model is ~60x a one-ply pass.')
+      console.log('        Narrow it with --weights key1,key2 unless you mean to run for hours.\n')
+    }
+    report = runTerms({ gamesPerDeck, seed: args.seed, model: args.aiExplicit ? args.aiA : undefined, weights: args.weights })
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
     process.exit(2)

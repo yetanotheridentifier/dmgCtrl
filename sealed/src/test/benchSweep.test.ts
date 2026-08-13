@@ -87,11 +87,18 @@ describe('runSweep across several seeds', () => {
     expect(threeSeeds.seeds).toEqual([5, 6, 7])
   })
 
+  /**
+   * Given explicit headroom because it is the only test here that runs a **second** three-seed sweep,
+   * and it runs inside a parallel suite. Alone it costs about a second; under a loaded machine it has
+   * been measured at 5.8s and timed out against the 5s default, twice, each time because an unrelated
+   * expensive test happened to be running beside it. The work is genuinely a second's worth, so the
+   * default was simply too tight rather than the test too slow.
+   */
   it('is deterministic across the whole seed list', () => {
     const again = runSweep({ gamesPerDeck: 1, seeds: [5, 6, 7] })
     expect(again.uncovered).toEqual(threeSeeds.uncovered)
     expect(again.cardsPlayed).toBe(threeSeeds.cardsPlayed)
-  })
+  }, 30_000)
 })
 
 describe('runSweep failure reporting', () => {
