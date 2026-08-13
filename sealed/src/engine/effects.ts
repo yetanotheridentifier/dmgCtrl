@@ -6,14 +6,27 @@ import type { EffectContext, TriggerPoint } from './abilities'
 import { getCardDefinition, runUnitTrigger } from './abilities'
 
 /**
- * How many cards a search by `unit` looks at: the base count times every
- * `searchModifier` its card and upgrades contribute (Arcana Star Map ×2). Kept here
- * so any future search effect sizes consistently.
+ * How many cards a search by `owner` looks at: the base count times every `searchModifier` **anything
+ * they control** contributes (Arcana Star Map x2).
+ *
+ * **Scoped to the player, not to the searching unit.** Arcana Star Map reads "Attached unit gains: 'If
+ * *you* would search a number of cards from your deck, search twice that number of cards instead'",
+ * and "you" is the controller: units do not search, players do. The upgrade grants its host an ability
+ * whose effect is about the player, so every search that player makes is doubled while the host is in
+ * play, whichever card does the searching.
+ *
+ * This was previously keyed on the searching unit's own upgrades, which made the card do nothing
+ * except in the one case where the Star Map happened to sit on the very unit that searched.
+ *
+ * Modifiers multiply, so two would be x4. Arcana Star Map is Unique, but that is a property of the
+ * card rather than of this rule.
  */
-export function searchCount(state: GameState, unit: UnitState, baseCount: number): number {
+export function searchCount(state: GameState, owner: PlayerId, baseCount: number): number {
   let n = baseCount
-  for (const cardId of abilityCardIds(unit)) {
-    n *= getCardDefinition(cardId)?.searchModifier?.(state, unit) ?? 1
+  for (const unit of state.players[owner].units) {
+    for (const cardId of abilityCardIds(unit)) {
+      n *= getCardDefinition(cardId)?.searchModifier?.(state, unit) ?? 1
+    }
   }
   return n
 }

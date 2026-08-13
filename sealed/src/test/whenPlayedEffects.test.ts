@@ -69,6 +69,7 @@ const D = {
   DRAWN: card({ id: 'DRAWN', type: 'unit', arena: 'ground', power: 1, hp: 1 }),
   // Search top 5 for a trait match
   ASH_107: card({ id: 'ASH_107', type: 'unit', arena: 'ground', power: 3, hp: 2, traits: ['Mandalorian'] }), // Clan Wren Loyalist
+  ASH_084: card({ id: 'ASH_084', type: 'upgrade', power: 0, hp: 0 }), // Arcana Star Map — doubles searches
   TRAIT_U: card({ id: 'TRAIT_U', type: 'unit', arena: 'ground', power: 2, hp: 2, traits: ['Rebel'] }),
   REBELCARD: card({ id: 'REBELCARD', type: 'unit', arena: 'ground', traits: ['Rebel'] }),
   MANDOCARD: card({ id: 'MANDOCARD', type: 'unit', arena: 'ground', traits: ['Mandalorian'] }),
@@ -478,6 +479,31 @@ describe('When Played — search top 5 for a trait match (Clan Wren Loyalist)', 
     // Rebel (index 0, matches TRAIT_U) and Mandalorian (index 2, matches Clan Wren itself) are eligible.
     expect((s.pendingChoices![0] as { eligibleIndices: number[] }).eligibleIndices).toEqual([0, 2])
     expect(legalMoves(s).filter(a => a.type === 'acceptChoice').map(a => a.deckIndex)).toEqual([0, 2])
+  })
+
+  /**
+   * **Arcana Star Map doubles it, from wherever it is attached (#513).**
+   *
+   * The card grants its host "if **you** would search a number of cards from your deck, search twice
+   * that number instead", and "you" is the controller: units do not search, players do. Reported from
+   * live play with the Star Map on Imperial Defector and Clan Wren Loyalist played afterwards, where
+   * the search still showed five.
+   */
+  it('reveals ten when the controller has an Arcana Star Map, on any unit', () => {
+    const deck = ['REBELCARD', 'NEUTRAL', 'MANDOCARD', 'NEUTRAL', 'NEUTRAL', 'EXTRA', 'EXTRA', 'EXTRA', 'EXTRA', 'MANDOCARD', 'EXTRA']
+    const host = unit('u', 'TRAIT_U', { upgrades: [{ cardId: 'ASH_084', owner: 'player' }] })
+    const s = play('ASH_107', { units: [host], deck })
+    expect((s.pendingChoices?.[0] as { revealed: string[] }).revealed).toHaveLength(10)
+    // The tenth card is a Mandalorian, so it is only reachable because the search was doubled.
+    expect((s.pendingChoices![0] as { eligibleIndices: number[] }).eligibleIndices).toContain(9)
+  })
+
+  /** Without it, the same board still searches five: the doubling is the upgrade's doing, not a
+   *  change to the card. */
+  it('still reveals five with no Star Map (control)', () => {
+    const deck = ['REBELCARD', 'NEUTRAL', 'MANDOCARD', 'NEUTRAL', 'NEUTRAL', 'EXTRA', 'EXTRA', 'EXTRA', 'EXTRA', 'MANDOCARD', 'EXTRA']
+    const s = play('ASH_107', { units: [unit('u', 'TRAIT_U')], deck })
+    expect((s.pendingChoices?.[0] as { revealed: string[] }).revealed).toHaveLength(5)
   })
 
   it('draws the chosen card and bottoms the rest of the revealed cards', () => {

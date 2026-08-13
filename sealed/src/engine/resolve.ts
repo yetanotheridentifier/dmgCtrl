@@ -403,8 +403,9 @@ function ackbarEligible(state: GameState, revealed: string[], budget: number): n
  */
 function startAckbarSearch(state: GameState, owner: PlayerId, choiceId: string): GameState {
   const p = state.players[owner]
-  const revealed = p.deck.slice(0, 10)
-  const rest = p.deck.slice(10)
+  const depth = searchCount(state, owner, 10)
+  const revealed = p.deck.slice(0, depth)
+  const rest = p.deck.slice(depth)
   const eligibleIndices = ackbarEligible(state, revealed, 5)
   // Pull the searched window out of the deck; leftover cards return to the bottom when the choice
   // ends. Raised even when nothing is playable (#413), so the player sees what they looked at.
@@ -560,8 +561,7 @@ function mayDamageFollowUps(state: GameState, choice: PendingChoice & { kind: 'm
   // 8D8: "if you do, search the top N of your deck for a unit, reveal it, and draw it."
   if (choice.thenSearchDraw) {
     const owner = choice.controller
-    const source = findUnit(next, choice.unitId)
-    const depth = source ? searchCount(next, source.unit, choice.thenSearchDraw) : choice.thenSearchDraw
+    const depth = searchCount(next, owner, choice.thenSearchDraw)
     const revealed = next.players[owner].deck.slice(0, depth)
     const eligibleIndices = revealed.flatMap((cardId, i) => (next.cards[cardId]?.type === 'unit' ? [i] : []))
     // Revealed even with no unit among them (#413); acknowledging bottoms them all.
@@ -937,7 +937,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         const host = search ? findUnit(next, pick.unitId) : undefined
         if (search && host) {
           const owner = choice.controller
-          const revealed = next.players[owner].deck.slice(0, search.depth)
+          const revealed = next.players[owner].deck.slice(0, searchCount(next, owner, search.depth))
           const eligibleIndices = revealed.flatMap((cardId, i) => {
             const c = next.cards[cardId]
             if (c?.type !== 'upgrade') return []
@@ -1184,7 +1184,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       // Sense Through the Force: the named number rides along on the search that follows.
       const owner = choice.controller
       const guessedCost = optionIndex ?? 0
-      const revealed = next.players[owner].deck.slice(0, 5)
+      const revealed = next.players[owner].deck.slice(0, searchCount(next, owner, 5))
       const eligibleIndices = revealed.map((_, i) => i) // "search for a card" — any card qualifies
       // Only an empty deck reveals nothing; with cards there is always something to show (#413).
       if (revealed.length > 0) {

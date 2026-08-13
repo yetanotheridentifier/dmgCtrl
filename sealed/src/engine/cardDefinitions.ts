@@ -63,7 +63,7 @@ registerCard('ASH_230', { // Improvised Identity — attach to a ground unit
       const found = findUnit(s, ctx.sourceInstanceId!)
       if (!found) return s
       const owner = ctx.owner
-      const revealed = s.players[owner].deck.slice(0, searchCount(s, found.unit, 3))
+      const revealed = s.players[owner].deck.slice(0, searchCount(s, owner, 3))
       // Always reveal, even when no ground unit is among them (#413): the player looked at these
       // cards and is entitled to see them. Acknowledging without a pick goes straight on to the
       // optional attack with no grant, which is what used to happen silently.
@@ -970,7 +970,7 @@ registerCard('ASH_108', whenPlayed('You may play a Heroism unit from your hand. 
 
 registerCard('ASH_107', whenPlayed('Search the top 5 cards of your deck for a card that shares a Trait with a unit you control, reveal it, and draw it.', (s, ctx) => { // Clan Wren Loyalist
   const owner = ctx.owner
-  const revealed = s.players[owner].deck.slice(0, 5)
+  const revealed = s.players[owner].deck.slice(0, searchCount(s, owner, 5))
   const myTraits = new Set(s.players[owner].units.flatMap(u => unitTraits(s, u).map(t => t.toLowerCase())))
   const eligibleIndices = revealed.flatMap((cardId, i) => (s.cards[cardId]?.traits.some(t => myTraits.has(t.toLowerCase())) ? [i] : []))
   // Reveal even with no trait match (#413): acknowledging bottoms them all and draws nothing, but
@@ -1481,7 +1481,7 @@ registerCard('ASH_245', { // Eye of Sion
       const self = findUnit(s, ctx.sourceInstanceId!)?.unit
       if (!self) return s
       const budget = effectivePower(s, self)
-      const revealed = s.players[ctx.owner].deck.slice(0, searchCount(s, self, 8))
+      const revealed = s.players[ctx.owner].deck.slice(0, searchCount(s, ctx.owner, 8))
       const eligibleIndices = revealed.flatMap((cardId, i) => {
         const c = s.cards[cardId]
         return c?.type === 'unit' && c.cost <= budget ? [i] : []
