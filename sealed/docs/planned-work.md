@@ -178,10 +178,17 @@ first or the sweep is repeated.
    readable with `--history`. `--out FILE` replaced regexing the child's printed report. Pre-flight
    warns when games-per-shard is not a multiple of `SEATING_CYCLE`.
 
-   **Left.** `spawnShards` generalised so head-to-head is one caller among several, and the matrix
-   sharded by `--shard-index K --shard-count N` with each child dealing itself every Nth pair. The
-   matrix is the original justification: 169 hours serial against roughly 23 sharded, and it has never
-   been run.
+   `spawnShards` is now mode-agnostic: it takes jobs (an id and an argv), streams each child's log,
+   reads back what the child wrote, and reports each completion so its caller can bank it. The
+   head-to-head is one caller, supplying `seedJobs` as its split and `poolShards` as its merge.
+
+   **Left: phase 4, the matrix.** Shard it by `--shard-index K --shard-count N`, each child dealing
+   itself every Nth pair, rather than the parent handing over 2,628 pairs on a command line.
+   Self-dealing also keeps each child independently re-runnable, which is what resumption depends on.
+   The matrix is this ticket's original justification: 169 hours serial against roughly 23 sharded, and
+   it has never been run. There is no golden output to diff against, so the property to assert is that
+   the dealt subsets partition the pair set exactly, at several shard counts including ones sharing a
+   factor with the deck count.
 
    The reason the control half outranked the sharding half: identical bots measure **48.6% and 48.7%**
    over the coverage decks on two independent seed blocks, so reading an arm against a theoretical 50%

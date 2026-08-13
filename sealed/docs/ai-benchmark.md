@@ -1062,8 +1062,18 @@ in `src/ai/` and is described in [ai-model.md](ai-model.md).
 - `bench/cost.ts` per-decision timing over one identical corpus, behind `--cost`.
 - `bench/budget.ts` node-rail exhaustion and the chain/beam split, behind `--budget`. Shares
   `cost.ts`'s corpus, so the two modes describe the same positions.
-- `bench/shard.ts` running one A/B as N processes over N seeds and pooling them, behind `--shard`.
-  Owns resumption: which seeds still need playing, and merging banked results with fresh ones.
+- `bench/shard.ts` running work as N child processes, behind `--shard`. `spawnShards` is
+  mode-agnostic: it is handed jobs (an id and an argv), streams each child's output to a log, reads
+  back what the child wrote with `--out`, and reports the moment one finishes so its caller can bank
+  the result before the parent can die. A mode supplies its own split and its own merge; `seedJobs`
+  and `poolShards` are the head-to-head's. Also owns resumption: which seeds still need playing, and
+  merging banked results with fresh ones.
+- `bench/paired.ts` the arm-versus-control comparison, behind `--control`. Differences by seed, and
+  judges the result against a tabulated t critical value rather than a computed p, because shard
+  counts are small enough that an approximation would flatter a marginal result.
+- `bench/status.ts` progress of a run in flight, behind `--status`, plus the `STATUS.md` an editor tab
+  can follow and the pre-flight checks. Pure reading and formatting, so `shard.ts` depends on it and
+  not the reverse.
 - `bench/aiMatchups.ts` AI-vs-AI across every ordered deck pair, behind `--matchups`.
 - `bench/decks.ts` the fixed sealed deck, built deterministically from the ASH snapshot. For now the
   same deck plays both sides (a mirror), which removes deck strength as a variable. The runner already
