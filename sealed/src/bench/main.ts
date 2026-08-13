@@ -1,6 +1,6 @@
 import { runBench } from './runBench'
 import type { BenchReport } from './runBench'
-import { openDb, saveReport, DEFAULT_DB_PATH } from './store'
+import { openDb, saveReport, saveExperiment, listExperiments, DEFAULT_DB_PATH } from './store'
 import { writeFailures, FAILURES_DIR } from './reports'
 import { runSweep } from './sweep'
 import type { SweepReport } from './sweep'
@@ -10,8 +10,14 @@ import { runTerms } from './terms'
 import type { TermReport } from './terms'
 import { runCost } from './cost'
 import { runBudget, type BudgetReport } from './budget'
-import { join } from 'node:path'
-import { runShards, poolShards, pendingSeeds, loadShardResults, shardRunKey, SHARD_DIR } from './shard'
+import { dirname, join } from 'node:path'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import {
+  runShards, poolShards, pendingSeeds, loadShardResults, shardRunKey, shardPayload,
+  spawnShards, shardPayloadPath, SHARD_DIR,
+} from './shard'
+import { renderStatus, loadAllProgress, preflight } from './status'
+import { pairedDifference, renderPaired } from './paired'
 import type { CostReport } from './cost'
 import type { DeckSource } from './decks'
 import { runLethal } from './lethal'
@@ -21,7 +27,7 @@ import type { DecisionReport } from './decisions'
 import { runGeneralisation } from './generalisation'
 import type { GeneralisationReport } from './generalisation'
 import { buildMatchupDecks } from './matchupDecks'
-import { runMatchupMatrix } from './matrix'
+import { runMatchupMatrix, dealPairs, type MatrixResult } from './matrix'
 import { saveMatrix, deckStrength, leaderStrength, baseStrength, type StrengthRow } from './store'
 import { resolveAi } from '../ai/registry'
 import { fetchSets, formatTriage, triage } from './triage'
@@ -64,6 +70,14 @@ interface Args {
   matchups: boolean
   /** Run the head-to-head as N parallel single-threaded processes over N seeds, and pool them. */
   shards?: number
+  status: boolean
+  control: boolean
+  history: boolean
+  /** Write this run's structured result here, for a parent process to read back. */
+  out?: string
+  /** This child's share of a partitioned mode: it deals itself every `shardCount`-th unit of work. */
+  shardIndex?: number
+  shardCount?: number
   triage: boolean
   /** Deck population for the A/B: `mirror` (default) or `coverage`. See `DeckSource`. */
   decks?: DeckSource
@@ -98,6 +112,12 @@ function parseArgs(argv: string[]): Args {
   let depth: number | undefined
   let matchups = false
   let shards: number | undefined
+  let status = false
+  let control = false
+  let history = false
+  let out: string | undefined
+  let shardIndex: number | undefined
+  let shardCount: number | undefined
   let triage = false
   let decks: DeckSource | undefined
   for (let i = 0; i < argv.length; i++) {
@@ -117,6 +137,12 @@ function parseArgs(argv: string[]): Args {
     else if (arg === '--depth') depth = Number(argv[++i])
     else if (arg === '--matchups') matchups = true
     else if (arg === '--shard') shards = Number(argv[++i])
+    else if (arg === '--status') status = true
+    else if (arg === '--control') control = true
+    else if (arg === '--history') history = true
+    else if (arg === '--out') out = argv[++i]
+    else if (arg === '--shard-index') shardIndex = Number(argv[++i])
+    else if (arg === '--shard-count') shardCount = Number(argv[++i])
     else if (arg === '--decks') {
       const v = argv[++i]
       if (v !== 'mirror' && v !== 'coverage') throw new Error(`--decks must be mirror or coverage, got "${v}"`)
@@ -131,7 +157,7 @@ function parseArgs(argv: string[]): Args {
   if (depth !== undefined && (!Number.isFinite(depth) || depth < 1)) throw new Error('--depth must be a positive integer')
   if (triage && positional.length === 0) throw new Error('--triage needs at least one set code, e.g. --triage LAW SEC')
   if (shards !== undefined && (!Number.isFinite(shards) || shards < 1)) throw new Error('--shard must be a positive integer')
-  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, matchups, shards, triage, decks, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, matchups, shards, status, control, history, out, shardIndex, shardCount, triage, decks, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
@@ -746,6 +772,8 @@ async function runShardMode(args: Args): Promise<void> {
     `\n${args.aiA} vs ${args.aiB}   ${shards} shards x ${args.games} games ` +
     `= ${shards * args.games} games   seeds ${args.seed} to ${args.seed + shards - 1}\n`,
   )
+  // Cheap checks, stated before hours are spent rather than discovered afterwards.
+  for (const warning of preflight({ shards, games: args.games })) console.log(`  WARNING: ${warning}\n`)
   // Say so loudly. A resumed run that looked like a fresh one would invite someone to wonder why a
   // three-day job finished in twenty minutes.
   if (todo.length < shards) {
@@ -772,11 +800,80 @@ async function runShardMode(args: Args): Promise<void> {
     row(`pooled win rate (${args.aiA})`, `${pct(pooled.winRateA)}  ± ${pct(pooled.winCi)}   (${pct(lo)} – ${pct(hi)})`),
     row('games pooled', `${pooled.wins} wins of ${pooled.completed}`),
     row('shards failed', `${failed.length} of ${results.length}`),
-    row('wall clock', `${((Date.now() - start) / 1000).toFixed(1)}s`),
-    '',
   )
+
+  // The control is the same baseline played against ITSELF, on the same seeds, the same games per
+  // shard and the same decks: one difference between the two runs, which is the arm. It gets its own
+  // run directory (its `aiA` differs), so it banks and resumes independently.
+  if (args.control) {
+    console.log(lines.join('\n'))
+    console.log(`\n  now the control: ${args.aiB} vs ${args.aiB} on the same ${shards} seeds\n`)
+    const controlResults = await runShards({ ...config, aiA: args.aiB })
+    const paired = pairedDifference(results, controlResults)
+    const ctlPooled = poolShards(controlResults.filter(r => r.exitCode === 0 || r.completed > 0))
+
+    // Persisted as ONE row: the comparison is the evidence, and storing the two runs without the
+    // relationship between them is what left a +2.35 result living only in a ticket comment.
+    const db = openDb(DEFAULT_DB_PATH)
+    const experimentId = saveExperiment(db, {
+      armSpec: args.aiA,
+      controlSpec: args.aiB,
+      decks: args.decks ?? 'mirror',
+      baseSeed: args.seed,
+      shards,
+      gamesPerShard: args.games,
+      arm: results,
+      control: controlResults,
+      paired,
+    })
+    db.close()
+
+    lines.length = 0
+    lines.push(
+      row(`pooled win rate (${args.aiB} control)`, `${pct(ctlPooled.winRateA)}  (${ctlPooled.wins} of ${ctlPooled.completed})`),
+      ...renderPaired(args.aiA, args.aiB, paired),
+      row('saved experiment', `${experimentId}  →  ${DEFAULT_DB_PATH}`),
+    )
+  }
+
+  lines.push(row('wall clock', `${((Date.now() - start) / 1000).toFixed(1)}s`), '')
   console.log(lines.join('\n'))
   if (failed.length > 0) process.exit(1)
+}
+
+/**
+ * Every comparison an arm has ever been in, newest first.
+ *
+ * The query that justifies storing experiments at all: **a store nobody queries is worse than none**,
+ * because it implies a coverage it does not deliver. Filtered by substring so a family is one question
+ * (`--history tie=reply` covers every tie-break arm ever run), and the paired difference leads, because
+ * a raw win rate without its control is the reading that inverted a live result.
+ */
+function runHistoryMode(args: Args): void {
+  const db = openDb(DEFAULT_DB_PATH)
+  const needle = args.ais[0] ?? ''
+  const rows = listExperiments(db).filter(r => r.armSpec.includes(needle) || r.controlSpec.includes(needle))
+  db.close()
+
+  if (rows.length === 0) {
+    console.log(`\nno experiments${needle ? ` matching "${needle}"` : ''} in ${DEFAULT_DB_PATH}\n`)
+    return
+  }
+  const lines = [`\nexperiments${needle ? ` matching "${needle}"` : ''}  (${rows.length})\n`]
+  for (const r of rows) {
+    const diff = `${r.pairedMean >= 0 ? '+' : ''}${(r.pairedMean * 100).toFixed(2)}`
+    const t = r.pairedT === null ? 'n/a' : r.pairedT.toFixed(2)
+    lines.push(
+      `  ${r.significant ? 'SIGNIFICANT' : 'not sig.   '}  ${diff.padStart(7)} points   t=${t} (${r.pairedDf} df)`,
+      `      ${r.armSpec}`,
+      `      vs ${r.controlSpec}   [${r.decks}]   ${r.shardCount} x ${r.gamesPerShard} games   seed ${r.baseSeed}`,
+      `      arm ${pct(r.armGames === 0 ? 0 : r.armWins / r.armGames)} of ${r.armGames}   ` +
+        `control ${pct(r.controlGames === 0 ? 0 : r.controlWins / r.controlGames)} of ${r.controlGames}` +
+        `   build ${r.buildTag}   ${r.startedAt}`,
+      '',
+    )
+  }
+  console.log(lines.join('\n'))
 }
 
 function runMatchupsMode(args: Args): void {
@@ -825,21 +922,103 @@ function strengthTable(title: string, rows: StrengthRow[], limit?: number): stri
   return lines
 }
 
+/**
+ * The matrix across N child processes, which is what makes it affordable at all: roughly 169 hours
+ * serial against about 23 sharded.
+ *
+ * Each child deals itself every Nth pair from `--shard-index` and `--shard-count`, so the parent never
+ * has to hand over 2,628 pairs on a command line, and each child stays independently re-runnable. Per
+ * pair seeds mean the merged result is identical to a serial run, cell for cell.
+ */
+async function runShardedMatrixMode(args: Args): Promise<void> {
+  const model = args.aiExplicit ? args.aiA : 'greedy'
+  const gamesPerCell = args.gamesSet ? args.games : 10
+  const shards = args.shards ?? 1
+  const decks = buildMatchupDecks()
+  const total = dealPairs(decks.length).length
+  const dir = join(SHARD_DIR, `matrix__${model.replace(/[^A-Za-z0-9._-]/g, '_')}__g${gamesPerCell}__s${args.seed}`)
+  mkdirSync(dir, { recursive: true })
+
+  console.log(
+    `\nmatchup matrix: ${model}, ${decks.length} decks, ${gamesPerCell} games/cell, seed ${args.seed}` +
+    `\n  ${shards} shards over ${total.toLocaleString()} pairs ` +
+    `= ${(total * gamesPerCell).toLocaleString()} games\n  ${dir}/\n`,
+  )
+
+  const start = Date.now()
+  const jobs = Array.from({ length: shards }, (_, k) => ({
+    id: `matrix-${k}`,
+    args: [
+      'src/bench/main.ts', '--matrix', '--games', String(gamesPerCell), '--seed', String(args.seed),
+      '--shard-index', String(k), '--shard-count', String(shards),
+      '--out', shardPayloadPath(dir, `matrix-${k}`),
+      ...(args.aiExplicit ? [model] : []),
+    ],
+  }))
+  const outcomes = await spawnShards(dir, jobs)
+
+  const failed = outcomes.filter(o => o.exitCode !== 0 || o.payload === null)
+  if (failed.length > 0) {
+    // Never save a partial matrix: it would be indistinguishable from a whole one with quiet gaps,
+    // and every row and leader average read off it would be wrong without saying so.
+    console.error(`\n  ${failed.length} of ${shards} shards failed (${failed.map(f => f.id).join(', ')}).`)
+    console.error('  Nothing saved. Re-run the identical command to retry.\n')
+    process.exit(1)
+  }
+
+  const parts = outcomes.map(o => o.payload as MatrixResult)
+  const merged: MatrixResult = {
+    ...parts[0],
+    deckCount: decks.length,
+    dropped: parts.reduce((n, p) => n + p.dropped, 0),
+    cells: parts.flatMap(p => p.cells),
+  }
+  const db = openDb(DEFAULT_DB_PATH)
+  const runId = saveMatrix(db, merged)
+  console.log(matrixReport(merged, model, decks.length * decks.length, runId, ((Date.now() - start) / 1000).toFixed(0), db))
+  db.close()
+}
+
 function runMatrixMode(args: Args): void {
   const model = args.aiExplicit ? args.aiA : 'greedy'
   const gamesPerCell = args.gamesSet ? args.games : 10
   const decks = buildMatchupDecks()
   const cells = decks.length * decks.length
-  console.log(`\nmatchup matrix: ${model}, ${decks.length} decks (${cells} cells), ${gamesPerCell} games/cell, seed ${args.seed}`)
-  console.log(`about ${(decks.length * (decks.length + 1) / 2 * gamesPerCell).toLocaleString()} games to play; this takes a while...\n`)
+  const shardIndex = args.shardIndex ?? 0
+  const shardCount = args.shardCount ?? 1
+  const share = shardCount > 1 ? `  [shard ${shardIndex + 1} of ${shardCount}]` : ''
+  const pairs = dealPairs(decks.length, shardIndex, shardCount).length
+  console.log(`\nmatchup matrix: ${model}, ${decks.length} decks (${cells} cells), ${gamesPerCell} games/cell, seed ${args.seed}${share}`)
+  console.log(`about ${(pairs * gamesPerCell).toLocaleString()} games to play; this takes a while...\n`)
 
   const start = Date.now()
-  const result = runMatchupMatrix(decks, resolveAi(model), model, { gamesPerCell, seed: args.seed })
+  const result = runMatchupMatrix(decks, resolveAi(model), model, { gamesPerCell, seed: args.seed, shardIndex, shardCount })
+
+  // A child writes its cells for the parent and saves nothing: one merged run belongs in the database,
+  // not N partial ones that would each look like a whole matrix with most of its cells missing.
+  if (args.out !== undefined) {
+    mkdirSync(dirname(args.out), { recursive: true })
+    writeFileSync(args.out, JSON.stringify(result, null, 2))
+    console.log(row('wrote', `${result.cells.length} cells  ->  ${args.out}`))
+    return
+  }
+
   const db = openDb(DEFAULT_DB_PATH)
   const runId = saveMatrix(db, result)
-  const wall = ((Date.now() - start) / 1000).toFixed(0)
+  console.log(matrixReport(result, model, cells, runId, ((Date.now() - start) / 1000).toFixed(0), db))
+  if (result.dropped > 0) process.exit(1)
+}
 
-  const lines = [
+/** The matrix readout, shared by the serial and sharded paths so they cannot drift apart. */
+function matrixReport(
+  result: MatrixResult,
+  model: string,
+  cells: number,
+  runId: string,
+  wall: string,
+  db: ReturnType<typeof openDb>,
+): string {
+  return [
     '',
     `dmgCtrl matchup matrix  (engine ${result.commitId})`,
     row('model', model),
@@ -859,9 +1038,7 @@ function runMatrixMode(args: Args): void {
     '',
     `  full matrix: sealed/${DEFAULT_DB_PATH}, table "matchups", run_id='${runId}'`,
     '',
-  ]
-  console.log(lines.join('\n'))
-  if (result.dropped > 0) process.exit(1)
+  ].join('\n')
 }
 
 /**
@@ -900,6 +1077,9 @@ function main(): void {
   if (args.triage) { void runTriageMode(args); return }
   if (args.sweep) { runSweepMode(args); return }
   if (args.generalise) { runGeneraliseMode(args); return }
+  // `--matrix --shard N` parallelises; `--matrix` alone still runs serially, and a child carries
+  // `--shard-index` rather than `--shard`, so it can never recurse into spawning its own children.
+  if (args.matrix && args.shards !== undefined) { void runShardedMatrixMode(args); return }
   if (args.matrix) { runMatrixMode(args); return }
   if (args.decisions) { runDecisionsMode(args); return }
   if (args.terms) { runTermsMode(args); return }
@@ -907,6 +1087,9 @@ function main(): void {
   if (args.budget) { runBudgetMode(args); return }
   if (args.lethal) { runLethalMode(args); return }
   if (args.matchups) { runMatchupsMode(args); return }
+  // Read-only, and deliberately ahead of every mode: asking what is running must never start anything.
+  if (args.status) { console.log(renderStatus(loadAllProgress(), Date.now())); return }
+  if (args.history) { runHistoryMode(args); return }
   if (args.shards !== undefined) { void runShardMode(args); return }
 
   let report: BenchReport
@@ -919,6 +1102,14 @@ function main(): void {
     return
   }
   console.log(format(report, Date.now() - start))
+
+  // Written before the database save, so a shard whose save fails is still counted by its parent.
+  // This is what replaced regexing the printed report: what a run measured no longer depends on how
+  // that report is worded.
+  if (args.out !== undefined) {
+    mkdirSync(dirname(args.out), { recursive: true })
+    writeFileSync(args.out, JSON.stringify(shardPayload(report, args.seed), null, 2))
+  }
 
   const runId = saveReport(openDb(DEFAULT_DB_PATH), report)
   const written = writeFailures(runId, report.games)

@@ -260,10 +260,119 @@ roughly 600 MB free and lightly into swap. Cores used to bind and memory did not
 short job first, read per-worker RSS, and reduce the shard count above ~500 MB a worker. A deeper
 search holds a larger frontier per root and should be expected to want more.
 
+**`--games` is per shard, and the wall clock is set by that rather than by the total.** `--shard 10
+--games 80` plays 800 games, and takes as long as one shard needs for 80. Reading it as the total
+turned a 30-minute estimate into 4.3 hours.
+
+**Keep `--games` a multiple of four.** Seat and first player cycle on independent axes with a period of
+`SEATING_CYCLE = 4`, so a remainder leaves a tail of games covering only some of the four
+combinations. A pre-flight check warns and names the two nearest safe values. It biases an arm and its
+control identically, so a paired figure survives it, but it is the same class of defect as the seat
+bias that made self-play read 48.3%.
+
 Shards split by **seed**, not by dividing one seed's games. Every shard is therefore a valid
 standalone run, exactly like the existing three-seed results, and the per-shard column is worth
 reading: a finding that holds across independent seeds is far stronger than one long run, and a shard
 disagreeing with the rest is a signal rather than something to average away.
+
+### Sharding the matchup matrix
+
+```bash
+npm run bench --prefix sealed -- --matrix --shard 10 --games 10 --seed 42 beam-reply
+```
+
+`--matrix` alone still runs serially. With `--shard N` the parent spawns N children, each told only
+`--shard-index K --shard-count N`, and each **deals itself every Nth pair**. The parent never hands
+over a pair list: 2,628 pairs do not fit on a command line, and self-dealing keeps every child
+independently re-runnable.
+
+**Dealt round-robin, never sliced.** The enumeration is `for i, for j >= i`, so a contiguous split by
+`i` would give the first shard 72 pairs and the last one a single pair, and that shard alone would set
+the wall clock.
+
+**A sharded matrix is identical to a serial one, cell for cell.** Each pair's games are seeded from the
+pair (`pairSeed(base, i, j)`) rather than from a single seed advanced as the loop goes, so a pair plays
+the same games wherever it runs. Verified at full size: 72 decks, 5,184 cells, zero differing. Without
+per-pair seeds a child playing every Nth pair would play different games and no sharded result could
+ever be checked against a serial one.
+
+A child writes its cells and saves nothing; only the merged run reaches the database. **If any shard
+fails, nothing is saved at all**, because a partial matrix is indistinguishable from a whole one with
+quiet gaps, and every row and leader average read off it would be wrong without saying so.
+
+### The matched control: `--control`
+
+```bash
+npm run bench --prefix sealed -- --shard 12 --games 168 --seed 9001 --decks coverage \
+  'beam-reply/tie=reply:null' beam-reply --control
+```
+
+Runs the arm, then runs **`aiB` against itself** on the same seeds, the same games per shard and the
+same decks, and reports the **paired difference with its `t`** as the headline. The control gets its
+own run directory, so it banks and resumes independently.
+
+**Use it for every A/B.** Reading an arm against a fixed 50% inverts results:
+
+| the same 2,040 games, read against | difference | verdict |
+| --- | --- | --- |
+| a theoretical 50% | +1.1 | not significant, abandon |
+| its own matched control | **+2.35** | t = 4.94, 11 df, **p < 0.001** |
+
+Pairing by seed is what makes it sharp rather than merely correct. A seed fixes the decks and the
+shuffles, and deck variance dominates the coverage pool: raw per-shard rates spanned 44.7% to 54.7%
+while the paired differences had a standard deviation of 1.65 points. It is also immune to whatever
+causes the sub-50 baseline, because both sides carry it equally.
+
+Significance is judged against a **tabulated** two-sided 5% critical value rather than a computed
+p-value. Shard counts are small (ten and twelve are typical), which is exactly where the t
+distribution departs most from the normal, and an approximation that is slightly generous there would
+flatter every marginal result this exists to judge.
+
+### The evidence store
+
+`--control` writes the comparison to `bench-results/bench.db` as **one `experiments` row** plus its
+per-shard pairs, and `--history <substring>` reads them back:
+
+```bash
+npm run bench --prefix sealed -- --history 'tie=reply'
+```
+
+**The comparison is the unit of evidence, not the run.** The store previously held runs only, which
+meant that of a completed tie-break experiment the pooled rate was in no row (each shard is its own
+`runs` row and the pool was computed and printed), the control was twelve rows nothing marked as a
+control, and the paired difference that settled it was nowhere at all. A store that logged runs more
+diligently would have kept the misleading number and lost the decisive one.
+
+The per-shard pairs are kept because **conclusions get revised on the same games**, so a stored
+experiment that cannot be re-analysed is a screenshot.
+
+`runs` also carries `decks` now. Its absence was a correctness hole rather than a missing field: a term
+whose cards are not in the mirror deck reports neutral there while firing on coverage, so two
+populations must never read as comparable. Existing databases are migrated by an idempotent `ALTER`,
+since `CREATE TABLE IF NOT EXISTS` cannot add a column.
+
+### Watching a run: `--status`
+
+```bash
+npm run bench --prefix sealed -- --status
+```
+
+Read-only, and safe at any time: it starts nothing. Per run it reports shards done of total, games
+played of total, **measured** seconds per game, and a projected finish, all from files already on disk.
+
+Every run also rewrites `bench-results/STATUS.md` as each shard lands, so a long run can be watched
+from an open editor tab rather than by asking.
+
+**An incomplete run is labelled `PARTIAL` and shows no pooled rate.** A subset of shards looks exactly
+like a finished run, and both of us have drawn a conclusion from one. The completeness of a run cannot
+be inferred from its result files either, because `shardRunKey` deliberately excludes the shard count
+so a run can resume at a different one, so each run writes a `run.json` manifest at launch and that is
+what makes "9 of 12" knowable at all.
+
+A shard counts as done only if it is this run's: within the seed range, stamped with this build, exited
+cleanly, and having played something. Those are the same four conditions `pendingSeeds` uses to decide
+what to re-run, and they must agree, or progress would show a run as further along than a resume would
+find it.
 
 **Pooling sums the games; it never averages the rates.** An unweighted mean is correct only when every
 shard completed the same number of games, and shards drop games, so the mean would silently
@@ -978,8 +1087,18 @@ in `src/ai/` and is described in [ai-model.md](ai-model.md).
 - `bench/cost.ts` per-decision timing over one identical corpus, behind `--cost`.
 - `bench/budget.ts` node-rail exhaustion and the chain/beam split, behind `--budget`. Shares
   `cost.ts`'s corpus, so the two modes describe the same positions.
-- `bench/shard.ts` running one A/B as N processes over N seeds and pooling them, behind `--shard`.
-  Owns resumption: which seeds still need playing, and merging banked results with fresh ones.
+- `bench/shard.ts` running work as N child processes, behind `--shard`. `spawnShards` is
+  mode-agnostic: it is handed jobs (an id and an argv), streams each child's output to a log, reads
+  back what the child wrote with `--out`, and reports the moment one finishes so its caller can bank
+  the result before the parent can die. A mode supplies its own split and its own merge; `seedJobs`
+  and `poolShards` are the head-to-head's. Also owns resumption: which seeds still need playing, and
+  merging banked results with fresh ones.
+- `bench/paired.ts` the arm-versus-control comparison, behind `--control`. Differences by seed, and
+  judges the result against a tabulated t critical value rather than a computed p, because shard
+  counts are small enough that an approximation would flatter a marginal result.
+- `bench/status.ts` progress of a run in flight, behind `--status`, plus the `STATUS.md` an editor tab
+  can follow and the pre-flight checks. Pure reading and formatting, so `shard.ts` depends on it and
+  not the reverse.
 - `bench/aiMatchups.ts` AI-vs-AI across every ordered deck pair, behind `--matchups`.
 - `bench/decks.ts` the fixed sealed deck, built deterministically from the ASH snapshot. For now the
   same deck plays both sides (a mirror), which removes deck strength as a variable. The runner already
