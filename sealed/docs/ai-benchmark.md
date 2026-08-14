@@ -68,6 +68,12 @@ blocks agreeing within 0.1 points is suggestive, not conclusive, so treat the re
 than as an established bias. Draws do not explain it (one draw in 2,040 games) and no evaluation
 weight can, because a control is the same bot on both sides and any weight change cancels.
 
+**The baseline is a property of the harness, not a constant.** The generalisation harness that `tune`
+runs through reads **50.4% ± 6.1%** over 252 self-play games on the same decks, where `runBench` reads
+48.70%. So a number carried across from one harness to another is no safer than a theoretical 50:
+establish each harness's own baseline at the precision you intend to measure at, before trusting a
+result from it.
+
 **Read an arm against its own control, never against a theoretical 50%.** The size of this matters
 more than it looks, because it inverts live results. The search tie-break over 2,040 games:
 

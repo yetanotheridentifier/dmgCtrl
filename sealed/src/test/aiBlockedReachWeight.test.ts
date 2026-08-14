@@ -57,13 +57,24 @@ function attempt(blockedReach: number): { tied: number; escapes: boolean } {
 }
 
 describe('the weight needed to escape the lockout', () => {
-  /** The scale the weight has to live on, asserted rather than remembered. */
-  it('is judged against a model whose other weights are 1 to 7', () => {
-    const scale = [
+  /**
+   * The scale the weight has to live on, asserted rather than remembered.
+   *
+   * **Expressed relative to a unit, not as an absolute.** Every price was doubled as a pure
+   * reparameterisation, so the raw numbers this file used to assert (and the "12 is triple a unit"
+   * finding behind it) are in the old units. Stated as a multiple of `unit` it survives any future
+   * rescaling, which is the point: what made 12 wrong was never the digit, it was being three times a
+   * whole body on a board where a body is the biggest thing you can win or lose.
+   *
+   * `saturation` is excluded because it is not a price at all: it is a pool size, measured in
+   * resources rather than score points, and it did not scale with the rest.
+   */
+  it('is judged against a model where no price exceeds a unit', () => {
+    const prices = [
       DEFAULT_WEIGHTS.base, DEFAULT_WEIGHTS.unit, DEFAULT_WEIGHTS.power, DEFAULT_WEIGHTS.hp,
-      DEFAULT_WEIGHTS.card, DEFAULT_WEIGHTS.resource, DEFAULT_WEIGHTS.saturation,
+      DEFAULT_WEIGHTS.card, DEFAULT_WEIGHTS.resource,
     ]
-    expect(Math.max(...scale)).toBeLessThanOrEqual(7)
+    expect(Math.max(...prices)).toBeLessThanOrEqual(DEFAULT_WEIGHTS.unit)
   })
 
   /** Off, the bot passes. That is the defect, and the baseline every weight below is measured against. */
@@ -95,14 +106,18 @@ describe('the weight needed to escape the lockout', () => {
    * This is the whole case for a small weight. The term does not have to be big enough to beat
    * anything, so it need not be big at all, and a weight of 1 sits at the bottom of the model's scale
    * instead of triple a whole unit.
+   *
+   * The scores below are **104 and 86 where the write-ups say 52 and 43**, because every price was
+   * later doubled as a pure reparameterisation. Same boards, same ordering, same conclusion, twice the
+   * units. Halve them to read them against the recorded numbers.
    */
   it('saturates immediately, so the values are identical at 1 and at 12', () => {
     const top = (blockedReach: number): number[] => {
       makeBeamAi(makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach }), shipped)(lockout())
       return [...lastSearchTrace()!.candidates].sort((a, b) => b - a).slice(0, 2)
     }
-    expect(top(0), 'passing wins outright before the term is priced').toEqual([52, 43])
-    expect(top(1), 'and is level with acting once it is').toEqual([43, 43])
+    expect(top(0), 'passing wins outright before the term is priced').toEqual([104, 86])
+    expect(top(1), 'and is level with acting once it is').toEqual([86, 86])
     expect(top(12), 'twelve times the weight lands in exactly the same place').toEqual(top(1))
   })
 

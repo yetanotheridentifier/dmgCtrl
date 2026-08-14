@@ -10,7 +10,10 @@ import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
 import { seededShuffle, nextSeed, seededUnit } from '../engine/rng'
 import { setupAi } from '../ai/setupAi'
-import { publicBreakdown, makeEvaluate, DEFAULT_WEIGHTS } from '../ai/evaluate'
+import { publicBreakdown, makeEvaluate, DEFAULT_WEIGHTS, type EvalWeights } from '../ai/evaluate'
+import { makeBeamGreedy } from '../ai/greedyAi'
+import { namedLimitsFor, beamLimitsFor } from '../ai/registry'
+import { sameAction } from './decisions'
 import { DEFAULT_HAND_WEIGHTS, handQuantities } from '../ai/handValue'
 import { makeQuiescent } from '../ai/search'
 import { role } from '../ai/race'
@@ -62,6 +65,24 @@ export interface TermConfig {
    *  full pass is ~30x a plain one and tests want a couple of decks rather than all 42. */
   decks?: number
   stepCeiling?: number
+  /**
+   * The model whose picks are perturbed. Defaults to the one-ply scorer, which is what every recorded
+   * `--terms` number was measured with, so historical results keep their meaning until a run asks for
+   * something else.
+   *
+   * **Naming a searching model is the point of #487.** A weight can be inert one ply deep and pivotal
+   * inside a search, or the reverse: the evaluation is now the leaf of a depth-3 minimax rather than
+   * the thing that picks the move.
+   */
+  model?: string
+  /**
+   * Restrict the perturbation to these weights.
+   *
+   * Not an optimisation but a precondition for the searching model: every perturbation is a full
+   * search per decision, three per weight, so an unfiltered pass is roughly **60x** a one-ply one.
+   * Scoped to the few weights a prediction names, it is affordable.
+   */
+  weights?: WeightKey[]
 }
 
 /** Where a decision happened. Regroup and answering a choice offer homogeneous candidate sets, so
@@ -138,31 +159,50 @@ export function stepFor(key: WeightKey): number {
   return Number.isInteger(shipped) ? Math.max(1, Math.round(quarter)) : quarter
 }
 
-/** The shipped scorer, and the perturbed ones, all built through the same factory the deployed bot
- *  uses so a nudge measures the real thing rather than a lookalike. */
-const shippedScore = makeQuiescent(makeEvaluate(DEFAULT_WEIGHTS))
-
 const shippedValue = (key: WeightKey): number =>
   key === 'hand.canAct' ? DEFAULT_HAND_WEIGHTS.canAct
     : key === 'hand.hold' ? DEFAULT_HAND_WEIGHTS.hold
       : DEFAULT_WEIGHTS[key as keyof Omit<typeof DEFAULT_WEIGHTS, 'hand'>]
 
-interface Scorers {
-  /** One step either way. Both directions, because a weight can sit at a plateau edge where lowering
-   *  it moves the choice and raising it does not. */
-  nudged: Array<ReturnType<typeof makeQuiescent>>
-  /** The weight switched off entirely. */
-  ablated: ReturnType<typeof makeQuiescent>
+/**
+ * How a set of weights chooses a move.
+ *
+ * The abstraction exists because the answer now depends on the model. One ply scores each candidate's
+ * resulting board and takes the best; a searching model plays the position itself. Both are handed the
+ * same inputs so the caller does not branch, and the one-ply path is unchanged from what every
+ * recorded `--terms` number was measured with.
+ */
+type Picker = (state: GameState, moves: Action[], nexts: GameState[], me: PlayerId, asRole: ReturnType<typeof role>) => Action | null
+
+/** Build a picker for one weight set, at the named model. */
+function pickerFor(model: string | undefined, weights: EvalWeights): Picker {
+  const limits = model === undefined ? null : namedLimitsFor(model) ?? beamLimitsFor(model)
+  if (limits === null) {
+    // One ply: score the resulting boards. `pick` reproduces the greedy driver's seeded tie-break, so
+    // an identical best set lands on the same move and a difference is the weight's doing.
+    const score = makeQuiescent(makeEvaluate(weights))
+    return (state, moves, nexts, me, asRole) => pick(moves, nexts.map(n => score(n, me, asRole)), state.rngSeed)
+  }
+  const ai = makeBeamGreedy(weights, limits)
+  return state => ai(state)
 }
 
-function perturbedScorers(): Map<WeightKey, Scorers> {
-  const out = new Map<WeightKey, Scorers>()
-  for (const key of SCALAR_KEYS) {
+interface Pickers {
+  /** One step either way. Both directions, because a weight can sit at a plateau edge where lowering
+   *  it moves the choice and raising it does not. */
+  nudged: Picker[]
+  /** The weight switched off entirely. */
+  ablated: Picker
+}
+
+function perturbedPickers(model: string | undefined, keys: WeightKey[]): Map<WeightKey, Pickers> {
+  const out = new Map<WeightKey, Pickers>()
+  for (const key of keys) {
     const step = stepFor(key)
     const shipped = shippedValue(key)
     out.set(key, {
-      nudged: [shipped - step, shipped + step].map(v => makeQuiescent(makeEvaluate(weightsFrom({ [key]: v })))),
-      ablated: makeQuiescent(makeEvaluate(weightsFrom({ [key]: 0 }))),
+      nudged: [shipped - step, shipped + step].map(v => pickerFor(model, weightsFrom({ [key]: v }))),
+      ablated: pickerFor(model, weightsFrom({ [key]: 0 })),
     })
   }
   return out
@@ -240,9 +280,11 @@ export function runTerms(config: TermConfig): TermReport {
   const decks = config.decks === undefined ? all : all.slice(0, config.decks)
   const cardDb = buildCardDb(POOL)
   const ceiling = config.stepCeiling ?? 4000
-  const scorers = perturbedScorers()
+  const keys = config.weights ?? SCALAR_KEYS
+  const pickers = perturbedPickers(config.model, keys)
+  const shippedPick = pickerFor(config.model, DEFAULT_WEIGHTS)
 
-  const acc = new Map<WeightKey, Acc>(SCALAR_KEYS.map(k => [k, emptyAcc()]))
+  const acc = new Map<WeightKey, Acc>(keys.map(k => [k, emptyAcc()]))
   let games = 0
   let decisions = 0
 
@@ -276,15 +318,15 @@ export function runTerms(config: TermConfig): TermReport {
         const nexts = moves.map(m => resolve(s, m))
         decisions++
 
-        const shipped = nexts.map(n => shippedScore(n, me, asRole))
-        const chosen = pick(moves, shipped, s.rngSeed)
+        const chosen = shippedPick(s, moves, nexts, me, asRole)
+        if (chosen === null) break
 
         // Decomposed once per candidate, not once per candidate per weight. A decided position
         // short-circuits to +/-WIN before any term is computed, so it has no decomposition and is not
         // evidence either way.
         const decomposed = nexts.filter(n => n.winner === null).map(n => quantitiesOf(n, me, asRole))
 
-        for (const key of SCALAR_KEYS) {
+        for (const key of keys) {
           const a = acc.get(key)!
           const bucket = a.byKind.get(kind)!
           bucket.decisions++
@@ -302,15 +344,20 @@ export function runTerms(config: TermConfig): TermReport {
             }
           }
 
-          const sc = scorers.get(key)!
-          const picks = (scorer: ReturnType<typeof makeQuiescent>): Action =>
-            pick(moves, nexts.map(n => scorer(n, me, asRole)), s.rngSeed)
+          const sc = pickers.get(key)!
+          // Compared by VALUE: a searching model builds its own move objects, so the reference
+          // comparison that worked for the shared `nexts` array would report every decision as
+          // pivotal. The one-ply path returns objects out of `moves` and is unaffected either way.
+          const picks = (p: Picker): boolean => {
+            const move = p(s, moves, nexts, me, asRole)
+            return move !== null && sameAction(move, chosen)
+          }
 
-          if (sc.nudged.some(scorer => picks(scorer) !== chosen)) {
+          if (sc.nudged.some(p => !picks(p))) {
             a.pivotal++
             bucket.pivotal++
           }
-          if (picks(sc.ablated) !== chosen) {
+          if (!picks(sc.ablated)) {
             a.loadBearing++
             bucket.loadBearing++
           }
@@ -329,7 +376,7 @@ export function runTerms(config: TermConfig): TermReport {
     'neutral',
   )
 
-  const stats: TermStat[] = SCALAR_KEYS.map(key => {
+  const stats: TermStat[] = keys.map(key => {
     const a = acc.get(key)!
     return {
       weight: key,

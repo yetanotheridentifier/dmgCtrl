@@ -13,6 +13,7 @@ import { publicBreakdown, makePublicScore, DEFAULT_WEIGHTS } from '../ai/evaluat
 import { DEFAULT_HAND_WEIGHTS } from '../ai/handValue'
 import { role } from '../ai/race'
 import { runTerms, stepFor } from '../bench/terms'
+import type { WeightKey } from '../bench/tune'
 import { SCALAR_KEYS } from '../bench/tune'
 import '../engine/cardDefinitions'
 
@@ -120,9 +121,24 @@ describe('the perturbation step', () => {
    * shipped weight, floored at the resolution the score can actually see.
    */
   it('scales with the weight, so a big weight gets a real nudge', () => {
-    expect(stepFor('lethalExposure')).toBe(6) // 24 / 4
-    expect(stepFor('saturation')).toBe(2) // 7 / 4, rounded
-    expect(stepFor('base')).toBe(1) // 4 / 4
+    expect(stepFor('lethalExposure')).toBe(12) // 48 / 4
+    expect(stepFor('saturation')).toBe(2) // 7 / 4, rounded. Not a price, so it did not double.
+    expect(stepFor('base')).toBe(2) // 8 / 4
+  })
+
+  /**
+   * **Doubling the prices doubled the steps too, which is the point of doing it.**
+   *
+   * A quarter of the shipped value, floored at 1, meant `readyUnit` at 1 could only ever be nudged by
+   * a whole unit of itself: a 100% perturbation, which tests "is this weight roughly right" rather
+   * than "is it exactly right". At 2 the step is still 1, but that is now a **half** step in the old
+   * units, so the sweep can ask a finer question.
+   */
+  it('gives the smallest weights a finer step than before doubling', () => {
+    expect(DEFAULT_WEIGHTS.readyUnit).toBe(2)
+    expect(stepFor('readyUnit')).toBe(1) // half a step in the units the old sweeps used
+    expect(DEFAULT_WEIGHTS.roleShift).toBe(2)
+    expect(stepFor('roleShift')).toBe(1)
   })
 
   /** `publicScore` is integer-valued, so a sub-integer nudge to an integer weight could never move
@@ -144,6 +160,71 @@ describe('the perturbation step', () => {
     for (const key of Object.keys(DEFAULT_HAND_WEIGHTS)) {
       expect(SCALAR_KEYS, key).toContain(`hand.${key}`)
     }
+  })
+})
+
+/**
+ * Driving the perturbations through the bot that actually plays (#487).
+ *
+ * `--terms` asks "does moving this weight change the move the bot picks". It answered that by scoring
+ * each candidate's resulting board one ply, which was the bot when this was written and is not now:
+ * the evaluation is the leaf of a depth-3 minimax, so a weight can be inert one ply deep and pivotal
+ * inside a search, or the reverse. #430 predicted exactly that and pre-registered the weights to
+ * watch (`resourceSurplus`, `saturation`, `hand.canAct`, `roleShift`).
+ *
+ * The cost is why `weights` exists. Every perturbation is a full search per decision, three per
+ * weight, so an unfiltered pass at the shipped model is ~60x a one-ply one. Scoped to the handful
+ * #430 named it is affordable.
+ */
+describe('runTerms driven by a searching model', () => {
+  const keys: WeightKey[] = ['base', 'power']
+  // Three runs shared across the file, not one per assertion. A searching pass is the most expensive
+  // thing in this suite and it runs in parallel with everything else: seven runs cost 25s of test time
+  // and are exactly what pushed unrelated marginal tests over their timeouts before.
+  const cfg = { gamesPerDeck: 1, seed: 4242, decks: 1, weights: keys, stepCeiling: 300 }
+  const onePly = runTerms({ ...cfg, model: 'greedy' })
+  const searched = runTerms({ ...cfg, model: 'beam:2x2' })
+  const defaulted = runTerms(cfg)
+
+  it('reports only the weights it was asked about', () => {
+    expect(searched.stats.map(s => s.weight).sort()).toEqual([...keys].sort())
+    expect(searched.decisions).toBeGreaterThan(0)
+  })
+
+  /**
+   * **The load-bearing assertion.** A searching model must reach different conclusions from a one-ply
+   * one on the same positions, or the fix is invisible and this file would pass against the old code.
+   * Which way it differs is the finding; that it differs at all is the mechanism.
+   */
+  it('reaches different conclusions from the one-ply scorer', () => {
+    const summarise = (r: typeof onePly) => r.stats.map(s => `${s.weight}:${s.pivotal}/${s.loadBearing}`)
+    expect(summarise(searched)).not.toEqual(summarise(onePly))
+  })
+
+  /**
+   * **The two models do not walk the same game, and that bounds what a comparison can say.**
+   *
+   * The shipped pick drives the trajectory, so a searching model plays different moves, reaches
+   * different positions and therefore sees a different quantity spread. Measured here: 21 and 36
+   * varying decisions against one ply's 31 and 43, over the same deck and seed.
+   *
+   * So a one-ply column and a searched column are **rates over different populations**, not a paired
+   * comparison of the same decisions. That is enough to answer "is this weight dormant or dead", which
+   * is what #430 asks, and it is not enough to attribute a difference in the rate to depth alone.
+   */
+  it('visits different positions than the one-ply scorer, so the columns are not paired', () => {
+    for (const r of [onePly, searched]) {
+      expect(r.decisions).toBeGreaterThan(0)
+      expect(r.stats.every(s => s.varies >= 0)).toBe(true)
+    }
+    // The divergence is the point: identical trajectories would mean the model never changed a move.
+    expect(searched.stats.map(s => s.varies)).not.toEqual(onePly.stats.map(s => s.varies))
+  })
+
+  /** Default stays one-ply, so every historical number keeps its meaning until a run asks otherwise. */
+  it('defaults to the one-ply scorer, for comparability with recorded runs', () => {
+    expect(defaulted.stats.map(s => s.pivotal)).toEqual(onePly.stats.map(s => s.pivotal))
+    expect(defaulted.stats.map(s => s.varies)).toEqual(onePly.stats.map(s => s.varies))
   })
 })
 

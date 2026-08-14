@@ -95,6 +95,25 @@ const SCHEMA = `
     paired_df       INTEGER NOT NULL,
     significant     INTEGER NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS term_runs (
+    run_id     TEXT PRIMARY KEY,
+    started_at TEXT    NOT NULL,
+    build_tag  TEXT    NOT NULL,
+    model      TEXT    NOT NULL,
+    games      INTEGER NOT NULL,
+    decisions  INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS term_stats (
+    run_id       TEXT    NOT NULL,
+    weight       TEXT    NOT NULL,
+    step         REAL    NOT NULL,
+    has_quantity INTEGER NOT NULL,
+    varies       INTEGER NOT NULL,
+    pivotal      INTEGER NOT NULL,
+    load_bearing INTEGER NOT NULL,
+    spread       REAL    NOT NULL,
+    PRIMARY KEY (run_id, weight)
+  );
   CREATE TABLE IF NOT EXISTS experiment_shards (
     experiment_id TEXT    NOT NULL,
     seed          INTEGER NOT NULL,
@@ -426,6 +445,70 @@ const mapExperiment = (r: Record<string, unknown>): ExperimentRow => ({
   pairedDf: num(r.paired_df),
   significant: num(r.significant) === 1,
 })
+
+/**
+ * One term-sensitivity run: which weights could change a decision, and how often.
+ *
+ * Stored because the question it answers is a **time series**, not a snapshot. "Has this weight woken
+ * up since the search landed?" needs the old reading beside the new one, and until now every
+ * `--terms` result printed to a terminal and vanished, so answering it meant re-running an hour of
+ * compute or trawling scrollback.
+ *
+ * `model` is part of the row rather than assumed: a weight inert one ply deep can be pivotal inside a
+ * search, so two runs of different models are not comparable and must not silently pool.
+ */
+export interface TermRunRow {
+  runId: string
+  startedAt: string
+  buildTag: string
+  model: string
+  games: number
+  decisions: number
+}
+
+export function saveTermRun(db: DatabaseSync, model: string, report: {
+  games: number
+  decisions: number
+  stats: Array<{ weight: string; step: number; hasQuantity: boolean; varies: number; pivotal: number; loadBearing: number; spread: number }>
+}): string {
+  const startedAt = new Date().toISOString()
+  const runId = `terms-${startedAt}-${randomUUID().slice(0, 8)}`
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    db.prepare(
+      `INSERT INTO term_runs (run_id, started_at, build_tag, model, games, decisions) VALUES (?,?,?,?,?,?)`,
+    ).run(runId, startedAt, COMMIT_ID, model, report.games, report.decisions)
+    const insert = db.prepare(
+      `INSERT INTO term_stats (run_id, weight, step, has_quantity, varies, pivotal, load_bearing, spread)
+       VALUES (?,?,?,?,?,?,?,?)`,
+    )
+    for (const s of report.stats) {
+      insert.run(runId, s.weight, s.step, s.hasQuantity ? 1 : 0, s.varies, s.pivotal, s.loadBearing, s.spread)
+    }
+    db.exec('COMMIT')
+  } catch (e) {
+    db.exec('ROLLBACK')
+    throw e
+  }
+  return runId
+}
+
+/** Every term run, newest first. */
+export function listTermRuns(db: DatabaseSync): TermRunRow[] {
+  return (db.prepare(`SELECT * FROM term_runs ORDER BY started_at DESC`).all() as Record<string, unknown>[])
+    .map(r => ({
+      runId: str(r.run_id), startedAt: str(r.started_at), buildTag: str(r.build_tag),
+      model: str(r.model), games: num(r.games), decisions: num(r.decisions),
+    }))
+}
+
+/** One run's per-weight rows, most pivotal first, which is the order a reader wants. */
+export function termStatsFor(db: DatabaseSync, runId: string): Array<{ weight: string; pivotal: number; loadBearing: number; varies: number }> {
+  return (db.prepare(
+    `SELECT weight, pivotal, load_bearing, varies FROM term_stats WHERE run_id = ? ORDER BY pivotal DESC, weight`,
+  ).all(runId) as Record<string, unknown>[])
+    .map(r => ({ weight: str(r.weight), pivotal: num(r.pivotal), loadBearing: num(r.load_bearing), varies: num(r.varies) }))
+}
 
 /** Every comparison, newest first, so the history reads as one. */
 export function listExperiments(db: DatabaseSync): ExperimentRow[] {

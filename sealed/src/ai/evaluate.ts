@@ -205,31 +205,65 @@ export interface EvalWeights {
   hand: HandWeights
 }
 
+/**
+ * Every weight that is a **price**: charged as `weight x quantity` and summed.
+ *
+ * Scaling all of them by one constant multiplies every score by it, so orderings are untouched, ties
+ * stay ties and the bot plays identically. That is what lets the shipped values be doubled: it buys
+ * half-step resolution for free, and `aiWeightScale.test.ts` evidences the invariance rather than
+ * asserting the arithmetic.
+ *
+ * `saturation` and `blockedReachCap` are deliberately absent: the first is a pool SIZE (where "enough
+ * resources" begins), the second caps a quantity. Scaling either is a real behaviour change. The
+ * private `hand` weights are absent too, because they are squashed into `[0, 1)` and their whole
+ * purpose is to sit below the public resolution.
+ */
+export const PRICE_KEYS = [
+  'base', 'unit', 'power', 'advantage', 'advantageExhausted', 'hp', 'card', 'resource',
+  'resourceSurplus', 'readyUnit', 'shield', 'blockedReach', 'initiative', 'claimCost',
+  'initiativeHorizon', 'roleShift', 'lethalExposure',
+] as const satisfies ReadonlyArray<keyof Omit<EvalWeights, 'hand' | 'saturation' | 'blockedReachCap'>>
+
+/** Multiply every price by `factor`, leaving the structural numbers and the private half alone. */
+export function scalePrices(w: EvalWeights, factor: number): EvalWeights {
+  const out = { ...w }
+  for (const key of PRICE_KEYS) out[key] = w[key] * factor
+  return out
+}
+
 // Tuned by a weight sweep against the frozen baseline across the 42 coverage decks (#392): a unit
 // weight of 6 over-valued raw bodies (4 beat 6 beat 8); power 2 / HP 1 are right (raising either hurt);
 // base 4 edged 3 and 5. See bench/tune.ts to re-sweep.
+//
+// **Every price below is DOUBLE the value that sweep chose.** Scaling all prices by a constant cannot
+// change a decision (see `PRICE_KEYS`), so this is a pure reparameterisation that buys half-step
+// resolution: the old optimum of 1 is now 2, and 1.5 is expressible as 3. Halve a price to read it in
+// the units the historical results are quoted in.
 export const DEFAULT_WEIGHTS: EvalWeights = {
-  base: 4,
-  unit: 4,
-  power: 2,
+  base: 8,
+  unit: 8,
+  power: 4,
   // Equal to `power`: a no-op until swept downward. See the field docs for why not zero.
-  advantage: 2,
-  advantageExhausted: 2,
-  hp: 1,
-  card: 2,
-  resource: 3,
+  advantage: 4,
+  advantageExhausted: 4,
+  hp: 2,
+  card: 4,
+  resource: 6,
   // MEASURED NEUTRAL AT BEST: equal to `resource`, i.e. the pool is deliberately shipped FLAT.
-  // See the concavity note above `resourceValue` before changing this.
-  resourceSurplus: 3,
+  // See the concavity note above `resourceValue` before changing this. While the two are equal the
+  // pool collapses to `resource x pool` and `saturation` is algebraically inert, whatever it is set to.
+  resourceSurplus: 6,
+  // NOT a price and so NOT doubled: this is the pool size where the knee sits, in resources.
   saturation: 7,
-  readyUnit: 1,
+  readyUnit: 2,
   // #493. OFF until swept, per the rule that a new weight ships at zero: shipping a default before
   // its A/B ran once inverted a whole reading, because the candidate was then the ablation.
   shield: 0,
   // #499. OFF until swept, per the rule that a new weight ships at zero.
   blockedReach: 0,
   // Two attackers' worth of denied reach. Above this, clearing a blocker starts to justify the tempo
-  // that a held-back second Sentinel exists to punish.
+  // that a held-back second Sentinel exists to punish. NOT a price and so NOT doubled: this caps a
+  // quantity, in damage, and doubling it would double how much reach the term can ever see.
   blockedReachCap: 24,
   // Swept twice. Turn order is worth far less than it first looks: raising `initiative` is
   // monotonically worse (4 -> 46.8%, 6 -> 35.4%, 8 -> 29.4% against the same AI with both terms at
@@ -243,21 +277,30 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   //
   // Untested: at `initiative: 1` the brake may be doing little, since `claimCost: 0` measured 50.6%
   // against this cell's 50.7%. Worth its own A/B before assuming the cost term still earns its place.
-  initiative: 1,
-  claimCost: 2,
+  //
+  // Note `claimCost` charges per READY UNIT forfeited and nothing for the cards it stops you playing,
+  // so claiming while holding an affordable bomb is currently free.
+  initiative: 2,
+  claimCost: 4,
   // #446. OFF until swept, per the rule that a new weight ships at zero. Conditional where the flat
   // `initiative` weight above is not: it pays only on the 13.0% of claim offers where the holder is
   // the side facing lethal next round, which is the case the search cannot see across the round
   // boundary. The flat version of the same idea is monotonically harmful, so the sweep starts low.
   initiativeHorizon: 0,
-  // Swept (#395). A small shift is all the data supports: 1 and 2 tie, 3 and 4 are worse, and the
-  // effect is modest at 51.4% +/- 0.9% over ~11,340 games (three matched-power seeds: 50.2%, 52.8%,
-  // 51.2%) against a role-blind AI. Roughly a third of what #393 or #394 each returned.
-  roleShift: 1,
-  // #443. Sized to outweigh a good trade (a strong unit is worth roughly 20 here) without
+  // Swept (#395) in the old units, where 1 and 2 tied and 3 and 4 were worse: so 2 here, and the
+  // untested half-step is 3. The effect is modest at 51.4% +/- 0.9% over ~11,340 games (three
+  // matched-power seeds: 50.2%, 52.8%, 51.2%) against a role-blind AI, roughly a third of what #393 or
+  // #394 each returned.
+  //
+  // **The one weight measured to have woken up under search**: pivotal on 12.1% of decisions against
+  // 7.7% one ply deep, and the only one of the four #430 predicted that moved. It is also the only one
+  // of them whose value is about the CURRENT board rather than next round, which is the horizon the
+  // search still cannot cross.
+  roleShift: 2,
+  // #443. Sized to outweigh a good trade (a strong unit is worth roughly 40 here) without
   // approaching a win, then swept. Measured before building: the 408 avoidable exposures across 1260
   // games carried a 22.1 point loss-rate penalty, 68.9% against a 46.8% baseline.
-  lethalExposure: 24,
+  lethalExposure: 48,
   hand: DEFAULT_HAND_WEIGHTS,
 }
 
