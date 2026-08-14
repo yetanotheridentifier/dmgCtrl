@@ -99,8 +99,17 @@ describe('runLethal', () => {
    * than the depth, and the whole sweep would be measuring the rail again (as the #410 screen did).
    */
   it('finds at least as much lethal at greater depth', () => {
-    const shallow = runLethal({ gamesPerDeck: 1, seed: 4242, decks: 2, solverDepth: 2, oracleSamples: 0 })
-    const deep = runLethal({ gamesPerDeck: 1, seed: 4242, decks: 2, solverDepth: 4, oracleSamples: 0 })
+    // The proviso has to be ENFORCED, not just stated. Both arms ran on the default 4000-node rail,
+    // which depth 2 never exhausts and depth 4 routinely does, so the assertion held only while the
+    // corpus happened to stay clear of it. It stopped holding the moment the bot generating the corpus
+    // changed, and the failure said "depth found less" when the truth was "the rail bound the deeper
+    // search". A budget neither depth can exhaust makes depth the only difference between the arms.
+    //
+    // **It takes 50x the default to stop binding**, not a little headroom: at 40,000 the deeper search
+    // still reports less, and only 200,000 makes depth 4 monotone over depth 2 here.
+    const solverNodes = 200_000
+    const shallow = runLethal({ gamesPerDeck: 1, seed: 4242, decks: 2, solverDepth: 2, solverNodes, oracleSamples: 0 })
+    const deep = runLethal({ gamesPerDeck: 1, seed: 4242, decks: 2, solverDepth: 4, solverNodes, oracleSamples: 0 })
     const found = (r: typeof shallow): number => r.lethal.attacksOnly + r.lethal.searchOnly
     expect(found(deep)).toBeGreaterThanOrEqual(found(shallow))
   }, 240_000)

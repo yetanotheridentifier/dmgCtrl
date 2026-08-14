@@ -135,6 +135,20 @@ export interface SearchLine {
   board: GameState
 }
 
+/**
+ * Mark a board as one being searched rather than played.
+ *
+ * The whole of the hidden-information guarantee at the round boundary, and it is one stamp at the root
+ * rather than a check at each crossing, because there are three of those (the root candidate, the
+ * modelled reply, the frontier expansion) and a fourth would be added without anyone noticing. State
+ * is copied on every `resolve`, so the flag reaches every board the search can reach.
+ *
+ * See `GameState.simulatedRegroup` for exactly what it changes.
+ */
+export function asSimulation(state: GameState): GameState {
+  return state.simulatedRegroup === true ? state : { ...state, simulatedRegroup: true }
+}
+
 let trace: SearchTrace | null = null
 
 /**
@@ -411,6 +425,29 @@ export interface BeamLimits {
    * reply bounds nothing, and cutting would also change which board the frontier continues from.
    */
   alphaBeta?: boolean
+  /**
+   * How many round boundaries one line may EXPAND past (#516). **Defaults to 0, which is the search
+   * without a horizon.**
+   *
+   * Zero does not mean the boundary is never reached. A move that ends the action phase crosses it in
+   * the engine whatever this says, and that board is scored; zero means the line stops there, which is
+   * where it always stopped. What redaction changed is only that the board is now honest. Splitting the
+   * two here is deliberate: the leak fix must be shippable on its own, and a horizon has to be measured
+   * against a control that does not have one.
+   *
+   * At 1 a line runs on into the opening of the next round. Beyond that is a different bot: every
+   * crossing hands both sides a resource and readies everything, and `ourTurnAgain` passes for the
+   * opponent to get our turn back, so under `reply: 'null'` a line can run "they pass, we claim, the
+   * round ends" repeatedly and bank a resource a round from an opponent who does nothing. Left
+   * unbounded, a depth-3 search reached **two** rounds ahead unprompted on the first position tried.
+   *
+   * The null-move assumption was always the beam's soft spot, and across a boundary it compounds:
+   * the further the line runs the more of its value rests on the opponent's continued silence.
+   *
+   * A board past the allowance is not produced at all rather than scored and left unexpanded. Scoring
+   * it would put its value into the running best, which is precisely the value being distrusted.
+   */
+  maxCrossings?: number
 }
 
 export const DEFAULT_BEAM_LIMITS: BeamLimits = {
@@ -456,7 +493,11 @@ export const DEFAULT_BEAM_LIMITS: BeamLimits = {
  * the root only, so the search is deterministic.
  */
 export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_LIMITS): Ai {
-  return (state: GameState): Action | null => {
+  return (real: GameState): Action | null => {
+    // Everything below searches the SIMULATION, so any line that ends the action phase crosses a
+    // modelled regroup rather than the real one and never reads a card off the deck. The action
+    // returned is ordinary data and is applied by the caller to the real board.
+    const state = asSimulation(real)
     const budget = searchBudget(limits.nodes)
     const moves = legalMoves(state)
     if (moves.length === 0) {
@@ -747,6 +788,12 @@ function reachableFrom(
   let peakBoard = root
   let frontier: Array<{ board: GameState; path: Action[] }> = [{ board: root, path: peakPath }]
 
+  // Boundaries are counted from the board being decided from, so the allowance covers the whole line
+  // rather than resetting at each level. `round` is already on the board, so no per-node bookkeeping.
+  const startRound = state.round
+  const crossings = limits.maxCrossings ?? 0
+  const tooFar = (board: GameState): boolean => board.round - startRound > crossings
+
   for (let d = 1; d < limits.depth; d++) {
     if (budget.left <= 0) break
     // The deepest level is expanded but never continued from, so its boards are ordinary leaves: the
@@ -759,6 +806,8 @@ function reachableFrom(
       if (node.winner !== null || node.phase !== 'action') continue
       const ours = ourTurnAgain(node, me, budget)
       if (ours === null) continue
+      // Passing for the opponent can itself end the phase, so the allowance is checked here too.
+      if (tooFar(ours)) continue
 
       for (const next of legalMoves(ours)) {
         // Passing on our own behalf would hand the search a turn the real game never gives it.
@@ -774,6 +823,7 @@ function reachableFrom(
         const policy = replyAt(d + 1)
         const leafAlpha = last && cutting && policy === 'pessimistic' ? best : -Infinity
         const board = applyReply(played, me, asRole, inner, policy, budget, leafAlpha, d + 1, chainCap)
+        if (tooFar(board)) continue
         const value = valueAt(board, me, asRole, inner, d + 1, limits.timePreference)
         const path = explaining ? [...entry.path, next] : entry.path
         if (value > best) {
@@ -821,7 +871,7 @@ export function beamReachesWin(
   limits: BeamLimits = DEFAULT_BEAM_LIMITS,
 ): boolean {
   const budget = searchBudget(limits.nodes)
-  const ours = ourTurnAgain(state, me, budget)
+  const ours = ourTurnAgain(asSimulation(state), me, budget)
   if (ours === null) return false
 
   // Asking whether a win EXISTS, so nothing may be pruned on value: alpha bounds the SCORE a branch

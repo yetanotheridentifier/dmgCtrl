@@ -6,7 +6,7 @@ import { resolve } from '../engine/resolve'
 import { seededUnit } from '../engine/rng'
 import { evaluate, makeEvaluate, DEFAULT_WEIGHTS, type Evaluator, type EvalWeights } from './evaluate'
 import { evaluateBaseline } from './evaluateBaseline'
-import { makeQuiescent, makeBeamAi, DEFAULT_BEAM_LIMITS, type BeamLimits } from './search'
+import { makeQuiescent, makeBeamAi, asSimulation, DEFAULT_BEAM_LIMITS, type BeamLimits } from './search'
 import {
   findLethal, shouldSearchLethal, DEFAULT_LETHAL_LIMITS, DEFAULT_LETHAL_GATE,
   type LethalLimits, type LethalGate,
@@ -26,7 +26,11 @@ import { role } from './race'
  * on their own discarded copies; the real seed advances once, when the chosen move is applied.
  */
 export function makeGreedyAi(evaluate: Evaluator): Ai {
-  return (state: GameState): Action | null => {
+  return (real: GameState): Action | null => {
+    // One ply still crosses the boundary: a `pass` that ends the action phase resolves the whole
+    // regroup, so without this the score of passing depends on two cards nobody has drawn. The same
+    // stamp the beam uses, so the control and the arm cheat or do not cheat together.
+    const state = asSimulation(real)
     const moves = legalMoves(state)
     if (moves.length === 0) return null
 
@@ -132,6 +136,25 @@ export const beamReplyAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_LIMITS)
 export const BEAM_REPLY_SHARED_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, chainNodes: undefined }
 
 export const beamReplySharedAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_SHARED_LIMITS)
+
+/**
+ * The shipped model allowed to play on past the round boundary (#516).
+ *
+ * One difference from `beam-reply` and it is not an evaluation term: a line may continue into the
+ * opening of the next round rather than stopping when the action phase ends. Everything readies and
+ * both sides bank a resource, so a value that only arrives next round is finally reachable.
+ *
+ * **Unmeasured.** It is registered so it can be A/B-ed against `beam-reply` on the same seeds, which is
+ * the only reason it exists yet. Four separate findings say the boundary is where the model goes blind,
+ * and none of them say what crossing it is worth.
+ *
+ * The redaction it relies on is NOT part of the difference: `beam-reply` searches a simulated regroup
+ * too, so both arms are equally blind to the cards nobody has drawn and the A/B measures the horizon
+ * alone.
+ */
+export const BEAM_HORIZON_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, maxCrossings: 1 }
+
+export const beamHorizonAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_HORIZON_LIMITS)
 
 /**
  * The beam with a lethal override in front of it (#433).

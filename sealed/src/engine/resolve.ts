@@ -2148,7 +2148,31 @@ const REGROUP_DRAW = 2
  */
 const EMPTY_DECK_DAMAGE = 3
 
+/**
+ * A card id that names nothing, used for the resource a simulated regroup takes.
+ *
+ * Inert rather than merely unused: every site that reads a resource's identity looks it up in
+ * `state.cards` and guards the miss (`resourceUpgradeCandidates`, `validUpgradeTargets`,
+ * `attachResourceUpgrade`), so an unknown id can never be played out of the resource row. Putting the
+ * REAL card there would be both a leak and a fake capability, since a search could then play an
+ * upgrade off a resource it should not have seen.
+ */
+export const UNSEEN_CARD = '__unseen__'
+
+/** See `GameState.simulatedRegroup` for what this models and why. */
+function simulatedRegroupFor(state: GameState, id: PlayerId): GameState {
+  const p = state.players[id]
+  const missed = Math.max(0, REGROUP_DRAW - p.deck.length)
+  const taken = REGROUP_DRAW - missed
+  return updatePlayer(state, id, {
+    deck: p.deck.slice(taken),
+    resources: taken > 0 ? [...p.resources, { cardId: UNSEEN_CARD, exhausted: false }] : p.resources,
+    base: missed === 0 ? p.base : { ...p.base, damage: p.base.damage + missed * EMPTY_DECK_DAMAGE },
+  })
+}
+
 function drawForRegroup(state: GameState, id: PlayerId): GameState {
+  if (state.simulatedRegroup === true) return simulatedRegroupFor(state, id)
   // Draw through the shared primitive rather than building the hand inline, so "when you draw 1
   // or more cards" fires — Axe Woves' text calls the regroup draw out explicitly. `drawCards`
   // takes what it can and no-ops on an empty deck, so the shortfall is counted here.
@@ -2204,6 +2228,10 @@ function enterRegroup(state: GameState): GameState {
   // the other player's, handing them the turn is the only way it can be answered: `choiceMoves`
   // offers the active player's choices alone, so otherwise the regroup phase has no legal move at
   // all and the game hangs (#365). `resumeAfterChoice` hands back once the queue drains.
+  // A search crosses the boundary in ONE step. The resource is already taken for both sides, and the
+  // choice must not be offered, since deciding the opponent's would mean reading their hand.
+  // `startNextRound` still hands the turn to whoever owes a `whenRegroupStarts` choice.
+  if (next.simulatedRegroup === true) return startNextRound(next)
   const pending = next.pendingChoices ?? []
   const answerable = pending.some(c => c.controller === next.initiative) || pending.length === 0
   return {

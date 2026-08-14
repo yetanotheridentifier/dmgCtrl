@@ -1,7 +1,7 @@
 import type { Ai } from './types'
 import { randomAi } from './randomAi'
 import {
-  greedyAi, greedyBaselineAi, greedyFlatAi, beamAi, beamReplyAi, beamReplySharedAi, lethalBeamAi,
+  greedyAi, greedyBaselineAi, greedyFlatAi, beamAi, beamReplyAi, beamReplySharedAi, beamHorizonAi, lethalBeamAi,
   makeBeamGreedy, makeLethalBeam, BEAM_REPLY_LIMITS, BEAM_REPLY_SHARED_LIMITS,
 } from './greedyAi'
 import { DEFAULT_BEAM_LIMITS, TIE_DECISION_KINDS, type BeamLimits } from './search'
@@ -45,6 +45,15 @@ export const AIS: Record<string, Ai> = {
    * it, 59.2% and 493. Exhaustion falls from 8.5% to 6.0% of decisions and the move changes on 2.0%.
    */
   'beam-reply-shared': beamReplySharedAi,
+  /**
+   * `beam-reply` allowed to play on into the opening of the next round, instead of stopping when the
+   * action phase ends. The arm for #516 and, so far, nothing more than that.
+   *
+   * **Unmeasured, and not a candidate.** It is here so it can be A/B-ed against `beam-reply` on the
+   * same seeds with `--control`, since both arms already search a redacted regroup and the horizon is
+   * therefore the only difference between them.
+   */
+  'beam-horizon': beamHorizonAi,
   /**
    * The beam with a lethal override in front of it, gated to the rounds where lethal is possible.
    * Outside that slice it is exactly `beam`, which is what makes an A/B between them one feature.
