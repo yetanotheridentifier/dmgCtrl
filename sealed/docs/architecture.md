@@ -322,6 +322,10 @@ SQLite/Drizzle (from the original plan) is deferred to E7, whose training pipeli
 is its actual consumer. `docker-compose.yml` holds commented placeholders for the
 E5 to E7 services (redis, influxdb, grafana, ollama).
 
+The **benchmark harness** does keep a SQLite database, at `bench-results/bench.db` via `node:sqlite`.
+That is a developer tool on the dev machine, not app storage: nothing the app runs reads or writes it,
+and it ships with nothing. See [ai-benchmark.md](ai-benchmark.md).
+
 ## Network
 
 `api.swu-db.com` serves no CORS headers, so the browser cannot fetch it directly.
