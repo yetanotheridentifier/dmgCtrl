@@ -138,6 +138,22 @@ export const BEAM_REPLY_SHARED_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, chai
 export const beamReplySharedAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_SHARED_LIMITS)
 
 /**
+ * The shipped model still reading the two cards it deals itself at regroup: the pre-#516 behaviour,
+ * kept as the control for that fix and nothing else.
+ *
+ * A line that ends the action phase runs the real regroup, so the board being scored holds a hand
+ * containing cards nobody has drawn, and the search prefers lines whose value comes from knowing them.
+ * Redaction removes that. Whether removing it also costs anything is a separate question from whether
+ * it is right, and this is the only arm that can answer it.
+ *
+ * Same role as `greedy-flat` and `beam-reply-shared`: it tracks every later change to the evaluation
+ * and the search, so the comparison stays one difference instead of drifting into two.
+ */
+export const BEAM_REPLY_UNREDACTED_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, redactRegroup: false }
+
+export const beamReplyUnredactedAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_UNREDACTED_LIMITS)
+
+/**
  * The shipped model allowed to play on past the round boundary (#516).
  *
  * One difference from `beam-reply` and it is not an evaluation term: a line may continue into the

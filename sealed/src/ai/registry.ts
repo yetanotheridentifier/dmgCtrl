@@ -1,7 +1,8 @@
 import type { Ai } from './types'
 import { randomAi } from './randomAi'
 import {
-  greedyAi, greedyBaselineAi, greedyFlatAi, beamAi, beamReplyAi, beamReplySharedAi, beamHorizonAi, lethalBeamAi,
+  greedyAi, greedyBaselineAi, greedyFlatAi, beamAi, beamReplyAi, beamReplySharedAi, beamReplyUnredactedAi,
+  beamHorizonAi, lethalBeamAi,
   makeBeamGreedy, makeLethalBeam, BEAM_REPLY_LIMITS, BEAM_REPLY_SHARED_LIMITS,
 } from './greedyAi'
 import { DEFAULT_BEAM_LIMITS, TIE_DECISION_KINDS, type BeamLimits } from './search'
@@ -45,6 +46,14 @@ export const AIS: Record<string, Ai> = {
    * it, 59.2% and 493. Exhaustion falls from 8.5% to 6.0% of decisions and the move changes on 2.0%.
    */
   'beam-reply-shared': beamReplySharedAi,
+  /**
+   * `beam-reply` still reading its own regroup draws: the pre-#516 behaviour, and the control for that
+   * fix. A search that crossed the real regroup scored a hand holding cards nobody had drawn.
+   *
+   * Here so "is the fix also no worse" can be asked at all, since redaction is otherwise unconditional
+   * and self-play against the shipped bot would measure nothing.
+   */
+  'beam-reply-unredacted': beamReplyUnredactedAi,
   /**
    * `beam-reply` allowed to play on into the opening of the next round, instead of stopping when the
    * action phase ends. The arm for #516 and, so far, nothing more than that.

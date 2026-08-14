@@ -448,6 +448,20 @@ export interface BeamLimits {
    * it would put its value into the running best, which is precisely the value being distrusted.
    */
   maxCrossings?: number
+  /**
+   * Redact the regroup the search crosses. On by default; `false` restores the pre-#516 behaviour of
+   * scoring boards that contain cards nobody has drawn.
+   *
+   * **Exists only so the fix can be measured.** Redaction is a correctness change rather than a
+   * strength claim, but "correct" and "no worse" are different assertions, and the second one needs a
+   * control that differs in exactly this. The same role `greedy-flat` plays for quiescence and
+   * `beam-reply-shared` for the per-chain allowance: a control that tracks every other change, so an
+   * A/B measures one thing rather than a snapshot's worth of drift.
+   *
+   * Not a supported way to play. The only sanctioned reading of `false` is "the arm this is being
+   * compared against".
+   */
+  redactRegroup?: boolean
 }
 
 export const DEFAULT_BEAM_LIMITS: BeamLimits = {
@@ -497,7 +511,7 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
     // Everything below searches the SIMULATION, so any line that ends the action phase crosses a
     // modelled regroup rather than the real one and never reads a card off the deck. The action
     // returned is ordinary data and is applied by the caller to the real board.
-    const state = asSimulation(real)
+    const state = limits.redactRegroup === false ? real : asSimulation(real)
     const budget = searchBudget(limits.nodes)
     const moves = legalMoves(state)
     if (moves.length === 0) {

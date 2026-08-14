@@ -239,3 +239,33 @@ describe('the beam-horizon arm', () => {
       .toEqual(valuesFrom('beam-horizon', atBoundary(JUNK_FIRST)))
   })
 })
+
+/**
+ * The control for the redaction itself.
+ *
+ * A control that quietly behaved like the arm would run for hours and report "no difference", which is
+ * indistinguishable from a real null result and far more expensive. So the property asserted here is
+ * the one the control exists to have: **it still reads the deck.**
+ */
+describe('the beam-reply-unredacted control', () => {
+  const valuesFrom = (name: string, s: GameState): number[] => {
+    clearSearchTrace()
+    resolveAi(name)(s)
+    return lastSearchTrace()!.candidates
+  }
+
+  it('is registered', () => {
+    expect(aiNames()).toContain('beam-reply-unredacted')
+  })
+
+  it('still values the boundary by cards nobody has drawn', () => {
+    expect(valuesFrom('beam-reply-unredacted', atBoundary(BOMBS_FIRST)))
+      .not.toEqual(valuesFrom('beam-reply-unredacted', atBoundary(JUNK_FIRST)))
+  })
+
+  /** And the shipped bot, on the same two boards, does not. Both halves or neither. */
+  it('is the only one of the two that does', () => {
+    expect(valuesFrom('beam-reply', atBoundary(BOMBS_FIRST)))
+      .toEqual(valuesFrom('beam-reply', atBoundary(JUNK_FIRST)))
+  })
+})
