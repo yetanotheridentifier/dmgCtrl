@@ -117,6 +117,13 @@ locks the attack (so the base is off-limits).
 ask the same question of both seats when reading the race. Re-deriving this logic anywhere else
 would let it drift from the rules.
 
+**Sentinel forces only from the attacker's own arena.** It reads "enemy units **in this arena** must
+attack a Sentinel when they attack you", so the forcing is scoped by where the attacker stands, not by
+what it can reach. That distinction is invisible for an ordinary unit, whose targets are same-arena by
+construction, and decisive for one that reaches across: a ground Sentinel must not lock a space
+attacker that merely *may* attack into the ground arena. Widening the target list must not widen the
+lock.
+
 ## Damage prevention
 
 Prevention is settled **after** the powers are known but **before** anything is committed, so first

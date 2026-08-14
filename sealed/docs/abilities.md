@@ -97,11 +97,33 @@ Card-type-agnostic, all on `CardDefinition`:
 | `makesDamageUnpreventable` | ignores Shields and prevention |
 | `dealsDamageFirst` | strikes before the defender |
 | `spillsExcessToUnit` | excess damage to another unit instead of the base |
-| `attacksEitherArena` | ignores the arena split |
+| `attacksEitherArena` | may attack units in either arena, not just its own |
 | `cannotAttackBases` | never contributes base damage |
+| `cannotBeAttacked` | not a legal target, and not a forced Sentinel target either |
 | `providesAspects` | supplies aspect icons while paying costs |
 | `deployCondition` | replaces the resource gate on deploying a leader |
 | `suppressesFriendlyAdvantage` | Advantage tokens are not spent after combat |
+| `searchModifier` | multiplies how many cards a **search** looks at |
+| `doublesTokenCreation` | doubles a batch of created tokens |
+| `entersReady` | the unit arrives ready, alongside Ambush and enters-ready grants |
+| `grantsAbilities` | hands an ability block to the host unit |
+| `grantedTraits` | extra traits, e.g. The Darksaber granting Mandalorian |
+| `makesLeaderUnit` | the host counts as a leader unit |
+| `actionAbilities` | activated "Action:" abilities, with `usable`, `oncePerRound`, `exhaustCost` |
+| `canPreventDamage` / `payPreventionCost` | offers a prevention, and collects its price if taken |
+
+Two of these are scoped more narrowly than they read.
+
+**`attacksEitherArena` widens what a unit may target and must not widen what forces it.** Sentinel is
+scoped by the arena the attacker stands in, so a ground Sentinel does not lock a space unit that merely
+*may* reach the ground arena. See [keywords-effects.md](keywords-effects.md).
+
+**`searchModifier` belongs to the player, not the searching unit.** Arcana Star Map grants its host
+"if **you** would search a number of cards from your deck, search twice that number instead", and units
+do not search: players do. So every search that player makes is doubled while the host is in play,
+whichever card is doing the searching, and `searchCount` takes the owner rather than a unit. Scoped to
+the searching unit it would do nothing except when the upgrade happened to sit on the very unit that
+searched.
 
 ## Leaders
 

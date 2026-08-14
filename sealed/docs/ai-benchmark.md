@@ -1089,10 +1089,26 @@ dropped games are kept whole, and those go to the `failures/` files above.
 All under `src/bench/`, pure and framework-free except the command entry point. The AI itself lives
 in `src/ai/` and is described in [ai-model.md](ai-model.md).
 
+**Every module is listed**, grouped by what it is for. A partial list is worse than none: a reader
+using it to find where something lives concludes it does not exist, which is exactly what happened when
+eight of eighteen modules were missing.
+
+### Diagnostics
+
 - `bench/decisions.ts` the blind-spot diagnostic behind `--decisions`.
+- `bench/terms.ts` term sensitivity behind `--terms`: which weights could ever change a decision, and
+  which do. Takes a model, so the perturbations can be driven through the shipped search rather than a
+  one-ply scorer, and `--weights` narrows it because doing so is ~60x otherwise.
 - `bench/cost.ts` per-decision timing over one identical corpus, behind `--cost`.
 - `bench/budget.ts` node-rail exhaustion and the chain/beam split, behind `--budget`. Shares
   `cost.ts`'s corpus, so the two modes describe the same positions.
+- `bench/lethal.ts` the one-turn lethal solver. Measured as an override and not shipped: the beam
+  already finds 5.8 of the 6.6 points of lethal that exists.
+- `bench/generalisation.ts` per-deck win rate across the coverage decks, weakest first, behind
+  `--generalise`. Also what `npm run tune` measures each candidate with.
+
+### Running games
+
 - `bench/shard.ts` running work as N child processes, behind `--shard`. `spawnShards` is
   mode-agnostic: it is handed jobs (an id and an argv), streams each child's output to a log, reads
   back what the child wrote with `--out`, and reports the moment one finishes so its caller can bank
@@ -1105,15 +1121,35 @@ in `src/ai/` and is described in [ai-model.md](ai-model.md).
 - `bench/status.ts` progress of a run in flight, behind `--status`, plus the `STATUS.md` an editor tab
   can follow and the pre-flight checks. Pure reading and formatting, so `shard.ts` depends on it and
   not the reverse.
-- `bench/aiMatchups.ts` AI-vs-AI across every ordered deck pair, behind `--matchups`.
-- `bench/decks.ts` the fixed sealed deck, built deterministically from the ASH snapshot. For now the
-  same deck plays both sides (a mirror), which removes deck strength as a variable. The runner already
-  takes two decks, so deck-versus-deck comparisons are a fixture change away, not a code change.
 - `bench/selfPlay.ts` `playGame`: one full game, seeded, with the drop classification.
-- `bench/runBench.ts` `runBench`: N games, alternating who goes first, aggregated into a report.
+- `bench/runBench.ts` `runBench`: N games, alternating seat and first player, aggregated into a report.
+- `bench/seating.ts` seat and first-player alternation on independent axes, so four games cover all
+  four combinations once and neither advantage settles on one side.
+
+### Deck sets and whole-pool work
+
+- `bench/decks.ts` the fixed sealed deck, built deterministically from the ASH snapshot. Both seats
+  play the same list, which removes deck strength as a variable.
+- `bench/coverageDecks.ts` the deck set whose union covers the whole card pool.
+- `bench/matchupDecks.ts` the leader-by-base deck set the matrix plays: 18 leaders x 4 base aspects.
+- `bench/sweep.ts` the whole-pool fuzzing sweep behind `--sweep`, which reports cards **played** rather
+  than decked and names anything decked but never drawn.
+- `bench/playCoverage.ts` the per-card play tracking that backs it.
+- `bench/matrix.ts` the deck-strength matrix behind `--matrix`, sharded by dealing each child every Nth
+  deck pair, with per-pair seeds so a sharded run is identical to a serial one.
+- `bench/aiMatchups.ts` AI-vs-AI across every ordered deck pair, behind `--matchups`.
+
+### Tuning and persistence
+
+- `bench/tune.ts` the weight sweep behind `npm run tune`. Candidates are the named model with bent
+  weights, taking their limits from the registry, so they track the shipped bot rather than a one-ply
+  stand-in.
 - `bench/stats.ts` the Wilson confidence interval.
-- `bench/store.ts` the SQLite persistence.
+- `bench/store.ts` the SQLite persistence: runs, games, matrix cells, experiments and term runs.
 - `bench/reports.ts` writing a dropped game out as a replayable fixture.
+
+### Everything else
+
 - `bench/triage.ts` the card-pool classifier behind `--triage`. Pure, apart from `fetchSets`. Holds
   the tool's model of the engine: implemented keywords, dispatched trigger points, unexpressible
   mechanics. Those lists shrink as mechanics land.
