@@ -390,6 +390,26 @@ The board term is built around what decides trades: unit **count** is the bigges
 Remaining HP counts lightly, so damage reads as progress toward removal without a
 surviving-but-damaged unit looking like a large loss. Only defeating a unit is the real swing.
 
+### The prices are all doubled, and that is free
+
+Every price is charged as `weight x quantity` and summed, so multiplying all of them by one constant
+multiplies every score by it. Orderings are untouched, ties stay ties, the bot plays identically:
+verified as identical moves at 40 real positions through the full shipped search, not just as
+arithmetic. `scalePrices` and `PRICE_KEYS` state which weights that covers, with a test asserting the
+list omits nothing.
+
+It buys resolution. The original sweeps chose whole numbers, so an optimum lying between two adjacent
+integers was inexpressible; doubling makes the half-step available. `roleShift`'s was exactly there.
+
+Two weights are **not** prices and did not scale. `saturation` is a pool size, measured in resources:
+doubling it would mean fourteen rather than seven, a real change. `blockedReachCap` caps a quantity in
+damage. The private `hand` weights did not scale either, because they are squashed into `[0, 1)`
+precisely so they sit below the public resolution.
+
+**Weight values quoted in older write-ups, and in the closed tickets, are in the pre-doubling units.**
+Halve a price to read it against them: what made `blockedReach: 12` wrong was never the digit but that
+it was three times a whole unit, and a unit is now 8.
+
 ### Shields are invisible, and making them visible does not help
 
 A token's **stat line decides whether the evaluation can see it**. Attached upgrades add their printed
@@ -659,6 +679,26 @@ steady rate, which is what makes it a race rather than an average.
 
 The role bends `base`, `unit` and `initiative` by `roleShift`. The aggressor pushes damage; the
 defender values trades and board clearing, and wants the initiative.
+
+**`roleShift` is the one weight that became more influential once the search landed**, and it is
+already at its optimum. Perturbing it changes the chosen move on **12.1%** of decisions through the
+shipped bot against **7.7%** one ply deep, the only one of four weights predicted to wake that did.
+That is a statement about influence, not about correctness: swept at 1, 3 and 4 against a control at
+the shipped 2, over 480 games an arm, every arm came back inside noise.
+
+| arm | paired difference | t (10 df) |
+| --- | --- | --- |
+| 1 | -1.14 | -0.71 |
+| 3 | +1.14 | +0.56 |
+| 4 | +2.27 | +0.72 |
+
+Critical value 2.228. The means look monotone and should not be read that way: the largest of them has
+the fewest shards favouring it (5 of 11) and twice the spread of the smallest, which is one or two
+outlier shards rather than an effect. The plateau the original one-ply sweep found is confirmed against
+the searching bot. **A weight can be highly influential and already correct.**
+
+That screen resolves to about ±4 to ±7 points, so it rules out a large effect and not a small one:
+detecting ~1 point at the observed spread needs roughly 5,000 games an arm.
 
 Two constraints:
 

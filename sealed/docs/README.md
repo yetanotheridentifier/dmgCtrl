@@ -12,7 +12,8 @@ Each file covers one concern, so you can open the right one without reading the 
 | [ai-model.md](ai-model.md) | what the opponent AI thinks: terms, weights, invariants | changing how the AI plays |
 | [ai-benchmark.md](ai-benchmark.md) | the benchmark harness and its modes | measuring an AI change |
 | [operations.md](operations.md) | local dev, build, deploy, support playbook, diagnostics | running or supporting it |
-| [planned-work.md](planned-work.md) | what is next, what is deferred, what was tried and rejected | resuming a session |
+| [experiments.md](experiments.md) | what has been measured, and which avenues it closes off | before proposing an AI change |
+| [planned-work.md](planned-work.md) | what is next and what is deferred | resuming a session |
 
 ## Conventions
 
