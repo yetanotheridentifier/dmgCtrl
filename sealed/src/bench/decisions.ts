@@ -557,6 +557,253 @@ export interface InitiativeHorizonStat {
 }
 
 /**
+ * What actually happened after a denial-bucket decision (#516).
+ *
+ * The bucket rates say how often the bot claims when the opponent finishes next round. They cannot say
+ * whether claiming **works**, and until that is known "claims in 10% of denial spots" is not a defect,
+ * it is a number. `theyFinishNext` is a PREDICTION made by `reachSteady >= baseRemaining`, and nothing
+ * has ever checked whether it comes true.
+ *
+ * A funnel rather than a rate, because the ways denial fails are different problems:
+ *
+ * | stage | meaning | what it would imply |
+ * | --- | --- | --- |
+ * | `lostFreeRun` | they won during the rest of the claim round | claiming CAUSED it: we handed them the round |
+ * | `lostFirstAction` | we reached the next round and acted first, they won on their first action anyway | unstoppable; going first was never enough |
+ * | `lostNextRound` | they won later in that round | we slowed them and it was not enough |
+ * | `survived` | the next round ended with the game still live | denial bought at least a round |
+ * | `wonGame` | we won | denial turned it around |
+ *
+ * `lostFreeRun` is the stage the tail exists to price and the one that is easiest to forget: claiming
+ * makes us pass for the rest of the round (CR 1.15.5b), so the opponent gets a free run BEFORE the
+ * turn order we bought ever applies.
+ *
+ * **Both arms, claimed and declined, from the same population.** A funnel for claims alone cannot say
+ * whether claiming helped, only what followed it. The comparison is observational and therefore
+ * confounded: the bot claims where it reads the position as salvageable, so the claimed arm is
+ * selected for winnability. It is a baseline, not an effect, and a real effect needs the counterfactual
+ * (fork the position, force each branch, replay).
+ */
+export interface DenialOutcomeStat {
+  decided: number
+  claimed: number
+  declined: number
+  /**
+   * They could finish THIS round, with what is already ready, before any regroup.
+   *
+   * The bucket is built on `reachSteady`, which readies everything first, so it cannot tell "they kill
+   * us next round if we do nothing" from "they kill us before the round is out". The second is not a
+   * denial opportunity at all: turn order next round is irrelevant to a game that ends before the round
+   * does. Judging the bot's claim rate without excluding these charges it for declining an option that
+   * was never on offer.
+   */
+  claimedHopeless: number
+  declinedHopeless: number
+  /**
+   * We still had something to do other than pass or claim.
+   *
+   * Claiming forfeits the rest of our round, so its cost depends entirely on what we were holding. With
+   * no counterplay the claim is free and reads as a pure gain; the interesting claims are the ones that
+   * gave something up.
+   */
+  claimedWithCounterplay: number
+  declinedWithCounterplay: number
+  claimedLostFreeRun: number
+  declinedLostFreeRun: number
+  claimedLostFirstAction: number
+  declinedLostFirstAction: number
+  claimedLostNextRound: number
+  declinedLostNextRound: number
+  claimedSurvived: number
+  declinedSurvived: number
+  claimedWonGame: number
+  declinedWonGame: number
+  /** Rounds between the decision and the end of the game, summed, so a mean can be reported. */
+  claimedRoundsAfter: number
+  declinedRoundsAfter: number
+}
+
+/**
+ * One denial decision being followed to the end of its game.
+ *
+ * Per game and never reused across games. A watch list declared outside the game loop once reported a
+ * leader-death rate of 72.3% against a true 17.7%, and this has exactly that shape.
+ */
+export interface DenialWatch {
+  seat: PlayerId
+  claimed: boolean
+  round: number
+  hopeless: boolean
+  counterplay: boolean
+  reachedNextRound: boolean
+  foeActedNextRound: boolean
+  lostFreeRun: boolean
+  lostFirstAction: boolean
+  lostNextRound: boolean
+}
+
+export function openDenialWatch(
+  seat: PlayerId, claimed: boolean, round: number,
+  facts: { hopeless: boolean; counterplay: boolean } = { hopeless: false, counterplay: false },
+): DenialWatch {
+  return {
+    seat, claimed, round, hopeless: facts.hopeless, counterplay: facts.counterplay,
+    reachedNextRound: false, foeActedNextRound: false,
+    lostFreeRun: false, lostFirstAction: false, lostNextRound: false,
+  }
+}
+
+/**
+ * What claiming COST, measured over every claim rather than the denial bucket alone.
+ *
+ * Claiming forfeits the rest of our round, and the opponent spends it. The question this answers is
+ * whether that free run is where the damage happens: a claim made when they could not finish next
+ * round, followed by a round they used to make sure they could, is a claim that handed them the game.
+ *
+ * Deliberately over ALL claims. That case cannot appear in the denial bucket, because the bucket
+ * requires the threat to exist at the moment of the decision, so a funnel scoped to denial is
+ * structurally blind to the claim that creates its own threat.
+ *
+ * This is the quantity `tailActions` models. If the free run rarely changes anything, the tail is
+ * pricing a cost that is not there, and its 84% share of the arm's 1.84x is wasted.
+ */
+/**
+ * How the claim decision actually resolves, decomposed (#516).
+ *
+ * Exists because the tie column it sits beside was measuring the wrong thing. "Tied" was implemented as
+ * `init.v === max(every candidate INCLUDING claiming)`, which is satisfied by claiming winning
+ * outright, so a decisive result counted as a blind spot. The headline "the initiative tie is the
+ * largest blind spot in the model" rests on that number.
+ *
+ * The three outcomes partition the decision, so the corrected tie rate can be read against the wins it
+ * used to be pooled with rather than taken on trust.
+ *
+ * `unresolved` is the separate and more useful question: a tie is handed to the second opinion, and
+ * only what survives THAT is a coin flip. Nothing has ever recorded whether the tie-break, which is
+ * shipped and paid for, separates anything.
+ */
+export interface InitiativeTieStat {
+  decisions: number
+  /** Claiming strictly beat every alternative. Not a tie at all. */
+  uniquelyBest: number
+  /** Claiming exactly matched the best alternative. */
+  tiedWithBest: number
+  /** Some alternative strictly beat claiming. */
+  beaten: number
+  /** Decisions the search left with more than one candidate at the lead. */
+  tiesOffered: number
+  /** Of those, still level after the second opinion: the genuine coin flips. */
+  unresolved: number
+  /** Candidates the seeded pick chose between, summed over `unresolved`. */
+  survivors: number
+  /**
+   * What claiming was tied WITH, by move type, counted once per tying candidate.
+   *
+   * "Claiming ties" is not one situation. Tying with `pass` means the search sees nothing to do and
+   * claiming is free, which is a decision worth taking blind; tying with an attack means it is weighing
+   * turn order against damage, which is a real trade and a coin flip is a poor way to settle it. The
+   * two want opposite policies, and a single rate cannot tell them apart.
+   */
+  tyingKinds: Array<{ kind: string; count: number }>
+}
+
+export interface ClaimCostStat {
+  claims: number
+  /** Reached the next round, so the free run actually happened and could be measured. */
+  measured: number
+  /** They could already finish next round when we claimed. */
+  threatBefore: number
+  /** They could not, and after the free run they could. The claim built the threat it now faces. */
+  threatCreated: number
+  /** Their steady reach grew across the free run, whether or not it crossed the line. */
+  reachGrew: number
+  /** Summed growth, so a mean can be reported beside the count. */
+  reachGrowth: number
+}
+
+export interface ClaimWatch {
+  seat: PlayerId
+  round: number
+  threatBefore: boolean
+  foeReach: number
+  settled: boolean
+}
+
+export function openClaimWatch(state: GameState, seat: PlayerId): ClaimWatch {
+  return {
+    seat,
+    round: state.round,
+    threatBefore: initiativeOutlook(state, seat).theyFinishNext,
+    foeReach: reachSteady(state, opponentOf(seat)),
+    settled: false,
+  }
+}
+
+/** Settle once the free run is over, which is the moment the next round begins. */
+export function advanceClaimWatch(watch: ClaimWatch, after: GameState, stat: ClaimCostStat): void {
+  if (watch.settled) return
+  // A game that ends during the free run never reaches the next round, so there is no "after" to
+  // compare against and it is left unmeasured rather than counted as no change.
+  if (after.winner !== null) { watch.settled = true; return }
+  if (after.round <= watch.round) return
+  watch.settled = true
+  stat.measured++
+  const threatAfter = initiativeOutlook(after, watch.seat).theyFinishNext
+  if (watch.threatBefore) stat.threatBefore++
+  else if (threatAfter) stat.threatCreated++
+  const growth = reachSteady(after, opponentOf(watch.seat)) - watch.foeReach
+  if (growth > 0) { stat.reachGrew++; stat.reachGrowth += growth }
+}
+
+/**
+ * Advance every open watch by one resolved decision.
+ *
+ * `actingSeat` is who moved and `wasAnswer` marks a pending-choice answer, which is not an action: a
+ * card handing someone a menu mid-resolution must not count as "their first action of the round", or
+ * the stage would fire on the wrong event entirely.
+ */
+export function advanceDenialWatch(watch: DenialWatch, after: GameState, actingSeat: PlayerId, wasAnswer: boolean): void {
+  const foe = opponentOf(watch.seat)
+  const foeWon = after.winner === foe
+  if (!watch.reachedNextRound) {
+    // Still inside the round we claimed in: anything they win here, they won on the free run our own
+    // claim handed them.
+    if (foeWon) { watch.lostFreeRun = true; return }
+    if (after.round > watch.round) watch.reachedNextRound = true
+    return
+  }
+  if (after.round > watch.round + 1) return
+  if (actingSeat === foe && !wasAnswer) {
+    if (!watch.foeActedNextRound) {
+      watch.foeActedNextRound = true
+      if (foeWon) { watch.lostFirstAction = true; return }
+    }
+  }
+  if (foeWon) watch.lostNextRound = true
+}
+
+/** Fold a finished game's watch into the totals. */
+export function closeDenialWatch(watch: DenialWatch, final: GameState, stat: DenialOutcomeStat): void {
+  const claimed = watch.claimed
+  stat.decided++
+  if (claimed) stat.claimed++
+  else stat.declined++
+  const bump = (a: keyof DenialOutcomeStat, b: keyof DenialOutcomeStat): void => { stat[claimed ? a : b]++ }
+  if (watch.hopeless) bump('claimedHopeless', 'declinedHopeless')
+  if (watch.counterplay) bump('claimedWithCounterplay', 'declinedWithCounterplay')
+  if (watch.lostFreeRun) bump('claimedLostFreeRun', 'declinedLostFreeRun')
+  if (watch.lostFirstAction) bump('claimedLostFirstAction', 'declinedLostFirstAction')
+  if (watch.lostNextRound) bump('claimedLostNextRound', 'declinedLostNextRound')
+  // Survived means the game was still live once the round we bought had run out.
+  if (final.round > watch.round + 1 || (final.winner === null && final.round > watch.round)) {
+    bump('claimedSurvived', 'declinedSurvived')
+  }
+  if (final.winner === watch.seat) bump('claimedWonGame', 'declinedWonGame')
+  if (claimed) stat.claimedRoundsAfter += final.round - watch.round
+  else stat.declinedRoundsAfter += final.round - watch.round
+}
+
+/**
  * Whether the bot can decline an optional ability (#396).
  *
  * A "may" trigger reaches the AI as a pending choice whose legal answers include `skipTrigger`, so
@@ -728,6 +975,9 @@ export interface DecisionReport {
   stats: DecisionStat[]
   ties: TieStat
   initiativeHorizon: InitiativeHorizonStat
+  denialOutcome: DenialOutcomeStat
+  claimCost: ClaimCostStat
+  initiativeTies: InitiativeTieStat
   triggers: TriggerStat
   pin: PinStat
   advantage: AdvantageStat
@@ -894,6 +1144,28 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   const blocked: BlockedReachStat = {
     decisions: 0, active: 0, activeAndLaneShut: 0, totalQuantity: 0, widestQuantity: 0,
   }
+  const tyingKinds = new Map<string, number>()
+  const initTies: InitiativeTieStat = {
+    decisions: 0, uniquelyBest: 0, tiedWithBest: 0, beaten: 0,
+    tiesOffered: 0, unresolved: 0, survivors: 0, tyingKinds: [],
+  }
+
+  const claimCost: ClaimCostStat = {
+    claims: 0, measured: 0, threatBefore: 0, threatCreated: 0, reachGrew: 0, reachGrowth: 0,
+  }
+
+  const denialOutcome: DenialOutcomeStat = {
+    decided: 0, claimed: 0, declined: 0,
+    claimedHopeless: 0, declinedHopeless: 0,
+    claimedWithCounterplay: 0, declinedWithCounterplay: 0,
+    claimedLostFreeRun: 0, declinedLostFreeRun: 0,
+    claimedLostFirstAction: 0, declinedLostFirstAction: 0,
+    claimedLostNextRound: 0, declinedLostNextRound: 0,
+    claimedSurvived: 0, declinedSurvived: 0,
+    claimedWonGame: 0, declinedWonGame: 0,
+    claimedRoundsAfter: 0, declinedRoundsAfter: 0,
+  }
+
   const horizon: InitiativeHorizonStat = {
     offered: 0, weFinishNext: 0, theyFinishNext: 0, bothFinishNext: 0, theyOnly: 0,
     lethalNow: 0, conversionLive: 0, denialLive: 0, weOnlyLive: 0, quietOffers: 0,
@@ -943,6 +1215,11 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       // would be a run across the whole corpus rather than within one game.
       let lockSampledRound = -1
       let lockRun = 0
+
+      // Per game, for the same reason as `watching` above: a watch list that outlives its game follows
+      // a decision into a game it was never part of.
+      const denialWatches: DenialWatch[] = []
+      const claimWatches: ClaimWatch[] = []
 
       for (let i = 0; i < ceiling && s.winner === null; i++) {
         const moves = legalMoves(s)
@@ -1000,8 +1277,6 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           // this measurement threefold.
           return { m, v: score(next, me, asRole), r: classifyResolution(next, me), exposed: canFinishThisAction(next, foe) }
         })
-        const best = Math.max(...scored.map(x => x.v))
-
         const record = (tally: Tally, subset: Array<(typeof scored)[number] & { sv: number }>): void => {
           if (subset.length < 2) return
           tally.offered++
@@ -1190,6 +1465,16 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
               } else if (o.theyFinishNext) {
                 horizon.denialLive++
                 if (claimed) horizon.denialClaimed++
+                // Follow this one to the end of the game. The bucket rate says what the bot did; only
+                // this says whether it mattered.
+                //
+                // `hopeless` uses `canFinishNow` rather than the bucket's `reachSteady`: the bucket
+                // readies everything first, so it cannot tell "they kill us next round" from "they kill
+                // us before this round is out", and only the first is a denial opportunity at all.
+                denialWatches.push(openDenialWatch(me, claimed, s.round, {
+                  hopeless: canFinishNow(s, foe),
+                  counterplay: moves.some(m => m.type !== 'pass' && m.type !== 'takeInitiative'),
+                }))
               } else if (o.weFinishNext) {
                 horizon.weOnlyLive++
                 if (claimed) horizon.weOnlyClaimed++
@@ -1201,13 +1486,45 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           }
           initiative.offered++
           initiative.candidates += 1
-          if (init.v === best) initiative.tied++
-          // Same question of the search: is claiming indistinguishable from the best alternative?
-          const svs = withSearch.map(x => x.sv)
-          if (svs.every(v => !Number.isNaN(v))) {
-            if (init.sv === Math.max(...svs)) initiative.tiedSearch++
-          } else if (init.v === best) {
-            initiative.tiedSearch++
+          // Against the best ALTERNATIVE, which is what the question has always said and what the
+          // implementation did not do. `best` is the max over every candidate INCLUDING claiming, so
+          // `init.v === best` also fires when claiming wins outright, and a decisive result was being
+          // counted as a blind spot. Every other decision kind uses `record`, which requires the whole
+          // candidate set to be level.
+          const others = withSearch.filter(x => x.m.type !== 'takeInitiative')
+          if (others.length > 0) {
+            const bestOther = Math.max(...others.map(x => x.v))
+            if (init.v === bestOther) initiative.tied++
+
+            const svs = withSearch.map(x => x.sv)
+            const usable = svs.every(v => !Number.isNaN(v))
+            const bestOtherSearch = usable ? Math.max(...others.map(x => x.sv)) : NaN
+            if (usable ? init.sv === bestOtherSearch : init.v === bestOther) initiative.tiedSearch++
+
+            // The decomposition, so the corrected rate can be read against what it replaces.
+            initTies.decisions++
+            if (usable) {
+              if (init.sv > bestOtherSearch) initTies.uniquelyBest++
+              else if (init.sv === bestOtherSearch) {
+                initTies.tiedWithBest++
+                // What it tied WITH. Raw move type rather than the coarser decision kind, since
+                // "tied with pass" and "tied with an attack" are the distinction that matters.
+                for (const other of others) {
+                  if (other.sv === bestOtherSearch) {
+                    tyingKinds.set(other.m.type, (tyingKinds.get(other.m.type) ?? 0) + 1)
+                  }
+                }
+              } else initTies.beaten++
+            }
+            // And what the seeded pick was actually left with. `tiedCandidates` is the tie the second
+            // opinion is handed; `finalists` is what survived it, which is the real coin flip.
+            if (trace && trace.tiedCandidates > 1) {
+              initTies.tiesOffered++
+              if (trace.finalists > 1) {
+                initTies.unresolved++
+                initTies.survivors += trace.finalists
+              }
+            }
           }
           initOffered++
           // The opponent has already passed, so claiming ends the phase (CR 1.15.5c) and they gain
@@ -1268,12 +1585,21 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         if (action.type === 'resourceCard' && s.phase === 'regroup') { banked++; bankedPool += pool }
         if (action.type === 'skipResource' && couldBank) { skipped++; skippedPool += pool }
         if (action.type === 'takeInitiative') {
+          // Every claim, not just the denial ones: a claim that hands them the round they need to
+          // BUILD lethal cannot appear in a bucket that requires the threat to exist already.
+          claimWatches.push(openClaimWatch(s, me))
+          claimCost.claims++
           initTaken++
           if (s.consecutivePasses >= 1) cheapTaken++
           else { forfeitedCount++; forfeited += s.players[me].units.filter(u => !u.exhausted).length }
         }
         const beforeAction = s
+        // Read BEFORE the resolve: an answer is a decision the card handed the player, not an action
+        // they chose to take, and the funnel's "their first action" stage must not fire on one.
+        const wasAnswer = hasPendingChoices(beforeAction)
         s = resolve(s, action)
+        for (const watch of denialWatches) advanceDenialWatch(watch, s, me, wasAnswer)
+        for (const watch of claimWatches) advanceClaimWatch(watch, s, claimCost)
 
         // Where the tokens went (#497). Diffed across the resolve rather than instrumented into
         // `consumeAdvantage`, so however a token leaves play it is still counted.
@@ -1304,6 +1630,8 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           else if (s.round > watch.until) watching.splice(w, 1) // survived the window
         }
       }
+
+      for (const watch of denialWatches) closeDenialWatch(watch, s, denialOutcome)
 
       // Charge each seat's avoidable exposures against whether that seat actually lost. A gate can
       // only ever recover games where the exposure preceded the defeat.
@@ -1348,6 +1676,14 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         .sort((a, b) => b.fired - a.fired || a.kind.localeCompare(b.kind)),
     },
     initiativeHorizon: horizon,
+    denialOutcome,
+    claimCost,
+    initiativeTies: {
+      ...initTies,
+      tyingKinds: [...tyingKinds.entries()]
+        .map(([kind, count]) => ({ kind, count }))
+        .sort((a, b) => b.count - a.count),
+    },
     triggers: {
       ...triggers,
       byKind: [...triggerKinds]

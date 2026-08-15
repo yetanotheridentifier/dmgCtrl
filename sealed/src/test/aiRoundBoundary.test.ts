@@ -241,6 +241,79 @@ describe('the beam-horizon arm', () => {
 })
 
 /**
+ * What claiming the initiative costs.
+ *
+ * Claiming makes us pass for the rest of the round while the opponent keeps playing, and `advanceTurn`
+ * bounces the turn back to them after every action. The search modelled that as **one** action followed
+ * by them giving up the rest of their turn, so the price of a claim was almost entirely unpriced. This
+ * is the half of #516 the crossing alone does not fix.
+ */
+describe('the opponent tail after we claim', () => {
+  /**
+   * We hold nothing back and they have three ready attackers and an empty board opposite, so every
+   * action they get is 3 more damage on our base. That makes "how many actions did we let them have"
+   * directly readable in the score, rather than inferred.
+   */
+  const beforeClaim = (): GameState => state({
+    cards,
+    phase: 'action',
+    activePlayer: 'player',
+    initiative: 'player',
+    initiativeTakenBy: null,
+    consecutivePasses: 0,
+    players: {
+      player: player({ deck: ['JUNK', 'JUNK', 'JUNK'], resources: ready(4) }),
+      opponent: player({
+        deck: ['JUNK', 'JUNK', 'JUNK'],
+        resources: ready(4),
+        units: [unit('e1', 'TST_U1'), unit('e2', 'TST_U1'), unit('e3', 'TST_U1')],
+      }),
+    },
+  })
+
+  /** What the search thinks claiming is worth, with the opponent allowed `tailActions` afterwards. */
+  function claimValue(tailActions: number): number {
+    const s = beforeClaim()
+    const index = legalMoves(s).findIndex(m => m.type === 'takeInitiative')
+    expect(index, 'the fixture must offer a claim').toBeGreaterThanOrEqual(0)
+    clearSearchTrace()
+    makeBeamAi(evaluate, {
+      ...DEFAULT_BEAM_LIMITS, nodes: 200_000, reply: 'pessimistic', maxCrossings: 1, tailActions,
+    })(s)
+    return lastSearchTrace()!.candidates[index]
+  }
+
+  it('charges for the actions we hand over', () => {
+    expect(claimValue(3)).toBeLessThan(claimValue(0))
+  })
+
+  /** Monotone, because each extra action they get is more damage we take. A tail that saturated after
+   *  one action would be the old behaviour wearing a parameter. */
+  it('charges more the longer they get to play', () => {
+    expect(claimValue(3)).toBeLessThan(claimValue(1))
+  })
+
+  /**
+   * And it fires only where we have claimed. Everywhere else the opponent holding the turn is the
+   * ordinary null move between our own actions, and handing them free actions there would change the
+   * whole search rather than the claim.
+   */
+  it('leaves every other decision alone', () => {
+    const s = atBoundary(BOMBS_FIRST)
+    const values = (tailActions: number): number[] => {
+      clearSearchTrace()
+      makeBeamAi(evaluate, {
+        ...DEFAULT_BEAM_LIMITS, nodes: 200_000, reply: 'pessimistic', maxCrossings: 1, tailActions,
+      })(s)
+      return lastSearchTrace()!.candidates
+    }
+    // On this board the OPPONENT holds the claim, so nothing we do triggers a tail.
+    expect(s.initiativeTakenBy).toBe('opponent')
+    expect(values(3)).toEqual(values(0))
+  })
+})
+
+/**
  * The control for the redaction itself.
  *
  * A control that quietly behaved like the arm would run for hours and report "no difference", which is

@@ -138,6 +138,24 @@ export const BEAM_REPLY_SHARED_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, chai
 export const beamReplySharedAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_SHARED_LIMITS)
 
 /**
+ * The two deliberate answers to a tied initiative, bracketing the coin flip that ships.
+ *
+ * The tie is 8.2% of claim offers once measured against the best ALTERNATIVE rather than against a
+ * maximum that included claiming itself. On those the search has no opinion, so the seeded pick decides
+ * by default rather than by anyone's decision.
+ *
+ * Run as a pair against `beam-reply`. Both losing means the flip is right and the tie is genuinely
+ * balanced; one winning means turn order is systematically mispriced in that direction, and the gap
+ * between the two arms sizes how much the initiative is worth at the margin. One arm alone could not
+ * distinguish those.
+ */
+export const BEAM_CLAIM_TIES_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, initiativeTie: 'take' }
+export const BEAM_HOLD_TIES_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, initiativeTie: 'avoid' }
+
+export const beamClaimTiesAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_CLAIM_TIES_LIMITS)
+export const beamHoldTiesAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_HOLD_TIES_LIMITS)
+
+/**
  * The shipped model still reading the two cards it deals itself at regroup: the pre-#516 behaviour,
  * kept as the control for that fix and nothing else.
  *
@@ -168,7 +186,18 @@ export const beamReplyUnredactedAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_
  * too, so both arms are equally blind to the cards nobody has drawn and the A/B measures the horizon
  * alone.
  */
-export const BEAM_HORIZON_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, maxCrossings: 1 }
+/**
+ * **Both halves, because for the claim decision they are one change.** Crossing alone prices what a
+ * claim buys and not what it costs, which is an argument for claiming more; the tail alone prices the
+ * cost and not the benefit, which is an argument for never claiming. Either on its own is a worse
+ * model than neither, so they are not separately shippable and are not measured separately here.
+ *
+ * `tailActions: 3` is **a guess and should be swept.** The right number is how many actions an opponent
+ * actually has left when we claim, and that is not measured anywhere: `--decisions` reports the ready
+ * units the CLAIMANT forfeits, which is the other side of the trade. Three is enough to be clearly more
+ * than the single action the search modelled before, and cheap enough to run.
+ */
+export const BEAM_HORIZON_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, maxCrossings: 1, tailActions: 3 }
 
 export const beamHorizonAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_HORIZON_LIMITS)
 

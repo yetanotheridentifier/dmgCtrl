@@ -624,6 +624,11 @@ nothing: `blockedReach`, Advantage-as-one-shot, this, and a per-kind restriction
 premise was correct and every **evaluation term** was worth approximately nothing. The one intervention
 that measured was a **search** change, comparing candidates differently rather than repricing a board.
 
+Extending the search itself past the boundary has since been tried too, and also does not pay: -3.72
+points at 1.84x the cost, with the mechanism demonstrably working (the claim rate went from
+discriminating weakly across the horizon buckets to strongly). So "the horizon is the blocker" is no
+longer a safe assumption either. See [experiments.md](experiments.md).
+
 ### Lethal exposure
 
 The defensive mirror of "a win in one action is always taken": prefer a move that does not leave the

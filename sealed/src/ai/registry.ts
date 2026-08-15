@@ -2,7 +2,7 @@ import type { Ai } from './types'
 import { randomAi } from './randomAi'
 import {
   greedyAi, greedyBaselineAi, greedyFlatAi, beamAi, beamReplyAi, beamReplySharedAi, beamReplyUnredactedAi,
-  beamHorizonAi, lethalBeamAi,
+  beamHorizonAi, beamClaimTiesAi, beamHoldTiesAi, lethalBeamAi,
   makeBeamGreedy, makeLethalBeam, BEAM_REPLY_LIMITS, BEAM_REPLY_SHARED_LIMITS,
 } from './greedyAi'
 import { DEFAULT_BEAM_LIMITS, TIE_DECISION_KINDS, type BeamLimits } from './search'
@@ -54,6 +54,16 @@ export const AIS: Record<string, Ai> = {
    * and self-play against the shipped bot would measure nothing.
    */
   'beam-reply-unredacted': beamReplyUnredactedAi,
+  /**
+   * `beam-reply` always taking a tied initiative, and never taking one. The pair brackets the seeded
+   * coin flip that ships, which is the default by omission rather than by anyone's decision.
+   *
+   * Only fires where claiming is still level after the second opinion, so neither can overrule a
+   * decision the search actually made. Run both: one arm alone cannot tell "claiming is underpriced"
+   * from "this tie is genuinely balanced".
+   */
+  'beam-claim-ties': beamClaimTiesAi,
+  'beam-hold-ties': beamHoldTiesAi,
   /**
    * `beam-reply` allowed to play on into the opening of the next round, instead of stopping when the
    * action phase ends. The arm for #516 and, so far, nothing more than that.

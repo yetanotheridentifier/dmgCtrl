@@ -13,26 +13,36 @@ and then in one line with a pointer.
 Ordered on one principle: **correctness, then structure, then calibration.** Anything that changes the
 engine or the horizon invalidates a calibration done before it.
 
-1. **#516 extend the search across the round boundary.** The structural item, and the one that unblocks
-   most of what is stuck.
+1. **#521 the bot passes far more than a competent player does.** A single pass should be a once-in-five
+   -to-ten-games event and it is routine. `pass` sits in the tied lead set 51.9% of the time, the
+   highest of any decision kind, and the search has no time preference at all, so delay is free by
+   construction.
 
-   `search.ts` drops any node that leaves the action phase, so no board the bot can reach ever contains
-   next round's damage. Four separate findings all terminate here: the initiative tie is the largest
-   blind spot in the model at 15.3% of offers; the bot's claim rate is flat across every horizon
-   bucket, so it demonstrably cannot see the difference; two evaluation weights cannot be judged
-   dormant or dead until it can; and the shielded-Sentinel lockout pays out on the far side of it.
+   **The rate itself is unmeasured**: nothing reports how often `pass` is chosen, or passes per game,
+   which is the quantity the complaint is about. Build that before any fix, and read it against a human
+   baseline rather than against itself.
 
-   **Four attempts to price something on the other side of that boundary have all failed** (see
-   experiments.md). Build the horizon rather than a fifth proxy for it.
+   Check first whether crossing the round boundary made it worse, by comparing the pass rate with the
+   horizon off and on. A line that ends the phase lands on a regroup where both sides ready everything
+   and bank a resource, which is the shape of this defect.
 
-   The hidden-information rule is settled: the two cards drawn at regroup are **not** read, though one
-   may be assumed resourceable. `drawCards` slices a fully-ordered deck held in state, so a search
-   crossing regroup would otherwise see both players' actual draws. Deck-composition probabilities are
-   deliberately out of scope.
-
-   **Re-ask the lockout the moment it works**, and re-run term sensitivity: if the search can reach
-   next round, the strip line finally contains its own payoff and two dormant weights become judgeable.
-2. **Run the matchup matrix.** Now unblocked: the weights are settled, so it will not need repeating.
+   A correct pass needs a read on the opponent's hand, which this model does not have, so the goal is
+   **fewer bad passes, not better ones.** Gate on non-inferiority and scripted positions: two equally
+   passive bots produce ordinary-looking games, so self-play cannot see this.
+2. **Finish what #516 scoped and did not do.** The horizon itself is built, measured at -3.72 points and
+   **shipped disabled**, so these are the parts that outlived it.
+   - **Re-run term sensitivity for `resourceSurplus` and `hand.canAct`.** They price things across the
+     boundary and cannot be told dormant from dead without a horizon. `beam-horizon` exists as an arm,
+     so this is finally answerable, and it is worth answering even though the horizon does not ship.
+   - **Re-ask the shielded-Sentinel lockout** against the horizon arm: whether the strip line now
+     contains its own payoff, and whether `blockedReach` becomes deletable rather than shippable.
+   - **Sweep `tailActions`.** It is most of the horizon's 1.84x cost while the free run changes nothing
+     measurable in 79% of claims, so a crossing-only arm may be both cheaper and better.
+3. **#519 price the regroup resourcing decision as thresholds.** The regroup decision is currently a
+   constant: `resource - card` is +2 and banking is always chosen, so nothing is being weighed. The rule
+   that should decide it, the knee rising to the leader's deploy cost, is live code that cancels out of
+   its own total while the two rates are equal.
+4. **Run the matchup matrix.** Now unblocked: the weights are settled, so it will not need repeating.
    Roughly **23 hours sharded** at 10 games a cell, against 169 serial.
 
    Per-cell numbers are noise at that size (±50% at 4 games). The readable aggregates are deck strength
@@ -41,7 +51,11 @@ engine or the horizon invalidates a calibration done before it.
 
    It measures the **deck generator**, not the sealed metagame: one algorithmic build per leader and
    base. That gap is the point rather than a caveat.
-3. **Two candidates from review, neither ticketed yet.** Both add information rather than re-pricing
+5. **#520 the lethal solver is budget-bound**, so every result quoted about solver depth measures the
+   rail instead. It takes 50x the default node budget before more depth stops finding less, and the
+   shipped gated solver runs at 4x. The +0.8 recorded for `beam-lethal` is a lower bound on a solver
+   that never finished its search.
+6. **Two candidates from review, neither ticketed yet.** Both add information rather than re-pricing
    it, which is the strongest steer available: of six attempts to re-price something, one worked, and
    it was a search change.
    - **Claiming the initiative charges nothing for the cards it stops you playing.** The cost term
@@ -49,17 +63,20 @@ engine or the horizon invalidates a calibration done before it.
    - **Ready and exhausted power are priced identically.** Splitting them has a proven pattern: the
      Advantage weights already ship equal to `power`, so the correction is a provable no-op until
      swept.
-4. **#479 complete the module list in `ai-benchmark.md`**, mostly done in passing.
 
-## Gated on the horizon
+## Deferred
 
 Optional abilities, token value, and hand and resource optionality are all "value something whose
 payoff arrives later", and all were closed once the search tie-break turned out to be the answer rather
-than a new term. **One idea survived unbuilt** and is worth a ticket if the horizon lands: resource
-count and hand SIZE are **public**, so "I am holding up three resources" may legitimately outrank the
-board score, where "I hold Vanquish" cannot.
+than a new term. **One idea survived unbuilt** and is worth a ticket: resource count and hand SIZE are
+**public**, so "I am holding up three resources" may legitimately outrank the board score, where "I hold
+Vanquish" cannot.
 
-Re-run the decision diagnostic once the horizon extends, and build only what still ties.
+The initiative tie policy is measured but unsettled. `beam-claim-ties` and `beam-hold-ties` bracket the
+seeded coin flip that ships, and at 80 games read +1.25 and +0.00, which settles nothing. The tie is
+8.2% of claim offers and splits roughly evenly between tying with a `pass`, where claiming is nearly
+free, and tying with an attack, where it is a real trade. A **conditional** policy is the obvious next
+arm if the blanket ones ever separate.
 
 That is the heuristic baseline. **Stop there before ML.**
 

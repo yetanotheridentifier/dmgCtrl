@@ -161,6 +161,17 @@ Everything is optional:
     front of it. Measured at **+0.8 points** and **not shipped**; kept registered so it can be
     re-measured. Outside the gate it returns exactly what `beam` returns, which is what makes an A/B
     between them one feature rather than two configurations.
+  - `beam-reply-unredacted` the deployed model still reading the two cards it deals itself at regroup.
+    The control for the redaction, and the only way to ask whether that fix cost anything, since
+    redaction is otherwise unconditional and self-play would measure nothing.
+  - `beam-horizon` the deployed model allowed to play on past the round boundary, with the opponent's
+    forfeited round modelled. Measured at **-3.72 points** over 2016 games at **1.84x** the cost, and
+    **not shipped**; kept registered because the mechanism works even though the bot does not win with
+    it, so the question is worth re-asking with the tail removed.
+  - `beam-claim-ties` / `beam-hold-ties` the deployed model always taking a tied initiative, and never
+    taking one. A pair, because one arm alone cannot tell "claiming is underpriced" from "the tie is
+    genuinely balanced"; the gap between them sizes what turn order is worth at the margin. Both only
+    act on candidates still level after the second opinion, so neither can overrule the search.
 
   More join the list as they are built.
 
@@ -735,13 +746,38 @@ This is the sharpest diagnostic in the harness, because a blind spot is invisibl
 term the evaluation lacks entirely shows up here as a 100% tie rate on the decision it should be
 deciding, long before it shows up as lost games.
 
-Current rates: initiative 18.2%, answering a choice 7.4%, which card to play 7.4%, attacks 1.7%,
-regroup card choice 0.1%. See [planned-work.md](planned-work.md) for what that ordering implies.
+Current rates for the deployed model: answering a choice 12.4%, which card to play 11.5%, initiative
+8.2%, which attack 4.8%, regroup card choice 2.9%.
 
 **Read the rate against how often the decision comes up**, or the ordering misleads. Initiative is
-offered about 40 times a game, so 18.2% is roughly 7 coin flips a game; answering a choice comes up
-about 12 times for 0.9; attacks are frequent but now decided, at 0.5. Initiative is the largest
-remaining blind spot by a wide margin.
+offered about 43 times a game, so 8.2% is roughly 3.5 ties a game; answering a choice comes up about 14
+times for 1.7.
+
+### The initiative rate compares against the best ALTERNATIVE
+
+It has to be said explicitly because it was once implemented the other way. A tie means claiming scored
+level with the best move that is **not** claiming. Comparing it against a maximum computed over every
+candidate *including* claiming is satisfied whenever claiming wins outright, which counts a decisive
+result as a blind spot: that read 18.3%, decomposing into 10.1% claiming won and 8.2% claiming tied.
+
+The arithmetic that catches it needs no instrument. The bot claims 15.3% of offers and every claim
+requires claiming to be at the lead, so a two-way tie taken half the time cannot produce 15.3% of claims
+out of 18.3% of ties. `benchInitiativeTies.test.ts` asserts it.
+
+### A tie is not yet a coin flip
+
+Ties go to the second opinion first, so **only what survives that is decided at random**. The two are
+reported separately, and the gap is the only measure of whether the tie-break is doing anything.
+
+For the deployed model it resolves little: of the ties it is handed, **86.4% are still level
+afterwards**, narrowed from an average 3.2 candidates to 2.4. That is consistent with the tie-break's
+measured +2.35 points, since resolving 13.6% still moves about 5% of decisions, but "the second opinion
+decides tied candidates" overstates what it does.
+
+`--decisions` also reports what claiming tied **with**, by move type, because the situations want
+opposite policies: tying with `pass` means the search sees nothing worth doing and the initiative is
+nearly free, while tying with an attack is a real trade of damage against turn order. The split is
+roughly attack 46%, pass 38%, leader ability 9%, playing a unit 7%.
 
 Attacks were the highest-volume blind spot at ~10% until scoring became quiescent, which is what a
 tie rate is for: an attack that suspended on a choice used to be scored before it had done anything,
@@ -756,6 +792,46 @@ and so read as behaviour rather than as a gap:
   already passed, and the mean ready units it still had when it claimed mid-phase. That last number
   is the clearest read on whether the AI is claiming sensibly: low means it claims when it has little
   left to do, high means it is throwing away a board full of attackers.
+
+### Denial: following a decision to the end of its game
+
+A claim rate says what the bot did. It cannot say whether it **worked**, and "they finish next round"
+is a prediction that nothing checked. So every decision in the denial bucket, where the opponent
+finishes next round and we do not, is followed to the end of its game and reported as a funnel with
+exclusive stages in time order: lost on their free run, lost to their first action of the round the
+claim bought, lost later that round, survived it, won the game.
+
+**The free run comes first and is the stage that is easy to forget.** Claiming forfeits the rest of your
+own round, so the opponent gets a turn *before* the turn order you bought ever applies. A loss there was
+caused by the claim rather than not prevented by it.
+
+Two splits decide how the rest reads. **Hopeless** uses `canFinishNow` rather than the bucket's
+`reachSteady`: they finish before this round is out, so turn order next round was never on offer and
+declining cannot be a mistake. **Had counterplay** is whether any legal move other than pass or claim
+existed, since with none the claim is free and proves nothing about judgement.
+
+Both columns, claimed and declined, come from the same population, but **the split is the bot's choice
+rather than a treatment**, so it is confounded: the bot claims where it reads the position as
+salvageable. Read the funnel's shape, not the difference between columns. Usefully, the bias direction
+is known, which is what makes the current reading interpretable: declined decisions are hopeless 41.6%
+of the time against claimed's 15.2%, so that column is loaded with lost positions and should look worse.
+It wins slightly more anyway (13.2% against 12.1%), so **claiming in a denial spot buys time without
+winning games**: 42.4% survive the round they bought against 19.6%, and it converts no better.
+
+A real effect needs the forced counterfactual, forking the position and playing both branches. That is
+not built.
+
+### What claiming costs, over every claim
+
+Scoped to all claims rather than the denial bucket, because a claim that hands the opponent the round
+they need to **build** lethal cannot appear in a bucket that requires the threat to exist already.
+
+Reported: how many claims had a measurable free run, whether the threat was already there, whether the
+free run **created** it, and how much the opponent's steady reach grew. Currently the free run creates a
+new lethal threat in 4.4% of claims and grows their reach at all in 20.7%, by about 3.6 when it does.
+
+This is the quantity a search modelling the opponent's forfeited round is pricing, so a small number
+here means that model is charging for a cost that mostly is not there.
 
 ### Lethal availability
 

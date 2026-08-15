@@ -114,6 +114,16 @@ export interface SearchTrace {
   lines?: SearchLine[]
   /** How many candidates tied for the lead, so the seeded pick or the tie-break decided between them. */
   tiedCandidates: number
+  /**
+   * How many candidates were still level once the second opinion had spoken, so the **seeded pick**
+   * chose. This, not `tiedCandidates`, is the rate at which the bot genuinely flips a coin.
+   *
+   * The two are the same number wherever no tie-break is configured or none applies. Where one does,
+   * the gap between them is the only measure of whether it is doing anything: a second opinion that
+   * ties just as often has been paid for and consulted to no effect, and nothing in the output has ever
+   * said so.
+   */
+  finalists: number
 }
 
 /** How a root candidate earned its value: the best board it reached, and the moves that got there. */
@@ -462,6 +472,43 @@ export interface BeamLimits {
    * compared against".
    */
   redactRegroup?: boolean
+  /**
+   * How many actions the opponent may take **after we claim the initiative**, before the line assumes
+   * they pass and the round ends (#516). Defaults to 0, which assumes they stop the moment we do.
+   *
+   * Claiming makes us pass for the rest of the round (CR 1.15.5b), and `advanceTurn` bounces the turn
+   * straight back to them, so they keep acting while we cannot. **That freedom is the price of the
+   * claim, and at 0 the search does not charge it.** The reply gives them one action at the level the
+   * claim was made, and `ourTurnAgain` then passes on their behalf, so the line models an opponent who
+   * takes a single action and gives up their remaining turn for nothing.
+   *
+   * Gated on `initiativeTakenBy` being US, so it never touches the ordinary between-our-actions null
+   * move. Widening it there would be a different and much larger change: it would stop the beam from
+   * being an own-turn search at all.
+   *
+   * Uses the configured reply policy rather than a policy of its own, since that is already the model
+   * of the opponent this search believes in. Under `null` there is no tail, which is consistent: an
+   * opponent assumed to do nothing does nothing here too.
+   *
+   * Costly, and deliberately capped rather than run to exhaustion: each action enumerates every legal
+   * move they have, and a claim can leave a full board's worth of them.
+   */
+  tailActions?: number
+  /**
+   * What to do when claiming the initiative is still level after the second opinion. `undefined` leaves
+   * it to the seeded pick, which is what ships.
+   *
+   * **A measurement, not a heuristic.** A coin flip is the current policy by default rather than by
+   * decision, and nobody has ever asked what the two deliberate answers are worth. `take` and `avoid`
+   * bracket it: if both lose to the flip then the flip is right and the tie is genuinely balanced; if
+   * one wins, the search is systematically mispricing turn order in one direction and the size of the
+   * gap says by how much.
+   *
+   * Applied only to candidates that are ALREADY level, after the tie-break, so it can never overrule a
+   * decision the search actually made. That is the same discipline `tieBreak` follows, and for the same
+   * reason: a rule allowed to beat a clear winner is a different bot rather than a tie policy.
+   */
+  initiativeTie?: 'take' | 'avoid'
 }
 
 export const DEFAULT_BEAM_LIMITS: BeamLimits = {
@@ -517,7 +564,7 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
     if (moves.length === 0) {
       trace = {
         nodes: limits.nodes, left: budget.left, chain: 0, beam: 0, exhausted: false,
-        candidates: [], tiedCandidates: 0,
+        candidates: [], tiedCandidates: 0, finalists: 0,
       }
       return null
     }
@@ -542,8 +589,16 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
         bestMoves.push(move)
       }
     }
+    const finalists = limits.tieBreak && bestMoves.length > 1
+      && tieBreakApplies(state, bestMoves, limits.tieBreak.tieKinds)
+      ? breakTie(state, bestMoves, me, asRole, inner, limits)
+      : bestMoves
+
     // Recorded before returning, so a caller can ask what this decision cost and whether the rail cut
     // it short. Overwritten every decision: it describes the last one, never a running total.
+    //
+    // Written AFTER the tie-break so `finalists` can be reported. Safe because `breakTie` runs
+    // `reachableFrom` directly rather than re-entering this function, so it never writes the trace.
     trace = {
       nodes: limits.nodes,
       left: budget.left,
@@ -553,13 +608,11 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
       candidates,
       lines: limits.explain === true ? lines : undefined,
       tiedCandidates: bestMoves.length,
+      finalists: finalists.length,
     }
 
-    const finalists = limits.tieBreak && bestMoves.length > 1
-      && tieBreakApplies(state, bestMoves, limits.tieBreak.tieKinds)
-      ? breakTie(state, bestMoves, me, asRole, inner, limits)
-      : bestMoves
-    return finalists[Math.floor(seededUnit(state.rngSeed) * finalists.length)]
+    const decided = settleInitiativeTie(finalists, limits.initiativeTie)
+    return decided[Math.floor(seededUnit(state.rngSeed) * decided.length)]
   }
 }
 
@@ -654,6 +707,25 @@ function breakTie(
 }
 
 /**
+ * Settle a tie that still contains `takeInitiative`, under a deliberate policy instead of a coin flip.
+ *
+ * Returns the survivors rather than a move, so the seeded pick still chooses among whatever is left and
+ * the search stays deterministic. A no-op unless a policy is set AND claiming is actually among the
+ * tied candidates, so it cannot touch a decision that was decided on merit.
+ *
+ * `avoid` falls back to the untouched list when claiming is the ONLY survivor: removing the last
+ * candidate would leave nothing to play, and "never claim" cannot mean "never move".
+ */
+export function settleInitiativeTie(tied: Action[], policy: 'take' | 'avoid' | undefined): Action[] {
+  if (policy === undefined || tied.length < 2) return tied
+  const claim = tied.find(m => m.type === 'takeInitiative')
+  if (claim === undefined) return tied
+  if (policy === 'take') return [claim]
+  const others = tied.filter(m => m.type !== 'takeInitiative')
+  return others.length > 0 ? others : tied
+}
+
+/**
  * Score a leaf, preferring the FASTEST win and the slowest loss.
  *
  * Without this the beam is indifferent between winning now and winning in three actions, because both
@@ -737,6 +809,46 @@ function applyReply(
   return chosen ?? state
 }
 
+/**
+ * Let the opponent spend the rest of the round, once WE have claimed and cannot act.
+ *
+ * The asymmetry this prices is real and is the reason the claim decision has been unreadable. Claiming
+ * buys turn order next round and pays for it with every action we still had, plus a free run for the
+ * opponent while we sit out. The search could see neither half: the payoff was past the round boundary,
+ * and the cost was modelled as a single action followed by them politely passing.
+ *
+ * Stops early on any of: the allowance, the budget, the phase ending (their own pass ends it, since we
+ * are already passing), or the reply declining to move. Returning the board unchanged is always safe,
+ * and is exactly the behaviour before this existed.
+ */
+function opponentTail(
+  state: GameState,
+  me: PlayerId,
+  asRole: Role | undefined,
+  inner: Evaluator,
+  limits: BeamLimits,
+  budget: SearchBudget,
+  chainCap: number,
+): GameState {
+  const allowance = limits.tailActions ?? 0
+  // ONLY where we have claimed. Anywhere else the opponent holding the turn is the ordinary null move
+  // between our own actions, and handing them extra actions there is a different search entirely.
+  if (allowance === 0 || state.initiativeTakenBy !== me) return state
+
+  const foe = opponentOf(me)
+  let node = state
+  for (let i = 0; i < allowance; i++) {
+    if (node.winner !== null || node.phase !== 'action' || node.activePlayer !== foe) break
+    if (budget.left <= 0) break
+    // No alpha: a cut is only a valid bound on a board nothing is expanded past, and the whole point
+    // here is that the line continues through this board into the next round.
+    const next = applyReply(node, me, asRole, inner, limits.reply, budget, -Infinity, 0, chainCap)
+    if (next === node) break
+    node = next
+  }
+  return node
+}
+
 /** Hand the turn back to us by passing for the OPPONENT, or `null` if that ends the sequence. */
 function ourTurnAgain(state: GameState, me: PlayerId, budget: SearchBudget): GameState | null {
   if (state.activePlayer === me) return state
@@ -791,7 +903,15 @@ function reachableFrom(
     (limits.replyDepth === undefined || level <= limits.replyDepth ? limits.reply : 'null')
   const cutting = limits.alphaBeta !== false && limits.reply === 'pessimistic'
   const rootAlpha = cutting && limits.depth === 1 ? alpha : -Infinity
-  const root = applyReply(settled, me, asRole, inner, replyAt(1), budget, rootAlpha, 1, chainCap)
+  // The tail belongs INSIDE the node, not at a level of its own. A root move's value is the max over
+  // the boards below it, and a max is only sound over boards we could choose to stop at. After a claim
+  // we cannot act, so the opponent's free run is not optional and its cost has to be inside the board
+  // being scored. Hung off the reply for the same reason it uses the reply's policy: it is the same
+  // model of the opponent, applied where they have more than one turn.
+  const root = opponentTail(
+    applyReply(settled, me, asRole, inner, replyAt(1), budget, rootAlpha, 1, chainCap),
+    me, asRole, inner, limits, budget, chainCap,
+  )
   let best = valueAt(root, me, asRole, inner, 1, limits.timePreference)
   let won = root.winner === me
   // Path tracking only when explaining: it allocates per frontier node, and the shipped bot should
@@ -836,7 +956,10 @@ function reachableFrom(
         // reply is a no-op and alpha would be meaningless.
         const policy = replyAt(d + 1)
         const leafAlpha = last && cutting && policy === 'pessimistic' ? best : -Infinity
-        const board = applyReply(played, me, asRole, inner, policy, budget, leafAlpha, d + 1, chainCap)
+        const board = opponentTail(
+          applyReply(played, me, asRole, inner, policy, budget, leafAlpha, d + 1, chainCap),
+          me, asRole, inner, limits, budget, chainCap,
+        )
         if (tooFar(board)) continue
         const value = valueAt(board, me, asRole, inner, d + 1, limits.timePreference)
         const path = explaining ? [...entry.path, next] : entry.path
