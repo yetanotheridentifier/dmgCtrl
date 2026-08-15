@@ -227,6 +227,29 @@ export interface GameState {
   consecutivePasses: number
   /** Regroup: whether each player has made their resource-1-card choice yet. */
   regroupResourced: Record<PlayerId, boolean>
+  /**
+   * This board is a SEARCH SIMULATION, so the regroup it crosses is a model rather than the real one.
+   *
+   * Never set in real play. An AI stamps it on its own copy before searching, and every board reached
+   * from there inherits it, which is what makes the property hold however the boundary is reached: at
+   * the root, in a modelled reply, or deep in the frontier.
+   *
+   * It exists because `enterRegroup` deals both players two cards off a fully-ordered deck held in
+   * state. A search that crossed the real regroup would score a hand containing cards nobody has drawn,
+   * and would then prefer lines whose value came from knowing them.
+   *
+   * Exactly three deviations, all in `simulatedRegroupFor` and `enterRegroup`:
+   *
+   * 1. **The two cards are removed from the deck but not read.** Deck size is public and the deck-out
+   *    clock is real, so they are spent rather than left in place, and the empty-deck damage still
+   *    lands.
+   * 2. **One resource is taken instead of one of them.** The shipped weights put `resource - card` at
+   *    +2 and banking is always chosen, so this is a faithful model of this bot rather than a
+   *    convenience. The second card is simply not modelled, which understates both hands equally.
+   * 3. **The resourcing choice is settled rather than offered.** The opponent's would otherwise be
+   *    decided by reading their hand.
+   */
+  simulatedRegroup?: boolean
   /** Monotonic counter for deterministic unit instance ids. */
   instanceCounter: number
   /** Seed for in-game shuffles (mulligans) — advances on use, replays deterministically. */

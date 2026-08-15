@@ -6,7 +6,7 @@ import { resolve } from '../engine/resolve'
 import { seededUnit } from '../engine/rng'
 import { evaluate, makeEvaluate, DEFAULT_WEIGHTS, type Evaluator, type EvalWeights } from './evaluate'
 import { evaluateBaseline } from './evaluateBaseline'
-import { makeQuiescent, makeBeamAi, DEFAULT_BEAM_LIMITS, type BeamLimits } from './search'
+import { makeQuiescent, makeBeamAi, asSimulation, DEFAULT_BEAM_LIMITS, type BeamLimits } from './search'
 import {
   findLethal, shouldSearchLethal, DEFAULT_LETHAL_LIMITS, DEFAULT_LETHAL_GATE,
   type LethalLimits, type LethalGate,
@@ -26,7 +26,11 @@ import { role } from './race'
  * on their own discarded copies; the real seed advances once, when the chosen move is applied.
  */
 export function makeGreedyAi(evaluate: Evaluator): Ai {
-  return (state: GameState): Action | null => {
+  return (real: GameState): Action | null => {
+    // One ply still crosses the boundary: a `pass` that ends the action phase resolves the whole
+    // regroup, so without this the score of passing depends on two cards nobody has drawn. The same
+    // stamp the beam uses, so the control and the arm cheat or do not cheat together.
+    const state = asSimulation(real)
     const moves = legalMoves(state)
     if (moves.length === 0) return null
 
@@ -132,6 +136,70 @@ export const beamReplyAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_LIMITS)
 export const BEAM_REPLY_SHARED_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, chainNodes: undefined }
 
 export const beamReplySharedAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_SHARED_LIMITS)
+
+/**
+ * The two deliberate answers to a tied initiative, bracketing the coin flip that ships.
+ *
+ * The tie is 8.2% of claim offers once measured against the best ALTERNATIVE rather than against a
+ * maximum that included claiming itself. On those the search has no opinion, so the seeded pick decides
+ * by default rather than by anyone's decision.
+ *
+ * Run as a pair against `beam-reply`. Both losing means the flip is right and the tie is genuinely
+ * balanced; one winning means turn order is systematically mispriced in that direction, and the gap
+ * between the two arms sizes how much the initiative is worth at the margin. One arm alone could not
+ * distinguish those.
+ */
+export const BEAM_CLAIM_TIES_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, initiativeTie: 'take' }
+export const BEAM_HOLD_TIES_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, initiativeTie: 'avoid' }
+
+export const beamClaimTiesAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_CLAIM_TIES_LIMITS)
+export const beamHoldTiesAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_HOLD_TIES_LIMITS)
+
+/**
+ * The shipped model still reading the two cards it deals itself at regroup: the pre-#516 behaviour,
+ * kept as the control for that fix and nothing else.
+ *
+ * A line that ends the action phase runs the real regroup, so the board being scored holds a hand
+ * containing cards nobody has drawn, and the search prefers lines whose value comes from knowing them.
+ * Redaction removes that. Whether removing it also costs anything is a separate question from whether
+ * it is right, and this is the only arm that can answer it.
+ *
+ * Same role as `greedy-flat` and `beam-reply-shared`: it tracks every later change to the evaluation
+ * and the search, so the comparison stays one difference instead of drifting into two.
+ */
+export const BEAM_REPLY_UNREDACTED_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, redactRegroup: false }
+
+export const beamReplyUnredactedAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_UNREDACTED_LIMITS)
+
+/**
+ * The shipped model allowed to play on past the round boundary (#516).
+ *
+ * One difference from `beam-reply` and it is not an evaluation term: a line may continue into the
+ * opening of the next round rather than stopping when the action phase ends. Everything readies and
+ * both sides bank a resource, so a value that only arrives next round is finally reachable.
+ *
+ * **Unmeasured.** It is registered so it can be A/B-ed against `beam-reply` on the same seeds, which is
+ * the only reason it exists yet. Four separate findings say the boundary is where the model goes blind,
+ * and none of them say what crossing it is worth.
+ *
+ * The redaction it relies on is NOT part of the difference: `beam-reply` searches a simulated regroup
+ * too, so both arms are equally blind to the cards nobody has drawn and the A/B measures the horizon
+ * alone.
+ */
+/**
+ * **Both halves, because for the claim decision they are one change.** Crossing alone prices what a
+ * claim buys and not what it costs, which is an argument for claiming more; the tail alone prices the
+ * cost and not the benefit, which is an argument for never claiming. Either on its own is a worse
+ * model than neither, so they are not separately shippable and are not measured separately here.
+ *
+ * `tailActions: 3` is **a guess and should be swept.** The right number is how many actions an opponent
+ * actually has left when we claim, and that is not measured anywhere: `--decisions` reports the ready
+ * units the CLAIMANT forfeits, which is the other side of the trade. Three is enough to be clearly more
+ * than the single action the search modelled before, and cheap enough to run.
+ */
+export const BEAM_HORIZON_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, maxCrossings: 1, tailActions: 3 }
+
+export const beamHorizonAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_HORIZON_LIMITS)
 
 /**
  * The beam with a lethal override in front of it (#433).

@@ -141,6 +141,53 @@ One ply is **not** the right second opinion, which was the original proposal. It
 shielded-Sentinel lockout wrong, preferring passing, where an optimistic reply separates the same
 position correctly. When the worst case cannot tell two moves apart, the upside can.
 
+It **resolves far less than its name suggests**, which is worth knowing before building anything on top
+of it: 86.4% of the ties handed to it are still level afterwards, narrowed from an average 3.2
+candidates to 2.4. The +2.35 stands, because resolving 13.6% of a 38% tie rate still moves about 5% of
+decisions.
+
+### Searching past the round boundary works, and loses
+
+A line can be made to cross regroup and play on into the next round. Built, measured, **not shipped**:
+**-3.72 points** (t = -1.95 on 11 df, 3 of 12 shards positive, 2016 games against a matched control) at
+**1.84x** the per-decision cost.
+
+The interesting part is that the mechanism did what it was designed to do. The claim rate went from
+discriminating weakly across the horizon buckets to discriminating strongly, χ² 9.47 to 34.5 against a
+7.815 critical value, concentrated in the case where claiming means acting first into our own win
+(17.8% to 28.9%). **The bot judges the claim decision better and plays worse overall.**
+
+Two candidate explanations, neither settled: the modelled opponent tail may be dead weight (it is most
+of the cost, and the free run changes nothing measurable in 79% of claims), or crossing may make
+**passing** more attractive, since a line that ends the phase now lands on a regroup where both sides
+ready everything and bank a resource.
+
+### Crossing the boundary safely means redacting the draw
+
+The regroup deals both players two cards off a fully-ordered deck held in state, so a search crossing it
+scores a hand holding cards nobody has drawn. The fix is a board-level flag stamped once at the root,
+not a check at each crossing site: there were three, and the property has to hold however the boundary
+is reached.
+
+The rest of the model is settled and not up for rediscovery: the two drawn cards are not read, one is
+assumed banked (the shipped weights put `resource - card` at +2, so banking is always chosen), the cards
+still leave the deck so the deck-out clock is honest, and the resourcing choice is settled rather than
+offered, since deciding the opponent's would mean reading their hand.
+
+Test it by **permuting the deck and requiring the same move**. An assertion that the hand did not grow
+passes the moment someone crosses the boundary a different way.
+
+### Claiming the initiative to deny a lethal does not convert
+
+Followed to the end of the game, a claim made where the opponent finishes next round and we do not buys
+time and nothing else: 42.4% survive the round the claim bought against 19.6% of declines, and 1.4
+rounds against 1.1, but it **wins 12.1% against declining's 13.2%**.
+
+The comparison is confounded, and the direction of the bias is what makes it readable: declined
+decisions are hopeless 41.6% of the time against claimed's 15.2%, so that column is loaded with lost
+positions and should look worse. It does not. A low denial claim rate is defensible behaviour rather
+than a blind spot.
+
 ## Avenues closed off
 
 Recorded so nobody spends an evening re-deriving a null result. All measured against the identical AI

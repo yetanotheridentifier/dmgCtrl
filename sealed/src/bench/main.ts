@@ -422,6 +422,81 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     row('claimed, quiet (control)', rate(ih.quietClaimed, ih.quietOffers)),
   )
 
+  const dn = report.denialOutcome
+  const mean = (total: number, n: number): string => (n === 0 ? 'n/a' : (total / n).toFixed(1))
+  // Count AND rate in one cell: a stage at 40% of 5 decisions and one at 40% of 300 are different
+  // findings, and a column of bare percentages hides which is which.
+  const rateCell = (n: number, d: number): string => (d === 0 ? 'n/a'.padStart(14) : `${n} ${pct(n / d)}`.padStart(14))
+  lines.push(
+    '',
+    '  denial, followed to the end of the game. "they finish next round" is a PREDICTION, and the claim',
+    '  rate alone cannot say whether claiming works. Stages are exclusive and run in time order. The',
+    '  free run comes FIRST: claiming forfeits the rest of your own round, so they get a turn before the',
+    '  turn order you bought ever applies. Losses there were caused by the claim, not prevented by it.',
+    '',
+    '  Both columns come from the same population, but the split is the BOT\'S choice, not a treatment:',
+    '  it claims where it reads the position as salvageable, so declined is selected for hopelessness.',
+    '  Read the funnel shape, not the difference. An effect needs the forced counterfactual.',
+    `      ${'stage'.padEnd(34)}${'claimed'.padStart(14)}${'declined'.padStart(14)}`,
+    `      ${'denial decisions'.padEnd(34)}${String(dn.claimed).padStart(14)}${String(dn.declined).padStart(14)}`,
+    `      ${'lost on their free run'.padEnd(34)}${rateCell(dn.claimedLostFreeRun, dn.claimed)}${rateCell(dn.declinedLostFreeRun, dn.declined)}`,
+    `      ${'lost to their first action'.padEnd(34)}${rateCell(dn.claimedLostFirstAction, dn.claimed)}${rateCell(dn.declinedLostFirstAction, dn.declined)}`,
+    `      ${'lost later that round'.padEnd(34)}${rateCell(dn.claimedLostNextRound, dn.claimed)}${rateCell(dn.declinedLostNextRound, dn.declined)}`,
+    `      ${'survived the round they bought'.padEnd(34)}${rateCell(dn.claimedSurvived, dn.claimed)}${rateCell(dn.declinedSurvived, dn.declined)}`,
+    `      ${'WON the game'.padEnd(34)}${rateCell(dn.claimedWonGame, dn.claimed)}${rateCell(dn.declinedWonGame, dn.declined)}`,
+    `      ${'mean rounds after the decision'.padEnd(34)}${mean(dn.claimedRoundsAfter, dn.claimed).padStart(14)}${mean(dn.declinedRoundsAfter, dn.declined).padStart(14)}`,
+    '',
+    '  and two splits that decide how the funnel above should be read. "hopeless" is canFinishNow, not',
+    '  the bucket\'s reachSteady: they finish before this round is out, so turn order next round was',
+    '  never on offer and the bot cannot be charged for declining it. "had counterplay" is whether we',
+    '  gave anything up: with no other legal move, claiming is free and proves nothing about judgement.',
+    `      ${'hopeless anyway'.padEnd(34)}${rateCell(dn.claimedHopeless, dn.claimed)}${rateCell(dn.declinedHopeless, dn.declined)}`,
+    `      ${'had counterplay to give up'.padEnd(34)}${rateCell(dn.claimedWithCounterplay, dn.claimed)}${rateCell(dn.declinedWithCounterplay, dn.declined)}`,
+  )
+
+  const it2 = report.initiativeTies
+  lines.push(
+    '',
+    '  claiming, decomposed. The tie column above USED to count claiming against a maximum that',
+    '  included claiming itself, so winning outright counted as a tie and the "largest blind spot in',
+    '  the model" was mostly the bot getting the decision right. These three partition the decision,',
+    '  measured against the best ALTERNATIVE.',
+    row('decisions with an alternative', `${it2.decisions}`),
+    row('  claiming won outright', rate(it2.uniquelyBest, it2.decisions) + '  (not a tie)'),
+    row('  claiming tied the best', rate(it2.tiedWithBest, it2.decisions)),
+    row('  an alternative won', rate(it2.beaten, it2.decisions)),
+    '',
+    '  and what the seeded pick was left with. A tie goes to the second opinion first, so only what',
+    '  survives THAT is a coin flip. The gap is the only measure of whether the tie-break, which is',
+    '  shipped and paid for, separates anything here.',
+    row('ties handed to the tie-break', rate(it2.tiesOffered, it2.decisions)),
+    row('  still level afterwards', rate(it2.unresolved, it2.tiesOffered) + '  (the real coin flips)'),
+    row('  candidates flipped between', it2.unresolved === 0 ? 'n/a' : (it2.survivors / it2.unresolved).toFixed(1)),
+    '',
+    '  and what claiming tied WITH. Tying with pass means the search sees nothing to do and claiming is',
+    '  free; tying with an attack means it is weighing turn order against damage. Those want opposite',
+    '  policies, and one rate cannot tell them apart.',
+    row('tying candidates by move', it2.tyingKinds.length === 0
+      ? 'none'
+      : it2.tyingKinds.slice(0, 6).map(k => `${k.kind} ${k.count}`).join(', ')),
+  )
+
+  const cc = report.claimCost
+  lines.push(
+    '',
+    '  what claiming COST, over every claim rather than the denial bucket. Claiming forfeits the rest',
+    '  of your round and they spend it. A claim made when they could NOT finish next round, followed by',
+    '  a round they used to make sure they could, handed them the game; that case cannot appear in the',
+    '  denial bucket, which requires the threat to exist already. This is the quantity tailActions',
+    '  models, so a small number here means the tail is pricing a cost that is not there.',
+    row('claims made', `${cc.claims}`),
+    row('  free run measurable', rate(cc.measured, cc.claims) + '  (the rest ended inside it)'),
+    row('  threat already there', rate(cc.threatBefore, cc.measured)),
+    row('  threat CREATED by the free run', rate(cc.threatCreated, cc.measured)),
+    row('  their reach grew at all', rate(cc.reachGrew, cc.measured)),
+    row('  mean growth when it grew', cc.reachGrew === 0 ? 'n/a' : (cc.reachGrowth / cc.reachGrew).toFixed(1)),
+  )
+
   const tr = report.triggers
   lines.push(
     '',
