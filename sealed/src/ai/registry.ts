@@ -155,6 +155,19 @@ const WEIGHT_OVERRIDE = /^(.+)\+([A-Za-z][A-Za-z0-9]*)=(-?\d+(?:\.\d+)?)$/
  */
 const TIE_BREAK_SPEC = /^(.+)\/tie=(.*)$/
 
+/**
+ * `NAME/pass=N`, charging N evaluation points against `pass` at the root (#521).
+ *
+ * A suffix rather than a registry entry per value, because this is swept rather than chosen: the
+ * measured rate is ~2.7 discretionary mid-round passes a game against a competent player's ~0.15, and
+ * finding the penalty that closes that gap without making the bot burn cards to avoid passing is a
+ * curve, not a candidate.
+ *
+ * Fractional and negative are both allowed. Negative has no proposed use but costs nothing to permit,
+ * and refusing it would mean the control arm for a "does the sign matter" question could not be named.
+ */
+const PASS_PENALTY_SPEC = /^(.+)\/pass=(-?\d+(?:\.\d+)?)$/
+
 /** The fields a second opinion may set, and how to read each one. Anything else is a typo. */
 const TIE_BREAK_FIELDS = ['reply', 'width', 'depth', 'nodes', 'kinds'] as const
 
@@ -294,6 +307,17 @@ export function resolveAi(name: string): Ai {
   const ai = AIS[name]
   if (ai) return ai
 
+  // `/pass=N` is stripped first, for the same reason `/tie=` is: the remainder is an ordinary name and
+  // the charge folds into whatever limits it resolves to, so it composes with every other suffix.
+  const passSpec = PASS_PENALTY_SPEC.exec(name)
+  if (passSpec) {
+    const passPenalty = Number(passSpec[2])
+    const weighted = splitWeightOverride(passSpec[1])
+    const limits = beamLimitsFor(weighted.base) ?? namedLimitsFor(weighted.base)
+    if (limits === null) throw new Error(`Cannot add a pass penalty to "${weighted.base}"`)
+    return makeBeamGreedy({ ...DEFAULT_WEIGHTS, ...weighted.overrides }, { ...limits, passPenalty })
+  }
+
   // `/tie=...` is stripped first so it composes with every other suffix and spec: the remainder is an
   // ordinary name, and the tie-break is folded into whatever limits that name resolves to.
   const tieBreak = tieBreakFor(name)
@@ -340,6 +364,6 @@ export function resolveAi(name: string): Ai {
   throw new Error(
     `Unknown AI "${name}". Available: ${aiNames().join(', ')}, ` +
     'or beam:WIDTHxDEPTH[:NODES], or reply:POLICY[:WIDTHxDEPTH[:NODES]]. ' +
-    'Suffixes: +WEIGHT=VALUE, /tie=FIELD:VALUE[,FIELD:VALUE]',
+    'Suffixes: +WEIGHT=VALUE, /tie=FIELD:VALUE[,FIELD:VALUE], /pass=N',
   )
 }
