@@ -454,6 +454,29 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     `      ${'had counterplay to give up'.padEnd(34)}${rateCell(dn.claimedWithCounterplay, dn.claimed)}${rateCell(dn.declinedWithCounterplay, dn.declined)}`,
   )
 
+  const ps = report.passes
+  lines.push(
+    '',
+    '  doing nothing. A competent player passes about once every five to ten GAMES, and only with a',
+    '  read on what the opponent holds plus the answer in hand. Forced passes are excluded, since with',
+    '  no other legal move passing is not a decision and counting them understates the defect exactly',
+    '  where the board is emptiest.',
+    '',
+    '  Ending the round is NOT the defensible case. Claiming makes you done for the round rather than',
+    '  passing out of it, so the only pass that ends a spent round is the forced one, already excluded.',
+    '  "Worse than claiming" is the sharpest line here and needs no judgement about the position: with',
+    '  the opponent already passed, passing and claiming end the phase identically, except claiming also',
+    '  takes the initiative. Same board, one strictly better move.',
+    row('MID-ROUND passes per game', ps.games === 0 ? 'n/a' : `${(ps.midRound / ps.games).toFixed(2)}   target ~0.15`),
+    row('chosen passes per game', ps.games === 0 ? 'n/a' : (ps.taken / ps.games).toFixed(2)),
+    row('passed when it had a choice', rate(ps.taken, ps.offered)),
+    row('  mid-round (play continues)', rate(ps.midRound, ps.taken)),
+    row('  WORSE THAN CLAIMING', rate(ps.dominatedByClaim, ps.taken)),
+    row('  with an attack available', rate(ps.withAttackAvailable, ps.taken)),
+    row('  ending the action phase', rate(ps.endedPhase, ps.taken)),
+    row('forced (no other legal move)', `${ps.forced}`),
+  )
+
   const it2 = report.initiativeTies
   lines.push(
     '',

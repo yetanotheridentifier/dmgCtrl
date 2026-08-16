@@ -146,6 +146,36 @@ of it: 86.4% of the ties handed to it are still level afterwards, narrowed from 
 candidates to 2.4. The +2.35 stands, because resolving 13.6% of a 38% tie rate still moves about 5% of
 decisions.
 
+### Charging for doing nothing is worth +2.43 points
+
+The bot made **2.7 discretionary mid-round passes a game**, against roughly 0.15 for a competent
+player: passing while play continued, handing the opponent that many free turns. Charging `pass` 8
+evaluation points at the root brings it to 0.21 and measures **+2.43 points** (t = 3.19 on 11 df, 10 of
+12 shards positive, 2016 games against a matched control).
+
+**It was built to fix a behaviour, not to win games**, and the bar set beforehand was non-inferiority:
+self-play cannot normally see a habit both sides share, so a flat result was the expected outcome of a
+success. It measured positive instead, which the mechanism explains without strain, since the opponent
+was being handed 2.7 turns a game for nothing.
+
+The charge cannot be an evaluation weight. `evaluate` prices boards, and passing barely changes the
+board, which is the whole defect. It belongs on the candidate, in the search, where moves are compared.
+
+The response curve, in mid-round passes a game: **2.71 at 0, 0.67 at 4, 0.36 at 6, 0.21 at 8, 0.10 at
+12, 0.02 at 16 and above.** 8 is the smallest value inside the target band rather than the best value
+found; whether 12 wins more is unmeasured.
+
+**Overcharging is the failure mode to watch**, since a bot that must not pass will play a card for no
+benefit instead, which is worse than the habit being fixed. Forced passes are the tripwire, because
+burning a hand means running out of legal moves sooner, and they move only from 223 to 232 across the
+whole range. It did not appear at any value tested.
+
+Two measurement notes that cost time to learn. Every round ends with a pass by construction, so a raw
+pass count is dominated by structure at ~5.3 forced passes a game: **the defect is only visible once
+mid-round passes are separated out**. And ending a round is not the defensible pass, because claiming
+makes you done for the round rather than passing out of it, so the only pass that ends a spent round is
+the forced one.
+
 ### Searching past the round boundary works, and loses
 
 A line can be made to cross regroup and play on into the next round. Built, measured, **not shipped**:

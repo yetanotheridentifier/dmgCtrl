@@ -266,6 +266,23 @@ One ply is **not** the right second opinion, which was the original proposal: it
 same lockout, while `reply: 'null'` separates it 56.1 to 52. When the worst case cannot tell two moves
 apart, the upside can.
 
+### Passing is charged 8 points
+
+`pass` is the one candidate the search charges for directly. The bot made **2.7 discretionary mid-round
+passes a game** against roughly 0.15 for a competent player, handing over that many free turns; the
+charge brings it to 0.21 and is worth **+2.43 points** (t = 3.19 on 11 df, 10 of 12 shards positive,
+2016 games against a matched control).
+
+**It is not an evaluation weight and cannot be one.** Everything else here prices a board. Passing
+barely changes the board, which is precisely why the model could not see the defect, so the charge lives
+on the candidate in `search.ts` and applies at the root only: the frontier never passes on our own
+behalf, and the pass inside `ourTurnAgain` is the opponent's.
+
+The value is the **margin by which passing must beat the best alternative**. Bounded on both sides:
+too small changes nothing, too large makes the bot play a card for no benefit rather than pass, which is
+a worse habit than the one being fixed. 8 is the smallest value inside the target band, not the best
+found. See [experiments.md](experiments.md) for the response curve.
+
 Two properties keep it honest:
 
 - **Never negate.** `evaluate` stopped being zero-sum when the private hand term landed, so the

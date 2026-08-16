@@ -509,6 +509,27 @@ export interface BeamLimits {
    * reason: a rule allowed to beat a clear winner is a different bot rather than a tie policy.
    */
   initiativeTie?: 'take' | 'avoid'
+  /**
+   * Charged against `pass` at the root, in evaluation points (#521). Zero is the behaviour before this
+   * existed.
+   *
+   * **The margin by which passing must win to be chosen**, which is the requirement stated directly
+   * rather than approximated. Measured, the bot makes about 2.7 discretionary mid-round passes a game
+   * against a competent player's ~0.15.
+   *
+   * It cannot be an evaluation weight. `evaluate` prices BOARDS, and passing barely changes the board:
+   * the same position with the turn handed over scores almost identically, which is the whole defect.
+   * So the charge belongs to the candidate, in the search, where the comparison happens.
+   *
+   * **Bounded from both sides, and the sweep is finding where in between.** Too small and nothing
+   * changes. Too large and the bot plays a card for no benefit rather than pass, which is a worse
+   * behaviour than the one being fixed: the floor is that passing must still beat burning a card for
+   * nothing.
+   *
+   * Applied at the root only, which is the only place `pass` is ever a candidate: the frontier skips it
+   * explicitly, and the pass `ourTurnAgain` makes is the OPPONENT's, which must not be charged.
+   */
+  passPenalty?: number
 }
 
 export const DEFAULT_BEAM_LIMITS: BeamLimits = {
@@ -578,7 +599,8 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
     const lines: SearchLine[] = []
     for (const move of moves) {
       // `best` so far is alpha: a candidate that cannot beat it need not be finished.
-      const { best: value, line } = reachableFrom(state, move, me, asRole, inner, limits, budget, best)
+      const { best: raw, line } = reachableFrom(state, move, me, asRole, inner, limits, budget, best)
+      const value = chargeForPassing(raw, move, limits)
       candidates.push(value)
       if (line) lines.push(line)
       if (value > best) {
@@ -694,7 +716,8 @@ function breakTie(
   let best = -Infinity
   const winners: Action[] = []
   for (const move of tied) {
-    const { best: value } = reachableFrom(state, move, me, asRole, inner, second, budget, best)
+    const { best: raw } = reachableFrom(state, move, me, asRole, inner, second, budget, best)
+    const value = chargeForPassing(raw, move, second)
     if (value > best) {
       best = value
       winners.length = 0
@@ -704,6 +727,18 @@ function breakTie(
     }
   }
   return winners.length > 0 ? winners : tied
+}
+
+/**
+ * Charge a root candidate for doing nothing.
+ *
+ * A function rather than an inline subtraction because it is applied in two places, the main search and
+ * the tie-break's second opinion, and a penalty missing from the second would let `pass` win a tie it
+ * had already been charged out of.
+ */
+function chargeForPassing(value: number, move: Action, limits: BeamLimits): number {
+  const penalty = limits.passPenalty ?? 0
+  return penalty !== 0 && move.type === 'pass' ? value - penalty : value
 }
 
 /**

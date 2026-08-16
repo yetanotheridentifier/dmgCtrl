@@ -668,6 +668,63 @@ export function openDenialWatch(
  * pricing a cost that is not there, and its 84% share of the arm's 1.84x is wasted.
  */
 /**
+ * How often the bot does nothing (#521).
+ *
+ * The complaint is that it passes far more than a competent player, for whom a single pass is roughly a
+ * one-game-in-five-to-ten event. Nothing measured the rate: the harness reported how often `pass` TIED
+ * for the lead, which is a property of the evaluation, and never how often it was actually chosen,
+ * which is the behaviour being complained about.
+ *
+ * **Forced passes are excluded and reported separately.** With no other legal move, passing is not a
+ * decision, and a rate diluted by them would understate the defect exactly where the board is emptiest.
+ *
+ * `withAttackAvailable` is the sharpest of these: passing while a ready unit could attack is the pass a
+ * player notices, and it needs no model of the position to call it out.
+ */
+export interface PassStat {
+  games: number
+  /** Decisions where passing was legal and something else was too. */
+  offered: number
+  /** Of those, passes actually taken. */
+  taken: number
+  /**
+   * Of those taken, how many ended the action phase.
+   *
+   * **Not the defensible column**, which is what it was first taken for. Claiming makes you done for the
+   * round rather than passing out of it, so the only pass that ends a round with nothing left to do is
+   * the FORCED one, and that is excluded by construction. A chosen pass that ends the round is a pass
+   * made while alternatives existed.
+   */
+  endedPhase: number
+  /**
+   * Of those taken, how many were **mid-round**: nobody had passed or claimed, so the round carried on
+   * and the opponent got a free turn out of it.
+   *
+   * **This is the defect.** Every round ends with a pass by construction, so a raw pass count is
+   * dominated by structure: forced passes run at ~5.3 a game over ~6.5 rounds. A competent player's
+   * "one pass every five to ten games" is about discretionary passes, and this is that number.
+   */
+  midRound: number
+  /** Of those taken, how many had an attack available. */
+  withAttackAvailable: number
+  /**
+   * Of those taken, how many were **strictly worse than claiming**.
+   *
+   * When the opponent has already passed, passing ends the action phase (two consecutive passes) and so
+   * does claiming (CR 1.15.5c). They reach the same board, except that claiming also takes the
+   * initiative and acts first next round. So wherever claiming was legal in that window, passing gave a
+   * free resource away for nothing.
+   *
+   * This is the sharpest number in the block: it needs no judgement about the position, no model of
+   * what the opponent holds, and no view on whether passing is ever right. Two moves, identical
+   * outcome, one strictly better.
+   */
+  dominatedByClaim: number
+  /** Passing was the only legal move. Not a decision, and never counted in the rates above. */
+  forced: number
+}
+
+/**
  * How the claim decision actually resolves, decomposed (#516).
  *
  * Exists because the tie column it sits beside was measuring the wrong thing. "Tied" was implemented as
@@ -978,6 +1035,7 @@ export interface DecisionReport {
   denialOutcome: DenialOutcomeStat
   claimCost: ClaimCostStat
   initiativeTies: InitiativeTieStat
+  passes: PassStat
   triggers: TriggerStat
   pin: PinStat
   advantage: AdvantageStat
@@ -1144,6 +1202,11 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   const blocked: BlockedReachStat = {
     decisions: 0, active: 0, activeAndLaneShut: 0, totalQuantity: 0, widestQuantity: 0,
   }
+  const passes: PassStat = {
+    games: 0, offered: 0, taken: 0, endedPhase: 0, midRound: 0,
+    withAttackAvailable: 0, dominatedByClaim: 0, forced: 0,
+  }
+
   const tyingKinds = new Map<string, number>()
   const initTies: InitiativeTieStat = {
     decisions: 0, uniquelyBest: 0, tiedWithBest: 0, beaten: 0,
@@ -1199,6 +1262,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       const shuffle = <T,>(arr: T[]): T[] => { shuffleSeed.v = nextSeed(shuffleSeed.v); return seededShuffle(arr, shuffleSeed.v) }
       let s: GameState = initGame(deck, deck, cardDb, { firstPlayer: g % 2 === 0 ? 'player' : 'opponent', shuffle, rngSeed: seed })
       games++
+      passes.games++
       let lastRole: Exclude<Role, 'neutral'> | null = null
       let sampledRound = 0
       // Per seat, so an exposure can be charged to whoever made it when the game is decided.
@@ -1593,11 +1657,41 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           if (s.consecutivePasses >= 1) cheapTaken++
           else { forfeitedCount++; forfeited += s.players[me].units.filter(u => !u.exhausted).length }
         }
+        // Doing nothing (#521). Counted from the candidate list rather than from the tie columns: how
+        // often `pass` TIES is a property of the evaluation, how often it is CHOSEN is the behaviour.
+        // Carried to the post-resolve check below, so a FORCED pass that ends the phase is not counted
+        // as a phase-ending choice. Without it `endedPhase` exceeded `taken`, which is how it was found.
+        let passWasChosen = false
+        if (moves.some(m => m.type === 'pass')) {
+          const alternatives = moves.filter(m => m.type !== 'pass')
+          if (alternatives.length === 0) passes.forced++
+          else {
+            passes.offered++
+            if (action.type === 'pass') {
+              passes.taken++
+              passWasChosen = true
+              if (alternatives.some(m => m.type === 'attack')) passes.withAttackAvailable++
+              // Neither side has stopped, so this pass does not end the round: it hands over a turn and
+              // play continues. Read off the board rather than from the resolve, so it stays a property
+              // of the decision the bot faced.
+              if (s.consecutivePasses === 0 && s.initiativeTakenBy === null) passes.midRound++
+              // Their pass already stands, so ours ends the phase; claiming ends it too and takes the
+              // initiative with it. Same board, one strictly better move.
+              if (s.consecutivePasses >= 1 && alternatives.some(m => m.type === 'takeInitiative')) {
+                passes.dominatedByClaim++
+              }
+            }
+          }
+        }
+
         const beforeAction = s
         // Read BEFORE the resolve: an answer is a decision the card handed the player, not an action
         // they chose to take, and the funnel's "their first action" stage must not fire on one.
         const wasAnswer = hasPendingChoices(beforeAction)
         s = resolve(s, action)
+        if (passWasChosen && beforeAction.phase === 'action' && s.phase !== 'action') {
+          passes.endedPhase++
+        }
         for (const watch of denialWatches) advanceDenialWatch(watch, s, me, wasAnswer)
         for (const watch of claimWatches) advanceClaimWatch(watch, s, claimCost)
 
@@ -1678,6 +1772,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
     initiativeHorizon: horizon,
     denialOutcome,
     claimCost,
+    passes,
     initiativeTies: {
       ...initTies,
       tyingKinds: [...tyingKinds.entries()]

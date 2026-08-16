@@ -117,8 +117,28 @@ export const beamAi = makeBeamGreedy(DEFAULT_WEIGHTS)
  * Unrestricted: restricting it to answer, play and resource measured indistinguishable (+4.25 against
  * +4.9), so the simpler form ships.
  */
+/**
+ * `passPenalty` is charged against doing nothing, and it is worth **+2.43 points** (t = 3.19 on 11 df,
+ * 10 of 12 shards positive, 2016 games against a matched control).
+ *
+ * It was built to fix a behaviour rather than to win games. The bot made **2.7 discretionary mid-round
+ * passes a game** against a competent player's roughly 0.15, handing over that many free turns; at 8 it
+ * makes 0.21. Self-play cannot normally see a habit both sides share, so a flat win rate was the
+ * expected outcome and the bar was non-inferiority. It measured positive instead, which is consistent
+ * with the mechanism: the opponent was being given 2.7 turns a game for nothing.
+ *
+ * **8 is the smallest value inside the target band, not the best value found.** The curve runs 2.71
+ * passes a game at 0, 0.67 at 4, 0.36 at 6, 0.21 at 8, 0.10 at 12, 0.02 at 16. Whether 12 wins more is
+ * unmeasured. Smaller was chosen deliberately: overcharging pushes the bot into playing cards for no
+ * benefit, which is a worse habit than the one being fixed.
+ *
+ * That failure mode did **not** appear at any swept value. Forced passes, which rise when a bot burns
+ * its hand and runs out of legal moves, move only from 223 to 232 across the whole range.
+ *
+ * `beam-reply/pass=0` names the pre-fix bot, so the control stays addressable without a registry entry.
+ */
 export const BEAM_REPLY_LIMITS: BeamLimits = {
-  ...DEFAULT_BEAM_LIMITS, reply: 'pessimistic', tieBreak: { reply: 'null' },
+  ...DEFAULT_BEAM_LIMITS, reply: 'pessimistic', tieBreak: { reply: 'null' }, passPenalty: 8,
 }
 
 export const beamReplyAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_LIMITS)

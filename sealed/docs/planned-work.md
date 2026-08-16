@@ -13,22 +13,13 @@ and then in one line with a pointer.
 Ordered on one principle: **correctness, then structure, then calibration.** Anything that changes the
 engine or the horizon invalidates a calibration done before it.
 
-1. **#521 the bot passes far more than a competent player does.** A single pass should be a once-in-five
-   -to-ten-games event and it is routine. `pass` sits in the tied lead set 51.9% of the time, the
-   highest of any decision kind, and the search has no time preference at all, so delay is free by
-   construction.
+1. **Confirm the pass penalty is at the right value.** It ships at 8, worth +2.43 points, and that is
+   the smallest value inside the target band rather than the best found: 12 halves the pass rate again
+   (0.10 a game against 0.21) and is unmeasured. One A/B of `beam-reply/pass=12` against the shipped bot
+   settles it, and 6 is worth including if the compute is there.
 
-   **The rate itself is unmeasured**: nothing reports how often `pass` is chosen, or passes per game,
-   which is the quantity the complaint is about. Build that before any fix, and read it against a human
-   baseline rather than against itself.
-
-   Check first whether crossing the round boundary made it worse, by comparing the pass rate with the
-   horizon off and on. A line that ends the phase lands on a regroup where both sides ready everything
-   and bank a resource, which is the shape of this defect.
-
-   A correct pass needs a read on the opponent's hand, which this model does not have, so the goal is
-   **fewer bad passes, not better ones.** Gate on non-inferiority and scripted positions: two equally
-   passive bots produce ordinary-looking games, so self-play cannot see this.
+   Watch forced passes, not just the win rate. Overcharging makes the bot play cards for no benefit,
+   which is a worse habit than the one being fixed, and forced passes are what rise when it does.
 2. **Finish what #516 scoped and did not do.** The horizon itself is built, measured at -3.72 points and
    **shipped disabled**, so these are the parts that outlived it.
    - **Re-run term sensitivity for `resourceSurplus` and `hand.canAct`.** They price things across the
