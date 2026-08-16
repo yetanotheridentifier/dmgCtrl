@@ -283,7 +283,13 @@ function choiceMoves(state: GameState): Action[] {
   const p = state.players[state.activePlayer]
   const moves: Action[] = []
 
-  for (const choice of state.pendingChoices ?? []) {
+  // An outstanding "who resolves first" gates the whole queue (CR 7.6.10). Offering anything alongside
+  // it would let the player settle the order by accident, by answering one of their own triggers and
+  // thereby choosing themselves without being asked.
+  const gate = (state.pendingChoices ?? []).find(c => c.kind === 'chooseTriggerOrder' && c.controller === state.activePlayer)
+  const queue = gate ? [gate] : (state.pendingChoices ?? [])
+
+  for (const choice of queue) {
     if (choice.controller !== state.activePlayer) continue
     switch (choice.kind) {
       case 'ambush': {
@@ -376,6 +382,12 @@ function choiceMoves(state: GameState): Action[] {
         // mandatory (`optional: false`, e.g. Snub Fighter Squadron's "Deal 1 to a space unit").
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         if (choice.optional !== false) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'chooseTriggerOrder': {
+        // Exactly two answers and no decline: someone has to go first (CR 7.6.10).
+        moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 0 }) // us first
+        moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 1 }) // them first
         break
       }
       case 'chooseOne': {

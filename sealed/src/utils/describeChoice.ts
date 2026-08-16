@@ -234,6 +234,9 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'chooseOne':
       return ['choose one effect']
 
+    case 'chooseTriggerOrder':
+      return ['choose which player resolves their triggered abilities first']
+
     // ── Searching the deck ────────────────────────────────────────────────────────────────────
     case 'search':
       return ['choose a ground unit to discard from the revealed cards']

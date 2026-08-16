@@ -151,12 +151,12 @@ function resolveAction(state: GameState, action: Action): GameState {
     // choice's source, which carries the original card down an arbitrarily long chain (#374).
     case 'skipTrigger': {
       const parent = action.choiceId ? findChoice(state, action.choiceId) : activeChoice(state)
-      return inheritSource(state, resolveSkip(state, action.choiceId), parent)
+      return promoteNested(state, inheritSource(state, resolveSkip(state, action.choiceId), parent))
     }
     case 'acceptChoice': {
       const parent = findChoice(state, action.choiceId)
       const next = resolveAccept(state, action.choiceId, action.targetInstanceId, action.deckIndex, action.optionIndex, action.baseTarget, action.handIndex, action.cardName)
-      return inheritSource(state, next, parent)
+      return promoteNested(state, inheritSource(state, next, parent))
     }
     case 'resourceCard':
       return requirePhase(state, 'regroup', () => regroupChoice(state, action.handIndex))
@@ -183,6 +183,35 @@ function inheritSource(before: GameState, after: GameState, parent: PendingChoic
   if (!parent?.source) return after
   const withoutParent = { ...before, pendingChoices: (before.pendingChoices ?? []).filter(c => c.id !== parent.id) }
   return stampChoiceSource(withoutParent, after, parent.source)
+}
+
+/**
+ * Move abilities triggered while ANSWERING a choice to the front of the queue (CR 7.6.11, 7.6.12).
+ *
+ * "After resolving a triggered ability A, if any new abilities were triggered while resolving it, the
+ * new abilities are considered nested abilities and must be resolved before any other abilities
+ * triggered at the same time as ability A." Each layer resolves fully before returning to an earlier
+ * one.
+ *
+ * `pushChoice` appends, which is right for a BATCH of simultaneous triggers (`finishDefeats` fires one
+ * per defeated unit, and they are genuinely at the same time) and wrong for a nested one, which was
+ * landing behind the opponent's waiting trigger. The CR's own example is the test: Greedo and Vanguard
+ * trade, Greedo's ability defeats Motti, and Motti's must resolve before Vanguard's.
+ *
+ * The distinction the engine can actually make is **when** the push happened: during a plain action it
+ * is a batch, during the resolution of an answer it is nested. That is what this hook keys on, so no
+ * flag has to be threaded through the effect layer.
+ *
+ * Relative order within each group is preserved: several nested abilities are themselves simultaneous
+ * and belong to their controller to order (CR 7.6.9).
+ */
+function promoteNested(before: GameState, after: GameState): GameState {
+  const queue = after.pendingChoices ?? []
+  if (queue.length < 2) return after
+  const waited = new Set((before.pendingChoices ?? []).map(c => c.id))
+  const nested = queue.filter(c => !waited.has(c.id))
+  if (nested.length === 0 || nested.length === queue.length) return after
+  return { ...after, pendingChoices: [...nested, ...queue.filter(c => waited.has(c.id))] }
 }
 
 function requirePhase(state: GameState, phase: GameState['phase'], fn: () => GameState): GameState {
@@ -910,6 +939,14 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         if (choice.markUsed) next = markAbilityUsed(next, choice.controller, choice.markUsed.instanceId, choice.markUsed.key)
       }
       break
+    case 'chooseTriggerOrder': {
+      // Option 1 hands the turn over so they clear their whole batch first; `resumeAfterChoice` brings
+      // it back once their side of the queue drains, which is the same path an interjected choice uses.
+      if ((optionIndex ?? 0) === 1) {
+        next = { ...next, activePlayer: opponentOf(choice.controller), pendingResumeActive: choice.controller }
+      }
+      break
+    }
     case 'chooseOne': {
       // Choose-one/modal: apply the picked option's effect (Sloane's arena buff).
       const opt = choice.options[optionIndex ?? 0]
@@ -1697,8 +1734,19 @@ function finishDistribution(state: GameState, choice: PendingChoice & { kind: 'd
 }
 
 function handOffOpponentChoice(state: GameState, actor: PlayerId): GameState {
-  if (!hasPendingChoices(state) || state.pendingChoices!.some(c => c.controller === actor)) return state
-  const other = state.pendingChoices![0].controller
+  if (!hasPendingChoices(state)) return state
+  const queue = state.pendingChoices!
+  const ours = queue.some(c => c.controller === actor)
+  const theirs = queue.some(c => c.controller === opponentOf(actor))
+  // CR 7.6.10: triggers owed on both sides, so the ACTIVE player picks which player resolves first.
+  // Raised at the front, because it gates every other choice in the queue and answering anything else
+  // would settle the order by accident.
+  if (ours && theirs && !queue.some(c => c.kind === 'chooseTriggerOrder')) {
+    const ask: PendingChoice = { kind: 'chooseTriggerOrder', id: `order-${queue.length}`, controller: actor }
+    return { ...state, activePlayer: actor, pendingChoices: [ask, ...queue] }
+  }
+  if (ours) return state
+  const other = queue[0].controller
   return other === actor ? state : { ...state, activePlayer: other, pendingResumeActive: actor }
 }
 

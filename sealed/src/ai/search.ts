@@ -657,9 +657,12 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
     }
 
     const afterInitiative = settleInitiativeTie(finalists, limits.initiativeTie)
-    const decided = limits.upgradeTie === true && afterInitiative.length > 1
+    const afterUpgrade = limits.upgradeTie === true && afterInitiative.length > 1
       ? settleUpgradeTie(state, afterInitiative, me)
       : afterInitiative
+    // Unconditional, because it restores the behaviour that existed before the ordering choice did
+    // rather than introducing a new preference. See `settleTriggerOrderTie`.
+    const decided = afterUpgrade.length > 1 ? settleTriggerOrderTie(state, afterUpgrade) : afterUpgrade
     return decided[Math.floor(seededUnit(state.rngSeed) * decided.length)]
   }
 }
@@ -753,6 +756,27 @@ function breakTie(
     }
   }
   return winners.length > 0 ? winners : tied
+}
+
+/**
+ * When the search cannot separate "I resolve first" from "they resolve first", resolve first.
+ *
+ * **A regression guard rather than a heuristic.** Before the ordering choice existed the engine always
+ * made the active player go first; adding the choice (CR 7.6.10) replaced a fixed sensible answer with
+ * a seeded coin flip wherever the search is indifferent, which it is on the scripted position that
+ * raised this: both options score 24.
+ *
+ * Resolving first is the better default because your abilities act on the board as it stands, before
+ * the opponent's have changed it. Applied only to a tie, so the search overrules it whenever it can
+ * actually see a difference, which is the whole point of asking.
+ */
+export function settleTriggerOrderTie(state: GameState, tied: Action[]): Action[] {
+  const isOrder = (m: Action): boolean =>
+    m.type === 'acceptChoice'
+    && (state.pendingChoices ?? []).some(c => c.id === m.choiceId && c.kind === 'chooseTriggerOrder')
+  if (!tied.every(isOrder)) return tied
+  const first = tied.filter(m => m.type === 'acceptChoice' && (m.optionIndex ?? 0) === 0)
+  return first.length > 0 ? first : tied
 }
 
 /**

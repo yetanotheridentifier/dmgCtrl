@@ -23,8 +23,8 @@ that fires more than once for one event relies on it.
 ## Answering
 
 `legalMoves` → `choiceMoves` offers options for **every** pending choice the active player controls,
-not just the head, so simultaneous choices can be resolved in any order (the active player orders
-simultaneous triggers, per CR).
+not just the head, so a player resolves their own simultaneous triggers in any order they like
+(CR 7.6.9).
 
 - **`acceptChoice { choiceId, targetInstanceId?, deckIndex?, optionIndex?, baseTarget?, handIndex?, cardName? }`**
   takes the positive option.
@@ -39,6 +39,34 @@ making the answered ability appear not to resolve. There is deliberately no such
 `resumeAfterChoice` decides what happens as the queue drains: the active player finishes theirs
 first, then control passes; round-start choices (`resumeAtInitiative`) begin the action phase with
 the initiative holder, mid-turn choices `advanceTurn`.
+
+### Nested abilities jump the queue
+
+**CR 7.6.11 and 7.6.12**: an ability triggered *while resolving* another must resolve before anything
+triggered at the same time as its parent, and each layer resolves fully before returning to an earlier
+one.
+
+`pushChoice` appends, which is correct for a **batch** of simultaneous triggers (`finishDefeats` fires
+one per defeated unit, and those genuinely are at the same time) and wrong for a nested one, which
+landed behind the opponent's waiting trigger.
+
+The signal separating the two is **when the push happened**: during a plain action it is a batch,
+during the resolution of an answer it is nested. `promoteNested` keys on exactly that, next to
+`inheritSource` which already hooks both answer paths, so nothing has to be threaded through the effect
+layer. Relative order within each group is preserved, since simultaneous nested abilities are their
+own controller's to order.
+
+The CR's worked example is the test: two units trade, one's When Defeated defeats a third unit, and
+that third unit's trigger resolves before the opponent's original.
+
+### Who resolves first is not yet the active player's choice
+
+**CR 7.6.10** gives the **active player** the choice of which *player* resolves their triggers first,
+and only that: the opponent's internal order is never theirs to pick.
+
+The engine does not offer it. The active player simply goes first, and `enterRegroup` prefers the
+initiative holder, which is the wrong seat under the rule as well as the wrong mechanism. It is a
+simplification rather than a bug in the queue, and it is tracked separately.
 
 ### A decided game has no pending choices
 
