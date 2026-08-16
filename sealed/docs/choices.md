@@ -40,6 +40,25 @@ making the answered ability appear not to resolve. There is deliberately no such
 first, then control passes; round-start choices (`resumeAtInitiative`) begin the action phase with
 the initiative holder, mid-turn choices `advanceTurn`.
 
+### A decided game has no pending choices
+
+**CR 6.6.2**: once a player's base has 0 remaining HP they "cannot take any actions, and cannot resolve
+any abilities or effects", and CR 1.16.5 ranks base defeat first among the state-based situations that
+pre-empt waiting triggers. So winning discards whatever was waiting, in two places:
+
+- `checkWin` clears `pendingChoices` when it sets a winner.
+- `pushChoice` refuses to add one to a decided game.
+
+Both, because whether a trigger is raised before or after the win check varies by card and by code path.
+A choice left pending on a won game is **unanswerable**, since `legalMoves` returns nothing once
+`winner` is set, so it strands whatever is presenting it: an attack that won the game while triggering
+Camtono put a card-reveal on top of the game-over screen that could be neither played nor dismissed, and
+the menu could not be reached.
+
+The rule belongs in the engine rather than in overlay ordering. A choice that does not exist cannot be
+rendered, whereas a UI fix would leave the impossible state in the model for the next surface to trip
+over.
+
 ### Suspending combat
 
 An attack that raises a choice mid-flight splits into `beginAttack` (exhaust, Restore, `onDefense`,
