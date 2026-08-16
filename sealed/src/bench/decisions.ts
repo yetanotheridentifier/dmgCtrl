@@ -722,6 +722,56 @@ export interface PassStat {
   dominatedByClaim: number
   /** Passing was the only legal move. Not a decision, and never counted in the rates above. */
   forced: number
+  /**
+   * Decisions the charge FLIPPED: passing had the best raw score and lost only because it was charged.
+   *
+   * The exact set the penalty is responsible for, recovered from the trace rather than inferred, since
+   * `candidates` holds post-charge values and `passPenalty` says what to add back.
+   *
+   * **This is where the charge either pays for itself or does harm.** Spending resources is free in the
+   * evaluation (`payCost` exhausts rather than removes, and both `resourceValue` and `handValue` count
+   * the total), so playing a card costs only its hand value, roughly 1 to 3 points for a modest card,
+   * against a charge of 8. The bot should therefore prefer a useless card to passing, which is a worse
+   * habit than the one being fixed.
+   */
+  flipped: number
+  /** What it played instead, over the flipped decisions. A tally of real actions against filler. */
+  flippedInto: Array<{ kind: string; count: number }>
+}
+
+/**
+ * Upgrades the bot attaches to its OWN units that make them worse (#509).
+ *
+ * Reported from live play: the bot played Pointless to Resist, "attached unit gets -3/-0 while attacking
+ * a base", on its own unit. The engine is right, since upgrades attach to any unit unless a card says
+ * otherwise, and the target choice is a genuine tie: `presence` sums `effectivePower` with **no
+ * context**, so `ctx.attackingBase` is false, the -3 never appears, and friendly and enemy targets score
+ * identically.
+ *
+ * Measured by comparing the host's attacking-base power across the attachment rather than by reading
+ * card text, so it catches any upgrade that is a downgrade in the context that matters, whatever the
+ * mechanism.
+ *
+ * The model is only **half** blind, which is why this is worth a number rather than an assumption:
+ * `race.ts` computes power with `{ attacking: true, attackingBase: true }`, so the clock and the role
+ * DO see the -3. The board term, which dominates, does not.
+ */
+export interface SelfDebuffStat {
+  /** Upgrades attached to a friendly unit. */
+  onOwnUnits: number
+  /** Upgrades attached to an enemy unit. */
+  onEnemyUnits: number
+  /**
+   * Attachments that lowered the host's power when attacking a base, by whose unit was chosen.
+   *
+   * **Both sides are needed or the number says nothing.** Counting only our own units cannot tell "the
+   * bot always targets correctly" from "a debuff upgrade never came up", since a correct play onto an
+   * enemy leaves no trace. The rate that matters is `own / (own + enemy)`: about half means the tie is
+   * real and decided by coin flip, near zero means the bot is choosing correctly by some route, and
+   * zero of zero means the situation never arose and this diagnostic cannot speak to it.
+   */
+  ownWorsened: number
+  enemyWorsened: number
 }
 
 /**
@@ -1036,6 +1086,7 @@ export interface DecisionReport {
   claimCost: ClaimCostStat
   initiativeTies: InitiativeTieStat
   passes: PassStat
+  selfDebuff: SelfDebuffStat
   triggers: TriggerStat
   pin: PinStat
   advantage: AdvantageStat
@@ -1202,10 +1253,12 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   const blocked: BlockedReachStat = {
     decisions: 0, active: 0, activeAndLaneShut: 0, totalQuantity: 0, widestQuantity: 0,
   }
+  const flippedInto = new Map<string, number>()
   const passes: PassStat = {
     games: 0, offered: 0, taken: 0, endedPhase: 0, midRound: 0,
-    withAttackAvailable: 0, dominatedByClaim: 0, forced: 0,
+    withAttackAvailable: 0, dominatedByClaim: 0, forced: 0, flipped: 0, flippedInto: [],
   }
+  const selfDebuff: SelfDebuffStat = { onOwnUnits: 0, onEnemyUnits: 0, ownWorsened: 0, enemyWorsened: 0 }
 
   const tyingKinds = new Map<string, number>()
   const initTies: InitiativeTieStat = {
@@ -1667,6 +1720,19 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           if (alternatives.length === 0) passes.forced++
           else {
             passes.offered++
+            // Did the charge decide this? Add the penalty back to the pass candidate and see whether it
+            // would have led. Only meaningful when the trace describes THIS decision, hence the length
+            // guard used everywhere else in this file.
+            if (action.type !== 'pass' && trace && trace.passPenalty > 0
+              && trace.candidates.length === moves.length) {
+              const passIndex = moves.findIndex(m => m.type === 'pass')
+              const raw = trace.candidates[passIndex] + trace.passPenalty
+              const bestOther = Math.max(...trace.candidates.filter((_, i) => i !== passIndex))
+              if (raw > bestOther) {
+                passes.flipped++
+                flippedInto.set(action.type, (flippedInto.get(action.type) ?? 0) + 1)
+              }
+            }
             if (action.type === 'pass') {
               passes.taken++
               passWasChosen = true
@@ -1691,6 +1757,26 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         s = resolve(s, action)
         if (passWasChosen && beforeAction.phase === 'action' && s.phase !== 'action') {
           passes.endedPhase++
+        }
+
+        // Attaching an upgrade to our own unit that makes it WORSE (#509). Compared across the
+        // attachment in the attacking-base context, rather than read off the card, so any upgrade that
+        // is a downgrade where it matters is caught however it is implemented.
+        if (action.type === 'playUpgrade' && action.targetInstanceId !== undefined) {
+          const ctx = { attacking: true, attackingBase: true }
+          for (const seat of [me, foe]) {
+            const before = beforeAction.players[seat].units.find(u => u.instanceId === action.targetInstanceId)
+            const after = s.players[seat].units.find(u => u.instanceId === action.targetInstanceId)
+            if (!before || !after) continue
+            const worse = effectivePower(s, after, ctx) < effectivePower(beforeAction, before, ctx)
+            if (seat === me) {
+              selfDebuff.onOwnUnits++
+              if (worse) selfDebuff.ownWorsened++
+            } else {
+              selfDebuff.onEnemyUnits++
+              if (worse) selfDebuff.enemyWorsened++
+            }
+          }
         }
         for (const watch of denialWatches) advanceDenialWatch(watch, s, me, wasAnswer)
         for (const watch of claimWatches) advanceClaimWatch(watch, s, claimCost)
@@ -1772,7 +1858,13 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
     initiativeHorizon: horizon,
     denialOutcome,
     claimCost,
-    passes,
+    selfDebuff,
+    passes: {
+      ...passes,
+      flippedInto: [...flippedInto.entries()]
+        .map(([kind, count]) => ({ kind, count }))
+        .sort((a, b) => b.count - a.count),
+    },
     initiativeTies: {
       ...initTies,
       tyingKinds: [...tyingKinds.entries()]

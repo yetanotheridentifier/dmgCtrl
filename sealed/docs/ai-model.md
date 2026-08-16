@@ -266,6 +266,20 @@ One ply is **not** the right second opinion, which was the original proposal: it
 same lockout, while `reply: 'null'` separates it 56.1 to 52. When the worst case cannot tell two moves
 apart, the upside can.
 
+### A hostile upgrade goes to their unit when the search cannot tell
+
+`ai/upgradeValue.ts` answers one question the board terms cannot: **would this upgrade make its host
+worse when it triggers?** A class of cards does nothing on play and everything later, so two boards
+that differ only in whose unit received one score identically.
+
+Applied **only to candidates the search has already declared equal**, which is not caution: where a unit
+can act inside the horizon the search plays the effect out and is already right, so ties are exactly the
+positions where it is blind.
+
+The delta is computed against the specific host, in the contexts a condition can name, and a keyword
+grant never offsets a stat loss. See [experiments.md](experiments.md) for the pool-wide results and the
+one card that forced that ordering.
+
 ### Passing is charged 8 points
 
 `pass` is the one candidate the search charges for directly. The bot made **2.7 discretionary mid-round
