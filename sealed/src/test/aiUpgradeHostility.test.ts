@@ -114,10 +114,33 @@ describe('upgrade hostility', () => {
     expect(BEAM_REPLY_UPGRADE_BLIND_LIMITS.upgradeTie).toBe(false)
   })
 
-  /** And ordinary upgrades are not hostile, or the rule would start giving away good cards. */
-  it('leaves ordinary upgrades alone', () => {
-    for (const id of ['ASH_086', 'ASH_181', 'ASH_134', 'ASH_229']) {
-      expect(hostility(id), `${cards[id]?.name ?? id} must not read as hostile`).toBeLessThanOrEqual(0)
-    }
+  /**
+   * **Every non-CONDITION upgrade in the set, not a sample.**
+   *
+   * This is the risk that matters. The rule can only do harm by misreading a good upgrade and handing
+   * it to the opponent, and that is bounded by checking the pool rather than by playing games: the
+   * policy fires so rarely that an 80-game screen diverged in zero games, and a 2,000-game run would be
+   * underpowered by construction rather than merely expensive.
+   *
+   * Driven off the card data, so a new set is covered the day it is added instead of whenever someone
+   * remembers to extend a list.
+   */
+  it('never reads an ordinary upgrade as hostile', () => {
+    const ordinary = (ashSet as SwuCard[])
+      .filter(c => c.Type === 'Upgrade' && !(c.Traits ?? []).includes('CONDITION'))
+      .map(c => `ASH_${c.Number}`)
+    expect(ordinary.length, 'the pool must actually be loaded').toBeGreaterThan(15)
+    const wrong = ordinary.filter(id => hostility(id) > 0)
+    expect(wrong.map(id => `${id} ${cards[id]?.name ?? ''}`), 'would be given to the opponent').toEqual([])
+  })
+
+  /** And the reverse: every CONDITION reads hostile, which is what the fallback exists to guarantee. */
+  it('reads every CONDITION upgrade in the set as hostile', () => {
+    const conditions = (ashSet as SwuCard[])
+      .filter(c => c.Type === 'Upgrade' && (c.Traits ?? []).includes('CONDITION'))
+      .map(c => `ASH_${c.Number}`)
+    expect(conditions.length).toBe(5)
+    const missed = conditions.filter(id => hostility(id) <= 0)
+    expect(missed.map(id => `${id} ${cards[id]?.name ?? ''}`), 'left on our own units').toEqual([])
   })
 })

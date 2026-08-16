@@ -168,6 +168,9 @@ Everything is optional:
     forfeited round modelled. Measured at **-3.72 points** over 2016 games at **1.84x** the cost, and
     **not shipped**; kept registered because the mechanism works even though the bot does not win with
     it, so the question is worth re-asking with the tail removed.
+  - `beam-reply-upgrade-blind` the deployed model without the hostile-upgrade tie policy. The control
+    for that fix, and the only way to name the pre-fix bot: the policy is a boolean on the limits with
+    no suffix grammar, so an A/B without this entry compares the arm with itself and reports `sd 0.00`.
   - `beam-claim-ties` / `beam-hold-ties` the deployed model always taking a tied initiative, and never
     taking one. A pair, because one arm alone cannot tell "claiming is underpriced" from "the tie is
     genuinely balanced"; the gap between them sizes what turn order is worth at the margin. Both only
@@ -796,6 +799,22 @@ and so read as behaviour rather than as a gap:
   already passed, and the mean ready units it still had when it claimed mid-phase. That last number
   is the clearest read on whether the AI is claiming sensibly: low means it claims when it has little
   left to do, high means it is throwing away a board full of attackers.
+
+### What the pass charge is buying, and where debuffs land
+
+Two counters that exist to police shipped behaviour rather than to find something new.
+
+**Decisions the charge flipped.** `SearchTrace` carries the penalty, so the pre-charge score is
+recoverable and "would this have gone the other way for free" is an exact question rather than an
+inference. Those are the decisions the charge is responsible for, and the tally of what was played
+instead is the verdict: real actions mean it works, filler means one bad habit was traded for a worse
+one. Currently 52 of 1832 decisions, into `takeInitiative` 21, `playUnit` 13, `attack` 13 and nothing at
+all into playing a card for no benefit.
+
+**Debuff upgrades, by whose unit they landed on.** Both sides are reported, because our own count alone
+cannot tell "always targets correctly" from "never came up": a correct play onto an enemy leaves no
+trace. Read `own / (own + enemy)`; 0 of 0 means the diagnostic cannot speak. Currently 0 of 5 onto our
+own units, so the general case is healthy and the tie policy exists for the residue.
 
 ### Denial: following a decision to the end of its game
 
