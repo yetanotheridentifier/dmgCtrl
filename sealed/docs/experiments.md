@@ -176,6 +176,38 @@ mid-round passes are separated out**. And ending a round is not the defensible p
 makes you done for the round rather than passing out of it, so the only pass that ends a spent round is
 the forced one.
 
+### A class of upgrades is invisible to a board evaluation
+
+Some upgrades do nothing when played and everything later: -3 power while attacking a base, doubled
+incoming damage, a burn when the attack ends, a tax on every ready. **The evaluation prices boards, so
+it cannot tell a friendly target from an enemy one**, and the seeded pick decides.
+
+It only bites when nothing can act inside the horizon. Where the host or the enemy target can attack,
+the search plays it out, the engine applies the effect, and it chooses correctly: **5 of 5 over 126
+games**, and 4 against 16 on a scripted board. Where nothing can act, every target scores the same.
+"The search is blind to this" and "the search returned a tie" are therefore the same set of positions,
+which is why a **tie-only** rule covers the whole defect and can never overrule a real judgement.
+
+Two signals, in order, because neither alone is sufficient across the ASH pool:
+
+- **The computed delta first**, comparing the host's power, HP and keywords with and without the
+  upgrade in the contexts where conditional effects apply. Catches the stat penalty and the damage
+  multiplier.
+- **The CONDITION trait only when the delta is silent.** Two of the five work through granted triggered
+  abilities, which cannot be priced without simulating them.
+
+**Keywords must never offset a stat loss.** Nowhere to Hide grants Sentinel and takes 2 power, and it
+is a card you give the opponent; an early version counted the grant against the loss and read it as a
+buff. Keywords now only rule out the trait fallback.
+
+Hostility is measured against the **specific host**, which makes two things fall out rather than needing
+special cases: the card is worth more against a unit that already has Sentinel and gains nothing, and a
+-2 modifier on a 1-power unit costs 1 rather than 2, because power floors at zero.
+
+Screened at 80 games against a matched control: **sd 0.00, no game diverged**. That is the expected
+result for a rule this narrow, not evidence either way, and it is why the acceptance was the replayed
+position rather than a win rate.
+
 ### Searching past the round boundary works, and loses
 
 A line can be made to cross regroup and play on into the next round. Built, measured, **not shipped**:

@@ -137,8 +137,20 @@ export const beamAi = makeBeamGreedy(DEFAULT_WEIGHTS)
  *
  * `beam-reply/pass=0` names the pre-fix bot, so the control stays addressable without a registry entry.
  */
+/**
+ * `upgradeTie` sends a hostile upgrade to an enemy unit when the search cannot tell the targets apart.
+ *
+ * Reported from live play and reproduced from the attached replay: both targets score an identical
+ * 144.12, so the seeded pick decided and it landed on our own unit. It only bites when nothing can act
+ * inside the horizon, which is precisely when the search returns a tie, so a tie-only rule covers the
+ * whole defect and can never overrule a judgement the search actually made.
+ *
+ * Expected to be invisible in a win rate. Where a unit CAN act the search already gets this right, 5
+ * times out of 5 measured over 126 games, so the rule fires rarely by construction. It ships for the
+ * same reason the pass charge did: a defect a human notices is worth fixing at a neutral win rate.
+ */
 export const BEAM_REPLY_LIMITS: BeamLimits = {
-  ...DEFAULT_BEAM_LIMITS, reply: 'pessimistic', tieBreak: { reply: 'null' }, passPenalty: 8,
+  ...DEFAULT_BEAM_LIMITS, reply: 'pessimistic', tieBreak: { reply: 'null' }, passPenalty: 8, upgradeTie: true,
 }
 
 export const beamReplyAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_LIMITS)
@@ -188,6 +200,19 @@ export const beamHoldTiesAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_HOLD_TIES_LIM
  * and the search, so the comparison stays one difference instead of drifting into two.
  */
 export const BEAM_REPLY_UNREDACTED_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, redactRegroup: false }
+
+/**
+ * The shipped model without the hostile-upgrade tie policy: the control for #509, and the only way to
+ * ask what that rule costs.
+ *
+ * Needed because the policy is a boolean on the limits with no suffix grammar, so unlike `pass=N` it
+ * cannot be switched off by name. Screening the arm against a name that resolves to the arm itself
+ * reads `sd 0.00` across every shard, which looks like a clean null and is really a comparison of a bot
+ * with itself.
+ */
+export const BEAM_REPLY_UPGRADE_BLIND_LIMITS: BeamLimits = { ...BEAM_REPLY_LIMITS, upgradeTie: false }
+
+export const beamReplyUpgradeBlindAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_UPGRADE_BLIND_LIMITS)
 
 export const beamReplyUnredactedAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_UNREDACTED_LIMITS)
 

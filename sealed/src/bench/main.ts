@@ -475,6 +475,28 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     row('  with an attack available', rate(ps.withAttackAvailable, ps.taken)),
     row('  ending the action phase', rate(ps.endedPhase, ps.taken)),
     row('forced (no other legal move)', `${ps.forced}`),
+    '',
+    '  what the charge is actually buying. These are the decisions it FLIPPED: passing led on the raw',
+    '  scores and lost only because it was charged. Spending resources is free in the evaluation, so a',
+    '  useless card costs only its hand value, 1 to 3 points against a charge of 8, and the bot should',
+    '  prefer the useless card to passing. If these flipped into real actions the charge is working; if',
+    '  they flipped into filler it has traded one bad habit for a worse one.',
+    row('decisions the charge flipped', rate(ps.flipped, ps.offered)),
+    row('  into', ps.flippedInto.length === 0
+      ? 'none'
+      : ps.flippedInto.slice(0, 6).map(k => `${k.kind} ${k.count}`).join(', ')),
+    '',
+    '  debuff upgrades, and whose unit they landed on. The board term sums power with no context, so a',
+    '  "while attacking" debuff is invisible to it and friendly and enemy targets score alike. BOTH',
+    '  sides are shown because our own count alone cannot tell "always targets correctly" from "never',
+    '  came up": a correct play onto an enemy leaves no trace. Read own / (own + enemy): about half is',
+    '  the coin flip, near zero is choosing correctly, and 0 of 0 means the diagnostic cannot speak.',
+    row('upgrades attached', `${report.selfDebuff.onOwnUnits} on ours, ${report.selfDebuff.onEnemyUnits} on theirs`),
+    row('  debuffs onto OUR unit', `${report.selfDebuff.ownWorsened}`),
+    row('  debuffs onto THEIR unit', `${report.selfDebuff.enemyWorsened}`),
+    row('  share landing on ours', report.selfDebuff.ownWorsened + report.selfDebuff.enemyWorsened === 0
+      ? 'never arose'
+      : rate(report.selfDebuff.ownWorsened, report.selfDebuff.ownWorsened + report.selfDebuff.enemyWorsened)),
   )
 
   const it2 = report.initiativeTies

@@ -2,7 +2,7 @@ import type { Ai } from './types'
 import { randomAi } from './randomAi'
 import {
   greedyAi, greedyBaselineAi, greedyFlatAi, beamAi, beamReplyAi, beamReplySharedAi, beamReplyUnredactedAi,
-  beamHorizonAi, beamClaimTiesAi, beamHoldTiesAi, lethalBeamAi,
+  beamReplyUpgradeBlindAi, beamHorizonAi, beamClaimTiesAi, beamHoldTiesAi, lethalBeamAi,
   makeBeamGreedy, makeLethalBeam, BEAM_REPLY_LIMITS, BEAM_REPLY_SHARED_LIMITS,
 } from './greedyAi'
 import { DEFAULT_BEAM_LIMITS, TIE_DECISION_KINDS, type BeamLimits } from './search'
@@ -54,6 +54,12 @@ export const AIS: Record<string, Ai> = {
    * and self-play against the shipped bot would measure nothing.
    */
   'beam-reply-unredacted': beamReplyUnredactedAi,
+  /**
+   * `beam-reply` without the hostile-upgrade tie policy: the control for #509. The policy is a boolean
+   * with no suffix grammar, so without this entry there is no way to name the pre-fix bot, and an A/B
+   * silently compares the arm with itself.
+   */
+  'beam-reply-upgrade-blind': beamReplyUpgradeBlindAi,
   /**
    * `beam-reply` always taking a tied initiative, and never taking one. The pair brackets the seeded
    * coin flip that ships, which is the default by omission rather than by anyone's decision.

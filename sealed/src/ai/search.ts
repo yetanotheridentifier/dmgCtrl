@@ -8,6 +8,7 @@ import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
 import { seededUnit } from '../engine/rng'
 import { role } from './race'
+import { upgradeHostility } from './upgradeValue'
 
 /**
  * Quiescent scoring: never evaluate a half-resolved action.
@@ -124,6 +125,14 @@ export interface SearchTrace {
    * said so.
    */
   finalists: number
+  /**
+   * What `pass` was charged, so a reader can recover the score it would have had.
+   *
+   * Without it the charge is invisible after the fact: `candidates` holds the value AFTER the penalty,
+   * so "would this decision have gone the other way for free" cannot be answered, and that is the only
+   * question that says whether the charge is buying real actions or rubbish.
+   */
+  passPenalty: number
 }
 
 /** How a root candidate earned its value: the best board it reached, and the moves that got there. */
@@ -530,6 +539,19 @@ export interface BeamLimits {
    * explicitly, and the pass `ourTurnAgain` makes is the OPPONENT's, which must not be charged.
    */
   passPenalty?: number
+  /**
+   * Among candidates the search has already declared equal, prefer putting a hostile upgrade on an
+   * ENEMY unit rather than a friendly one (#509). Off by default.
+   *
+   * **Tie-only for a principled reason, not a cautious one.** A class of upgrades does nothing to the
+   * board when played and everything later: -3 power attacking a base, doubled incoming damage, a tax
+   * on readying. Where the host can act inside the horizon the search plays that out, the engine
+   * applies the effect and it already chooses correctly, measured 5 of 5. Where nothing can act, the
+   * effect is unreachable and every target scores the same. So "the search is blind to this" and "the
+   * search returned a tie" are the SAME set of positions, and a rule confined to ties covers the whole
+   * defect while being unable to overrule any judgement the search actually made.
+   */
+  upgradeTie?: boolean
 }
 
 export const DEFAULT_BEAM_LIMITS: BeamLimits = {
@@ -585,7 +607,7 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
     if (moves.length === 0) {
       trace = {
         nodes: limits.nodes, left: budget.left, chain: 0, beam: 0, exhausted: false,
-        candidates: [], tiedCandidates: 0, finalists: 0,
+        candidates: [], tiedCandidates: 0, finalists: 0, passPenalty: limits.passPenalty ?? 0,
       }
       return null
     }
@@ -631,9 +653,13 @@ export function makeBeamAi(inner: Evaluator, limits: BeamLimits = DEFAULT_BEAM_L
       lines: limits.explain === true ? lines : undefined,
       tiedCandidates: bestMoves.length,
       finalists: finalists.length,
+      passPenalty: limits.passPenalty ?? 0,
     }
 
-    const decided = settleInitiativeTie(finalists, limits.initiativeTie)
+    const afterInitiative = settleInitiativeTie(finalists, limits.initiativeTie)
+    const decided = limits.upgradeTie === true && afterInitiative.length > 1
+      ? settleUpgradeTie(state, afterInitiative, me)
+      : afterInitiative
     return decided[Math.floor(seededUnit(state.rngSeed) * decided.length)]
   }
 }
@@ -725,6 +751,39 @@ function breakTie(
     } else if (value === best) {
       winners.push(move)
     }
+  }
+  return winners.length > 0 ? winners : tied
+}
+
+/**
+ * Break a tie by where a hostile upgrade would land.
+ *
+ * Ranks the tied candidates and keeps the joint best, so it narrows rather than picks: if nothing
+ * separates them the seeded choice still decides, and the search stays deterministic.
+ *
+ * A non-upgrade candidate scores 0, which is deliberately BETWEEN putting a hostile upgrade on an enemy
+ * (positive) and on a friendly unit (negative). Doing something else entirely is better than making our
+ * own unit worse, and worse than a free debuff on theirs.
+ */
+export function settleUpgradeTie(state: GameState, tied: Action[], me: PlayerId): Action[] {
+  const foe = opponentOf(me)
+  const rank = (move: Action): number => {
+    if (move.type !== 'playUpgrade' || move.targetInstanceId === undefined) return 0
+    const card = state.players[me].hand[move.handIndex]
+    if (card === undefined) return 0
+    const mine = state.players[me].units.find(u => u.instanceId === move.targetInstanceId)
+    const theirs = state.players[foe].units.find(u => u.instanceId === move.targetInstanceId)
+    const host = mine ?? theirs
+    if (!host) return 0
+    const hostility = upgradeHostility(state, host, card)
+    return mine ? -hostility : hostility
+  }
+  let best = -Infinity
+  const winners: Action[] = []
+  for (const move of tied) {
+    const score = rank(move)
+    if (score > best) { best = score; winners.length = 0; winners.push(move) }
+    else if (score === best) winners.push(move)
   }
   return winners.length > 0 ? winners : tied
 }
