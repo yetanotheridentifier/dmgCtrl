@@ -449,6 +449,69 @@ export function SearchDrawOverlay({ state, choice, onPick, onDone }: {
 }
 
 /**
+ * "Who resolves first" overlay (CR 7.6.10).
+ *
+ * With triggers owed on both sides, the active player chooses which PLAYER clears their batch first.
+ * They choose the player and nothing else: the opponent's internal order is the opponent's (CR 7.6.9),
+ * so this deliberately offers two buttons rather than a draggable list.
+ *
+ * **Both batches are listed, with the card that raised each.** That is the "why am I being asked this"
+ * answer, and it is the whole reason the choice is legible: the order question itself names no card,
+ * because it exists precisely because two cards triggered at once. Seeing what is waiting on each side
+ * is what makes the decision a decision rather than a coin flip with buttons.
+ *
+ * Portalled to body for the same reason the other overlays are: it must clear the board's stacking
+ * context.
+ */
+export function TriggerOrderOverlay({ state, mine, theirs, onPick }: {
+  state: GameState
+  mine: PendingChoice[]
+  theirs: PendingChoice[]
+  onPick: (optionIndex: number) => void
+}) {
+  const column = (title: string, choices: PendingChoice[], testId: string) => (
+    <div data-testid={testId} className="min-w-[16rem] flex-1">
+      <p className="mb-2 text-xs uppercase tracking-[0.14em] text-ink-dim">{title}</p>
+      <ul className="flex flex-col gap-1.5">
+        {choices.length === 0
+          ? <li className="text-sm text-ink-faint">nothing waiting</li>
+          : choices.map(c => (
+            <li key={c.id} className="rounded-lg border border-line/50 px-3 py-2 text-sm text-ink">
+              <DescribedParts state={state} parts={describeChoiceParts(state, c)} />
+            </li>
+          ))}
+      </ul>
+    </div>
+  )
+  return createPortal(
+    <div data-testid="trigger-order-overlay" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/75 p-4">
+      <p className="text-sm text-ink">Abilities triggered on both sides. Who resolves first?</p>
+      <div className="flex flex-wrap justify-center gap-6">
+        {column('Your triggers', mine, 'trigger-order-mine')}
+        {column("Opponent's triggers", theirs, 'trigger-order-theirs')}
+      </div>
+      <div className="flex gap-3">
+        <button
+          data-testid="trigger-order-mine-btn"
+          onClick={() => onPick(0)}
+          className="rounded-xl border-2 border-accent px-4 py-2 text-sm text-accent shadow-[0_0_12px_rgba(79,195,247,0.3)] hover:bg-accent/10"
+        >
+          I resolve first
+        </button>
+        <button
+          data-testid="trigger-order-theirs-btn"
+          onClick={() => onPick(1)}
+          className="rounded-xl border-2 border-line/60 px-4 py-2 text-sm text-ink-dim hover:text-ink"
+        >
+          They resolve first
+        </button>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+/**
  * "Name a card" overlay (Ryder Azadi): a text box that filters the nameable card list (every
  * card in the current game — both decks) by substring; clicking one names it. Portalled to body so it
  * clears the board's stacking context. The full-ASH-set list is a later extension (follow-up).
@@ -1185,6 +1248,15 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       </ul>
     )
 
+    // "Who resolves first" (CR 7.6.10) gates every other choice, so it is selected first and rendered
+    // ahead of everything in the overlay chain below.
+    const orderChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'chooseTriggerOrder' }> =>
+        c.kind === 'chooseTriggerOrder' && c.controller === 'player',
+    )
+    const waiting = (side: PlayerId) =>
+      (gameState.pendingChoices ?? []).filter(c => c.controller === side && c.kind !== 'chooseTriggerOrder')
+
     // A "look at the top card" choice (Camtono): its accept/decline moves are
     // shown inside the centre-screen overlay next to the card, not in the action menu.
     const lookChoice = gameState.pendingChoices?.find(
@@ -1361,7 +1433,16 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       </div>
     )
 
-    if (lookChoice) {
+    if (orderChoice) {
+      choiceOverlay = (
+        <TriggerOrderOverlay
+          state={gameState}
+          mine={waiting('player')}
+          theirs={waiting('opponent')}
+          onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: orderChoice.id, optionIndex })}
+        />
+      )
+    } else if (lookChoice) {
       choiceOverlay = (
         <CardChoiceOverlay card={gameState.cards[lookChoice.cardId]} cardId={lookChoice.cardId} prompt="Look at the top card of your deck">
           {lookActions.map((action, i) => (

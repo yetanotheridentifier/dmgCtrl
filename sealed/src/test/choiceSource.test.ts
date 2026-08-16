@@ -86,6 +86,18 @@ describe('every choice raised in real games can name its source (#374)', () => {
     const unnamed = new Map<string, string>()
     const kindsSeen = new Set<string>()
 
+    /**
+     * Kinds the rules raise rather than a card.
+     *
+     * `chooseTriggerOrder` asks which PLAYER resolves first (CR 7.6.10). It exists because two cards
+     * triggered at once, so naming one of them would be arbitrary and misleading: the question is not
+     * "why is this card asking" but "whose batch goes first". Its overlay lists the waiting triggers
+     * with their own sources, which is the answer to "why am I being asked this".
+     *
+     * Deliberately a list of ONE, and it should stay short. Anything a card raised must name that card.
+     */
+    const ruleLevel = new Set(['chooseTriggerOrder'])
+
     decks.forEach((deck, d) => {
       const seed = nextSeed(1000 + d)
       const shuffleSeed = { v: seed }
@@ -95,6 +107,7 @@ describe('every choice raised in real games can name its source (#374)', () => {
       for (let i = 0; i < 5000 && s.winner === null; i++) {
         for (const choice of s.pendingChoices ?? []) {
           kindsSeen.add(choice.kind)
+          if (ruleLevel.has(choice.kind)) continue
           if (choiceSourceRef(s, choice).length === 0) unnamed.set(choice.kind, JSON.stringify(choice))
         }
         const action = setupAi(s) ?? randomAi(s)

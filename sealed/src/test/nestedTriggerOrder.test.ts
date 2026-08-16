@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { resolve } from '../engine/resolve'
+import { legalMoves } from '../engine/legalMoves'
 import { registerCard, unregisterAbility } from '../engine/abilities'
 import { pushChoice } from '../engine/types'
 import { state, player, unit, card, CARDS } from './helpers/engineFixtures'
@@ -89,7 +90,11 @@ describe('nested triggered abilities (CR 7.6.11)', () => {
    */
   it('resolves a nested trigger before the opponent trigger it interrupted', () => {
     registerAll()
-    const traded = resolve(board(), { type: 'attack', attackerId: 'greedo', target: { kind: 'unit', instanceId: 'vanguard' } })
+    const fought = resolve(board(), { type: 'attack', attackerId: 'greedo', target: { kind: 'unit', instanceId: 'vanguard' } })
+    // Both sides owe triggers, so the order question comes first (CR 7.6.10). Take ourselves, which is
+    // what the CR's Grayson does, then resolve our own trigger onto Motti.
+    const order = fought.pendingChoices!.find(c => c.kind === 'chooseTriggerOrder')!
+    const traded = resolve(fought, { type: 'acceptChoice', choiceId: order.id, optionIndex: 0 })
     const ours = (traded.pendingChoices ?? []).find(c => c.controller === 'player')
     expect(ours, 'we should have a trigger to resolve').toBeDefined()
 
@@ -104,5 +109,79 @@ describe('nested triggered abilities (CR 7.6.11)', () => {
     )
     expect(queue.indexOf('motti'), 'the nested ability resolves FIRST (CR 7.6.11)')
       .toBeLessThan(queue.indexOf('vanguard'))
+  })
+})
+
+/**
+ * Who goes first, when both sides owe triggers (CR 7.6.10).
+ *
+ * > the active player chooses one player at a time to resolve abilities. When chosen, that player
+ * > resolves all abilities triggered on cards they control in the order of their choice, and once they
+ * > finish, the other player does the same.
+ *
+ * The engine used to make the active player go first, full stop: the right mechanism with the decision
+ * hardcoded. They now get asked.
+ *
+ * **They choose the player and nothing else.** The opponent's internal order stays theirs (7.6.9), so
+ * this choice carries no target and no list; offering anything finer would be offering a decision that
+ * is not the active player's to make.
+ */
+describe('choosing which player resolves first (CR 7.6.10)', () => {
+  afterEach(() => {
+    for (const id of [GREEDO, VANGUARD, MOTTI]) unregisterAbility(id)
+  })
+
+  const traded = (): GameState => {
+    registerAll()
+    return resolve(board(), { type: 'attack', attackerId: 'greedo', target: { kind: 'unit', instanceId: 'vanguard' } })
+  }
+
+  it('asks the active player, and asks first', () => {
+    const s = traded()
+    const queue = s.pendingChoices ?? []
+    expect(queue[0]?.kind, 'it gates the rest of the queue, so it leads it').toBe('chooseTriggerOrder')
+    expect(queue[0]?.controller, 'the ACTIVE player decides, not the initiative holder').toBe('player')
+    expect(s.activePlayer).toBe('player')
+  })
+
+  /**
+   * Two answers, no decline, and **nothing else on offer**. The gate matters as much as the options:
+   * without it the player could answer one of their own triggers instead and settle the order by
+   * accident, choosing themselves without ever being asked.
+   */
+  it('offers exactly two answers and gates the rest of the queue', () => {
+    const s = traded()
+    const moves = legalMoves(s)
+    expect(moves).toHaveLength(2)
+    expect(moves.every(m => m.type === 'acceptChoice' && m.choiceId === s.pendingChoices![0].id)).toBe(true)
+    expect(moves.some(m => m.type === 'skipTrigger'), 'someone has to go first').toBe(false)
+  })
+
+  it('keeps the turn when we choose ourselves', () => {
+    const s = traded()
+    const mine = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, optionIndex: 0 })
+    expect(mine.activePlayer).toBe('player')
+    expect((mine.pendingChoices ?? []).some(c => c.kind === 'chooseTriggerOrder'), 'asked once').toBe(false)
+  })
+
+  it('hands the turn over when we choose them, and takes it back after', () => {
+    const s = traded()
+    const theirs = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, optionIndex: 1 })
+    expect(theirs.activePlayer).toBe('opponent')
+
+    const oursLeft = (theirs.pendingChoices ?? []).filter(c => c.controller === 'player')
+    expect(oursLeft.length, 'our trigger is still owed').toBeGreaterThan(0)
+
+    const theirChoice = (theirs.pendingChoices ?? []).find(c => c.controller === 'opponent')!
+    const drained = resolve(theirs, { type: 'skipTrigger', choiceId: theirChoice.id })
+    expect(drained.activePlayer, 'the turn comes back once their side is clear').toBe('player')
+  })
+
+  /** It must not fire when only one side owes anything, or every ordinary trigger grows a prompt. */
+  it('does not ask when only one player owes a trigger', () => {
+    registerCard(GREEDO, { abilities: [{ trigger: 'whenDefeated', description: 'none', effect: s => s }] })
+    registerCard(VANGUARD, { abilities: [{ trigger: 'whenDefeated', description: 'none', effect: s => s }] })
+    const s = resolve(board(), { type: 'attack', attackerId: 'greedo', target: { kind: 'unit', instanceId: 'vanguard' } })
+    expect((s.pendingChoices ?? []).some(c => c.kind === 'chooseTriggerOrder')).toBe(false)
   })
 })

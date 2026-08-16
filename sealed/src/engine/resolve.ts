@@ -939,6 +939,14 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         if (choice.markUsed) next = markAbilityUsed(next, choice.controller, choice.markUsed.instanceId, choice.markUsed.key)
       }
       break
+    case 'chooseTriggerOrder': {
+      // Option 1 hands the turn over so they clear their whole batch first; `resumeAfterChoice` brings
+      // it back once their side of the queue drains, which is the same path an interjected choice uses.
+      if ((optionIndex ?? 0) === 1) {
+        next = { ...next, activePlayer: opponentOf(choice.controller), pendingResumeActive: choice.controller }
+      }
+      break
+    }
     case 'chooseOne': {
       // Choose-one/modal: apply the picked option's effect (Sloane's arena buff).
       const opt = choice.options[optionIndex ?? 0]
@@ -1726,8 +1734,19 @@ function finishDistribution(state: GameState, choice: PendingChoice & { kind: 'd
 }
 
 function handOffOpponentChoice(state: GameState, actor: PlayerId): GameState {
-  if (!hasPendingChoices(state) || state.pendingChoices!.some(c => c.controller === actor)) return state
-  const other = state.pendingChoices![0].controller
+  if (!hasPendingChoices(state)) return state
+  const queue = state.pendingChoices!
+  const ours = queue.some(c => c.controller === actor)
+  const theirs = queue.some(c => c.controller === opponentOf(actor))
+  // CR 7.6.10: triggers owed on both sides, so the ACTIVE player picks which player resolves first.
+  // Raised at the front, because it gates every other choice in the queue and answering anything else
+  // would settle the order by accident.
+  if (ours && theirs && !queue.some(c => c.kind === 'chooseTriggerOrder')) {
+    const ask: PendingChoice = { kind: 'chooseTriggerOrder', id: `order-${queue.length}`, controller: actor }
+    return { ...state, activePlayer: actor, pendingChoices: [ask, ...queue] }
+  }
+  if (ours) return state
+  const other = queue[0].controller
   return other === actor ? state : { ...state, activePlayer: other, pendingResumeActive: actor }
 }
 

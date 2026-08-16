@@ -504,6 +504,15 @@ type ChoiceVariant =
   // Choose-one / modal: pick exactly one of `options` (Sloane). Each option is a small
   // serialisable effect descriptor, resolved by index; mandatory (no decline).
   | { kind: 'chooseOne'; id: string; controller: PlayerId; options: ChooseOption[] }
+  /**
+   * CR 7.6.10: with triggers owed on BOTH sides, the **active player** chooses which player resolves
+   * theirs first. Option 0 is us, option 1 is them.
+   *
+   * They choose the player and nothing else. The opponent's internal order stays the opponent's
+   * (CR 7.6.9), which is why this carries no target and no list: offering anything finer would be
+   * offering a decision that is not theirs to make.
+   */
+  | { kind: 'chooseTriggerOrder'; id: string; controller: PlayerId }
   // Luke front: may exhaust the (undeployed) leader to heal `amount` from `unitId`, or decline.
   | { kind: 'mayExhaustLeaderHealUnit'; id: string; controller: PlayerId; unitId: string; amount: number }
   // Luke deployed: heal `amount` from a chosen unit (`unitTargets`) or base (`baseTargets`). Mandatory.
