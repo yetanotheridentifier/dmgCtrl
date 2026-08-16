@@ -2130,9 +2130,15 @@ function checkWin(state: GameState): GameState {
   }
   const playerLost = defeated('player')
   const opponentLost = defeated('opponent')
-  if (playerLost && opponentLost) return { ...state, winner: 'draw' }
-  if (playerLost) return { ...state, winner: 'opponent' }
-  if (opponentLost) return { ...state, winner: 'player' }
+  // Anything still waiting is discarded with the win. CR 6.6.2: a player on 0 remaining HP "cannot take
+  // any actions, and cannot resolve any abilities or effects", and CR 1.16.5 ranks base defeat first
+  // among the state-based situations that pre-empt waiting triggers. Leaving a choice pending would
+  // strand it: `legalMoves` returns nothing for a decided game, so it could never be answered.
+  const decided = (winner: GameState['winner']): GameState =>
+    ({ ...state, winner, pendingChoices: undefined })
+  if (playerLost && opponentLost) return decided('draw')
+  if (playerLost) return decided('opponent')
+  if (opponentLost) return decided('player')
   return state
 }
 

@@ -691,6 +691,12 @@ export function removeChoice(state: GameState, id: string): GameState {
 
 /** Append a choice to the pending queue (order = trigger order; the controller reorders). */
 export function pushChoice(state: GameState, choice: PendingChoice): GameState {
+  // A decided game resolves nothing (CR 6.6.2: once a player's base has 0 remaining HP they "cannot
+  // resolve any abilities or effects"). Guarded HERE rather than at each caller because whether a
+  // trigger is raised before or after the win check varies by card and by code path: Camtono revealed a
+  // card on top of the game-over screen after an attack that won the game, and the player could neither
+  // answer it nor dismiss it, since a decided game offers no legal moves.
+  if (state.winner !== null) return state
   // Guarantee a unique id among pending choices — different triggers on the same played
   // unit (e.g. Support + Greef Karga) would otherwise collide and mislabel each other.
   const existing = state.pendingChoices ?? []
