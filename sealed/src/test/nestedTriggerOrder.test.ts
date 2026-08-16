@@ -2,6 +2,9 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
 import { registerCard, unregisterAbility } from '../engine/abilities'
+import { makeBeamAi, lastSearchTrace, clearSearchTrace } from '../ai/search'
+import { BEAM_REPLY_LIMITS } from '../ai/greedyAi'
+import { evaluate } from '../ai/evaluate'
 import { pushChoice } from '../engine/types'
 import { state, player, unit, card, CARDS } from './helpers/engineFixtures'
 import type { GameState } from '../engine/types'
@@ -175,6 +178,45 @@ describe('choosing which player resolves first (CR 7.6.10)', () => {
     const theirChoice = (theirs.pendingChoices ?? []).find(c => c.controller === 'opponent')!
     const drained = resolve(theirs, { type: 'skipTrigger', choiceId: theirChoice.id })
     expect(drained.activePlayer, 'the turn comes back once their side is clear').toBe('player')
+  })
+
+  /**
+   * **The bot has to answer this too**, and it is a decision that did not exist before.
+   *
+   * Both options barely change the board: one sets `activePlayer` and neither moves a card. That is the
+   * shape of decision the evaluation is blind to, so the question is whether the search reaches past it.
+   * It should: quiescent scoring drives an owed choice chain to completion before scoring, so each
+   * option is priced by the boards its chain actually reaches rather than by the board it starts from.
+   */
+  it('is answerable by the shipped bot, and priced by what follows it', () => {
+    const s = traded()
+    clearSearchTrace()
+    const chosen = makeBeamAi(evaluate, { ...BEAM_REPLY_LIMITS, nodes: 200_000 })(s)
+    expect(chosen, 'the bot must produce a move').not.toBeNull()
+    expect(legalMoves(s), 'and a legal one').toContainEqual(chosen)
+
+    const values = lastSearchTrace()!.candidates
+    expect(values).toHaveLength(2)
+    expect(values.every(v => Number.isFinite(v)), 'both options must score').toBe(true)
+  })
+
+  /**
+   * **And when it cannot separate them, it resolves first.**
+   *
+   * On this position both options score identically, so without a preference the seeded pick would
+   * decide. That would be a regression: before the ordering choice existed the active player always
+   * went first, and asking the question must not turn a fixed sensible answer into a coin flip.
+   *
+   * Tie-only, so the search still overrules it wherever it can see a difference, which is the reason
+   * for asking at all.
+   */
+  it('resolves first when the search rates both options equal', () => {
+    const s = traded()
+    clearSearchTrace()
+    const chosen = makeBeamAi(evaluate, { ...BEAM_REPLY_LIMITS, nodes: 200_000 })(s)
+    const values = lastSearchTrace()!.candidates
+    expect(values[0], 'this position is the tied case').toBe(values[1])
+    expect(chosen).toMatchObject({ type: 'acceptChoice', optionIndex: 0 })
   })
 
   /** It must not fire when only one side owes anything, or every ordinary trigger grows a prompt. */
