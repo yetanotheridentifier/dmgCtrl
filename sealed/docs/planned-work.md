@@ -13,18 +13,12 @@ and then in one line with a pointer.
 Ordered on one principle: **correctness, then structure, then calibration.** Anything that changes the
 engine or the horizon invalidates a calibration done before it.
 
-1. **Confirm the pass penalty is at the right value.** It ships at 8, worth +2.43 points, and that is
-   the smallest value inside the target band rather than the best found: 12 halves the pass rate again
-   (0.10 a game against 0.21) and is unmeasured. One A/B of `beam-reply/pass=12` against the shipped bot
-   settles it, and 6 is worth including if the compute is there.
-
-   Watch forced passes, not just the win rate. Overcharging makes the bot play cards for no benefit,
-   which is a worse habit than the one being fixed, and forced passes are what rise when it does.
+1. **#530 decide `hand.canAct`.** Measured inert through the horizon arm, and still not removable:
+   deleting it inverts the lower bound in `handValue.test.ts` that stops the model banking its last
+   castable card. A scripted position for the case that bound describes is the only option producing
+   evidence rather than a preference, and self-play cannot reach it.
 2. **Finish what #516 scoped and did not do.** The horizon itself is built, measured at -3.72 points and
    **shipped disabled**, so these are the parts that outlived it.
-   - **Re-run term sensitivity for `resourceSurplus` and `hand.canAct`.** They price things across the
-     boundary and cannot be told dormant from dead without a horizon. `beam-horizon` exists as an arm,
-     so this is finally answerable, and it is worth answering even though the horizon does not ship.
    - **Re-ask the shielded-Sentinel lockout** against the horizon arm: whether the strip line now
      contains its own payoff, and whether `blockedReach` becomes deletable rather than shippable.
    - **Sweep `tailActions`.** It is most of the horizon's 1.84x cost while the free run changes nothing
@@ -63,11 +57,11 @@ than a new term. **One idea survived unbuilt** and is worth a ticket: resource c
 **public**, so "I am holding up three resources" may legitimately outrank the board score, where "I hold
 Vanquish" cannot.
 
-The initiative tie policy is measured but unsettled. `beam-claim-ties` and `beam-hold-ties` bracket the
-seeded coin flip that ships, and at 80 games read +1.25 and +0.00, which settles nothing. The tie is
-8.2% of claim offers and splits roughly evenly between tying with a `pass`, where claiming is nearly
-free, and tying with an attack, where it is a real trade. A **conditional** policy is the obvious next
-arm if the blanket ones ever separate.
+The initiative tie policy is settled: always taking a tied initiative and never taking one measured
+**+0.00 apart** over 2016 games, so the seeded coin flip that ships is right. A **conditional** policy
+is not strictly ruled out, since a zero gap between blanket arms is also what a half-right-half-wrong
+rule would produce, and the tying candidates do split (attack 46%, pass 38%). The ceiling is too low to
+chase: the tie is 8.2% of claim offers and fourth of five blind spots.
 
 That is the heuristic baseline. **Stop there before ML.**
 

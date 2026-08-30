@@ -103,9 +103,11 @@ shift, pivotal on 12.1% of decisions against 7.7% one ply deep. Swept around its
 games an arm, every arm came back inside noise (largest t = 0.72 against 2.228), confirming the
 plateau the original sweep found.
 
-Two weights could not be judged and are **dormant rather than dead**: both price things that pay off
-across the round boundary the search cannot cross. Notably the one weight that did wake is the only one
-of the four whose value concerns the **current** board.
+Two weights could not be judged at the time, because both price things that pay off across the round
+boundary the search could not cross. They have since been told apart by running the same instrument
+through a search that can cross it: `resourceSurplus` is alive and only at regroup, `hand.canAct` is
+inert. See "Dormant and dead, told apart at last" below. Notably the one weight that woke here is the
+only one of the four whose value concerns the **current** board.
 
 A third is **provably inert**: the resource pool is priced flat, so the knee that splits it collapses
 out of the arithmetic and cannot change any answer whatever it is set to.
@@ -175,6 +177,31 @@ pass count is dominated by structure at ~5.3 forced passes a game: **the defect 
 mid-round passes are separated out**. And ending a round is not the defensible pass, because claiming
 makes you done for the round rather than passing out of it, so the only pass that ends a spent round is
 the forced one.
+
+### The pass charge is right at 8
+
+`pass=12` against the shipped `pass=8` measured **+0.55 points** (t = 1.37 on 11 df, 6 of 12 shards
+favouring, sd 1.38, 2016 games against a matched control). The interval runs about -0.3 to +1.4, so a
+larger charge is not established as better and cannot be much better if it is.
+
+8 stays for a second reason beyond the number: it is the smaller charge, so it applies less pressure
+toward the failure mode the whole design is bounded against, playing a card for no benefit rather than
+passing. The response curve is in the entry above.
+
+### A tied initiative is worth nothing either way
+
+`beam-claim-ties` (always take a tied initiative) against `beam-hold-ties` (never take one) measured
+**+0.00 points** (sd 0.84, se 0.24 over 12 shards, 5 of 12 favouring, 2016 games). The spread is
+non-zero, so the arms genuinely diverge; the per-shard differences scatter both ways and cancel.
+
+So the seeded coin flip that ships is the right answer, to within about half a point. **Reading both
+extremes is what makes that legible**: a single arm against the flip cannot separate "balanced" from
+"underpowered to detect", and at 80 games those same arms read +1.25 and +0.00, which settles nothing.
+
+It does **not** rule out a conditional policy. A zero gap between two blanket arms is also what you
+would see if taking were right half the time and wrong the other half, which the split of tying
+candidates hints at: attack 46%, pass 38%. The ceiling is low enough not to chase it, since the tie is
+8.2% of claim offers and fourth of five blind spots on the corrected metric.
 
 ### A class of upgrades is invisible to a board evaluation
 
@@ -249,6 +276,35 @@ The comparison is confounded, and the direction of the bias is what makes it rea
 decisions are hopeless 41.6% of the time against claimed's 15.2%, so that column is loaded with lost
 positions and should look worse. It does not. A low denial claim rate is defensible behaviour rather
 than a blind spot.
+
+### Dormant and dead, told apart at last
+
+Two weights priced things that pay off across the round boundary, and could not be judged until a
+horizon existed to price them against. Term sensitivity run through **`beam-horizon`**, 42 games and
+2736 decisions, answers both:
+
+| weight | varies | pivotal | bearing | bearing by kind |
+| --- | --- | --- | --- | --- |
+| `resourceSurplus` | 1.4% | 1.2% | 1.4% | action 0.0%, **regroup 8.6%**, answering 0.0% |
+| `hand.canAct` | 4.7% | **0.0%** | **0.0%** | action 0.0%, regroup 0.2%, answering 0.0% |
+
+**`resourceSurplus` is alive, and only at regroup.** Narrow, and exactly where the resourcing decision
+is, so it belongs to that question rather than to the horizon.
+
+**`hand.canAct` is inert.** Its quantity varies across candidates 4.7% of the time, so it is not
+structurally flat, and yet nudging the weight changes the pick zero times and zeroing it changes the
+pick zero times. Dead **even with the horizon that was supposed to wake it**, which is the strongest
+form of that answer available.
+
+**That does not make it deletable, and the reason generalises.** `handValue.test.ts` asserts a lower
+bound: keeping a castable card must beat holding the biggest uncastable bomb in the pool, or the model
+banks its last play. At `canAct` of 0 that bound reduces to `poorest > 0.3 x richest` over the real
+pool, which it does not satisfy, so removing the weight inverts a preference.
+
+Both are true at once: **it changes no decision the bench reaches, and removing it would invert a
+preference in a situation the bench does not reach.** A measured null is evidence about the corpus, not
+about the rule. An earlier version of this same area cost 9.5 points of win rate, so it is not a corner
+to trim on an inert reading.
 
 ## Avenues closed off
 

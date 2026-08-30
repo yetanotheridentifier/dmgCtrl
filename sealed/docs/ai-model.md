@@ -498,9 +498,14 @@ worth tuning" quadrant and independent support for the note under Initiative tha
 `lethalExposure` is bearing in only 1.0% of decisions, which is not in tension with the +3.8 points
 it measured: it is rare and decisive rather than broad, exactly as the exposure sizing predicted.
 
-Several weights are expected to be **dormant rather than dead**, pricing futures that one ply has no
-way to see. Re-running this after lookahead lands is how the two are told apart, and the claim to
-test is the Bearing column rather than Varies.
+Weights that price futures one ply cannot see were **dormant rather than dead** until a search existed
+that could reach them. Re-running this through a horizon-crossing arm is how the two were told apart,
+reading the Bearing column rather than Varies: `resourceSurplus` is alive and only at regroup (bearing
+8.6% there, 0.0% elsewhere), and `hand.canAct` is inert (bearing 0.0%).
+
+**Inert is not the same as removable.** `hand.canAct` changes no decision the bench reaches, and
+deleting it would still invert the lower bound asserted in `handValue.test.ts`, which keeps the model
+from banking its last castable card. See [experiments.md](experiments.md).
 
 ### Banking: `resource` must exceed `card`
 
