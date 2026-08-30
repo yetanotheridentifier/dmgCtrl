@@ -1,10 +1,11 @@
-import type { DamageSource, GameState, PendingChoice, PlayerId, UnitState } from './types'
+import type { DamageSource, GameState, PendingChoice, PendingTrigger, PlayerId, UnitState } from './types'
 import { opponentOf, updatePlayer, recordUnitDefeated, recordUnitDamaged, recordUnitLeftPlay, pushChoice, abilityCardIds } from './types'
+import { enqueueTriggers, drainTriggers } from './triggerQueue'
 import { effectiveHp } from './stats'
 import type { StatContext } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
-import { runUnitTrigger, getCardDefinition } from './abilities'
+import { collectUnitTriggers, getCardDefinition } from './abilities'
 import { fireUpgradesDefeated, fireUnitsTrigger, damageIsUnpreventable, releaseCaptured } from './effects'
 
 /** Product of the damage multipliers the unit's card and upgrades contribute. */
@@ -27,8 +28,15 @@ function damageMultiplier(state: GameState, unit: UnitState): number {
  * Apply damage to a player's units, defeating any with damage ≥ HP (CR 1.9.6).
  * Fires each defeated unit's (and its upgrades') `whenDefeated` abilities after
  * the unit has left play.
+ *
+ * `defer` holds the trigger batch open for a caller that is still adding to it. The combat damage step
+ * is ONE event: attacker and defender are damaged by two calls, but the units they defeat die
+ * simultaneously and their abilities are ordered as a single batch (CR 1.9.10). Draining after the
+ * first call would resolve the defender's ability before the attacker's had even been collected, which
+ * is precisely the eager dispatch this queue exists to stop. A lone call is a whole event, so it drains
+ * itself and behaves exactly as it always did.
  */
-export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<string, number>, byCombat = false, statCtx: StatContext = {}, source?: DamageSource): GameState {
+export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<string, number>, byCombat = false, statCtx: StatContext = {}, source?: DamageSource, defer = false): GameState {
   // Unpreventable damage ignores Shields entirely — the token isn't even spent (Gorian Shard).
   const unpreventable = damageIsUnpreventable(state, source)
   const p = state.players[owner]
@@ -68,11 +76,14 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
     }
   }
 
-  let result = finishDefeats(state, owner, survivors, defeated, byCombat, spentShieldOwners)
+  let result = finishDefeats(state, owner, survivors, defeated, byCombat, spentShieldOwners, defer)
   // "…a unit that was damaged this phase" (Galvanized Leap) — recorded whether or not it survived.
   for (const id of damagedIds) result = recordUnitDamaged(result, id)
   if (survivedDamage) result = fireUnitsTrigger(result, 'whenFriendlyDamagedSurvives', owner)
-  return result
+  // Resolve the batch here, which is where it used to resolve. `drainTriggers` stops of its own accord
+  // as soon as a player has something to order, so deferral costs nothing when there is no decision:
+  // the overwhelmingly common single-ability defeat behaves exactly as it did.
+  return defer ? result : drainTriggers(result)
 }
 
 /**
@@ -84,7 +95,7 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
  * `spentShieldOwners` carries shields defeated by soaking this same damage, so they settle in the
  * same pass as the upgrades that went down with their hosts, one reaction each.
  */
-function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[], defeated: UnitState[], byCombat = false, spentShieldOwners: PlayerId[] = []): GameState {
+function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[], defeated: UnitState[], byCombat = false, spentShieldOwners: PlayerId[] = [], sameEvent = false): GameState {
   // Always write `survivors` back — they carry the damage just applied (defeated may be empty).
   const p = state.players[owner]
   const defeatedUpgrades = defeated.flatMap(u => u.upgrades).filter(a => state.cards[a.cardId]?.type !== 'token')
@@ -124,17 +135,27 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
   const lostUpgradeOwners = [...defeated.flatMap(u => u.upgrades).map(a => a.owner), ...spentShieldOwners]
   if (lostUpgradeOwners.length > 0) result = fireUpgradesDefeated(result, lostUpgradeOwners)
 
+  // Collected rather than fired. This is the only trigger point that can leave abilities owed on BOTH
+  // sides at once, so it is where CR 7.6.10 lives; running them here would settle the order before
+  // anyone could be asked for it. `drainTriggers` resolves the batch once the action completes.
+  const owed: PendingTrigger[] = []
   for (const dead of defeated) {
     result = recordUnitDefeated(result, owner, dead.cardId) // "defeated this phase" tracking
     result = recordUnitLeftPlay(result, owner, dead.cardId, dead.isLeader)
-    result = runUnitTrigger(result, 'whenDefeated', dead, owner, { defeatedUnit: dead, defeatedByCombat: byCombat })
-    // "When another friendly unit is defeated" (The Twins) — the controller's surviving units
-    // react. Re-found each step in case an earlier reactor changed the board.
-    result = fireUnitsTrigger(result, 'whenFriendlyUnitDefeated', owner, { defeatedUnit: dead })
+    const ctx = { defeatedUnit: dead, defeatedByCombat: byCombat }
+    owed.push(...collectUnitTriggers(result, 'whenDefeated', dead, owner, ctx))
+    // "When another friendly unit is defeated" (The Twins) — the controller's surviving units react.
+    for (const u of result.players[owner].units) {
+      owed.push(...collectUnitTriggers(result, 'whenFriendlyUnitDefeated', u, owner, { defeatedUnit: dead }))
+    }
     // "When an enemy unit is defeated" (Chimaera) — the other side reacts.
-    result = fireUnitsTrigger(result, 'whenEnemyUnitDefeated', opponentOf(owner), { defeatedUnit: dead })
+    for (const u of result.players[opponentOf(owner)].units) {
+      owed.push(...collectUnitTriggers(result, 'whenEnemyUnitDefeated', u, opponentOf(owner), { defeatedUnit: dead }))
+    }
   }
-  return result
+  // `sameEvent` when the caller is still filling this batch: its remaining calls are simultaneous with
+  // this one, not nested under it.
+  return enqueueTriggers(result, owed, sameEvent)
 }
 
 /**
@@ -153,9 +174,13 @@ export function sweepStateBasedDefeats(state: GameState): GameState {
       const doomed = units.filter(u => u.damage >= effectiveHp(next, u))
       if (doomed.length === 0) continue
       const doomedIds = new Set(doomed.map(u => u.instanceId))
-      next = finishDefeats(next, owner, units.filter(u => !doomedIds.has(u.instanceId)), doomed)
+      // One state-based check defeats both sides at once, so the two owners fill the same batch.
+      next = finishDefeats(next, owner, units.filter(u => !doomedIds.has(u.instanceId)), doomed, false, [], true)
       changed = true
     }
+    // Drained per pass, so a trigger that changes the board again is seen by the next one, which is
+    // what the eager dispatch used to give for free.
+    if (changed) next = drainTriggers(next)
     if (!changed) break
   }
   return next
@@ -166,7 +191,7 @@ export function sweepStateBasedDefeats(state: GameState): GameState {
 export function defeatUnit(state: GameState, instanceId: string): GameState {
   for (const owner of ['player', 'opponent'] as PlayerId[]) {
     const target = state.players[owner].units.find(u => u.instanceId === instanceId)
-    if (target) return finishDefeats(state, owner, state.players[owner].units.filter(u => u.instanceId !== instanceId), [target])
+    if (target) return drainTriggers(finishDefeats(state, owner, state.players[owner].units.filter(u => u.instanceId !== instanceId), [target]))
   }
   return state
 }

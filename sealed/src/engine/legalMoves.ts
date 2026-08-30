@@ -286,7 +286,8 @@ function choiceMoves(state: GameState): Action[] {
   // An outstanding "who resolves first" gates the whole queue (CR 7.6.10). Offering anything alongside
   // it would let the player settle the order by accident, by answering one of their own triggers and
   // thereby choosing themselves without being asked.
-  const gate = (state.pendingChoices ?? []).find(c => c.kind === 'chooseTriggerOrder' && c.controller === state.activePlayer)
+  const gate = (state.pendingChoices ?? []).find(c =>
+    (c.kind === 'chooseTriggerOrder' || c.kind === 'chooseNextTrigger') && c.controller === state.activePlayer)
   const queue = gate ? [gate] : (state.pendingChoices ?? [])
 
   for (const choice of queue) {
@@ -388,6 +389,11 @@ function choiceMoves(state: GameState): Action[] {
         // Exactly two answers and no decline: someone has to go first (CR 7.6.10).
         moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 0 }) // us first
         moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 1 }) // them first
+        break
+      }
+      case 'chooseNextTrigger': {
+        // One move per owed ability of our own, no decline: they all resolve, the order is the choice.
+        choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
         break
       }
       case 'chooseOne': {

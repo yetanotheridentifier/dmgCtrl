@@ -771,9 +771,13 @@ function breakTie(
  * actually see a difference, which is the whole point of asking.
  */
 export function settleTriggerOrderTie(state: GameState, tied: Action[]): Action[] {
+  // Both ordering questions, for the same reason. `chooseNextTrigger` (CR 7.6.9) is asked far more
+  // often, and option 0 there is the order the engine collected the abilities in, which is exactly what
+  // the dispatcher did before anyone was asked. A tie must not turn that into a coin flip either.
   const isOrder = (m: Action): boolean =>
     m.type === 'acceptChoice'
-    && (state.pendingChoices ?? []).some(c => c.id === m.choiceId && c.kind === 'chooseTriggerOrder')
+    && (state.pendingChoices ?? []).some(c =>
+      c.id === m.choiceId && (c.kind === 'chooseTriggerOrder' || c.kind === 'chooseNextTrigger'))
   if (!tied.every(isOrder)) return tied
   const first = tied.filter(m => m.type === 'acceptChoice' && (m.optionIndex ?? 0) === 0)
   return first.length > 0 ? first : tied

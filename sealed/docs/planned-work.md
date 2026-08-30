@@ -172,4 +172,10 @@ extra ids for no extra work.
   separately keys on the upgrade's owner rather than the controlling unit's controller, which is wrong
   for a stolen unit carrying one. Raising a mandatory choice during regroup needs thought first.
 - **Per-player unique-symbol rule** (defeat a duplicate).
+- **Suppressing a trigger-ordering prompt where the order cannot matter.** Every simultaneous batch is
+  ordered by its controller, so three of one player's units dying together asks two questions even when
+  all three abilities do the same thing. Deliberately not attempted yet: "cannot matter" is a hard
+  property to establish, and getting it wrong silently removes a real decision. Ship the prompt, gather
+  play-testing, suppress with evidence. Any attempt should be gated on the prompt genuinely being a
+  nuisance in play rather than on how it reads in the test suite.
 - **Offensive pinning.** Closed on prevalence rather than deferred; see experiments.md.

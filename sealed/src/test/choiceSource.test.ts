@@ -94,9 +94,14 @@ describe('every choice raised in real games can name its source (#374)', () => {
      * "why is this card asking" but "whose batch goes first". Its overlay lists the waiting triggers
      * with their own sources, which is the answer to "why am I being asked this".
      *
-     * Deliberately a list of ONE, and it should stay short. Anything a card raised must name that card.
+     * `chooseNextTrigger` is the same question one level down (CR 7.6.9): which of your OWN abilities
+     * resolves next. It is raised only when two or more triggered together, so again no single card
+     * raised it. Each candidate carries its own `cardId`, so the prompt names every waiting ability's
+     * source individually, which is strictly more information than a single stamped source could give.
+     *
+     * Deliberately short, and it should stay short. Anything a card raised must name that card.
      */
-    const ruleLevel = new Set(['chooseTriggerOrder'])
+    const ruleLevel = new Set(['chooseTriggerOrder', 'chooseNextTrigger'])
 
     decks.forEach((deck, d) => {
       const seed = nextSeed(1000 + d)

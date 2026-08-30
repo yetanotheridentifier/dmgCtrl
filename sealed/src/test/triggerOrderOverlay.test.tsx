@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, within, fireEvent } from '@testing-library/react'
-import { TriggerOrderOverlay } from '../components/gameScreen'
+import { TriggerOrderOverlay, NextTriggerOverlay } from '../components/gameScreen'
 import { state, player, unit, card, CARDS } from './helpers/engineFixtures'
-import type { PendingChoice } from '../engine/types'
+import type { PendingTrigger } from '../engine/types'
 import '../engine/cardDefinitions'
 
 /**
@@ -22,25 +22,25 @@ const cards = {
   ASH_153: card({ id: 'ASH_153', name: 'Green Leader', type: 'unit', arena: 'ground', power: 3, hp: 3 }),
 }
 
-// The unit that RAISED a choice is what names it, ahead of any `source` field, so the fixture's units
-// have to be the cards the prompts should read as: our Green Leader, their Ant Droid.
-const board = () => state({
+/**
+ * Waiting ABILITIES, not the choices some of them raise. Ant Droid's When Defeated just draws a card:
+ * under the old choice-based listing it contributed nothing to the overlay, so the side it was on read
+ * "nothing waiting" while genuinely owing a trigger.
+ */
+const trigger = (over: Partial<PendingTrigger> & Pick<PendingTrigger, 'id' | 'controller' | 'cardId'>): PendingTrigger =>
+  ({ point: 'whenDefeated', abilityIndex: 0, layer: 0, ...over })
+
+const board = (owed: PendingTrigger[] = []) => state({
   cards,
+  pendingTriggers: owed,
   players: {
     player: player({ units: [unit('a', 'ASH_153')] }),
     opponent: player({ units: [unit('e', 'ASH_116')] }),
   },
 })
 
-const mine: PendingChoice[] = [{
-  kind: 'mayDamage', id: 'ours', controller: 'player', unitId: 'a', targets: ['e'], amount: 2, optional: true,
-  source: { cardId: 'ASH_153', controller: 'player' },
-}]
-
-const theirs: PendingChoice[] = [{
-  kind: 'mayGiveTokens', id: 'theirs', controller: 'opponent', token: 'Advantage', count: 1, targets: ['e'], optional: false,
-  source: { cardId: 'ASH_116', controller: 'opponent' },
-}]
+const mine: PendingTrigger[] = [trigger({ id: 'ours', controller: 'player', cardId: 'ASH_153' })]
+const theirs: PendingTrigger[] = [trigger({ id: 'theirs', controller: 'opponent', cardId: 'ASH_116' })]
 
 describe('TriggerOrderOverlay', () => {
   it('lists both sides, and names the card behind each waiting trigger', () => {
@@ -70,5 +70,45 @@ describe('TriggerOrderOverlay', () => {
   it('says so when a side has nothing waiting', () => {
     render(<TriggerOrderOverlay state={board()} mine={mine} theirs={[]} onPick={vi.fn()} />)
     expect(within(screen.getByTestId('trigger-order-theirs')).getByText(/nothing waiting/i)).toBeInTheDocument()
+  })
+
+  /**
+   * The listing must survive an ability that raises no choice, because that is the case the whole fix
+   * is about: Ant Droid's When Defeated draws a card and asks nothing, and the old choice-based
+   * listing rendered it as an empty side.
+   */
+  it('lists an ability that raises no choice of its own', () => {
+    render(<TriggerOrderOverlay state={board()} mine={[]} theirs={theirs} onPick={vi.fn()} />)
+    expect(within(screen.getByTestId('trigger-order-theirs')).queryByText(/nothing waiting/i)).not.toBeInTheDocument()
+    expect(within(screen.getByTestId('trigger-order-theirs')).getByText(/Ant Droid/)).toBeInTheDocument()
+  })
+})
+
+/**
+ * Ordering your own simultaneous abilities (CR 7.6.9).
+ *
+ * Naming each candidate by its own card is the point: the reported case was one unit carrying two When
+ * Defeated abilities, its own and one granted by an upgrade, which are indistinguishable otherwise.
+ */
+describe('NextTriggerOverlay', () => {
+  const owed = [
+    trigger({ id: 'own', controller: 'player', cardId: 'ASH_153' }),
+    trigger({ id: 'upgrade', controller: 'player', cardId: 'ASH_116' }),
+  ]
+  const candidates = owed.map(t => ({ triggerId: t.id, cardId: t.cardId }))
+
+  it('offers one button per waiting ability, each naming its card', () => {
+    render(<NextTriggerOverlay state={board(owed)} candidates={candidates} onPick={vi.fn()} />)
+    expect(screen.getByTestId('next-trigger-btn-0')).toHaveTextContent(/Green Leader/)
+    expect(screen.getByTestId('next-trigger-btn-1')).toHaveTextContent(/Ant Droid/)
+  })
+
+  /** No decline: both abilities resolve, the only question is which comes first. */
+  it('reports the picked ability by index, and offers no way out', () => {
+    const onPick = vi.fn()
+    render(<NextTriggerOverlay state={board(owed)} candidates={candidates} onPick={onPick} />)
+    fireEvent.click(screen.getByTestId('next-trigger-btn-1'))
+    expect(onPick).toHaveBeenCalledWith(1)
+    expect(screen.queryByText(/cancel|skip|decline/i)).not.toBeInTheDocument()
   })
 })
