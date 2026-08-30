@@ -21,6 +21,24 @@ const D = {
   BRUISER: card({ id: 'BRUISER', name: 'Bruiser', type: 'unit', arena: 'ground', power: 6, hp: 8 }),
 }
 
+/**
+ * Answer any outstanding trigger-ordering prompt, taking each in queue order.
+ *
+ * Needed only where a batch leaves one player several abilities at once: the engine holds the batch
+ * rather than picking an order for them. Every test using it has a batch whose members do the same
+ * thing, so the pick is arbitrary and the assertion is about the total, not the sequence.
+ */
+function settleOrdering(s: GameState): GameState {
+  let next = s
+  for (let i = 0; i < 16; i++) {
+    const ask = (next.pendingChoices ?? [])
+      .find(c => c.kind === 'chooseNextTrigger' || c.kind === 'chooseTriggerOrder')
+    if (!ask) return next
+    next = resolve(next, { type: 'acceptChoice', choiceId: ask.id, optionIndex: 0 })
+  }
+  return next
+}
+
 /** One Ant Droid, an empty hand, and a deck deep enough that a runaway draw is visible. */
 const board = (droid = unit('ant', 'ASH_116', { arena: 'ground' })): GameState => state({
   phase: 'action',
@@ -75,6 +93,9 @@ describe('Ant Droid draws exactly one card however it is defeated (#376)', () =>
     })
     const wiped = applyUnitDamage(three, 'player', new Map([['a', 2], ['b', 2], ['c', 2]]))
     expect(wiped.players.player.units).toHaveLength(0)
-    expect(drawn(wiped)).toBe(3)
+    // Three abilities on cards one player controls, so the order is theirs to pick (CR 7.6.9) and the
+    // batch waits to be told. All three are the same draw, so the order cannot matter here: the count
+    // is what #376 is about, and it is unchanged once the prompts are answered.
+    expect(drawn(settleOrdering(wiped))).toBe(3)
   })
 })

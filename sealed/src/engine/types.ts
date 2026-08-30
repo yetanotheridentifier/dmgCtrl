@@ -11,6 +11,7 @@
  */
 
 import type { AttackTarget } from './actions'
+import type { TriggerPoint } from './abilities'
 
 export type PlayerId = 'player' | 'opponent'
 export type Arena = 'ground' | 'space'
@@ -288,6 +289,26 @@ export interface GameState {
    */
   pendingResumeActive?: PlayerId
   /**
+   * Triggered abilities that have fired but not yet resolved, one entry per **ability**.
+   *
+   * The rules order triggered abilities (CR 7.6.9, 7.6.10), and most abilities resolve without asking
+   * the player anything. Ordering therefore cannot be read off `pendingChoices`: a batch where one side
+   * draws a card and the other looks at a deck top puts a single entry in that queue, so the engine
+   * saw one side owing something and never asked. The abilities have to exist as data before they run.
+   *
+   * Per ability rather than per unit, because a unit's own ability and one granted by an upgrade on it
+   * are two abilities the player orders (the reported case was exactly that).
+   */
+  pendingTriggers?: PendingTrigger[]
+  /**
+   * Which side is currently entitled to resolve its triggers, once CR 7.6.10 has been answered.
+   *
+   * Held separately from `activePlayer` because that moves for other reasons, and a batch may outlive
+   * several choices. Scoped to the layer it was answered for, so a nested batch does not silently
+   * inherit an answer given about the batch it interrupted. Cleared when the triggers drain.
+   */
+  triggerTurn?: { side: PlayerId; layer: number }
+  /**
    * Transient "this phase" stat/keyword modifiers, each aimed at a unit.
    * Folded into `effectivePower`/`effectiveHp`/`unitKeywords`; cleared at the start of
    * the regroup phase so a unit defeated during regroup uses its base stats.
@@ -397,6 +418,49 @@ export interface PhaseEvents {
   leaderLeftPlay: PlayerId[]
   /** Card ids each player has played this phase, in order — "the first X you play each phase". */
   played: Record<PlayerId, string[]>
+}
+
+/**
+ * One triggered ability, owed but not yet resolved.
+ *
+ * Plain data so it survives the `initialState + moves` replay contract: everything the dispatcher
+ * needs to run the ability later is either an id or a value already in state. The context fields are
+ * the ones the defeat batch supplies; a trigger point that needs more adds its own here rather than
+ * smuggling a closure through.
+ */
+export interface PendingTrigger {
+  id: string
+  /** Whose ability it is, and therefore whose order it is (CR 7.6.9). */
+  controller: PlayerId
+  point: TriggerPoint
+  /**
+   * The card the ability belongs to. An upgrade's ability is attributed to the **upgrade**, not to
+   * the unit hosting it, which is what lets a prompt tell one owed ability from another.
+   */
+  cardId: string
+  /** Index into that card's registered abilities, since one card may carry two at the same point. */
+  abilityIndex: number
+  /**
+   * Nesting depth (CR 7.6.11). A batch that fires together shares a layer; anything triggered *while*
+   * resolving one of them sits one deeper and resolves first.
+   *
+   * The layer is what makes a nested ability un-orderable against the batch it interrupted: the rules
+   * say it "must be resolved next", so only abilities that triggered at the same time are ever offered
+   * as a choice. Ordering questions are therefore asked within a layer, never across two.
+   */
+  layer: number
+  /** The in-play instance the ability fires from, when it still exists. */
+  sourceInstanceId?: string
+  /**
+   * The controller has already named this one as the next to resolve (CR 7.6.9), so the dispatcher
+   * runs it instead of asking again. Without it, moving the pick to the front is invisible to a
+   * dispatcher that only counts how many are owed, and the same question repeats forever.
+   */
+  picked?: boolean
+  /** `whenDefeated`: the unit as it was at the moment of defeat (it has left play). */
+  defeatedUnit?: UnitState
+  /** `whenDefeated`: the defeat was caused by combat damage. */
+  defeatedByCombat?: boolean
 }
 
 /**
@@ -513,6 +577,16 @@ type ChoiceVariant =
    * offering a decision that is not theirs to make.
    */
   | { kind: 'chooseTriggerOrder'; id: string; controller: PlayerId }
+  /**
+   * CR 7.6.9: a player with several of their own abilities owed at once chooses the order.
+   *
+   * `cardId` rides alongside the trigger id so a prompt can name the card each waiting ability came
+   * from. Two abilities off one unit are otherwise indistinguishable, and one of them is routinely an
+   * upgrade's rather than the host's.
+   *
+   * Only raised for two or more: a single owed ability is not a decision.
+   */
+  | { kind: 'chooseNextTrigger'; id: string; controller: PlayerId; candidates: { triggerId: string; cardId: string }[] }
   // Luke front: may exhaust the (undeployed) leader to heal `amount` from `unitId`, or decline.
   | { kind: 'mayExhaustLeaderHealUnit'; id: string; controller: PlayerId; unitId: string; amount: number }
   // Luke deployed: heal `amount` from a chosen unit (`unitTargets`) or base (`baseTargets`). Mandatory.

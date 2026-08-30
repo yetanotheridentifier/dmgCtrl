@@ -28,7 +28,9 @@ registerCard(cardId, definition)      // merges: abilities append, hooks overwri
 getCardDefinition(cardId)             // the hooks
 getAbilities(cardId)                  // the triggered abilities
 runTrigger(state, point, ctx)         // called by resolve
-runUnitTrigger(state, point, unit, owner, extra?)
+runUnitTrigger(state, point, unit, owner, extra?)          // fire now
+collectUnitTriggers(state, point, unit, owner, extra?)     // the same abilities, as data
+runPendingTrigger(state, trigger)                          // resolve one collected ability
 ```
 
 `effect: (state, ctx) => state` is pure like everything else in the engine, with
@@ -48,6 +50,23 @@ play by then).
 
 Each ability is attributed to the card it came from, not the host, so an upgrade's ability names the
 upgrade.
+
+### Firing now, or collecting to order
+
+Most trigger points fire immediately through `runUnitTrigger`. **Defeat triggers do not.** They are
+collected as data by `collectUnitTriggers` and resolved by the queue in `engine/triggerQueue.ts`,
+because that is the one point where abilities can be owed on **both** sides at once, and the rules give
+the players the ordering (CR 7.6.9, 7.6.10). Running them on the spot destroys that decision before it
+can be offered, which is why the split exists. `choices.md` owns the ordering rules; this is only the
+dispatch half.
+
+The two paths enumerate the same abilities from the same sources. `collectUnitTriggers` snapshots the
+card list at the moment of triggering rather than recomputing it at resolution time, so whether an aura
+or a lasting effect granted the ability is settled when it triggers.
+
+`runPendingTrigger` addresses one ability by `cardId` + `abilityIndex`, indexing the card's **full**
+ability list. A card carrying two abilities at the same point is exactly the case the ordering prompt
+exists for, so they must stay individually addressable.
 
 ### Trigger points
 

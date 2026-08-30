@@ -23,8 +23,7 @@ that fires more than once for one event relies on it.
 ## Answering
 
 `legalMoves` → `choiceMoves` offers options for **every** pending choice the active player controls,
-not just the head, so a player resolves their own simultaneous triggers in any order they like
-(CR 7.6.9).
+not just the head, so a player answers their own outstanding choices in any order they like.
 
 - **`acceptChoice { choiceId, targetInstanceId?, deckIndex?, optionIndex?, baseTarget?, handIndex?, cardName? }`**
   takes the positive option.
@@ -40,49 +39,83 @@ making the answered ability appear not to resolve. There is deliberately no such
 first, then control passes; round-start choices (`resumeAtInitiative`) begin the action phase with
 the initiative holder, mid-turn choices `advanceTurn`.
 
-### Nested abilities jump the queue
+## Ordering triggered abilities
 
-**CR 7.6.11 and 7.6.12**: an ability triggered *while resolving* another must resolve before anything
+The rules let players order triggered **abilities** (CR 7.6.9 - 7.6.12). That is a different queue from
+the one above, and it has to be: most abilities resolve without asking the player anything, so a batch
+is not visible in `pendingChoices` at all. A trade where one side draws a card and the other looks at a
+deck top leaves a single entry there, which reads as "only one side owes something" and asks nothing.
+
+So abilities are collected as data before they run:
+
+```ts
+GameState.pendingTriggers?: PendingTrigger[]
+```
+
+One entry per **ability**, not per unit: a unit's own ability and one granted by an upgrade attached to
+it are two abilities their controller orders. `collectUnitTriggers` snapshots the card list at the
+moment of triggering, which is also the more correct reading of when an aura's grant is settled.
+`drainTriggers` then resolves the batch, stopping wherever a player has something to decide.
+
+### The two questions
+
+| Choice | Rule | Asked when |
+| --- | --- | --- |
+| `chooseTriggerOrder` | CR 7.6.10 | abilities owed on **both** sides: the **active player** picks which player goes first, and only that |
+| `chooseNextTrigger` | CR 7.6.9 | that player owes **two or more**: they pick which of their own resolves next |
+
+Neither is ever offered over the opponent's internal order. `chooseNextTrigger` carries each candidate's
+own `cardId`, because a prompt that cannot name the card is useless where one unit carries two.
+
+**Both gate the queue.** While either is pending, `choiceMoves` offers only that choice. Without the
+gate a player could answer one of their own triggers instead and settle the order by accident.
+
+### Nesting is a layer, not a position
+
+**CR 7.6.11 and 7.6.12**: an ability triggered *while resolving* another resolves before anything
 triggered at the same time as its parent, and each layer resolves fully before returning to an earlier
-one.
+one. A nested ability is therefore **not orderable** against the batch it interrupted, so ordering
+questions are asked within a layer and never across two.
 
-`pushChoice` appends, which is correct for a **batch** of simultaneous triggers (`finishDefeats` fires
-one per defeated unit, and those genuinely are at the same time) and wrong for a nested one, which
-landed behind the opponent's waiting trigger.
+`enqueueTriggers` assigns the layer, and the signal is simply that **the queue was not empty**: it is
+only non-empty between firing and draining, so anything arriving in that window was triggered by
+resolving something already in it. The exception is a caller filling one event across several calls,
+which passes `sameEvent`: the combat damage step damages each side separately, but the units it defeats
+die together.
 
-The signal separating the two is **when the push happened**: during a plain action it is a batch,
-during the resolution of an answer it is nested. `promoteNested` keys on exactly that, next to
-`inheritSource` which already hooks both answer paths, so nothing has to be threaded through the effect
-layer. Relative order within each group is preserved, since simultaneous nested abilities are their
-own controller's to order.
+Assigned at enqueue rather than after the answering action completes, because a drain can happen in
+between. Damage dealt while answering a trigger's choice defeats a unit, and `applyUnitDamage` drains
+before control returns to the resolver, so a layer assigned later is assigned too late.
 
-The CR's worked example is the test: two units trade, one's When Defeated defeats a third unit, and
-that third unit's trigger resolves before the opponent's original.
+The CR's worked example is the test: two units trade, one's When Defeated defeats a third unit, and that
+third unit's trigger resolves before the opponent's original, with no ordering prompt in between.
 
-### Who resolves first is the active player's choice
+### Draining, and who is active
 
-**CR 7.6.10** gives the **active player** the choice of which *player* resolves their triggers first,
-and only that: the opponent's internal order is never theirs to pick.
+`drainTriggers` moves `activePlayer` to each ability's controller so a choice it raises reaches the
+right side, and **restores it on a full drain**. Only on a full drain: stopping to ask a question
+deliberately leaves it on the chooser.
 
-With triggers owed on both sides, `handOffOpponentChoice` raises a `chooseTriggerOrder` choice for the
-active player at the **front** of the queue. Option 0 keeps the turn; option 1 hands it over and
-`resumeAfterChoice` brings it back once their side drains, the same path an interjected choice uses.
+The restore is load-bearing. A batch that resolved silently once left `activePlayer` parked on the last
+ability's owner, the attack path read "the attacker" back out of that state and got the defender,
+and `advanceTurn` then flipped the turn to the wrong player for the rest of the game.
 
-**It gates the queue.** While it is pending, `choiceMoves` offers only that choice. Without the gate a
-player could answer one of their own triggers instead and settle the order by accident, choosing
-themselves without ever being asked.
+### The AI
 
-It carries no target and no list, deliberately: offering anything finer would be offering a decision
-that is not the active player's to make.
+The bot answers both through quiescent scoring, which drives the owed chain before scoring, so each
+option is priced by the boards it reaches rather than the board it starts from. Where options tie,
+`settleTriggerOrderTie` takes option 0: resolving first for CR 7.6.10, and collection order for
+CR 7.6.9. That is a regression guard rather than a preference. Both were fixed sensible answers before
+the questions existed, and asking must not turn them into a coin flip.
 
-The AI answers it through quiescent scoring, which drives the owed chain before scoring, so each option
-is priced by the boards it reaches rather than the board it starts from. Where the two still tie,
-`settleTriggerOrderTie` resolves first. That is a regression guard rather than a preference: the engine
-always went first before this choice existed, and asking the question must not turn a fixed sensible
-answer into a coin flip.
+**Neither is raised by a card**, so both are exemptions in the source-attribution guarantee below.
+`chooseNextTrigger` more than covers the gap: it names every waiting ability's source individually,
+which is more than a single stamped source could say.
 
-**It is the only choice no card raises**, so it is the one exemption in the source-attribution guarantee
-below.
+**Prompt volume is a known cost.** Three of one player's units dying together asks two questions even
+when all three abilities do the same thing. Suppressing the prompt where order cannot matter is
+deliberately not attempted: "cannot matter" is hard to establish, and getting it wrong silently removes
+a real decision.
 
 ### A decided game has no pending choices
 

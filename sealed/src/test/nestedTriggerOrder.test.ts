@@ -82,7 +82,9 @@ describe('nested triggered abilities (CR 7.6.11)', () => {
     const traded = resolve(board(), { type: 'attack', attackerId: 'greedo', target: { kind: 'unit', instanceId: 'vanguard' } })
     expect(traded.players.player.units.find(u => u.instanceId === 'greedo'), 'Greedo dies').toBeUndefined()
     expect(traded.players.opponent.units.find(u => u.instanceId === 'vanguard'), 'Vanguard dies').toBeUndefined()
-    const owed = (traded.pendingChoices ?? []).map(c => c.controller)
+    // Read off the TRIGGER queue, not the choice queue. Abilities are owed as abilities; only the one
+    // actually being resolved has raised a choice, since each resolves fully before the next (7.6.12).
+    const owed = (traded.pendingTriggers ?? []).map(t => t.controller)
     expect(owed, 'both sides owe a trigger').toContain('player')
     expect(owed).toContain('opponent')
   })
@@ -104,14 +106,15 @@ describe('nested triggered abilities (CR 7.6.11)', () => {
     const killedMotti = resolve(traded, { type: 'acceptChoice', choiceId: ours!.id, targetInstanceId: 'motti' })
     expect(killedMotti.players.opponent.units.find(u => u.instanceId === 'motti'), 'Motti dies to it').toBeUndefined()
 
-    // Keyed on `id`, which these fixtures set to the defeated unit's instance id. `unitId` is not on
-    // every choice variant, so it cannot be read off the queue generically.
-    const queue = (killedMotti.pendingChoices ?? []).map(c => c.id)
-    expect(queue, 'both the nested trigger and the waiting one are owed').toEqual(
-      expect.arrayContaining(['motti', 'vanguard']),
-    )
-    expect(queue.indexOf('motti'), 'the nested ability resolves FIRST (CR 7.6.11)')
-      .toBeLessThan(queue.indexOf('vanguard'))
+    // Motti's ability is nested, so it jumps the whole batch and is the one now resolving: its choice
+    // is raised (keyed on `id`, which these fixtures set to the defeated unit's instance id) while
+    // Vanguard's ability, triggered at the same time as the parent, is still only owed.
+    const raised = (killedMotti.pendingChoices ?? []).map(c => c.id)
+    expect(raised, 'the nested ability is the one resolving (CR 7.6.11)').toContain('motti')
+    expect(raised, 'and the interrupted one has not begun').not.toContain('vanguard')
+
+    const stillOwed = (killedMotti.pendingTriggers ?? []).map(t => t.sourceInstanceId)
+    expect(stillOwed, 'Vanguard waits its turn (CR 7.6.12)').toContain('vanguard')
   })
 })
 
@@ -172,8 +175,8 @@ describe('choosing which player resolves first (CR 7.6.10)', () => {
     const theirs = resolve(s, { type: 'acceptChoice', choiceId: s.pendingChoices![0].id, optionIndex: 1 })
     expect(theirs.activePlayer).toBe('opponent')
 
-    const oursLeft = (theirs.pendingChoices ?? []).filter(c => c.controller === 'player')
-    expect(oursLeft.length, 'our trigger is still owed').toBeGreaterThan(0)
+    const oursLeft = (theirs.pendingTriggers ?? []).filter(t => t.controller === 'player')
+    expect(oursLeft.length, 'our ability is still owed').toBeGreaterThan(0)
 
     const theirChoice = (theirs.pendingChoices ?? []).find(c => c.controller === 'opponent')!
     const drained = resolve(theirs, { type: 'skipTrigger', choiceId: theirChoice.id })
@@ -222,8 +225,92 @@ describe('choosing which player resolves first (CR 7.6.10)', () => {
   /** It must not fire when only one side owes anything, or every ordinary trigger grows a prompt. */
   it('does not ask when only one player owes a trigger', () => {
     registerCard(GREEDO, { abilities: [{ trigger: 'whenDefeated', description: 'none', effect: s => s }] })
-    registerCard(VANGUARD, { abilities: [{ trigger: 'whenDefeated', description: 'none', effect: s => s }] })
+    // Vanguard deliberately has NO whenDefeated, so only our side owes an ability. An earlier version of
+    // this test gave both sides one and still expected silence, which held only because neither raised a
+    // CHOICE: it was asserting the defect this file now covers.
     const s = resolve(board(), { type: 'attack', attackerId: 'greedo', target: { kind: 'unit', instanceId: 'vanguard' } })
     expect((s.pendingChoices ?? []).some(c => c.kind === 'chooseTriggerOrder')).toBe(false)
+  })
+
+  /**
+   * **The substrate, in one assertion.** Both abilities do nothing and neither raises a choice, so the
+   * pending-choice queue stays empty and the question used to go unasked. The rules order triggered
+   * ABILITIES, so it must be asked here too.
+   */
+  it('asks even when neither ability raises a choice of its own', () => {
+    registerCard(GREEDO, { abilities: [{ trigger: 'whenDefeated', description: 'none', effect: s => s }] })
+    registerCard(VANGUARD, { abilities: [{ trigger: 'whenDefeated', description: 'none', effect: s => s }] })
+    const s = resolve(board(), { type: 'attack', attackerId: 'greedo', target: { kind: 'unit', instanceId: 'vanguard' } })
+    expect((s.pendingChoices ?? []).some(c => c.kind === 'chooseTriggerOrder')).toBe(true)
+  })
+})
+
+/**
+ * Ordering a player's OWN simultaneous abilities (CR 7.6.9).
+ *
+ * > If a player must resolve multiple triggered abilities on cards they control at the same time, that
+ * > player chooses the order in which to resolve those abilities.
+ *
+ * This was previously satisfied only by accident: `choiceMoves` offers every pending choice the active
+ * player controls, so abilities that each raise one could be answered in any order. Abilities that raise
+ * none had no representation to order, and fired in dispatch order. The unit here carries two, which is
+ * the shape the filed report hit (a unit's own ability plus one granted by its upgrade).
+ */
+describe('ordering your own simultaneous abilities (CR 7.6.9)', () => {
+  afterEach(() => {
+    for (const id of [GREEDO, VANGUARD, MOTTI]) unregisterAbility(id)
+  })
+
+  /** Two abilities on our Greedo, each raising a distinctly-id'd choice so the order is readable. */
+  function registerPair(): void {
+    const raise = (id: string) => (s: GameState, ctx: { owner: 'player' | 'opponent' }): GameState => {
+      const targets = [...s.players.player.units, ...s.players.opponent.units].map(u => u.instanceId)
+      return targets.length === 0 ? s : pushChoice(s, {
+        kind: 'mayDamage', id, controller: ctx.owner, unitId: 'greedo', targets, amount: 1, optional: true,
+      })
+    }
+    registerCard(GREEDO, { abilities: [
+      { trigger: 'whenDefeated', description: 'alpha', effect: raise('alpha') },
+      { trigger: 'whenDefeated', description: 'beta', effect: raise('beta') },
+    ] })
+    registerCard(VANGUARD, { abilities: [{ trigger: 'whenDefeated', description: 'none', effect: s => s }] })
+  }
+
+  /** Both sides owe, so 7.6.10 comes first; take ourselves, then we are owed the 7.6.9 question. */
+  const ours = (): GameState => {
+    registerPair()
+    const fought = resolve(board(), { type: 'attack', attackerId: 'greedo', target: { kind: 'unit', instanceId: 'vanguard' } })
+    const order = fought.pendingChoices!.find(c => c.kind === 'chooseTriggerOrder')!
+    return resolve(fought, { type: 'acceptChoice', choiceId: order.id, optionIndex: 0 })
+  }
+
+  it('asks which of our two resolves first', () => {
+    const ask = (ours().pendingChoices ?? []).find(c => c.kind === 'chooseNextTrigger')
+    expect(ask, 'two abilities on cards we control').toBeDefined()
+    expect(ask!.controller).toBe('player')
+    expect((ask as { candidates: unknown[] }).candidates).toHaveLength(2)
+  })
+
+  /**
+   * **Each ability resolves fully before the next begins** (CR 7.6.12). Picking one must raise its
+   * choice and only its choice; the other stays owed until this one is answered.
+   */
+  it('resolves the picked ability alone, leaving the other owed', () => {
+    const asked = ours()
+    const ask = (asked.pendingChoices ?? []).find(c => c.kind === 'chooseNextTrigger')!
+    const second = resolve(asked, { type: 'acceptChoice', choiceId: ask.id, optionIndex: 1 })
+
+    // Which of the two we picked is the engine's to say; that exactly one of them ran is the rule.
+    const raised = (second.pendingChoices ?? []).map(c => c.id).filter(id => id === 'alpha' || id === 'beta')
+    expect(raised, 'one ability resolved, and only one').toHaveLength(1)
+  })
+
+  /** One ability is not a decision, so it must not grow a prompt. */
+  it('does not ask when only one of our abilities is owed', () => {
+    registerAll()
+    const fought = resolve(board(), { type: 'attack', attackerId: 'greedo', target: { kind: 'unit', instanceId: 'vanguard' } })
+    const order = fought.pendingChoices!.find(c => c.kind === 'chooseTriggerOrder')!
+    const mine = resolve(fought, { type: 'acceptChoice', choiceId: order.id, optionIndex: 0 })
+    expect((mine.pendingChoices ?? []).some(c => c.kind === 'chooseNextTrigger')).toBe(false)
   })
 })

@@ -7,6 +7,7 @@ import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, stampChoiceSource, type TriggerPoint, type EffectContext } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, sweepStateBasedDefeats, preventionOffer } from './combat'
+import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { exhaustUnit, findUnit, giveToken, giveTokens, fireUpgradeAttached, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
@@ -127,10 +128,16 @@ function resolveAction(state: GameState, action: Action): GameState {
         // A choice the attack raised keeps the turn to resolve it first. A defender's own trigger
         // (whenDefeated) is controlled by the defender, so hand control to them; remember the
         // attacker (`pendingResumeActive`) so the turn advances once every post-combat trigger drains.
-        if (hasPendingChoices(attacked)) {
-          const handed = handOffOpponentChoice(attacked, attacked.activePlayer)
+        // Post-combat triggers are owed as ABILITIES, so the batch is drained here rather than having
+        // been run inside `finishDefeats`: that is what leaves an ordering decision to offer.
+        const settled = drainTriggers(attacked)
+        if (settled.winner !== null) return settled
+        if (hasPendingChoices(settled) || (settled.pendingTriggers ?? []).length > 0) {
+          const handed = handOffOpponentChoice(settled, attacked.activePlayer)
           return handed.pendingResumeActive !== undefined ? handed : { ...handed, pendingResumeActive: attacked.activePlayer }
         }
+        // A full drain restores `activePlayer` itself, so the tail below sees the attacker.
+        attacked = settled
         // Taking the attack is how you ANSWER an Ambush / Support / "you may attack" choice, so it
         // owes the same follow-through as answering from the menu: above all the turn transition
         // `takeInitiative` parked while the choice was outstanding. Ending on a bare `advanceTurn`
@@ -547,6 +554,13 @@ function resumeAfterChoice(state: GameState, resolved: PendingChoice): GameState
     const activeHasMore = state.pendingChoices!.some(c => c.controller === state.activePlayer)
     return activeHasMore ? state : { ...state, activePlayer: opponentOf(state.activePlayer) }
   }
+  // A trigger's own choice has been answered, so the batch it belongs to carries on (CR 7.6.12). Only
+  // when that drains completely does the turn logic below apply.
+  if ((state.pendingTriggers ?? []).length > 0) {
+    const drained = drainTriggers(state)
+    if (hasPendingChoices(drained) || (drained.pendingTriggers ?? []).length > 0) return drained
+    state = drained
+  }
   // A combat suspended for an On Defense choice resumes once the queue drains.
   if (state.pendingAttack) return resumePendingAttack(state)
   // Regroup choices are resolved before anyone resources, and resourcing starts with the
@@ -940,11 +954,22 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       break
     case 'chooseTriggerOrder': {
-      // Option 1 hands the turn over so they clear their whole batch first; `resumeAfterChoice` brings
-      // it back once their side of the queue drains, which is the same path an interjected choice uses.
-      if ((optionIndex ?? 0) === 1) {
-        next = { ...next, activePlayer: opponentOf(choice.controller), pendingResumeActive: choice.controller }
+      // Records WHICH SIDE resolves its batch first and nothing else; the dispatcher takes it from
+      // there. Option 0 is us, option 1 is them. `pendingResumeActive` remembers the actor so the turn
+      // returns to them once the whole batch drains, which is the path an interjected choice uses.
+      const first = (optionIndex ?? 0) === 1 ? opponentOf(choice.controller) : choice.controller
+      // Scoped to the layer being asked about, so a nested batch re-asks rather than inheriting this.
+      const layer = (next.pendingTriggers ?? []).reduce((max, t) => Math.max(max, t.layer), 0)
+      next = { ...next, triggerTurn: { side: first, layer }, activePlayer: first }
+      if (first !== choice.controller && next.pendingResumeActive === undefined) {
+        next = { ...next, pendingResumeActive: choice.controller }
       }
+      break
+    }
+    case 'chooseNextTrigger': {
+      // CR 7.6.9: the picked ability goes to the front, and the drain resolves it next.
+      const pick = choice.candidates[optionIndex ?? 0]
+      if (pick) next = pickNextTrigger(next, pick.triggerId)
       break
     }
     case 'chooseOne': {
@@ -1736,16 +1761,9 @@ function finishDistribution(state: GameState, choice: PendingChoice & { kind: 'd
 function handOffOpponentChoice(state: GameState, actor: PlayerId): GameState {
   if (!hasPendingChoices(state)) return state
   const queue = state.pendingChoices!
-  const ours = queue.some(c => c.controller === actor)
-  const theirs = queue.some(c => c.controller === opponentOf(actor))
-  // CR 7.6.10: triggers owed on both sides, so the ACTIVE player picks which player resolves first.
-  // Raised at the front, because it gates every other choice in the queue and answering anything else
-  // would settle the order by accident.
-  if (ours && theirs && !queue.some(c => c.kind === 'chooseTriggerOrder')) {
-    const ask: PendingChoice = { kind: 'chooseTriggerOrder', id: `order-${queue.length}`, controller: actor }
-    return { ...state, activePlayer: actor, pendingChoices: [ask, ...queue] }
-  }
-  if (ours) return state
+  // Ordering is NOT decided here. It belongs to the trigger queue, which holds abilities rather than
+  // the choices some of them happen to raise, and this function only ever sees the latter.
+  if (queue.some(c => c.controller === actor)) return state
   const other = queue[0].controller
   return other === actor ? state : { ...state, activePlayer: other, pendingResumeActive: actor }
 }
@@ -2072,13 +2090,17 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   }
   const damageTo = (id: string, amount: number) => (prevented.includes(id) ? 0 : amount)
 
-  let next = applyUnitDamage(preCombat, enemyId, new Map([[defender.instanceId, damageTo(defender.instanceId, attackerPower)]]), true, defenderCtx, attackerSource)
+  // Both applications defer: the two units die to the same damage step, so their abilities are one
+  // simultaneous batch and the drain waits until both have been collected.
+  let next = applyUnitDamage(preCombat, enemyId, new Map([[defender.instanceId, damageTo(defender.instanceId, attackerPower)]]), true, defenderCtx, attackerSource, true)
   // "Deals combat damage before the defender" (Carson Teva): a defender defeated by that
   // damage never strikes back. Without it, damage is simultaneous (CR 1.9.10) and both still land.
   const defenderSurvived = next.players[enemyId].units.some(u => u.instanceId === defender.instanceId)
   if (defenderSurvived || !unitDealsDamageFirst(preCombat, attacker)) {
-    next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, damageTo(attacker.instanceId, counterPower)]]), true, { combat, attacking: true, viaAmbush }, counterSource)
+    next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, damageTo(attacker.instanceId, counterPower)]]), true, { combat, attacking: true, viaAmbush }, counterSource, true)
   }
+  // The damage step is complete, so the batch it fired can be ordered and resolved.
+  next = drainTriggers(next)
 
   // Overwhelm excess also goes through base-damage prevention.
   const overwhelmDealt = overwhelmExcess > 0 ? baseDamageAfterPrevention(next, enemyId, overwhelmExcess, attackerSource) : 0
@@ -2256,9 +2278,11 @@ function clearHidden(state: GameState): GameState {
  * return and `whenDefeated` all fire.
  */
 function sweepUnitDefeats(state: GameState): GameState {
-  let next = applyUnitDamage(state, 'player', new Map())
-  next = applyUnitDamage(next, 'opponent', new Map())
-  return next
+  // Both sides are swept by the same state-based check, so units dying on either side die together and
+  // their abilities are one batch to order (CR 1.16). Deferred, then drained once.
+  let next = applyUnitDamage(state, 'player', new Map(), false, {}, undefined, true)
+  next = applyUnitDamage(next, 'opponent', new Map(), false, {}, undefined, true)
+  return drainTriggers(next)
 }
 
 function enterRegroup(state: GameState): GameState {

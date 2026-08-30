@@ -237,6 +237,9 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'chooseTriggerOrder':
       return ['choose which player resolves their triggered abilities first']
 
+    case 'chooseNextTrigger':
+      return ['choose which of your triggered abilities resolves next']
+
     // ── Searching the deck ────────────────────────────────────────────────────────────────────
     case 'search':
       return ['choose a ground unit to discard from the revealed cards']

@@ -153,7 +153,8 @@ between successive states, keeping cloning cheap for future tree search. Card zo
 routes to the right discard on defeat; token upgrades (Shield/Experience/Advantage) and
 token units (`TOKEN_*` ids) live in the card db as built-ins. Transient per-attack
 grants (`grantedKeywords`, `grantedAbilityCardIds`), once-per-round ability usage
-(`usedAbilities`), the **pending-choice queue** (`pendingChoices`), a suspended-combat
+(`usedAbilities`), the **pending-choice queue** (`pendingChoices`), the **triggered-ability queue**
+(`pendingTriggers`, with `triggerTurn` recording whose batch is resolving), a suspended-combat
 record (`pendingAttack`), "this phase" stat/keyword modifiers (`lastingEffects`) and the
 per-phase event log (`phaseEvents`) all live on the state, JSON-serialisable. Ability *code* can't
 (functions don't serialise), so it sits in the module-level **ability registry**,

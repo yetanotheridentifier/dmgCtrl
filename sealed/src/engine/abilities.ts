@@ -1,4 +1,4 @@
-import type { EngineCard, GameState, KeywordInstance, PlayerId, UnitState, CombatContext, DamageSource } from './types'
+import type { EngineCard, GameState, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource } from './types'
 import { abilityCardIds } from './types'
 import type { AttackTarget } from './actions'
 
@@ -446,6 +446,59 @@ function auraGrantedAbilityCards(state: GameState, unit: UnitState, owner: Playe
     }
   }
   return out
+}
+
+/**
+ * The same abilities `runUnitTrigger` would fire, as data instead of as effects.
+ *
+ * Split out so a batch can be **ordered before it runs** (CR 7.6.9, 7.6.10). The card list is
+ * snapshotted here rather than recomputed at resolution time, which is also the more correct reading:
+ * whether an aura or a lasting effect granted the ability is settled when the ability triggers, not
+ * when the player gets round to resolving it.
+ *
+ * `abilityIndex` indexes the card's FULL ability list, not the filtered one, so `runPendingTrigger`
+ * can address it directly.
+ */
+export function collectUnitTriggers(
+  state: GameState,
+  point: TriggerPoint,
+  unit: UnitState,
+  owner: PlayerId,
+  extra?: Pick<EffectContext, 'defeatedUnit' | 'defeatedByCombat'>,
+): PendingTrigger[] {
+  const out: PendingTrigger[] = []
+  const cardIds = [
+    ...abilityCardIds(unit),
+    ...auraGrantedAbilityCards(state, unit, owner),
+    ...(state.lastingEffects ?? []).flatMap(e => (e.targetInstanceId === unit.instanceId ? e.abilityCardIds ?? [] : [])),
+  ]
+  for (const cardId of cardIds) {
+    getAbilities(cardId).forEach((ability, abilityIndex) => {
+      if (ability.trigger !== point) return
+      out.push({
+        id: `t${out.length}-${unit.instanceId}-${cardId}-${abilityIndex}`,
+        controller: owner, point, cardId, abilityIndex,
+        // Base layer: the dispatcher deepens anything triggered while resolving another (CR 7.6.11).
+        layer: 0,
+        sourceInstanceId: unit.instanceId,
+        ...extra,
+      })
+    })
+  }
+  return out
+}
+
+/** Resolve exactly one collected trigger. A no-op if its card's abilities are no longer registered. */
+export function runPendingTrigger(state: GameState, trigger: PendingTrigger): GameState {
+  const ability = getAbilities(trigger.cardId)[trigger.abilityIndex]
+  if (!ability || ability.trigger !== trigger.point) return state
+  return runEffect(state, ability.effect, {
+    owner: trigger.controller,
+    cardId: trigger.cardId,
+    sourceInstanceId: trigger.sourceInstanceId,
+    defeatedUnit: trigger.defeatedUnit,
+    defeatedByCombat: trigger.defeatedByCombat,
+  })
 }
 
 export function runUnitTrigger(

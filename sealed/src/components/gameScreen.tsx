@@ -4,7 +4,8 @@ import { nameableCardNames } from '../engine/legalMoves'
 import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
 import type { SavedDeck } from '../data/deckStore'
-import type { EngineCard, GameState, PendingChoice, PlayerId, UnitState, UpgradeAttachment } from '../engine/types'
+import type { EngineCard, GameState, PendingChoice, PendingTrigger, PlayerId, UnitState, UpgradeAttachment } from '../engine/types'
+import { getAbilities } from '../engine/abilities'
 import type { Action } from '../engine/actions'
 import { describeAction, handCardRef } from '../utils/describeAction'
 import type { DescribePart } from '../utils/describeAction'
@@ -463,21 +464,35 @@ export function SearchDrawOverlay({ state, choice, onPick, onDone }: {
  * Portalled to body for the same reason the other overlays are: it must clear the board's stacking
  * context.
  */
+/**
+ * How one waiting ability reads: the card that carries it, then what it does.
+ *
+ * Taken from the ability registry rather than from any choice it might raise, because most abilities
+ * raise none. Listing choices here was the UI half of the same defect as the engine's: a batch of
+ * abilities that quietly draw and make tokens rendered as "nothing waiting", and the player was asked
+ * to order a list of nothing.
+ */
+function triggerLabel(state: GameState, t: PendingTrigger): string {
+  const name = state.cards[t.cardId]?.name ?? t.cardId
+  const text = getAbilities(t.cardId)[t.abilityIndex]?.description
+  return text ? `${name}: ${text}` : name
+}
+
 export function TriggerOrderOverlay({ state, mine, theirs, onPick }: {
   state: GameState
-  mine: PendingChoice[]
-  theirs: PendingChoice[]
+  mine: PendingTrigger[]
+  theirs: PendingTrigger[]
   onPick: (optionIndex: number) => void
 }) {
-  const column = (title: string, choices: PendingChoice[], testId: string) => (
+  const column = (title: string, triggers: PendingTrigger[], testId: string) => (
     <div data-testid={testId} className="min-w-[16rem] flex-1">
       <p className="mb-2 text-xs uppercase tracking-[0.14em] text-ink-dim">{title}</p>
       <ul className="flex flex-col gap-1.5">
-        {choices.length === 0
+        {triggers.length === 0
           ? <li className="text-sm text-ink-faint">nothing waiting</li>
-          : choices.map(c => (
-            <li key={c.id} className="rounded-lg border border-line/50 px-3 py-2 text-sm text-ink">
-              <DescribedParts state={state} parts={describeChoiceParts(state, c)} />
+          : triggers.map(t => (
+            <li key={t.id} className="rounded-lg border border-line/50 px-3 py-2 text-sm text-ink">
+              {triggerLabel(state, t)}
             </li>
           ))}
       </ul>
@@ -506,6 +521,43 @@ export function TriggerOrderOverlay({ state, mine, theirs, onPick }: {
           They resolve first
         </button>
       </div>
+    </div>,
+    document.body,
+  )
+}
+
+/**
+ * Ordering your own simultaneous abilities (CR 7.6.9).
+ *
+ * One button per waiting ability, and no decline: they all resolve, the only question is the sequence.
+ * Each is named by its own card, which is the whole point of asking, since a unit's own ability and one
+ * granted by an upgrade attached to it are otherwise indistinguishable.
+ */
+export function NextTriggerOverlay({ state, candidates, onPick }: {
+  state: GameState
+  candidates: { triggerId: string; cardId: string }[]
+  onPick: (optionIndex: number) => void
+}) {
+  const owed = state.pendingTriggers ?? []
+  return createPortal(
+    <div data-testid="next-trigger-overlay" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/75 p-4">
+      <p className="text-sm text-ink">Several of your abilities triggered at once. Which resolves next?</p>
+      <ul className="flex w-full max-w-lg flex-col gap-2">
+        {candidates.map((c, i) => {
+          const trigger = owed.find(t => t.id === c.triggerId)
+          return (
+            <li key={c.triggerId}>
+              <button
+                data-testid={`next-trigger-btn-${i}`}
+                onClick={() => onPick(i)}
+                className="w-full rounded-xl border-2 border-line/60 px-4 py-2 text-left text-sm text-ink hover:border-accent hover:bg-accent/10"
+              >
+                {trigger ? triggerLabel(state, trigger) : (state.cards[c.cardId]?.name ?? c.cardId)}
+              </button>
+            </li>
+          )
+        })}
+      </ul>
     </div>,
     document.body,
   )
@@ -1254,8 +1306,15 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
       (c): c is Extract<PendingChoice, { kind: 'chooseTriggerOrder' }> =>
         c.kind === 'chooseTriggerOrder' && c.controller === 'player',
     )
+    // Read off the trigger queue: abilities are what the rules order, and most raise no choice at all.
     const waiting = (side: PlayerId) =>
-      (gameState.pendingChoices ?? []).filter(c => c.controller === side && c.kind !== 'chooseTriggerOrder')
+      (gameState.pendingTriggers ?? []).filter(t => t.controller === side)
+
+    // "Which of mine resolves next" (CR 7.6.9) gates the queue in the same way.
+    const nextTriggerChoice = gameState.pendingChoices?.find(
+      (c): c is Extract<PendingChoice, { kind: 'chooseNextTrigger' }> =>
+        c.kind === 'chooseNextTrigger' && c.controller === 'player',
+    )
 
     // A "look at the top card" choice (Camtono): its accept/decline moves are
     // shown inside the centre-screen overlay next to the card, not in the action menu.
@@ -1440,6 +1499,14 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           mine={waiting('player')}
           theirs={waiting('opponent')}
           onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: orderChoice.id, optionIndex })}
+        />
+      )
+    } else if (nextTriggerChoice) {
+      choiceOverlay = (
+        <NextTriggerOverlay
+          state={gameState}
+          candidates={nextTriggerChoice.candidates}
+          onPick={optionIndex => actAndClear({ type: 'acceptChoice', choiceId: nextTriggerChoice.id, optionIndex })}
         />
       )
     } else if (lookChoice) {

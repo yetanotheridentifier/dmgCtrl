@@ -146,6 +146,13 @@ describe('no choice raised in real games falls back to the generic prompt', () =
       for (let i = 0; i < 4000 && s.winner === null; i++) {
         if (legalMoves(s).length === 0) break
         for (const choice of s.pendingChoices ?? []) {
+          // The two trigger-ordering questions are raised by the RULES, not by a card, precisely
+          // because more than one card triggered at once: naming one of them would be arbitrary. Their
+          // instruction half still has to read, which the check below the exemption covers.
+          if (choice.kind === 'chooseTriggerOrder' || choice.kind === 'chooseNextTrigger') {
+            if (render(describeChoiceParts(s, choice)).length === 0) bad.set(choice.kind, '(no instruction)')
+            continue
+          }
           const source = render(choiceSourceRef(s, choice))
           const whole = render(describeChoiceParts(s, choice))
           const instruction = whole.slice(source.length).replace(/^[:\s]+/, '')
