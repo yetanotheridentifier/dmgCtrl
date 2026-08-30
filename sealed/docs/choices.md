@@ -59,14 +59,30 @@ own controller's to order.
 The CR's worked example is the test: two units trade, one's When Defeated defeats a third unit, and
 that third unit's trigger resolves before the opponent's original.
 
-### Who resolves first is not yet the active player's choice
+### Who resolves first is the active player's choice
 
 **CR 7.6.10** gives the **active player** the choice of which *player* resolves their triggers first,
 and only that: the opponent's internal order is never theirs to pick.
 
-The engine does not offer it. The active player simply goes first, and `enterRegroup` prefers the
-initiative holder, which is the wrong seat under the rule as well as the wrong mechanism. It is a
-simplification rather than a bug in the queue, and it is tracked separately.
+With triggers owed on both sides, `handOffOpponentChoice` raises a `chooseTriggerOrder` choice for the
+active player at the **front** of the queue. Option 0 keeps the turn; option 1 hands it over and
+`resumeAfterChoice` brings it back once their side drains, the same path an interjected choice uses.
+
+**It gates the queue.** While it is pending, `choiceMoves` offers only that choice. Without the gate a
+player could answer one of their own triggers instead and settle the order by accident, choosing
+themselves without ever being asked.
+
+It carries no target and no list, deliberately: offering anything finer would be offering a decision
+that is not the active player's to make.
+
+The AI answers it through quiescent scoring, which drives the owed chain before scoring, so each option
+is priced by the boards it reaches rather than the board it starts from. Where the two still tie,
+`settleTriggerOrderTie` resolves first. That is a regression guard rather than a preference: the engine
+always went first before this choice existed, and asking the question must not turn a fixed sensible
+answer into a coin flip.
+
+**It is the only choice no card raises**, so it is the one exemption in the source-attribution guarantee
+below.
 
 ### A decided game has no pending choices
 
@@ -99,6 +115,12 @@ suspension.
 
 A prompt has to be able to say *why* the player is being asked, which matters most when the choice
 came from the opponent's card.
+
+**One exemption, and it should stay at one.** `chooseTriggerOrder` is raised by the rules rather than by
+a card: it exists precisely *because* two cards triggered at once, so naming either would be arbitrary
+and misleading. Its overlay lists the waiting triggers with their own sources, which is the real answer
+to "why am I being asked this". `choiceSource.test.ts` carries the exemption as a one-element list, and
+anything a card raises must still name that card.
 
 Threading a source through by hand does not hold: there are **~185 `pushChoice` call sites**. There
 are only **five** places an ability effect is invoked, and each already knows its card, so the source
