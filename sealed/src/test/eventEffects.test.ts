@@ -177,6 +177,9 @@ describe('Long Live the Empire (103) — defeat a friendly Imperial to resource 
     expect(U(done, 'imp')).toBeUndefined()
     expect(done.players.player.resources).toHaveLength(before + 1)
     expect(done.players.player.deck[0]).toBe('TOUGH') // top card went to resources
+    // CR 1.7.7: an ability resourced it, and this card does not say otherwise, so it arrives
+    // exhausted. Untested until it was reported, which is why a ready resource went unnoticed.
+    expect(done.players.player.resources.at(-1)).toEqual({ cardId: 'GRD', exhausted: true })
   })
 
   it('resources nothing if the defeat is declined', () => {
