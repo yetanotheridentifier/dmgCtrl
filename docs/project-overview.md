@@ -156,7 +156,7 @@ Use `--cold` to simulate a first-time user (clears `swu_bases_cache` before each
 - The app is designed for **landscape iPhone** — portrait mode is functional but not the primary target
 - swu-db.com blocks direct browser requests (CORS) — all calls go via the Cloudflare Worker proxy at `https://worker.dmgctrl.app`
 - swuapi.com has CORS enabled and can be called directly from the browser
-- Set codes: `SOR` (Spark of Rebellion), `SHD` (Shadows of the Galaxy), `TWI` (Twilight of the Republic), `JTL` (Jump to Lightspeed), `LOF` (Legends of the Force), `SEC` (Secrets of Power), `LAW` (A Lawless Time), `IBH` (Intro Battle: Hoth)
+- Set codes with bases in the data: `SOR` (Spark of Rebellion), `SHD` (Shadows of the Galaxy), `TWI` (Twilight of the Republic), `JTL` (Jump to Lightspeed), `LOF` (Legends of the Force), `SEC` (Secrets of Power), `LAW` (A Lawless Time), `IBH` (Intro Battle: Hoth), `ASH` (Ashes of the Empire), `TS26` (2026 Twin Suns). No set list is hardcoded in the app: sets flow through from the card APIs, so a new set needs no code change
 - The owner's handle is `yetanotheridentifier` — replace in any URLs
 - Tests use `--legacy-peer-deps` in the GitHub Actions install step
 - `vmin` units are used for game screen sizing to work correctly across orientations
