@@ -171,11 +171,21 @@ export function healUnit(state: GameState, instanceId: string, amount: number): 
   return patchUnit(state, found.owner, instanceId, u => ({ ...u, damage: Math.max(0, u.damage - amount) }))
 }
 
-/** Resource the top card of a player's deck: move deck[0] into resources, ready. No-op if empty. */
+/**
+ * Resource the top card of a player's deck: move deck[0] into resources. No-op if empty.
+ *
+ * **Exhausted, per CR 1.7.7**: "if an ability instructs a player to resource a card, the card is placed
+ * facedown and exhausted in that player's resource zone unless otherwise specified". Only a card whose
+ * text says otherwise arrives ready, and neither card reaching this path does (Long Live the Empire,
+ * The Armorer), so the default is all this needs to implement.
+ *
+ * The distinction is tempo rather than economy: a ready resource is spendable in the same action that
+ * created it, so ramp that arrives ready funds itself a round early.
+ */
 export function resourceTopOfDeck(state: GameState, owner: PlayerId): GameState {
   const p = state.players[owner]
   if (p.deck.length === 0) return state
-  return { ...state, players: { ...state.players, [owner]: { ...p, resources: [...p.resources, { cardId: p.deck[0], exhausted: false }], deck: p.deck.slice(1) } } }
+  return { ...state, players: { ...state.players, [owner]: { ...p, resources: [...p.resources, { cardId: p.deck[0], exhausted: true }], deck: p.deck.slice(1) } } }
 }
 
 /** Heal `amount` damage from a player's base — never below 0. */

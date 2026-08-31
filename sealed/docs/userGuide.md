@@ -51,6 +51,8 @@ The AI opponent mulligans any hand without a turn-1 play and resources the pair 
 
 Players alternate single actions. When both players pass consecutively, the round moves to the **regroup phase**: each player draws 2, may put 1 card from hand into resources, then everything readies and a new round begins. In regroup, **click any hand card to resource it** (or Skip resourcing to bank nothing). Whoever holds the **initiative** acts first each round: take it during a round to act first in the next one (but you'll pass for the rest of the current one).
 
+A card put into your resource zone **by a card ability** (Long Live the Empire, The Armorer) arrives **exhausted**, exactly as one you bank yourself does. It pays for something from the next round, not the action that created it, so ramp buys you a bigger future turn rather than a bigger current one. Only a card that says otherwise in its own text gives you a ready resource.
+
 ### Winning
 
 Deal damage to the opponent's base until it reaches its health before they do the same to you. Each base shows the **damage it has taken as a large number over the card**, counting up to its printed health (which varies from base to base). If a single action defeats **both** bases at once, the game is a **draw**. If your deck runs out, drawing deals 3 damage to your own base per missed card, so don't dawdle.
