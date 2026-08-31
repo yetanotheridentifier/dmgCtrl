@@ -1,6 +1,7 @@
 /**
  * Populates the base_aspects InfluxDB measurement with baseKey → aspect mappings.
- * Re-run whenever a new set is released — uses a fixed timestamp so records are overwritten.
+ * Re-run whenever a new set is released. Runs nightly to stay inside InfluxDB's
+ * 30-day retention window.
  *
  * Usage: node scripts/populate-base-aspects.mjs
  * Requires: INFLUXDB_URL, INFLUXDB_TOKEN, INFLUXDB_ORG in environment or local .env.influxdb file
@@ -63,7 +64,7 @@ export function buildBaseAspects(swuApiCards, swuDbCards) {
 
 /**
  * Converts a base→aspect pair to an InfluxDB line protocol record.
- * Uses timestamp=1 (one second past epoch) so re-runs overwrite.
+ * Every record in a run shares one timestamp, so a query can select a whole run.
  */
 export function toLineProtocol(baseKey, aspect, timestampSeconds) {
   const escapedKey = baseKey.replace(/[, =]/g, '\\$&')
@@ -90,11 +91,48 @@ async function fetchSwuApiCards() {
   return allCards
 }
 
-async function fetchSwuDbCards() {
-  const res = await fetch(`${SWU_DB_URL}/cards/search?q=type:base`)
-  if (!res.ok) throw new Error(`swu-db fetch failed: ${res.status}`)
+/**
+ * Lists every set code swuapi knows about, used to scope the swu-db queries.
+ */
+export async function fetchSetCodes(fetchImpl = fetch) {
+  const res = await fetchImpl(`${SWUAPI_URL}/sets`)
+  if (!res.ok) throw new Error(`swuapi sets fetch failed: ${res.status}`)
   const json = await res.json()
-  return json.data.filter(c => c.VariantType === 'Normal')
+  return (json.sets ?? []).map(s => s.code)
+}
+
+/**
+ * Fetches base cards from swu-db one set at a time.
+ *
+ * A single unscoped `type:base` query is a single point of failure: swu-db
+ * returns 502 for the whole query if any one set's base records cannot be
+ * served. Scoping per set confines that to the offending set, which is
+ * reported in `skipped` so the caller can warn rather than lose every set.
+ */
+export async function fetchSwuDbBases(setCodes, fetchImpl = fetch) {
+  const cards = []
+  const skipped = []
+
+  for (const setCode of setCodes) {
+    const url = `${SWU_DB_URL}/cards/search?q=type:base+set:${setCode.toLowerCase()}`
+    let res
+    try {
+      res = await fetchImpl(url)
+    } catch {
+      skipped.push(setCode)
+      continue
+    }
+    if (!res.ok) {
+      skipped.push(setCode)
+      continue
+    }
+    const json = await res.json()
+    for (const card of json.data ?? []) {
+      if (card.VariantType === 'Normal') cards.push(card)
+    }
+  }
+
+  return { cards, skipped }
 }
 
 async function writeToInfluxDB(lines) {
@@ -116,7 +154,23 @@ async function writeToInfluxDB(lines) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   console.log('Fetching base data...')
-  const [swuApiCards, swuDbCards] = await Promise.all([fetchSwuApiCards(), fetchSwuDbCards()])
+  const [swuApiCards, setCodes] = await Promise.all([fetchSwuApiCards(), fetchSetCodes()])
+
+  // swu-db is only consulted for sets swuapi has no bases for, so skip the rest.
+  const coveredBySwuApi = new Set(
+    swuApiCards.filter(c => c.variant_type === 'Standard').map(c => c.set_code)
+  )
+  const setsToFetch = setCodes.filter(code => !coveredBySwuApi.has(code))
+
+  console.log(`Fetching ${setsToFetch.length} set(s) from swu-db...`)
+  const { cards: swuDbCards, skipped } = await fetchSwuDbBases(setsToFetch)
+  if (skipped.length > 0) {
+    console.warn(
+      `Warning: swu-db could not serve ${skipped.length} set(s): ${skipped.join(', ')}. ` +
+        'Their bases are omitted from this run; previously written records are unchanged.'
+    )
+  }
+
   const bases = buildBaseAspects(swuApiCards, swuDbCards)
   const runTimestamp = Math.floor(Date.now() / 1000)
   const lines = bases.map(({ baseKey, aspect }) => toLineProtocol(baseKey, aspect, runTimestamp))

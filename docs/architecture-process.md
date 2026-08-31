@@ -361,7 +361,9 @@ Feature use is measured via usage events (sessions containing at least one relev
 
 ### `base_aspects` InfluxDB measurement
 
-A separate InfluxDB measurement (`base_aspects`) stores a static `baseKey → aspect` lookup used by the base popularity panel to colour bars. It is populated by `scripts/populate-base-aspects.mjs`, which fetches base card data from swuapi.com (active sets) and the swu-db proxy (rotated sets) and writes one record per base using a fixed timestamp so re-runs overwrite rather than append.
+A separate InfluxDB measurement (`base_aspects`) stores a static `baseKey → aspect` lookup used by the base popularity panel to colour bars. It is populated by `scripts/populate-base-aspects.mjs`, which fetches base card data from swuapi.com (active sets) and the swu-db proxy (rotated sets) and writes one record per base. Every record in a run shares a single timestamp, so the Grafana query can select one whole run by its time.
+
+swuapi is the primary source: the script reads its set list, then queries swu-db only for the sets swuapi has no bases for. Those swu-db queries are **scoped to one set each**. An unscoped `type:base` query is a single point of failure, because swu-db returns 502 for the entire query when any one set's base records cannot be served. Per-set queries confine that to the offending set: it is named in a warning, its bases are omitted from the run, and the remaining sets are still written. A set absent from swuapi's set list is never queried, so bases for a set that only swu-db knows about are not picked up until swuapi lists it.
 
 The daily GitHub Actions workflow (`.github/workflows/populate-base-aspects.yml`) keeps the records within the 30-day InfluxDB retention window. The Grafana query joins `events` against `base_aspects` using a derived-table subquery to select only the most recent run's records:
 
@@ -397,6 +399,7 @@ Tests verify behaviour, not implementation. Hook tests cover logic in isolation;
 ### Mocking approach
 
 - External APIs are mocked with `vi.stubGlobal('fetch', ...)` — no real network calls in tests
+- Standalone scripts under `scripts/` instead take an optional `fetchImpl` parameter defaulting to `fetch`, so tests pass a stub directly rather than replacing the global. `populate-base-aspects.mjs` uses this for `fetchSetCodes` and `fetchSwuDbBases`, which lets a test drive per-set success and failure in one call
 - localStorage is mocked with `vi.stubGlobal('localStorage', ...)` to test caching paths
 - All mocks are torn down with `vi.unstubAllGlobals()` in `afterEach`
 - `useUserSettings` is mocked with `vi.mock('../hooks/useUserSettings', ...)` in tests that exercise preference-gated behaviour; `vi.hoisted` is used for mock values that need per-test control
