@@ -301,8 +301,8 @@ Two properties keep it honest:
 
 - **Never negate.** `evaluate` stopped being zero-sum when the private hand term landed, so the
   opponent's side is scored with `evaluate(s, foe)` directly. `-evaluate(s, me)` would read their hand.
-- **Their role is fixed once**, from the position they are deciding in, the same discipline #395
-  imposed on ours. Deriving it per candidate compares scores computed with different weight sets.
+- **Their role is fixed once**, from the position they are deciding in, the same discipline that
+  applies to ours. Deriving it per candidate compares scores computed with different weight sets.
 
 ### Bounded by alpha-beta, not by trimming
 

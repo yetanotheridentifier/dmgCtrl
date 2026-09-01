@@ -448,9 +448,9 @@ npm run bench --prefix sealed -- --budget --games 200 beam beam-reply beam:4x3:2
 ```
 
 A cell whose budget runs out is measuring the rail rather than the width and depth in its name, and
-that has cost a real result before: #410's first screen reported depth 4 as **worse** than depth 3
-purely because the rail truncated it, and lifting the rail reversed the finding. So any sweep over
-depth or width carries a raised-budget control cell, and this mode says whether it was needed.
+that has cost a real result before: a depth screen reported depth 4 as **worse** than depth 3 purely
+because the rail truncated it, and lifting the rail reversed the finding. So any sweep over depth or
+width carries a raised-budget control cell, and this mode says whether it was needed.
 
 **A wall clock answers this question wrongly.** Raising `nodes` from 10,000 to 200,000 costs ten times
 as much per decision at depth 3, and also at depth 1 where the beam expands nothing, which reads as a

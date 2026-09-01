@@ -2,6 +2,8 @@
 
 dmgCtrl Sealed lets you play Star Wars: Unlimited **Sealed** games against an AI opponent, using a deck built from your own sealed pool.
 
+The **?** in the header opens this help, showing the part that covers the screen you're on: choosing and importing decks on the deck screen, playing the game once you're in one. It opens over what you were doing rather than replacing it, so opening it mid-game costs you nothing. Click anywhere outside it, or press **Escape**, to go back.
+
 ## Importing a deck
 
 1. Build your sealed deck in **ProtectThePod** and copy its JSON export to the clipboard.

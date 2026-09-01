@@ -243,6 +243,35 @@ share one `ICON_PROPS` spec, so a mismatch between neighbours is visible in one 
 and question mark are the PWA's paths, copied rather than imported: the two apps are separate
 packages and deliberately stay that way.
 
+## Help
+
+`HelpOverlay` shows `userGuide.md`, and shows only the part belonging to the screen it was
+opened from: importing and opponent choice on the deck screen, playing and the board in a game.
+
+It is an overlay for the same reason settings is, and it is the reason that reason is known:
+help used to be a screen, so opening it mid-game unmounted `GameScreen` and the game with it,
+and coming back ran `initGame` again on a fresh seed. The overlay is held by `App` rather than
+duplicated per screen, taking its context from `screen`, and renders over whichever screen is
+mounted. Dismissed by Escape or a click outside the panel; there is no close button, so nothing
+has to stay in view as the guide scrolls.
+
+**The guide stays one file.** `utils/helpSections.ts` splits the rendered HTML into a preamble,
+its `<h2>` sections and the trailing footer, and `HELP_SECTIONS` maps each section to a screen.
+Splitting on `<h2>` only, so a section keeps its subsections. The preamble and the footer (the
+fan-content disclaimer) go into every context. Per-screen files would have matched the PWA, at
+the cost of a copy of the disclaimer in each and three files free to drift.
+
+The cost of slicing one file is that the map is keyed on heading prose, so a renamed or newly
+added section would silently vanish from the help rather than fail anything. `helpSections.test.ts`
+closes that: the map must claim every section in the guide, and name no section the guide lacks.
+**Adding a section to the user guide without assigning it to a screen fails the suite.**
+
+Layout note: the **overlay** is the scroll container, not the panel. A panel capped at a
+fraction of the viewport with the content scrolling inside it depends on a flex chain resolving
+to a definite height, and that did not hold here: the game's help ran off the screen unreachably
+while the deck screen's shorter help fitted and looked correct. `min-h-full` with `items-center`
+centres a short panel and lets a tall one grow downward, so the top stays reachable.
+
 ## UI (GameScreen)
 
 The board is drawn with art-dominant cards, not text rows:

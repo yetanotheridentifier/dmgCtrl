@@ -1,9 +1,32 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { saveDeck } from '../data/deckStore'
 import { db } from '../data/db'
+import type { SwuCard } from '../data/cards'
+
+const SWU_CARDS: SwuCard[] = [
+  { Set: 'TST', Number: '001', Name: 'Test Leader', Type: 'Leader', Cost: '5', Power: '4', HP: '7' },
+  { Set: 'TST', Number: '002', Name: 'Test Base', Type: 'Base', HP: '30' },
+  { Set: 'TST', Number: '900', Name: 'Big Test Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '0', Power: '4', HP: '3' },
+]
+
+/**
+ * Start a real game through the deck screen. The cards are seeded so no network is needed;
+ * with one saved deck the opponent picker mirrors it.
+ */
+async function startGame(user: ReturnType<typeof userEvent.setup>) {
+  for (const card of SWU_CARDS) {
+    await db.cards.put({ id: `TST_${card.Number}`, json: card, fetchedAt: 1 })
+  }
+  saveDeck({ name: 'Playable', leader: 'TST_001', base: 'TST_002', cards: [{ id: 'TST_900', count: 30 }] })
+  render(<App />)
+
+  const row = within(screen.getByTestId('deck-list')).getByText('Playable').closest('li')!
+  await user.click(within(row).getByRole('button', { name: /^play$/i }))
+  await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
+}
 
 describe('App shell', () => {
   beforeEach(async () => {
@@ -60,16 +83,63 @@ describe('App shell', () => {
     expect(screen.queryByTestId('game-screen')).not.toBeInTheDocument()
   })
 
-  it('opens help from the header and returns to the previous screen', async () => {
+  it('opens help from the header without leaving the current screen', async () => {
     const user = userEvent.setup()
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: /help/i }))
-    expect(screen.getByTestId('help-screen')).toBeInTheDocument()
-    expect(screen.queryByTestId('deck-select-screen')).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: /back/i }))
+    expect(screen.getByTestId('help-overlay')).toBeInTheDocument()
+    // The deck screen stays mounted underneath, rather than being replaced.
     expect(screen.getByTestId('deck-select-screen')).toBeInTheDocument()
+
+    await user.click(screen.getByTestId('help-overlay'))
+    expect(screen.queryByTestId('help-overlay')).not.toBeInTheDocument()
+    expect(screen.getByTestId('deck-select-screen')).toBeInTheDocument()
+  })
+
+  /**
+   * #541: help used to be a screen, so opening it unmounted GameScreen and the game went with
+   * it (the whole game lives in useGame's state and refs). Coming back started a *different*
+   * game, with a fresh seed. Asserted on a decision already taken: a remounted game is back at
+   * the mulligan, so the mulligan buttons reappearing is the defect.
+   */
+  it('leaves a game in progress alone when help is opened over it', async () => {
+    const user = userEvent.setup()
+    await startGame(user)
+
+    await user.click(screen.getByRole('button', { name: /keep hand/i }))
+    expect(screen.queryByRole('button', { name: /keep hand/i })).toBeNull()
+    const logBefore = screen.getByTestId('game-log').textContent
+
+    await user.click(screen.getByRole('button', { name: /help/i }))
+    expect(screen.getByTestId('help-overlay')).toBeInTheDocument()
+    await user.click(screen.getByTestId('help-overlay'))
+
+    // Still the same game: past the mulligan, same log, never remounted.
+    expect(screen.getByTestId('game-board')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /keep hand/i })).toBeNull()
+    expect(screen.getByTestId('game-log').textContent).toBe(logBefore)
+  })
+
+  /** #542: help is for the screen you opened it from. */
+  it('shows the deck screen’s help from the deck screen', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: /help/i }))
+    const content = screen.getByTestId('help-content').innerHTML
+    expect(content).toContain('Importing a deck')
+    expect(content).not.toContain('Turn structure')
+  })
+
+  it('shows the game’s help from a game', async () => {
+    const user = userEvent.setup()
+    await startGame(user)
+
+    await user.click(screen.getByRole('button', { name: /help/i }))
+    const content = screen.getByTestId('help-content').innerHTML
+    expect(content).toContain('Turn structure')
+    expect(content).not.toContain('Importing a deck')
   })
 
   /** #539: settings open over whatever is on screen rather than replacing it. */
@@ -95,7 +165,7 @@ describe('App shell', () => {
     await user.click(screen.getByTestId('settings-close'))
 
     await user.click(screen.getByRole('button', { name: /help/i }))
-    await user.click(screen.getByRole('button', { name: /back/i }))
+    await user.click(screen.getByTestId('help-overlay'))
     await user.click(screen.getByRole('button', { name: /settings/i }))
 
     expect(screen.getByTestId('setting-base-health')).toHaveValue('remaining')
