@@ -350,7 +350,8 @@ need the worker healthy.
 
 When chasing a load failure, first make sure you're running current code: the app shows the
 **release** (see build identity below). In dev it's a small badge in the
-**bottom-right corner**; in prod it sits at the foot of the **Help** page. If the browser shows an
+**bottom-right corner** (hidden while Help is open, which would otherwise show it through the
+backdrop); in prod it sits at the foot of the **Help** overlay. If the browser shows an
 older one, restart the dev servers and hard-reload (Ctrl+Shift+R). Known
 upstream state (2026-07): SWUDB card detail 502s on the ASH bases
 (ASH_019/020/023 confirmed); all recover via the swuapi fallback.
