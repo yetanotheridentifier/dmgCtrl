@@ -54,8 +54,40 @@ jobs:
       - name: Install sealed dependencies
         run: npm install --prefix sealed
 
-      - name: Run tests
-        run: npm test
+      # Run as three steps rather than one `npm test`, each writing its own heading to the job
+      # summary first. Vitest's GitHub reporter hardcodes its "## Vitest Test Report" heading and
+      # puts the project name only on individual failures, so three suites in one step produced
+      # three identical anonymous blocks that had to be told apart by counting tests. The final
+      # step removes that hardcoded heading, leaving one named heading per suite.
+      - name: Test the PWA
+        run: |
+          {
+            echo "# PWA Test Report"
+            echo "_The tracker app in \`src/\`: X-Wing, SWU tracking, Kill Team._"
+          } >> "$GITHUB_STEP_SUMMARY"
+          npm run test:pwa
+
+      - name: Test the proxy worker
+        run: |
+          {
+            echo "# Proxy Test Report"
+            echo "_The card API Worker in \`proxy/\`._"
+          } >> "$GITHUB_STEP_SUMMARY"
+          npm --prefix proxy test
+
+      - name: Test sealed
+        run: |
+          {
+            echo "# Sealed Test Report"
+            echo "_The Sealed game in \`sealed/\`: rules engine, AI and UI. The simulation tests run in their own workflow._"
+          } >> "$GITHUB_STEP_SUMMARY"
+          npm --prefix sealed test
+
+      # `always()`, so the summary still reads properly on the run where a suite failed, which is
+      # the run anyone actually opens.
+      - name: Drop Vitest's own report headings
+        if: always()
+        run: sed -i '/^## Vitest Test Report$/d' "$GITHUB_STEP_SUMMARY"
 
   build:
     needs: [lint, test]

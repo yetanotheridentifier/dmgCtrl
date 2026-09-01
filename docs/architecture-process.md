@@ -48,7 +48,7 @@ test → build → deploy
 | Job | Steps |
 |---|---|
 | `lint` | `npm ci` → `npm run lint` for the PWA and for sealed |
-| `test` | `npm ci` → `npm test` (Vitest) |
+| `test` | `npm ci` → the three suites as three steps (Vitest) |
 | `build` | `npm ci` → `tsc` → `vite build` |
 | `deploy` | Upload `dist/` to GitHub Pages |
 
@@ -420,7 +420,18 @@ npm run test:watch  # watch mode
 
 Always use `npm test`. The `npx vitest run` form has a cache glitch that causes spurious first-run failures.
 
-`npm test` runs three separate Vitest suites in sequence: this app, the proxy worker, and sealed. Each names itself (`pwa`, `proxy`, `sealed`) via `test.name`, so the three summaries in a CI run are told apart by name rather than by counting tests.
+`npm test` runs three separate Vitest suites in sequence: this app (`npm run test:pwa`), the proxy worker, and sealed. Each config sets `test.name` (`pwa`, `proxy`, `sealed`), which labels individual failures and the terminal output.
+
+**The CI job runs them as three named steps rather than one `npm test`**, each writing a heading to the job summary before it runs, and a final step strips Vitest's own heading so each suite has exactly one:
+
+```
+# PWA Test Report
+_The tracker app in `src/`: X-Wing, SWU tracking, Kill Team._
+### Summary
+...
+```
+
+Vitest's GitHub reporter hardcodes its `## Vitest Test Report` heading and puts the project name only on individual failures, so three suites in one step produced three identical anonymous blocks that had to be told apart by counting tests. `test.name` does not reach that block; the headings are ours, and the strip step runs on `always()` so the summary still reads properly on a failed run.
 
 ### Linting
 

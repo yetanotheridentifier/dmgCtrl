@@ -40,5 +40,19 @@ jobs:
       - name: Install sealed dependencies
         run: npm install --prefix sealed
 
+      # The heading is ours: Vitest's GitHub reporter hardcodes its own and would otherwise
+      # leave an anonymous block that reads like any other suite's. The next step removes that
+      # hardcoded heading so only the named one remains.
       - name: Run the simulation tests
-        run: npm run test:bench --prefix sealed
+        run: |
+          {
+            echo "# Sealed Simulation Test Report"
+            echo "_The seven files in \`SIMULATION_TESTS\` that play real games to reach their numbers, kept out of \`npm test\` for speed._"
+          } >> "$GITHUB_STEP_SUMMARY"
+          npm run test:bench --prefix sealed
+
+      # `always()`, so the summary still reads properly on the run where the suite failed, which
+      # is the run anyone actually opens.
+      - name: Drop Vitest's own report heading
+        if: always()
+        run: sed -i '/^## Vitest Test Report$/d' "$GITHUB_STEP_SUMMARY"
