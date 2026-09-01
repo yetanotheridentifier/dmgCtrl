@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest'
 import { listDecks, saveDeck, removeDeck, STORAGE_KEY } from '../data/deckStore'
 import type { ParsedDeck } from '../utils/parseProtectThePod'

@@ -8,6 +8,34 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Its own job rather than a step in `test`, so a lint failure and a test failure are reported
+  # from the same push. Sharing the job meant the test step never ran once lint failed, which
+  # cost a second round trip to find out the tests were broken too. It duplicates about 27s of
+  # setup and install, and runs alongside `test`, so it costs runner time rather than wall time.
+  # No proxy install here: nothing in it is linted.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Install sealed dependencies
+        run: npm install --prefix sealed
+
+      # Each package lints with its own config, and both run at --max-warnings 0, so a warning
+      # left in place fails the build.
+      - name: Lint
+        run: npm run lint
+
+      - name: Lint sealed
+        run: npm run lint --prefix sealed
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -30,7 +58,7 @@ jobs:
         run: npm test
 
   build:
-    needs: test
+    needs: [lint, test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

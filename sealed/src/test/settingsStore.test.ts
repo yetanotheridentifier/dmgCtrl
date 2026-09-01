@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { loadSettings, saveSettings, defaultSettings, STORAGE_KEY } from '../data/settingsStore'
 import { isDev } from '../env'

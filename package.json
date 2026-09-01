@@ -10,7 +10,7 @@
     "dev:all": "bash scripts/dev-sealed.sh",
     "build": "tsc -b && vite build",
     "build:github": "vite build --mode github",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 0",
     "preview": "npm run build && wrangler dev",
     "test": "vitest run && npm --prefix proxy test && npm --prefix sealed test",
     "test:watch": "vitest",

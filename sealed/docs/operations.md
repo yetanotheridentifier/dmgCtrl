@@ -5,9 +5,10 @@
 ```bash
 npm --prefix sealed install        # once
 npm --prefix sealed run dev        # dev server (Vite, hot reload, port 5174)
-npm --prefix sealed test           # test suite
+npm --prefix sealed test           # test suite, minus the simulation tests
+npm --prefix sealed run test:bench # the simulation tests on their own
 npm --prefix sealed run test:watch # TDD loop
-npm --prefix sealed run lint       # eslint
+npm --prefix sealed run lint       # eslint, at --max-warnings 0
 npx --prefix sealed tsc -b         # typecheck (also part of build)
 npm run check --prefix sealed      # validation gate: build identity, test, tsc, eslint
 npm run bench --prefix sealed      # AI benchmark: play many games between two AIs, report win rates
@@ -113,9 +114,56 @@ Full guide, output format, data model, the coverage sweep, the generalisation di
 triage, weight tuning and how to add an AI: [ai-benchmark.md](ai-benchmark.md).
 
 `npm run check` is the one-shot validation gate: it regenerates the build identity, then runs the
-tests, `tsc -b` and `eslint .` in sequence, stopping at the first failure.
+tests, `tsc -b` and `eslint .` in sequence, stopping at the first failure. **It runs every test,
+including the simulation tests that `npm test` leaves out**, so it stays the honest local gate
+before handing work over.
 
-The root `npm test` runs all three suites (main app, proxy worker, sealed).
+The root `npm test` runs all three suites (main app, proxy worker, sealed). Each is a separate
+Vitest run writing its own CI summary, so each config sets `test.name` (`pwa`, `proxy`, `sealed`)
+and the report says which is which.
+
+### Two projects, and which one runs when
+
+The sealed suite is split into two Vitest projects:
+
+| Project | Holds | Runs |
+| --- | --- | --- |
+| `sealed` | everything else | `npm test`, and CI's `test` job |
+| `sealed-bench` | the files in `SIMULATION_TESTS` (`vite.config.ts`) | `npm run test:bench`, and CI's own **Simulation tests** workflow |
+
+The split is about CPU, not importance. The simulation tests play real games to reach their
+numbers, and cost roughly 254s of the suite's ~350s of test CPU. A single job is CPU-bound on a
+4-vCPU runner, so leaving them in the test job was the difference between a five-minute pipeline
+and a two-minute one. Their sample sizes are deliberately **not** trimmed to make them fit: they
+measure rates over simulated games, and a smaller sample widens the interval until the assertion
+stops meaning anything.
+
+**Each CI job gets its own runner**, so moving them to a separate workflow costs a runner rather
+than wall-clock time: that job finishes inside the test job's window. They still run on every
+pull request, so a failure is attributable to the change that caused it, and on pushes to `main`,
+where only one merge sits between runs. The nightly run exists for a narrower reason: CI installs
+with `npm install` rather than `npm ci`, so a failure on an unchanged tree points at the
+environment.
+
+That workflow does not gate deployment. It is not in `deploy.yml`, and `build` waits only on
+`lint` and `test`.
+
+Locally, `npm test` leaves them out so the inner loop stays around 25s, and `npm run check`
+includes them. Both projects share one worker pool, so `check` is about 122s rather than the 126s
+of running them one after the other; the floor is the suite's CPU, not the split.
+
+### Test environments
+
+Tests default to the **`node`** environment in sealed, because about 150 of its ~190 files are
+engine, AI and bench code that never touch a DOM, and building one per file cost more than
+running the tests: measured over 16 engine files, 28.6s of CPU against 9.2s. **A new sealed test
+that renders a component, or touches `localStorage`, `document` or the Dexie `db`, needs a
+`// @vitest-environment jsdom` docblock at the top of the file.** Without one it fails on a
+missing global, which is loud rather than subtle.
+
+The PWA suite defaults the other way, to `jsdom`, because 36 of its 44 files render something.
+Its few pure-logic files carry `// @vitest-environment node` instead. Both defaults follow the
+same rule, which is to match the common case in that suite and make the exception declare itself.
 
 ## Build identity: two identifiers, two audiences
 

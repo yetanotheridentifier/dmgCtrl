@@ -10,16 +10,17 @@
     "dev": "vite",
     "prebuild": "node scripts/buildIdentity.mjs",
     "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 0",
     "preview": "vite preview",
     "pretest": "node scripts/buildIdentity.mjs",
-    "test": "vitest run",
+    "test": "vitest run --project sealed",
+    "test:bench": "vitest run --project sealed-bench",
     "test:watch": "vitest",
     "prebench": "node scripts/buildIdentity.mjs",
     "bench": "tsx src/bench/main.ts",
     "pretune": "node scripts/buildIdentity.mjs",
     "tune": "tsx src/bench/tune.ts",
-    "check": "node scripts/buildIdentity.mjs && vitest run && tsc -b && eslint ."
+    "check": "node scripts/buildIdentity.mjs && vitest run && tsc -b && eslint . --max-warnings 0"
   },
   "dependencies": {
     "dexie": "^4.4.4",

@@ -15,7 +15,13 @@ export function useInstallPrompt(): UseInstallPromptReturn {
   const [dismissed, setDismissed] = useState(() =>
     sessionStorage.getItem('install_banner_dismissed') === '1'
   )
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
+  // `beforeinstallprompt` usually fires before React mounts, so an inline script in index.html
+  // captures it on `window`. Read that in the initialiser rather than assigning it from an
+  // effect: setting state synchronously on mount renders twice and, with the banner keyed off
+  // this value, showed a frame without it.
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(
+    () => (window as Window & { __dmgInstallPrompt?: BeforeInstallPromptEvent }).__dmgInstallPrompt ?? null,
+  )
 
   const isStandalone =
     window.matchMedia('(display-mode: standalone)').matches ||
@@ -27,11 +33,7 @@ export function useInstallPrompt(): UseInstallPromptReturn {
   const platform: 'ios' | 'android' | null = isIOS ? 'ios' : isAndroid ? 'android' : null
 
   useEffect(() => {
-    // Pick up the event if it fired before this hook mounted (captured in index.html inline script)
     const w = window as Window & { __dmgInstallPrompt?: BeforeInstallPromptEvent }
-    if (w.__dmgInstallPrompt) {
-      setDeferredPrompt(w.__dmgInstallPrompt)
-    }
 
     const handler = (e: Event) => {
       e.preventDefault()

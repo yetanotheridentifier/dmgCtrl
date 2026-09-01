@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from 'vitest'
 import { isSetValidForFormat, getValidSets, isBaseValidForFormat, formatValidationError } from '../utils/formatFilter'
 import { Base } from '../hooks/useBases'

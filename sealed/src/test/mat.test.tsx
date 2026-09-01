@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, screen, within, fireEvent } from '@testing-library/react'
 import { DeckPile, ResourceStack, DiscardPile } from '../components/mat'

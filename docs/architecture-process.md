@@ -47,9 +47,14 @@ test → build → deploy
 
 | Job | Steps |
 |---|---|
+| `lint` | `npm ci` → `npm run lint` for the PWA and for sealed |
 | `test` | `npm ci` → `npm test` (Vitest) |
 | `build` | `npm ci` → `tsc` → `vite build` |
 | `deploy` | Upload `dist/` to GitHub Pages |
+
+`lint` and `test` are separate jobs and run in parallel; `build` waits for both. Kept apart so one push reports both answers: as steps in a single job, a lint failure stopped the tests from running at all, and the test result only appeared on the next push.
+
+Sealed's simulation tests are not in that `test` job. They play real games to reach their numbers and are CPU-bound, so they get their own workflow (`.github/workflows/simulation-tests.yml`), which runs on pull requests, on pushes to `main`, and nightly. Each job has its own runner, so that costs a runner rather than wall-clock time and it still finishes inside the test job's window. It does not gate deployment. See [sealed/docs/operations.md](../sealed/docs/operations.md) for the reasoning behind each trigger.
 
 ### Deployment target
 
@@ -414,6 +419,31 @@ npm run test:watch  # watch mode
 ```
 
 Always use `npm test`. The `npx vitest run` form has a cache glitch that causes spurious first-run failures.
+
+`npm test` runs three separate Vitest suites in sequence: this app, the proxy worker, and sealed. Each names itself (`pwa`, `proxy`, `sealed`) via `test.name`, so the three summaries in a CI run are told apart by name rather than by counting tests.
+
+### Linting
+
+```bash
+npm run lint                 # this app
+npm run lint --prefix sealed # sealed
+```
+
+Both run at **`--max-warnings 0`**, in CI's own `lint` job. A warning is therefore a build failure, which is the point: a rule worth enabling as a warning is worth acting on, and a permanently warning-but-green build teaches everyone to scroll past it.
+
+Each package lints itself with its own config. Flat config does not cascade, so `sealed` is in the root config's `ignores`; without that the root run would lint sealed's files with the PWA's ruleset as well as sealed's own run doing it properly.
+
+### Test environments
+
+This suite defaults to the **`jsdom`** environment, because 36 of its 44 files render a component or a hook. The handful of pure-logic files (parsing, formatting, URL helpers, the Node script test) carry a `// @vitest-environment node` docblock, which skips building a DOM they never use.
+
+Sealed defaults the other way round, to `node`, since most of its files are engine and AI code. The rule is the same in both: the default matches the common case for that suite, and the exception declares itself in the file.
+
+### mkcert is a dev-server-only plugin
+
+`vite-plugin-mkcert` issues the local certificate behind `npm run dev:https`. It asks the GitHub API for the latest mkcert release while Vite resolves the config, so it is applied **only when serving locally** (`command === 'serve'`, and neither `VITEST` nor `CI` set).
+
+It must not run anywhere else. Vitest resolves this config on startup, so an ungated plugin called that API on every test run too, and CI runners share an IP and therefore share the unauthenticated rate limit: a pipeline run failed with a 403 that had nothing to do with certificates, and the next passed only because the shared quota had moved on.
 
 ### Coverage expectations
 
