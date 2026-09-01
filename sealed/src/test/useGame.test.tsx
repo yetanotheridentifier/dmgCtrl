@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { StrictMode } from 'react'
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'

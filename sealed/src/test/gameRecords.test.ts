@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest'
 import { db } from '../data/db'
 import { saveGameRecord, listGameRecords, clearGameRecords } from '../data/gameRecords'

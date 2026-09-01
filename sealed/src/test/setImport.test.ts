@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { db } from '../data/db'
 import { importSet, cachedSetCount } from '../data/setImport'

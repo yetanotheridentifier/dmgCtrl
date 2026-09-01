@@ -8,6 +8,34 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Its own job rather than a step in `test`, so a lint failure and a test failure are reported
+  # from the same push. Sharing the job meant the test step never ran once lint failed, which
+  # cost a second round trip to find out the tests were broken too. It duplicates about 27s of
+  # setup and install, and runs alongside `test`, so it costs runner time rather than wall time.
+  # No proxy install here: nothing in it is linted.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Install sealed dependencies
+        run: npm install --prefix sealed
+
+      # Each package lints with its own config, and both run at --max-warnings 0, so a warning
+      # left in place fails the build.
+      - name: Lint
+        run: npm run lint
+
+      - name: Lint sealed
+        run: npm run lint --prefix sealed
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -26,11 +54,43 @@ jobs:
       - name: Install sealed dependencies
         run: npm install --prefix sealed
 
-      - name: Run tests
-        run: npm test
+      # Run as three steps rather than one `npm test`, each writing its own heading to the job
+      # summary first. Vitest's GitHub reporter hardcodes its "## Vitest Test Report" heading and
+      # puts the project name only on individual failures, so three suites in one step produced
+      # three identical anonymous blocks that had to be told apart by counting tests. The final
+      # step removes that hardcoded heading, leaving one named heading per suite.
+      - name: Test the PWA
+        run: |
+          {
+            echo "# PWA Test Report"
+            echo "_The tracker app in \`src/\`: X-Wing, SWU tracking, Kill Team._"
+          } >> "$GITHUB_STEP_SUMMARY"
+          npm run test:pwa
+
+      - name: Test the proxy worker
+        run: |
+          {
+            echo "# Proxy Test Report"
+            echo "_The card API Worker in \`proxy/\`._"
+          } >> "$GITHUB_STEP_SUMMARY"
+          npm --prefix proxy test
+
+      - name: Test sealed
+        run: |
+          {
+            echo "# Sealed Test Report"
+            echo "_The Sealed game in \`sealed/\`: rules engine, AI and UI. The simulation tests run in their own workflow._"
+          } >> "$GITHUB_STEP_SUMMARY"
+          npm --prefix sealed test
+
+      # `always()`, so the summary still reads properly on the run where a suite failed, which is
+      # the run anyone actually opens.
+      - name: Drop Vitest's own report headings
+        if: always()
+        run: sed -i '/^## Vitest Test Report$/d' "$GITHUB_STEP_SUMMARY"
 
   build:
-    needs: test
+    needs: [lint, test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

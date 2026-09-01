@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, within, fireEvent } from '@testing-library/react'
 import { CardSelectOverlay } from '../components/gameScreen'

@@ -85,11 +85,19 @@ const errorStyle: React.CSSProperties = {
 function ImagePreview({ base, src, isHyperspace, allFailed, imageLoaded, rotationDeg, useHyperspace, fill = 'width', onLoad, onError, overlay }: ImagePreviewProps) {
   const imgRef = useRef<HTMLImageElement>(null)
 
+  // Held in a ref, and updated before the effect below runs, so the check fires on a change of
+  // `src` alone. Depending on `onLoad` directly would re-run it whenever the parent re-rendered
+  // with a fresh inline callback, reporting the same image as loaded over and over.
+  const onLoadRef = useRef(onLoad)
+  useLayoutEffect(() => {
+    onLoadRef.current = onLoad
+  })
+
   // Browsers don't re-fire the load event for cached images, so React's onLoad
   // handler can miss it if the image was already in cache when this component mounts.
   // Check img.complete synchronously after commit and call onLoad ourselves if so.
   useLayoutEffect(() => {
-    if (imgRef.current?.complete) onLoad()
+    if (imgRef.current?.complete) onLoadRef.current()
   }, [src])
 
   if (allFailed || !src) {

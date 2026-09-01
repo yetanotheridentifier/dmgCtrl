@@ -1,0 +1,58 @@
+name: Simulation tests
+
+# Sealed's simulation tests play real games to reach their numbers: about 254s of the suite's
+# ~350s of test CPU, in seven files listed as SIMULATION_TESTS in sealed/vite.config.ts.
+#
+# They run here rather than in `npm test` because a job gets its own runner, and this one
+# finishes inside the test job's window. Splitting them out of the test *job* is what makes the
+# pipeline fast; it costs a runner rather than wall-clock time. Keeping them on the pull request
+# is what keeps a failure attributable to one change.
+#
+# Deliberately its own workflow, not a job in deploy.yml, so it never gates a deployment.
+#
+# Three triggers, each earning its place:
+#   pull_request  the failure lands on the change that caused it, which is the whole point
+#   push (main)   two separately-green branches can merge into a broken main; only one merge
+#                 sits between runs here, so attribution stays exact
+#   schedule      CI installs with `npm install`, not `npm ci`, so dependencies can move under
+#                 an unchanged tree. With the first two in place, a nightly failure on code
+#                 that has not changed is unambiguously environmental.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '30 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  simulation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Install sealed dependencies
+        run: npm install --prefix sealed
+
+      # The heading is ours: Vitest's GitHub reporter hardcodes its own and would otherwise
+      # leave an anonymous block that reads like any other suite's. The next step removes that
+      # hardcoded heading so only the named one remains.
+      - name: Run the simulation tests
+        run: |
+          {
+            echo "# Sealed Simulation Test Report"
+            echo "_The seven files in \`SIMULATION_TESTS\` that play real games to reach their numbers, kept out of \`npm test\` for speed._"
+          } >> "$GITHUB_STEP_SUMMARY"
+          npm run test:bench --prefix sealed
+
+      # `always()`, so the summary still reads properly on the run where the suite failed, which
+      # is the run anyone actually opens.
+      - name: Drop Vitest's own report heading
+        if: always()
+        run: sed -i '/^## Vitest Test Report$/d' "$GITHUB_STEP_SUMMARY"

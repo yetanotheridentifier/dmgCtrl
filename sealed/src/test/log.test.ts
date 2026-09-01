@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { logger, getLogs, clearLogs } from '../data/log'
 

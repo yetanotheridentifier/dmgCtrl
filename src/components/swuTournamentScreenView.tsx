@@ -100,8 +100,6 @@ const dropEndButtonStyle = (enabled: boolean, confirm: boolean, small = false): 
   transition: 'all 0.15s ease',
 })
 
-const iconButtonStyle = (_small = false): React.CSSProperties => NAV_BTN_STYLE
-
 interface Props {
   displayBase: Base
   tournament: TournamentState | null
@@ -215,7 +213,7 @@ export default function SwuTournamentScreenView({
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: small ? '1vw' : '3vw' }}>
         {!isStarted ? (
-          <button aria-label="Back" onClick={onBack} style={iconButtonStyle(small)}>
+          <button aria-label="Back" onClick={onBack} style={NAV_BTN_STYLE}>
             <BackIcon />
           </button>
         ) : (
@@ -237,11 +235,11 @@ export default function SwuTournamentScreenView({
       </div>
       <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: small ? '1vw' : '2vw' }}>
         {onSettings && (
-          <button onClick={onSettings} aria-label="⚙" style={iconButtonStyle(small)}>
+          <button onClick={onSettings} aria-label="⚙" style={NAV_BTN_STYLE}>
             <CogIcon />
           </button>
         )}
-        <button onClick={onHelp} aria-label="Help" style={iconButtonStyle(small)}>
+        <button onClick={onHelp} aria-label="Help" style={NAV_BTN_STYLE}>
           <HelpIcon />
         </button>
       </div>
