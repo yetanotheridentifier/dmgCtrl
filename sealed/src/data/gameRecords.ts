@@ -17,6 +17,16 @@ export interface GameRecord {
   initialState: GameState
   moves: { by: PlayerId; action: Action }[]
   finalState: GameState
+  /**
+   * How many times the player took a move back while playing this game. Undone moves are
+   * truncated out of `moves`, so a game played with undo replays perfectly and is otherwise
+   * indistinguishable from one played straight through: a consumer that treats a retried line
+   * as a played line has no way to tell. Not an indexed key, so it needs no schema version.
+   *
+   * Absent on records written before it was counted, which means provenance unknown rather
+   * than zero. It cannot be backfilled.
+   */
+  undoCount?: number
 }
 
 export async function saveGameRecord(record: Omit<GameRecord, 'id'>): Promise<GameRecord> {

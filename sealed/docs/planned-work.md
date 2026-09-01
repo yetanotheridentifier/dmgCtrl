@@ -157,6 +157,24 @@ The 292 vanilla and keyword-only cards need no ticket, reconciling set by set wi
 in `data/implementedCards.ts`. 29 cards with ability text are printed in more than one set, covering 30
 extra ids for no extra work.
 
+## App and UI
+
+Neither belongs to the AI or the card stream, and the first is a live defect rather than an
+enhancement.
+
+- **#541 opening Help mid-game abandons the game.** Routing to the help screen unmounts
+  `GameScreen`, and the game lives entirely in `useGame`'s state and refs, so coming back
+  starts a *different* game (a fresh `rngSeed`), not the one that was in progress. Nothing is
+  recoverable: a record is written only when a winner appears. The settings surface dodged this
+  by being an overlay; help has not. Confirmed by hand.
+- **#542 split the help content by context**, as the PWA does with a `source` prop and one
+  markdown file per screen. Sealed shows the whole of `userGuide.md` everywhere, so the deck
+  screen offers combat rules and a game offers deck importing. `App.tsx` already records which
+  screen help was opened from, so the source needs no new plumbing. Two things to settle first:
+  whether to split the file (matching the PWA, but duplicating anything relevant to both
+  contexts) or section one file, and #541, since context-specific *game* help cannot be read
+  while playing until opening it stops ending the game.
+
 ## Deferred
 
 - **Web Worker** for the AI. **Downgraded, probably unnecessary.** It existed to stop a blocking search

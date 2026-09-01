@@ -12,7 +12,10 @@ import type { DescribePart } from '../utils/describeAction'
 import { describeChoiceParts, BOARD_TARGET_KINDS } from '../utils/describeChoice'
 import { upgradeHostIds } from '../utils/upgradeHosts'
 import { buildReportMarkdown, issueUrl } from '../utils/bugReport'
-import { BugReportOverlay, BugIcon } from './bugReportOverlay'
+import { BugReportOverlay } from './bugReportOverlay'
+import { SettingsOverlay } from './settingsOverlay'
+import { BugIcon, GearIcon, HelpIcon } from './icons'
+import { useSettings } from '../hooks/useSettings'
 import { RELEASE, COMMIT_ID } from '../buildIdentity'
 import { isDev } from '../env'
 import { orderUnits } from './boardLayout'
@@ -720,11 +723,16 @@ function BaseCard({ state, side, onAttack }: {
   const p = state.players[side]
   const baseCard = state.cards[p.base.cardId]
   const { zoomed, bind, anchorRef, setAnchor } = useCardZoom()
+  const { settings } = useSettings()
   // Base HP comes from the card metadata (bases vary; never assume 30).
   const baseHp = baseCard?.hp ?? 0
-  // Damage taken, counting up to the base's HP — the SWU-standard display.
-  // A future ticket makes counting down (remaining) a user preference.
+  // Damage taken, counting up to the base's HP, is the SWU-standard display and the default.
+  // Clamped either way: an overkill must read as a full base rather than as more damage than
+  // the base has HP, or as negative health remaining (#323).
   const damage = Math.min(p.base.damage, baseHp)
+  const countDown = settings.baseHealthDisplay === 'remaining'
+  const shown = countDown ? baseHp - damage : damage
+  const label = countDown ? 'health remaining' : 'damage'
   const inner = (
     <div className="relative">
       <CardFace card={baseCard} fallbackName={p.base.cardId} highlight={onAttack ? 'red' : undefined} />
@@ -733,7 +741,7 @@ function BaseCard({ state, side, onAttack }: {
           little since the base art sits low, so the number reads centred on it. */}
       <span
         data-testid={`${side}-base-hp`}
-        aria-label={`${side === 'player' ? 'Your' : 'Opponent'} base damage: ${damage} of ${baseHp}`}
+        aria-label={`${side === 'player' ? 'Your' : 'Opponent'} base ${label}: ${shown} of ${baseHp}`}
         className="pointer-events-none absolute inset-0 flex items-center justify-center tabular-nums select-none"
         style={{
           fontSize: `${Math.round(CARD_WIDTH_PX * 0.5)}px`,
@@ -745,7 +753,7 @@ function BaseCard({ state, side, onAttack }: {
           transform: 'translateY(-2%)',
         }}
       >
-        {damage}
+        {shown}
       </span>
     </div>
   )
@@ -1078,6 +1086,10 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   // the clipboard refused it, so the report is shown to copy by hand rather than lost.
   const [reporting, setReporting] = useState(false)
   const [fallbackReport, setFallbackReport] = useState<string | undefined>(undefined)
+  // Settings (#539): an overlay over the board, not a screen. Routing away would unmount this
+  // component and the game with it (#541).
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const { settings } = useSettings()
 
   async function submitReport(title: string, description: string) {
     const { initialState, moves } = replayData()
@@ -1479,8 +1491,11 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
         )}
         {/* Not a game action — it takes back your last one, and the AI's reply with it. Muted
             and set apart from the action buttons, and absent (not disabled) with nothing to
-            undo, so it never reads as a move you could make. */}
-        {canUndo && (
+            undo, so it never reads as a move you could make.
+            Off unless the player asks for it (#533): rewinding past a mulligan, a draw or a
+            search lets the same decision be taken again with the hidden cards already seen. The
+            mechanism still runs, so turning the setting on mid-game takes effect at once. */}
+        {settings.allowUndo && canUndo && (
           <button
             data-testid="undo-btn"
             onClick={() => { clearSelections(); undo() }}
@@ -1690,7 +1705,10 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
   }
 
   return (
-    <div data-testid="game-screen" className="grid h-screen w-full" style={{ gridTemplateColumns: '16rem 1fr' }}>
+    // 19rem, not 16: the log column's header carries the exit icon, the dmgCtrl wordmark and
+    // up to three buttons, and at 16rem the wordmark truncated once the settings gear joined
+    // them. The wordmark keeps `truncate` as a backstop rather than overflowing the column.
+    <div data-testid="game-screen" className="grid h-screen w-full" style={{ gridTemplateColumns: '19rem 1fr' }}>
       {/* Left column: the header (on the core theme background, like the page
           header) above the log panel — no divider to the play area. */}
       <div className="flex min-h-0 flex-col">
@@ -1702,20 +1720,30 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
             <span className="truncate text-xl font-extralight tracking-[0.1em] text-ink">dmgCtrl</span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {settings.showBugReport && (
+              <button
+                data-testid="bug-report-btn"
+                onClick={() => setReporting(true)}
+                aria-label="Report a bug"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-line text-ink-dim hover:text-ink shadow-[0_0_8px_rgba(156,163,175,0.2)]"
+              >
+                <BugIcon />
+              </button>
+            )}
             <button
-              data-testid="bug-report-btn"
-              onClick={() => setReporting(true)}
-              aria-label="Report a bug"
+              data-testid="settings-btn"
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Settings"
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-line text-ink-dim hover:text-ink shadow-[0_0_8px_rgba(156,163,175,0.2)]"
             >
-              <BugIcon />
+              <GearIcon />
             </button>
             <button
               onClick={onHelp}
               aria-label="Help"
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-2 border-line text-ink-dim hover:text-ink shadow-[0_0_8px_rgba(156,163,175,0.2)]"
             >
-              ?
+              <HelpIcon />
             </button>
           </div>
         </header>
@@ -1769,6 +1797,8 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
           fallbackReport={fallbackReport}
         />
       )}
+
+      {settingsOpen && <SettingsOverlay onClose={() => setSettingsOpen(false)} />}
 
       {/* Game over — a modal overlay over the whole screen. */}
       {gameState && gameState.winner !== null && (

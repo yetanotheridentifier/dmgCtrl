@@ -1,22 +1,6 @@
 import { useEffect, useState } from 'react'
 
 /**
- * A bug, in the same flat line-art style as the rest of the chrome. Sized smaller than the button's
- * text glyphs so it sits with clear padding inside the 9x9 square rather than filling it.
- */
-export function BugIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      {/* Antennae, then the shell, then three legs a side. */}
-      <path d="M9 5 7.5 3M15 5 16.5 3" />
-      <rect x="7.5" y="7" width="9" height="13" rx="4.5" />
-      <path d="M7.5 11H4M7.5 15.5H3.5M8.5 19.5 6 21.5" />
-      <path d="M16.5 11H20M16.5 15.5H20.5M15.5 19.5 18 21.5" />
-    </svg>
-  )
-}
-
-/**
  * The bug-report form (#373): a title and a description over a dark backdrop.
  *
  * Purely presentational. Assembling the report, putting it on the clipboard and opening GitHub all

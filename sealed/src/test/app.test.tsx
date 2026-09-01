@@ -71,4 +71,33 @@ describe('App shell', () => {
     await user.click(screen.getByRole('button', { name: /back/i }))
     expect(screen.getByTestId('deck-select-screen')).toBeInTheDocument()
   })
+
+  /** #539: settings open over whatever is on screen rather than replacing it. */
+  it('opens settings from the header without leaving the current screen', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: /settings/i }))
+    expect(screen.getByTestId('settings-overlay')).toBeInTheDocument()
+    // The deck screen is still mounted underneath, not replaced.
+    expect(screen.getByTestId('deck-select-screen')).toBeInTheDocument()
+
+    await user.click(screen.getByTestId('settings-close'))
+    expect(screen.queryByTestId('settings-overlay')).not.toBeInTheDocument()
+  })
+
+  it('keeps a setting changed from the header, across screens', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: /settings/i }))
+    await user.selectOptions(screen.getByTestId('setting-base-health'), 'remaining')
+    await user.click(screen.getByTestId('settings-close'))
+
+    await user.click(screen.getByRole('button', { name: /help/i }))
+    await user.click(screen.getByRole('button', { name: /back/i }))
+    await user.click(screen.getByRole('button', { name: /settings/i }))
+
+    expect(screen.getByTestId('setting-base-health')).toHaveValue('remaining')
+  })
 })

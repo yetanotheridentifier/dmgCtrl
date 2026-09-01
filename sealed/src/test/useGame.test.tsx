@@ -286,6 +286,66 @@ describe('useGame', () => {
       expect(result.current.legal.some(a => (a as { type: string }).type === 'undo')).toBe(false)
       expect(legalMoves(result.current.gameState!).some(a => (a as { type: string }).type === 'undo')).toBe(false)
     })
+
+    /**
+     * #533: undone moves are truncated out, so a game played with undo replays perfectly and is
+     * otherwise indistinguishable from one played straight through. The E7 training pipeline is
+     * the consumer of these records, and a retried line is not a played line, so the record has
+     * to say so. It cannot be backfilled later, hence counting it from the start.
+     */
+    describe('undo provenance on the saved record', () => {
+      async function playToAWin(result: Awaited<ReturnType<typeof atRoundOne>>, undos: number) {
+        act(() => result.current.act({ type: 'playUnit', handIndex: 0 }))
+        for (let i = 0; i < undos; i++) {
+          act(() => result.current.undo())
+          act(() => result.current.act({ type: 'playUnit', handIndex: 0 }))
+        }
+        act(() => result.current.act({ type: 'pass' }))
+        act(() => result.current.act({ type: 'skipResource' }))
+        const unitId = result.current.gameState!.players.player.units[0].instanceId
+        act(() => result.current.act({ type: 'attack', attackerId: unitId, target: { kind: 'base' } }))
+        expect(result.current.gameState!.winner).toBe('player')
+      }
+
+      it('records zero when the game was played straight through', async () => {
+        const result = await atRoundOne()
+        await playToAWin(result, 0)
+
+        await waitFor(async () => {
+          const records = await listGameRecords()
+          expect(records).toHaveLength(1)
+          expect(records[0].undoCount).toBe(0)
+        })
+      })
+
+      it('counts every undo, not just whether one was used', async () => {
+        const result = await atRoundOne()
+        await playToAWin(result, 3)
+
+        await waitFor(async () => {
+          const records = await listGameRecords()
+          expect(records).toHaveLength(1)
+          expect(records[0].undoCount).toBe(3)
+        })
+      })
+
+      /** An undo with nothing to take back is not an undo: it must not inflate the count. */
+      it('does not count an undo that rewound nothing', async () => {
+        const { result } = renderHook(() => useGame(DECK, DECK, OPTS))
+        await waitFor(() => expect(result.current.status).toBe('playing'))
+        act(() => result.current.undo())
+
+        act(() => result.current.act({ type: 'keepHand' }))
+        act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
+        act(() => result.current.act({ type: 'setupResource', handIndex: 0 }))
+        await playToAWin(result, 0)
+
+        await waitFor(async () => {
+          const records = await listGameRecords()
+          expect(records[0].undoCount).toBe(0)
+        })
+      })
+    })
   })
 
   /** #373: a bug report carries the game so far, which must replay to what is on screen. */
