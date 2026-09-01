@@ -183,17 +183,65 @@ and drives the AI exactly once.
 **each individual action**, the AI's included. `undo()` rewinds to the last snapshot the human
 took, which drops the AI's reply along with the player's move, and truncates the move list so
 an undone move can never reach a saved record. Depth is unlimited: you can rewind to the
-opening mulligan. Two deliberate constraints:
+opening mulligan. Three deliberate constraints:
 
 - **It is not an `Action`.** It lives on the hook's return value, so it cannot appear in
   `legalMoves` and the AI cannot pick it, which would otherwise loop forever.
 - **It stops at the end of the game**, because the record has been written by then and
   rewinding past it would leave the saved game disagreeing with the screen.
+- **The button is offered only when `allowUndo` is set**, which defaults to the build
+  (`isDev()`). The gate is presentational, in `GameScreen`: the snapshots are kept either
+  way, so turning the setting on mid-game exposes the whole history already recorded rather
+  than starting from that moment.
 
-Replaying an undone action reproduces the same AI reply, per the determinism contract above.
-That is what makes undo useful for pinning down a defect rather than a way to re-roll. The
-per-action granularity is finer than `undo` currently needs; it is the substrate for stepping
-through history from the log.
+Replaying an undone action reproduces the same AI reply, per the determinism contract above,
+so undo cannot re-roll an outcome. It can still rewind past a mulligan, a draw or a search,
+which lets the same decision be taken again with the hidden information already seen. That is
+why it is off by default: it is a tool for pinning down a defect or practising a line, not part
+of playing a game.
+
+Because undone moves are truncated out, a game played with undo replays perfectly and is
+otherwise indistinguishable from one played straight through. `useGame` therefore counts the
+rewinds it performs and writes the total to the record's `undoCount`, so the E7 training
+pipeline can tell a retried line from a played one. A rewind that found nothing to take back
+does not count. The field is absent on records written before it existed, which means
+provenance unknown rather than zero, and it cannot be backfilled.
+
+The per-action granularity is finer than `undo` currently needs; it is the substrate for
+stepping through history from the log.
+
+## User settings
+
+`data/settingsStore.ts` holds the shape, the defaults and the reading of the stored blob;
+`hooks/useSettings.ts` wraps it in a context provider around the whole app. Consumers read
+`settings` and call one `update(patch)`, so adding a setting is a field and an overlay row
+with nothing to wire between them.
+
+Four properties are load-bearing:
+
+- **Defaults may depend on the build.** `allowUndo` and `showBugReport` default to `isDev()`:
+  developer tools, on while developing and off in the shipped app, and a user preference
+  either way. `defaultSettings()` is a function, not a constant, so the build is read at call
+  time and both cases stay testable.
+- **Reading never writes.** Persisting a computed default on first load would freeze one
+  build's answer into storage and stop it tracking the build. Only an explicit change writes.
+- **Every field is validated on load, against its own default.** A stored blob can be corrupt,
+  partial or wrongly typed, and none of those may stop the app starting: an unusable value
+  falls back to its default and the rest survives. A blob written before a setting existed
+  omits it, which reads as that setting's default.
+- **Settings are live.** They reach the UI through context, not through `UseGameOptions`, so a
+  change applies to the game in progress rather than at the next game.
+
+The surface is an **overlay** (`SettingsOverlay`), opened from the cog in the app header and
+from the cog in the game header. Not a screen: routing away unmounts `GameScreen` and the game
+with it, since the game lives entirely in `useGame`'s state and refs. `bugReportOverlay` and
+`cardGridOverlay` are the same pattern. It reads the context directly rather than taking props,
+unlike the presentational overlays, because a settings form has no caller-held state to be given.
+
+The header chrome icons (bug, cog, question mark) live together in `components/icons.tsx` and
+share one `ICON_PROPS` spec, so a mismatch between neighbours is visible in one file. The cog
+and question mark are the PWA's paths, copied rather than imported: the two apps are separate
+packages and deliberately stay that way.
 
 ## UI (GameScreen)
 
@@ -276,11 +324,14 @@ The board is drawn with art-dominant cards, not text rows:
   than replaced, leaving the instruction in every filed issue. Transient guidance belongs in
   the form, not in the permanent record.
 - **Screen layout**: the game screen is full-bleed, a two-column grid
-  (`16rem 1fr`), no divider between them. Backgrounds follow one rule: the **play area,
+  (`19rem 1fr`), no divider between them. The left column is sized to fit its whole header
+  row, exit icon, wordmark and up to three buttons, without truncating the wordmark.
+  Backgrounds follow one rule: the **play area,
   the bars and the two headers use the core theme background** (transparent → the body
   starfield), while the **log and the individual pile columns use `bg-surface`**. So the
   **left column** header (the transparent **dmgCtrl icon = exit** with the **dmgCtrl**
-  wordmark, and the **? = help** aligned to the log's right edge) sits on the starfield
+  wordmark, and the **bug = report**, **cog = settings** and **? = help** buttons aligned
+  to the log's right edge) sits on the starfield
   like the page header, above the **log**, a `bg-surface` panel filling the height. The
   **right column** is the **play area**, edge-to-edge to the top and right and transparent,
   so the opponent leader reads as joined with it. The frame (icon/help/log) renders even
@@ -301,16 +352,20 @@ The board is drawn with art-dominant cards, not text rows:
   board vertically. The opponent half is bottom-anchored and your half top-anchored, so
   the two bases meet at the **battlefront** in the centre and units line up along it,
   stacking away as more are played. `boardLayout.orderUnits` keeps Sentinels at the front.
-  Each base shows the **damage it has taken**, counting up to the card's HP (dynamic,
-  never a hardcoded 30), as a large number overlaid on the card (PWA game-screen style:
-  light weight, accent glow, ~50% of card height). Counting remaining down instead is a
-  future display preference; it never touches game state or logs.
+  Each base shows either the **damage it has taken** counting up to the card's HP (the
+  default) or the **health remaining** counting down, per the `baseHealthDisplay` setting,
+  as a large number overlaid on the card (PWA game-screen style: light weight, accent glow,
+  ~50% of card height). The HP is read from the card (dynamic, never a hardcoded 30) and the
+  damage is clamped to it, so an overkill reads as a full base or as zero remaining, never
+  as more damage than the base has HP nor as negative health. The preference is display
+  only: the engine counts damage up either way, and the win threshold stays `damage >= hp`.
 
 ## Storage tiers
 
 | Store | Holds | Why |
 |---|---|---|
 | localStorage `sealed_decks` | Imported decks | Tiny, synchronous |
+| localStorage `sealed_settings` | User settings | Tiny, synchronous; per device and browser |
 | IndexedDB `cards` ← `setImport.ts` | Whole sets via one SWUDB search call (`?q=set:XXX`) | Full catalogue offline; includes bases the detail endpoint 502s on |
 | IndexedDB `cards` (Dexie v1) | Card JSON + thumbnail bytes | ~KBs per card; queryable; offline |
 | IndexedDB `games` (Dexie v2) | Completed game records | Replayable substrate for E7 training |

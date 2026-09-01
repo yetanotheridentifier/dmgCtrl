@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import GameScreen from '../components/gameScreen'
+import { SettingsProvider } from '../hooks/useSettings'
 import '../engine/cardDefinitions' // side-effect: registers Clan Vizsla Soldier's ability
 import { db } from '../data/db'
 import { legalMoves } from '../engine/legalMoves'
@@ -60,7 +61,11 @@ describe('Clan Vizsla Soldier: the may-defeat-an-upgrade choice is reachably opt
     for (const c of CARDS) await db.cards.put({ id: `${c.Set}_${c.Number}`, json: c, fetchedAt: 1 })
 
     const user = userEvent.setup()
-    render(<GameScreen deck={playerDeck} opponentDeck={opponentDeck} onExit={() => {}} onHelp={() => {}} gameOptions={OPTS} />)
+    render(
+      <SettingsProvider>
+        <GameScreen deck={playerDeck} opponentDeck={opponentDeck} onExit={() => {}} onHelp={() => {}} gameOptions={OPTS} />
+      </SettingsProvider>,
+    )
     await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
 
     // Setup: keep hand, resource the two Fillers dealt after the three real cards.

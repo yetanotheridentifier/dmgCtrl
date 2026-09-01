@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor, within, fireEvent } from '@testing-library/react'
+import type { ReactElement } from 'react'
 import userEvent from '@testing-library/user-event'
 import GameScreen from '../components/gameScreen'
 import { db } from '../data/db'
@@ -7,6 +8,9 @@ import type { SavedDeck } from '../data/deckStore'
 import type { SwuCard } from '../data/cards'
 import type { UseGameOptions } from '../hooks/useGame'
 import { legalMoves } from '../engine/legalMoves'
+import { SettingsProvider } from '../hooks/useSettings'
+import { defaultSettings, STORAGE_KEY as SETTINGS_KEY } from '../data/settingsStore'
+import type { Settings } from '../data/settingsStore'
 
 const SWU_CARDS: SwuCard[] = [
   { Set: 'TST', Number: '001', Name: 'Test Leader', Type: 'Leader', Cost: '5', Power: '4', HP: '7' },
@@ -50,8 +54,20 @@ async function seedCards() {
   }
 }
 
+/** GameScreen reads user settings, so every render needs the provider around it. */
+const renderGame = (ui: ReactElement) => render(<SettingsProvider>{ui}</SettingsProvider>)
+
+/**
+ * Settings are read from storage when the provider mounts, so a test that depends on one has
+ * to seed it *before* rendering. Seed explicitly rather than leaning on the default: `allowUndo`
+ * defaults from the build, which is not something a component test should depend on.
+ */
+function seedSettings(patch: Partial<Settings>) {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...defaultSettings(), ...patch }))
+}
+
 async function renderBoard(onExit = vi.fn()) {
-  render(<GameScreen deck={DECK} opponentDeck={DECK} onExit={onExit} onHelp={vi.fn()} gameOptions={OPTS} />)
+  renderGame(<GameScreen deck={DECK} opponentDeck={DECK} onExit={onExit} onHelp={vi.fn()} gameOptions={OPTS} />)
   await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
   // Setup phase: keep the opening hand, then resource two cards by clicking
   // them in the hand (index 0 is a Pricey Unit each time). The AI's setup heuristic
@@ -67,17 +83,18 @@ describe('GameScreen', () => {
   beforeEach(async () => {
     await db.cards.clear()
     await db.games.clear()
+    localStorage.clear()
     await seedCards()
   })
 
   it('shows a loading state then the board', async () => {
-    render(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
+    renderGame(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
     expect(screen.getByTestId('game-loading')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
   })
 
   it('offers the mulligan decision during setup', async () => {
-    render(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
+    renderGame(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
     await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
     expect(screen.getByRole('button', { name: /mulligan/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /keep hand/i })).toBeInTheDocument()
@@ -156,6 +173,7 @@ describe('GameScreen', () => {
   /** #366: undo is hidden rather than disabled when there is nothing to take back. */
   it('shows Undo only once the player has acted, and rewinds the board', async () => {
     const user = userEvent.setup()
+    seedSettings({ allowUndo: true })
     await renderBoard()
     // renderBoard finishes the setup phase, so there is already something to undo.
     const undo = screen.getByTestId('undo-btn')
@@ -168,8 +186,36 @@ describe('GameScreen', () => {
   })
 
   it('hides Undo before the player has acted', async () => {
-    render(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
+    seedSettings({ allowUndo: true })
+    renderGame(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
     await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
+    expect(screen.queryByTestId('undo-btn')).toBeNull()
+  })
+
+  /**
+   * #533: the reported defect. Mulliganing offered an Undo that took the mulligan back, so the
+   * replacement hand could be seen and then declined. Undo is a playtesting tool, and with the
+   * setting off it is not offered at all rather than being offered and refused.
+   */
+  it('offers no Undo after a mulligan when undo is off', async () => {
+    const user = userEvent.setup()
+    seedSettings({ allowUndo: false })
+    renderGame(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
+    await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: /mulligan/i }))
+
+    expect(screen.queryByTestId('undo-btn')).toBeNull()
+  })
+
+  it('hides Undo mid-game when the setting is off, with moves to take back', async () => {
+    const user = userEvent.setup()
+    seedSettings({ allowUndo: false })
+    await renderBoard()
+    await user.click(screen.getByTestId('hand-card-3'))
+
+    // A unit is on the board, so there is certainly something to take back.
+    expect(within(screen.getByTestId('player-ground-units')).getAllByTestId('card-face')).toHaveLength(1)
     expect(screen.queryByTestId('undo-btn')).toBeNull()
   })
 
@@ -212,7 +258,7 @@ describe('GameScreen', () => {
    */
   it('overlays the board without displacing it or blocking clicks', async () => {
     const user = userEvent.setup()
-    render(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
+    renderGame(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
     await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /keep hand/i }))
 
@@ -228,7 +274,7 @@ describe('GameScreen', () => {
 
   it('prompts for the two setup resources, counting them off', async () => {
     const user = userEvent.setup()
-    render(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
+    renderGame(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
     await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
 
     // The mulligan decision is resolved from the Action buttons, not the board — say so, or a
@@ -263,6 +309,9 @@ describe('GameScreen', () => {
    * clipboard, because the replay payload is far too large for a URL.
    */
   describe('bug report', () => {
+    // The button is a setting now, so seed it rather than depending on the build's default.
+    beforeEach(() => seedSettings({ showBugReport: true }))
+
     const openReport = async (user: ReturnType<typeof userEvent.setup>) => {
       await user.click(screen.getByTestId('bug-report-btn'))
       await user.type(screen.getByTestId('bug-report-title'), 'Game hung')
@@ -272,7 +321,7 @@ describe('GameScreen', () => {
     /** The form is modal: board decoration must not paint over it or distract from it. */
     it('hides the action prompt while the form is open', async () => {
       const user = userEvent.setup()
-      render(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
+      renderGame(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
       await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
       expect(screen.getByTestId('action-prompt')).toBeInTheDocument() // the mulligan prompt
 
@@ -400,7 +449,7 @@ describe('GameScreen', () => {
 
   it('resources a card by clicking it in the setup phase, highlighted green', async () => {
     const user = userEvent.setup()
-    render(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
+    renderGame(<GameScreen deck={DECK} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
     await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /keep hand/i }))
 
@@ -592,7 +641,7 @@ describe('GameScreen', () => {
     const inertDeck: SavedDeck = { id: 'o', name: 'Inert', leader: 'TST_001', base: 'TST_002', cards: [{ id: 'TST_300', count: 30 }], importedAt: 1 }
 
     const user = userEvent.setup()
-    render(<GameScreen deck={playerDeck} opponentDeck={inertDeck} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
+    renderGame(<GameScreen deck={playerDeck} opponentDeck={inertDeck} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
     await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
 
     // Setup: keep hand, resource two Fillers (index 2 twice), leaving Cheap Unit + Upgrade.
@@ -624,10 +673,115 @@ describe('GameScreen', () => {
   it('shows the diagnostic detail when card loading fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 502, json: () => Promise.resolve({}) }))
     const badDeck = { ...DECK, cards: [{ id: 'TST_404', count: 30 }] }
-    render(<GameScreen deck={badDeck} opponentDeck={badDeck} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
+    renderGame(<GameScreen deck={badDeck} opponentDeck={badDeck} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
 
     await waitFor(() => expect(screen.getByTestId('game-error')).toBeInTheDocument())
     expect(screen.getByTestId('game-error-detail')).toHaveTextContent(/TST_404/)
     vi.unstubAllGlobals()
+  })
+
+  /**
+   * #324: a display preference only. The engine keeps counting damage up and the win threshold
+   * stays `damage >= hp`; this changes the number on the base card and nothing else.
+   */
+  describe('base health display', () => {
+    it('counts damage up by default', async () => {
+      await renderBoard()
+      expect(screen.getByTestId('player-base-hp')).toHaveTextContent(/^0$/)
+      expect(screen.getByTestId('player-base-hp')).toHaveAccessibleName(/damage: 0 of 30/i)
+    })
+
+    it('counts health down when set to remaining', async () => {
+      seedSettings({ baseHealthDisplay: 'remaining' })
+      await renderBoard()
+      expect(screen.getByTestId('player-base-hp')).toHaveTextContent(/^30$/)
+      expect(screen.getByTestId('player-base-hp')).toHaveAccessibleName(/remaining: 30 of 30/i)
+    })
+
+    /**
+     * #323 clamped the count-up display so 40 damage on a 30-HP base reads 30 rather than 40.
+     * Counting down has the same edge from the other side: it must read 0, never a negative.
+     */
+    it('never shows negative remaining health after an overkill', async () => {
+      const user = userEvent.setup()
+      seedSettings({ baseHealthDisplay: 'remaining' })
+      await renderBoard()
+      await user.click(screen.getByTestId('hand-card-3'))
+      await user.click(screen.getByRole('button', { name: /^pass$/i }))
+      await user.click(screen.getByRole('button', { name: /skip resourcing/i }))
+      await user.click(screen.getByTestId('board-unit-u1'))
+      // 40 power into a 30-HP base.
+      await user.click(screen.getByTestId('target-opponent-base'))
+
+      expect(screen.getByTestId('opponent-base-hp')).toHaveTextContent(/^0$/)
+    })
+  })
+
+  /**
+   * #539: settings have to be reachable during a game, and reaching them must not cost the game.
+   * Routing to a screen unmounts GameScreen and starts a different game (#541), so this is an
+   * overlay over the board.
+   */
+  describe('settings overlay', () => {
+    it('opens from the game header and closes again', async () => {
+      const user = userEvent.setup()
+      await renderBoard()
+      expect(screen.queryByTestId('settings-overlay')).toBeNull()
+
+      await user.click(screen.getByTestId('settings-btn'))
+      expect(screen.getByTestId('settings-overlay')).toBeInTheDocument()
+
+      await user.click(screen.getByTestId('settings-close'))
+      expect(screen.queryByTestId('settings-overlay')).toBeNull()
+    })
+
+    it('leaves the game in progress untouched', async () => {
+      const user = userEvent.setup()
+      await renderBoard()
+      await user.click(screen.getByTestId('hand-card-3'))
+      const logBefore = screen.getByTestId('game-log').textContent
+
+      await user.click(screen.getByTestId('settings-btn'))
+      await user.click(screen.getByTestId('settings-close'))
+
+      // The board is still the same game, not a fresh one: same unit, same log.
+      expect(within(screen.getByTestId('player-ground-units')).getAllByTestId('card-face')).toHaveLength(1)
+      expect(screen.getByTestId('game-log').textContent).toBe(logBefore)
+    })
+
+    it('hides the bug report button when that setting is off, and shows it when on', async () => {
+      const user = userEvent.setup()
+      seedSettings({ showBugReport: false })
+      await renderBoard()
+      expect(screen.queryByTestId('bug-report-btn')).toBeNull()
+
+      await user.click(screen.getByTestId('settings-btn'))
+      await user.click(screen.getByTestId('setting-show-bug-report'))
+      await user.click(screen.getByTestId('settings-close'))
+
+      expect(screen.getByTestId('bug-report-btn')).toBeInTheDocument()
+    })
+
+    /** The gear is the way back to the settings, so it is never hidden by a setting. */
+    it('keeps the settings button itself visible with everything else turned off', async () => {
+      seedSettings({ showBugReport: false, allowUndo: false })
+      await renderBoard()
+      expect(screen.getByTestId('settings-btn')).toBeInTheDocument()
+    })
+
+    /** Turning undo on mid-game takes effect without restarting: that is the point of the setting. */
+    it('applies an undo change immediately', async () => {
+      const user = userEvent.setup()
+      seedSettings({ allowUndo: false })
+      await renderBoard()
+      await user.click(screen.getByTestId('hand-card-3'))
+      expect(screen.queryByTestId('undo-btn')).toBeNull()
+
+      await user.click(screen.getByTestId('settings-btn'))
+      await user.click(screen.getByTestId('setting-allow-undo'))
+      await user.click(screen.getByTestId('settings-close'))
+
+      expect(screen.getByTestId('undo-btn')).toBeInTheDocument()
+    })
   })
 })

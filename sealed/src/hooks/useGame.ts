@@ -136,6 +136,9 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
   const historyRef = useRef<Snapshot[]>([])
   const logRef = useRef<LogEntry[]>([])
   const [canUndo, setCanUndo] = useState(false)
+  // Rewinds actually performed, for the saved record's provenance. A ref, not state: it is
+  // read once at save time and must not re-render the board on every undo.
+  const undoCountRef = useRef(0)
 
   /** Advance the AI while it is the active player; returns the resulting state. */
   const driveAi = useCallback(
@@ -177,6 +180,7 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
       movesRef.current = []
       historyRef.current = []
       setCanUndo(false)
+      undoCountRef.current = 0
       recordSavedRef.current = false
 
       try {
@@ -260,6 +264,7 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
       initialState: initial,
       moves: movesRef.current,
       finalState: gameState,
+      undoCount: undoCountRef.current,
     })
   }, [gameState, playerDeck.name, opponentDeck.name])
 
@@ -298,6 +303,7 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
   const undo = useCallback(() => {
     const index = historyRef.current.map(s => s.by).lastIndexOf(HUMAN)
     if (index < 0) return
+    undoCountRef.current++
     const snapshot = historyRef.current[index]
     historyRef.current = historyRef.current.slice(0, index)
     movesRef.current = movesRef.current.slice(0, snapshot.movesLength)
