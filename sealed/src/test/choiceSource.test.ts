@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
-import { runTrigger, stampChoiceSource } from '../engine/abilities'
+import { collectUnitTriggers, stampChoiceSource } from '../engine/abilities'
+import { fireBatch } from '../engine/effects'
 import '../engine/cardDefinitions'
 import { choiceSourceRef } from '../utils/describeChoice'
 import { buildCoverageDecks } from '../bench/coverageDecks'
@@ -65,7 +66,7 @@ describe('the dispatcher attributes a choice to the card that raised it', () => 
       cards: { ...CARDS, ASH_050: card({ id: 'ASH_050', name: 'Morgan Elsbeth', type: 'unit', arena: 'ground', power: 3, hp: 4 }) },
       players: { player: player({ units: [unit('m', 'ASH_050', { arena: 'ground' })] }), opponent: player() },
     })
-    const fired = runTrigger(s, 'whenDefeated', { owner: 'player', cardId: 'ASH_050', sourceInstanceId: 'm' })
+    const fired = fireBatch(s, collectUnitTriggers(s, 'whenDefeated', s.players.player.units[0], 'player'))
     expect(fired.pendingChoices?.[0]).toMatchObject({ kind: 'mayLastingBuff', source: { cardId: 'ASH_050', controller: 'player' } })
   })
 })

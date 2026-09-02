@@ -434,6 +434,36 @@ export interface PhaseEvents {
  * the ones the defeat batch supplies; a trigger point that needs more adds its own here rather than
  * smuggling a closure through.
  */
+/**
+ * What an ability's effect reads about the event that triggered it, beyond who controls it and which
+ * card it is on. Carried on a `PendingTrigger` so a collected ability resolves with the context it
+ * triggered with, however long it waits to be ordered.
+ *
+ * One shape rather than a field per trigger point: a new trigger point adds a member here and needs no
+ * change to the queue, and `EffectContext` extends it so an effect reads the same names either way.
+ * Every member must stay JSON-serialisable, since the queue lives on the game state.
+ */
+export interface TriggerContext {
+  /** `onAttackEnd`: the target of the attack that just ended. */
+  attackTarget?: AttackTarget
+  /** `onAttackEnd` / `whenEnemyAttacksBase`: the unit that made the attack. */
+  attackerInstanceId?: string
+  /** `onAttackEnd`: combat damage dealt to the opponent's base this attack (0 if none). */
+  combatDamageToBase?: number
+  /** `onAttackEnd`: the defending unit was defeated during this attack. */
+  defenderDefeated?: boolean
+  /** `onAttackEnd`: combat damage the attacker dealt to the defending unit (0 if a base attack). */
+  combatDamageToDefender?: number
+  /** `whenDefeated`: the unit as it was at the moment of defeat (it has left play). */
+  defeatedUnit?: UnitState
+  /** `whenDefeated`: the defeat was caused by combat damage. */
+  defeatedByCombat?: boolean
+  /** A unit the event is *about*: the one just played, readied, or chosen. */
+  targetInstanceId?: string
+  /** `whenUpgradeAttached`: the upgrade was played from hand rather than created by an ability. */
+  upgradePlayed?: boolean
+}
+
 export interface PendingTrigger {
   id: string
   /** Whose ability it is, and therefore whose order it is (CR 7.6.9). */
@@ -463,10 +493,13 @@ export interface PendingTrigger {
    * dispatcher that only counts how many are owed, and the same question repeats forever.
    */
   picked?: boolean
-  /** `whenDefeated`: the unit as it was at the moment of defeat (it has left play). */
-  defeatedUnit?: UnitState
-  /** `whenDefeated`: the defeat was caused by combat damage. */
-  defeatedByCombat?: boolean
+  /**
+   * The ability is on the controller's **undeployed leader** (its front side) rather than on a unit or
+   * an upgrade, so it is looked up in `leaderAbilities` rather than in the card's unit abilities.
+   */
+  fromLeader?: boolean
+  /** The event details the ability triggered with, replayed into its effect when it resolves. */
+  ctx?: TriggerContext
 }
 
 /**
@@ -592,7 +625,9 @@ type ChoiceVariant =
    *
    * Only raised for two or more: a single owed ability is not a decision.
    */
-  | { kind: 'chooseNextTrigger'; id: string; controller: PlayerId; candidates: { triggerId: string; cardId: string }[] }
+  // `sourceInstanceId` is what tells two copies of one card apart: the same ability on two units is a
+  // real ordering decision, and without the instance the prompt would offer two identical buttons.
+  | { kind: 'chooseNextTrigger'; id: string; controller: PlayerId; candidates: { triggerId: string; cardId: string; sourceInstanceId?: string }[] }
   // Luke front: may exhaust the (undeployed) leader to heal `amount` from `unitId`, or decline.
   | { kind: 'mayExhaustLeaderHealUnit'; id: string; controller: PlayerId; unitId: string; amount: number }
   // Luke deployed: heal `amount` from a chosen unit (`unitTargets`) or base (`baseTargets`). Mandatory.

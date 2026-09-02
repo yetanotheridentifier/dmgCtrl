@@ -157,6 +157,23 @@ The 292 vanilla and keyword-only cards need no ticket, reconciling set by set wi
 in `data/implementedCards.ts`. 29 cards with ability text are printed in more than one set, covering 30
 extra ids for no extra work.
 
+## Player-facing UI
+
+Both came out of play-testing the trigger-ordering work, and both sort the same ~72 pending-choice
+kinds, so **#552 first**: it has to classify every kind anyway, which is where #553's mapping then hangs.
+
+- **#552 triggered choices belong in an overlay, not the action column.** A triggered choice reads as a
+  centre-screen overlay when two abilities trigger and as small buttons beside Pass when one does. The
+  split to aim for is by how a choice is answered: click-a-unit stays on the board, pick-a-button moves
+  to an overlay. The action column keeps what the player initiates.
+- **#553 highlight colour should say what the effect does.** Today it says what kind of interaction it
+  is: every board target is red, so a heal, a buff and a lethal hit look alike, and healing your own
+  base paints it the same red as an enemy attacking it. The intended scheme is red for damage, debuff
+  and weakness, green for tokens and buffs, blue for heal, yellow for exhaust and capture, white for
+  attaching a real upgrade. Not a lookup table: green and blue are already spoken for, the palette is
+  two colours short, and one kind can carry either sign (Baylan's +2/+2 and Ezra's −3/−0 are both
+  `mayLastingBuff`), so the mapping reads the payload.
+
 ## Deferred
 
 - **Web Worker** for the AI. **Downgraded, probably unnecessary.** It existed to stop a blocking search
@@ -172,10 +189,23 @@ extra ids for no extra work.
   separately keys on the upgrade's owner rather than the controlling unit's controller, which is wrong
   for a stolen unit carrying one. Raising a mandatory choice during regroup needs thought first.
 - **Per-player unique-symbol rule** (defeat a duplicate).
-- **Suppressing a trigger-ordering prompt where the order cannot matter.** Every simultaneous batch is
-  ordered by its controller, so three of one player's units dying together asks two questions even when
-  all three abilities do the same thing. Deliberately not attempted yet: "cannot matter" is a hard
-  property to establish, and getting it wrong silently removes a real decision. Ship the prompt, gather
-  play-testing, suppress with evidence. Any attempt should be gated on the prompt genuinely being a
-  nuisance in play rather than on how it reads in the test suite.
+- **Suppressing a trigger-ordering prompt where the order cannot matter.** Three of one player's units
+  dying together still asks two questions even when all three abilities do the same thing. Two slices
+  are suppressed today, both where the property is checkable rather than judged: **indistinguishable**
+  abilities (the same ability, on the same card, on the **same unit**, firing more than once for one
+  event) and **inert** ones (running the effect changes nothing). Everything else still asks: different
+  units, different cards, different abilities.
+  Widening it stays deliberately unattempted: "cannot matter" is a hard property to establish, and
+  getting it wrong silently removes a real decision. Gather play-testing and suppress with evidence,
+  gated on the prompt genuinely being a nuisance in play rather than on how it reads in the suite.
+- **An inert ability that a batch-mate would have enabled** is handled: abilities that can act resolve
+  first and the board is re-read, so Grogu's deploy meets Luke Skywalker's "at least 4 units" rather
+  than Luke being spent while inert (`lukeGroguEnable.test.ts`). What is **not** offered is the reverse
+  choice: deliberately fizzling a conditional ability by taking it while its condition is still unmet,
+  which matters only for a conditional *drawback* an ability in the same batch would switch on. No such
+  pairing is known in ASH. Offering it means putting inert abilities back in the prompt, which is the
+  thing play-testing asked to remove, so it needs a real case before it is worth the noise.
+- **Naming a unit in the trigger-ordering prompt.** Two copies of one card triggering together are
+  numbered, because the prompt has no way to point at a unit on the board. It carries each candidate's
+  `sourceInstanceId`, so highlighting the unit is available whenever the prompt is worth the work.
 - **Offensive pinning.** Closed on prevalence rather than deferred; see experiments.md.

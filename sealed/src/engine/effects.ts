@@ -1,9 +1,25 @@
-import type { DamageSource, GameState, NextUnitGrant, PlayerId, UnitState } from './types'
+import type { DamageSource, GameState, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState } from './types'
 import { updatePlayer, pushChoice, recordBaseDamaged, recordUpgradeDefeated, recordUnitLeftPlay, abilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
-import type { EffectContext, TriggerPoint } from './abilities'
-import { getCardDefinition, runUnitTrigger } from './abilities'
+import type { TriggerPoint } from './abilities'
+import { getCardDefinition, collectUnitTriggers } from './abilities'
+import { enqueueTriggers, drainTriggers } from './triggerQueue'
+
+/**
+ * Run one event's triggered abilities: enqueue them as a batch and drain as far as they go.
+ *
+ * The single way an event fires its abilities. Collecting first is what lets the controller order the
+ * batch (CR 7.6.9-7.6.10) and lets each ability resolve **fully** before the next begins (CR 7.6.12),
+ * so an ability that resolves later sees the board as the earlier ones left it, rather than a board
+ * snapshotted when the event happened.
+ *
+ * Nothing owed means nothing to do: draining an empty batch would resolve whatever an OUTER batch
+ * still owes, at a point that is not its turn.
+ */
+export function fireBatch(state: GameState, owed: PendingTrigger[], sameEvent = false): GameState {
+  return owed.length === 0 ? state : drainTriggers(enqueueTriggers(state, owed, sameEvent))
+}
 
 /**
  * How many cards a search by `owner` looks at: the base count times every `searchModifier` **anything
@@ -89,8 +105,33 @@ export function giveToken(state: GameState, instanceId: string, tokenId: string)
  * must attach them together rather than in a loop.
  */
 export function fireUpgradeAttached(state: GameState, instanceId: string, upgradePlayed = false): GameState {
+  return fireBatch(state, collectUpgradeAttached(state, instanceId, upgradePlayed))
+}
+
+/**
+ * Open the Support pending choice: another ready unit may attack, gaining the Support source's
+ * abilities for that attack (see the `support` case in the attack dispatcher). No choice if there is
+ * no other ready unit. Shared by playing a Support unit and deploying a Support leader.
+ */
+export function openSupportChoice(state: GameState, owner: PlayerId, sourceInstanceId: string): GameState {
+  const others = state.players[owner].units.filter(u => u.instanceId !== sourceInstanceId && !u.exhausted)
+  if (others.length === 0) return state
+  // Record the source card as well as the instance: the Support unit can leave play before the
+  // choice is answered, and an instance id that no longer resolves cannot name anything (#374).
+  const sourceCardId = state.players[owner].units.find(u => u.instanceId === sourceInstanceId)?.cardId
+  return pushChoice(state, {
+    kind: 'support',
+    id: sourceInstanceId,
+    controller: owner,
+    unitId: sourceInstanceId,
+    ...(sourceCardId ? { source: { cardId: sourceCardId, controller: owner } } : {}),
+  })
+}
+
+/** {@link fireUpgradeAttached} as data, for a caller folding it into a wider batch (a unit entering). */
+export function collectUpgradeAttached(state: GameState, instanceId: string, upgradePlayed = false): PendingTrigger[] {
   const found = findUnit(state, instanceId)
-  return found ? runUnitTrigger(state, 'whenUpgradeAttached', found.unit, found.owner, { upgradePlayed }) : state
+  return found ? collectUnitTriggers(state, 'whenUpgradeAttached', found.unit, found.owner, { upgradePlayed }) : []
 }
 
 /**
@@ -129,11 +170,14 @@ export function dealDamageToBase(state: GameState, player: PlayerId, amount: num
  */
 export function fireUpgradesDefeated(state: GameState, upgradeOwners: PlayerId[]): GameState {
   let next = state
+  // One batch, not one per upgrade: they are defeated by the same event, so their reactions are
+  // simultaneous and belong in one ordering question rather than nested under each other.
+  const owed: PendingTrigger[] = []
   for (const owner of upgradeOwners) {
     next = recordUpgradeDefeated(next, owner)
-    next = fireUnitsTrigger(next, 'whenFriendlyUpgradeDefeated', owner)
+    owed.push(...collectUnitsTrigger(next, 'whenFriendlyUpgradeDefeated', owner))
   }
-  return next
+  return fireBatch(next, owed)
 }
 
 /**
@@ -261,17 +305,14 @@ export function drawCards(state: GameState, owner: PlayerId, n: number): GameSta
   return fireUnitsTrigger(next, 'whenDrawCards', owner)
 }
 
-/**
- * Fire `point` on every unit `owner` controls, re-finding each one as we go so an earlier
- * reactor leaving play (or changing the board) can't resurrect a stale unit.
- */
-export function fireUnitsTrigger(state: GameState, point: TriggerPoint, owner: PlayerId, extra?: Partial<EffectContext>): GameState {
-  let next = state
-  for (const id of next.players[owner].units.map(u => u.instanceId)) {
-    const reactor = next.players[owner].units.find(u => u.instanceId === id)
-    if (reactor) next = runUnitTrigger(next, point, reactor, owner, extra)
-  }
-  return next
+/** Every ability `owner`'s units have at `point`: one event, so one batch. */
+export function collectUnitsTrigger(state: GameState, point: TriggerPoint, owner: PlayerId, ctx?: TriggerContext): PendingTrigger[] {
+  return state.players[owner].units.flatMap(u => collectUnitTriggers(state, point, u, owner, ctx))
+}
+
+/** Fire `point` on every unit `owner` controls, as one ordered batch. */
+export function fireUnitsTrigger(state: GameState, point: TriggerPoint, owner: PlayerId, ctx?: TriggerContext): GameState {
+  return fireBatch(state, collectUnitsTrigger(state, point, owner, ctx))
 }
 
 /**

@@ -110,6 +110,16 @@ describe('NextTriggerOverlay', () => {
     render(<NextTriggerOverlay state={board(owed)} candidates={candidates} onPick={onPick} />)
     fireEvent.click(screen.getByTestId('next-trigger-btn-1'))
     expect(onPick).toHaveBeenCalledWith(1)
-    expect(screen.queryByText(/cancel|skip|decline/i)).not.toBeInTheDocument()
+    // One button per candidate and nothing else to press: the ordering itself cannot be declined.
+    expect(screen.getAllByRole('button')).toHaveLength(candidates.length)
+  })
+
+  /**
+   * Picking here is not accepting the ability, and nothing on the prompt says so otherwise. Turning a
+   * "may" down happens on its own choice, once its turn comes.
+   */
+  it('says that declining comes later, on each ability', () => {
+    render(<NextTriggerOverlay state={board(owed)} candidates={candidates} onPick={vi.fn()} />)
+    expect(screen.getByText(/decline optional effects/i)).toBeInTheDocument()
   })
 })

@@ -66,6 +66,36 @@ function innermost(queue: PendingTrigger[]): number {
 }
 
 /**
+ * Whether ordering this batch is a real decision. The rules give the controller the order (CR 7.6.9),
+ * but the same ability on the same card on the same unit, firing more than once for one event, has
+ * only one answer: three upgrades leaving a unit at once is three Zeb Orrelios reactions that differ
+ * in nothing. Asking would be a prompt whose options are indistinguishable to the player.
+ *
+ * The instance is part of the identity on purpose. Two copies of a card each hold their own ability,
+ * and which resolves first is observable whenever one can change what the other sees.
+ */
+function distinguishable(triggers: PendingTrigger[]): boolean {
+  const key = (t: PendingTrigger) => `${t.cardId}#${t.abilityIndex}#${t.sourceInstanceId ?? ''}`
+  return new Set(triggers.map(key)).size > 1
+}
+
+/**
+ * Whether this ability would change nothing if it resolved **right now**: a conditional trigger whose
+ * condition is unmet, or one with no legal target.
+ *
+ * Asked by running it and looking at what comes back. Effects are pure, so the probed board is simply
+ * discarded and only the answer kept, and a card states an unmet condition by returning the state it
+ * was given (`s.initiative === ctx.owner ? … : s`), which is what makes the question answerable at all
+ * without a per-card declaration that could drift from the effect it describes.
+ *
+ * "Right now" is the whole of it. The answer can change as the batch runs, so it is re-asked on every
+ * pass rather than settled once when the batch was collected.
+ */
+function inertNow(state: GameState, trigger: PendingTrigger): boolean {
+  return runPendingTrigger(state, trigger) === state
+}
+
+/**
  * Nothing owed: drop both fields rather than leaving empty ones behind, so states stay comparable, and
  * hand `activePlayer` back to whoever held it on entry.
  *
@@ -121,17 +151,28 @@ export function drainTriggers(state: GameState): GameState {
     }
 
     const mine = live.filter(t => t.controller === turn.side)
+    let toRun = mine[0]
+    // Only worth probing where there is something to order: one ability resolves either way.
     if (mine.length > 1 && !mine[0].picked) {
-      // CR 7.6.9: their own order. `cardId` rides along so the prompt can name each waiting ability's
-      // source, which is the only thing distinguishing a unit's own ability from its upgrade's.
-      return pushChoice({ ...next, activePlayer: turn.side }, {
-        kind: 'chooseNextTrigger',
-        id: `next-${queue.length}`,
-        controller: turn.side,
-        candidates: mine.map(t => ({ triggerId: t.id, cardId: t.cardId })),
-      })
+      const actionable = mine.filter(t => !inertNow(next, t))
+      if (actionable.length > 1 && distinguishable(actionable)) {
+        // CR 7.6.9: their own order, over the abilities that would actually do something. `cardId`
+        // rides along so the prompt can name each waiting ability's source, which is the only thing
+        // distinguishing a unit's own ability from its upgrade's.
+        return pushChoice({ ...next, activePlayer: turn.side }, {
+          kind: 'chooseNextTrigger',
+          id: `next-${queue.length}`,
+          controller: turn.side,
+          candidates: actionable.map(t => ({ triggerId: t.id, cardId: t.cardId, ...(t.sourceInstanceId ? { sourceInstanceId: t.sourceInstanceId } : {}) })),
+        })
+      }
+      // Something that can act goes first, and the board is re-read on the next pass. An unmet
+      // condition is not a permanent one: Grogu deploying meets Luke Skywalker's "at least 4 units",
+      // and spending Luke while he could still do nothing would decide that for the player.
+      // With nothing actionable, order cannot matter: none of them can change what the others see.
+      if (actionable.length > 0) toRun = actionable[0]
     }
-    next = runOne(next, mine[0])
+    next = runOne(next, toRun)
   }
   return next
 }

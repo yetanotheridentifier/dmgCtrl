@@ -163,7 +163,12 @@ describe('whenUpgradeAttached — Sabine Wren (208)', () => {
     expect(granted.pendingChoices ?? [], 'but only one trigger').toHaveLength(1)
   })
 
-  /** Two separate grants are two events, so they fire twice. Per trigger, not per action. */
+  /**
+   * Two separate grants are two events, so they fire twice. Per trigger, not per action.
+   *
+   * They arrive one after the other rather than together: the first ability resolves fully (which
+   * here means its choice is answered) before the second begins (CR 7.6.12).
+   */
   it('fires again for a second, separate grant', () => {
     const board = state({
       cards: S,
@@ -173,7 +178,10 @@ describe('whenUpgradeAttached — Sabine Wren (208)', () => {
       },
     })
     const twice = giveTokens(giveTokens(board, 'sw', TOKEN_ADVANTAGE, 2), 'sw', TOKEN_ADVANTAGE, 2)
-    expect(twice.pendingChoices ?? []).toHaveLength(2)
+    const first = twice.pendingChoices ?? []
+    expect(first).toHaveLength(1)
+    const after = resolve({ ...twice, activePlayer: 'player' }, { type: 'skipTrigger', choiceId: first[0].id })
+    expect(after.pendingChoices ?? [], 'the second grant fires once the first is settled').toHaveLength(1)
   })
 
   /** Granting nothing is not an attach event, so it must neither attach nor fire. */
@@ -209,7 +217,10 @@ describe('whenUpgradeAttached — Sabine Wren (208)', () => {
       },
     })
     const played = resolve(board, { type: 'playUpgrade', handIndex: 0, targetInstanceId: 'sw' })
-    expect(played.pendingChoices ?? [], 'the attach, then the grant it causes').toHaveLength(2)
+    const first = played.pendingChoices ?? []
+    expect(first, 'the attach').toHaveLength(1)
+    const after = resolve({ ...played, activePlayer: 'player' }, { type: 'skipTrigger', choiceId: first[0].id })
+    expect(after.pendingChoices ?? [], 'then the grant it causes').toHaveLength(1)
   })
 })
 

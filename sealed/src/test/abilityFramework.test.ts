@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { registerCard, unregisterAbility, runUnitTrigger } from '../engine/abilities'
-import { giveToken, drawCards, exhaustUnit } from '../engine/effects'
+import { registerCard, unregisterAbility, collectUnitTriggers } from '../engine/abilities'
+import { giveToken, drawCards, exhaustUnit, fireBatch } from '../engine/effects'
 import { effectiveCost, legalMoves } from '../engine/legalMoves'
 import { unitHasKeyword } from '../engine/keywords'
 import { resolve } from '../engine/resolve'
@@ -36,14 +36,19 @@ describe('effect primitives', () => {
 })
 
 describe('granted-ability dispatch', () => {
-  it('runUnitTrigger fires the unit card AND its upgrades for the trigger point', () => {
+  it('collects the unit card AND its upgrades for the trigger point', () => {
     registerCard('TST_UNIT_TRIG', { abilities: [{ trigger: 'onAttackEnd', description: 'unit', effect: s => s }] })
     registerCard('TST_GRANT', { abilities: [{ trigger: 'onAttackEnd', description: 'upgrade', effect: (s, ctx) => giveToken(s, ctx.sourceInstanceId!, TOKEN_ADVANTAGE) }] })
     const s = state({
       cards: { ...CARDS, TST_UNIT_TRIG: card({ id: 'TST_UNIT_TRIG', type: 'unit' }), TST_GRANT: card({ id: 'TST_GRANT', type: 'upgrade' }) },
       players: { player: player({ units: [unit('u1', 'TST_UNIT_TRIG', { upgrades: [{ cardId: 'TST_GRANT', owner: 'player' }] })] }), opponent: player() },
     })
-    const next = runUnitTrigger(s, 'onAttackEnd', s.players.player.units[0], 'player')
+    const owed = collectUnitTriggers(s, 'onAttackEnd', s.players.player.units[0], 'player')
+    expect(owed.map(t => t.cardId)).toEqual(['TST_UNIT_TRIG', 'TST_GRANT'])
+    // The unit's own ability here is `s => s`, so there is nothing to order: it resolves silently and
+    // the upgrade's runs. Both fired; only one of them could change anything.
+    const next = fireBatch(s, owed)
+    expect(next.pendingChoices ?? []).toEqual([])
     expect(hasToken(next.players.player.units[0], TOKEN_ADVANTAGE)).toBe(true) // the upgrade's ability fired on the unit
   })
 })

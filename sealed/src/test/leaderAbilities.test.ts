@@ -291,18 +291,27 @@ describe('choice-id collisions (regression)', () => {
         opponent: player({ units: [unit('e1', 'TST_U1')] }),
       },
     })
+    // Both are When Played abilities on the same event, so the batch is ordered before either runs
+    // and they arrive one at a time. The ids must still differ: they are raised from the same played
+    // unit, and a collision would make one unanswerable.
     const played = resolve(s, { type: 'playUnit', handIndex: 0 })
-    const kinds = played.pendingChoices!.map(c => c.kind)
-    expect(kinds).toContain('support')
-    expect(kinds).toContain('mayExhaustLeaderForAdvantage')
-    const ids = played.pendingChoices!.map(c => c.id)
-    expect(new Set(ids).size).toBe(ids.length) // ids are unique
+    const order = played.pendingChoices!.find(c => c.kind === 'chooseNextTrigger')!
+    const candidates = (order as { candidates: { cardId: string }[] }).candidates
+    expect(candidates.map(c => c.cardId).sort()).toEqual(['ASH_017', 'KEYWORD_SUPPORT'])
 
-    // Each skip resolves to its own choice, and reads distinctly: two identical decline buttons
-    // would leave it unclear which trigger you were turning down.
-    const skipLabels = legalMoves(played).filter(a => a.type === 'skipTrigger').map(a => describeAction(played, 'player', a))
-    expect(skipLabels.filter(l => l === 'Decline support')).toHaveLength(1)
-    expect(new Set(skipLabels).size).toBe(skipLabels.length)
+    const supportFirst = resolve(played, { type: 'acceptChoice', choiceId: order.id, optionIndex: candidates.findIndex(c => c.cardId === 'KEYWORD_SUPPORT') })
+    const support = supportFirst.pendingChoices!.find(c => c.kind === 'support')!
+    // It reads as its own decline, rather than as an unlabelled second button.
+    const skips = legalMoves(supportFirst).filter(a => a.type === 'skipTrigger')
+    expect(skips.map(a => describeAction(supportFirst, 'player', a))).toEqual(['Decline support'])
+
+    const declined = resolve(supportFirst, { type: 'skipTrigger', choiceId: support.id })
+    const karga = declined.pendingChoices!.find(c => c.kind === 'mayExhaustLeaderForAdvantage')!
+    // Both are raised from the played unit, so both are keyed on its instance. They never coexist, so
+    // that is answerable: each is the only thing owed when it is asked, and reads as its own decline.
+    expect(legalMoves(declined).filter(a => a.type === 'skipTrigger').map(a => describeAction(declined, 'player', a)))
+      .toEqual(['Don\'t'])
+    expect(resolve(declined, { type: 'skipTrigger', choiceId: karga.id }).pendingChoices ?? []).toHaveLength(0)
   })
 })
 

@@ -5,7 +5,7 @@ import { useGame } from '../hooks/useGame'
 import type { UseGameOptions } from '../hooks/useGame'
 import type { SavedDeck } from '../data/deckStore'
 import type { EngineCard, GameState, PendingChoice, PendingTrigger, PlayerId, UnitState, UpgradeAttachment } from '../engine/types'
-import { getAbilities } from '../engine/abilities'
+import { triggerAbility } from '../engine/abilities'
 import type { Action } from '../engine/actions'
 import { describeAction, handCardRef } from '../utils/describeAction'
 import type { DescribePart } from '../utils/describeAction'
@@ -476,8 +476,13 @@ export function SearchDrawOverlay({ state, choice, onPick, onDone }: {
  * to order a list of nothing.
  */
 function triggerLabel(state: GameState, t: PendingTrigger): string {
-  const name = state.cards[t.cardId]?.name ?? t.cardId
-  const text = getAbilities(t.cardId)[t.abilityIndex]?.description
+  // Ambush and Support are abilities on pseudo cards with no entry in the card database, so they are
+  // named by the unit they fired from: the card the player is actually looking at.
+  const source = t.sourceInstanceId
+    ? [...state.players.player.units, ...state.players.opponent.units].find(u => u.instanceId === t.sourceInstanceId)
+    : undefined
+  const name = state.cards[t.cardId]?.name ?? (source ? state.cards[source.cardId]?.name : undefined) ?? t.cardId
+  const text = triggerAbility(t)?.description
   return text ? `${name}: ${text}` : name
 }
 
@@ -538,16 +543,23 @@ export function TriggerOrderOverlay({ state, mine, theirs, onPick }: {
  */
 export function NextTriggerOverlay({ state, candidates, onPick }: {
   state: GameState
-  candidates: { triggerId: string; cardId: string }[]
+  candidates: { triggerId: string; cardId: string; sourceInstanceId?: string }[]
   onPick: (optionIndex: number) => void
 }) {
   const owed = state.pendingTriggers ?? []
+  const labels = candidates.map(c => {
+    const trigger = owed.find(t => t.id === c.triggerId)
+    return trigger ? triggerLabel(state, trigger) : (state.cards[c.cardId]?.name ?? c.cardId)
+  })
   return createPortal(
     <div data-testid="next-trigger-overlay" className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/75 p-4">
       <p className="text-sm text-ink">Several of your abilities triggered at once. Which resolves next?</p>
       <ul className="flex w-full max-w-lg flex-col gap-2">
         {candidates.map((c, i) => {
-          const trigger = owed.find(t => t.id === c.triggerId)
+          // Two copies of one card each hold their own ability, and the label cannot tell them apart.
+          // Number those so the buttons are at least distinct to click.
+          const duplicated = labels.filter(l => l === labels[i]).length > 1
+          const seen = labels.slice(0, i + 1).filter(l => l === labels[i]).length
           return (
             <li key={c.triggerId}>
               <button
@@ -555,12 +567,18 @@ export function NextTriggerOverlay({ state, candidates, onPick }: {
                 onClick={() => onPick(i)}
                 className="w-full rounded-xl border-2 border-line/60 px-4 py-2 text-left text-sm text-ink hover:border-accent hover:bg-accent/10"
               >
-                {trigger ? triggerLabel(state, trigger) : (state.cards[c.cardId]?.name ?? c.cardId)}
+                {duplicated ? `${labels[i]} (${seen})` : labels[i]}
               </button>
             </li>
           )
         })}
       </ul>
+      {/* Picking here is not accepting the ability, and the difference is not obvious: there is no
+          decline on this prompt because all of them resolve, and a "may" is turned down on its own
+          choice once its turn comes. */}
+      <p className="max-w-lg text-center text-xs text-ink-dim">
+        Each will resolve in turn. You can still decline optional effects when they do.
+      </p>
     </div>,
     document.body,
   )

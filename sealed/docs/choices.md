@@ -57,15 +57,42 @@ it are two abilities their controller orders. `collectUnitTriggers` snapshots th
 moment of triggering, which is also the more correct reading of when an aura's grant is settled.
 `drainTriggers` then resolves the batch, stopping wherever a player has something to decide.
 
+**Every** event's abilities go through this, not just defeats. That is what makes an ability read the
+board as the abilities before it in the batch left it, rather than as it stood when the event happened:
+a leader deployed by one ability is a friendly unit by the time a later "give a Shield to another
+friendly unit" in the same batch picks its targets. `abilities.md` owns the collecting half.
+
 ### The two questions
 
 | Choice | Rule | Asked when |
 | --- | --- | --- |
 | `chooseTriggerOrder` | CR 7.6.10 | abilities owed on **both** sides: the **active player** picks which player goes first, and only that |
-| `chooseNextTrigger` | CR 7.6.9 | that player owes **two or more**: they pick which of their own resolves next |
+| `chooseNextTrigger` | CR 7.6.9 | that player owes **two or more distinguishable** abilities: they pick which of their own resolves next |
 
 Neither is ever offered over the opponent's internal order. `chooseNextTrigger` carries each candidate's
-own `cardId`, because a prompt that cannot name the card is useless where one unit carries two.
+own `cardId` and `sourceInstanceId`: a prompt that cannot name the card is useless where one unit
+carries two, and one that cannot name the unit is useless where two units carry the same card.
+
+Two things keep the question to the cases where it is a decision.
+
+**Indistinguishable** abilities are not offered. The same ability, on the same card, on the same unit,
+firing more than once for one event offers nothing to choose between: three upgrades leaving a unit at
+once is three identical Zeb Orrelios reactions.
+
+**Inert** abilities are not offered either. A conditional trigger whose condition is unmet, or one with
+no legal target, would change nothing, and `inertNow` asks by running it and seeing whether the state
+comes back unchanged. Effects are pure, so the probed board is discarded and only the answer kept, and
+a card states an unmet condition by returning the state it was given, which is what makes the question
+answerable without a per-card declaration that could drift from its own effect. Probing happens only
+where two or more abilities are owed, since one resolves either way.
+
+**Inert is a fact about now, not about the ability**, so it is re-asked on every pass rather than
+settled when the batch was collected. An ability that can act resolves before one that cannot, and the
+board is read again afterwards: playing Luke Skywalker (ASH_112) with two units out triggers his "if you
+control at least 4 units" alongside Grogu's deploy offer, and deploying Grogu is what meets it. Spending
+Luke while he was still inert would decide that for the player.
+
+Where nothing in the batch can act, order cannot matter: none of them can change what the others see.
 
 **Both gate the queue.** While either is pending, `choiceMoves` offers only that choice. Without the
 gate a player could answer one of their own triggers instead and settle the order by accident.

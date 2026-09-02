@@ -97,12 +97,12 @@ combat in the resolver. Combat and defeat go through `engine/stats.ts`
 `dealDamageToUnit`, extracted so abilities can deal damage without a resolver cycle).
 Upgrades attach into `unit.upgrades`; a card upgrade routes to its **owner's**
 discard on defeat; token upgrades (Shield/Experience/Advantage) and token units live
-there too. Optional "may…" decisions and simultaneous triggers resolve through a
-**pending-choice queue** (`pendingChoices`), including a mid-combat suspend/resume
-(`pendingAttack`) for On Defense. All 25 ASH upgrades are implemented.
-Every ASH leader (both sides) is implemented too. **Still pending**: events, ability text on ordinary
-unit cards beyond keywords, concession, and active-player ordering of simultaneous cross-player
-triggers (no card exercises it yet).
+there too. Optional "may…" decisions resolve through a **pending-choice queue** (`pendingChoices`),
+including a mid-combat suspend/resume (`pendingAttack`) for On Defense. Simultaneous **abilities** are a
+separate queue (`pendingTriggers`): every event collects what it triggered and resolves the batch one
+ability at a time, so their controller orders them and each finishes before the next begins. All 25 ASH
+upgrades are implemented. Every ASH leader (both sides) is implemented too. **Still pending**: events,
+ability text on ordinary unit cards beyond keywords, and concession.
 
 ## Card identity and printings
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { registerAbility, unregisterAbility, getAbilities, runTrigger } from '../engine/abilities'
+import { registerAbility, unregisterAbility, getAbilities, collectCardTriggers } from '../engine/abilities'
+import { fireBatch } from '../engine/effects'
 import type { GameState } from '../engine/types'
 import { resolve } from '../engine/resolve'
 import { player, state, ready } from './helpers/engineFixtures'
@@ -31,10 +32,18 @@ describe('ability registry', () => {
   })
 })
 
-describe('runTrigger', () => {
+/**
+ * Collecting a card's abilities and running the batch: the one path an event's abilities take, so it
+ * is the one exercised here. Nothing fires eagerly: an ability is data until the batch runs it.
+ */
+describe('collectCardTriggers + fireBatch', () => {
+  const fire = (s: GameState, cardId = 'TST_U1') =>
+    fireBatch(s, collectCardTriggers('whenPlayed', cardId, 'player'))
+
   it('returns the same state reference when nothing is registered', () => {
     const s = state()
-    expect(runTrigger(s, 'whenPlayed', { owner: 'player', cardId: 'TST_U1' })).toBe(s)
+    expect(collectCardTriggers('whenPlayed', 'TST_U1', 'player')).toEqual([])
+    expect(fire(s)).toBe(s)
   })
 
   it('applies the matching effect with its context', () => {
@@ -50,14 +59,13 @@ describe('runTrigger', () => {
         }
       },
     })
-    const next = runTrigger(state(), 'whenPlayed', { owner: 'player', cardId: 'TST_U1' })
-    expect(next.players.opponent.base.damage).toBe(2)
+    expect(fire(state()).players.opponent.base.damage).toBe(2)
   })
 
   it('does not fire effects registered for other trigger points', () => {
     registerAbility('TST_U1', { trigger: 'whenDefeated', description: 'x', effect: () => { throw new Error('should not run') } })
     const s = state()
-    expect(runTrigger(s, 'whenPlayed', { owner: 'player', cardId: 'TST_U1' })).toBe(s)
+    expect(fire(s)).toBe(s)
   })
 })
 

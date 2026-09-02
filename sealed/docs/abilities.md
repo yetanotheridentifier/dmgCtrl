@@ -27,10 +27,12 @@ a module-level registry in `engine/abilities.ts`:
 registerCard(cardId, definition)      // merges: abilities append, hooks overwrite
 getCardDefinition(cardId)             // the hooks
 getAbilities(cardId)                  // the triggered abilities
-runTrigger(state, point, ctx)         // called by resolve
-runUnitTrigger(state, point, unit, owner, extra?)          // fire now
-collectUnitTriggers(state, point, unit, owner, extra?)     // the same abilities, as data
-runPendingTrigger(state, trigger)                          // resolve one collected ability
+collectUnitTriggers(state, point, unit, owner, ctx?)   // a unit's (and its upgrades') abilities, as data
+collectCardTriggers(point, cardId, owner, src?, ctx?)  // a card with no instance: an event, an upgrade
+collectLeaderTriggers(state, point, owner, ctx?)       // an undeployed leader's front side
+triggerAbility(trigger)                                // the ability a collected trigger stands for
+runPendingTrigger(state, trigger)                      // resolve one collected ability
+fireBatch(state, owed)                                 // effects.ts: enqueue an event's batch and drain
 ```
 
 `effect: (state, ctx) => state` is pure like everything else in the engine, with
@@ -42,31 +44,60 @@ Real card behaviour is registered in `engine/cardDefinitions.ts`, a side-effect 
 
 ## Dispatch
 
-**`runUnitTrigger`** is the key entry point: it fires the unit's own card abilities, each attached
-upgrade's abilities, any card lent for the attack, cards granted by an aura, and abilities handed
-over for the phase by a lasting effect. `extra` merges into the `EffectContext`, which is how the
-attack outcome reaches `onAttackEnd` and the captured unit reaches `whenDefeated` (the unit has left
-play by then).
+**Nothing fires on the spot.** An event collects everything it triggered as data, then hands the whole
+batch to `fireBatch`, which enqueues it and drains it one ability at a time
+(`engine/triggerQueue.ts`). Two properties follow, and both are the point:
+
+- the controller orders the batch (CR 7.6.9, 7.6.10), including abilities that raise no choice and so
+  would otherwise be over before anything could be asked;
+- each ability resolves **fully** before the next begins (CR 7.6.12), so one that resolves later reads
+  the board the earlier ones left rather than a snapshot of the moment the event happened.
+
+The second is why a unit's targets are chosen as its ability resolves: a leader deployed by an earlier
+ability in the batch is a friendly unit by the time a later "give a Shield to another friendly unit"
+looks for targets.
+
+`collectUnitTriggers` gathers a unit's own card abilities, each attached upgrade's, any card lent for
+the attack, cards granted by an aura, and abilities handed over for the phase by a lasting effect. The
+card list is snapshotted when the ability triggers rather than recomputed at resolution, so whether an
+aura or a lasting effect granted it is settled at the moment of the event.
 
 Each ability is attributed to the card it came from, not the host, so an upgrade's ability names the
-upgrade.
-
-### Firing now, or collecting to order
-
-Most trigger points fire immediately through `runUnitTrigger`. **Defeat triggers do not.** They are
-collected as data by `collectUnitTriggers` and resolved by the queue in `engine/triggerQueue.ts`,
-because that is the one point where abilities can be owed on **both** sides at once, and the rules give
-the players the ordering (CR 7.6.9, 7.6.10). Running them on the spot destroys that decision before it
-can be offered, which is why the split exists. `choices.md` owns the ordering rules; this is only the
-dispatch half.
-
-The two paths enumerate the same abilities from the same sources. `collectUnitTriggers` snapshots the
-card list at the moment of triggering rather than recomputing it at resolution time, so whether an aura
-or a lasting effect granted the ability is settled when it triggers.
+upgrade. The `ctx` argument becomes `PendingTrigger.ctx` and is merged back into the `EffectContext`
+when the ability runs, which is how the attack outcome reaches `onAttackEnd` and the captured unit
+reaches `whenDefeated` (the unit has left play by then).
 
 `runPendingTrigger` addresses one ability by `cardId` + `abilityIndex`, indexing the card's **full**
-ability list. A card carrying two abilities at the same point is exactly the case the ordering prompt
-exists for, so they must stay individually addressable.
+ability list, with `fromLeader` choosing between a card's unit abilities and an undeployed leader's.
+A card carrying two abilities at the same point is exactly the case the ordering prompt exists for, so
+they must stay individually addressable. `triggerAbility` is the same lookup, shared with the prompt
+that names each waiting ability.
+
+### One event, one batch
+
+A batch is an *event*, not a call site: a unit entering play collects the upgrades it arrived with
+attaching, its own When Played, and every "when you play or create a unit" reaction, and fires them
+together. Splitting one event across several `fireBatch` calls would nest the later ones under the
+earlier as though they had been triggered by them (CR 7.6.11), which is what `sameEvent` exists to
+prevent where a caller genuinely must fill a batch in stages.
+
+Ordering is only asked where it is a decision. Two kinds of ability resolve without a prompt:
+**indistinguishable** ones (the same ability, on the same card, on the same unit, firing more than once
+for one event, as when three upgrades leave a unit at once) and **inert** ones (a conditional trigger
+whose condition is unmet *at that moment*, or one with no legal target). Inert is re-checked on every
+pass, since an ability resolving earlier in the batch can meet a later one's condition. `choices.md`
+owns both rules.
+
+### Ambush and Support are abilities, not keywords
+
+Both read as keywords but each is a When Played ability ("When you play this unit, you may attack …"),
+so they are registered as the pseudo cards `KEYWORD_AMBUSH` and `KEYWORD_SUPPORT` and collected into
+the play batch like anything else. That is what puts them into the ordering question alongside the
+card's own When Played. Raising their choice directly instead would stop the rest of the batch until
+it was answered, since a choice on the board holds everything behind it.
+
+The unit's ready state is not part of that: entering ready so Ambush can attack is part of entering
+play, and stays in `enterUnit`.
 
 ### Trigger points
 
