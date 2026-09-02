@@ -1,6 +1,6 @@
 import type { EffectContext } from './abilities'
 import { registerCard } from './abilities'
-import { giveToken, giveTokens, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit } from './effects'
+import { giveToken, giveTokens, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice } from './effects'
 import { dealDamageToUnit, defeatUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
@@ -2024,6 +2024,51 @@ registerCard('ASH_162', attackWithRider('Attack with a unit. For this attack, it
 registerCard('ASH_184', attackWithRider('Attack with a unit. After completing the attack, give 3 Advantage tokens to a unit.', GRANT_FOLLOW_ME))
 registerCard('ASH_234', attackWithRider('Attack with a unit. It gets +1/+0 for this attack for each unit the defending player controls in its arena.', GRANT_MASTERSTROKE))
 registerCard('ASH_137', attackWithRider('Attack with a unit. For this attack, you may deal its excess damage to another unit in the same arena.', GRANT_WIPE_THEM_OUT))
+
+// ── Keywords that are really When Played abilities ────────────────────────────────────────────
+
+/**
+ * Ambush and Support read as keywords but each is a **When Played ability** ("When you play this
+ * unit, you may attack …"), so they are registered here and collected into the play batch like any
+ * other ability. That is what puts them into the ordering question alongside the card's own When
+ * Played and everyone else's reactions.
+ *
+ * Raising their choice directly from `enterUnit` instead is what made a Snub Fighter Squadron unable
+ * to deal its 1 damage until after it had taken its Ambush attack: a choice on the board stops the
+ * rest of the batch (CR 7.6.12), and this one was there before the batch began.
+ *
+ * The unit's ready state is NOT decided here. Ambush enters its unit ready so it can attack, which is
+ * part of entering play rather than part of the ability, and stays in `enterUnit`.
+ */
+export const KEYWORD_AMBUSH = 'KEYWORD_AMBUSH'
+registerCard(KEYWORD_AMBUSH, {
+  abilities: [{
+    trigger: 'whenPlayed',
+    description: 'You may attack with this unit.',
+    effect: (s, ctx) => {
+      const u = findUnit(s, ctx.sourceInstanceId!)
+      // Re-checked as the ability resolves: an earlier ability in the same batch may have cleared the
+      // arena, and an Ambush with nothing to hit offers nothing.
+      if (!u || enemyAttackTargets(s, u.unit).targets.length === 0) return s
+      return pushChoice(s, {
+        kind: 'ambush',
+        id: ctx.sourceInstanceId!,
+        controller: ctx.owner,
+        unitId: ctx.sourceInstanceId!,
+        source: { cardId: u.unit.cardId, controller: ctx.owner },
+      })
+    },
+  }],
+})
+
+export const KEYWORD_SUPPORT = 'KEYWORD_SUPPORT'
+registerCard(KEYWORD_SUPPORT, {
+  abilities: [{
+    trigger: 'whenPlayed',
+    description: "You may attack with another unit. It gains this unit's other abilities for this attack.",
+    effect: (s, ctx) => openSupportChoice(s, ctx.owner, ctx.sourceInstanceId!),
+  }],
+})
 
 // ── The last three events ─────────────────────────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
-import { replayUpTo, loadReport } from './helpers/replayReport'
+import { replayWith, pickTrigger, loadReport } from './helpers/replayReport'
 import { dealDamageToUnit, defeatUnit } from '../engine/combat'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { TOKEN_ADVANTAGE, TOKEN_SHIELD } from '../engine/tokenUpgrades'
@@ -105,34 +105,50 @@ describe('Advantage tokens spent completing a combat are defeated', () => {
  * owner. `pushChoice` already de-collides repeated ids, so each firing gets its own answerable
  * choice.
  */
+/**
+ * The firings arrive **one at a time**: they are simultaneous triggers, and an ability resolves fully
+ * before the next begins (CR 7.6.12), so the count is what the batch pays out in total rather than how
+ * many choices sit on the board at once. Ordering is not asked, because one ability on one unit firing
+ * three times for one event offers the player nothing to choose between.
+ */
 describe('one trigger per upgrade defeated, not one per event', () => {
   const damageChoices = (s: GameState) => (s.pendingChoices ?? []).filter(c => c.kind === 'selectDamageTarget')
+
+  /** Answer every Zeb choice the batch owes, in turn, and count them. */
+  function payOut(from: GameState): { fired: number; state: GameState } {
+    let s: GameState = { ...from, activePlayer: 'player' }
+    let fired = 0
+    for (let guard = 0; guard < 10 && damageChoices(s).length > 0; guard++) {
+      fired++
+      s = resolve(s, { type: 'acceptChoice', choiceId: damageChoices(s)[0].id, baseTarget: 'opponent' })
+      s = { ...s, activePlayer: 'player' }
+    }
+    return { fired, state: s }
+  }
 
   it('fires three times when a host dies carrying three upgrades', () => {
     const three = [tok(TOKEN_ADVANTAGE, 'player'), tok(TOKEN_SHIELD, 'player'), tok(TOKEN_ADVANTAGE, 'player')]
     // A targeted defeat, so the shield has no damage to soak and simply goes down with its host.
     const dead = defeatUnit(board(three), 'mine')
     expect(dead.players.player.units.some(u => u.instanceId === 'mine')).toBe(false)
-    expect(damageChoices(dead)).toHaveLength(3)
+    expect(payOut(dead).fired).toBe(3)
   })
 
   it('fires three times when three Advantage tokens are spent on one attack', () => {
     const attacked = resolve(board([tok(TOKEN_ADVANTAGE, 'player'), tok(TOKEN_ADVANTAGE, 'player'), tok(TOKEN_ADVANTAGE, 'player')]), {
       type: 'attack', attackerId: 'mine', target: { kind: 'base' },
     })
-    expect(damageChoices(attacked)).toHaveLength(3)
+    expect(payOut(attacked).fired).toBe(3)
   })
 
-  it('gives each firing its own answerable choice id', () => {
+  it('gives each firing its own answerable choice', () => {
     const attacked = resolve(board([tok(TOKEN_ADVANTAGE, 'player'), tok(TOKEN_ADVANTAGE, 'player')]), {
       type: 'attack', attackerId: 'mine', target: { kind: 'base' },
     })
-    const ids = damageChoices(attacked).map(c => c.id)
-    expect(new Set(ids).size).toBe(ids.length)
     // Both are answerable in turn, so two lots of 1 damage land on top of the attack's own.
     const before = attacked.players.opponent.base.damage
-    let s: GameState = { ...attacked, activePlayer: 'player' }
-    for (const id of ids) s = resolve(s, { type: 'acceptChoice', choiceId: id, baseTarget: 'opponent' })
+    const { fired, state: s } = payOut(attacked)
+    expect(fired).toBe(2)
     expect(damageChoices(s)).toHaveLength(0)
     expect(s.players.opponent.base.damage).toBe(before + 2)
   })
@@ -193,7 +209,10 @@ describe('Baylan Skoll sees a spent token as a defeated upgrade (#419)', () => {
    * stops here rather than replaying to the end.
    */
   it('replays the reported game and offers both halves (#419)', () => {
-    const played = replayUpTo(loadReport('baylanExhaust'), PLAYS_BAYLAN)
+    // Taking the initiative triggers both their leader's ability and a unit's, so the batch is now
+    // ordered first, a question the reporter was never asked. They answered the leader's, so that is
+    // the order injected here; everything after it is their own recorded moves.
+    const played = replayWith(loadReport('baylanExhaust'), { 36: s => pickTrigger(s, 'ASH_014') }, PLAYS_BAYLAN)
     expect(upgradeDefeatedThisPhase(played, 'player'), 'three Advantage tokens were spent this phase').toBe(true)
     expect(played.players.player.units.some(u => u.cardId === 'ASH_039'), 'Baylan Skoll is in play').toBe(true)
     expect(played.pendingChoices?.map(c => c.kind)).toEqual(['mayGiveTokens', 'mayExhaustUnit'])

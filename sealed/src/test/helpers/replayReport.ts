@@ -7,6 +7,7 @@ import advantageToEnemy from '../fixtures/reports/advantageToEnemy.json'
 import debuffOnOwnUnit from '../fixtures/reports/debuffOnOwnUnit.json'
 import triggerOrderNotOffered from '../fixtures/reports/triggerOrderNotOffered.json'
 import minefieldArenaChoice from '../fixtures/reports/minefieldArenaChoice.json'
+import nestedDeployShieldTarget from '../fixtures/reports/nestedDeployShieldTarget.json'
 import rampResourceReady from '../fixtures/reports/rampResourceReady.json'
 import shieldedSentinelLockout from '../fixtures/reports/shieldedSentinelLockout.json'
 import shieldedSentinelPing from '../fixtures/reports/shieldedSentinelPing.json'
@@ -43,8 +44,8 @@ const ashCards = ashSet as SwuCard[]
  */
 const REPORTS: Record<string, unknown> = {
   advantageToEnemy, attackBuffPersists, baylanExhaust, debuffOnOwnUnit, exhaustedLeaderDraw,
-  haulcraftPrompt, minefieldArenaChoice, rampResourceReady, shieldedSentinelLockout,
-  shieldedSentinelPing, triggerOrderNotOffered, vaneFriendlyUpgrade,
+  haulcraftPrompt, minefieldArenaChoice, nestedDeployShieldTarget, rampResourceReady,
+  shieldedSentinelLockout, shieldedSentinelPing, triggerOrderNotOffered, vaneFriendlyUpgrade,
 }
 
 /**
@@ -114,6 +115,38 @@ export function replay(report: Report, extra: SwuCard[] = []): GameState {
  */
 export function replayUpTo(report: Report, moveCount: number, extra: SwuCard[] = []): GameState {
   return replay({ ...report, moves: report.moves.slice(0, moveCount) }, extra)
+}
+
+/**
+ * Replay a report, injecting extra actions along the way: `inserts[i]` is applied to the board just
+ * before the report's move `i`.
+ *
+ * The other way to keep a report usable once a fix raises a choice the reporter never saw. Where
+ * `replayUpTo` stops short of the change, this plays past it by answering the new question the way
+ * they would have, which is what a report whose interesting moment is well after the new prompt needs.
+ * Each insert is a function of the live board, since a new choice's id is generated, not recorded.
+ */
+export function replayWith(
+  report: Report,
+  inserts: Record<number, (s: GameState) => Action[]>,
+  moveCount = report.moves.length,
+  extra: SwuCard[] = [],
+): GameState {
+  let s = hydrate(report, extra)
+  for (let i = 0; i < moveCount; i++) {
+    for (const action of inserts[i]?.(s) ?? []) s = resolve(s, action)
+    s = resolve(s, report.moves[i].action)
+  }
+  return s
+}
+
+/** Answer an outstanding "which of my abilities resolves next" by naming the card it belongs to. */
+export function pickTrigger(state: GameState, cardId: string): Action[] {
+  const ask = (state.pendingChoices ?? []).find(c => c.kind === 'chooseNextTrigger')
+  if (!ask || ask.kind !== 'chooseNextTrigger') return []
+  const optionIndex = ask.candidates.findIndex(c => c.cardId === cardId)
+  if (optionIndex === -1) throw new Error(`pickTrigger: no ${cardId} among ${ask.candidates.map(c => c.cardId).join(', ')}`)
+  return [{ type: 'acceptChoice', choiceId: ask.id, optionIndex }]
 }
 
 /** A report filed under `fixtures/reports/`, by name. */

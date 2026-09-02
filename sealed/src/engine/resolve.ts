@@ -1,14 +1,15 @@
 import type { Action, AttackTarget } from './actions'
 import type { GameState, PlayerId, UnitState } from './types'
-import type { PendingChoice, UpgradeRef } from './types'
+import type { PendingChoice, PendingTrigger, TriggerContext, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds } from './types'
 import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
-import { runTrigger, runUnitTrigger, runLeaderTrigger, getCardDefinition, actionAbilityKey, leaderActions, stampChoiceSource, type TriggerPoint, type EffectContext } from './abilities'
+import { collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, stampChoiceSource, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, sweepStateBasedDefeats, preventionOffer } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
-import { exhaustUnit, findUnit, giveToken, giveTokens, fireUpgradeAttached, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn } from './effects'
+import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
+import { exhaustUnit, findUnit, giveToken, giveTokens, fireUpgradeAttached, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait } from './keywords'
@@ -374,6 +375,10 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
   const inPlay = (): UnitState => next.players[owner].units.find(u => u.instanceId === newUnit.instanceId)!
   const exhaust = () => { next = updatePlayer(next, owner, { units: next.players[owner].units.map(u => (u.instanceId === newUnit.instanceId ? { ...u, exhausted: true } : u)) }) }
   const readyUp = () => { next = updatePlayer(next, owner, { units: next.players[owner].units.map(u => (u.instanceId === newUnit.instanceId ? { ...u, exhausted: false } : u)) }) }
+  // Which of the two keyword When Played abilities this unit brings to the batch below. The ready
+  // state is settled here, since entering ready is part of entering play rather than part of the
+  // ability; the ability itself is collected with everything else the play triggered.
+  const keywordAbilities: string[] = []
   if (unitHasKeyword(next, inPlay(), 'Ambush')) {
     if (enemyAttackTargets(next, inPlay()).targets.length > 0) {
       // Ambush always enters the unit ready so it can immediately attack, whether Ambush is printed
@@ -383,7 +388,7 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
       // unit" looks the unit up by instance id. Correct it here against the live keyword set, which
       // does see it.
       if (inPlay().exhausted) readyUp()
-      next = pushChoice(next, { kind: 'ambush', id: newUnit.instanceId, controller: owner, unitId: newUnit.instanceId })
+      keywordAbilities.push(KEYWORD_AMBUSH)
     } else if (!inPlay().exhausted) {
       exhaust() // no target → settle into a normal exhausted entry
     }
@@ -392,29 +397,36 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
     // to the normal exhausted entry — unless an ability entered it ready (Fennec `ready`, or a Neel-style
     // enters-ready grant).
     if (ready !== true && !grantEntersReady && !inPlay().exhausted) exhaust()
-    if (unitHasKeyword(next, inPlay(), 'Support')) next = openSupportChoice(next, owner, newUnit.instanceId)
+    if (unitHasKeyword(next, inPlay(), 'Support')) keywordAbilities.push(KEYWORD_SUPPORT)
   }
 
-  // A unit entering with upgrades (a Shielded token) reacts to them attaching (Sabine Wren).
-  if (inPlay().upgrades.length > 0) next = fireUpgradeAttached(next, newUnit.instanceId)
-
-  // "When Played" abilities fire after the card enters play (CR 6.2.0f).
-  next = runTrigger(next, 'whenPlayed', { owner, cardId, sourceInstanceId: newUnit.instanceId })
-  // "When you play or create a unit" reacts on the controller's other cards.
-  next = fireEntersPlay(next, owner, newUnit.instanceId)
+  // One unit arriving is one event, so everything reacting to it is ONE batch: the controller orders
+  // it and each ability resolves fully before the next begins. That is what lets an ability landing
+  // later see the board the earlier ones left: a leader deployed by the batch is a friendly unit by
+  // the time a "give a Shield to another friendly unit" in the same batch picks its targets (#529).
+  next = fireBatch(next, collectEntersPlay(next, owner, newUnit.instanceId, cardId, keywordAbilities))
   return uniqueUnitCheck(next, owner) // two units with the same unique title → defeat one
 }
 
-/** Fire "When you play or create a unit" on the owner's undeployed leader and its
- *  other units, targeting the newly-entered unit. (Token *creation* firing is a follow-up.) */
-function fireEntersPlay(state: GameState, owner: PlayerId, newUnitId: string): GameState {
-  let next = runLeaderTrigger(state, 'whenPlayOrCreateUnit', owner, { targetInstanceId: newUnitId })
-  for (const id of state.players[owner].units.map(u => u.instanceId)) {
-    if (id === newUnitId) continue
-    const reactor = next.players[owner].units.find(u => u.instanceId === id)
-    if (reactor) next = runUnitTrigger(next, 'whenPlayOrCreateUnit', reactor, owner, { targetInstanceId: newUnitId })
+/**
+ * Everything that triggers off a unit arriving, as one batch: any upgrades it entered with attaching
+ * (a Shielded token → Sabine Wren), its own "When Played" (CR 6.2.0f), and "when you play or create a
+ * unit" on the controller's undeployed leader and their other units.
+ */
+function collectEntersPlay(state: GameState, owner: PlayerId, newUnitId: string, cardId: string, keywordAbilities: string[] = []): PendingTrigger[] {
+  const entered = state.players[owner].units.find(u => u.instanceId === newUnitId)
+  if (!entered) return []
+  const owed: PendingTrigger[] = []
+  if (entered.upgrades.length > 0) owed.push(...collectUpgradeAttached(state, newUnitId))
+  owed.push(...collectCardTriggers('whenPlayed', cardId, owner, newUnitId))
+  // Ambush / Support: keyword-printed When Played abilities, ordered with the rest.
+  for (const kw of keywordAbilities) owed.push(...collectCardTriggers('whenPlayed', kw, owner, newUnitId))
+  owed.push(...collectLeaderTriggers(state, 'whenPlayOrCreateUnit', owner, { targetInstanceId: newUnitId }))
+  for (const u of state.players[owner].units) {
+    if (u.instanceId === newUnitId) continue
+    owed.push(...collectUnitTriggers(state, 'whenPlayOrCreateUnit', u, owner, { targetInstanceId: newUnitId }))
   }
-  return next
+  return owed
 }
 
 /** Enoch: grant "next unit costs 1 less per 2 damage dealt to your base". */
@@ -494,28 +506,8 @@ function playEvent(state: GameState, handIndex: number): GameState {
   next = recordCardPlayed(next, playerId, card.id)
   const sourceInstanceId = `ev${next.instanceCounter}`
   next = { ...next, instanceCounter: next.instanceCounter + 1 }
-  next = runTrigger(next, 'whenPlayed', { owner: playerId, cardId: card.id, sourceInstanceId })
+  next = fireBatch(next, collectCardTriggers('whenPlayed', card.id, playerId, sourceInstanceId))
   return checkWin(next)
-}
-
-/**
- * Open the Support pending choice: another ready unit may attack, gaining the Support
- * source's abilities for that attack (see the `support` case in the attack dispatcher). No choice
- * if there's no other ready unit. Shared by playing a Support unit and deploying a Support leader.
- */
-function openSupportChoice(state: GameState, owner: PlayerId, sourceInstanceId: string): GameState {
-  const others = state.players[owner].units.filter(u => u.instanceId !== sourceInstanceId && !u.exhausted)
-  if (others.length === 0) return state
-  // Record the source card as well as the instance: the Support unit can leave play before the
-  // choice is answered, and an instance id that no longer resolves cannot name anything (#374).
-  const sourceCardId = state.players[owner].units.find(u => u.instanceId === sourceInstanceId)?.cardId
-  return pushChoice(state, {
-    kind: 'support',
-    id: sourceInstanceId,
-    controller: owner,
-    unitId: sourceInstanceId,
-    ...(sourceCardId ? { source: { cardId: sourceCardId, controller: owner } } : {}),
-  })
 }
 
 /**
@@ -1541,7 +1533,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         pl = { ...pl, units: pl.units.map(u => (u.instanceId === targetInstanceId ? { ...u, upgrades: [...u.upgrades, { cardId: choice.cardId, owner }] } : u)) }
         next = updatePlayer(next, owner, pl)
         next = resourceTopOfDeck(next, owner) // "If you do, resource the top card of your deck."
-        next = runTrigger(next, 'whenPlayed', { owner, cardId: choice.cardId, sourceInstanceId: targetInstanceId })
+        next = fireBatch(next, collectCardTriggers('whenPlayed', choice.cardId, owner, targetInstanceId))
         next = uniqueUpgradeCheck(next, owner) // unique rule
         next = checkWin(next)
         if (next.winner !== null) return next
@@ -1607,7 +1599,7 @@ function playTopCardFree(state: GameState, owner: PlayerId, cardId: string, targ
         u.instanceId === targetInstanceId ? { ...u, upgrades: [...u.upgrades, { cardId, owner }] } : u,
       ),
     })
-    next = runTrigger(next, 'whenPlayed', { owner, cardId, sourceInstanceId: targetInstanceId })
+    next = fireBatch(next, collectCardTriggers('whenPlayed', cardId, owner, targetInstanceId))
     return uniqueUpgradeCheck(next, owner) // unique rule
   }
   // Event (or an upgrade with no target): temporary stub — discard with no effect.
@@ -1682,16 +1674,13 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
 
   next = recordCardPlayed(next, playerId, card.id) // after the cost ("the first upgrade you play each phase")
 
-  // "When 1 or more upgrades attach to this unit" (Sabine Wren) — the host reacts. This is the
-  // played-from-hand path, so it also satisfies "when you PLAY an upgrade on this unit" (Gar Saxon).
-  next = fireUpgradeAttached(next, targetInstanceId, true)
-
-  // "When Played" abilities fire after the upgrade attaches (CR 6.2.0f).
-  next = runTrigger(next, 'whenPlayed', {
-    owner: playerId,
-    cardId: card.id,
-    sourceInstanceId: targetInstanceId,
-  })
+  // One upgrade arriving is one event: the host reacting to it attaching (Sabine Wren, and since this
+  // is the played-from-hand path, "when you PLAY an upgrade on this unit" too, Gar Saxon) and the
+  // upgrade's own "When Played" (CR 6.2.0f) are simultaneous, so they are one batch.
+  next = fireBatch(next, [
+    ...collectUpgradeAttached(next, targetInstanceId, true),
+    ...collectCardTriggers('whenPlayed', card.id, playerId, targetInstanceId),
+  ])
   next = uniqueUpgradeCheck(next, playerId) // two upgrades with the same title → defeat one
   return checkWin(next)
 }
@@ -1852,16 +1841,15 @@ function takeInitiative(state: GameState): GameState {
   // Taking the initiative immediately after an opponent's pass ends the action phase (CR 1.15.5c).
   const endsPhase = state.consecutivePasses >= 1
   let taken: GameState = { ...state, initiative: playerId, initiativeTakenBy: playerId }
-  // "When you take the initiative" (Mandalorian): fire before the turn transition. If it raises
-  // a choice, hold with the taker and finish the transition once the choice drains (resumeAfterChoice).
-  const before = taken.pendingChoices?.length ?? 0
-  taken = runLeaderTrigger(taken, 'whenTakeInitiative', playerId)
-  // The taker's units carry the trigger too (Grogu the unit).
-  for (const u of taken.players[playerId].units) {
-    const still = taken.players[playerId].units.find(x => x.instanceId === u.instanceId)
-    if (still) taken = runUnitTrigger(taken, 'whenTakeInitiative', still, playerId)
-  }
-  if ((taken.pendingChoices?.length ?? 0) > before) {
+  // "When you take the initiative" (Mandalorian): fire before the turn transition. If the batch stops
+  // to ask something, hold with the taker and finish the transition once it drains (resumeAfterChoice).
+  // The taker's units carry the trigger as well as their leader (Grogu the unit).
+  const before = taken
+  taken = fireBatch(taken, [
+    ...collectLeaderTriggers(taken, 'whenTakeInitiative', playerId),
+    ...collectUnitsTrigger(taken, 'whenTakeInitiative', playerId),
+  ])
+  if (batchOutstanding(before, taken)) {
     return { ...taken, pendingInitiativeEndsPhase: endsPhase }
   }
   return endsPhase ? enterRegroup(taken) : { ...taken, activePlayer: opponentOf(playerId) }
@@ -1897,34 +1885,36 @@ function consumeAdvantage(state: GameState, owner: PlayerId, instanceId: string)
 /** Fire "When Attack Ends" abilities on the attacker (card + upgrades), if it
  *  survived the combat. `ctx` carries what the attack did (target, whether
  *  it damaged the base) for abilities like Whistling Birds. */
-function fireAttackEnd(state: GameState, owner: PlayerId, attackerId: string, ctx: Partial<EffectContext>, captured?: UnitState): GameState {
+function fireAttackEnd(state: GameState, owner: PlayerId, attackerId: string, ctx: TriggerContext, captured?: UnitState): GameState {
   const fullCtx = { ...ctx, attackerInstanceId: attackerId }
   // "When THIS unit's attack ends" — the attacker only (Camtono, Whistling Birds). Still
   // triggers if the attacker was defeated by combat damage (CR 7.6 / 1258) — fall back to
   // its last-known state (with its upgrades).
   const attacker = state.players[owner].units.find(u => u.instanceId === attackerId) ?? captured
-  let next = attacker ? runUnitTrigger(state, 'onAttackEnd', attacker, owner, fullCtx) : state
-  // "When a friendly unit's attack ends" — every unit the attacker's controller has (re-found
-  // in case an earlier reactor changed the board), plus their undeployed leader.
-  for (const id of next.players[owner].units.map(u => u.instanceId)) {
-    const reactor = next.players[owner].units.find(u => u.instanceId === id)
-    if (reactor) next = runUnitTrigger(next, 'whenFriendlyAttackEnds', reactor, owner, fullCtx)
-  }
-  next = runLeaderTrigger(next, 'whenFriendlyAttackEnds', owner, fullCtx)
-  return next
+  const owed = attacker ? collectUnitTriggers(state, 'onAttackEnd', attacker, owner, fullCtx) : []
+  // "When a friendly unit's attack ends": every unit the attacker's controller has, plus their
+  // undeployed leader. One event, so all of it is one batch.
+  owed.push(...collectUnitsTrigger(state, 'whenFriendlyAttackEnds', owner, fullCtx))
+  owed.push(...collectLeaderTriggers(state, 'whenFriendlyAttackEnds', owner, fullCtx))
+  return fireBatch(state, owed)
 }
 
-/** Fire a trigger for every unit in play (both sides), re-finding each in case an
- *  earlier ability changed it. Used for board-wide events like regroup start. */
+/**
+ * Whether an event's batch is still going: it stopped to ask something, or it has abilities left to
+ * resolve. Either way the caller must suspend and let `resumeAfterChoice` pick the batch back up,
+ * rather than carrying on as though the event had finished.
+ *
+ * Counting only the choices raised (as this did before the batch existed) is not enough: an ability
+ * waiting its turn in the queue has raised nothing yet and is just as unfinished.
+ */
+function batchOutstanding(before: GameState, after: GameState): boolean {
+  return (after.pendingChoices?.length ?? 0) > (before.pendingChoices?.length ?? 0)
+    || (after.pendingTriggers ?? []).length > 0
+}
+
+/** Fire a trigger for every unit in play, both sides, as one batch. Board-wide events like regroup start. */
 function fireForAllUnits(state: GameState, point: TriggerPoint): GameState {
-  let next = state
-  for (const owner of ['player', 'opponent'] as PlayerId[]) {
-    for (const id of next.players[owner].units.map(u => u.instanceId)) {
-      const unit = next.players[owner].units.find(u => u.instanceId === id)
-      if (unit) next = runUnitTrigger(next, point, unit, owner)
-    }
-  }
-  return next
+  return fireBatch(state, (['player', 'opponent'] as PlayerId[]).flatMap(owner => collectUnitsTrigger(state, point, owner)))
 }
 
 /**
@@ -1957,10 +1947,10 @@ function attack(state: GameState, attackerId: string, target: AttackTarget, viaA
 
   // "On Attack" abilities fire before combat damage; a raised choice suspends
   // the attack with the attacker keeping control, resuming at the On Defense stage.
-  const before = next.pendingChoices?.length ?? 0
+  const before = next
   const attackerNow = next.players[playerId].units.find(u => u.instanceId === attackerId)!
-  next = runUnitTrigger(next, 'onAttack', attackerNow, playerId, { attackTarget: target })
-  if ((next.pendingChoices?.length ?? 0) > before) {
+  next = fireBatch(next, collectUnitTriggers(next, 'onAttack', attackerNow, playerId, { attackTarget: target }))
+  if (batchOutstanding(before, next)) {
     return { ...next, pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'onDefense', viaAmbush } }
   }
   return runAttackStages(next, attackerId, target, 'onDefense', viaAmbush)
@@ -1978,9 +1968,8 @@ function runAttackStages(state: GameState, attackerId: string, target: AttackTar
   if (stage === 'onDefense' && target.kind === 'unit') {
     const defender = state.players[enemyId].units.find(u => u.instanceId === target.instanceId)
     if (defender) {
-      const before = state.pendingChoices?.length ?? 0
-      const afterDefense = runUnitTrigger(state, 'onDefense', defender, enemyId)
-      if ((afterDefense.pendingChoices?.length ?? 0) > before) {
+      const afterDefense = fireBatch(state, collectUnitTriggers(state, 'onDefense', defender, enemyId))
+      if (batchOutstanding(state, afterDefense)) {
         // Hand control to the defender; resume at the damage stage.
         return { ...afterDefense, pendingAttack: { attackerId, target, activePlayer: playerId, stage: 'damage', viaAmbush, ...prevent }, activePlayer: enemyId }
       }
@@ -2025,10 +2014,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
     let next = dealDamageToBase(state, enemyId, attackerPower, baseSource)
     next = recordBaseAttacked(next, enemyId) // "your base was attacked this phase" (Greef Karga)
     // "When an enemy unit attacks your base" (Kachirho Militia) — the attacked player's units react.
-    for (const id of next.players[enemyId].units.map(u => u.instanceId)) {
-      const reactor = next.players[enemyId].units.find(u => u.instanceId === id)
-      if (reactor) next = runUnitTrigger(next, 'whenEnemyAttacksBase', reactor, enemyId, { attackerInstanceId: attackerId })
-    }
+    next = fireBatch(next, collectUnitsTrigger(next, 'whenEnemyAttacksBase', enemyId, { attackerInstanceId: attackerId }))
     next = consumeAdvantage(next, playerId, attackerId) // the attack completed
     next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: dealtToBase })
     return clearAttackGrants(checkWin(next))
@@ -2355,18 +2341,17 @@ function readyEverything(state: GameState, id: PlayerId): GameState {
   const p = state.players[id]
   const readied = readyAllResources(p)
   const justReadied = p.units.filter(u => u.exhausted).map(u => u.instanceId)
-  let next = updatePlayer(state, id, {
+  const next = updatePlayer(state, id, {
     resources: readied.resources,
     // Ready units and clear their once-per-round action-ability usage.
     units: p.units.map(u => (u.exhausted || u.usedAbilities ? { ...u, exhausted: false, usedAbilities: undefined } : u)),
     leader: p.leader.exhausted ? { ...p.leader, exhausted: false } : p.leader,
   })
-  // "When this unit readies" abilities fire for each unit that just readied.
-  for (const instanceId of justReadied) {
+  // "When this unit readies" abilities: everything readies at once, so one batch.
+  return fireBatch(next, justReadied.flatMap(instanceId => {
     const unit = next.players[id].units.find(u => u.instanceId === instanceId)
-    if (unit) next = runUnitTrigger(next, 'whenReadies', unit, id)
-  }
-  return next
+    return unit ? collectUnitTriggers(next, 'whenReadies', unit, id) : []
+  }))
 }
 
 /** Whoever decides the first pending choice — the initiative holder if they have one

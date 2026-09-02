@@ -215,8 +215,16 @@ describe('When Played — single target', () => {
     expect(shields(U(accept(s, 'cheap'), 'cheap'))).toBe(1)
   })
 
+  /**
+   * Ambush is a When Played ability too, so playing this card triggers two of them and the controller
+   * is asked which resolves first. Taking the damage first is the whole point of the choice: it can
+   * clear the arena before the Ambush attack picks a target.
+   */
   it('Snub Fighter Squadron (194): deals 1 to a space unit — mandatory (no decline)', () => {
-    const s = play('ASH_194', {}, { units: [unit('sp', 'SPACER', { arena: 'space' })] })
+    const played = play('ASH_194', {}, { units: [unit('sp', 'SPACER', { arena: 'space' })] })
+    const order = played.pendingChoices!.find(c => c.kind === 'chooseNextTrigger')!
+    const candidates = (order as { candidates: { cardId: string }[] }).candidates
+    const s = resolve(played, { type: 'acceptChoice', choiceId: order.id, optionIndex: candidates.findIndex(c => c.cardId === 'ASH_194') })
     const dmg = s.pendingChoices!.find(c => c.kind === 'mayDamage')!
     expect(dmg).toBeDefined()
     expect(legalMoves(s).some(a => a.type === 'skipTrigger' && a.choiceId === dmg.id)).toBe(false) // mandatory

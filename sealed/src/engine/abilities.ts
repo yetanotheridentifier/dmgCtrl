@@ -1,6 +1,5 @@
-import type { EngineCard, GameState, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource } from './types'
+import type { EngineCard, GameState, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext } from './types'
 import { abilityCardIds } from './types'
-import type { AttackTarget } from './actions'
 
 /**
  * Card ability framework. Card-type-agnostic: units, leaders, events and upgrades
@@ -57,35 +56,18 @@ export type TriggerPoint =
   | 'onDefense'
   | 'whenPlayOrCreateUnit'
 
-export interface EffectContext {
+/**
+ * What one ability's effect is handed when it resolves: who owns it and which card it is on, plus the
+ * event details in {@link TriggerContext}. The event half is shared with `PendingTrigger.ctx`, so an
+ * effect reads the same field names whether it ran eagerly or waited in the ordered queue.
+ */
+export interface EffectContext extends TriggerContext {
   /** Controller of the ability's source card. */
   owner: PlayerId
   /** The card whose ability is firing (the unit's card, or an attached upgrade). */
   cardId: string
   /** In-play instance the ability belongs to, when one exists. */
   sourceInstanceId?: string
-  /** `onAttackEnd` only: the target of the attack that just ended. */
-  attackTarget?: AttackTarget
-  /** `onAttackEnd` only: the instance id of the unit that made the attack. */
-  attackerInstanceId?: string
-  /** `onAttackEnd` only: combat damage dealt to the opponent's base this attack (0 if none). */
-  combatDamageToBase?: number
-  /** `onAttackEnd` only: the defending unit was defeated during this attack (Thrawn / Halo / Rukh). */
-  defenderDefeated?: boolean
-  /** `onAttackEnd` only: combat damage the attacker dealt to the defending unit (0 if a base attack) (Great Mothers). */
-  combatDamageToDefender?: number
-  /** `whenDefeated` only: the unit as captured at the moment of defeat (it has left play). */
-  defeatedUnit?: UnitState
-  /** `whenDefeated` only: true when the defeat was caused by combat damage (Paz Vizsla / Shin Hati). */
-  defeatedByCombat?: boolean
-  /** A chosen target unit's instance id, when the ability picks one. */
-  targetInstanceId?: string
-  /**
-   * `whenUpgradeAttached` only (Gar Saxon): the upgrade was **played** from hand, rather
-   * than created and attached by an ability (a Shield/Experience token, Sabine's grant, …).
-   * "When you play an upgrade on this unit" only counts the former.
-   */
-  upgradePlayed?: boolean
 }
 
 export type EffectFn = (state: GameState, ctx: EffectContext) => GameState
@@ -399,40 +381,6 @@ function runEffect(state: GameState, effect: (s: GameState, ctx: EffectContext) 
 }
 
 /**
- * Fire every ability on `ctx.cardId` registered for `point`, in registration order.
- * Returns the input state unchanged (same reference) when nothing fires.
- */
-export function runTrigger(state: GameState, point: TriggerPoint, ctx: EffectContext): GameState {
-  let next = state
-  for (const ability of getAbilities(ctx.cardId)) {
-    if (ability.trigger === point) {
-      next = runEffect(next, ability.effect, ctx)
-    }
-  }
-  return next
-}
-
-/**
- * Fire an undeployed leader's front-side triggered abilities at `point`. A
- * deployed leader reacts via its unit (through `runUnitTrigger`), so this only fires
- * while the leader is in the base zone.
- */
-export function runLeaderTrigger(state: GameState, point: TriggerPoint, owner: PlayerId, extra?: Partial<EffectContext>): GameState {
-  const leader = state.players[owner].leader
-  if (leader.deployed) return state
-  let next = state
-  for (const ability of registry.get(leader.cardId)?.leaderAbilities?.abilities ?? []) {
-    if (ability.trigger === point) next = runEffect(next, ability.effect, { owner, cardId: leader.cardId, ...extra })
-  }
-  return next
-}
-
-/**
- * Fire a unit event at `point`: the unit's own card abilities AND each
- * attached upgrade's abilities, so an upgrade's "When Attack Ends: …" fires when
- * the attached unit's attack ends. `owner` controls the unit.
- */
-/**
  * Card ids whose abilities `unit` (controlled by `owner`) currently gains from a `grantsAbilities`
  * aura in play. Scans both sides' units, since a future aura may target enemies.
  */
@@ -464,7 +412,7 @@ export function collectUnitTriggers(
   point: TriggerPoint,
   unit: UnitState,
   owner: PlayerId,
-  extra?: Pick<EffectContext, 'defeatedUnit' | 'defeatedByCombat'>,
+  ctx?: TriggerContext,
 ): PendingTrigger[] {
   const out: PendingTrigger[] = []
   const cardIds = [
@@ -481,49 +429,88 @@ export function collectUnitTriggers(
         // Base layer: the dispatcher deepens anything triggered while resolving another (CR 7.6.11).
         layer: 0,
         sourceInstanceId: unit.instanceId,
-        ...extra,
+        ...(ctx ? { ctx } : {}),
       })
     })
   }
   return out
 }
 
+/**
+ * The same abilities `collectUnitTriggers` gathers, for a card that is **not a unit in play**: the
+ * event or upgrade whose own "When Played" fires as it resolves. It has no instance, so there is no
+ * aura or lasting-effect grant to look for, just the card's own abilities.
+ */
+export function collectCardTriggers(
+  point: TriggerPoint,
+  cardId: string,
+  owner: PlayerId,
+  sourceInstanceId?: string,
+  ctx?: TriggerContext,
+): PendingTrigger[] {
+  const out: PendingTrigger[] = []
+  getAbilities(cardId).forEach((ability, abilityIndex) => {
+    if (ability.trigger !== point) return
+    out.push({
+      id: `t${out.length}-${sourceInstanceId ?? cardId}-${cardId}-${abilityIndex}`,
+      controller: owner, point, cardId, abilityIndex, layer: 0,
+      ...(sourceInstanceId ? { sourceInstanceId } : {}),
+      ...(ctx ? { ctx } : {}),
+    })
+  })
+  return out
+}
+
+/**
+ * An **undeployed** leader's front-side triggered abilities at `point`, as data. A deployed leader
+ * reacts through its unit, so it is collected by `collectUnitTriggers` like any other unit.
+ *
+ * Whether the leader was deployed is settled here, when the ability triggers, for the same reason
+ * `collectUnitTriggers` snapshots its card list: what triggered is decided by the board at the moment
+ * of the event, not by the board whenever the player gets round to resolving it.
+ */
+export function collectLeaderTriggers(
+  state: GameState,
+  point: TriggerPoint,
+  owner: PlayerId,
+  ctx?: TriggerContext,
+): PendingTrigger[] {
+  const leader = state.players[owner].leader
+  if (leader.deployed) return []
+  const out: PendingTrigger[] = []
+  ;(registry.get(leader.cardId)?.leaderAbilities?.abilities ?? []).forEach((ability, abilityIndex) => {
+    if (ability.trigger !== point) return
+    out.push({
+      id: `t${out.length}-leader-${leader.cardId}-${abilityIndex}`,
+      controller: owner, point, cardId: leader.cardId, abilityIndex, layer: 0,
+      fromLeader: true,
+      ...(ctx ? { ctx } : {}),
+    })
+  })
+  return out
+}
+
+/**
+ * The ability a collected trigger stands for. Undeployed-leader abilities live in a different part of
+ * the registry from a unit's, so both the resolver and the prompt that names the ability go through
+ * here rather than each remembering the distinction.
+ */
+export function triggerAbility(trigger: PendingTrigger): AbilityDef | undefined {
+  const abilities = trigger.fromLeader
+    ? registry.get(trigger.cardId)?.leaderAbilities?.abilities ?? []
+    : getAbilities(trigger.cardId)
+  return abilities[trigger.abilityIndex]
+}
+
 /** Resolve exactly one collected trigger. A no-op if its card's abilities are no longer registered. */
 export function runPendingTrigger(state: GameState, trigger: PendingTrigger): GameState {
-  const ability = getAbilities(trigger.cardId)[trigger.abilityIndex]
+  const ability = triggerAbility(trigger)
   if (!ability || ability.trigger !== trigger.point) return state
   return runEffect(state, ability.effect, {
     owner: trigger.controller,
     cardId: trigger.cardId,
     sourceInstanceId: trigger.sourceInstanceId,
-    defeatedUnit: trigger.defeatedUnit,
-    defeatedByCombat: trigger.defeatedByCombat,
+    ...trigger.ctx,
   })
 }
 
-export function runUnitTrigger(
-  state: GameState,
-  point: TriggerPoint,
-  unit: UnitState,
-  owner: PlayerId,
-  extra?: Partial<EffectContext>,
-): GameState {
-  let next = state
-  // The unit's own card, its upgrades, any cards whose abilities are granted for this attack
-  // (Improvised Identity), and any granted by an aura in play (Bo-Katan's Gauntlet).
-  const cardIds = [
-    ...abilityCardIds(unit),
-    ...auraGrantedAbilityCards(state, unit, owner),
-    // Abilities handed over for the phase by a lasting effect (Treacherous Minefield).
-    ...(state.lastingEffects ?? []).flatMap(e => (e.targetInstanceId === unit.instanceId ? e.abilityCardIds ?? [] : [])),
-  ]
-  for (const cardId of cardIds) {
-    for (const ability of getAbilities(cardId)) {
-      if (ability.trigger === point) {
-        // `cardId` is the loop's, so an upgrade's ability is attributed to the upgrade, not the host.
-        next = runEffect(next, ability.effect, { owner, cardId, sourceInstanceId: unit.instanceId, ...extra })
-      }
-    }
-  }
-  return next
-}

@@ -70,15 +70,26 @@ describe('The Conflict Within (ASH_088) — whenReadies pay-or-exhaust', () => {
     expect(legalMoves(next).map(a => a.type)).toEqual(['skipTrigger']) // can't pay → must exhaust
   })
 
-  it('lets the active player resolve several simultaneous ready choices in any order', () => {
+  /**
+   * Both units ready on the same event, so the two abilities are simultaneous and the player names
+   * the order before either resolves (CR 7.6.9). The order is a real decision here: paying 3 for the
+   * first can leave the second unable to pay.
+   */
+  it('lets the active player order several simultaneous ready abilities', () => {
     const next = intoNextRound(regroupWith(['ASH_088', 'ASH_088'], ready(10)))
-    // Two pending choices, both addressable now (active player orders them).
-    const ids = legalMoves(next).filter(a => a.type === 'acceptChoice').map(a => a.choiceId).sort()
-    expect(ids).toEqual(['u1', 'u2'])
-    // Resolve u2 first, then u1 — order is the player's to pick.
-    let s = resolve(next, { type: 'skipTrigger', choiceId: 'u2' })
+    const ask = next.pendingChoices!.find(c => c.kind === 'chooseNextTrigger')!
+    const candidates = (ask as { candidates: { sourceInstanceId?: string }[] }).candidates
+    // Named by the unit each belongs to, so two copies of one card are tellable apart.
+    expect(candidates.map(c => c.sourceInstanceId).sort()).toEqual(['u1', 'u2'])
+
+    // Take u2's first: it is the only thing owed until it is settled.
+    let s = resolve(next, { type: 'acceptChoice', choiceId: ask.id, optionIndex: candidates.findIndex(c => c.sourceInstanceId === 'u2') })
+    expect(s.pendingChoices?.map(c => c.id)).toEqual(['u2'])
+    s = resolve(s, { type: 'skipTrigger', choiceId: 'u2' })
     expect(s.players.player.units.find(u => u.instanceId === 'u2')!.exhausted).toBe(true)
-    expect(s.pendingChoices?.map(c => c.id)).toEqual(['u1']) // u1 still pending
+
+    // Then u1's, with no further ordering question: one ability left is no decision.
+    expect(s.pendingChoices?.map(c => c.id)).toEqual(['u1'])
     s = resolve(s, { type: 'acceptChoice', choiceId: 'u1' })
     expect(s.pendingChoices).toBeUndefined()
     expect(s.players.player.units.find(u => u.instanceId === 'u1')!.exhausted).toBe(false)
