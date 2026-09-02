@@ -44,22 +44,35 @@ recurses through the aura pass. Inspect card data and traits instead; `unitHasTr
 An aura can be combat-conditional: the combat roles (`attackerInstanceId`, `defenderInstanceId`) are
 threaded into the aura call, so "while attacking" and "while defending" auras work.
 
-## Lasting effects: "this phase"
+## Lasting effects
 
 ```ts
-GameState.lastingEffects?: LastingEffect[]   // { targetInstanceId, power?, hp?, keywords? }
+GameState.lastingEffects?: LastingEffect[]   // { targetInstanceId, power?, hp?, keywords?, untilEndOfAttack? }
 ```
 
 `addLastingEffect` appends one; `lastingEffectTotals(state, instanceId)` sums those aimed at a unit.
 Folded into stats and keywords exactly like auras.
 
-**Cleared at the start of the regroup phase**, so a unit defeated *during* regroup uses its base
-stats. Immediately after they clear, a **state-based defeat check** runs: a unit that only the
-expired +HP buff kept alive, now at damage ≥ HP, is defeated then, routing through the normal
-discard, leader-return and `whenDefeated` path.
+**The card's text decides how long one lasts**, and there are two durations:
 
-This is broader than the per-attack `grantedKeywords` / `grantedAbilityCardIds`, which clear after a
-single attack.
+| Text | Effect | Expires |
+| --- | --- | --- |
+| "for this phase" | the default | at the start of the regroup phase, in `clearLastingEffects` |
+| "for this attack" | `untilEndOfAttack: true` | when that attack finishes, in `clearAttackGrants` |
+
+A phase-scoped effect is gone before regroup resolves, so a unit defeated *during* regroup uses its
+base stats.
+
+Both expiries run the same **state-based defeat check** immediately afterwards: a unit that only the
+expired +HP buff kept alive, now at damage ≥ HP, is defeated then, routing through the normal discard,
+leader-return and `whenDefeated` path.
+
+`clearAttackGrants` is the single point where everything an attack lent expires — `untilEndOfAttack`
+effects alongside the per-attack `grantedKeywords` (Support) and `grantedAbilityCardIds` (Support,
+Improvised Identity) — so a duration is declared by the card and cleaned up in one place.
+
+A card whose bonus is conditional on attacking can instead express it as a `statModifier` gated on
+`ctx.attacking` (Masterstroke), which needs no expiry at all.
 
 ## Spent tokens are defeated upgrades
 

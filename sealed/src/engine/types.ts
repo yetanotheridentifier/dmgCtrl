@@ -385,12 +385,18 @@ export interface ChooseOption {
   keywords?: KeywordInstance[]
 }
 
-/** A "this phase" modifier targeting a single unit. Omitted stats = 0. */
+/** A transient modifier targeting a single unit. Omitted stats = 0. */
 export interface LastingEffect {
   targetInstanceId: string
   power?: number
   hp?: number
   keywords?: KeywordInstance[]
+  /**
+   * Scoped to a single attack rather than the phase (Mando's N-1 Starfighter and Razor Crest both
+   * read "this unit gets +2/+0 for this attack"). Cleared by `clearAttackGrants` alongside the other
+   * per-attack grants; everything else lives until the regroup phase.
+   */
+  untilEndOfAttack?: boolean
   /**
    * Card ids whose triggered abilities the unit gains for the duration (Treacherous Minefield hands
    * every unit in an arena an "On Attack" for the phase). Gathered by `runUnitTrigger` exactly like
@@ -793,7 +799,7 @@ export function pushChoice(state: GameState, choice: PendingChoice): GameState {
 // Lasting effects + phase-event tracking
 // ---------------------------------------------------------------------------
 
-/** Add a "this phase" modifier aimed at a unit. */
+/** Add a transient modifier aimed at a unit — "this phase" unless it says `untilEndOfAttack`. */
 export function addLastingEffect(state: GameState, effect: LastingEffect): GameState {
   return { ...state, lastingEffects: [...(state.lastingEffects ?? []), effect] }
 }
