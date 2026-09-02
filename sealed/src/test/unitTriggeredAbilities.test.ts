@@ -3,6 +3,7 @@ import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
 import { dealDamageToUnit } from '../engine/combat'
 import { unitHasKeyword } from '../engine/keywords'
+import { effectivePower } from '../engine/stats'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { TOKEN_ADVANTAGE, TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
@@ -525,6 +526,7 @@ describe('On Attack — paying a cost of your own', () => {
     const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, handIndex: 0 })
     expect(done.players.player.hand).not.toContain('FILLER')
     expect(done.players.opponent.base.damage).toBe(5) // power 3 + 2 buff
+    expect(effectivePower(done, U(done, 'a'))).toBe(3) // "for this attack": gone once the attack ends
   })
 
   it("Mando's N-1 Starfighter (203): may exhaust the leader for +2/+0 this attack", () => {
@@ -534,6 +536,7 @@ describe('On Attack — paying a cost of your own', () => {
     const done = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id })
     expect(done.players.player.leader.exhausted).toBe(true)
     expect(done.players.opponent.base.damage).toBe(3) // power 1 + 2 buff
+    expect(effectivePower(done, U(done, 'a'))).toBe(1) // "for this attack": gone once the attack ends
   })
 })
 

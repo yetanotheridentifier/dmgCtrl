@@ -518,9 +518,16 @@ function openSupportChoice(state: GameState, owner: PlayerId, sourceInstanceId: 
   })
 }
 
-/** Strip transient per-attack grants (Support keywords, and Improvised Identity's
- *  granted abilities) from every unit once the attack that used them is done. */
-function clearGrantedKeywords(state: GameState): GameState {
+/**
+ * Strip an attack's transient grants once the attack that used them is done: Support's lent keywords,
+ * Improvised Identity's lent abilities, and any lasting effect made for that one attack ("+2/+0 for
+ * this attack"). One expiry point for all three, so a card's text decides the duration and nothing
+ * else has to remember to clean up.
+ *
+ * A unit that only an expiring +HP buff kept alive is defeated by the same state-based check the
+ * regroup expiry runs, for the same reason.
+ */
+function clearAttackGrants(state: GameState): GameState {
   let next = state
   for (const id of ['player', 'opponent'] as PlayerId[]) {
     const units = next.players[id].units
@@ -530,11 +537,17 @@ function clearGrantedKeywords(state: GameState): GameState {
       })
     }
   }
+  const expiring = (next.lastingEffects ?? []).filter(e => e.untilEndOfAttack)
+  if (expiring.length > 0) {
+    const kept = next.lastingEffects!.filter(e => !e.untilEndOfAttack)
+    next = { ...next, lastingEffects: kept.length > 0 ? kept : undefined }
+    if (expiring.some(e => (e.hp ?? 0) > 0)) next = sweepUnitDefeats(next)
+  }
   return next
 }
 
 /** Grant a unit the full abilities (keywords + triggered) of `cardId` for one attack
- *  (Improvised Identity). Cleared by `clearGrantedKeywords` after the attack. */
+ *  (Improvised Identity). Cleared by `clearAttackGrants` after the attack. */
 function grantAbilityCard(state: GameState, attackerId: string, cardId: string): GameState {
   const playerId = state.activePlayer
   return updatePlayer(state, playerId, {
@@ -1095,7 +1108,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
             }
           } else if ('buffUnit' in choice.then) {
             // Razor Crest: "if you do, this unit gets +power/+hp for this attack".
-            next = addLastingEffect(next, { targetInstanceId: choice.then.buffUnit, power: choice.then.power, hp: choice.then.hp })
+            next = addLastingEffect(next, { targetInstanceId: choice.then.buffUnit, power: choice.then.power, hp: choice.then.hp, untilEndOfAttack: true })
           } else if ('exhaustUnit' in choice.then) {
             // Mayor's Majordomo: the discard was a COST — now exhaust a unit.
             const targets = inPlayUnits(next).map(u => u.instanceId)
@@ -1122,11 +1135,11 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       break
     }
     case 'mayExhaustLeaderBuffSelf': {
-      // Mando's N-1: exhaust your leader, then give this unit a "this phase" buff.
+      // Mando's N-1: exhaust your leader, then buff this unit for the attack that raised the choice.
       const p = next.players[choice.controller]
       if (!p.leader.exhausted) {
         next = updatePlayer(next, choice.controller, { leader: { ...p.leader, exhausted: true } })
-        next = addLastingEffect(next, { targetInstanceId: choice.unitId, power: choice.power, hp: choice.hp })
+        next = addLastingEffect(next, { targetInstanceId: choice.unitId, power: choice.power, hp: choice.hp, untilEndOfAttack: true })
       }
       break
     }
@@ -1998,7 +2011,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   const enemyId = opponentOf(playerId)
   const attacker = state.players[playerId].units.find(u => u.instanceId === attackerId)
   // The attacker may have been defeated before damage (e.g. an On Defense ping).
-  if (!attacker) return clearGrantedKeywords(checkWin(state))
+  if (!attacker) return clearAttackGrants(checkWin(state))
 
   // "While attacking a damaged unit …" (Marrok's Fiend Fighter) reads the defender's pre-combat damage.
   const targetUnit = target.kind === 'unit' ? state.players[enemyId].units.find(u => u.instanceId === target.instanceId) : undefined
@@ -2018,7 +2031,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
     }
     next = consumeAdvantage(next, playerId, attackerId) // the attack completed
     next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: dealtToBase })
-    return clearGrantedKeywords(checkWin(next))
+    return clearAttackGrants(checkWin(next))
   }
 
   const defenderBefore = state.players[enemyId].units.find(u => u.instanceId === target.instanceId)
@@ -2026,7 +2039,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   if (!defenderBefore) {
     let next = consumeAdvantage(state, playerId, attackerId)
     next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: 0, defenderDefeated: true, combatDamageToDefender: 0 })
-    return clearGrantedKeywords(checkWin(next))
+    return clearAttackGrants(checkWin(next))
   }
 
   // Saboteur: when this unit attacks, defeat the defending unit's Shields before combat damage
@@ -2123,7 +2136,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   // Pass the pre-combat attacker so its "When Attack Ends" fires even if it was defeated.
   const defenderDefeated = !next.players[enemyId].units.some(u => u.instanceId === defender.instanceId)
   next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: overwhelmDealt, defenderDefeated, combatDamageToDefender: attackerPower }, attacker)
-  return clearGrantedKeywords(checkWin(next))
+  return clearAttackGrants(checkWin(next))
 }
 
 /**

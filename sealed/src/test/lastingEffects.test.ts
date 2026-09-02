@@ -69,6 +69,30 @@ describe('lasting effects mechanism', () => {
     expect(s.players.player.discard).toContain('TST_U1')
   })
 
+  it('an untilEndOfAttack effect expires with the attack; a plain one does not', () => {
+    let s = state({ players: { player: player({ units: [unit('u1', 'TST_U1')] }), opponent: player() } })
+    s = addLastingEffect(s, { targetInstanceId: 'u1', power: 2, untilEndOfAttack: true })
+    s = addLastingEffect(s, { targetInstanceId: 'u1', power: 2 })
+    expect(effectivePower(s, find(s, 'u1'))).toBe(7) // 3 + 2 + 2
+    s = resolve(s, { type: 'attack', attackerId: 'u1', target: { kind: 'base' } })
+    expect(s.players.opponent.base.damage).toBe(7) // both buffs applied to the attack itself
+    expect(effectivePower(s, find(s, 'u1'))).toBe(5) // the attack-scoped 2 is gone, the phase one stays
+  })
+
+  it('defeats a unit kept alive only by an untilEndOfAttack HP buff when the attack ends', () => {
+    let s = state({
+      players: {
+        player: player({ units: [unit('u1', 'TST_U1', { damage: 4 })] }), // TST_U1 base HP 4
+        opponent: player(),
+      },
+    })
+    s = addLastingEffect(s, { targetInstanceId: 'u1', hp: 2, untilEndOfAttack: true }) // HP 6 → survives at 4 damage
+    expect(effectiveHp(s, find(s, 'u1'))).toBe(6)
+    s = resolve(s, { type: 'attack', attackerId: 'u1', target: { kind: 'base' } })
+    expect(s.players.player.units.find(u => u.instanceId === 'u1')).toBeUndefined() // defeated
+    expect(s.players.player.discard).toContain('TST_U1')
+  })
+
   it('expires at the start of the regroup phase (both players pass)', () => {
     let s = addLastingEffect(
       state({ players: { player: player({ units: [unit('u1', 'TST_U1')] }), opponent: player() } }),
