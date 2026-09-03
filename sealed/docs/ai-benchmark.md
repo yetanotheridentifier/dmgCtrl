@@ -44,6 +44,26 @@ head-to-head result go through: it went on pinning `aiA` to the `player` seat an
 moved first. Self-play controls through it read 50.0%, 48.8% and 46.3% on three seed sets, pooling to
 **48.3%** where an unbiased harness gives 50. It uses `seating` now.
 
+### Every harness reports its win rate split by who moved first
+
+Because seat and first player vary independently, every result already knows whether aiA moved first,
+and each harness reports the rate **on the play**, the rate **on the draw**, and the **gap** between
+them. `--matrix` reports it per deck as well, which is where it says something about the game rather
+than about the bot.
+
+Two properties hold everywhere it is reported:
+
+- **The halves add back to the overall rate.** Only the on-play half is stored; the on-draw half is
+  the remainder of the games and the wins, so the sub-rates cannot drift from the number beside them.
+- **A half is half the sample, and a gap carries both halves' noise.** Every gap is quoted with a band
+  (Newcombe's square-and-add of the two Wilson half-widths). This is where a gap read at a small size
+  and believed would cost the most, because it looks like a property of the deck rather than an
+  estimate.
+
+`movedFirstForA` in `bench/seating.ts` is the single rule. `firstPlayer` names a **seat**, and aiA's
+seat changes every other game: reading one without the other gives a split that is exactly inverted on
+half the games, and inverted looks no different from correct.
+
 Two consequences worth knowing when reading older numbers:
 
 - **Differences are unaffected.** Anything measured as candidate-minus-control cancels the bias, so
@@ -1075,6 +1095,10 @@ handed all 18 decks an Aggression base. On that set greedy measured **49.1%** ag
 baseline; on an aspect-rotated set of the same size it measures **53.9% ± 2.7%**. A single-aspect
 sample is not a matchup sample, and it was very nearly reported as a real result.
 
+It also reports aiA's rate on the play and on the draw, over every game in the run, and then per
+deck. **The per-deck rows are wide**: a row is one deck against all 18, so at the default four games a
+cell it is 72 games and each half is 36. The band beside each gap is the point of printing them.
+
 Note the mirror harness reads higher on the same comparison (60.0% ± 3.3%). That is expected rather
 than contradictory: in a mirror both AIs face identical decks so pure skill shows, whereas across
 matchups deck strength adds variance that a stronger AI cannot always overcome, compressing the rate
@@ -1121,12 +1145,33 @@ npm run bench --prefix sealed -- --matrix --games 14 --seed 42 greedy   # ~14 ga
 
 `--games` is games *per cell*; a whole run is ~30-40 min at 14. It prints strongest/weakest decks,
 by-leader and by-base strength (each deck's average win rate across all opponents) and saves every
-ordered pair to the SQLite `matchups` table. It answers two questions:
+ordered pair to the SQLite `matchups` table. It answers three questions:
 
 - **Which decks are strongest** (for a fixed model): the deck-strength ranking, or `AVG(win_rate_a)`
   grouped by `deck_a`.
 - **Which decks improve or degrade as the model changes**: run the matrix for two models (e.g.
   `greedy` and `greedy-baseline`, or before/after a tune) and diff their rows.
+- **Which decks depend on moving first**: the turn-order section, and the `play` / `draw` / `gap`
+  columns on every strength table.
+
+### Turn order: one tight number and one wide ranking
+
+The matrix answers two questions of very different precision, and the readout says which is which:
+
+- **How much moving first is worth.** Every game contributes exactly one first-mover observation (a
+  game where deck i moved first is the on-play half of cell (i,j) and the on-draw half of cell (j,i)),
+  so this is pooled over the whole run: 26,280 games at 10 a cell, or about ±0.6%. Mirror pairs are the
+  one exception, contributing the half of their games the row deck moved first in, because only one
+  cell is emitted for them and counting it twice would weight mirrors double.
+- **Which decks depend on it.** A deck's gap is measured over its own row only, 720 games at 10 a cell
+  split into two halves of 360, so it carries roughly ±7 points. **Read that ordering as a queue of
+  candidates to re-measure, not as a ranking**: at that width most of the order is noise. The readout
+  prints the median band beside it rather than leaving the columns to imply a precision they do not
+  have.
+
+The cell keeps the on-play half only (`games_on_play`, `wins_on_play`); the on-draw half is the
+remainder of `games` and `wins_a`. A matrix saved before this existed has both columns at zero, which
+every reader treats as "not recorded" rather than as a measured 0%.
 
 ### Interrogating a matrix
 
@@ -1138,8 +1183,21 @@ SQLite extension, **DB Browser for SQLite**, the `sqlite3` CLI, or Node. Useful 
 SELECT deck_a, ROUND(AVG(win_rate_a), 3) AS strength FROM matchups WHERE run_id = ? GROUP BY deck_a ORDER BY strength DESC;
 -- by leader
 SELECT leader_a, ROUND(AVG(win_rate_a), 3) AS strength FROM matchups WHERE run_id = ? GROUP BY leader_a ORDER BY strength DESC;
--- a specific matchup
-SELECT win_rate_a, avg_margin FROM matchups WHERE run_id = ? AND deck_a = ? AND deck_b = ?;
+-- a specific matchup, on the play and on the draw
+SELECT win_rate_a, avg_margin,
+       CAST(wins_on_play AS REAL) / games_on_play                       AS on_play,
+       CAST(wins_a - wins_on_play AS REAL) / (games - games_on_play)    AS on_draw
+FROM matchups WHERE run_id = ? AND deck_a = ? AND deck_b = ?;
+-- how much moving first is worth, over every game in the run
+SELECT SUM(wins_on_play) * 1.0 / SUM(games_on_play) AS first_mover_win_rate, SUM(games_on_play) AS games
+FROM matchups WHERE run_id = ?;
+-- the decks that most depend on the opening (wide: see the section above)
+SELECT deck_a,
+       ROUND(AVG(CASE WHEN games_on_play > 0
+                      THEN CAST(wins_on_play AS REAL) / games_on_play END)
+           - AVG(CASE WHEN games - games_on_play > 0
+                      THEN CAST(wins_a - wins_on_play AS REAL) / (games - games_on_play) END), 3) AS gap
+FROM matchups WHERE run_id = ? GROUP BY deck_a ORDER BY gap DESC;
 -- model comparison: how each deck's strength changed between two runs
 SELECT a.deck_a, ROUND(AVG(a.win_rate_a) - AVG(b.win_rate_a), 3) AS delta
 FROM matchups a JOIN matchups b ON a.deck_a = b.deck_a AND a.deck_b = b.deck_b
@@ -1252,7 +1310,8 @@ eight of eighteen modules were missing.
 - `bench/selfPlay.ts` `playGame`: one full game, seeded, with the drop classification.
 - `bench/runBench.ts` `runBench`: N games, alternating seat and first player, aggregated into a report.
 - `bench/seating.ts` seat and first-player alternation on independent axes, so four games cover all
-  four combinations once and neither advantage settles on one side.
+  four combinations once and neither advantage settles on one side. `movedFirstForA` is the one place
+  aiA's seat and the first player are read together, which every first-player split goes through.
 
 ### Deck sets and whole-pool work
 
@@ -1272,7 +1331,8 @@ eight of eighteen modules were missing.
 - `bench/tune.ts` the weight sweep behind `npm run tune`. Candidates are the named model with bent
   weights, taking their limits from the registry, so they track the shipped bot rather than a one-ply
   stand-in.
-- `bench/stats.ts` the Wilson confidence interval.
+- `bench/stats.ts` the Wilson confidence interval, and the first-player split: two halves with their
+  own bands plus the gap between them, banded by Newcombe's square-and-add.
 - `bench/store.ts` the SQLite persistence: runs, games, matrix cells, experiments and term runs.
 - `bench/reports.ts` writing a dropped game out as a replayable fixture.
 

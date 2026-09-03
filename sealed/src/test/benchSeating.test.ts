@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { seating, resultForA } from '../bench/seating'
+import { seating, resultForA, movedFirstForA } from '../bench/seating'
 
 /**
  * Seat assignment for a two-AI comparison.
@@ -77,5 +77,36 @@ describe('resultForA', () => {
       expect(r.won).toBe(false)
       expect(r.draw).toBe(true)
     }
+  })
+})
+
+/**
+ * Did aiA move first? Every harness reports who moved first by SEAT, and aiA's seat changes every
+ * other game, so the two have to be read together. Stated once here rather than at each of the three
+ * call sites, because it is the same question with the same silent failure mode: reading the seat
+ * without the swap gives a first-mover split that is exactly inverted on half the games.
+ */
+describe('movedFirstForA', () => {
+  it('is true exactly when the first player holds aiA\'s seat', () => {
+    expect(movedFirstForA({ swapped: false, firstPlayer: 'player' })).toBe(true)
+    expect(movedFirstForA({ swapped: false, firstPlayer: 'opponent' })).toBe(false)
+    // Swapped: aiA is the `opponent` seat, so the `opponent` moving first is aiA moving first.
+    expect(movedFirstForA({ swapped: true, firstPlayer: 'opponent' })).toBe(true)
+    expect(movedFirstForA({ swapped: true, firstPlayer: 'player' })).toBe(false)
+  })
+
+  it('gives each AI the first move equally often over a whole cycle', () => {
+    const n = 400
+    const first = Array.from({ length: n }, (_, g) => movedFirstForA(seating(g))).filter(Boolean).length
+    expect(first).toBe(n / 2)
+  })
+
+  /**
+   * A partial cycle is deliberately uneven, and in a known direction: over three games aiA moves
+   * first once. That asymmetry is what pins a first-mover split the right way round, since a balanced
+   * count cannot tell a correct split from an inverted one.
+   */
+  it('is uneven over a partial cycle, in a known direction', () => {
+    expect([0, 1, 2].map(g => movedFirstForA(seating(g)))).toEqual([true, false, false])
   })
 })

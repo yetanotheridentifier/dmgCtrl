@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 // `readFileSync` is used for both banked results and a child's `--out` payload.
 import { join } from 'node:path'
-import { wilsonInterval } from './stats'
+import { wilsonInterval, firstPlayerSplit, type FirstPlayerSplit } from './stats'
 import { COMMIT_ID } from '../buildIdentity'
 import type { DeckSource } from './decks'
 import { SHARD_DIR, makeManifest, writeStatusFile } from './status'
@@ -43,6 +43,9 @@ export interface ShardResult {
    * the new measurement. Absent on results banked before this field existed.
    */
   commitId?: string
+  /** aiA's on-play half, when this shard recorded one. Absent on results banked before it existed. */
+  gamesOnPlay?: number
+  winsOnPlay?: number
 }
 
 export interface PooledResult {
@@ -67,6 +70,28 @@ export function poolShards(shards: Array<{ winRateA: number; completed: number }
   const wins = shards.reduce((n, s) => n + Math.round(s.winRateA * s.completed), 0)
   const { rate, halfWidth } = wilsonInterval(wins, completed)
   return { winRateA: completed === 0 ? 0 : rate, winCi: halfWidth, wins, completed }
+}
+
+/**
+ * Pool the first-player split across shards, or refuse.
+ *
+ * This is where the sample that makes the split readable comes from: a sharded run is the only path
+ * that plays tens of thousands of games. But shards are **resumed from results banked on disk**, and
+ * a banked result from before this field existed carries no halves. Treating a missing half as zero
+ * would report a first-player rate over a fraction of the games while looking like a whole run, which
+ * is the same failure the pooled total is guarded against, so one absent half refuses the pool.
+ */
+export function poolFirstPlayer(
+  shards: Array<{ winRateA: number; completed: number; gamesOnPlay?: number; winsOnPlay?: number }>,
+): FirstPlayerSplit | null {
+  if (shards.length === 0) return null
+  if (shards.some(s => s.gamesOnPlay === undefined || s.winsOnPlay === undefined)) return null
+  const gamesOnPlay = shards.reduce((n, s) => n + s.gamesOnPlay!, 0)
+  const winsOnPlay = shards.reduce((n, s) => n + s.winsOnPlay!, 0)
+  const completed = shards.reduce((n, s) => n + s.completed, 0)
+  // `winRateA` is `winsA / completed` by construction, as in `poolShards`.
+  const wins = shards.reduce((n, s) => n + Math.round(s.winRateA * s.completed), 0)
+  return firstPlayerSplit(winsOnPlay, gamesOnPlay, wins - winsOnPlay, completed - gamesOnPlay)
 }
 
 export interface ShardConfig {
@@ -135,16 +160,24 @@ export interface ShardPayload {
   completed: number
   dropped: number
   commitId: string
+  /** aiA's on-play half. Absent on results banked before the split existed. */
+  gamesOnPlay?: number
+  winsOnPlay?: number
 }
 
 /** Project a finished report down to what the parent will read back. */
-export function shardPayload(report: { winRateA: number; completed: number; dropped: number; commitId: string }, seed: number): ShardPayload {
+export function shardPayload(
+  report: { winRateA: number; completed: number; dropped: number; commitId: string; gamesOnPlay?: number; winsOnPlay?: number },
+  seed: number,
+): ShardPayload {
   return {
     seed,
     winRateA: report.winRateA,
     completed: report.completed,
     dropped: report.dropped,
     commitId: report.commitId,
+    gamesOnPlay: report.gamesOnPlay,
+    winsOnPlay: report.winsOnPlay,
   }
 }
 
@@ -178,6 +211,8 @@ export function shardResultFrom(payload: unknown, seed: number, exitCode: number
     exitCode,
     // Stamped so a later resume can tell whether this result describes the code now running.
     commitId: typeof payload.commitId === 'string' ? payload.commitId : COMMIT_ID,
+    gamesOnPlay: typeof payload.gamesOnPlay === 'number' ? payload.gamesOnPlay : undefined,
+    winsOnPlay: typeof payload.winsOnPlay === 'number' ? payload.winsOnPlay : undefined,
   }
 }
 

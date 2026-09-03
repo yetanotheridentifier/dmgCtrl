@@ -6,7 +6,7 @@ import { nextSeed } from '../engine/rng'
 import { COMMIT_ID } from '../buildIdentity'
 import type { Ai } from '../ai/types'
 import { playGame } from './selfPlay'
-import { seating, resultForA } from './seating'
+import { seating, resultForA, movedFirstForA } from './seating'
 import type { MatchupDeck } from './matchupDecks'
 
 /**
@@ -18,6 +18,10 @@ import type { MatchupDeck } from './matchupDecks'
  *
  * The result is N*N ordered cells, stored in SQLite so it can be interrogated: average a row for deck
  * strength under a fixed model, or diff two models' rows to see which decks improve or degrade.
+ *
+ * Every cell also carries the half of its games the row deck moved first in, so "A beats B 54%" can be
+ * read as its two sub-rates. A cell hiding 68% on the play and 40% on the draw is the case that makes
+ * the single number misleading rather than merely coarse.
  */
 
 const POOL = ashSet as unknown as SwuCard[]
@@ -33,6 +37,24 @@ export interface MatchupCell {
   winsA: number
   winRateA: number
   avgMargin: number
+  /**
+   * The on-play half: games deck A moved first in, and how many of those it won.
+   *
+   * **Only one half is stored.** The on-draw half is `games - gamesOnPlay` and `winsA - winsOnPlay`,
+   * so the two sub-rates weight-average back to `winRateA` by construction rather than by agreement,
+   * and no later change can leave them disagreeing with the number already trusted.
+   */
+  gamesOnPlay: number
+  winsOnPlay: number
+}
+
+/** One cell's tally, from the row deck's point of view. */
+interface Tally {
+  games: number
+  wins: number
+  gamesOnPlay: number
+  winsOnPlay: number
+  margin: number
 }
 
 export interface MatrixResult {
@@ -46,12 +68,13 @@ export interface MatrixResult {
   cells: MatchupCell[]
 }
 
-function cell(a: MatchupDeck, b: MatchupDeck, games: number, wins: number, margin: number): MatchupCell {
+function cell(a: MatchupDeck, b: MatchupDeck, t: Tally): MatchupCell {
   return {
     aLabel: a.label, bLabel: b.label,
     leaderA: a.leaderName, baseA: a.baseAspect,
     leaderB: b.leaderName, baseB: b.baseAspect,
-    games, winsA: wins, winRateA: games === 0 ? 0 : wins / games, avgMargin: margin,
+    games: t.games, winsA: t.wins, winRateA: t.games === 0 ? 0 : t.wins / t.games, avgMargin: t.margin,
+    gamesOnPlay: t.gamesOnPlay, winsOnPlay: t.winsOnPlay,
   }
 }
 
@@ -119,6 +142,12 @@ export function runMatchupMatrix(
       let winsB = 0
       let completed = 0
       let marginSum = 0
+      // The first-player split, tallied inside the loop because it cannot be recovered afterwards.
+      // Deck j's on-play half is exactly the games deck i did NOT move first in, so both cells' halves
+      // are counted here rather than derived by subtraction, where a sign slip would be silent.
+      let iFirstGames = 0
+      let iWinsWhileFirst = 0
+      let jWinsWhileFirst = 0
       let seed = pairSeed(config.seed, i, j)
       for (let g = 0; g < config.gamesPerCell; g++) {
         seed = nextSeed(seed)
@@ -139,14 +168,25 @@ export function runMatchupMatrix(
         if (r.status !== 'completed') { dropped++; continue }
         completed++
         const forI = resultForA(r, seats) // "A" here is deck i
-        if (forI.won) winsA++
-        else if (!forI.draw) winsB++
+        const iFirst = movedFirstForA(seats)
+        if (iFirst) iFirstGames++
+        if (forI.won) { winsA++; if (iFirst) iWinsWhileFirst++ }
+        else if (!forI.draw) { winsB++; if (!iFirst) jWinsWhileFirst++ }
         marginSum += forI.margin // from deck i's perspective, whichever seat it took
       }
       const avgMargin = completed === 0 ? 0 : marginSum / completed
-      cells.push(cell(decks[i], decks[j], completed, winsA, avgMargin))
-      // The same games give the reverse matchup: deck j's wins are winsB, margin flips sign.
-      if (i !== j) cells.push(cell(decks[j], decks[i], completed, winsB, -avgMargin))
+      cells.push(cell(decks[i], decks[j], {
+        games: completed, wins: winsA, margin: avgMargin,
+        gamesOnPlay: iFirstGames, winsOnPlay: iWinsWhileFirst,
+      }))
+      // The same games give the reverse matchup: deck j's wins are winsB, margin flips sign, and its
+      // on-play half is deck i's on-draw half.
+      if (i !== j) {
+        cells.push(cell(decks[j], decks[i], {
+          games: completed, wins: winsB, margin: -avgMargin,
+          gamesOnPlay: completed - iFirstGames, winsOnPlay: jWinsWhileFirst,
+        }))
+      }
     }
   }
 

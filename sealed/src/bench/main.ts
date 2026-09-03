@@ -14,7 +14,7 @@ import { runBudget, type BudgetReport } from './budget'
 import { dirname, join } from 'node:path'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import {
-  runShards, poolShards, pendingSeeds, loadShardResults, shardRunKey, shardPayload,
+  runShards, poolShards, poolFirstPlayer, pendingSeeds, loadShardResults, shardRunKey, shardPayload,
   spawnShards, shardPayloadPath, SHARD_DIR,
 } from './shard'
 import { renderStatus, loadAllProgress, preflight } from './status'
@@ -30,7 +30,8 @@ import { runGeneralisation } from './generalisation'
 import type { GeneralisationReport } from './generalisation'
 import { buildMatchupDecks } from './matchupDecks'
 import { runMatchupMatrix, dealPairs, type MatrixResult } from './matrix'
-import { saveMatrix, deckStrength, leaderStrength, baseStrength, type StrengthRow } from './store'
+import { saveMatrix, deckStrength, leaderStrength, baseStrength, firstPlayerAdvantage, type StrengthRow } from './store'
+import type { FirstPlayerSplit } from './stats'
 import { resolveAi } from '../ai/registry'
 import { fetchSets, formatTriage, triage } from './triage'
 
@@ -208,16 +209,39 @@ export function solverNodesFor(depth: number | undefined, solverNodes: number | 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
 const row = (label: string, value: string): string => `  ${label.padEnd(22)}: ${value}`
 
+/** A rate that may not have been measured. A dash, never 0.0%, which would read as a rout. */
+const pctOrDash = (x: number | null): string => (x === null ? '-' : pct(x))
+/** A difference between two rates, in percentage points and always signed, so it cannot be read as one. */
+const points = (x: number | null): string => (x === null ? '-' : `${x >= 0 ? '+' : ''}${(x * 100).toFixed(1)}`)
+/** A band width in percentage points. Never signed: the ± in front of it already says both directions. */
+const band = (x: number | null): string => (x === null ? '-' : (x * 100).toFixed(1))
+
+/**
+ * The first-player split as one line: both halves, then the gap with its band.
+ *
+ * The gap carries both halves' noise and each half is half the sample, so the band is what says
+ * whether a gap is a finding. It is quoted everywhere the gap is.
+ */
+function turnOrderLine(split: FirstPlayerSplit): string {
+  return `${pct(split.onPlay.rate)} on the play  /  ${pct(split.onDraw.rate)} on the draw` +
+    `   gap ${points(split.gap)} ± ${band(split.gapCi)} pts` +
+    `   (${split.onPlay.games.toLocaleString()} / ${split.onDraw.games.toLocaleString()} games)`
+}
+
 function format(report: BenchReport, wallMs: number): string {
   const totalMoves = report.games.reduce((n, g) => n + g.moveCount, 0)
   const lo = Math.max(0, report.winRateA - report.winCi)
   const hi = Math.min(1, report.winRateA + report.winCi)
+  // A run is one shard's worth of games, so it pools through the same function a sharded run does:
+  // one place recovers the win count from the rate, rather than two that could round differently.
+  const split = poolFirstPlayer([report])
   const lines = [
     '',
     `dmgCtrl AI bench  (engine ${report.commitId})`,
     `${report.aiA} vs ${report.aiB}   ${report.gamesRequested} games   seed ${report.seed}`,
     '',
     row(`win rate (${report.aiA}/A)`, `${pct(report.winRateA)}  ± ${pct(report.winCi)}   (${pct(lo)} – ${pct(hi)})`),
+    row('turn order', split === null ? '-' : turnOrderLine(split)),
     row('draw rate', pct(report.drawRate)),
     row('base-damage margin', `${report.avgMargin >= 0 ? '+' : ''}${report.avgMargin.toFixed(1)}  (A's view)`),
     row('game length', `${report.avgRounds.toFixed(1)} rounds avg`),
@@ -975,9 +999,13 @@ async function runShardMode(args: Args): Promise<void> {
       `${String(r.completed).padStart(5)} completed, ${r.dropped} dropped${note}`)
   }
   const failed = results.filter(r => r.exitCode !== 0)
+  // Null when any shard was banked before the split existed, which a resumed run can mix in. Saying
+  // nothing is right there: a partial pool would be a first-player rate over a fraction of the games.
+  const split = poolFirstPlayer(good)
   lines.push(
     '',
     row(`pooled win rate (${args.aiA})`, `${pct(pooled.winRateA)}  ± ${pct(pooled.winCi)}   (${pct(lo)} – ${pct(hi)})`),
+    row('turn order', split === null ? 'not recorded by every shard' : turnOrderLine(split)),
     row('games pooled', `${pooled.wins} wins of ${pooled.completed}`),
     row('shards failed', `${failed.length} of ${results.length}`),
   )
@@ -1078,6 +1106,7 @@ function runMatchupsMode(args: Args): void {
     '',
     `dmgCtrl AI matchups  (engine ${report.commitId})`,
     row(`overall (${report.aiA})`, `${pct(report.overallWinRateA)}  ± ${pct(report.overallCi)}   (${report.totalGames} games)`),
+    row('turn order', turnOrderLine(report.split)),
     row('dropped', `${report.dropped}`),
     row('wall clock', `${((Date.now() - start) / 1000).toFixed(0)}s`),
     '',
@@ -1087,19 +1116,79 @@ function runMatchupsMode(args: Args): void {
     `  best matchups for ${report.aiA}:`,
     ...report.cells.slice(-8).reverse().map(c => `    ${pct(c.winRateA).padStart(6)}   ${c.aLabel}  vs  ${c.bLabel}`),
     '',
+    // Each row is one deck against all of them, so at the default four games a cell it is 72 games
+    // and each half is 36. Wide enough that the band is the point of printing it.
+    `  ${report.aiA}'s decks, most dependent on moving first:`,
+    ...report.byDeck.slice(0, 5).map(d =>
+      `    ${points(d.split.gap).padStart(6)} ± ${band(d.split.gapCi).padStart(4)} pts   ` +
+      `${pct(d.split.onPlay.rate).padStart(6)} / ${pct(d.split.onDraw.rate).padStart(6)}   ${d.label}`),
+    '',
   ]
   console.log(lines.join('\n'))
   if (report.dropped > 0) process.exit(1)
 }
 
+/**
+ * A strength ranking, with each row's rate split by who moved first.
+ *
+ * The gap's band is deliberately not in this table: a row's `± n pts` beside its gap would triple the
+ * width, and the gaps worth reading are in the turn-order section below with their bands attached.
+ */
 function strengthTable(title: string, rows: StrengthRow[], limit?: number): string[] {
   const shown = limit ? rows.slice(0, limit) : rows
-  const lines = [`  ${title}:`]
+  const lines = [
+    `  ${title}:`,
+    `    ${'rate'.padStart(6)}   ${'margin'.padStart(6)}   ${'play'.padStart(6)}   ${'draw'.padStart(6)}   ${'gap'.padStart(6)}`,
+  ]
   for (const r of shown) {
     const margin = `${r.avgMargin >= 0 ? '+' : ''}${r.avgMargin.toFixed(1)}`
-    lines.push(`    ${pct(r.winRate).padStart(6)}  margin ${margin.padStart(5)}   ${r.key}`)
+    lines.push(
+      `    ${pct(r.winRate).padStart(6)}   ${margin.padStart(6)}   ${pctOrDash(r.onPlay).padStart(6)}   ` +
+      `${pctOrDash(r.onDraw).padStart(6)}   ${points(r.gap).padStart(6)}   ${r.key}`,
+    )
   }
   return lines
+}
+
+/** The median of a set of half-widths: what a typical row in the table above carries. */
+function median(xs: number[]): number | null {
+  if (xs.length === 0) return null
+  const sorted = xs.slice().sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+}
+
+/**
+ * The turn-order readout: one tight number and one wide ranking, said as such.
+ *
+ * Every game in the run contributes exactly one first-mover observation, so "the first mover wins X%"
+ * is the tightest number the matrix produces. A single deck's gap is measured over its own row only,
+ * which is a fraction of that, so the per-deck ordering is a queue of candidates to re-measure rather
+ * than a ranking. The band on each is what keeps the two apart, and it is quoted rather than described.
+ */
+function turnOrderSection(db: ReturnType<typeof openDb>, runId: string, limit = 8): string[] {
+  const pooled = firstPlayerAdvantage(db, runId)
+  if (pooled.games === 0) return ['  turn order: not recorded for this run']
+  const measured = deckStrength(db, runId).filter(r => r.gap !== null)
+  const byGap = measured.slice().sort((a, b) => b.gap! - a.gap!)
+  const typical = median(measured.map(r => r.gapCi!))
+  const line = (r: StrengthRow): string =>
+    `      ${points(r.gap).padStart(6)} ± ${band(r.gapCi).padStart(4)} pts   ` +
+    `${pctOrDash(r.onPlay).padStart(6)} / ${pctOrDash(r.onDraw).padStart(6)}   ${r.key}`
+  return [
+    '  turn order:',
+    `    the first mover wins   ${pct(pooled.rate)} ± ${pct(pooled.halfWidth)}   (${pooled.games.toLocaleString()} games, one observation each)`,
+    typical === null
+      ? '    no deck has both halves, so no gap is measurable'
+      : `    a deck's gap is measured over its own row only, and carries ± ${band(typical)} pts here:` +
+        ' read the order as candidates, not as a ranking',
+    '',
+    '    most dependent on moving first:',
+    ...byGap.slice(0, limit).map(line),
+    '',
+    '    least dependent:',
+    ...byGap.slice(-limit).reverse().map(line),
+  ]
 }
 
 /**
@@ -1215,6 +1304,8 @@ function matrixReport(
     ...strengthTable('by leader (strongest first)', leaderStrength(db, runId)),
     '',
     ...strengthTable('by base aspect', baseStrength(db, runId)),
+    '',
+    ...turnOrderSection(db, runId),
     '',
     `  full matrix: sealed/${DEFAULT_DB_PATH}, table "matchups", run_id='${runId}'`,
     '',

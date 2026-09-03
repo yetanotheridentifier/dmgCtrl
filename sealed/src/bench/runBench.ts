@@ -3,7 +3,7 @@ import { nextSeed } from '../engine/rng'
 import { resolveAi } from '../ai/registry'
 import { wilsonInterval } from './stats'
 import { benchDeckSet, type DeckSource } from './decks'
-import { seating, resultForA } from './seating'
+import { seating, resultForA, movedFirstForA } from './seating'
 
 /** Games per full seat / first-player cycle. See `seating`. */
 /** Seat and first player cycle on independent axes, so four games cover all four combinations once.
@@ -63,6 +63,15 @@ export interface BenchReport {
   /** Games with aiA in the opponent seat. Half the total, and the check that the seat advantage is
    *  actually being cancelled rather than merely intended to be. */
   seatsSwapped: number
+  /**
+   * Games aiA moved first in, and its wins in them. The on-draw half is the remainder of `completed`
+   * and the wins behind `winRateA`, so the two sub-rates weight-average back to it by construction.
+   *
+   * Both sides play the same deck list here, so this measures the harness and the AI rather than a
+   * deck: how much of aiA's rate comes from holding the opening.
+   */
+  gamesOnPlay: number
+  winsOnPlay: number
   avgRounds: number
   movesPerSec: number
   failures: Failure[]
@@ -89,6 +98,8 @@ export function runBench(config: BenchConfig): BenchReport {
   const marginsForA: number[] = []
   let seed = config.seed
   let seatsSwapped = 0
+  let gamesOnPlay = 0
+  let winsOnPlay = 0
   // Non-negative, and stable for a given seed so a run stays reproducible.
   const deckOffset = ((config.seed % decks.length) + decks.length) % decks.length
 
@@ -121,6 +132,10 @@ export function runBench(config: BenchConfig): BenchReport {
       const forA = resultForA(result, seats)
       wonByA.push(forA.won)
       marginsForA.push(forA.margin)
+      if (movedFirstForA(seats)) {
+        gamesOnPlay++
+        if (forA.won) winsOnPlay++
+      }
     }
 
     if (result.status === 'dropped') {
@@ -161,6 +176,8 @@ export function runBench(config: BenchConfig): BenchReport {
     decksUsed: Math.min(decks.length, Math.max(1, Math.ceil(config.games / SEATING_CYCLE))),
     firstDeck: decks[deckOffset % decks.length].name,
     seatsSwapped,
+    gamesOnPlay,
+    winsOnPlay,
     avgRounds: mean(done.map(g => g.rounds)),
     movesPerSec: totalMs === 0 ? 0 : totalMoves / (totalMs / 1000),
     failures,
