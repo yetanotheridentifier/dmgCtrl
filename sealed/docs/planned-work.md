@@ -8,27 +8,48 @@ which avenues that closes off, and [ai-model.md](ai-model.md) holds the measured
 explain the model's current shape. Evidence appears below only where it decides what to build next,
 and then in one line with a pointer.
 
+**Three streams, in this order: the heuristic bot, then the card programme, then the player-facing
+UI.** They sit on separate branches and share no code, so the order is a decision about attention
+rather than a dependency.
+
 ## Next up
 
 Ordered on one principle: **correctness, then structure, then calibration.** Anything that changes the
-engine or the horizon invalidates a calibration done before it.
+engine or the horizon invalidates a calibration done before it, which is why the matchup matrix sits
+at the end of the list rather than in the middle of it.
 
-1. **#530 decide `hand.canAct`.** Measured inert through the horizon arm, and still not removable:
+1. **#507 split every deck's win rate by who moved first.** Cheap, and it has to precede the matrix: a
+   cell reading "A beats B 54%" hides the whole story if A wins 68% on the play and 40% on the draw.
+   `seating(gameIndex)` is already deterministic and every runner passes `firstPlayer` through, so this
+   is a reporting change over data the harness already holds. Running it after the matrix means running
+   the matrix twice.
+2. **#557 decide `hand.canAct`.** Measured inert through the horizon arm, and still not removable:
    deleting it inverts the lower bound in `handValue.test.ts` that stops the model banking its last
    castable card. A scripted position for the case that bound describes is the only option producing
    evidence rather than a preference, and self-play cannot reach it.
-2. **Finish what #516 scoped and did not do.** The horizon itself is built, measured at -3.72 points and
-   **shipped disabled**, so these are the parts that outlived it.
+3. **#558 finish what #516 scoped and did not do.** The horizon itself is built, measured at -3.72 points
+   and **shipped disabled**, so these are the parts that outlived it. Either measurement can ship alone.
    - **Re-ask the shielded-Sentinel lockout** against the horizon arm: whether the strip line now
-     contains its own payoff, and whether `blockedReach` becomes deletable rather than shippable.
+     contains its own payoff, and whether `blockedReach`, which ships at weight 0, becomes deletable
+     rather than shippable.
    - **Sweep `tailActions`.** It is most of the horizon's 1.84x cost while the free run changes nothing
      measurable in 79% of claims, so a crossing-only arm may be both cheaper and better.
-3. **#519 price the regroup resourcing decision as thresholds.** The regroup decision is currently a
+   - The horizon A/B predates the root pass charge that cut mid-round passes from 2.71 a game to 0.21,
+     so the crossing may no longer be answering the same question. First step is the cheap one: read
+     the pass rate at `maxCrossings` 0 against 1, which is minutes rather than hours of games.
+4. **#519 price the regroup resourcing decision as thresholds.** The regroup decision is currently a
    constant: `resource - card` is +2 and banking is always chosen, so nothing is being weighed. The rule
    that should decide it, the knee rising to the leader's deploy cost, is live code that cancels out of
    its own total while the two rates are equal.
-4. **Run the matchup matrix.** Now unblocked: the weights are settled, so it will not need repeating.
-   Roughly **23 hours sharded** at 10 games a cell, against 169 serial.
+5. **#520 the lethal solver is budget-bound**, so every result quoted about solver depth measures the
+   rail instead. It takes 50x the default node budget before more depth stops finding less, and the
+   shipped gated solver runs at 4x. The +0.8 recorded for `beam-lethal` is a lower bound on a solver
+   that never finished its search. Gated on the node budget being settable from the CLI, which is
+   where the sizing pass stopped last time.
+6. **Run the matchup matrix.** Last, and only once the five above have settled: it is the calibration
+   they would each invalidate, and at roughly **23 hours sharded** (10 games a cell, against 169
+   serial) it is the one run worth doing exactly once. With #507 in place it answers two questions
+   instead of one.
 
    Per-cell numbers are noise at that size (±50% at 4 games). The readable aggregates are deck strength
    (±5.8%) and leader strength (±2.9%), and the genuinely interesting output is any leader whose
@@ -36,11 +57,7 @@ engine or the horizon invalidates a calibration done before it.
 
    It measures the **deck generator**, not the sealed metagame: one algorithmic build per leader and
    base. That gap is the point rather than a caveat.
-5. **#520 the lethal solver is budget-bound**, so every result quoted about solver depth measures the
-   rail instead. It takes 50x the default node budget before more depth stops finding less, and the
-   shipped gated solver runs at 4x. The +0.8 recorded for `beam-lethal` is a lower bound on a solver
-   that never finished its search.
-6. **Two candidates from review, neither ticketed yet.** Both add information rather than re-pricing
+7. **Two candidates from review, neither ticketed yet.** Both add information rather than re-pricing
    it, which is the strongest steer available: of six attempts to re-price something, one worked, and
    it was a search change.
    - **Claiming the initiative charges nothing for the cards it stops you playing.** The cost term
@@ -110,13 +127,14 @@ revealed aspects. More accurate, arguably legitimate, but a different honesty cl
 - **Epic 7 data pipeline** (#403 export, #404 consent, #405 collection Worker, #406 training store).
   #403 is small and would let a self-play corpus accumulate from the current bot immediately.
 
-## The card programme (parallel stream)
+## The card programme (second stream)
 
 ASH is implemented. The other nine sets are not: 1,960 distinct cards, triaged by what the engine
 cannot yet express rather than by how hard the text looks. The triage is repeatable and fetches live,
 so the next set can be sized on release day. See [ai-benchmark.md](ai-benchmark.md).
 
-It runs on its own branch alongside the AI work and shares nothing with it.
+It runs on its own branch and shares no code with the AI work, so it is sequenced rather than
+blocked: it starts when the heuristic baseline is finished.
 
 **The programme is #452 to #478.** GitHub holds them and their current state; this section holds only
 the shape.
@@ -155,12 +173,17 @@ Three findings that contradict the assumptions the programme started from:
 
 The 292 vanilla and keyword-only cards need no ticket, reconciling set by set with `PLAYABLE_AS_PRINTED`
 in `data/implementedCards.ts`. 29 cards with ability text are printed in more than one set, covering 30
-extra ids for no extra work.
+extra ids for no extra work: each needs one line in `data/reprints.ts` naming its other printings, and
+`--triage` marks the ones that do not have it yet.
 
-## Player-facing UI
+## Player-facing UI (third stream)
 
 Both came out of play-testing the trigger-ordering work, and both sort the same ~72 pending-choice
 kinds, so **#552 first**: it has to classify every kind anyway, which is where #553's mapping then hangs.
+
+Coming after the card programme means the set of kinds is still growing while this is built, so the
+classification wants to be a rule read off the payload rather than a table of the kinds that exist on
+the day it ships. #553 already has to work that way for a different reason.
 
 - **#552 triggered choices belong in an overlay, not the action column.** A triggered choice reads as a
   centre-screen overlay when two abilities trigger and as small buttons beside Pass when one does. The
