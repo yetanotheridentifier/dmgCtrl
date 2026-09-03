@@ -62,8 +62,9 @@ export interface LethalConfig {
    * the solver being cleverer. Matching them isolates what the damage-relevance pruning actually buys.
    */
   solverDepth?: number
-  /** Node budget for the solver. Scaled with depth by the CLI so the rail does not silently become
-   *  the real depth, which is the mistake the #410 screen made. */
+  /** Node budget for the solver. The CLI scales it with depth so the rail does not silently become
+   *  the real depth, which is the mistake the #410 screen made, and `--solver-nodes` overrides that
+   *  scaling because it is itself too low to size a solver with. */
   solverNodes?: number
   /** The gate to SCORE. The solver itself always runs ungated here, so the gate is measured against
    *  the truth rather than against its own admissions. */

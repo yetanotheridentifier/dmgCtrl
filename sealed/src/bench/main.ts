@@ -23,6 +23,7 @@ import type { CostReport } from './cost'
 import type { DeckSource } from './decks'
 import { runLethal } from './lethal'
 import type { LethalReport } from './lethal'
+import { DEFAULT_LETHAL_LIMITS } from '../ai/lethal'
 import { runAiMatchups } from './aiMatchups'
 import type { DecisionReport } from './decisions'
 import { runGeneralisation } from './generalisation'
@@ -68,6 +69,11 @@ interface Args {
   lethal: boolean
   /** Solver depth for `--lethal`. Undefined means the shipped default. */
   depth?: number
+  /**
+   * Node budget for `--lethal`'s solver. Undefined leaves it scaled with `depth`, which is what
+   * every result recorded before this flag existed ran on. See `solverNodesFor`.
+   */
+  solverNodes?: number
   matchups: boolean
   /** Run the head-to-head as N parallel single-threaded processes over N seeds, and pool them. */
   shards?: number
@@ -98,7 +104,7 @@ interface Args {
   aiB: string
 }
 
-function parseArgs(argv: string[]): Args {
+export function parseArgs(argv: string[]): Args {
   const positional: string[] = []
   let games = 100
   let gamesSet = false
@@ -113,6 +119,7 @@ function parseArgs(argv: string[]): Args {
   let budget = false
   let lethal = false
   let depth: number | undefined
+  let solverNodes: number | undefined
   let matchups = false
   let shards: number | undefined
   let status = false
@@ -139,6 +146,7 @@ function parseArgs(argv: string[]): Args {
     else if (arg === '--budget') budget = true
     else if (arg === '--lethal') lethal = true
     else if (arg === '--depth') depth = Number(argv[++i])
+    else if (arg === '--solver-nodes') solverNodes = Number(argv[++i])
     else if (arg === '--matchups') matchups = true
     else if (arg === '--shard') shards = Number(argv[++i])
     else if (arg === '--status') status = true
@@ -159,10 +167,42 @@ function parseArgs(argv: string[]): Args {
   }
   if (!Number.isFinite(games) || games < 1) throw new Error(`--games must be a positive integer`)
   if (!seeds.every(Number.isFinite) || seeds.length === 0) throw new Error('--seed must be a number, or a comma-separated list of numbers')
-  if (depth !== undefined && (!Number.isFinite(depth) || depth < 1)) throw new Error('--depth must be a positive integer')
+  assertPositiveInt(depth, '--depth')
+  assertPositiveInt(solverNodes, '--solver-nodes')
   if (triage && positional.length === 0) throw new Error('--triage needs at least one set code, e.g. --triage LAW SEC')
   if (shards !== undefined && (!Number.isFinite(shards) || shards < 1)) throw new Error('--shard must be a positive integer')
-  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, matchups, shards, status, control, history, out, weights, shardIndex, shardCount, triage, decks, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, solverNodes, matchups, shards, status, control, history, out, weights, shardIndex, shardCount, triage, decks, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+}
+
+/**
+ * One rule, two flags: the solver's depth and its node budget reject the same shapes alike.
+ *
+ * `Number.isInteger` rather than `Number.isFinite`, which is what `--depth` used to check. The
+ * message always promised an integer and the check did not enforce it, so `--depth 1.5` was
+ * accepted and then silently truncated inside the search. A missing value arrives here as NaN and
+ * is rejected the same way.
+ */
+function assertPositiveInt(value: number | undefined, flag: string): void {
+  if (value === undefined) return
+  if (!Number.isInteger(value) || value < 1) throw new Error(`${flag} must be a positive integer`)
+}
+
+/**
+ * The node budget `--lethal`'s solver runs at.
+ *
+ * Absent `--solver-nodes` it scales with depth, which is the expression every result recorded
+ * before the flag existed ran on, so those numbers stay reproducible. That scaling is not enough
+ * on its own: `depth x 4000` is 16,000 at depth 4, and at both 4,000 and 40,000 a depth-4 search
+ * reports finding LESS lethal than a depth-2 one, going monotone only around 200,000. Any run
+ * where the budget binds first is measuring the rail rather than the depth its name advertises,
+ * and lifting it is what this flag is for.
+ *
+ * `undefined` means the shipped default, which `runLethal` resolves to `DEFAULT_LETHAL_LIMITS`.
+ */
+export function solverNodesFor(depth: number | undefined, solverNodes: number | undefined): number | undefined {
+  if (solverNodes !== undefined) return solverNodes
+  if (depth === undefined) return undefined
+  return Math.max(DEFAULT_LETHAL_LIMITS.nodes, depth * 4000)
 }
 
 const pct = (x: number): string => `${(x * 100).toFixed(1)}%`
@@ -753,15 +793,16 @@ function runLethalMode(args: Args): void {
     // Sampled hard: the first run checked 60 positions a seed and found three disagreements it could
     // not classify. Correctness is the risk in this ticket, so it gets the compute.
     //
-    // The node budget scales with depth. A fixed rail would bind before the depth did and the sweep
-    // would report a flat curve for the wrong reason, which is exactly what the #410 screen did.
+    // The node budget scales with depth unless `--solver-nodes` overrides it. A fixed rail would
+    // bind before the depth did and the sweep would report a flat curve for the wrong reason, and
+    // the scaled one is itself too low to size a solver with. See `solverNodesFor`.
     report = runLethal({
       gamesPerDeck,
       seed: args.seed,
       oracleSamples: 400,
       oracleStride: 5,
       solverDepth: args.depth,
-      solverNodes: args.depth === undefined ? undefined : Math.max(4000, args.depth * 4000),
+      solverNodes: solverNodesFor(args.depth, args.solverNodes),
     })
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
@@ -1259,4 +1300,7 @@ function main(): void {
   if (report.provisional) process.exit(1)
 }
 
-main()
+// Guarded so the parsing helpers above can be imported by tests without running a benchmark.
+// Same guard as `tune.ts`. The npm script and the shard children both invoke this file by path
+// (`tsx src/bench/main.ts`), so both still satisfy it.
+if (process.argv[1]?.endsWith('main.ts')) main()

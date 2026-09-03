@@ -44,8 +44,11 @@ at the end of the list rather than in the middle of it.
 5. **#520 the lethal solver is budget-bound**, so every result quoted about solver depth measures the
    rail instead. It takes 50x the default node budget before more depth stops finding less, and the
    shipped gated solver runs at 4x. The +0.8 recorded for `beam-lethal` is a lower bound on a solver
-   that never finished its search. Gated on the node budget being settable from the CLI, which is
-   where the sizing pass stopped last time.
+   that never finished its search. `--lethal` takes `--solver-nodes N` (#559), so the sizing pass is
+   runnable. The `beam-lethal:WIDTHxBEAMDEPTHxSOLVERDEPTH` spec carries its own copy of the same
+   scaled rail with no override, so the `--cost` sweep, which addresses solver depths by AI name, is
+   still bound by it. Extending that spec with an optional node budget, as `beam:` and `reply:`
+   already have, is the first task.
 6. **Run the matchup matrix.** Last, and only once the five above have settled: it is the calibration
    they would each invalidate, and at roughly **23 hours sharded** (10 games a cell, against 169
    serial) it is the one run worth doing exactly once. With #507 in place it answers two questions

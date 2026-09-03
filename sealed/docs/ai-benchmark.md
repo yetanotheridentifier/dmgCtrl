@@ -218,6 +218,31 @@ rather than search. It also scores the **gate** (what it skips, and whether any 
 winnable position) and runs an exhaustive **oracle** against the pruned search on real positions,
 since a pruned line makes the answer wrong rather than imprecise, and does so silently.
 
+The solver has **two** limits, and a result is only about the one that bound last:
+
+- `--depth N` how many actions deep it searches.
+- `--solver-nodes N` how many positions it may visit before giving up. Absent the flag this scales
+  as `max(4000, depth * 4000)`, which is the value every result recorded before the flag existed
+  ran on.
+
+**The scaled default is far too low to size a solver with.** At depth 4 against depth 2, both 4,000
+and 40,000 nodes report the *deeper* search finding **less** lethal, which is impossible on depth
+alone: the budget ran out first. Only around 200,000 does the curve go monotone. So any run left on
+the default is measuring the node rail wearing a depth's name, and `--solver-nodes` is what lifts
+it:
+
+```bash
+npm run bench --prefix sealed -- --lethal --depth 4 --solver-nodes 200000
+```
+
+The report's `solver depth / nodes` row prints the pair the run actually used, and it is worth
+reading before any depth figure taken from that run. Both flags reject anything that is not a
+positive integer, at parse time rather than part way through a run.
+
+The same rail exists on the `beam-lethal:WIDTHxBEAMDEPTHxSOLVERDEPTH` AI spec, which scales its
+budget the same way and has no equivalent override, so a `--cost` sweep addressed by AI name is
+still bound by it.
+
 `--terms` re-scores every decision once per weight per perturbation, so it costs roughly 30 times a
 plain pass: 3 games a deck is ~20 minutes and is plenty for rates of this size.
 
