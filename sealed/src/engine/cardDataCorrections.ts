@@ -28,4 +28,10 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   ASH_030: { keywords: [{ name: 'Sentinel' }] }, // Marrok — Sentinel is real; Saboteur is conditional (while upgraded)
   ASH_099: { keywords: [{ name: 'Support' }] }, // Gozanti Assault Carrier (E) — Support is real; Sentinel is gained on attack
   ASH_079: { keywords: [] }, // Koska Reeves (F) — Sentinel is conditional (while you control a token unit)
+
+  // Same source behaviour, one step further out: a keyword the card only ever GIVES to other units
+  // is listed as the card's own. The ability grants it where it belongs; the card itself has only
+  // what is printed on it.
+  ASH_007: { keywords: [{ name: 'Overwhelm' }] }, // Grand Admiral Sloane — Overwhelm is hers; Sentinel goes to each OTHER friendly unit
+  ASH_127: { keywords: [] }, // The Twins — Sentinel is given to another friendly unit, never held
 }

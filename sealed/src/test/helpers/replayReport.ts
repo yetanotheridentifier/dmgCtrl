@@ -10,6 +10,7 @@ import minefieldArenaChoice from '../fixtures/reports/minefieldArenaChoice.json'
 import nestedDeployShieldTarget from '../fixtures/reports/nestedDeployShieldTarget.json'
 import rampResourceReady from '../fixtures/reports/rampResourceReady.json'
 import shieldedSentinelLockout from '../fixtures/reports/shieldedSentinelLockout.json'
+import sloaneSelfSentinel from '../fixtures/reports/sloaneSelfSentinel.json'
 import shieldedSentinelPing from '../fixtures/reports/shieldedSentinelPing.json'
 import vaneFriendlyUpgrade from '../fixtures/reports/vaneFriendlyUpgrade.json'
 import vaneFriendlyUpgradeCards from '../fixtures/reports/vaneFriendlyUpgradeCards.json'
@@ -45,7 +46,8 @@ const ashCards = ashSet as SwuCard[]
 const REPORTS: Record<string, unknown> = {
   advantageToEnemy, attackBuffPersists, baylanExhaust, debuffOnOwnUnit, exhaustedLeaderDraw,
   haulcraftPrompt, minefieldArenaChoice, nestedDeployShieldTarget, rampResourceReady,
-  shieldedSentinelLockout, shieldedSentinelPing, triggerOrderNotOffered, vaneFriendlyUpgrade,
+  shieldedSentinelLockout, shieldedSentinelPing, sloaneSelfSentinel, triggerOrderNotOffered,
+  vaneFriendlyUpgrade,
 }
 
 /**
