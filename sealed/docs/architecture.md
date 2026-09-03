@@ -131,6 +131,14 @@ printing's own **art rides along**, so you still see the card you own.
   prevents the correct, complete network fetch from ever running. The bundled tier removes that race
   for anything it covers; re-run the generator when a new set gets ability support or FFG ships a
   new print run.
+- **A card printed in more than one set is one card too.** Both joins above work within a set, and
+  a reprint is a Normal printing of its own, so neither can reach across: `SEC_258` Grassroots
+  Resistance resolved to itself and played as a blank event. `data/reprints.ts` declares those
+  cards, naming the id whose behaviour the engine implements and the other sets' Normal ids, and is
+  applied last, after the within-set id is known. Extending it is one line per card; variant
+  printings need no line of their own, since they reach their set's Normal id first.
+  `npm run bench --prefix sealed -- --triage <SETS>` lists cards printed in more than one set and
+  marks the ones the table does not yet collapse.
 - **Unresolvable cards keep their own id and play vanilla**, which is the previous behaviour, so
   being offline degrades rather than breaks. They are reported through
   `GameValue.unresolvedPrintings`, shown above the log and included in bug reports: the symptom

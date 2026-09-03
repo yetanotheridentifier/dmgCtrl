@@ -93,6 +93,30 @@ describe('printings play as the card, not as a vanilla body', () => {
   })
 
   /**
+   * #551: the same card printed in another set. Grassroots Resistance is ASH_258 and SEC_258, the
+   * ability is registered against the ASH id, and the reporter's pool held the SEC printing — so the
+   * event cost 4, did nothing, and never asked for a damage target. What the deck holds is the SEC
+   * card; what the engine must see is the implemented one.
+   */
+  it('gives a card reprinted in another set the abilities registered against the implemented printing', async () => {
+    const grassrootsSec: SwuCard = {
+      Set: 'SEC', Number: '258', Name: 'Grassroots Resistance', Type: 'Event',
+      VariantType: 'Normal', Cost: '4', Aspects: ['Heroism'],
+    }
+    const deck: SavedDeck = { ...HYPERSPACE_DECK, cards: [{ id: 'SEC_258', count: 4 }, { id: 'ASH_099', count: 26 }] }
+
+    await db.cards.clear()
+    await seed([LEADER, BASE, CHAFF, grassrootsSec])
+
+    const result = await toFirstPlay(deck)
+    const state = result.current.gameState!
+    expect(state.players.player.hand).toContain('ASH_258')
+    expect(state.players.player.hand.every(id => id !== 'SEC_258')).toBe(true)
+    expect(state.cards.ASH_258?.name).toBe('Grassroots Resistance')
+    expect(result.current.unresolvedPrintings).toEqual([])
+  })
+
+  /**
    * Offline: the game must still start, with the affected cards named rather than hidden. Uses a
    * made-up set (`ZZZ`) rather than real ASH ids: ASH now has a bundled printing map (#389) that
    * resolves Barriss's real ids with no cache or network involved at all, so this scenario (no index

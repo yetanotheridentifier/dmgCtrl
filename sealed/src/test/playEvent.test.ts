@@ -124,7 +124,9 @@ describe('the first four events', () => {
     expect(resolve(weak, { type: 'playEvent', handIndex: 0 }).players.player.hand).toHaveLength(0)
   })
 
-  it('Grassroots Resistance (258): 3 damage to a chosen unit, and heals your base 3', () => {
+  // The card reads "Deal 3 damage to a unit. Heal 3 damage from your base." — in that order, so
+  // the target is picked before the base heals rather than after (#551).
+  it('Grassroots Resistance (258): 3 damage to a chosen unit, then heals your base 3', () => {
     const s = state({
       cards: F,
       players: {
@@ -133,9 +135,24 @@ describe('the first four events', () => {
       },
     })
     const played = resolve(s, { type: 'playEvent', handIndex: 0 })
-    expect(played.players.player.base.damage).toBe(4) // healed immediately
+    expect(played.pendingChoices![0]).toMatchObject({ kind: 'selectDamageTarget', amount: 3 })
+    expect(played.players.player.base.damage).toBe(7) // not yet: the damage resolves first
     const done = resolve(played, { type: 'acceptChoice', choiceId: played.pendingChoices![0].id, targetInstanceId: 'e' })
     expect(U(done, 'e').damage).toBe(3)
+    expect(done.players.player.base.damage).toBe(4)
+  })
+
+  it('Grassroots Resistance (258): heals the base even with no unit to damage', () => {
+    const s = state({
+      cards: F,
+      players: {
+        player: rich({ hand: ['ASH_258'], base: { cardId: 'TST_B', damage: 7 } }),
+        opponent: player(),
+      },
+    })
+    const played = resolve(s, { type: 'playEvent', handIndex: 0 })
+    expect(played.pendingChoices ?? []).toHaveLength(0)
+    expect(played.players.player.base.damage).toBe(4)
   })
 
   it('Display of Strength (136): +3/+3 to a chosen unit for the phase', () => {

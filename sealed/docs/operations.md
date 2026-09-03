@@ -429,6 +429,16 @@ Writes `src/data/printingMaps/<set>.json`; import it in `data/bundledPrintings.t
 set. The script warns and omits any printing it cannot join to a Normal row rather than guessing,
 so those fall back to the existing dynamic (cache/network) path.
 
+That map is within one set. A card the new set shares with an implemented one needs a line in
+`data/reprints.ts` as well, or it plays without its ability. Find them with:
+
+```bash
+npm run bench --prefix sealed -- --triage ASH SEC
+```
+
+Every cross-set reprint is listed, and the ones already collapsed onto a single implementation are
+marked `registered`; the rest are the lines to add.
+
 ## Extending the engine
 
 - **A new AI**: implement `(state) => Action | null`, choosing from `legalMoves(state)` and drawing
