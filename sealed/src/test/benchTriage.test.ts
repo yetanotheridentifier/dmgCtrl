@@ -246,6 +246,26 @@ describe('cross-set reprints', () => {
     expect(triage([card({ ...reprinted, Set: 'SOR', Number: '10' })]).reprints).toEqual([])
   })
 
+  /**
+   * The reprint table (`data/reprints.ts`) is declared by hand, so triage is where a new set's
+   * reprints get noticed: a pair it does not collapse onto one id is a line still to add (#551).
+   */
+  it('marks a pair the reprint table already collapses onto one implementation', () => {
+    const r = triage([
+      card({ ...reprinted, Set: 'ASH', Number: '258' }),
+      card({ ...reprinted, Set: 'SEC', Number: '258' }),
+    ])
+    expect(r.reprints[0].registered).toBe(true)
+  })
+
+  it('marks a pair the table does not cover, which is the work it is reporting', () => {
+    const r = triage([
+      card({ ...reprinted, Set: 'SOR', Number: '10' }),
+      card({ ...reprinted, Set: 'LAW', Number: '55' }),
+    ])
+    expect(r.reprints[0].registered).toBe(false)
+  })
+
   it('does not treat a same-set reprint at another collector number as cross-set', () => {
     // IBH prints one card at up to three numbers. That collapses in normalPrintings instead.
     const r = triage([

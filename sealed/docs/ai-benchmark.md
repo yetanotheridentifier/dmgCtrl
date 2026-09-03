@@ -695,6 +695,10 @@ under. Across the nine unimplemented sets that is 29 cards with ability text, co
 ids for no extra work. Reprints skew vanilla, since they exist mostly to balance sealed pools, and a
 printing's rarity can differ without affecting any of this: the engine does not read rarity.
 
+What makes the coverage real is `data/reprints.ts`, which collapses the other printings onto the
+implemented id during hydration. Each entry is marked `registered` once it does, so the report doubles
+as the list of lines still to add when a set is brought in.
+
 ## Generalisation diagnostic
 
 `--generalise` plays one AI against another across the whole coverage deck set and reports the first

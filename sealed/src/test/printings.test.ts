@@ -109,6 +109,50 @@ describe('canonicaliseCards', () => {
 })
 
 /**
+ * The cross-set tier (#551). A card printed in two sets is two ids, and the per-set join above can
+ * never bridge them: `SEC_258` is already the Normal printing of Grassroots Resistance, so it
+ * resolved to itself and played with no ability at all. The declared reprint table names the
+ * implemented printing outright, which also means it needs no index and works offline.
+ */
+describe('canonicaliseCards, cross-set reprints (#551)', () => {
+  const grassrootsSec = { Set: 'SEC', Number: '258', Name: 'Grassroots Resistance', Type: 'Event', VariantType: 'Normal' } as SwuCard
+  const grassrootsSecVariant = { ...grassrootsSec, Number: '480', VariantType: 'Hyperspace' } as SwuCard
+  const starViperSor = { Set: 'SOR', Number: '112', Name: 'Consortium StarViper', Type: 'Unit', VariantType: 'Normal' } as SwuCard
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('rewrites a reprint onto the implemented printing with no cache or network', async () => {
+    await db.cards.clear()
+    vi.stubGlobal('fetch', vi.fn(() => {
+      throw new Error('must not be called: a declared reprint names its canonical id outright')
+    }))
+
+    const { map, unresolved } = await canonicaliseCards([grassrootsSec, starViperSor])
+    expect(map.get('SEC_258')).toBe('ASH_258')
+    expect(map.get('SOR_112')).toBe('ASH_122')
+    expect(unresolved).toEqual([])
+  })
+
+  /** Both tiers in order: the SEC listing collapses the variant onto SEC_258, the table onto ASH. */
+  it('carries a variant printing of a reprint through the within-set tier first', async () => {
+    await db.cards.clear()
+    await db.cards.put({ id: 'SEC_258', json: grassrootsSec, fetchedAt: 1 })
+
+    const { map, unresolved } = await canonicaliseCards([grassrootsSecVariant])
+    expect(map.get('SEC_480')).toBe('ASH_258')
+    expect(unresolved).toEqual([])
+  })
+
+  it('leaves a card with no reprint entry on its own id', async () => {
+    await db.cards.clear()
+    for (const c of NORMAL) await db.cards.put({ id: `${c.Set}_${c.Number}`, json: c, fetchedAt: 1 })
+
+    const { map } = await canonicaliseCards([NORMAL[1]])
+    expect(map.get('ZZZ_045')).toBe('ZZZ_045')
+  })
+})
+
+/**
  * The bundled fast path (#389): a known ASH printing resolves without ever touching the card cache
  * or the network. The actual bug was an INCOMPLETE cache silently short-circuiting the dynamic
  * fallback before it reached the network (a non-empty but incomplete `Map` isn't `undefined`, so

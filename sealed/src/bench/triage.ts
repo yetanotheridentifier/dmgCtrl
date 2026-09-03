@@ -1,4 +1,5 @@
 import type { SwuCard } from '../data/cards'
+import { reprintCanonicalId } from '../data/reprints'
 
 /**
  * Card-pool triage: classify a set by what the engine cannot yet express.
@@ -138,8 +139,11 @@ export interface TriageReport {
   fallout: { probe: string; cards: number }[]
   /** Cards blocked by nothing that nonetheless trip a probe. */
   suspectCards: number
-  /** Cards with ability text printed in more than one set. One registration covers every id. */
-  reprints: { name: string; type: string; ids: string[] }[]
+  /**
+   * Cards with ability text printed in more than one set. One registration covers every id, once
+   * `data/reprints.ts` collapses them onto it; `registered` is false while that line is missing.
+   */
+  reprints: { name: string; type: string; ids: string[]; registered: boolean }[]
   /** Extra ids those reprints cover: the work saved, not the cards. */
   reprintSavings: number
   triaged: TriagedCard[]
@@ -296,7 +300,12 @@ export function triage(pool: SwuCard[]): TriageReport {
   }
   const reprints = [...byIdentity.values()]
     .filter(group => new Set(group.map(c => c.set)).size > 1)
-    .map(group => ({ name: group[0].name, type: group[0].type, ids: group.map(c => c.id).sort() }))
+    .map(group => {
+      const ids = group.map(c => c.id).sort()
+      // Registered = every printing resolves to the same id, so one implementation serves them all.
+      const registered = new Set(ids.map(id => reprintCanonicalId(id) ?? id)).size === 1
+      return { name: group[0].name, type: group[0].type, ids, registered }
+    })
     .sort((a, b) => b.ids.length - a.ids.length || a.name.localeCompare(b.name))
   const reprintSavings = reprints.reduce((n, r) => n + r.ids.length - 1, 0)
 
@@ -369,7 +378,12 @@ export function formatTriage(r: TriageReport): string[] {
 
   lines.push('', `  Cross-set reprints: ${r.reprints.length} ability cards printed in more than one set,`)
   lines.push(`  covering ${r.reprintSavings} extra card ids for no extra work.`)
-  for (const rp of r.reprints.slice(0, 10)) lines.push(`  ${pad(rp.name, 34)}${rp.ids.join(', ')}`)
+  // Unregistered first: each is a line to add to data/reprints.ts, which is the actionable half.
+  const missing = r.reprints.filter(rp => !rp.registered)
+  lines.push(`  ${missing.length} not yet collapsed onto one implementation (add a line to data/reprints.ts).`)
+  for (const rp of [...missing, ...r.reprints.filter(rp => rp.registered)].slice(0, 10)) {
+    lines.push(`  ${pad(rp.name, 34)}${pad(rp.ids.join(', '), 32)}${rp.registered ? 'registered' : ''}`.trimEnd())
+  }
   if (r.reprints.length > 10) lines.push(`  ... and ${r.reprints.length - 10} more`)
 
   lines.push('', '  Triage, not a specification. Every card still needs reading before it is built.')

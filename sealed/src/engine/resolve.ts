@@ -1037,6 +1037,9 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       // Deal the chosen amount to the picked base or unit.
       if (baseTarget) next = dealDamageToBase(next, baseTarget, choice.amount, choice.source)
       else if (targetInstanceId) next = dealDamageToUnit(next, targetInstanceId, choice.amount, choice.source)
+      // "…Heal N damage from your base": the card's second sentence, held back so the target is
+      // chosen first (Grassroots Resistance).
+      if (choice.thenHealBase) next = healBase(next, choice.controller, choice.thenHealBase)
       next = checkWin(next)
       if (next.winner !== null) return next
       break

@@ -1776,11 +1776,12 @@ registerCard('ASH_185', whenPlayed('If you control a unit with 4 or more power, 
   s.players[ctx.owner].units.some(u => effectivePower(s, u) >= 4) ? drawCards(s, ctx.owner, 2) : s))
 
 registerCard('ASH_258', whenPlayed('Deal 3 damage to a unit. Heal 3 damage from your base.', (s, ctx) => { // Grassroots Resistance
-  const healed = healBase(s, ctx.owner, 3)
-  const targets = allUnits(healed).map(u => u.instanceId)
+  // Both sentences resolve, in the order printed: the heal rides on the damage choice so the target
+  // is picked first, and happens on its own when there is no unit to damage.
+  const targets = allUnits(s).map(u => u.instanceId)
   return targets.length
-    ? pushChoice(healed, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 3, unitTargets: targets, baseTargets: [] })
-    : healed
+    ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 3, unitTargets: targets, baseTargets: [], thenHealBase: 3 })
+    : healBase(s, ctx.owner, 3)
 }))
 
 registerCard('ASH_136', whenPlayed('Give a unit +3/+3 for this phase.', (s, ctx) => { // Display of Strength

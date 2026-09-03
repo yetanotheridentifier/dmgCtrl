@@ -3,6 +3,7 @@ import { cardId, SWU_DB_API } from './cards'
 import type { SwuCard } from './cards'
 import { logger } from './log'
 import { bundledCanonicalId } from './bundledPrintings'
+import { reprintCanonicalId } from './reprints'
 
 /**
  * Printings, and why card identity has to be canonical.
@@ -28,6 +29,10 @@ import { bundledCanonicalId } from './bundledPrintings'
  * card for the set is cached, even if incomplete, so an incomplete cache silently prevented the
  * (correct, complete) network fetch from ever running. The bundled tier removes that race entirely
  * for anything it covers.
+ *
+ * Both tiers work within one set, and a cross-set reprint is a Normal printing of its own, so
+ * neither can bridge the two (#551). The declared table in `reprints.ts` does, and is applied last:
+ * whatever id a card's own set resolves to, a reprint of an implemented card ends on that card.
  */
 
 /** Identity of a card across its printings. */
@@ -86,6 +91,26 @@ async function printingIndex(set: string, cache: Map<string, PrintingIndex | und
 }
 
 /**
+ * The card's Normal id within its own set: bundled map first, then the cache/network index. An id
+ * that cannot be resolved stays as it is and says why, so the game plays on with a vanilla card
+ * rather than failing to start.
+ */
+async function withinSet(
+  card: SwuCard,
+  id: string,
+  indexes: Map<string, PrintingIndex | undefined>,
+): Promise<{ canonical: string; reason?: UnresolvedReason }> {
+  const bundled = bundledCanonicalId(id)
+  if (bundled) return { canonical: bundled }
+
+  const index = await printingIndex(card.Set, indexes)
+  if (!index) return { canonical: id, reason: 'no-index' }
+
+  const canonical = index.get(printingKey(card))
+  return canonical ? { canonical } : { canonical: id, reason: 'unknown-card' }
+}
+
+/**
  * Canonical id for each hydrated card, keyed by the id it was fetched under.
  *
  * Takes the cards rather than bare ids because the join is by name: a variant's identity is only
@@ -102,25 +127,16 @@ export async function canonicaliseCards(cards: SwuCard[]): Promise<{ map: Map<st
     const id = cardId(card.Set, card.Number)
     if (map.has(id)) continue
 
-    const bundled = bundledCanonicalId(id)
-    if (bundled) {
-      map.set(id, bundled)
+    // A declared reprint names its canonical id outright, so it needs no index of its own set.
+    const declared = reprintCanonicalId(id)
+    if (declared) {
+      map.set(id, declared)
       continue
     }
 
-    const index = await printingIndex(card.Set, indexes)
-    if (!index) {
-      map.set(id, id)
-      unresolved.push({ id, name: card.Name, reason: 'no-index' })
-      continue
-    }
-    const canonical = index.get(printingKey(card))
-    if (!canonical) {
-      map.set(id, id)
-      unresolved.push({ id, name: card.Name, reason: 'unknown-card' })
-      continue
-    }
-    map.set(id, canonical)
+    const { canonical, reason } = await withinSet(card, id, indexes)
+    if (reason) unresolved.push({ id, name: card.Name, reason })
+    map.set(id, reprintCanonicalId(canonical) ?? canonical)
   }
 
   if (unresolved.length > 0) {
