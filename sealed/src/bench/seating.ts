@@ -26,6 +26,23 @@ export function seating(gameIndex: number): Seating {
   }
 }
 
+/** The seat `aiA` occupies. Every result and every "who moved first" reading has to go through this. */
+export function seatForA({ swapped }: Seating): PlayerId {
+  return swapped ? 'opponent' : 'player'
+}
+
+/**
+ * Did `aiA` move first?
+ *
+ * `firstPlayer` names a SEAT, and aiA's seat changes every other game, so the two have to be read
+ * together. Stated once here rather than at each harness that groups by it: reading the seat without
+ * the swap gives a first-mover split that is exactly inverted on half the games, and inverted looks
+ * no different from correct.
+ */
+export function movedFirstForA(seats: Seating): boolean {
+  return seats.firstPlayer === seatForA(seats)
+}
+
 /** A completed game as `aiA` experienced it. */
 export interface OutcomeForA {
   won: boolean
@@ -43,12 +60,11 @@ export interface OutcomeForA {
  */
 export function resultForA(
   result: { winner: PlayerId | 'draw' | null; margin: number },
-  { swapped }: Seating,
+  seats: Seating,
 ): OutcomeForA {
-  const aSeat: PlayerId = swapped ? 'opponent' : 'player'
   return {
-    won: result.winner === aSeat,
+    won: result.winner === seatForA(seats),
     draw: result.winner === 'draw',
-    margin: swapped ? -result.margin : result.margin,
+    margin: seats.swapped ? -result.margin : result.margin,
   }
 }

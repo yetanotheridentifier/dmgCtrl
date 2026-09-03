@@ -5,6 +5,7 @@ import { dirname } from 'node:path'
 import type { BenchReport } from './runBench'
 import type { MatrixResult } from './matrix'
 import type { PairedResult } from './paired'
+import { firstPlayerSplit, wilsonInterval, type SplitSide } from './stats'
 import { COMMIT_ID } from '../buildIdentity'
 
 /**
@@ -73,6 +74,10 @@ const SCHEMA = `
     wins_a      INTEGER NOT NULL,
     win_rate_a  REAL    NOT NULL,
     avg_margin  REAL    NOT NULL,
+    -- The on-play half only. The on-draw half is the remainder of games and wins_a, so the two
+    -- sub-rates cannot drift from win_rate_a.
+    games_on_play INTEGER NOT NULL DEFAULT 0,
+    wins_on_play  INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (run_id, deck_a, deck_b)
   );
   CREATE TABLE IF NOT EXISTS experiments (
@@ -135,6 +140,11 @@ const SCHEMA = `
 const MIGRATIONS: Array<{ table: string; column: string; ddl: string }> = [
   { table: 'runs', column: 'decks', ddl: `ALTER TABLE runs ADD COLUMN decks TEXT NOT NULL DEFAULT 'mirror'` },
   { table: 'runs', column: 'games_per_shard', ddl: 'ALTER TABLE runs ADD COLUMN games_per_shard INTEGER' },
+  // A matrix saved before the first-player split has neither half, which the zero default makes
+  // indistinguishable from "the row deck never moved first". Every reader treats an empty on-play
+  // half as absent rather than as a measured 0%, which is what keeps an old run readable.
+  { table: 'matchups', column: 'games_on_play', ddl: 'ALTER TABLE matchups ADD COLUMN games_on_play INTEGER NOT NULL DEFAULT 0' },
+  { table: 'matchups', column: 'wins_on_play', ddl: 'ALTER TABLE matchups ADD COLUMN wins_on_play INTEGER NOT NULL DEFAULT 0' },
 ]
 
 /** Apply any column a live database is missing. Reading the schema is cheaper than tracking a version
@@ -302,11 +312,14 @@ export function saveMatrix(db: DatabaseSync, result: MatrixResult): string {
   ).run(runId, startedAt, result.commitId, result.model, result.deckCount, result.gamesPerCell, result.seed, result.dropped)
 
   const insert = db.prepare(
-    `INSERT INTO matchups (run_id, deck_a, deck_b, leader_a, base_a, leader_b, base_b, games, wins_a, win_rate_a, avg_margin)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO matchups (run_id, deck_a, deck_b, leader_a, base_a, leader_b, base_b, games, wins_a, win_rate_a, avg_margin, games_on_play, wins_on_play)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
   for (const c of result.cells) {
-    insert.run(runId, c.aLabel, c.bLabel, c.leaderA, c.baseA, c.leaderB, c.baseB, c.games, c.winsA, c.winRateA, c.avgMargin)
+    insert.run(
+      runId, c.aLabel, c.bLabel, c.leaderA, c.baseA, c.leaderB, c.baseB,
+      c.games, c.winsA, c.winRateA, c.avgMargin, c.gamesOnPlay, c.winsOnPlay,
+    )
   }
   return runId
 }
@@ -316,14 +329,74 @@ export interface StrengthRow {
   winRate: number
   avgMargin: number
   games: number
+  /** Win rate over the games this key moved first, or null when it never did (an older run). */
+  onPlay: number | null
+  onDraw: number | null
+  /** `onPlay - onDraw`: how much this deck or leader depends on the opening. */
+  gap: number | null
+  /** Half-width of the 95% band on the gap. Each half is half the sample, so this is wide. */
+  gapCi: number | null
 }
 
+/**
+ * A group's strength, with the first-player split.
+ *
+ * **The split is averaged the same way the overall rate is**, per cell rather than per game, so the
+ * two halves average back to `win_rate` instead of drifting from it. A cell that never played a half
+ * contributes NULL rather than 0%, which `AVG` skips: a zero would read as a measured rout.
+ *
+ * The band is a different question and takes the pooled game count, because that is the sample the
+ * rate was estimated from.
+ */
 function strength(db: DatabaseSync, column: string, runId: string): StrengthRow[] {
   const rows = db.prepare(
-    `SELECT ${column} AS key, AVG(win_rate_a) AS win_rate, AVG(avg_margin) AS avg_margin, SUM(games) AS games
+    `SELECT ${column} AS key, AVG(win_rate_a) AS win_rate, AVG(avg_margin) AS avg_margin, SUM(games) AS games,
+            AVG(CASE WHEN games_on_play > 0 THEN CAST(wins_on_play AS REAL) / games_on_play END) AS on_play,
+            AVG(CASE WHEN games - games_on_play > 0
+                     THEN CAST(wins_a - wins_on_play AS REAL) / (games - games_on_play) END) AS on_draw,
+            SUM(games_on_play) AS games_on_play, SUM(games - games_on_play) AS games_on_draw
      FROM matchups WHERE run_id = ? GROUP BY ${column} ORDER BY win_rate DESC`,
   ).all(runId) as Record<string, unknown>[]
-  return rows.map(r => ({ key: str(r.key), winRate: num(r.win_rate), avgMargin: num(r.avg_margin), games: num(r.games) }))
+  return rows.map(r => {
+    const onPlay = r.on_play === null ? null : num(r.on_play)
+    const onDraw = r.on_draw === null ? null : num(r.on_draw)
+    const gamesOnPlay = num(r.games_on_play)
+    const gamesOnDraw = num(r.games_on_draw)
+    // Wilson reads only wins/n, so handing it the group's averaged rate times its games gives the band
+    // around the rate actually being reported rather than around a second, pooled one.
+    const split = firstPlayerSplit((onPlay ?? 0) * gamesOnPlay, gamesOnPlay, (onDraw ?? 0) * gamesOnDraw, gamesOnDraw)
+    return {
+      key: str(r.key),
+      winRate: num(r.win_rate),
+      avgMargin: num(r.avg_margin),
+      games: num(r.games),
+      onPlay,
+      onDraw,
+      gap: onPlay === null || onDraw === null ? null : onPlay - onDraw,
+      gapCi: onPlay === null || onDraw === null ? null : split.gapCi,
+    }
+  })
+}
+
+/**
+ * How often the deck that moved first won, over the whole run.
+ *
+ * **Each game contributes exactly one observation.** A game where deck i moved first is the on-play
+ * half of cell (i,j) and the on-draw half of cell (j,i), so summing the on-play halves counts it once.
+ * A mirror pair is the one exception: both sides are the same deck, only one cell is emitted, and it
+ * contributes the half of its games that deck moved first in. That costs 72 pairs of 2,628, and the
+ * alternative (counting the mirror twice) would weight mirrors double.
+ *
+ * This is the tightest number the matrix produces: every game is in it, where a single deck's gap is
+ * measured over its row alone.
+ */
+export function firstPlayerAdvantage(db: DatabaseSync, runId: string): SplitSide {
+  const r = db.prepare(
+    `SELECT SUM(wins_on_play) AS wins, SUM(games_on_play) AS games FROM matchups WHERE run_id = ?`,
+  ).get(runId) as Record<string, unknown> | undefined
+  const wins = r === undefined || r.wins === null ? 0 : num(r.wins)
+  const games = r === undefined || r.games === null ? 0 : num(r.games)
+  return { ...wilsonInterval(wins, games), wins, games }
 }
 
 /** Each deck's average win rate across all opponents (its overall strength under this model). */
