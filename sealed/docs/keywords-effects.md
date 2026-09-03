@@ -17,6 +17,12 @@ Each sums, in order:
 Combat and every defeat check go through these helpers, so a keyword granted by an aura or a
 "this phase" buff shapes attack targeting for free.
 
+Step 1 is narrower than the source data suggests. SWUDB's `Keywords` is a union over everything a
+card's text mentions, so a card that gains a keyword conditionally, or hands one to other units,
+ships it as a printed keyword of its own. Only what is printed on the card belongs in step 1:
+`cardDataCorrections.ts` strips the rest, and the ability grants it back where it belongs, at step 3
+or 4. A wrongly printed Sentinel is the one that bites, since it redirects enemy attacks.
+
 ### Which cards supply a unit's abilities
 
 `abilityCardIds(unit)` is the single definition: the unit's own card, each attached upgrade, and any
