@@ -48,7 +48,8 @@ moved first. Self-play controls through it read 50.0%, 48.8% and 46.3% on three 
 
 `--decisions`, `--terms`, `--lethal` and `--cost` sample differently from every mode above. They play a
 mirror with **one** AI driving both sides, and record whatever the active player faces, so the unit is
-a decision rather than a game and both seats are sampled by construction.
+a decision rather than a game and both seats are sampled by construction. `--sweep` plays the same
+single-agent mirror, counting cards rather than decisions, and the same rule applies to it.
 
 **`seating` therefore does not apply to them, and using it would be wrong.** It balances seat against
 first player because two different agents are being compared and one of them would otherwise keep a
@@ -56,14 +57,17 @@ seat. Here there is no second agent: a seat asymmetry cannot accrue to anybody, 
 decision from both seats is counted.
 
 **The first player is the one variable, and it is balanced across the whole corpus** by
-`firstPlayerFor(index)`, indexed by the corpus-wide game number. Indexing within a deck instead
-balances nothing at one game per deck, which is the default for three of these four modes: the
-alternation never reaches its second branch and every game opens the same way. Each mode prints how
-many of its games each side opened, so the balance is visible rather than assumed.
+`firstPlayerFor(index)`, indexed by the corpus-wide game number. Indexing within a deck balances
+nothing at one game per deck, which is the default for `--terms` and `--lethal`, because the
+alternation never reaches its second branch and every game opens the same way; it is also uneven at
+any odd count, which `--decisions` (three) and `--sweep` (five) both are. Indexed across the corpus it
+holds at any games-per-deck. Each mode prints how many of its games each side opened, so the balance
+is visible rather than assumed.
 
 Whether a decision is taken with the initiative or without it is a real property of a position, so a
 corpus that only ever opens one way is a sample of half the game. Balancing it was measured across
-three seeds on four `--decisions` figures: three moved by less than the seed-to-seed spread, and how
+three seeds on four `--decisions` figures under `greedy`: three moved by less than the seed-to-seed
+spread, and how
 often a side is fully walled fell about a point on every seed. **A single seed's decision rates are
 therefore not evidence of a change on their own**, since the spread between seeds is the same size as
 the effect: quote several.
