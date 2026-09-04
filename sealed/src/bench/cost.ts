@@ -11,6 +11,7 @@ import { greedyAi } from '../ai/greedyAi'
 import { resolveAi, aiNames } from '../ai/registry'
 import { COMMIT_ID } from '../buildIdentity'
 import { buildCoverageDecks } from './coverageDecks'
+import { firstPlayerFor } from './seating'
 
 /**
  * What a search configuration costs per decision (#425).
@@ -58,6 +59,10 @@ export interface CostRow {
 export interface CostReport {
   commitId: string
   states: number
+  /** Games the states were drawn from, and how many of those the `player` seat opened. A game
+   *  contributes every decision in it, so a corpus spans far fewer games than it holds states. */
+  games: number
+  gamesPlayerFirst: number
   /**
    * Which AI the ratios are against.
    *
@@ -78,24 +83,43 @@ function baselineFor(timed: Array<{ ai: string; msPerDecision: number }>): { ai:
   return { ai: cheapest.ai, ms: cheapest.msPerDecision }
 }
 
+/** The fixed corpus, with the composition figures needed to say what it is a sample of. */
+export interface Corpus {
+  states: GameState[]
+  /** Games started to fill it. Fewer than the deck count when `limit` is reached first. */
+  games: number
+  /** Of those, how many the `player` seat opened. Half, give or take the odd game. */
+  gamesPlayerFirst: number
+}
+
 /**
  * Real positions an AI would actually be asked to think about.
  *
  * Setup decisions are excluded because `setupAi` makes them and never consults the evaluation, so
  * timing an AI on them would dilute the figure with positions it does not think about at all.
+ *
+ * **The first player alternates by deck.** It used to be pinned to `player`, which left every
+ * position in the corpus descending from the same opening. That never biased a `--cost` ratio, since
+ * one corpus is replayed identically by every configuration, but `--budget` reads *rates* off these
+ * same positions, and a rate over a corpus that only opens one way is a rate over half the game.
  */
-export function collectCorpus(limit: number, seed: number): GameState[] {
+export function collectCorpus(limit: number, seed: number): Corpus {
   const { decks } = buildCoverageDecks(POOL, seed)
   const cardDb = buildCardDb(POOL)
   const states: GameState[] = []
   let next = seed
+  let games = 0
+  let gamesPlayerFirst = 0
 
-  for (const deck of decks) {
+  for (const [i, deck] of decks.entries()) {
     if (states.length >= limit) break
     next = nextSeed(next)
     let shuffleSeed = next
+    const firstPlayer = firstPlayerFor(i)
+    games++
+    if (firstPlayer === 'player') gamesPlayerFirst++
     let state = initGame(deck, deck, cardDb, {
-      firstPlayer: 'player',
+      firstPlayer,
       shuffle: <T,>(arr: T[]): T[] => { shuffleSeed = nextSeed(shuffleSeed); return seededShuffle(arr, shuffleSeed) },
       rngSeed: next,
     })
@@ -110,11 +134,11 @@ export function collectCorpus(limit: number, seed: number): GameState[] {
       steps++
     }
   }
-  return states
+  return { states, games, gamesPlayerFirst }
 }
 
 export function runCost(config: CostConfig): CostReport {
-  const corpus = collectCorpus(config.states, config.seed)
+  const { states: corpus, games, gamesPlayerFirst } = collectCorpus(config.states, config.seed)
   const names = config.ais ?? aiNames()
 
   const timed = names.map(name => {
@@ -132,6 +156,8 @@ export function runCost(config: CostConfig): CostReport {
   return {
     commitId: COMMIT_ID,
     states: corpus.length,
+    games,
+    gamesPlayerFirst,
     baseline: baseline.ai,
     rows: timed.map(t => ({ ...t, relative: t.msPerDecision / baseline.ms })),
   }

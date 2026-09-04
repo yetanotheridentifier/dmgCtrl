@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { seating, resultForA, movedFirstForA } from '../bench/seating'
+import { seating, resultForA, movedFirstForA, firstPlayerFor } from '../bench/seating'
 
 /**
  * Seat assignment for a two-AI comparison.
@@ -108,5 +108,33 @@ describe('movedFirstForA', () => {
    */
   it('is uneven over a partial cycle, in a known direction', () => {
     expect([0, 1, 2].map(g => movedFirstForA(seating(g)))).toEqual([true, false, false])
+  })
+})
+
+/**
+ * Who moves first in a **single-agent corpus**: one AI driving both seats, every decision
+ * instrumented whoever takes it. `--decisions`, `--terms`, `--lethal` and `--cost` all sample that
+ * way, and `seating` does not apply to them: there is no aiA to pin to a seat, and a seat asymmetry
+ * averages out because both seats' decisions are collected.
+ *
+ * The first player is a variable there, and the only one. It must be balanced across the **whole**
+ * corpus, which is what indexing by the corpus-wide game number buys: alternating within a deck
+ * instead balanced nothing at one game per deck, which is the default for three of those four modes.
+ */
+describe('firstPlayerFor', () => {
+  it('alternates every game', () => {
+    expect([0, 1, 2, 3].map(firstPlayerFor)).toEqual(['player', 'opponent', 'player', 'opponent'])
+  })
+
+  /** The property the modes depend on: over any even sample, neither side opens more often. */
+  it('is balanced over any even count', () => {
+    for (const n of [2, 8, 44, 200]) {
+      const first = Array.from({ length: n }, (_, i) => firstPlayerFor(i))
+      expect(first.filter(p => p === 'player'), `n=${n}`).toHaveLength(n / 2)
+    }
+  })
+
+  it('is a pure function of the index', () => {
+    expect(firstPlayerFor(37)).toBe(firstPlayerFor(37))
   })
 })

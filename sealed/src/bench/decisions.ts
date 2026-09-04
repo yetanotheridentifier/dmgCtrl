@@ -20,6 +20,7 @@ import { resolveAi } from '../ai/registry'
 import { setupAi } from '../ai/setupAi'
 import { role, reachSteady, canFinishNow, canFinishThisAction, type Role } from '../ai/race'
 import { buildCoverageDecks } from './coverageDecks'
+import { firstPlayerFor } from './seating'
 
 /**
  * Decision-quality diagnostics (#393).
@@ -1079,6 +1080,9 @@ export interface DecisionReport {
   commitId: string
   ai: string
   games: number
+  /** Games opened by the `player` seat. Half of `games`, and the check that the corpus samples both
+   *  openings rather than merely intending to. See `firstPlayerFor`. */
+  gamesPlayerFirst: number
   stats: DecisionStat[]
   ties: TieStat
   initiativeHorizon: InitiativeHorizonStat
@@ -1220,6 +1224,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   const plays = empty()
   const answering = empty()
   let games = 0
+  let gamesPlayerFirst = 0
   let banked = 0
   let skipped = 0
   let bankedPool = 0
@@ -1313,8 +1318,12 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       const seed = nextSeed(config.seed + d * 37 + g)
       const shuffleSeed = { v: seed }
       const shuffle = <T,>(arr: T[]): T[] => { shuffleSeed.v = nextSeed(shuffleSeed.v); return seededShuffle(arr, shuffleSeed.v) }
-      let s: GameState = initGame(deck, deck, cardDb, { firstPlayer: g % 2 === 0 ? 'player' : 'opponent', shuffle, rngSeed: seed })
+      // Indexed across the whole corpus, not within the deck: a within-deck alternation only balances
+      // when games-per-deck is even, and this mode's default of three ran 2:1 on the same opening.
+      const firstPlayer = firstPlayerFor(d * config.gamesPerDeck + g)
+      let s: GameState = initGame(deck, deck, cardDb, { firstPlayer, shuffle, rngSeed: seed })
       games++
+      if (firstPlayer === 'player') gamesPlayerFirst++
       passes.games++
       let lastRole: Exclude<Role, 'neutral'> | null = null
       let sampledRound = 0
@@ -1842,6 +1851,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
     commitId: COMMIT_ID,
     ai: config.aiName ?? 'greedy',
     games,
+    gamesPlayerFirst,
     stats: [
       stat('regroup: which card', resourcing),
       stat('initiative: take it', initiative),

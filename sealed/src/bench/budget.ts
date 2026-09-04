@@ -65,7 +65,7 @@ export interface BudgetReport {
 }
 
 export function runBudget(config: BudgetConfig): BudgetReport {
-  const corpus = collectCorpus(config.states, config.seed)
+  const { states: corpus } = collectCorpus(config.states, config.seed)
   const rows: BudgetRow[] = []
   const skipped: string[] = []
 

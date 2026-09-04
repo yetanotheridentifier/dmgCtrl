@@ -44,6 +44,30 @@ head-to-head result go through: it went on pinning `aiA` to the `player` seat an
 moved first. Self-play controls through it read 50.0%, 48.8% and 46.3% on three seed sets, pooling to
 **48.3%** where an unbiased harness gives 50. It uses `seating` now.
 
+### The instrumented corpora balance the opening, not the seat
+
+`--decisions`, `--terms`, `--lethal` and `--cost` sample differently from every mode above. They play a
+mirror with **one** AI driving both sides, and record whatever the active player faces, so the unit is
+a decision rather than a game and both seats are sampled by construction.
+
+**`seating` therefore does not apply to them, and using it would be wrong.** It balances seat against
+first player because two different agents are being compared and one of them would otherwise keep a
+seat. Here there is no second agent: a seat asymmetry cannot accrue to anybody, because every
+decision from both seats is counted.
+
+**The first player is the one variable, and it is balanced across the whole corpus** by
+`firstPlayerFor(index)`, indexed by the corpus-wide game number. Indexing within a deck instead
+balances nothing at one game per deck, which is the default for three of these four modes: the
+alternation never reaches its second branch and every game opens the same way. Each mode prints how
+many of its games each side opened, so the balance is visible rather than assumed.
+
+Whether a decision is taken with the initiative or without it is a real property of a position, so a
+corpus that only ever opens one way is a sample of half the game. Balancing it was measured across
+three seeds on four `--decisions` figures: three moved by less than the seed-to-seed spread, and how
+often a side is fully walled fell about a point on every seed. **A single seed's decision rates are
+therefore not evidence of a change on their own**, since the spread between seeds is the same size as
+the effect: quote several.
+
 ### Every harness reports its win rate split by who moved first
 
 Because seat and first player vary independently, every result already knows whether aiA moved first,
@@ -294,6 +318,11 @@ states a depth-3 minimax measured **5.8 ms/decision**; at 200 states the same co
 **ratios** as well as the absolutes, because a shallow and a deep search converge when there is
 nothing to search. Filling from a wider spread of decks rather than consecutively would reduce this
 and is worth doing before the next large sweep.
+
+**200 states is only three games.** A game contributes every decision in it, so the corpus is far
+coarser in games than its state count suggests, and the readout prints both alongside how many of
+those games each side opened. That coarseness is the reason the openings alternate by deck rather than
+by game: with three games there is no finer grain available.
 
 Do **not** take a per-decision cost from a bench wall clock. A game's clock includes the opponent's
 cheap decisions and the engine's own work, which diluted the same ratio to 12x when it was really 34x,
@@ -833,12 +862,27 @@ This is the sharpest diagnostic in the harness, because a blind spot is invisibl
 term the evaluation lacks entirely shows up here as a 100% tie rate on the decision it should be
 deciding, long before it shows up as lost games.
 
-Current rates for the deployed model: answering a choice 12.4%, which card to play 11.5%, initiative
-8.2%, which attack 4.8%, regroup card choice 2.9%.
+Current rates for the deployed model (`beam-reply`, one game per coverage deck, seeds 4242 to 4244):
 
-**Read the rate against how often the decision comes up**, or the ordering misleads. Initiative is
-offered about 43 times a game, so 8.2% is roughly 3.5 ties a game; answering a choice comes up about 14
-times for 1.7.
+| decision | search | 1-ply | offered per game |
+| --- | --- | --- | --- |
+| answering a choice | 16.2 - 17.1% | 16.9 - 19.8% | ~15 |
+| which card to play | 10.4 - 13.7% | 5.6 - 8.7% | ~24 |
+| which attack | 3.9 - 6.2% | 0.8 - 2.8% | ~32 |
+| regroup: which card | 2.4 - 2.9% | 0.4% | ~12 |
+| initiative: take it | 2.0 - 2.1% | 9.9 - 10.9% | ~41 |
+
+The ranges are the spread across the three seeds, not confidence intervals: a single seed of this
+size is not evidence of a change on its own.
+
+**The two columns diverge in both directions, and the gap is the point.** Initiative is the extreme
+case: one ply flips a coin on 10.4% of offers where the deployed search ties on 2.0%, so nearly all of
+those are ties a search can separate. `which card to play` and `which attack` go the other way, where
+the search ties moves one ply scores differently, because their lines converge inside the horizon.
+
+**Read the rate against how often the decision comes up**, or the ordering misleads. Answering a
+choice comes up about 15 times a game, so 16.7% is roughly 2.5 coin flips a game, the most of any
+kind. Initiative is offered about 41 times, but at 2.0% that is about 0.85 a game.
 
 ### The initiative rate compares against the best ALTERNATIVE
 
@@ -1343,6 +1387,8 @@ eight of eighteen modules were missing.
 - `bench/seating.ts` seat and first-player alternation on independent axes, so four games cover all
   four combinations once and neither advantage settles on one side. `movedFirstForA` is the one place
   aiA's seat and the first player are read together, which every first-player split goes through.
+  `firstPlayerFor` is the separate rule for single-agent corpora, where the seat is not a variable and
+  only the opening needs balancing.
 
 ### Deck sets and whole-pool work
 

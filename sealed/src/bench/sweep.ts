@@ -9,6 +9,7 @@ import { buildCoverageDecks } from './coverageDecks'
 import { compareCardIds } from './playCoverage'
 import { playGame } from './selfPlay'
 import type { DropReason, GameResult } from './selfPlay'
+import { firstPlayerFor } from './seating'
 
 /**
  * The whole-pool fuzzing sweep (#408): play games across the coverage deck set so every card in the
@@ -111,7 +112,9 @@ export function runSweep(config: SweepConfig): SweepReport {
           aiPlayer: ai,
           aiOpponent: ai,
           seed,
-          firstPlayer: g % 2 === 0 ? 'player' : 'opponent',
+          // Corpus-wide, not within the deck: a within-deck alternation leaves the odd default of
+          // five games per deck running 3:2 on the same opening, and one game per deck running 5:0.
+          firstPlayer: firstPlayerFor(gameIndex),
           stepCeiling: config.stepCeiling,
           timeoutMs: config.timeoutMs,
           trackCoverage: true,

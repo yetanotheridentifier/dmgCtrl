@@ -19,6 +19,7 @@ import { makeQuiescent } from '../ai/search'
 import { role } from '../ai/race'
 import { COMMIT_ID } from '../buildIdentity'
 import { buildCoverageDecks } from './coverageDecks'
+import { firstPlayerFor } from './seating'
 import { SCALAR_KEYS, weightsFrom, type WeightKey } from './tune'
 
 /**
@@ -138,6 +139,9 @@ export interface TermStat {
 export interface TermReport {
   commitId: string
   games: number
+  /** Games opened by the `player` seat. Half of `games`, and the check that the corpus samples both
+   *  openings rather than merely intending to. See `firstPlayerFor`. */
+  gamesPlayerFirst: number
   /** Decisions with a real choice. A single forced move cannot be mis-ranked against anything. */
   decisions: number
   stats: TermStat[]
@@ -286,6 +290,7 @@ export function runTerms(config: TermConfig): TermReport {
 
   const acc = new Map<WeightKey, Acc>(keys.map(k => [k, emptyAcc()]))
   let games = 0
+  let gamesPlayerFirst = 0
   let decisions = 0
 
   decks.forEach((deck, d) => {
@@ -293,12 +298,12 @@ export function runTerms(config: TermConfig): TermReport {
       const seed = nextSeed(config.seed + d * 37 + g)
       const shuffleSeed = { v: seed }
       const shuffle = <T,>(arr: T[]): T[] => { shuffleSeed.v = nextSeed(shuffleSeed.v); return seededShuffle(arr, shuffleSeed.v) }
-      let s: GameState = initGame(deck, deck, cardDb, {
-        firstPlayer: g % 2 === 0 ? 'player' : 'opponent',
-        shuffle,
-        rngSeed: seed,
-      })
+      // Indexed across the whole corpus, not within the deck: at one game per deck, which is this
+      // mode's default, a within-deck alternation never fires and every game opens the same way.
+      const firstPlayer = firstPlayerFor(d * config.gamesPerDeck + g)
+      let s: GameState = initGame(deck, deck, cardDb, { firstPlayer, shuffle, rngSeed: seed })
       games++
+      if (firstPlayer === 'player') gamesPlayerFirst++
 
       for (let i = 0; i < ceiling && s.winner === null; i++) {
         const moves = legalMoves(s)
@@ -390,5 +395,5 @@ export function runTerms(config: TermConfig): TermReport {
     }
   })
 
-  return { commitId: COMMIT_ID, games, decisions, stats }
+  return { commitId: COMMIT_ID, games, gamesPlayerFirst, decisions, stats }
 }
