@@ -333,6 +333,13 @@ search holds a larger frontier per root and should be expected to want more.
 --games 80` plays 800 games, and takes as long as one shard needs for 80. Reading it as the total
 turned a 30-minute estimate into 4.3 hours.
 
+**Shard size also decides what an interruption costs.** Every shard starts at once and writes its
+result only when it finishes, so `--games` is the only banking granularity there is: nothing at all is
+on disk until shards begin landing. At 168 games a shard the first results land inside two hours; at
+2,000 they land at the end of a 20-hour run, and anything that kills the run before then loses all of
+it. A 24,000-game A/B was lost exactly that way at 7h50m. **Size the shard to land within an hour or
+two, and buy more games by adding shards rather than by lengthening each one** (see waves, below).
+
 **Keep `--games` a multiple of four.** Seat and first player cycle on independent axes with a period of
 `SEATING_CYCLE = 4`, so a remainder leaves a tail of games covering only some of the four
 combinations. A pre-flight check warns and names the two nearest safe values. It biases an arm and its
@@ -428,6 +435,9 @@ npm run bench --prefix sealed -- --status
 
 Read-only, and safe at any time: it starts nothing. Per run it reports shards done of total, games
 played of total, **measured** seconds per game, and a projected finish, all from files already on disk.
+The rate and the finish come from shards that have **landed**, so a run whose first shard is still
+playing reports `0 of N` with `rate unknown`: see shard sizing above, since that is what decides how
+long a run stays unreadable.
 
 Every run also rewrites `bench-results/STATUS.md` as each shard lands, so a long run can be watched
 from an open editor tab rather than by asking.
@@ -458,8 +468,12 @@ bench-results/shards/<aiA>__vs__<aiB>__g<games>__s<seed>/
   seed-4910.json    written the moment it finishes
 ```
 
-**The log is the only progress signal there is.** A shard prints its report at the end and nothing
-before, so `tail -f` on a log file is how a multi-day run is distinguished from a hung one.
+**A shard in flight produces no signal at all.** It prints its report when its games are done and
+nothing before, so its log stays **empty** for the whole run. A 0-byte log after eight hours means
+"not finished", and from the files alone that is indistinguishable from hung. `--status` reports a
+measured rate and a projected finish only once a shard has landed; before that a run shows `0 of N`
+with `rate unknown`. Until that changes, what separates a working run from a stuck one is that its
+worker processes are still burning CPU.
 
 **Re-running the identical command resumes.** Completed shards are skipped, failed ones repeat, and
 the run announces `RESUMING: N shard(s) already complete`. A shard counts as done only if it exited
@@ -473,6 +487,23 @@ resumed with fewer shards (memory pressure being the obvious reason) without orp
 wrong is silent: the first implementation dropped the banked results, so a resumed run reported a win
 rate over only the shards it had just re-run, with a plausibly wider interval and no indication that
 anything was missing. `mergeShardResults` is a separate tested function for that reason.
+
+**Take a long measurement in waves.** Because the shard count is not part of the run's identity,
+re-running with a **larger** `--shard` banks what is already done and plays only the new seeds,
+extending the run rather than restarting it:
+
+```bash
+npm run bench --prefix sealed -- --shard 12 --games 168 --seed 9101 beam-reply beam-reply   # wave 1
+npm run bench --prefix sealed -- --shard 24 --games 168 --seed 9101 beam-reply beam-reply   # wave 2
+```
+
+Wave 2 announces `RESUMING: 12 shard(s) already complete, 12 to run` and pools all 24, the
+first-player split included. Each wave costs the same wall clock as the first, and a crash costs one
+wave rather than the run.
+
+**`--games` and `--seed` must stay identical between waves.** Both are part of the run key, so
+changing either starts a separate run and silently leaves the earlier work unpooled, which looks like
+a fresh run rather than like a mistake. Only `--shard` changes.
 
 ### Mechanics that broke the first time
 
