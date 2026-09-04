@@ -18,6 +18,7 @@ import {
 } from '../ai/lethal'
 import { COMMIT_ID } from '../buildIdentity'
 import { buildCoverageDecks } from './coverageDecks'
+import { firstPlayerFor } from './seating'
 
 /**
  * Sizing the lethal solver (#433): is it worth wiring into the bot?
@@ -127,6 +128,9 @@ export interface GateCheck {
 export interface LethalReport {
   commitId: string
   games: number
+  /** Games opened by the `player` seat. Half of `games`, and the check that the corpus samples both
+   *  openings rather than merely intending to. See `firstPlayerFor`. */
+  gamesPlayerFirst: number
   decisions: number
   gate: GateCheck
   /** What the solver was allowed, so a rate can be compared with another run. */
@@ -181,6 +185,7 @@ export function runLethal(config: LethalConfig): LethalReport {
   const gate: GateCheck = { skipped: 0, skippedWithLethal: 0, skippedCostingAWin: 0 }
   const gateConfig = config.gate ?? DEFAULT_LETHAL_GATE
   let games = 0
+  let gamesPlayerFirst = 0
   let decisions = 0
   let solverMs = 0
   let solverCalls = 0
@@ -190,12 +195,12 @@ export function runLethal(config: LethalConfig): LethalReport {
       const seed = nextSeed(config.seed + d * 37 + g)
       const shuffleSeed = { v: seed }
       const shuffle = <T,>(arr: T[]): T[] => { shuffleSeed.v = nextSeed(shuffleSeed.v); return seededShuffle(arr, shuffleSeed.v) }
-      let s: GameState = initGame(deck, deck, cardDb, {
-        firstPlayer: g % 2 === 0 ? 'player' : 'opponent',
-        shuffle,
-        rngSeed: seed,
-      })
+      // Indexed across the whole corpus, not within the deck: at one game per deck, which is this
+      // mode's default, a within-deck alternation never fires and every game opens the same way.
+      const firstPlayer = firstPlayerFor(d * config.gamesPerDeck + g)
+      let s: GameState = initGame(deck, deck, cardDb, { firstPlayer, shuffle, rngSeed: seed })
       games++
+      if (firstPlayer === 'player') gamesPlayerFirst++
 
       for (let i = 0; i < ceiling && s.winner === null; i++) {
         const moves = legalMoves(s)
@@ -268,6 +273,7 @@ export function runLethal(config: LethalConfig): LethalReport {
   return {
     commitId: COMMIT_ID,
     games,
+    gamesPlayerFirst,
     decisions,
     solverDepth,
     solverNodes,

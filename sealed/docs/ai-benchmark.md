@@ -44,6 +44,28 @@ head-to-head result go through: it went on pinning `aiA` to the `player` seat an
 moved first. Self-play controls through it read 50.0%, 48.8% and 46.3% on three seed sets, pooling to
 **48.3%** where an unbiased harness gives 50. It uses `seating` now.
 
+### The instrumented corpora balance the opening, not the seat
+
+`--decisions`, `--terms`, `--lethal` and `--cost` sample differently from every mode above. They play a
+mirror with **one** AI driving both sides, and record whatever the active player faces, so the unit is
+a decision rather than a game and both seats are sampled by construction.
+
+**`seating` therefore does not apply to them, and using it would be wrong.** It balances seat against
+first player because two different agents are being compared and one of them would otherwise keep a
+seat. Here there is no second agent: a seat asymmetry cannot accrue to anybody, because every
+decision from both seats is counted.
+
+**The first player is the one variable, and it is balanced across the whole corpus** by
+`firstPlayerFor(index)`, indexed by the corpus-wide game number. Indexing within a deck instead
+balances nothing at one game per deck, which is the default for three of these four modes: the
+alternation never reaches its second branch and every game opens the same way. Each mode prints how
+many of its games each side opened, so the balance is visible rather than assumed.
+
+Whether a decision is taken with the initiative or without it is a real property of a position, so a
+corpus that only ever opens one way is a sample of half the game. Measured over three seeds, correcting
+it moves most reported rates by less than the seed-to-seed spread; the exception is how often a side is
+fully walled, which fell about a point on every seed.
+
 ### Every harness reports its win rate split by who moved first
 
 Because seat and first player vary independently, every result already knows whether aiA moved first,
@@ -294,6 +316,11 @@ states a depth-3 minimax measured **5.8 ms/decision**; at 200 states the same co
 **ratios** as well as the absolutes, because a shallow and a deep search converge when there is
 nothing to search. Filling from a wider spread of decks rather than consecutively would reduce this
 and is worth doing before the next large sweep.
+
+**200 states is only three games.** A game contributes every decision in it, so the corpus is far
+coarser in games than its state count suggests, and the readout prints both alongside how many of
+those games each side opened. That coarseness is the reason the openings alternate by deck rather than
+by game: with three games there is no finer grain available.
 
 Do **not** take a per-decision cost from a bench wall clock. A game's clock includes the opponent's
 cheap decisions and the engine's own work, which diluted the same ratio to 12x when it was really 34x,
@@ -1343,6 +1370,8 @@ eight of eighteen modules were missing.
 - `bench/seating.ts` seat and first-player alternation on independent axes, so four games cover all
   four combinations once and neither advantage settles on one side. `movedFirstForA` is the one place
   aiA's seat and the first player are read together, which every first-player split goes through.
+  `firstPlayerFor` is the separate rule for single-agent corpora, where the seat is not a variable and
+  only the opening needs balancing.
 
 ### Deck sets and whole-pool work
 

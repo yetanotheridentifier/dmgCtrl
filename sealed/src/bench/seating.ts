@@ -43,6 +43,24 @@ export function movedFirstForA(seats: Seating): boolean {
   return seats.firstPlayer === seatForA(seats)
 }
 
+/**
+ * Who moves first in game `index` of a **single-agent corpus**: one AI driving both seats, with every
+ * decision instrumented whoever takes it. `--decisions`, `--terms`, `--lethal` and `--cost` all
+ * sample that way.
+ *
+ * **`seating` deliberately does not apply there.** It balances two axes because two different agents
+ * are being compared and one of them would otherwise keep a seat. Here there is no aiA to pin, and a
+ * seat asymmetry averages out on its own because both seats' decisions are collected. The first
+ * player is the only variable left, so it alternates every game rather than every two.
+ *
+ * **Index across the whole corpus, not within a deck.** Alternating on the game number inside each
+ * deck balanced nothing at one game per deck, which is the default for three of those four modes: the
+ * expression never reached its second branch and every game opened the same way.
+ */
+export function firstPlayerFor(index: number): PlayerId {
+  return index % 2 === 0 ? 'player' : 'opponent'
+}
+
 /** A completed game as `aiA` experienced it. */
 export interface OutcomeForA {
   won: boolean

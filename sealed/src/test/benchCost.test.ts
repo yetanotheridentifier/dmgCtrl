@@ -74,14 +74,14 @@ describe('the corpus', () => {
    * AIs. It is therefore collected once, with one fixed driver, before any timing starts.
    */
   it('is identical for a given seed', () => {
-    const a = collectCorpus(20, 7)
-    const b = collectCorpus(20, 7)
+    const a = collectCorpus(20, 7).states
+    const b = collectCorpus(20, 7).states
     expect(a.length).toBe(b.length)
     expect(JSON.stringify(a)).toBe(JSON.stringify(b))
   })
 
   it('differs by seed, so one lucky deck cannot define the cost', () => {
-    expect(JSON.stringify(collectCorpus(20, 7))).not.toBe(JSON.stringify(collectCorpus(20, 99)))
+    expect(JSON.stringify(collectCorpus(20, 7).states)).not.toBe(JSON.stringify(collectCorpus(20, 99).states))
   })
 
   /**
@@ -89,7 +89,7 @@ describe('the corpus', () => {
    * would dilute the number with positions it does not actually think about.
    */
   it('holds only positions an AI is asked to think about', () => {
-    for (const state of collectCorpus(20, 7)) {
+    for (const state of collectCorpus(20, 7).states) {
       expect(state.phase).not.toBe('setup')
       expect(state.winner).toBeNull()
     }
