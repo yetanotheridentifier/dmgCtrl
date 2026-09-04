@@ -62,9 +62,11 @@ alternation never reaches its second branch and every game opens the same way. E
 many of its games each side opened, so the balance is visible rather than assumed.
 
 Whether a decision is taken with the initiative or without it is a real property of a position, so a
-corpus that only ever opens one way is a sample of half the game. Measured over three seeds, correcting
-it moves most reported rates by less than the seed-to-seed spread; the exception is how often a side is
-fully walled, which fell about a point on every seed.
+corpus that only ever opens one way is a sample of half the game. Balancing it was measured across
+three seeds on four `--decisions` figures: three moved by less than the seed-to-seed spread, and how
+often a side is fully walled fell about a point on every seed. **A single seed's decision rates are
+therefore not evidence of a change on their own**, since the spread between seeds is the same size as
+the effect: quote several.
 
 ### Every harness reports its win rate split by who moved first
 
@@ -860,12 +862,27 @@ This is the sharpest diagnostic in the harness, because a blind spot is invisibl
 term the evaluation lacks entirely shows up here as a 100% tie rate on the decision it should be
 deciding, long before it shows up as lost games.
 
-Current rates for the deployed model: answering a choice 12.4%, which card to play 11.5%, initiative
-8.2%, which attack 4.8%, regroup card choice 2.9%.
+Current rates for the deployed model (`beam-reply`, one game per coverage deck, seeds 4242 to 4244):
 
-**Read the rate against how often the decision comes up**, or the ordering misleads. Initiative is
-offered about 43 times a game, so 8.2% is roughly 3.5 ties a game; answering a choice comes up about 14
-times for 1.7.
+| decision | search | 1-ply | offered per game |
+| --- | --- | --- | --- |
+| answering a choice | 16.2 - 17.1% | 16.9 - 19.8% | ~15 |
+| which card to play | 10.4 - 13.7% | 5.6 - 8.7% | ~24 |
+| which attack | 3.9 - 6.2% | 0.8 - 2.8% | ~32 |
+| regroup: which card | 2.4 - 2.9% | 0.4% | ~12 |
+| initiative: take it | 2.0 - 2.1% | 9.9 - 10.9% | ~41 |
+
+The ranges are the spread across the three seeds, not confidence intervals: a single seed of this
+size is not evidence of a change on its own.
+
+**The two columns diverge in both directions, and the gap is the point.** Initiative is the extreme
+case: one ply flips a coin on 10.4% of offers where the deployed search ties on 2.0%, so nearly all of
+those are ties a search can separate. `which card to play` and `which attack` go the other way, where
+the search ties moves one ply scores differently, because their lines converge inside the horizon.
+
+**Read the rate against how often the decision comes up**, or the ordering misleads. Answering a
+choice comes up about 15 times a game, so 16.7% is roughly 2.5 coin flips a game, the most of any
+kind. Initiative is offered about 41 times, but at 2.0% that is about 0.85 a game.
 
 ### The initiative rate compares against the best ALTERNATIVE
 

@@ -200,8 +200,9 @@ extremes is what makes that legible**: a single arm against the flip cannot sepa
 
 It does **not** rule out a conditional policy. A zero gap between two blanket arms is also what you
 would see if taking were right half the time and wrong the other half, which the split of tying
-candidates hints at: attack 46%, pass 38%. The ceiling is low enough not to chase it, since the tie is
-8.2% of claim offers and fourth of five blind spots on the corrected metric.
+candidates hints at: attack 46%, pass 38%. The ceiling is low enough not to chase it, since on the
+corrected metric the tie is **2.0% of claim offers** (2.0 / 2.1 / 2.1 over three seeds), the lowest
+tie rate of the five decision kinds.
 
 ### A class of upgrades is invisible to a board evaluation
 
