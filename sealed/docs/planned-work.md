@@ -18,11 +18,7 @@ Ordered on one principle: **correctness, then structure, then calibration.** Any
 engine or the horizon invalidates a calibration done before it, which is why the matchup matrix sits
 at the end of the list rather than in the middle of it.
 
-1. **#557 decide `hand.canAct`.** Measured inert through the horizon arm, and still not removable:
-   deleting it inverts the lower bound in `handValue.test.ts` that stops the model banking its last
-   castable card. A scripted position for the case that bound describes is the only option producing
-   evidence rather than a preference, and self-play cannot reach it.
-2. **#558 finish what #516 scoped and did not do.** The horizon itself is built, measured at -3.72 points
+1. **#558 finish what #516 scoped and did not do.** The horizon itself is built, measured at -3.72 points
    and **shipped disabled**, so these are the parts that outlived it. Either measurement can ship alone.
    - **Re-ask the shielded-Sentinel lockout** against the horizon arm: whether the strip line now
      contains its own payoff, and whether `blockedReach`, which ships at weight 0, becomes deletable
@@ -32,11 +28,11 @@ at the end of the list rather than in the middle of it.
    - The horizon A/B predates the root pass charge that cut mid-round passes from 2.71 a game to 0.21,
      so the crossing may no longer be answering the same question. First step is the cheap one: read
      the pass rate at `maxCrossings` 0 against 1, which is minutes rather than hours of games.
-3. **#519 price the regroup resourcing decision as thresholds.** The regroup decision is currently a
+2. **#519 price the regroup resourcing decision as thresholds.** The regroup decision is currently a
    constant: `resource - card` is +2 and banking is always chosen, so nothing is being weighed. The rule
    that should decide it, the knee rising to the leader's deploy cost, is live code that cancels out of
    its own total while the two rates are equal.
-4. **#520 the lethal solver is budget-bound**, so every result quoted about solver depth measures the
+3. **#520 the lethal solver is budget-bound**, so every result quoted about solver depth measures the
    rail instead. It takes 50x the default node budget before more depth stops finding less, and the
    shipped gated solver runs at 4x. The +0.8 recorded for `beam-lethal` is a lower bound on a solver
    that never finished its search. `--lethal` takes `--solver-nodes N` (#559), so the sizing pass is
@@ -44,7 +40,7 @@ at the end of the list rather than in the middle of it.
    scaled rail with no override, so the `--cost` sweep, which addresses solver depths by AI name, is
    still bound by it. Extending that spec with an optional node budget, as `beam:` and `reply:`
    already have, is the first task.
-5. **Run the matchup matrix.** Only once the four AI tickets above have settled: it is the calibration
+4. **Run the matchup matrix.** Only once the three AI tickets above have settled: it is the calibration
    they would each invalidate, and at roughly **23 hours sharded** (10 games a cell, against 169
    serial) it is the one run worth doing exactly once. It banks and resumes per shard now, so an
    interruption at hour 20 costs the outstanding shards rather than all 23. The first-player split is
