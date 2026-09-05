@@ -45,7 +45,7 @@ describe('the A/B harness', () => {
   it('defaults to the single mirror deck', () => {
     const mirror = benchDeckSet('mirror', 1)
     expect(mirror.decks).toHaveLength(1)
-    expect(mirror.decks[0].cards).toHaveLength(30)
+    expect(mirror.decks[0].player.cards).toHaveLength(30)
   })
 
   /**
@@ -58,6 +58,23 @@ describe('the A/B harness', () => {
     const report = runBench({ games: 8, seed: 7, aiA: 'random', aiB: 'random', decks: 'coverage' })
     expect(report.completed).toBeGreaterThan(0)
     expect(report.decks).toBe('coverage')
+  })
+
+  /**
+   * **`mirror` and `coverage` must stay symmetric, and `lockout` must not.**
+   *
+   * The asymmetry is the whole point of the lockout set, and it is also the thing that makes an
+   * absolute win rate over it meaningless. Asserting it here means neither property can be lost by
+   * accident: a lockout set that quietly became a mirror would stop producing the position, and a
+   * coverage set that quietly became asymmetric would invalidate every A/B run over it.
+   */
+  it('keeps the ordinary sources symmetric and the lockout source asymmetric', () => {
+    for (const source of ['mirror', 'coverage'] as const) {
+      for (const m of benchDeckSet(source, 1).decks) expect(m.player).toBe(m.opponent)
+    }
+    const lockout = benchDeckSet('lockout', 1)
+    expect(lockout.decks.length).toBeGreaterThan(10)
+    for (const m of lockout.decks) expect(m.player).not.toBe(m.opponent)
   })
 
   /**

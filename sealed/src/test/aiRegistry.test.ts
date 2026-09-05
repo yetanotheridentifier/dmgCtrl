@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { AIS, aiNames, resolveAi, beamLimitsFor, tieBreakFor, namedLimitsFor } from '../ai/registry'
+import { AIS, aiNames, resolveAi, beamLimitsFor, tieBreakFor, namedLimitsFor, horizonFor } from '../ai/registry'
 import { randomAi } from '../ai/randomAi'
 import { greedyAi } from '../ai/greedyAi'
 import { lastSearchTrace, DEFAULT_BEAM_LIMITS } from '../ai/search'
@@ -246,6 +246,53 @@ describe('AI registry', () => {
     expect(() => resolveAi('beam-reply/tie=depth:0')).toThrow()
     expect(() => resolveAi('beam-reply/tie=depth:notanumber')).toThrow()
     expect(() => resolveAi('beam-reply/tie=')).toThrow()
+  })
+
+  /**
+   * `/horizon=` exists so the two halves of the horizon can be swept apart. `beam-horizon` fuses
+   * them at `cross:1,tail:3`, and the 3 is recorded in `greedyAi.ts` as a guess.
+   */
+  it('names each half of the horizon separately', () => {
+    expect(horizonFor('beam-reply/horizon=cross:1,tail:0')).toEqual({ maxCrossings: 1, tailActions: 0 })
+    expect(horizonFor('beam-reply/horizon=tail:3')).toEqual({ tailActions: 3 })
+    expect(horizonFor('beam-reply')).toBeNull()
+  })
+
+  /**
+   * **Zero has to be expressible**, because it is the control arm for every question the suffix
+   * exists to ask. A grammar that could only turn the horizon up could not name the comparison.
+   */
+  it('allows zero, which is the control arm', () => {
+    expect(horizonFor('beam-horizon/horizon=cross:0')).toEqual({ maxCrossings: 0 })
+    expect(() => resolveAi('beam-horizon/horizon=cross:0,tail:0')).not.toThrow()
+  })
+
+  /**
+   * **The suffix must rebuild the named bot, not an approximation of it.** Reconstructing
+   * `beam-horizon` out of `beam-reply` has to produce the registered arm exactly, or an A/B between
+   * them measures the reconstruction's errors alongside the horizon.
+   */
+  it('rebuilds the registered horizon arm from the shipped one', () => {
+    expect(namedLimitsFor('beam-horizon')).toEqual({
+      ...namedLimitsFor('beam-reply'), maxCrossings: 1, tailActions: 3,
+    })
+  })
+
+  /**
+   * The gap this closed: every suffix threw on `beam-horizon`, so the one A/B the lockout work needs
+   * could not be named at all.
+   */
+  it('lets the other suffixes apply to the horizon arm', () => {
+    expect(() => resolveAi('beam-horizon+blockedReach=3')).not.toThrow()
+    expect(() => resolveAi('beam-horizon/tie=reply:null')).not.toThrow()
+  })
+
+  it('rejects an unknown horizon field or a bad value rather than dropping it', () => {
+    expect(() => resolveAi('beam-reply/horizon=crossings:1')).toThrow()
+    expect(() => resolveAi('beam-reply/horizon=cross:-1')).toThrow()
+    expect(() => resolveAi('beam-reply/horizon=cross:notanumber')).toThrow()
+    expect(() => resolveAi('beam-reply/horizon=')).toThrow()
+    expect(() => resolveAi('greedy/horizon=cross:1')).toThrow()
   })
 
   /**

@@ -1,12 +1,10 @@
-import ashSet from '../test/fixtures/ashSet.json'
 import '../engine/cardDefinitions' // side effect: registers every implemented card ability
-import type { SwuCard } from '../data/cards'
 import type { GameState, PlayerId, UnitState } from '../engine/types'
 import type { Action } from '../engine/actions'
 import { opponentOf, hasPendingChoices } from '../engine/types'
-import { buildCardDb } from '../engine/cardDb'
 import { initGame } from '../engine/initGame'
-import { legalMoves, enemyAttackTargets } from '../engine/legalMoves'
+import { DEFAULT_STEP_CEILING } from './selfPlay'
+import { legalMoves } from '../engine/legalMoves'
 import { unitHasKeyword } from '../engine/keywords'
 import { effectivePower } from '../engine/stats'
 import { getCardDefinition } from '../engine/abilities'
@@ -18,8 +16,8 @@ import { makeQuiescent, lastSearchTrace, clearSearchTrace } from '../ai/search'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { resolveAi } from '../ai/registry'
 import { setupAi } from '../ai/setupAi'
-import { role, reachSteady, canFinishNow, canFinishThisAction, type Role } from '../ai/race'
-import { buildCoverageDecks } from './coverageDecks'
+import { role, reachSteady, canFinishNow, canFinishThisAction, lockedLanes, type Role } from '../ai/race'
+import { benchDeckSet, type DeckSource } from './decks'
 import { firstPlayerFor } from './seating'
 
 /**
@@ -36,7 +34,8 @@ import { firstPlayerFor } from './seating'
  * here as a tie long before it shows up in a win rate.
  */
 
-const POOL = ashSet as unknown as SwuCard[]
+// The pool itself now reaches this mode through `benchDeckSet`, which owns both the decks and the
+// card database so the two cannot come from different snapshots.
 
 export interface DecisionConfig {
   gamesPerDeck: number
@@ -49,6 +48,16 @@ export interface DecisionConfig {
    * Omit it for a real run, where the whole pool is the point.
    */
   deckLimit?: number
+  /**
+   * Which deck population to walk. `coverage` by default, which is what every rate this mode has ever
+   * quoted was measured over.
+   *
+   * `lockout` is the reason this option exists: the shielded-Sentinel lockout occurs on 0.5% of
+   * coverage decisions and never lasts a round, so every figure this diagnostic reports about it is
+   * dominated by positions where it does not happen. Read the two side by side rather than treating a
+   * `lockout` rate as comparable with a historical `coverage` one.
+   */
+  decks?: DeckSource
 }
 
 /** One kind of decision, and how often the evaluation had nothing to say about it. */
@@ -1079,6 +1088,11 @@ export function advantageSpend(before: GameState, after: GameState, action: Acti
 export interface DecisionReport {
   commitId: string
   ai: string
+  /**
+   * Which deck population produced these rates. Reported rather than assumed: a `lockout` rate and a
+   * `coverage` rate are not comparable, and the header used to name the coverage decks unconditionally.
+   */
+  decks: DeckSource
   games: number
   /** Games opened by the `player` seat. Half of `games`, and the check that the corpus samples both
    *  openings rather than merely intending to. See `firstPlayerFor`. */
@@ -1150,27 +1164,10 @@ function shieldedBlockersAgainst(s: GameState, seat: PlayerId): number {
 }
 
 /**
- * Which arenas is this seat shut out of by a shielded Sentinel?
- *
- * **Per arena, because a lane is an arena.** A shielded Sentinel in ground locks ground attackers and
- * leaves space untouched, so asking "is every attacker on the board locked" reports "not locked"
- * whenever a single unit stands in the other arena. Measured that way the rate came out at 0.3% of
- * decisions and never lasting a round, which contradicted what play-testers were reporting. The
- * complaint is that **one lane** closes, and that is what this counts.
- *
- * A lane needs at least one ready attacker of ours to be shut: an empty arena is not blocked.
+ * Which arenas is this seat shut out of? `lockedLanes` lives in `ai/race.ts`, beside the
+ * `blockedReach` gate that asks the same question: three copies of it had drifted apart before it was
+ * shared.
  */
-function lockedLanes(s: GameState, seat: PlayerId): Array<'ground' | 'space'> {
-  const shut = (arena: 'ground' | 'space'): boolean => {
-    const ready = s.players[seat].units.filter(u => !u.exhausted && u.arena === arena)
-    if (ready.length === 0) return false
-    return ready.every(u => {
-      const { targets, sentinelLocked } = enemyAttackTargets(s, u, seat)
-      return sentinelLocked && targets.length > 0 && targets.every(isShielded)
-    })
-  }
-  return (['ground', 'space'] as const).filter(shut)
-}
 
 /** Every arena this seat can attack in is shut: no damage of ours lands anywhere. */
 function lockedOutBy(s: GameState, seat: PlayerId): boolean {
@@ -1208,11 +1205,12 @@ const rank = (counts: Map<string, number>): Array<{ kind: string; count: number 
     .sort((a, b) => b.count - a.count || a.kind.localeCompare(b.kind))
 
 export function runDecisions(config: DecisionConfig): DecisionReport {
-  const all = buildCoverageDecks(POOL, config.seed)
-  const decks = config.deckLimit === undefined ? all.decks : all.decks.slice(0, config.deckLimit)
-  const cardDb = buildCardDb(POOL)
+  // The card database comes from the deck set rather than being rebuilt here, so the decks and the
+  // definitions behind them can never come from two different snapshots of the pool.
+  const { decks: all, cardDb } = benchDeckSet(config.decks ?? 'coverage', config.seed)
+  const decks = config.deckLimit === undefined ? all : all.slice(0, config.deckLimit)
   const ai = resolveAi(config.aiName ?? 'greedy')
-  const ceiling = config.stepCeiling ?? 4000
+  const ceiling = config.stepCeiling ?? DEFAULT_STEP_CEILING
 
   const shields: ShieldStat = {
     decisionsFacingShield: 0, removalAvailable: 0, removals: 0, shieldsSeen: 0, decisionsHoldingShield: 0,
@@ -1321,7 +1319,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       // Indexed across the whole corpus, not within the deck: a within-deck alternation only balances
       // when games-per-deck is even, and this mode's default of three ran 2:1 on the same opening.
       const firstPlayer = firstPlayerFor(d * config.gamesPerDeck + g)
-      let s: GameState = initGame(deck, deck, cardDb, { firstPlayer, shuffle, rngSeed: seed })
+      let s: GameState = initGame(deck.player, deck.opponent, cardDb, { firstPlayer, shuffle, rngSeed: seed })
       games++
       if (firstPlayer === 'player') gamesPlayerFirst++
       passes.games++
@@ -1850,6 +1848,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   return {
     commitId: COMMIT_ID,
     ai: config.aiName ?? 'greedy',
+    decks: config.decks ?? 'coverage',
     games,
     gamesPlayerFirst,
     stats: [

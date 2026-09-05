@@ -166,7 +166,9 @@ export function parseArgs(argv: string[]): Args {
     else if (arg === '--shard-count') shardCount = Number(argv[++i])
     else if (arg === '--decks') {
       const v = argv[++i]
-      if (v !== 'mirror' && v !== 'coverage') throw new Error(`--decks must be mirror or coverage, got "${v}"`)
+      if (v !== 'mirror' && v !== 'coverage' && v !== 'lockout') {
+        throw new Error(`--decks must be mirror, coverage or lockout, got "${v}"`)
+      }
       decks = v
     }
     else if (arg === '--triage') triage = true
@@ -379,7 +381,13 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
   const lines = [
     '',
     `dmgCtrl decision quality  (engine ${report.commitId})`,
-    `${report.ai}, ${report.games} games across the coverage decks (${report.gamesPlayerFirst} opened by player)`,
+    `${report.ai}, ${report.games} games across the ${report.decks} decks`
+      + ` (${report.gamesPlayerFirst} opened by player)`,
+    ...(report.decks === 'lockout'
+      ? ['', '  LOCKOUT DECKS: the player seat faces a purpose-built shielded-Sentinel wall, so these',
+        '  rates are NOT comparable with a coverage run. The wall sits on the opponent seat, which',
+        '  means board-wide rates below are roughly halved by the wall-holding seat contributing none.']
+      : []),
     '',
     '  a TIE is a decision the evaluation cannot see: every candidate scores the same, so the',
     '  seeded tie-break picks one at random. High tie rates are blind spots, not close calls.',
@@ -739,7 +747,9 @@ function runDecisionsMode(args: Args): void {
   const start = Date.now()
   let report: DecisionReport
   try {
-    report = runDecisions({ gamesPerDeck, seed: args.seed, aiName: args.aiExplicit ? args.aiA : 'greedy' })
+    report = runDecisions({
+      gamesPerDeck, seed: args.seed, aiName: args.aiExplicit ? args.aiA : 'greedy', decks: args.decks,
+    })
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
     process.exit(2)

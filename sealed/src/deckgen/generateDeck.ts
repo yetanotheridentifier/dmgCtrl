@@ -40,8 +40,15 @@ export interface GenerateOptions {
   seed: number
   /** Card ids to prioritise (coverage sweep steers toward not-yet-covered cards). */
   prefer?: Set<string>
-  /** Card ids to force in (bypassing caps), so a straggler deck definitely covers its target. */
-  require?: Set<string>
+  /**
+   * Card ids to force in, mapped to how many copies, bypassing the curve and type caps.
+   *
+   * A count rather than a flag because the two callers want different things from it. The coverage
+   * sweep wants one copy, enough to cover a straggler; a deck built to produce a specific board wants
+   * the card **drawn**, and one copy in thirty is not a plan. Clamped to `MAX_COPIES`, since a deck
+   * that is quietly illegal is worse than one that fails to build.
+   */
+  require?: Map<string, number>
 }
 
 interface Counts {
@@ -63,7 +70,7 @@ function jitter(seed: number, card: SwuCard): number {
 export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report: DeckReport } {
   const { leader, base, pool, seed } = opts
   const prefer = opts.prefer ?? new Set<string>()
-  const require = opts.require ?? new Set<string>()
+  const require = opts.require ?? new Map<string, number>()
   const covered = coveredAspects(leader, base)
   const alignment = (leader.Aspects ?? []).find(isAlignment)
 
@@ -136,7 +143,10 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
   // Force-include required cards first (they bypass the caps), so a targeted straggler deck is
   // guaranteed to cover its card. Only eligible (penalty-free) ones can be forced.
   for (const c of eligible) {
-    if (require.has(id(c)) && (counts.copies.get(id(c)) ?? 0) === 0 && counts.size < DECK_SIZE) add(c)
+    // A unique card is one copy whatever was asked for, so a wall package naming three of a Unique
+    // does not quietly build an illegal deck. `MAX_COPIES` bounds the rest.
+    const want = Math.min(require.get(id(c)) ?? 0, c.Unique ? 1 : MAX_COPIES)
+    while ((counts.copies.get(id(c)) ?? 0) < want && counts.size < DECK_SIZE) add(c)
   }
 
   while (counts.size < DECK_SIZE) {

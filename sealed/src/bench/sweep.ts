@@ -30,7 +30,6 @@ export interface SweepConfig {
   seeds: number[]
   aiName?: string
   stepCeiling?: number
-  timeoutMs?: number
 }
 
 export interface SweepFailure {
@@ -116,7 +115,6 @@ export function runSweep(config: SweepConfig): SweepReport {
           // five games per deck running 3:2 on the same opening, and one game per deck running 5:0.
           firstPlayer: firstPlayerFor(gameIndex),
           stepCeiling: config.stepCeiling,
-          timeoutMs: config.timeoutMs,
           trackCoverage: true,
         })
         for (const id of result.cardsDrawn) drawn.add(id)

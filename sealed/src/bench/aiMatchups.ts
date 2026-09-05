@@ -78,7 +78,7 @@ export function runAiMatchups(
   aiB: Ai,
   nameA: string,
   nameB: string,
-  config: { gamesPerCell: number; seed: number; stepCeiling?: number; timeoutMs?: number },
+  config: { gamesPerCell: number; seed: number; stepCeiling?: number },
 ): AiMatchupReport {
   const cardDb = buildCardDb(POOL)
   const cells: AiMatchupCell[] = []

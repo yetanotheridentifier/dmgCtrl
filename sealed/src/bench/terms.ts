@@ -6,6 +6,7 @@ import type { Action } from '../engine/actions'
 import { hasPendingChoices } from '../engine/types'
 import { buildCardDb } from '../engine/cardDb'
 import { initGame } from '../engine/initGame'
+import { DEFAULT_STEP_CEILING } from './selfPlay'
 import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
 import { seededShuffle, nextSeed, seededUnit } from '../engine/rng'
@@ -283,7 +284,7 @@ export function runTerms(config: TermConfig): TermReport {
   const all = buildCoverageDecks(POOL, config.seed).decks
   const decks = config.decks === undefined ? all : all.slice(0, config.decks)
   const cardDb = buildCardDb(POOL)
-  const ceiling = config.stepCeiling ?? 4000
+  const ceiling = config.stepCeiling ?? DEFAULT_STEP_CEILING
   const keys = config.weights ?? SCALAR_KEYS
   const pickers = perturbedPickers(config.model, keys)
   const shippedPick = pickerFor(config.model, DEFAULT_WEIGHTS)

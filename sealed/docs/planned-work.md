@@ -18,21 +18,30 @@ Ordered on one principle: **correctness, then structure, then calibration.** Any
 engine or the horizon invalidates a calibration done before it, which is why the matchup matrix sits
 at the end of the list rather than in the middle of it.
 
-1. **#558 finish what #516 scoped and did not do.** The horizon itself is built, measured at -3.72 points
-   and **shipped disabled**, so these are the parts that outlived it. Either measurement can ship alone.
-   - **Re-ask the shielded-Sentinel lockout** against the horizon arm: whether the strip line now
-     contains its own payoff, and whether `blockedReach`, which ships at weight 0, becomes deletable
-     rather than shippable.
-   - **Sweep `tailActions`.** It is most of the horizon's 1.84x cost while the free run changes nothing
-     measurable in 79% of claims, so a crossing-only arm may be both cheaper and better.
-   - The horizon A/B predates the root pass charge that cut mid-round passes from 2.71 a game to 0.21,
-     so the crossing may no longer be answering the same question. First step is the cheap one: read
-     the pass rate at `maxCrossings` 0 against 1, which is minutes rather than hours of games.
-2. **#519 price the regroup resourcing decision as thresholds.** The regroup decision is currently a
+1. **Decide `blockedReach` on the full paired run.** #558 answered both of its questions and left one
+   candidate standing, which is the only thing here that still needs bench hours.
+
+   The term ships at weight 0. At weight 3 it screens **+10.00 paired (t = 2.75, significant, 0 of 10
+   shards against) on `--decks lockout`** and **+1.25 (not significant, 8 of 10 shards byte-identical)
+   on coverage. Both are 80-game screens**, so the run that decides it is the full paired A/B on the
+   wall decks, with coverage as the non-inferiority gate. Quote the paired difference, never a rate.
+
+   The mechanism already agrees: strips taken 14.7% to 23.3%, rounds locked 10.1% to 5.1%.
+
+   **The horizon is closed for this purpose** and `tailActions` with it: crossing the boundary moves
+   the scripted lockout by exactly 0 and the filed game by 0 of 18, and a crossing-only arm invents its
+   own passivity defect (53.1% of its chosen passes end the round early, against 0.0% shipped). Both
+   recorded in [experiments.md](experiments.md); do not re-open either without a new reason.
+2. **#570 the bot wedges on one generated deck**, risk accepted rather than fixed. A trigger-cascade
+   deck makes a single decision cost minutes, and neither obvious guard works: a step ceiling counts
+   completed steps and the counter simply stops, while the only chain cap that neutralises it changes
+   4.3% of all decisions. Listed here so a hung shard is recognised rather than re-diagnosed: check the
+   shard's `.progress` file for a stale timestamp against its siblings.
+3. **#519 price the regroup resourcing decision as thresholds.** The regroup decision is currently a
    constant: `resource - card` is +2 and banking is always chosen, so nothing is being weighed. The rule
    that should decide it, the knee rising to the leader's deploy cost, is live code that cancels out of
    its own total while the two rates are equal.
-3. **#520 the lethal solver is budget-bound**, so every result quoted about solver depth measures the
+4. **#520 the lethal solver is budget-bound**, so every result quoted about solver depth measures the
    rail instead. It takes 50x the default node budget before more depth stops finding less, and the
    shipped gated solver runs at 4x. The +0.8 recorded for `beam-lethal` is a lower bound on a solver
    that never finished its search. `--lethal` takes `--solver-nodes N` (#559), so the sizing pass is
@@ -40,7 +49,7 @@ at the end of the list rather than in the middle of it.
    scaled rail with no override, so the `--cost` sweep, which addresses solver depths by AI name, is
    still bound by it. Extending that spec with an optional node budget, as `beam:` and `reply:`
    already have, is the first task.
-4. **Run the matchup matrix.** Only once the three AI tickets above have settled: it is the calibration
+5. **Run the matchup matrix.** Only once the three AI tickets above have settled: it is the calibration
    they would each invalidate, and at roughly **23 hours sharded** (10 games a cell, against 169
    serial) it is the one run worth doing exactly once. It banks and resumes per shard now, so an
    interruption at hour 20 costs the outstanding shards rather than all 23. The first-player split is

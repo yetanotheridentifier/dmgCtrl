@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { loadReport, replaySteps } from './helpers/replayReport'
-import { legalMoves, enemyAttackTargets } from '../engine/legalMoves'
+import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
 import { unitHasKeyword } from '../engine/keywords'
 import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { makeBeamAi } from '../ai/search'
 import { makeEvaluate, DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { BEAM_REPLY_LIMITS, BEAM_HORIZON_LIMITS } from '../ai/greedyAi'
+import { lockedLanes } from '../ai/race'
 import type { BeamLimits } from '../ai/search'
 import { OPPONENT_AI } from '../config'
 import type { GameState, PlayerId, UnitState } from '../engine/types'
@@ -43,17 +44,13 @@ const isShielded = (u: UnitState): boolean => u.upgrades.some(up => up.cardId ==
 const shieldsOn = (s: GameState, seat: PlayerId): number =>
   s.players[seat].units.reduce((n, u) => n + u.upgrades.filter(up => up.cardId === TOKEN_SHIELD).length, 0)
 
-/** Is some arena of `seat`'s shut, every ready attacker forced onto shielded targets only? */
-function laneShut(s: GameState, seat: PlayerId): boolean {
-  return (['ground', 'space'] as const).some(arena => {
-    const ready = s.players[seat].units.filter(u => !u.exhausted && u.arena === arena)
-    if (ready.length === 0) return false
-    return ready.every(u => {
-      const { targets, sentinelLocked } = enemyAttackTargets(s, u, seat)
-      return sentinelLocked && targets.length > 0 && targets.every(isShielded)
-    })
-  })
-}
+/**
+ * Is some arena of `seat`'s shut, every ready attacker forced onto shielded targets only?
+ *
+ * The shipped predicate, not a restatement of it. This file used to carry its own copy, which is how
+ * a replay test can quietly stop testing the thing the bench measures.
+ */
+const laneShut = (s: GameState, seat: PlayerId): boolean => lockedLanes(s, seat).length > 0
 
 /** Bot decisions where its lane was shut by a shielded blocker and a strip was legal. */
 const locked = states.filter(s =>

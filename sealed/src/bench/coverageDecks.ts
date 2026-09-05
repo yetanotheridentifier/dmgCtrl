@@ -23,7 +23,7 @@ export interface CoverageResult {
 }
 
 /** One representative base per distinct aspect (bases are mechanically identical, aspect aside). */
-function distinctBases(pool: SwuCard[]): SwuCard[] {
+export function distinctBases(pool: SwuCard[]): SwuCard[] {
   const byAspect = new Map<string, SwuCard>()
   for (const b of pool.filter(c => c.Type === 'Base')) {
     const key = (b.Aspects ?? []).join(',')
@@ -85,7 +85,7 @@ export function buildCoverageDecks(pool: SwuCard[], seed = 1): CoverageResult {
     const prefer = new Set(remaining.map(id))
     // Force the target in so this deck definitely covers it (Rare / bomb stragglers otherwise get
     // squeezed out by the caps). The rest of the deck still steers toward the other stragglers.
-    const { deck } = generateDeck({ leader: combo.leader, base: combo.base, pool, seed: seed + guard + 1, prefer, require: new Set([id(target)]) })
+    const { deck } = generateDeck({ leader: combo.leader, base: combo.base, pool, seed: seed + guard + 1, prefer, require: new Map([[id(target), 1]]) })
     decks.push(deck)
     mark(deck)
   }

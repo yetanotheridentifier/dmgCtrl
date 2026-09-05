@@ -25,6 +25,7 @@ const SIMULATION_TESTS = [
   'src/test/benchTerms.test.ts',
   'src/test/aiShieldedSentinelReport.test.ts',
   'src/test/aiWeightScale.test.ts',
+  'src/test/lockoutDecksPlay.test.ts',
 ]
 
 // Served at https://dmgctrl.app/sealed — base must match so built asset URLs resolve.

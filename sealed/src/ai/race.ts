@@ -117,6 +117,35 @@ export function blockedReach(state: GameState, owner: PlayerId): number {
   }, 0)
 }
 
+/**
+ * The arenas of `seat`'s that are **shut**: every ready attacker there is Sentinel-forced onto
+ * targets that all carry a Shield, so nothing this seat does reaches the enemy base in that lane.
+ *
+ * **Per arena, because a lane is an arena.** A ground blocker locks ground and leaves space alone, so
+ * asking "is every attacker on the board locked" answers "no" whenever a single unit stands in the
+ * other arena. Measured board-wide the rate came out at 0.3% of decisions and never lasting a round,
+ * which contradicted what play-testers reported and very nearly retired a real defect.
+ *
+ * A lane needs at least one ready attacker to be shut: an empty arena is not blocked, it is empty.
+ *
+ * Lives here rather than in the bench because it is the same question `blockedReach` above gates on,
+ * and it had drifted into three separate copies (the decision diagnostic, the filed-report replay,
+ * and the deck set built to produce it). Three copies of a predicate this fiddly is how two of them
+ * end up disagreeing with nobody reading them side by side.
+ */
+export function lockedLanes(state: GameState, seat: PlayerId): Array<'ground' | 'space'> {
+  const shut = (arena: 'ground' | 'space'): boolean => {
+    const ready = state.players[seat].units.filter(u => !u.exhausted && u.arena === arena)
+    if (ready.length === 0) return false
+    return ready.every(u => {
+      const { targets, sentinelLocked } = enemyAttackTargets(state, u, seat)
+      return sentinelLocked && targets.length > 0
+        && targets.every(t => t.upgrades.some(up => up.cardId === TOKEN_SHIELD))
+    })
+  }
+  return (['ground', 'space'] as const).filter(shut)
+}
+
 /** Base damage the shielded blockers shutting our lanes deal us each round. */
 function blockerOutput(state: GameState, owner: PlayerId): number {
   const foe = opponentOf(owner)
