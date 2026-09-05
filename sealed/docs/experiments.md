@@ -305,7 +305,71 @@ pool, which it does not satisfy, so removing the weight inverts a preference.
 Both are true at once: **it changes no decision the bench reaches, and removing it would invert a
 preference in a situation the bench does not reach.** A measured null is evidence about the corpus, not
 about the rule. An earlier version of this same area cost 9.5 points of win rate, so it is not a corner
-to trim on an inert reading.
+to trim on an inert reading. The section below settles which of the two readings governs.
+
+### `hand.canAct` is a rule, not a patch
+
+The inert reading and the arithmetic bound describe different populations, so a scripted position
+decides between them rather than more games. `aiHandCanAct.test.ts` builds it from the real pool: the
+poorest castable card beside the richest card three or more resources out of reach.
+
+**At `canAct` of 0 the shipped bot banks its only castable card** and keeps one it cannot play, at a
+two-card hand and again at a five-card hand. At 3 it banks the bomb and keeps the play. The candidate
+scores are 18.115 against 18.035 at zero and 18.115 against 18.252 at three, so this is a decision and
+not a tie broken by a seed.
+
+**The decision is a public tie**, which is why the term can reach it at all: banking any card leaves
+hand size and pool identical, so every public term scores both options alike and the squashed hand
+value is the only thing left to order them.
+
+**The position is not rare, and it is not about small hands.** Over the 44 coverage decks, 540 banking
+decisions: exactly one card is castable in **6.7%** of them (7.0% on a `greedy` screen), and 22 of
+those 36 decisions were at a **five-card** hand against 1 at two cards. It is an opening phenomenon:
+**21.6% in round 1**, 11.4% in round 2, and 4 cases in 276 decisions from round 4 on, because
+resources outgrow the curve. Forced discards raise the same quantity and are covered by the same term.
+
+**The weight must exceed 2.07**, measured as the largest margin by which a stranded card outscores a
+castable one across every pool size. The binding pair is a high-value card **one** resource out of
+reach, not a distant bomb. The shipped 3 clears it; 0.0% of pairs are still wrong at 3.
+
+**The upper bound cannot bind.** It predates the squash. At `canAct` of 3, 10, 100, 1000 and 100000 the
+bot develops its castable card every time, and the evaluated gain converges to 7.0 against a public
+gain of 8, because a term confined to `[0, 1)` cannot override an integer-valued public preference. The
+bound is correct and inert; the lower bound is the one that governs the weight.
+
+### Reshaping `reach` does not retire `hand.canAct`
+
+Eleven decay curves over the real pool, at six pool sizes, scoring the share of castable-against-
+stranded card pairs that bank the last play at `canAct` of 0, and the smallest weight that fixes every
+pair.
+
+| curve | needs the guard | guard must exceed | stranded pairs scoring alike |
+| --- | --- | --- | --- |
+| **shipped** step 0.25, floor 0.30 | 38.8% | 2.07 | 1.9% |
+| linear 0.10 a resource | 72.6% | 2.56 | 1.4% |
+| linear 0.25 a resource | 29.0% | 2.07 | 13.9% |
+| linear 0.33 a resource | 19.0% | **1.81** | 13.6% |
+| shipped step, floor 0.15 | 28.9% | 2.07 | 1.6% |
+| shipped step, floor 0.00 | 27.9% | 2.07 | **28.0%** |
+| geometric 0.85^d | 66.4% | 2.39 | 1.1% |
+
+**No curve removes the need for the weight**, because the binding case is a card one resource out of
+reach at a 0.75 multiplier, which no change to the floor touches. Nine of the eleven report the
+identical 2.07 for that reason.
+
+**A gentler decay is worse.** The shipped curve is already linear at 0.25 a resource, floored at 0.30
+from three out, so a 0.10 decay is more generous everywhere inside seven resources and nearly doubles
+the region needing the guard.
+
+**The floor earns its place by keeping the ordering alive.** Remove it and 28.0% of stranded-against-
+stranded pairs score exactly alike, so choosing between two cards you cannot play returns to a coin
+flip.
+
+Two curves beat the shipped one on both columns (step with a 0.15 floor, and linear 0.25 with a 0.10
+floor). **That is not evidence they play better**: with the guard present at 3, every curve in the
+table makes the identical decision in this family. A floor change would bite on which card leaves a
+five-card hand, which is the decision `hand.hold` drives on 75.9% of regroups and which none of this
+measures.
 
 ## Avenues closed off
 

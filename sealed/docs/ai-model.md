@@ -504,8 +504,10 @@ reading the Bearing column rather than Varies: `resourceSurplus` is alive and on
 8.6% there, 0.0% elsewhere), and `hand.canAct` is inert (bearing 0.0%).
 
 **Inert is not the same as removable.** `hand.canAct` changes no decision the bench reaches, and
-deleting it would still invert the lower bound asserted in `handValue.test.ts`, which keeps the model
-from banking its last castable card. See [experiments.md](experiments.md).
+deleting it inverts the lower bound asserted in `handValue.test.ts`, which keeps the model from banking
+its last castable card. A scripted position decides it: at a weight of 0 the shipped bot banks its only
+castable card, at 3 it keeps it, and no `reach` curve removes the need. See
+[experiments.md](experiments.md).
 
 ### Banking: `resource` must exceed `card`
 
@@ -576,10 +578,47 @@ Two properties of the private half fall out of its design rather than its tuning
   into `[0, 1)` and used only to break public ties, and a monotone scalar cannot reorder a tie-break.
   0.12 and 0.4 measure identically; **0 measures 46.6%**, because the ordering collapses and the coin
   flip returns.
-- **`canAct` is inert in self-play.** It is flat over the whole hand, so it cancels between candidate
-  moves unless one of them spends the last castable card. Values 0, 3 and 6 change no decision at any
-  `hold` setting. It is a guard against a rare position rather than a working term, and its measured
-  contribution is zero.
+- **`canAct` is inert in self-play, and still required.** It is flat over the whole hand, so it cancels
+  between candidate moves unless one of them spends the last castable card. Values 0, 3 and 6 change no
+  decision at any `hold` setting. It is a guard against a position self-play does not reach rather than
+  a working term, and a scripted position is what decides it.
+
+  **Bounded below at 2.07**, the largest margin by which a stranded card outscores a castable one over
+  the real pool. The binding case is a card **one** resource out of reach, so no change to `reach`'s
+  floor relaxes it. **Unbounded above**: the upper bound predates the squash, and a term confined to
+  `[0, 1)` cannot override an integer-valued public preference, so at a weight of 100000 the bot still
+  develops. The shipped 3 sits just above the only edge that binds.
+
+  Exactly one card is castable in **6.7%** of banking decisions, 21.6% of them in round 1 and almost
+  none from round 4, so this guards the opening.
+
+### What the hand model cannot express
+
+Three limits are known, sized, and **deliberately not being fixed**. The heuristic evaluation is at the
+end of its useful improvements, and the next real gain in play strength comes from a learned model
+rather than from another hand-tuned term, so these are recorded as understood rather than queued.
+Anyone reaching for the hand model should know they are here, and that none of them is an oversight.
+
+**The castable test is a single bit, where the real question is curve coverage.** `canAct` asks whether
+*anything* is castable now. It cannot express that holding a card three turns out is fine when there
+are plays to make on each turn until it lands. `setupAi` computes exactly that shape for the opening
+hand, scoring a hand on whether it fills turn-1, turn-2 and turn-3 slots, and nothing computes it at
+regroup. Related: the hand is priced as if it were final, and two cards arrive every regroup, so the
+guard is systematically more cautious than the draw justifies.
+
+**Keywords are counted, not identified.** `cardValue` charges 1 point per keyword and 1 per registered
+ability or hook, against 0.5 per point of power or HP, so Ambush and Restore 1 are worth the same, and
+so are Restore 1 and Restore 3. Of 238 playable cards, 91 carry at least one keyword and the keyword
+term is 3.1% of all card value in the pool; the keyword is 7.1% of an Ambush card's value, 8.5% of a
+Sentinel's. **The same keyword is priced twice, differently, on either side of being played**: on the
+board a Shield has its own weight per token and a Sentinel is priced through `blockedReach`, while in
+hand both collapse to a single point. Timing is invisible too: Ambush and Shielded pay off as the unit
+lands, while Raid, Restore, on-attack and when-defeated pay off a turn or more later.
+
+**`reach`'s floor is unmeasured in the decision it actually drives.** Curve shape is settled for the
+question of whether `canAct` is needed, and it is not settled for which card leaves a five-card hand,
+which is `hand.hold`'s 75.9%-of-regroups decision. Two floors score better than the shipped one on the
+arithmetic and neither has been played.
 
 ### Initiative
 
