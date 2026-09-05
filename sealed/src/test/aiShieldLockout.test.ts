@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { beamReplyAi } from '../ai/greedyAi'
+import { beamReplyAi, beamHorizonAi, BEAM_REPLY_LIMITS, BEAM_HORIZON_LIMITS } from '../ai/greedyAi'
 import { makeBeamAi, lastSearchTrace, DEFAULT_BEAM_LIMITS } from '../ai/search'
 import { evaluate, makeEvaluate, DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { legalMoves } from '../engine/legalMoves'
@@ -301,5 +301,82 @@ describe('the shielded-Sentinel lockout', () => {
     // Hand the turn back to us; the opponent passing is the null move the search already assumes.
     const ours = stripped.activePlayer === 'player' ? stripped : resolve(stripped, { type: 'pass' })
     expect(beamReplyAi(ours)).toMatchObject({ type: 'attack', attackerId: 'big' })
+  })
+})
+
+/**
+ * Does crossing the round boundary rescue this position?
+ *
+ * The question the whole chain of work opens with, and the one thing #516 built the horizon for and
+ * never asked. It cannot be settled by a win rate: a lane genuinely shut is 0.5% of bench decisions,
+ * so a bot that fixed this perfectly would move the aggregate by a fraction of a point. The scripted
+ * position is the acceptance criterion, which is why it is asked here rather than on the bench.
+ *
+ * `beam-horizon` is `beam-reply` plus `maxCrossings: 1` and `tailActions: 3`, and it inherits the
+ * root pass charge that shipped after the horizon was measured. So this is the current bot with the
+ * horizon switched on, not the bot the -3.72 was recorded against.
+ */
+describe('the lockout against the horizon arm', () => {
+
+  /**
+   * **The horizon does not rescue it, and it does not move it either.** Recorded as a known failure
+   * so the suite stays green while the answer is pinned.
+   *
+   * This retires the last live hypothesis about the lockout, and it was the cheapest of all of them
+   * to ask: a scripted position rather than the five-hour A/B the horizon itself was judged on.
+   */
+  it.fails('strips the Shield once a line may cross the round boundary', () => {
+    expect(beamHorizonAi(lockout())).toMatchObject({ type: 'attack', attackerId: 'chump' })
+  })
+
+  /**
+   * **The crossing changes the gap by exactly nothing: 10 points either way.**
+   *
+   * Not "not enough", which would leave a heavier configuration worth trying. Zero, which closes the
+   * whole approach for this position, and the reason was already proven two tests above: both lines
+   * reach the SAME end board at the SAME depth, differing only in the route taken to it. A search
+   * that values a move by the max over reachable boards discards the route, so giving it more boards
+   * to reach cannot separate two candidates that already converge.
+   *
+   * That is a property of the search rather than of the depth, which is why the extra ply buys
+   * nothing here while measurably improving the bot's initiative judgement elsewhere.
+   */
+  it('leaves the gap between passing and stripping exactly where it found it', () => {
+    const gapUnder = (limits: typeof BEAM_HORIZON_LIMITS): number => {
+      const s = lockout()
+      const moves = legalMoves(s)
+      makeBeamAi(evaluate, limits)(s)
+      const v = lastSearchTrace()!.candidates
+      return v[moves.findIndex(m => m.type === 'pass')]
+        - v[moves.findIndex(m => m.type === 'attack' && m.attackerId === 'chump')]
+    }
+
+    expect(gapUnder(BEAM_REPLY_LIMITS)).toBe(10)
+    expect(gapUnder(BEAM_HORIZON_LIMITS)).toBe(gapUnder(BEAM_REPLY_LIMITS))
+  })
+
+  /**
+   * **The root pass charge is already spending 8 of its 8 points here and still loses by 10.**
+   *
+   * Worth pinning, because #521 shipped that charge the day after the horizon was measured and it is
+   * the one thing that has changed about this position since. It moved the gap from 18 to 10: real
+   * work, in the right direction, and less than half of what the position needs.
+   *
+   * So the charge is not the missing piece either, and raising it is not the answer: it applies to
+   * every pass in the game, and the rate it was sized against (2.71 discretionary passes a game down
+   * to 0.21) is already close to a competent player's.
+   */
+  it('is not closed by the root pass charge, which is already paying in full', () => {
+    const gapAtCharge = (passPenalty: number): number => {
+      const s = lockout()
+      const moves = legalMoves(s)
+      makeBeamAi(evaluate, { ...BEAM_REPLY_LIMITS, passPenalty })(s)
+      const v = lastSearchTrace()!.candidates
+      return v[moves.findIndex(m => m.type === 'pass')]
+        - v[moves.findIndex(m => m.type === 'attack' && m.attackerId === 'chump')]
+    }
+
+    expect(gapAtCharge(0), 'the raw gap, before anything charges the pass').toBe(18)
+    expect(gapAtCharge(BEAM_REPLY_LIMITS.passPenalty!), 'what ships').toBe(10)
   })
 })

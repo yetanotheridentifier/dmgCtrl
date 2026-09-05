@@ -6,7 +6,8 @@ import { unitHasKeyword } from '../engine/keywords'
 import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { makeBeamAi } from '../ai/search'
 import { makeEvaluate, DEFAULT_WEIGHTS } from '../ai/evaluate'
-import { BEAM_REPLY_LIMITS } from '../ai/greedyAi'
+import { BEAM_REPLY_LIMITS, BEAM_HORIZON_LIMITS } from '../ai/greedyAi'
+import type { BeamLimits } from '../ai/search'
 import { OPPONENT_AI } from '../config'
 import type { GameState, PlayerId, UnitState } from '../engine/types'
 import '../engine/cardDefinitions'
@@ -70,17 +71,18 @@ const locked = states.filter(s =>
  * Memoised: each call is 18 searches by the shipped bot at ~200 ms apiece, and asking twice for the
  * same weight doubled this file's cost for nothing.
  */
-const cache = new Map<number, number>()
-function stripsAt(blockedReach: number): number {
-  const hit = cache.get(blockedReach)
+const cache = new Map<string, number>()
+function stripsAt(blockedReach: number, limits: BeamLimits = BEAM_REPLY_LIMITS): number {
+  const key = `${blockedReach}|${limits.maxCrossings ?? 0}x${limits.tailActions ?? 0}`
+  const hit = cache.get(key)
   if (hit !== undefined) return hit
-  const ai = makeBeamAi(makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach }), BEAM_REPLY_LIMITS)
+  const ai = makeBeamAi(makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach }), limits)
   const n = locked.filter(s => {
     const held = shieldsOn(s, 'player')
     const move = ai(s)
     return move !== null && shieldsOn(resolve(s, move), 'player') < held
   }).length
-  cache.set(blockedReach, n)
+  cache.set(key, n)
   return n
 }
 
@@ -130,5 +132,24 @@ describe('the filed shielded-Sentinel lockout', () => {
     expect(fixed, 'weight 3 must be a large improvement on shipped').toBeGreaterThanOrEqual(8)
     expect(fixed, 'but it does not rescue every locked position').toBeLessThan(locked.length)
     expect(fixed).toBeGreaterThan(stripsAt(0))
+  }, 120_000)
+
+  /**
+   * **Crossing the round boundary does not rescue these positions either**, which is the second half
+   * of the answer #516 scoped and never ran. The scripted board says the crossing moves the gap by
+   * exactly zero; this says the same thing across eighteen real boards from the filed game.
+   *
+   * Over the 18 locked decisions: **shipped strips 1, the horizon strips 1, an in-scale weight of 3
+   * strips 10.** The two candidates are not close, and the horizon is not a partial fix that a
+   * heavier configuration might complete. It changes nothing at all.
+   *
+   * The horizon count is asserted as "no better than shipped" rather than as an exact 1, so an
+   * unrelated search change cannot fail this on a number that is not the point. The claim is that
+   * crossing the boundary is not the missing piece.
+   */
+  it('is not rescued by letting a line cross the round boundary', () => {
+    expect(stripsAt(0, BEAM_HORIZON_LIMITS)).toBeLessThanOrEqual(stripsAt(0))
+    // The comparison that matters: the evaluation term reaches boards the extra depth never does.
+    expect(stripsAt(3)).toBeGreaterThan(stripsAt(0, BEAM_HORIZON_LIMITS) * 5)
   }, 120_000)
 })
