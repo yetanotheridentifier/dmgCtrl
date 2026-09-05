@@ -74,6 +74,27 @@ describe('runBench', () => {
     expect(stable(b)).toEqual(stable(a))
   })
 
+  /**
+   * A shard reports progress while it runs (#562).
+   *
+   * Without this a shard is silent until its last game: an overnight `--games 2000` run left twelve
+   * 0-byte logs and reported `games 0 of 24000` for eight hours before it was lost. The count is what a
+   * heartbeat turns into a measured rate and a projected finish.
+   */
+  it('reports games played as it plays them', () => {
+    const seen: number[] = []
+    runBench({ games: 4, seed: 55, aiA: 'random', aiB: 'random', onProgress: n => seen.push(n) })
+    expect(seen, 'counted as they finish, so a reader knows how far in it is').toEqual([1, 2, 3, 4])
+  })
+
+  /** A dropped game is still a game played, and an hour of dropped games must not read as a stall. */
+  it('counts a dropped game as progress too', () => {
+    const seen: number[] = []
+    const report = runBench({ games: 3, seed: 8, aiA: 'random', aiB: 'random', stepCeiling: 3, onProgress: n => seen.push(n) })
+    expect(report.dropped).toBeGreaterThan(0)
+    expect(seen).toEqual([1, 2, 3])
+  })
+
   it('flags a run PROVISIONAL when a game drops, recording the failing seed', () => {
     // A brutally low step ceiling forces every game to be dropped as non-terminating.
     const report = runBench({ games: 3, seed: 8, aiA: 'random', aiB: 'random', stepCeiling: 3 })

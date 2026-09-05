@@ -12,12 +12,16 @@ import type { WeightKey } from './tune'
 import { runCost } from './cost'
 import { runBudget, type BudgetReport } from './budget'
 import { dirname, join } from 'node:path'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { COMMIT_ID } from '../buildIdentity'
 import {
   runShards, poolShards, poolFirstPlayer, pendingSeeds, loadShardResults, shardRunKey, shardPayload,
-  spawnShards, shardPayloadPath, SHARD_DIR,
+  spawnShards, shardPayloadPath, SHARD_DIR, type ShardResult,
 } from './shard'
-import { renderStatus, loadAllProgress, preflight } from './status'
+import {
+  renderStatus, loadAllProgress, preflight, makeManifest, writeStatusFile, MANIFEST_FILE,
+  heartbeatPathFor, heartbeatWriter, writeHeartbeat, clearHeartbeat, type RunManifest,
+} from './status'
 import { pairedDifference, renderPaired } from './paired'
 import type { CostReport } from './cost'
 import type { DeckSource } from './decks'
@@ -29,7 +33,10 @@ import type { DecisionReport } from './decisions'
 import { runGeneralisation } from './generalisation'
 import type { GeneralisationReport } from './generalisation'
 import { buildMatchupDecks } from './matchupDecks'
-import { runMatchupMatrix, dealPairs, type MatrixResult } from './matrix'
+import {
+  runMatchupMatrix, dealPairs, matrixShardIds, matrixPayloadUsable, pendingMatrixShards,
+  mergeMatrixParts, matrixResumeRefusal, type MatrixResult,
+} from './matrix'
 import { saveMatrix, deckStrength, leaderStrength, baseStrength, firstPlayerAdvantage, type StrengthRow } from './store'
 import type { FirstPlayerSplit } from './stats'
 import { resolveAi } from '../ai/registry'
@@ -1206,47 +1213,144 @@ async function runShardedMatrixMode(args: Args): Promise<void> {
   const shards = args.shards ?? 1
   const decks = buildMatchupDecks()
   const total = dealPairs(decks.length).length
-  const dir = join(SHARD_DIR, `matrix__${model.replace(/[^A-Za-z0-9._-]/g, '_')}__g${gamesPerCell}__s${args.seed}`)
+  const expectedCells = decks.length * decks.length
+  const key = `matrix__${model.replace(/[^A-Za-z0-9._-]/g, '_')}__g${gamesPerCell}__s${args.seed}`
+  const dir = join(SHARD_DIR, key)
   mkdirSync(dir, { recursive: true })
+
+  // The shard count decides which pairs each child plays, so a resume at a different one is a
+  // different partition over the same directory and is refused rather than silently started fresh.
+  const previous = readJsonFile(join(dir, MANIFEST_FILE)) as RunManifest | null
+  const refusal = matrixResumeRefusal(previous, shards)
+  if (refusal !== null) {
+    console.error(`\n  ${refusal}\n`)
+    process.exit(1)
+    return
+  }
+
+  // Payloads already on disk stand in for running their shard again, on the same four conditions
+  // `pendingSeeds` applies to the head-to-head. This is the resumption the matrix has never had.
+  const wanted = { commitId: COMMIT_ID, model, gamesPerCell, seed: args.seed, deckCount: decks.length }
+  const banked = new Map<string, MatrixResult>()
+  for (const id of matrixShardIds(shards)) {
+    const payload = readJsonFile(shardPayloadPath(dir, id))
+    if (matrixPayloadUsable(payload, wanted)) banked.set(id, payload as MatrixResult)
+  }
+  const todo = pendingMatrixShards(shards, banked)
 
   console.log(
     `\nmatchup matrix: ${model}, ${decks.length} decks, ${gamesPerCell} games/cell, seed ${args.seed}` +
     `\n  ${shards} shards over ${total.toLocaleString()} pairs ` +
     `= ${(total * gamesPerCell).toLocaleString()} games\n  ${dir}/\n`,
   )
+  // Said loudly, as the head-to-head says it: a resumed run that looked fresh would invite someone to
+  // wonder why a 23-hour job finished in twenty minutes.
+  if (banked.size > 0) {
+    console.log(`  RESUMING: ${banked.size} shard(s) already complete, ${todo.length} to run\n`)
+  }
+
+  // Written before the first child starts, so `--status` and `STATUS.md` see the run immediately.
+  // A matrix shard is not a seed, so the manifest carries its ids; `games` is per shard, which the
+  // pairs divide into to within one, and `gamesTotal` carries the exact figure.
+  const manifest = makeManifest({
+    shards, games: Math.round((total * gamesPerCell) / shards), baseSeed: args.seed,
+    aiA: model, aiB: model, shardIds: matrixShardIds(shards), kind: 'matrix',
+    gamesTotal: total * gamesPerCell,
+  }, key)
+  writeFileSync(join(dir, MANIFEST_FILE), JSON.stringify(manifest, null, 2))
+  // Banked shards from an earlier attempt may predate their progress record, so write it now: a
+  // resumed run must not read as further behind than it is.
+  for (const [id, payload] of banked) writeFileSync(join(dir, `${id}.json`), bankedMatrixShard(payload, args.seed))
 
   const start = Date.now()
-  const jobs = Array.from({ length: shards }, (_, k) => ({
-    id: `matrix-${k}`,
+  const jobs = todo.map(id => ({
+    id,
     args: [
       'src/bench/main.ts', '--matrix', '--games', String(gamesPerCell), '--seed', String(args.seed),
-      '--shard-index', String(k), '--shard-count', String(shards),
-      '--out', shardPayloadPath(dir, `matrix-${k}`),
+      '--shard-index', String(matrixShardIds(shards).indexOf(id)), '--shard-count', String(shards),
+      '--out', shardPayloadPath(dir, id),
       ...(args.aiExplicit ? [model] : []),
     ],
   }))
-  const outcomes = await spawnShards(dir, jobs)
+  const outcomes = await spawnShards(dir, jobs, outcome => {
+    // Banked the moment its shard lands, exactly as the head-to-head has done since #492. This is the
+    // callback the matrix never passed, and its absence is what made a 23-hour run all-or-nothing.
+    const payload = matrixPayloadUsable(outcome.payload, wanted) ? outcome.payload as MatrixResult : null
+    writeFileSync(join(dir, `${outcome.id}.json`), bankedMatrixShard(payload, args.seed, outcome.exitCode))
+    clearHeartbeat(heartbeatPathFor(shardPayloadPath(dir, outcome.id)))
+    writeStatusFile()
+  })
 
-  const failed = outcomes.filter(o => o.exitCode !== 0 || o.payload === null)
+  for (const o of outcomes) {
+    if (matrixPayloadUsable(o.payload, wanted)) banked.set(o.id, o.payload as MatrixResult)
+  }
+  const failed = outcomes.filter(o => !banked.has(o.id))
   if (failed.length > 0) {
-    // Never save a partial matrix: it would be indistinguishable from a whole one with quiet gaps,
-    // and every row and leader average read off it would be wrong without saying so.
-    console.error(`\n  ${failed.length} of ${shards} shards failed (${failed.map(f => f.id).join(', ')}).`)
-    console.error('  Nothing saved. Re-run the identical command to retry.\n')
+    // **Never save a partial matrix**: it would be indistinguishable from a whole one with quiet gaps,
+    // and every row and leader average read off it would be wrong without saying so. Banking a shard's
+    // payload and saving a merged matrix stay separate decisions, which is what lets the re-run be
+    // cheap without weakening that.
+    console.error(`\n  ${failed.length} of ${todo.length} shards failed (${failed.map(f => f.id).join(', ')}).`)
+    console.error(`  ${banked.size} of ${shards} shard(s) are banked in ${dir}/`)
+    console.error('  Nothing saved to the database. Re-run the identical command to play only what is missing.\n')
     process.exit(1)
+    return
   }
 
-  const parts = outcomes.map(o => o.payload as MatrixResult)
-  const merged: MatrixResult = {
-    ...parts[0],
-    deckCount: decks.length,
-    dropped: parts.reduce((n, p) => n + p.dropped, 0),
-    cells: parts.flatMap(p => p.cells),
+  const merged = mergeMatrixParts(matrixShardIds(shards).map(id => banked.get(id)!), expectedCells)
+  if (!merged.ok) {
+    console.error(`\n  the merged matrix is not a matrix: ${merged.reason}.`)
+    console.error(`  Nothing saved to the database. The shard payloads are in ${dir}/\n`)
+    process.exit(1)
+    return
   }
+
   const db = openDb(DEFAULT_DB_PATH)
-  const runId = saveMatrix(db, merged)
-  console.log(matrixReport(merged, model, decks.length * decks.length, runId, ((Date.now() - start) / 1000).toFixed(0), db))
+  const runId = saveMatrix(db, merged.merged)
+  console.log(matrixReport(merged.merged, model, expectedCells, runId, ((Date.now() - start) / 1000).toFixed(0), db))
   db.close()
+}
+
+/**
+ * A child's progress reporter, or nothing when this process is not one.
+ *
+ * **`--out` is what makes a process a shard**: the parent passes it and nothing else does, so an
+ * interactive run keeps writing no heartbeat at all. The path is derived from the payload path rather
+ * than passed separately, so a child cannot report its progress somewhere its parent is not reading.
+ */
+function shardProgress(out: string | undefined, gamesTotal: number): ((n: number) => void) | undefined {
+  if (out === undefined) return undefined
+  const path = heartbeatPathFor(out)
+  return heartbeatWriter(gamesTotal, beat => writeHeartbeat(path, beat))
+}
+
+/** Read a JSON file, or null when it is missing or was half-written when the machine died. */
+function readJsonFile(path: string): unknown {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * A matrix shard's progress record, in the shape every other shard mode banks.
+ *
+ * **One progress mechanism, two modes.** `--status` reads banked results, and giving the matrix its
+ * own would mean a second scanner, a second completeness rule and a second place for the two to
+ * disagree. `winRateA` is meaningless for a matrix shard and is never read: the status readout shows
+ * no rate for any run, and the matrix's numbers come from its cells.
+ */
+function bankedMatrixShard(payload: MatrixResult | null, seed: number, exitCode = 0): string {
+  const result: ShardResult = {
+    seed,
+    winRateA: 0,
+    completed: payload?.gamesPlayed ?? 0,
+    dropped: payload?.dropped ?? 0,
+    exitCode,
+    commitId: COMMIT_ID,
+  }
+  return JSON.stringify(result, null, 2)
 }
 
 function runMatrixMode(args: Args): void {
@@ -1262,7 +1366,10 @@ function runMatrixMode(args: Args): void {
   console.log(`about ${(pairs * gamesPerCell).toLocaleString()} games to play; this takes a while...\n`)
 
   const start = Date.now()
-  const result = runMatchupMatrix(decks, resolveAi(model), model, { gamesPerCell, seed: args.seed, shardIndex, shardCount })
+  const result = runMatchupMatrix(decks, resolveAi(model), model, {
+    gamesPerCell, seed: args.seed, shardIndex, shardCount,
+    onProgress: shardProgress(args.out, pairs * gamesPerCell),
+  })
 
   // A child writes its cells for the parent and saves nothing: one merged run belongs in the database,
   // not N partial ones that would each look like a whole matrix with most of its cells missing.
@@ -1367,7 +1474,10 @@ function main(): void {
   let report: BenchReport
   const start = Date.now()
   try {
-    report = runBench({ games: args.games, seed: args.seed, aiA: args.aiA, aiB: args.aiB, decks: args.decks })
+    report = runBench({
+      games: args.games, seed: args.seed, aiA: args.aiA, aiB: args.aiB, decks: args.decks,
+      onProgress: shardProgress(args.out, args.games),
+    })
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
     process.exit(2)

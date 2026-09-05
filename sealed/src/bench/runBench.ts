@@ -27,6 +27,14 @@ export interface BenchConfig {
    * the mirror deck's 30 units. See {@link DeckSource}.
    */
   decks?: DeckSource
+  /**
+   * Called with the running count after every game, dropped ones included.
+   *
+   * A shard is otherwise silent until its last game: an overnight `--games 2000` run left twelve
+   * 0-byte logs and reported nothing for eight hours before it was lost. What the count becomes is a
+   * heartbeat file; this stays a bare callback so the run layer keeps doing no I/O of its own.
+   */
+  onProgress?: (gamesPlayed: number) => void
 }
 
 export interface Failure {
@@ -147,6 +155,9 @@ export function runBench(config: BenchConfig): BenchReport {
       result.initialState = null
     }
     games.push(result)
+    // After the push, so the count is games finished rather than games started. A dropped game still
+    // counts: an hour of them is progress, and reading it as silence would call a working shard hung.
+    config.onProgress?.(games.length)
   }
 
   const done = games.filter(g => g.status === 'completed')

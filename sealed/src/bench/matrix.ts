@@ -64,6 +64,14 @@ export interface MatrixResult {
   gamesPerCell: number
   seed: number
   dropped: number
+  /**
+   * Games this part actually completed.
+   *
+   * Not derivable from the cells: a pair off the diagonal produces two cells from **one** set of
+   * games, since the reverse matchup is derived rather than replayed, so summing `cell.games` would
+   * count most of them twice. A parent reporting progress needs the real figure.
+   */
+  gamesPlayed?: number
   /** N*N ordered pairs (row deck vs column deck). */
   cells: MatchupCell[]
 }
@@ -130,11 +138,15 @@ export function runMatchupMatrix(
     /** Which share of the pairs to play. Defaults to all of them. */
     shardIndex?: number
     shardCount?: number
+    /** Called with the running count of games played, so a 23-hour child is not silent for all of it.
+     *  See `BenchConfig.onProgress`, which this mirrors. */
+    onProgress?: (gamesPlayed: number) => void
   },
 ): MatrixResult {
   const cardDb = buildCardDb(POOL)
   const cells: MatchupCell[] = []
   let dropped = 0
+  let played = 0
 
   for (const [i, j] of dealPairs(decks.length, config.shardIndex ?? 0, config.shardCount ?? 1)) {
     {
@@ -165,6 +177,8 @@ export function runMatchupMatrix(
           firstPlayer: seats.firstPlayer,
           stepCeiling: config.stepCeiling,
         })
+        played++
+        config.onProgress?.(played)
         if (r.status !== 'completed') { dropped++; continue }
         completed++
         const forI = resultForA(r, seats) // "A" here is deck i
@@ -197,6 +211,102 @@ export function runMatchupMatrix(
     gamesPerCell: config.gamesPerCell,
     seed: config.seed,
     dropped,
+    gamesPlayed: played,
     cells,
   }
+}
+
+/**
+ * Banking and resuming a sharded matrix (#562).
+ *
+ * The head-to-head has banked each shard as it lands since #492; the matrix passed no banking callback
+ * at all, so a run that died at hour 20 of 23 cost all 23 and told the operator to re-run the identical
+ * command, which replayed every shard from zero. The children's payloads were on disk the whole time
+ * and nothing read them back.
+ *
+ * **The matrix cannot resume the way the head-to-head does.** A head-to-head shard is a seed, so
+ * re-running at a larger `--shard` extends the run, and the shard count is deliberately excluded from
+ * its run key for that reason. A matrix child deals itself every Nth pair from `--shard-count N`, so
+ * changing the count changes which pairs each child plays: `matrix-0.out` from a ten-shard run holds a
+ * different set of pairs than shard 0 of an eight-shard run. The count is a resume condition here
+ * rather than a free parameter.
+ */
+
+/** One id per child, naming its log, its payload and its banked result, as `seed-N` does for the
+ *  head-to-head. */
+export const matrixShardIds = (shards: number): string[] =>
+  Array.from({ length: shards }, (_, k) => `matrix-${k}`)
+
+/**
+ * May a payload already on disk stand in for running its shard again?
+ *
+ * The same four questions `pendingSeeds` asks, in the matrix's terms. **The commit stamp is the
+ * load-bearing one**: nothing in the run directory's name changes when the code does, so without it a
+ * re-run after an evaluation change would find every shard complete, replay the old cells in 0.0s and
+ * present them as the new measurement.
+ */
+export function matrixPayloadUsable(
+  payload: unknown,
+  wanted: { commitId: string; model: string; gamesPerCell: number; seed: number; deckCount: number },
+): boolean {
+  if (typeof payload !== 'object' || payload === null) return false
+  const p = payload as Partial<MatrixResult>
+  if (!Array.isArray(p.cells) || p.cells.length === 0) return false
+  return p.commitId === wanted.commitId
+    && p.model === wanted.model
+    && p.gamesPerCell === wanted.gamesPerCell
+    && p.seed === wanted.seed
+    && p.deckCount === wanted.deckCount
+}
+
+/** Which shards still need running, given the payloads that were readable and usable. */
+export const pendingMatrixShards = (
+  shards: number,
+  banked: ReadonlyMap<string, MatrixResult>,
+): string[] => matrixShardIds(shards).filter(id => !banked.has(id))
+
+/**
+ * Assemble the parts into one matrix, or refuse and say why.
+ *
+ * **This is the check the parent never made.** It merged whatever it was handed and trusted that N
+ * shards' cells add up to the whole matrix. That held while every part came from one live spawn; once
+ * parts can come back from disk it is exactly the assumption a wrong resume breaks, and a matrix with
+ * quiet gaps is indistinguishable from a whole one while every row and leader average read off it is
+ * wrong.
+ */
+export function mergeMatrixParts(
+  parts: MatrixResult[],
+  expectedCells: number,
+): { ok: true; merged: MatrixResult } | { ok: false; reason: string } {
+  if (parts.length === 0) return { ok: false, reason: 'no shard produced a result' }
+  const cells = parts.flatMap(p => p.cells)
+  const keys = new Set(cells.map(c => `${c.aLabel}|${c.bLabel}`))
+  if (keys.size !== cells.length) {
+    return { ok: false, reason: `${cells.length - keys.size} duplicate cell(s): two shards played the same pair` }
+  }
+  if (cells.length !== expectedCells) {
+    return { ok: false, reason: `${cells.length} cells, expected ${expectedCells}` }
+  }
+  return {
+    ok: true,
+    merged: {
+      ...parts[0],
+      dropped: parts.reduce((n, p) => n + p.dropped, 0),
+      gamesPlayed: parts.reduce((n, p) => n + (p.gamesPlayed ?? 0), 0),
+      cells,
+    },
+  }
+}
+
+/**
+ * Why this run may not continue into that directory, or null if it may.
+ *
+ * Refused rather than silently started fresh: the payloads already there belong to a different
+ * partition of the same pairs, and merging them would produce duplicated cells and silent gaps.
+ */
+export function matrixResumeRefusal(banked: { shards: number } | null, requestedShards: number): string | null {
+  if (banked === null || banked.shards === requestedShards) return null
+  return `this run was started at --shard ${banked.shards} and you asked for ${requestedShards}. ` +
+    'A matrix child deals itself every Nth pair, so the shard count decides which pairs it plays: ' +
+    `re-run with --shard ${banked.shards} to resume, or delete the run directory to start again.`
 }

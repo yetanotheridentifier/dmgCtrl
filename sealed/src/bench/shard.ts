@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { wilsonInterval, firstPlayerSplit, type FirstPlayerSplit } from './stats'
 import { COMMIT_ID } from '../buildIdentity'
 import type { DeckSource } from './decks'
-import { SHARD_DIR, makeManifest, writeStatusFile } from './status'
+import { SHARD_DIR, MANIFEST_FILE, makeManifest, writeStatusFile, clearHeartbeat, heartbeatPathFor } from './status'
 
 export { SHARD_DIR }
 
@@ -244,7 +244,8 @@ export function loadShardResults(dir: string): ShardResult[] {
   if (!existsSync(dir)) return []
   const out: ShardResult[] = []
   for (const file of readdirSync(dir)) {
-    if (!file.endsWith('.json')) continue
+    // The manifest shares the directory and the extension, and is not a result.
+    if (!file.endsWith('.json') || file === MANIFEST_FILE) continue
     try {
       out.push(JSON.parse(readFileSync(join(dir, file), 'utf8')) as ShardResult)
     } catch {
@@ -276,7 +277,7 @@ export async function runShards(config: ShardConfig): Promise<ShardResult[]> {
   // deliberately excludes the shard count so a run can resume at a different one, which means the
   // result files alone can never say how many shards were expected, and a subset of them looks exactly
   // like a finished run. Written before the first child starts, so `--status` sees a run immediately.
-  writeFileSync(join(dir, 'run.json'), JSON.stringify(makeManifest(config, shardRunKey(config)), null, 2))
+  writeFileSync(join(dir, MANIFEST_FILE), JSON.stringify(makeManifest(config, shardRunKey(config)), null, 2))
 
   const banked = loadShardResults(dir)
   const todo = pendingSeeds(config, banked)
@@ -287,6 +288,9 @@ export async function runShards(config: ShardConfig): Promise<ShardResult[]> {
     const seed = Number(outcome.id.replace('seed-', ''))
     const result = shardResultFrom(outcome.payload, seed, outcome.exitCode)
     writeFileSync(join(dir, `${outcome.id}.json`), JSON.stringify(result, null, 2))
+    // The shard is no longer in flight, and a heartbeat left behind would report its games as both
+    // banked and outstanding.
+    clearHeartbeat(heartbeatPathFor(shardPayloadPath(dir, outcome.id)))
     writeStatusFile()
   })
 

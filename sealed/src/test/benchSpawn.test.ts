@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { seedJobs, shardPayloadPath, type ShardConfig } from '../bench/shard'
+import { heartbeatPathFor } from '../bench/status'
 
 /**
  * Mode-agnostic shard spawning (#492, phase 3).
@@ -58,6 +59,20 @@ describe('seedJobs', () => {
   it('passes exactly the path the runner will read back', () => {
     const [job] = seedJobs(config(), [100], 'runs/abc')
     expect(job.args[job.args.indexOf('--out') + 1]).toBe(shardPayloadPath('runs/abc', job.id))
+  })
+
+  /**
+   * **The heartbeat path is derived from the payload path**, so a child cannot be told to write its
+   * result in one place and its progress in another. It carries the same constraint as the payload and
+   * for the same reason: `loadShardResults` and the progress scanner glob `*.json` in the run
+   * directory, so a heartbeat ending `.json` would be read back as a banked result carrying no exit
+   * code, and a run would report itself further along than it is.
+   */
+  it('puts a shard\'s heartbeat beside its payload, and not as a .json', () => {
+    const [job] = seedJobs(config(), [100], 'runs/abc')
+    const out = job.args[job.args.indexOf('--out') + 1]
+    expect(heartbeatPathFor(out)).toBe('runs/abc/seed-100.progress')
+    expect(heartbeatPathFor(out).endsWith('.json')).toBe(false)
   })
 
   /**
