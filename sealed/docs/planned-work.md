@@ -18,19 +18,11 @@ Ordered on one principle: **correctness, then structure, then calibration.** Any
 engine or the horizon invalidates a calibration done before it, which is why the matchup matrix sits
 at the end of the list rather than in the middle of it.
 
-The harness ticket leads because everything below is measured through it, and it touches no engine
-code, so it invalidates nothing.
-
-1. **#562 a long run banks nothing until a shard lands, and the matrix banks nothing at all.** The
-   sharded matrix calls `spawnShards` without the banking callback the head-to-head passes, so it has
-   no resumption: a 23-hour run that dies at hour 20 costs all 23. A hard prerequisite for the matrix,
-   and the progress half pays off on every long run before it. A 24,000-game overnight A/B was lost
-   this way at 7h50m, having banked nothing.
-2. **#557 decide `hand.canAct`.** Measured inert through the horizon arm, and still not removable:
+1. **#557 decide `hand.canAct`.** Measured inert through the horizon arm, and still not removable:
    deleting it inverts the lower bound in `handValue.test.ts` that stops the model banking its last
    castable card. A scripted position for the case that bound describes is the only option producing
    evidence rather than a preference, and self-play cannot reach it.
-3. **#558 finish what #516 scoped and did not do.** The horizon itself is built, measured at -3.72 points
+2. **#558 finish what #516 scoped and did not do.** The horizon itself is built, measured at -3.72 points
    and **shipped disabled**, so these are the parts that outlived it. Either measurement can ship alone.
    - **Re-ask the shielded-Sentinel lockout** against the horizon arm: whether the strip line now
      contains its own payoff, and whether `blockedReach`, which ships at weight 0, becomes deletable
@@ -40,11 +32,11 @@ code, so it invalidates nothing.
    - The horizon A/B predates the root pass charge that cut mid-round passes from 2.71 a game to 0.21,
      so the crossing may no longer be answering the same question. First step is the cheap one: read
      the pass rate at `maxCrossings` 0 against 1, which is minutes rather than hours of games.
-4. **#519 price the regroup resourcing decision as thresholds.** The regroup decision is currently a
+3. **#519 price the regroup resourcing decision as thresholds.** The regroup decision is currently a
    constant: `resource - card` is +2 and banking is always chosen, so nothing is being weighed. The rule
    that should decide it, the knee rising to the leader's deploy cost, is live code that cancels out of
    its own total while the two rates are equal.
-5. **#520 the lethal solver is budget-bound**, so every result quoted about solver depth measures the
+4. **#520 the lethal solver is budget-bound**, so every result quoted about solver depth measures the
    rail instead. It takes 50x the default node budget before more depth stops finding less, and the
    shipped gated solver runs at 4x. The +0.8 recorded for `beam-lethal` is a lower bound on a solver
    that never finished its search. `--lethal` takes `--solver-nodes N` (#559), so the sizing pass is
@@ -52,10 +44,11 @@ code, so it invalidates nothing.
    scaled rail with no override, so the `--cost` sweep, which addresses solver depths by AI name, is
    still bound by it. Extending that spec with an optional node budget, as `beam:` and `reply:`
    already have, is the first task.
-6. **Run the matchup matrix.** Only once the four AI tickets above have settled: it is the calibration
+5. **Run the matchup matrix.** Only once the four AI tickets above have settled: it is the calibration
    they would each invalidate, and at roughly **23 hours sharded** (10 games a cell, against 169
-   serial) it is the one run worth doing exactly once. It needs #562 first, or an interruption at hour
-   20 costs all 23. The first-player split is in place, so it answers two questions instead of one.
+   serial) it is the one run worth doing exactly once. It banks and resumes per shard now, so an
+   interruption at hour 20 costs the outstanding shards rather than all 23. The first-player split is
+   in place, so it answers two questions instead of one.
 
    Per-cell numbers are noise at that size (±50% at 4 games). The readable aggregates are deck strength
    (±5.8%) and leader strength (±2.9%), and the genuinely interesting output is any leader whose
@@ -69,13 +62,13 @@ code, so it invalidates nothing.
 
    It measures the **deck generator**, not the sealed metagame: one algorithmic build per leader and
    base. That gap is the point rather than a caveat.
-7. **#565 split what a run plays from what it records.** Fifteen modes, two real shapes: a game run and
+6. **#565 split what a run plays from what it records.** Fifteen modes, two real shapes: a game run and
    a corpus run. The fragmentation already costs something measured, since the generalisation harness
    and `runBench` read 50.4% and 48.70% for the same AI on the same decks, which is why every harness
    needs its own baseline established before a number from it can be trusted. After the matrix rather
    than before it: the benefit is mostly for repeated A/B runs, and a large harness refactor
    immediately before a 23-hour calibration is the wrong risk to take.
-8. **Two candidates from review, neither ticketed yet.** Both add information rather than re-pricing
+7. **Two candidates from review, neither ticketed yet.** Both add information rather than re-pricing
    it, which is the strongest steer available: of six attempts to re-price something, one worked, and
    it was a search change.
    - **Claiming the initiative charges nothing for the cards it stops you playing.** The cost term

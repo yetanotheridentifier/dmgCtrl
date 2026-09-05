@@ -367,11 +367,12 @@ search holds a larger frontier per root and should be expected to want more.
 turned a 30-minute estimate into 4.3 hours.
 
 **Shard size also decides what an interruption costs.** Every shard starts at once and writes its
-result only when it finishes, so `--games` is the only banking granularity there is: nothing at all is
-on disk until shards begin landing. At 168 games a shard the first results land inside two hours; at
-2,000 they land at the end of a 20-hour run, and anything that kills the run before then loses all of
-it. A 24,000-game A/B was lost exactly that way at 7h50m. **Size the shard to land within an hour or
-two, and buy more games by adding shards rather than by lengthening each one** (see waves, below).
+result only when it finishes, so `--games` is the only banking granularity there is. A run says how far
+along it is from its first minute, but that is visibility rather than safety: nothing is **recoverable**
+until shards begin landing. At 168 games a shard the first results land inside two hours; at 2,000 they
+land at the end of a 20-hour run, and anything that kills the run before then loses all of it. A
+24,000-game A/B was lost exactly that way at 7h50m. **Size the shard to land within an hour or two, and
+buy more games by adding shards rather than by lengthening each one** (see waves, below).
 
 **Keep `--games` a multiple of four.** Seat and first player cycle on independent axes with a period of
 `SEATING_CYCLE = 4`, so a remainder leaves a tail of games covering only some of the four
@@ -408,6 +409,22 @@ ever be checked against a serial one.
 A child writes its cells and saves nothing; only the merged run reaches the database. **If any shard
 fails, nothing is saved at all**, because a partial matrix is indistinguishable from a whole one with
 quiet gaps, and every row and leader average read off it would be wrong without saying so.
+
+**Each shard is banked as it lands, and re-running the identical command plays only what is missing.**
+Banking a shard's payload and saving a merged matrix are separate decisions, so resumption costs the
+guarantee above nothing: a re-run after a crash at hour 20 of 23 replays the outstanding shards rather
+than all of them, and still saves nothing until the matrix is whole. The merge also checks itself,
+refusing a set of parts that is short of `N*N` cells or carries the same cell twice.
+
+**The shard count is fixed for the life of a matrix run**, which is the one place the matrix and the
+head-to-head differ. A head-to-head shard is a seed, so re-running at a larger `--shard` extends the run
+and the count is deliberately excluded from its key. A matrix child deals itself every Nth pair, so the
+count decides which pairs it plays: `matrix-0.out` from a ten-shard run holds a different set of pairs
+than shard 0 of an eight-shard run, and merging the two would give duplicated cells and silent gaps.
+Re-running at a different count is **refused**, naming the count the run was started at.
+
+A matrix run appears in `--status` like any other, labelled `matrix <model>`, with the same heartbeats
+and the same banked-versus-in-flight split.
 
 ### The matched control: `--control`
 
@@ -467,10 +484,17 @@ npm run bench --prefix sealed -- --status
 ```
 
 Read-only, and safe at any time: it starts nothing. Per run it reports shards done of total, games
-played of total, **measured** seconds per game, and a projected finish, all from files already on disk.
-The rate and the finish come from shards that have **landed**, so a run whose first shard is still
-playing reports `0 of N` with `rate unknown`: see shard sizing above, since that is what decides how
-long a run stays unreadable.
+banked of total, games still in flight, **measured** seconds per game, and a projected finish, all from
+files already on disk.
+
+**Banked and in-flight are separate figures and are never added together.** Banked games are the ones
+that survive a crash, which is the question that matters at hour 20 of a 23-hour run; in-flight games
+say the run is moving and how fast. The 24,000-game run that was lost had played roughly half its games
+and banked none of them.
+
+The rate comes from a landed shard where there is one, since that measures a whole shard rather than a
+prefix of one, and from the running shards otherwise. A reading taken from a running shard is marked
+`(in flight)`, because a prefix and a whole shard are not the same claim.
 
 Every run also rewrites `bench-results/STATUS.md` as each shard lands, so a long run can be watched
 from an open editor tab rather than by asking.
@@ -493,20 +517,46 @@ whole run instead of a mean of twelve wide ones.
 
 ### Watching a run, and resuming a broken one
 
-Each run gets a directory named after what defines it, holding a log and a result per shard:
+Each run gets a directory named after what defines it, holding a log, a heartbeat and a result per
+shard:
 
 ```
 bench-results/shards/<aiA>__vs__<aiB>__g<games>__s<seed>/
-  seed-4910.log     written as the shard runs
-  seed-4910.json    written the moment it finishes
+  run.json           the manifest, written before the first child starts
+  seed-4910.log      written as the shard runs
+  seed-4910.progress how many games it has played, rewritten about once a minute
+  seed-4910.json     written the moment it finishes
 ```
 
-**A shard in flight produces no signal at all.** It prints its report when its games are done and
-nothing before, so its log stays **empty** for the whole run. A 0-byte log after eight hours means
-"not finished", and from the files alone that is indistinguishable from hung. `--status` reports a
-measured rate and a projected finish only once a shard has landed; before that a run shows `0 of N`
-with `rate unknown`. Until that changes, what separates a working run from a stuck one is that its
-worker processes are still burning CPU.
+**A running shard reports its progress in a heartbeat file.** Its log still stays empty until its games
+are done, because it prints its report and nothing before, so the log is not the channel. The heartbeat
+carries counted games and two timestamps, which is what gives `--status` a measured rate at any shard
+size within one game of a run starting.
+
+**The heartbeat carries no win rate, deliberately.** A partial run showing a rate is the mistake the
+word `PARTIAL` exists to block, and the cheapest way to keep that guarantee is for the in-flight
+channel to have no rate in it to show.
+
+It is written on a clock rather than every N games, because a `beam-reply` game takes about 35 seconds
+and a `greedy` mirror game takes milliseconds, so a count would be either silent for an hour or
+thousands of writes a second depending on the mode. The real cadence is **`max(a minute, one game)`**,
+since it is only ever written on a game boundary: at 35 seconds a game it lands every other game, and
+on a fast mode it lands once a minute.
+
+**A minute is chosen for resolution rather than for cost.** The interval bounds one thing only, how
+stale a `--status` reading can be, since the first write is never throttled and the rate is a
+cumulative average that a late write delays rather than biases. The runs being watched are 30 minutes a
+shard at the short end and 20 hours at the long one, and a minute resolves both finely.
+
+It is deleted the moment its shard lands: a heartbeat's existence is the whole of "this shard is still
+running", so one left behind would report banked games as still outstanding.
+
+**A heartbeat that has stopped moving reads as `STALLED`**, which is what separates hung from slow. The
+threshold scales with the shard's own measured game time rather than being a constant, since a
+heartbeat is only written on a game boundary and a search deep enough to take ten minutes a game would
+trip any fixed timeout. Its five-minute floor is also **what bounds the write interval**: an interval
+anywhere near the floor would report healthy shards as hung, silently, so the 5x margin between them is
+pinned by a test rather than left as a coincidence.
 
 **Re-running the identical command resumes.** Completed shards are skipped, failed ones repeat, and
 the run announces `RESUMING: N shard(s) already complete`. A shard counts as done only if it exited
@@ -1384,8 +1434,9 @@ eight of eighteen modules were missing.
   judges the result against a tabulated t critical value rather than a computed p, because shard
   counts are small enough that an approximation would flatter a marginal result.
 - `bench/status.ts` progress of a run in flight, behind `--status`, plus the `STATUS.md` an editor tab
-  can follow and the pre-flight checks. Pure reading and formatting, so `shard.ts` depends on it and
-  not the reverse.
+  can follow and the pre-flight checks. Also owns the heartbeat a running shard writes: the throttled
+  writer, where the file lives, and the rule that decides hung from slow. Pure reading and formatting
+  apart from the heartbeat file itself, so `shard.ts` depends on it and not the reverse.
 - `bench/selfPlay.ts` `playGame`: one full game, seeded, with the drop classification.
 - `bench/runBench.ts` `runBench`: N games, alternating seat and first player, aggregated into a report.
 - `bench/seating.ts` seat and first-player alternation on independent axes, so four games cover all
@@ -1404,7 +1455,9 @@ eight of eighteen modules were missing.
   than decked and names anything decked but never drawn.
 - `bench/playCoverage.ts` the per-card play tracking that backs it.
 - `bench/matrix.ts` the deck-strength matrix behind `--matrix`, sharded by dealing each child every Nth
-  deck pair, with per-pair seeds so a sharded run is identical to a serial one.
+  deck pair, with per-pair seeds so a sharded run is identical to a serial one. Also owns its
+  resumption: which payloads on disk may stand in for running a shard again, the merge that refuses a
+  set of parts that is not a whole matrix, and why the shard count cannot change between attempts.
 - `bench/aiMatchups.ts` AI-vs-AI across every ordered deck pair, behind `--matchups`.
 
 ### Tuning and persistence
