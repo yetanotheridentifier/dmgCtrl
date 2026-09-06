@@ -247,10 +247,64 @@ discriminating weakly across the horizon buckets to discriminating strongly, Ï‡Â
 7.815 critical value, concentrated in the case where claiming means acting first into our own win
 (17.8% to 28.9%). **The bot judges the claim decision better and plays worse overall.**
 
-Two candidate explanations, neither settled: the modelled opponent tail may be dead weight (it is most
-of the cost, and the free run changes nothing measurable in 79% of claims), or crossing may make
-**passing** more attractive, since a line that ends the phase now lands on a regroup where both sides
-ready everything and bank a resource.
+Two candidate explanations were open: the modelled opponent tail may be dead weight (it is most of the
+cost, and the free run changes nothing measurable in 79% of claims), or crossing may make **passing**
+more attractive, since a line that ends the phase now lands on a regroup where both sides ready
+everything and bank a resource.
+
+**It is the second, and the tail is not required for it.** A crossing-only arm
+(`beam-reply/horizon=cross:1,tail:0`) against the shipped bot, `--decisions`, 44 games on the same
+seeds and the coverage decks:
+
+| | `cross:0` | `cross:1,tail:0` |
+| --- | --- | --- |
+| chosen passes a game | 0.75 | **1.11** |
+| passed when it had a choice | 1.6% | **2.6%** |
+| of those, **ending the action phase** | **0.0%** | **53.1%** |
+| of those, worse than claiming | 0 | 3 |
+
+The crossing invents a behaviour the shipped bot does not have: **it ends rounds early.** Over half of
+its chosen passes end the action phase, against none at all without the crossing, which is exactly the
+mechanism the horizon result predicted. The search can now see the fresh round on the far side of
+regroup and takes the max over it, so stopping the current round early scores well.
+
+Mid-round passes actually **fall** (0.75 to 0.52), so a raw pass rate reads this as an improvement. It
+is not one.
+
+**The root pass charge does not prevent it**, which retires the hypothesis that the -3.72 would read
+differently now that the charge ships: the charge is applied at the root while the attraction lies in
+the max over post-regroup boards. Three of the crossing arm's passes are *worse than claiming*, where
+the two moves end the phase identically except that claiming also takes the initiative: the same
+board, one strictly better move, and the shipped bot does this zero times.
+
+So a crossing-only arm is **not** "both cheaper and better". It is cheaper and carries its own
+passivity defect, and sweeping `tailActions` beneath it would be tuning the half that is not the
+problem.
+
+### The horizon does not touch the shielded-Sentinel lockout
+
+The question the horizon was built for, asked on the two scripted positions rather than on a win rate,
+because a lane genuinely shut is 0.5% of coverage decisions. **It changes nothing, and not by a
+little.**
+
+| | shipped | with the horizon | with `blockedReach` at 3 |
+| --- | --- | --- | --- |
+| gap, passing minus stripping (scripted board) | 10 | **10** | 0 |
+| strips, of 18 locked boards from a filed game | 1 | **1** | 10 |
+
+Zero movement rather than insufficient movement, so no heavier configuration completes it. The reason
+was already proven and is a property of the **search** rather than of the depth: the passing line and
+the stripping line reach the **same end board at the same level**, differing only in the route, and a
+value that is a max over reachable boards discards the route. Giving such a search more boards to
+reach cannot separate two candidates that already converge.
+
+The root pass charge is spending its full 8 points on that position and still loses: the raw gap is
+**18**, and 10 after the charge. Real work in the right direction, less than half of what is needed,
+and not raisable, since it applies to every pass in the game and is already sized to about a competent
+player's rate.
+
+**This closes the horizon as an answer to the lockout**, which was the last live alternative to pricing
+it in the evaluation.
 
 ### Crossing the boundary safely means redacting the draw
 
@@ -394,11 +448,71 @@ it charges for what it already sees.
   Only a contextual version is worth revisiting. And "worse than random" was an overstatement: random
   strips by accident rather than correctly, so stripping less often than chance is not by itself
   evidence of an error.
-- **Blocked reach**, priced as damage a shielded Sentinel denies. At the weight first tried it measured
-  **25.0%** against the shipped bot, because it was triple the value of a whole unit on a scale where a
-  unit is the biggest thing you can win or lose. In-scale values do not create the tie it was meant to
-  break, and a sweep found the term invisible over ~2,500 games. The weight was allowed to be named by
-  a single scripted position and never read against the model's own scale, which costs seconds.
+- **Blocked reach**, priced as damage a shielded Sentinel denies. **Ungated** it measured **25.0%**
+  against the shipped bot at weight 12, because it fired on 24.2% of decisions as a board-wide grudge
+  against Sentinels while the lockout it was written for is 2%, at triple the value of a whole unit.
+  Gating it to *shielded* blockers is what fixed that, and the gate ships. Gated, weight 12 read
+  **48.8%**, and an in-scale sweep found the term **invisible** over ~2,500 games.
+
+  "Invisible", never "harmful": the 25.0% belongs to the ungated term and does not transfer.
+
+  **Every one of those numbers predates four changes to what was being measured**, so none of them is
+  a current reading. The in-scale sweep ran the day before the search tie-break shipped, two days
+  before every price in the model doubled, and three weeks before the bench's seat bias was fixed.
+  That last one matters most: self-play controls through the head-to-head path these A/Bs used read
+  50.0%, **48.8%** and 46.3%, pooling to 48.3% where an unbiased harness gives 50, so the gated
+  reading coincides exactly with a known-biased control. Not proof it was the bias, and not a number
+  to quote either.
+
+  **The tie-break's absence is the mechanistic suspect.** Escaping the lockout needs two things: the
+  term must turn the position into a tie, and the second opinion must then resolve that tie toward
+  acting. On the day of the sweep the shipped bot had no second opinion, so the term was measured
+  without the half of the mechanism it depends on.
+
+  The weight was also allowed to be named by a single scripted position and never read against the
+  model's own scale, which costs seconds. Every weight from 1 to 16 escapes the scripted lockout and
+  all produce the identical two-way tie, so 12 was simply the first value tried.
+
+  **Re-screened at weight 3 on a population that contains the position** (`--decks lockout`), 80 games
+  a side with a matched control on the same seeds:
+
+  | | wall decks | coverage decks |
+  | --- | --- | --- |
+  | paired difference | **+10.00** | **+1.25** |
+  | t (9 df) | 2.75, significant at 5% | 0.43, not significant |
+  | shards favouring the arm | 6 of 10 | 1 of 10 |
+  | shards favouring the control | **0** | 1 |
+  | shards byte-identical | 4 | **8** |
+
+  The mechanism agrees with the win rate, which is what a proxy measurement would not do. Over the
+  same games the term takes an available strip on **23.3%** of chances against the shipped bot's
+  14.7%, halves the rounds spent locked (10.1% to 5.1%), and leaves 25% fewer shielded blockers
+  standing.
+
+  **The full paired runs, 1,678 games an arm**, which is what those screens are worth once played out:
+
+  | | wall decks | coverage decks |
+  | --- | --- | --- |
+  | paired difference | **+1.88** | **+0.14** |
+  | t | 1.73 on 10 df vs 2.228 | 0.19 on 9 df vs 2.262 |
+  | | **not significant** | not significant |
+  | shards favouring the arm | 7 of 11 | 6 of 10 |
+
+  The screens read +10.00 and +1.25, so both shrank hard at twenty times the sample, exactly as the
+  tie-break did (55.0% at 80 games, 51.1% at 2,040). **Screens are disaster filters and this is what
+  they are worth.**
+
+  **Shipped at 3 anyway**, on this ticket's stated gate of a scripted position plus non-inferiority
+  rather than a win rate, because a shut lane is 2.2% of coverage decisions and no aggregate can carry
+  it. Positive point estimates on both populations, neutral where the position does not occur, a
+  measured mechanism, and a defect reported twice from real play. Recorded as **not significant**, not
+  as a win.
+
+  **Cost is a precondition, not a footnote.** The quantity runs the targeting rules per unit, so with
+  the weight non-zero it evaluates on every board. Shipping it unguarded measured **1.26x** the
+  per-decision cost; gating on "the enemy holds a unit that is both a Sentinel and shielded" brings it
+  inside noise (three runs read 1.11x in the term's favour, then 1.09x and 1.05x against). A term this
+  narrow has to pay nothing on the boards where it cannot fire.
 - **Advantage priced as a one-off.** The token is +1/0 until its unit next completes an attack or
   defence, so a permanent model over-values it. Prevalence passed the gate at 20.7% of decisions, and
   six arms plus 1,800 games measured nothing: 76% of tokens are spent, so the honest discount is small
@@ -425,6 +539,42 @@ it charges for what it already sees.
   most units are power 2-5, so single-unit pins barely exist in this pool. The opponent deploys into a
   pin 8.1% of the time, so neither side plays around the threat and self-play could not reward the
   behaviour even if it were built.
+- **The shielded-Sentinel lockout was in this category, and no longer is.** A deck population can be
+  built for a strategy self-play will not play. See below.
+
+### Building a population for a strategy self-play will not play
+
+The lockout defeated measurement for a year because it is a **human** strategy: a shut lane appears on
+2.2% of coverage decisions and never lasts a full round, while play-testers hit it constantly and one
+filed game ran four consecutive rounds. `blockedReach` was written off as "invisible over ~2,500
+games" on exactly that population.
+
+The fix is a deck set built to contain the position: one seat gets an ordinary coverage deck, the
+other a wall of self-shielding ground Sentinels plus the cards that put a Shield back after a strip.
+`--decks lockout`. The shipped bot, 44 games a side, same seeds:
+
+| `beam-reply` | coverage | lockout |
+| --- | --- | --- |
+| a lane shut | 2.2% | **6.4%** |
+| rounds locked | 1.3% | **10.1%** |
+| longest lockout in one game | **1 round** | **4 rounds** |
+| the bot took an available strip | 9.3% | 14.7% |
+| **passed with an attack available** | 57.6% | **96.7%** |
+
+**Both columns are the calibration.** The coverage column reproduces the historical record and the
+lockout column reproduces the filed game, which is what distinguishes an instrument from a large
+number.
+
+Three properties of such a set, learned building this one:
+
+- **It must be asymmetric, and that costs the absolute win rate.** A mirror where both seats hold the
+  wall cannot show a bot finding a way *through* one. The price is that the pairing has a favourite
+  before either bot moves, so only a paired difference against a matched control means anything.
+- **The benefit is measured on the built population; non-inferiority stays on the ordinary one.** A
+  term tuned only against a manufactured population is tuned against nobody's game.
+- **Read the qualified rate, not the raw one.** The raw pass rate barely moves between the two
+  populations (0.75 a game against 0.68); what changes is that the bot passes *with an attack
+  available* almost every time. A rate alone reads this as no difference.
 
 ### Refuted assumptions
 

@@ -49,9 +49,21 @@ const clear = (): GameState => state({
 })
 
 describe('the blocked-reach term', () => {
-  /** Ships off, per the rule that a new weight is defaulted to zero and swept upward. */
-  it('defaults to zero, so nothing changes until it is measured', () => {
-    expect(DEFAULT_WEIGHTS.blockedReach).toBe(0)
+  /**
+   * **Ships at 3, and the value has to stay in scale.**
+   *
+   * It was defaulted to zero and swept upward, which is the rule; this asserts where the sweep landed
+   * and, more usefully, that it sits inside the model's own range. What made the original 12 wrong was
+   * never the digit but that it was triple a whole unit, and a term that wins its arguments by
+   * shouting is fragile whatever a screen says.
+   *
+   * Expressed against `unit` rather than as a bare number, so a future rescaling of every price
+   * cannot silently turn this back into an out-of-scale weight.
+   */
+  it('ships in scale, below the value of a whole unit', () => {
+    expect(DEFAULT_WEIGHTS.blockedReach).toBe(3)
+    expect(DEFAULT_WEIGHTS.blockedReach).toBeGreaterThan(0)
+    expect(DEFAULT_WEIGHTS.blockedReach).toBeLessThan(DEFAULT_WEIGHTS.unit)
   })
 
   it('costs us nothing when no lane is shut', () => {

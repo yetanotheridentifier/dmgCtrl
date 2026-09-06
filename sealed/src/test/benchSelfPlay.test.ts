@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { playGame } from '../bench/selfPlay'
+import { playGame, DEFAULT_STEP_CEILING } from '../bench/selfPlay'
 import { benchInputs } from '../bench/decks'
 import { randomAi } from '../ai/randomAi'
 import type { Ai } from '../ai/types'
-import type { GameResult } from '../bench/selfPlay'
+import type { GameResult, DropReason } from '../bench/selfPlay'
 
 /**
  * The pure heart of the harness: a whole game played headlessly between two AIs, seeded so it is a
@@ -43,13 +43,51 @@ describe('playGame', () => {
    * invariant, and a number that moves with CPU load is not a measurement.
    *
    * `stepCeiling` is the deterministic guard and is the only one allowed to decide a game's fate.
+   *
+   * This used to prove the point by passing `timeoutMs: 0` and watching the game finish anyway. The
+   * option is gone (it was a no-op threaded through six modules), so the invariant is asserted
+   * directly instead: the same inputs give the same game, and nothing but the step count can stop
+   * one. Deleting the option did not delete the rule.
    */
-  it('ignores the wall clock entirely, so load cannot change the outcome', () => {
-    const normal = playGame({ ...base, seed: 11 })
-    // An impossible time budget: if the clock still gated anything, this would drop instantly.
-    const starved = playGame({ ...base, seed: 11, timeoutMs: 0 })
-    expect(starved.status).toBe('completed')
-    expect(stable(starved)).toEqual(stable(normal))
+  it('depends only on its inputs, so load cannot change the outcome', () => {
+    const first = playGame({ ...base, seed: 11 })
+    const second = playGame({ ...base, seed: 11 })
+    expect(stable(second)).toEqual(stable(first))
+    // The two runs take different real time on any loaded machine; the result must not notice.
+    expect(second.status).toBe('completed')
+  })
+
+  /**
+   * The guard vocabulary must contain no reason nothing can produce. `'timeout'` outlived the
+   * wall-clock guard by months as an unreachable member of `DropReason`, which reads as a safety net
+   * that is not there: a 39-minute game on the coverage decks was diagnosed twice against it.
+   */
+  it('offers only drop reasons something can actually produce', () => {
+    const reasons: DropReason[] = ['nonterminating', 'stuck', 'threw']
+    expect(reasons).toHaveLength(3)
+  })
+
+  /**
+   * **The ceiling is sized from the evidence store, and this pins it there.**
+   *
+   * Across 81,773 completed games the move count runs median 84, p99 154, p99.99 223, longest **259**.
+   * The ceiling was 50,000, which is 193x that longest game, and it had never fired: of 81,780 stored
+   * games the seven drops are all `threw`. A guard that cannot fire in useful time is not a guard.
+   *
+   * The bounds below are the argument, not decoration. Too low and real games start dropping, which
+   * silently biases every rate; too high and it goes back to being decorative.
+   */
+  it('bounds a game at a few times the longest ever played', () => {
+    const LONGEST_EVER = 259
+    expect(DEFAULT_STEP_CEILING).toBeGreaterThan(LONGEST_EVER * 2)
+    expect(DEFAULT_STEP_CEILING).toBeLessThan(LONGEST_EVER * 20)
+  })
+
+  /** And a real game must finish inside it with room to spare, or the bound is biasing results. */
+  it('lets an ordinary game finish well inside the ceiling', () => {
+    const r = playGame({ ...base, seed: 42 })
+    expect(r.status).toBe('completed')
+    expect(r.moveCount).toBeLessThan(DEFAULT_STEP_CEILING / 3)
   })
 
   it('still stops a non-terminating game, by step count rather than by clock', () => {

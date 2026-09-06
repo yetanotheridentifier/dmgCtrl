@@ -9,7 +9,7 @@ import { setupAi } from '../ai/setupAi'
 import { newCoverage, observeAction, observeState } from './playCoverage'
 
 /** Why a game was abandoned instead of counted. Each is a distinct engine-defect signature. */
-export type DropReason = 'nonterminating' | 'timeout' | 'stuck' | 'threw'
+export type DropReason = 'nonterminating' | 'stuck' | 'threw'
 
 export interface MoveRecord {
   by: PlayerId
@@ -56,22 +56,23 @@ export interface PlayGameOptions {
   aiOpponent: Ai
   seed: number
   firstPlayer: PlayerId
-  /** Abort a game that will not terminate. Real games are a few hundred moves; a cycle blows past. */
-  stepCeiling?: number
   /**
-   * Accepted and ignored.
+   * Abort a game that will not terminate. Real games are a few hundred moves; a cycle blows past.
    *
-   * This used to abort a game whose wall-clock time ran away, which made a RESULT depend on how busy
-   * the machine was: two byte-identical sweep configs measured 0.4964 and 0.4965, one game apart in
-   * 8400, because a loaded box dropped a game an idle one finished. Determinism is a stated
-   * invariant, and `stepCeiling` already bounds the work deterministically.
+   * **This is the only guard, and a wall-clock one must never be added beside it.** A timeout used to
+   * abort a game whose real time ran away, which made a RESULT depend on how busy the machine was:
+   * two byte-identical sweep configs measured 0.4964 and 0.4965, one game apart in 8400, because a
+   * loaded box dropped a game an idle one finished. Determinism is a stated invariant, and a number
+   * that moves with CPU load is not a measurement.
    *
-   * Kept in the signature so existing callers still compile, and so the reason is documented where
-   * someone would otherwise reintroduce it.
+   * A `timeoutMs` option outlived that removal as a deprecated no-op, threaded from the CLI through
+   * six modules and read by none of them. It has been deleted: an option that cannot do anything is
+   * a question every future reader has to answer again.
    *
-   * @deprecated wall-clock time no longer affects the outcome; use `stepCeiling`.
+   * The cost of clock-independence is that this ceiling is the only bound on a pathological game, so
+   * it has to be set low enough to bind in useful time.
    */
-  timeoutMs?: number
+  stepCeiling?: number
   /**
    * Track which cards were drawn and played. Off by default: it costs a set-union per step, and the
    * AI benchmark plays hundreds of thousands of games where the answer is never read. The coverage
@@ -85,7 +86,25 @@ export interface PlayGameOptions {
  * catches a genuine cycle. It is the ONLY guard allowed to decide a game's fate, because it is a
  * function of the seed rather than of the machine.
  */
-const DEFAULT_STEP_CEILING = 50_000
+/**
+ * How many steps a game may take before it is dropped as non-terminating.
+ *
+ * **Sized from the evidence store, not guessed.** Across **81,773 completed games** the move count
+ * runs median 84, p99 154, p99.99 223, and the longest ever recorded is **259**. So this is roughly
+ * four times the longest game the project has ever played, and twelve times a typical one.
+ *
+ * It was 50,000, which is 193x that longest game. Nothing was ever dropped for hitting it: of 81,780
+ * stored games the seven drops are all `threw`. Tightening it therefore changes the outcome of no
+ * game anyone has run, while making the guard able to fire in useful time rather than in hours.
+ *
+ * **This bounds a game's LENGTH, and cannot bound its DURATION.** A single decision that never
+ * returns never completes a step, so the counter simply stops and no ceiling can help: measured on
+ * one pathological deck, the shipped bot took 29 ordinary steps and then sat inside decision 30
+ * indefinitely. Per-decision cost is bounded inside the search (`nodes`, `chainNodes`), not here.
+ *
+ * The one shared value: the instrumented corpora used to carry their own copy of 4000 apiece.
+ */
+export const DEFAULT_STEP_CEILING = 1_000
 
 /**
  * A seeded shuffle that advances its own seed each call, so both decks (and any later shuffle) draw

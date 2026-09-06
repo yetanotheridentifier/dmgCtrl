@@ -2,7 +2,7 @@ import { COMMIT_ID } from '../buildIdentity'
 import { nextSeed } from '../engine/rng'
 import { resolveAi } from '../ai/registry'
 import { wilsonInterval } from './stats'
-import { benchDeckSet, type DeckSource } from './decks'
+import { benchDeckSet, type DeckSource, type DeckMatchup } from './decks'
 import { seating, resultForA, movedFirstForA } from './seating'
 
 /** Games per full seat / first-player cycle. See `seating`. */
@@ -20,7 +20,6 @@ export interface BenchConfig {
   /** AI name for the opponent seat. */
   aiB: string
   stepCeiling?: number
-  timeoutMs?: number
   /**
    * Which deck population to play over. Defaults to `mirror`, the single fixed deck every historical
    * result was measured on. `coverage` is what makes a term measurable when its cards are not among
@@ -94,6 +93,10 @@ const mean = (xs: number[]): number => (xs.length === 0 ? 0 : xs.reduce((a, b) =
  * from one base seed, so a whole run reproduces exactly. Any dropped game makes the run provisional
  * and its seed is recorded so the failure can be reproduced and filed.
  */
+/** A matchup's name: one deck when both seats share it, both when they do not. */
+const matchupName = (m: DeckMatchup): string =>
+  m.player.name === m.opponent.name ? m.player.name : `${m.player.name} vs ${m.opponent.name}`
+
 export function runBench(config: BenchConfig): BenchReport {
   const source = config.decks ?? 'mirror'
   const { decks, cardDb } = benchDeckSet(source, config.seed)
@@ -126,15 +129,14 @@ export function runBench(config: BenchConfig): BenchReport {
     // game number alone: ten shards of eight games would play the same two decks ten times over.
     const deck = decks[(deckOffset + Math.floor(i / SEATING_CYCLE)) % decks.length]
     const result = playGame({
-      deckPlayer: deck,
-      deckOpponent: deck,
+      deckPlayer: deck.player,
+      deckOpponent: deck.opponent,
       cardDb,
       aiPlayer: seats.swapped ? aiB : aiA,
       aiOpponent: seats.swapped ? aiA : aiB,
       seed,
       firstPlayer: seats.firstPlayer,
       stepCeiling: config.stepCeiling,
-      timeoutMs: config.timeoutMs,
     })
     if (result.status === 'completed') {
       const forA = resultForA(result, seats)
@@ -185,7 +187,9 @@ export function runBench(config: BenchConfig): BenchReport {
     avgMargin: mean(marginsForA),
     decks: source,
     decksUsed: Math.min(decks.length, Math.max(1, Math.ceil(config.games / SEATING_CYCLE))),
-    firstDeck: decks[deckOffset % decks.length].name,
+    // Both halves under an asymmetric source, since "which deck did this run open on" is two decks
+    // there and naming only one of them would read as a mirror that it is not.
+    firstDeck: matchupName(decks[deckOffset % decks.length]),
     seatsSwapped,
     gamesOnPlay,
     winsOnPlay,

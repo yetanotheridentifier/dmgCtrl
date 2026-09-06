@@ -4,6 +4,7 @@ import type { CardDb } from '../engine/types'
 import type { ParsedDeck } from '../utils/parseProtectThePod'
 import { buildCardDb } from '../engine/cardDb'
 import { buildCoverageDecks } from './coverageDecks'
+import { buildLockoutDecks } from './lockoutDecks'
 import '../engine/cardDefinitions' // side effect: registers every implemented card ability
 
 /**
@@ -64,18 +65,38 @@ export function benchInputs(): { deck: ParsedDeck; cardDb: CardDb } {
  * deck: Advantage tokens appear on **0.0%** of decisions against 20.7% on the coverage decks, and a
  * shielded Sentinel on **0.0%** against roughly 2%.
  *
+ * `lockout` is the exception to all of the above and the only **asymmetric** source: an ordinary
+ * coverage deck facing a purpose-built shielded-Sentinel wall. It exists because the lockout is a
+ * strategy self-play never builds, so the population that could measure it had to be constructed. See
+ * `lockoutDecks.ts` for what that costs, chiefly that an absolute win rate over it means nothing.
+ *
  * `mirror` stays the default so every historical result keeps its meaning.
  */
-export type DeckSource = 'mirror' | 'coverage'
+export type DeckSource = 'mirror' | 'coverage' | 'lockout'
 
 /**
- * The decks an A/B will play, and the card database behind them.
+ * The matchups a run plays: the list each seat is dealt.
  *
- * Both seats always play the SAME list, whichever source is chosen, so the comparison stays a mirror
- * match and any deck-strength difference cancels by construction.
+ * For `mirror` and `coverage` both seats play the SAME list, so deck strength cancels by construction
+ * and a win-rate difference is down to the AI. `lockout` deliberately breaks that, which is why the
+ * pairing is returned rather than a single list: a set where both sides hold the wall cannot show a
+ * bot finding its way through one.
  */
-export function benchDeckSet(source: DeckSource, seed: number): { decks: ParsedDeck[]; cardDb: CardDb } {
+export interface DeckMatchup {
+  /** The `player` seat's list. Under `lockout` this is the seat facing the wall. */
+  player: ParsedDeck
+  /** The `opponent` seat's list. Under `lockout` this is the wall. */
+  opponent: ParsedDeck
+}
+
+/** The decks a run will play, and the card database behind them. */
+export function benchDeckSet(source: DeckSource, seed: number): { decks: DeckMatchup[]; cardDb: CardDb } {
   const cardDb = buildCardDb(SET)
-  if (source === 'mirror') return { decks: [buildBenchDeck(SET)], cardDb }
-  return { decks: buildCoverageDecks(SET, seed).decks, cardDb }
+  const mirrored = (list: ParsedDeck[]): DeckMatchup[] => list.map(d => ({ player: d, opponent: d }))
+  if (source === 'mirror') return { decks: mirrored([buildBenchDeck(SET)]), cardDb }
+  if (source === 'coverage') return { decks: mirrored(buildCoverageDecks(SET, seed).decks), cardDb }
+  // The wall sits on `opponent` so the seat facing it is `player`, which is the seat the decision
+  // diagnostic's own duration instrument samples. Lining those up means the deck set and the
+  // measurement are talking about the same seat rather than nearly the same seat.
+  return { decks: buildLockoutDecks(SET, seed).map(p => ({ player: p.facing, opponent: p.wall })), cardDb }
 }

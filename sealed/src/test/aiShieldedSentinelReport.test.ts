@@ -1,12 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { loadReport, replaySteps } from './helpers/replayReport'
-import { legalMoves, enemyAttackTargets } from '../engine/legalMoves'
+import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
 import { unitHasKeyword } from '../engine/keywords'
 import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { makeBeamAi } from '../ai/search'
 import { makeEvaluate, DEFAULT_WEIGHTS } from '../ai/evaluate'
-import { BEAM_REPLY_LIMITS } from '../ai/greedyAi'
+import { BEAM_REPLY_LIMITS, BEAM_HORIZON_LIMITS } from '../ai/greedyAi'
+import { lockedLanes } from '../ai/race'
+import type { BeamLimits } from '../ai/search'
 import { OPPONENT_AI } from '../config'
 import type { GameState, PlayerId, UnitState } from '../engine/types'
 import '../engine/cardDefinitions'
@@ -42,17 +44,13 @@ const isShielded = (u: UnitState): boolean => u.upgrades.some(up => up.cardId ==
 const shieldsOn = (s: GameState, seat: PlayerId): number =>
   s.players[seat].units.reduce((n, u) => n + u.upgrades.filter(up => up.cardId === TOKEN_SHIELD).length, 0)
 
-/** Is some arena of `seat`'s shut, every ready attacker forced onto shielded targets only? */
-function laneShut(s: GameState, seat: PlayerId): boolean {
-  return (['ground', 'space'] as const).some(arena => {
-    const ready = s.players[seat].units.filter(u => !u.exhausted && u.arena === arena)
-    if (ready.length === 0) return false
-    return ready.every(u => {
-      const { targets, sentinelLocked } = enemyAttackTargets(s, u, seat)
-      return sentinelLocked && targets.length > 0 && targets.every(isShielded)
-    })
-  })
-}
+/**
+ * Is some arena of `seat`'s shut, every ready attacker forced onto shielded targets only?
+ *
+ * The shipped predicate, not a restatement of it. This file used to carry its own copy, which is how
+ * a replay test can quietly stop testing the thing the bench measures.
+ */
+const laneShut = (s: GameState, seat: PlayerId): boolean => lockedLanes(s, seat).length > 0
 
 /** Bot decisions where its lane was shut by a shielded blocker and a strip was legal. */
 const locked = states.filter(s =>
@@ -70,17 +68,18 @@ const locked = states.filter(s =>
  * Memoised: each call is 18 searches by the shipped bot at ~200 ms apiece, and asking twice for the
  * same weight doubled this file's cost for nothing.
  */
-const cache = new Map<number, number>()
-function stripsAt(blockedReach: number): number {
-  const hit = cache.get(blockedReach)
+const cache = new Map<string, number>()
+function stripsAt(blockedReach: number, limits: BeamLimits = BEAM_REPLY_LIMITS): number {
+  const key = `${blockedReach}|${limits.maxCrossings ?? 0}x${limits.tailActions ?? 0}`
+  const hit = cache.get(key)
   if (hit !== undefined) return hit
-  const ai = makeBeamAi(makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach }), BEAM_REPLY_LIMITS)
+  const ai = makeBeamAi(makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach }), limits)
   const n = locked.filter(s => {
     const held = shieldsOn(s, 'player')
     const move = ai(s)
     return move !== null && shieldsOn(resolve(s, move), 'player') < held
   }).length
-  cache.set(blockedReach, n)
+  cache.set(key, n)
   return n
 }
 
@@ -97,24 +96,28 @@ describe('the filed shielded-Sentinel lockout', () => {
   })
 
   /**
-   * **The defect, pinned against the configuration that actually ships.** `blockedReach` defaults to
-   * zero, so the term being present in the codebase changes nothing. That is why the reporter still
-   * saw this on a build containing it.
+   * **The fix, pinned against the configuration that actually ships.**
    *
-   * **The tie-break now ships and does not rescue it either**, which was predicted rather than
+   * The reporter's build contained `blockedReach` at zero, which is why they still saw this: the term
+   * being present in the codebase changed nothing. It now ships at 3 and the behaviour changes on the
+   * reporter's own boards, which is the evidence a win rate cannot carry (a lane is shut in about 2%
+   * of bench decisions, so the aggregate is a fraction of a point however well the fix works).
+   *
+   * The tie-break is the other half and does not work alone, which was predicted rather than
    * discovered: a second opinion is consulted only between candidates that already tied for the lead,
-   * and here passing wins outright (52 to 43). The tie only exists once `blockedReach` prices it, and
-   * that weight measured 25.0% at the value which creates it.
-   *
-   * So the +2.35 points the tie-break earns are an aggregate effect across ordinary decisions, and
-   * this position is evidence that it fixes no specific reported defect. Both facts belong in the same
-   * assertion, or the win rate reads as a fix for something it never touches.
+   * and without the term passing wins outright here. The tie exists only once `blockedReach` prices
+   * it. So the +2.35 points the tie-break earns remain an aggregate effect across ordinary decisions
+   * rather than a fix for this, and both facts belong in one assertion.
    */
-  it('barely ever strips at the weights the app ships', () => {
+  it('strips on the reporter\'s own boards at the weights the app ships', () => {
     expect(OPPONENT_AI).toBe('beam-reply')
-    expect(DEFAULT_WEIGHTS.blockedReach, 'the term ships off').toBe(0)
+    expect(DEFAULT_WEIGHTS.blockedReach, 'the term ships on').toBe(3)
     expect(BEAM_REPLY_LIMITS.tieBreak, 'the tie-break ships on').toEqual({ reply: 'null' })
-    expect(stripsAt(0), 'and the reported behaviour survives it: still almost never strips').toBeLessThanOrEqual(2)
+
+    const shipped = stripsAt(DEFAULT_WEIGHTS.blockedReach)
+    expect(shipped, 'the shipped bot now strips on most of them').toBeGreaterThanOrEqual(8)
+    expect(stripsAt(0), 'where the pre-fix bot almost never did').toBeLessThanOrEqual(2)
+    expect(shipped).toBeGreaterThan(stripsAt(0) * 4)
   }, 120_000)
 
   /**
@@ -130,5 +133,24 @@ describe('the filed shielded-Sentinel lockout', () => {
     expect(fixed, 'weight 3 must be a large improvement on shipped').toBeGreaterThanOrEqual(8)
     expect(fixed, 'but it does not rescue every locked position').toBeLessThan(locked.length)
     expect(fixed).toBeGreaterThan(stripsAt(0))
+  }, 120_000)
+
+  /**
+   * **Crossing the round boundary does not rescue these positions either**, which is the second half
+   * of the answer #516 scoped and never ran. The scripted board says the crossing moves the gap by
+   * exactly zero; this says the same thing across eighteen real boards from the filed game.
+   *
+   * Over the 18 locked decisions: **shipped strips 1, the horizon strips 1, an in-scale weight of 3
+   * strips 10.** The two candidates are not close, and the horizon is not a partial fix that a
+   * heavier configuration might complete. It changes nothing at all.
+   *
+   * The horizon count is asserted as "no better than shipped" rather than as an exact 1, so an
+   * unrelated search change cannot fail this on a number that is not the point. The claim is that
+   * crossing the boundary is not the missing piece.
+   */
+  it('is not rescued by letting a line cross the round boundary', () => {
+    expect(stripsAt(0, BEAM_HORIZON_LIMITS)).toBeLessThanOrEqual(stripsAt(0))
+    // The comparison that matters: the evaluation term reaches boards the extra depth never does.
+    expect(stripsAt(3)).toBeGreaterThan(stripsAt(0, BEAM_HORIZON_LIMITS) * 5)
   }, 120_000)
 })

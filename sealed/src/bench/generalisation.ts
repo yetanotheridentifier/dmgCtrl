@@ -31,7 +31,6 @@ export interface GeneralisationConfig {
   aiA: string
   aiB: string
   stepCeiling?: number
-  timeoutMs?: number
 }
 
 export interface DeckResult {
@@ -100,7 +99,7 @@ export function runGeneralisationWith(
   aiB: Ai,
   labelA: string,
   labelB: string,
-  config: { gamesPerDeck: number; seed: number; stepCeiling?: number; timeoutMs?: number },
+  config: { gamesPerDeck: number; seed: number; stepCeiling?: number },
 ): GeneralisationReport {
   const { decks } = buildCoverageDecks(POOL, config.seed)
   const cardDb = buildCardDb(POOL)

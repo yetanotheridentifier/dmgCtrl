@@ -5,6 +5,7 @@ import type { GameState, PlayerId } from '../engine/types'
 import { hasPendingChoices } from '../engine/types'
 import { buildCardDb } from '../engine/cardDb'
 import { initGame } from '../engine/initGame'
+import { DEFAULT_STEP_CEILING } from './selfPlay'
 import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
 import { seededShuffle, nextSeed } from '../engine/rng'
@@ -171,7 +172,7 @@ export function runLethal(config: LethalConfig): LethalReport {
   const all = buildCoverageDecks(POOL, config.seed).decks
   const decks = config.decks === undefined ? all : all.slice(0, config.decks)
   const cardDb = buildCardDb(POOL)
-  const ceiling = config.stepCeiling ?? 4000
+  const ceiling = config.stepCeiling ?? DEFAULT_STEP_CEILING
   const oracleSamples = config.oracleSamples ?? 60
   const oracleStride = config.oracleStride ?? 17
   const oracleDepth = config.oracleDepth ?? 3

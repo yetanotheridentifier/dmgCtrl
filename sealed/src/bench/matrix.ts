@@ -134,7 +134,6 @@ export function runMatchupMatrix(
     gamesPerCell: number
     seed: number
     stepCeiling?: number
-    timeoutMs?: number
     /** Which share of the pairs to play. Defaults to all of them. */
     shardIndex?: number
     shardCount?: number

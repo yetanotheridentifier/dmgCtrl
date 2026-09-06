@@ -3,7 +3,7 @@ import { randomAi } from './randomAi'
 import {
   greedyAi, greedyBaselineAi, greedyFlatAi, beamAi, beamReplyAi, beamReplySharedAi, beamReplyUnredactedAi,
   beamReplyUpgradeBlindAi, beamHorizonAi, beamClaimTiesAi, beamHoldTiesAi, lethalBeamAi,
-  makeBeamGreedy, makeLethalBeam, BEAM_REPLY_LIMITS, BEAM_REPLY_SHARED_LIMITS,
+  makeBeamGreedy, makeLethalBeam, BEAM_REPLY_LIMITS, BEAM_REPLY_SHARED_LIMITS, BEAM_HORIZON_LIMITS,
 } from './greedyAi'
 import { DEFAULT_BEAM_LIMITS, TIE_DECISION_KINDS, type BeamLimits } from './search'
 import { DEFAULT_LETHAL_LIMITS } from './lethal'
@@ -162,6 +162,29 @@ const WEIGHT_OVERRIDE = /^(.+)\+([A-Za-z][A-Za-z0-9]*)=(-?\d+(?:\.\d+)?)$/
 const TIE_BREAK_SPEC = /^(.+)\/tie=(.*)$/
 
 /**
+ * `NAME/horizon=cross:N,tail:M`, setting how far past the round boundary a line may run (#516, #558).
+ *
+ * A suffix rather than registry entries, because the two halves need **sweeping separately** and the
+ * single registered `beam-horizon` fuses them: it is `cross:1,tail:3`, where the 3 is recorded in
+ * `greedyAi.ts` as "a guess and should be swept". The tail is most of the arm's 1.84x cost while the
+ * opponent's free run changes nothing measurable in 79% of claims, so `cross:1,tail:0` is the cheap
+ * arm nobody could name.
+ *
+ * **A crossing-only arm is a diagnostic, not a shipping candidate**, and the note above
+ * `BEAM_HORIZON_LIMITS` says why: for the claim decision the two halves are one change, since
+ * crossing prices what a claim buys while the tail prices what it costs. Either alone is a worse
+ * model than neither. It is nameable so the 1.84x can be attributed and the pass rate read at
+ * `cross:0` against `cross:1`, not so it can be shipped.
+ *
+ * Zero is a legal value for both, and it has to be: `cross:0` is the control arm for every question
+ * asked here, and a grammar that could not express "off" would make the comparison unnameable.
+ */
+const HORIZON_SPEC = /^(.+)\/horizon=(.*)$/
+
+/** The fields a horizon spec may set, mapped to the limit each one drives. */
+const HORIZON_FIELDS = { cross: 'maxCrossings', tail: 'tailActions' } as const
+
+/**
  * `NAME/pass=N`, charging N evaluation points against `pass` at the root (#521).
  *
  * A suffix rather than a registry entry per value, because this is swept rather than chosen: the
@@ -233,6 +256,37 @@ export function tieBreakFor(name: string): Partial<BeamLimits> | null {
 }
 
 /**
+ * The horizon limits a name asks for, or `null` if it asks for none.
+ *
+ * Exported for the same reason `tieBreakFor` is: a spec that silently parsed to nothing would run the
+ * shipped bot under an arm's name and report "no difference", which is the most expensive way a
+ * measurement can fail here.
+ */
+export function horizonFor(name: string): Partial<BeamLimits> | null {
+  const m = HORIZON_SPEC.exec(name)
+  if (!m) return null
+  const spec = m[2]
+  if (spec.trim() === '') throw new Error(`Empty horizon in "${name}". Try /horizon=cross:1,tail:0`)
+
+  const limits: Partial<BeamLimits> = {}
+  for (const part of spec.split(',')) {
+    const [key, ...rest] = part.split(':')
+    const field = (Object.keys(HORIZON_FIELDS) as Array<keyof typeof HORIZON_FIELDS>).find(f => f === key)
+    if (field === undefined) {
+      throw new Error(`Unknown horizon field "${key}" in "${name}". Valid: ${Object.keys(HORIZON_FIELDS).join(', ')}`)
+    }
+    const n = Number(rest.join(':'))
+    // Zero is allowed and negative is not: zero is the control arm, and a negative would reach the
+    // search as a silently broken limit rather than as an error.
+    if (!Number.isInteger(n) || n < 0) {
+      throw new Error(`Horizon "${field}" in "${name}" needs a whole number of at least 0, got "${rest.join(':')}"`)
+    }
+    limits[HORIZON_FIELDS[field]] = n
+  }
+  return limits
+}
+
+/**
  * The limits behind a **registered** beam name, so a suffix can rebuild that bot rather than an
  * approximation of it.
  *
@@ -246,6 +300,9 @@ export function namedLimitsFor(name: string): BeamLimits | null {
     beam: DEFAULT_BEAM_LIMITS,
     'beam-reply': BEAM_REPLY_LIMITS,
     'beam-reply-shared': BEAM_REPLY_SHARED_LIMITS,
+    // Without this, every suffix threw on the horizon arm: `beam-horizon+blockedReach=1` was
+    // unnameable, which is exactly the A/B the lockout work needs.
+    'beam-horizon': BEAM_HORIZON_LIMITS,
   }
   return named[name] ?? null
 }
@@ -324,6 +381,17 @@ export function resolveAi(name: string): Ai {
     return makeBeamGreedy({ ...DEFAULT_WEIGHTS, ...weighted.overrides }, { ...limits, passPenalty })
   }
 
+  // `/horizon=...` is stripped the same way `/pass=` is, and before the tie-break, so the remainder
+  // is an ordinary name and the crossing folds into whatever limits it resolves to.
+  const horizon = horizonFor(name)
+  if (horizon) {
+    const base = HORIZON_SPEC.exec(name)![1]
+    const weighted = splitWeightOverride(base)
+    const limits = beamLimitsFor(weighted.base) ?? namedLimitsFor(weighted.base)
+    if (limits === null) throw new Error(`Cannot set a horizon on "${weighted.base}"`)
+    return makeBeamGreedy({ ...DEFAULT_WEIGHTS, ...weighted.overrides }, { ...limits, ...horizon })
+  }
+
   // `/tie=...` is stripped first so it composes with every other suffix and spec: the remainder is an
   // ordinary name, and the tie-break is folded into whatever limits that name resolves to.
   const tieBreak = tieBreakFor(name)
@@ -370,6 +438,6 @@ export function resolveAi(name: string): Ai {
   throw new Error(
     `Unknown AI "${name}". Available: ${aiNames().join(', ')}, ` +
     'or beam:WIDTHxDEPTH[:NODES], or reply:POLICY[:WIDTHxDEPTH[:NODES]]. ' +
-    'Suffixes: +WEIGHT=VALUE, /tie=FIELD:VALUE[,FIELD:VALUE], /pass=N',
+    'Suffixes: +WEIGHT=VALUE, /tie=FIELD:VALUE[,FIELD:VALUE], /pass=N, /horizon=cross:N[,tail:M]',
   )
 }

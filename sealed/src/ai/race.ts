@@ -105,6 +105,26 @@ export function reachSteady(state: GameState, owner: PlayerId): number {
  * nothing to either side of the subtraction and so cannot register as blocked.
  */
 export function blockedReach(state: GameState, owner: PlayerId): number {
+  // **Cheap precondition, and it is what makes the term affordable to ship.** The gate below needs
+  // `sentinelLocked` plus a target list whose every member carries a Shield, so nothing can be denied
+  // unless the enemy holds a unit that is BOTH a Sentinel and shielded. Without one the answer is
+  // zero and the per-unit targeting walk below is pure waste.
+  //
+  // That walk is far more expensive than any other term, and this is the difference between shipping
+  // and not. Measured over 200 states against the same bot with the term at 0:
+  //
+  //   no precondition          1.26x, repeatable
+  //   gated on any Shield      1.12x
+  //   gated on this            not separable from noise: three runs read 1.11x in the term's
+  //                            FAVOUR, then 1.09x and 1.05x against it
+  //
+  // A Shield is present in about a sixth of decisions; a shielded *blocker* is far rarer, which is
+  // why the second gate is worth more than the first despite looking like a smaller distinction.
+  const foe = state.players[opponentOf(owner)]
+  const hasShieldedBlocker = foe.units.some(u =>
+    u.upgrades.some(up => up.cardId === TOKEN_SHIELD) && unitHasKeyword(state, u, 'Sentinel'))
+  if (!hasShieldedBlocker) return 0
+
   return state.players[owner].units.reduce((n, u) => {
     if (unitCannotAttackBases(state, u)) return n
     const { targets, sentinelLocked } = enemyAttackTargets(state, u, owner)
@@ -115,6 +135,35 @@ export function blockedReach(state: GameState, owner: PlayerId): number {
     const free = effectivePower(state, u, { attacking: true, attackingBase: true })
     return n + Math.max(0, free - unitReach(state, owner, u))
   }, 0)
+}
+
+/**
+ * The arenas of `seat`'s that are **shut**: every ready attacker there is Sentinel-forced onto
+ * targets that all carry a Shield, so nothing this seat does reaches the enemy base in that lane.
+ *
+ * **Per arena, because a lane is an arena.** A ground blocker locks ground and leaves space alone, so
+ * asking "is every attacker on the board locked" answers "no" whenever a single unit stands in the
+ * other arena. Measured board-wide the rate came out at 0.3% of decisions and never lasting a round,
+ * which contradicted what play-testers reported and very nearly retired a real defect.
+ *
+ * A lane needs at least one ready attacker to be shut: an empty arena is not blocked, it is empty.
+ *
+ * Lives here rather than in the bench because it is the same question `blockedReach` above gates on,
+ * and it had drifted into three separate copies (the decision diagnostic, the filed-report replay,
+ * and the deck set built to produce it). Three copies of a predicate this fiddly is how two of them
+ * end up disagreeing with nobody reading them side by side.
+ */
+export function lockedLanes(state: GameState, seat: PlayerId): Array<'ground' | 'space'> {
+  const shut = (arena: 'ground' | 'space'): boolean => {
+    const ready = state.players[seat].units.filter(u => !u.exhausted && u.arena === arena)
+    if (ready.length === 0) return false
+    return ready.every(u => {
+      const { targets, sentinelLocked } = enemyAttackTargets(state, u, seat)
+      return sentinelLocked && targets.length > 0
+        && targets.every(t => t.upgrades.some(up => up.cardId === TOKEN_SHIELD))
+    })
+  }
+  return (['ground', 'space'] as const).filter(shut)
 }
 
 /** Base damage the shielded blockers shutting our lanes deal us each round. */

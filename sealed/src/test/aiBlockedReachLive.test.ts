@@ -12,7 +12,7 @@ import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
 import { seededShuffle, nextSeed } from '../engine/rng'
 import { setupAi } from '../ai/setupAi'
-import { greedyAi } from '../ai/greedyAi'
+import { makeTunedGreedy } from '../ai/greedyAi'
 import '../engine/cardDefinitions'
 
 /**
@@ -31,7 +31,16 @@ import '../engine/cardDefinitions'
 
 const POOL = ashSet as unknown as SwuCard[]
 
-/** Real positions, walked with greedy so they are boards the bot actually meets. */
+/**
+ * Real positions, walked with greedy so they are boards the bot actually meets.
+ *
+ * **Walked with the term OFF**, which matters now that it ships at 3. A bot carrying the term escapes
+ * lockouts, so a corpus it walks contains far fewer of the positions the term exists to price, and
+ * "does this weight reorder any candidates" then answers no for the wrong reason. The question here is
+ * how much the term disturbs a model that does not already have it.
+ */
+const walker = makeTunedGreedy({ ...DEFAULT_WEIGHTS, blockedReach: 0 })
+
 function corpus(limit: number): GameState[] {
   const { decks } = buildCoverageDecks(POOL, 42)
   const cardDb = buildCardDb(POOL)
@@ -48,7 +57,7 @@ function corpus(limit: number): GameState[] {
       rngSeed: seed,
     })
     while (g.winner === null && states.length < limit) {
-      const action = setupAi(g) ?? greedyAi(g)
+      const action = setupAi(g) ?? walker(g)
       if (!action) break
       if (legalMoves(g).length > 1) states.push(g)
       g = resolve(g, action)
@@ -70,7 +79,10 @@ describe('the gated blocked-reach term over real positions', () => {
    * every commit.
    */
   const limits = { ...DEFAULT_BEAM_LIMITS, reply: 'null' as const, width: 1, depth: 1 }
-  const off = makeBeamAi(makeEvaluate(DEFAULT_WEIGHTS), limits)
+  // Explicitly zero, not `DEFAULT_WEIGHTS`. The term now SHIPS at 3, so a baseline taken from the
+  // defaults would be the term at 3 wearing the name "off", and every "changed against off" figure
+  // below would silently measure the wrong difference.
+  const off = makeBeamAi(makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach: 0 }), limits)
   const at = (blockedReach: number) => makeBeamAi(makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach }), limits)
   const on = at(12)
   // The AI is built ONCE per weight, not once per position. Constructing it inside the filter rebuilt
@@ -101,6 +113,11 @@ describe('the gated blocked-reach term over real positions', () => {
     const w12 = changedAt(12)
     expect(w1, 'weight 1 must still do something, or it cannot fix anything').toBeGreaterThan(0)
     expect(w1, 'and must disturb less than the out-of-scale weight').toBeLessThan(w12)
+    // The shipped weight sits between them, which is the shape the sweep was looking for: enough to
+    // fix the position, nowhere near the out-of-scale footprint.
+    const shipped = changedAt(DEFAULT_WEIGHTS.blockedReach)
+    expect(shipped).toBeGreaterThanOrEqual(w1)
+    expect(shipped).toBeLessThanOrEqual(w12)
     // Cheap in isolation, but this file runs inside an 8-way parallel suite where a 2s case stretches
     // past the 5s default. The budget is generous on purpose: the assertion is about behaviour, and a
     // tight limit here fails on load and teaches nothing.

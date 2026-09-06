@@ -147,8 +147,8 @@ plausible number.
 
 ### The deck population decides what can be measured at all
 
-`--decks` chooses what a head-to-head plays over: `mirror` (the default) or `coverage`. Both seats
-always play the same list either way, so it stays a mirror match.
+`--decks` chooses what a run plays over: `mirror` (the default), `coverage`, or `lockout`. The first
+two deal both seats the same list, so they stay mirror matches and deck strength cancels.
 
 **`mirror` is one fixed deck of the first 30 aspect-matching units, and a term whose cards are not
 among them cannot fire.** It then reports neutral, which is indistinguishable from a genuine null
@@ -172,6 +172,52 @@ factor, and 44 decks against a 4-game cycle does.
 
 The deck source is part of the shard run key when it is not the default, so a coverage run can never
 pool with mirror results.
+
+#### `lockout`: the one asymmetric source
+
+A population in which the shielded-Sentinel lockout actually occurs. The `player` seat is dealt an
+ordinary coverage deck and the `opponent` seat a purpose-built wall: three self-shielding ground
+Sentinels (`Shielded` grants the token on arrival, so the lane shuts with no combination and no
+intent) plus Durasteel Plating and Perserverance to put a Shield back after one is stripped.
+
+It exists because the lockout is a **human strategy** and self-play never builds it. `--decisions` with
+the shipped bot, 44 games a side, the same seeds:
+
+| `beam-reply` | coverage | lockout |
+| --- | --- | --- |
+| a lane shut | 2.2% | **6.4%** |
+| rounds locked | 1.3% | **10.1%** |
+| longest lockout in one game | **1 round** | **4 rounds** |
+| a strip was available | 40.9% | 41.3% |
+| the bot took it | 9.3% | 14.7% |
+| **passed with an attack available** | 57.6% | **96.7%** |
+| `blockedReach` live | 3.9% | 13.6% |
+| ...of those, on a shut lane | 77 | **223** |
+
+Both columns are calibration, not just size. The coverage column reproduces the historical record (a
+lane shut on about 2% of decisions, never lasting a full round) and the lockout column reproduces the
+filed play-tester game (four consecutive locked rounds).
+
+**The sharpest line is the pass one.** The raw pass rate barely moves between the two populations
+(0.75 a game against 0.68), so a rate alone reads as no difference; what changes is that on the wall
+decks the bot passes **with an attack available** almost every time it passes at all. Read the
+qualified figure, not the rate.
+
+That gap has already cost a real result. `blockedReach` was recorded as "invisible over ~2,500 games"
+on the coverage decks, where the position it prices barely occurs; on eighteen locked boards from a
+filed play-tester game the same term at an in-scale weight strips on 10 where the shipped bot strips
+on 1. Note the term's **precision does not improve** here (42.1% of firings on a shut lane against
+coverage's 52.0%); what this set buys is roughly three times the volume.
+
+**Three properties of this source that are not optional to understand:**
+
+- **An absolute win rate over it is meaningless.** The pairing has a favourite before either bot
+  moves. Only a paired difference against a matched control on the same seeds can be read here.
+- **It measures the benefit; `coverage` remains the non-inferiority gate.** A fix must show up on the
+  wall decks and must not lose on ordinary ones.
+- **Board-wide rates are roughly halved**, because the wall-holding seat contributes none of them. The
+  duration figures (`rounds locked`, `longest lockout`) sample the `player` seat alone and so are
+  read directly.
 
 ## Running it
 
@@ -226,7 +272,7 @@ Everything is optional:
 
   More join the list as they are built.
 
-  Three suffixes compose with any of the above, so an A/B cell is a name rather than a registry entry:
+  Four suffixes compose with any of the above, so an A/B cell is a name rather than a registry entry:
 
   - `+WEIGHT=VALUE` rebuilds the bot with one evaluation weight changed, e.g.
     `beam-reply+blockedReach=12`. A new weight ships at zero and is swept upward, which needs two AIs
@@ -243,7 +289,18 @@ Everything is optional:
     Fractional and negative values are accepted. The shipped bot charges **8**, so `beam-reply/pass=0`
     is the pre-fix control and needs no registry entry.
 
-  All three reject a typo loudly. A suffix that parsed to nothing would run the shipped bot under the
+  - `/horizon=cross:N[,tail:M]` sets how far past the round boundary a line may run, e.g.
+    `beam-reply/horizon=cross:1,tail:0`. Zero is legal for both and has to be, since `cross:0` is the
+    control arm for every question the suffix asks. `beam-horizon` fuses the two halves at
+    `cross:1,tail:3`, where the 3 is a guess; the tail is most of that arm's 1.84x cost while the
+    opponent's free run changes nothing measurable in 79% of claims.
+
+    **A crossing-only arm is a diagnostic, not a shipping candidate.** For the claim decision the two
+    halves are one change: crossing prices what a claim buys and the tail prices what it costs, so
+    either alone is a worse model than neither. Use it to attribute the cost and to read the pass rate
+    at `cross:0` against `cross:1`, not to ship.
+
+  All four reject a typo loudly. A suffix that parsed to nothing would run the shipped bot under the
   candidate's name and report "no difference", which is the most expensive way a sweep can fail.
 
 `OPPONENT_AI` in `src/config.ts` decides what the app ships, independently of any of this. The bench
@@ -1450,6 +1507,9 @@ eight of eighteen modules were missing.
 - `bench/decks.ts` the fixed sealed deck, built deterministically from the ASH snapshot. Both seats
   play the same list, which removes deck strength as a variable.
 - `bench/coverageDecks.ts` the deck set whose union covers the whole card pool.
+- `bench/lockoutDecks.ts` the asymmetric wall set behind `--decks lockout`: a coverage deck facing a
+  purpose-built shielded-Sentinel deck, and the only source where the two seats are dealt different
+  lists. Owns the wall package and the minimums a combo must reach to count as a wall.
 - `bench/matchupDecks.ts` the leader-by-base deck set the matrix plays: 18 leaders x 4 base aspects.
 - `bench/sweep.ts` the whole-pool fuzzing sweep behind `--sweep`, which reports cards **played** rather
   than decked and names anything decked but never drawn.

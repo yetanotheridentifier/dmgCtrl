@@ -259,8 +259,28 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   // #493. OFF until swept, per the rule that a new weight ships at zero: shipping a default before
   // its A/B ran once inverted a whole reading, because the candidate was then the ablation.
   shield: 0,
-  // #499. OFF until swept, per the rule that a new weight ships at zero.
-  blockedReach: 0,
+  /**
+   * Reach denied by a **shielded** blocker: the shielded-Sentinel lockout, reported twice from live
+   * play. Gated so it prices only blockers the rest of the model cannot see; an unshielded Sentinel is
+   * answerable by attacking it and the material terms already cover that.
+   *
+   * **3 is in scale** (a unit is 8) and is the smallest value with real-board evidence behind it. The
+   * 12 that measured 25.0% was ungated and off the scale; every weight from 1 upward escapes the
+   * scripted lockout identically, so the digit was never what mattered.
+   *
+   * Shipped on the ticket's own gate, which is a scripted position plus non-inferiority rather than a
+   * win rate, because a shut lane is 2.2% of coverage decisions and no aggregate can carry it:
+   *
+   * - **Scripted:** strips 10 of the 18 locked boards from the filed report, against 1 shipped.
+   * - **Non-inferiority:** +0.14 paired over 1,678 games on the coverage decks, dead neutral.
+   * - **Where the position occurs:** +1.88 paired on `--decks lockout`, 7 of 11 shards positive.
+   *   Positive but **not significant** (t = 1.73 on 10 df), and recorded as such rather than as a win.
+   * - **Mechanism:** strips taken 14.7% to 23.3%, rounds locked 10.1% to 5.1%.
+   *
+   * A partial fix by construction: even at weight 12 it reaches 10 of 18, so about a third of those
+   * positions are refused for reasons this term does not touch.
+   */
+  blockedReach: 3,
   // Two attackers' worth of denied reach. Above this, clearing a blocker starts to justify the tempo
   // that a held-back second Sentinel exists to punish. NOT a price and so NOT doubled: this caps a
   // quantity, in damage, and doubling it would double how much reach the term can ever see.

@@ -144,14 +144,18 @@ describe('breaking a tie with a second opinion', () => {
   })
 
   /**
-   * **A tie-break alone cannot escape the lockout, because it is not a tie.**
+   * **A tie-break alone cannot escape the lockout, because without `blockedReach` it is not a tie.**
    *
-   * Under shipped weights passing wins outright, 52 to 43. A second opinion is only ever consulted
-   * between candidates that already tied for the lead, so it never runs here. This is the assumption
-   * I got wrong: the tie in this position only appears once `blockedReach` is priced.
+   * Measured against the model with the term off, which is the state this finding belongs to: passing
+   * won outright, and a second opinion is only ever consulted between candidates that already tied for
+   * the lead, so it never ran here. That was the assumption originally got wrong.
+   *
+   * The term is what creates the tie. With it shipped, this position is exactly the case the tie-break
+   * exists for, which is asserted below rather than here.
    */
-  it('does not fire on the lockout, because passing wins outright', () => {
-    const ai = makeBeamAi(evaluate, { ...shipped, tieBreak: { reply: 'null' } })
+  it('does not fire on the lockout without the term, because passing wins outright', () => {
+    const withoutTerm = makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach: 0 })
+    const ai = makeBeamAi(withoutTerm, { ...shipped, tieBreak: { reply: 'null' } })
     ai(lockout())
     expect(lastSearchTrace()!.tiedCandidates).toBe(1)
   })
