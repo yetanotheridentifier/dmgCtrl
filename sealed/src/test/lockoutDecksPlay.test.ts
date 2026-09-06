@@ -8,7 +8,8 @@ import { buildCardDb } from '../engine/cardDb'
 import { initGame } from '../engine/initGame'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
-import { greedyAi } from '../ai/greedyAi'
+import { greedyAi, makeTunedGreedy } from '../ai/greedyAi'
+import { DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { setupAi } from '../ai/setupAi'
 import { lockedLanes } from '../ai/race'
 import { nextSeed, seededShuffle } from '../engine/rng'
@@ -51,7 +52,19 @@ interface Lockout {
  * The facing seat is always `player`, which is also the seat the bench's own duration instrument
  * samples, so this test and the bench are reading the same thing.
  */
-function walk(pairs: DeckPairing[], seed0: number): Lockout {
+/**
+ * The pre-fix bot: `greedy` with `blockedReach` switched off.
+ *
+ * **The deck set is characterised against a bot that cannot escape the lockout**, because what is
+ * being measured is the population's capacity to produce the position, not the current bot's ability
+ * to get out of it. Walking with the shipped bot would fold the fix into the instrument, and a set
+ * that later looked "less locked" would be ambiguous between a weaker deck set and a better bot.
+ *
+ * The shipped bot is then read against it below, where the difference is the fix rather than noise.
+ */
+const preFixGreedy = makeTunedGreedy({ ...DEFAULT_WEIGHTS, blockedReach: 0 })
+
+function walk(pairs: DeckPairing[], seed0: number, ai = preFixGreedy): Lockout {
   const out: Lockout = { lockedDecisions: 0, decisions: 0, longestRun: 0, games: 0 }
   let seed = seed0
 
@@ -83,7 +96,7 @@ function walk(pairs: DeckPairing[], seed0: number): Lockout {
         out.decisions++
         if (g.activePlayer === 'player' && lockedLanes(g, 'player').length > 0) out.lockedDecisions++
       }
-      const action = setupAi(g) ?? greedyAi(g)
+      const action = setupAi(g) ?? ai(g)
       if (!action) break
       g = resolve(g, action)
     }
@@ -132,5 +145,18 @@ describe('the wall deck set in play', () => {
   it('holds a lane shut for several consecutive rounds', () => {
     expect(withWall.longestRun).toBeGreaterThanOrEqual(2)
     expect(withWall.longestRun).toBeGreaterThan(withoutWall.longestRun)
+  }, 300_000)
+
+  /**
+   * **And the shipped bot spends less time locked than the pre-fix one**, on the same decks and the
+   * same seeds, which is the fix showing up in a population rather than on a scripted board.
+   *
+   * Asserted as a direction rather than a size. The size belongs to the bench, where it measured
+   * rounds locked 10.1% to 5.1% over 44 games a side; a slice of 12 pairings is a mechanism check.
+   */
+  it('locks the shipped bot less than the bot without the term', () => {
+    const shipped = walk(walls, 4242, greedyAi)
+    expect(DEFAULT_WEIGHTS.blockedReach, 'this test is meaningless if the term is off').toBeGreaterThan(0)
+    expect(shipped.lockedDecisions).toBeLessThan(withWall.lockedDecisions)
   }, 300_000)
 })

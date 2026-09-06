@@ -96,24 +96,28 @@ describe('the filed shielded-Sentinel lockout', () => {
   })
 
   /**
-   * **The defect, pinned against the configuration that actually ships.** `blockedReach` defaults to
-   * zero, so the term being present in the codebase changes nothing. That is why the reporter still
-   * saw this on a build containing it.
+   * **The fix, pinned against the configuration that actually ships.**
    *
-   * **The tie-break now ships and does not rescue it either**, which was predicted rather than
+   * The reporter's build contained `blockedReach` at zero, which is why they still saw this: the term
+   * being present in the codebase changed nothing. It now ships at 3 and the behaviour changes on the
+   * reporter's own boards, which is the evidence a win rate cannot carry (a lane is shut in about 2%
+   * of bench decisions, so the aggregate is a fraction of a point however well the fix works).
+   *
+   * The tie-break is the other half and does not work alone, which was predicted rather than
    * discovered: a second opinion is consulted only between candidates that already tied for the lead,
-   * and here passing wins outright (52 to 43). The tie only exists once `blockedReach` prices it, and
-   * that weight measured 25.0% at the value which creates it.
-   *
-   * So the +2.35 points the tie-break earns are an aggregate effect across ordinary decisions, and
-   * this position is evidence that it fixes no specific reported defect. Both facts belong in the same
-   * assertion, or the win rate reads as a fix for something it never touches.
+   * and without the term passing wins outright here. The tie exists only once `blockedReach` prices
+   * it. So the +2.35 points the tie-break earns remain an aggregate effect across ordinary decisions
+   * rather than a fix for this, and both facts belong in one assertion.
    */
-  it('barely ever strips at the weights the app ships', () => {
+  it('strips on the reporter\'s own boards at the weights the app ships', () => {
     expect(OPPONENT_AI).toBe('beam-reply')
-    expect(DEFAULT_WEIGHTS.blockedReach, 'the term ships off').toBe(0)
+    expect(DEFAULT_WEIGHTS.blockedReach, 'the term ships on').toBe(3)
     expect(BEAM_REPLY_LIMITS.tieBreak, 'the tie-break ships on').toEqual({ reply: 'null' })
-    expect(stripsAt(0), 'and the reported behaviour survives it: still almost never strips').toBeLessThanOrEqual(2)
+
+    const shipped = stripsAt(DEFAULT_WEIGHTS.blockedReach)
+    expect(shipped, 'the shipped bot now strips on most of them').toBeGreaterThanOrEqual(8)
+    expect(stripsAt(0), 'where the pre-fix bot almost never did').toBeLessThanOrEqual(2)
+    expect(shipped).toBeGreaterThan(stripsAt(0) * 4)
   }, 120_000)
 
   /**

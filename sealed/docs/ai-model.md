@@ -258,9 +258,12 @@ Three properties make it a tie-break rather than a second bot:
   (+4.25 against +4.9 on matched seeds, five of ten shards byte-identical), so the simpler form ships.
   The benefit does concentrate in those kinds; including attacks and passes simply costs nothing.
 
-**It fixes no specific reported defect.** It does not fire on the shielded-Sentinel lockout at all,
-where passing wins outright 52 to 43; that tie only exists once `blockedReach` prices it, and the weight
-which creates it measures 25.0%. The case for this is the aggregate.
+**Its own case is the aggregate**, and it fixes no reported defect on its own. On the shielded-Sentinel
+lockout it does not fire at all unless `blockedReach` is priced, because passing wins outright and a
+second opinion is only consulted between candidates already tied for the lead.
+
+**It is half of the lockout fix, though.** `blockedReach` brings the two lines dead level and the root
+pass charge then settles the tie toward acting. Neither half escapes that position alone.
 
 One ply is **not** the right second opinion, which was the original proposal: it prefers passing in that
 same lockout, while `reply: 'null'` separates it 56.1 to 52. When the worst case cannot tell two moves
@@ -694,10 +697,18 @@ other, so there is no reliable gradient. It also costs **65-70% more wall clock*
 predicate calls `reachSteady` and `canFinishNow` on the `evaluate` hot path. A zero guard means the
 shipped configuration pays none of that.
 
-The lesson generalises past this term. Four attempts to price a beyond-horizon effect have now returned
-nothing: `blockedReach`, Advantage-as-one-shot, this, and a per-kind restriction on the tie-break. Every
-premise was correct and every **evaluation term** was worth approximately nothing. The one intervention
-that measured was a **search** change, comparing candidates differently rather than repricing a board.
+The lesson generalises past this term, with one exception since found. Attempts to price a
+beyond-horizon effect have mostly returned nothing: Advantage-as-one-shot, this, and a per-kind
+restriction on the tie-break. Every premise was correct and every evaluation term was worth
+approximately nothing on an aggregate. The intervention that measured best was a **search** change,
+comparing candidates differently rather than repricing a board.
+
+**`blockedReach` is the exception, and it is instructive about why.** It was in that list until it was
+re-measured on a deck population that actually contains the position it prices. On the ordinary decks a
+shut lane is 2.2% of decisions, so no aggregate could ever carry it, and "worth nothing" was a verdict
+on the population rather than on the term. It ships at 3 on a scripted position plus non-inferiority,
+not on a win rate. **Before concluding a term is worth nothing, check that its quantity varies in the
+population it was measured over.**
 
 Extending the search itself past the boundary has since been tried too, and also does not pay: -3.72
 points at 1.84x the cost, with the mechanism demonstrably working (the claim rate went from

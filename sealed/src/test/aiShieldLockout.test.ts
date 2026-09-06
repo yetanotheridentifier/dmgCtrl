@@ -70,6 +70,19 @@ function lockout(): GameState {
 
 const attackWith = (id: string) => ({ type: 'attack', attackerId: id, target: { kind: 'unit', instanceId: 'wall' } })
 
+/**
+ * The shipped evaluation with `blockedReach` switched off: **the model as it was before the fix**.
+ *
+ * Every test below that explains *why* the bot used to pass runs against this rather than against
+ * `evaluate`. Those findings are diagnoses of a model without the term, and they stay true of it; run
+ * against the shipped evaluation they would simply assert that the fix works, which is a different
+ * claim already made above and would quietly delete the reasoning that produced it.
+ *
+ * Written as an override of `DEFAULT_WEIGHTS` rather than a frozen copy, so it tracks every other
+ * weight change and keeps differing in exactly one thing.
+ */
+const beforeFix = makeEvaluate({ ...DEFAULT_WEIGHTS, blockedReach: 0 })
+
 describe('the shielded-Sentinel lockout', () => {
   /** The fixture has to be a lockout, or the rest proves nothing. */
   it('offers no way past the Sentinel while the Shield is up', () => {
@@ -92,21 +105,22 @@ describe('the shielded-Sentinel lockout', () => {
   })
 
   /**
-   * **The defect, recorded as a known failure (#499).**
+   * **The fix, and the reason this whole file exists.**
    *
-   * `it.fails` asserts this DOES fail today, so the suite stays green while the defect is pinned, and
-   * turns red the moment it is fixed. Convert it to a plain `it` when #499 lands: a known-failure
-   * marker left in place after the fix would hide a regression rather than catch one.
+   * This was a known failure for the life of the defect: the bot played `pass`, not a bad attack but
+   * nothing at all, so the lane stayed shut for the rest of the game. It is now a plain assertion,
+   * because `blockedReach` ships at 3 and the bot strips.
    *
-   * The bot plays `pass`. Not a bad attack, nothing at all, so the lane stays shut for the rest of
-   * the game.
+   * Two ingredients, and **neither works alone**. The term brings the two lines level (both score 86,
+   * asserted below), and the root pass charge then tips the tie toward acting. That is why a shield
+   * weight never rescued this: swept against depth and reply policy, no shield weight up to 16 helped
+   * under `pessimistic` or `selfish` at depth 3 or 5. The search always found the line; nothing gave
+   * it a reason to prefer it.
    *
-   * It is **not** a missing Shield term. Swept against depth and reply policy on this position, the
-   * bot plays this line correctly at shield weight **zero** under `reply: 'null'` at depth 3, and no
-   * shield weight up to 16 rescues it under `pessimistic` or `selfish` at depth 3 or 5. The search
-   * finds the line; the reply policy refuses it.
+   * It asserts WHICH unit strips, not merely that something does. Leading with BIG spends the Shield
+   * on our best attacker and loses the 5/6 instead of the 1/1 for the same two actions.
    */
-  it.fails('strips the Shield with the cheap unit, not the expensive one', () => {
+  it('strips the Shield with the cheap unit, not the expensive one', () => {
     expect(beamReplyAi(lockout())).toMatchObject({ type: 'attack', attackerId: 'chump' })
   })
 
@@ -155,16 +169,22 @@ describe('the shielded-Sentinel lockout', () => {
     const passAt = moves.findIndex(m => m.type === 'pass')
     const stripAt = moves.findIndex(m => m.type === 'attack' && m.attackerId === 'chump')
 
-    makeBeamAi(evaluate, { ...DEFAULT_BEAM_LIMITS, depth: 3, reply: 'pessimistic', nodes: 200_000 })(s)
+    makeBeamAi(beforeFix, { ...DEFAULT_BEAM_LIMITS, depth: 3, reply: 'pessimistic', nodes: 200_000 })(s)
     const pessimistic = lastSearchTrace()!.candidates
     // The defect in one line: doing nothing outscores the only move that opens the lane.
     expect(pessimistic[passAt]).toBeGreaterThan(pessimistic[stripAt])
 
     // And it is the tempo cost rather than the horizon alone: remove the modelled punishment and the
     // same search at the same depth prefers the strip.
-    makeBeamAi(evaluate, { ...DEFAULT_BEAM_LIMITS, depth: 3, reply: 'null', nodes: 200_000 })(s)
+    makeBeamAi(beforeFix, { ...DEFAULT_BEAM_LIMITS, depth: 3, reply: 'null', nodes: 200_000 })(s)
     const noReply = lastSearchTrace()!.candidates
     expect(noReply[stripAt]).toBeGreaterThan(noReply[passAt])
+
+    // And the fix, read on the same position with the same search: the term brings them level, which
+    // is all it does. The pass charge decides the tie that creates.
+    makeBeamAi(evaluate, { ...DEFAULT_BEAM_LIMITS, depth: 3, reply: 'pessimistic', nodes: 200_000 })(s)
+    const shipped = lastSearchTrace()!.candidates
+    expect(shipped[passAt]).toBe(shipped[stripAt])
   })
 
   /**
@@ -178,7 +198,7 @@ describe('the shielded-Sentinel lockout', () => {
    * defaulting to 0.
    */
   it('is not escaped by making the search prefer sooner outcomes', () => {
-    const strong = makeBeamAi(evaluate, {
+    const strong = makeBeamAi(beforeFix, {
       ...DEFAULT_BEAM_LIMITS, depth: 3, reply: 'pessimistic', nodes: 200_000, timePreference: 12,
     })
     expect(strong(lockout())).toMatchObject({ type: 'pass' })
@@ -193,7 +213,7 @@ describe('the shielded-Sentinel lockout', () => {
   it('shows why passing wins: both lines reach the same peak', () => {
     const s = lockout()
     const moves = legalMoves(s)
-    makeBeamAi(evaluate, {
+    makeBeamAi(beforeFix, {
       ...DEFAULT_BEAM_LIMITS, depth: 3, reply: 'pessimistic', nodes: 200_000, explain: true,
     })(s)
     const lines = lastSearchTrace()!.lines!
@@ -319,14 +339,20 @@ describe('the shielded-Sentinel lockout', () => {
 describe('the lockout against the horizon arm', () => {
 
   /**
-   * **The horizon does not rescue it, and it does not move it either.** Recorded as a known failure
-   * so the suite stays green while the answer is pinned.
+   * **The horizon does not rescue it, and it does not move it either.**
    *
-   * This retires the last live hypothesis about the lockout, and it was the cheapest of all of them
+   * Measured against the model **without** `blockedReach`, which is the only way to ask what crossing
+   * the boundary is worth: the shipped bot now strips because of the term, so asking the horizon arm
+   * directly would credit the crossing with the evaluation's fix.
+   *
+   * This retired the last live hypothesis about the lockout, and it was the cheapest of all of them
    * to ask: a scripted position rather than the five-hour A/B the horizon itself was judged on.
    */
-  it.fails('strips the Shield once a line may cross the round boundary', () => {
-    expect(beamHorizonAi(lockout())).toMatchObject({ type: 'attack', attackerId: 'chump' })
+  it('does not strip even when a line may cross the round boundary', () => {
+    const horizonBeforeFix = makeBeamAi(beforeFix, BEAM_HORIZON_LIMITS)
+    expect(horizonBeforeFix(lockout())).toMatchObject({ type: 'pass' })
+    // And the shipped bot, horizon or not, now strips: the evaluation is what changed, not the depth.
+    expect(beamHorizonAi(lockout())).toMatchObject({ type: 'attack' })
   })
 
   /**
@@ -345,7 +371,7 @@ describe('the lockout against the horizon arm', () => {
     const gapUnder = (limits: typeof BEAM_HORIZON_LIMITS): number => {
       const s = lockout()
       const moves = legalMoves(s)
-      makeBeamAi(evaluate, limits)(s)
+      makeBeamAi(beforeFix, limits)(s)
       const v = lastSearchTrace()!.candidates
       return v[moves.findIndex(m => m.type === 'pass')]
         - v[moves.findIndex(m => m.type === 'attack' && m.attackerId === 'chump')]
@@ -362,21 +388,30 @@ describe('the lockout against the horizon arm', () => {
    * the one thing that has changed about this position since. It moved the gap from 18 to 10: real
    * work, in the right direction, and less than half of what the position needs.
    *
-   * So the charge is not the missing piece either, and raising it is not the answer: it applies to
-   * every pass in the game, and the rate it was sized against (2.71 discretionary passes a game down
-   * to 0.21) is already close to a competent player's.
+   * So the charge was not the missing piece on its own, and raising it was never the answer: it
+   * applies to every pass in the game, and the rate it was sized against (2.71 discretionary passes a
+   * game down to 0.21) is already close to a competent player's.
+   *
+   * **It is half of the shipped fix, though**, which is why both halves are read here. With the term
+   * the raw gap is 0, a dead tie, and the same 8 points then decide it: -8, stripping ahead.
    */
-  it('is not closed by the root pass charge, which is already paying in full', () => {
-    const gapAtCharge = (passPenalty: number): number => {
+  it('is half of the fix: the charge decides the tie the term creates', () => {
+    const gapAtCharge = (passPenalty: number, evaluator = beforeFix): number => {
       const s = lockout()
       const moves = legalMoves(s)
-      makeBeamAi(evaluate, { ...BEAM_REPLY_LIMITS, passPenalty })(s)
+      makeBeamAi(evaluator, { ...BEAM_REPLY_LIMITS, passPenalty })(s)
       const v = lastSearchTrace()!.candidates
       return v[moves.findIndex(m => m.type === 'pass')]
         - v[moves.findIndex(m => m.type === 'attack' && m.attackerId === 'chump')]
     }
+    const shipped = BEAM_REPLY_LIMITS.passPenalty!
 
+    // Without the term the charge is real work in the right direction and less than half of enough.
     expect(gapAtCharge(0), 'the raw gap, before anything charges the pass').toBe(18)
-    expect(gapAtCharge(BEAM_REPLY_LIMITS.passPenalty!), 'what ships').toBe(10)
+    expect(gapAtCharge(shipped), 'the charge alone').toBe(10)
+
+    // With it, the term levels the two lines and the charge settles them.
+    expect(gapAtCharge(0, evaluate), 'the term alone: a dead tie').toBe(0)
+    expect(gapAtCharge(shipped, evaluate), 'both: stripping wins outright').toBe(-shipped)
   })
 })

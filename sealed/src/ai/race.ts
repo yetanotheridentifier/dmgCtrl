@@ -105,6 +105,26 @@ export function reachSteady(state: GameState, owner: PlayerId): number {
  * nothing to either side of the subtraction and so cannot register as blocked.
  */
 export function blockedReach(state: GameState, owner: PlayerId): number {
+  // **Cheap precondition, and it is what makes the term affordable to ship.** The gate below needs
+  // `sentinelLocked` plus a target list whose every member carries a Shield, so nothing can be denied
+  // unless the enemy holds a unit that is BOTH a Sentinel and shielded. Without one the answer is
+  // zero and the per-unit targeting walk below is pure waste.
+  //
+  // That walk is far more expensive than any other term, and this is the difference between shipping
+  // and not. Measured over 200 states against the same bot with the term at 0:
+  //
+  //   no precondition          1.26x, repeatable
+  //   gated on any Shield      1.12x
+  //   gated on this            not separable from noise: three runs read 1.11x in the term's
+  //                            FAVOUR, then 1.09x and 1.05x against it
+  //
+  // A Shield is present in about a sixth of decisions; a shielded *blocker* is far rarer, which is
+  // why the second gate is worth more than the first despite looking like a smaller distinction.
+  const foe = state.players[opponentOf(owner)]
+  const hasShieldedBlocker = foe.units.some(u =>
+    u.upgrades.some(up => up.cardId === TOKEN_SHIELD) && unitHasKeyword(state, u, 'Sentinel'))
+  if (!hasShieldedBlocker) return 0
+
   return state.players[owner].units.reduce((n, u) => {
     if (unitCannotAttackBases(state, u)) return n
     const { targets, sentinelLocked } = enemyAttackTargets(state, u, owner)

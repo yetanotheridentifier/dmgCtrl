@@ -489,9 +489,30 @@ it charges for what it already sees.
   14.7%, halves the rounds spent locked (10.1% to 5.1%), and leaves 25% fewer shielded blockers
   standing.
 
-  **These are 80-game screens and nothing more.** Both need the full paired run before any of it is a
-  result: the tie-break read 55.0% at 80 games and 51.1% at 2,040. What the pair establishes is
-  direction and safety, and that the term is close to inert where the position does not occur.
+  **The full paired runs, 1,678 games an arm**, which is what those screens are worth once played out:
+
+  | | wall decks | coverage decks |
+  | --- | --- | --- |
+  | paired difference | **+1.88** | **+0.14** |
+  | t | 1.73 on 10 df vs 2.228 | 0.19 on 9 df vs 2.262 |
+  | | **not significant** | not significant |
+  | shards favouring the arm | 7 of 11 | 6 of 10 |
+
+  The screens read +10.00 and +1.25, so both shrank hard at twenty times the sample, exactly as the
+  tie-break did (55.0% at 80 games, 51.1% at 2,040). **Screens are disaster filters and this is what
+  they are worth.**
+
+  **Shipped at 3 anyway**, on this ticket's stated gate of a scripted position plus non-inferiority
+  rather than a win rate, because a shut lane is 2.2% of coverage decisions and no aggregate can carry
+  it. Positive point estimates on both populations, neutral where the position does not occur, a
+  measured mechanism, and a defect reported twice from real play. Recorded as **not significant**, not
+  as a win.
+
+  **Cost is a precondition, not a footnote.** The quantity runs the targeting rules per unit, so with
+  the weight non-zero it evaluates on every board. Shipping it unguarded measured **1.26x** the
+  per-decision cost; gating on "the enemy holds a unit that is both a Sentinel and shielded" brings it
+  inside noise (three runs read 1.11x in the term's favour, then 1.09x and 1.05x against). A term this
+  narrow has to pay nothing on the boards where it cannot fire.
 - **Advantage priced as a one-off.** The token is +1/0 until its unit next completes an attack or
   defence, so a permanent model over-values it. Prevalence passed the gate at 20.7% of decisions, and
   six arms plus 1,800 games measured nothing: 76% of tokens are spent, so the honest discount is small
