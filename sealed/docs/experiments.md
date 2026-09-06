@@ -551,9 +551,10 @@ games" on exactly that population.
 
 The fix is a deck set built to contain the position: one seat gets an ordinary coverage deck, the
 other a wall of self-shielding ground Sentinels plus the cards that put a Shield back after a strip.
-`--decks lockout`. The shipped bot, 44 games a side, same seeds:
+`--decks lockout`. Measured **with `blockedReach` at 0**, the bot as it was before that term shipped,
+44 games a side on the same seeds. That is what the population holds, not what the current bot does:
 
-| `beam-reply` | coverage | lockout |
+| `beam-reply`, `blockedReach: 0` | coverage | lockout |
 | --- | --- | --- |
 | a lane shut | 2.2% | **6.4%** |
 | rounds locked | 1.3% | **10.1%** |

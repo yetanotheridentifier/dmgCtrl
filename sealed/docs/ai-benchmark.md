@@ -183,7 +183,11 @@ intent) plus Durasteel Plating and Perserverance to put a Shield back after one 
 It exists because the lockout is a **human strategy** and self-play never builds it. `--decisions` with
 the shipped bot, 44 games a side, the same seeds:
 
-| `beam-reply` | coverage | lockout |
+**Measured with `blockedReach` at 0**, which is what the bot was before that term shipped. Read it as
+what the population contains, not as what the current bot does: the whole point of the set is that it
+holds the position, and a bot that can escape shows a milder version of it.
+
+| `beam-reply`, `blockedReach: 0` | coverage | lockout |
 | --- | --- | --- |
 | a lane shut | 2.2% | **6.4%** |
 | rounds locked | 1.3% | **10.1%** |
@@ -193,6 +197,10 @@ the shipped bot, 44 games a side, the same seeds:
 | **passed with an attack available** | 57.6% | **96.7%** |
 | `blockedReach` live | 3.9% | 13.6% |
 | ...of those, on a shut lane | 77 | **223** |
+
+The shipped bot carries the term at 3 and reads the lockout column differently: strips taken **23.3%**,
+a lane shut **4.4%**, rounds locked **5.1%**, longest lockout **3 rounds**, passed with an attack
+available **88.6%**. Still a partial escape rather than a solved position, which is expected.
 
 Both columns are calibration, not just size. The coverage column reproduces the historical record (a
 lane shut on about 2% of decisions, never lasting a full round) and the lockout column reproduces the
@@ -275,8 +283,10 @@ Everything is optional:
   Four suffixes compose with any of the above, so an A/B cell is a name rather than a registry entry:
 
   - `+WEIGHT=VALUE` rebuilds the bot with one evaluation weight changed, e.g.
-    `beam-reply+blockedReach=12`. A new weight ships at zero and is swept upward, which needs two AIs
-    differing in that weight and nothing else. An unknown weight is rejected rather than dropped.
+    `beam-reply+blockedReach=0`. A new weight ships at zero and is swept upward, which needs two AIs
+    differing in that weight and nothing else. **Zero is as useful as any other value**, and is how a
+    shipped term's own control is named: `blockedReach` ships at 3, so `beam-reply+blockedReach=0` is
+    the bot without it. An unknown weight is rejected rather than dropped.
   - `/tie=FIELD:VALUE[,FIELD:VALUE]` names the **second opinion** consulted when candidates tie for
     the lead, e.g. `beam-reply/tie=reply:null` or `beam-reply/tie=reply:null,depth:2`. Fields are
     `reply`, `width`, `depth` and `nodes`; only the tied candidates are re-searched, so this can never
