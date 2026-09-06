@@ -1,0 +1,328 @@
+{
+  "initialState": {
+    "players": {
+      "player": {
+        "leader": {
+          "cardId": "ASH_003",
+          "deployed": false,
+          "epicActionUsed": false,
+          "exhausted": false
+        },
+        "base": {
+          "cardId": "ASH_023",
+          "damage": 0
+        },
+        "hand": [
+          "ASH_171",
+          "ASH_184",
+          "ASH_264",
+          "ASH_171",
+          "ASH_178",
+          "ASH_141"
+        ],
+        "deck": [
+          "ASH_086",
+          "ASH_143",
+          "ASH_086",
+          "ASH_047",
+          "ASH_264",
+          "ASH_141",
+          "ASH_143",
+          "ASH_178",
+          "ASH_264",
+          "ASH_170",
+          "ASH_049",
+          "ASH_049",
+          "ASH_239",
+          "ASH_170",
+          "ASH_030",
+          "ASH_077",
+          "ASH_030",
+          "ASH_049",
+          "ASH_239",
+          "ASH_148",
+          "ASH_239",
+          "ASH_143",
+          "ASH_086",
+          "ASH_171"
+        ],
+        "discard": [],
+        "resources": [],
+        "units": []
+      },
+      "opponent": {
+        "leader": {
+          "cardId": "ASH_004",
+          "deployed": false,
+          "epicActionUsed": false,
+          "exhausted": false
+        },
+        "base": {
+          "cardId": "ASH_023",
+          "damage": 0
+        },
+        "hand": [
+          "ASH_086",
+          "ASH_048",
+          "ASH_089",
+          "ASH_143",
+          "ASH_142",
+          "ASH_239"
+        ],
+        "deck": [
+          "ASH_048",
+          "ASH_076",
+          "ASH_239",
+          "ASH_178",
+          "ASH_142",
+          "ASH_053",
+          "ASH_261",
+          "ASH_079",
+          "ASH_143",
+          "ASH_076",
+          "ASH_178",
+          "ASH_261",
+          "ASH_239",
+          "ASH_092",
+          "ASH_079",
+          "ASH_086",
+          "ASH_086",
+          "ASH_243",
+          "ASH_079",
+          "ASH_143",
+          "ASH_048",
+          "ASH_187",
+          "ASH_261",
+          "ASH_089"
+        ],
+        "discard": [],
+        "resources": [],
+        "units": []
+      }
+    },
+    "initiative": "player",
+    "initiativeTakenBy": null,
+    "activePlayer": "player",
+    "phase": "setup",
+    "round": 1,
+    "consecutivePasses": 0,
+    "regroupResourced": {
+      "player": false,
+      "opponent": false
+    },
+    "instanceCounter": 1,
+    "rngSeed": 2197323579,
+    "setupStage": "mulligan",
+    "winner": null
+  },
+  "moves": [
+    {
+      "by": "player",
+      "action": {
+        "type": "keepHand"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "keepHand"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "setupResource",
+        "handIndex": 1
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "setupResource",
+        "handIndex": 3
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "setupResource",
+        "handIndex": 0
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "setupResource",
+        "handIndex": 0
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "playUnit",
+        "handIndex": 3
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "playUnit",
+        "handIndex": 1
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "useLeaderAbility",
+        "index": 0,
+        "targetInstanceId": "u1"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "takeInitiative"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "pass"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "resourceCard",
+        "handIndex": 0
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "resourceCard",
+        "handIndex": 1
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "pass"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "playUnit",
+        "handIndex": 3
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "playUnit",
+        "handIndex": 3
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "useLeaderAbility",
+        "index": 0,
+        "targetInstanceId": "u1"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "pass"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "takeInitiative"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "resourceCard",
+        "handIndex": 3
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "resourceCard",
+        "handIndex": 4
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "playUnit",
+        "handIndex": 3
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "playUnit",
+        "handIndex": 2
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "useLeaderAbility",
+        "index": 0,
+        "targetInstanceId": "u1"
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "attack",
+        "attackerId": "u2",
+        "target": {
+          "kind": "base"
+        }
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "attack",
+        "attackerId": "u1",
+        "target": {
+          "kind": "base"
+        }
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "useLeaderAbility",
+        "index": 0
+      }
+    },
+    {
+      "by": "opponent",
+      "action": {
+        "type": "attack",
+        "attackerId": "u4",
+        "target": {
+          "kind": "base"
+        },
+        "choiceId": "ASH_004-attack"
+      }
+    },
+    {
+      "by": "player",
+      "action": {
+        "type": "takeInitiative"
+      }
+    }
+  ]
+}

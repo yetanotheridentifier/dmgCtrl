@@ -760,15 +760,26 @@ The harness must survive engine defects without wedging or silently corrupting a
 **dropped**, not counted, for one of four reasons:
 
 - `stuck` an AI had no legal move while the game was still live (usually an engine hang).
-- `threw` resolving a move threw an error.
-- `nonterminating` the game exceeded a large move ceiling (a cycle that never ends).
-- `timeout` the game ran past a wall-clock limit.
+- `threw` choosing or resolving a move threw an error.
+- `nonterminating` the game exceeded the move ceiling (a cycle that never ends).
+
+There is deliberately **no wall-clock reason**: a drop decision that consults the clock makes a result
+depend on machine load. See the note above `stepCeiling` in `bench/selfPlay.ts` for what that cost.
 
 Each dropped game is written to `bench-results/failures/` as a **replayable fixture**: the starting
 position plus every move, in the exact `{ initialState, moves }` shape the bug-replay harness
 (`src/test/helpers/replayReport.ts`) already reads. Drop that file into `src/test/fixtures/reports/`,
 replay it, and step through to the exact move where things went wrong, then file it as a bug. This is
 how the bench found and pinned two real hangs during its own construction.
+
+**Load it with that harness, never by parsing the JSON.** `cards` is stripped when a fixture is
+written and the harness rebuilds it from the ASH snapshot on load; a hand-rolled loader throws on the
+first move, inside `defeated`, for reasons that have nothing to do with the bug being chased.
+
+**A `threw` is not necessarily in `resolve`.** A move is appended to the record *before* it is
+resolved, so a throw inside `resolve` leaves the offending move last. If every recorded move replays
+cleanly, the throw is in the AI **choosing the next move**: replay to the end, then call the AI on the
+result.
 
 ## Coverage sweep: whole-pool fuzzing
 

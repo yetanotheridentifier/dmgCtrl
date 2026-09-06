@@ -12,6 +12,7 @@ import rampResourceReady from '../fixtures/reports/rampResourceReady.json'
 import shieldedSentinelLockout from '../fixtures/reports/shieldedSentinelLockout.json'
 import sloaneSelfSentinel from '../fixtures/reports/sloaneSelfSentinel.json'
 import shieldedSentinelPing from '../fixtures/reports/shieldedSentinelPing.json'
+import triggerProbeOverflow from '../fixtures/reports/triggerProbeOverflow.json'
 import vaneFriendlyUpgrade from '../fixtures/reports/vaneFriendlyUpgrade.json'
 import vaneFriendlyUpgradeCards from '../fixtures/reports/vaneFriendlyUpgradeCards.json'
 import { buildCardDb } from '../../engine/cardDb'
@@ -47,7 +48,7 @@ const REPORTS: Record<string, unknown> = {
   advantageToEnemy, attackBuffPersists, baylanExhaust, debuffOnOwnUnit, exhaustedLeaderDraw,
   haulcraftPrompt, minefieldArenaChoice, nestedDeployShieldTarget, rampResourceReady,
   shieldedSentinelLockout, shieldedSentinelPing, sloaneSelfSentinel, triggerOrderNotOffered,
-  vaneFriendlyUpgrade,
+  triggerProbeOverflow, vaneFriendlyUpgrade,
 }
 
 /**
