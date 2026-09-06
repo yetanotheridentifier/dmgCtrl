@@ -183,7 +183,11 @@ intent) plus Durasteel Plating and Perserverance to put a Shield back after one 
 It exists because the lockout is a **human strategy** and self-play never builds it. `--decisions` with
 the shipped bot, 44 games a side, the same seeds:
 
-| `beam-reply` | coverage | lockout |
+**Measured with `blockedReach` at 0**, which is what the bot was before that term shipped. Read it as
+what the population contains, not as what the current bot does: the whole point of the set is that it
+holds the position, and a bot that can escape shows a milder version of it.
+
+| `beam-reply`, `blockedReach: 0` | coverage | lockout |
 | --- | --- | --- |
 | a lane shut | 2.2% | **6.4%** |
 | rounds locked | 1.3% | **10.1%** |
@@ -193,6 +197,10 @@ the shipped bot, 44 games a side, the same seeds:
 | **passed with an attack available** | 57.6% | **96.7%** |
 | `blockedReach` live | 3.9% | 13.6% |
 | ...of those, on a shut lane | 77 | **223** |
+
+The shipped bot carries the term at 3 and reads the lockout column differently: strips taken **23.3%**,
+a lane shut **4.4%**, rounds locked **5.1%**, longest lockout **3 rounds**, passed with an attack
+available **88.6%**. Still a partial escape rather than a solved position, which is expected.
 
 Both columns are calibration, not just size. The coverage column reproduces the historical record (a
 lane shut on about 2% of decisions, never lasting a full round) and the lockout column reproduces the
@@ -275,8 +283,10 @@ Everything is optional:
   Four suffixes compose with any of the above, so an A/B cell is a name rather than a registry entry:
 
   - `+WEIGHT=VALUE` rebuilds the bot with one evaluation weight changed, e.g.
-    `beam-reply+blockedReach=12`. A new weight ships at zero and is swept upward, which needs two AIs
-    differing in that weight and nothing else. An unknown weight is rejected rather than dropped.
+    `beam-reply+blockedReach=0`. A new weight ships at zero and is swept upward, which needs two AIs
+    differing in that weight and nothing else. **Zero is as useful as any other value**, and is how a
+    shipped term's own control is named: `blockedReach` ships at 3, so `beam-reply+blockedReach=0` is
+    the bot without it. An unknown weight is rejected rather than dropped.
   - `/tie=FIELD:VALUE[,FIELD:VALUE]` names the **second opinion** consulted when candidates tie for
     the lead, e.g. `beam-reply/tie=reply:null` or `beam-reply/tie=reply:null,depth:2`. Fields are
     `reply`, `width`, `depth` and `nodes`; only the tied candidates are re-searched, so this can never
@@ -760,15 +770,26 @@ The harness must survive engine defects without wedging or silently corrupting a
 **dropped**, not counted, for one of four reasons:
 
 - `stuck` an AI had no legal move while the game was still live (usually an engine hang).
-- `threw` resolving a move threw an error.
-- `nonterminating` the game exceeded a large move ceiling (a cycle that never ends).
-- `timeout` the game ran past a wall-clock limit.
+- `threw` choosing or resolving a move threw an error.
+- `nonterminating` the game exceeded the move ceiling (a cycle that never ends).
+
+There is deliberately **no wall-clock reason**: a drop decision that consults the clock makes a result
+depend on machine load. See the note above `stepCeiling` in `bench/selfPlay.ts` for what that cost.
 
 Each dropped game is written to `bench-results/failures/` as a **replayable fixture**: the starting
 position plus every move, in the exact `{ initialState, moves }` shape the bug-replay harness
 (`src/test/helpers/replayReport.ts`) already reads. Drop that file into `src/test/fixtures/reports/`,
 replay it, and step through to the exact move where things went wrong, then file it as a bug. This is
 how the bench found and pinned two real hangs during its own construction.
+
+**Load it with that harness, never by parsing the JSON.** `cards` is stripped when a fixture is
+written and the harness rebuilds it from the ASH snapshot on load; a hand-rolled loader throws on the
+first move, inside `defeated`, for reasons that have nothing to do with the bug being chased.
+
+**A `threw` is not necessarily in `resolve`.** A move is appended to the record *before* it is
+resolved, so a throw inside `resolve` leaves the offending move last. If every recorded move replays
+cleanly, the throw is in the AI **choosing the next move**: replay to the end, then call the AI on the
+result.
 
 ## Coverage sweep: whole-pool fuzzing
 

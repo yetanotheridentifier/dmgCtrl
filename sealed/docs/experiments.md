@@ -551,9 +551,10 @@ games" on exactly that population.
 
 The fix is a deck set built to contain the position: one seat gets an ordinary coverage deck, the
 other a wall of self-shielding ground Sentinels plus the cards that put a Shield back after a strip.
-`--decks lockout`. The shipped bot, 44 games a side, same seeds:
+`--decks lockout`. Measured **with `blockedReach` at 0**, the bot as it was before that term shipped,
+44 games a side on the same seeds. That is what the population holds, not what the current bot does:
 
-| `beam-reply` | coverage | lockout |
+| `beam-reply`, `blockedReach: 0` | coverage | lockout |
 | --- | --- | --- |
 | a lane shut | 2.2% | **6.4%** |
 | rounds locked | 1.3% | **10.1%** |
@@ -575,6 +576,30 @@ Three properties of such a set, learned building this one:
 - **Read the qualified rate, not the raw one.** The raw pass rate barely moves between the two
   populations (0.75 a game against 0.68); what changes is that the bot passes *with an attack
   available* almost every time. A rate alone reads this as no difference.
+
+### An engine change cannot be A/B-ed, and self-play cannot see it at all
+
+A change inside `resolve` sits under every AI, so there is no name to put on the other arm. Worse,
+**a self-play control is blind to it by construction**: both seats carry the change, so the control
+reads ~50% whatever happened.
+
+What works is a **fixed weaker reference on identical seeds, run once per build**: `beam-reply` against
+`greedy`, same decks, same shuffles, before and after. If the change hurt the strong bot, its margin
+over the weak one shrinks. Validating the trigger-probe fix that way, 12 shards of 120 games:
+
+| | pre-fix | post-fix |
+| --- | --- | --- |
+| pooled | 79.6% ± 2.1% | 79.6% ± 2.1% |
+| shards identical | **11 of 12** | |
+| the twelfth | 118 completed, **2 dropped** | **120 completed, 0 dropped** |
+| wall clock | 2813.1 s | 2807.5 s |
+
+Read it as "the matchup is unchanged", not "the bot is as strong in absolute terms": both sides moved
+together, and no before-and-after across commits can separate those. It is the strongest available
+reading for an engine change, and it is worth the hour.
+
+The sharper evidence here was not the win rate but the **drop count**, which measures the defect
+directly rather than through a proxy.
 
 ### Refuted assumptions
 

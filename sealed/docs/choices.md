@@ -86,6 +86,14 @@ a card states an unmet condition by returning the state it was given, which is w
 answerable without a per-card declaration that could drift from its own effect. Probing happens only
 where two or more abilities are owed, since one resolves either way.
 
+**The probe runs with the trigger already off the queue**, exactly as `runOne` resolves it, and that is
+load-bearing rather than tidy. An effect can fire a nested batch: attaching a token fires "when an
+upgrade attaches". If the probe ran against a board that still owed the ability being probed, that
+nested drain would find it waiting and probe it again, unboundedly. It overflowed the stack on a real
+board, and made a single decision cost a minute on another. The comparison is against the probed board
+rather than the original, or removing the trigger would itself read as a change and nothing would ever
+look inert.
+
 **Inert is a fact about now, not about the ability**, so it is re-asked on every pass rather than
 settled when the batch was collected. An ability that can act resolves before one that cannot, and the
 board is read again afterwards: playing Luke Skywalker (ASH_112) with two units out triggers his "if you

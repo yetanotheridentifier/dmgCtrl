@@ -92,7 +92,17 @@ function distinguishable(triggers: PendingTrigger[]): boolean {
  * pass rather than settled once when the batch was collected.
  */
 function inertNow(state: GameState, trigger: PendingTrigger): boolean {
-  return runPendingTrigger(state, trigger) === state
+  // **Probed with this trigger already off the queue, exactly as `runOne` resolves it.** Without that
+  // the probe runs against a board that still owes the very ability being probed, so an effect which
+  // fires a nested batch (attaching a token fires "when an upgrade attaches") reaches a drain that
+  // finds the same trigger waiting and probes it again. That recursion is unbounded: it overflowed
+  // the stack on a real board, and in the app, which has no error boundary, that is a lost game.
+  //
+  // The comparison is against the probed board rather than `state`, or dequeuing would itself read as
+  // a change and every trigger would look actionable.
+  const waiting = (state.pendingTriggers ?? []).filter(t => t.id !== trigger.id)
+  const from: GameState = { ...state, pendingTriggers: waiting }
+  return runPendingTrigger(from, trigger) === from
 }
 
 /**
