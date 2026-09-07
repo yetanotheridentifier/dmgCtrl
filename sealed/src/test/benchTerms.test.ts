@@ -94,12 +94,15 @@ describe('the term decomposition', () => {
     const state = corpus(1)[0]
     const terms = publicBreakdown(state, 'player', DEFAULT_WEIGHTS, 'neutral')
     expect(Object.keys(terms).sort()).toEqual([
-      'advantage', 'advantageExhausted', 'base', 'blockedReach', 'card', 'claimCost', 'hp',
-      'initiative', 'lethalExposure', 'power', 'readyUnit', 'resource', 'resourceSurplus', 'shield',
-      'unit',
+      'advantage', 'advantageExhausted', 'base', 'blockedReach', 'card', 'cardScarcity', 'claimCost',
+      'deployUrgency', 'hp', 'initiative', 'lethalExposure', 'power', 'readyUnit', 'resource',
+      'resourceSurplus', 'shield', 'unit',
     ])
     expect(Object.keys(terms)).not.toContain('saturation')
     expect(Object.keys(terms)).not.toContain('roleShift')
+    // `handKnee` splits the hand between `card` and `cardScarcity` exactly as `saturation` splits the
+    // pool, so it is a size rather than a coefficient and has no quantity to report.
+    expect(Object.keys(terms)).not.toContain('handKnee')
   })
 
   /** The role bends weights, and the breakdown must report the bent ones or the sum would not hold. */

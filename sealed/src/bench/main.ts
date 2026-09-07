@@ -409,11 +409,24 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
   }
   const r = report.resourcing
   const total = r.banked + r.skipped
+  // A pooled skip rate cannot tell "skips late holding two cards" from "skips at random", so the
+  // breakouts are printed alongside it rather than left in the report object for a test to read.
+  const breakout = (label: string, buckets: typeof r.byRound): string[] => [
+    `    ${label.padEnd(11)}${buckets.map(b => String(b.key).padStart(6)).join('')}`,
+    `    ${'skipped'.padEnd(11)}${buckets
+      .map(b => (b.banked + b.skipped === 0 ? '   n/a' : pct(b.skipped / (b.banked + b.skipped)).padStart(6)))
+      .join('')}`,
+    `    ${'decisions'.padEnd(11)}${buckets.map(b => String(b.banked + b.skipped).padStart(6)).join('')}`,
+  ]
   lines.push(
     '',
     '  regroup banking (a strict public preference, so not a tie: this is behaviour, not a gap)',
     row('banked', `${r.banked}  (avg pool ${r.avgPoolWhenBanked.toFixed(1)})`),
     row('skipped', total === 0 ? '0' : `${r.skipped} = ${pct(r.skipped / total)}  (avg pool ${r.avgPoolWhenSkipped.toFixed(1)})`),
+    '',
+    ...breakout('round', r.byRound),
+    '',
+    ...breakout('hand size', r.byHandSize),
   )
   const i = report.initiative
   lines.push(

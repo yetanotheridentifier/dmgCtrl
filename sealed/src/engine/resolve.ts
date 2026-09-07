@@ -2244,7 +2244,10 @@ function simulatedRegroupFor(state: GameState, id: PlayerId): GameState {
   const taken = REGROUP_DRAW - missed
   return updatePlayer(state, id, {
     deck: p.deck.slice(taken),
-    resources: taken > 0 ? [...p.resources, { cardId: UNSEEN_CARD, exhausted: false }] : p.resources,
+    // Drawn face down: the SIZE is public and the draw is deterministic, so modelling it is honest,
+    // while the identities stay unreadable. Every consumer already guards on an unknown id, so these
+    // are unplayable and unpriced rather than special-cased.
+    hand: [...p.hand, ...Array.from({ length: taken }, () => UNSEEN_CARD)],
     base: missed === 0 ? p.base : { ...p.base, damage: p.base.damage + missed * EMPTY_DECK_DAMAGE },
   })
 }

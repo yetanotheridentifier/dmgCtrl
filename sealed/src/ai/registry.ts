@@ -145,7 +145,7 @@ const LETHAL_BEAM_SPEC = /^beam-lethal:(\d+)x(\d+):(\d+)$/
  * `beam-reply+shield=4` against plain `beam-reply` is exactly one difference, and `--shard` can run
  * it. Negatives are allowed: a term can be worth measuring in either direction.
  */
-const WEIGHT_OVERRIDE = /^(.+)\+([A-Za-z][A-Za-z0-9]*)=(-?\d+(?:\.\d+)?)$/
+const WEIGHT_OVERRIDE = /^(.+?)((?:\+[A-Za-z][A-Za-z0-9]*=-?\d+(?:\.\d+)?)+)$/
 
 /**
  * `NAME/tie=FIELD:VALUE[,FIELD:VALUE...]`, naming the second opinion consulted when candidates tie
@@ -311,13 +311,20 @@ export function namedLimitsFor(name: string): BeamLimits | null {
 function splitWeightOverride(name: string): { base: string; overrides?: Partial<EvalWeights> } {
   const m = WEIGHT_OVERRIDE.exec(name)
   if (!m) return { base: name }
-  const [, base, key, raw] = m
-  // Checked against the real weight set rather than a hardcoded list, so a typo fails loudly instead
-  // of being silently dropped and measured as "no difference".
-  if (!(key in DEFAULT_WEIGHTS)) {
-    throw new Error(`Unknown weight "${key}" in "${name}". Valid: ${Object.keys(DEFAULT_WEIGHTS).join(', ')}`)
+  const [, base, tail] = m
+  const overrides: Record<string, number> = {}
+  // Several pairs, because some terms are only meaningful together: `cardScarcity` is a rate and
+  // `handKnee` is the size it is charged below, so a grid cell names both or expresses nothing.
+  for (const pair of tail.split('+').filter(Boolean)) {
+    const [key, raw] = pair.split('=')
+    // Checked against the real weight set rather than a hardcoded list, so a typo fails loudly instead
+    // of being silently dropped and measured as "no difference".
+    if (!(key in DEFAULT_WEIGHTS)) {
+      throw new Error(`Unknown weight "${key}" in "${name}". Valid: ${Object.keys(DEFAULT_WEIGHTS).join(', ')}`)
+    }
+    overrides[key] = Number(raw)
   }
-  return { base, overrides: { [key]: Number(raw) } as Partial<EvalWeights> }
+  return { base, overrides: overrides as Partial<EvalWeights> }
 }
 
 /**

@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { makeBeamAi, asSimulation, lastSearchTrace, clearSearchTrace, DEFAULT_BEAM_LIMITS } from '../ai/search'
-import { evaluate } from '../ai/evaluate'
+import { makeBeamAi, asSimulation, settleCrossing, lastSearchTrace, clearSearchTrace, DEFAULT_BEAM_LIMITS } from '../ai/search'
+import { evaluate, DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
 import { cardValue } from '../ai/cardValue'
 import { resolveAi, aiNames } from '../ai/registry'
+import { makeBeamGreedy } from '../ai/greedyAi'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 import type { GameState } from '../engine/types'
 import '../engine/cardDefinitions'
@@ -122,17 +123,43 @@ describe('the simulated regroup', () => {
     expect(legalMoves(after).length, 'and the search can continue from it').toBeGreaterThan(0)
   })
 
-  /** Two cards leave the deck and one becomes a resource. Neither reaches a hand. */
-  it('spends the two cards without reading them', () => {
+  /**
+   * The engine models the MECHANICAL half of the regroup and predicts nothing (#519).
+   *
+   * It used to bank one of the two drawn cards on each side's behalf and leave the hand untouched.
+   * That was faithful while `resource - card` was +2 and banking was the only thing the bot ever did.
+   * It is not a rule the engine can state any more: whether a seat banks now depends on evaluation
+   * weights, which the engine has no business knowing.
+   *
+   * So the cards enter the hand **unidentified**. Hand SIZE is public and the draw is deterministic,
+   * so modelling the size is honest; the identities stay unreadable, which is the guarantee the whole
+   * boundary exercise exists to keep. The resourcing choice is applied afterwards by the search, in
+   * `settleCrossing`, from public quantities alone.
+   */
+  it('draws the two cards face down and banks nothing', () => {
     const before = atBoundary(BOMBS_FIRST)
     const after = crossed(before)
     for (const id of ['player', 'opponent'] as const) {
       const was = before.players[id]
       const now = after.players[id]
-      expect(now.hand, `${id} draws nothing`).toEqual(was.hand)
+      expect(now.hand.length, `${id} draws two`).toBe(was.hand.length + 2)
       expect(now.deck.length, `${id} spends both cards`).toBe(was.deck.length - 2)
-      expect(now.resources.length, `${id} banks one of them`).toBe(was.resources.length + 1)
+      expect(now.resources.length, `${id} banks nothing here`).toBe(was.resources.length)
     }
+  })
+
+  /**
+   * The drawn cards are placeholders, not cards. Every consumer already guards on an unknown id, so
+   * they are unplayable and unpriced rather than special-cased: `legalMoves` skips a hand entry with no
+   * definition, and so does `handValue`. That is the correct reading of "you know you drew two cards
+   * and not what they are".
+   */
+  it('leaves the drawn cards unidentified, so nothing can read or play them', () => {
+    const after = crossed(atBoundary(BOMBS_FIRST))
+    const drawn = after.players.player.hand
+    expect(drawn.length, 'not vacuous: there are cards to be unreadable').toBe(2)
+    expect(drawn.every(id => after.cards[id] === undefined), 'no definition to read').toBe(true)
+    expect(legalMoves(after).some(m => 'handIndex' in m), 'and none of them is playable').toBe(false)
   })
 
   /**
@@ -142,14 +169,86 @@ describe('the simulated regroup', () => {
   it('still charges for an empty deck', () => {
     const short = atBoundary(['JUNK'])
     const after = crossed(short)
-    // One card short of the two owed: 3 damage, and the one card there still banks.
+    // One card short of the two owed: 3 damage, and the one card there is still drawn.
     expect(after.players.player.base.damage).toBe(3)
-    expect(after.players.player.resources.length).toBe(short.players.player.resources.length + 1)
+    expect(after.players.player.hand.length).toBe(short.players.player.hand.length + 1)
 
     const empty = atBoundary([])
     const afterEmpty = crossed(empty)
     expect(afterEmpty.players.player.base.damage).toBe(6)
-    expect(afterEmpty.players.player.resources.length, 'nothing to bank').toBe(empty.players.player.resources.length)
+    expect(afterEmpty.players.player.hand.length, 'nothing to draw').toBe(empty.players.player.hand.length)
+  })
+
+  /**
+   * The half the engine gave up, now applied by the side that owns the policy (#519).
+   *
+   * `settleCrossing` runs once per crossing, on both seats, from PUBLIC quantities only: hand size,
+   * pool, leader cost and deploy state. That it can be done for the opponent at all is a consequence
+   * of the gates being public terms; a hand-reading rule could not model their choice without cheating.
+   *
+   * Banking a placeholder rather than a known card keeps the model honest in the other direction too:
+   * the search is predicting THAT a card is banked, not choosing which, and which is private.
+   */
+  it('applies the resourcing choice for both seats, under the shipped weights', () => {
+    const before = atBoundary(BOMBS_FIRST)
+    const after = settleCrossing(crossed(before), DEFAULT_WEIGHTS)
+    for (const id of ['player', 'opponent'] as const) {
+      const was = before.players[id]
+      const now = after.players[id]
+      // Shipped weights bank every regroup: two drawn, one banked, so the hand is up one net.
+      expect(now.resources.length, `${id} banks`).toBe(was.resources.length + 1)
+      expect(now.hand.length, `${id} keeps the other`).toBe(was.hand.length + 1)
+    }
+  })
+
+  /**
+   * The reason the crossing could not stay a constant. With the scarcity bonus on, a seat holding few
+   * cards declines, and the modelled future has to reflect the policy the bot is actually playing or
+   * the search is measuring an arm that contradicts itself.
+   */
+  it('declines instead, once the weights say a small hand is worth more', () => {
+    const w = { ...DEFAULT_WEIGHTS, cardScarcity: 3, handKnee: 3 }
+    const before = atBoundary(BOMBS_FIRST)
+    const after = settleCrossing(crossed(before), w)
+    for (const id of ['player', 'opponent'] as const) {
+      const was = before.players[id]
+      const now = after.players[id]
+      expect(now.resources.length, `${id} declines`).toBe(was.resources.length)
+      expect(now.hand.length, `${id} keeps both`).toBe(was.hand.length + 2)
+    }
+  })
+
+  /**
+   * **That the settlement reaches the SEARCH, not only the helper.**
+   *
+   * `step` is the single funnel, and the property it carries is "no site calls `resolve` directly".
+   * Testing `settleCrossing` alone would pass just as well if nothing in the search ever called it,
+   * which is the failure mode this whole area has form for. Two bots differing only in weights must
+   * therefore reach differently-settled boards through the real search.
+   */
+  it('settles inside the search, and follows the deciding bot’s own weights', () => {
+    const s = atBoundary(BOMBS_FIRST)
+    const passIndex = legalMoves(s).findIndex(m => m.type === 'pass')
+    const boardAfterPass = (w: typeof DEFAULT_WEIGHTS): GameState => {
+      clearSearchTrace()
+      makeBeamGreedy(w, { ...DEFAULT_BEAM_LIMITS, nodes: 200_000, explain: true })(s)
+      return lastSearchTrace()!.lines![passIndex].board
+    }
+    const shipped = boardAfterPass(DEFAULT_WEIGHTS)
+    const scarce = boardAfterPass({ ...DEFAULT_WEIGHTS, cardScarcity: 3, handKnee: 3 })
+    expect(shipped.players.player.resources.length, 'shipped weights bank at the crossing')
+      .toBe(s.players.player.resources.length + 1)
+    expect(scarce.players.player.resources.length, 'the scarcity arm declines')
+      .toBe(s.players.player.resources.length)
+  })
+
+  /** Settling reads sizes and the leader, never a card. Permuting the deck cannot reach it. */
+  it('settles identically however the deck is ordered', () => {
+    const w = { ...DEFAULT_WEIGHTS, cardScarcity: 3, handKnee: 3 }
+    const bombs = settleCrossing(crossed(atBoundary(BOMBS_FIRST)), w)
+    const junk = settleCrossing(crossed(atBoundary(JUNK_FIRST)), w)
+    expect(bombs.players.player.resources.length).toBe(junk.players.player.resources.length)
+    expect(bombs.players.player.hand.length).toBe(junk.players.player.hand.length)
   })
 
   /**

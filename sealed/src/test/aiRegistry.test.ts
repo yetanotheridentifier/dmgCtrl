@@ -183,6 +183,30 @@ describe('AI registry', () => {
     expect(() => resolveAi('beam-reply+shield=')).toThrow()
   })
 
+  /**
+   * Several weights at once, because some terms are only meaningful in pairs (#519).
+   *
+   * `cardScarcity` is a rate and `handKnee` is the size it is charged below, so a cell of that grid
+   * names both or names neither: sweeping the rate at a fixed knee measures one line through the
+   * space and calls it the space. The single-override form could not express a cell at all, which
+   * would have forced either a registry entry per cell or a sweep of the wrong shape.
+   */
+  it('builds the shipped bot with several weights overridden at once', () => {
+    const s = decisionState()
+    expect(() => resolveAi('beam-reply+cardScarcity=3+handKnee=4')).not.toThrow()
+    // Each pair is read: changing either one alone gives a different bot from changing both.
+    const both = resolveAi('beam-reply+cardScarcity=6+handKnee=5')
+    expect(both).not.toBe(resolveAi('beam-reply+cardScarcity=6'))
+    // Shipped values in every slot is still the shipped bot, so a grid keeps its anchor.
+    expect(resolveAi(`beam-reply+cardScarcity=${DEFAULT_WEIGHTS.cardScarcity}+handKnee=${DEFAULT_WEIGHTS.handKnee}`)(s))
+      .toEqual(resolveAi('beam-reply')(s))
+  })
+
+  it('still rejects an unknown weight anywhere in the list', () => {
+    expect(() => resolveAi('beam-reply+cardScarcity=3+nonsense=4')).toThrow()
+    expect(() => resolveAi('beam-reply+nonsense=4+cardScarcity=3')).toThrow()
+  })
+
   /** Only weights that price a quantity can be swept this way; `saturation` is a knee, not a price,
    *  but it is still a real key so it must be addressable rather than rejected. */
   it('accepts any real weight key', () => {

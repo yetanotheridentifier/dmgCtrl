@@ -100,6 +100,32 @@ export interface ResourcingStat {
   skipped: number
   avgPoolWhenBanked: number
   avgPoolWhenSkipped: number
+  /**
+   * The same counts split by round, and by the hand size the choice was made from (#519).
+   *
+   * A pooled skip rate cannot tell "skips late holding two cards" from "skips at random", and those
+   * are opposite readings: the first is the behaviour a threshold term is built to produce, the second
+   * is noise. It is also the guard against the named failure mode, which is banking that stops EARLY
+   * and which a pooled rate of a dozen percent hides completely.
+   *
+   * Two one-dimensional breakouts rather than a grid. Round and hand size are correlated but are not
+   * the same question, and a 2D table over a corpus this size is mostly empty cells.
+   */
+  byRound: ResourcingBucket[]
+  byHandSize: ResourcingBucket[]
+}
+
+/**
+ * One row of a regroup breakout: how the choice went at a given round, or at a given hand size.
+ *
+ * Hand size is read BEFORE the card leaves the hand, and forced skips are excluded, so `key` is never
+ * zero in the hand-size breakout. The two breakouts share a shape because they answer the same
+ * question against different axes.
+ */
+export interface ResourcingBucket {
+  key: number
+  banked: number
+  skipped: number
 }
 
 /**
@@ -1197,6 +1223,19 @@ function decisionKind(s: GameState, action: Action): string {
   }
 }
 
+/** One axis of the regroup breakout while it is being counted. */
+type ResourcingTally = Map<number, { banked: number; skipped: number }>
+
+const bumpResourcing = (tally: ResourcingTally, key: number, side: 'banked' | 'skipped'): void => {
+  const bucket = tally.get(key) ?? { banked: 0, skipped: 0 }
+  bucket[side]++
+  tally.set(key, bucket)
+}
+
+/** Ordered by key, so the shape reads down the column rather than following insertion. */
+const resourcingBuckets = (tally: ResourcingTally): ResourcingBucket[] =>
+  [...tally].sort(([a], [b]) => a - b).map(([key, bucket]) => ({ key, ...bucket }))
+
 /** Choice kinds, most frequent first. Count then name, so the order is stable across runs rather
  *  than following insertion. */
 const rank = (counts: Map<string, number>): Array<{ kind: string; count: number }> =>
@@ -1227,6 +1266,8 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   let skipped = 0
   let bankedPool = 0
   let skippedPool = 0
+  const bankingByRound: ResourcingTally = new Map()
+  const bankingByHandSize: ResourcingTally = new Map()
   let initOffered = 0
   let initTaken = 0
   let cheapOffered = 0
@@ -1703,11 +1744,18 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           if (verdict === 'unavoidable') exposure.unavoidable++
         }
         // Pool size BEFORE the decision, so "skipped at 8" means it already held 8. Skipping with
-        // an empty hand is forced, not chosen, so it is not counted.
+        // an empty hand is forced, not chosen, so it is not counted. Hand size is read here for the
+        // same reason and at the same moment: the regroup draw has already landed, so this is the
+        // hand the choice was actually made from.
         const pool = s.players[me].resources.length
-        const couldBank = s.players[me].hand.length > 0
-        if (action.type === 'resourceCard' && s.phase === 'regroup') { banked++; bankedPool += pool }
-        if (action.type === 'skipResource' && couldBank) { skipped++; skippedPool += pool }
+        const handSize = s.players[me].hand.length
+        const couldBank = handSize > 0
+        const note = (side: 'banked' | 'skipped'): void => {
+          bumpResourcing(bankingByRound, s.round, side)
+          bumpResourcing(bankingByHandSize, handSize, side)
+        }
+        if (action.type === 'resourceCard' && s.phase === 'regroup') { banked++; bankedPool += pool; note('banked') }
+        if (action.type === 'skipResource' && couldBank) { skipped++; skippedPool += pool; note('skipped') }
         if (action.type === 'takeInitiative') {
           // Every claim, not just the denial ones: a claim that hands them the round they need to
           // BUILD lethal cannot appear in a bucket that requires the threat to exist already.
@@ -1896,6 +1944,8 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       skipped,
       avgPoolWhenBanked: banked === 0 ? 0 : bankedPool / banked,
       avgPoolWhenSkipped: skipped === 0 ? 0 : skippedPool / skipped,
+      byRound: resourcingBuckets(bankingByRound),
+      byHandSize: resourcingBuckets(bankingByHandSize),
     },
     initiative: {
       offered: initOffered,

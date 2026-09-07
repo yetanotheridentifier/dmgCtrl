@@ -1049,8 +1049,20 @@ so it scored the same as every other attack that suspended.
 Two behaviours are reported separately, because they are strict public preferences rather than ties
 and so read as behaviour rather than as a gap:
 
-- **regroup banking**: banks versus skips, and the mean pool at each. The skip rate is 0% by
-  construction, since the pool is valued flat.
+- **regroup banking**: banks versus skips, the mean pool at each, and the same split broken out **by
+  round and by hand size**. The pooled skip rate is 0% by construction, since the pool is valued flat.
+
+  The breakouts exist because a pooled rate cannot tell "skips late holding two cards" from "skips at
+  random", and those are opposite readings. They also police the named failure mode, which is banking
+  that stops early: a bot that declines a resource in round 2 loses 98% of its games, and a pooled
+  rate of a dozen percent hides that completely. Two one-dimensional tables rather than a grid, since
+  round and hand size are correlated without being the same question and a 2D table over this corpus
+  is mostly empty cells.
+
+  Both count only chosen decisions. An empty hand leaves `skipResource` as the sole legal move, and a
+  forced move is not a decision, so hand size in that breakout is never zero. It is read before the
+  banked card leaves the hand, and the regroup draw has already landed by then, so it is the hand the
+  choice was actually made from.
 - **initiative**: how often it claims, how often it takes the *cheap* window where the opponent has
   already passed, and the mean ready units it still had when it claimed mid-phase. That last number
   is the clearest read on whether the AI is claiming sensibly: low means it claims when it has little
