@@ -381,20 +381,29 @@ describe('runDecisions', () => {
 
   // Plays the coverage deck set twice over, so well past vitest's 5s default.
   /**
-   * The readout that let #393 iteration 2 be judged. Banking is a flat public +1 at every regroup,
-   * so the shipped AI never skips: 0% is the correct current number, not a broken measurement. A
-   * concave pool moved it to 12.5% (all at a pool of exactly the knee) and still lost, so the flat
-   * weights stayed. This asserts the instrument reports the behaviour, whatever the weights say.
+   * The readout that judged the resourcing work. It asserts the instrument reports the behaviour,
+   * whatever the weights say, so it is written against the SHAPE the shipped weights produce rather
+   * than against a fixed count.
+   *
+   * The shipped bot skips because of `cardScarcity`, and the whole reason that cell won where the
+   * pool knee lost is WHERE the skips fall. Skipping late on a saturated pool is the behaviour the
+   * threshold is built to produce; skipping early is the named failure mode, which cost 3.5 points
+   * when the same bonus was charged on hand size alone. A pooled rate cannot tell the two apart, so
+   * this checks the round split, not just the total.
    */
   it('reports whether the AI banks or skips, and at what pool size', () => {
-    const { banked, skipped, avgPoolWhenBanked } = report.resourcing
+    const { banked, skipped, avgPoolWhenBanked, avgPoolWhenSkipped, byRound } = report.resourcing
     expect(banked).toBeGreaterThan(0)
     expect(avgPoolWhenBanked).toBeGreaterThan(0)
-    // Flat pool value (`resourceSurplus === resource`) means banking always wins by exactly +1, and
-    // the private hand term is bounded below 1, so it can never flip that. Forced skips (an empty
-    // hand leaves no other legal move) are excluded, or this would be a few percent of phantoms.
-    expect(DEFAULT_WEIGHTS.resourceSurplus).toBe(DEFAULT_WEIGHTS.resource)
-    expect(skipped, 'a flat pool never CHOOSES to decline a resource').toBe(0)
+    // Forced skips (an empty hand leaves no other legal move) are excluded upstream, so every skip
+    // counted here is a choice.
+    expect(DEFAULT_WEIGHTS.cardScarcity, 'the term that produces skips is live').toBeGreaterThan(0)
+    expect(skipped, 'the shipped bot does decline, sometimes').toBeGreaterThan(0)
+    expect(avgPoolWhenSkipped, 'and only on a deeper pool than it banks on').toBeGreaterThan(avgPoolWhenBanked)
+
+    // The failure mode, stated as a property: a resource declined early is the one that hurts.
+    const early = byRound.filter(b => b.key < 6).reduce((n, b) => n + b.skipped, 0)
+    expect(early, 'no skips before round six').toBe(0)
   })
 
   /**

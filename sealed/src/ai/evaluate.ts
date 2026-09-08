@@ -105,12 +105,14 @@ export interface EvalWeights {
    * and closing it measures 1.8%, so the gap is left where it is and this reverses the decision
    * locally instead.
    *
-   * OFF until swept, per the rule that a new weight ships at zero.
+   * Swept and shipped at 3: +0.77 points over 4032 games against a matched control, 95% interval
+   * [+0.20, +1.34], across two seed blocks reading +0.94 and +0.59. The pool condition is what makes
+   * it a gain rather than a loss; see `scarceCards`.
    */
   cardScarcity: number
   /**
    * Hand size at or below which `cardScarcity` is charged. NOT a price: like `saturation` it decides
-   * how a quantity is split between two rates, and while `cardScarcity` is zero it is inert.
+   * how a quantity is split between two rates, so it is a size in cards rather than a value.
    *
    * Grounded in the pool the bot actually plays rather than in taste: over 1630 regroup decisions on
    * the shipped bot, hand size runs 2 to 8 with 72% at 4 or 5, and 15% at 3 or below. That is the
@@ -294,11 +296,15 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   advantageExhausted: 4,
   hp: 2,
   card: 4,
-  // #519. OFF until swept. At 3 the marginal card below the knee reaches 7 against a resource's 6,
-  // which is the smallest step that reverses the banking decision at all: the gap it has to overcome
-  // is `resource - card` = 2.
-  cardScarcity: 0,
-  // NOT a price and so NOT doubled: this is a hand size, in cards. Inert while `cardScarcity` is 0.
+  // At 3 the marginal card below the knee reaches 7 against a resource's 6, which is the smallest
+  // step that reverses the banking decision at all: the gap it has to overcome is `resource - card`
+  // = 2. Swept and shipped: +0.77 points over 4032 games against a matched control, 95% interval
+  // [+0.20, +1.34], replicating across two seed blocks at +0.94 and +0.59. Only ever charged once
+  // the pool is saturated (`scarceCards`), which is the half that made it a gain: charged on hand
+  // size alone the same weight measured -3.52.
+  cardScarcity: 3,
+  // NOT a price and so NOT doubled: this is a hand size, in cards. Live, since `cardScarcity` is
+  // non-zero: it splits the hand between `card` and `card + cardScarcity`.
   handKnee: 3,
   resource: 6,
   // MEASURED NEUTRAL AT BEST: equal to `resource`, i.e. the pool is deliberately shipped FLAT.

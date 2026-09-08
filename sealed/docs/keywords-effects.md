@@ -129,12 +129,31 @@ of the returned card must skip that branch for tokens.
 ## Attack targeting
 
 `enemyAttackTargets(state, attacker, owner?)` answers what a unit may attack, resolving arena,
-Hidden, "cannot be attacked", Saboteur and Sentinel-lock together, and reporting whether Sentinel
-locks the attack (so the base is off-limits).
+Hidden, "cannot be attacked", Saboteur and Sentinel-lock together. It returns the legal unit
+`targets`, whether Sentinel `sentinelLocked` the attack, and `canAttackBase`.
+
+**`canAttackBase` belongs with the target list because it is the same kind of rule.** Two separate
+things shut the base off: Sentinel forcing, and "can't attack bases" (Wicket). A site that derived
+base legality from `sentinelLocked` alone would enforce one and drop the other.
+
+`attackMoves` is the single enumeration built on that answer, and every source of an attack goes
+through it: the action phase, Ambush, Support and the two "attack with a unit" choices. They differ
+only in which units are candidates, what abilities they lend the attacker, and whether the base is
+offered at all (Ambush reads "attack an enemy unit", so it never is). One statement of a targeting
+rule therefore binds all five.
+
+**The restriction is on the target, not on the damage.** An attack declares a legal target and only
+then computes damage, so a unit that cannot attack bases still trickles Overwhelm excess onto one
+after attacking a unit: it attacked a unit, and the surplus trampled through. `canAttackBase`
+governs what may be declared, never where damage lands.
 
 `owner` defaults to the active player, which is every rules call site. It is explicit so the AI can
 ask the same question of both seats when reading the race. Re-deriving this logic anywhere else
 would let it drift from the rules.
+
+An ability that grants a **mandatory** attack (Thrawn, the four rider events) is gated on
+`canAnyUnitAttack`, since its choice carries no decline and raising it with nothing to attack would
+leave the player no legal move.
 
 **Sentinel forces only from the attacker's own arena.** It reads "enemy units **in this arena** must
 attack a Sentinel when they attack you", so the forcing is scoped by where the attacker stands, not by

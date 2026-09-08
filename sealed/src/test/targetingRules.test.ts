@@ -2,14 +2,15 @@ import { describe, it, expect } from 'vitest'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
-import { state, player, unit, card, CARDS } from './helpers/engineFixtures'
+import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 import type { Action } from '../engine/actions'
-import type { GameState } from '../engine/types'
+import type { GameState, PendingChoice } from '../engine/types'
 
 /**
  * Targeting rules — who may attack what: "can't attack bases" (Wicket), "can't be attacked
- * while …" (Tatooine Repulsor Train) and "may attack either arena" (Red Leader). All are enforced in
- * `legalMoves` (`enemyAttackTargets` + the base-attack move), so they also bind Ambush/Support attacks.
+ * while …" (Tatooine Repulsor Train) and "may attack either arena" (Red Leader). All are answered by
+ * `enemyAttackTargets`, whose `targets` and `canAttackBase` are the only inputs to `attackMoves`, so
+ * one statement of each rule binds every path that offers an attack — Ambush and Support included.
  */
 const F = {
   ...CARDS,
@@ -41,6 +42,24 @@ describe("Wicket (034) — can't attack bases", () => {
       players: { player: player({ units: [unit('n', 'GRD', { arena: 'ground' })] }), opponent: player({ units: [unit('e', 'GRD', { arena: 'ground' })] }) },
     })
     expect(targetsOf(s, 'n')).toEqual(['base', 'e'])
+  })
+
+  /**
+   * **The restriction is on the attack target, not on where the damage ends up.** An attack declares
+   * a legal target and only then computes damage, so Overwhelm's excess reaching the base is not the
+   * unit attacking the base: it attacked a unit, and the surplus tramples through (CR 1.9.11).
+   */
+  it('still tramples excess to the base with Overwhelm', () => {
+    const s = state({
+      cards: { ...F, OVERWHELM_UP: card({ id: 'OVERWHELM_UP', type: 'upgrade', power: 0, hp: 0, keywords: [{ name: 'Overwhelm' }] }) },
+      players: {
+        player: player({ units: [unit('w', 'ASH_034', { arena: 'ground', upgrades: [{ cardId: 'OVERWHELM_UP', owner: 'player' }] })] }),
+        opponent: player({ units: [unit('e', 'GRD', { arena: 'ground', damage: 4 })] }), // 1 HP left
+      },
+    })
+    expect(targetsOf(s, 'w'), 'the base is still not a legal attack target').toEqual(['e'])
+    const done = resolve(s, { type: 'attack', attackerId: 'w', target: { kind: 'unit', instanceId: 'e' } })
+    expect(done.players.opponent.base.damage, 'power 3 less the defender\'s 1 remaining HP').toBe(2)
   })
 })
 
@@ -151,5 +170,84 @@ describe("Tatooine Repulsor Train (035) — can't be attacked while you control 
     const atk = resolve(s, { type: 'attack', attackerId: 't', target: { kind: 'base' } })
     // The Train exhausts itself by attacking, so 2 exhausted friendlies → 4 damage.
     expect(atk.pendingChoices?.[0]).toMatchObject({ kind: 'selectDamageTarget', amount: 4 })
+  })
+})
+
+/**
+ * **"Can't attack bases" is a targeting rule like any other, so it binds every path that grants an
+ * attack.** It was the one such rule computed OUTSIDE `enemyAttackTargets`: the four choice-driven
+ * paths each re-derived base legality from `sentinelLocked` alone and so dropped this half of it.
+ * Wicket could not attack a base on its own turn, but could through Support, a granted attack, or
+ * Grogu and Thrawn.
+ */
+describe("Wicket (034) — can't attack bases on any path that grants an attack", () => {
+  const withChoice = (choice: PendingChoice) => state({
+    cards: F,
+    pendingChoices: [choice],
+    players: {
+      player: player({ units: [unit('w', 'ASH_034', { arena: 'ground' }), unit('n', 'GRD', { arena: 'ground' })] }),
+      opponent: player({ units: [unit('e', 'GRD', { arena: 'ground' })] }),
+    },
+  })
+  const support: PendingChoice = { kind: 'support', id: 'c', controller: 'player', unitId: 'n' }
+  const anyUnit: PendingChoice = { kind: 'mayAttackAnyUnit', id: 'c', controller: 'player', restore: 0 }
+  const named: PendingChoice = { kind: 'mayAttack', id: 'c', controller: 'player', unitId: 'w' }
+
+  it('via Support', () => {
+    expect(targetsOf(withChoice(support), 'w')).toEqual(['e'])
+  })
+
+  it('via an attack offered to any ready unit (Grogu, Thrawn, the rider events)', () => {
+    expect(targetsOf(withChoice(anyUnit), 'w')).toEqual(['e'])
+  })
+
+  it('via an attack offered to one named unit (Improvised Identity)', () => {
+    expect(targetsOf(withChoice(named), 'w')).toEqual(['e'])
+  })
+
+  it('and an ordinary unit still reaches the base on those paths (control)', () => {
+    expect(targetsOf(withChoice(anyUnit), 'n')).toEqual(['base', 'e'])
+  })
+})
+
+/**
+ * **An ability that grants a MANDATORY attack must not offer itself when no attack is legal.**
+ * Thrawn and the four rider events print "Attack with a unit" with no "may", so their choice has no
+ * decline: raising it with nothing to attack would leave the player no legal move at all. Their
+ * guards therefore have to ask the same question the move enumeration does, base legality included.
+ */
+describe('a mandatory granted attack is offered only when one is legal', () => {
+  const G = { ...F, ASH_004: card({ id: 'ASH_004', type: 'leader', cost: 8, power: 5, hp: 8 }), ASH_162: card({ id: 'ASH_162', type: 'event', cost: 1 }) }
+
+  /** Wicket ready and alone, and no enemy unit: it cannot attack a base, and there is nothing else. */
+  const noAttackPossible = (over: Parameters<typeof player>[0] = {}) => state({
+    cards: G,
+    players: {
+      player: player({ resources: ready(10), units: [unit('w', 'ASH_034', { arena: 'ground' })], ...over }),
+      opponent: player(),
+    },
+  })
+
+  it('Thrawn (004) cannot use his leader action', () => {
+    const s = noAttackPossible({ leader: { cardId: 'ASH_004', deployed: false, epicActionUsed: false, exhausted: false } })
+    expect(legalMoves(s).some(m => m.type === 'useLeaderAbility')).toBe(false)
+  })
+
+  it('Rash Action (162) raises no choice, so the board is never left unanswerable', () => {
+    const s = noAttackPossible({ hand: ['ASH_162'] })
+    const played = resolve(s, { type: 'playEvent', handIndex: 0 })
+    expect(played.pendingChoices ?? []).toHaveLength(0)
+    expect(legalMoves(played).length, 'the player still has moves').toBeGreaterThan(0)
+  })
+
+  it('but both are on offer as soon as there is something to attack (control)', () => {
+    const withEnemy = (over: Parameters<typeof player>[0]) => ({
+      ...noAttackPossible(over),
+      players: { ...noAttackPossible(over).players, opponent: player({ units: [unit('e', 'GRD', { arena: 'ground' })] }) },
+    })
+    const thrawn = withEnemy({ leader: { cardId: 'ASH_004', deployed: false, epicActionUsed: false, exhausted: false } })
+    expect(legalMoves(thrawn).some(m => m.type === 'useLeaderAbility')).toBe(true)
+    const played = resolve(withEnemy({ hand: ['ASH_162'] }), { type: 'playEvent', handIndex: 0 })
+    expect(played.pendingChoices ?? []).toHaveLength(1)
   })
 })

@@ -48,8 +48,16 @@ const L = {
 /** The candidate: the driver plus its guard rail, at the cell measured at -0.30 over 2016 games. */
 const GATED = { ...DEFAULT_WEIGHTS, cardScarcity: 3, handKnee: 3, deployUrgency: 2 }
 
+/**
+ * The control, stated explicitly rather than taken from the shipped defaults. The shipped bot now
+ * carries `cardScarcity`, so reading it as the term-off arm would silently compare the term with
+ * itself and report no difference.
+ */
+const UNGATED = { ...DEFAULT_WEIGHTS, cardScarcity: 0 }
+
 const shipped = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_LIMITS)
 const gated = makeBeamGreedy(GATED, BEAM_REPLY_LIMITS)
+const ungated = makeBeamGreedy(UNGATED, BEAM_REPLY_LIMITS)
 
 /**
  * A regroup with a given pool and hand, and the leader already deployed unless asked otherwise.
@@ -92,12 +100,16 @@ describe('the position where a resource buys nothing', () => {
   })
 
   /**
-   * The behaviour the ticket exists to change. The shipped weights put `resource - card` at +2, a
-   * constant, so this position is decided identically to a round-one position with two resources and a
-   * full hand. It is not a judgement; it is the same answer everywhere.
+   * Without the scarcity bonus, `resource - card` is a constant +2, so this position is decided
+   * identically to a round-one position with two resources and a full hand. It is not a judgement; it
+   * is the same answer everywhere, and that constancy is what the bonus exists to break.
    */
-  it('the shipped bot banks anyway, because its answer never depends on the board', () => {
-    expect(banks(shipped, saturated)).toBe(true)
+  it('a bot without the bonus banks anyway, because its answer never depends on the board', () => {
+    expect(banks(ungated, saturated)).toBe(true)
+  })
+
+  it('the shipped bot declines, now that it carries the bonus', () => {
+    expect(banks(shipped, saturated)).toBe(false)
   })
 
   it('the gated bot declines', () => {

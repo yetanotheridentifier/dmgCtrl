@@ -35,6 +35,12 @@ Choices are always removed **by id**. A player may answer any of their outstandi
 than the head, so a "remove the head" helper consumed the wrong one and left the real choice pending,
 making the answered ability appear not to resolve. There is deliberately no such helper.
 
+**Whether a choice can be declined is a property of the card, not of the kind.** A kind shared by
+cards that print "may" and cards that do not carries an `optional` flag, and `choiceMoves` offers
+`skipTrigger` only when it is set: `selectDamageTarget` and `mayAttackAnyUnit` are both used this
+way. A kind whose name begins `may` is therefore not by itself evidence that every card using it
+offers a way out.
+
 `resumeAfterChoice` decides what happens as the queue drains: the active player finishes theirs
 first, then control passes; round-start choices (`resumeAtInitiative`) begin the action phase with
 the initiative holder, mid-turn choices `advanceTurn`.
@@ -231,6 +237,11 @@ The combined guarantee is that every choice reaching a player renders as
 Button labels are the same problem in a different place. `describeAction` never falls through to a
 kind's internal name, and a bare `Accept`/`Decline` is avoided where it would be ambiguous: a
 prevention offer reads `Prevent 1` / `Take the damage`.
+
+**A tail effect belongs in both.** `selectDamageTarget.thenHealBase` carries the second sentence of a
+card that damages and then heals, and the prompt and the log entry both name it. The log is the only
+record of an effect the board can hide: a base healed and then hit again on the opponent's next
+action looks like a heal that never happened.
 
 ## Presentation
 

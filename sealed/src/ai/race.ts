@@ -45,6 +45,10 @@ export type Role = 'aggressor' | 'defender' | 'neutral'
  * since the attacker picks its target and would choose the cheapest way through.
  */
 export function unitReach(state: GameState, owner: PlayerId, unit: UnitState): number {
+  // **Known under-count (#580).** "Can't attack bases" bars the base as an attack TARGET; Overwhelm
+  // still tramples excess through from a unit attack, so the engine lands base damage here where
+  // this returns 0. Left alone deliberately: correcting it changes what the model believes, which
+  // this project measures rather than argues. #580 carries the fix and the bench question.
   if (unitCannotAttackBases(state, unit)) return 0
   const power = effectivePower(state, unit, { attacking: true, attackingBase: true })
   if (power <= 0) return 0

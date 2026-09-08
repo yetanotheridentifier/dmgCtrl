@@ -118,9 +118,20 @@ describe('the shipped weights keep the pool flat', () => {
     expect(DEFAULT_WEIGHTS.resourceSurplus).toBe(DEFAULT_WEIGHTS.resource)
   })
 
-  it('so the AI still banks a card at every regroup, deep pool or not', () => {
+  /**
+   * Isolated from the hand-side bonus, which is a different rule that also reads the pool. With
+   * `cardScarcity` zeroed, pool DEPTH alone never changes the answer, which is what "flat" means.
+   */
+  it('so the pool depth alone never changes the answer', () => {
+    const flatOnly = makeGreedyAi(makeEvaluate({ ...DEFAULT_WEIGHTS, cardScarcity: 0 }))
+    expect(flatOnly(regroup(2))?.type).toBe('resourceCard')
+    expect(flatOnly(regroup(DEFAULT_WEIGHTS.saturation + 3))?.type).toBe('resourceCard')
+  })
+
+  /** And the shipped bot declines at the deep pool, from the hand-side rule rather than the pool. */
+  it('while the shipped weights decline once the pool is saturated', () => {
     expect(greedyAi(regroup(2))?.type).toBe('resourceCard')
-    expect(greedyAi(regroup(DEFAULT_WEIGHTS.saturation + 3))?.type).toBe('resourceCard')
+    expect(greedyAi(regroup(DEFAULT_WEIGHTS.saturation + 3))?.type).not.toBe('resourceCard')
   })
 })
 
@@ -183,13 +194,19 @@ describe('the hand is priced concavely: the marginal card is dearer when you hol
   const marginals = (w: typeof DEFAULT_WEIGHTS, sizes: number[]): number[] =>
     sizes.map(h => cardsValue(handOf(regroup(8), h + 1), 'player', w) - cardsValue(handOf(regroup(8), h), 'player', w))
 
-  it('ships at zero, so the term is a provable no-op until it is swept', () => {
-    expect(DEFAULT_WEIGHTS.cardScarcity).toBe(0)
-    expect(DEFAULT_WEIGHTS.deployUrgency).toBe(0)
+  it('ships enabled at the swept cell, with its guard rail still off', () => {
+    expect(DEFAULT_WEIGHTS.cardScarcity, 'swept and shipped at 3').toBe(3)
+    expect(DEFAULT_WEIGHTS.handKnee).toBe(3)
+    expect(DEFAULT_WEIGHTS.deployUrgency, 'measured unnecessary: the knee subsumes it').toBe(0)
   })
 
-  it('prices every card alike while the bonus is zero', () => {
-    expect(new Set(marginals(DEFAULT_WEIGHTS, [1, 2, 3, 4, 5, 6]))).toEqual(new Set([DEFAULT_WEIGHTS.card]))
+  it('prices every card alike when the bonus is zeroed', () => {
+    const off = { ...DEFAULT_WEIGHTS, cardScarcity: 0 }
+    expect(new Set(marginals(off, [1, 2, 3, 4, 5, 6]))).toEqual(new Set([DEFAULT_WEIGHTS.card]))
+  })
+
+  it('and the shipped weights are the SCARCE arm, so the two now differ', () => {
+    expect(marginals(DEFAULT_WEIGHTS, [1, 2])).toEqual(marginals(SCARCE, [1, 2]))
   })
 
   it('pays the bonus on cards at or below the knee, and the base rate above it', () => {

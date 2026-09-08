@@ -146,7 +146,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'payOrExhaust') return "Don't pay (exhaust)"
       if (choice.kind === 'mayPlayTopFree') return "Don't play"
       if (choice.kind === 'mayDamageExhaust') return 'Decline'
-      if (choice.kind === 'mayAttack') return "Don't attack"
+      if (choice.kind === 'mayAttack' || choice.kind === 'mayAttackAnyUnit') return "Don't attack"
       if (choice.kind === 'distributeDamage' || choice.kind === 'distributeTokens' || choice.kind === 'lookAtHand' || choice.kind === 'searchPlayFree' || choice.kind === 'dealOwnBaseForDiscount') return 'Done'
       // Acknowledging a reveal that matched nothing (#413), and passing on Reforge's search.
       if (choice.kind === 'searchDraw' || choice.kind === 'search' || choice.kind === 'searchPlayUpgrade') return 'Done'
@@ -254,9 +254,13 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         return `Return ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
       }
       if (choice.kind === 'selectDamageTarget') {
-        if (action.baseTarget) return `Deal ${choice.amount} to ${action.baseTarget === by ? 'your base' : "opponent's base"}`
+        // The heal is the card's second sentence and lands with the damage, so the log has to name
+        // it: without it Grassroots Resistance read as damage only, and the base was hit again
+        // before the player could see the 3 come off (#575).
+        const heal = choice.thenHealBase ? `, heal ${choice.thenHealBase} from your base` : ''
+        if (action.baseTarget) return `Deal ${choice.amount} to ${action.baseTarget === by ? 'your base' : "opponent's base"}${heal}`
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
-        return `Deal ${choice.amount} to ${target ?? 'unit'}`
+        return `Deal ${choice.amount} to ${target ?? 'unit'}${heal}`
       }
       if (choice.kind === 'selectHealTarget') {
         if (action.baseTarget) return `Heal ${choice.amount} from ${action.baseTarget === by ? 'your base' : "opponent's base"}`

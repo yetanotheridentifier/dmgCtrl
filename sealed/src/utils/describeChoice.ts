@@ -99,7 +99,10 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'mayDamage':
       return [`choose a unit to deal ${choice.amount} damage to`]
     case 'selectDamageTarget':
-      return [`choose a ${targetNoun(choice)} to deal ${choice.amount} damage to`]
+      // The heal tail is part of the same effect (Grassroots Resistance), so it belongs in the
+      // prompt: a player told only about the damage has no reason to look for the heal (#575).
+      return [`choose a ${targetNoun(choice)} to deal ${choice.amount} damage to`
+        + (choice.thenHealBase ? `, then heal ${choice.thenHealBase} from your base` : '')]
     case 'selectHealTarget':
       return [`choose a ${targetNoun(choice)} to heal ${choice.amount} damage from`]
     case 'mayDamageExhaust':
@@ -175,7 +178,8 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'mayAttack':
       return ['you may attack with this unit']
     case 'mayAttackAnyUnit':
-      return [`choose a ready unit to attack with${choice.restore > 0 ? `, it gains Restore ${choice.restore}` : ''}`]
+      return [`${choice.optional ? 'you may attack with a ready unit' : 'choose a ready unit to attack with'}`
+        + (choice.restore > 0 ? `, it gains Restore ${choice.restore}` : '')]
 
     // ── Costs and yes/no offers ───────────────────────────────────────────────────────────────
     case 'payOrExhaust':
