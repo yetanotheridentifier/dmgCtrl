@@ -9,7 +9,7 @@ import { collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCar
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, sweepStateBasedDefeats, preventionOffer } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
-import { exhaustUnit, findUnit, giveToken, giveTokens, fireUpgradeAttached, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn } from './effects'
+import { exhaustUnit, findUnit, giveToken, giveTokens, fireUpgradeAttached, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait } from './keywords'
@@ -899,9 +899,8 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       break
     case 'mayExhaustLeaderForAdvantage': {
       // Greef Karga front: exhaust the leader to give the just-played unit an Advantage token.
-      const p = next.players[choice.controller]
-      if (!p.leader.exhausted) {
-        next = updatePlayer(next, choice.controller, { leader: { ...p.leader, exhausted: true } })
+      if (leaderCanExhaust(next, choice.controller)) {
+        next = exhaustLeader(next, choice.controller)
         next = giveToken(next, choice.unitId, TOKEN_ADVANTAGE)
       }
       break
@@ -934,19 +933,17 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       if (targetInstanceId) next = giveTokens(next, targetInstanceId, choice.token, choice.count)
       break
     case 'mayExhaustLeaderGiveAdvantage': {
-      // Ezra front: exhaust the (undeployed) leader to give the chosen unit an Advantage token.
-      const p = next.players[choice.controller]
-      if (targetInstanceId && !p.leader.exhausted) {
-        next = updatePlayer(next, choice.controller, { leader: { ...p.leader, exhausted: true } })
+      // Ezra front: exhaust the leader to give the chosen unit an Advantage token.
+      if (targetInstanceId && leaderCanExhaust(next, choice.controller)) {
+        next = exhaustLeader(next, choice.controller)
         next = giveToken(next, targetInstanceId, TOKEN_ADVANTAGE)
       }
       break
     }
     case 'mayExhaustLeaderExhaustUnit': {
-      // Shin Hati front: exhaust the (undeployed) leader to exhaust the chosen unit.
-      const p = next.players[choice.controller]
-      if (targetInstanceId && !p.leader.exhausted) {
-        next = updatePlayer(next, choice.controller, { leader: { ...p.leader, exhausted: true } })
+      // Shin Hati front: exhaust the leader to exhaust the chosen unit.
+      if (targetInstanceId && leaderCanExhaust(next, choice.controller)) {
+        next = exhaustLeader(next, choice.controller)
         next = exhaustUnit(next, targetInstanceId)
       }
       break
@@ -1045,10 +1042,9 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       break
     }
     case 'mayExhaustLeaderHealUnit': {
-      // Luke front: exhaust the (undeployed) leader to heal the attacker.
-      const p = next.players[choice.controller]
-      if (!p.leader.exhausted) {
-        next = updatePlayer(next, choice.controller, { leader: { ...p.leader, exhausted: true } })
+      // Luke front: exhaust the leader to heal the attacker.
+      if (leaderCanExhaust(next, choice.controller)) {
+        next = exhaustLeader(next, choice.controller)
         next = healUnit(next, choice.unitId, choice.amount)
       }
       break
@@ -1131,9 +1127,9 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     }
     case 'mayExhaustLeaderBuffSelf': {
       // Mando's N-1: exhaust your leader, then buff this unit for the attack that raised the choice.
-      const p = next.players[choice.controller]
-      if (!p.leader.exhausted) {
-        next = updatePlayer(next, choice.controller, { leader: { ...p.leader, exhausted: true } })
+      // The one leader-exhaust cost raised by a UNIT, so the leader may well be deployed (#577).
+      if (leaderCanExhaust(next, choice.controller)) {
+        next = exhaustLeader(next, choice.controller)
         next = addLastingEffect(next, { targetInstanceId: choice.unitId, power: choice.power, hp: choice.hp, untilEndOfAttack: true })
       }
       break

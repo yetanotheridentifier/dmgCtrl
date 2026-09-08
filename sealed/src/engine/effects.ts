@@ -247,6 +247,36 @@ export function exhaustUnit(state: GameState, instanceId: string): GameState {
 }
 
 /**
+ * A leader lives in one of two places and carries its ready state wherever it is: `leader.exhausted`
+ * while it sits in the base zone, and the unit's own `exhausted` once it has deployed. `deployLeader`
+ * never touches the base-zone flag again, and regroup readies the two independently, so a cost paid
+ * against the flag charges a deployed leader nothing.
+ *
+ * These two are the only correct way to ask about, and to charge, an "exhaust a friendly leader" cost.
+ */
+export function deployedLeaderUnit(state: GameState, owner: PlayerId): UnitState | undefined {
+  const p = state.players[owner]
+  return p.leader.deployed ? p.units.find(u => u.isLeader) : undefined
+}
+
+/** Whether an "exhaust a friendly leader" cost can still be paid. */
+export function leaderCanExhaust(state: GameState, owner: PlayerId): boolean {
+  const onBoard = deployedLeaderUnit(state, owner)
+  // A deployed leader answers for itself; the base-zone flag is stale once it has left.
+  if (state.players[owner].leader.deployed) return onBoard !== undefined && !onBoard.exhausted
+  return !state.players[owner].leader.exhausted
+}
+
+/** Pay that cost, wherever the leader currently is. No-op if it cannot be paid. */
+export function exhaustLeader(state: GameState, owner: PlayerId): GameState {
+  const onBoard = deployedLeaderUnit(state, owner)
+  if (onBoard) return exhaustUnit(state, onBoard.instanceId)
+  if (state.players[owner].leader.deployed) return state // deployed but defeated: nothing to exhaust
+  const p = state.players[owner]
+  return p.leader.exhausted ? state : updatePlayer(state, owner, { leader: { ...p.leader, exhausted: true } })
+}
+
+/**
  * Create a token unit for `owner` — a fresh in-play unit from a built-in
  * token card (e.g. the Mandalorian). A Shielded token enters play with a shield
  * token, per its keyword. Consumes one instance id.

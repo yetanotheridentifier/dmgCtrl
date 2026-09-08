@@ -207,10 +207,6 @@ the day it ships. #553 already has to work that way for a different reason.
   only if a winning configuration lands in the hundreds of milliseconds, or if mobile happens.
 - **Mobile and PWA adaptation** (#482). A redesign rather than breakpoints, and it would reinstate the
   Web Worker question.
-- **#580 `unitReach` and Overwhelm past "can't attack bases".** The model credits such a unit with no
-  base damage at all, where the engine still tramples Overwhelm excess through from a unit attack.
-  The fix is small and written out on the ticket; it is held back because it changes what the model
-  believes and so wants a bench arm, and the combination is rare enough that sizing it comes first.
 - **#579 an engine record of the effects it applies.** The correct answer to what #578 approximates,
   and it **replaces** #578 rather than joining it. Held back on cost: most effect helpers do not know
   their cause, so attribution has to be threaded through `effects.ts`, and a journal on `GameState`

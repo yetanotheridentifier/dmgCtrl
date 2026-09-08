@@ -782,19 +782,13 @@ The reading is a lower bound. `canFinishThisAction` sees only damage already on 
 event finisher, an Ambush unit or a pump in hand is invisible to it. Closing that gap is search, not
 a weight.
 
-Three of the gaps are **public** rather than hidden, and are worth knowing before the bound is trusted.
+Two of the gaps are **public** rather than hidden, and are worth knowing before the bound is trusted.
 A leader deploys **ready** and deploys on resources controlled rather than spent, so an undeployed
 leader is a ready attacker its owner can produce at will; deploying is itself an action, so it is
 normally a two-action line, but a leader granted Ambush on deploy swings in the same action. And a
 few units ready themselves while some events ready an exhausted one, so `exhausted` is not the last
-word on whether a body can attack again this round. Those two are narrow enough not to earn a term,
-and both make the race model under-read a player who is about to deploy.
-
-The third is a plain under-count. `unitReach` returns zero for a unit that cannot attack bases, but
-that restriction bars declaring the base as a target and nothing more: Overwhelm still tramples
-excess onto the base from an attack on a *unit*. Such a body's contribution to the clock is therefore
-missed entirely. It needs the restriction and Overwhelm on the same unit, so it is rare, and
-correcting it changes what the model believes and wants a bench arm rather than an argument.
+word on whether a body can attack again this round. Both are narrow enough not to earn a term, and
+both make the race model under-read a player who is about to deploy.
 
 ### Role: read the race, not the board
 
@@ -807,9 +801,11 @@ dead. At round 3 the faster clock predicts the winner **68.0%** of the time agai
 board leader, rising to 80.5% by round 5.
 
 Reach is computed through `enemyAttackTargets`, the rules' own targeting function, so Sentinel,
-Saboteur, arena and Hidden resolve once rather than being re-derived. Overwhelm tramples past a wall,
-Restore lengthens the attacker's clock, and the clock splits "this round" (ready units only) from the
-steady rate, which is what makes it a race rather than an average.
+Saboteur, arena, Hidden and "can't attack bases" resolve once rather than being re-derived. Its
+`canAttackBase` folds together every reason the base is shut, and Overwhelm gets past all of them:
+the excess comes from an attack on a **unit**, so it never needs the base as a legal target. Restore
+lengthens the attacker's clock, and the clock splits "this round" (ready units only) from the steady
+rate, which is what makes it a race rather than an average.
 
 The role bends `base`, `unit` and `initiative` by `roleShift`. The aggressor pushes damage; the
 defender values trades and board clearing, and wants the initiative.

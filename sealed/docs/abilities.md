@@ -190,8 +190,18 @@ A leader has two sides and they register separately on one card id:
 - The top-level `abilities` are the deployed (back) side, registering exactly like a unit's.
 
 **Exhaustion only blocks abilities whose cost is exhausting.** A triggered front-side ability whose
-cost is resources fires whether the leader is exhausted or not; a card that costs exhausting the
-leader checks `leader.exhausted` itself.
+cost is resources fires whether the leader is exhausted or not.
+
+**A leader carries its ready state wherever it is, and "exhaust a friendly leader" has to follow it.**
+In the base zone that is `leader.exhausted`; once deployed it is the leader unit's own `exhausted`,
+and the base-zone flag is stale from that moment, since deploying never clears it and regroup readies
+the two separately. `leaderCanExhaust` and `exhaustLeader` in `effects.ts` are the only correct way to
+ask and to charge, and every handler for such a cost uses them.
+
+The distinction is invisible for the four leader-FRONT costs, because `collectLeaderTriggers` returns
+nothing once the leader deploys, so those can never meet a deployed leader. It is decisive for a cost
+raised by a **unit** ability (Mando's N-1 Starfighter), which fires whatever the controller's leader is
+doing. Charging the flag there left a deployed leader ready and its action unspent.
 
 Deploying is an epic action requiring the player to **control** resources equal to the leader's
 printed cost, not to spend them. A `deployCondition` hook replaces that gate where a card says

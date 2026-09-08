@@ -67,12 +67,46 @@ describe('reach: damage that can actually connect with a base', () => {
     expect(reachSteady(board([unit('t', 'TRAMPLER')], [unit('w', 'WALL')]), 'player')).toBe(2)
   })
 
-  it('ignores a unit that cannot attack bases at all', () => {
+  it('pins the default: a unit with no such restriction does reach', () => {
     const cards = { ...R, GROUNDED: card({ id: 'GROUNDED', type: 'unit', arena: 'ground', power: 5, hp: 5 }) }
     const s = board([unit('g', 'GROUNDED')], [], { cards })
-    // No definition marks GROUNDED as base-barred, so it does reach; the guard is exercised by the
-    // real cards that set `cannotAttackBases`. This pins the default.
     expect(reachSteady(s, 'player')).toBe(5)
+  })
+
+  /**
+   * **"Can't attack bases" bars the TARGET, not the damage.** Wicket (ASH_034) is the only card that
+   * sets it, so it is used here rather than a fixture card: the restriction lives in the card
+   * definition, and a synthetic card cannot carry it.
+   *
+   * On its own Wicket contributes nothing, because it can never declare the base. Grant it Overwhelm
+   * and it contributes again, since the excess from an attack on a UNIT tramples through, which is
+   * what the engine does and what a hand-played board confirmed.
+   */
+  describe('Wicket (034) — cannot attack bases', () => {
+    const W = {
+      ...R,
+      ASH_034: card({ id: 'ASH_034', type: 'unit', arena: 'ground', cost: 1, power: 3, hp: 3, keywords: [{ name: 'Saboteur' }] }),
+      OVER_UP: card({ id: 'OVER_UP', type: 'upgrade', cost: 1, power: 0, hp: 0, keywords: [{ name: 'Overwhelm' }] }),
+    }
+    const wicket = (overrides = {}) => unit('w', 'ASH_034', { arena: 'ground', ...overrides })
+    const trample = { upgrades: [{ cardId: 'OVER_UP', owner: 'player' as const }] }
+
+    it('contributes nothing on its own, with no enemy unit to trample through', () => {
+      expect(reachSteady(board([wicket()], [], { cards: W }), 'player')).toBe(0)
+    })
+
+    it('still contributes nothing against an enemy unit without Overwhelm', () => {
+      expect(reachSteady(board([wicket()], [unit('e', 'GRUNT')], { cards: W }), 'player')).toBe(0)
+    })
+
+    it('DOES contribute with Overwhelm: 3 power less the defender\'s 3 HP leaves 0…', () => {
+      expect(reachSteady(board([wicket(trample)], [unit('e', 'GRUNT')], { cards: W }), 'player')).toBe(0)
+    })
+
+    it('…and lands the excess over a softer body', () => {
+      const soft = unit('e', 'GRUNT', { damage: 2 }) // 3 HP less 2 damage = 1 remaining
+      expect(reachSteady(board([wicket(trample)], [soft], { cards: W }), 'player')).toBe(2)
+    })
   })
 
   it('reads each seat independently, not just the active player', () => {
