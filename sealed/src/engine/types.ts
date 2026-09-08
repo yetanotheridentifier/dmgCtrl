@@ -770,9 +770,11 @@ type ChoiceVariant =
   | { kind: 'selectUniqueUnitToDefeat'; id: string; controller: PlayerId; cardId: string; candidates: string[] }
   // Attack with any ready unit (Thrawn, Grogu); it gains Restore `restore` for that attack, which is
   // 0 when nothing grants it. Resolved by making the attack on the board — skipping declines it.
+  // Mandatory unless `optional`: Thrawn and the attack-granting events print "Attack with a unit",
+  // so once their cost is paid the attack is compulsory, while Grogu prints "You **may** attack".
   // `grantCardId` lends the chosen attacker a carrier card's abilities for that attack — how the
   // attack-granting events (Rash Action, Follow Me, Masterstroke, Wipe Them Out) add their rider.
-  | { kind: 'mayAttackAnyUnit'; id: string; controller: PlayerId; restore: number; grantCardId?: string }
+  | { kind: 'mayAttackAnyUnit'; id: string; controller: PlayerId; restore: number; optional?: boolean; grantCardId?: string }
   // Defeat one of `targets`, or decline. The card supplies the eligible units, so this covers
   // "a non-leader enemy unit" (Thrawn), "an upgraded non-leader unit" (Get Lost), and so on.
   // `thenResource` chains "if you do, resource the top card of your deck" (Long Live the Empire).

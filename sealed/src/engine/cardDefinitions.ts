@@ -543,11 +543,16 @@ registerCard('ASH_010', { // Bo-Katan Kryze — front/back create a Mandalorian 
   aura: (s, src, tgt, friendly) => (friendly && tgt.instanceId !== src.instanceId && unitHasTrait(s, tgt, 'Mandalorian') ? { power: 1 } : undefined),
 })
 
+/**
+ * Whether any ready unit could legally attack something. The gate on every ability that grants a
+ * MANDATORY attack: their choice has no decline, so raising one with nothing to attack would leave
+ * the player no legal move at all.
+ */
 const canAnyUnitAttack = (s: GameState, owner: PlayerId): boolean =>
   s.players[owner].units.some(u => {
     if (u.exhausted) return false
-    const { targets, sentinelLocked } = enemyAttackTargets(s, u)
-    return targets.length > 0 || !sentinelLocked
+    const { targets, canAttackBase } = enemyAttackTargets(s, u)
+    return targets.length > 0 || canAttackBase
   })
 
 registerCard('ASH_004', { // Grand Admiral Thrawn — front attack + conditional Restore; deployed On Attack conditional defeat
@@ -1427,8 +1432,9 @@ registerCard('ASH_155', { // Grogu (unit)
   abilities: [{
     trigger: 'whenTakeInitiative',
     description: 'You may attack with a unit.',
-    effect: (s, ctx) => (s.players[ctx.owner].units.some(u => !u.exhausted)
-      ? pushChoice(s, { kind: 'mayAttackAnyUnit', id: `${ctx.sourceInstanceId}-attack`, controller: ctx.owner, restore: 0 })
+    // "You **may** attack": the only user of this choice that can be declined.
+    effect: (s, ctx) => (canAnyUnitAttack(s, ctx.owner)
+      ? pushChoice(s, { kind: 'mayAttackAnyUnit', id: `${ctx.sourceInstanceId}-attack`, controller: ctx.owner, restore: 0, optional: true })
       : s),
   }],
 })
@@ -2015,9 +2021,12 @@ registerCard(GRANT_MASTERSTROKE, {
 const GRANT_WIPE_THEM_OUT = 'GRANT_WIPE_THEM_OUT'
 registerCard(GRANT_WIPE_THEM_OUT, { sourceCardId: 'ASH_137', spillsExcessToUnit: () => true }) // Wipe Them Out
 
-/** "Attack with a unit", lending it `grantCardId`'s rider for that attack. */
+/**
+ * "Attack with a unit", lending it `grantCardId`'s rider for that attack. Mandatory, so it is gated
+ * on an attack being legal rather than merely on a ready unit existing.
+ */
 const attackWithRider = (description: string, grantCardId: string) =>
-  whenPlayed(description, (s, ctx) => (s.players[ctx.owner].units.some(u => !u.exhausted)
+  whenPlayed(description, (s, ctx) => (canAnyUnitAttack(s, ctx.owner)
     ? pushChoice(s, { kind: 'mayAttackAnyUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, restore: 0, grantCardId })
     : s))
 

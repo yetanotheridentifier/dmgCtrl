@@ -327,7 +327,12 @@ and cancels.
 **The cost is early skipping, not hoarding.** A scripted position isolates it: with a deployed leader,
 a pool of 2 and three cards it cannot afford, the hand-size rule declines the resource, which is
 precisely when a resource is worth most. Conditioning the bonus on the pool having reached the knee
-removes every skip before round six and turns -3.52 into **+0.77** over 4032 games.
+removes every skip before round six and turns -3.52 into **+0.77** over 4032 games, 95% interval
+[+0.20, +1.34], across two seed blocks reading +0.94 and +0.59. That is the cell the model carries.
+
+The conjunction also gives `saturation` a second job. As a rate it stays algebraically absent while
+the pool is flat; as the threshold the bonus fires behind it reaches 2.4% of regroup decisions, so a
+term-sensitivity run that reads it as inert is now measuring a broken gate rather than confirming one.
 
 The intermediate finding is worth keeping because it is the one that misleads: a separate
 leader-deploy weight also recovered the loss, from -3.52 to -0.30, by suppressing early skips. It is

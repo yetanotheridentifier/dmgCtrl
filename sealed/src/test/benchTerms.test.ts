@@ -161,9 +161,10 @@ describe('the perturbation step', () => {
    * everything else.
    */
   it('scales with the arm’s own weight, not the shipped default', () => {
-    expect(DEFAULT_WEIGHTS.cardScarcity, 'ships at zero, which is the case that bites').toBe(0)
-    expect(stepFor('cardScarcity')).toBe(1)
-    expect(stepFor('cardScarcity', { cardScarcity: 8 })).toBe(2)
+    // Asserted on a weight that still ships at zero, since that is the case the contract is about.
+    expect(DEFAULT_WEIGHTS.deployUrgency, 'ships at zero, which is the case that bites').toBe(0)
+    expect(stepFor('deployUrgency')).toBe(1)
+    expect(stepFor('deployUrgency', { deployUrgency: 8 })).toBe(2)
     expect(stepFor('lethalExposure', { lethalExposure: 8 })).toBe(2)
   })
 
@@ -318,24 +319,24 @@ describe('runTerms', () => {
     expect(hold.loadBearing, 'while removing it changes real decisions').toBeGreaterThan(0)
   })
 
-  /** The converse guard: a weight that is genuinely absent must be flat in every column, or the
-   *  ablation is picking up noise from somewhere other than the weight. */
-  it('finds saturation inert under ablation too, not just under a nudge', () => {
-    const saturation = report.stats.find(s => s.weight === 'saturation')!
-    expect(saturation.pivotal).toBe(0)
-    expect(saturation.loadBearing).toBe(0)
-  })
-
   /**
-   * Agreement with what is already known, from the ticket. `saturation` is algebraically absent while
-   * `resourceSurplus === resource`: `resourceValue` collapses to `resource * pool` and the knee
-   * cancels. A report that found it pivotal would be measuring something other than the shipped
-   * evaluation.
+   * **`saturation` has two jobs and only one of them is dead.**
+   *
+   * As a RATE it is algebraically absent while `resourceSurplus === resource`: `resourceValue`
+   * collapses to `resource * pool` and the knee cancels out of the pool's own total. As a THRESHOLD
+   * it decides where `cardScarcity`'s bonus starts charging, so it moves the regroup decision.
+   *
+   * Every measurement taken before it acquired that second job read a flat zero in both columns,
+   * which is why the flat reading is no longer the guard it once was: with the bonus live, a zero
+   * here would mean the threshold is not reaching the decision at all.
    */
-  it('finds saturation inert, because the flat pool makes it algebraically absent', () => {
-    expect(DEFAULT_WEIGHTS.resourceSurplus, 'precondition: the pool ships flat').toBe(DEFAULT_WEIGHTS.resource)
+  it('finds saturation load-bearing through its threshold, not through its rate', () => {
+    expect(DEFAULT_WEIGHTS.resourceSurplus, 'the pool still ships flat, so the RATE prices nothing')
+      .toBe(DEFAULT_WEIGHTS.resource)
+    expect(DEFAULT_WEIGHTS.cardScarcity, 'while the bonus it gates is live').toBeGreaterThan(0)
     const saturation = report.stats.find(s => s.weight === 'saturation')!
-    expect(saturation.pivotal).toBe(0)
+    expect(saturation.pivotal + saturation.loadBearing, 'the threshold reaches real decisions')
+      .toBeGreaterThan(0)
   })
 
   /**

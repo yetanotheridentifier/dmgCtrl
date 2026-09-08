@@ -6,17 +6,24 @@ import { unitHasKeyword, unitCannotAttackBases, unitCannotBeAttacked, unitAttack
 import { getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions } from './abilities'
 import './cardDefinitions' // side effect: registers all real card behaviours
 
+type AttackTarget = Extract<Action, { type: 'attack' }>['target']
+
 /**
- * The enemy units `attacker` may attack, and whether Sentinel locks the attack onto them (so the
- * base is off-limits). Sentinel forces the attack; Hidden removes a unit as a target unless it also
- * has Sentinel; Saboteur ignores Sentinel.
+ * Everything `attacker` may legally attack: the enemy units, whether Sentinel locks the attack onto
+ * them, and whether the enemy base is a legal target. Sentinel forces the attack; Hidden removes a
+ * unit as a target unless it also has Sentinel; Saboteur ignores Sentinel.
+ *
+ * **`canAttackBase` lives here because it is a targeting rule like the others.** Two separate things
+ * close the base off: Sentinel forcing, and "can't attack bases" (Wicket). Only the first used to
+ * travel with the target list, so every site that offered an attack re-derived base legality from
+ * `sentinelLocked` alone, and the three that were not the action phase dropped the Wicket half.
  *
  * `owner` is who controls `attacker`, defaulting to the active player, which is every rules call
  * site. It is explicit so the AI can ask the same question of BOTH seats when reading the race
  * (#395): whether a unit's damage can actually reach a base is exactly this calculation, and a
  * second copy of it in the AI would drift from the rules the way the ability lookups did in #417.
  */
-export function enemyAttackTargets(state: GameState, attacker: UnitState, owner: PlayerId = state.activePlayer): { targets: UnitState[]; sentinelLocked: boolean } {
+export function enemyAttackTargets(state: GameState, attacker: UnitState, owner: PlayerId = state.activePlayer): { targets: UnitState[]; sentinelLocked: boolean; canAttackBase: boolean } {
   const enemy = state.players[opponentOf(owner)]
   // Normally same-arena only; Red Leader reaches either arena.
   const inRange = unitAttacksEitherArena(state, attacker) ? enemy.units : enemy.units.filter(e => e.arena === attacker.arena)
@@ -31,7 +38,39 @@ export function enemyAttackTargets(state: GameState, attacker: UnitState, owner:
   // away from a space attacker while the space lane was open.
   const sentinels = attackable.filter(e => e.arena === attacker.arena && unitHasKeyword(state, e, 'Sentinel'))
   const sentinelLocked = sentinels.length > 0 && !unitHasKeyword(state, attacker, 'Saboteur')
-  return { targets: sentinelLocked ? sentinels : attackable, sentinelLocked }
+  return {
+    targets: sentinelLocked ? sentinels : attackable,
+    sentinelLocked,
+    canAttackBase: !sentinelLocked && !unitCannotAttackBases(state, attacker),
+  }
+}
+
+/**
+ * Every attack `attacker` may legally make, as moves.
+ *
+ * The single enumeration behind all five sources of an attack: the action phase, Ambush, Support and
+ * the two "attack with a unit" choices. They differ only in which units are candidates and in what
+ * they lend the attacker, never in what a given attacker may hit, so the target rules are asked once
+ * here rather than copied per site.
+ *
+ * - `choiceId` names the choice this attack answers, and is absent for a plain action-phase attack.
+ * - `grantCardId` lends the attacker another card's abilities for the attack (the Support source, or
+ *   a rider event's carrier), so granted keywords shape the legal targets exactly as `resolve` will
+ *   apply them.
+ * - `includeBase` is false for Ambush, which reads "attack an enemy unit" and never offers the base.
+ */
+function attackMoves(
+  state: GameState,
+  attacker: UnitState,
+  { choiceId, grantCardId, includeBase = true }: { choiceId?: string; grantCardId?: string; includeBase?: boolean } = {},
+): Action[] {
+  const withGrant = grantCardId ? { ...attacker, grantedAbilityCardIds: [grantCardId] } : attacker
+  const { targets, canAttackBase } = enemyAttackTargets(state, withGrant)
+  const move = (target: AttackTarget): Action =>
+    ({ type: 'attack', attackerId: attacker.instanceId, target, ...(choiceId ? { choiceId } : {}) })
+  const moves = targets.map(e => move({ kind: 'unit', instanceId: e.instanceId }))
+  if (includeBase && canAttackBase) moves.push(move({ kind: 'base' }))
+  return moves
 }
 
 /**
@@ -213,15 +252,7 @@ function actionPhaseMoves(state: GameState): Action[] {
   // onto a Sentinel unit in that arena — even the base is off-limits — unless
   // the attacker has Saboteur (CR 6.3.2b).
   for (const unit of p.units) {
-    if (unit.exhausted) continue
-
-    const { targets, sentinelLocked } = enemyAttackTargets(state, unit)
-    for (const enemyUnit of targets) {
-      moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'unit', instanceId: enemyUnit.instanceId } })
-    }
-    if (!sentinelLocked && !unitCannotAttackBases(state, unit)) {
-      moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'base' } })
-    }
+    if (!unit.exhausted) moves.push(...attackMoves(state, unit))
   }
 
   // Deploy Leader — epic action; requires CONTROLLING resources equal to the leader's
@@ -297,26 +328,18 @@ function choiceMoves(state: GameState): Action[] {
         const unit = p.units.find(u => u.instanceId === choice.unitId)
         // Only a ready unit can attack: it may have been exhausted (e.g. by another granted attack)
         // before this ambush was answered, matching the guards on mayAttack / mayAttackAnyUnit / support.
-        if (unit && !unit.exhausted) {
-          for (const e of enemyAttackTargets(state, unit).targets) {
-            moves.push({ type: 'attack', attackerId: unit.instanceId, target: { kind: 'unit', instanceId: e.instanceId }, choiceId: choice.id })
-          }
-        }
+        // Ambush reads "attack an enemy unit", so the base is never on offer.
+        if (unit && !unit.exhausted) moves.push(...attackMoves(state, unit, { choiceId: choice.id, includeBase: false }))
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'support': {
         // The chosen attacker gains the Support source's full abilities for the attack, so
         // its granted keywords (Saboteur, Sentinel-ignoring…) shape the legal targets here too.
-        const sourceCardId = p.units.find(u => u.instanceId === choice.unitId)?.cardId
+        const grantCardId = p.units.find(u => u.instanceId === choice.unitId)?.cardId
         for (const candidate of p.units) {
           if (candidate.exhausted || candidate.instanceId === choice.unitId) continue
-          const attacker = sourceCardId ? { ...candidate, grantedAbilityCardIds: [sourceCardId] } : candidate
-          const { targets, sentinelLocked } = enemyAttackTargets(state, attacker)
-          for (const e of targets) {
-            moves.push({ type: 'attack', attackerId: candidate.instanceId, target: { kind: 'unit', instanceId: e.instanceId }, choiceId: choice.id })
-          }
-          if (!sentinelLocked) moves.push({ type: 'attack', attackerId: candidate.instanceId, target: { kind: 'base' }, choiceId: choice.id })
+          moves.push(...attackMoves(state, candidate, { choiceId: choice.id, grantCardId }))
         }
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
@@ -663,11 +686,11 @@ function choiceMoves(state: GameState): Action[] {
       case 'mayAttackAnyUnit': {
         // Thrawn front: attack with any ready unit (the Restore grant is applied on resolve).
         for (const u of p.units) {
-          if (u.exhausted) continue
-          const { targets, sentinelLocked } = enemyAttackTargets(state, u)
-          for (const e of targets) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'unit', instanceId: e.instanceId }, choiceId: choice.id })
-          if (!sentinelLocked) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'base' }, choiceId: choice.id })
+          if (!u.exhausted) moves.push(...attackMoves(state, u, { choiceId: choice.id, grantCardId: choice.grantCardId }))
         }
+        // Only where the card says "may" (Grogu). Enumerating the attacks alone made every one of
+        // them compulsory, so taking the initiative forced a swing you might not want (#575).
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'selectUnitToDefeat': {
@@ -685,12 +708,7 @@ function choiceMoves(state: GameState): Action[] {
         // Improvised Identity's optional follow-up attack, with the discarded unit's
         // abilities granted (so granted Saboteur etc. shape the legal targets).
         const u = p.units.find(x => x.instanceId === choice.unitId)
-        if (u && !u.exhausted) {
-          const attacker = choice.grantCardId ? { ...u, grantedAbilityCardIds: [choice.grantCardId] } : u
-          const { targets, sentinelLocked } = enemyAttackTargets(state, attacker)
-          for (const e of targets) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'unit', instanceId: e.instanceId }, choiceId: choice.id })
-          if (!sentinelLocked) moves.push({ type: 'attack', attackerId: u.instanceId, target: { kind: 'base' }, choiceId: choice.id })
-        }
+        if (u && !u.exhausted) moves.push(...attackMoves(state, u, { choiceId: choice.id, grantCardId: choice.grantCardId }))
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }

@@ -482,8 +482,13 @@ over 8503 decisions. A weight matters at one ply only if its quantity differs ac
 being compared, since an equal term adds the same constant to every score and cancels.
 
 `base`, `power`, `resource` and `hand.hold` carry the model: each changes the chosen move in 14% to
-23% of decisions when switched off. At the other end, **`saturation` changes nothing at all**, in any
-column, which is what a genuinely dead weight looks like. `hand.canAct` is close behind at 0.1%.
+23% of decisions when switched off. At the other end **`hand.canAct` changes 0.1%**, which is what a
+weight with nothing to say looks like.
+
+**`saturation` is the one to read carefully**, because it is near-zero overall for a reason that is
+not deadness. It prices nothing as a *rate* while the pool ships flat, and does all its work as the
+*threshold* `cardScarcity` charges behind, which only ever bites at a regroup. A pooled figure
+averages that away; see [The resource pool is flat](#the-resource-pool-is-flat) for the split.
 
 Two results are worth holding onto because they contradict the obvious reading:
 
@@ -777,13 +782,19 @@ The reading is a lower bound. `canFinishThisAction` sees only damage already on 
 event finisher, an Ambush unit or a pump in hand is invisible to it. Closing that gap is search, not
 a weight.
 
-Two of the gaps are **public** rather than hidden, and are worth knowing before the bound is trusted.
+Three of the gaps are **public** rather than hidden, and are worth knowing before the bound is trusted.
 A leader deploys **ready** and deploys on resources controlled rather than spent, so an undeployed
 leader is a ready attacker its owner can produce at will; deploying is itself an action, so it is
 normally a two-action line, but a leader granted Ambush on deploy swings in the same action. And a
 few units ready themselves while some events ready an exhausted one, so `exhausted` is not the last
-word on whether a body can attack again this round. Both are narrow enough not to earn a term, and
-both make the race model under-read a player who is about to deploy.
+word on whether a body can attack again this round. Those two are narrow enough not to earn a term,
+and both make the race model under-read a player who is about to deploy.
+
+The third is a plain under-count. `unitReach` returns zero for a unit that cannot attack bases, but
+that restriction bars declaring the base as a target and nothing more: Overwhelm still tramples
+excess onto the base from an attack on a *unit*. Such a body's contribution to the clock is therefore
+missed entirely. It needs the restriction and Overwhelm on the same unit, so it is rare, and
+correcting it changes what the model believes and wants a bench arm rather than an argument.
 
 ### Role: read the race, not the board
 

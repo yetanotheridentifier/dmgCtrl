@@ -148,7 +148,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | `dealsDamageFirst` | strikes before the defender |
 | `spillsExcessToUnit` | excess damage to another unit instead of the base |
 | `attacksEitherArena` | may attack units in either arena, not just its own |
-| `cannotAttackBases` | never contributes base damage |
+| `cannotAttackBases` | the enemy base is not a legal attack target |
 | `cannotBeAttacked` | not a legal target, and not a forced Sentinel target either |
 | `providesAspects` | supplies aspect icons while paying costs |
 | `deployCondition` | replaces the resource gate on deploying a leader |
@@ -162,11 +162,16 @@ Card-type-agnostic, all on `CardDefinition`:
 | `actionAbilities` | activated "Action:" abilities, with `usable`, `oncePerRound`, `exhaustCost` |
 | `canPreventDamage` / `payPreventionCost` | offers a prevention, and collects its price if taken |
 
-Two of these are scoped more narrowly than they read.
+Three of these are scoped more narrowly than they read.
 
 **`attacksEitherArena` widens what a unit may target and must not widen what forces it.** Sentinel is
 scoped by the arena the attacker stands in, so a ground Sentinel does not lock a space unit that merely
 *may* reach the ground arena. See [keywords-effects.md](keywords-effects.md).
+
+**`cannotAttackBases` restricts the attack target, not the damage.** An attack picks a legal target and
+only then computes damage, so a unit with this hook still lands Overwhelm excess on the base after
+attacking a *unit*. It bars declaring the base, nothing more, and it is one half of `canAttackBase`
+(Sentinel forcing is the other).
 
 **`searchModifier` belongs to the player, not the searching unit.** Arcana Star Map grants its host
 "if **you** would search a number of cards from your deck, search twice that number instead", and units

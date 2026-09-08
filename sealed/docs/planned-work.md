@@ -194,6 +194,11 @@ the day it ships. #553 already has to work that way for a different reason.
   attaching a real upgrade. Not a lookup table: green and blue are already spoken for, the palette is
   two colours short, and one kind can carry either sign (Baylan's +2/+2 and Ezra's −3/−0 are both
   `mayLastingBuff`), so the mapping reads the payload.
+- **#578 the log should say what changed, not just what was chosen.** Lowest of the three. The log
+  is one entry per submitted action, so an effect that resolves without a choice of its own leaves no
+  trace: a base healed and hit again before the player looks reads as a heal that never fired. A
+  board diff in `useGame` covers the common case with no engine change. Its limit is that it says
+  what changed and never why, which is what #579 is for.
 
 ## Deferred
 
@@ -202,6 +207,15 @@ the day it ships. #553 already has to work that way for a different reason.
   only if a winning configuration lands in the hundreds of milliseconds, or if mobile happens.
 - **Mobile and PWA adaptation** (#482). A redesign rather than breakpoints, and it would reinstate the
   Web Worker question.
+- **#580 `unitReach` and Overwhelm past "can't attack bases".** The model credits such a unit with no
+  base damage at all, where the engine still tramples Overwhelm excess through from a unit attack.
+  The fix is small and written out on the ticket; it is held back because it changes what the model
+  believes and so wants a bench arm, and the combination is rare enough that sizing it comes first.
+- **#579 an engine record of the effects it applies.** The correct answer to what #578 approximates,
+  and it **replaces** #578 rather than joining it. Held back on cost: most effect helpers do not know
+  their cause, so attribution has to be threaded through `effects.ts`, and a journal on `GameState`
+  sits in the search's hot path, so landing it needs a bench run against a matched control rather
+  than a green suite.
 - **Token-unit art**, and a permanent set for ASH tokens.
 - **Unique rule on change of control.** The rule is built for units and upgrades and is per-player, but
   `takeControlOfUnit` never re-checks it. Two cases slip through: stealing a unique unit you already

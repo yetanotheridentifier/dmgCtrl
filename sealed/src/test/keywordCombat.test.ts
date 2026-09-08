@@ -103,6 +103,39 @@ describe('Overwhelm (excess combat damage to base)', () => {
     expect(next.players.opponent.base.damage).toBe(4)
   })
 
+  /**
+   * **A Shield prevents the whole damage instance, so there is nothing left to trample.** It is not a
+   * reduction that Overwhelm's excess is measured against: the defender is dealt no damage at all and
+   * the token is spent doing it, so the base takes nothing either.
+   */
+  it('a Shield on the defender leaves no excess to trample', () => {
+    const s = withCards({ TST_OVER: OVERWHELMER }, {
+      players: {
+        player: player({ units: [unit('a1', 'TST_OVER')] }), // 6 power
+        opponent: player({ units: [unit('d1', 'TST_U1', { upgrades: [{ cardId: TOKEN_SHIELD, owner: 'opponent' }] })] }), // 3/4 shielded
+      },
+    })
+    const next = resolve(s, { type: 'attack', attackerId: 'a1', target: { kind: 'unit', instanceId: 'd1' } })
+    const d1 = next.players.opponent.units.find(u => u.instanceId === 'd1')!
+    expect(d1.damage, 'the whole instance is prevented, not reduced').toBe(0)
+    expect(d1.upgrades.some(a => a.cardId === TOKEN_SHIELD), 'and the token is spent doing it').toBe(false)
+    expect(next.players.opponent.base.damage, 'no damage dealt means no excess').toBe(0)
+  })
+
+  /** Saboteur strips the Shield before combat damage, so the excess trickles through as normal. */
+  it('but Saboteur strips the Shield first, and then it does trample', () => {
+    const SAB_OVER = card({ id: 'TST_SO', type: 'unit', arena: 'ground', power: 6, hp: 6, keywords: [{ name: 'Overwhelm' }, { name: 'Saboteur' }] })
+    const s = withCards({ TST_SO: SAB_OVER }, {
+      players: {
+        player: player({ units: [unit('a1', 'TST_SO')] }), // 6 power
+        opponent: player({ units: [unit('d1', 'TST_U1', { upgrades: [{ cardId: TOKEN_SHIELD, owner: 'opponent' }] })] }), // 3/4 shielded
+      },
+    })
+    const next = resolve(s, { type: 'attack', attackerId: 'a1', target: { kind: 'unit', instanceId: 'd1' } })
+    expect(next.players.opponent.units, 'the defender is defeated').toHaveLength(0)
+    expect(next.players.opponent.base.damage, '6 power less the 4 HP it no longer had a Shield for').toBe(2)
+  })
+
   it('overwhelm excess can win the game', () => {
     const s = withCards({ TST_OVER: OVERWHELMER }, {
       players: {

@@ -243,11 +243,13 @@ describe('the simulated regroup', () => {
       makeBeamGreedy(w, { ...DEFAULT_BEAM_LIMITS, nodes: 200_000, explain: true })(s)
       return lastSearchTrace()!.lines![passIndex].board
     }
-    const shipped = boardAfterPass(DEFAULT_WEIGHTS)
-    const scarce = boardAfterPass({ ...DEFAULT_WEIGHTS, cardScarcity: 3, handKnee: 3 })
-    expect(shipped.players.player.resources.length, 'shipped weights bank at the crossing')
+    // The control is stated explicitly: the shipped weights now CARRY the bonus, so reading them as
+    // the term-off arm would compare the term with itself and prove nothing.
+    const banking = boardAfterPass({ ...DEFAULT_WEIGHTS, cardScarcity: 0 })
+    const scarce = boardAfterPass(DEFAULT_WEIGHTS)
+    expect(banking.players.player.resources.length, 'without the bonus the bot banks at the crossing')
       .toBe(s.players.player.resources.length + 1)
-    expect(scarce.players.player.resources.length, 'the scarcity arm declines')
+    expect(scarce.players.player.resources.length, 'the shipped weights decline')
       .toBe(s.players.player.resources.length)
   })
 
