@@ -45,16 +45,14 @@ export type Role = 'aggressor' | 'defender' | 'neutral'
  * since the attacker picks its target and would choose the cheapest way through.
  */
 export function unitReach(state: GameState, owner: PlayerId, unit: UnitState): number {
-  // **Known under-count (#580).** "Can't attack bases" bars the base as an attack TARGET; Overwhelm
-  // still tramples excess through from a unit attack, so the engine lands base damage here where
-  // this returns 0. Left alone deliberately: correcting it changes what the model believes, which
-  // this project measures rather than argues. #580 carries the fix and the bench question.
-  if (unitCannotAttackBases(state, unit)) return 0
   const power = effectivePower(state, unit, { attacking: true, attackingBase: true })
   if (power <= 0) return 0
 
-  const { targets, sentinelLocked } = enemyAttackTargets(state, unit, owner)
-  if (!sentinelLocked) return power
+  // `canAttackBase` folds both reasons the base can be shut: a Sentinel forcing the attack elsewhere,
+  // and the unit's own "can't attack bases". Overwhelm gets past either, because it tramples the
+  // excess from an attack on a UNIT and never declares the base as a target.
+  const { targets, canAttackBase } = enemyAttackTargets(state, unit, owner)
+  if (canAttackBase) return power
   if (!unitHasKeyword(state, unit, 'Overwhelm')) return 0
 
   // Overwhelm past the softest wall that does not negate it.
@@ -130,6 +128,8 @@ export function blockedReach(state: GameState, owner: PlayerId): number {
   if (!hasShieldedBlocker) return 0
 
   return state.players[owner].units.reduce((n, u) => {
+    // `free` below is what an UNBLOCKED base attack would land, which a base-barred unit never has,
+    // so this term does not describe it. Its trample is already counted by `unitReach`.
     if (unitCannotAttackBases(state, u)) return n
     const { targets, sentinelLocked } = enemyAttackTargets(state, u, owner)
     if (!sentinelLocked) return n
