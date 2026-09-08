@@ -413,7 +413,8 @@ Public terms, in `ai/evaluate.ts`:
 | `unit` | per unit in play, the dominant board term |
 | `power`, `hp` | per point of effective power / remaining HP |
 | `card` | per card in hand (size only) |
-| `resource`, `resourceSurplus`, `saturation` | the resource pool, see below |
+| `cardScarcity`, `handKnee` | a bonus on the cards below the knee once the pool is saturated, see below |
+| `resource`, `resourceSurplus`, `saturation` | the resource pool, and the threshold `cardScarcity` fires behind, see below |
 | `readyUnit` | a light tempo term |
 | `initiative`, `claimCost` | turn order, see below |
 | `lethalExposure` | handing the opponent a one-action kill, see below |
@@ -532,10 +533,13 @@ regression.
 ### The resource pool is flat
 
 `resourceSurplus` equals `resource`, which also makes `saturation` **algebraically** inert:
-`resourceValue` collapses to `resource × pool` when the two rates are equal, so the knee cancels out.
-Sweeping `saturation` alone therefore cannot move anything, and measuring it produced four identical
-numbers. Term sensitivity confirms it from the other direction: `saturation` changes no decision when
-nudged and none when switched off entirely.
+`resourceValue` collapses to `resource × pool` when the two rates are equal, so the knee cancels out
+of the pool's own total. As a **rate** `saturation` therefore prices nothing.
+
+It is not inert, because it is also a **threshold**. `cardScarcity` only charges its bonus once the
+pool has reached the knee, so `saturation` decides where "enough resources" begins for the regroup
+decision. Term sensitivity reads it load-bearing on 2.4% of regroup decisions, where every measurement
+before it acquired that second job read a flat zero.
 
 A concave pool, valuing surplus resources below the `card` weight, is implemented and switched off.
 
@@ -553,6 +557,34 @@ does not pay. Concavity costs in proportion to how hard the knee bites (49.7% at
 knee at 4, converging to flat as the knee rises out of reach), while **convexity does nothing at
 all**: valuing surplus above the full rate changes no decision, because banking is already always
 chosen.
+
+`resourceSurplus` ships equal to `resource`, so the split is arithmetically a no-op and the weight is
+**deletable**: fixing the pool at one rate is exactly today's behaviour. It is kept only so the
+concavity question stays cheap to re-ask.
+
+### Declining a resource
+
+The pool alone does not decide whether to bank at regroup. `cardsValue` charges `cardScarcity` on the
+cards at or below `handKnee`, **and only once the pool has reached the knee**. Both halves are
+required, and the conjunction is the whole rule:
+
+- a small hand over a shallow pool is when a resource is worth most, because it still buys reach;
+- a small hand over a saturated pool is when the card is worth more, because the resource buys nothing
+  and the card is still a body.
+
+The quantity is an order statistic rather than a curve. The regroup pick is the **minimum of the whole
+hand**, and the expected minimum of six sits well below the expected minimum of two, so the real cost
+of banking falls as the hand grows. Hand SIZE is public, so this sits in the zero-sum half; which card
+is worth least is private and stays with `hand.hold`.
+
+**The leader-deploy gate falls out of the same threshold.** The knee already rises to an undeployed
+leader's printed cost, so below it the pool is not saturated, the bonus cannot fire, and the bot keeps
+banking until it can deploy. No separate weight expresses this.
+
+Measured at `cardScarcity: 3`, `handKnee: 3`: **+0.77 points** over 4032 games an arm against a matched
+control, 95% interval [+0.20, +1.34], pooled over two independent seed blocks reading +0.94 and +0.59.
+The bot skips 6.7% of regroups, none before round six, at a mean pool of 7.9 against 4.5 when banking.
+Per-decision cost is unchanged.
 
 ### The hand
 

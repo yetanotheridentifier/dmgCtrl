@@ -2,11 +2,10 @@ import type { Action } from '../engine/actions'
 import type { GameState } from '../engine/types'
 import type { Ai } from './types'
 import { legalMoves } from '../engine/legalMoves'
-import { resolve } from '../engine/resolve'
 import { seededUnit } from '../engine/rng'
 import { evaluate, makeEvaluate, DEFAULT_WEIGHTS, type Evaluator, type EvalWeights } from './evaluate'
 import { evaluateBaseline } from './evaluateBaseline'
-import { makeQuiescent, makeBeamAi, asSimulation, DEFAULT_BEAM_LIMITS, type BeamLimits } from './search'
+import { makeQuiescent, makeBeamAi, asSimulation, step, settleWith, DEFAULT_BEAM_LIMITS, type BeamLimits } from './search'
 import {
   findLethal, shouldSearchLethal, DEFAULT_LETHAL_LIMITS, DEFAULT_LETHAL_GATE,
   type LethalLimits, type LethalGate,
@@ -44,7 +43,7 @@ export function makeGreedyAi(evaluate: Evaluator): Ai {
     let best = -Infinity
     const bestMoves: Action[] = []
     for (const move of moves) {
-      const score = evaluate(resolve(state, move), me, asRole)
+      const score = evaluate(step(state, move), me, asRole)
       if (score > best) {
         best = score
         bestMoves.length = 0
@@ -67,7 +66,13 @@ export function makeGreedyAi(evaluate: Evaluator): Ai {
  * night tuning weights for a bot nobody plays.
  */
 export function makeTunedGreedy(weights: EvalWeights): Ai {
-  return makeGreedyAi(makeQuiescent(makeEvaluate(weights)))
+  const inner = makeGreedyAi(makeQuiescent(makeEvaluate(weights)))
+  // Point the crossing settlement at THIS bot's weights, per decision: an A/B runs two bots in one
+  // process, and a crossing settled with the other arm's weights would quietly measure neither.
+  return (state: GameState): Action | null => {
+    settleWith(weights)
+    return inner(state)
+  }
 }
 
 /** The live greedy AI: unit-count-centred evaluation (#392), scored only on finished actions (#400). */
@@ -89,7 +94,12 @@ export const greedyBaselineAi = makeGreedyAi(evaluateBaseline)
  * A/B against `greedy` isolates the beam and nothing else.
  */
 export function makeBeamGreedy(weights: EvalWeights, limits?: BeamLimits): Ai {
-  return makeBeamAi(makeEvaluate(weights), limits)
+  const inner = makeBeamAi(makeEvaluate(weights), limits)
+  // See `makeTunedGreedy`: the settlement follows the bot taking the decision, not the process.
+  return (state: GameState): Action | null => {
+    settleWith(weights)
+    return inner(state)
+  }
 }
 
 export const beamAi = makeBeamGreedy(DEFAULT_WEIGHTS)

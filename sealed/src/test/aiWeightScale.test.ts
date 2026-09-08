@@ -74,7 +74,9 @@ describe('scalePrices', () => {
   /** A price left out of `PRICE_KEYS` would silently fail to scale, which would change behaviour on
    *  the very change that is supposed to change nothing. */
   it('covers every weight that is a price', () => {
-    const structural = ['saturation', 'blockedReachCap', 'hand']
+    // `handKnee` joins the structural list for the same reason `saturation` is on it: it is a size,
+    // in cards, deciding which half of the hand the scarcity bonus is charged on.
+    const structural = ['saturation', 'handKnee', 'blockedReachCap', 'hand']
     const all = Object.keys(DEFAULT_WEIGHTS).filter(k => !structural.includes(k))
     expect([...PRICE_KEYS].sort()).toEqual(all.sort())
   })

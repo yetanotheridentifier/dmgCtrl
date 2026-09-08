@@ -244,11 +244,13 @@ export interface GameState {
    * 1. **The two cards are removed from the deck but not read.** Deck size is public and the deck-out
    *    clock is real, so they are spent rather than left in place, and the empty-deck damage still
    *    lands.
-   * 2. **One resource is taken instead of one of them.** The shipped weights put `resource - card` at
-   *    +2 and banking is always chosen, so this is a faithful model of this bot rather than a
-   *    convenience. The second card is simply not modelled, which understates both hands equally.
-   * 3. **The resourcing choice is settled rather than offered.** The opponent's would otherwise be
-   *    decided by reading their hand.
+   * 2. **They enter the hand unidentified.** Hand SIZE is public and the draw is deterministic, so the
+   *    size is modelled; the identities are not. Consumers already skip a hand entry with no
+   *    definition, so the placeholders are unplayable and unpriced.
+   * 3. **The resourcing choice is not made here at all.** The engine models the mechanical half and
+   *    predicts nothing: whether a seat banks depends on evaluation weights, which are not the
+   *    engine's to know. `search.ts: settleCrossing` applies the choice for both seats afterwards,
+   *    from public quantities alone, which is what keeps the opponent's choice out of their hand.
    */
   simulatedRegroup?: boolean
   /** Monotonic counter for deterministic unit instance ids. */

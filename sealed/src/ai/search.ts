@@ -1,11 +1,12 @@
 import type { GameState, PlayerId } from '../engine/types'
 import type { Action } from '../engine/actions'
-import type { Evaluator } from './evaluate'
+import type { Evaluator, EvalWeights } from './evaluate'
 import type { Ai } from './types'
 import type { Role } from './race'
 import { hasPendingChoices, opponentOf } from '../engine/types'
 import { legalMoves } from '../engine/legalMoves'
-import { resolve } from '../engine/resolve'
+import { resolve, UNSEEN_CARD } from '../engine/resolve'
+import { makePublicScore, DEFAULT_WEIGHTS } from './evaluate'
 import { seededUnit } from '../engine/rng'
 import { role } from './race'
 import { upgradeHostility } from './upgradeValue'
@@ -168,6 +169,83 @@ export function asSimulation(state: GameState): GameState {
   return state.simulatedRegroup === true ? state : { ...state, simulatedRegroup: true }
 }
 
+/**
+ * Apply the resourcing choice on both sides of a modelled regroup (#519).
+ *
+ * The engine crosses the boundary and predicts nothing: it draws the two cards face down and banks
+ * neither. This decides, for each seat, whether that seat takes a resource, and is the AI's half of a
+ * split the engine cannot make on its own, since the answer depends on evaluation weights.
+ *
+ * **Public quantities only, and that is what makes modelling the opponent legitimate.** Hand size,
+ * pool, leader cost and deploy state are all visible to both players, so `publicScore` can be asked
+ * what each seat prefers without reading a card. A hand-reading rule could not: predicting their
+ * choice would mean knowing their hand, which is the whole thing the redaction exists to prevent.
+ *
+ * A public tie banks, which is what the shipped weights do at every regroup. The private half is
+ * deliberately not consulted, even for our own seat: this is a prediction about a future decision
+ * rather than the decision itself, and `hand.hold` picks WHICH card, which the model does not model.
+ *
+ * The card banked is one of the face-down placeholders. The search is predicting THAT a card is
+ * banked, not choosing which, and which is private.
+ */
+export function settleCrossing(state: GameState, w: EvalWeights): GameState {
+  if (state.simulatedRegroup !== true) return state
+  let next = state
+  for (const id of ['player', 'opponent'] as PlayerId[]) {
+    const p = next.players[id]
+    const index = p.hand.lastIndexOf(UNSEEN_CARD)
+    if (index === -1) continue
+    const banked = updatePlayerFor(next, id, {
+      hand: [...p.hand.slice(0, index), ...p.hand.slice(index + 1)],
+      resources: [...p.resources, { cardId: UNSEEN_CARD, exhausted: false }],
+    })
+    // Each seat judged from its own side of the zero-sum half, so the two are decided independently
+    // rather than one being the negation of the other.
+    if (makePublicScore(w)(banked, id) >= makePublicScore(w)(next, id)) next = banked
+  }
+  return next
+}
+
+/** Local `updatePlayer`: the engine's is not exported, and this needs only the two fields. */
+function updatePlayerFor(state: GameState, id: PlayerId, patch: Partial<GameState['players'][PlayerId]>): GameState {
+  return { ...state, players: { ...state.players, [id]: { ...state.players[id], ...patch } } }
+}
+
+/**
+ * The weights `step` settles a crossing with, for the decision currently being taken.
+ *
+ * Module state for the same reason `trace` is, and the note there applies unchanged: it keeps the hot
+ * path's signatures alone and it works for every AI the registry can build, including the
+ * pre-constructed named ones. A crossing can happen at any of seven `resolve` sites in this file, so
+ * the alternative was threading a parameter through ten signatures, which is a great deal of surface
+ * for a value that is constant for the whole of one decision.
+ *
+ * Single threaded, set at the top of each decision, and defaulted so every helper called directly from
+ * a test or the bench settles with the shipped weights rather than with whatever ran last.
+ */
+let settleWeights: EvalWeights = DEFAULT_WEIGHTS
+
+/** Point the crossing settlement at one bot's weights, for the decision about to be taken. */
+export function settleWith(w: EvalWeights): void {
+  settleWeights = w
+}
+
+/**
+ * `resolve`, plus the resourcing choice on any regroup it crossed.
+ *
+ * **The AI must never call `resolve` directly.** The engine crosses the boundary without deciding
+ * whether either side banks, so a site that skipped this would model a bot that never takes a resource
+ * at all. `aiRoundBoundary.test.ts` pins that no such site exists, by permuting the deck and by
+ * checking the settlement reaches the search rather than only the helper.
+ *
+ * A crossing is a round change, which is on the board already, so this costs a comparison on the
+ * overwhelming majority of resolves that cross nothing.
+ */
+export function step(state: GameState, action: Action): GameState {
+  const after = resolve(state, action)
+  return after.round > state.round ? settleCrossing(after, settleWeights) : after
+}
+
 let trace: SearchTrace | null = null
 
 /**
@@ -235,7 +313,7 @@ function quiesce(
   for (const move of moves) {
     if (budget.left <= 0) break
     spendChain(budget)
-    const score = quiesce(resolve(state, move), me, asRole, inner, budget)
+    const score = quiesce(step(state, move), me, asRole, inner, budget)
     best = maximising ? Math.max(best, score) : Math.min(best, score)
   }
   // Every branch was cut by the budget before scoring anything: fall back rather than return ±∞.
@@ -303,7 +381,7 @@ function driveChain(
   for (const move of moves) {
     if (budget.left <= 0) break
     spendChain(budget)
-    const child = resolve(state, move)
+    const child = step(state, move)
     const score = quiesce(child, me, asRole, inner, budget)
     if (maximising ? score > bestScore : score < bestScore) {
       bestScore = score
@@ -916,7 +994,7 @@ function applyReply(
   for (const move of moves) {
     if (budget.left <= 0) break
     spendBeam(budget)
-    const next = resolveChain(resolve(state, move), me, asRole, inner, budget, chainCap)
+    const next = resolveChain(step(state, move), me, asRole, inner, budget, chainCap)
     const score = minimising ? inner(next, me, asRole) : inner(next, foe, foeRole)
     if (minimising ? score < best : score > best) {
       best = score
@@ -976,7 +1054,7 @@ function ourTurnAgain(state: GameState, me: PlayerId, budget: SearchBudget): Gam
   if (state.activePlayer === me) return state
   if (budget.left <= 0) return null
   spendBeam(budget)
-  const passed = resolve(state, { type: 'pass' })
+  const passed = step(state, { type: 'pass' })
   // Their pass can end the phase outright, and a phase boundary is where this policy stops claiming
   // anything: continuing across a round is #446's problem, not this one.
   if (passed.winner !== null || passed.phase !== 'action' || passed.activePlayer !== me) return null
@@ -1009,7 +1087,7 @@ function reachableFrom(
   alpha: number,
 ): Reach {
   if (budget.left <= 0) {
-    const board = resolve(state, move)
+    const board = step(state, move)
     return { best: inner(board, me, asRole), won: board.winner === me }
   }
   spendBeam(budget)
@@ -1017,7 +1095,7 @@ function reachableFrom(
   // Beam nodes are always settled boards, so depth counts actions rather than choice answers. Under a
   // reply policy the board scored is the one AFTER their answer, which is the whole of two-ply.
   const chainCap = limits.chainNodes ?? Infinity
-  const settled = resolveChain(resolve(state, move), me, asRole, inner, budget, chainCap)
+  const settled = resolveChain(step(state, move), me, asRole, inner, budget, chainCap)
   // See `alphaBeta`: a cut is only a valid bound for pessimistic play, and only on a board nothing is
   // expanded past. At depth 1 the root board is such a board; deeper it is continued from.
   // Beyond `replyDepth` the opponent is assumed to do nothing rather than to punish optimally again.
@@ -1070,7 +1148,7 @@ function reachableFrom(
         if (next.type === 'pass') continue
         if (budget.left <= 0) break
         spendBeam(budget)
-        const played = resolveChain(resolve(ours, next), me, asRole, inner, budget, chainCap)
+        const played = resolveChain(step(ours, next), me, asRole, inner, budget, chainCap)
         // No alpha at an interior level: there a branch's value is the MAX over its leaves, so a poor
         // reply at this node says nothing about what the branch can still reach. `best` rather than
         // the caller's alpha, because it is the tighter of the two and both bound this root.

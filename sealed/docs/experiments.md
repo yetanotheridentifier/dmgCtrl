@@ -306,6 +306,45 @@ player's rate.
 **This closes the horizon as an answer to the lockout**, which was the last live alternative to pricing
 it in the evaluation.
 
+### Concavity on the hand works where concavity on the pool did not, but only as a conjunction
+
+Three experiments put a knee on the resource pool and each lost, monotonically in how hard the knee
+bit. Moving the same curve onto the HAND reproduces that result exactly when it is charged on hand size
+alone, and reverses it when it is conditioned on the pool as well.
+
+Charged on hand size alone, over 504 games a cell against a matched control:
+
+| | knee 2 | knee 3 | knee 4 |
+| --- | --- | --- | --- |
+| `cardScarcity` 3 | +0.40 | **-3.52** (2016 games) | **-20.04** |
+| `cardScarcity` 4 | -0.40 | **-4.37** | **-18.85** |
+| `cardScarcity` 6 | -0.40 | **-4.56** | **-17.06** |
+
+Monotone in the knee and flat in the magnitude, which is what a binary decision looks like once its
+sign has flipped. A knee of 2 is a no-op by construction: above a hand of 2 the quantity is constant
+and cancels.
+
+**The cost is early skipping, not hoarding.** A scripted position isolates it: with a deployed leader,
+a pool of 2 and three cards it cannot afford, the hand-size rule declines the resource, which is
+precisely when a resource is worth most. Conditioning the bonus on the pool having reached the knee
+removes every skip before round six and turns -3.52 into **+0.77** over 4032 games.
+
+The intermediate finding is worth keeping because it is the one that misleads: a separate
+leader-deploy weight also recovered the loss, from -3.52 to -0.30, by suppressing early skips. It is
+unnecessary. The knee already rises to an undeployed leader's cost, so the conjunction subsumes the
+gate and the extra weight changes no decision.
+
+### An evaluation term on hand size prices every decision, not one
+
+`cardScarcity` reads hand size, and playing a card reduces hand size, so the term charges the play
+decision as well as the regroup one. That is inherent to pricing a decision through a static
+evaluation of board states, and it is not avoidable by tuning.
+
+Measured, it costs nothing: the two arms that differ only in the leader-deploy weight carry the
+distortion identically and differ by 3.5 points, which locates the cost in skip timing rather than in
+card play. The bot's declined-play profile is also unchanged against the shipped bot, same cards and
+same pass count, with 0.2 more cards held.
+
 ### Crossing the boundary safely means redacting the draw
 
 The regroup deals both players two cards off a fully-ordered deck held in state, so a search crossing it
@@ -607,6 +646,14 @@ directly rather than through a proxy.
   kind from 71% to 91% against a uniform picker's 70.5%. Accepting above chance is not evidence of a
   defect: optional abilities are designed to be usually good.
 - **A concave resource pool.** Measured 49.7% against flat and degraded further as the knee lowered.
-  The pool ships flat, which is also what makes the knee inert.
+  The pool ships flat as a rate. The knee is no longer inert, because the regroup rule fires behind it.
+- **"The bot hoards cards it could play."** At a chosen pass it holds 2.09 playable cards of 3.32, and
+  the cards it declines most are the ones it plays most: Pathfinder Sergeant 46 plays against 10
+  declines, Moff Gideon 36 against 12. Four of the six most-declined are unique units whose value
+  depends on board state. Holding is situational, not a failure to develop, so the resourcing decision
+  is not downstream of a play-quality problem.
+- **"The bot will not deploy expensive bodies."** It plays an 8-cost 6/6 into an empty board, a board it
+  outclasses, and a board that could trade with it. Repeated declines of specific bombs in the corpus
+  are positional and remain unexplained; the general claim is not.
 - **Per-candidate role assignment.** The role belongs to the decision, not the candidate.
 - **Deeper search.** Depth 4, covered above.

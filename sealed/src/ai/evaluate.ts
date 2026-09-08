@@ -90,6 +90,34 @@ export interface EvalWeights {
   advantageExhausted: number
   hp: number // per point of a unit's remaining HP (light, so damage is progress not a big loss)
   card: number // per card in hand (public: hand SIZE is visible to both players)
+  /**
+   * Extra value per card held **at or below `handKnee`**, on top of `card`, making the hand's value
+   * concave (#519).
+   *
+   * The regroup pick is not a choice between two cards: it is the MINIMUM of the whole hand, and the
+   * expected minimum of six sits well below the expected minimum of two. So the real cost of banking
+   * falls as the hand grows, which is an order statistic rather than a taste curve. Hand SIZE is
+   * public, so this belongs in the zero-sum half; which card is worth least is private and stays with
+   * `hand.hold`, where it already decides 75.9% of regroups.
+   *
+   * **A bonus below the knee rather than a discount above it**, and the two are the same curve. Only
+   * the bonus form leaves `card` alone: `resource > card` is the sharpest constraint in the weight set
+   * and closing it measures 1.8%, so the gap is left where it is and this reverses the decision
+   * locally instead.
+   *
+   * OFF until swept, per the rule that a new weight ships at zero.
+   */
+  cardScarcity: number
+  /**
+   * Hand size at or below which `cardScarcity` is charged. NOT a price: like `saturation` it decides
+   * how a quantity is split between two rates, and while `cardScarcity` is zero it is inert.
+   *
+   * Grounded in the pool the bot actually plays rather than in taste: over 1630 regroup decisions on
+   * the shipped bot, hand size runs 2 to 8 with 72% at 4 or 5, and 15% at 3 or below. That is the
+   * tail a gate should be firing on, and the distribution is itself conditional on a bot that banks
+   * every regroup, so it is a lower bound on where the term would fire once it does anything.
+   */
+  handKnee: number
   resource: number // per resource in the pool up to the knee (total, not ready: all ready each round)
   /**
    * Per resource ABOVE the knee. Lower than `resource`, which is what makes the pool's value
@@ -103,6 +131,23 @@ export interface EvalWeights {
    * casts 91% of the set. Raised to the leader's deploy cost while it is still undeployed.
    */
   saturation: number
+  /**
+   * Extra value per resource held **below the leader's printed cost**, while that leader is still
+   * undeployed (#519). "Keep resourcing until you can deploy your leader", said as a threshold.
+   *
+   * The gate really is a resource COUNT: `legalMoves.ts` deploys on CONTROLLING resources equal to the
+   * leader's cost (CR 2.6.1, controlled rather than spent), and the printed cost is the right number
+   * for all 18 ASH leaders. Public on both halves of the condition, so it stays in the zero-sum half
+   * with each side measured against its own leader.
+   *
+   * This is what the knee in `resourceSplit` was reaching for and could not say. That one raises where
+   * SURPLUS pricing begins, which cannot matter while the two pool rates are equal; this charges an
+   * explicit bonus on the resources below the gate, so it is live whatever the pool weights are.
+   *
+   * It means nothing until something else introduces skipping: on a bot that banks every regroup it is
+   * a guard rail with nothing to guard. OFF until swept.
+   */
+  deployUrgency: number
   readyUnit: number // per ready (unexhausted) unit, a light tempo term
   /**
    * Per Shield token, ours minus theirs (#493).
@@ -213,16 +258,17 @@ export interface EvalWeights {
  * half-step resolution for free, and `aiWeightScale.test.ts` evidences the invariance rather than
  * asserting the arithmetic.
  *
- * `saturation` and `blockedReachCap` are deliberately absent: the first is a pool SIZE (where "enough
- * resources" begins), the second caps a quantity. Scaling either is a real behaviour change. The
+ * `saturation`, `handKnee` and `blockedReachCap` are deliberately absent: the first two are SIZES
+ * (where "enough resources" and "few enough cards" begin), the third caps a quantity. Scaling any of
+ * them is a real behaviour change rather than a reparameterisation. The
  * private `hand` weights are absent too, because they are squashed into `[0, 1)` and their whole
  * purpose is to sit below the public resolution.
  */
 export const PRICE_KEYS = [
-  'base', 'unit', 'power', 'advantage', 'advantageExhausted', 'hp', 'card', 'resource',
-  'resourceSurplus', 'readyUnit', 'shield', 'blockedReach', 'initiative', 'claimCost',
+  'base', 'unit', 'power', 'advantage', 'advantageExhausted', 'hp', 'card', 'cardScarcity', 'resource',
+  'resourceSurplus', 'deployUrgency', 'readyUnit', 'shield', 'blockedReach', 'initiative', 'claimCost',
   'initiativeHorizon', 'roleShift', 'lethalExposure',
-] as const satisfies ReadonlyArray<keyof Omit<EvalWeights, 'hand' | 'saturation' | 'blockedReachCap'>>
+] as const satisfies ReadonlyArray<keyof Omit<EvalWeights, 'hand' | 'saturation' | 'handKnee' | 'blockedReachCap'>>
 
 /** Multiply every price by `factor`, leaving the structural numbers and the private half alone. */
 export function scalePrices(w: EvalWeights, factor: number): EvalWeights {
@@ -248,6 +294,12 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   advantageExhausted: 4,
   hp: 2,
   card: 4,
+  // #519. OFF until swept. At 3 the marginal card below the knee reaches 7 against a resource's 6,
+  // which is the smallest step that reverses the banking decision at all: the gap it has to overcome
+  // is `resource - card` = 2.
+  cardScarcity: 0,
+  // NOT a price and so NOT doubled: this is a hand size, in cards. Inert while `cardScarcity` is 0.
+  handKnee: 3,
   resource: 6,
   // MEASURED NEUTRAL AT BEST: equal to `resource`, i.e. the pool is deliberately shipped FLAT.
   // See the concavity note above `resourceValue` before changing this. While the two are equal the
@@ -255,6 +307,8 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   resourceSurplus: 6,
   // NOT a price and so NOT doubled: this is the pool size where the knee sits, in resources.
   saturation: 7,
+  // #519. OFF until swept, and inert until something else makes the bot skip a regroup.
+  deployUrgency: 0,
   readyUnit: 2,
   // #493. OFF until swept, per the rule that a new weight ships at zero: shipping a default before
   // its A/B ran once inverted a whole reading, because the candidate was then the ablation.
@@ -557,7 +611,39 @@ function horizonValue(state: GameState, me: PlayerId, w: EvalWeights): number {
  */
 export function resourceValue(state: GameState, id: PlayerId, w: EvalWeights): number {
   const { full, surplus } = resourceSplit(state, id, w)
-  return w.resource * full + w.resourceSurplus * surplus
+  return w.resource * full + w.resourceSurplus * surplus + w.deployUrgency * deployShortfall(state, id)
+}
+
+/**
+ * Resources still counting toward the leader's deploy gate: the pool, capped at the leader's printed
+ * cost, and zero once the leader is deployed. The quantity `deployUrgency` prices.
+ *
+ * Capped rather than a bare "am I short" flag so it is a quantity like every other public term, and so
+ * that banking below the gate is worth the bonus while banking above it is not. Each side reads its
+ * OWN leader, which is what keeps the term antisymmetric.
+ */
+function deployShortfall(state: GameState, id: PlayerId): number {
+  const p = state.players[id]
+  if (p.leader.deployed) return 0
+  return Math.min(p.resources.length, state.cards[p.leader.cardId]?.cost ?? 0)
+}
+
+/**
+ * What a player's HAND is worth by size alone, with the cards below `handKnee` charged a scarcity
+ * bonus on top of `card` (#519).
+ *
+ * PUBLIC: hand size is visible to both players, so this belongs in the zero-sum half. Card identity is
+ * not, and does not appear here. See `cardScarcity` for why the curve sits on the hand rather than on
+ * the resource pool, and why it is a bonus below the knee rather than a discount above it.
+ */
+export function cardsValue(state: GameState, id: PlayerId, w: EvalWeights): number {
+  return w.card * state.players[id].hand.length + w.cardScarcity * scarceCards(state, id, w)
+}
+
+/** The cards the scarcity bonus is charged on: none until the pool is saturated. See `poolSaturated`. */
+function scarceCards(state: GameState, id: PlayerId, w: EvalWeights): number {
+  if (!poolSaturated(state, id, w)) return 0
+  return Math.min(state.players[id].hand.length, w.handKnee)
 }
 
 /**
@@ -567,12 +653,44 @@ export function resourceValue(state: GameState, id: PlayerId, w: EvalWeights): n
  * change any total, which is exactly why the shipped flat pool makes the knee algebraically inert.
  */
 function resourceSplit(state: GameState, id: PlayerId, w: EvalWeights): { full: number; surplus: number } {
+  const pool = state.players[id].resources.length
+  const full = Math.min(pool, kneeFor(state, id, w))
+  return { full, surplus: pool - full }
+}
+
+/**
+ * Where "enough resources" begins for this player: the shipped knee, raised to the leader's printed
+ * cost while that leader is still in the base zone.
+ *
+ * Factored out because two rules need the same threshold and must not drift apart. It splits the pool
+ * for `resourceValue`, and it is the predicate `cardScarcity` fires behind: both are asking "has the
+ * pool reached the point where another resource stops buying anything".
+ */
+function kneeFor(state: GameState, id: PlayerId, w: EvalWeights): number {
   const p = state.players[id]
   const leaderCost = state.cards[p.leader.cardId]?.cost ?? 0
-  const knee = p.leader.deployed ? w.saturation : Math.max(w.saturation, leaderCost)
-  const pool = p.resources.length
-  const full = Math.min(pool, knee)
-  return { full, surplus: pool - full }
+  return p.leader.deployed ? w.saturation : Math.max(w.saturation, leaderCost)
+}
+
+/**
+ * Whether another resource would buy this player anything.
+ *
+ * **The half of the scarcity rule that was missing, and a scripted position caught it.** Charged on
+ * hand size alone, the bonus fired at a pool of 2 holding three cards that could not be cast, which is
+ * precisely when a resource is worth most: below the knee it still buys reach. The rule is a
+ * conjunction, and only the conjunction is defensible: decline when the hand is small **and** the pool
+ * has already run past what it can spend.
+ *
+ * Reusing the knee makes `saturation` live again as a **predicate** rather than as a second rate. As a
+ * rate it is algebraically inert while the two pool weights are equal, which is why three concavity
+ * experiments could not move it; as a threshold it decides something.
+ *
+ * It also subsumes the leader-deploy gate for free, since the knee already rises to an undeployed
+ * leader's cost: below that the pool is not saturated, so the bonus cannot fire and the bot keeps
+ * banking.
+ */
+function poolSaturated(state: GameState, id: PlayerId, w: EvalWeights): boolean {
+  return state.players[id].resources.length >= kneeFor(state, id, w)
 }
 
 /**
@@ -599,7 +717,7 @@ export function makePublicScore(w0: EvalWeights): Evaluator {
     const foe = opponentOf(me)
     const baseTerm = w.base * (state.players[foe].base.damage - state.players[me].base.damage)
     const board = boardPresence(state, me, w) - boardPresence(state, foe, w)
-    const cards = w.card * (state.players[me].hand.length - state.players[foe].hand.length)
+    const cards = cardsValue(state, me, w) - cardsValue(state, foe, w)
     const resources = resourceValue(state, me, w) - resourceValue(state, foe, w)
     const tempo = w.readyUnit * (readyUnits(state, me) - readyUnits(state, foe))
     // Symmetric like every other board term, so the public half stays zero-sum: a Shield is worth
@@ -630,8 +748,8 @@ export interface Term {
 /** The linear coefficients, i.e. every public weight that prices a quantity. `saturation` and
  *  `roleShift` are absent by construction: neither is a price. See `resourceSplit` and `roleAdjusted`. */
 export type LinearTermKey =
-  | 'base' | 'unit' | 'power' | 'advantage' | 'advantageExhausted' | 'hp' | 'card' | 'resource'
-  | 'resourceSurplus'
+  | 'base' | 'unit' | 'power' | 'advantage' | 'advantageExhausted' | 'hp' | 'card' | 'cardScarcity'
+  | 'resource' | 'resourceSurplus' | 'deployUrgency'
   | 'readyUnit' | 'shield' | 'blockedReach' | 'initiative' | 'claimCost' | 'lethalExposure'
 
 /**
@@ -684,8 +802,18 @@ export function publicBreakdown(
     },
     hp: { weight: w.hp, quantity: mine.hp - theirs.hp },
     card: { weight: w.card, quantity: state.players[me].hand.length - state.players[foe].hand.length },
+    // The scarcity bonus rides on top of `card` above, so its quantity is the capped hand alone and
+    // the two together reproduce `cardsValue`.
+    cardScarcity: {
+      weight: w.cardScarcity,
+      quantity: scarceCards(state, me, w) - scarceCards(state, foe, w),
+    },
     resource: { weight: w.resource, quantity: myPool.full - theirPool.full },
     resourceSurplus: { weight: w.resourceSurplus, quantity: myPool.surplus - theirPool.surplus },
+    deployUrgency: {
+      weight: w.deployUrgency,
+      quantity: deployShortfall(state, me) - deployShortfall(state, foe),
+    },
     readyUnit: { weight: w.readyUnit, quantity: readyUnits(state, me) - readyUnits(state, foe) },
     shield: { weight: w.shield, quantity: shields(state, me) - shields(state, foe) },
     blockedReach: { weight: w.blockedReach, quantity: blockedFor(state, foe, w) - blockedFor(state, me, w) },

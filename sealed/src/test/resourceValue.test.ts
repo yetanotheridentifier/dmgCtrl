@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { publicScore, resourceValue, makeEvaluate, DEFAULT_WEIGHTS } from '../ai/evaluate'
+import { publicScore, resourceValue, cardsValue, makePublicScore, makeEvaluate, DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { makeGreedyAi, greedyAi } from '../ai/greedyAi'
 import { makeQuiescent } from '../ai/search'
 import '../engine/cardDefinitions'
@@ -49,6 +49,9 @@ function regroup(resourceCount: number, leaderCardId = 'CHEAP_LEADER', deployed 
 
 const poolOf = (s: GameState, r: number): GameState =>
   ({ ...s, players: { ...s.players, player: { ...s.players.player, resources: ready(r) } } })
+
+const handOf = (s: GameState, cards: number): GameState =>
+  ({ ...s, players: { ...s.players, player: { ...s.players.player, hand: Array.from({ length: cards }, () => 'PLAYABLE') } } })
 
 describe('resourceValue', () => {
   it('is non-decreasing in the pool size: your own resources are never a liability', () => {
@@ -154,6 +157,144 @@ describe('the banking decision: resource must outvalue a card', () => {
 })
 
 /**
+ * The concavity, moved off the pool and onto the hand (#519).
+ *
+ * Three experiments put a knee on the RESOURCE pool and each lost, monotonically in how much
+ * concavity was applied. The premise was never wrong: the bot really does leave 1 to 2 resources
+ * unspent per round late on. The quantity was.
+ *
+ * The regroup pick is not a choice between two cards. It is the **minimum of the whole hand**, and the
+ * expected minimum of six sits well below the expected minimum of two, so the real cost of banking
+ * falls as the hand grows. That is an order statistic rather than a taste curve, which is what the
+ * pool knee never had behind it. Measured over 1630 regroup decisions on the shipped bot, hand size
+ * runs 2 to 8 with 72% of decisions at 4 or 5.
+ *
+ * Charged as a BONUS on the cards below the knee rather than as a discount on the ones above it. The
+ * two are the same curve, and only the bonus form leaves `card` itself alone: the shipped gap
+ * `resource > card` is the sharpest constraint in the weight set, and closing it is the measured 1.8%
+ * catastrophe. Here the gap is untouched and the bonus reverses the decision locally, which is exactly
+ * the scope the behaviour wants.
+ */
+const SCARCE = { ...DEFAULT_WEIGHTS, cardScarcity: 3, handKnee: 3 }
+
+describe('the hand is priced concavely: the marginal card is dearer when you hold few', () => {
+  // Pool 8, i.e. past the knee: below it the bonus is switched off entirely and every marginal card
+  // is worth the flat rate. That conjunction is the rule, and `the pool predicate` below pins it.
+  const marginals = (w: typeof DEFAULT_WEIGHTS, sizes: number[]): number[] =>
+    sizes.map(h => cardsValue(handOf(regroup(8), h + 1), 'player', w) - cardsValue(handOf(regroup(8), h), 'player', w))
+
+  it('ships at zero, so the term is a provable no-op until it is swept', () => {
+    expect(DEFAULT_WEIGHTS.cardScarcity).toBe(0)
+    expect(DEFAULT_WEIGHTS.deployUrgency).toBe(0)
+  })
+
+  it('prices every card alike while the bonus is zero', () => {
+    expect(new Set(marginals(DEFAULT_WEIGHTS, [1, 2, 3, 4, 5, 6]))).toEqual(new Set([DEFAULT_WEIGHTS.card]))
+  })
+
+  it('pays the bonus on cards at or below the knee, and the base rate above it', () => {
+    // Marginal for the card that takes the hand from h to h+1, so the knee is crossed at h = knee.
+    expect(marginals(SCARCE, [0, 1, 2])).toEqual([7, 7, 7])
+    expect(marginals(SCARCE, [3, 4, 5])).toEqual([4, 4, 4])
+  })
+
+  it('is non-decreasing in hand size: your own cards are never a liability', () => {
+    for (const w of [DEFAULT_WEIGHTS, SCARCE]) {
+      const values = Array.from({ length: 10 }, (_, h) => cardsValue(handOf(regroup(8), h), 'player', w))
+      for (let i = 1; i < values.length; i++) expect(values[i], `hand ${i}`).toBeGreaterThanOrEqual(values[i - 1])
+    }
+  })
+})
+
+/**
+ * The behaviour the term exists to produce, and the failure mode it must not reach.
+ *
+ * Losing 98% of games is what "never banks" measures, so the early-game guard is asserted as hard as
+ * the new behaviour is. A bot that declines a resource in round 2 is the catastrophe whatever its skip
+ * rate averages to.
+ */
+describe('banking, once the marginal card is priced by scarcity', () => {
+  const banks = (s: GameState, w = SCARCE): boolean => makeGreedyAi(makeEvaluate(w))(s)?.type === 'resourceCard'
+
+  it('still banks from a full hand, which is the early game', () => {
+    expect(banks(handOf(regroup(2), 5)), 'five cards, two resources').toBe(true)
+    expect(banks(handOf(regroup(4), 4)), 'four cards, one above the knee').toBe(true)
+  })
+
+  it('declines once the hand is small AND the pool is saturated', () => {
+    expect(banks(handOf(regroup(8), 3)), 'three cards, pool past the knee').toBe(false)
+    expect(banks(handOf(regroup(8), 2))).toBe(false)
+  })
+
+  /**
+   * **The conjunction, and the half a scripted position caught missing.**
+   *
+   * Charged on hand size alone the bonus fired at a pool of 2 holding three uncastable cards, which is
+   * precisely when a resource is worth most: below the knee it still buys reach. A small hand is not a
+   * reason to decline; a small hand over a pool that has run out of things to buy is.
+   */
+  it('banks from a small hand while the pool is still short of the knee', () => {
+    expect(banks(handOf(regroup(2), 3)), 'three cards, pool of two').toBe(true)
+    expect(banks(handOf(regroup(DEFAULT_WEIGHTS.saturation - 1), 2)), 'one short of the knee').toBe(true)
+  })
+
+  /**
+   * The public half decides this, so the squashed hand term cannot reach it either way: the gap is
+   * +2 banking and -1 declining, and the private half spans strictly less than 1.
+   */
+  it('is decided publicly, whatever the hand is worth', () => {
+    const s = handOf(regroup(8), 2)
+    expect(publicScore(s, 'player')).toBe(Math.round(publicScore(s, 'player')))
+  })
+})
+
+/**
+ * "Keep resourcing until you can deploy your leader" comes out of the knee for free.
+ *
+ * The threshold `cardScarcity` fires behind is the SAME one that splits the pool, and that one already
+ * rises to an undeployed leader's printed cost (CR 2.6.1: the gate is a resource COUNT, controlled
+ * rather than spent). So below it the pool is not saturated, the bonus cannot fire, and the bot keeps
+ * banking. No second weight is needed to say it.
+ *
+ * That is a finding rather than a design: `deployUrgency` was built as a separate guard rail and
+ * measured worth +3.2 points against the ungated driver. Under the conjunction the knee does the same
+ * job, which is what these tests check, and whether the weight still earns its place is then an
+ * open question for measurement rather than an assumption in either direction.
+ */
+describe('the leader-deploy gate falls out of the knee', () => {
+  const banks = (s: GameState, w = SCARCE): boolean => makeGreedyAi(makeEvaluate(w))(s)?.type === 'resourceCard'
+
+  it('keeps banking below the leader’s cost, from a hand the scarcity bonus would otherwise protect', () => {
+    // Pool 8 is past the shipped knee of 7, so a DEPLOYED leader here would decline. The 10-cost
+    // leader raises the threshold above the pool, and that alone restores banking.
+    expect(banks(handOf(regroup(8, 'BIG_LEADER'), 2)), '10-cost leader, pool of 8').toBe(true)
+    expect(banks(handOf(regroup(8, 'BIG_LEADER', true), 2)), 'same board, leader deployed').toBe(false)
+  })
+
+  it('declines once the pool reaches the leader’s cost', () => {
+    expect(banks(handOf(regroup(10, 'BIG_LEADER'), 2)), 'pool now reaches the 10-cost leader').toBe(false)
+  })
+
+  it('uses the shipped knee once the leader is cheap enough not to bind', () => {
+    expect(banks(handOf(regroup(8, 'CHEAP_LEADER'), 2)), '5-cost leader, knee stays at 7').toBe(false)
+  })
+
+  /** With the knee doing the work, the separate weight changes none of these decisions. */
+  it('reaches the same decisions with deployUrgency off as on', () => {
+    const off = { ...SCARCE, deployUrgency: 0 }
+    const on = { ...SCARCE, deployUrgency: 2 }
+    for (const board of [
+      handOf(regroup(8, 'BIG_LEADER'), 2),
+      handOf(regroup(10, 'BIG_LEADER'), 2),
+      handOf(regroup(8, 'CHEAP_LEADER'), 2),
+      handOf(regroup(2), 3),
+    ]) {
+      expect(banks(board, off), 'deployUrgency is not what decides these').toBe(banks(board, on))
+    }
+  })
+})
+
+/**
  * The guarantee iteration 1 rests on. `publicScore` must stay integer-valued, or the hand term stops
  * being a tie-break and starts voting, which measured at 40-50% win rate. A fractional weight would
  * break that silently, with no test failing anywhere near the cause.
@@ -186,5 +327,30 @@ describe('public weights stay integers, so the hand term stays a tie-break', () 
     const mine = resourceValue(s, 'player', CONCAVE)
     const theirs = resourceValue(s, 'opponent', CONCAVE)
     expect(mine - theirs).toBe(-(theirs - mine))
+  })
+
+  /**
+   * The same discipline for the two new terms (#519). Each side is measured against its own hand and
+   * its own leader, so the public half stays zero-sum however far apart the two positions are. A term
+   * that read the pair jointly would put a private quantity in the shared half by the back door.
+   */
+  it('stays zero-sum with the scarcity bonus and the deploy gate on', () => {
+    const w = { ...DEFAULT_WEIGHTS, cardScarcity: 3, handKnee: 3, deployUrgency: 2 }
+    const s = handOf(
+      state({
+        cards: L,
+        players: {
+          player: player({ leader: { cardId: 'BIG_LEADER', deployed: false, epicActionUsed: false, exhausted: false }, resources: ready(9) }),
+          opponent: player({
+            leader: { cardId: 'CHEAP_LEADER', deployed: false, epicActionUsed: false, exhausted: false },
+            resources: ready(3),
+            hand: ['PLAYABLE', 'PLAYABLE', 'PLAYABLE', 'PLAYABLE', 'PLAYABLE'],
+          }),
+        },
+      }),
+      2,
+    )
+    expect(makePublicScore(w)(s, 'player') + makePublicScore(w)(s, 'opponent')).toBe(0)
+    expect(cardsValue(s, 'player', w)).not.toBe(cardsValue(s, 'opponent', w))
   })
 })

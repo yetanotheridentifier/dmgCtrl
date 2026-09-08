@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   runDecisions, classifyResolution, sameAction, advantageSpend, initiativeOutlook, TIE_FANOUT_CAP,
-  optionalTriggerSplit, randomAcceptChance, pinsLeader,
+  optionalTriggerSplit, randomAcceptChance, pinsLeader, type ResourcingBucket,
 } from '../bench/decisions'
 import { DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
@@ -25,6 +25,10 @@ import '../engine/cardDefinitions'
  * thing in this suite, and a second copy of it pushed unrelated marginal tests over their timeouts.
  */
 const searched = runDecisions({ gamesPerDeck: 1, seed: 4242, aiName: 'beam:4x2', deckLimit: 3 })
+
+/** Total one half of a regroup breakout, so a breakout can be checked against the count it splits. */
+const sumOf = (buckets: ResourcingBucket[], key: 'banked' | 'skipped'): number =>
+  buckets.reduce((n, b) => n + b[key], 0)
 
 describe('runDecisions', () => {
   // One game per deck keeps this quick; the numbers are stable enough to assert on.
@@ -394,6 +398,76 @@ describe('runDecisions', () => {
   })
 
   /**
+   * #519. A single skip rate cannot tell "skips late holding two cards" from "skips at random", and
+   * that distinction is the whole behavioural claim the threshold terms make. It is also the guard
+   * against the named failure mode, since the 1.8% catastrophe is banking that stops EARLY, which a
+   * pooled rate of, say, 12% hides completely.
+   *
+   * Two one-dimensional breakouts rather than a grid. Round and hand size are correlated but are not
+   * the same question, and a 2D table over a corpus this size is mostly empty cells.
+   */
+  it('breaks the split out by round and by hand size', () => {
+    const { byRound, byHandSize, banked, skipped } = report.resourcing
+    for (const buckets of [byRound, byHandSize]) {
+      // Every counted decision lands in exactly one bucket of each breakout, so the two readings of
+      // the same corpus cannot drift apart.
+      expect(sumOf(buckets, 'banked')).toBe(banked)
+      expect(sumOf(buckets, 'skipped')).toBe(skipped)
+      // More than one row, or the instrument is reporting an average under another name.
+      expect(buckets.length).toBeGreaterThan(1)
+      const keys = buckets.map(b => b.key)
+      expect(keys, 'ordered, so the shape is readable down the column').toEqual([...keys].sort((a, b) => a - b))
+      for (const b of buckets) expect(b.banked + b.skipped, `bucket ${b.key}`).toBeGreaterThan(0)
+    }
+  })
+
+  /**
+   * A forced skip on an empty hand is excluded from the counts, so every counted decision was made
+   * holding at least one card. A zero bucket here would mean the hand is being read AFTER the card
+   * leaves it, which would shift the whole distribution by one and still look plausible.
+   */
+  it('reads the hand size before the banked card leaves the hand', () => {
+    for (const b of report.resourcing.byHandSize) expect(b.key).toBeGreaterThanOrEqual(1)
+  })
+
+  /**
+   * #519, and the measurement that could show this ticket is fixing the wrong thing.
+   *
+   * Every gate in it prices keeping a card against taking a resource, and that trade only pays if the
+   * card is eventually played. If the bot routinely passes while holding cards it can afford, its hand
+   * is worth less than the model claims and banking is right whatever the position looks like.
+   */
+  it('records WHICH cards could legally have been played and were not', () => {
+    const u = report.unspentHand
+    expect(u.passes, 'chosen passes are sampled').toBeGreaterThan(0)
+    // Playable is a subset of held. Affordability would break this, since a card can be affordable
+    // and unplayable, and that is the whole correction.
+    expect(u.avgPlayableHeld).toBeLessThanOrEqual(u.avgHeld)
+    expect(u.byCard.length, 'the table a reader acts on is populated').toBeGreaterThan(0)
+    for (const c of u.byCard) {
+      expect(c.declined).toBeGreaterThan(0)
+      expect(c.name.length).toBeGreaterThan(0)
+      // A card cannot be declined in more games than it was declined on occasions, and every declined
+      // card was declined in at least one game. Both orderings break if the per-game set leaks across
+      // games, which is the defect this shape exists to make impossible to miss.
+      expect(c.games, c.name).toBeGreaterThan(0)
+      expect(c.games, c.name).toBeLessThanOrEqual(c.declined)
+      expect(c.played, c.name).toBeGreaterThanOrEqual(0)
+      // Games are a subset of occasions on both sides, and a copy cannot be out more often than the
+      // card was declined. Each breaks if a per-game set leaks across games.
+      expect(c.playedGames, c.name).toBeLessThanOrEqual(c.played)
+      expect(c.copyOnBoard, c.name).toBeLessThanOrEqual(c.declined)
+    }
+    // Ranked, so the run is readable and two runs of the same seed agree.
+    const counts = u.byCard.map(c => c.declined)
+    expect(counts).toEqual([...counts].sort((a, b) => b - a))
+    // The two views count the same occasions, so their totals must agree exactly.
+    const byCardTotal = u.byCard.reduce((n, c) => n + c.declined, 0)
+    const byTypeTotal = u.byType.reduce((n, t) => n + t.declined, 0)
+    expect(byTypeTotal).toBe(byCardTotal)
+  })
+
+  /**
    * #394's readout, and the guard against its two named failure modes. Never-claim and always-claim
    * are both wrong however good the win rate looks, so the raw counts are asserted rather than a
    * score. Claiming forfeits the rest of your round, so a low mean of forfeited ready units is the
@@ -514,6 +588,37 @@ describe('runDecisions', () => {
   it('reports no search ties for a one-ply AI', () => {
     expect(report.ties.searched).toBe(0)
     expect(report.ties.fired).toBe(0)
+  })
+})
+
+/**
+ * The skip half of the breakout, which the shipped weights never exercise (#519).
+ *
+ * `skipped` is 0 by construction on the shipped bot, so every assertion above tests the bank path and
+ * takes the skip path on trust. That is exactly the gap #519 is about to fill, and an instrument first
+ * read on the arm it was built for is an instrument nobody has checked.
+ *
+ * `card` above `resource` inverts the banking gate. As a way to PLAY that is the measured 1.8%
+ * catastrophe, and as a way to drive a diagnostic it is precisely right: it is the only bot available
+ * today that takes the branch. A weight override needs beam-shaped limits to attach to, which is why
+ * this names a shallow beam rather than `greedy`.
+ */
+describe('the regroup breakout counts skips, not only banks', () => {
+  const skipping = runDecisions({
+    gamesPerDeck: 1,
+    seed: 4242,
+    aiName: `beam:4x2+card=${DEFAULT_WEIGHTS.resource + 2}`,
+    deckLimit: 3,
+  })
+
+  it('buckets a bot that declines every resource', () => {
+    const { byRound, byHandSize, banked, skipped } = skipping.resourcing
+    expect(skipped, 'the arm exists to take this branch').toBeGreaterThan(0)
+    expect(banked, 'and never the other one').toBe(0)
+    for (const buckets of [byRound, byHandSize]) {
+      expect(sumOf(buckets, 'skipped')).toBe(skipped)
+      expect(buckets.length).toBeGreaterThan(1)
+    }
   })
 })
 
