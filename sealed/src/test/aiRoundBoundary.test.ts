@@ -48,17 +48,26 @@ const JUNK_FIRST = ['JUNK', 'JUNK', 'BOMB', 'BOMB', 'JUNK']
  * boundary in a single `resolve` from the root, which keeps the test about the boundary rather than
  * about whichever reply policy happens to be configured.
  */
-const atBoundary = (deck: string[]): GameState => state({
+const atBoundary = (deck: string[], pool = 4): GameState => state({
   cards,
   phase: 'action',
   activePlayer: 'player',
   initiative: 'opponent',
   initiativeTakenBy: 'opponent',
   players: {
-    player: player({ deck, resources: ready(4), units: [unit('a', 'TST_U1')] }),
-    opponent: player({ deck: ['JUNK', 'JUNK', 'JUNK'], resources: ready(4), units: [unit('e', 'TST_U3')] }),
+    player: player({ deck, resources: ready(pool), units: [unit('a', 'TST_U1')] }),
+    opponent: player({ deck: ['JUNK', 'JUNK', 'JUNK'], resources: ready(pool), units: [unit('e', 'TST_U3')] }),
   },
 })
+
+/**
+ * A pool past any knee, so the scarcity rule is free to fire.
+ *
+ * The rule is a conjunction of a small hand AND a saturated pool, and the default fixture's pool of 4
+ * is below the knee on purpose: at that pool another resource still buys reach, so a bot that declined
+ * there would be the -3.52 failure mode rather than the behaviour under test.
+ */
+const DEEP_POOL = 12
 
 /** What the search valued `pass` at. `candidates` is in `legalMoves` order, which is what makes this
  *  addressable at all. */
@@ -208,7 +217,7 @@ describe('the simulated regroup', () => {
    */
   it('declines instead, once the weights say a small hand is worth more', () => {
     const w = { ...DEFAULT_WEIGHTS, cardScarcity: 3, handKnee: 3 }
-    const before = atBoundary(BOMBS_FIRST)
+    const before = atBoundary(BOMBS_FIRST, DEEP_POOL)
     const after = settleCrossing(crossed(before), w)
     for (const id of ['player', 'opponent'] as const) {
       const was = before.players[id]
@@ -227,7 +236,7 @@ describe('the simulated regroup', () => {
    * therefore reach differently-settled boards through the real search.
    */
   it('settles inside the search, and follows the deciding bot’s own weights', () => {
-    const s = atBoundary(BOMBS_FIRST)
+    const s = atBoundary(BOMBS_FIRST, DEEP_POOL)
     const passIndex = legalMoves(s).findIndex(m => m.type === 'pass')
     const boardAfterPass = (w: typeof DEFAULT_WEIGHTS): GameState => {
       clearSearchTrace()

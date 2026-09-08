@@ -431,6 +431,43 @@ describe('runDecisions', () => {
   })
 
   /**
+   * #519, and the measurement that could show this ticket is fixing the wrong thing.
+   *
+   * Every gate in it prices keeping a card against taking a resource, and that trade only pays if the
+   * card is eventually played. If the bot routinely passes while holding cards it can afford, its hand
+   * is worth less than the model claims and banking is right whatever the position looks like.
+   */
+  it('records WHICH cards could legally have been played and were not', () => {
+    const u = report.unspentHand
+    expect(u.passes, 'chosen passes are sampled').toBeGreaterThan(0)
+    // Playable is a subset of held. Affordability would break this, since a card can be affordable
+    // and unplayable, and that is the whole correction.
+    expect(u.avgPlayableHeld).toBeLessThanOrEqual(u.avgHeld)
+    expect(u.byCard.length, 'the table a reader acts on is populated').toBeGreaterThan(0)
+    for (const c of u.byCard) {
+      expect(c.declined).toBeGreaterThan(0)
+      expect(c.name.length).toBeGreaterThan(0)
+      // A card cannot be declined in more games than it was declined on occasions, and every declined
+      // card was declined in at least one game. Both orderings break if the per-game set leaks across
+      // games, which is the defect this shape exists to make impossible to miss.
+      expect(c.games, c.name).toBeGreaterThan(0)
+      expect(c.games, c.name).toBeLessThanOrEqual(c.declined)
+      expect(c.played, c.name).toBeGreaterThanOrEqual(0)
+      // Games are a subset of occasions on both sides, and a copy cannot be out more often than the
+      // card was declined. Each breaks if a per-game set leaks across games.
+      expect(c.playedGames, c.name).toBeLessThanOrEqual(c.played)
+      expect(c.copyOnBoard, c.name).toBeLessThanOrEqual(c.declined)
+    }
+    // Ranked, so the run is readable and two runs of the same seed agree.
+    const counts = u.byCard.map(c => c.declined)
+    expect(counts).toEqual([...counts].sort((a, b) => b - a))
+    // The two views count the same occasions, so their totals must agree exactly.
+    const byCardTotal = u.byCard.reduce((n, c) => n + c.declined, 0)
+    const byTypeTotal = u.byType.reduce((n, t) => n + t.declined, 0)
+    expect(byTypeTotal).toBe(byCardTotal)
+  })
+
+  /**
    * #394's readout, and the guard against its two named failure modes. Never-claim and always-claim
    * are both wrong however good the win rate looks, so the raw counts are asserted rather than a
    * score. Claiming forfeits the rest of your round, so a low mean of forfeited ready units is the

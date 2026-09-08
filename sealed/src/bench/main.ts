@@ -428,6 +428,32 @@ function formatDecisions(report: DecisionReport, wallMs: number): string {
     '',
     ...breakout('hand size', r.byHandSize),
   )
+  const u = report.unspentHand
+  lines.push(
+    '',
+    '  unspent hand at a chosen pass: cards it could legally have PLAYED and did not. Legality is',
+    '  not desirability, so this is evidence rather than a verdict. An upgrade is legal on an ENEMY',
+    '  unit, an event is legal with no target and burns itself, and a unit can be right to hold. The',
+    '  card names are what separate those; the counts alone cannot. "copy out" is a decline taken',
+    '  while already controlling a copy: for a unique that forces a defeat, so the rules may have',
+    '  decided it, though replacing a spent copy can still be the right play.',
+    row('playable held', u.passes === 0 ? 'n/a' : `${u.avgPlayableHeld.toFixed(2)} avg of ${u.avgHeld.toFixed(2)} held, over ${u.passes} passes`),
+    row('by type', u.byType.length === 0 ? 'none' : u.byType.map(t => `${t.type} ${t.declined}`).join(', ')),
+  )
+  if (u.byCard.length > 0) {
+    lines.push(
+      '',
+      '    declined  in games   played  in games  copy out  card',
+    )
+    for (const c of u.byCard.slice(0, 12)) {
+      lines.push(
+        `    ${String(c.declined).padStart(8)}  ${String(c.games).padStart(8)}`
+        + `  ${String(c.played).padStart(7)}  ${String(c.playedGames).padStart(8)}`
+        + `  ${String(c.copyOnBoard).padStart(8)}  ${c.name} (${c.type}${c.unique ? ', unique' : ''})`,
+      )
+    }
+    if (u.byCard.length > 12) lines.push(`    ${' '.repeat(8)}  ... and ${u.byCard.length - 12} more`)
+  }
   const i = report.initiative
   lines.push(
     '',

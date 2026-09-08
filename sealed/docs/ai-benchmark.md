@@ -433,6 +433,18 @@ search holds a larger frontier per root and should be expected to want more.
 --games 80` plays 800 games, and takes as long as one shard needs for 80. Reading it as the total
 turned a 30-minute estimate into 4.3 hours.
 
+**`--control` doubles a shard's wall clock.** It runs two full passes, the arm and then the control on
+the same seeds, so a shard sized from the anchor below takes twice as long as the number suggests. A
+run at 168 games a shard, chosen because the anchor says results land inside two hours, took four hours
+and lost 71% of its games to an interruption that a correctly sized run would have banked through.
+Halve `--games` for a `--control` run.
+
+**The memory ceiling caps the wave width, not just the shard count.** At ~365 MB a `beam-reply` worker,
+24 concurrent want ~8.8 GB against 7.8 GB. More games therefore means more waves at 12 shards rather
+than more workers: run `--shard 12`, then the same command at `--shard 24`, which banks the first
+twelve and plays only the new seeds. Concurrency stays at 12 and the paired test gains degrees of
+freedom, which tightens the interval slightly for the same total games.
+
 **Shard size also decides what an interruption costs.** Every shard starts at once and writes its
 result only when it finishes, so `--games` is the only banking granularity there is. A run says how far
 along it is from its first minute, but that is visibility rather than safety: nothing is **recoverable**
@@ -1063,6 +1075,22 @@ and so read as behaviour rather than as a gap:
   forced move is not a decision, so hand size in that breakout is never zero. It is read before the
   banked card leaves the hand, and the regroup draw has already landed by then, so it is the hand the
   choice was actually made from.
+- **unspent hand**: at each **chosen** pass, which cards in hand could legally have been played and
+  were not, as a ranked table of card, occasions declined, games declined in, times played and games
+  played in, plus how many of those declines were taken while already controlling a copy.
+
+  **Read off `legalMoves`, never off cost.** An upgrade with no host, a debuff with no enemy unit and
+  an attack event with no ready unit are each affordable and none is playable, so an affordability
+  count reports the bot declining plays that do not exist and infers a mistake from correct play.
+
+  **It is evidence, not a verdict**, which is why it names cards rather than reporting a rate. Legality
+  is not desirability: an upgrade is legal on an enemy unit and usually wrong there, an event is legal
+  with no target and simply burns itself, and a unit can be right to hold for the board or for a bluff.
+  A second copy of a unique forces a mandatory defeat, so the copy-out column separates declines the
+  rules decided from declines the bot judged, without hiding the case where replacing a spent copy is
+  right. The plays columns are the denominator: declined often and played often is situational holding,
+  declined often and never played is a card the bot cannot use.
+
 - **initiative**: how often it claims, how often it takes the *cheap* window where the opponent has
   already passed, and the mean ready units it still had when it claimed mid-phase. That last number
   is the clearest read on whether the AI is claiming sensibly: low means it claims when it has little
@@ -1252,6 +1280,13 @@ The last two are not the same question, and the gap between them is the reason b
 tie-break whose ordering survives rescaling is bearing but never pivotal. Conversely a weight can be
 pivotal without being bearing, when what matters is its **difference** from another weight and zeroing
 it leaves that difference the same sign.
+
+**A named arm's own weights are what get perturbed.** `--terms beam-reply+cardScarcity=3` measures that
+bot: the suffix sets the baseline each perturbation moves from, and the step is a quarter of the value
+the arm carries rather than of the shipped default. Both mattered for a weight that ships at zero and
+is swept upward, where perturbing the default meant ablating zero to zero and reporting a tautological
+0.0% for the weight under investigation. The limits come from the same name with its suffix stripped,
+so a suffixed arm runs its real search instead of falling through to one ply.
 
 `saturation` and `roleShift` price no quantity: the first decides how the pool is split between two
 rates, the second bends other weights. They report `n/a` under Varies, and only the perturbation

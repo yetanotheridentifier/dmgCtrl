@@ -13,15 +13,15 @@ import { seededShuffle, nextSeed, seededUnit } from '../engine/rng'
 import { setupAi } from '../ai/setupAi'
 import { publicBreakdown, makeEvaluate, DEFAULT_WEIGHTS, type EvalWeights } from '../ai/evaluate'
 import { makeBeamGreedy } from '../ai/greedyAi'
-import { namedLimitsFor, beamLimitsFor } from '../ai/registry'
+import { namedLimitsFor, beamLimitsFor, splitWeightOverride } from '../ai/registry'
 import { sameAction } from './decisions'
 import { DEFAULT_HAND_WEIGHTS, handQuantities } from '../ai/handValue'
-import { makeQuiescent } from '../ai/search'
+import { makeQuiescent, type BeamLimits } from '../ai/search'
 import { role } from '../ai/race'
 import { COMMIT_ID } from '../buildIdentity'
 import { buildCoverageDecks } from './coverageDecks'
 import { firstPlayerFor } from './seating'
-import { SCALAR_KEYS, weightsFrom, type WeightKey } from './tune'
+import { SCALAR_KEYS, type WeightKey } from './tune'
 
 /**
  * Term sensitivity (#430): which evaluation weights can actually change a decision.
@@ -156,18 +156,39 @@ export interface TermReport {
  * because `publicScore` is integer-valued and a sub-integer nudge to an integer weight could not move
  * anything even in principle. The fractional hand weights keep their fractional step.
  */
-export function stepFor(key: WeightKey): number {
-  const shipped = key === 'hand.canAct' ? DEFAULT_HAND_WEIGHTS.canAct
-    : key === 'hand.hold' ? DEFAULT_HAND_WEIGHTS.hold
-    : DEFAULT_WEIGHTS[key as keyof Omit<typeof DEFAULT_WEIGHTS, 'hand'>]
-  const quarter = Math.abs(shipped) / 4
-  return Number.isInteger(shipped) ? Math.max(1, Math.round(quarter)) : quarter
+export function stepFor(key: WeightKey, overrides: Partial<EvalWeights> = {}): number {
+  const value = valueOf(key, overrides)
+  const quarter = Math.abs(value) / 4
+  return Number.isInteger(value) ? Math.max(1, Math.round(quarter)) : quarter
 }
 
-const shippedValue = (key: WeightKey): number =>
-  key === 'hand.canAct' ? DEFAULT_HAND_WEIGHTS.canAct
-    : key === 'hand.hold' ? DEFAULT_HAND_WEIGHTS.hold
-      : DEFAULT_WEIGHTS[key as keyof Omit<typeof DEFAULT_WEIGHTS, 'hand'>]
+/**
+ * The value the measured bot actually carries for a weight: the shipped default unless the named arm
+ * overrides it.
+ *
+ * **Reading the default here was half of a silent defect.** A new weight ships at zero and is swept
+ * upward by name, so an arm carrying `cardScarcity=3` was ablated from 0 to 0 and reported a
+ * tautological "bearing 0.0%" for the very weight under investigation.
+ */
+const valueOf = (key: WeightKey, overrides: Partial<EvalWeights>): number => {
+  const hand = overrides.hand
+  if (key === 'hand.canAct') return hand?.canAct ?? DEFAULT_HAND_WEIGHTS.canAct
+  if (key === 'hand.hold') return hand?.hold ?? DEFAULT_HAND_WEIGHTS.hold
+  const flat = key as keyof Omit<typeof DEFAULT_WEIGHTS, 'hand'>
+  return (overrides[flat] as number | undefined) ?? DEFAULT_WEIGHTS[flat]
+}
+
+/** The arm's weights with one key replaced, so a perturbation moves one thing and keeps the rest. */
+export function weightsWith(overrides: Partial<EvalWeights>, key: WeightKey, value: number): EvalWeights {
+  const base: EvalWeights = {
+    ...DEFAULT_WEIGHTS,
+    ...overrides,
+    hand: { ...DEFAULT_HAND_WEIGHTS, ...(overrides.hand ?? {}) },
+  }
+  if (key === 'hand.canAct') return { ...base, hand: { ...base.hand, canAct: value } }
+  if (key === 'hand.hold') return { ...base, hand: { ...base.hand, hold: value } }
+  return { ...base, [key]: value }
+}
 
 /**
  * How a set of weights chooses a move.
@@ -179,9 +200,26 @@ const shippedValue = (key: WeightKey): number =>
  */
 type Picker = (state: GameState, moves: Action[], nexts: GameState[], me: PlayerId, asRole: ReturnType<typeof role>) => Action | null
 
+/**
+ * The search shape a model name asks for, or `null` for the one-ply scorer.
+ *
+ * **Strips the weight suffix first**, which is the other half of the silent defect: `namedLimitsFor`
+ * is an exact map lookup and `beamLimitsFor` only matches `beam:` and `reply:` specs, so a name like
+ * `beam-reply+cardScarcity=3` missed both and fell through to one ply. The run then reported one-ply
+ * numbers under the arm's name, which is indistinguishable from a real result by inspection.
+ *
+ * A `null` here is a real answer for `greedy` and its variants, which ARE one ply. It is reported in
+ * the header rather than left implicit, so a fall-through is visible in the output next time.
+ */
+export function limitsFor(model: string | undefined): BeamLimits | null {
+  if (model === undefined) return null
+  const { base } = splitWeightOverride(model)
+  return namedLimitsFor(base) ?? beamLimitsFor(base)
+}
+
 /** Build a picker for one weight set, at the named model. */
 function pickerFor(model: string | undefined, weights: EvalWeights): Picker {
-  const limits = model === undefined ? null : namedLimitsFor(model) ?? beamLimitsFor(model)
+  const limits = limitsFor(model)
   if (limits === null) {
     // One ply: score the resulting boards. `pick` reproduces the greedy driver's seeded tie-break, so
     // an identical best set lands on the same move and a difference is the weight's doing.
@@ -200,14 +238,18 @@ interface Pickers {
   ablated: Picker
 }
 
-function perturbedPickers(model: string | undefined, keys: WeightKey[]): Map<WeightKey, Pickers> {
+function perturbedPickers(
+  model: string | undefined,
+  keys: WeightKey[],
+  overrides: Partial<EvalWeights>,
+): Map<WeightKey, Pickers> {
   const out = new Map<WeightKey, Pickers>()
   for (const key of keys) {
-    const step = stepFor(key)
-    const shipped = shippedValue(key)
+    const step = stepFor(key, overrides)
+    const value = valueOf(key, overrides)
     out.set(key, {
-      nudged: [shipped - step, shipped + step].map(v => pickerFor(model, weightsFrom({ [key]: v }))),
-      ablated: pickerFor(model, weightsFrom({ [key]: 0 })),
+      nudged: [value - step, value + step].map(v => pickerFor(model, weightsWith(overrides, key, v))),
+      ablated: pickerFor(model, weightsWith(overrides, key, 0)),
     })
   }
   return out
@@ -286,8 +328,16 @@ export function runTerms(config: TermConfig): TermReport {
   const cardDb = buildCardDb(POOL)
   const ceiling = config.stepCeiling ?? DEFAULT_STEP_CEILING
   const keys = config.weights ?? SCALAR_KEYS
-  const pickers = perturbedPickers(config.model, keys)
-  const shippedPick = pickerFor(config.model, DEFAULT_WEIGHTS)
+  // The arm's OWN weights are the baseline every perturbation moves from, and the bot the run
+  // compares against. Reading `DEFAULT_WEIGHTS` here measured the shipped bot under the arm's name.
+  const overrides = config.model === undefined ? {} : splitWeightOverride(config.model).overrides ?? {}
+  const pickers = perturbedPickers(config.model, keys, overrides)
+  const armWeights: EvalWeights = {
+    ...DEFAULT_WEIGHTS,
+    ...overrides,
+    hand: { ...DEFAULT_HAND_WEIGHTS, ...(overrides.hand ?? {}) },
+  }
+  const shippedPick = pickerFor(config.model, armWeights)
 
   const acc = new Map<WeightKey, Acc>(keys.map(k => [k, emptyAcc()]))
   let games = 0
@@ -386,7 +436,7 @@ export function runTerms(config: TermConfig): TermReport {
     const a = acc.get(key)!
     return {
       weight: key,
-      step: stepFor(key),
+      step: stepFor(key, overrides),
       hasQuantity: pricesAQuantity(key, sample),
       varies: a.varies,
       pivotal: a.pivotal,

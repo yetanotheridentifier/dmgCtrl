@@ -308,7 +308,7 @@ export function namedLimitsFor(name: string): BeamLimits | null {
 }
 
 /** Split `NAME+WEIGHT=VALUE` into the AI name and the override, validating the key exists. */
-function splitWeightOverride(name: string): { base: string; overrides?: Partial<EvalWeights> } {
+export function splitWeightOverride(name: string): { base: string; overrides?: Partial<EvalWeights> } {
   const m = WEIGHT_OVERRIDE.exec(name)
   if (!m) return { base: name }
   const [, base, tail] = m

@@ -116,6 +116,84 @@ export interface ResourcingStat {
 }
 
 /**
+ * What the bot was still holding when its action phase ended (#519).
+ *
+ * **The question this ticket may be downstream of.** Every gate here prices keeping a card against
+ * taking a resource, and that trade only pays if the card is eventually played. If the bot routinely
+ * reaches the regroup still holding cards it could have cast, then its hand is worth less than
+ * `hand.hold` claims, and swapping a card it will not play for a resource it will not spend is the
+ * better half whatever the position looks like. That would make always-banking correct **for this
+ * bot** and make the whole ticket a play-quality problem wearing a resourcing costume.
+ *
+ * Sampled at the moment the bot **chooses to pass**, which is the sharpest available form of the
+ * question: it had a turn, it had cards it could afford, and it did nothing. The final board would
+ * conflate hoarding with simply losing, and the regroup is worse still, since the two drawn cards have
+ * already landed by the time that decision is taken.
+ *
+ * **Playability is read off `legalMoves`, never off cost.** An upgrade with no host, a debuff with no
+ * enemy unit and an attack event with no ready unit are each affordable and none is playable, so an
+ * affordability count would report the bot declining plays that do not exist and infer a mistake from
+ * correct play. The engine's own restrictions encode every one of those conditions already.
+ *
+ * One judgement remains beyond the engine's reach: a legal card can still be right to hold, such as a
+ * "this phase" buff played as the phase ends, which changes nothing lasting. That is why the units
+ * column exists as the conservative reading, and why the two are reported side by side rather than
+ * summed into one rate.
+ */
+export interface UnspentHandStat {
+  /** Chosen passes sampled. A forced pass is not a decision and is excluded upstream. */
+  passes: number
+  /** Mean hand cards that were legally playable at those passes, per `legalMoves`. */
+  avgPlayableHeld: number
+  /** Mean cards held, playable or not. A big number here beside a small one above is a hand nothing
+   *  could be done with, which says the opposite thing about resourcing. */
+  avgHeld: number
+  /**
+   * **The table to read.** Every occasion a specific card was playable and was not played, most
+   * frequent first.
+   *
+   * Identity rather than a rate, because legality is not desirability and no counter can bridge the
+   * gap. An upgrade is legal on an ENEMY unit and is usually wrong there unless it is a debuff; an
+   * event is legal with no target and simply burns itself; a unit can be right to hold for the board,
+   * for a bluff, or for what the pool is known to hold. Each of those reads as "declined a play", and
+   * only the card's name tells them apart. So the count is deliberately not a verdict: it is the
+   * evidence a reader uses to reach one.
+   *
+   * Counts OCCASIONS, not cards: a card held through five passes while playable is five, which is the
+   * signal worth having, since a card declined once is a judgement and one declined all game is a
+   * habit.
+   */
+  byCard: Array<{
+    cardId: string
+    name: string
+    type: string
+    unique: boolean
+    /** Occasions the card was playable and was not played. */
+    declined: number
+    /** GAMES in which that happened at least once. A card sat on all match is one game and many
+     *  occasions; thirty games of one decline each is the opposite finding, and the occasion count
+     *  alone cannot tell them apart. */
+    games: number
+    /** Times the card was actually played across the run, and the games that happened in. With the
+     *  two above these give the rates: declines and plays are only comparable per game. */
+    played: number
+    playedGames: number
+    /**
+     * Declines taken while already controlling a copy of this card.
+     *
+     * **Flagged, not excluded.** Playing a second copy of a unique forces a mandatory defeat, so some
+     * of these are the rules leaving no real choice rather than the bot judging anything. But
+     * replacing a copy can be right: a Sentinel that has already attacked has banked its value, and a
+     * When Played or When Defeated ability needs bodies to work on. Excluding them would hide a
+     * legitimate play, so the reader gets the split and decides.
+     */
+    copyOnBoard: number
+  }>
+  /** The same occasions by card type, for the aggregate view. */
+  byType: Array<{ type: string; declined: number }>
+}
+
+/**
  * One row of a regroup breakout: how the choice went at a given round, or at a given hand size.
  *
  * Hand size is read BEFORE the card leaves the hand, and forced skips are excluded, so `key` is never
@@ -1138,6 +1216,7 @@ export interface DecisionReport {
   shields: ShieldStat
   leader: LeaderStat
   resourcing: ResourcingStat
+  unspentHand: UnspentHandStat
   initiative: InitiativeStat
   role: RoleStat
   suspended: SuspendedStat
@@ -1268,6 +1347,16 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
   let skippedPool = 0
   const bankingByRound: ResourcingTally = new Map()
   const bankingByHandSize: ResourcingTally = new Map()
+  let unspentPasses = 0
+  let unspentPlayable = 0
+  let unspentHeld = 0
+  const unspentByCard = new Map<string, {
+    cardId: string; name: string; type: string; unique: boolean
+    declined: number; games: number; copyOnBoard: number
+  }>()
+  const unspentByType = new Map<string, number>()
+  const playedByCard = new Map<string, number>()
+  const playedGamesByCard = new Map<string, number>()
   let initOffered = 0
   let initTaken = 0
   let cheapOffered = 0
@@ -1366,6 +1455,10 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
       passes.games++
       let lastRole: Exclude<Role, 'neutral'> | null = null
       let sampledRound = 0
+      // Per game, so a card sat on all match counts as ONE game rather than as thirty declines. The
+      // two answer opposite questions and a single occasion count cannot separate them.
+      const declinedThisGame = new Set<string>()
+      const playedThisGame = new Set<string>()
       // Per seat, so an exposure can be charged to whoever made it when the game is decided.
       const avoidableBy: Record<PlayerId, boolean> = { player: false, opponent: false }
       /**
@@ -1754,6 +1847,17 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
           bumpResourcing(bankingByRound, s.round, side)
           bumpResourcing(bankingByHandSize, handSize, side)
         }
+        // #519: plays are the denominator the decline count needs. A card declined thirty times and
+        // played twenty-five is being held situationally, which is correct play; declined thirty times
+        // and never played is a card the bot cannot use. Counted for every play, then merged onto the
+        // declined rows at the end, so ordering within a game cannot lose one.
+        if (action.type === 'playUnit' || action.type === 'playUpgrade' || action.type === 'playEvent') {
+          const playedId = s.players[me].hand[action.handIndex]
+          if (playedId !== undefined) {
+            playedByCard.set(playedId, (playedByCard.get(playedId) ?? 0) + 1)
+            playedThisGame.add(playedId)
+          }
+        }
         if (action.type === 'resourceCard' && s.phase === 'regroup') { banked++; bankedPool += pool; note('banked') }
         if (action.type === 'skipResource' && couldBank) { skipped++; skippedPool += pool; note('skipped') }
         if (action.type === 'takeInitiative') {
@@ -1791,6 +1895,42 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
             if (action.type === 'pass') {
               passes.taken++
               passWasChosen = true
+              // #519: what the bot could actually have PLAYED when it chose to do nothing.
+              //
+              // Read off `legalMoves`, never off affordability. An upgrade with no host, a debuff with
+              // no enemy unit and an attack event with no ready unit are all affordable and none of
+              // them is playable, so counting cost would report the bot declining plays that do not
+              // exist. The engine's play restrictions already encode every one of those conditions.
+              const playable = new Set(
+                moves.filter(m => m.type === 'playUnit' || m.type === 'playUpgrade' || m.type === 'playEvent')
+                  .map(m => (m as { handIndex: number }).handIndex),
+              )
+              unspentPasses++
+              unspentHeld += s.players[me].hand.length
+              unspentPlayable += playable.size
+              // Which cards, by name. Legality is not desirability, and no aggregate can separate a
+              // burnt event from a held bluff: the identity is what a reader needs to tell them apart.
+              for (const idx of playable) {
+                const cardId = s.players[me].hand[idx]
+                const c = s.cards[cardId]
+                if (c === undefined) continue
+                // Already controlling a copy: for a unique, playing the second forces a mandatory
+                // defeat, so the decline may be the rules rather than a judgement. Recorded beside the
+                // total rather than removed from it, because replacing a copy can be the right play.
+                const copyOut = s.players[me].units.some(u => u.cardId === cardId)
+                const seen = unspentByCard.get(cardId)
+                if (seen) {
+                  seen.declined++
+                  if (copyOut) seen.copyOnBoard++
+                } else {
+                  unspentByCard.set(cardId, {
+                    cardId, name: c.name, type: c.type, unique: c.unique,
+                    declined: 1, games: 0, copyOnBoard: copyOut ? 1 : 0,
+                  })
+                }
+                unspentByType.set(c.type, (unspentByType.get(c.type) ?? 0) + 1)
+                declinedThisGame.add(cardId)
+              }
               if (alternatives.some(m => m.type === 'attack')) passes.withAttackAvailable++
               // Neither side has stopped, so this pass does not end the round: it hands over a turn and
               // play continues. Read off the board rather than from the resolve, so it stays a property
@@ -1866,6 +2006,14 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         }
       }
 
+      for (const cardId of declinedThisGame) {
+        const row = unspentByCard.get(cardId)
+        if (row) row.games++
+      }
+      for (const cardId of playedThisGame) {
+        playedGamesByCard.set(cardId, (playedGamesByCard.get(cardId) ?? 0) + 1)
+      }
+
       for (const watch of denialWatches) closeDenialWatch(watch, s, denialOutcome)
 
       // Charge each seat's avoidable exposures against whether that seat actually lost. A gate can
@@ -1939,6 +2087,20 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
     blockedReach: blocked,
     shields,
     leader,
+    unspentHand: {
+      passes: unspentPasses,
+      avgPlayableHeld: unspentPasses === 0 ? 0 : unspentPlayable / unspentPasses,
+      avgHeld: unspentPasses === 0 ? 0 : unspentHeld / unspentPasses,
+      // Count then name, so the order is stable across runs rather than following insertion.
+      byCard: [...unspentByCard.values()]
+        .map(c => ({
+          ...c,
+          played: playedByCard.get(c.cardId) ?? 0,
+          playedGames: playedGamesByCard.get(c.cardId) ?? 0,
+        }))
+        .sort((a, b) => b.declined - a.declined || a.name.localeCompare(b.name)),
+      byType: rank(unspentByType).map(k => ({ type: k.kind, declined: k.count })),
+    },
     resourcing: {
       banked,
       skipped,

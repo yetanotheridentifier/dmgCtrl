@@ -178,8 +178,10 @@ describe('the banking decision: resource must outvalue a card', () => {
 const SCARCE = { ...DEFAULT_WEIGHTS, cardScarcity: 3, handKnee: 3 }
 
 describe('the hand is priced concavely: the marginal card is dearer when you hold few', () => {
+  // Pool 8, i.e. past the knee: below it the bonus is switched off entirely and every marginal card
+  // is worth the flat rate. That conjunction is the rule, and `the pool predicate` below pins it.
   const marginals = (w: typeof DEFAULT_WEIGHTS, sizes: number[]): number[] =>
-    sizes.map(h => cardsValue(handOf(regroup(4), h + 1), 'player', w) - cardsValue(handOf(regroup(4), h), 'player', w))
+    sizes.map(h => cardsValue(handOf(regroup(8), h + 1), 'player', w) - cardsValue(handOf(regroup(8), h), 'player', w))
 
   it('ships at zero, so the term is a provable no-op until it is swept', () => {
     expect(DEFAULT_WEIGHTS.cardScarcity).toBe(0)
@@ -198,7 +200,7 @@ describe('the hand is priced concavely: the marginal card is dearer when you hol
 
   it('is non-decreasing in hand size: your own cards are never a liability', () => {
     for (const w of [DEFAULT_WEIGHTS, SCARCE]) {
-      const values = Array.from({ length: 10 }, (_, h) => cardsValue(handOf(regroup(4), h), 'player', w))
+      const values = Array.from({ length: 10 }, (_, h) => cardsValue(handOf(regroup(8), h), 'player', w))
       for (let i = 1; i < values.length; i++) expect(values[i], `hand ${i}`).toBeGreaterThanOrEqual(values[i - 1])
     }
   })
@@ -219,9 +221,21 @@ describe('banking, once the marginal card is priced by scarcity', () => {
     expect(banks(handOf(regroup(4), 4)), 'four cards, one above the knee').toBe(true)
   })
 
-  it('declines once the hand is at or below the knee', () => {
-    expect(banks(handOf(regroup(6), 3)), 'three cards, deep pool').toBe(false)
-    expect(banks(handOf(regroup(6), 2))).toBe(false)
+  it('declines once the hand is small AND the pool is saturated', () => {
+    expect(banks(handOf(regroup(8), 3)), 'three cards, pool past the knee').toBe(false)
+    expect(banks(handOf(regroup(8), 2))).toBe(false)
+  })
+
+  /**
+   * **The conjunction, and the half a scripted position caught missing.**
+   *
+   * Charged on hand size alone the bonus fired at a pool of 2 holding three uncastable cards, which is
+   * precisely when a resource is worth most: below the knee it still buys reach. A small hand is not a
+   * reason to decline; a small hand over a pool that has run out of things to buy is.
+   */
+  it('banks from a small hand while the pool is still short of the knee', () => {
+    expect(banks(handOf(regroup(2), 3)), 'three cards, pool of two').toBe(true)
+    expect(banks(handOf(regroup(DEFAULT_WEIGHTS.saturation - 1), 2)), 'one short of the knee').toBe(true)
   })
 
   /**
@@ -229,43 +243,54 @@ describe('banking, once the marginal card is priced by scarcity', () => {
    * +2 banking and -1 declining, and the private half spans strictly less than 1.
    */
   it('is decided publicly, whatever the hand is worth', () => {
-    const s = handOf(regroup(6), 2)
+    const s = handOf(regroup(8), 2)
     expect(publicScore(s, 'player')).toBe(Math.round(publicScore(s, 'player')))
   })
 })
 
 /**
- * "Keep resourcing until you can deploy your leader", said as a threshold on a quantity that is
- * PUBLIC: you can see a resource row and an undeployed leader.
+ * "Keep resourcing until you can deploy your leader" comes out of the knee for free.
  *
- * This is what the dead knee in `resourceSplit` was reaching for. That one raised the point where
- * surplus pricing began, which cannot matter while the two rates are equal; this charges an explicit
- * bonus on the resources below the gate, so it is live at any setting of the pool weights.
+ * The threshold `cardScarcity` fires behind is the SAME one that splits the pool, and that one already
+ * rises to an undeployed leader's printed cost (CR 2.6.1: the gate is a resource COUNT, controlled
+ * rather than spent). So below it the pool is not saturated, the bonus cannot fire, and the bot keeps
+ * banking. No second weight is needed to say it.
  *
- * It only means anything once something else has introduced skipping. On a bot that banks every
- * regroup it is a guard rail with nothing to guard, which is why it is built alongside the scarcity
- * bonus rather than before it.
+ * That is a finding rather than a design: `deployUrgency` was built as a separate guard rail and
+ * measured worth +3.2 points against the ungated driver. Under the conjunction the knee does the same
+ * job, which is what these tests check, and whether the weight still earns its place is then an
+ * open question for measurement rather than an assumption in either direction.
  */
-describe('the leader-deploy gate', () => {
-  const URGENT = { ...SCARCE, deployUrgency: 2 }
-  const banks = (s: GameState): boolean => makeGreedyAi(makeEvaluate(URGENT))(s)?.type === 'resourceCard'
+describe('the leader-deploy gate falls out of the knee', () => {
+  const banks = (s: GameState, w = SCARCE): boolean => makeGreedyAi(makeEvaluate(w))(s)?.type === 'resourceCard'
 
-  it('keeps banking below the leader’s cost, even from a hand the scarcity bonus protects', () => {
-    expect(banks(handOf(regroup(4, 'BIG_LEADER'), 2)), '10-cost leader, pool of 4').toBe(true)
+  it('keeps banking below the leader’s cost, from a hand the scarcity bonus would otherwise protect', () => {
+    // Pool 8 is past the shipped knee of 7, so a DEPLOYED leader here would decline. The 10-cost
+    // leader raises the threshold above the pool, and that alone restores banking.
+    expect(banks(handOf(regroup(8, 'BIG_LEADER'), 2)), '10-cost leader, pool of 8').toBe(true)
+    expect(banks(handOf(regroup(8, 'BIG_LEADER', true), 2)), 'same board, leader deployed').toBe(false)
   })
 
-  it('stops once the gate is met', () => {
-    expect(banks(handOf(regroup(6, 'CHEAP_LEADER'), 2)), '5-cost leader, gate long since passed').toBe(false)
+  it('declines once the pool reaches the leader’s cost', () => {
     expect(banks(handOf(regroup(10, 'BIG_LEADER'), 2)), 'pool now reaches the 10-cost leader').toBe(false)
   })
 
-  it('stops once the leader is deployed, whatever the pool', () => {
-    expect(banks(handOf(regroup(4, 'BIG_LEADER', true), 2))).toBe(false)
+  it('uses the shipped knee once the leader is cheap enough not to bind', () => {
+    expect(banks(handOf(regroup(8, 'CHEAP_LEADER'), 2)), '5-cost leader, knee stays at 7').toBe(false)
   })
 
-  it('charges nothing while the weight is zero', () => {
+  /** With the knee doing the work, the separate weight changes none of these decisions. */
+  it('reaches the same decisions with deployUrgency off as on', () => {
     const off = { ...SCARCE, deployUrgency: 0 }
-    expect(makeGreedyAi(makeEvaluate(off))(handOf(regroup(4, 'BIG_LEADER'), 2))?.type).not.toBe('resourceCard')
+    const on = { ...SCARCE, deployUrgency: 2 }
+    for (const board of [
+      handOf(regroup(8, 'BIG_LEADER'), 2),
+      handOf(regroup(10, 'BIG_LEADER'), 2),
+      handOf(regroup(8, 'CHEAP_LEADER'), 2),
+      handOf(regroup(2), 3),
+    ]) {
+      expect(banks(board, off), 'deployUrgency is not what decides these').toBe(banks(board, on))
+    }
   })
 })
 

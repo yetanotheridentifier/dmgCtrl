@@ -12,7 +12,7 @@ import { greedyAi } from '../ai/greedyAi'
 import { publicBreakdown, makePublicScore, DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { DEFAULT_HAND_WEIGHTS } from '../ai/handValue'
 import { role } from '../ai/race'
-import { runTerms, stepFor } from '../bench/terms'
+import { runTerms, stepFor, limitsFor, weightsWith } from '../bench/terms'
 import type { WeightKey } from '../bench/tune'
 import { SCALAR_KEYS } from '../bench/tune'
 import '../engine/cardDefinitions'
@@ -152,6 +152,21 @@ describe('the perturbation step', () => {
     expect(stepFor('hand.hold')).toBeLessThan(1)
   })
 
+  /**
+   * The step is a quarter of **the value the measured bot actually carries**, not of the shipped one.
+   *
+   * A weight that ships at 0 and is swept upward is the normal case for a new term, and against the
+   * shipped default a quarter of 0 floors to 1 for every arm alike. So an arm carrying 8 was being
+   * nudged by 1, a 12% perturbation reported under the same "quarter of the weight" contract as
+   * everything else.
+   */
+  it('scales with the arm’s own weight, not the shipped default', () => {
+    expect(DEFAULT_WEIGHTS.cardScarcity, 'ships at zero, which is the case that bites').toBe(0)
+    expect(stepFor('cardScarcity')).toBe(1)
+    expect(stepFor('cardScarcity', { cardScarcity: 8 })).toBe(2)
+    expect(stepFor('lethalExposure', { lethalExposure: 8 })).toBe(2)
+  })
+
   /** One list, shared with the tuner rather than copied, so a new weight is both sweepable and
    *  measurable the day it exists. The tuner learned this the hard way: a hardcoded list meant an
    *  overnight sweep rejected every job and measured nothing. */
@@ -202,6 +217,42 @@ describe('runTerms driven by a searching model', () => {
   it('reaches different conclusions from the one-ply scorer', () => {
     const summarise = (r: typeof onePly) => r.stats.map(s => `${s.weight}:${s.pivotal}/${s.loadBearing}`)
     expect(summarise(searched)).not.toEqual(summarise(onePly))
+  })
+
+  /**
+   * **A named arm's own weights are what get perturbed, and its own search is what does the picking.**
+   *
+   * Both halves of this were silently wrong. `perturbedPickers` built every candidate from
+   * `weightsFrom`, which spreads `DEFAULT_WEIGHTS`, so an arm's `+weight=` overrides were discarded and
+   * a weight shipping at 0 was "ablated" from 0 to 0. And the limits lookup was an exact map hit, which
+   * a suffixed name misses, so `beam-reply+...` fell through to the ONE-PLY picker while still being
+   * reported under the arm's name.
+   *
+   * The result was a table that reproduced the historical one-ply numbers almost exactly, under a
+   * different name, with a tautological 0.0% for the weight being investigated. Nothing failed.
+   *
+   * Asserted on a weight whose behaviour we know independently: `cardScarcity` at 3 makes the bot
+   * decline resources at regroup (`--decisions` measures 8.9% skipped against the shipped bot's 0%),
+   * so zeroing it MUST change picks there. A zero is the bug's signature.
+   */
+  it('resolves a suffixed name to its real search instead of falling through to one ply', () => {
+    expect(limitsFor('beam-reply'), 'the plain name always worked').not.toBeNull()
+    expect(limitsFor('beam-reply+cardScarcity=3+handKnee=3')).toEqual(limitsFor('beam-reply'))
+    expect(limitsFor('beam:2x2+cardScarcity=3')).toEqual(limitsFor('beam:2x2'))
+    // Undefined still means the one-ply scorer, which is a real answer and the historical default.
+    expect(limitsFor(undefined)).toBeNull()
+    // So does a genuinely one-ply name, and that is why an unresolvable name cannot simply throw.
+    expect(limitsFor('greedy')).toBeNull()
+  })
+
+  it('perturbs from the arm’s value and leaves its other overrides alone', () => {
+    const overrides = { cardScarcity: 3, handKnee: 3 }
+    expect(weightsWith(overrides, 'cardScarcity', 0).cardScarcity, 'ablation reaches zero').toBe(0)
+    expect(weightsWith(overrides, 'cardScarcity', 0).handKnee, 'the arm’s other overrides survive').toBe(3)
+    expect(weightsWith(overrides, 'cardScarcity', 4).cardScarcity).toBe(4)
+    // The nested hand set is rebuilt rather than dropped, or every hand weight would silently reset.
+    expect(weightsWith(overrides, 'hand.canAct', 9).hand.canAct).toBe(9)
+    expect(weightsWith(overrides, 'hand.canAct', 9).hand.hold).toBe(DEFAULT_HAND_WEIGHTS.hold)
   })
 
   /**

@@ -637,8 +637,13 @@ function deployShortfall(state: GameState, id: PlayerId): number {
  * the resource pool, and why it is a bonus below the knee rather than a discount above it.
  */
 export function cardsValue(state: GameState, id: PlayerId, w: EvalWeights): number {
-  const held = state.players[id].hand.length
-  return w.card * held + w.cardScarcity * Math.min(held, w.handKnee)
+  return w.card * state.players[id].hand.length + w.cardScarcity * scarceCards(state, id, w)
+}
+
+/** The cards the scarcity bonus is charged on: none until the pool is saturated. See `poolSaturated`. */
+function scarceCards(state: GameState, id: PlayerId, w: EvalWeights): number {
+  if (!poolSaturated(state, id, w)) return 0
+  return Math.min(state.players[id].hand.length, w.handKnee)
 }
 
 /**
@@ -648,12 +653,44 @@ export function cardsValue(state: GameState, id: PlayerId, w: EvalWeights): numb
  * change any total, which is exactly why the shipped flat pool makes the knee algebraically inert.
  */
 function resourceSplit(state: GameState, id: PlayerId, w: EvalWeights): { full: number; surplus: number } {
+  const pool = state.players[id].resources.length
+  const full = Math.min(pool, kneeFor(state, id, w))
+  return { full, surplus: pool - full }
+}
+
+/**
+ * Where "enough resources" begins for this player: the shipped knee, raised to the leader's printed
+ * cost while that leader is still in the base zone.
+ *
+ * Factored out because two rules need the same threshold and must not drift apart. It splits the pool
+ * for `resourceValue`, and it is the predicate `cardScarcity` fires behind: both are asking "has the
+ * pool reached the point where another resource stops buying anything".
+ */
+function kneeFor(state: GameState, id: PlayerId, w: EvalWeights): number {
   const p = state.players[id]
   const leaderCost = state.cards[p.leader.cardId]?.cost ?? 0
-  const knee = p.leader.deployed ? w.saturation : Math.max(w.saturation, leaderCost)
-  const pool = p.resources.length
-  const full = Math.min(pool, knee)
-  return { full, surplus: pool - full }
+  return p.leader.deployed ? w.saturation : Math.max(w.saturation, leaderCost)
+}
+
+/**
+ * Whether another resource would buy this player anything.
+ *
+ * **The half of the scarcity rule that was missing, and a scripted position caught it.** Charged on
+ * hand size alone, the bonus fired at a pool of 2 holding three cards that could not be cast, which is
+ * precisely when a resource is worth most: below the knee it still buys reach. The rule is a
+ * conjunction, and only the conjunction is defensible: decline when the hand is small **and** the pool
+ * has already run past what it can spend.
+ *
+ * Reusing the knee makes `saturation` live again as a **predicate** rather than as a second rate. As a
+ * rate it is algebraically inert while the two pool weights are equal, which is why three concavity
+ * experiments could not move it; as a threshold it decides something.
+ *
+ * It also subsumes the leader-deploy gate for free, since the knee already rises to an undeployed
+ * leader's cost: below that the pool is not saturated, so the bonus cannot fire and the bot keeps
+ * banking.
+ */
+function poolSaturated(state: GameState, id: PlayerId, w: EvalWeights): boolean {
+  return state.players[id].resources.length >= kneeFor(state, id, w)
 }
 
 /**
@@ -769,8 +806,7 @@ export function publicBreakdown(
     // the two together reproduce `cardsValue`.
     cardScarcity: {
       weight: w.cardScarcity,
-      quantity: Math.min(state.players[me].hand.length, w.handKnee)
-        - Math.min(state.players[foe].hand.length, w.handKnee),
+      quantity: scarceCards(state, me, w) - scarceCards(state, foe, w),
     },
     resource: { weight: w.resource, quantity: myPool.full - theirPool.full },
     resourceSurplus: { weight: w.resourceSurplus, quantity: myPool.surplus - theirPool.surplus },
