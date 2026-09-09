@@ -115,8 +115,9 @@ describe('runLethal', () => {
   }, 240_000)
 
   /**
-   * The gate exists to avoid spending 200 to 350 ms where lethal cannot pay, so it has to actually
-   * skip something or it is pure overhead.
+   * The gate exists to avoid spending 39 ms a call, or 798 ms once the node budget is raised far
+   * enough to stop binding, where lethal cannot pay. So it has to actually skip something or it is
+   * pure overhead.
    */
   it('skips a meaningful share of decisions', () => {
     expect(report.gate.skipped).toBeGreaterThan(report.decisions / 4)

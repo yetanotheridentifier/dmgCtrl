@@ -67,7 +67,7 @@ Design properties that matter for later epics:
   carries a different seed and is free to diverge. Opponents are swappable via
   `UseGameOptions.ai` (tests inject a passive one; smarter rungs slot in the same way), and are
   addressed by name through the registry in `ai/registry.ts`. The **deployed** opponent is a single
-  config constant, `OPPONENT_AI` in `src/config.ts` (currently `greedy`): shipping a new model is a
+  config constant, `OPPONENT_AI` in `src/config.ts` (currently `beam-reply`): shipping a new model is a
   one-line change plus a redeploy, deliberately a reviewed deployment setting rather than a user
   choice.
 - **Measurability.** Because the AI is pure and seeded, a headless harness can play thousands of

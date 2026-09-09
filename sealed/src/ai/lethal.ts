@@ -103,9 +103,10 @@ function progresses(before: GameState, after: GameState, seat: PlayerId): boolea
 /**
  * When to spend the search at all.
  *
- * The solver costs 200 to 350 ms a call once its budget is not binding, so it must not run where it
- * cannot pay. Every gate here is a way of NOT finding a line, so each is a potential silent failure
- * and belongs in the same category as pruning: measured, not trusted.
+ * The solver costs 39 ms a call at depth 4 on the shipped 4,000-node budget and **798 ms** at the
+ * 200,000 it needs before the budget stops binding, so it must not run where it cannot pay. Every
+ * gate here is a way of NOT finding a line, so each is a potential silent failure and belongs in the
+ * same category as pruning: measured, not trusted.
  */
 export interface LethalGate {
   /**

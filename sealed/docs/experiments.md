@@ -129,6 +129,80 @@ Sentinel-clearing lines closes that gap, and the shipped beam already finds **5.
 of lethal that exists. Wired in as an override it measured **+0.8 points** over three seeds and 2580
 games: same sign every time, indistinguishable from neutral, not shipped.
 
+**That +0.8 is a lower bound, not a value.** The arm ran with its node budget binding, so it was a
+solver that abandoned most of its searches part way through rather than the one the design specifies.
+See the sizing below for how far short the budget falls.
+
+### The lethal solver's node budget is what binds, not its depth
+
+The solver takes a depth and a node budget, and the budget is described as a safety rail. It does not
+behave as one: at the budgets in use it fires on nearly every call, so a figure recorded against a
+solver depth describes where the budget cut rather than the depth its name advertises.
+
+Two readings agree on where a budget stops binding, and **cost is the sharper of the two**. The count
+of lethal positions found stops rising, and so does the wall clock per call. A search that terminates
+on its own cannot spend a budget it is given, so a cell whose cost is still climbing is still
+truncating, while a flat count can also just mean there was nothing more to find.
+
+Over a fixed 142-decision corpus (2 coverage decks, one game each), as lethal positions found and
+milliseconds per solver call:
+
+| solver depth | 4,000 | 40,000 | 200,000 | 1,000,000 | budget needed |
+| --- | --- | --- | --- | --- | --- |
+| 2 | 12 / 13 ms | 14 / 20 ms | 14 / 20 ms | 14 / 21 ms | ~40,000 |
+| 3 | 10 / 29 ms | 15 / 93 ms | 16 / 104 ms | 16 / 103 ms | ~200,000 |
+| 4 | 11 / 31 ms | 13 / 151 ms | 16 / 361 ms | 16 / 397 ms | ~200,000 |
+| 5 | 11 / 29 ms | 13 / 170 ms | 15 / 473 ms | 16 / 1,078 ms | over 1,000,000 |
+| 6 | 10 / 27 ms | 13 / 164 ms | 15 / 475 ms | 16 / 1,181 ms | over 1,000,000 |
+
+**The requirement grows faster than linearly**, so a budget scaled as `depth * 4000` is the wrong
+shape as well as the wrong size: depth 2 needs five times that expression and depth 5 more than
+thirty times it.
+
+**The monotonicity invariant holds only once the budget is lifted.** At 4,000 nodes depth 4 finds
+fewer lethal positions than depth 2 (11 against 12), and at 40,000 it still does (13 against 14),
+which depth alone cannot produce.
+
+**Read that table for the budget column only.** It is a 142-decision corpus and it misleads about
+everything else: it holds sixteen lethal positions, every depth from 3 up finds all sixteen, and the
+beam independently finds all sixteen too, so `beam missed` is zero in all twenty cells. A corpus that
+small is mostly openings, which is the same distortion `--cost` carries, and it under-reads the cost
+per call by three to four times.
+
+### What a solver that finishes actually buys
+
+Over the full coverage corpus (42 decks, one game each, 3,119 decisions, identical in every cell,
+with the beam arm fixed at `DEFAULT_BEAM_LIMITS` so only the solver varies):
+
+| solver depth / nodes | lethal found | beam missed | ms per call |
+| --- | --- | --- | --- |
+| 4 / 4,000 | 192 | 20 | 39 ms |
+| 2 / 40,000 | 161 | 1 | 62 ms |
+| 3 / 200,000 | 194 | 11 | 444 ms |
+| 4 / 200,000 | 212 | 25 | 798 ms |
+
+**`beam missed` is a property of depth, not of budget.** The beam searches three actions, so a solver
+at depth 2 or 3 is looking at a horizon the beam already covers and finds almost nothing it misses:
+one position at depth 2, eleven at depth 3, against twenty-five at depth 4. Headroom lives entirely
+in lines longer than the beam can reach.
+
+**Lifting the rail costs 20x and buys a quarter more headroom.** At depth 4, going from 4,000 nodes
+to 200,000 moves `beam missed` from 20 to 25 of 3,119 decisions, 0.6% to 0.8%, for 39 ms to 798 ms a
+call. That is the price of the override the design specifies, against the one that was measured.
+
+**Whether 200,000 is enough at this corpus size is not established.** The budget column above was
+sized on the 142-decision corpus, which under-reads cost several-fold, so the point where cost stops
+climbing may sit higher here. Nothing above depends on it: 200,000 is a lower bound on the budget a
+depth-4 solver wants, and the cost of that solver is therefore also a lower bound.
+
+**A funded solver is close to inert at game level.** Screened at 80 games against a matched `beam`
+control on the same eight seeds, `beam-lethal:4x3:4:200000` measures a paired difference of **-1.25
+points** (sd 6.41, t = -0.55 on 7 df, 1 of 8 shards favouring the arm). Eighty games is a disaster
+filter and cannot establish parity, so the number to read is not the -1.25: it is that **five of the
+eight shards measured a difference of exactly zero**, meaning the arm and the control played
+identical games. An override that fires on 0.8% of decisions mostly does not reach the result, which
+is the same fact the decision-level slice states, confirmed at the level that pays for it.
+
 ### A second opinion on a tie is worth +2.35 points
 
 When the pessimistic search rates several candidates equal, re-searching only those under an optimistic

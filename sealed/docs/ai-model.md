@@ -350,6 +350,12 @@ Measured over 36,384 decisions: lethal exists in **6.6%**, of which 4.8 points a
 the shipped beam already finds 5.8 points. The beam misses a win in **0.9% to 1.5%** of decisions,
 depending on how deep the solver is allowed to look.
 
+**Every figure in that paragraph, and the +0.8 below, was taken with the node budget binding**, so
+each is a lower bound rather than a value. The budget is a rail, and a rail that fires on nearly
+every call has become the real depth: a depth-4 solver wants at least **200,000** nodes and has been
+run at 4,000. Over 3,119 decisions that difference takes the lines the beam misses from 20 to 25, and
+the cost from 39 ms a call to 798 ms.
+
 **It is not wired into the bot**, and that is a measured decision rather than an omission. As an
 override in front of the beam it scored 50.1%, 51.4% and 50.8% over three seeds and 2580 games:
 **+0.8 points, the same sign every time, and indistinguishable from neutral.** Separating an effect
@@ -358,9 +364,13 @@ work needs it.
 
 Three properties are worth keeping in mind if it is ever revisited:
 
-- **It is a lower bound.** Pruning and the node budget can each make it miss a line, so `false` means
-  "none found within budget". An exhaustive oracle run against it on real positions found **zero**
-  missed lines in 1,200 checks, so the bound is tight in practice.
+- **It is a lower bound, and the budget is the half that bites.** Pruning and the node budget can
+  each make it miss a line, so `false` means "none found within budget". An exhaustive oracle found
+  **zero** missed lines in 1,200 checks, so the PRUNING is tight. The budget is not: at solver depth
+  4 over 3,119 decisions the search finds 192 lethal positions at 4,000 nodes and 212 at 200,000.
+- **Headroom comes from depth, not from budget.** The beam searches three actions, so a solver at
+  depth 2 or 3 is looking where the beam already looks and finds almost nothing it misses (1 and 11
+  positions against depth 4's 25). Only lines longer than the beam's horizon are worth anything.
 - **It must return the fastest kill, not any kill.** Returning whichever line came first measured
   **47.8%**, losing two points, because a five-action line hands the opponent five chances to answer
   while a two-action line hands them two. This is the same rule the beam's depth discount encodes.

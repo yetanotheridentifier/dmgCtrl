@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { makeLethalBeam } from '../ai/greedyAi'
 import { beamAi } from '../ai/greedyAi'
-import { resolveAi } from '../ai/registry'
+import { resolveAi, lethalLimitsFor } from '../ai/registry'
 import { DEFAULT_WEIGHTS } from '../ai/evaluate'
 import { DEFAULT_BEAM_LIMITS } from '../ai/search'
 import { DEFAULT_LETHAL_LIMITS, DEFAULT_LETHAL_GATE } from '../ai/lethal'
@@ -14,12 +14,14 @@ import '../engine/cardDefinitions'
  * The beam with a lethal override in front of it (#433).
  *
  * Measured over 36,384 decisions: the shipped beam at depth 3 misses a winning line in 0.31% of
- * decisions at matched depth, rising to 1.15% when the solver is allowed depth 6. The override is
- * only worth anything in that slice, so everything here is about it changing NOTHING elsewhere.
+ * decisions at matched depth, rising to 1.15% when the solver is allowed depth 6. Both rates were
+ * taken with the node budget binding, so both are lower bounds. The override is only worth anything
+ * in that slice, so everything here is about it changing NOTHING elsewhere.
  *
- * The gate matters as much as the search. At 200 to 350 ms a call the solver cannot run on every
- * decision, and each gate is a way of not finding a line, so a gate that fires too eagerly disables
- * the feature while looking like a free speedup.
+ * The gate matters as much as the search. A depth-4 solver costs 39 ms a call on the shipped 4,000
+ * node budget and 798 ms on the 200,000 it needs to finish, so it cannot run on every decision, and
+ * each gate is a way of not finding a line: a gate that fires too eagerly disables the feature while
+ * looking like a free speedup.
  */
 
 const cards = {
@@ -97,10 +99,60 @@ describe('registry', () => {
   it('builds a lethal beam at a given beam and solver depth', () => {
     expect(() => resolveAi('beam-lethal:4x3:5')).not.toThrow()
     expect(() => resolveAi('beam-lethal')).not.toThrow()
+    expect(() => resolveAi('beam-lethal:4x3:5:200000')).not.toThrow()
   })
 
   it('rejects a malformed spec rather than falling back to defaults', () => {
     expect(() => resolveAi('beam-lethal:4x3:0')).toThrow()
     expect(() => resolveAi('beam-lethal:x')).toThrow()
+    expect(() => resolveAi('beam-lethal:4x3:5:0')).toThrow()
+  })
+})
+
+/**
+ * What the two limits resolve to, asserted rather than inferred.
+ *
+ * Exported for the same reason `beamLimitsFor` is: a sweep cell that silently parsed to the shipped
+ * configuration would run the shipped bot under a candidate's name and report no difference, and a
+ * decision trace is a weaker way to catch that than reading the limits.
+ *
+ * The node budget is the reason this exists at all. It is a rail, and a rail that fires routinely has
+ * quietly become the real depth: at depth 4 against depth 2, both 4,000 and 40,000 nodes report the
+ * DEEPER search finding less lethal, which depth alone cannot do. Sizing the solver therefore needs a
+ * way to name a budget per cell, exactly as `beam:` and `reply:` already have.
+ */
+describe('the lethal beam solver limits', () => {
+  /** The whole point of the trailing field: an explicit budget wins outright. */
+  it('takes an explicit node budget over the depth-scaled rail', () => {
+    expect(lethalLimitsFor('beam-lethal:8x3:4:200000')).toEqual({ depth: 4, nodes: 200_000 })
+    expect(lethalLimitsFor('beam-lethal:8x3:6:1000000')).toEqual({ depth: 6, nodes: 1_000_000 })
+  })
+
+  /**
+   * The containment that makes this safe to land: absent the new field, every cell keeps the budget
+   * it has always had, so nothing already recorded shifts underneath.
+   */
+  it('keeps the depth-scaled rail when no budget is named', () => {
+    expect(lethalLimitsFor('beam-lethal:8x3:1')).toEqual({ depth: 1, nodes: 4000 })
+    expect(lethalLimitsFor('beam-lethal:8x3:2')).toEqual({ depth: 2, nodes: 8000 })
+    expect(lethalLimitsFor('beam-lethal:8x3:4')).toEqual({ depth: 4, nodes: 16_000 })
+  })
+
+  /**
+   * **The bare name does not run the scaled rail.** `beam-lethal` is the entry that measured +0.8
+   * over 2,580 games, and it takes `DEFAULT_LETHAL_LIMITS`: a FLAT 4,000, a quarter of what the same
+   * depth scales to through the spec. Pinned here because the difference lives in two levels of
+   * default argument and is invisible at the call site, and because it decides how that +0.8 reads.
+   */
+  it('runs the bare name on the flat shipped rail, not the scaled one', () => {
+    expect(lethalLimitsFor('beam-lethal')).toEqual(DEFAULT_LETHAL_LIMITS)
+    expect(lethalLimitsFor('beam-lethal')).toEqual({ depth: 4, nodes: 4000 })
+    expect(lethalLimitsFor('beam-lethal:8x3:4')!.nodes).toBe(4 * lethalLimitsFor('beam-lethal')!.nodes)
+  })
+
+  it('is null for a name that runs no solver', () => {
+    expect(lethalLimitsFor('beam')).toBeNull()
+    expect(lethalLimitsFor('beam:8x3')).toBeNull()
+    expect(lethalLimitsFor('greedy')).toBeNull()
   })
 })

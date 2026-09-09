@@ -82,6 +82,15 @@ interface Args {
    * every result recorded before this flag existed ran on. See `solverNodesFor`.
    */
   solverNodes?: number
+  /**
+   * How many of the coverage decks `--lethal` plays. Undefined means all of them, which is what every
+   * result recorded before this flag existed ran on.
+   *
+   * Distinct from `--decks`, which names which deck POPULATION an A/B draws from. Sizing a solver
+   * needs a run per candidate budget per depth, and the full set with an ungated solver on every
+   * decision is too large a unit to sweep with.
+   */
+  deckCount?: number
   matchups: boolean
   /** Run the head-to-head as N parallel single-threaded processes over N seeds, and pool them. */
   shards?: number
@@ -128,6 +137,7 @@ export function parseArgs(argv: string[]): Args {
   let lethal = false
   let depth: number | undefined
   let solverNodes: number | undefined
+  let deckCount: number | undefined
   let matchups = false
   let shards: number | undefined
   let status = false
@@ -155,6 +165,7 @@ export function parseArgs(argv: string[]): Args {
     else if (arg === '--lethal') lethal = true
     else if (arg === '--depth') depth = Number(argv[++i])
     else if (arg === '--solver-nodes') solverNodes = Number(argv[++i])
+    else if (arg === '--deck-count') deckCount = Number(argv[++i])
     else if (arg === '--matchups') matchups = true
     else if (arg === '--shard') shards = Number(argv[++i])
     else if (arg === '--status') status = true
@@ -179,9 +190,10 @@ export function parseArgs(argv: string[]): Args {
   if (!seeds.every(Number.isFinite) || seeds.length === 0) throw new Error('--seed must be a number, or a comma-separated list of numbers')
   assertPositiveInt(depth, '--depth')
   assertPositiveInt(solverNodes, '--solver-nodes')
+  assertPositiveInt(deckCount, '--deck-count')
   if (triage && positional.length === 0) throw new Error('--triage needs at least one set code, e.g. --triage LAW SEC')
   if (shards !== undefined && (!Number.isFinite(shards) || shards < 1)) throw new Error('--shard must be a positive integer')
-  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, solverNodes, matchups, shards, status, control, history, out, weights, shardIndex, shardCount, triage, decks, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, solverNodes, deckCount, matchups, shards, status, control, history, out, weights, shardIndex, shardCount, triage, decks, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 /**
@@ -883,6 +895,10 @@ function runLethalMode(args: Args): void {
       oracleStride: 5,
       solverDepth: args.depth,
       solverNodes: solverNodesFor(args.depth, args.solverNodes),
+      // Undefined plays the whole coverage set, which is what every recorded run played. Sizing the
+      // rail takes a run per candidate budget per depth, and the full set is too large a unit for
+      // that: `--deck-count` is what makes the sweep affordable.
+      decks: args.deckCount,
     })
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)

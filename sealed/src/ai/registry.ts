@@ -6,7 +6,7 @@ import {
   makeBeamGreedy, makeLethalBeam, BEAM_REPLY_LIMITS, BEAM_REPLY_SHARED_LIMITS, BEAM_HORIZON_LIMITS,
 } from './greedyAi'
 import { DEFAULT_BEAM_LIMITS, TIE_DECISION_KINDS, type BeamLimits } from './search'
-import { DEFAULT_LETHAL_LIMITS } from './lethal'
+import { DEFAULT_LETHAL_LIMITS, type LethalLimits } from './lethal'
 import { DEFAULT_WEIGHTS, type EvalWeights } from './evaluate'
 
 /**
@@ -87,9 +87,15 @@ export const AIS: Record<string, Ai> = {
    * 2580 games: +0.8 points, the same sign on every seed, and not distinguishable from neutral (the
    * combined interval is about +/-1.9). Separating it from zero would need roughly 10,000 games.
    *
+   * **That is a lower bound rather than a value.** This entry takes `DEFAULT_LETHAL_LIMITS`, a flat
+   * 4,000 nodes, and the solver needs roughly 50x that before its depth rather than its budget is
+   * what stops it. The bot measured above therefore abandoned most of its searches part way through,
+   * so it is a weaker override than the one the design specifies. Use
+   * `beam-lethal:WIDTHxBEAMDEPTH:SOLVERDEPTH:NODES` to name a budget that finishes.
+   *
    * It stays registered because it is the only way to re-measure it, and because `findLethal` is
    * needed by #446 regardless. Do not read its presence here as a candidate: `OPPONENT_AI` decides
-   * what ships, and it is `greedy`.
+   * what ships, and it is `beam-reply`.
    */
   'beam-lethal': lethalBeamAi,
 }
@@ -126,12 +132,19 @@ const BEAM_SPEC = /^beam:(\d+)x(\d+)(?::(\d+))?$/
 const REPLY_SPEC = /^reply:(pessimistic|selfish)(?::(\d+)x(\d+)(?::(\d+))?)?$/
 
 /**
- * `beam-lethal:WIDTHxBEAMDEPTH:SOLVERDEPTH`, so a run can address the beam and the lethal override
- * independently. They are swept separately on purpose: the beam pays its cost on every decision while
- * the gated solver pays only where lethal is arithmetically possible, so the right depth for one is
- * not the right depth for the other.
+ * `beam-lethal:WIDTHxBEAMDEPTH:SOLVERDEPTH` or `beam-lethal:WIDTHxBEAMDEPTH:SOLVERDEPTH:NODES`, so a
+ * run can address the beam and the lethal override independently. They are swept separately on
+ * purpose: the beam pays its cost on every decision while the gated solver pays only where lethal is
+ * arithmetically possible, so the right depth for one is not the right depth for the other.
+ *
+ * The optional node budget is here for the reason it is on `beam:` and `reply:`, only more sharply.
+ * The budget is a safety rail, and this rail fires on essentially every call: at depth 4 against
+ * depth 2, both 4,000 and 40,000 nodes report the DEEPER search finding less lethal, which depth
+ * alone cannot do, and only around 200,000 makes the curve monotone. Without a way to name a budget
+ * per cell, a sweep across solver depths measures where the rail happened to cut rather than the
+ * depths its cells advertise.
  */
-const LETHAL_BEAM_SPEC = /^beam-lethal:(\d+)x(\d+):(\d+)$/
+const LETHAL_BEAM_SPEC = /^beam-lethal:(\d+)x(\d+):(\d+)(?::(\d+))?$/
 
 /**
  * `NAME+WEIGHT=VALUE`, so a single evaluation weight can be swept against the deployed search.
@@ -372,6 +385,38 @@ export function beamLimitsFor(name: string): BeamLimits | null {
   return null
 }
 
+/**
+ * The SOLVER limits a `beam-lethal` name asks for, or `null` if the name runs no solver.
+ *
+ * Exported for the same reason `beamLimitsFor` is, and with more riding on it: the node budget is the
+ * limit that has actually been binding, so a cell whose rail silently stayed where it was would
+ * report a flat curve across solver depths and retire the question it was run to answer.
+ *
+ * **The bare name and the spec form do not agree, and both are named here on purpose.**
+ * `beam-lethal` is the configuration that was measured at +0.8 over 2,580 games, and it takes the
+ * flat `DEFAULT_LETHAL_LIMITS`: 4,000 nodes, a quarter of what the same solver depth scales to
+ * through the spec. Changing it would move a recorded number, so it stays, and this function is what
+ * makes the difference assertable rather than a consequence of two levels of default argument.
+ */
+export function lethalLimitsFor(name: string): LethalLimits | null {
+  if (name === 'beam-lethal') return DEFAULT_LETHAL_LIMITS
+
+  const spec = LETHAL_BEAM_SPEC.exec(name)
+  if (!spec) return null
+
+  const solverDepth = Number(spec[3])
+  // Scaled with depth unless the cell names a budget, so the rail does not silently become the real
+  // depth. A flat budget made the solver look four times cheaper than it is, and had the #410 screen
+  // call depth 4 worse than depth 3.
+  const nodes = spec[4] === undefined
+    ? Math.max(DEFAULT_LETHAL_LIMITS.nodes, solverDepth * 4000)
+    : Number(spec[4])
+  if (solverDepth < 1 || nodes < 1) {
+    throw new Error(`Lethal beam "${name}" needs a solver depth and node budget of at least 1`)
+  }
+  return { depth: solverDepth, nodes }
+}
+
 /** Look up an AI by name, failing loudly (and helpfully) on a typo rather than silently. */
 export function resolveAi(name: string): Ai {
   const ai = AIS[name]
@@ -426,16 +471,16 @@ export function resolveAi(name: string): Ai {
 
   const lethalSpec = LETHAL_BEAM_SPEC.exec(name)
   if (lethalSpec) {
-    const [width, beamDepth, solverDepth] = lethalSpec.slice(1, 4).map(Number)
-    if (width < 1 || beamDepth < 1 || solverDepth < 1) {
-      throw new Error(`Lethal beam "${name}" needs width and both depths of at least 1`)
+    const [width, beamDepth] = lethalSpec.slice(1, 3).map(Number)
+    if (width < 1 || beamDepth < 1) {
+      throw new Error(`Lethal beam "${name}" needs a beam width and depth of at least 1`)
     }
+    // The solver side comes from `lethalLimitsFor`, so the limits a sweep asserts are the limits the
+    // bot is built with rather than a second reading of the same spec.
     return makeLethalBeam(
       DEFAULT_WEIGHTS,
       { ...DEFAULT_BEAM_LIMITS, width, depth: beamDepth },
-      // Scaled with depth, so the rail does not silently become the real depth. A flat budget made
-      // the solver look four times cheaper than it is, and the #410 screen call depth 4 worse than 3.
-      { depth: solverDepth, nodes: Math.max(DEFAULT_LETHAL_LIMITS.nodes, solverDepth * 4000) },
+      lethalLimitsFor(name)!,
     )
   }
 
@@ -444,7 +489,8 @@ export function resolveAi(name: string): Ai {
 
   throw new Error(
     `Unknown AI "${name}". Available: ${aiNames().join(', ')}, ` +
-    'or beam:WIDTHxDEPTH[:NODES], or reply:POLICY[:WIDTHxDEPTH[:NODES]]. ' +
+    'or beam:WIDTHxDEPTH[:NODES], or reply:POLICY[:WIDTHxDEPTH[:NODES]], ' +
+    'or beam-lethal:WIDTHxBEAMDEPTH:SOLVERDEPTH[:NODES]. ' +
     'Suffixes: +WEIGHT=VALUE, /tie=FIELD:VALUE[,FIELD:VALUE], /pass=N, /horizon=cross:N[,tail:M]',
   )
 }

@@ -259,10 +259,16 @@ Everything is optional:
     with the own-turn beam, and `reply:POLICY:WIDTHxDEPTH:NODES` sets the budget as well. A reply
     expands every legal answer at every level, so it drains the budget faster than a `beam:` cell of
     the same shape and the node form matters more here, not less.
-  - `beam-lethal` / `beam-lethal:WIDTHxBEAMDEPTHxSOLVERDEPTH` the beam with a lethal override in
-    front of it. Measured at **+0.8 points** and **not shipped**; kept registered so it can be
+  - `beam-lethal` / `beam-lethal:WIDTHxBEAMDEPTH:SOLVERDEPTH[:NODES]` the beam with a lethal override
+    in front of it. Measured at **+0.8 points** and **not shipped**; kept registered so it can be
     re-measured. Outside the gate it returns exactly what `beam` returns, which is what makes an A/B
     between them one feature rather than two configurations.
+
+    The two names carry **different node budgets**, and the difference is large enough to decide what
+    a result means. The bare `beam-lethal` runs the flat shipped 4,000; the spec form scales as
+    `max(4000, solverDepth * 4000)` unless the cell names a budget, so the same solver depth of 4 runs
+    at 16,000 through the spec. Neither is enough for the solver to finish (see the rail below), so
+    a cell that means to measure depth has to name its own `NODES`.
   - `beam-reply-unredacted` the deployed model still reading the two cards it deals itself at regroup.
     The control for the redaction, and the only way to ask whether that fix cost anything, since
     redaction is otherwise unconditional and self-play would measure nothing.
@@ -354,9 +360,20 @@ The report's `solver depth / nodes` row prints the pair the run actually used, a
 reading before any depth figure taken from that run. Both flags reject anything that is not a
 positive integer, at parse time rather than part way through a run.
 
-The same rail exists on the `beam-lethal:WIDTHxBEAMDEPTHxSOLVERDEPTH` AI spec, which scales its
-budget the same way and has no equivalent override, so a `--cost` sweep addressed by AI name is
-still bound by it.
+The same rail exists on the AI spec, which is addressed by name rather than by flag, so
+`--solver-nodes` does not reach it. `beam-lethal:WIDTHxBEAMDEPTH:SOLVERDEPTH:NODES` names it there,
+which is what lets a `--cost` sweep across solver depths compare depths rather than truncations:
+
+```bash
+npm run bench --prefix sealed -- --cost beam beam-lethal:8x3:2:200000 beam-lethal:8x3:4:200000
+```
+
+`--deck-count N` plays only the first N coverage decks. Absent the flag `--lethal` plays the whole
+set, which is what every recorded run used, with the solver called ungated on every decision. Sizing
+a rail takes a run per candidate budget per depth, and the full set is too large a unit for that.
+
+**A small corpus under-reads the solver's cost by three to four times**, the same distortion `--cost`
+carries, so size a budget on a short run and take the cost from a full one.
 
 `--terms` re-scores every decision once per weight per perturbation, so it costs roughly 30 times a
 plain pass: 3 games a deck is ~20 minutes and is plenty for rates of this size.

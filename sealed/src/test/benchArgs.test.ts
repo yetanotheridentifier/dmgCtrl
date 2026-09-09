@@ -85,6 +85,40 @@ describe('bench argument parsing', () => {
   })
 
   /**
+   * How much corpus a sizing run plays.
+   *
+   * `--lethal` always played the whole coverage deck set, so its smallest possible run was 44 games
+   * and ~3,000 decisions with the solver called ungated on every one of them. That is a fine size for
+   * a result and a bad one for finding the budget at which the rail stops binding, which takes a run
+   * per candidate budget per depth.
+   *
+   * Separate from `--decks`, which names WHICH deck population an A/B plays (mirror, coverage or
+   * lockout) rather than how many. Two different questions that would otherwise share a flag.
+   */
+  describe('the lethal deck count', () => {
+    it('parses --deck-count onto the args', () => {
+      expect(parseArgs(['--lethal', '--deck-count', '2']).deckCount).toBe(2)
+    })
+
+    /** Undefined means the full coverage set, which is what every recorded `--lethal` run played. */
+    it('leaves it unset when the flag is absent', () => {
+      expect(parseArgs(['--lethal']).deckCount).toBeUndefined()
+      expect(parseArgs(['--lethal', '--depth', '4']).deckCount).toBeUndefined()
+    })
+
+    it.each(['0', '-1', '1.5', 'lots'])('rejects a bad --deck-count of %s at parse time', value => {
+      expect(() => parseArgs(['--lethal', '--deck-count', value])).toThrow('--deck-count must be a positive integer')
+    })
+
+    /** The names are one character apart, so this pins that they are still two independent settings. */
+    it('does not collide with --decks', () => {
+      const args = parseArgs(['--lethal', '--decks', 'coverage', '--deck-count', '3'])
+      expect(args.decks).toBe('coverage')
+      expect(args.deckCount).toBe(3)
+    })
+  })
+
+  /**
    * `--solver-nodes` is a new flag on a parser that rejects unknown ones, so this guards the
    * boring failure: a typo'd flag name silently becoming a positional AI name, which would run
    * the shipped bot under a candidate's name and report no difference.

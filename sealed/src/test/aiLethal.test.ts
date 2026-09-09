@@ -304,7 +304,8 @@ describe('findLethal returns the move, not just the verdict', () => {
 
 describe('the gate', () => {
   /**
-   * The solver costs 200 to 350 ms a call, so it must not run where it cannot pay. The gate is
+   * The solver costs 39 ms a call at depth 4 on the shipped budget and 798 ms once that budget is
+   * raised enough to stop binding, so it must not run where it cannot pay. The gate is
    * measured rather than trusted: a gate that skips a real line is the same class of silent failure
    * as pruning that loses one.
    */

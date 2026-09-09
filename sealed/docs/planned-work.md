@@ -18,14 +18,32 @@ Ordered on one principle: **correctness, then structure, then calibration.** Any
 engine or the horizon invalidates a calibration done before it, which is why the matchup matrix sits
 at the end of the list rather than in the middle of it.
 
-1. **#520 the lethal solver is budget-bound**, so every result quoted about solver depth measures the
-   rail instead. It takes 50x the default node budget before more depth stops finding less, and the
-   shipped gated solver runs at 4x. The +0.8 recorded for `beam-lethal` is a lower bound on a solver
-   that never finished its search. `--lethal` takes `--solver-nodes N` (#559), so the sizing pass is
-   runnable. The `beam-lethal:WIDTHxBEAMDEPTHxSOLVERDEPTH` spec carries its own copy of the same
-   scaled rail with no override, so the `--cost` sweep, which addresses solver depths by AI name, is
-   still bound by it. Extending that spec with an optional node budget, as `beam:` and `reply:`
-   already have, is the first task.
+1. **#520 the lethal solver is budget-bound.** The sizing pass is done and is recorded in
+   [experiments.md](experiments.md); the budget is nameable per cell now, on the CLI (#559) and on
+   the `beam-lethal:WIDTHxBEAMDEPTH:SOLVERDEPTH[:NODES]` spec. What remains is the decision the
+   numbers set up.
+
+   A depth-4 solver wants at least 200,000 nodes against the 4,000 it ships with, and over 3,119
+   decisions that takes the lines the beam misses from **20 to 25** for **39 ms to 798 ms** a call.
+   So the specified override is roughly **20x the cost for a quarter more headroom**, and the
+   recorded +0.8 is a lower bound taken on the cheap end of that trade.
+
+   The 80-game screen is done and gives no encouragement: **-1.25 points** paired against a matched
+   `beam` control, with **five of eight shards measuring exactly zero**, the arm and control having
+   played identical games. Separating an effect this size needs roughly 10,000 games, which at the
+   funded solver's cost is **30-plus hours** even sharded.
+
+   **The recommendation is to close on the sizing rather than run that.** The screen cannot establish
+   parity and does not refute the recorded +0.8, but nothing in the evidence argues for spending 30
+   hours to resolve a term that changes nothing in five games out of eight.
+
+   Left unmeasured if it closes that way: whether 200,000 nodes is non-binding on a full-size corpus
+   (sized on 142 decisions, which under-reads cost three to four times; one 1.5 to 2.5 hour run
+   settles it).
+
+   **The question the numbers open up is making the solver cheaper**, which #520 excluded. Two
+   candidates, neither measured: `findLethal` re-searches from depth 1 upward with a fresh budget
+   after it already has an answer, and the `powerBound` gate ships off.
 2. **Run the matchup matrix.** Only once the AI tickets above have settled: it is the calibration
    they would each invalidate, and at roughly **23 hours sharded** (10 games a cell, against 169
    serial) it is the one run worth doing exactly once. It banks and resumes per shard now, so an
