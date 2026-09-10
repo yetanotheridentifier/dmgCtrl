@@ -129,6 +129,173 @@ Sentinel-clearing lines closes that gap, and the shipped beam already finds **5.
 of lethal that exists. Wired in as an override it measured **+0.8 points** over three seeds and 2580
 games: same sign every time, indistinguishable from neutral, not shipped.
 
+**That +0.8 is a lower bound, not a value.** The arm ran with its node budget binding, so it was a
+solver that abandoned most of its searches part way through rather than the one the design specifies.
+See the sizing below for how far short the budget falls.
+
+### The lethal solver's node budget is what binds, not its depth
+
+The solver takes a depth and a node budget, and the budget is described as a safety rail. It does not
+behave as one: at the budgets in use it fires on nearly every call, so a figure recorded against a
+solver depth describes where the budget cut rather than the depth its name advertises.
+
+Two readings agree on where a budget stops binding, and **cost is the sharper of the two**. The count
+of lethal positions found stops rising, and so does the wall clock per call. A search that terminates
+on its own cannot spend a budget it is given, so a cell whose cost is still climbing is still
+truncating, while a flat count can also just mean there was nothing more to find.
+
+Over a fixed 142-decision corpus (2 coverage decks, one game each), as lethal positions found and
+milliseconds per solver call:
+
+| solver depth | 4,000 | 40,000 | 200,000 | 1,000,000 | budget needed |
+| --- | --- | --- | --- | --- | --- |
+| 2 | 12 / 13 ms | 14 / 20 ms | 14 / 20 ms | 14 / 21 ms | ~40,000 |
+| 3 | 10 / 29 ms | 15 / 93 ms | 16 / 104 ms | 16 / 103 ms | ~200,000 |
+| 4 | 11 / 31 ms | 13 / 151 ms | 16 / 361 ms | 16 / 397 ms | ~200,000 |
+| 5 | 11 / 29 ms | 13 / 170 ms | 15 / 473 ms | 16 / 1,078 ms | over 1,000,000 |
+| 6 | 10 / 27 ms | 13 / 164 ms | 15 / 475 ms | 16 / 1,181 ms | over 1,000,000 |
+
+**The requirement grows faster than linearly**, so a budget scaled as `depth * 4000` is the wrong
+shape as well as the wrong size: depth 2 needs five times that expression and depth 5 more than
+thirty times it.
+
+**The monotonicity invariant holds only once the budget is lifted.** At 4,000 nodes depth 4 finds
+fewer lethal positions than depth 2 (11 against 12), and at 40,000 it still does (13 against 14),
+which depth alone cannot produce.
+
+**Read that table for the budget column only.** It is a 142-decision corpus and it misleads about
+everything else: it holds sixteen lethal positions, every depth from 3 up finds all sixteen, and the
+beam independently finds all sixteen too, so `beam missed` is zero in all twenty cells. A corpus that
+small is mostly openings, which is the same distortion `--cost` carries, and it under-reads the cost
+per call by three to four times.
+
+### What a solver that finishes actually buys
+
+Over the full coverage corpus (42 decks, one game each, 3,119 decisions, identical in every cell,
+with the beam arm fixed at `DEFAULT_BEAM_LIMITS` so only the solver varies):
+
+| solver depth / nodes | lethal found | beam missed | ms per call |
+| --- | --- | --- | --- |
+| 4 / 4,000 | 192 | 20 | 39 ms |
+| 2 / 40,000 | 161 | 1 | 62 ms |
+| 3 / 200,000 | 194 | 11 | 444 ms |
+| 4 / 200,000 | 212 | 25 | ~780 ms |
+
+**`beam missed` is a property of depth, not of budget.** The beam searches three actions, so a solver
+at depth 2 or 3 is looking at a horizon the beam already covers and finds almost nothing it misses:
+one position at depth 2, eleven at depth 3, against twenty-five at depth 4. Headroom lives entirely
+in lines longer than the beam can reach.
+
+**Lifting the rail costs 20x and buys a quarter more headroom.** At depth 4, going from 4,000 nodes
+to 200,000 moves `beam missed` from 20 to 25 of 3,119 decisions, 0.6% to 0.8%, for 39 ms to about
+780 ms a call. Four runs of that same cell measured 755, 772, 772 and 798 ms, so per-call cost
+carries roughly 5% run-to-run variance and is not worth quoting to three figures. That is the price of the override the design specifies, against the one that was measured.
+
+**Whether 200,000 is enough at this corpus size is not established.** The budget column above was
+sized on the 142-decision corpus, which under-reads cost several-fold, so the point where cost stops
+climbing may sit higher here. Nothing above depends on it: 200,000 is a lower bound on the budget a
+depth-4 solver wants, and the cost of that solver is therefore also a lower bound.
+
+**A funded solver is close to inert at game level.** Screened at 80 games against a matched `beam`
+control on the same eight seeds, `beam-lethal:4x3:4:200000` measures a paired difference of **-1.25
+points** (sd 6.41, t = -0.55 on 7 df, 1 of 8 shards favouring the arm). Eighty games is a disaster
+filter and cannot establish parity, so the number to read is not the -1.25: it is that **five of the
+eight shards measured a difference of exactly zero**, meaning the arm and the control played
+identical games. An override that fires on 0.8% of decisions mostly does not reach the result, which
+is the same fact the decision-level slice states, confirmed at the level that pays for it.
+
+### The lethal gate's cheap saving is the power bound, not a later round
+
+Every gate is a way of not finding a line, so each is scored against a solver running **ungated** on
+the same corpus: `skipped` is the compute saved, and `COST A WIN` counts positions the gate declines
+where a line existed **and the beam also misses it**. Only that last number is a loss, and a variant
+is usable only at zero.
+
+Full coverage corpus, 3,119 decisions, solver at depth 4 and 200,000 nodes:
+
+| gate | skipped | had lethal | cost a win |
+| --- | --- | --- | --- |
+| shipped: round 4+, skip single-action | 40.8% (1,273) | 51 | 0 |
+| round 5+ | 62.8% (1,960) | 59 | 3 |
+| round 6+ | 82.0% (2,559) | 136 | 12 |
+| power bound on | 61.8% (1,928) | 51 | **0** |
+| power bound on, round 5+ | 72.6% (2,265) | 59 | 3 |
+| single-action check off | 39.2% (1,222) | 0 | 0 |
+
+**Round 4 cannot be skipped.** It carries 688 decisions and 9 lethal positions, 3 of which the beam
+misses, so a `minRound: 5` floor throws away 3 of the 25 positions that are the feature's entire
+headroom. Rounds 5 and 6 are where lethal concentrates, but the tail into round 4 is not empty and it
+is disproportionately the part worth having.
+
+**The power bound costs nothing here and saves a third of the calls.** It skips 655 decisions beyond
+the shipped gate and **not one of them held a line**: `had lethal` is 51 either way. Solver calls fall
+from 59.2% of decisions to 38.2%.
+
+That is a measurement on this card pool rather than a proof. The bound sums printed power, so an
+event that deals damage with none is invisible to it, and the reason it measures safe is that a kill
+carried entirely by events does not occur in this corpus. A set with stronger burn would need this
+re-run before the gate could be trusted, and the failure would be silent.
+
+**`skipWhenSingleAction` is nearly inert**, worth 51 decisions of skipping in 3,119. It accounts for
+every one of the shipped gate's lethal skips, all safe because a single-action win is one the
+evaluation cannot get wrong.
+
+### A lossy gate on ready damage skips 77% of decisions for nothing
+
+Every gate above is admissible: it sums generously so it can never skip a real line, and that safety
+is exactly why each saves so little. The alternative is to start from what can actually attack now,
+ready units plus the leader (which deploys ready), and allow a fixed number of points for what might
+materialise from a pump, an upgrade or a burn event. That is deliberately lossy, so the allowance is
+a measurement rather than a judgement.
+
+Same corpus, 3,119 decisions:
+
+| gate | skipped | had lethal | cost a win |
+| --- | --- | --- | --- |
+`time left` is the share of solver work surviving the gate, which is the only column a cost decision
+rests on. Every other column counts decisions.
+
+| gate | skipped | cost a win | time left |
+| --- | --- | --- | --- |
+| ready damage + 0 | 95.0% | 15 | 14.0% |
+| ready damage + 3 | 90.1% | 4 | 22.5% |
+| ready damage + 5 | 85.5% | 3 | 32.7% |
+| ready damage + 7 | 80.5% | 3 | 50.1% |
+| ready damage + 8 | 76.9% | **0** | 55.9% |
+| ready damage + 10 | 71.8% | 0 | 69.8% |
+| ready damage + 12 | 65.6% | 0 | 81.1% |
+
+The quantity must be **power, not reach**. `unitReach` reads a Sentinel-locked unit as zero, so a
+reach-based gate would skip the positions where the solver's job is to clear the blocker or grant
+Saboteur so that ready power reaches the base.
+
+**Eight is the first safe value, not a comfortable one.** Seven still costs 3, and the zero at eight
+is measured against 25 headroom positions in total. Ten and twelve buy margin at a third and a half
+of the saving.
+
+### Counting skipped decisions overstates every gate's saving
+
+The same run, read as time rather than decisions, says the gates were never doing what their skip
+rates suggest:
+
+| gate | skipped | time left |
+| --- | --- | --- |
+| shipped: round 4+, skip single-action | 40.8% | **97.2%** |
+| single-action check off | 39.2% | 97.2% |
+| power bound on | 61.8% | 64.0% |
+| ready damage + 8 | 76.9% | 55.9% |
+
+**The shipped gate declines 40.8% of decisions and saves 2.8% of the time**, because the positions it
+skips are the cheap ones. `skipWhenSingleAction` saves nothing measurable at all. The best safe
+variant found, a lossy ready-damage gate at slack 8, is worth **1.79x** rather than the 2.6x to 4.8x
+that extrapolating from per-class node means predicted.
+
+**The cost lives where the feature does.** Solver time concentrates in the complex late-game boards
+where lethal is plausible, and those are exactly the positions no gate can decline without losing
+lines. The evidence is how tight the boundary is: slack 7 leaves 50.1% of the work and costs 3
+winnable positions, slack 8 leaves 55.9% and costs none. There is no large safe saving left on this
+axis.
+
 ### A second opinion on a tie is worth +2.35 points
 
 When the pessimistic search rates several candidates equal, re-searching only those under an optimistic
@@ -473,6 +640,28 @@ measures.
 
 Recorded so nobody spends an evening re-deriving a null result. All measured against the identical AI
 with the change switched off, across the coverage decks.
+
+### The lethal solver is not worth pursuing, and cannot be made cheap enough to change that
+
+The override is a narrow one by construction: even with a budget that lets it finish, the whole slice
+where it can act is **25 decisions in 3,119**, and outside that slice it returns exactly what the beam
+returns. Everything measured about it points the same way.
+
+- **Its cost is 20x its headroom.** A depth-4 solver needs 200,000 nodes rather than the 4,000 it
+  ships with, which takes the lines the beam misses from 20 to 25 and the cost from 39 ms to about
+  780 ms a call.
+- **It is close to inert at game level.** Screened at 80 games against a matched control, five of
+  eight shards played *identical games*, and the paired difference was -1.25 points.
+- **Gating cannot rescue it.** The best safe gate found leaves 55.9% of the work, worth 1.79x, and
+  the reason is structural: solver time concentrates in the complex late-game boards where lethal is
+  plausible, which are exactly the positions a gate must not decline.
+- **Pruning inside the search cannot either.** Negatives are 97.3% of node work, so perfect rejection
+  would be worth ~36x, but the best admissible damage bound available rejects 16% of them. A sound
+  tighter bound needs a per-card damage ceiling that accounts for events dealing damage with no
+  printed power, which does not exist.
+
+What would change the picture is a **cheaper engine**, not a cleverer search: at roughly 43
+microseconds per node, the price is `resolve` and `legalMoves` rather than tree size.
 
 ### Six attempts to price something the search misses; one worked
 

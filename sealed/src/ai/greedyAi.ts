@@ -264,10 +264,16 @@ export const beamHorizonAi = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_HORIZON_LIMITS
  * override, and its safety property is that **outside that slice it is exactly the beam**. A bot that
  * played differently in ordinary positions could not be A/B-ed as one feature.
  *
- * The gate is not an optimisation, it is part of the design. The solver costs 200 to 350 ms a call
- * once its budget stops binding, which is several times a whole beam decision, so running it
- * everywhere would cost more than simply deepening the beam. Gated to the rounds where lethal is
- * arithmetically possible, it pays only where it can win.
+ * **Both of those rates were measured with the node budget binding**, so both are lower bounds on
+ * what the named depths can see rather than values for them. Over 3,119 decisions at solver depth 4,
+ * raising the budget from 4,000 nodes to 200,000 takes the lines the beam misses from 20 to 25 and
+ * the lethal found from 192 to 212. "Depth 6" is a statement about depth 6 only if depth 6 was
+ * reachable, and on that evidence it was not.
+ *
+ * The gate is not an optimisation, it is part of the design, and the budget decides how much it has
+ * to save. The same depth-4 solver costs 39 ms a call at 4,000 nodes and **798 ms** at 200,000, many
+ * times a whole beam decision, so a solver that finishes cannot run anywhere near every decision.
+ * Gated to the rounds where lethal is arithmetically possible, it pays only where it can win.
  */
 export function makeLethalBeam(
   weights: EvalWeights,
@@ -286,4 +292,13 @@ export function makeLethalBeam(
   }
 }
 
-export const lethalBeamAi = makeLethalBeam(DEFAULT_WEIGHTS)
+/**
+ * Every limit spelled out rather than left to a default argument.
+ *
+ * The node budget is why. `DEFAULT_LETHAL_LIMITS` is a FLAT 4,000, while the
+ * `beam-lethal:WIDTHxBEAMDEPTH:SOLVERDEPTH` spec scales its budget with solver depth and so runs the
+ * same depth at 16,000. Two configurations, one name, and the difference was visible only by
+ * following two levels of default argument into another module. This entry is the one that produced
+ * the recorded +0.8, so it keeps the flat rail and says so.
+ */
+export const lethalBeamAi = makeLethalBeam(DEFAULT_WEIGHTS, DEFAULT_BEAM_LIMITS, DEFAULT_LETHAL_LIMITS)

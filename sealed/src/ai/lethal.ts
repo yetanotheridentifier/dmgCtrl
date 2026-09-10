@@ -103,9 +103,14 @@ function progresses(before: GameState, after: GameState, seat: PlayerId): boolea
 /**
  * When to spend the search at all.
  *
- * The solver costs 200 to 350 ms a call once its budget is not binding, so it must not run where it
- * cannot pay. Every gate here is a way of NOT finding a line, so each is a potential silent failure
- * and belongs in the same category as pruning: measured, not trusted.
+ * The solver costs 39 ms a call at depth 4 on the shipped 4,000-node budget and about **780 ms** at
+ * the 200,000 it needs before the budget stops binding, so it must not run where it cannot pay.
+ * Every gate here is a way of NOT finding a line, so each is a potential silent failure and belongs
+ * in the same category as pruning: measured, not trusted.
+ *
+ * **Measured as time, these gates save far less than their skip rates suggest.** The shipped pair
+ * declines 40.8% of decisions and 2.8% of the work, because the positions they skip are the cheap
+ * ones. Cost concentrates where lethal is plausible, which is where the gates must not fire.
  */
 export interface LethalGate {
   /**
@@ -124,12 +129,34 @@ export interface LethalGate {
   /**
    * Skip when the total POWER available cannot reach the base.
    *
-   * **Off by default, deliberately.** It bounds damage by power, while a burn event deals damage with
-   * none, and a burn event is one of the three things this solver exists to find. Enabling it trades
-   * a measurable false-skip rate for compute, which is a decision to make with data rather than by
-   * default.
+   * **Off by default**, though the data it once asked for now exists. It bounds damage by power,
+   * while a burn event deals damage with none, and a burn event is one of the three things this
+   * solver exists to find.
+   *
+   * Measured over 3,119 decisions it skips 655 decisions beyond the shipped gate and **not one of
+   * them held a line**, leaving 64.0% of the solver's work for zero winnable positions lost. That is
+   * a null result on this card pool rather than a proof of soundness: a set with stronger burn would
+   * need it re-run, and the failure would be silent.
    */
   powerBound: boolean
+  /**
+   * Skip unless the READY board, plus this many points of allowance, can cover the base.
+   *
+   * **Deliberately lossy, unlike every other gate here**, and the only one that is. `powerBound` is
+   * admissible by construction: it sums every unit ready or not, the leader and the whole hand's
+   * printed power, so it fires only where the position is nowhere near. That safety is also why it
+   * saves so little. This one starts from what can actually attack now and allows a fixed number of
+   * points for what might materialise: a pump, an upgrade, a burn event.
+   *
+   * The allowance is doing two jobs with one number, standing in for bounded pumps and for events
+   * that deal damage with no power at all, so the right value is a measurement rather than a
+   * judgement. `undefined` is off, which is what the shipped gate names.
+   *
+   * Reads `readyDamage`, which is Sentinel-BLIND on purpose. A reach-based quantity would read a
+   * blocked board as zero and skip the positions where the solver's job is to clear the blocker or
+   * grant Saboteur so that power reaches the base.
+   */
+  readySlack?: number
 }
 
 export const DEFAULT_LETHAL_GATE: LethalGate = {
@@ -155,11 +182,30 @@ function optimisticDamage(state: GameState, seat: PlayerId): number {
   return total
 }
 
+/**
+ * The damage the board can put into the base right now: ready units, plus the leader if it has yet
+ * to deploy, since it arrives READY (CR 3.4.4) and is not in `units` until then.
+ *
+ * **Sentinel-blind on purpose**, which is what separates it from `unitReach`. A blocker in the way
+ * does not reduce the power standing behind it, and clearing that blocker is one of the three things
+ * the solver exists to do. Reading a locked board as zero would gate away exactly those lines.
+ *
+ * Exported so a gate's slack can be sized against it rather than guessed.
+ */
+export function readyDamage(state: GameState, seat: PlayerId): number {
+  const p = state.players[seat]
+  let total = 0
+  for (const u of p.units) if (!u.exhausted) total += effectivePower(state, u)
+  if (!p.leader.deployed) total += state.cards[p.leader.cardId]?.power ?? 0
+  return total
+}
+
 /** Is this position worth spending the search on? Exported so the bench can measure what it skips. */
 export function shouldSearchLethal(state: GameState, seat: PlayerId, gate: LethalGate = DEFAULT_LETHAL_GATE): boolean {
   if (state.round < gate.minRound) return false
   if (gate.skipWhenSingleAction && canFinishThisAction(state, seat)) return false
   if (gate.powerBound && optimisticDamage(state, seat) < remainingBase(state, seat)) return false
+  if (gate.readySlack !== undefined && readyDamage(state, seat) + gate.readySlack < remainingBase(state, seat)) return false
   return true
 }
 
@@ -182,9 +228,38 @@ interface LethalResult {
 
 const NO_LETHAL: LethalResult = { won: false, move: null }
 
+/**
+ * A verdict plus what it cost, for attributing the solver's price rather than guessing at it.
+ *
+ * The cost here is dominated by proving negatives: a search that finds a line returns immediately,
+ * while one that finds nothing has to exhaust the tree or the budget. A wall clock blends the two and
+ * cannot say which, so it cannot say whether better pruning has anything to win.
+ */
+export interface LethalProbe {
+  won: boolean
+  /** `resolve` calls spent: the budget it was given, less what it had left. */
+  nodesUsed: number
+  /**
+   * The budget ran out. A `won: false` from an exhausted search means "no line found in budget",
+   * which is a weaker claim than the "no line within this depth" a completed search makes.
+   */
+  exhausted: boolean
+}
+
+/** One traversal, reported. `hasLethal` is this with the accounting dropped. */
+export function probeLethal(
+  state: GameState,
+  seat: PlayerId,
+  limits: LethalLimits = DEFAULT_LETHAL_LIMITS,
+): LethalProbe {
+  const budget = { left: limits.nodes }
+  const result = search(state, seat, limits.depth, budget)
+  return { won: result.won, nodesUsed: limits.nodes - budget.left, exhausted: budget.left <= 0 }
+}
+
 /** Does a sequence of `seat`'s own actions finish the enemy base, assuming the opponent does nothing? */
 export function hasLethal(state: GameState, seat: PlayerId, limits: LethalLimits = DEFAULT_LETHAL_LIMITS): boolean {
-  return search(state, seat, limits.depth, { left: limits.nodes }).won
+  return probeLethal(state, seat, limits).won
 }
 
 /**

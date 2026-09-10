@@ -15,19 +15,11 @@ rather than a dependency.
 ## Next up
 
 Ordered on one principle: **correctness, then structure, then calibration.** Anything that changes the
-engine or the horizon invalidates a calibration done before it, which is why the matchup matrix sits
-at the end of the list rather than in the middle of it.
+engine or the horizon invalidates a calibration done before it.
 
-1. **#520 the lethal solver is budget-bound**, so every result quoted about solver depth measures the
-   rail instead. It takes 50x the default node budget before more depth stops finding less, and the
-   shipped gated solver runs at 4x. The +0.8 recorded for `beam-lethal` is a lower bound on a solver
-   that never finished its search. `--lethal` takes `--solver-nodes N` (#559), so the sizing pass is
-   runnable. The `beam-lethal:WIDTHxBEAMDEPTHxSOLVERDEPTH` spec carries its own copy of the same
-   scaled rail with no override, so the `--cost` sweep, which addresses solver depths by AI name, is
-   still bound by it. Extending that spec with an optional node budget, as `beam:` and `reply:`
-   already have, is the first task.
-2. **Run the matchup matrix.** Only once the AI tickets above have settled: it is the calibration
-   they would each invalidate, and at roughly **23 hours sharded** (10 games a cell, against 169
+1. **Run the matchup matrix.** Nothing outstanding now changes what the bot plays, so the calibration
+   is no longer at risk of being invalidated by the work in front of it. At roughly **23 hours
+   sharded** (10 games a cell, against 169
    serial) it is the one run worth doing exactly once. It banks and resumes per shard now, so an
    interruption at hour 20 costs the outstanding shards rather than all 23. The first-player split is
    in place, so it answers two questions instead of one.
@@ -44,13 +36,13 @@ at the end of the list rather than in the middle of it.
 
    It measures the **deck generator**, not the sealed metagame: one algorithmic build per leader and
    base. That gap is the point rather than a caveat.
-3. **#565 split what a run plays from what it records.** Fifteen modes, two real shapes: a game run and
+2. **#565 split what a run plays from what it records.** Fifteen modes, two real shapes: a game run and
    a corpus run. The fragmentation already costs something measured, since the generalisation harness
    and `runBench` read 50.4% and 48.70% for the same AI on the same decks, which is why every harness
    needs its own baseline established before a number from it can be trusted. After the matrix rather
    than before it: the benefit is mostly for repeated A/B runs, and a large harness refactor
    immediately before a 23-hour calibration is the wrong risk to take.
-4. **Two candidates from review, neither ticketed yet.** Both add information rather than re-pricing
+3. **Two candidates from review, neither ticketed yet.** Both add information rather than re-pricing
    it, which is the strongest steer available: of six attempts to re-price something, one worked, and
    it was a search change.
    - **Claiming the initiative charges nothing for the cards it stops you playing.** The cost term
