@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  hasLethal, findLethal, attacksToFinish, shouldSearchLethal,
+  hasLethal, findLethal, probeLethal, attacksToFinish, shouldSearchLethal, readyDamage,
   DEFAULT_LETHAL_LIMITS, DEFAULT_LETHAL_GATE,
 } from '../ai/lethal'
 import { canFinishNow, canFinishThisAction } from '../ai/race'
@@ -116,6 +116,146 @@ describe('attacksToFinish', () => {
   /** A Sentinel locks every attacker onto itself, so nothing reaches the base until it is gone. */
   it('is Infinity behind a Sentinel, even with plenty of power', () => {
     expect(attacksToFinish(position(['FINISHER'], ['WALL']), 'player')).toBe(Infinity)
+  })
+})
+
+/**
+ * What a call actually SPENT, so the cost can be attributed instead of guessed at.
+ *
+ * The solver's cost is dominated by proving negatives: a search that finds a line returns on the
+ * spot, while one that finds nothing must exhaust the tree or the budget. Which of those two it is
+ * decides whether pruning has an order of magnitude in it or nothing at all, and that is not
+ * answerable from a wall clock, which blends both.
+ *
+ * `exhausted` matters on its own. A `false` from an exhausted search means "not found in budget",
+ * which is a different claim from "no line exists", and only this says which one was made.
+ */
+describe('probeLethal reports what the search spent', () => {
+  it('agrees with hasLethal wherever it is asked', () => {
+    for (const s of [
+      position(['FINISHER']),
+      position(['SMALL']),
+      position(['SMALL', 'FINISHER'], ['WALL']),
+      position([]),
+    ]) {
+      expect(probeLethal(s, 'player').won).toBe(hasLethal(s, 'player'))
+    }
+  })
+
+  it('never spends more than the budget', () => {
+    const s = position(['SMALL', 'FINISHER'], ['WALL'])
+    const probe = probeLethal(s, 'player', { depth: 4, nodes: 50 })
+    expect(probe.nodesUsed).toBeLessThanOrEqual(50)
+    expect(probe.nodesUsed).toBeGreaterThanOrEqual(0)
+  })
+
+  /**
+   * The closed form answers an attacks-only kill without searching at all, so the cheap case has to
+   * BE cheap. If this ever costs real nodes, the shortcut has stopped firing and every cost figure
+   * taken from the solver is measuring something else.
+   */
+  it('spends almost nothing when the closed form already has the answer', () => {
+    expect(probeLethal(position(['FINISHER']), 'player').nodesUsed).toBe(0)
+  })
+
+  it('reports a starved search as exhausted rather than as a verdict', () => {
+    const s = position(['SMALL', 'FINISHER'], ['WALL'])
+    const starved = probeLethal(s, 'player', { depth: 4, nodes: 0 })
+    expect(starved.won).toBe(false)
+    expect(starved.exhausted, 'the false must be reported as "not found in budget"').toBe(true)
+    // The same position on a real budget does find the line, so the false above was the budget
+    // talking rather than the position. That is the distinction the flag exists to make.
+    expect(probeLethal(s, 'player').won).toBe(true)
+  })
+
+  it('does not call a completed search exhausted', () => {
+    // No units at all, so the move loop finishes far inside any real budget.
+    const probe = probeLethal(position([]), 'player')
+    expect(probe.won).toBe(false)
+    expect(probe.exhausted).toBe(false)
+  })
+})
+
+/**
+ * The damage the board can put into the base right now, as the input to a deliberately LOSSY gate.
+ *
+ * Distinct from `optimisticDamage`, which sums every unit ready or not, the leader, and the printed
+ * power of the whole hand, precisely so it can never skip a real line. This one is the opposite
+ * trade: much tighter, admittedly incomplete, and paired with a slack allowance that is tuned by
+ * measuring what it costs rather than reasoned about.
+ *
+ * **Ready power, not reach.** `unitReach` reads a Sentinel-locked unit as 0, so a reach-based
+ * quantity would skip exactly the positions where the solver's job is to clear the blocker, play
+ * removal or grant Saboteur so that ready power reaches the base. Sentinel-blindness here is the
+ * point, not an oversight.
+ *
+ * **The leader counts.** It deploys READY (CR 3.4.4) and is not in `units` until it does, so
+ * omitting it would lose the leader-finish lines that are one of the three things the solver exists
+ * to find.
+ */
+describe('readyDamage', () => {
+  it('sums the power of ready units', () => {
+    expect(readyDamage(position(['SMALL']), 'player')).toBe(3 + 4)
+    expect(readyDamage(position(['SMALL', 'HALF']), 'player')).toBe(3 + 5 + 4)
+  })
+
+  it('counts the undeployed leader, which arrives ready', () => {
+    expect(readyDamage(position([]), 'player')).toBe(4)
+  })
+
+  it('ignores exhausted units, which cannot attack', () => {
+    const s = position(['FINISHER'])
+    const exhausted = {
+      ...s,
+      players: {
+        ...s.players,
+        player: {
+          ...s.players.player,
+          units: s.players.player.units.map(u => ({ ...u, exhausted: true })),
+        },
+      },
+    }
+    expect(readyDamage(exhausted, 'player')).toBe(4) // the leader only
+  })
+
+  /** The property the whole gate rests on: a wall in the way does not reduce the power behind it. */
+  it('is blind to Sentinels, unlike reach', () => {
+    expect(readyDamage(position(['FINISHER'], ['WALL']), 'player')).toBe(9 + 4)
+    expect(attacksToFinish(position(['FINISHER'], ['WALL']), 'player'), 'reach says nothing gets through').toBe(Infinity)
+  })
+})
+
+describe('the ready-damage slack gate', () => {
+  /** Only the slack varies, so nothing below is the round check or the single-action check talking. */
+  const slackOnly = (readySlack: number): typeof DEFAULT_LETHAL_GATE & { readySlack: number } =>
+    ({ minRound: 1, skipWhenSingleAction: false, powerBound: false, readySlack })
+
+  // 3 power plus a 4 power leader against a 9 HP base: 2 short.
+  const short = position(['SMALL'])
+
+  it('skips when the ready board plus the slack cannot cover the base', () => {
+    expect(shouldSearchLethal(short, 'player', slackOnly(0))).toBe(false)
+    expect(shouldSearchLethal(short, 'player', slackOnly(1))).toBe(false)
+  })
+
+  it('searches once the slack closes the gap', () => {
+    expect(shouldSearchLethal(short, 'player', slackOnly(2))).toBe(true)
+    expect(shouldSearchLethal(short, 'player', slackOnly(8))).toBe(true)
+  })
+
+  /** More slack can only admit more, or a sweep across slack values means nothing. */
+  it('admits a superset as the slack rises', () => {
+    const admits = [0, 1, 2, 3, 5, 8].map(n => shouldSearchLethal(short, 'player', slackOnly(n)))
+    for (let i = 1; i < admits.length; i++) {
+      if (admits[i - 1]) expect(admits[i], `slack ${i} admitted less than the one below`).toBe(true)
+    }
+  })
+
+  /** The containment: the shipped gate names no slack, so nothing already measured moves. */
+  it('is off unless a slack is named', () => {
+    expect(DEFAULT_LETHAL_GATE).not.toHaveProperty('readySlack')
+    const late = { ...short, round: 6 }
+    expect(shouldSearchLethal(late, 'player', DEFAULT_LETHAL_GATE)).toBe(true)
   })
 })
 

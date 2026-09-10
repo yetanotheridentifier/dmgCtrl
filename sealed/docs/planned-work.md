@@ -15,37 +15,11 @@ rather than a dependency.
 ## Next up
 
 Ordered on one principle: **correctness, then structure, then calibration.** Anything that changes the
-engine or the horizon invalidates a calibration done before it, which is why the matchup matrix sits
-at the end of the list rather than in the middle of it.
+engine or the horizon invalidates a calibration done before it.
 
-1. **#520 the lethal solver is budget-bound.** The sizing pass is done and is recorded in
-   [experiments.md](experiments.md); the budget is nameable per cell now, on the CLI (#559) and on
-   the `beam-lethal:WIDTHxBEAMDEPTH:SOLVERDEPTH[:NODES]` spec. What remains is the decision the
-   numbers set up.
-
-   A depth-4 solver wants at least 200,000 nodes against the 4,000 it ships with, and over 3,119
-   decisions that takes the lines the beam misses from **20 to 25** for **39 ms to 798 ms** a call.
-   So the specified override is roughly **20x the cost for a quarter more headroom**, and the
-   recorded +0.8 is a lower bound taken on the cheap end of that trade.
-
-   The 80-game screen is done and gives no encouragement: **-1.25 points** paired against a matched
-   `beam` control, with **five of eight shards measuring exactly zero**, the arm and control having
-   played identical games. Separating an effect this size needs roughly 10,000 games, which at the
-   funded solver's cost is **30-plus hours** even sharded.
-
-   **The recommendation is to close on the sizing rather than run that.** The screen cannot establish
-   parity and does not refute the recorded +0.8, but nothing in the evidence argues for spending 30
-   hours to resolve a term that changes nothing in five games out of eight.
-
-   Left unmeasured if it closes that way: whether 200,000 nodes is non-binding on a full-size corpus
-   (sized on 142 decisions, which under-reads cost three to four times; one 1.5 to 2.5 hour run
-   settles it).
-
-   **The question the numbers open up is making the solver cheaper**, which #520 excluded. Two
-   candidates, neither measured: `findLethal` re-searches from depth 1 upward with a fresh budget
-   after it already has an answer, and the `powerBound` gate ships off.
-2. **Run the matchup matrix.** Only once the AI tickets above have settled: it is the calibration
-   they would each invalidate, and at roughly **23 hours sharded** (10 games a cell, against 169
+1. **Run the matchup matrix.** Nothing outstanding now changes what the bot plays, so the calibration
+   is no longer at risk of being invalidated by the work in front of it. At roughly **23 hours
+   sharded** (10 games a cell, against 169
    serial) it is the one run worth doing exactly once. It banks and resumes per shard now, so an
    interruption at hour 20 costs the outstanding shards rather than all 23. The first-player split is
    in place, so it answers two questions instead of one.
@@ -62,13 +36,13 @@ at the end of the list rather than in the middle of it.
 
    It measures the **deck generator**, not the sealed metagame: one algorithmic build per leader and
    base. That gap is the point rather than a caveat.
-3. **#565 split what a run plays from what it records.** Fifteen modes, two real shapes: a game run and
+2. **#565 split what a run plays from what it records.** Fifteen modes, two real shapes: a game run and
    a corpus run. The fragmentation already costs something measured, since the generalisation harness
    and `runBench` read 50.4% and 48.70% for the same AI on the same decks, which is why every harness
    needs its own baseline established before a number from it can be trusted. After the matrix rather
    than before it: the benefit is mostly for repeated A/B runs, and a large harness refactor
    immediately before a 23-hour calibration is the wrong risk to take.
-4. **Two candidates from review, neither ticketed yet.** Both add information rather than re-pricing
+3. **Two candidates from review, neither ticketed yet.** Both add information rather than re-pricing
    it, which is the strongest steer available: of six attempts to re-price something, one worked, and
    it was a search change.
    - **Claiming the initiative charges nothing for the cards it stops you playing.** The cost term

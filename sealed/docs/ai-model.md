@@ -354,7 +354,7 @@ depending on how deep the solver is allowed to look.
 each is a lower bound rather than a value. The budget is a rail, and a rail that fires on nearly
 every call has become the real depth: a depth-4 solver wants at least **200,000** nodes and has been
 run at 4,000. Over 3,119 decisions that difference takes the lines the beam misses from 20 to 25, and
-the cost from 39 ms a call to 798 ms.
+the cost from 39 ms a call to about 780 ms.
 
 **It is not wired into the bot**, and that is a measured decision rather than an omission. As an
 override in front of the beam it scored 50.1%, 51.4% and 50.8% over three seeds and 2580 games:
@@ -381,8 +381,15 @@ Three properties are worth keeping in mind if it is ever revisited:
 
 A gate keeps it off the decisions where it cannot pay: before round 4 (lethal has never once been
 observed in rounds 1 to 3), and where a single action already wins (`WIN` dominates, so the driver is
-proven to take it). That skips ~45% of decisions and, measured against an ungated run, cost **zero**
-winnable positions.
+proven to take it). That skips **40.8%** of decisions and, measured against an ungated run, costs
+**zero** winnable positions.
+
+**It saves almost no time, though, and the skip rate is why that is easy to miss.** Those 40.8% are
+the cheap positions: measured as solver work rather than decisions, **97.2%** of the cost survives
+the gate, and the single-action check saves nothing measurable at all. Solver time concentrates in
+the complex late-game boards where lethal is plausible, which are exactly the ones a gate cannot
+decline without losing lines. Round 4 alone holds 3 of the 25 positions the beam misses, so raising
+the floor to round 5 is a real loss rather than a free saving.
 
 ## The two halves of `evaluate`
 

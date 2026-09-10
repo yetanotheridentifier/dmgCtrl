@@ -14,7 +14,7 @@ import { evaluate } from '../ai/evaluate'
 import { beamAi } from '../ai/greedyAi'
 import { beamReachesWin, DEFAULT_BEAM_LIMITS } from '../ai/search'
 import {
-  hasLethal, attacksToFinish, shouldSearchLethal,
+  probeLethal, attacksToFinish, shouldSearchLethal, hasLethal,
   DEFAULT_LETHAL_LIMITS, DEFAULT_LETHAL_GATE, type LethalGate,
 } from '../ai/lethal'
 import { COMMIT_ID } from '../buildIdentity'
@@ -68,9 +68,6 @@ export interface LethalConfig {
    *  the real depth, which is the mistake the #410 screen made, and `--solver-nodes` overrides that
    *  scaling because it is itself too low to size a solver with. */
   solverNodes?: number
-  /** The gate to SCORE. The solver itself always runs ungated here, so the gate is measured against
-   *  the truth rather than against its own admissions. */
-  gate?: LethalGate
 }
 
 export interface LethalCounts {
@@ -126,6 +123,72 @@ export interface GateCheck {
   skippedCostingAWin: number
 }
 
+/** One gate's score, named so a table of them can be read row by row. */
+export interface GateRow extends GateCheck {
+  label: string
+  gate: LethalGate
+  /**
+   * Solver work on the decisions this gate ADMITS, as a share of the ungated total.
+   *
+   * **Calls saved is not time saved**, and every other figure here is a decision count. A gate that
+   * declines a great many cheap positions looks dramatic on `skipped` and saves little; this is what
+   * a cost decision actually rests on. `1 - nodeShare` is the real saving.
+   */
+  nodeShare: number
+  /** The same in wall clock, which includes per-node engine cost that `nodeShare` cannot see. */
+  msShare: number
+}
+
+/**
+ * The gates scored side by side, shipped one first.
+ *
+ * **Several gates, one run.** The solver runs ungated here, so an extra gate costs a predicate
+ * evaluation rather than another search: scoring these six together is within noise of scoring one,
+ * where six separate runs would each pay for the whole corpus. It also removes the failure mode that
+ * matters most, a variant read against a baseline from a different run.
+ *
+ * Every gate is a way of NOT finding a line, so each row's `skippedCostingAWin` is the one to read
+ * and it must be zero before a variant can be considered. `powerBound` is expected to fail exactly
+ * that test: it bounds damage by POWER, and a burn event deals damage with none, so a hand holding
+ * the finisher reads as a zero ceiling. That is the measurement this table exists to make rather
+ * than argue.
+ */
+export const GATE_VARIANTS: { label: string, gate: LethalGate }[] = [
+  { label: 'shipped: round 4+, skip single-action', gate: DEFAULT_LETHAL_GATE },
+  { label: 'round 5+', gate: { ...DEFAULT_LETHAL_GATE, minRound: 5 } },
+  { label: 'round 6+', gate: { ...DEFAULT_LETHAL_GATE, minRound: 6 } },
+  { label: 'power bound on', gate: { ...DEFAULT_LETHAL_GATE, powerBound: true } },
+  { label: 'power bound on, round 5+', gate: { ...DEFAULT_LETHAL_GATE, powerBound: true, minRound: 5 } },
+  { label: 'single-action check off', gate: { ...DEFAULT_LETHAL_GATE, skipWhenSingleAction: false } },
+  // The ready-damage slack, swept. Every other gate here is admissible and therefore saves little;
+  // this one trades a measured loss for compute, so the sweep IS the design: read the largest slack
+  // whose COST A WIN is still zero, and note that the whole headroom is ~25 positions, so a row
+  // losing one or two is losing a real fraction of the feature rather than rounding.
+  ...[0, 1, 2, 3, 5, 6, 7, 8, 10, 12].map(readySlack => ({
+    label: `ready damage + ${readySlack}`,
+    gate: { ...DEFAULT_LETHAL_GATE, readySlack },
+  })),
+]
+
+/**
+ * Where the solver's time actually goes.
+ *
+ * The cost is dominated by proving negatives, and the split below is what says by how much. A search
+ * that finds a line returns on the spot; one that finds nothing must exhaust the tree or the budget.
+ * If negatives cost orders more than positives, better pruning has somewhere to go; if they already
+ * terminate cheaply, the budget is not what is expensive and pruning would buy nothing.
+ */
+export interface NodeCheck {
+  meanNodes: number
+  /** Mean over calls that found a line, and over calls that did not. */
+  meanNodesFound: number
+  meanNodesNotFound: number
+  /** The largest single call, which is what a per-decision time limit has to survive. */
+  maxNodes: number
+  /** Calls that used the whole budget, so their verdict is "not found in budget". */
+  exhausted: number
+}
+
 export interface LethalReport {
   commitId: string
   games: number
@@ -133,7 +196,8 @@ export interface LethalReport {
    *  openings rather than merely intending to. See `firstPlayerFor`. */
   gamesPlayerFirst: number
   decisions: number
-  gate: GateCheck
+  /** Every gate in `GATE_VARIANTS`, scored on this one corpus, shipped gate first. */
+  gates: GateRow[]
   /** What the solver was allowed, so a rate can be compared with another run. */
   solverDepth: number
   solverNodes: number
@@ -142,6 +206,8 @@ export interface LethalReport {
   oracle: OracleCheck
   /** Wall clock per `hasLethal` call. #446 calls it repeatedly, so this is part of the decision. */
   msPerCall: number
+  /** What each call spent, split by whether it found anything. See `NodeCheck`. */
+  nodes: NodeCheck
 }
 
 /**
@@ -183,13 +249,24 @@ export function runLethal(config: LethalConfig): LethalReport {
   const lethal: LethalCounts = { none: 0, attacksOnly: 0, searchOnly: 0, beamSaw: 0, beamMissed: 0 }
   const rounds = new Map<number, RoundRow>()
   const oracle: OracleCheck = { checked: 0, solverMissed: 0, solverExtra: 0, disagreedWithChoicePending: 0 }
-  const gate: GateCheck = { skipped: 0, skippedWithLethal: 0, skippedCostingAWin: 0 }
-  const gateConfig = config.gate ?? DEFAULT_LETHAL_GATE
+  const gates: GateRow[] = GATE_VARIANTS.map(v => ({
+    ...v, skipped: 0, skippedWithLethal: 0, skippedCostingAWin: 0, nodeShare: 0, msShare: 0,
+  }))
+  // Accumulated raw, divided by the ungated totals at the end. Kept beside `gates` rather than on it
+  // so a row never carries a running total that reads like a finished share.
+  const admittedNodes = GATE_VARIANTS.map(() => 0)
+  const admittedMs = GATE_VARIANTS.map(() => 0)
   let games = 0
   let gamesPlayerFirst = 0
   let decisions = 0
   let solverMs = 0
   let solverCalls = 0
+  let nodesTotal = 0
+  let nodesFound = 0
+  let nodesNotFound = 0
+  let callsFound = 0
+  let maxNodes = 0
+  let exhausted = 0
 
   decks.forEach((deck, d) => {
     for (let g = 0; g < config.gamesPerDeck; g++) {
@@ -218,17 +295,36 @@ export function runLethal(config: LethalConfig): LethalReport {
         row.decisions++
 
         const start = performance.now()
-        const solver = hasLethal(s, me, solverLimits)
-        solverMs += performance.now() - start
+        const probe = probeLethal(s, me, solverLimits)
+        const solver = probe.won
+        const callMs = performance.now() - start
+        solverMs += callMs
         solverCalls++
+        nodesTotal += probe.nodesUsed
+        maxNodes = Math.max(maxNodes, probe.nodesUsed)
+        if (probe.exhausted) exhausted++
+        if (solver) { callsFound++; nodesFound += probe.nodesUsed } else { nodesNotFound += probe.nodesUsed }
 
-        // The solver above runs UNGATED, so the gate can be scored against the truth rather than
-        // against itself. A gate measured only on the positions it admits can never look wrong.
-        if (!shouldSearchLethal(s, me, gateConfig)) {
-          gate.skipped++
+        // One beam verdict per decision, shared by every gate row and by the classification below.
+        // It is only meaningful where a line exists, and asking costs a real search, so a position
+        // with no lethal never pays for it.
+        const beamSees = solver && beamReachesWin(s, me, evaluate, DEFAULT_BEAM_LIMITS)
+
+        // The solver above runs UNGATED, so the gates can be scored against the truth rather than
+        // against their own admissions. A gate measured only on the positions it admits can never
+        // look wrong.
+        for (let v = 0; v < GATE_VARIANTS.length; v++) {
+          if (shouldSearchLethal(s, me, GATE_VARIANTS[v].gate)) {
+            // Admitted, so this call's cost is what the gate leaves behind.
+            admittedNodes[v] += probe.nodesUsed
+            admittedMs[v] += callMs
+            continue
+          }
+          const g = gates[v]
+          g.skipped++
           if (solver) {
-            gate.skippedWithLethal++
-            if (!beamReachesWin(s, me, evaluate, DEFAULT_BEAM_LIMITS)) gate.skippedCostingAWin++
+            g.skippedWithLethal++
+            if (!beamSees) g.skippedCostingAWin++
           }
         }
 
@@ -241,7 +337,7 @@ export function runLethal(config: LethalConfig): LethalReport {
           if (attacksToFinish(s, me) <= solverDepth) lethal.attacksOnly++
           else lethal.searchOnly++
 
-          if (beamReachesWin(s, me, evaluate, DEFAULT_BEAM_LIMITS)) {
+          if (beamSees) {
             lethal.beamSaw++
           } else {
             lethal.beamMissed++
@@ -278,10 +374,21 @@ export function runLethal(config: LethalConfig): LethalReport {
     decisions,
     solverDepth,
     solverNodes,
-    gate,
+    gates: gates.map((g, v) => ({
+      ...g,
+      nodeShare: nodesTotal === 0 ? 0 : admittedNodes[v] / nodesTotal,
+      msShare: solverMs === 0 ? 0 : admittedMs[v] / solverMs,
+    })),
     lethal,
     byRound: [...rounds.values()].sort((a, b) => a.round - b.round),
     oracle,
     msPerCall: solverCalls === 0 ? 0 : solverMs / solverCalls,
+    nodes: {
+      meanNodes: solverCalls === 0 ? 0 : nodesTotal / solverCalls,
+      meanNodesFound: callsFound === 0 ? 0 : nodesFound / callsFound,
+      meanNodesNotFound: solverCalls === callsFound ? 0 : nodesNotFound / (solverCalls - callsFound),
+      maxNodes,
+      exhausted,
+    },
   }
 }

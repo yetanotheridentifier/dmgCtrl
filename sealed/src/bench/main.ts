@@ -923,15 +923,28 @@ function runLethalMode(args: Args): void {
     row('beam already saw it', rate(le.beamSaw)),
     row('BEAM MISSED IT', `${rate(le.beamMissed)}   <- the only headroom here`),
     '',
-    row('gate skipped', `${rate(report.gate.skipped)}   compute saved`),
-    row('  had lethal', `${report.gate.skippedWithLethal}   fine if the beam wins them anyway`),
-    row('  COST A WIN', `${report.gate.skippedCostingAWin}   <- must be zero`),
+    '  gates, scored on this same corpus (skipped / had lethal / COST A WIN / time left):',
+    // `time left` is the saving that matters. Every other column counts decisions, and a gate that
+    // declines many cheap positions looks dramatic on `skipped` while saving little.
+    ...report.gates.map(g => `    ${g.label.padEnd(38)} ${rate(g.skipped).padEnd(16)} ` +
+      `${String(g.skippedWithLethal).padStart(4)} ${String(g.skippedCostingAWin).padStart(6)}   ` +
+      `${pct(g.msShare).padStart(6)}` +
+      `${g.skippedCostingAWin > 0 ? '   <- LOSES A WINNABLE POSITION' : ''}`),
+    '    a variant is only usable at COST A WIN = 0; time left is the share of solver work surviving',
     '',
     row('oracle checked', `${report.oracle.checked}`),
     row('  SOLVER MISSED', `${report.oracle.solverMissed}   <- a real defect: pruning lost a line`),
     row('  solver found extra', `${report.oracle.solverExtra}   expected: owed answers cost it budget, not depth`),
     row('  with choice pending', `${report.oracle.disagreedWithChoicePending}   of the disagreements above`),
     row('ms per solver call', report.msPerCall.toFixed(2)),
+    // Where the time goes, which a wall clock cannot say: a call that finds a line returns at once,
+    // one that finds nothing must exhaust the tree or the budget. The ratio between these two is
+    // what decides whether better pruning has an order of magnitude in it.
+    row('nodes per call', report.nodes.meanNodes.toFixed(0)),
+    row('  found a line', `${report.nodes.meanNodesFound.toFixed(0)}   returns on the spot`),
+    row('  found nothing', `${report.nodes.meanNodesNotFound.toFixed(0)}   pays for the whole proof`),
+    row('  worst call', `${report.nodes.maxNodes}   what a per-decision limit must survive`),
+    row('  budget exhausted', `${rate(report.nodes.exhausted)}   verdict is "not found in budget"`),
     '',
     '  by round (decisions / lethal / beam missed):',
     `    ${report.byRound.map(r => `r${r.round} ${r.decisions}/${r.lethal}/${r.beamMissed}`).join('  ')}`,

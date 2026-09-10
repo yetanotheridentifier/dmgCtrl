@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { runLethal } from '../bench/lethal'
+import { runLethal, GATE_VARIANTS, type LethalReport, type GateRow } from '../bench/lethal'
+import { DEFAULT_LETHAL_GATE } from '../ai/lethal'
 import '../engine/cardDefinitions'
+
+/** The row for the gate the bot actually runs. Always first, so a reader meets the baseline first. */
+const shippedGate = (report: LethalReport): GateRow => report.gates[0]
 
 /**
  * Sizing #433: is the lethal solver worth wiring into the bot, or is it a correct primitive that
@@ -120,7 +124,7 @@ describe('runLethal', () => {
    * pure overhead.
    */
   it('skips a meaningful share of decisions', () => {
-    expect(report.gate.skipped).toBeGreaterThan(report.decisions / 4)
+    expect(shippedGate(report).skipped).toBeGreaterThan(report.decisions / 4)
   })
 
   /**
@@ -133,7 +137,106 @@ describe('runLethal', () => {
    * the metric is the narrower one.
    */
   it('never skips a win the beam would also miss', () => {
-    expect(report.gate.skippedCostingAWin, 'the gate threw away a winnable position').toBe(0)
+    expect(shippedGate(report).skippedCostingAWin, 'the gate threw away a winnable position').toBe(0)
+  })
+
+  /**
+   * Several gates scored in ONE run.
+   *
+   * The solver already runs ungated, so an extra gate costs a predicate evaluation rather than
+   * another search: scoring six variants together is within noise of scoring one, where six separate
+   * runs would be six times a 48-minute corpus. The gate question is a comparison by nature, and a
+   * variant read from a different run than its baseline is not one.
+   */
+  describe('the gate variants', () => {
+    it('scores the shipped gate first, so the baseline leads', () => {
+      expect(shippedGate(report).gate).toEqual(DEFAULT_LETHAL_GATE)
+    })
+
+    it('scores every variant in GATE_VARIANTS', () => {
+      expect(report.gates).toHaveLength(GATE_VARIANTS.length)
+      expect(report.gates.map(g => g.label)).toEqual(GATE_VARIANTS.map(v => v.label))
+    })
+
+    /** A table nobody can read row by row is not a table. */
+    it('labels every variant distinctly', () => {
+      expect(new Set(GATE_VARIANTS.map(v => v.label)).size).toBe(GATE_VARIANTS.length)
+    })
+
+    /** Each count is a subset of the one above it, or the safety number is measured against the
+     *  wrong base and a real loss can hide inside a bigger number. */
+    it('nests each count inside the one above', () => {
+      for (const row of report.gates) {
+        expect(row.skipped, row.label).toBeLessThanOrEqual(report.decisions)
+        expect(row.skippedWithLethal, row.label).toBeLessThanOrEqual(row.skipped)
+        expect(row.skippedCostingAWin, row.label).toBeLessThanOrEqual(row.skippedWithLethal)
+      }
+    })
+
+    /**
+     * The variants are scored on ONE corpus, so a stricter gate must skip a superset of a looser
+     * one. Raising the minimum round only ever adds rounds to the skipped set, so if this ever fails
+     * the variants were not scored on the same decisions and no row can be compared with any other.
+     */
+    it('skips a superset as the minimum round rises', () => {
+      const byRound = (min: number): GateRow | undefined =>
+        report.gates.find(g => g.gate.minRound === min
+          && g.gate.powerBound === DEFAULT_LETHAL_GATE.powerBound
+          && g.gate.skipWhenSingleAction === DEFAULT_LETHAL_GATE.skipWhenSingleAction)
+      const at4 = byRound(4)
+      const at5 = byRound(5)
+      const at6 = byRound(6)
+      expect(at4, 'the shipped minimum round must be scored').toBeDefined()
+      expect(at5!.skipped).toBeGreaterThanOrEqual(at4!.skipped)
+      expect(at6!.skipped).toBeGreaterThanOrEqual(at5!.skipped)
+    })
+
+    /**
+     * **Calls saved is not time saved.** A gate that skips a great many cheap decisions can look
+     * dramatic and save little, and every "skipped" figure above is a decision count. `nodeShare` is
+     * the solver work surviving the gate as a fraction of the ungated total, which is the quantity a
+     * cost decision actually rests on.
+     */
+    it('reports the surviving work as a share, not just the calls', () => {
+      for (const row of report.gates) {
+        expect(row.nodeShare, row.label).toBeGreaterThanOrEqual(0)
+        expect(row.nodeShare, row.label).toBeLessThanOrEqual(1)
+        expect(row.msShare, row.label).toBeGreaterThanOrEqual(0)
+        expect(row.msShare, row.label).toBeLessThanOrEqual(1)
+      }
+    })
+
+    /** A gate that skips a superset must leave no more work behind than the one it contains. */
+    it('leaves less work behind as the minimum round rises', () => {
+      const share = (min: number): number => report.gates.find(g => g.gate.minRound === min
+        && g.gate.readySlack === undefined
+        && g.gate.powerBound === DEFAULT_LETHAL_GATE.powerBound
+        && g.gate.skipWhenSingleAction === DEFAULT_LETHAL_GATE.skipWhenSingleAction)!.nodeShare
+      expect(share(5)).toBeLessThanOrEqual(share(4))
+      expect(share(6)).toBeLessThanOrEqual(share(5))
+    })
+
+    /** More slack admits more, so more work survives. The sweep is unreadable if this ever inverts. */
+    it('leaves more work behind as the slack rises', () => {
+      const slacks = report.gates
+        .filter(g => g.gate.readySlack !== undefined)
+        .sort((a, b) => a.gate.readySlack! - b.gate.readySlack!)
+      expect(slacks.length).toBeGreaterThan(1)
+      for (let i = 1; i < slacks.length; i++) {
+        expect(slacks[i].nodeShare, slacks[i].label).toBeGreaterThanOrEqual(slacks[i - 1].nodeShare)
+      }
+    })
+
+    /**
+     * The control that prices the gate we already have. Turning `skipWhenSingleAction` off can only
+     * shrink the skipped set, and if it shrinks it to nothing at the shipped minimum round then the
+     * round check is doing all the work and the single-action check is free to reconsider.
+     */
+    it('scores an arm with the single-action check off', () => {
+      const off = report.gates.find(g => !g.gate.skipWhenSingleAction)
+      expect(off, 'nothing prices skipWhenSingleAction').toBeDefined()
+      expect(off!.skipped).toBeLessThanOrEqual(shippedGate(report).skipped)
+    })
   })
 
   it('is deterministic for a given seed', () => {

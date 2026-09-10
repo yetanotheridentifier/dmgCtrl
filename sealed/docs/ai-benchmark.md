@@ -335,9 +335,21 @@ npm run bench --prefix sealed -- --lethal --games 2 --depth 5  # what a lethal s
 
 `--lethal` sizes a lethal solver against the shipped beam. Its headline is **`beam missed`**, not
 `lethal found`: a win the bot already plays is not headroom, and attacks-only lethal is closed form
-rather than search. It also scores the **gate** (what it skips, and whether any of that cost a
-winnable position) and runs an exhaustive **oracle** against the pruned search on real positions,
-since a pruned line makes the answer wrong rather than imprecise, and does so silently.
+rather than search. It also runs an exhaustive **oracle** against the pruned search on real
+positions, since a pruned line makes the answer wrong rather than imprecise, and does so silently.
+
+It scores **every gate in `GATE_VARIANTS` side by side on one corpus**. The solver runs ungated, so
+an extra gate costs a predicate evaluation rather than another search: the whole table in one run
+costs what a single variant costs, where six runs would each pay for the whole corpus. Read `COST A WIN`, which counts
+positions a gate declines where a line existed *and the beam misses it too*. A variant is usable only
+at zero, and the report says so on any row that is not.
+
+**A short corpus cannot falsify a gate.** With few decks `beam missed` is zero, so `COST A WIN` is
+structurally zero however reckless the variant. Size a gate on the full set.
+
+**Read `time left`, not `skipped`.** Every other column counts decisions, and a gate that declines
+many cheap positions looks dramatic while saving nothing: the shipped gate skips 40.8% of decisions
+and 2.8% of the solver's work.
 
 The solver has **two** limits, and a result is only about the one that bound last:
 
