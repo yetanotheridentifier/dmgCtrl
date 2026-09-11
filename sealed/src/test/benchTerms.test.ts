@@ -95,8 +95,8 @@ describe('the term decomposition', () => {
     const terms = publicBreakdown(state, 'player', DEFAULT_WEIGHTS, 'neutral')
     expect(Object.keys(terms).sort()).toEqual([
       'advantage', 'advantageExhausted', 'base', 'blockedReach', 'card', 'cardScarcity', 'claimCost',
-      'deployUrgency', 'hp', 'initiative', 'lethalExposure', 'power', 'readyUnit', 'resource',
-      'resourceSurplus', 'shield', 'unit',
+      'deployUrgency', 'hp', 'initiative', 'lethalExposure', 'power', 'powerReady', 'readyUnit',
+      'resource', 'resourceSurplus', 'shield', 'unit',
     ])
     expect(Object.keys(terms)).not.toContain('saturation')
     expect(Object.keys(terms)).not.toContain('roleShift')

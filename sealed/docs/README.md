@@ -4,6 +4,7 @@ Each file covers one concern, so you can open the right one without reading the 
 
 | File | Covers | Open it when |
 | --- | --- | --- |
+| [glossary.md](glossary.md) | game terms from the Comprehensive Rules, and the terms this project invented | writing anything that names a game action, or meeting an unfamiliar AI term |
 | [userGuide.md](userGuide.md) | how the game plays from the player's side | changing UI wording or flow |
 | [architecture.md](architecture.md) | system shape, rules engine, data model, runtime flow, storage, network | orienting, or you don't know where something lives |
 | [abilities.md](abilities.md) | how a card's behaviour is declared, registered and dispatched | adding or fixing a card |

@@ -75,6 +75,28 @@ export interface EvalWeights {
    */
   advantage: number
   /**
+   * Per point of power on a unit that is **ready**, replacing `power` for those units.
+   *
+   * A unit enters play exhausted when played (CR 1.7.2b) and readies at the regroup phase, so
+   * exhaustion is temporary. What makes it worth pricing anyway is that **the shipped search never
+   * crosses the round boundary** (`maxCrossings` defaults to 0), so within everything the search can
+   * see, an exhausted unit's power can never be spent. The search cannot correct for this, because
+   * the readying happens past a horizon it never reaches.
+   *
+   * Readiness is not otherwise unpriced: `readyUnit` is a flat per-body tempo term. What it cannot
+   * express is that holding nine points of unspent power is worth more than holding two.
+   *
+   * **Ships equal to `power`**, so it is a no-op until swept upward, for the reason `advantage`
+   * ships equal rather than at zero: zero would assert a ready unit's power is worthless, which is a
+   * large change rather than a neutral one.
+   *
+   * Two interactions to keep in view when sweeping. A played unit arrives exhausted while a
+   * **deployed leader arrives ready** (CR 3.3.4), so raising this charges for playing units and pays
+   * for deploying leaders. And it overlaps `readyUnit`, which prices the same distinction flat, so
+   * sweeping one while the other is live attributes shared effect to whichever moved.
+   */
+  powerReady: number
+  /**
    * Per Advantage token on an **exhausted** carrier, replacing `advantage` for those.
    *
    * A ready carrier can spend the token this round; an exhausted one readies at regroup, which is a
@@ -267,7 +289,7 @@ export interface EvalWeights {
  * purpose is to sit below the public resolution.
  */
 export const PRICE_KEYS = [
-  'base', 'unit', 'power', 'advantage', 'advantageExhausted', 'hp', 'card', 'cardScarcity', 'resource',
+  'base', 'unit', 'power', 'powerReady', 'advantage', 'advantageExhausted', 'hp', 'card', 'cardScarcity', 'resource',
   'resourceSurplus', 'deployUrgency', 'readyUnit', 'shield', 'blockedReach', 'initiative', 'claimCost',
   'initiativeHorizon', 'roleShift', 'lethalExposure',
 ] as const satisfies ReadonlyArray<keyof Omit<EvalWeights, 'hand' | 'saturation' | 'handKnee' | 'blockedReachCap'>>
@@ -291,6 +313,8 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   base: 8,
   unit: 8,
   power: 4,
+  // Equal to `power`: a no-op until swept upward. See the field docs for why not zero.
+  powerReady: 4,
   // Equal to `power`: a no-op until swept downward. See the field docs for why not zero.
   advantage: 4,
   advantageExhausted: 4,
@@ -390,6 +414,14 @@ interface Presence {
   units: number
   power: number
   hp: number
+  /**
+   * Power sitting on units that are **ready**, repriced off `power`. See
+   * {@link powerReadyCorrection}.
+   *
+   * Always accumulated, unlike `advantage`: the per-unit power is already computed for `power`, so
+   * this is a comparison and an add rather than another walk of the upgrade array.
+   */
+  readyPower: number
   /** Advantage tokens on ready carriers, repriced off `power`. See {@link advantageCorrection}. */
   advantage: number
   /** Advantage tokens on exhausted carriers, which cannot spend them this round. */
@@ -403,10 +435,12 @@ interface Presence {
  * guarded for the same reason, and it was expensive enough to time out a test before it was.
  */
 function presence(state: GameState, id: PlayerId, countAdvantage: boolean): Presence {
-  const out: Presence = { units: 0, power: 0, hp: 0, advantage: 0, advantageExhausted: 0 }
+  const out: Presence = { units: 0, power: 0, hp: 0, readyPower: 0, advantage: 0, advantageExhausted: 0 }
   for (const unit of state.players[id].units) {
     out.units++
-    out.power += effectivePower(state, unit)
+    const power = effectivePower(state, unit)
+    out.power += power
+    if (!unit.exhausted) out.readyPower += power
     out.hp += Math.max(0, effectiveHp(state, unit) - unit.damage)
     if (!countAdvantage) continue
     const tokens = unit.upgrades.filter(u => u.cardId === TOKEN_ADVANTAGE).length
@@ -439,13 +473,31 @@ function advantageCorrection(p: Presence, w: EvalWeights): number {
 }
 
 /**
+ * Reprice power on units that can act, from `power` to `powerReady`.
+ *
+ * Same shape as {@link advantageCorrection} and for the same two reasons: it is provably zero when
+ * the rates are equal, which is how it ships, and it adjusts the rate rather than re-deriving what
+ * power is, so whatever the stats pipeline says a unit's power is still stands.
+ *
+ * **The two corrections compose rather than collide**, which is worth stating because a token on a
+ * ready carrier is counted by both. That token's power is charged `w.power` through `p.power`, then
+ * `(w.powerReady - w.power)` here, then `(w.advantage - w.power)` there, totalling
+ * `w.powerReady + w.advantage - w.power`: the ready rate, adjusted by the token's one-off-ness. At
+ * the shipped weights all three are equal and it collapses to `w.power`.
+ */
+function powerReadyCorrection(p: Presence, w: EvalWeights): number {
+  return (w.powerReady - w.power) * p.readyPower
+}
+
+/**
  * Board value of a player's units: a fixed bonus per body (unit count), plus power, plus a light
  * remaining-HP term. Deployed leaders live in `units`, so they count too. Defeating a unit removes
  * its whole contribution (the real trade swing); chipping only shaves the small HP part.
  */
 function boardPresence(state: GameState, id: PlayerId, w: EvalWeights): number {
   const p = presence(state, id, advantagePriced(w))
-  return w.unit * p.units + w.power * p.power + w.hp * p.hp + advantageCorrection(p, w)
+  return w.unit * p.units + w.power * p.power + w.hp * p.hp
+    + advantageCorrection(p, w) + powerReadyCorrection(p, w)
 }
 
 /**
@@ -754,7 +806,7 @@ export interface Term {
 /** The linear coefficients, i.e. every public weight that prices a quantity. `saturation` and
  *  `roleShift` are absent by construction: neither is a price. See `resourceSplit` and `roleAdjusted`. */
 export type LinearTermKey =
-  | 'base' | 'unit' | 'power' | 'advantage' | 'advantageExhausted' | 'hp' | 'card' | 'cardScarcity'
+  | 'base' | 'unit' | 'power' | 'powerReady' | 'advantage' | 'advantageExhausted' | 'hp' | 'card' | 'cardScarcity'
   | 'resource' | 'resourceSurplus' | 'deployUrgency'
   | 'readyUnit' | 'shield' | 'blockedReach' | 'initiative' | 'claimCost' | 'lethalExposure'
 
@@ -801,6 +853,10 @@ export function publicBreakdown(
     power: { weight: w.power, quantity: mine.power - theirs.power },
     // The correction, carried at its own rate so the identity holds: `power` already charged these
     // tokens at `w.power`, and this pays the difference. Zero quantity contribution when equal.
+    // Repriced as corrections, so the weight shown is the delta off `power` and the quantity is what
+    // that delta applies to. Both read zero at the shipped rates, which is what makes the no-op
+    // visible in a breakdown rather than merely asserted.
+    powerReady: { weight: w.powerReady - w.power, quantity: mine.readyPower - theirs.readyPower },
     advantage: { weight: w.advantage - w.power, quantity: mine.advantage - theirs.advantage },
     advantageExhausted: {
       weight: w.advantageExhausted - w.power,
