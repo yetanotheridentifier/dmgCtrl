@@ -4,7 +4,8 @@ import { effectivePower, effectiveHp } from '../engine/stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { handValue, DEFAULT_HAND_WEIGHTS, type HandWeights } from './handValue'
 import {
-  role, canFinishThisAction, canFinishNow, lockoutSwing, reachSteady, remainingBase, type Role,
+  role, canFinishThisAction, canFinishNow, lockoutSwing, reachSteady, reachThisRound, remainingBase,
+  type Role,
 } from './race'
 
 /**
@@ -244,6 +245,30 @@ export interface EvalWeights {
    */
   initiativeHorizon: number
   /**
+   * Per point of **exhausted reach on the board** while the initiative counter can still be taken.
+   *
+   * Fixes a blind spot that no other weight can reach. Taking the initiative is once per round
+   * across both players (CR 1.15.5a), so until someone takes it the holder's grip is contingent. A
+   * **denial claim**, claiming when you already hold it purely to stop them taking it, leaves
+   * `state.initiative` unchanged, so the `initiative` weight does not move while `claimCost` charges
+   * in full. A denial claim therefore scores as pure cost in every position, at every weight, and
+   * the bot can never make one.
+   *
+   * What acting first is worth is what it protects and what it pre-empts, and both are the same
+   * quantity: reach locked up in **exhausted** units, `reachSteady - reachThisRound`. Ours because
+   * acting first lets it attack before it can be traded with; theirs because acting first lets us
+   * pre-empt it. Ready reach is not at risk, since it attacks this round either way. The shipped
+   * search cannot see any of this: it does not cross the round boundary, where everything readies.
+   *
+   * **Charged to the holder only, and so deliberately not zero-sum.** Crediting the non-holder the
+   * same stake is the symmetric reading and it inverts the decision: the credit would vanish when
+   * they took the counter, making taking it score as a loss. Their opportunity is already expressed
+   * by the `holding` swing when they take it.
+   *
+   * Ships at **0**, per the rule that a new weight ships at zero and is swept upward.
+   */
+  initiativeExposure: number
+  /**
    * Per ready unit forfeited by having claimed the initiative this round (#394). Claiming makes you
    * pass for the rest of the round, so this is what that costs. Scaled by ready units rather than
    * flat, because the whole judgement is how much you were giving up.
@@ -291,7 +316,7 @@ export interface EvalWeights {
 export const PRICE_KEYS = [
   'base', 'unit', 'power', 'powerReady', 'advantage', 'advantageExhausted', 'hp', 'card', 'cardScarcity', 'resource',
   'resourceSurplus', 'deployUrgency', 'readyUnit', 'shield', 'blockedReach', 'initiative', 'claimCost',
-  'initiativeHorizon', 'roleShift', 'lethalExposure',
+  'initiativeHorizon', 'initiativeExposure', 'roleShift', 'lethalExposure',
 ] as const satisfies ReadonlyArray<keyof Omit<EvalWeights, 'hand' | 'saturation' | 'handKnee' | 'blockedReachCap'>>
 
 /** Multiply every price by `factor`, leaving the structural numbers and the private half alone. */
@@ -391,6 +416,9 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   // the side facing lethal next round, which is the case the search cannot see across the round
   // boundary. The flat version of the same idea is monotonically harmful, so the sweep starts low.
   initiativeHorizon: 0,
+  // #584 candidate 3. OFF until swept. See the field docs: it prices the one thing no other weight
+  // can, a claim made to deny rather than to take.
+  initiativeExposure: 0,
   // Swept (#395) in the old units, where 1 and 2 tied and 3 and 4 were worse: so 2 here, and the
   // untested half-step is 3. The effect is modest at 51.4% +/- 0.9% over ~11,340 games (three
   // matched-power seeds: 50.2%, 52.8%, 51.2%) against a role-blind AI, roughly a third of what #393 or
@@ -594,8 +622,26 @@ function forfeitedTempo(state: GameState, id: PlayerId): number {
 export function initiativeValue(state: GameState, me: PlayerId, w: EvalWeights): number {
   const foe = opponentOf(me)
   const holding = w.initiative * (state.initiative === me ? 1 : -1)
-  return holding + horizonValue(state, me, w)
+  return holding + horizonValue(state, me, w) + exposureValue(state, me, w)
     - w.claimCost * forfeitedTempo(state, me) + w.claimCost * forfeitedTempo(state, foe)
+}
+
+/**
+ * What holding the initiative is worth **less** while it can still be taken away.
+ *
+ * See the `initiativeExposure` field docs for why this exists and why it is charged to the holder
+ * only. The short version: a denial claim moves no other term, so without this the bot cannot ever
+ * make one.
+ */
+function exposureValue(state: GameState, me: PlayerId, w: EvalWeights): number {
+  if (w.initiativeExposure === 0) return 0
+  // Already taken this round, so the holding is secure and there is nothing left to price.
+  if (state.initiativeTakenBy !== null) return 0
+  // Only the holder is exposed. The non-holder's opportunity is priced by `holding` when they take
+  // it, and pricing it here as well would make taking the counter score as a loss.
+  if (state.initiative !== me) return 0
+  const atRisk = (seat: PlayerId): number => reachSteady(state, seat) - reachThisRound(state, seat)
+  return -w.initiativeExposure * (atRisk(me) + atRisk(opponentOf(me)))
 }
 
 /**

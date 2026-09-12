@@ -133,6 +133,8 @@ defined.
 | **Lockout** | A lane shut by a Sentinel that keeps being re-shielded, so nothing gets through. A **locked lane** is one arena in that state. |
 | **Presence** | The board summary the evaluation scores: unit count, total power, total remaining HP. |
 | **Tempo** | Actions available now. **Forfeited tempo** is what taking the initiative gives up, currently counted as ready units only. |
+| **Denial claim** | Claiming the initiative when you **already hold it**, purely to stop the opponent taking it. The evaluation cannot represent it: the term for holding reads who has the counter, which such a claim does not change. |
+| **Reach at risk** | Reach locked up in exhausted units, `reachSteady - reachThisRound`. It is what acting first next round protects, and what acting first pre-empts. |
 | **Lethal** | A sequence of a seat's own actions that finishes the enemy base, under the null move. |
 | **Attacks to finish** | The fewest ready attackers whose reach covers the base. Closed form, no search needed. |
 | **Exposure** | Handing the opponent a position they can win from immediately. |

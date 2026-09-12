@@ -79,6 +79,19 @@ describe('a readiness premium must not stop the bot playing units', () => {
     expect(beamWith({ readyUnit: DEFAULT_WEIGHTS.readyUnit * 10 })(holdingABody()))
       .toMatchObject({ type: 'playUnit' })
   })
+
+  /**
+   * **Not** the reason `initiativeExposure` measured harmful, recorded because it was the obvious
+   * suspect and it is wrong.
+   *
+   * A unit enters play exhausted, so playing one converts its whole power into "reach at risk" under
+   * that term and charges for it immediately: 12 points at weight 2 for a 6-power body. That looked
+   * like enough to suppress playing units altogether. It is not. The body is worth far more than the
+   * charge and the bot still puts it down.
+   */
+  it('is NOT suppressed by initiativeExposure at the weight that measured harmful', () => {
+    expect(beamWith({ initiativeExposure: 2 })(holdingABody())).toMatchObject({ type: 'playUnit' })
+  })
 })
 
 /**

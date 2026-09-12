@@ -17,19 +17,9 @@ rather than a dependency.
 Ordered on one principle: **correctness, then structure, then calibration.** Anything that changes the
 engine or the horizon invalidates a calibration done before it.
 
-1. **#584 price the cards a claim forfeits, and the power that is ready.** Two evaluation candidates,
-   both adding information the search cannot derive rather than re-pricing what it sees. **Sized
-   first**, in one `--decisions` run reporting both prevalences: offensive pinning was retired on 0.8%
-   without anyone building it, and that filter costs hours rather than days. They are ahead of the
-   matrix because either one landing means the matrix measured a bot that no longer exists, and the
-   sizing is what says whether that risk is real.
-
-   They must be swept as **separate arms** against a matched control. Candidate 1 adds a weight at
-   zero, candidate 2 splits `power` into ready and exhausted halves that ship equal, so each is a
-   provable no-op at its shipped value but they are different changes.
-
-2. **Run the matchup matrix**, once #584's sizing says whether anything is coming that would
-   invalidate it. At roughly **23 hours sharded** (10 games a cell, against 169
+1. **Run the matchup matrix.** Unblocked: #584 closed with both candidates measuring null or harmful
+   and shipping at their no-op values, so nothing outstanding changes what the bot plays and the
+   calibration cannot be invalidated underneath. At roughly **23 hours sharded** (10 games a cell, against 169
    serial) it is the one run worth doing exactly once. It banks and resumes per shard now, so an
    interruption at hour 20 costs the outstanding shards rather than all 23. The first-player split is
    in place, so it answers two questions instead of one.
@@ -46,13 +36,13 @@ engine or the horizon invalidates a calibration done before it.
 
    It measures the **deck generator**, not the sealed metagame: one algorithmic build per leader and
    base. That gap is the point rather than a caveat.
-3. **#565 split what a run plays from what it records.** Fifteen modes, two real shapes: a game run and
+2. **#565 split what a run plays from what it records.** Fifteen modes, two real shapes: a game run and
    a corpus run. The fragmentation already costs something measured, since the generalisation harness
    and `runBench` read 50.4% and 48.70% for the same AI on the same decks, which is why every harness
    needs its own baseline established before a number from it can be trusted. After the matrix rather
    than before it: the benefit is mostly for repeated A/B runs, and a large harness refactor
    immediately before a 23-hour calibration is the wrong risk to take.
-4. **#585 use the game's own terms for game actions.** Units are played and only leaders are
+3. **#585 use the game's own terms for game actions.** Units are played and only leaders are
    deployed; cards are resourced rather than banked; things are defeated rather than killed.
    [glossary.md](glossary.md) records the correct terms and the ones this project invented. Not
    urgent and not blocking anything, but it is prose-level debt that makes comments carrying measured
