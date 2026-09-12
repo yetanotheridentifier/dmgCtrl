@@ -112,6 +112,75 @@ only one of the four whose value concerns the **current** board.
 A third is **provably inert**: the resource pool is priced flat, so the knee that splits it collapses
 out of the arithmetic and cannot change any answer whatever it is set to.
 
+### Splitting power by readiness is the most pivotal quantity in the model, and worth nothing
+
+The weight set is at a local optimum, but that is a statement about **re-pricing quantities the model
+already has**. Splitting one into two is a different move, and the readiness split is the clearest
+case of it available.
+
+Power is charged per point whether or not the unit can act. Readiness is priced, but only by
+`readyUnit`, a **flat per-body** term that cannot express that holding nine points of unspent power
+is worth more than holding two. `powerReady` splits the rate instead, and ships equal to `power` so
+it is a provable no-op until swept.
+
+Term sensitivity over 9,317 decisions puts it **first in the model by pivotal rate**:
+
+| weight | varies | pivotal | bearing |
+| --- | --- | --- | --- |
+| `powerReady` | 57.4% | **9.5%** | 13.4% |
+| `base` | 41.9% | 9.2% | 21.6% |
+| `power` | 64.2% | 9.0% | 15.8% |
+| `readyUnit` | 51.9% | 2.2% | 2.9% |
+| `claimCost` | 42.3% | 0.5% | 1.6% |
+
+A nudge changes the chosen move on 9.5% of decisions, above `power` and `base` themselves, while the
+flat version of the same idea sits near the bottom at 2.2%. So readiness is worth pricing and the
+existing term is the wrong shape for it, which is a different claim from "the weights are mistuned".
+
+**Two caveats that the number cannot carry.** `--terms` runs the **one-ply** scorer, not the shipped
+beam, so this sizes the evaluation rather than the bot; a deeper search sees more and may be less
+sensitive. And `powerReady` overlaps `readyUnit` by construction, so sweeping one while the other is
+live attributes shared effect to whichever moved.
+
+**Pivotal is not positive.** It says the quantity can change the pick, which is what justifies a
+sweep, not that changing it wins. Shields appear in 15.8% of decisions and still measured
+neutral-to-harmful.
+
+**Swept, and it is worth nothing.** Against a matched control on the same eight seeds, 2,048 games a
+value:
+
+| `powerReady` | paired difference | t (7 df) | shards favouring |
+| --- | --- | --- | --- |
+| 5 | +0.63 | 1.20 | 4 of 8 |
+| 6 | +0.54 | 0.37 | 5 of 8 |
+| 8 | -1.86 | -1.44 | 3 of 8 |
+
+Slightly positive at a small premium, negative by a large one, nothing near significance and **no
+gradient** between 5 and 6. That is the same shape that retired `initiativeHorizon`. It ships at
+`power`, where it is a no-op.
+
+The 96-game screen read **+3.12** for the cell that measured +0.54 at full size, which is the usual
+lesson: a screen's point estimate is an overestimate, not a preview.
+
+### Pivotal at the decision level is not consequential at the game level
+
+Worth separating from the result above, because it calibrates how much to trust `--terms`.
+
+`powerReady` is the **most pivotal weight in the model**: nudging it changes the chosen move on 9.5%
+of decisions, ahead of `power` and `base`. Changing it from 4 to 5 across 2,048 games changed the
+outcome of **13 games**. Five of the eight shards moved by exactly one game in 256.
+
+So roughly one decision in ten changed, and roughly one game in a hundred and sixty. Most decisions
+are not decisive, and an instrument that counts changed *decisions* cannot see that.
+
+**The sweep was not too blunt to find it.** The same harness, on fewer games, measured -6.93 at
+t = -8.16 for `initiativeExposure`. It detects effects of that size easily. The flat reading for
+`powerReady` is a real null.
+
+The practical rule: `--terms` is a screen for weights that **cannot** matter, and a high pivotal rate
+earns a sweep rather than predicting its outcome. It sits alongside prevalence, which justifies an
+attempt without predicting the result.
+
 ### The hidden information is small, and what matters is public
 
 A one-action lethal is available to the opponent in **2.2%** of decisions and is **absent before round
@@ -354,6 +423,71 @@ larger charge is not established as better and cannot be much better if it is.
 8 stays for a second reason beyond the number: it is the smaller charge, so it applies less pressure
 toward the failure mode the whole design is bounded against, playing a card for no benefit rather than
 passing. The response curve is in the entry above.
+
+### Charging more for a claim is the wrong direction
+
+Taking the initiative forfeits the rest of your actions this round. `claimCost` prices that by
+counting **ready units** forfeited and nothing for the cards a claim stops you playing, so claiming
+while holding an affordable body is free. That looks like an under-charge worth fixing. It is not,
+for two reasons that point the same way.
+
+**The axis is saturated.** A 146-cell grid swept `initiative` against `claimCost`, and the chosen
+cell was confirmed at +0.62% across six paired seeds and 100,800 games. Whatever is left on this axis
+is smaller than that.
+
+**The residual points the other way.** Removing the charge entirely, `claimCost: 0` against the
+shipped bot on matched seeds, measured **+2.50 points** (sd 14.88, t = 0.48 on 7 df, not significant,
+80 games). That is a disaster filter rather than a result and it establishes nothing on its own, but
+it found no disaster and its sign says the existing charge is if anything already too high. It
+matches the note recorded on the weight itself, that `claimCost: 0` measured 50.6% against 50.7% at
+`initiative: 1`.
+
+Adding a second charge to an axis that is already saturated, and whose residual sign is negative, is
+not worth the compute it would take to resolve.
+
+**The reason a claim can be right while holding cards is real, and already priced.** Everything
+readies at the regroup phase, and the shipped search never crosses that boundary, so both halves of
+the trade are invisible to it. `initiativeHorizon` is exactly that term, for the case where the
+holder is the side facing lethal next round. It measured +1.87 at one weight and **ships at 0**.
+
+### Pricing an insecure hold on the initiative is actively harmful
+
+There is a real gap in how the initiative is modelled. Taking it is once per round across both
+players, so until someone takes it the holder's grip is contingent. `initiativeValue`'s `holding`
+term reads only **who holds the counter**, which a claim does not change when you already hold it, so
+a **denial claim** scores as pure `claimCost` with no benefit. The bot therefore cannot ever make
+one, at any weight: the benefit side is arithmetically identical either side of the claim.
+
+`initiativeExposure` closed that gap by charging the holder, while the counter is still takeable, for
+reach locked up in exhausted units (`reachSteady - reachThisRound`) on both boards. It resolves two
+of the three scripted positions in `aiRoundBoundaryScenarios.test.ts` that the shipped model plays
+wrongly.
+
+It also loses, monotonically, against a matched control on the same seeds at 1,024 games a value:
+
+| `initiativeExposure` | paired difference | t (3 df) | shards favouring |
+| --- | --- | --- | --- |
+| 1 | -0.98 | -0.66 | 1 of 4 |
+| 2 | **-6.93** | **-8.16, significant** | **0 of 4** |
+| 4 | **-16.50** | **-7.35, significant** | **0 of 4** |
+
+Roughly **-4 points per point of weight**, a dose-response clean enough to rule out noise: at weight 4
+the arm wins **36.0%** against the control's 52.5%, which is worse than the always-claim
+configuration below.
+
+**The mechanism is the always-claim failure mode**, and it is pinned by a test rather than inferred.
+Claiming removes the whole charge in a single action, so once a real amount of reach is exhausted,
+which mid-round is most of it, nothing else competes with `weight x stake`. With 24 points of
+exhausted reach the bot attacks at weight 0 and takes the initiative at weight 2. Giving up the rest
+of every round is already priced elsewhere: `claimCost: 0`, the always-claim configuration, measures
+**41.1%**.
+
+Suppressing plays was the obvious suspect and is **not** the cause: a 6-power body is still played at
+weight 2, because the body is worth far more than the charge.
+
+**The gap is real and the fix is not this.** A term that makes claiming attractive in proportion to a
+board-wide quantity will always over-claim, because the quantity is large in exactly the positions
+where the rest of the round is worth most.
 
 ### A tied initiative is worth nothing either way
 

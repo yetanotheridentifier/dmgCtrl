@@ -432,8 +432,9 @@ Public terms, in `ai/evaluate.ts`:
 | `card` | per card in hand (size only) |
 | `cardScarcity`, `handKnee` | a bonus on the cards below the knee once the pool is saturated, see below |
 | `resource`, `resourceSurplus`, `saturation` | the resource pool, and the threshold `cardScarcity` fires behind, see below |
-| `readyUnit` | a light tempo term |
-| `initiative`, `claimCost` | turn order, see below |
+| `readyUnit` | a light tempo term, flat per ready body |
+| `powerReady` | per point of power on a **ready** unit, **shipped equal to `power`**, see below |
+| `initiative`, `claimCost`, `initiativeExposure` | turn order, see below |
 | `lethalExposure` | handing the opponent a one-action kill, see below |
 | `shield` | per Shield token, **shipped at 0**, see below |
 | `roleShift` | how far the role bends the weights, see below |
@@ -506,6 +507,14 @@ weight with nothing to say looks like.
 not deadness. It prices nothing as a *rate* while the pool ships flat, and does all its work as the
 *threshold* `cardScarcity` charges behind, which only ever bites at a regroup. A pooled figure
 averages that away; see [The resource pool is flat](#the-resource-pool-is-flat) for the split.
+
+**A high pivotal rate earns a sweep; it does not predict one.** `powerReady`, which charges power on a
+ready unit separately from power on an exhausted one, is the **most pivotal weight in the model** at
+9.5%, ahead of `power` and `base`. Swept over 2,048 games a value it is worth nothing: +0.63, +0.54
+and -1.86 at weights 5, 6 and 8, no gradient, none significant. Changing the chosen move on roughly
+one decision in ten changed the outcome of 13 games in 2,048. It ships equal to `power`, a no-op.
+Most decisions simply are not decisive, and an instrument counting changed *decisions* cannot see
+that.
 
 Two results are worth holding onto because they contradict the obvious reading:
 
@@ -768,6 +777,21 @@ Extending the search itself past the boundary has since been tried too, and also
 points at 1.84x the cost, with the mechanism demonstrably working (the claim rate went from
 discriminating weakly across the horizon buckets to strongly). So "the horizon is the blocker" is no
 longer a safe assumption either. See [experiments.md](experiments.md).
+
+**A denial claim cannot be represented at all, and no weight can change that.** Taking the initiative
+is once per round across both players, so until someone takes it the holder's grip is contingent.
+`holding` reads only **who holds the counter**, which a claim does not change when you already hold
+one, while `claimCost` charges in full. So claiming purely to stop the opponent taking it scores as
+pure cost at every weight, and the bot never does it. `initiativeHorizon` shares the blind spot,
+gating on the same condition.
+
+`initiativeExposure` exists to close that, charging the holder for exhausted reach while the counter
+is still takeable, and **ships at 0 because it is actively harmful**: roughly -4 points per point of
+weight, reaching -16.50 at weight 4. It buys the always-claim failure mode, since claiming clears the
+whole charge in one action and the charge is largest exactly where the rest of the round is worth
+most. The gap is real; a board-wide quantity is the wrong instrument for it. Three scripted positions
+in `aiRoundBoundaryScenarios.test.ts` record what the model gets wrong, one of them as a deliberate
+expected failure.
 
 ### Lethal exposure
 
