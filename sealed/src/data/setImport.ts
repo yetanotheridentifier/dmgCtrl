@@ -58,3 +58,41 @@ export async function cachedSetCount(setCode: string): Promise<number> {
   const prefix = `${setCode.toUpperCase()}_`
   return db.cards.where('id').startsWith(prefix).count()
 }
+
+/**
+ * Every cached card of a set, as the generator wants them.
+ *
+ * `json` is the raw SWUDB payload, which is what `SwuCard` describes, so this is a cast rather than a
+ * conversion. Cards that failed to cache simply are not here, and a generator asked to build from a
+ * short pool reports the shortfall rather than throwing.
+ */
+export async function cachedSetCards(setCode: string): Promise<SwuCard[]> {
+  const prefix = `${setCode.toUpperCase()}_`
+  const rows = await db.cards.where('id').startsWith(prefix).toArray()
+  return rows.map(r => r.json as SwuCard)
+}
+
+/**
+ * The set to build a generated deck from: whichever has the most cards cached.
+ *
+ * Chosen rather than asked for, because a generated deck is a convenience and a second set-code input
+ * beside the import one would be two fields meaning nearly the same thing. A sealed deck comes from a
+ * single set, so mixing them would be wrong; picking the largest keeps that true without a choice to
+ * make. `null` when nothing is cached, which the caller shows as "import a set first".
+ */
+export async function largestCachedSet(): Promise<{ set: string; cards: SwuCard[] } | null> {
+  const rows = await db.cards.toArray()
+  const bySet = new Map<string, SwuCard[]>()
+  for (const r of rows) {
+    const set = r.id.split('_')[0]
+    if (!set) continue
+    const list = bySet.get(set) ?? []
+    list.push(r.json as SwuCard)
+    bySet.set(set, list)
+  }
+  let best: { set: string; cards: SwuCard[] } | null = null
+  for (const [set, cards] of bySet) {
+    if (!best || cards.length > best.cards.length) best = { set, cards }
+  }
+  return best
+}

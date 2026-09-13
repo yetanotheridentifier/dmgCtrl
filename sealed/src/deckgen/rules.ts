@@ -18,6 +18,51 @@ import type { ParsedDeck } from '../utils/parseProtectThePod'
 export const ALIGNMENTS = ['Heroism', 'Villainy']
 export const DECK_SIZE = 30
 export const MAX_COPIES = 3
+/**
+ * Copies of one card a sealed pool realistically yields, by rarity.
+ *
+ * **Not a rule of the game.** The 3-copy cap is a constructed-format rule and does not apply in
+ * sealed: you may play every copy you opened, five included. What limits you is how unlikely a
+ * duplicate is, and that is entirely a function of rarity. A six-pack pool yields roughly 0-3
+ * Legendaries in total and essentially never two of the same, a duplicate Rare only a few percent of
+ * the time, and 2 or at a push 3 of a given Common.
+ *
+ * This stands in for a pool the generator does not yet model, which is the real fix: it builds from
+ * the **whole set** under rarity quotas, so before this a flat cap let it take three copies of a
+ * Legendary, and the matrix at seed 42 duly put three Zeb Orrelios into four decks.
+ *
+ * `Special` covers 2 leaders, 6 units and 2 upgrades in this set. The two **leaders** are guaranteed
+ * to every player at prerelease and so are always available to build around, but that is a leader
+ * availability rule rather than a copy count. The Special non-leaders are about as likely as a
+ * Legendary, hence the same cap.
+ */
+export const MAX_COPIES_BY_RARITY: Record<string, number> = {
+  Common: 3,
+  Uncommon: 2,
+  Rare: 1,
+  Legendary: 1,
+  Special: 1,
+}
+
+/**
+ * Chance that a card already in the deck gets **another** copy, by rarity.
+ *
+ * Rolled per extra copy, so the copies of a card follow a geometric distribution: a Common is
+ * doubled 40% of the time and tripled 16%, a Rare doubled 3% of the time, and a Legendary
+ * essentially never. That is the shape of opening packs, where a duplicate is a draw rather than a
+ * deckbuilding decision, and it replaces {@link MAX_COPIES_BY_RARITY} as the thing that actually
+ * governs copy counts; the caps remain only as a backstop.
+ *
+ * Still an approximation of a pool rather than a pool. The real fix opens six packs and builds from
+ * what came out, which would make these probabilities an emergent property instead of a constant.
+ */
+export const DUPLICATE_CHANCE: Record<string, number> = {
+  Common: 0.40,
+  Uncommon: 0.10,
+  Rare: 0.03,
+  Legendary: 0.0001,
+  Special: 0.0001,
+}
 export const CHEAP_COST_MAX = 2
 export const CHEAP_UNITS = { min: 6, max: 10 }
 export const BOMB_COST_MIN = 7

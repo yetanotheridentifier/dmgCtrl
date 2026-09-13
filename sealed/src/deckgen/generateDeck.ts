@@ -3,7 +3,7 @@ import type { ParsedDeck } from '../utils/parseProtectThePod'
 import { seededUnit } from '../engine/rng'
 import {
   coveredAspects, deckReport, isAlignment, type DeckReport,
-  DECK_SIZE, MAX_COPIES, CHEAP_COST_MAX, CHEAP_UNITS, BOMB_COST_MIN, BOMB_UNITS,
+  DECK_SIZE, MAX_COPIES, MAX_COPIES_BY_RARITY, DUPLICATE_CHANCE, CHEAP_COST_MAX, CHEAP_UNITS, BOMB_COST_MIN, BOMB_UNITS,
   MAX_EVENTS, MAX_UPGRADES, RARITY_MIX,
 } from './rules'
 
@@ -22,12 +22,32 @@ import {
 const id = (c: SwuCard): string => `${c.Set}_${c.Number}`
 const cost = (c: SwuCard): number => Number(c.Cost ?? 0)
 
-// In-deck targets the greedy aims for (all inside the rule ranges); mid units fill the remainder.
-const CHEAP_TARGET = 8
-const BOMB_TARGET = 3
-const EVENT_TARGET = 4
-const UPGRADE_TARGET = 3
-const ALIGN_TARGET = 13 // ~43% of 30, inside 40-50%
+/**
+ * What the build aims for, as a range rather than a number. Mid-cost units fill the remainder.
+ *
+ * A fixed target is a quota every deck hits exactly, which describes the constant rather than a
+ * deck: before this, every deck had precisely 4 events and 3 upgrades, because the score's +60 for
+ * being under target is far larger than the jitter that was meant to vary it. Each range stays
+ * inside the legality and shape rules, so a deck built to any point in it still passes `deckReport`.
+ */
+const CHEAP_TARGET = { base: 8, spread: 1 } // 7-9, inside CHEAP_UNITS 6-10
+const BOMB_TARGET = { base: 3, spread: 0 } // BOMB_UNITS allows only 2-3, and 2 reads as light
+const EVENT_TARGET = { base: 4, spread: 1 } // 3-5, under MAX_EVENTS 6
+const UPGRADE_TARGET = { base: 3, spread: 1 } // 2-4, under MAX_UPGRADES 5
+// Fixed, unlike the others. The score tolerates `alignTarget + 2` before it pushes back, so a target
+// of 14 admits 16 of 30, which is 0.53 and outside ALIGNMENT_FRACTION's 0.4-0.5. The alignment split
+// is a legality-shaped rule rather than a matter of taste, so it does not want jitter.
+const ALIGN_TARGET = { base: 13, spread: 0 }
+
+/**
+ * A target resolved for one deck. Seeded so the shape is reproducible, and salted per target so the
+ * event count and the upgrade count do not move together.
+ */
+function resolveTarget(seed: number, salt: number, t: { base: number; spread: number }): number {
+  if (t.spread === 0) return t.base
+  const roll = Math.floor(seededUnit(((seed * 2246822519) ^ salt) >>> 0 || 1) * (2 * t.spread + 1))
+  return t.base - t.spread + Math.min(roll, 2 * t.spread)
+}
 // Coverage steering: preferred (not-yet-covered) cards get this bonus. Moderate on purpose, it
 // tips the choice toward uncovered cards WITHIN a role (an uncovered cheap unit over a covered one),
 // but stays below the curve role weight (200) so it can never break the curve to chase coverage.
@@ -74,6 +94,13 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
   const covered = coveredAspects(leader, base)
   const alignment = (leader.Aspects ?? []).find(isAlignment)
 
+  // Resolved once per deck, so the shape varies between decks but is fixed while one is being built.
+  const cheapTarget = resolveTarget(seed, 1, CHEAP_TARGET)
+  const bombTarget = resolveTarget(seed, 2, BOMB_TARGET)
+  const eventTarget = resolveTarget(seed, 3, EVENT_TARGET)
+  const upgradeTarget = resolveTarget(seed, 4, UPGRADE_TARGET)
+  const alignTarget = resolveTarget(seed, 5, ALIGN_TARGET)
+
   const eligible = pool.filter(c =>
     (c.Type === 'Unit' || c.Type === 'Event' || c.Type === 'Upgrade') &&
     (c.Aspects ?? []).every(a => covered.has(a)),
@@ -96,8 +123,23 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
     return (counts.rarity[r] ?? 0) < min
   }
 
+  /**
+   * Whether another copy of `c` is allowed: a **roll**, not a cap, at the rarity's duplicate chance.
+   *
+   * Seeded on the card and on which copy this would be, so a deck is still reproducible from its seed
+   * and the second copy's roll is independent of the third's. The cap stays as a backstop for the
+   * tail the geometric distribution leaves open.
+   */
+  const copiesAtMax = (c: SwuCard): boolean => {
+    const have = counts.copies.get(id(c)) ?? 0
+    if (have === 0) return false
+    if (have >= (MAX_COPIES_BY_RARITY[c.Rarity ?? 'Common'] ?? MAX_COPIES)) return true
+    const chance = DUPLICATE_CHANCE[c.Rarity ?? 'Common'] ?? 0
+    return jitter(seed * 7919 + have * 104729, c) >= chance
+  }
+
   const allowed = (c: SwuCard): boolean => {
-    if ((counts.copies.get(id(c)) ?? 0) >= MAX_COPIES) return false
+    if (copiesAtMax(c)) return false
     if (rarityAtMax(c)) return false
     const isUnit = c.Type === 'Unit'
     if (isUnit && cost(c) <= CHEAP_COST_MAX && counts.cheap >= CHEAP_UNITS.max) return false
@@ -112,17 +154,17 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
     if (prefer.has(id(c))) s += PREFER_BONUS
     const isUnit = c.Type === 'Unit'
     const cst = cost(c)
-    if (isUnit && cst <= CHEAP_COST_MAX && counts.cheap < CHEAP_TARGET) s += 200
-    if (isUnit && cst >= BOMB_COST_MIN && counts.bomb < BOMB_TARGET) s += 200
+    if (isUnit && cst <= CHEAP_COST_MAX && counts.cheap < cheapTarget) s += 200
+    if (isUnit && cst >= BOMB_COST_MIN && counts.bomb < bombTarget) s += 200
     if (isUnit && cst > CHEAP_COST_MAX && cst < BOMB_COST_MIN) s += 40
-    if (c.Type === 'Event' && counts.events < EVENT_TARGET) s += 60
-    if (c.Type === 'Upgrade' && counts.upgrades < UPGRADE_TARGET) s += 60
+    if (c.Type === 'Event' && counts.events < eventTarget) s += 60
+    if (c.Type === 'Upgrade' && counts.upgrades < upgradeTarget) s += 60
     if (rarityBelowMin(c)) s += 90
     if (alignment) {
       const a = (c.Aspects ?? []).includes(alignment)
-      if (a && counts.align < ALIGN_TARGET) s += 130
-      if (!a && counts.align >= ALIGN_TARGET) s += 40
-      if (a && counts.align >= ALIGN_TARGET + 2) s -= 300
+      if (a && counts.align < alignTarget) s += 130
+      if (!a && counts.align >= alignTarget) s += 40
+      if (a && counts.align >= alignTarget + 2) s -= 300
     }
     return s
   }
@@ -184,8 +226,23 @@ export function buildDeckForLeader(leader: SwuCard, pool: SwuCard[], seed: numbe
     if (!byAspect.has(key)) byAspect.set(key, b)
   }
 
+  /**
+   * **Never double an aspect the leader already supplies.** This set has no card with a doubled
+   * aspect, so the overlap buys nothing and one colour cannot fill a deck. Kept as a filter with a
+   * fallback rather than an assumption: a leader carrying every base aspect would otherwise have no
+   * base at all.
+   */
+  const leaderAspects = new Set(leader.Aspects ?? [])
+  const usable = [...byAspect.values()]
+    .filter(b => !(b.Aspects ?? []).some(a => leaderAspects.has(a)))
+  const candidates = usable.length > 0 ? usable : [...byAspect.values()]
+
+  // Rotated by seed rather than always tried in pool order, which made the first legal base the
+  // answer for almost every leader: two leaders sharing no aspect were landing on the same base.
+  const start = Math.floor(seededUnit(((seed * 40503) ^ 0x9e37) >>> 0 || 1) * candidates.length)
   let best: { deck: ParsedDeck; report: DeckReport } | undefined
-  for (const base of byAspect.values()) {
+  for (let i = 0; i < candidates.length; i++) {
+    const base = candidates[(start + i) % candidates.length]
     const result = generateDeck({ leader, base, pool, seed, prefer })
     if (!best || result.report.violations.length < best.report.violations.length) best = result
     if (best.report.ok) break

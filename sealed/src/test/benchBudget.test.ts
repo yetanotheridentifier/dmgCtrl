@@ -25,17 +25,22 @@ import '../engine/cardDefinitions'
 describe('runBudget', () => {
   // A budget too small to finish against the shipped one. Deliberately extreme: the point of the
   // assertion is that exhaustion is detected and ordered, not that a particular cell exhausts.
-  const report = runBudget({ states: 20, seed: 4242, ais: ['beam:4x3:200', 'beam:4x3:10000'] })
+  //
+  // It has to be extreme enough to bind on EVERY sampled state, not merely on a typical one. The
+  // rail's firing rate rests on a heavy tail of positions with a large choice-chain fan-out, so a
+  // budget set near the average depends on 20 sampled states happening to contain one of them, and
+  // that broke the moment the deck generator changed what those states look like.
+  const report = runBudget({ states: 20, seed: 4242, ais: ['beam:4x3:20', 'beam:4x3:10000'] })
 
   it('reports a row per AI asked for', () => {
-    expect(report.rows.map(r => r.ai)).toEqual(['beam:4x3:200', 'beam:4x3:10000'])
+    expect(report.rows.map(r => r.ai)).toEqual(['beam:4x3:20', 'beam:4x3:10000'])
     expect(report.states).toBe(20)
   })
 
   /** The property the sweep leans on: a cell that cannot finish is visibly distinguished from one
    *  that can, rather than both reporting a plausible-looking number. */
   it('separates a budget that cannot finish from one that can', () => {
-    const tight = report.rows.find(r => r.ai === 'beam:4x3:200')!
+    const tight = report.rows.find(r => r.ai === 'beam:4x3:20')!
     const ample = report.rows.find(r => r.ai === 'beam:4x3:10000')!
     expect(tight.exhaustedRate).toBeGreaterThan(0)
     expect(tight.exhaustedRate).toBeGreaterThan(ample.exhaustedRate)
@@ -43,7 +48,7 @@ describe('runBudget', () => {
 
   /** And a truncated search really is doing less work, not just reporting a flag. */
   it('shows the truncated cell spending less than the one it starves', () => {
-    const tight = report.rows.find(r => r.ai === 'beam:4x3:200')!
+    const tight = report.rows.find(r => r.ai === 'beam:4x3:20')!
     const ample = report.rows.find(r => r.ai === 'beam:4x3:10000')!
     expect(tight.avgSpend).toBeLessThan(ample.avgSpend)
   })

@@ -6,7 +6,9 @@ import DeckSelectScreen from '../components/deckSelectScreen'
 import { TOTAL_PROGRESS, SET_PROGRESS, CARD_TYPES } from '../data/implementedCards'
 import { saveDeck } from '../data/deckStore'
 import { syncCatalogue } from '../data/catalogueSync'
-import { importSet } from '../data/setImport'
+import { importSet, largestCachedSet } from '../data/setImport'
+import ashSet from './fixtures/ashSet.json'
+import type { SwuCard } from '../data/cards'
 
 vi.mock('../data/catalogueSync', () => ({
   syncCatalogue: vi.fn().mockResolvedValue({ hydrated: 0, skipped: 0, failed: 0 }),
@@ -15,6 +17,9 @@ vi.mock('../data/catalogueSync', () => ({
 vi.mock('../data/setImport', () => ({
   importSet: vi.fn().mockResolvedValue({ cached: 264, total: 264 }),
   cachedSetCount: vi.fn().mockResolvedValue(0),
+  // No cached set by default, which is the state a fresh install is in: the generated-deck panel
+  // has to work before anyone has imported anything.
+  largestCachedSet: vi.fn().mockResolvedValue(null),
 }))
 
 function validDeckJson(name = 'Vader Aggro') {
@@ -30,6 +35,9 @@ describe('DeckSelectScreen', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.mocked(syncCatalogue).mockClear()
+    // Reset rather than left set by whichever test ran last: a cached pool changes what the screen
+    // renders, so leaking one makes the order of these tests matter.
+    vi.mocked(largestCachedSet).mockResolvedValue(null)
   })
 
   it('shows an empty state when no decks are saved', () => {
@@ -180,6 +188,169 @@ describe('DeckSelectScreen', () => {
   it('hides the opponent selector when no decks are saved', () => {
     render(<DeckSelectScreen onPlay={vi.fn()} />)
     expect(screen.queryByTestId('opponent-deck-select')).not.toBeInTheDocument()
+  })
+
+  /**
+   * A deck built from the cached set, to play with or against.
+   *
+   * It exists to make the **generator** inspectable: the card list is shown so a deck can be judged
+   * against what a real pool would actually give you, which is how the tripled-Legendary case was
+   * found. It is never persisted, and it works before any deck has been imported, since generated
+   * against generated is the quickest way to exercise a pool.
+   */
+  describe('the generated deck', () => {
+    const withPool = () => vi.mocked(largestCachedSet).mockResolvedValue({
+      set: 'ASH', cards: ashSet as unknown as SwuCard[],
+    })
+
+    it('offers nothing to generate until a set is cached', async () => {
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      expect(await screen.findByTestId('generated-deck-subtitle'))
+        .toHaveTextContent('Import a set below to generate decks')
+      expect(screen.getByTestId('generate-deck-button')).toBeDisabled()
+      expect(screen.getByTestId('play-generated-button')).toBeDisabled()
+    })
+
+    it('names the set it would build from once one is cached', async () => {
+      withPool()
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      expect(await screen.findByTestId('generated-deck-subtitle')).toHaveTextContent('Built from ASH')
+      expect(screen.getByTestId('generate-deck-button')).toBeEnabled()
+    })
+
+    /** The card list is the deliverable: a deck you cannot read is a deck you cannot judge. */
+    it('lists every card with name, cost, rarity and copies', async () => {
+      withPool()
+      const user = userEvent.setup()
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await user.click(await screen.findByTestId('generate-deck-button'))
+
+      const list = screen.getByTestId('generated-deck-cards')
+      const entries = within(list).getAllByRole('listitem')
+      expect(entries.length).toBeGreaterThan(5)
+      // cost, name, rarity initial, copies. The copy count is what makes a tripled Legendary visible.
+      for (const li of entries) expect(li.textContent).toMatch(/^\d+.+[CURLS?]x\d+$/)
+      // Names, not ids: an id-only list cannot be judged against a real pool by eye.
+      expect(list.textContent).not.toMatch(/ASH_\d/)
+    })
+
+    /**
+     * Ordered by cost **within each type block**, because that is how a curve is read. Sorting
+     * globally would interleave units with events and hide whether the unit curve is right, which is
+     * one of the shape rules the generator targets.
+     */
+    it('orders each type block by increasing cost', async () => {
+      withPool()
+      const user = userEvent.setup()
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await user.click(await screen.findByTestId('generate-deck-button'))
+
+      const lists = within(screen.getByTestId('generated-deck-cards')).getAllByRole('list')
+      expect(lists.length).toBeGreaterThan(1)
+      for (const list of lists) {
+        const costs = within(list).getAllByRole('listitem')
+          .map(li => Number(/^\d+/.exec(li.textContent ?? '')?.[0] ?? NaN))
+        expect(costs).toEqual([...costs].sort((a, b) => a - b))
+      }
+    })
+
+    /**
+     * Units on the left, the non-unit cards on the right. A decklist is read units-first, and a
+     * flowing two-column grid interleaves the types so neither the curve nor the unit count can be
+     * taken in at a glance.
+     */
+    it('groups the list by card type, units first', async () => {
+      withPool()
+      const user = userEvent.setup()
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await user.click(await screen.findByTestId('generate-deck-button'))
+
+      const panel = screen.getByTestId('generated-deck-cards')
+      const headings = within(panel).getAllByRole('heading').map(h => h.textContent ?? '')
+      expect(headings[0]).toMatch(/^Units/)
+      // Each heading carries its own copy count, so the deck adds up in view.
+      for (const h of headings) expect(h).toMatch(/\(\d+\)/)
+    })
+
+    /** The leader and base are cards too: previously the base showed as a bare id. */
+    it('names the leader and base, both hoverable', async () => {
+      withPool()
+      const user = userEvent.setup()
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await user.click(await screen.findByTestId('generate-deck-button'))
+
+      const subtitle = screen.getByTestId('generated-deck-subtitle')
+      expect(subtitle.textContent).not.toMatch(/ASH_\d/)
+      expect(within(subtitle).getAllByTestId('static-card-ref')).toHaveLength(2)
+    })
+
+    /** Hovering a card shows its art, the same popover the log uses. */
+    it('makes every card hoverable for its art', async () => {
+      withPool()
+      const user = userEvent.setup()
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await user.click(await screen.findByTestId('generate-deck-button'))
+
+      const refs = within(screen.getByTestId('generated-deck-cards')).getAllByTestId('static-card-ref')
+      expect(refs.length).toBeGreaterThan(5)
+      expect(refs[0]).toHaveAttribute('data-card-id')
+    })
+
+    it('plays with the generated deck', async () => {
+      withPool()
+      const user = userEvent.setup()
+      const onPlay = vi.fn()
+      render(<DeckSelectScreen onPlay={onPlay} />)
+      await user.click(await screen.findByTestId('generate-deck-button'))
+      await user.click(screen.getByTestId('play-generated-button'))
+
+      expect(onPlay).toHaveBeenCalled()
+      expect(onPlay.mock.calls[0][0].id).toBe('generated')
+      expect(onPlay.mock.calls[0][0].cards.length).toBeGreaterThan(0)
+    })
+
+    it('offers a generated opponent even with no decks imported', async () => {
+      withPool()
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      const select = await screen.findByTestId('opponent-deck-select')
+      const options = within(select).getAllByRole('option').map(o => o.textContent)
+      expect(options[0]).toBe('Random generated deck')
+      expect(options[1]).toBe('Random built deck')
+    })
+
+    /**
+     * "Built" is the distinction the rename carries: it picks among the player's own imported decks
+     * and must never hand back a generated one, or the two options would mean the same thing.
+     */
+    it('keeps the generated deck out of the random built pick', async () => {
+      withPool()
+      const user = userEvent.setup()
+      const onPlay = vi.fn()
+      const mine = saveDeck({ name: 'Mine', leader: 'SOR_010', base: 'SOR_029', cards: [] })
+      render(<DeckSelectScreen onPlay={onPlay} />)
+      await screen.findByTestId('generated-deck-subtitle')
+
+      const row = within(screen.getByTestId('deck-list')).getByText('Mine').closest('li')!
+      await user.click(within(row).getByRole('button', { name: /play/i }))
+
+      expect(onPlay.mock.calls[0][1].id).toBe(mine.id)
+    })
+
+    it('plays against a freshly generated opponent when chosen', async () => {
+      withPool()
+      const user = userEvent.setup()
+      const onPlay = vi.fn()
+      const mine = saveDeck({ name: 'Mine', leader: 'SOR_010', base: 'SOR_029', cards: [] })
+      render(<DeckSelectScreen onPlay={onPlay} />)
+
+      await user.selectOptions(await screen.findByTestId('opponent-deck-select'), 'generated')
+      const row = within(screen.getByTestId('deck-list')).getByText('Mine').closest('li')!
+      await user.click(within(row).getByRole('button', { name: /play/i }))
+
+      expect(onPlay.mock.calls[0][0].id).toBe(mine.id)
+      expect(onPlay.mock.calls[0][1].id).toBe('generated')
+      expect(onPlay.mock.calls[0][1].cards.length).toBeGreaterThan(0)
+    })
   })
 
   it('imports a full card set and reports the count', async () => {

@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import type { GameState, PlayerId } from '../engine/types'
+import type { GameState, PlayerId, EngineCard } from '../engine/types'
 import type { DescribePart } from '../utils/describeAction'
 import { CardZoomPopover } from './cardZoom'
 
@@ -43,6 +43,39 @@ export function CardRef({ state, cardId, controller, text }: {
     >
       {text}
       {hovering && state && <CardZoomPopover card={state.cards[cardId]} fallbackName={text} anchorRef={anchorRef} />}
+    </span>
+  )
+}
+
+/**
+ * The same hover-to-zoom reference, for somewhere there is no game in progress.
+ *
+ * `CardRef` reads its card out of `state.cards`, which only exists once a game has started. The deck
+ * screen has a card db built straight from the cached set instead, so this takes the card itself.
+ * Styled neutrally rather than by controller, since outside a game nobody controls it.
+ */
+export function StaticCardRef({ card, text }: {
+  card: EngineCard | undefined
+  text: string
+}) {
+  const [hovering, setHovering] = useState(false)
+  const anchorRef = useRef<HTMLElement | null>(null)
+  // Stable callback ref, for the reason `CardRef` documents: an unstable one is detached around the
+  // popover's layout effect and the zoom never becomes visible.
+  const setAnchor = useCallback((el: HTMLElement | null) => { anchorRef.current = el }, [])
+
+  return (
+    <span
+      ref={setAnchor}
+      data-testid="static-card-ref"
+      data-card-id={card?.id}
+      onPointerEnter={e => { if (e.pointerType === 'mouse') setHovering(true) }}
+      onPointerLeave={() => setHovering(false)}
+      onPointerCancel={() => setHovering(false)}
+      className="pointer-events-auto underline decoration-dotted underline-offset-2 cursor-help"
+    >
+      {text}
+      {hovering && <CardZoomPopover card={card} fallbackName={text} anchorRef={anchorRef} />}
     </span>
   )
 }

@@ -1,6 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useDecks } from '../hooks/useDecks'
 import type { SavedDeck } from '../data/deckStore'
+import type { SwuCard } from '../data/cards'
+import { largestCachedSet } from '../data/setImport'
+import { generateRandomDeck, GENERATED_DECK_ID } from '../deckgen/randomDeck'
+import { buildCardDb } from '../engine/cardDb'
+import { StaticCardRef } from './cardRef'
+import type { GeneratedDeck, GeneratedDeckEntry } from '../deckgen/randomDeck'
+import type { EngineCard } from '../engine/types'
 import { cardRefFromId } from '../utils/parseProtectThePod'
 import type { ParseDeckError, ParsedDeck } from '../utils/parseProtectThePod'
 import { syncCatalogue } from '../data/catalogueSync'
@@ -32,12 +39,76 @@ function cardCount(deck: SavedDeck): number {
   return deck.cards.reduce((n, c) => n + c.count, 0)
 }
 
-function pickOpponent(decks: SavedDeck[], choice: string, fallback: SavedDeck): SavedDeck {
+/**
+ * The opponent a choice resolves to.
+ *
+ * `generated` builds a fresh deck per game rather than reusing the one on screen, so playing twice
+ * against it is two different decks: the point is exercising the generator, not a fixed sparring
+ * partner. `random` picks among the player's own imported decks only and never returns a generated
+ * one, which is why it reads "Random built deck".
+ */
+function pickOpponent(
+  decks: SavedDeck[],
+  choice: string,
+  fallback: SavedDeck,
+  generate: () => SavedDeck | null,
+): SavedDeck {
+  if (choice === GENERATED_DECK_ID) return generate() ?? fallback
   if (choice !== 'random') return decks.find(d => d.id === choice) ?? fallback
+  if (decks.length === 0) return fallback
   return decks[Math.floor(Math.random() * decks.length)]
 }
 
 const pctOf = (done: number, total: number) => (total === 0 ? 0 : Math.round((done / total) * 100))
+
+/**
+ * Rarity shown as its initial and coloured, since the column has to stay narrow enough that the card
+ * name gets the width. Reading a deck's rarity mix at a glance is the point: a pool that could never
+ * produce it shows up as a column of L's and R's.
+ */
+const RARITY_CLASS: Record<string, string> = {
+  Legendary: 'text-amber',
+  Special: 'text-amber',
+  Rare: 'text-accent',
+  Uncommon: 'text-ink-dim',
+  Common: 'text-ink-faint',
+}
+
+/**
+ * One card-type block of a generated deck list: a heading carrying the count, then a row per card.
+ *
+ * Renders nothing when empty rather than an empty heading, so a deck with no upgrades simply has no
+ * Upgrades block instead of a heading promising rows that are not there.
+ */
+function DeckSection({ title, entries, cardDb }: {
+  title: string
+  entries: GeneratedDeckEntry[]
+  cardDb: Record<string, EngineCard> | null
+}) {
+  if (entries.length === 0) return null
+  const copies = entries.reduce((n, c) => n + c.count, 0)
+  return (
+    <section className="mb-2">
+      <h4 className="text-ink-faint text-[0.65rem] uppercase tracking-[0.12em] font-light">
+        {title} <span className="tabular-nums">({copies})</span>
+      </h4>
+      <ul>
+        {entries.map(c => (
+          <li key={c.id} className="flex items-baseline gap-2 py-0.5">
+            <span className="text-ink-faint w-4 shrink-0 text-right tabular-nums">{c.cost}</span>
+            <span className="truncate">
+              <StaticCardRef card={cardDb?.[c.id]} text={c.name} />
+            </span>
+            <span className={`shrink-0 ml-auto ${RARITY_CLASS[c.rarity] ?? 'text-ink-faint'}`}>
+              {c.rarity.slice(0, 1)}
+            </span>
+            <span className="text-ink-faint shrink-0 w-6 text-right tabular-nums">x{c.count}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
 
 /** Headline "% of every set implemented" bar. */
 function ProgressBar() {
@@ -146,6 +217,29 @@ export default function DeckSelectScreen({ onPlay }: Props) {
   const [opponentChoice, setOpponentChoice] = useState('random')
   const [setCode, setSetCode] = useState('')
   const [setStatus, setSetStatus] = useState<string | null>(null)
+  // The pool is loaded once so generating is synchronous, which lets the opponent picker build a
+  // fresh deck at play time without `onPlay` having to become async.
+  const [pool, setPool] = useState<{ set: string; cards: SwuCard[] } | null>(null)
+  const [generated, setGenerated] = useState<GeneratedDeck | null>(null)
+  // The same conversion the engine uses, so hovering a card in the deck list shows exactly what it
+  // would show in a game. Rebuilt only when the pool changes.
+  const cardDb = useMemo(() => (pool ? buildCardDb(pool.cards) : null), [pool])
+
+  useEffect(() => {
+    let live = true
+    void largestCachedSet().then(p => { if (live) setPool(p) })
+    return () => { live = false }
+  }, [setStatus])
+
+  /** A different deck every time: the seed is what makes one reproducible after the fact. */
+  function buildGenerated(): GeneratedDeck | null {
+    if (!pool) return null
+    return generateRandomDeck(pool.cards, Math.floor(Math.random() * 1_000_000) + 1)
+  }
+
+  function handleGenerate() {
+    setGenerated(buildGenerated())
+  }
 
   function handleImport() {
     const result = importDeck(importText)
@@ -161,7 +255,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
   }
 
   function handlePlay(deck: SavedDeck) {
-    onPlay(deck, pickOpponent(decks, opponentChoice, deck))
+    onPlay(deck, pickOpponent(decks, opponentChoice, deck, () => buildGenerated()?.deck ?? null))
   }
 
   async function handleSetImport() {
@@ -182,6 +276,83 @@ export default function DeckSelectScreen({ onPlay }: Props) {
     <div data-testid="deck-select-screen" className="flex flex-col lg:flex-row gap-8 items-start">
       <div className="max-w-2xl w-full min-w-0">
       <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Deck selection</h2>
+
+      {/* Generated decks sit above the imported ones: this is the quickest way to see what the
+          generator produces, and it works before any deck has been imported. */}
+      <div data-testid="generated-deck-panel" className="mt-4 border-2 border-line/60 rounded-xl bg-surface px-4 py-3">
+        <div className="flex items-center gap-4">
+          <div className="flex-1 min-w-0">
+            <span className="block font-medium truncate">Random generated deck</span>
+            <span data-testid="generated-deck-subtitle" className="block text-xs text-ink-faint">
+              {pool === null
+                ? 'Import a set below to generate decks'
+                : generated === null
+                  ? `Built from ${pool.set} (${pool.cards.length} cards cached)`
+                  : (
+                    // Leader and base are cards too, so they hover for their art like any other row.
+                    // They were previously raw ids, which is unreadable for the base.
+                    <>
+                      {cardCount(generated.deck)} cards&ensp;·&ensp;
+                      <StaticCardRef
+                        card={cardDb?.[generated.deck.leader]}
+                        text={cardDb?.[generated.deck.leader]?.name ?? generated.leaderName}
+                      />
+                      &ensp;·&ensp;
+                      <StaticCardRef
+                        card={cardDb?.[generated.deck.base]}
+                        text={cardDb?.[generated.deck.base]?.name ?? generated.deck.base}
+                      />
+                    </>
+                  )}
+            </span>
+          </div>
+          <button
+            data-testid="generate-deck-button"
+            onClick={handleGenerate}
+            disabled={pool === null}
+            className="px-4 py-1.5 text-sm border-2 border-accent text-accent rounded-xl hover:bg-accent/10 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {generated === null ? 'Generate' : 'Regenerate'}
+          </button>
+          <button
+            data-testid="play-generated-button"
+            onClick={() => generated && handlePlay(generated.deck)}
+            disabled={generated === null}
+            className="px-4 py-1.5 text-sm border-2 border-ink text-ink rounded-xl shadow-[0_0_12px_rgba(255,255,255,0.2)] hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Play
+          </button>
+        </div>
+
+        {generated && (
+          <div className="mt-3 border-t border-line/40 pt-3">
+            {/* The card list is the point of the panel: a deck you cannot read is a deck you cannot
+                judge against what a real pool would give you. */}
+            {/* Grouped by card type rather than flowed across two columns: a decklist is read as
+                units first, then the non-unit cards, and a flowing grid interleaves them so neither
+                the curve nor the unit count can be taken in at a glance. */}
+            <div data-testid="generated-deck-cards" className="grid grid-cols-2 gap-x-6 text-xs text-ink-dim">
+              <DeckSection title="Units" entries={generated.entries.filter(c => c.type === 'Unit')} cardDb={cardDb} />
+              <div>
+                <DeckSection title="Upgrades" entries={generated.entries.filter(c => c.type === 'Upgrade')} cardDb={cardDb} />
+                <DeckSection title="Events" entries={generated.entries.filter(c => c.type === 'Event')} cardDb={cardDb} />
+                {/* Anything the pool could not resolve, so a partial cache is visible rather than
+                    silently dropping rows and leaving a deck that does not add up. */}
+                <DeckSection
+                  title="Other"
+                  entries={generated.entries.filter(c => !['Unit', 'Upgrade', 'Event'].includes(c.type))}
+                  cardDb={cardDb}
+                />
+              </div>
+            </div>
+            {!generated.report.ok && (
+              <p data-testid="generated-deck-violations" className="mt-2 text-xs text-red">
+                Shape rules broken: {generated.report.violations.join('; ')}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
 
       {decks.length === 0 ? (
         <p data-testid="deck-empty-state" className="mt-4 text-ink-faint text-sm">
@@ -214,7 +385,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
         </ul>
       )}
 
-      {decks.length > 0 && (
+      {(decks.length > 0 || pool !== null) && (
         <div className="mt-4 flex items-center gap-3">
           <label htmlFor="opponent-deck-select" className="text-accent text-xs uppercase tracking-[0.12em] font-light">
             Opponent
@@ -226,7 +397,10 @@ export default function DeckSelectScreen({ onPlay }: Props) {
             onChange={e => setOpponentChoice(e.target.value)}
             className="bg-transparent border-2 border-accent rounded-xl px-3 py-1.5 text-sm text-ink shadow-[0_0_12px_rgba(79,195,247,0.3)] focus:outline-none"
           >
-            <option value="random">Random deck</option>
+            {/* A freshly generated deck each game, so it is not the same opponent twice. */}
+            <option value={GENERATED_DECK_ID} disabled={pool === null}>Random generated deck</option>
+            {/* "Built" because it picks among the player's own imported decks and never a generated one. */}
+            <option value="random" disabled={decks.length === 0}>Random built deck</option>
             {decks.map(d => (
               <option key={d.id} value={d.id}>{d.name}</option>
             ))}
