@@ -1426,7 +1426,9 @@ played and the rest derived.
 npm run bench --prefix sealed -- --matrix --games 14 --seed 42 greedy   # ~14 games/cell => ~1000/deck
 ```
 
-`--games` is games *per cell*; a whole run is ~30-40 min at 14. It prints strongest/weakest decks,
+`--games` is games *per cell*, and **the model dominates the cost**: ~30-40 min at 14 for `greedy`,
+against a **measured 14h 36m** for `beam-reply` at 10 a cell over 10 shards (26,280 games, seed 42).
+Budget for the model being measured, not for the example above. It prints strongest/weakest decks,
 by-leader and by-base strength (each deck's average win rate across all opponents) and saves every
 ordered pair to the SQLite `matchups` table. It answers three questions:
 

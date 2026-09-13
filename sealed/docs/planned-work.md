@@ -17,32 +17,41 @@ rather than a dependency.
 Ordered on one principle: **correctness, then structure, then calibration.** Anything that changes the
 engine or the horizon invalidates a calibration done before it.
 
-1. **Run the matchup matrix.** Unblocked: #584 closed with both candidates measuring null or harmful
-   and shipping at their no-op values, so nothing outstanding changes what the bot plays and the
-   calibration cannot be invalidated underneath. At roughly **23 hours sharded** (10 games a cell, against 169
-   serial) it is the one run worth doing exactly once. It banks and resumes per shard now, so an
-   interruption at hour 20 costs the outstanding shards rather than all 23. The first-player split is
-   in place, so it answers two questions instead of one.
+1. **#587 turn the leader ranking into a blind-spot queue.** The matrix has run (26,280 games, none
+   dropped, 14h 36m) and its findings are in [experiments.md](experiments.md). What remains is the
+   part the run cannot do for itself.
 
-   Per-cell numbers are noise at that size (±50% at 4 games). The readable aggregates are deck strength
-   (±5.8%) and leader strength (±2.9%), and the genuinely interesting output is any leader whose
-   measured strength disagrees with its real-play reputation, which is a queue of bot blind spots.
+   Leader strength spans **68.1% to 22.4%** across decks that differ only in leader and base aspect,
+   and the ordering tracks how legible a leader's value is to a static board score: stat lines and
+   printed keywords at the top, combat-conditional auras and self-costing abilities at the bottom.
+   **The matrix cannot tell "the bot misplays this" from "this is weak in an algorithmic deck"**, so
+   the next step is a comparison against real-play reputation. Each disagreement is a candidate blind
+   spot, and each becomes a scripted position rather than another aggregate sweep.
 
-   **The turn-order output splits the same way.** Pooled over every game, "the first mover wins X%" is
-   the tightest number the run produces (±0.6% at 10 games a cell); a single deck's gap is measured
-   over its own row and carries about ±7 points, so that ordering is a queue of candidates rather than
-   a ranking. A dry run over the full deck set at 4 games a cell measured the per-deck band at ±11.3
-   points, which is what the ±7 projection scales from.
+   The strongest lead is that a leader whose value is **combat-conditional** is invisible to a board
+   score: Grogu is 0 power and buffs only while attacking or defending. That is the same shape as the
+   Shield, which is printed 0/0 and works through a hook, and which needed its own term.
 
-   It measures the **deck generator**, not the sealed metagame: one algorithmic build per leader and
-   base. That gap is the point rather than a caveat.
-2. **#565 split what a run plays from what it records.** Fifteen modes, two real shapes: a game run and
+   **Blocked on the generator, though, and that is the higher priority.** `generateDeck` builds from
+   the whole card set with no pool step, and `MAX_COPIES` is 3 regardless of rarity, so decks carrying
+   three copies of one Legendary exist in the run. Those are stronger than anything a sealed player
+   could build, and the inflation lands unevenly across leaders. Re-reading the ranking is worth
+   little until the generator produces pools a player could actually open.
+
+2. **Make the deck generator model a sealed pool.** Open six packs, then build from what came out,
+   rather than from the full set under quotas. Per-rarity copy caps are the minimum fix (a Legendary
+   is realistically 1 copy, a duplicate Rare a few percent); a real pool step is the honest one.
+
+   It also unlocks two things that are thin today. Several deck suites become meaningful, since the
+   pool varies where the current seed only breaks ties between equally scored cards. And per-card win
+   rates need far more decks than 52 before a card-sized effect can clear the noise.
+3. **#565 split what a run plays from what it records.** Fifteen modes, two real shapes: a game run and
    a corpus run. The fragmentation already costs something measured, since the generalisation harness
    and `runBench` read 50.4% and 48.70% for the same AI on the same decks, which is why every harness
    needs its own baseline established before a number from it can be trusted. After the matrix rather
    than before it: the benefit is mostly for repeated A/B runs, and a large harness refactor
    immediately before a 23-hour calibration is the wrong risk to take.
-3. **#585 use the game's own terms for game actions.** Units are played and only leaders are
+4. **#585 use the game's own terms for game actions.** Units are played and only leaders are
    deployed; cards are resourced rather than banked; things are defeated rather than killed.
    [glossary.md](glossary.md) records the correct terms and the ones this project invented. Not
    urgent and not blocking anything, but it is prose-level debt that makes comments carrying measured

@@ -181,6 +181,94 @@ The practical rule: `--terms` is a screen for weights that **cannot** matter, an
 earns a sweep rather than predicting its outcome. It sits alongside prevalence, which justifies an
 attempt without predicting the result.
 
+### Moving first is worth 1.2 points
+
+The matchup matrix pools one first-mover observation from every game, which makes this the
+best-powered number the harness produces: over **25,920 games**, the first mover wins **51.2% +/-
+0.6%**.
+
+That is small, and it explains a run of null results rather than sitting beside them. Every attempt
+to make the model value turn order more highly has failed: `initiative` is monotonically harmful when
+raised, `initiativeHorizon` swept to no gradient and ships at 0, and `initiativeExposure` measured
+roughly -4 points per point of weight. A term cannot be worth more than the thing it prices.
+
+It is a property of this deck generator and this model, not of the game: a human extracting more from
+the initiative would not show up here.
+
+### The leader ranking tracks what the evaluation can read
+
+72 even decks (18 leaders x 4 base aspects), every deck against every deck under `beam-reply`, 10
+games a cell, 26,280 games, none dropped. Leader strength carries about +/-2.9%, deck strength
++/-5.8%, and individual cells are noise.
+
+The spread by leader is **enormous**: 68.1% down to 22.4%, over 45 points, on decks that differ only
+in leader and base aspect.
+
+| strongest | | weakest | |
+| --- | --- | --- | --- |
+| Grand Admiral Sloane | 68.1% | Grogu | 22.4% |
+| Ezra Bridger | 67.3% | Bo-Katan Kryze | 23.4% |
+| Luke Skywalker | 66.8% | Vane | 36.7% |
+| Baylan Skoll | 63.1% | Sabine Wren | 38.1% |
+
+**The ordering lines up with how legible a leader's value is to a static board score.** At the top
+sit a 6/7 stat line (Luke), a leader carrying printed Saboteur (Ezra), and one that hands out Sentinel
+and Overwhelm (Sloane): raw stats and keywords the evaluation and the reach model already read. At the
+bottom sit abilities the evaluation structurally cannot price:
+
+- **Grogu** is **0 power, 3 HP**, and his entire value is combat-conditional auras (+1/+0 while a
+  friendly unit defends, -1/-0 to the defender while one attacks). A static board score reads a 0/3
+  body. This is the same class as the Shield, which is printed 0/0 and works through a hook.
+- **Vane**'s ability costs a friendly upgrade, which the model prices as a straight loss.
+- **Sabine Wren**'s gives the opponent 2 Advantage tokens, which the model prices as a gift.
+- **Bo-Katan Kryze** costs **10**, so she is undeployable for most of a game.
+
+**The matrix cannot separate "the bot misplays this leader" from "this leader is weak in an
+algorithmic deck".** Grogu really is a 0-power body, and Bo-Katan really does cost 10. What the
+ranking supplies is a queue of candidates; deciding which are blind spots needs a comparison against
+real-play reputation, which is outside what this measures.
+
+Base aspect is nearly flat by comparison, 51.9% (Command) to 46.7% (Aggression).
+
+**Twenty of the 72 decks are unbuildable in sealed**, pairing a leader with a base aspect it already
+supplies. This set has no cards with a doubled aspect, so the overlap buys nothing, and one colour
+does not yield enough playables. Re-pooled over the 52 buildable decks, dropping the others as
+opponents as well as rows, **nothing moves more than about 3.5 points** and the ordering is
+essentially unchanged: Shin Hati gains most (58.7% to 62.1%), Ezra Bridger loses most (67.3% to
+63.8%). The one leader whose rating was flattered is Fennec Shand, 52.4% to 47.7%, because both her
+strongest bases were her own aspects.
+
+### The deck generator does not model a sealed pool
+
+Worth stating plainly because it bounds everything the matrix can say: `generateDeck` builds from the
+**whole card set** under rarity quotas. There is no pool step, so the decks are not sealed decks.
+
+The sharpest symptom is copy counts. `MAX_COPIES` is **3 regardless of rarity**, and `RARITY_MIX`
+allows up to 3 Legendary *cards*, so **3 copies of one Legendary is legal and occurs** (Zeb Orrelios
+appears at 3 copies in four decks). A real six-pack pool yields roughly 0-3 Legendaries in total,
+essentially never two of the same, and only a few percent chance of a duplicate Rare.
+
+So some decks in this run are stronger than anything a sealed player could build, and unevenly so:
+the inflation lands on whichever leaders the generator chose to give a tripled bomb. Leader ratings
+should be read with that in mind, and a pool-aware generator would change them by an unknown amount.
+
+### Per-card win rates are not measurable at this scale
+
+Attempted from the run: rebuild every deck (the generator is deterministic), join to deck win rates,
+and group by card and copy count. It does not work, and the reason is worth recording so it is not
+retried unchanged.
+
+Most card rows rest on **3 to 8 decks**, against a deck win rate that carries +/-5.8% on its own.
+The giveaway is repeated values: four different cards score exactly +8.8 against their leader's mean
+because they sit in the *same four decks*. Those are not four observations of card quality, they are
+one deck's win rate under four names.
+
+Three confounds stack. A deck's rate is dominated by its **leader** (21% to 70%), and a card is only
+legal where its aspects are covered, so a raw mean mostly measures which leaders may play it;
+subtracting the leader's mean removes that one. Cards chosen by the same heuristic **travel
+together** and cannot be separated. And the generator picks by its own scoring, so the result partly
+measures **what the generator likes** rather than what wins.
+
 ### The hidden information is small, and what matters is public
 
 A one-action lethal is available to the opponent in **2.2%** of decisions and is **absent before round
