@@ -2485,3 +2485,186 @@ registerCard('TWI_152', { // Mace Windu's Lightsaber
 })
 registerCard('TWI_168', whenPlayed('If an opponent controls more units than you, draw a card.', (s, ctx) => // Old Access Codes
   (s.players[opponentOf(ctx.owner)].units.length > s.players[ctx.owner].units.length ? drawCards(s, ctx.owner, 1) : s)))
+
+// ── Constant abilities on units and upgrades from the other sealed sets ──
+// `u` is the unit the ability is on: the unit itself, or for an upgrade the unit it is attached to. A keyword the
+// source data lists as the card's own, when the card only gains it conditionally or gives it to other units, is
+// stripped in `cardDataCorrections.ts` and granted here.
+
+type Holds = (s: GameState, u: UnitState) => boolean
+const friendliesOf = (s: GameState, u: UnitState): UnitState[] => { const o = unitOwner(s, u); return o ? s.players[o].units : [] }
+const enemiesOf = (s: GameState, u: UnitState): UnitState[] => { const o = unitOwner(s, u); return o ? s.players[opponentOf(o)].units : [] }
+const resourcesOf = (s: GameState, u: UnitState): number => { const o = unitOwner(s, u); return o ? s.players[o].resources.length : 0 }
+const isAspect = (aspect: string): Holds => (s, x) => (s.cards[x.cardId]?.aspects ?? []).includes(aspect)
+const isTrait = (trait: string): Holds => (s, x) => unitHasTrait(s, x, trait)
+const isNamed = (name: string): Holds => (s, x) => cardOf(s, x)?.name === name
+const another = (test: Holds): Holds => (s, u) => controlsAnother(s, u, test)
+const controlsA = (test: Holds): Holds => (s, u) => friendliesOf(s, u).some(x => test(s, x))
+const enemyHas = (test: Holds): Holds => (s, u) => enemiesOf(s, u).some(x => test(s, x))
+const holdsInitiative: Holds = (s, u) => unitOwner(s, u) === s.initiative
+const undamaged: Holds = (_s, u) => u.damage === 0
+const upgraded: Holds = (_s, u) => isUpgraded(u)
+const anyHost: Holds = () => true
+const enemyDefeatedThisPhase: Holds = (s, u) => { const o = unitOwner(s, u); return o !== undefined && defeatedThisPhase(s, opponentOf(o)).length > 0 }
+/** "(as a leader or unit)": the player's leader, deployed or not, or any unit of theirs with that name. */
+const playerControlsNamed = (s: GameState, owner: PlayerId, name: string): boolean =>
+  s.cards[s.players[owner].leader.cardId]?.name === name || s.players[owner].units.some(x => cardOf(s, x)?.name === name)
+const controlsNamed = (name: string): Holds => (s, u) => { const o = unitOwner(s, u); return o !== undefined && playerControlsNamed(s, o, name) }
+/** "You control a <trait> upgrade": one the unit's controller owns, on any unit. */
+const controlsUpgradeWithTrait = (s: GameState, u: UnitState, trait: string): boolean => {
+  const o = unitOwner(s, u)
+  return o !== undefined && allUnits(s).some(x => x.upgrades.some(up => up.owner === o && (s.cards[up.cardId]?.traits ?? []).some(t => t.toLowerCase() === trait.toLowerCase())))
+}
+const perEach = (n: number, power: number, hp = 0) => (n > 0 ? { power: n * power, hp: n * hp } : {})
+const KW = {
+  sentinel: { name: 'Sentinel' }, ambush: { name: 'Ambush' }, overwhelm: { name: 'Overwhelm' }, saboteur: { name: 'Saboteur' }, grit: { name: 'Grit' },
+  raid: (value: number): KeywordInstance => ({ name: 'Raid', value }),
+  restore: (value: number): KeywordInstance => ({ name: 'Restore', value }),
+}
+/** "While <condition>, this unit (or attached unit) gains <keywords>". */
+const gains = (when: Holds, ...keywords: KeywordInstance[]) => ({ conditionalKeywords: (s: GameState, u: UnitState) => (when(s, u) ? keywords : []) })
+/** "Each (other) friendly <test> unit gets/gains ...". `others` leaves the source out. */
+const friendlyAura = (test: Holds, contribution: { power?: number; hp?: number; keywords?: KeywordInstance[] }, others: boolean) => ({
+  aura: (s: GameState, source: UnitState, target: UnitState, friendly: boolean) =>
+    (friendly && (!others || target.instanceId !== source.instanceId) && test(s, target) ? contribution : undefined),
+})
+
+// Conditional keywords on the unit itself
+registerCard('LAW_105', gains(upgraded, KW.sentinel)) // Cinta Kaz
+registerCard('SEC_201', gains(controlsNamed('Padmé Amidala'), KW.raid(2))) // Anakin Skywalker
+registerCard('SEC_079', gains((s, u) => friendliesOf(s, u).length > enemiesOf(s, u).length, KW.sentinel)) // Corrupt Politician
+registerCard('SEC_249', gains(another(isTrait('Official')), KW.raid(2))) // High Command Councilor
+registerCard('SEC_134', gains(enemyHas((_s, x) => x.damage > 0), KW.raid(2))) // Hunting Assassin Droid
+registerCard('SEC_116', gains(controlsA(isTrait('Official')), KW.restore(2))) // Nubian Star Skiff
+registerCard('SEC_063', gains(undamaged, KW.sentinel)) // Rotunda Senate Guards
+registerCard('SEC_029', gains(upgraded, KW.grit)) // Zam Wesell
+registerCard('LOF_162', gains(another(isAspect('Aggression')), KW.raid(2))) // Hunting Nexu
+registerCard('LOF_212', gains(enemyHas((_s, x) => x.exhausted), KW.raid(2))) // Life Wind Sage
+registerCard('LOF_118', gains(enemyHas(isTrait('Force')), KW.ambush)) // Terentatek
+registerCard('JTL_107', gains(controlsA(isTrait('Vehicle')), KW.sentinel)) // Bunker Defender
+registerCard('JTL_081', gains(controlsA((_s, x) => isTokenCard(x.cardId)), KW.raid(1))) // First Order TIE Fighter
+registerCard('JTL_257', gains(another(isTrait('Fighter')), KW.raid(2))) // Flanking Fang Fighter
+registerCard('JTL_113', gains((s, u) => resourcesOf(s, u) >= 6, KW.sentinel)) // Homestead Militia
+registerCard('TWI_062', gains(undamaged, KW.restore(2))) // Daughter of Dathomir
+registerCard('TWI_081', gains(another(isTrait('Separatist')), KW.ambush)) // Droid Commando
+registerCard('TWI_054', gains((s, u) => enemiesOf(s, u).length >= 3, KW.sentinel)) // Duchess's Champion
+registerCard('TWI_180', gains(another(isTrait('Separatist')), KW.raid(2))) // Separatist Commando
+registerCard('SHD_169', gains(upgraded, KW.overwhelm)) // Clan Challengers
+registerCard('SHD_112', gains(another(isAspect('Command')), KW.sentinel)) // Gamorrean Retainer
+registerCard('SHD_247', gains(upgraded, KW.sentinel)) // Protector of the Throne
+registerCard('SHD_034', gains(upgraded, KW.sentinel)) // Supercommando Squad
+registerCard('SOR_065', gains(holdsInitiative, KW.sentinel)) // Baze Malbus
+registerCard('SOR_114', gains(another(isAspect('Command')), KW.ambush)) // Escort Skiff
+registerCard('SOR_249', gains(another(isTrait('Vehicle')), KW.ambush)) // Frontier AT-RT
+registerCard('SOR_211', gains(another(isAspect('Cunning')), KW.sentinel)) // Gamorrean Guards
+registerCard('SOR_159', gains(another(isAspect('Aggression')), KW.raid(2))) // Partisan Insurgent
+registerCard('SOR_048', gains(undamaged, KW.sentinel)) // Vigilant Honor Guards
+registerCard('TS26_20', gains(undamaged, KW.sentinel)) // 501st Veteran
+registerCard('SOR_082', { // Emperor's Royal Guard
+  ...gains(controlsA(isTrait('Official')), KW.sentinel),
+  statModifier: (s, u) => (controlsNamed('Emperor Palpatine')(s, u) ? { hp: 1 } : {}),
+})
+registerCard('TWI_130', { // Bo-Katan Kryze
+  ...gains(another(isTrait('Mandalorian')), KW.overwhelm, KW.saboteur),
+  statModifier: (s, u) => (another(isTrait('Trooper'))(s, u) ? { power: 1 } : {}),
+})
+registerCard('TWI_143', { ...gains(enemyDefeatedThisPhase, KW.saboteur), statModifier: (s, u) => (enemyDefeatedThisPhase(s, u) ? { power: 1 } : {}) }) // Jyn Erso
+registerCard('TS26_50', { ...gains(undamaged, KW.sentinel), statModifier: (s, u) => perEach(resourcesOf(s, u), 1, 1) }) // General Grievous
+
+// Stat modifiers on the unit itself
+const whileDefending = { statModifier: (_s: GameState, _u: UnitState, ctx: { defending?: boolean }) => (ctx.defending ? { power: 2 } : {}) }
+registerCard('SEC_151', { statModifier: (s, u) => { const o = unitOwner(s, u); return o && s.players[o].resources.length < s.players[opponentOf(o)].resources.length ? { power: 2 } : {} } }) // Kazuda Xiono
+registerCard('SEC_114', { statModifier: (s, u) => perEach(friendliesOf(s, u).filter(x => x.instanceId !== u.instanceId && x.exhausted).length, 1) }) // Kino Loy
+registerCard('SEC_108', { statModifier: (s, u) => (holdsInitiative(s, u) ? { power: 2 } : {}) }) // Senator's Aide
+registerCard('LOF_062', { statModifier: (_s, u) => perEach(u.upgrades.length, 1, 1) }) // Axe Woves
+registerCard('LOF_083', { statModifier: (s, u) => { // Captain Enoch: Trooper units in your discard pile
+  const o = unitOwner(s, u)
+  return o ? perEach(s.players[o].discard.filter(id => s.cards[id]?.type === 'unit' && (s.cards[id]?.traits ?? []).some(t => t.toLowerCase() === 'trooper')).length, 1) : {}
+} })
+registerCard('LOF_049', whileDefending) // Jedi Guardian
+registerCard('SHD_042', whileDefending) // Concord Dawn Interceptors
+registerCard('LOF_244', { statModifier: (s, u) => ({ power: (another(isTrait('Jedi'))(s, u) ? 1 : 0) + (controlsUpgradeWithTrait(s, u, 'Lightsaber') ? 1 : 0) }) }) // Jedi Vector
+registerCard('LOF_060', { statModifier: (s, u) => (controlsA(isTrait('Force'))(s, u) || controlsUpgradeWithTrait(s, u, 'Force') ? { power: 1, hp: 1 } : {}) }) // Padawan Starfighter
+registerCard('LOF_153', { statModifier: (_s, u) => perEach(u.damage, 2) }) // Paz Vizsla
+registerCard('LOF_233', { statModifier: (_s, u) => (u.damage > 0 ? { power: 3 } : {}) }) // Scimitar
+registerCard('LOF_081', { statModifier: (s, u) => (another(isAspect('Villainy'))(s, u) ? { power: 2 } : {}) }) // Sith Legionnaire
+registerCard('JTL_115', { statModifier: (s, u) => perEach(friendliesOf(s, u).filter(x => x.instanceId !== u.instanceId && x.arena === 'space').length, 1, 1) }) // Clone Combat Squadron
+registerCard('JTL_052', { statModifier: (_s, u) => perEach(u.damage, -1) }) // D'Qar Cargo Frigate
+registerCard('JTL_256', { statModifier: (s, u) => perEach(friendliesOf(s, u).filter(x => x.instanceId !== u.instanceId && isNamed('Swarming Vulture Droid')(s, x)).length, 1) }) // Swarming Vulture Droid
+registerCard('TWI_142', { statModifier: (s, u) => { const o = unitOwner(s, u); return o && s.players[o].base.damage >= 15 ? { power: 2 } : {} } }) // Anakin's Interceptor
+registerCard('TWI_163', { statModifier: (s, u) => (another(isTrait('Trooper'))(s, u) ? { power: 2 } : {}) }) // Relentless Rocket Droid
+registerCard('SHD_056', { statModifier: (_s, u) => (isUpgraded(u) ? { power: 1, hp: 1 } : {}) }) // Follower of The Way
+registerCard('SHD_083', { statModifier: (s, u) => (resourcesOf(s, u) >= 6 ? { power: 2 } : {}) }) // Seasoned Shoretrooper
+registerCard('SOR_118', { statModifier: (s, u) => perEach(resourcesOf(s, u), 1, 1) }) // 97th Legion
+registerCard('SOR_161', { statModifier: (s, u) => (holdsInitiative(s, u) ? { power: 2 } : {}) }) // Ardent Sympathizer
+
+// Auras on other units
+registerCard('LAW_139', friendlyAura((s, x) => isLeaderUnit(s, x), { power: 2, hp: 2 }, false)) // Admiral Motti
+registerCard('SEC_047', friendlyAura(anyHost, { keywords: [KW.restore(1)] }, true)) // Coronet
+registerCard('LOF_169', friendlyAura(isTrait('Droid'), { keywords: [KW.raid(2)] }, false)) // Invasion Control Ship
+registerCard('LOF_089', friendlyAura(isTrait('Vehicle'), { power: 6, hp: 6 }, true)) // Supremacy
+registerCard('JTL_161', friendlyAura(isTrait('Vehicle'), { power: 1, keywords: [KW.overwhelm] }, false)) // Captain Tarkin
+registerCard('JTL_085', friendlyAura((_s, x) => x.arena === 'space', { power: 1, hp: 1 }, true)) // Victor Leader
+registerCard('TWI_092', friendlyAura(isAspect('Heroism'), { hp: 1 }, true)) // Admiral Yularen
+registerCard('SHD_188', friendlyAura(isNamed('Zuckuss'), { power: 1, hp: 1, keywords: [KW.ambush] }, false)) // 4-LOM
+registerCard('SHD_190', friendlyAura(isNamed('4-LOM'), { power: 1, hp: 1, keywords: [KW.saboteur] }, false)) // Zuckuss
+registerCard('SOR_079', friendlyAura((s, x) => nonLeader(s, x) && printedCost(s, x) >= 6, { keywords: [KW.ambush] }, false)) // Admiral Piett
+registerCard('SOR_242', friendlyAura(isTrait('Rebel'), { power: 1, hp: 1 }, true)) // General Dodonna
+registerCard('SOR_230', friendlyAura(isTrait('Imperial'), { power: 1, hp: 1 }, true)) // General Veers
+registerCard('SOR_144', friendlyAura(isAspect('Heroism'), { keywords: [KW.raid(1)] }, true)) // Red Three
+registerCard('SOR_100', friendlyAura(isTrait('Vehicle'), { power: 1, hp: 1, keywords: [KW.ambush] }, false)) // Wedge Antilles
+registerCard('TS26_40', friendlyAura(isTrait('Republic'), { keywords: [KW.restore(1)] }, true)) // Obi-Wan Kenobi
+registerCard('SHD_037', { aura: (s, _src, tgt, friendly) => (!friendly && nonLeader(s, tgt) ? { power: -2, hp: -2 } : undefined) }) // Supreme Leader Snoke
+registerCard('SEC_224', { // Vel Sartha: each exhausted enemy unit gets -2/-0 while defending
+  aura: (_s, _src, tgt, friendly, combat) => (!friendly && tgt.exhausted && combat?.defenderInstanceId === tgt.instanceId ? { power: -2 } : undefined),
+})
+registerCard('SOR_212', { // Strafing Gunship: attacks ground units; a ground defender gets -2/-0 while it attacks
+  attacksEitherArena: () => true,
+  aura: (_s, src, tgt, _friendly, combat) =>
+    (combat?.attackerInstanceId === src.instanceId && combat.defenderInstanceId === tgt.instanceId && tgt.arena === 'ground' ? { power: -2 } : undefined),
+})
+
+// Costs, entering ready and combat rules
+registerCard('LAW_110', { costModifier: (s, p) => -s.players[p].units.filter(x => x.damage > 0).length }) // Phoenix Squadron Fighters
+registerCard('JTL_163', { costModifier: s => -groundUnits(s).filter(x => x.damage > 0).length }) // AT-DP Occupier
+registerCard('JTL_204', { costModifier: (s, p) => (unitsIn(s, opponentOf(p), 'space').length >= 3 ? -3 : 0) }) // Home One
+registerCard('TWI_197', { costModifier: (s, p) => (s.players[p].units.length >= 3 ? -1 : 0) }) // Republic Attack Pod
+registerCard('TWI_098', { costModifier: (s, p) => -s.players[opponentOf(p)].units.length }) // Republic Defense Carrier
+registerCard('SOR_248', { costModifier: (s, p) => (s.players[p].units.some(x => unitHasTrait(s, x, 'Trooper')) ? -1 : 0) }) // Volunteer Soldier
+registerCard('LAW_223', { entersReady: (s, p) => s.players[p].units.some(x => !cardOf(s, x)?.unique) }) // Rose Tico
+registerCard('LAW_210', { entersReady: (s, p) => playerControlsNamed(s, p, 'Jabba the Hutt') }) // Salacious Crumb
+registerCard('SEC_170', { entersReady: (s, p) => unitsIn(s, opponentOf(p), 'ground').length === 0 }) // Corellian Hounds
+registerCard('SEC_135', { cannotBeAttacked: (_s, u) => !u.exhausted }) // Muckraker Crab Droid
+registerCard('SOR_198', { dealsDamageFirst: () => true }) // Han Solo: while attacking, deals combat damage first
+registerCard('SHD_234', { dealsDamageFirst: () => true }) // Incinerator Trooper: while attacking, deals combat damage first
+
+// Upgrades
+registerCard('SEC_071', gains((_s, u) => u.exhausted, KW.sentinel)) // Disciples' Devotion
+registerCard('LOF_215', { attachRestriction: nonVehicle, ...gains(anyHost, KW.saboteur) }) // Ascension Cable
+registerCard('LOF_261', { // Constructed Lightsaber
+  attachRestriction: isTrait('Force'),
+  conditionalKeywords: (s, u) => {
+    const heroism = isAspect('Heroism')(s, u)
+    const villainy = isAspect('Villainy')(s, u)
+    return [...(heroism ? [KW.restore(2)] : []), ...(villainy ? [KW.raid(2)] : []), ...(heroism || villainy ? [] : [KW.sentinel])]
+  },
+})
+registerCard('LOF_238', { attachRestriction: nonVehicle, ...gains(isTrait('Sith'), KW.grit) }) // Darth Revan's Lightsabers
+registerCard('LOF_053', { attachRestriction: nonVehicle, ...gains(isTrait('Force'), KW.restore(1)) }) // Heirloom Lightsaber
+registerCard('LAW_128', { attachRestriction: nonLeader, ...gains(anyHost, KW.grit) }) // Veiled Strength
+registerCard('TWI_071', gains(anyHost, KW.sentinel)) // Unshakeable Will
+registerCard('TWI_236', { // Grievous's Wheel Bike
+  attachRestriction: nonVehicle,
+  costModifier: (s, _p, target) => (target && cardOf(s, target)?.name === 'General Grievous' ? -2 : 0),
+  ...gains(anyHost, KW.overwhelm),
+})
+registerCard('SOR_070', gains(anyHost, KW.restore(2))) // Devotion
+registerCard('SOR_166', gains(anyHost, KW.saboteur)) // Infiltrator's Skill
+registerCard('SOR_057', gains(anyHost, KW.sentinel)) // Protector
+registerCard('LOF_074', { attachRestriction: isTrait('Force') }) // Bolstered Endurance
+registerCard('LOF_151', { attachRestriction: (s, t) => unitHasTrait(s, t, 'Jedi') && nonVehicle(s, t) }) // Knight's Saber
+registerCard('TS26_79', { attachRestriction: (s, t) => printedCost(s, t) <= 4 }) // Underestimated
+registerCard('LAW_129', { costModifier: (s, _p, target) => (target && s.cards[target.cardId]?.unique ? -1 : 0) }) // Mastery: 1 less on a unique unit
+registerCard('SHD_069', { grantedTraits: () => ['Mandalorian'] }) // Foundling
+registerCard('LAW_150', { attachRestriction: nonVehicle, grantedTraits: () => ['Rebel'], ...friendlyAura(isTrait('Rebel'), { power: 2, hp: 2 }, true) }) // Fulcrum
+registerCard('SOR_072', { cannotAttackBases: () => true }) // Entrenched
