@@ -29,7 +29,7 @@ export const MAX_COPIES = 3
  *
  * This stands in for a pool the generator does not yet model, which is the real fix: it builds from
  * the **whole set** under rarity quotas, so before this a flat cap let it take three copies of a
- * Legendary, and the matrix at seed 42 duly put three Zeb Orrelios into four decks.
+ * Legendary, and the first matrix duly put three Zeb Orrelios into four decks.
  *
  * `Special` covers 2 leaders, 6 units and 2 upgrades in this set. The two **leaders** are guaranteed
  * to every player at prerelease and so are always available to build around, but that is a leader

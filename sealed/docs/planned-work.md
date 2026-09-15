@@ -17,40 +17,35 @@ rather than a dependency.
 Ordered on one principle: **correctness, then structure, then calibration.** Anything that changes the
 engine or the horizon invalidates a calibration done before it.
 
-1. **#587 turn the leader ranking into a blind-spot queue.** The matrix has run (26,280 games, none
-   dropped, 14h 36m) and its findings are in [experiments.md](experiments.md). What remains is the
-   part the run cannot do for itself.
+1. **#587 turn the leader ranking into a blind-spot queue.** The matrix has run on the corrected
+   generator (55,120 games over 52 decks, none dropped) and its findings are in
+   [experiments.md](experiments.md).
 
-   Leader strength spans **68.1% to 22.4%** across decks that differ only in leader and base aspect,
-   and the ordering tracks how legible a leader's value is to a static board score: stat lines and
-   printed keywords at the top, combat-conditional auras and self-costing abilities at the bottom.
-   **The matrix cannot tell "the bot misplays this" from "this is weak in an algorithmic deck"**, so
-   the next step is a comparison against real-play reputation. Each disagreement is a candidate blind
-   spot, and each becomes a scripted position rather than another aggregate sweep.
+   Read against real-play reputation, most of the bottom of the ranking is **pool-dependent rather than
+   misplayed**: Grogu, Bo-Katan Kryze, Moff Gideon, The Mandalorian and Vane each need specific cards an
+   algorithmic deck rarely supplies. **Sabine Wren is the candidate blind spot.** Play-testing reports
+   the bot using her ability after spending all its resources, so the opponent gets 2 Advantage tokens
+   and no unit collects the Shielded she pays for. Next: reproduce it in a game for a replay, then a
+   scripted position and a ticket.
 
-   The strongest lead is that a leader whose value is **combat-conditional** is invisible to a board
-   score: Grogu is 0 power and buffs only while attacking or defending. That is the same shape as the
-   Shield, which is printed 0/0 and works through a hook, and which needed its own term.
-
-   **Blocked on the generator, though, and that is the higher priority.** `generateDeck` builds from
-   the whole card set with no pool step, and `MAX_COPIES` is 3 regardless of rarity, so decks carrying
-   three copies of one Legendary exist in the run. Those are stronger than anything a sealed player
-   could build, and the inflation lands unevenly across leaders. Re-reading the ranking is worth
-   little until the generator produces pools a player could actually open.
+   **Whether a different deck suite moves a leader's rating is still open.** The runs replayed one
+   suite because the matrix children built the default seed; that is fixed, and a payload played on
+   different decks is now refused. A real multi-suite run waits for the pool generator below: the copy
+   caps alone moved leaders by up to 12 points, and a pool step will move them again.
 
 2. **Make the deck generator model a sealed pool.** Open six packs, then build from what came out,
-   rather than from the full set under quotas. Per-rarity copy caps are the minimum fix (a Legendary
-   is realistically 1 copy, a duplicate Rare a few percent); a real pool step is the honest one.
+   rather than from the full set under quotas. Duplicates are already rolled by rarity; the pool step
+   is what remains, and example pools from real openings will calibrate it.
 
-   It also unlocks two things that are thin today. Several deck suites become meaningful, since the
-   pool varies where the current seed only breaks ties between equally scored cards. And per-card win
+   It also unlocks two things that are thin today. Several deck suites become more meaningful, since a
+   pool varies which cards a leader can have at all, where a seed only varies the draw from the whole
+   set. And per-card win
    rates need far more decks than 52 before a card-sized effect can clear the noise.
 3. **#565 split what a run plays from what it records.** Fifteen modes, two real shapes: a game run and
    a corpus run. The fragmentation already costs something measured, since the generalisation harness
    and `runBench` read 50.4% and 48.70% for the same AI on the same decks, which is why every harness
-   needs its own baseline established before a number from it can be trusted. After the matrix rather
-   than before it: the benefit is mostly for repeated A/B runs, and a large harness refactor
-   immediately before a 23-hour calibration is the wrong risk to take.
+   needs its own baseline established before a number from it can be trusted. The benefit is mostly
+   for repeated A/B runs.
 4. **#585 use the game's own terms for game actions.** Units are played and only leaders are
    deployed; cards are resourced rather than banked; things are defeated rather than killed.
    [glossary.md](glossary.md) records the correct terms and the ones this project invented. Not

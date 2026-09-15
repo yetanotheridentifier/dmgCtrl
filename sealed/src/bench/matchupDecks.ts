@@ -43,18 +43,31 @@ function distinctBases(pool: SwuCard[]): SwuCard[] {
  * Taking the first would hand all 18 decks an Aggression base, which is a badly biased sample to
  * judge "does this AI beat that one across matchups" on.
  */
-export function buildMatchupDecks(pool: SwuCard[] = POOL, basesPerLeader = 4): MatchupDeck[] {
+export function buildMatchupDecks(pool: SwuCard[] = POOL, basesPerLeader = 4, seed = 1): MatchupDeck[] {
   const leaders = pool.filter(c => c.Type === 'Leader').sort((a, b) => Number(a.Number) - Number(b.Number))
   const allBases = distinctBases(pool)
-  const take = Math.min(Math.max(1, basesPerLeader), allBases.length)
   const out: MatchupDeck[] = []
   leaders.forEach((leader, i) => {
+    /**
+     * A base must not double an aspect the leader already supplies. No card in this set carries a
+     * doubled aspect, so the overlap buys nothing, and a single colour does not yield enough
+     * playables to fill a deck. That takes the full set from 72 to 52: most leaders lose one base,
+     * and the two carrying two colour aspects lose two.
+     *
+     * Kept as a filter with a fallback rather than an assumption, so a leader covering every aspect
+     * would still get a deck instead of vanishing from the grid.
+     */
+    const leaderAspects = new Set(leader.Aspects ?? [])
+    const usable = allBases.filter(b => !(b.Aspects ?? []).some(a => leaderAspects.has(a)))
+    const candidates = usable.length > 0 ? usable : allBases
+
+    const take = Math.min(Math.max(1, basesPerLeader), candidates.length)
     // Rotate the window so a trimmed set still spans every aspect; a full set is unaffected.
-    const bases = Array.from({ length: take }, (_, k) => allBases[(i + k) % allBases.length])
+    const bases = Array.from({ length: take }, (_, k) => candidates[(i + k) % candidates.length])
     for (const base of bases) {
       const baseAspect = base.Aspects?.[0] ?? '?'
       const label = `${leader.Name} (${baseAspect})`
-      const { deck } = generateDeck({ leader, base, pool, seed: 1 })
+      const { deck } = generateDeck({ leader, base, pool, seed })
       out.push({ deck: { ...deck, name: label }, label, leaderName: leader.Name, baseAspect })
     }
   })

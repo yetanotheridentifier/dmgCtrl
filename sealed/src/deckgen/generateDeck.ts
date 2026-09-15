@@ -216,8 +216,9 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
 /**
  * Build a deck for a leader, choosing the base that yields the best (fewest violations) deck. Tries
  * each distinct base aspect; deterministic. This is the entry point a single-deck consumer uses.
+ * `baseAspect` restricts it to that aspect, including one the leader already carries.
  */
-export function buildDeckForLeader(leader: SwuCard, pool: SwuCard[], seed: number, prefer?: Set<string>): { deck: ParsedDeck; report: DeckReport } {
+export function buildDeckForLeader(leader: SwuCard, pool: SwuCard[], seed: number, prefer?: Set<string>, baseAspect?: string): { deck: ParsedDeck; report: DeckReport } {
   const bases = pool.filter(c => c.Type === 'Base')
   // One representative base per distinct aspect (bases are mechanically identical, aspect aside).
   const byAspect = new Map<string, SwuCard>()
@@ -233,9 +234,12 @@ export function buildDeckForLeader(leader: SwuCard, pool: SwuCard[], seed: numbe
    * base at all.
    */
   const leaderAspects = new Set(leader.Aspects ?? [])
-  const usable = [...byAspect.values()]
-    .filter(b => !(b.Aspects ?? []).some(a => leaderAspects.has(a)))
-  const candidates = usable.length > 0 ? usable : [...byAspect.values()]
+  const all = [...byAspect.values()]
+  const usable = all.filter(b => !(b.Aspects ?? []).some(a => leaderAspects.has(a)))
+  // A base aspect the caller names wins, even one the leader already carries: the rule above stops the
+  // generator doubling an aspect by accident, not a player asking for it.
+  const named = baseAspect === undefined ? [] : all.filter(b => (b.Aspects ?? []).includes(baseAspect))
+  const candidates = named.length > 0 ? named : usable.length > 0 ? usable : all
 
   // Rotated by seed rather than always tried in pool order, which made the first legal base the
   // answer for almost every leader: two leaders sharing no aspect were landing on the same base.

@@ -3,10 +3,10 @@ import { useDecks } from '../hooks/useDecks'
 import type { SavedDeck } from '../data/deckStore'
 import type { SwuCard } from '../data/cards'
 import { largestCachedSet } from '../data/setImport'
-import { generateRandomDeck, GENERATED_DECK_ID } from '../deckgen/randomDeck'
+import { generateRandomDeck, generationOptions, GENERATED_DECK_ID } from '../deckgen/randomDeck'
 import { buildCardDb } from '../engine/cardDb'
 import { StaticCardRef } from './cardRef'
-import type { GeneratedDeck, GeneratedDeckEntry } from '../deckgen/randomDeck'
+import type { GeneratedDeck, GeneratedDeckEntry, GenerationChoice } from '../deckgen/randomDeck'
 import type { EngineCard } from '../engine/types'
 import { cardRefFromId } from '../utils/parseProtectThePod'
 import type { ParseDeckError, ParsedDeck } from '../utils/parseProtectThePod'
@@ -44,8 +44,9 @@ function cardCount(deck: SavedDeck): number {
  *
  * `generated` builds a fresh deck per game rather than reusing the one on screen, so playing twice
  * against it is two different decks: the point is exercising the generator, not a fixed sparring
- * partner. `random` picks among the player's own imported decks only and never returns a generated
- * one, which is why it reads "Random built deck".
+ * partner. It is the default, so while no set is cached it falls back to `random` rather than
+ * mirroring the player's own deck. `random` picks among the player's own imported decks only and never
+ * returns a generated one, which is why it reads "Random built deck".
  */
 function pickOpponent(
   decks: SavedDeck[],
@@ -53,13 +54,20 @@ function pickOpponent(
   fallback: SavedDeck,
   generate: () => SavedDeck | null,
 ): SavedDeck {
-  if (choice === GENERATED_DECK_ID) return generate() ?? fallback
-  if (choice !== 'random') return decks.find(d => d.id === choice) ?? fallback
+  if (choice === GENERATED_DECK_ID) {
+    const generated = generate()
+    if (generated) return generated
+  } else if (choice !== 'random') {
+    return decks.find(d => d.id === choice) ?? fallback
+  }
   if (decks.length === 0) return fallback
   return decks[Math.floor(Math.random() * decks.length)]
 }
 
 const pctOf = (done: number, total: number) => (total === 0 ? 0 : Math.round((done / total) * 100))
+
+/** The accent select every opponent choice uses, so the three read as one group of controls. */
+const SELECT_CLASS = 'w-full bg-transparent border-2 border-accent rounded-xl px-3 py-1.5 text-sm text-ink shadow-[0_0_12px_rgba(79,195,247,0.3)] focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed'
 
 /**
  * Rarity shown as its initial and coloured, since the column has to stay narrow enough that the card
@@ -178,13 +186,13 @@ function SetRow({ set, defaultOpen }: { set: SetProgress; defaultOpen: boolean }
 }
 
 /**
- * Reference panel (RHS of the setup screen): how much of each set's card abilities are built into
+ * Reference panel (foot of the card catalogue column): how much of each set's card abilities are built into
  * the engine. One collapsible block per set, newest first, each broken down by card type. Sourced
  * from the manifest in `data/implementedCards`, which a test pins to the ability registry.
  */
 function ImplementationStatus() {
   return (
-    <aside data-testid="implemented-cards" className="w-full lg:w-[27rem] shrink-0 lg:mt-0 mt-4">
+    <aside data-testid="implemented-cards" className="mt-8">
       <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Implemented cards</h2>
       <p className="mt-1 text-ink-faint text-xs">
         Which card abilities are built in. Others still play as vanilla stats / resources.
@@ -214,7 +222,10 @@ export default function DeckSelectScreen({ onPlay }: Props) {
   const { decks, importDeck, removeDeck } = useDecks()
   const [importText, setImportText] = useState('')
   const [importError, setImportError] = useState<ParseDeckError | null>(null)
-  const [opponentChoice, setOpponentChoice] = useState('random')
+  const [opponentChoice, setOpponentChoice] = useState<string>(GENERATED_DECK_ID)
+  // What a generated opponent is built around. The empty string is "random".
+  const [opponentLeader, setOpponentLeader] = useState('')
+  const [opponentAspect, setOpponentAspect] = useState('')
   const [setCode, setSetCode] = useState('')
   const [setStatus, setSetStatus] = useState<string | null>(null)
   // The pool is loaded once so generating is synchronous, which lets the opponent picker build a
@@ -224,6 +235,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
   // The same conversion the engine uses, so hovering a card in the deck list shows exactly what it
   // would show in a game. Rebuilt only when the pool changes.
   const cardDb = useMemo(() => (pool ? buildCardDb(pool.cards) : null), [pool])
+  const options = useMemo(() => (pool ? generationOptions(pool.cards) : null), [pool])
 
   useEffect(() => {
     let live = true
@@ -232,9 +244,9 @@ export default function DeckSelectScreen({ onPlay }: Props) {
   }, [setStatus])
 
   /** A different deck every time: the seed is what makes one reproducible after the fact. */
-  function buildGenerated(): GeneratedDeck | null {
+  function buildGenerated(choice: GenerationChoice = {}): GeneratedDeck | null {
     if (!pool) return null
-    return generateRandomDeck(pool.cards, Math.floor(Math.random() * 1_000_000) + 1)
+    return generateRandomDeck(pool.cards, Math.floor(Math.random() * 1_000_000) + 1, choice)
   }
 
   function handleGenerate() {
@@ -255,7 +267,8 @@ export default function DeckSelectScreen({ onPlay }: Props) {
   }
 
   function handlePlay(deck: SavedDeck) {
-    onPlay(deck, pickOpponent(decks, opponentChoice, deck, () => buildGenerated()?.deck ?? null))
+    const choice = { leaderId: opponentLeader || undefined, baseAspect: opponentAspect || undefined }
+    onPlay(deck, pickOpponent(decks, opponentChoice, deck, () => buildGenerated(choice)?.deck ?? null))
   }
 
   async function handleSetImport() {
@@ -273,9 +286,11 @@ export default function DeckSelectScreen({ onPlay }: Props) {
   }
 
   return (
-    <div data-testid="deck-select-screen" className="flex flex-col lg:flex-row gap-8 items-start">
-      <div className="max-w-2xl w-full min-w-0">
-      <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Deck selection</h2>
+    <div data-testid="deck-select-screen" className="grid grid-cols-1 lg:grid-cols-[minmax(0,5fr)_minmax(0,3fr)_minmax(0,4fr)] gap-8 items-start">
+      {/* Three columns: the deck you play with, the deck the bot plays, and the card catalogue that
+          feeds both. The opponent gets a column of its own because choosing a generated one is a panel. */}
+      <div data-testid="player-column" className="min-w-0">
+      <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Your deck</h2>
 
       {/* Generated decks sit above the imported ones: this is the quickest way to see what the
           generator produces, and it works before any deck has been imported. */}
@@ -285,7 +300,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
             <span className="block font-medium truncate">Random generated deck</span>
             <span data-testid="generated-deck-subtitle" className="block text-xs text-ink-faint">
               {pool === null
-                ? 'Import a set below to generate decks'
+                ? 'Cache a set in the card catalogue to generate decks'
                 : generated === null
                   ? `Built from ${pool.set} (${pool.cards.length} cards cached)`
                   : (
@@ -356,7 +371,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
 
       {decks.length === 0 ? (
         <p data-testid="deck-empty-state" className="mt-4 text-ink-faint text-sm">
-          No decks yet — paste a ProtectThePod export below to get started.
+          No decks yet. Paste a ProtectThePod export below to get started.
         </p>
       ) : (
         <ul data-testid="deck-list" className="mt-4 divide-y divide-line/40 border-2 border-line/60 rounded-xl bg-surface">
@@ -383,29 +398,6 @@ export default function DeckSelectScreen({ onPlay }: Props) {
             </li>
           ))}
         </ul>
-      )}
-
-      {(decks.length > 0 || pool !== null) && (
-        <div className="mt-4 flex items-center gap-3">
-          <label htmlFor="opponent-deck-select" className="text-accent text-xs uppercase tracking-[0.12em] font-light">
-            Opponent
-          </label>
-          <select
-            id="opponent-deck-select"
-            data-testid="opponent-deck-select"
-            value={opponentChoice}
-            onChange={e => setOpponentChoice(e.target.value)}
-            className="bg-transparent border-2 border-accent rounded-xl px-3 py-1.5 text-sm text-ink shadow-[0_0_12px_rgba(79,195,247,0.3)] focus:outline-none"
-          >
-            {/* A freshly generated deck each game, so it is not the same opponent twice. */}
-            <option value={GENERATED_DECK_ID} disabled={pool === null}>Random generated deck</option>
-            {/* "Built" because it picks among the player's own imported decks and never a generated one. */}
-            <option value="random" disabled={decks.length === 0}>Random built deck</option>
-            {decks.map(d => (
-              <option key={d.id} value={d.id}>{d.name}</option>
-            ))}
-          </select>
-        </div>
       )}
 
       <div className="mt-8">
@@ -435,10 +427,83 @@ export default function DeckSelectScreen({ onPlay }: Props) {
         </button>
       </div>
 
-      <div className="mt-8">
-        <h3 className="text-accent text-xs uppercase tracking-[0.12em] font-light">Card catalogue</h3>
+      </div>
+
+      <div data-testid="opponent-column" className="min-w-0">
+        <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">
+          <label htmlFor="opponent-deck-select">Opponent</label>
+        </h2>
+        {decks.length === 0 && pool === null ? (
+          <p className="mt-4 text-ink-faint text-sm">Import a deck or cache a set to choose an opponent.</p>
+        ) : (
+          <select
+            id="opponent-deck-select"
+            data-testid="opponent-deck-select"
+            value={opponentChoice}
+            onChange={e => setOpponentChoice(e.target.value)}
+            className={`mt-4 ${SELECT_CLASS}`}
+          >
+            {/* A freshly generated deck each game, so it is not the same opponent twice. The default,
+                because it is the opponent that exercises the bot on a leader you can choose below. */}
+            <option value={GENERATED_DECK_ID} disabled={pool === null}>Random generated deck</option>
+            {/* "Built" because it picks among the player's own imported decks and never a generated one. */}
+            <option value="random" disabled={decks.length === 0}>Random built deck</option>
+            {decks.map(d => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+        )}
+
+        {/* How to watch the bot play one leader: the matrix rates leaders, and a game against a chosen
+            one shows whether a rating belongs to the leader or to the bot. A fieldset, so switching the
+            opponent to a built deck disables every control in it at once. */}
+        {options && (
+          <fieldset
+            data-testid="opponent-generation-panel"
+            disabled={opponentChoice !== GENERATED_DECK_ID}
+            className="mt-4 border-2 border-line/60 rounded-xl bg-surface px-4 py-3"
+          >
+            <legend className="px-1 text-accent text-xs uppercase tracking-[0.12em] font-light">Generated opponent</legend>
+            <label className="block text-xs text-ink-dim">
+              Leader
+              <select
+                data-testid="opponent-leader-select"
+                value={opponentLeader}
+                onChange={e => setOpponentLeader(e.target.value)}
+                className={`mt-1 ${SELECT_CLASS}`}
+              >
+                <option value="">Random leader</option>
+                {options.leaders.map(l => (
+                  <option key={l.id} value={l.id}>{l.name} ({l.aspects.join(', ')})</option>
+                ))}
+              </select>
+            </label>
+            <label className="mt-3 block text-xs text-ink-dim">
+              Base aspect
+              <select
+                data-testid="opponent-aspect-select"
+                value={opponentAspect}
+                onChange={e => setOpponentAspect(e.target.value)}
+                className={`mt-1 ${SELECT_CLASS}`}
+              >
+                <option value="">Random base aspect</option>
+                {options.aspects.map(a => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+              </select>
+            </label>
+            <p className="mt-3 text-xs text-ink-faint">
+              A random pick never pairs a leader with a base of an aspect the leader already has. Choosing
+              both yourself overrides that.
+            </p>
+          </fieldset>
+        )}
+      </div>
+
+      <div data-testid="catalogue-column" className="min-w-0">
+        <h2 className="text-accent text-sm uppercase tracking-[0.12em] font-light">Card catalogue</h2>
         <p className="mt-1 text-ink-faint text-xs">
-          Cache a full set locally (e.g. ASH) — games and deck views then work offline, including bases.
+          Cache a full set locally (e.g. ASH): games and deck views then work offline, including bases.
         </p>
         <div className="mt-2 flex items-center gap-3">
           <input
@@ -463,10 +528,9 @@ export default function DeckSelectScreen({ onPlay }: Props) {
             </span>
           )}
         </div>
-      </div>
-      </div>
 
-      <ImplementationStatus />
+        <ImplementationStatus />
+      </div>
     </div>
   )
 }
