@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SavedDeck } from '../data/deckStore'
 import { getCard, cardId } from '../data/cards'
 import type { SwuCard } from '../data/cards'
-import { canonicaliseCards } from '../data/printings'
+import { asCardId, canonicalDeck, canonicaliseCards } from '../data/printings'
 import type { Unresolved } from '../data/printings'
 import { cardRefFromId } from '../utils/parseProtectThePod'
 import { buildCardDb } from '../engine/cardDb'
@@ -81,22 +81,6 @@ const MAX_AI_STEPS = 500
 interface MoveRecord {
   by: PlayerId
   action: Action
-}
-
-/**
- * The deck as the engine should see it: printings collapsed onto their Normal ids. The saved deck
- * keeps the printings you actually own, so the deck list still shows your cards; only the game
- * works in canonical ids. Two printings of one card collapse to a single entry, which is correct
- * for play (they are the same card) and merely means one of the two arts is shown.
- */
-function canonicalDeck(deck: SavedDeck, canonical: Map<string, string>): SavedDeck {
-  const id = (raw: string) => canonical.get(raw) ?? raw
-  return {
-    ...deck,
-    leader: id(deck.leader),
-    base: id(deck.base),
-    cards: deck.cards.map(c => ({ ...c, id: id(c.id) })),
-  }
 }
 
 /**
@@ -210,12 +194,11 @@ export function useGame(playerDeck: SavedDeck, opponentDeck: SavedDeck, options:
 
         const canonicalCards = cards.map(card => {
           const target = canonical.get(cardId(card.Set, card.Number))
-          if (!target) return card
-          const [set, number] = target.split('_')
-          return { ...card, Set: set, Number: number }
+          return target ? asCardId(card, target) : card
         })
 
-        let state = initGame(canonicalDeck(playerDeck, canonical), canonicalDeck(opponentDeck, canonical), buildCardDb(canonicalCards), {
+        const toCanonical = (id: string) => canonical.get(id)
+        let state = initGame(canonicalDeck(playerDeck, toCanonical), canonicalDeck(opponentDeck, toCanonical), buildCardDb(canonicalCards), {
           firstPlayer: options.firstPlayer ?? (rng() < 0.5 ? 'player' : 'opponent'),
           shuffle,
           rngSeed: options.rngSeed,

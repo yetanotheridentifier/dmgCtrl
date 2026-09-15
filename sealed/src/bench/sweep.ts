@@ -1,6 +1,11 @@
 import '../engine/cardDefinitions' // side effect: registers every implemented card ability
+import { cardId } from '../data/cards'
 import type { SwuCard } from '../data/cards'
+import { asCardId, canonicalDeck } from '../data/printings'
+import { reprintCanonicalId } from '../data/reprints'
 import { buildCardDb } from '../engine/cardDb'
+import type { CardDb } from '../engine/types'
+import type { ParsedDeck } from '../utils/parseProtectThePod'
 import { nextSeed } from '../engine/rng'
 import { COMMIT_ID } from '../buildIdentity'
 import { resolveAi } from '../ai/registry'
@@ -10,6 +15,30 @@ import { poolFor } from './setPools'
 import { playGame } from './selfPlay'
 import type { DropReason, GameResult } from './selfPlay'
 import { firstPlayerFor } from './seating'
+
+/**
+ * A deck as the sweep plays it. Fixtures hold Normal printings only, so the one id left to collapse
+ * is a card reprinted in another set: the engine implements it under a single id (`data/reprints.ts`),
+ * and the other printing would otherwise play as a blank card. The app does the same when it hydrates
+ * a deck (`canonicaliseCards`).
+ */
+export function engineDeck(deck: ParsedDeck): ParsedDeck {
+  return canonicalDeck(deck, reprintCanonicalId)
+}
+
+/**
+ * The pool's card database under the ids the games play. A reprint's row is filed under the id the
+ * engine implements, unless the pool also holds that card's own row, which wins: otherwise the data
+ * would depend on which of the two sets happened to come last in the pool.
+ */
+export function sweepCardDb(pool: SwuCard[]): CardDb {
+  const ids = new Set(pool.map(c => cardId(c.Set, c.Number)))
+  return buildCardDb(pool.flatMap(card => {
+    const canonical = reprintCanonicalId(cardId(card.Set, card.Number))
+    if (!canonical) return [card]
+    return ids.has(canonical) ? [] : [asCardId(card, canonical)]
+  }))
+}
 
 /**
  * The whole-pool fuzzing sweep (#408): play games across the coverage deck set so every card in the
@@ -81,7 +110,7 @@ export function runSweep(config: SweepConfig): SweepReport {
   // which cards are decked at all, so `cardsDecked` would move between seeds and the union would
   // no longer be measuring the same pool. Only the GAME seeds vary.
   const { decks } = buildCoverageDecks(pool, config.seeds[0])
-  const cardDb = buildCardDb(pool)
+  const cardDb = sweepCardDb(pool)
   const ai = resolveAi(config.aiName ?? 'random')
 
   let completed = 0
@@ -107,12 +136,21 @@ export function runSweep(config: SweepConfig): SweepReport {
       leaders.add(deck.leader)
       bases.add(deck.base)
       for (const entry of deck.cards) decked.add(entry.id)
+      // Games run in the engine's ids and coverage is reported in the printed ones. A deck draws on
+      // one set, so each engine id in it stands for exactly one printing.
+      const game = engineDeck(deck)
+      const printedIds = new Map<string, string>([
+        [game.leader, deck.leader],
+        [game.base, deck.base],
+        ...game.cards.map((entry, i): [string, string] => [entry.id, deck.cards[i].id]),
+      ])
+      const printed = (id: string) => printedIds.get(id) ?? id
 
       for (let g = 0; g < config.gamesPerDeck; g++) {
         seed = nextSeed(seed)
         const result = playGame({
-          deckPlayer: deck,
-          deckOpponent: deck,
+          deckPlayer: game,
+          deckOpponent: game,
           cardDb,
           aiPlayer: ai,
           aiOpponent: ai,
@@ -123,9 +161,9 @@ export function runSweep(config: SweepConfig): SweepReport {
           stepCeiling: config.stepCeiling,
           trackCoverage: true,
         })
-        for (const id of result.cardsDrawn) drawn.add(id)
-        for (const id of result.cardsPlayed) played.add(id)
-        for (const id of result.leadersDeployed) deployed.add(id)
+        for (const id of result.cardsDrawn) drawn.add(printed(id))
+        for (const id of result.cardsPlayed) played.add(printed(id))
+        for (const id of result.leadersDeployed) deployed.add(printed(id))
         if (result.status === 'dropped') {
           dropped++
           failures.push({ deck: deck.name, gameIndex, seed: result.seed, reason: result.dropReason! })
