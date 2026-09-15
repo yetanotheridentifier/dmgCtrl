@@ -16,9 +16,8 @@ import {
  * Card-pool triage: classify a set by what the engine cannot yet express, so a newly released set
  * can be sized without reading 260 cards by hand.
  *
- * The load-bearing test is the ASH anchor: the tool's "plays as printed" count must agree with the
- * figure `data/implementedCards.ts` already records by hand. Two independent derivations agreeing is
- * what makes the tool's numbers for the OTHER sets trustworthy.
+ * The setup panel's "plays as printed" counts are checked against this tool for every set's fixture in
+ * `implementedCards.test.ts`, which is where a drift between the two shows up.
  */
 
 const ASH = ashSet as unknown as SwuCard[]
@@ -177,12 +176,6 @@ describe('triage fallout probes', () => {
 
 describe('the ASH anchor', () => {
   const report = triage(ASH)
-
-  it('agrees with the hand-recorded "plays as printed" count for ASH', () => {
-    // data/implementedCards.ts records ASH as { bases: 8, units: 39 } playable with no engine work.
-    // Derived independently here, the two must match, or one of them is wrong.
-    expect(report.buckets.vanilla + report.buckets['existing-keyword']).toBe(47)
-  })
 
   it('finds every ASH leader', () => {
     expect(report.leaders).toBe(18)
