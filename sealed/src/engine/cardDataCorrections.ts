@@ -33,4 +33,60 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   // what is printed on it.
   ASH_007: { keywords: [{ name: 'Overwhelm' }] }, // Grand Admiral Sloane — Overwhelm is hers; Sentinel goes to each OTHER friendly unit
   ASH_127: { keywords: [] }, // The Twins — Sentinel is given to another friendly unit, never held
+
+  // The other sealed sets, conditional keywords.
+  LAW_105: { keywords: [] }, // Cinta Kaz: Sentinel while upgraded
+  SEC_201: { keywords: [{ name: 'Hidden' }] }, // Anakin Skywalker: Hidden is real; Raid 2 while you control Padmé Amidala
+  SEC_079: { keywords: [] }, // Corrupt Politician: Sentinel while you control more units
+  SEC_249: { keywords: [] }, // High Command Councilor: Raid 2 while you control another Official unit
+  SEC_134: { keywords: [] }, // Hunting Assassin Droid: Raid 2 while an enemy unit is damaged
+  SEC_116: { keywords: [] }, // Nubian Star Skiff: Restore 2 while you control an Official unit
+  SEC_063: { keywords: [] }, // Rotunda Senate Guards: Sentinel while undamaged
+  SEC_029: { keywords: [] }, // Zam Wesell: Grit while upgraded
+  LOF_162: { keywords: [] }, // Hunting Nexu: Raid 2 while you control another Aggression unit
+  LOF_212: { keywords: [] }, // Life Wind Sage: Raid 2 while an enemy unit is exhausted
+  LOF_118: { keywords: [] }, // Terentatek: Ambush while an opponent controls a Force unit
+  JTL_107: { keywords: [] }, // Bunker Defender: Sentinel while you control a Vehicle unit
+  JTL_081: { keywords: [] }, // First Order TIE Fighter: Raid 1 while you control a token unit
+  JTL_257: { keywords: [] }, // Flanking Fang Fighter: Raid 2 while you control another Fighter unit
+  JTL_113: { keywords: [] }, // Homestead Militia: Sentinel while you control 6 or more resources
+  TWI_062: { keywords: [] }, // Daughter of Dathomir: Restore 2 while undamaged
+  TWI_081: { keywords: [] }, // Droid Commando: Ambush while you control another Separatist unit
+  TWI_180: { keywords: [] }, // Separatist Commando: Raid 2 while you control another Separatist unit
+  TWI_130: { keywords: [] }, // Bo-Katan Kryze: Overwhelm and Saboteur while you control another Mandalorian unit
+  TWI_143: { keywords: [] }, // Jyn Erso: Saboteur while an enemy unit was defeated this phase
+  SHD_169: { keywords: [{ name: 'Raid', value: 3 }] }, // Clan Challengers: Raid 3 is real; Overwhelm while upgraded
+  SHD_112: { keywords: [] }, // Gamorrean Retainer: Sentinel while you control another Command unit
+  SHD_247: { keywords: [] }, // Protector of the Throne: Sentinel while upgraded
+  SHD_034: { keywords: [{ name: 'Shielded' }] }, // Supercommando Squad: Shielded is real; Sentinel while upgraded
+  SOR_065: { keywords: [{ name: 'Grit' }] }, // Baze Malbus: Grit is real; Sentinel while you have the initiative
+  SOR_082: { keywords: [] }, // Emperor's Royal Guard: Sentinel while you control an Official unit
+  SOR_114: { keywords: [] }, // Escort Skiff: Ambush while you control another Command unit
+  SOR_249: { keywords: [] }, // Frontier AT-RT: Ambush while you control another Vehicle unit
+  SOR_211: { keywords: [] }, // Gamorrean Guards: Sentinel while you control another Cunning unit
+  SOR_159: { keywords: [] }, // Partisan Insurgent: Raid 2 while you control another Aggression unit
+  SOR_048: { keywords: [] }, // Vigilant Honor Guards: Sentinel while undamaged
+  TS26_20: { keywords: [{ name: 'Grit' }, { name: 'Raid', value: 1 }] }, // 501st Veteran: Grit and Raid 1 are real; Sentinel while undamaged
+  TS26_50: { keywords: [] }, // General Grievous: Sentinel while undamaged
+
+  // The other sealed sets, keywords a unit only gives to other units.
+  LOF_169: { keywords: [] }, // Invasion Control Ship: Raid 2 goes to friendly Droid units
+  JTL_161: { keywords: [] }, // Captain Tarkin: Overwhelm goes to friendly Vehicle units
+  SOR_079: { keywords: [] }, // Admiral Piett: Ambush goes to friendly units that cost 6 or more
+  SOR_100: { keywords: [] }, // Wedge Antilles: Ambush goes to friendly Vehicle units
+  TS26_40: { keywords: [] }, // Obi-Wan Kenobi: Restore 1 goes to other friendly Republic units
+
+  // An upgrade's "attached unit gains X" is the attached unit's keyword, granted by the ability, not the upgrade's own.
+  SEC_071: { keywords: [] }, // Disciples' Devotion: Sentinel while attached unit is exhausted
+  LOF_215: { keywords: [] }, // Ascension Cable: Saboteur
+  LOF_238: { keywords: [] }, // Darth Revan's Lightsabers: Grit on a Sith
+  LOF_053: { keywords: [] }, // Heirloom Lightsaber: Restore 1 on a Force unit
+  LAW_128: { keywords: [] }, // Veiled Strength: Grit
+  TWI_071: { keywords: [] }, // Unshakeable Will: Sentinel
+  SOR_070: { keywords: [] }, // Devotion: Restore 2
+  SOR_166: { keywords: [] }, // Infiltrator's Skill: Saboteur
+  SOR_057: { keywords: [] }, // Protector: Sentinel
+
+  // A printed keyword the source omits.
+  SHD_188: { keywords: [{ name: 'Ambush' }] }, // 4-LOM
 }

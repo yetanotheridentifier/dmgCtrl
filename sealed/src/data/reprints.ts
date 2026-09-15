@@ -42,6 +42,11 @@ export const REPRINTS: Reprint[] = [
   { name: 'Patrolling V-Wing', canonical: 'SOR_111', printings: ['TWI_107'] },
   { name: 'Cargo Juggernaut', canonical: 'SOR_068', printings: ['SHD_066'] },
   { name: 'Disabling Fang Fighter', canonical: 'SOR_162', printings: ['SHD_166'] },
+  { name: 'Homestead Militia', canonical: 'JTL_113', printings: ['SOR_113'] },
+  { name: 'Hunting Nexu', canonical: 'LOF_162', printings: ['SHD_168'] },
+  { name: 'Padawan Starfighter', canonical: 'LOF_060', printings: ['TWI_058'] },
+  { name: 'Seasoned Shoretrooper', canonical: 'SHD_083', printings: ['SOR_081'] },
+  { name: 'Volunteer Soldier', canonical: 'SOR_248', printings: ['TWI_254'] },
 ]
 
 const BY_PRINTING: Record<string, string> = Object.fromEntries(
