@@ -126,15 +126,12 @@ blocked: it starts when the heuristic baseline is finished.
 **The programme is #452 to #478.** GitHub holds them and their current state; this section holds only
 the shape.
 
-One prerequisite blocks everything, and it is not card work. (Two others have shipped: the sweep
-reports cards *played* rather than *decked*, and it sweeps any sealed set or several at once with
-`--set`, which is what every acceptance criterion below rests on.)
+Its prerequisites have shipped: the sweep reports cards *played* rather than *decked*, it sweeps any
+sealed set or several at once with `--set` (what every acceptance criterion below rests on), and the
+setup panel credits a registered card to whichever set its id names, with the manifest test covering
+every set.
 
-- **#478** the setup panel counts registered cards for ASH only, and the test that keeps the manifest
-  honest filters to `ASH_` ids first. The first card registered outside ASH is invisible and nothing
-  fails. It bites on the first card of #453.
-
-Then two phases:
+Two phases:
 
 - **Phase 1 (#453 to #460), 1,073 cards blocked by nothing.** 65% of the pool is expressible with the
   primitives already in `engine/effects.ts`. Cut by trigger point. Events (#453) are the largest and
@@ -156,8 +153,8 @@ Three findings that contradict the assumptions the programme started from:
   stranding a resource the player meant to play.
 - **Bounty is gated behind capture**, not resources.
 
-The 292 vanilla and keyword-only cards need no ticket, reconciling set by set with `PLAYABLE_AS_PRINTED`
-in `data/implementedCards.ts`. 29 cards with ability text are printed in more than one set, covering 30
+The 292 vanilla and keyword-only cards need no ticket: `PLAYABLE_AS_PRINTED` in
+`data/implementedCards.ts` credits them, and a test holds it to the triage of each set's fixture. 29 cards with ability text are printed in more than one set, covering 30
 extra ids for no extra work: each needs one line in `data/reprints.ts` naming its other printings, and
 `--triage` marks the ones that do not have it yet.
 

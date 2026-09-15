@@ -96,6 +96,10 @@ the play batch like anything else. That is what puts them into the ordering ques
 card's own When Played. Raising their choice directly instead would stop the rest of the batch until
 it was answered, since a choice on the board holds everything behind it.
 
+Pseudo cards (`KEYWORD_*`, and the `GRANT_*` abilities one card hands to others) are not cards. The
+setup panel's manifest, `data/implementedCards.ts`, must list every registered card id in any set, and
+its test counts only ids shaped `<SET>_<number>`, so a pseudo card is left out and any other shape fails.
+
 The unit's ready state is not part of that: entering ready so Ambush can attack is part of entering
 play, and stays in `enterUnit`.
 

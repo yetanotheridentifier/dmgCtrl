@@ -1,11 +1,14 @@
 /**
  * Implementation manifest — the cards whose abilities are built into the engine, shown as a
  * reference on the setup screen. Kept in step with the ability registry by a test
- * (`implementedCards.test.ts`) that asserts these ids exactly match the registered ASH cards.
+ * (`implementedCards.test.ts`) that asserts these ids exactly match every registered card, in any set.
+ * A card is credited to the set its id names, so the lists carry no set field of their own.
  *
  * Leaders are two-sided: `front` = the undeployed leader ability, `back` = the deployed
  * (leader-unit) ability. A `false` marks a side still to come (see `docs/abilities.md`).
  */
+
+import { REPRINTS, type Reprint } from './reprints'
 
 export interface LeaderStatus {
   id: string
@@ -202,10 +205,6 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
 ]
 
 /**
- * Unit cards whose *abilities* are built into the engine. Keyword-only / vanilla units aren't here —
- * they need no definition and are counted separately. Grouped by the mechanic each ability uses.
- */
-/**
  * Event cards whose effects are built into the engine. An event's effect is registered as its
  * `whenPlayed`, so — unlike units — there is no "vanilla event": every one needs a definition.
  */
@@ -246,6 +245,10 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'ASH_235', name: 'Sense Through the Force' },
 ]
 
+/**
+ * Unit cards whose *abilities* are built into the engine. Keyword-only / vanilla units aren't here —
+ * they need no definition and are counted separately. Grouped by the mechanic each ability uses.
+ */
 export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   // Conditional self keyword grants
   { id: 'ASH_098', name: 'AT-ST Raider' },
@@ -424,7 +427,9 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
  * own "built" group. Derived so implementing a card needs no edit here.
  */
 export const UNIT_GROUPS: UnitGroup[] = (() => {
-  const built = new Set(IMPLEMENTED_UNITS.map(u => u.id))
+  // The plan is ASH's, so only ASH's built units belong in it.
+  const builtUnits = IMPLEMENTED_UNITS.filter(u => setOf(u.id) === 'ASH')
+  const built = new Set(builtUnits.map(u => u.id))
   const plan = UNIT_PLAN.map(g => ({ ...g, units: g.units.filter(u => !built.has(u.id)) }))
   const keep = (id: string) => plan.find(g => g.id === id)!
   return [
@@ -434,7 +439,7 @@ export const UNIT_GROUPS: UnitGroup[] = (() => {
       name: 'Abilities built',
       status: 'done' as GroupStatus,
       note: 'Card abilities are implemented and covered by tests.',
-      units: IMPLEMENTED_UNITS.map(u => ({ id: u.id, name: u.name })),
+      units: builtUnits.map(u => ({ id: u.id, name: u.name })),
     },
     keep('ready'),
     keep('mechanic'),
@@ -470,7 +475,6 @@ export interface SetProgress {
   total: TypeCounts
 }
 
-const NONE: TypeCounts = { leaders: 0, bases: 0, units: 0, upgrades: 0, events: 0, tokens: 0 }
 
 /**
  * Printed card counts per set, from the SWUDB set listing (`cards/search?q=set:…`, normal variants
@@ -503,20 +507,20 @@ const SET_TOTALS: { code: string; group: SetGroup; total: TypeCounts }[] = [
 
 /**
  * Cards that already play correctly with no engine work: vanilla ones, and keyword-only ones whose
- * every keyword is implemented (Ambush, Grit, Hidden, Overwhelm, Raid, Restore, Saboteur, Sentinel,
- * Shielded, Support). Counted from the SWUDB set listings by the same rule `keywordOnlyUnits.test.ts`
- * applies — strip parenthetical reminder text and the declared keywords, and anything left is a real
- * ability. IBH is counted by distinct card, so its reprints aren't double-counted.
+ * every keyword is implemented. This is the triage tool's rule (`bench/triage.ts`): strip parenthetical
+ * reminder text and the declared keywords, and anything left is a real ability. IBH is counted by
+ * distinct card, so its reprints aren't double-counted.
+ *
+ * Recorded rather than computed, because computing it means shipping every set's fixture in the app.
+ * `implementedCards.test.ts` triages each set's fixture and fails if any count here differs, so when a
+ * keyword lands and cards move over, the test names the new numbers. It also fails if a built card is
+ * counted here as well.
  *
  * LEADERS ARE EXCLUDED: every leader has a deployed-side ability, and reading only `FrontText` would
- * wrongly pass one whose front is blank (ASH's Grogu).
- *
- * The unimplemented keywords across the card data are Bounty (SHD, TS26), Coordinate and Exploit
- * (TWI), Piloting (JTL), Plot (SEC, TS26) and Smuggle (SHD). A card carrying any of them is never
- * credited. 12 are otherwise vanilla and held back purely by the keyword — 6 on Plot, 6 on Exploit —
- * and would move over if those landed. ASH uses none of them, so no registered card is affected.
+ * wrongly pass one whose front is blank (ASH's Grogu). A card carrying an unimplemented keyword is never
+ * credited, even when it is otherwise vanilla.
  */
-const PLAYABLE_AS_PRINTED: Record<string, Partial<TypeCounts>> = {
+export const PLAYABLE_AS_PRINTED: Record<string, Partial<TypeCounts>> = {
   ASH: { bases: 8, units: 39 },
   LAW: { units: 47 },
   SEC: { bases: 8, units: 32 },
@@ -530,27 +534,58 @@ const PLAYABLE_AS_PRINTED: Record<string, Partial<TypeCounts>> = {
 }
 
 /**
- * What's implemented, per set: the cards that play as printed, plus — for ASH — every card with a
- * registered ability. Tokens count the three the engine actually creates; Experience is printed but
- * no card grants it, so ASH reads 3 of 4.
+ * Tokens the engine creates, per set. ASH counts Shield, Advantage and Mandalorian; Experience is
+ * printed but no card grants it, so ASH reads 3 of 4.
  */
-const IMPLEMENTED_BY_SET: Record<string, TypeCounts> = {
-  ...Object.fromEntries(SET_TOTALS.map(({ code }) => [code, { ...NONE, ...PLAYABLE_AS_PRINTED[code] }])),
-  ASH: {
-    leaders: IMPLEMENTED_LEADERS.filter(l => l.front && l.back).length,
-    bases: 8,
-    units: (UNIT_GROUPS.find(g => g.id === 'keyword')?.units.length ?? 0) + IMPLEMENTED_UNITS.length,
-    upgrades: IMPLEMENTED_UPGRADES.length,
-    events: IMPLEMENTED_EVENTS.length,
-    tokens: 3,
-  },
+const TOKENS_BUILT: Record<string, number> = { ASH: 3 }
+
+/** The set a card id belongs to: the code before its underscore (`TS26_012` is TS26). */
+export function setOf(id: string): string {
+  return id.slice(0, id.indexOf('_'))
+}
+
+/** The built cards, by the card type the panel counts them under. */
+export interface Manifest {
+  leaders: LeaderStatus[]
+  units: UpgradeStatus[]
+  upgrades: UpgradeStatus[]
+  events: UpgradeStatus[]
+}
+
+export const IMPLEMENTED: Manifest = {
+  leaders: IMPLEMENTED_LEADERS,
+  units: IMPLEMENTED_UNITS,
+  upgrades: IMPLEMENTED_UPGRADES,
+  events: IMPLEMENTED_EVENTS,
+}
+
+/**
+ * What's implemented in one set: the cards that play as printed, plus every built card whose id is
+ * in the set. A leader counts once both sides are built. A reprint of a built card (`data/reprints.ts`)
+ * counts for each set that prints it, under its own id, since one implementation plays every printing.
+ */
+export function implementedCounts(code: string, manifest: Manifest, reprints: readonly Reprint[] = REPRINTS): TypeCounts {
+  const inSet = (cards: { id: string }[]): number => {
+    const ids = cards.map(c => c.id)
+    const printings = reprints.filter(r => ids.includes(r.canonical)).flatMap(r => r.printings)
+    return [...ids, ...printings].filter(id => setOf(id) === code).length
+  }
+  const playable = PLAYABLE_AS_PRINTED[code] ?? {}
+  return {
+    leaders: (playable.leaders ?? 0) + inSet(manifest.leaders.filter(l => l.front && l.back)),
+    bases: playable.bases ?? 0,
+    units: (playable.units ?? 0) + inSet(manifest.units),
+    upgrades: (playable.upgrades ?? 0) + inSet(manifest.upgrades),
+    events: (playable.events ?? 0) + inSet(manifest.events),
+    tokens: TOKENS_BUILT[code] ?? 0,
+  }
 }
 
 export const SET_PROGRESS: SetProgress[] = SET_TOTALS.map(({ code, group, total }) => ({
   code,
   group,
   total,
-  done: IMPLEMENTED_BY_SET[code] ?? NONE,
+  done: implementedCounts(code, IMPLEMENTED),
 }))
 
 /** Sum a set's counts across every card type. */

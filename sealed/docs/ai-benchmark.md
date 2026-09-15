@@ -1010,11 +1010,14 @@ look rather than to be precise about which.
 **This is triage, not a specification.** It is reliable about clusters and relative sizes; every card
 still needs reading before it is built.
 
-### The ASH anchor
+### The setup panel follows the triage
 
-`benchTriage.test.ts` asserts the tool's "plays as printed" count for ASH equals the 47 that
-`data/implementedCards.ts` records by hand. Two independent derivations agreeing is what makes the
-tool's numbers for other sets trustworthy, and the test fails if either drifts.
+The setup panel credits each set with the cards that play as printed, from `PLAYABLE_AS_PRINTED` in
+`data/implementedCards.ts`. Those counts are recorded rather than computed, since computing them would
+ship every fixture in the app, and `implementedCards.test.ts` triages each set's bundled fixture and
+fails if any count by card type differs. When a keyword lands and cards move over, that test names the
+new numbers. It also fails if a card with a registered ability is counted as playing as printed, which
+would count it twice.
 
 ### Card identity, variants and reprints
 
