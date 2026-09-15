@@ -1,4 +1,3 @@
-import ashSet from '../test/fixtures/ashSet.json'
 import '../engine/cardDefinitions' // side effect: registers every implemented card ability
 import type { SwuCard } from '../data/cards'
 import { buildCardDb } from '../engine/cardDb'
@@ -7,18 +6,17 @@ import { COMMIT_ID } from '../buildIdentity'
 import { resolveAi } from '../ai/registry'
 import { buildCoverageDecks } from './coverageDecks'
 import { compareCardIds } from './playCoverage'
+import { poolFor } from './setPools'
 import { playGame } from './selfPlay'
 import type { DropReason, GameResult } from './selfPlay'
 import { firstPlayerFor } from './seating'
 
 /**
  * The whole-pool fuzzing sweep (#408): play games across the coverage deck set so every card in the
- * set gets exercised, and surface any hang or throw as a dropped game with a replayable fixture
+ * pool gets exercised, and surface any hang or throw as a dropped game with a replayable fixture
  * (reusing the #390 machinery). Random play is the default: it is fast and pokes card interactions
  * broadly, which is what finds engine bugs (both hangs found so far came out this way).
  */
-
-const POOL = ashSet as unknown as SwuCard[]
 
 export interface SweepConfig {
   gamesPerDeck: number
@@ -30,6 +28,11 @@ export interface SweepConfig {
   seeds: number[]
   aiName?: string
   stepCeiling?: number
+  /**
+   * The cards to sweep, ASH when absent. A pool may span several sets (see `poolFor`); each set builds
+   * its own decks, so no deck mixes sets.
+   */
+  pool?: SwuCard[]
 }
 
 export interface SweepFailure {
@@ -41,6 +44,8 @@ export interface SweepFailure {
 
 export interface SweepReport {
   commitId: string
+  /** The set codes the pool spanned, in pool order. */
+  sets: string[]
   decks: number
   gamesPerDeck: number
   /** The seeds this run used, so it can be reproduced exactly. */
@@ -71,11 +76,12 @@ export interface SweepReport {
 }
 
 export function runSweep(config: SweepConfig): SweepReport {
+  const pool = config.pool ?? poolFor(['ASH'])
   // The deck set is generated once, from the first seed. Regenerating it per seed would change
   // which cards are decked at all, so `cardsDecked` would move between seeds and the union would
   // no longer be measuring the same pool. Only the GAME seeds vary.
-  const { decks } = buildCoverageDecks(POOL, config.seeds[0])
-  const cardDb = buildCardDb(POOL)
+  const { decks } = buildCoverageDecks(pool, config.seeds[0])
+  const cardDb = buildCardDb(pool)
   const ai = resolveAi(config.aiName ?? 'random')
 
   let completed = 0
@@ -139,6 +145,7 @@ export function runSweep(config: SweepConfig): SweepReport {
 
   return {
     commitId: COMMIT_ID,
+    sets: [...new Set(pool.map(c => c.Set))],
     decks: decks.length,
     gamesPerDeck: config.gamesPerDeck,
     seeds: [...config.seeds],

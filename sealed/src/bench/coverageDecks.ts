@@ -5,10 +5,14 @@ import { coveredAspects } from '../deckgen/rules'
 
 /**
  * Whole-pool coverage (#408): a set of legal, realistic decks whose union exercises every card in the
- * set. Two passes: one deck per leader (so every leader appears), choosing the base that adds the
+ * pool. Two passes: one deck per leader (so every leader appears), choosing the base that adds the
  * most new cards; then a top-up pass that keeps adding decks aimed at the remaining stragglers until
  * everything is covered. Each deck steers toward not-yet-covered cards via `prefer`, without breaking
  * its own legality (see the moderate PREFER_BONUS in the generator). Deterministic from `seed`.
+ *
+ * **A deck draws on one set.** The generator models a sealed pool, which is opened from one set, so a
+ * pool spanning several sets is covered set by set, in pool order, and no deck mixes them. Copy limits
+ * are per card id, which a cross-set reprint would slip past, so mixing sets needs rules of its own.
  *
  * Any card that no leader + base can include penalty-free is reported in `uncovered` rather than
  * dropped silently, so it can be handled deliberately.
@@ -45,6 +49,23 @@ function comboFor(card: SwuCard, leaders: SwuCard[], bases: SwuCard[]): { leader
 }
 
 export function buildCoverageDecks(pool: SwuCard[], seed = 1): CoverageResult {
+  const bySet = new Map<string, SwuCard[]>()
+  for (const card of pool) {
+    const cards = bySet.get(card.Set)
+    if (cards) cards.push(card)
+    else bySet.set(card.Set, [card])
+  }
+  const decks: ParsedDeck[] = []
+  const uncovered: string[] = []
+  for (const cards of bySet.values()) {
+    const covered = coverOneSet(cards, seed)
+    decks.push(...covered.decks)
+    uncovered.push(...covered.uncovered)
+  }
+  return { decks, uncovered }
+}
+
+function coverOneSet(pool: SwuCard[], seed: number): CoverageResult {
   const leaders = pool.filter(c => c.Type === 'Leader')
   const bases = distinctBases(pool)
   const deckable = pool.filter(c => c.Type === 'Unit' || c.Type === 'Event' || c.Type === 'Upgrade')

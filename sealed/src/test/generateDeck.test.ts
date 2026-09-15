@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import ashSet from './fixtures/ashSet.json'
 import type { SwuCard } from '../data/cards'
-import { buildDeckForLeader } from '../deckgen/generateDeck'
+import { buildDeckForLeader, generateDeck } from '../deckgen/generateDeck'
 import { deckReport, MAX_COPIES, MAX_COPIES_BY_RARITY } from '../deckgen/rules'
 
 /**
@@ -15,6 +15,28 @@ const LEADERS = POOL.filter(c => c.Type === 'Leader')
 function byId(pool: SwuCard[]): Map<string, SwuCard> {
   return new Map(pool.map(c => [`${c.Set}_${c.Number}`, c]))
 }
+
+/**
+ * **Unique limits the board, not the deck.** A player may hold several copies of a Unique card; only one
+ * of them can be in play at a time. So a forced count on a Unique is honoured like any other card's, up
+ * to the copy cap.
+ */
+describe('generateDeck with forced copies', () => {
+  const card = (n: string): SwuCard => POOL.find(c => c.Number === n)!
+  const build = (require: Map<string, number>) =>
+    generateDeck({ leader: card('008'), base: card('020'), pool: POOL, seed: 1, require }).deck
+  const copies = (deck: { cards: Array<{ id: string; count: number }> }, id: string): number =>
+    deck.cards.find(e => e.id === id)?.count ?? 0
+
+  it('forces several copies of a Unique card when asked', () => {
+    expect(card('097').Unique, 'Moff Gideon, Remnant Commander is Unique').toBe(true)
+    expect(copies(build(new Map([['ASH_097', 3]])), 'ASH_097')).toBe(3)
+  })
+
+  it('still clamps a forced count to the copy cap', () => {
+    expect(copies(build(new Map([['ASH_239', 5]])), 'ASH_239')).toBe(MAX_COPIES)
+  })
+})
 
 describe('buildDeckForLeader', () => {
   it('has 18 ASH leaders to build for', () => {

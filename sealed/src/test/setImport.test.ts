@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { db } from '../data/db'
 import { importSet, cachedSetCount } from '../data/setImport'
-import { getCard, SWU_DB_API } from '../data/cards'
+import { getCard, SWU_DB_API, type SwuCard } from '../data/cards'
 
 const SEARCH_PAYLOAD = {
   total_cards: 3,
@@ -41,6 +41,29 @@ describe('importSet', () => {
     expect(await db.cards.get('ASH_011')).toBeDefined()
     expect(await db.cards.get('ASH_020')).toBeDefined()
     expect(await db.cards.get('ASH_311')).toBeUndefined() // variant filtered out
+  })
+
+  /**
+   * The set search wraps list entries as `{ S: value }`, where the per-card endpoint returns plain
+   * strings. Cached as sent, every aspect and trait comparison in the app is against an object.
+   */
+  it('caches aspects and traits as plain strings when the search wraps them', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({
+        data: [{
+          Set: 'ASH', Number: '097', Name: 'Moff Gideon', Type: 'Unit', VariantType: 'Normal', Cost: '3',
+          Aspects: [{ S: 'Command' }, { S: 'Villainy' }], Traits: [{ S: 'IMPERIAL' }, { S: 'OFFICIAL' }],
+        }],
+      }),
+    }))
+
+    await importSet('ASH')
+
+    const cached = (await db.cards.get('ASH_097'))!.json as SwuCard
+    expect(cached.Aspects).toEqual(['Command', 'Villainy'])
+    expect(cached.Traits).toEqual(['IMPERIAL', 'OFFICIAL'])
   })
 
   it('reports progress per cached card', async () => {

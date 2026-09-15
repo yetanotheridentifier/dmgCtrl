@@ -185,9 +185,9 @@ export function generateDeck(opts: GenerateOptions): { deck: ParsedDeck; report:
   // Force-include required cards first (they bypass the caps), so a targeted straggler deck is
   // guaranteed to cover its card. Only eligible (penalty-free) ones can be forced.
   for (const c of eligible) {
-    // A unique card is one copy whatever was asked for, so a wall package naming three of a Unique
-    // does not quietly build an illegal deck. `MAX_COPIES` bounds the rest.
-    const want = Math.min(require.get(id(c)) ?? 0, c.Unique ? 1 : MAX_COPIES)
+    // Unique limits the board, not the deck: several copies are legal, and only one can be in play at a
+    // time. So a Unique is bounded by `MAX_COPIES` like any other card.
+    const want = Math.min(require.get(id(c)) ?? 0, MAX_COPIES)
     while ((counts.copies.get(id(c)) ?? 0) < want && counts.size < DECK_SIZE) add(c)
   }
 

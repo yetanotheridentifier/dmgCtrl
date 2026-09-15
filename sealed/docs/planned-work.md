@@ -126,12 +126,10 @@ blocked: it starts when the heuristic baseline is finished.
 **The programme is #452 to #478.** GitHub holds them and their current state; this section holds only
 the shape.
 
-Two prerequisites block everything, neither of them card work. (A third, counting cards *played*
-rather than *decked*, has shipped: the sweep reports `cardsPlayed` and names what was decked but never
-drawn, which is what every acceptance criterion below rests on.)
+One prerequisite blocks everything, and it is not card work. (Two others have shipped: the sweep
+reports cards *played* rather than *decked*, and it sweeps any sealed set or several at once with
+`--set`, which is what every acceptance criterion below rests on.)
 
-- **#452** the sweep pool is hard-wired to ASH. Tickets are cut per mechanic, so every group's cards
-  span all nine sets.
 - **#478** the setup panel counts registered cards for ASH only, and the test that keeps the manifest
   honest filters to `ASH_` ids first. The first card registered outside ASH is invisible and nothing
   fails. It bites on the first card of #453.
@@ -202,6 +200,10 @@ the day it ships. #553 already has to work that way for a different reason.
   sits in the search's hot path, so landing it needs a bench run against a matched control rather
   than a green suite.
 - **Token-unit art**, and a permanent set for ASH tokens.
+- **#591 decks across sets**, for Premier (the default format), Eternal and chaos sealed. The sweep and
+  the deck generator build one set per deck, because they model sealed. Mixing sets needs copy limits
+  by card rather than by id, reprint collapse in the bench (today a reprint id plays as vanilla there),
+  per-format set legality, and deck-shape rules of its own.
 - **Unique rule on change of control.** The rule is built for units and upgrades and is per-player, but
   `takeControlOfUnit` never re-checks it. Two cases slip through: stealing a unique unit you already
   control, and your unique being stolen, you legally play your own second copy, then regroup handing

@@ -176,12 +176,19 @@ pool with mirror results.
 #### `lockout`: the one asymmetric source
 
 A population in which the shielded-Sentinel lockout actually occurs. The `player` seat is dealt an
-ordinary coverage deck and the `opponent` seat a purpose-built wall: three self-shielding ground
-Sentinels (`Shielded` grants the token on arrival, so the lane shuts with no combination and no
-intent) plus Durasteel Plating and Perserverance to put a Shield back after one is stripped.
+ordinary coverage deck, so the wall faces every deck in the coverage set, and the `opponent` seat is
+dealt one fixed wall deck built the way a player builds it: Moff Gideon on a Vigilance base, Imperial
+Sentinels from the first turn, self-shielding Sentinels in the middle of the curve (`Shielded` grants
+the token on arrival, so the lane shuts with no combination and no intent), and Durasteel Plating,
+Perserverance and Trexler Armored Marauder to put a Shield back after one is stripped.
 
-It exists because the lockout is a **human strategy** and self-play never builds it. `--decisions` with
-the shipped bot, 44 games a side, the same seeds:
+**It is a list, not a generated deck.** A generated wall takes its filler from the generator, so it
+moves whenever the card data or the generator does: correcting one printed cost took a Sentinel out of
+three generated walls and halved the lockout rate they produced. A list does not drift. It still passes
+the generator's legality, curve and rarity rules, so it is a deck someone would play.
+
+It exists because the lockout is a **human strategy** and self-play never builds it. `--decisions --games 2
+--seed 1`, 48 games a side over the same coverage decks:
 
 **Measured with `blockedReach` at 0**, which is what the bot was before that term shipped. Read it as
 what the population contains, not as what the current bot does: the whole point of the set is that it
@@ -189,33 +196,35 @@ holds the position, and a bot that can escape shows a milder version of it.
 
 | `beam-reply`, `blockedReach: 0` | coverage | lockout |
 | --- | --- | --- |
-| a lane shut | 2.2% | **6.4%** |
-| rounds locked | 1.3% | **10.1%** |
-| longest lockout in one game | **1 round** | **4 rounds** |
-| a strip was available | 40.9% | 41.3% |
-| the bot took it | 9.3% | 14.7% |
-| **passed with an attack available** | 57.6% | **96.7%** |
-| `blockedReach` live | 3.9% | 13.6% |
-| ...of those, on a shut lane | 77 | **223** |
+| a lane shut | 1.7% | **5.6%** |
+| **rounds locked** | 0.6% | **11.9%** |
+| longest lockout in one game | **1 round** | **3 rounds** |
+| a strip was available | 41.1% | 44.6% |
+| the bot took it | 7.8% | 10.8% |
+| passed with an attack available | 64.5% | 75.8% |
+| `blockedReach` live | 2.3% | 12.2% |
+| ...of those, on a shut lane | 51 | **213** |
 
-The shipped bot carries the term at 3 and reads the lockout column differently: strips taken **23.3%**,
-a lane shut **4.4%**, rounds locked **5.1%**, longest lockout **3 rounds**, passed with an attack
-available **88.6%**. Still a partial escape rather than a solved position, which is expected.
+The shipped bot carries the term at 3 and reads the lockout column differently: strips taken **20.5%**,
+a lane shut **5.2%**, rounds locked **5.8%**, longest lockout **2 rounds**, passed with an attack
+available **63.0%**. It roughly halves the rounds spent locked and takes nearly twice the strips, but it
+is still a partial escape rather than a solved position, which is expected.
 
 Both columns are calibration, not just size. The coverage column reproduces the historical record (a
-lane shut on about 2% of decisions, never lasting a full round) and the lockout column reproduces the
-filed play-tester game (four consecutive locked rounds).
+lane shut on about 2% of decisions, never lasting a full round), and the lockout column holds a lane
+shut for several consecutive rounds: 3 here, and 3 to 5 across seeds when walked with `greedy`. The
+filed play-tester game ran four.
 
-**The sharpest line is the pass one.** The raw pass rate barely moves between the two populations
-(0.75 a game against 0.68), so a rate alone reads as no difference; what changes is that on the wall
-decks the bot passes **with an attack available** almost every time it passes at all. Read the
-qualified figure, not the rate.
+**The sharpest line is rounds locked**, twenty times the coverage rate. The raw pass rate does not move
+between the two populations (0.65 a game against 0.69), and the qualified figure, passing **with an
+attack available**, separates them only modestly (64.5% against 75.8%), so neither pass line is the one
+to read the lockout from.
 
 That gap has already cost a real result. `blockedReach` was recorded as "invisible over ~2,500 games"
 on the coverage decks, where the position it prices barely occurs; on eighteen locked boards from a
 filed play-tester game the same term at an in-scale weight strips on 10 where the shipped bot strips
-on 1. Note the term's **precision does not improve** here (42.1% of firings on a shut lane against
-coverage's 52.0%); what this set buys is roughly three times the volume.
+on 1. Note the term's **precision does not improve** here (42.2% of firings on a shut lane against
+coverage's 54.8%); what this set buys is about five times the volume.
 
 **Three properties of this source that are not optional to understand:**
 
@@ -842,13 +851,14 @@ result.
 
 The default bench plays one fixed deck, so it only exercises the ~30 cards in that deck. The
 **coverage sweep** plays across a generated set of legal, realistic decks whose union touches **every
-card in the set**, turning the bench into a fuzzer over the whole pool:
+card in the pool**, turning the bench into a fuzzer over the whole pool:
 
 ```bash
-npm run bench --prefix sealed -- --sweep [--games N] [--seed N] [ai]
+npm run bench --prefix sealed -- --sweep [--set SET[,SET ...]|all] [--games N] [--seed N[,N ...]] [ai]
 ```
 
-`--games` is games *per deck* (default 5); `ai` defaults to `random`, which is fast and pokes card
+`--set` names the sets the pool is drawn from: ASH when absent, `all` for every sealed set (see
+below). `--games` is games *per deck* (default 5); `ai` defaults to `random`, which is fast and pokes card
 interactions broadly (the best bug-finder). It reports the coverage numbers below and any dropped
 game, writing each as a replayable fixture. A drop here is a **finding**, a hang or throw in some
 card, not a failure of the sweep.
@@ -894,6 +904,50 @@ which cards are decked at all, and the union would no longer measure one pool.
 If a card still resists, chase that card rather than raising the counts. `uncovered` names it, sorted
 by set and then by collector number as a number, so `TS26_3` sorts before `TS26_10` rather than after
 it as a plain string sort would have it.
+
+### Several sets: one set per deck
+
+A pool can span several sets, because card tickets are cut by mechanic and a mechanic's cards are
+spread across every set. **Each deck still draws on one set.** The generator models a sealed pool,
+which is opened from one set, so `buildCoverageDecks` covers a multi-set pool set by set and no deck
+mixes them. Copy limits are per card id, which a card reprinted in another set would slip past, so
+decks that mix sets need rules of their own and are not built here.
+
+Sets are resolved into one canonical order (the setup panel's), so a run depends on which sets were
+named rather than on how they were typed: the order decides which decks play first, and so which
+games open on which seat.
+
+**Sets under 200 cards are not swept.** They are not designed for sealed play, and the generator
+cannot fill a 30-card deck from one: IBH's 51 cards built a coverage deck of 3 cards, and its games
+ended almost at once. `all` leaves them out and naming one is refused with its card count. The rule
+is a count rather than a list, so a small product released later is left out without anyone adding
+it. `coverageDecks.test.ts` asserts every sealed set builds only rule-satisfying decks.
+
+Over the eight sealed sets, `--set all --games 5 --seed 42,43,44` is **189 decks and 2,835 games with
+none dropped, playing 1,855 of the 1,860 decked cards** (143 of 144 leaders deployed) in about 20
+seconds.
+
+### The card pools: `--fixture`
+
+Every set's cards are bundled as a fixture (`src/test/fixtures/<set>Set.json`), so a sweep never
+needs the network and is reproducible from its seed and set list alone. They are written from the
+card API:
+
+```bash
+npm run bench --prefix sealed -- --fixture LAW SEC     # or --fixture all
+```
+
+A fixture holds Normal printings only, one row per card within a set, no tokens, and only the fields
+the engine reads. The set search wraps aspects and traits as `{ S: value }`, which `fromSearchRow` in
+`data/cards.ts` unwraps: the same rule the app's set import and printings index use. `benchSetPools.test.ts` checks every fixture's counts against the per-set totals the setup
+panel shows. A new set needs its import in `bench/setPools.ts` and its totals in
+`data/implementedCards.ts`, and that test fails until both are there.
+
+**Refreshing a fixture can change the decks every bench plays.** The deck generator reads a fixture's
+cost directly, and `cardDataCorrections` never reaches it, so a corrected cost reshapes every curve
+built around that card. `coverageDecks.test.ts` pins a fingerprint of the ASH coverage deck set so
+such a change is seen rather than absorbed. When it moves, the benches that play those decks need
+re-reading.
 
 ### How coverage is measured
 
@@ -1619,13 +1673,16 @@ eight of eighteen modules were missing.
 - `bench/decks.ts` the fixed sealed deck, built deterministically from the ASH snapshot. Both seats
   play the same list, which removes deck strength as a variable.
 - `bench/coverageDecks.ts` the deck set whose union covers the whole card pool.
-- `bench/lockoutDecks.ts` the asymmetric wall set behind `--decks lockout`: a coverage deck facing a
-  purpose-built shielded-Sentinel deck, and the only source where the two seats are dealt different
-  lists. Owns the wall package and the minimums a combo must reach to count as a wall.
+- `bench/lockoutDecks.ts` the asymmetric wall set behind `--decks lockout`: every coverage deck facing
+  one fixed, hand-built shielded-Sentinel deck (`WALL_DECK`), and the only source where the two seats
+  are dealt different lists.
 - `bench/matchupDecks.ts` the leader-by-base deck set the matrix plays: 18 leaders x 4 base aspects.
 - `bench/sweep.ts` the whole-pool fuzzing sweep behind `--sweep`, which reports cards **played** rather
   than decked and names anything decked but never drawn.
 - `bench/playCoverage.ts` the per-card play tracking that backs it.
+- `bench/setPools.ts` the card pools the bench draws on: one bundled fixture per set, `poolFor` to
+  join several in canonical order, and `toFixture`, which `--fixture` uses to turn a live set listing
+  into fixture rows.
 - `bench/matrix.ts` the deck-strength matrix behind `--matrix`, sharded by dealing each child every Nth
   deck pair, with per-pair seeds so a sharded run is identical to a serial one. Also owns its
   resumption: which payloads on disk may stand in for running a shard again, the merge that refuses a

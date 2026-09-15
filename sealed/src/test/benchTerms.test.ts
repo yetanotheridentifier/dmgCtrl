@@ -329,15 +329,21 @@ describe('runTerms', () => {
    * Every measurement taken before it acquired that second job read a flat zero in both columns,
    * which is why the flat reading is no longer the guard it once was: with the bonus live, a zero
    * here would mean the threshold is not reaching the decision at all.
+   *
+   * **Read over its own, larger sample.** The threshold bites on a handful of decisions, so the two
+   * decks above sit on a knife edge: they read 2 load-bearing decisions of 101, and 0 once one card's
+   * printed cost was corrected in the ASH fixture, which reshuffles the decks. Eight decks read 3.
+   * Narrowed to this one weight, so the larger sample costs one perturbation rather than one per weight.
    */
   it('finds saturation load-bearing through its threshold, not through its rate', () => {
     expect(DEFAULT_WEIGHTS.resourceSurplus, 'the pool still ships flat, so the RATE prices nothing')
       .toBe(DEFAULT_WEIGHTS.resource)
     expect(DEFAULT_WEIGHTS.cardScarcity, 'while the bonus it gates is live').toBeGreaterThan(0)
-    const saturation = report.stats.find(s => s.weight === 'saturation')!
+    const wider = runTerms({ gamesPerDeck: 1, seed: 4242, decks: 8, weights: ['saturation'] })
+    const saturation = wider.stats.find(s => s.weight === 'saturation')!
     expect(saturation.pivotal + saturation.loadBearing, 'the threshold reaches real decisions')
       .toBeGreaterThan(0)
-  })
+  }, 120_000)
 
   /**
    * Matches the sweep that tried 0, 3 and 6 and changed no decision at all, and explains WHY: the

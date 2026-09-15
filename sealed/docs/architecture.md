@@ -404,7 +404,7 @@ The board is drawn with art-dominant cards, not text rows:
 |---|---|---|
 | localStorage `sealed_decks` | Imported decks | Tiny, synchronous |
 | localStorage `sealed_settings` | User settings | Tiny, synchronous; per device and browser |
-| IndexedDB `cards` ← `setImport.ts` | Whole sets via one SWUDB search call (`?q=set:XXX`) | Full catalogue offline; includes bases the detail endpoint 502s on |
+| IndexedDB `cards` ← `setImport.ts` | Whole sets via one SWUDB search call (`?q=set:XXX`), each row passed through `fromSearchRow` first because the search wraps aspects and traits as `{ S: value }` | Full catalogue offline; includes bases the detail endpoint 502s on |
 | IndexedDB `cards` (Dexie v1) | Card JSON + thumbnail bytes | ~KBs per card; queryable; offline |
 | IndexedDB `games` (Dexie v2) | Completed game records | Replayable substrate for E7 training |
 
@@ -434,9 +434,10 @@ leaves CORS-friendly hosts (cdn.starwarsunlimited.com) untouched.
 ## Testing
 
 Strict TDD; 1000+ tests. Engine tests use hand-built fixture states
-(`src/test/helpers/engineFixtures.ts`); a few validation/behaviour tests run against a trimmed
-snapshot of the real ASH card data (`src/test/fixtures/ashSet.json`, 264 cards, refreshed from
-`worker.dmgctrl.app/cards/search?q=set:ASH`), e.g. `keywordOnlyUnits.test.ts` proving the
+(`src/test/helpers/engineFixtures.ts`); a few validation/behaviour tests run against trimmed
+snapshots of the real card data, one per set (`src/test/fixtures/<set>Set.json`, written by
+`npm run bench --prefix sealed -- --fixture <SET>` from `worker.dmgctrl.app/cards/search?q=set:<SET>`;
+ASH is `ashSet.json`, 264 cards), e.g. `keywordOnlyUnits.test.ts` proving the
 keyword-only units need no engine work. Data-layer tests run against fake-indexeddb; screen tests
 drive the real hook + engine with seeded caches, deterministic shuffles, and a passive AI injected
 through `UseGameOptions.ai` (it takes the last-ordered legal move, which is always the do-nothing

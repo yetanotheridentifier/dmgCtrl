@@ -14,8 +14,9 @@ const SWU_CARDS: SwuCard[] = [
 ]
 
 /**
- * Start a real game through the deck screen. The cards are seeded so no network is needed;
- * with one saved deck the opponent picker mirrors it.
+ * Start a real game through the deck screen. The cards are seeded so no network is needed. The
+ * opponent is chosen explicitly as a random built deck, which with one saved deck mirrors it: the
+ * default is a generated deck, and these tests are about the shell, not the generator.
  */
 async function startGame(user: ReturnType<typeof userEvent.setup>) {
   for (const card of SWU_CARDS) {
@@ -24,6 +25,7 @@ async function startGame(user: ReturnType<typeof userEvent.setup>) {
   saveDeck({ name: 'Playable', leader: 'TST_001', base: 'TST_002', cards: [{ id: 'TST_900', count: 30 }] })
   render(<App />)
 
+  await user.selectOptions(screen.getByTestId('opponent-deck-select'), 'random')
   const row = within(screen.getByTestId('deck-list')).getByText('Playable').closest('li')!
   await user.click(within(row).getByRole('button', { name: /^play$/i }))
   await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())

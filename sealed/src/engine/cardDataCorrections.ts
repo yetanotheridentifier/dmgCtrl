@@ -9,7 +9,6 @@ import type { EngineCard } from './types'
  * as gaps surface during play (arena, cost, power/HP, …).
  */
 export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
-  ASH_097: { cost: 3 }, // Moff Gideon (unit) — printed cost is 3; the source ships 8
   ASH_081: { arena: 'space' }, // Nebulon-C Frigate — a Space capital ship; the source ships Ground
 
   // The source lists each card's *conditional* keyword in its base `Keywords`, which

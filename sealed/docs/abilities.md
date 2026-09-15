@@ -224,6 +224,6 @@ Card text is authoritative from the card API, which serves the printed ability t
 are missing for some upgrades and are filled from `upgradeStatOverrides.ts`. Values the source data
 gets wrong are corrected in `cardDataCorrections.ts`.
 
-The whole-pool fuzz sweep (`npm run bench --prefix sealed -- --sweep`) plays every card in the set
-and surfaces a hang or throw as a dropped game with a replayable fixture, which is the broadest net
+The whole-pool fuzz sweep (`npm run bench --prefix sealed -- --sweep`, with `--set` for sets other
+than ASH) plays every card in the pool and surfaces a hang or throw as a dropped game with a replayable fixture, which is the broadest net
 for a new card breaking an interaction.

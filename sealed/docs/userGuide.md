@@ -24,7 +24,7 @@ The deck screen has three columns: **your deck** on the left, **the opponent** i
 
 The **Opponent** selector controls which deck the AI plays:
 
-- **Random generated deck** (the default): a fresh deck built from your cached set for every game. Until a set is cached, a random built deck is used instead.
+- **Random generated deck** (the default): a fresh deck built from your cached set for every game. Until a cached set holds enough cards to fill a whole deck, a random built deck is used instead, and **Generate** says the set cannot fill a deck.
 - **Random built deck**: one of your imported decks at random (it may pick the same deck you're playing).
 - **A specific deck**: choose any imported deck by name.
 

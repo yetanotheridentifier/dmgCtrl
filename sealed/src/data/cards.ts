@@ -69,6 +69,23 @@ export function cardId(set: string, number: string): string {
   return `${set.toUpperCase()}_${number}`
 }
 
+/**
+ * A row from the set search (`cards/search?q=set:`) as a `SwuCard`. The search wraps each list entry
+ * as `{ S: value }` (aspects and traits), where the per-card endpoint returns plain values, which is
+ * what `SwuCard` describes. Every search row goes through this before it is cached or used, so the rest
+ * of the app only sees plain strings: a wrapped aspect matches nothing, and rendered as text it blanks
+ * the deck screen. Plain rows pass through unchanged, and key order is kept.
+ */
+export function fromSearchRow(row: object): SwuCard {
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(row)) {
+    out[key] = Array.isArray(value)
+      ? value.map(v => (v !== null && typeof v === 'object' && 'S' in v ? (v as { S: unknown }).S : v))
+      : value
+  }
+  return out as unknown as SwuCard
+}
+
 function mapSwuApiCard(card: SwuApiCard): SwuCard {
   const [set, number] = card.collector_number.split('_')
   return {

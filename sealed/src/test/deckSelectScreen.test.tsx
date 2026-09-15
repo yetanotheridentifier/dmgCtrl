@@ -335,6 +335,40 @@ describe('DeckSelectScreen', () => {
       expect(onPlay.mock.calls[0][0].cards.length).toBeGreaterThan(0)
     })
 
+    /** A partial cache: one leader, one base and a single unit, far short of a 30-card deck. */
+    const withThinPool = () => vi.mocked(largestCachedSet).mockResolvedValue({
+      set: 'TST',
+      cards: [
+        { Set: 'TST', Number: '001', Name: 'Test Leader', Type: 'Leader', Cost: '5', Power: '4', HP: '7' },
+        { Set: 'TST', Number: '002', Name: 'Test Base', Type: 'Base', HP: '30' },
+        { Set: 'TST', Number: '900', Name: 'Big Test Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '0', Power: '4', HP: '3' },
+      ],
+    })
+
+    it('says the cached set cannot fill a deck rather than offering a short one', async () => {
+      withThinPool()
+      const user = userEvent.setup()
+      render(<DeckSelectScreen onPlay={vi.fn()} />)
+      await user.click(await screen.findByTestId('generate-deck-button'))
+
+      expect(screen.getByTestId('generated-deck-subtitle')).toHaveTextContent('Cannot fill a 30-card deck from TST')
+      expect(screen.getByTestId('play-generated-button')).toBeDisabled()
+    })
+
+    it('falls back to a random built opponent when the cached set cannot fill a deck', async () => {
+      withThinPool()
+      const user = userEvent.setup()
+      const onPlay = vi.fn()
+      const saved = saveDeck({ name: 'Ready Deck', leader: 'SOR_010', base: 'SOR_029', cards: [{ id: 'SOR_100', count: 30 }] })
+      render(<DeckSelectScreen onPlay={onPlay} />)
+      expect(await screen.findByTestId('generated-deck-subtitle')).toHaveTextContent('Built from TST')
+
+      const row = within(screen.getByTestId('deck-list')).getByText('Ready Deck').closest('li')!
+      await user.click(within(row).getByRole('button', { name: /play/i }))
+
+      expect(onPlay.mock.calls[0][1].id).toBe(saved.id)
+    })
+
     it('offers a generated opponent even with no decks imported', async () => {
       withPool()
       render(<DeckSelectScreen onPlay={vi.fn()} />)

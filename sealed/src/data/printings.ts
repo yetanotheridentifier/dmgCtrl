@@ -1,5 +1,5 @@
 import { db } from './db'
-import { cardId, SWU_DB_API } from './cards'
+import { cardId, fromSearchRow, SWU_DB_API } from './cards'
 import type { SwuCard } from './cards'
 import { logger } from './log'
 import { bundledCanonicalId } from './bundledPrintings'
@@ -76,7 +76,7 @@ async function indexFromNetwork(set: string): Promise<PrintingIndex | undefined>
       return undefined
     }
     const payload = (await response.json()) as { data?: SwuCard[] }
-    const cards = payload.data ?? []
+    const cards = (payload.data ?? []).map(fromSearchRow)
     return cards.length > 0 ? buildPrintingIndex(cards) : undefined
   } catch (err) {
     logger.warn('printing index fetch rejected', { set, error: String(err) })
