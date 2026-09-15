@@ -237,11 +237,13 @@ supplies.
   less than that. In practice that means Shield and Advantage tokens, and when to spend one rather than
   keep it is a judgment the model has no term for.
 
-**Sabine Wren is the exception that looks like misplay.** Her ability has the opponent give 2
-Advantage tokens to one of their units, and in return the next unit she plays this phase gains
-Shielded. Play-testing reports the bot using it after spending all its resources, so no unit collects
-the Shield and the tokens are a pure gift. That is a sequencing defect rather than a weak leader, and it
-has not yet been reproduced in a replay.
+**Sabine Wren is the exception that looks like misplay, some of the time.** Her ability has the
+opponent give 2 Advantage tokens to one of their units, and in return the next unit she plays this
+phase gains Shielded. In one recorded game the bot uses it with no ready resources and then passes, so
+no unit collects the Shield and the tokens are a pure gift. In another it uses it with 4 resources
+ready and follows with a 4-cost unit, which is the card played correctly. The two are consistent with
+the bot not checking whether a unit can still be played this phase, rather than with a blanket
+misvaluation. That is a sequencing defect rather than a weak leader.
 
 **Aggression is the weakest base aspect**, 45.9% against 50.4% to 52.1% for the other three, and it
 was also the weakest under the earlier generator. Why is not measured: the Aggression cards may be
