@@ -106,9 +106,34 @@ describe('scaling the prices changes nothing', () => {
    */
   it('picks the identical move at every position, through the full shipped search', () => {
     const shipped = makeBeamGreedy(DEFAULT_WEIGHTS, BEAM_REPLY_LIMITS)
-    const doubled = makeBeamGreedy(scalePrices(DEFAULT_WEIGHTS, 2), BEAM_REPLY_LIMITS)
+    // `passPenalty` has to be scaled with them. It is a PRICE, charged in the same points as every
+    // evaluation term, but it lives on `BeamLimits` rather than in `EvalWeights`, so `scalePrices`
+    // cannot reach it. Leave it unscaled and doubling the rest halves it in relative terms, which
+    // makes `pass` cheaper and is a real behaviour change rather than a rescaling.
+    const doubled = makeBeamGreedy(scalePrices(DEFAULT_WEIGHTS, 2), {
+      ...BEAM_REPLY_LIMITS, passPenalty: (BEAM_REPLY_LIMITS.passPenalty ?? 0) * 2,
+    })
     for (const s of positions) expect(doubled(s)).toEqual(shipped(s))
   }, 180_000)
+
+  /**
+   * **The invariant is conditional on scaling the pass charge too**, and that is arithmetic rather
+   * than something to assert over a corpus.
+   *
+   * A charge of 8 subtracted from a doubled score is half the charge in relative terms, so `pass`
+   * gets cheaper. Whether any *particular* corpus contains a position whose margin falls in the
+   * window where that flips the pick is luck: an earlier version of this file asserted exactly that
+   * and broke the moment the deck generator changed, which is a test measuring its own fixture.
+   *
+   * Latent in the shipped configuration, since nothing scales the weights today. A future rescale
+   * that forgot the pass charge would change how often the bot passes and would read as a tuning
+   * result.
+   */
+  it('charges pass in the same points it scales, so the two must move together', () => {
+    const penalty = BEAM_REPLY_LIMITS.passPenalty ?? 0
+    expect(penalty, 'a charge of zero would make this moot').toBeGreaterThan(0)
+    expect(PRICE_KEYS).not.toContain('passPenalty')
+  })
 
   /** And halving, so the property is scale-invariance rather than a lucky factor. Every shipped price
    *  is even, so halving stays integral. */

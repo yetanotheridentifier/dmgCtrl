@@ -11,22 +11,35 @@ import { randomAi } from '../ai/randomAi'
 describe('matchup deck set', () => {
   const decks = buildMatchupDecks()
 
-  it('pairs every leader with every base aspect (18 x 4 = 72 decks)', () => {
-    expect(decks).toHaveLength(72)
+  /**
+   * 52 rather than 18 x 4, because a base that doubles an aspect the leader already supplies is not a
+   * deck anyone builds: this set has no card with a doubled aspect, so the overlap buys nothing and
+   * one colour cannot fill a deck. Each of the 18 leaders loses the base matching a colour aspect it
+   * carries, and the two with two colour aspects lose two.
+   */
+  it('pairs every leader with every base aspect it does not already carry (52 decks)', () => {
+    expect(decks).toHaveLength(52)
   })
 
-  it('represents every leader equally (4 decks each)', () => {
+  it('represents every leader, 3 decks each bar the two-aspect pair', () => {
     const byLeader = new Map<string, number>()
     for (const d of decks) byLeader.set(d.leaderName, (byLeader.get(d.leaderName) ?? 0) + 1)
     expect(byLeader.size).toBe(18)
-    for (const n of byLeader.values()) expect(n).toBe(4)
+    // The Armorer (Vigilance/Command) and Fennec Shand (Aggression/Cunning) carry two colour
+    // aspects, so only two bases remain for each.
+    expect([...byLeader.values()].filter(n => n === 2)).toHaveLength(2)
+    expect([...byLeader.values()].filter(n => n === 3)).toHaveLength(16)
   })
 
-  it('represents every base aspect equally (18 decks each)', () => {
+  /**
+   * **Still even by aspect**, which is what keeps a base-strength reading meaningful. Each aspect is
+   * carried by exactly five leaders, so each loses the same five decks: 18 - 5 = 13.
+   */
+  it('represents every base aspect equally (13 decks each)', () => {
     const byBase = new Map<string, number>()
     for (const d of decks) byBase.set(d.baseAspect, (byBase.get(d.baseAspect) ?? 0) + 1)
     expect(byBase.size).toBe(4)
-    for (const n of byBase.values()) expect(n).toBe(18)
+    for (const n of byBase.values()) expect(n).toBe(13)
   })
 
   it('is deterministic', () => {

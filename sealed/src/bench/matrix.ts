@@ -61,6 +61,11 @@ export interface MatrixResult {
   commitId: string
   model: string
   deckCount: number
+  /**
+   * Which decks the games were played on, from {@link deckSuiteId}. Every suite has the same deck count
+   * and the same labels, so without this a payload played on different decks passes for this run's.
+   */
+  deckSuite: string
   gamesPerCell: number
   seed: number
   dropped: number
@@ -124,6 +129,27 @@ export function dealPairs(deckCount: number, shardIndex = 0, shardCount = 1): Ar
 export function pairSeed(base: number, i: number, j: number): number {
   const mixed = ((base ^ Math.imul(i + 1, 0x9E3779B1) ^ Math.imul(j + 1, 0x85EBCA77)) >>> 0) || 1
   return nextSeed(mixed)
+}
+
+/**
+ * A short fingerprint of a deck set: every deck's label, leader, base and card counts.
+ *
+ * **The labels alone cannot tell two suites apart**, since they name only a leader and a base aspect.
+ * A parent and its children each build the deck set, and when the children built a different seed
+ * than the parent, four suites merged cleanly as one suite played four times. FNV-1a, because this only
+ * has to separate the handful of suites a run directory could meet, not resist anyone.
+ */
+export function deckSuiteId(decks: MatchupDeck[]): string {
+  const canonical = decks.map(d => {
+    const cards = d.deck.cards.map(c => `${c.id}x${c.count}`).sort().join(',')
+    return `${d.label}|${d.deck.leader}|${d.deck.base}|${cards}`
+  }).join(';')
+  let hash = 0x811c9dc5
+  for (let i = 0; i < canonical.length; i++) {
+    hash ^= canonical.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
 }
 
 export function runMatchupMatrix(
@@ -207,6 +233,7 @@ export function runMatchupMatrix(
     commitId: COMMIT_ID,
     model,
     deckCount: decks.length,
+    deckSuite: deckSuiteId(decks),
     gamesPerCell: config.gamesPerCell,
     seed: config.seed,
     dropped,
@@ -246,7 +273,7 @@ export const matrixShardIds = (shards: number): string[] =>
  */
 export function matrixPayloadUsable(
   payload: unknown,
-  wanted: { commitId: string; model: string; gamesPerCell: number; seed: number; deckCount: number },
+  wanted: { commitId: string; model: string; gamesPerCell: number; seed: number; deckCount: number; deckSuite: string },
 ): boolean {
   if (typeof payload !== 'object' || payload === null) return false
   const p = payload as Partial<MatrixResult>
@@ -256,6 +283,7 @@ export function matrixPayloadUsable(
     && p.gamesPerCell === wanted.gamesPerCell
     && p.seed === wanted.seed
     && p.deckCount === wanted.deckCount
+    && p.deckSuite === wanted.deckSuite
 }
 
 /** Which shards still need running, given the payloads that were readable and usable. */

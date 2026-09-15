@@ -501,11 +501,11 @@ npm run bench --prefix sealed -- --matrix --shard 10 --games 10 --seed 42 beam-r
 
 `--matrix` alone still runs serially. With `--shard N` the parent spawns N children, each told only
 `--shard-index K --shard-count N`, and each **deals itself every Nth pair**. The parent never hands
-over a pair list: 2,628 pairs do not fit on a command line, and self-dealing keeps every child
+over a pair list: 1,378 pairs do not fit on a command line, and self-dealing keeps every child
 independently re-runnable.
 
 **Dealt round-robin, never sliced.** The enumeration is `for i, for j >= i`, so a contiguous split by
-`i` would give the first shard 72 pairs and the last one a single pair, and that shard alone would set
+`i` would give the first shard 52 pairs and the last one a single pair, and that shard alone would set
 the wall clock.
 
 **A sharded matrix is identical to a serial one, cell for cell.** Each pair's games are seeded from the
@@ -513,6 +513,12 @@ pair (`pairSeed(base, i, j)`) rather than from a single seed advanced as the loo
 the same games wherever it runs. Verified at full size: 72 decks, 5,184 cells, zero differing. Without
 per-pair seeds a child playing every Nth pair would play different games and no sharded result could
 ever be checked against a serial one.
+
+**The same decks, too.** Each child builds its own deck set, so the parent and every child build it
+from `--seed` in one place, and each payload carries a `deckSuite` fingerprint of the decks it played.
+A payload whose fingerprint differs from the parent's is refused, like one from different code. Labels
+cannot catch this, because every suite has the same leader and base pairings: a four-suite run whose
+children built the default seed merged cleanly as one suite played four times.
 
 A child writes its cells and saves nothing; only the merged run reaches the database. **If any shard
 fails, nothing is saved at all**, because a partial matrix is indistinguishable from a whole one with
@@ -1371,7 +1377,7 @@ Every **ordered** pair of 18 decks (one per leader), aiA on the first deck and a
 seats alternated so first-player advantage cancels. Ordered rather than the triangle `matrix.ts`
 uses, because with two different AIs "A on deck i vs B on deck j" is a different experiment from its
 reverse; that symmetry trick is only valid when both seats play identically. 18 decks keeps it to 324
-cells and about a minute; 72 would be over 5000.
+cells and about a minute; 52 would be 2,704.
 
 **A trap worth knowing about.** The first version took the *first* base for each leader, which
 handed all 18 decks an Aggression base. On that set greedy measured **49.1%** against the frozen
@@ -1416,17 +1422,26 @@ of every comparison.
 
 ## Matchup matrix
 
-`--matrix` measures **deck strength** and **matchups**. It builds an even deck set (every one of the
-18 leaders paired with each of the 4 base aspects = 72 decks, `bench/matchupDecks.ts`) and, under one
-fixed AI model, plays every deck against every deck (mirrors included). First player is alternated so
-seat advantage cancels, which means "i vs j" already measures "j vs i", so only the upper triangle is
-played and the rest derived.
+`--matrix` measures **deck strength** and **matchups**. It builds an even deck set
+(`bench/matchupDecks.ts`): every one of the 18 leaders paired with each base aspect it does not already
+carry, since a base doubling a leader's aspect is not a deck anyone builds in sealed. That is 52 decks,
+still 13 per aspect. Under one fixed AI model it plays every deck against every deck (mirrors
+included). First player is alternated so seat advantage cancels, which means "i vs j" already measures
+"j vs i", so only the upper triangle is played and the rest derived.
+
+**`--seed` picks the deck suite as well as the games.** A different seed builds different cards for the
+same 52 pairings, and the run directory keys on the seed, so several suites bank and resume separately.
+Read one suite's leader ratings as describing that suite: a change to how the generator picks cards
+has moved leaders by up to 12 points (see `experiments.md`).
 
 ```bash
 npm run bench --prefix sealed -- --matrix --games 14 --seed 42 greedy   # ~14 games/cell => ~1000/deck
 ```
 
-`--games` is games *per cell*; a whole run is ~30-40 min at 14. It prints strongest/weakest decks,
+`--games` is games *per cell*, and **the model dominates the cost**: under 40 min at 14 for `greedy`,
+against a **measured 7h 50m** a suite for `beam-reply` at 10 a cell over 10 shards (13,780 games; four
+runs finished within 4 minutes of each other).
+Budget for the model being measured, not for the example above. It prints strongest/weakest decks,
 by-leader and by-base strength (each deck's average win rate across all opponents) and saves every
 ordered pair to the SQLite `matchups` table. It answers three questions:
 
@@ -1443,11 +1458,11 @@ The matrix answers two questions of very different precision, and the readout sa
 
 - **How much moving first is worth.** Every game contributes exactly one first-mover observation (a
   game where deck i moved first is the on-play half of cell (i,j) and the on-draw half of cell (j,i)),
-  so this is pooled over the whole run: 26,280 games at 10 a cell, or about ±0.6%. Mirror pairs are the
+  so this is pooled over the whole run: 13,780 games at 10 a cell, or about ±0.8%. Mirror pairs are the
   one exception, contributing the half of their games the row deck moved first in, because only one
   cell is emitted for them and counting it twice would weight mirrors double.
-- **Which decks depend on it.** A deck's gap is measured over its own row only, 720 games at 10 a cell
-  split into two halves of 360, so it carries roughly ±7 points. **Read that ordering as a queue of
+- **Which decks depend on it.** A deck's gap is measured over its own row only, 520 games at 10 a cell
+  split into two halves of 260, so it carries roughly ±8 points. **Read that ordering as a queue of
   candidates to re-measure, not as a ranking**: at that width most of the order is noise. The readout
   prints the median band beside it rather than leaving the columns to imply a precision they do not
   have.

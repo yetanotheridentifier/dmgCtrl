@@ -181,6 +181,115 @@ The practical rule: `--terms` is a screen for weights that **cannot** matter, an
 earns a sweep rather than predicting its outcome. It sits alongside prevalence, which justifies an
 attempt without predicting the result.
 
+### Moving first is worth half a point
+
+The matchup matrix pools one first-mover observation from every game, which makes this the
+best-powered number the harness produces: over **54,080 games**, the first mover wins **50.59% +/-
+0.42%**. Decks from a generator that allowed three copies of a Legendary read 51.2% +/- 0.6%, and the
+two intervals overlap.
+
+Either way it is small, and it explains a run of null results rather than sitting beside them. Every attempt
+to make the model value turn order more highly has failed: `initiative` is monotonically harmful when
+raised, `initiativeHorizon` swept to no gradient and ships at 0, and `initiativeExposure` measured
+roughly -4 points per point of weight. A term cannot be worth more than the thing it prices.
+
+It is a property of this deck generator and this model, not of the game: a human extracting more from
+the initiative would not show up here.
+
+### The leader ranking tracks what the evaluation reads and what the pool supplies
+
+52 decks, each leader paired with every base aspect it does not already carry, every deck against
+every deck under `beam-reply`. **One deck suite** (generator seed 1) played on four sets of game seeds
+at 10 games a cell: 55,120 games, none dropped, 40 games a cell in all. Leader strength carries about
++/-1.2 points, base aspect +/-0.6 and a single deck about +/-2; an individual cell is still noise. The
+spread between the four replays matched game noise for every leader, as replaying one suite should.
+
+The spread by leader is **enormous**: 68.2% down to 17.3%, over 50 points. The strongest single deck
+is Luke Skywalker on a Command base at 77.2%, the weakest Grogu on Vigilance at 14.3%.
+
+| strongest | | weakest | |
+| --- | --- | --- | --- |
+| Ezra Bridger | 68.2% | Grogu | 17.3% |
+| Luke Skywalker | 67.4% | Bo-Katan Kryze | 26.2% |
+| Baylan Skoll | 64.6% | Emperor Palpatine | 40.4% |
+| Shin Hati | 61.8% | Vane | 42.1% |
+
+**The matrix alone cannot separate "the bot misplays this leader" from "this leader is weak in an
+algorithmic deck".** Real-play reputation is what separates them, and read against it the ranking
+splits in two.
+
+**At the top, value a static board score already reads**: a 6/7 stat line (Luke) and printed Saboteur
+(Ezra). **Most of the bottom is pool-dependent rather than misplayed.** These leaders are hard to build
+rather than weak: each needs specific cards that a deck built without regard to its leader rarely
+supplies.
+
+- **Grogu** is **0 power**, deploys only when a Unique unit costing 4 or more is played, and his auras
+  work only in combat (+1/+0 while another friendly unit defends, -1/-0 to the defender while one
+  attacks). He wants several such units in the pool. His deploy can be used again after he is
+  defeated, and that is correct: CR 3.4.5 retires only a leader's Epic Action, and his deploy is a
+  triggered ability.
+- **Bo-Katan Kryze** deploys when resources plus friendly Mandalorian units reach 10, so she needs a
+  board of Mandalorians.
+- **Moff Gideon** gains keywords from Imperial units in the discard pile, so he needs Imperial units
+  that carry them.
+- **The Mandalorian** likewise needs specific cards to build around.
+- **Vane** defeats a friendly upgrade to deal 2 damage to a base, which only pays on an upgrade worth
+  less than that. In practice that means Shield and Advantage tokens, and when to spend one rather than
+  keep it is a judgment the model has no term for.
+
+**Sabine Wren is the exception that looks like misplay, some of the time.** Her ability has the
+opponent give 2 Advantage tokens to one of their units, and in return the next unit she plays this
+phase gains Shielded. In one recorded game the bot uses it with no ready resources and then passes, so
+no unit collects the Shield and the tokens are a pure gift. In another it uses it with 4 resources
+ready and follows with a 4-cost unit, which is the card played correctly. The two are consistent with
+the bot not checking whether a unit can still be played this phase, rather than with a blanket
+misvaluation. That is a sequencing defect rather than a weak leader.
+
+**Aggression is the weakest base aspect**, 45.9% against 50.4% to 52.1% for the other three, and it
+was also the weakest under the earlier generator. Why is not measured: the Aggression cards may be
+ones the model values poorly, or the generator may fill an Aggression deck worse.
+
+**The ranking moves with the generator by more than its error bars.** On the same 52 leader and base
+pairings, a generator that allowed three copies of a Legendary rated Moff Gideon **12.2 points** higher
+and Grand Admiral Sloane **8.0** higher (first rather than fifth), where a difference between the two
+readings carries about +/-2.7. Ezra Bridger, Baylan Skoll and The Mandalorian each moved more than 4
+points the other way. The cause is not measured; triple copies of strong cards landing on particular
+leaders is the obvious candidate. What it does establish is that **which cards a deck gets can move a
+leader's rating by 12 points**, so a rating describes this generator as much as the leader. Whether a
+different suite from the same generator moves it too has not been measured.
+
+### The deck generator does not model a sealed pool
+
+Worth stating plainly because it bounds everything the matrix can say: `generateDeck` builds from the
+**whole card set** under rarity quotas. There is no pool step, so the decks are not sealed decks.
+
+Copy counts no longer give it away: duplicates are rolled by rarity (`DUPLICATE_CHANCE`, so a Common
+is doubled 40% of the time and a Legendary essentially never), with per-rarity caps as a backstop.
+What remains is the pool itself. A real six-pack pool decides which cards a leader can have at all, so
+the pool-dependent leaders above are rated on decks no player would open. A pool-aware generator would
+move their ratings by an unknown amount, and the copy caps alone moved leaders by up to 12 points.
+
+### Per-card win rates are not measurable at this scale
+
+Rebuild every deck (the generator is deterministic), join to deck win rates, and group by card and
+copy count. It does not produce card quality, and the reason is worth recording so it is not retried
+unchanged.
+
+More games do not fix it. Over the 52-deck suite at 40 games a cell a deck's rate carries about +/-2
+and the median card row rests on **12 decks**, yet **40 of 94 rows** share their exact value with
+another row. The two top-scoring cards both read +7.2 against their leader's mean because they sit in
+the *same four decks*: one set of decks' win rate under two names, not two observations of card
+quality.
+
+The generator is also narrow. **85 distinct cards** appear across all 52 decks, so most of the set is
+never measured at all.
+
+Three confounds stack. A deck's rate is dominated by its **leader** (17% to 68%), and a card is only
+legal where its aspects are covered, so a raw mean mostly measures which leaders may play it;
+subtracting the leader's mean removes that one. Cards chosen by the same heuristic **travel
+together** and cannot be separated. And the generator picks by its own scoring, so the result partly
+measures **what the generator likes** rather than what wins.
+
 ### The hidden information is small, and what matters is public
 
 A one-action lethal is available to the opponent in **2.2%** of decisions and is **absent before round

@@ -20,10 +20,15 @@ The **Card catalogue** section lets you cache an entire set by its code (e.g. `A
 
 ## Choosing an opponent
 
+The deck screen has three columns: **your deck** on the left, **the opponent** in the middle, and the **card catalogue** on the right.
+
 The **Opponent** selector controls which deck the AI plays:
 
-- **Random deck**: the AI picks one of your imported decks at random (it may pick the same deck you're playing).
+- **Random generated deck** (the default): a fresh deck built from your cached set for every game. Until a set is cached, a random built deck is used instead.
+- **Random built deck**: one of your imported decks at random (it may pick the same deck you're playing).
 - **A specific deck**: choose any imported deck by name.
+
+Below it, **Generated opponent** chooses the **leader** and **base aspect** the generated deck is built around, and either can stay **random**. A random pick never pairs a leader with a base of an aspect the leader already has, since no card in the set rewards doubling an aspect; choose both yourself to get that pairing anyway. It only applies while the opponent is a random generated deck, and it's the way to watch how the AI plays a particular leader.
 
 The current AI opponent plays **random legal moves**. It exists to exercise the full rules engine; smarter opponents are on the roadmap.
 

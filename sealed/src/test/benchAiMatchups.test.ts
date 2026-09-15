@@ -29,7 +29,8 @@ describe('buildMatchupDecks trimmed to one base per leader', () => {
   })
 
   it('leaves the full set unchanged', () => {
-    expect(buildMatchupDecks()).toHaveLength(72)
+    // 52, not 18 x 4: a base doubling an aspect the leader already carries is not a buildable deck.
+    expect(buildMatchupDecks()).toHaveLength(52)
   })
 })
 

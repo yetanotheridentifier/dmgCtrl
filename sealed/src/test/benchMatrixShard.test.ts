@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  dealPairs, pairSeed, runMatchupMatrix,
+  dealPairs, pairSeed, runMatchupMatrix, deckSuiteId,
   matrixShardIds, matrixPayloadUsable, pendingMatrixShards, mergeMatrixParts, matrixResumeRefusal,
   type MatrixResult, type MatchupCell,
 } from '../bench/matrix'
@@ -115,6 +115,31 @@ describe('a sharded matrix equals a serial one', () => {
 })
 
 /**
+ * **Which decks a payload was played on.** The parent and each child build the deck set for
+ * themselves, so they can build different ones, and nothing else in a payload would show it: a label
+ * names a leader and a base aspect, which every suite shares. That is how a four-suite run came back as
+ * four replications of one suite. The children built the default seed, the parent built the seed it was
+ * asked for, and every merge check passed.
+ */
+describe('deckSuiteId', () => {
+  const suiteOne = buildMatchupDecks(undefined, 4, 1)
+  const suiteTwo = buildMatchupDecks(undefined, 4, 2)
+
+  it('is the same for the same decks, and differs between suites that share every label', () => {
+    expect(suiteTwo.map(d => d.label)).toEqual(suiteOne.map(d => d.label))
+    expect(deckSuiteId(buildMatchupDecks(undefined, 4, 1))).toBe(deckSuiteId(suiteOne))
+    expect(deckSuiteId(suiteTwo)).not.toBe(deckSuiteId(suiteOne))
+  })
+
+  it('is stamped on the matrix a run plays', () => {
+    // No games: the stamp describes the decks handed in, so playing any would only cost time.
+    const decks = suiteTwo.slice(0, 2)
+    const result = runMatchupMatrix(decks, greedyAi, 'greedy', { gamesPerCell: 0, seed: 1 })
+    expect(result.deckSuite).toBe(deckSuiteId(decks))
+  })
+})
+
+/**
  * Banking and resuming a sharded matrix (#562).
  *
  * The head-to-head has banked each shard as it lands since #492; the matrix passed no banking callback
@@ -140,12 +165,12 @@ const cell = (a: string, b: string): MatchupCell => ({
 })
 
 const part = (cells: MatchupCell[], over: Partial<MatrixResult> = {}): MatrixResult => ({
-  commitId: COMMIT_ID, model: 'beam-reply', deckCount: 2, gamesPerCell: 10, seed: 42, dropped: 0,
-  cells, ...over,
+  commitId: COMMIT_ID, model: 'beam-reply', deckCount: 2, deckSuite: 'suite-a', gamesPerCell: 10, seed: 42,
+  dropped: 0, cells, ...over,
 })
 
 /** What the run's own parameters say a banked payload must match to be reusable. */
-const wanted = { commitId: COMMIT_ID, model: 'beam-reply', gamesPerCell: 10, seed: 42, deckCount: 2 }
+const wanted = { commitId: COMMIT_ID, model: 'beam-reply', gamesPerCell: 10, seed: 42, deckCount: 2, deckSuite: 'suite-a' }
 
 describe('matrixShardIds', () => {
   /** The id names the log, the payload and the banked result, exactly as `seed-N` does for the
@@ -176,6 +201,14 @@ describe('matrixPayloadUsable', () => {
     expect(matrixPayloadUsable(part([cell('a', 'b')], { seed: 43 }), wanted)).toBe(false)
     expect(matrixPayloadUsable(part([cell('a', 'b')], { deckCount: 72 }), wanted)).toBe(false)
     expect(matrixPayloadUsable(part([cell('a', 'b')], { model: 'greedy' }), wanted)).toBe(false)
+  })
+
+  /**
+   * Same deck count, same labels, same seed, different cards. Every other field is blind to it, and it
+   * is what a child building its decks from a different seed than its parent produces.
+   */
+  it('rejects a payload played on a different deck suite', () => {
+    expect(matrixPayloadUsable(part([cell('a', 'b')], { deckSuite: 'suite-b' }), wanted)).toBe(false)
   })
 
   /**

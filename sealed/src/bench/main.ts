@@ -32,10 +32,10 @@ import { runAiMatchups } from './aiMatchups'
 import type { DecisionReport } from './decisions'
 import { runGeneralisation } from './generalisation'
 import type { GeneralisationReport } from './generalisation'
-import { buildMatchupDecks } from './matchupDecks'
+import { buildMatchupDecks, type MatchupDeck } from './matchupDecks'
 import {
   runMatchupMatrix, dealPairs, matrixShardIds, matrixPayloadUsable, pendingMatrixShards,
-  mergeMatrixParts, matrixResumeRefusal, type MatrixResult,
+  mergeMatrixParts, matrixResumeRefusal, deckSuiteId, type MatrixResult,
 } from './matrix'
 import { saveMatrix, deckStrength, leaderStrength, baseStrength, firstPlayerAdvantage, type StrengthRow } from './store'
 import type { FirstPlayerSplit } from './stats'
@@ -1278,6 +1278,19 @@ function turnOrderSection(db: ReturnType<typeof openDb>, runId: string, limit = 
 }
 
 /**
+ * The deck set a matrix plays, built the same way by the parent and by every child.
+ *
+ * `--seed` picks the deck suite as well as seeding the games, so one seed is one whole experiment, and
+ * the run directory (which already keys on the seed) banks and resumes each suite separately. **Both
+ * paths build their decks here** because each process builds its own: when the children built the
+ * default seed instead, a four-suite run played one suite four times and every merge check passed. The
+ * payload's `deckSuite` is what now refuses that.
+ */
+function matrixDecks(seed: number): MatchupDeck[] {
+  return buildMatchupDecks(undefined, 4, seed)
+}
+
+/**
  * The matrix across N child processes, which is what makes it affordable at all: roughly 169 hours
  * serial against about 23 sharded.
  *
@@ -1289,7 +1302,7 @@ async function runShardedMatrixMode(args: Args): Promise<void> {
   const model = args.aiExplicit ? args.aiA : 'greedy'
   const gamesPerCell = args.gamesSet ? args.games : 10
   const shards = args.shards ?? 1
-  const decks = buildMatchupDecks()
+  const decks = matrixDecks(args.seed)
   const total = dealPairs(decks.length).length
   const expectedCells = decks.length * decks.length
   const key = `matrix__${model.replace(/[^A-Za-z0-9._-]/g, '_')}__g${gamesPerCell}__s${args.seed}`
@@ -1308,7 +1321,7 @@ async function runShardedMatrixMode(args: Args): Promise<void> {
 
   // Payloads already on disk stand in for running their shard again, on the same four conditions
   // `pendingSeeds` applies to the head-to-head. This is the resumption the matrix has never had.
-  const wanted = { commitId: COMMIT_ID, model, gamesPerCell, seed: args.seed, deckCount: decks.length }
+  const wanted = { commitId: COMMIT_ID, model, gamesPerCell, seed: args.seed, deckCount: decks.length, deckSuite: deckSuiteId(decks) }
   const banked = new Map<string, MatrixResult>()
   for (const id of matrixShardIds(shards)) {
     const payload = readJsonFile(shardPayloadPath(dir, id))
@@ -1434,7 +1447,7 @@ function bankedMatrixShard(payload: MatrixResult | null, seed: number, exitCode 
 function runMatrixMode(args: Args): void {
   const model = args.aiExplicit ? args.aiA : 'greedy'
   const gamesPerCell = args.gamesSet ? args.games : 10
-  const decks = buildMatchupDecks()
+  const decks = matrixDecks(args.seed)
   const cells = decks.length * decks.length
   const shardIndex = args.shardIndex ?? 0
   const shardCount = args.shardCount ?? 1

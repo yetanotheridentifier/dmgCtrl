@@ -17,32 +17,37 @@ rather than a dependency.
 Ordered on one principle: **correctness, then structure, then calibration.** Anything that changes the
 engine or the horizon invalidates a calibration done before it.
 
-1. **Run the matchup matrix.** Unblocked: #584 closed with both candidates measuring null or harmful
-   and shipping at their no-op values, so nothing outstanding changes what the bot plays and the
-   calibration cannot be invalidated underneath. At roughly **23 hours sharded** (10 games a cell, against 169
-   serial) it is the one run worth doing exactly once. It banks and resumes per shard now, so an
-   interruption at hour 20 costs the outstanding shards rather than all 23. The first-player split is
-   in place, so it answers two questions instead of one.
+1. **#587 turn the leader ranking into a blind-spot queue.** The matrix has run on the corrected
+   generator (55,120 games over 52 decks, none dropped) and its findings are in
+   [experiments.md](experiments.md).
 
-   Per-cell numbers are noise at that size (±50% at 4 games). The readable aggregates are deck strength
-   (±5.8%) and leader strength (±2.9%), and the genuinely interesting output is any leader whose
-   measured strength disagrees with its real-play reputation, which is a queue of bot blind spots.
+   Read against real-play reputation, most of the bottom of the ranking is **pool-dependent rather than
+   misplayed**: Grogu, Bo-Katan Kryze, Moff Gideon, The Mandalorian and Vane each need specific cards an
+   algorithmic deck rarely supplies. **Sabine Wren is the candidate blind spot, filed as #589 with a
+   replay**: the bot used her ability with no ready resources and passed, so the opponent got 2
+   Advantage tokens and no unit collected the Shielded. It is intermittent: the log attached to #588
+   shows the same bot using it with 4 resources ready and following with a 4-cost unit. Next: a scripted
+   position built from the #589 replay, against a matched one where a unit can still be played.
 
-   **The turn-order output splits the same way.** Pooled over every game, "the first mover wins X%" is
-   the tightest number the run produces (±0.6% at 10 games a cell); a single deck's gap is measured
-   over its own row and carries about ±7 points, so that ordering is a queue of candidates rather than
-   a ranking. A dry run over the full deck set at 4 games a cell measured the per-deck band at ±11.3
-   points, which is what the ±7 projection scales from.
+   **Whether a different deck suite moves a leader's rating is still open.** The runs replayed one
+   suite because the matrix children built the default seed; that is fixed, and a payload played on
+   different decks is now refused. A real multi-suite run waits for the pool generator below: the copy
+   caps alone moved leaders by up to 12 points, and a pool step will move them again.
 
-   It measures the **deck generator**, not the sealed metagame: one algorithmic build per leader and
-   base. That gap is the point rather than a caveat.
-2. **#565 split what a run plays from what it records.** Fifteen modes, two real shapes: a game run and
+2. **Make the deck generator model a sealed pool.** Open six packs, then build from what came out,
+   rather than from the full set under quotas. Duplicates are already rolled by rarity; the pool step
+   is what remains, and example pools from real openings will calibrate it.
+
+   It also unlocks two things that are thin today. Several deck suites become more meaningful, since a
+   pool varies which cards a leader can have at all, where a seed only varies the draw from the whole
+   set. And per-card win
+   rates need far more decks than 52 before a card-sized effect can clear the noise.
+3. **#565 split what a run plays from what it records.** Fifteen modes, two real shapes: a game run and
    a corpus run. The fragmentation already costs something measured, since the generalisation harness
    and `runBench` read 50.4% and 48.70% for the same AI on the same decks, which is why every harness
-   needs its own baseline established before a number from it can be trusted. After the matrix rather
-   than before it: the benefit is mostly for repeated A/B runs, and a large harness refactor
-   immediately before a 23-hour calibration is the wrong risk to take.
-3. **#585 use the game's own terms for game actions.** Units are played and only leaders are
+   needs its own baseline established before a number from it can be trusted. The benefit is mostly
+   for repeated A/B runs.
+4. **#585 use the game's own terms for game actions.** Units are played and only leaders are
    deployed; cards are resourced rather than banked; things are defeated rather than killed.
    [glossary.md](glossary.md) records the correct terms and the ones this project invented. Not
    urgent and not blocking anything, but it is prose-level debt that makes comments carrying measured
