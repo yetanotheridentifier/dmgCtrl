@@ -123,6 +123,7 @@ describe('defeat events: which units each one may defeat', () => {
     const played = play(board(id, mine, theirs))
     expect(choice(played).kind).toBe('selectUnitToDefeat')
     expect(targetsOf(choice(played))).toEqual(expected)
+    expect(skippable(played)).toBe(false)
   })
 
   it('defeats the chosen unit', () => {
@@ -166,10 +167,11 @@ describe('single-target utility events', () => {
     expect(U(accept(played, { targetInstanceId: 'e' }), 'e')!.upgrades).toEqual([{ cardId: TOKEN_SHIELD, owner: 'opponent' }])
   })
 
-  it('Evasive Maneuver (JTL_262) exhausts any unit', () => {
+  it('Evasive Maneuver (JTL_262) exhausts any unit, and must', () => {
     const played = play(board('JTL_262', [unit('a', 'GRD')], [unit('e', 'GRD')]))
     expect(choice(played).kind).toBe('mayExhaustUnit')
     expect(targetsOf(choice(played))).toEqual(['a', 'e'])
+    expect(skippable(played)).toBe(false)
     expect(U(accept(played, { targetInstanceId: 'e' }), 'e')!.exhausted).toBe(true)
   })
 })
@@ -189,6 +191,7 @@ describe('ready events', () => {
     const played = play(board(id, mine, theirs))
     expect(choice(played).kind).toBe('selectUnitToReady')
     expect(targetsOf(choice(played))).toEqual(expected)
+    expect(skippable(played)).toBe(false)
   })
 
   it('readies the chosen unit', () => {
@@ -217,6 +220,7 @@ describe('return-to-hand events', () => {
     const played = play(board(id, mine, theirs))
     expect(choice(played).kind).toBe('selectUnitToReturn')
     expect(targetsOf(choice(played))).toEqual(expected)
+    expect(skippable(played)).toBe(false)
   })
 
   it("returns the chosen unit to its owner's hand", () => {
@@ -259,6 +263,7 @@ describe('"for this phase" buffs and debuffs on one unit', () => {
     const played = play(board(id, mine, theirs, entered))
     expect(choice(played)).toMatchObject({ kind: 'mayLastingBuff', ...buff })
     expect(targetsOf(choice(played))).toEqual(expected)
+    expect(skippable(played)).toBe(false)
   })
 
   it('takes the smaller form without a Force unit or the initiative', () => {

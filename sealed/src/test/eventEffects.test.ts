@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
+import { legalMoves } from '../engine/legalMoves'
 import { unitHasKeyword } from '../engine/keywords'
 import { effectivePower } from '../engine/stats'
 import { dealDamageToUnit } from '../engine/combat'
@@ -182,12 +183,9 @@ describe('Long Live the Empire (103) — defeat a friendly Imperial to resource 
     expect(done.players.player.resources.at(-1)).toEqual({ cardId: 'GRD', exhausted: true })
   })
 
-  it('resources nothing if the defeat is declined', () => {
+  it('cannot be declined, since the card prints no "may"', () => {
     const s = state({ cards: F, players: { player: rich({ hand: ['ASH_103'], units: [unit('imp', 'IMP')], deck: ['GRD'] }), opponent: player() } })
-    const played = play(s)
-    const before = played.players.player.resources.length
-    const done = resolve(played, { type: 'skipTrigger', choiceId: choice(played).id })
-    expect(done.players.player.resources).toHaveLength(before)
+    expect(legalMoves(play(s)).some(m => m.type === 'skipTrigger')).toBe(false)
   })
 })
 

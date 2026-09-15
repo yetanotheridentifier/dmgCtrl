@@ -37,9 +37,18 @@ making the answered ability appear not to resolve. There is deliberately no such
 
 **Whether a choice can be declined is a property of the card, not of the kind.** A kind shared by
 cards that print "may" and cards that do not carries an `optional` flag, and `choiceMoves` offers
-`skipTrigger` only when it is set: `selectDamageTarget` and `mayAttackAnyUnit` are both used this
-way. A kind whose name begins `may` is therefore not by itself evidence that every card using it
-offers a way out.
+`skipTrigger` only when it is set. The unit and upgrade picks work this way: `selectUnitToDefeat`,
+`selectUnitToReady`, `selectUnitToReturn`, `selectUnitToSteal`, `selectDistributeSource`,
+`selectUpgradeToReturn`, `selectDamageTarget`, `selectHealTarget` and `mayAttackAnyUnit`, and so do
+`mayLastingBuff` and `mayExhaustUnit`. Display of Strength and Evasive Maneuver print no "may", so a
+kind whose name begins `may` is not by itself evidence that every card using it offers a way out.
+(`mayDamage` and `mayGiveTokens` are the exceptions that default the other way, and mandatory cards
+set `optional: false` on them.)
+
+Under the rules a mandatory effect with a legal target must take one, even when the only legal target
+is the player's own unit. The AI needs nothing extra for that: it scores the legal answers, and a
+choice with one answer is simply that answer. `multiPick` keeps its Done, because every card using it
+reads "up to" or "any number", where stopping at zero is legal.
 
 `resumeAfterChoice` decides what happens as the queue drains: the active player finishes theirs
 first, then control passes; round-start choices (`resumeAtInitiative`) begin the action phase with
