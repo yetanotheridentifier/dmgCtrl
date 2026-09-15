@@ -271,15 +271,12 @@ describe('Far Far Away (236) — bounce one of yours, then one of theirs', () =>
     expect(done.players.opponent.hand).toContain('GRD')
   })
 
-  it('does nothing further if the friendly return is declined', () => {
+  it('cannot be declined, since the card prints no "may"', () => {
     const s = state({
       cards: G,
       players: { player: rich({ hand: ['ASH_236'], units: [unit('mine', 'GRD')] }), opponent: player({ units: [unit('theirs', 'GRD')] }) },
     })
-    const played = play(s)
-    const done = resolve(played, { type: 'skipTrigger', choiceId: choice(played).id })
-    expect(U(done, 'theirs')).toBeDefined()
-    expect(done.pendingChoices ?? []).toHaveLength(0)
+    expect(legalMoves(play(s)).some(m => m.type === 'skipTrigger')).toBe(false)
   })
 })
 
@@ -532,6 +529,7 @@ describe('Choose Your Path (257) — choose one of two conditional modes', () =>
     const played = play(forceOnly)
     const c = choice(played)
     expect(c.kind === 'chooseMode' && c.modes).toEqual(['healBase'])
+    expect(legalMoves(played).some(m => m.type === 'skipTrigger')).toBe(false) // "Choose one" is never optional
     const done = resolve(played, { type: 'acceptChoice', choiceId: c.id, optionIndex: 0 })
     expect(done.players.player.base.damage).toBe(4)
   })

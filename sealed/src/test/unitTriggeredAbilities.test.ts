@@ -192,7 +192,7 @@ describe('Flarestar (167): whenPlayed / whenDefeated', () => {
 })
 
 describe('Helgait (195): distribute Advantage = power', () => {
-  it('distributes power(6) Advantage among friendly units, stacking allowed, Done stops early', () => {
+  it('distributes power(6) Advantage among friendly units, stacking allowed, and once started places them all', () => {
     const s = defeat('ASH_195', { playerUnits: [unit('a', 'FILLER', { arena: 'ground' }), unit('b', 'FILLER', { arena: 'ground' })] })
     expect(s.pendingChoices?.[0]).toMatchObject({ kind: 'distributeTokens', token: TOKEN_ADVANTAGE, remaining: 6, total: 6 })
     const targets = legalMoves(s).filter(a => a.type === 'acceptChoice').map(a => a.targetInstanceId)
@@ -202,7 +202,17 @@ describe('Helgait (195): distribute Advantage = power', () => {
     expect(cur.pendingChoices?.[0]).toMatchObject({ remaining: 5 })
     cur = resolve(cur, { type: 'acceptChoice', choiceId: cur.pendingChoices![0].id, targetInstanceId: 'a' }) // stack on the same unit
     expect(advs(U(cur, 'a'))).toBe(2)
-    const done = resolve(cur, { type: 'skipTrigger', choiceId: cur.pendingChoices![0].id })
+    // "You may" covers the whole distribution; once resolving, it resolves as much as possible (CR 8.32.1).
+    expect(legalMoves(cur).some(a => a.type === 'skipTrigger')).toBe(false)
+    for (let i = 0; i < 4; i++) cur = resolve(cur, { type: 'acceptChoice', choiceId: cur.pendingChoices![0].id, targetInstanceId: 'b' })
+    expect(advs(U(cur, 'b'))).toBe(4)
+    expect(cur.pendingChoices ?? []).toHaveLength(0)
+  })
+
+  it('may be declined before any token is placed', () => {
+    const s = defeat('ASH_195', { playerUnits: [unit('a', 'FILLER', { arena: 'ground' })] })
+    const done = resolve(s, { type: 'skipTrigger', choiceId: s.pendingChoices![0].id })
+    expect(advs(U(done, 'a'))).toBe(0)
     expect(done.pendingChoices ?? []).toHaveLength(0)
   })
 

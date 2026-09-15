@@ -504,9 +504,11 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'distributeTokens': {
-        // Helgait: allocate a token to any friendly unit, or stop (Done) — always optional.
+        // Every token is placed (CR 3.7.2.b) unless the card says otherwise. "Up to" (`upTo`, Elzar Mann)
+        // stops at any point. "You may" (`optional`, Helgait) declines only before the first token,
+        // because a "may" once taken is resolved as far as possible (CR 8.32.1).
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
-        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        if (choice.upTo || (choice.optional && choice.remaining === choice.total)) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'dealOwnBaseForDiscount': {
@@ -524,9 +526,9 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'returnFriendlyUnit': {
-        // Purrgil Ultra: return a chosen friendly unit, or decline (optional).
+        // Return a chosen friendly unit. Purrgil Ultra may; Far Far Away must.
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
-        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'peekTopDiscard': {
@@ -594,10 +596,11 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'selectPair': {
-        // Friendly first, then the enemy half.
+        // Friendly first, then the enemy half. Chimaera may choose; Diplomatic Pageantry must. Nothing
+        // happens until both are picked, so an optional pair can still be declined at the second pick.
         const stage = choice.chosenFriendly === undefined ? choice.friendlyTargets : choice.enemyTargets
         for (const id of stage) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
-        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'searchPlayUpgrade': {
@@ -625,10 +628,11 @@ function choiceMoves(state: GameState): Action[] {
       }
       case 'mayPlayUnitFromDiscard':
       case 'chooseMode': {
-        // Pick one of the listed options (a discard-pile unit, or a mode), or decline.
+        // Pick one of the listed options (a discard-pile unit, or a mode). "Choose one" is never optional;
+        // every card that plays a unit from the discard reads "up to" or "you may", so that one declines.
         const options = choice.kind === 'chooseMode' ? choice.modes : choice.candidates
         options.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
-        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        if (choice.kind === 'mayPlayUnitFromDiscard') moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'selectUnitToReady':
