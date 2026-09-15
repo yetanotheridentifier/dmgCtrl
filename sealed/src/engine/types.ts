@@ -566,12 +566,11 @@ type ChoiceVariant =
   // Trask Walker: optionIndex 0 = bottom the card and heal `heal` from your base,
   // 1 = return it to your hand. Mandatory once a card is chosen.
   | { kind: 'chooseDiscardFate'; id: string; controller: PlayerId; cardId: string; heal: number }
-  // Chimaera: choose a friendly AND an enemy non-leader unit, then defeat both. Resolved in
-  // two accepts — the first records `chosenFriendly` and re-offers with the enemy targets. Optional.
-  // Pick one friendly and one enemy unit, then apply `mode` to both. Resolved in two accepts — the
-  // first records `chosenFriendly` and re-offers with the enemy targets. Optional.
+  // Pick one friendly and one enemy unit, then apply `mode` to both. Resolved in two accepts: the
+  // first records `chosenFriendly` and re-offers with the enemy targets. Mandatory unless `optional`:
+  // Chimaera prints "may", Diplomatic Pageantry does not.
   // `thenAdvantage` gives that many Advantage tokens to a friendly unit afterwards (Diplomatic Pageantry).
-  | { kind: 'selectPair'; id: string; controller: PlayerId; friendlyTargets: string[]; enemyTargets: string[]; chosenFriendly?: string; mode: 'defeat' | 'exhaust'; thenAdvantage?: number }
+  | { kind: 'selectPair'; id: string; controller: PlayerId; friendlyTargets: string[]; enemyTargets: string[]; chosenFriendly?: string; mode: 'defeat' | 'exhaust'; optional?: boolean; thenAdvantage?: number }
   // Return one of `candidates` (upgrades in play) to its owner's hand. Mandatory unless `optional`:
   // Jabba the Hutt prints "may", Full of Surprises does not.
   | { kind: 'selectUpgradeToReturn'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional?: boolean; thenShield?: boolean }
@@ -666,18 +665,20 @@ type ChoiceVariant =
   // `remaining` reaches 0. `targets` are the currently-eligible unit instance ids (both sides,
   // recomputed as units are defeated). Always optional — the controller may stop early (a "may").
   | { kind: 'distributeDamage'; id: string; controller: PlayerId; remaining: number; total: number; targets: string[] }
-  // Distribute `total` tokens among `targets`, one per pick until `remaining` reaches 0 (Helgait).
-  // Unlike `multiPick`'s give-advantage, targets stay eligible so tokens can stack. Always optional.
+  // Distribute `total` tokens among `targets`, one per pick until `remaining` reaches 0. Unlike
+  // `multiPick`'s give-advantage, targets stay eligible so tokens can stack. Every token is placed
+  // (Fateful Goodbye) unless `upTo`, which may stop at any point (Elzar Mann), or `optional`, which may
+  // decline before the first token only (Helgait's "you may").
   // `exclude` keeps a unit out of the target list across re-offers ("other friendly units"), and
-  // `then` chains once distribution finishes — by exhausting the pool or stopping (Elzar Mann).
-  | { kind: 'distributeTokens'; id: string; controller: PlayerId; token: string; remaining: number; total: number; targets: string[]; exclude?: string; then?: 'opponentSearchEvent' }
+  // `then` chains once distribution finishes, by exhausting the pool or stopping (Elzar Mann).
+  | { kind: 'distributeTokens'; id: string; controller: PlayerId; token: string; remaining: number; total: number; targets: string[]; optional?: boolean; upTo?: boolean; exclude?: string; then?: 'opponentSearchEvent' }
   // Enoch: deal up to `max` damage to your own base, one at a time (`dealt` so far); stopping
   // (or reaching `max`) grants "next unit costs 1 less per 2 damage dealt". Each accept deals 1 more.
   | { kind: 'dealOwnBaseForDiscount'; id: string; controller: PlayerId; dealt: number; max: number }
-  // Purrgil Ultra: return a chosen friendly non-leader unit (`targets`) to hand, then deal
-  // damage equal to its cost to any unit. Optional (skip = don't return).
-  // `then` picks the follow-up: 'damageEqualToCost' (Purrgil Ultra) or 'returnEnemyUnit' (Far Far Away).
-  | { kind: 'returnFriendlyUnit'; id: string; controller: PlayerId; targets: string[]; then?: 'damageEqualToCost' | 'returnEnemyUnit' }
+  // Return a chosen friendly non-leader unit (`targets`) to hand, then the `then` follow-up:
+  // 'damageEqualToCost' (Purrgil Ultra) or 'returnEnemyUnit' (Far Far Away). Mandatory unless
+  // `optional`: Purrgil Ultra prints "may", Far Far Away does not.
+  | { kind: 'returnFriendlyUnit'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; then?: 'damageEqualToCost' | 'returnEnemyUnit' }
   // Return one of `targets` to its owner's hand. Distinct from returnFriendlyUnit in that the card
   // supplies the eligible units, which may be the opponent's. Mandatory unless `optional`, as are the
   // ready, steal and distribute-source picks below.
@@ -691,8 +692,8 @@ type ChoiceVariant =
   // `candidates` are discard-pile card ids; `acceptChoice`'s `optionIndex` picks one. `remaining`
   // counts how many more may be played after this one, so the offer re-raises until the pool runs out.
   | { kind: 'mayPlayUnitFromDiscard'; id: string; controller: PlayerId; candidates: string[]; remaining: number; maxCost?: number; excludeTrait?: string }
-  // "Choose one:" — a modal effect. `modes` holds only the options the card allows right now, so a
-  // mode whose condition isn't met is never offered.
+  // "Choose one:", a modal effect. `modes` holds only the options the card allows right now, so a
+  // mode whose condition isn't met is never offered. Mandatory: "choose one" is never optional.
   | { kind: 'chooseMode'; id: string; controller: PlayerId; modes: string[] }
   // Treacherous Minefield: pick an arena (optionIndex 0 = ground, 1 = space); every unit there
   // gains `grantCardId`'s abilities for the phase.

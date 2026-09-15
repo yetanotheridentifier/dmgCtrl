@@ -39,16 +39,22 @@ making the answered ability appear not to resolve. There is deliberately no such
 cards that print "may" and cards that do not carries an `optional` flag, and `choiceMoves` offers
 `skipTrigger` only when it is set. The unit and upgrade picks work this way: `selectUnitToDefeat`,
 `selectUnitToReady`, `selectUnitToReturn`, `selectUnitToSteal`, `selectDistributeSource`,
-`selectUpgradeToReturn`, `selectDamageTarget`, `selectHealTarget` and `mayAttackAnyUnit`, and so do
-`mayLastingBuff` and `mayExhaustUnit`. Display of Strength and Evasive Maneuver print no "may", so a
-kind whose name begins `may` is not by itself evidence that every card using it offers a way out.
-(`mayDamage` and `mayGiveTokens` are the exceptions that default the other way, and mandatory cards
-set `optional: false` on them.)
+`returnFriendlyUnit`, `selectPair`, `selectUpgradeToReturn`, `selectDamageTarget`, `selectHealTarget`
+and `mayAttackAnyUnit`, and so do `mayLastingBuff` and `mayExhaustUnit`. Display of Strength and
+Evasive Maneuver print no "may", so a kind whose name begins `may` is not by itself evidence that every
+card using it offers a way out. (`mayDamage` and `mayGiveTokens` are the exceptions that default the
+other way, and mandatory cards set `optional: false` on them.) `selectPair` changes nothing until both
+units are picked, so an optional pair can still be declined at its second pick.
+
+`distributeTokens` places every token (CR 3.7.2.b) unless the card says otherwise. `upTo` ("up to 5",
+Elzar Mann) stops at any point (CR 8.30.1). `optional` ("you may", Helgait) declines only before the
+first token: a player who takes a "may" must resolve as much of it as possible (CR 8.32.1).
 
 Under the rules a mandatory effect with a legal target must take one, even when the only legal target
 is the player's own unit. The AI needs nothing extra for that: it scores the legal answers, and a
-choice with one answer is simply that answer. `multiPick` keeps its Done, because every card using it
-reads "up to" or "any number", where stopping at zero is legal.
+choice with one answer is simply that answer. `multiPick` keeps its Done and `mayPlayUnitFromDiscard`
+its decline, because every card using them reads "up to", "any number" or "you may", where stopping at
+zero is legal. `chooseMode` has no decline: "choose one" is never optional.
 
 `resumeAfterChoice` decides what happens as the queue drains: the active player finishes theirs
 first, then control passes; round-start choices (`resumeAtInitiative`) begin the action phase with

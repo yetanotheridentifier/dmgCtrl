@@ -1023,7 +1023,7 @@ registerCard('ASH_167', {
 registerCard('ASH_195', whenDefeated("You may distribute Advantage tokens equal to this unit's power among friendly units.", (s, ctx) => { // Helgait
   const power = ctx.defeatedUnit ? effectivePower(s, ctx.defeatedUnit) : 0
   const targets = s.players[ctx.owner].units.map(u => u.instanceId)
-  return power > 0 && targets.length ? pushChoice(s, { kind: 'distributeTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_ADVANTAGE, remaining: power, total: power, targets }) : s
+  return power > 0 && targets.length ? pushChoice(s, { kind: 'distributeTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_ADVANTAGE, remaining: power, total: power, targets, optional: true }) : s
 }))
 
 registerCard('ASH_043', { // Corona Four — On Attack debuff + When Defeated defeat a 0-power unit
@@ -1073,7 +1073,7 @@ registerCard('ASH_027', whenDefeated('You may deal up to 6 damage to your base. 
 // Purrgil Ultra (038): the same "return a friendly unit, deal its cost" on both When Played and When Defeated.
 const purrgilReturn = (s: GameState, ctx: { owner: PlayerId; sourceInstanceId?: string }): GameState => {
   const targets = s.players[ctx.owner].units.filter(u => !isLeaderUnit(s, u) && u.instanceId !== ctx.sourceInstanceId).map(u => u.instanceId)
-  return targets.length ? pushChoice(s, { kind: 'returnFriendlyUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, then: 'damageEqualToCost' }) : s
+  return targets.length ? pushChoice(s, { kind: 'returnFriendlyUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true, then: 'damageEqualToCost' }) : s
 }
 registerCard('ASH_038', {
   abilities: [
@@ -1580,7 +1580,7 @@ registerCard('ASH_052', { // Chimaera
       const friendlyTargets = s.players[ctx.owner].units.map(u => u.instanceId)
       const enemyTargets = s.players[opponentOf(ctx.owner)].units.filter(u => !u.isLeader).map(u => u.instanceId)
       return friendlyTargets.length && enemyTargets.length
-        ? pushChoice(s, { kind: 'selectPair', id: ctx.sourceInstanceId!, controller: ctx.owner, friendlyTargets, enemyTargets, mode: 'defeat' })
+        ? pushChoice(s, { kind: 'selectPair', id: ctx.sourceInstanceId!, controller: ctx.owner, friendlyTargets, enemyTargets, mode: 'defeat', optional: true })
         : s
     } },
     { trigger: 'whenEnemyUnitDefeated', description: 'Heal 2 damage from your base.', effect: (s, ctx) => healBase(s, ctx.owner, 2) },
@@ -1733,6 +1733,7 @@ registerCard('ASH_224', { // Elzar Mann
         token: TOKEN_ADVANTAGE,
         remaining: 5,
         total: 5,
+        upTo: true,
         targets,
         exclude: ctx.sourceInstanceId!,
         then: 'opponentSearchEvent',
