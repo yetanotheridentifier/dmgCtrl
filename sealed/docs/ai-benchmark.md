@@ -924,7 +924,7 @@ is a count rather than a list, so a small product released later is left out wit
 it. `coverageDecks.test.ts` asserts every sealed set builds only rule-satisfying decks.
 
 Over the eight sealed sets, `--set all --games 5 --seed 42,43,44` is **189 decks and 2,835 games with
-none dropped, playing 1,855 of the 1,860 decked cards** (143 of 144 leaders deployed) in about 20
+none dropped, playing 1,854 of the 1,860 decked cards** (143 of 144 leaders deployed) in about 15
 seconds.
 
 ### The card pools: `--fixture`

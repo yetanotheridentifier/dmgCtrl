@@ -134,14 +134,18 @@ every set.
 Two phases:
 
 - **Phase 1 (#453 to #460), 1,073 cards blocked by nothing.** 65% of the pool is expressible with the
-  primitives already in `engine/effects.ts`. Cut by trigger point. Events (#453) are the largest and
-  most uniform batch.
+  primitives already in `engine/effects.ts`. Cut by trigger point. Events are the largest batch; the
+  ones that are a single existing choice or primitive play, and the other 257 are #597, grouped by
+  what each group lacks.
 - **Phase 2 (#461 to #476), 487 cards blocked by exactly one mechanic each**, ordered by how many cards
   each unlocks on its own.
 
 **Batches shrink, never grow.** A card that turns out not to fit is lifted into #477 and the batch
 ships without it. The classification is regex triage over ability prose: it catches new nouns but not
-familiar nouns in an unfamiliar shape, and roughly 40 cards are expected to fall out this way.
+familiar nouns in an unfamiliar shape. It also misses some nouns: token units other than the
+Mandalorian, Disclose and indirect damage are not in its blocker list (#599). Those three alone cover
+41 of the 319 events it passed, against roughly 40 cards expected to fall out across all of Phase 1,
+so the Phase 1 sizes are overstated until the triage is corrected and re-run.
 
 Three findings that contradict the assumptions the programme started from:
 

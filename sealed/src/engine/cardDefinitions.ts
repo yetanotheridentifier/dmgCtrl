@@ -1,6 +1,6 @@
 import type { EffectContext } from './abilities'
 import { registerCard } from './abilities'
-import { giveToken, giveTokens, exhaustUnit, drawCards, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust } from './effects'
+import { giveToken, giveTokens, exhaustUnit, drawCards, returnUnitToHand, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust } from './effects'
 import { dealDamageToUnit, defeatUnit } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
@@ -10,7 +10,7 @@ import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, damagedThi
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets } from './legalMoves'
 import { canAfford } from './resources'
 import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, unitHasKeyword, unitKeywords } from './keywords'
-import type { EngineCard, GameState, PlayerId, UnitState, UpgradeRef } from './types'
+import type { EngineCard, GameState, KeywordInstance, LastingEffect, PlayerId, UnitState, UpgradeRef } from './types'
 
 /**
  * Real card definitions. Side-effect module: importing it registers every
@@ -2106,3 +2106,198 @@ registerCard('ASH_090', whenPlayed('Defeat an upgrade on a friendly unit. If you
 
 registerCard('ASH_235', whenPlayed('Choose a number, then search the top 5 cards of your deck for a card, reveal it, and draw it. If its cost is the chosen number, you may give 3 Advantage tokens to a Force unit.', (s, ctx) => // Sense Through the Force
   pushChoice(s, { kind: 'chooseNumber', id: ctx.sourceInstanceId!, controller: ctx.owner, max: 10, then: 'senseThroughTheForce' })))
+
+// ── Events from the other sealed sets that existing choices already express ──────────────────
+// Each is one pending choice, or one primitive applied across a set of units, with the card
+// supplying only which units qualify and how much. A card's cross-set reprints reach it through
+// `data/reprints.ts`.
+
+type EventCtx = { owner: PlayerId; sourceInstanceId?: string }
+type UnitTest = (s: GameState, u: UnitState, owner: PlayerId) => boolean
+type Buff = { power?: number; hp?: number; keywords?: KeywordInstance[] }
+
+const printedCost = (s: GameState, u: UnitState): number => s.cards[u.cardId]?.cost ?? 0
+// A leader unit includes one made so by an upgrade (The Darksaber), hence `isLeaderUnit` over `isLeader`.
+const nonLeader = (s: GameState, u: UnitState): boolean => !isLeaderUnit(s, u)
+const isEnemy = (s: GameState, u: UnitState, owner: PlayerId): boolean => s.players[opponentOf(owner)].units.includes(u)
+const controlsTrait = (s: GameState, owner: PlayerId, trait: string): boolean => s.players[owner].units.some(u => unitHasTrait(s, u, trait))
+const unitsIn = (s: GameState, owner: PlayerId, arena: 'ground' | 'space'): UnitState[] => s.players[owner].units.filter(u => u.arena === arena)
+const eligibleIds = (s: GameState, owner: PlayerId, test: UnitTest): string[] => allUnits(s).filter(u => test(s, u, owner)).map(u => u.instanceId)
+const lastingOnEach = (s: GameState, units: UnitState[], effect: Omit<LastingEffect, 'targetInstanceId'>): GameState =>
+  units.reduce((acc, u) => addLastingEffect(acc, { targetInstanceId: u.instanceId, ...effect }), s)
+
+/** "Deal N damage to a unit" (or a base, where `baseTargets` names them). Mandatory. */
+const damageChoice = (s: GameState, ctx: EventCtx, amount: number, units: UnitState[], baseTargets: PlayerId[] = []): GameState =>
+  units.length || baseTargets.length
+    ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount, unitTargets: units.map(u => u.instanceId), baseTargets })
+    : s
+
+const defeatEvent = (description: string, test: UnitTest) => whenPlayed(description, (s, ctx) => {
+  const targets = eligibleIds(s, ctx.owner, test)
+  return targets.length ? pushChoice(s, { kind: 'selectUnitToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
+})
+
+const readyEvent = (description: string, test: UnitTest) => whenPlayed(description, (s, ctx) => {
+  const targets = eligibleIds(s, ctx.owner, test)
+  return targets.length ? pushChoice(s, { kind: 'selectUnitToReady', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
+})
+
+const returnEvent = (description: string, test: UnitTest) => whenPlayed(description, (s, ctx) => {
+  const targets = eligibleIds(s, ctx.owner, test)
+  return targets.length ? pushChoice(s, { kind: 'selectUnitToReturn', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
+})
+
+/** "Give a unit +X/+Y (and keywords) for this phase", the amounts read as the event resolves. */
+const buffChoice = (s: GameState, ctx: EventCtx, test: UnitTest, buff: Buff): GameState => {
+  const targets = eligibleIds(s, ctx.owner, test)
+  return targets.length ? pushChoice(s, { kind: 'mayLastingBuff', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, ...buff }) : s
+}
+const buffEvent = (description: string, test: UnitTest, buff: (s: GameState, owner: PlayerId) => Buff) =>
+  whenPlayed(description, (s, ctx) => buffChoice(s, ctx, test, buff(s, ctx.owner)))
+const anyUnit: UnitTest = () => true
+
+// Damage
+registerCard('SOR_172', whenPlayed('Deal 4 damage to a unit.', (s, ctx) => damageChoice(s, ctx, 4, allUnits(s)))) // Open Fire
+registerCard('SHD_178', whenPlayed('Deal 2 damage to a unit or base.', (s, ctx) => damageChoice(s, ctx, 2, allUnits(s), BOTH_BASES))) // Daring Raid
+registerCard('JTL_125', whenPlayed('If you control more space units than an opponent, deal 4 damage to a ground unit that opponent controls.', (s, ctx) => { // Air Superiority
+  const enemy = opponentOf(ctx.owner)
+  return unitsIn(s, ctx.owner, 'space').length > unitsIn(s, enemy, 'space').length ? damageChoice(s, ctx, 4, unitsIn(s, enemy, 'ground')) : s
+}))
+
+// Defeat
+registerCard('SOR_078', defeatEvent('Defeat a non-leader unit.', nonLeader)) // Vanquish
+registerCard('LOF_264', defeatEvent('Defeat a non-leader unit.', nonLeader)) // It's Worse
+registerCard('SHD_079', defeatEvent('Defeat a unit.', anyUnit)) // Rival's Fall
+registerCard('LOF_077', defeatEvent('Defeat a non-leader unit that costs 2 or less.', (s, u) => nonLeader(s, u) && printedCost(s, u) <= 2)) // Crushing Blow
+registerCard('SHD_078', defeatEvent('Defeat a non-leader unit with 5 or more power.', (s, u) => nonLeader(s, u) && effectivePower(s, u) >= 5)) // Fell the Dragon
+registerCard('SOR_077', defeatEvent('Defeat a unit with 5 or less remaining HP.', (s, u) => remainingHp(s, u) <= 5)) // Takedown
+registerCard('JTL_078', defeatEvent('Defeat a non-leader Vehicle unit.', (s, u) => nonLeader(s, u) && unitHasTrait(s, u, 'Vehicle'))) // Direct Hit
+registerCard('SEC_247', defeatEvent('Defeat a unit with cost equal to or less than the number of Villainy aspect icons among friendly units.', (s, u, owner) => { // Evil is Everywhere
+  const icons = s.players[owner].units.reduce((n, f) => n + (s.cards[f.cardId]?.aspects ?? []).filter(a => a === 'Villainy').length, 0)
+  return printedCost(s, u) <= icons
+}))
+registerCard('SOR_251', whenPlayed('Defeat an upgrade.', (s, ctx) => { // Confiscate
+  // Any upgrade on either side, tokens included, as "defeat an upgrade" reads for Vane and Reforge.
+  const candidates = upgradeCandidates(s)
+  return candidates.length
+    ? pushChoice(s, { kind: 'selectUpgradeToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: false })
+    : s
+}))
+
+// Heal, shield, exhaust
+registerCard('SOR_074', whenPlayed('Heal 3 damage from a unit or base.', (s, ctx) => // Repair
+  pushChoice(s, { kind: 'selectHealTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 3, unitTargets: allUnits(s).map(u => u.instanceId), baseTargets: BOTH_BASES })))
+registerCard('SOR_073', whenPlayed('Give a Shield token to a unit.', (s, ctx) => { // Moment of Peace
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length
+    ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_SHIELD, count: 1, targets, optional: false })
+    : s
+}))
+registerCard('JTL_262', whenPlayed('Exhaust a unit.', (s, ctx) => { // Evasive Maneuver
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayExhaustUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
+}))
+
+// Ready
+registerCard('SOR_169', readyEvent('Ready a unit with 3 or less power.', (s, u) => effectivePower(s, u) <= 3)) // Keep Fighting
+registerCard('LOF_174', readyEvent('Ready a Force unit with 4 or less power.', (s, u) => unitHasTrait(s, u, 'Force') && effectivePower(s, u) <= 4)) // Ataru Onslaught
+registerCard('JTL_179', readyEvent('Ready a Fighter or Transport unit with 6 or less power.', (s, u) => // Koiogran Turn
+  (unitHasTrait(s, u, 'Fighter') || unitHasTrait(s, u, 'Transport')) && effectivePower(s, u) <= 6))
+registerCard('JTL_209', whenPlayed('If an opponent controls more space units than you, ready each space unit you control.', (s, ctx) => { // It's a Trap
+  const mine = unitsIn(s, ctx.owner, 'space')
+  return unitsIn(s, opponentOf(ctx.owner), 'space').length > mine.length ? mine.reduce((acc, u) => readyUnit(acc, u.instanceId), s) : s
+}))
+
+// Return to hand
+registerCard('SOR_222', returnEvent("Return a non-leader unit to its owner's hand.", nonLeader)) // Waylay
+registerCard('LAW_246', returnEvent("Return a non-leader unit that costs 3 or less to its owner's hand.", (s, u) => nonLeader(s, u) && printedCost(s, u) <= 3)) // The Axe Forgets
+registerCard('SHD_233', whenPlayed("Return each non-leader unit to its owner's hand.", s => // Evacuate
+  allUnits(s).filter(u => nonLeader(s, u)).reduce((acc, u) => returnUnitToHand(acc, u.instanceId), s)))
+
+// One unit, for this phase
+registerCard('SOR_124', buffEvent('Give a unit +2/+2 for this phase.', anyUnit, () => ({ power: 2, hp: 2 }))) // Tactical Advantage
+registerCard('SHD_130', buffEvent('Give a unit +4/+4 for this phase.', anyUnit, () => ({ power: 4, hp: 4 }))) // Moment of Glory
+registerCard('LAW_131', buffEvent('Give a unit -2/-2 for this phase.', anyUnit, () => ({ power: -2, hp: -2 }))) // Incapacitate
+registerCard('JTL_079', buffEvent('Give a unit -5/-5 for this phase.', anyUnit, () => ({ power: -5, hp: -5 }))) // Out the Airlock
+registerCard('SOR_216', buffEvent('Give an enemy unit -4/-0 for this phase.', isEnemy, () => ({ power: -4 }))) // Disarm
+registerCard('LOF_126', buffEvent('Give a unit +3/+3 and Overwhelm for this phase.', anyUnit, () => ({ power: 3, hp: 3, keywords: [{ name: 'Overwhelm' }] }))) // Overpower
+registerCard('JTL_229', buffEvent('Give a unit Sentinel for this phase.', anyUnit, () => ({ keywords: [{ name: 'Sentinel' }] }))) // Diversion
+registerCard('LOF_217', buffEvent('Give an exhausted unit -8/-0 for this phase.', (_s, u) => u.exhausted, () => ({ power: -8 }))) // Force Slow
+registerCard('TWI_052', buffEvent('Choose a unit that entered play this phase. It gets -4/-4 for this phase.', (s, u) => // Hello There
+  [...enteredPlayThisPhase(s, 'player'), ...enteredPlayThisPhase(s, 'opponent')].includes(u.instanceId), () => ({ power: -4, hp: -4 })))
+registerCard('SHD_051', buffEvent('Give an enemy unit -2/-0 for this phase. If you control a Force unit, give the enemy unit -2/-2 for this phase instead.', isEnemy, (s, owner) => // Mystic Reflection
+  (controlsTrait(s, owner, 'Force') ? { power: -2, hp: -2 } : { power: -2 })))
+registerCard('LOF_078', buffEvent('Give a unit -2/-2 for this phase. If you control a Force unit, give it -3/-3 instead.', anyUnit, (s, owner) => // Whirlwind of Power
+  (controlsTrait(s, owner, 'Force') ? { power: -3, hp: -3 } : { power: -2, hp: -2 })))
+registerCard('LAW_167', buffEvent('Give a unit +1/+1 for this phase for each different aspect among units you control.', anyUnit, (s, owner) => { // Common Cause
+  const n = new Set(s.players[owner].units.flatMap(u => s.cards[u.cardId]?.aspects ?? [])).size
+  return { power: n, hp: n }
+}))
+registerCard('TWI_074', buffEvent('Give a unit Sentinel for this phase. If you have the initiative, also give that unit +2/+2 for this phase.', anyUnit, (s, owner) => // Guarding the Way
+  (s.initiative === owner ? { power: 2, hp: 2, keywords: [{ name: 'Sentinel' }] } : { keywords: [{ name: 'Sentinel' }] })))
+registerCard('SOR_076', whenPlayed('Give a unit -2/-2 for this phase. Heal 2 damage from your base.', (s, ctx) => // Make an Opening
+  healBase(buffChoice(s, ctx, anyUnit, { power: -2, hp: -2 }), ctx.owner, 2)))
+registerCard('SEC_075', whenPlayed('Give a unit -2/-2 for this phase. Draw a card.', (s, ctx) => // Knowledge and Defense
+  // The draw goes first, so a "when you draw" reaction settles before the debuff choice is on the board.
+  buffChoice(drawCards(s, ctx.owner, 1), ctx, anyUnit, { power: -2, hp: -2 })))
+
+// Draw and bases
+registerCard('TWI_175', whenPlayed('Draw 3 cards.', (s, ctx) => drawCards(s, ctx.owner, 3))) // Strategic Analysis
+registerCard('SEC_125', whenPlayed('If you control a ground unit and a space unit, draw 2 cards.', (s, ctx) => // Reconnaissance
+  (unitsIn(s, ctx.owner, 'ground').length && unitsIn(s, ctx.owner, 'space').length ? drawCards(s, ctx.owner, 2) : s)))
+registerCard('TWI_100', whenPlayed('If you control 3 or more Official units, draw 3 cards.', (s, ctx) => // Petition the Senate
+  (s.players[ctx.owner].units.filter(u => unitHasTrait(s, u, 'Official')).length >= 3 ? drawCards(s, ctx.owner, 3) : s)))
+registerCard('SHD_159', whenPlayed("Deal damage to each player's base equal to the number of cards in that player's hand.", (s, ctx) => // The Chaos of War
+  [ctx.owner, opponentOf(ctx.owner)].reduce((acc, p) => dealDamageToBase(acc, p, acc.players[p].hand.length), s)))
+
+// Every unit that qualifies
+registerCard('TWI_173', whenPlayed('Deal 2 damage to each ground unit.', s => // Blood Sport
+  allUnits(s).filter(u => u.arena === 'ground').reduce((acc, u) => dealDamageToUnit(acc, u.instanceId, 2), s)))
+registerCard('LOF_141', whenPlayed('Deal 2 damage to each non-Vehicle enemy unit. If you control a Force unit, draw a card.', (s, ctx) => { // Death Field
+  const hit = s.players[opponentOf(ctx.owner)].units.filter(u => !unitHasTrait(s, u, 'Vehicle')).reduce((acc, u) => dealDamageToUnit(acc, u.instanceId, 2), s)
+  return controlsTrait(hit, ctx.owner, 'Force') ? drawCards(hit, ctx.owner, 1) : hit
+}))
+registerCard('TWI_126', whenPlayed('Give each friendly unit +1/+1 for this phase.', (s, ctx) => // Encouraging Leadership
+  lastingOnEach(s, s.players[ctx.owner].units, { power: 1, hp: 1 })))
+registerCard('TWI_075', whenPlayed('Give each enemy unit -1/-1 for this phase.', (s, ctx) => // Disruptive Burst
+  lastingOnEach(s, s.players[opponentOf(ctx.owner)].units, { power: -1, hp: -1 })))
+registerCard('LOF_127', whenPlayed('Each friendly Creature unit gets +2/+2 for this phase.', (s, ctx) => // Rampage
+  lastingOnEach(s, s.players[ctx.owner].units.filter(u => unitHasTrait(s, u, 'Creature')), { power: 2, hp: 2 })))
+registerCard('SOR_154', whenPlayed('Each friendly unit gains Raid 2 this phase.', (s, ctx) => // Rallying Cry
+  lastingOnEach(s, s.players[ctx.owner].units, { keywords: [{ name: 'Raid', value: 2 }] })))
+registerCard('LOF_152', whenPlayed('Each friendly Force unit gains Raid 1 and Saboteur for this phase.', (s, ctx) => // Focus Determines Reality
+  lastingOnEach(s, s.players[ctx.owner].units.filter(u => unitHasTrait(s, u, 'Force')), { keywords: [{ name: 'Raid', value: 1 }, { name: 'Saboteur' }] })))
+registerCard('TWI_250', whenPlayed('Give each friendly Trooper unit Raid 1 for this phase. Give each friendly Jedi unit Sentinel for this phase.', (s, ctx) => { // Sword and Shield Maneuver
+  const units = s.players[ctx.owner].units
+  const raided = lastingOnEach(s, units.filter(u => unitHasTrait(s, u, 'Trooper')), { keywords: [{ name: 'Raid', value: 1 }] })
+  return lastingOnEach(raided, units.filter(u => unitHasTrait(s, u, 'Jedi')), { keywords: [{ name: 'Sentinel' }] })
+}))
+
+// Attack with a unit, with a rider for that attack (see "Attack-granting events" above)
+const GRANT_SURPRISE_STRIKE = 'GRANT_SURPRISE_STRIKE'
+registerCard(GRANT_SURPRISE_STRIKE, { sourceCardId: 'SOR_220', statModifier: (_s, _u, ctx) => (ctx.attacking ? { power: 3 } : {}) })
+registerCard('SOR_220', attackWithRider('Attack with a unit. It gets +3/+0 for this attack.', GRANT_SURPRISE_STRIKE)) // Surprise Strike
+
+const GRANT_BREAKING_IN = 'GRANT_BREAKING_IN'
+registerCard(GRANT_BREAKING_IN, {
+  sourceCardId: 'TWI_224',
+  statModifier: (_s, _u, ctx) => (ctx.attacking ? { power: 2 } : {}),
+  conditionalKeywords: () => [{ name: 'Saboteur' }],
+})
+registerCard('TWI_224', attackWithRider('Attack with a unit. It gets +2/+0 and gains Saboteur for this attack.', GRANT_BREAKING_IN)) // Breaking In
+
+const GRANT_PRECISION_FIRE = 'GRANT_PRECISION_FIRE'
+registerCard(GRANT_PRECISION_FIRE, {
+  sourceCardId: 'SOR_168',
+  statModifier: (s, u, ctx) => (ctx.attacking && unitHasTrait(s, u, 'Trooper') ? { power: 2 } : {}),
+  conditionalKeywords: () => [{ name: 'Saboteur' }],
+})
+registerCard('SOR_168', attackWithRider("Attack with a unit. It gains Saboteur for this attack. If it's a Trooper, it also gets +2/+0 for this attack.", GRANT_PRECISION_FIRE)) // Precision Fire
+
+const GRANT_SHOOT_FIRST = 'GRANT_SHOOT_FIRST'
+registerCard(GRANT_SHOOT_FIRST, {
+  sourceCardId: 'SOR_217',
+  statModifier: (_s, _u, ctx) => (ctx.attacking ? { power: 1 } : {}),
+  dealsDamageFirst: () => true,
+})
+registerCard('SOR_217', attackWithRider('Attack with a unit. It gets +1/+0 for this attack and deals its combat damage before the defender.', GRANT_SHOOT_FIRST)) // Shoot First

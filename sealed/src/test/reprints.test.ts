@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import ashSet from './fixtures/ashSet.json'
-import type { SwuCard } from '../data/cards'
 import { REPRINTS, reprintCanonicalId } from '../data/reprints'
+import { poolFor, SET_CODES } from '../bench/setPools'
 
 /**
  * Cross-set reprints (#551). A card printed in two sets carries two collector numbers, and every
@@ -13,17 +12,17 @@ import { REPRINTS, reprintCanonicalId } from '../data/reprints'
  * This table is not: it is declared, one line per card, because a set is added when it is released
  * rather than discovered at runtime.
  *
- * The name is carried alongside the ids so a mistyped canonical id is caught here, against the
- * checked-in ASH listing, rather than by a card quietly playing as something else.
+ * The name is carried alongside the ids so a mistyped id is caught here, against the checked-in set
+ * listings, rather than by a card quietly playing as something else.
  */
 
-const ASH_BY_ID = new Map((ashSet as unknown as SwuCard[]).map(c => [`${c.Set}_${c.Number}`, c]))
+const BY_ID = new Map(poolFor(SET_CODES).map(c => [`${c.Set}_${c.Number}`, c]))
 const setOf = (id: string) => id.split('_')[0]
 
 describe('the cross-set reprint table', () => {
-  it('gives every canonical id as a real ASH card of that name', () => {
-    for (const { name, canonical } of REPRINTS) {
-      expect(ASH_BY_ID.get(canonical)?.Name, canonical).toBe(name)
+  it('gives every canonical id, and every printing, as a real card of that name in its set', () => {
+    for (const { name, canonical, printings } of REPRINTS) {
+      for (const id of [canonical, ...printings]) expect(BY_ID.get(id)?.Name, id).toBe(name)
     }
   })
 
