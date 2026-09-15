@@ -37,6 +37,11 @@ npm run bench --prefix sealed -- --sweep --games 5 --seed 42,43,44
 every card in the pool in a few seconds; one long single-seed run does not, because the last card or
 two is seed-luck rather than run length.
 
+`--set LAW,SEC` (or `--set all`) sweeps other sets, each building its own decks. Sets under 200 cards
+are not designed for sealed and are left out. A set's bundled card data is refreshed from the card API
+with `--fixture SET` (or `--fixture all`); see the sweep section of `ai-benchmark.md` before
+refreshing ASH, since it changes the decks every bench plays.
+
 And a **generalisation diagnostic** (`--generalise`) that plays one AI against another across the
 coverage decks and reports the per-deck win rate (weakest first), to see where an AI is weak and
 whether a new version beats the current one:

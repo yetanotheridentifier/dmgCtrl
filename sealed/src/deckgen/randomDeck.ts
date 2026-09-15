@@ -2,7 +2,7 @@ import type { SwuCard } from '../data/cards'
 import type { SavedDeck } from '../data/deckStore'
 import { seededUnit } from '../engine/rng'
 import { buildDeckForLeader } from './generateDeck'
-import { deckReport } from './rules'
+import { DECK_SIZE, deckReport } from './rules'
 import type { DeckReport } from './rules'
 
 /**
@@ -76,7 +76,9 @@ function leadersIn(pool: SwuCard[]): SwuCard[] {
  *
  * Seeded rather than `Math.random` so a deck that looks wrong can be reproduced from its seed, which
  * is the difference between a bug report and an anecdote. Returns `null` when the pool holds no
- * leader, which is what an empty or partial cache looks like.
+ * leader, or cannot fill a whole deck, which is what an empty or partial cache looks like. Other shape
+ * violations still come back in the report, but a short deck is not playable at all: the engine deals
+ * a short opening hand from it and the setup AI has nothing to resource.
  *
  * **Only a deliberate choice pairs a leader with a base sharing its aspect.** A random base already
  * avoids the leader's aspects, and a random leader here avoids a chosen base aspect, so the pairing the
@@ -92,6 +94,7 @@ export function generateRandomDeck(pool: SwuCard[], seed: number, choice: Genera
   const from = avoiding.length > 0 ? avoiding : leaders
   const leader = named ?? from[Math.floor(seededUnit(seed || 1) * from.length) % from.length]
   const { deck } = buildDeckForLeader(leader, pool, seed, undefined, baseAspect)
+  if (deck.cards.reduce((n, c) => n + c.count, 0) < DECK_SIZE) return null
   const byId = new Map(pool.map(c => [`${c.Set}_${c.Number}`, c]))
 
   const entries: GeneratedDeckEntry[] = deck.cards.map(c => {

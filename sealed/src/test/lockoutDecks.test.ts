@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import ashSet from './fixtures/ashSet.json'
 import type { SwuCard } from '../data/cards'
-import { buildLockoutDecks, WALL_PACKAGE } from '../bench/lockoutDecks'
+import { buildLockoutDecks, WALL_DECK } from '../bench/lockoutDecks'
 import { buildCoverageDecks } from '../bench/coverageDecks'
 import { deckReport } from '../deckgen/rules'
 
@@ -31,8 +31,9 @@ import { deckReport } from '../deckgen/rules'
 
 const POOL = ashSet as unknown as SwuCard[]
 const byId = new Map(POOL.map(c => [`${c.Set}_${c.Number}`, c]))
-const copies = (deck: { cards: Array<{ id: string; count: number }> }, id: string): number =>
-  deck.cards.find(e => e.id === id)?.count ?? 0
+
+/** The wall's cards with multiplicity, read from card data rather than from the list's comments. */
+const wallCards = (): SwuCard[] => WALL_DECK.cards.flatMap(e => Array<SwuCard>(e.count).fill(byId.get(e.id)!))
 
 describe('the wall deck set', () => {
 
@@ -48,14 +49,21 @@ describe('the wall deck set', () => {
   })
 
   /**
+   * **One fixed wall, many decks facing it.** A generated wall moved whenever the card data or the
+   * generator did: correcting one printed cost took a Sentinel out of three walls and cut the lockout
+   * rate in half. A list someone built does not drift, so a rate read over it stays comparable.
+   */
+  it('faces every coverage deck with the same fixed wall', () => {
+    for (const { wall } of pairings) expect(wall).toEqual(WALL_DECK)
+  })
+
+  /**
    * The whole purpose of the set. A self-shielding Sentinel arrives with the Shield already on it,
    * so the wall needs no combination and no intent: the bot plays a good body and the lane shuts.
    */
-  it('gives every wall deck a self-shielding Sentinel it will actually draw', () => {
-    for (const { wall } of pairings) {
-      const walls = WALL_PACKAGE.sentinels.reduce((n, id) => n + copies(wall, id), 0)
-      expect(walls, `${wall.name} must hold a self-shielding Sentinel`).toBeGreaterThanOrEqual(3)
-    }
+  it('holds self-shielding Sentinels it will actually draw', () => {
+    const selfShielding = wallCards().filter(c => (c.Keywords ?? []).includes('Sentinel') && (c.Keywords ?? []).includes('Shielded'))
+    expect(selfShielding.length).toBeGreaterThanOrEqual(3)
   })
 
   /**
@@ -63,46 +71,34 @@ describe('the wall deck set', () => {
    * absorbs one instance of damage and is then gone, so without support the wall falls the moment the
    * bot strips it and the bench reads a one-round lockout. The filed game ran four rounds.
    */
-  it('gives every wall deck a way to put the Shield back', () => {
-    for (const { wall } of pairings) {
-      const support = WALL_PACKAGE.reshield.reduce((n, id) => n + copies(wall, id), 0)
-      expect(support, `${wall.name} must be able to re-shield`).toBeGreaterThanOrEqual(2)
-    }
+  it('holds ways to put the Shield back', () => {
+    const reshield = wallCards().filter(c => /give a Shield token/i.test(c.FrontText ?? ''))
+    expect(reshield.length).toBeGreaterThanOrEqual(2)
+  })
+
+  /** Enough to play on the first turn, so a Sentinel is down before the other side can attack. */
+  it('has 8 or 9 units costing 2 or less', () => {
+    const cheap = deckReport(WALL_DECK, byId).counts.cheapUnits
+    expect(cheap).toBeGreaterThanOrEqual(8)
+    expect(cheap).toBeLessThanOrEqual(9)
   })
 
   /**
-   * **A deck someone would play.** The package goes in only where it is penalty-free and the
-   * generator's own curve, type and rarity rules still apply, so a weight tuned against this set is
-   * tuned against legal decks rather than against a pile built to prove a point.
+   * **A deck someone would play.** Held to the same legality, curve, type and rarity rules as every
+   * generated deck, so a weight tuned against this set is tuned against a legal deck rather than
+   * against a pile built to prove a point.
    */
-  it('builds legal, penalty-free decks', () => {
-    for (const { wall } of pairings) {
-      const report = deckReport(wall, byId)
-      expect(report.violations, `${wall.name}: ${report.violations.join('; ')}`).toEqual([])
-      expect(report.ok).toBe(true)
-    }
+  it('is a legal, penalty-free deck', () => {
+    const report = deckReport(WALL_DECK, byId)
+    expect(report.violations, report.violations.join('; ')).toEqual([])
+    expect(report.ok).toBe(true)
   })
 
-  /**
-   * **How varied the wall side is, asserted rather than assumed.**
-   *
-   * The archetype needs Vigilance for the re-shields and Villainy or Command for the Sentinels, which
-   * sounds narrow and is not: **22 distinct leader and base combinations** host it, out of the 18
-   * leaders against 4 base aspects the pool offers. So the wall side is an archetype rather than a
-   * single deck, and a result over this set is not a claim about one matchup.
-   *
-   * Asserted as a floor rather than as 22 exactly, because the number is a property of the card pool
-   * and a set rotation should not fail this. The floor is what matters: a set that collapsed to one
-   * or two walls would be measuring a matchup rather than a strategy.
-   */
-  it('draws its walls from many hosting combinations', () => {
-    const distinct = new Set(pairings.map(p => p.wall.name))
-    expect(distinct.size, 'a single matchup repeated would measure the matchup').toBeGreaterThanOrEqual(8)
-  })
-
-  /** Reproducible, or no result measured over it can be re-read later. */
+  /** Reproducible, or no result measured over it can be re-read later. The seed moves the facing side only. */
   it('is deterministic from its seed', () => {
     expect(buildLockoutDecks(POOL, 1)).toEqual(pairings)
-    expect(buildLockoutDecks(POOL, 2)).not.toEqual(pairings)
+    const other = buildLockoutDecks(POOL, 2)
+    expect(other.map(p => p.facing)).not.toEqual(pairings.map(p => p.facing))
+    for (const { wall } of other) expect(wall).toEqual(WALL_DECK)
   })
 })

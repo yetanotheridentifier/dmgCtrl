@@ -41,6 +41,7 @@ import { saveMatrix, deckStrength, leaderStrength, baseStrength, firstPlayerAdva
 import type { FirstPlayerSplit } from './stats'
 import { resolveAi } from '../ai/registry'
 import { fetchSets, formatTriage, triage } from './triage'
+import { fixtureFile, poolFor, resolveSealedSets, SET_CODES, toFixture } from './setPools'
 
 /**
  * The bench command line: `npm run bench --prefix sealed -- [--games N] [--seed N] [aiA] [aiB]`.
@@ -105,9 +106,13 @@ interface Args {
   shardIndex?: number
   shardCount?: number
   triage: boolean
+  /** Write the named sets' bundled fixtures from the card API. */
+  fixture: boolean
+  /** The sets the sweep's pool is drawn from (`--set`), resolved to canonical order. ASH when absent. */
+  poolSets: string[]
   /** Deck population for the A/B: `mirror` (default) or `coverage`. See `DeckSource`. */
   decks?: DeckSource
-  /** Set codes for `--triage`, taken from the positional arguments. */
+  /** Set codes for `--triage` and `--fixture`, taken from the positional arguments. */
   sets: string[]
   aiExplicit: boolean
   /**
@@ -148,6 +153,8 @@ export function parseArgs(argv: string[]): Args {
   let shardIndex: number | undefined
   let shardCount: number | undefined
   let triage = false
+  let fixture = false
+  let poolSets = ['ASH']
   let decks: DeckSource | undefined
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
@@ -183,6 +190,13 @@ export function parseArgs(argv: string[]): Args {
       decks = v
     }
     else if (arg === '--triage') triage = true
+    else if (arg === '--fixture') fixture = true
+    // `--set LAW,SEC` names the sweep's pool. A flag, because the sweep's positionals are AI names.
+    else if (arg === '--set') {
+      const v = argv[++i]
+      if (v === undefined || v.startsWith('--')) throw new Error('--set needs a set code, a comma-separated list of them, or all')
+      poolSets = resolveSealedSets(v.split(','))
+    }
     else if (arg.startsWith('--')) throw new Error(`Unknown flag: ${arg}`)
     else positional.push(arg)
   }
@@ -192,8 +206,9 @@ export function parseArgs(argv: string[]): Args {
   assertPositiveInt(solverNodes, '--solver-nodes')
   assertPositiveInt(deckCount, '--deck-count')
   if (triage && positional.length === 0) throw new Error('--triage needs at least one set code, e.g. --triage LAW SEC')
+  if (fixture && positional.length === 0) throw new Error('--fixture needs at least one set code, e.g. --fixture LAW SEC, or --fixture all')
   if (shards !== undefined && (!Number.isFinite(shards) || shards < 1)) throw new Error('--shard must be a positive integer')
-  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, solverNodes, deckCount, matchups, shards, status, control, history, out, weights, shardIndex, shardCount, triage, decks, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
+  return { games, gamesSet, seed, seeds, sweep, generalise, matrix, decisions, terms, cost, budget, lethal, depth, solverNodes, deckCount, matchups, shards, status, control, history, out, weights, shardIndex, shardCount, triage, fixture, poolSets, decks, sets: positional.map(s => s.toUpperCase()), aiExplicit: positional.length > 0, ais: positional, aiA: positional[0] ?? 'random', aiB: positional[1] ?? 'random' }
 }
 
 /**
@@ -287,6 +302,7 @@ function formatSweep(report: SweepReport, wallMs: number, aiName: string): strin
     `dmgCtrl coverage sweep  (engine ${report.commitId})`,
     `${report.decks} decks × ${report.gamesPerDeck} games × ${report.seeds.length} seed(s)   ${aiName} mirror`,
     '',
+    row('sets', report.sets.join(', ')),
     row('seeds', report.seeds.join(', ')),
     row('total games', `${report.totalGames}`),
     row('completed / dropped', `${report.completed} / ${report.dropped}`),
@@ -322,7 +338,7 @@ function runSweepMode(args: Args): void {
   const start = Date.now()
   let report: SweepReport
   try {
-    report = runSweep({ gamesPerDeck, seeds: args.seeds, aiName: args.aiA })
+    report = runSweep({ gamesPerDeck, seeds: args.seeds, aiName: args.aiA, pool: poolFor(args.poolSets) })
   } catch (err) {
     console.error(`bench: ${(err as Error).message}`)
     process.exit(2)
@@ -1531,6 +1547,29 @@ async function runTriageMode(args: Args): Promise<void> {
   console.log('')
 }
 
+/**
+ * `--fixture LAW SEC` (or `all`): fetch sets from the card API and write each as the bench's bundled
+ * fixture. Committed rather than fetched per run, so a sweep is reproducible without the network.
+ * A new set also needs its import in `setPools.ts` and its counts in `data/implementedCards.ts`, and
+ * `benchSetPools.test.ts` fails until both are there.
+ */
+async function runFixtureMode(args: Args): Promise<void> {
+  const codes = args.sets.includes('ALL') ? [...SET_CODES] : args.sets
+  for (const code of codes) {
+    let cards
+    try {
+      cards = toFixture(await fetchSets([code]))
+    } catch (err) {
+      console.error(`bench: ${(err as Error).message}`)
+      process.exit(2)
+      return
+    }
+    const file = fixtureFile(code)
+    writeFileSync(file, JSON.stringify(cards))
+    console.log(row(code, `${cards.length} cards -> ${file}`))
+  }
+}
+
 function main(): void {
   let args: Args
   try {
@@ -1539,12 +1578,15 @@ function main(): void {
     console.error(`bench: ${(err as Error).message}`)
     console.error('usage: npm run bench --prefix sealed -- [--games N] [--seed N]')
     console.error('       [--sweep|--generalise|--matrix|--decisions|--terms|--cost|--budget|--lethal|--matchups] [ai ...]')
+    console.error('       npm run bench --prefix sealed -- --sweep [--set SET[,SET ...]|all] [--games N] [--seed N[,N ...]] [ai]')
     console.error('       npm run bench --prefix sealed -- --triage SET [SET ...]')
+    console.error('       npm run bench --prefix sealed -- --fixture SET [SET ...]|all')
     process.exit(2)
     return
   }
 
   if (args.triage) { void runTriageMode(args); return }
+  if (args.fixture) { void runFixtureMode(args); return }
   if (args.sweep) { runSweepMode(args); return }
   if (args.generalise) { runGeneraliseMode(args); return }
   // `--matrix --shard N` parallelises; `--matrix` alone still runs serially, and a child carries

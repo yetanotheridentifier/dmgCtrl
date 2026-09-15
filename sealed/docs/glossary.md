@@ -147,7 +147,7 @@ defined.
 | --- | --- |
 | **Decision** | One position where the AI chose an action. The unit most rates are measured against. |
 | **Corpus** | The set of decisions or games a measurement is taken over. |
-| **Coverage decks** | The standard generated deck set, one algorithmic build per leader and base. **Mirror** plays a deck against itself; the **lockout** set is built to contain a position self-play otherwise never reaches. |
+| **Coverage decks** | The standard generated deck set, one algorithmic build per leader and base. **Mirror** plays a deck against itself; the **lockout** set faces every coverage deck with one hand-built wall deck, to contain a position self-play otherwise never reaches. |
 | **Arm** / **control** | The changed bot and the unchanged one it is measured against, on the same seeds. |
 | **Paired difference** | Arm minus control, seed by seed. The result. Identical bots do not measure 50%, so a raw rate read against a fixed baseline can invert. |
 | **Shard** | One parallel slice of a run, pooled with the others. |

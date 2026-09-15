@@ -1,8 +1,6 @@
 import type { SwuCard } from '../data/cards'
 import type { ParsedDeck } from '../utils/parseProtectThePod'
-import { generateDeck } from '../deckgen/generateDeck'
-import { deckReport } from '../deckgen/rules'
-import { buildCoverageDecks, distinctBases } from './coverageDecks'
+import { buildCoverageDecks } from './coverageDecks'
 
 /**
  * A deck population in which the shielded-Sentinel lockout actually happens.
@@ -26,58 +24,51 @@ import { buildCoverageDecks, distinctBases } from './coverageDecks'
  * and a win-rate difference is down to the AI. This one deliberately does not. **One side is an
  * ordinary coverage deck**, because the question is whether a bot can find its way THROUGH a wall,
  * and a mirror where both sides hold one cannot show that. It also keeps the whole-pool coverage
- * intact on the facing side: the wall decks are a narrow archetype, and a set built only from them
- * would measure a corner of the pool.
+ * intact on the facing side, and gives the wall many different decks to face.
  *
  * **The cost of that choice is that an absolute win rate over this set is meaningless.** The pairing
  * has a favourite before either bot moves. Only a paired difference against a matched control on the
  * same seeds can be read here, and the ordinary coverage set remains the non-inferiority gate.
  *
- * ## The package
+ * ## The wall
  *
- * Self-shielding Sentinels, so the wall needs no combination and no intent: `Shielded` grants the
- * token on arrival, so the bot plays a good body and the lane shuts by itself. Plus re-shield
- * support, because **duration is the reported defect**. A Shield absorbs one instance of damage and
- * is then spent, so without a way to put it back the wall falls the moment the bot finally strips it
- * and the bench reads a one-round lockout it can dismiss as noise.
+ * **One fixed list, built the way a player would build it**, rather than generated. A generated wall
+ * takes its filler from the generator, so it moves whenever the card data or the generator does:
+ * correcting one printed cost took a Sentinel out of three generated walls and halved the lockout rate
+ * they produced. A list does not drift, so a rate read over it stays comparable between runs.
  *
- * Vigilance is where this archetype genuinely lives: it holds both re-shield cards and a share of the
- * Sentinels, which is why every wall combo below covers it. That is a deck someone would build, not a
- * pile assembled to prove a point, and the generator's own curve, type and rarity rules still apply.
+ * Moff Gideon on a Vigilance base: Imperial Sentinels from the first turn, self-shielding Sentinels
+ * in the middle of the curve, and Shields put back by Durasteel Plating, Perserverance and Trexler
+ * Armored Marauder, because **duration is the reported defect**. A Shield absorbs one instance of
+ * damage and is then spent, so without a way to put it back the wall falls the moment the bot finally
+ * strips it and the bench reads a one-round lockout it can dismiss as noise.
+ *
+ * It is held to the generator's own legality, curve, type and rarity rules (`deckReport`), so it is a
+ * deck someone would play rather than a pile assembled to prove a point.
  */
-
-const id = (c: SwuCard): string => `${c.Set}_${c.Number}`
-
-/** The wall, and what keeps it standing. Ids rather than names, since names are not unique. */
-export const WALL_PACKAGE = {
-  /** Ground Sentinels carrying `Shielded`, so each one arrives as a shut lane. */
-  sentinels: ['ASH_048', 'ASH_029', 'ASH_243'],
-  /** Puts the Shield back after a strip, which is what turns one locked round into four. */
-  reshield: ['ASH_086', 'ASH_089'],
-  /**
-   * Copies to force in. Three of the commons, because one copy in thirty is not a plan: the card has
-   * to be **drawn** for the position to occur at all. `generateDeck` clamps Uniques to one, so Darth
-   * Vader asking for more would be a silent illegality rather than a bigger wall.
-   */
-  copies: new Map<string, number>([
-    ['ASH_048', 3], // Imperial Armored Commando: 4 cost, 4/3 ground, Sentinel + Shielded
-    ['ASH_029', 3], // Scorpenek Annihilator Droid: 6 cost, 5/5 ground, Overwhelm + Sentinel + Shielded
-    ['ASH_243', 1], // Darth Vader: 5 cost, 4/6 ground, Sentinel + Shielded, Unique
-    ['ASH_086', 3], // Durasteel Plating: upgrade, gives a Shield to the attached unit
-    ['ASH_089', 2], // Perserverance: event, heal 3 from a unit and give it a Shield
-  ]),
+export const WALL_DECK: ParsedDeck = {
+  name: 'Wall: Moff Gideon (Vigilance)',
+  leader: 'ASH_008', // Moff Gideon, Indomitable Warlord: Command, Villainy
+  base: 'ASH_020', // Nevarro City, Restored: Vigilance
+  cards: [
+    { id: 'ASH_117', count: 2 }, // Outland Protector: 1 cost, Imperial space Sentinel
+    { id: 'ASH_069', count: 1 }, // Noti Nomad: 1 cost, Shielded
+    { id: 'ASH_239', count: 3 }, // Imperial Loyalist: 2 cost, Imperial Sentinel
+    { id: 'ASH_073', count: 2 }, // Palace Chef Droid: 2 cost, Sentinel, +2/+0 while defending
+    { id: 'ASH_093', count: 1 }, // Captain Pellaeon: 2 cost, Imperial
+    { id: 'ASH_097', count: 3 }, // Moff Gideon, Remnant Commander: 3 cost, Sentinel, recurs an Imperial
+    { id: 'ASH_096', count: 2 }, // Forest Patroller: 3 cost, Overwhelm, Restore 1
+    { id: 'ASH_048', count: 3 }, // Imperial Armored Commando: 4 cost, Sentinel, Shielded
+    { id: 'ASH_243', count: 1 }, // Darth Vader, Meet Your Destiny: 5 cost, Shielded, Sentinel while ready
+    { id: 'ASH_099', count: 1 }, // Gozanti Assault Carrier: 5 cost, space Sentinel on attack
+    { id: 'ASH_029', count: 2 }, // Scorpenek Annihilator Droid: 6 cost, Sentinel, Shielded, Overwhelm
+    { id: 'ASH_082', count: 2 }, // Trexler Armored Marauder: 6 cost, gives a Shield to a unit costing 3 or less
+    { id: 'ASH_101', count: 1 }, // The Great Mothers: 7 cost
+    { id: 'ASH_133', count: 1 }, // Trask Walker: 8 cost, recurs a unit from the discard pile
+    { id: 'ASH_086', count: 3 }, // Durasteel Plating: upgrade, gives a Shield
+    { id: 'ASH_089', count: 2 }, // Perserverance: event, heal 3 and give a Shield
+  ],
 }
-
-/**
- * What a deck must hold to be a wall at all.
- *
- * Three Sentinel copies is roughly a four-in-five chance of drawing one across a game, and two
- * re-shields is enough for the lockout to survive being answered once. A combo that cannot reach both
- * is not a weaker wall, it is a deck that will not produce the position, and measuring over it would
- * quietly dilute every rate this set exists to read.
- */
-const MIN_SENTINELS = 3
-const MIN_RESHIELD = 2
 
 /** One matchup: an ordinary deck trying to find a way through a purpose-built wall. */
 export interface DeckPairing {
@@ -87,52 +78,10 @@ export interface DeckPairing {
   wall: ParsedDeck
 }
 
-const copiesOf = (deck: ParsedDeck, cardId: string): number =>
-  deck.cards.find(e => e.id === cardId)?.count ?? 0
-
-const held = (deck: ParsedDeck, ids: string[]): number =>
-  ids.reduce((n, cardId) => n + copiesOf(deck, cardId), 0)
-
 /**
- * Every legal wall deck the pool can build, in a stable order.
- *
- * Searched over leader and base rather than named outright, so the set follows the card pool instead
- * of a hardcoded pair that a set rotation would silently invalidate. A combo that cannot hold the
- * package penalty-free simply fails the minimums and is dropped, which is also what makes the empty
- * case detectable rather than a set of zero walls nobody notices.
- */
-function buildWallDecks(pool: SwuCard[], seed: number): ParsedDeck[] {
-  const byId = new Map(pool.map(c => [id(c), c]))
-  const bases = distinctBases(pool)
-  const walls: ParsedDeck[] = []
-
-  for (const leader of pool.filter(c => c.Type === 'Leader')) {
-    for (const base of bases) {
-      const { deck, report } = generateDeck({ leader, base, pool, seed, require: WALL_PACKAGE.copies })
-      if (!report.ok) continue
-      if (held(deck, WALL_PACKAGE.sentinels) < MIN_SENTINELS) continue
-      if (held(deck, WALL_PACKAGE.reshield) < MIN_RESHIELD) continue
-      // Re-checked rather than trusted: the forced cards bypass the curve and type caps on the way
-      // in, so "the generator said ok" and "this deck is legal" are two different claims here.
-      if (deckReport(deck, byId).violations.length > 0) continue
-      walls.push(deck)
-    }
-  }
-
-  if (walls.length === 0) throw new Error('lockout decks: no leader and base can hold the wall package')
-  return walls
-}
-
-/**
- * The wall deck set: every coverage deck, paired with a wall.
- *
- * Walls are cycled across the coverage decks rather than matched one-to-one, because the archetype is
- * narrow (it needs Vigilance for the re-shields, and Villainy or Command for the Sentinels) while the
- * coverage set is the whole pool. Deterministic from `seed`, or nothing measured over it can be
- * re-read later.
+ * The wall deck set: every coverage deck, each paired with the wall. Deterministic from `seed`, which
+ * chooses the coverage decks; the wall is the same in every pairing.
  */
 export function buildLockoutDecks(pool: SwuCard[], seed = 1): DeckPairing[] {
-  const facing = buildCoverageDecks(pool, seed).decks
-  const walls = buildWallDecks(pool, seed)
-  return facing.map((deck, i) => ({ facing: deck, wall: walls[i % walls.length] }))
+  return buildCoverageDecks(pool, seed).decks.map(facing => ({ facing, wall: WALL_DECK }))
 }

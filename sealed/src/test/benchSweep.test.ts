@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { runSweep } from '../bench/sweep'
 import { compareCardIds } from '../bench/playCoverage'
+import { poolFor } from '../bench/setPools'
 
 /**
  * The coverage sweep (#408) plays across the whole coverage deck set so every card is exercised, and
@@ -98,6 +99,38 @@ describe('runSweep across several seeds', () => {
     const again = runSweep({ gamesPerDeck: 1, seeds: [5, 6, 7] })
     expect(again.uncovered).toEqual(threeSeeds.uncovered)
     expect(again.cardsPlayed).toBe(threeSeeds.cardsPlayed)
+  }, 30_000)
+})
+
+/**
+ * The pool is a parameter. Several sets are swept by building each set's coverage decks from that set
+ * alone (see `buildCoverageDecks`), so adding a set adds decks and cards without disturbing the others.
+ */
+describe('runSweep over a chosen pool', () => {
+  const ash = poolFor(['ASH'])
+  const defaulted = runSweep({ gamesPerDeck: 1, seeds: [5] })
+
+  it('sweeps ASH when no pool is given, and says so', () => {
+    expect(defaulted.sets).toEqual(['ASH'])
+  })
+
+  it('plays exactly the default sweep when ASH is named', () => {
+    const named = runSweep({ gamesPerDeck: 1, seeds: [5], pool: ash })
+    expect(named.decks).toBe(defaulted.decks)
+    expect(named.cardsPlayed).toBe(defaulted.cardsPlayed)
+    expect(named.uncovered).toEqual(defaulted.uncovered)
+    expect(named.failures).toEqual(defaulted.failures)
+  })
+
+  /** Given headroom for the same reason as the determinism test above: it is two sweeps' worth of games. */
+  it('adds a second set as its own decks and cards', () => {
+    // A copy of ASH under another code, so the second set's deck count is known exactly.
+    const twin = ash.map(c => ({ ...c, Set: 'TWN' }))
+    const both = runSweep({ gamesPerDeck: 1, seeds: [5], pool: [...ash, ...twin] })
+    expect(both.sets).toEqual(['ASH', 'TWN'])
+    expect(both.decks).toBe(defaulted.decks * 2)
+    expect(both.cardsDecked).toBe(defaulted.cardsDecked * 2)
+    expect(both.completed + both.dropped).toBe(both.totalGames)
   }, 30_000)
 })
 

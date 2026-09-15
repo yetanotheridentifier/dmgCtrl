@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { parseArgs, solverNodesFor } from '../bench/main'
 import { DEFAULT_LETHAL_LIMITS } from '../ai/lethal'
+import { SEALED_SET_CODES } from '../bench/setPools'
 
 /**
  * The lethal solver has two limits and only one of them could be addressed. `--depth` set the
@@ -115,6 +116,55 @@ describe('bench argument parsing', () => {
       const args = parseArgs(['--lethal', '--decks', 'coverage', '--deck-count', '3'])
       expect(args.decks).toBe('coverage')
       expect(args.deckCount).toBe(3)
+    })
+  })
+
+  /**
+   * Which sets the sweep draws its pool from. A flag rather than positionals, because the sweep's
+   * positionals are already AI names. Resolved at parse time, so a mistyped set fails before any
+   * decks are built rather than part way through a run.
+   */
+  describe('the sweep pool', () => {
+    it('defaults to ASH, the pool every recorded sweep ran on', () => {
+      expect(parseArgs(['--sweep']).poolSets).toEqual(['ASH'])
+    })
+
+    it('parses a comma-separated list into canonical order', () => {
+      expect(parseArgs(['--sweep', '--set', 'sec,law']).poolSets).toEqual(['LAW', 'SEC'])
+    })
+
+    it('takes all as every set built for sealed', () => {
+      expect(parseArgs(['--sweep', '--set', 'all']).poolSets).toEqual(SEALED_SET_CODES)
+    })
+
+    it('rejects a set too small for sealed at parse time', () => {
+      expect(() => parseArgs(['--sweep', '--set', 'IBH'])).toThrow('IBH has 51 cards')
+    })
+
+    it('rejects an unknown set at parse time', () => {
+      expect(() => parseArgs(['--sweep', '--set', 'LAW,XYZ'])).toThrow('Unknown set: XYZ')
+    })
+
+    it('rejects a missing list', () => {
+      expect(() => parseArgs(['--sweep', '--set'])).toThrow('--set needs')
+    })
+
+    it('leaves the AI positional alone', () => {
+      const args = parseArgs(['--sweep', '--set', 'LAW', 'greedy'])
+      expect(args.aiA).toBe('greedy')
+      expect(args.poolSets).toEqual(['LAW'])
+    })
+  })
+
+  describe('writing fixtures', () => {
+    it('takes set codes positionally, as --triage does', () => {
+      const args = parseArgs(['--fixture', 'law', 'sec'])
+      expect(args.fixture).toBe(true)
+      expect(args.sets).toEqual(['LAW', 'SEC'])
+    })
+
+    it('needs at least one set code', () => {
+      expect(() => parseArgs(['--fixture'])).toThrow('--fixture needs at least one set code')
     })
   })
 

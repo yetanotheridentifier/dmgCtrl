@@ -7,6 +7,7 @@ import { generateRandomDeck, generationOptions, GENERATED_DECK_ID } from '../dec
 import { buildCardDb } from '../engine/cardDb'
 import { StaticCardRef } from './cardRef'
 import type { GeneratedDeck, GeneratedDeckEntry, GenerationChoice } from '../deckgen/randomDeck'
+import { DECK_SIZE } from '../deckgen/rules'
 import type { EngineCard } from '../engine/types'
 import { cardRefFromId } from '../utils/parseProtectThePod'
 import type { ParseDeckError, ParsedDeck } from '../utils/parseProtectThePod'
@@ -232,6 +233,9 @@ export default function DeckSelectScreen({ onPlay }: Props) {
   // fresh deck at play time without `onPlay` having to become async.
   const [pool, setPool] = useState<{ set: string; cards: SwuCard[] } | null>(null)
   const [generated, setGenerated] = useState<GeneratedDeck | null>(null)
+  // Set when Generate built nothing because the cached set cannot fill a deck, so the button says why
+  // rather than appearing to do nothing.
+  const [cannotBuild, setCannotBuild] = useState(false)
   // The same conversion the engine uses, so hovering a card in the deck list shows exactly what it
   // would show in a game. Rebuilt only when the pool changes.
   const cardDb = useMemo(() => (pool ? buildCardDb(pool.cards) : null), [pool])
@@ -239,7 +243,11 @@ export default function DeckSelectScreen({ onPlay }: Props) {
 
   useEffect(() => {
     let live = true
-    void largestCachedSet().then(p => { if (live) setPool(p) })
+    void largestCachedSet().then(p => {
+      if (!live) return
+      setPool(p)
+      setCannotBuild(false)
+    })
     return () => { live = false }
   }, [setStatus])
 
@@ -250,7 +258,9 @@ export default function DeckSelectScreen({ onPlay }: Props) {
   }
 
   function handleGenerate() {
-    setGenerated(buildGenerated())
+    const next = buildGenerated()
+    setGenerated(next)
+    setCannotBuild(next === null)
   }
 
   function handleImport() {
@@ -302,7 +312,7 @@ export default function DeckSelectScreen({ onPlay }: Props) {
               {pool === null
                 ? 'Cache a set in the card catalogue to generate decks'
                 : generated === null
-                  ? `Built from ${pool.set} (${pool.cards.length} cards cached)`
+                  ? `${cannotBuild ? `Cannot fill a ${DECK_SIZE}-card deck from` : 'Built from'} ${pool.set} (${pool.cards.length} cards cached)`
                   : (
                     // Leader and base are cards too, so they hover for their art like any other row.
                     // They were previously raw ids, which is unreadable for the base.

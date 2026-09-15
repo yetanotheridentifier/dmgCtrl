@@ -108,22 +108,22 @@ const rate = (l: Lockout): number => l.lockedDecisions / l.decisions
 
 describe('the wall deck set in play', () => {
 
-  // A slice rather than the whole set: this asks whether the mechanism fires, and the rates the
-  // bench will quote come from the bench, over every deck and a searching bot.
-  const DECKS = 12
-  const walls = buildLockoutDecks(POOL, 7).slice(0, DECKS)
-  const coverage = buildCoverageDecks(POOL, 7).decks.slice(0, DECKS)
+  // The whole coverage set rather than a slice. A 12-deck slice read 4.3 times the coverage rate on this
+  // seed and 11 times on the next: a dozen games is too few for the control's rate to settle, since its
+  // locked decisions come from one or two games. The rates the bench quotes still come from the bench,
+  // over a searching bot.
+  const walls = buildLockoutDecks(POOL, 7)
+  const coverage = buildCoverageDecks(POOL, 7).decks
 
   const withWall = walk(walls, 4242)
   const withoutWall = walk(coverage.map(d => ({ facing: d, wall: d })), 4242)
 
   /**
-   * **Measured over these 12 pairings: 7.0% of decisions against the coverage set's 0.3%.**
-   *
-   * Roughly twenty times the rate, which is the whole justification for the set existing. Asserted as
-   * a multiple of the matched coverage walk rather than against the recorded 7.0%, so an unrelated
-   * change to `greedy` or to the generator moves both arms together and this fails only when the
-   * decks stop producing the position.
+   * **Measured over these 22 pairings: 7.75% of decisions against the coverage set's 0.87%**, about
+   * nine times the rate, and 8.33% against 0.42% pooled over three seeds. That gap is the whole
+   * justification for the set existing. Asserted as a multiple of the matched coverage walk rather than
+   * against the recorded rate, so an unrelated change to `greedy` or to the generator moves both arms
+   * together and this fails only when the decks stop producing the position.
    */
   it('produces a shut lane far more often than the coverage decks do', () => {
     expect(withWall.decisions, 'the walk must reach real decisions').toBeGreaterThan(500)
@@ -138,12 +138,13 @@ describe('the wall deck set in play', () => {
   /**
    * **Duration is the reported defect**, which is why the re-shield cards are in the package.
    *
-   * Measured: **3 consecutive rounds** on this slice, against **0** on the matched coverage walk. The
-   * bench has never recorded a lockout lasting a full round on the coverage decks; the filed game ran
-   * four. A set producing only single-round lockouts would be measuring a milder, different thing.
+   * Measured: **4 consecutive rounds** on these pairings, against **0** on the matched coverage walk,
+   * and 3 to 5 across three seeds. The bench has never recorded a lockout lasting a full round on the
+   * coverage decks; the filed game ran four. A set producing only short lockouts would be measuring a
+   * milder, different thing.
    */
   it('holds a lane shut for several consecutive rounds', () => {
-    expect(withWall.longestRun).toBeGreaterThanOrEqual(2)
+    expect(withWall.longestRun).toBeGreaterThanOrEqual(3)
     expect(withWall.longestRun).toBeGreaterThan(withoutWall.longestRun)
   }, 300_000)
 

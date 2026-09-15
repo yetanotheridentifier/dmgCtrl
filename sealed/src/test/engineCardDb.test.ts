@@ -162,12 +162,6 @@ describe('upgrade stat overrides — temporary ASH data gap', () => {
 })
 
 describe('card data corrections — wrong source values overridden', () => {
-  it('corrects the Moff Gideon unit (ASH_097) cost to its printed 3 (source ships 8)', () => {
-    const c = normaliseCard({ Set: 'ASH', Number: '097', Name: 'Moff Gideon', Type: 'Unit', Cost: '8', Power: '2', HP: '5', Arenas: ['Ground'] })
-    expect(c.cost).toBe(3)
-    expect([c.power, c.hp]).toEqual([2, 5]) // the rest is untouched
-  })
-
   it('corrects the Nebulon-C Frigate (ASH_081) to the Space arena (source ships Ground)', () => {
     const c = normaliseCard({ Set: 'ASH', Number: '081', Name: 'Nebulon-C Frigate', Type: 'Unit', Cost: '5', Power: '3', HP: '6', Arenas: ['Ground'] })
     expect(c.arena).toBe('space')

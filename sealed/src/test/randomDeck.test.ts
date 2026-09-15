@@ -3,6 +3,7 @@ import ashSet from './fixtures/ashSet.json'
 import type { SwuCard } from '../data/cards'
 import type { SavedDeck } from '../data/deckStore'
 import { generateRandomDeck, generationOptions } from '../deckgen/randomDeck'
+import { DECK_SIZE } from '../deckgen/rules'
 
 /**
  * Choosing the leader and base aspect of a generated deck.
@@ -49,6 +50,27 @@ describe('generateRandomDeck', () => {
     const { deck } = generateRandomDeck(POOL, 1, { leaderId: idOf(CAD_BANE), baseAspect: 'Aggression' })!
     expect(deck.leader).toBe(idOf(CAD_BANE))
     expect(baseAspect(deck)).toBe('Aggression')
+  })
+
+  it('builds a whole deck from a full set', () => {
+    for (const seed of SEEDS) {
+      const { deck } = generateRandomDeck(POOL, seed)!
+      expect(deck.cards.reduce((n, c) => n + c.count, 0), `seed ${seed}`).toBe(DECK_SIZE)
+    }
+  })
+
+  /**
+   * A deck of one to three cards is not a deck: the engine deals a short opening hand from it and the
+   * setup AI has nothing to resource. A pool that thin (a partial cache, a test fixture) builds nothing,
+   * so a caller falls back the way it does with no set cached.
+   */
+  it('builds nothing from a pool too thin to fill a deck', () => {
+    const thin: SwuCard[] = [
+      { Set: 'TST', Number: '001', Name: 'Test Leader', Type: 'Leader', Cost: '5', Power: '4', HP: '7' },
+      { Set: 'TST', Number: '002', Name: 'Test Base', Type: 'Base', HP: '30' },
+      { Set: 'TST', Number: '900', Name: 'Big Test Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '0', Power: '4', HP: '3' },
+    ]
+    for (const seed of SEEDS) expect(generateRandomDeck(thin, seed), `seed ${seed}`).toBeNull()
   })
 })
 

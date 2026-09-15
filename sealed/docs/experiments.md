@@ -950,7 +950,9 @@ it charges for what it already sees.
   all produce the identical two-way tie, so 12 was simply the first value tried.
 
   **Re-screened at weight 3 on a population that contains the position** (`--decks lockout`), 80 games
-  a side with a matched control on the same seeds:
+  a side with a matched control on the same seeds. This screen and the full runs below were measured
+  on generated wall decks, not on the fixed wall deck `--decks lockout` now deals, and have not been
+  re-run on it:
 
   | | wall decks | coverage decks |
   | --- | --- | --- |
@@ -1026,21 +1028,22 @@ filed game ran four consecutive rounds. `blockedReach` was written off as "invis
 games" on exactly that population.
 
 The fix is a deck set built to contain the position: one seat gets an ordinary coverage deck, the
-other a wall of self-shielding ground Sentinels plus the cards that put a Shield back after a strip.
-`--decks lockout`. Measured **with `blockedReach` at 0**, the bot as it was before that term shipped,
-44 games a side on the same seeds. That is what the population holds, not what the current bot does:
+other one fixed wall deck of Sentinels from the first turn, self-shielding Sentinels, and the cards
+that put a Shield back after a strip. `--decks lockout`. Measured **with `blockedReach` at 0**, the bot
+as it was before that term shipped, 48 games a side on the same seeds. That is what the population
+holds, not what the current bot does:
 
 | `beam-reply`, `blockedReach: 0` | coverage | lockout |
 | --- | --- | --- |
-| a lane shut | 2.2% | **6.4%** |
-| rounds locked | 1.3% | **10.1%** |
-| longest lockout in one game | **1 round** | **4 rounds** |
-| the bot took an available strip | 9.3% | 14.7% |
-| **passed with an attack available** | 57.6% | **96.7%** |
+| a lane shut | 1.7% | **5.6%** |
+| **rounds locked** | 0.6% | **11.9%** |
+| longest lockout in one game | **1 round** | **3 rounds** |
+| the bot took an available strip | 7.8% | 10.8% |
+| passed with an attack available | 64.5% | 75.8% |
 
-**Both columns are the calibration.** The coverage column reproduces the historical record and the
-lockout column reproduces the filed game, which is what distinguishes an instrument from a large
-number.
+**Both columns are the calibration.** The coverage column reproduces the historical record, and the
+lockout column holds a lane shut for several consecutive rounds as the filed game did, which is what
+distinguishes an instrument from a large number.
 
 Three properties of such a set, learned building this one:
 
@@ -1049,9 +1052,18 @@ Three properties of such a set, learned building this one:
   before either bot moves, so only a paired difference against a matched control means anything.
 - **The benefit is measured on the built population; non-inferiority stays on the ordinary one.** A
   term tuned only against a manufactured population is tuned against nobody's game.
-- **Read the qualified rate, not the raw one.** The raw pass rate barely moves between the two
-  populations (0.75 a game against 0.68); what changes is that the bot passes *with an attack
-  available* almost every time. A rate alone reads this as no difference.
+- **Read the lockout from its duration, not from the pass rate.** The raw pass rate does not move
+  between the two populations (0.65 a game against 0.69), and passing *with an attack available*
+  separates them only modestly (64.5% against 75.8%). Rounds locked separates them twenty times over
+  (0.6% against 11.9%).
+- **Fix the wall; do not generate it.** A generated wall takes its filler from the deck generator, so
+  it moves with the card data: correcting one printed cost (Moff Gideon, 8 to 3) took a Sentinel out
+  of three of twelve generated walls and cut their shut-lane rate from 9.5% to 4.7% of decisions. The
+  wall is now one hand-built list, held to the generator's legality and shape rules.
+- **A dozen games cannot size the gap.** Walked with the pre-fix `greedy`, the fixed wall against the
+  first 12 coverage decks read 4.3 times the coverage rate on one seed and 11 on the next, because the
+  control's locked decisions come from one or two games. Over all 22 coverage decks on three seeds it
+  is **8.33% against 0.42%, about 20 times**, with the longest lockout 3 to 5 rounds on every seed.
 
 ### An engine change cannot be A/B-ed, and self-play cannot see it at all
 

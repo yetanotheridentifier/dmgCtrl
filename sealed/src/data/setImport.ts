@@ -1,5 +1,5 @@
 import { db } from './db'
-import { cardId, SWU_DB_API } from './cards'
+import { cardId, fromSearchRow, SWU_DB_API } from './cards'
 import type { SwuCard } from './cards'
 import { logger } from './log'
 
@@ -40,7 +40,7 @@ export async function importSet(setCode: string, opts: SetImportOptions = {}): P
   }
 
   const payload = (await response.json()) as SearchPayload
-  const normals = (payload.data ?? []).filter(c => c.VariantType == null || c.VariantType === 'Normal')
+  const normals = (payload.data ?? []).map(fromSearchRow).filter(c => c.VariantType == null || c.VariantType === 'Normal')
 
   let cached = 0
   for (const card of normals) {
