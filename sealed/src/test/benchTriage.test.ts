@@ -143,6 +143,41 @@ describe('triage blockers', () => {
     expect(capture.sole).toBe(0)
   })
 
+  /**
+   * Mechanics printed across whole sets that the engine has no primitive for. Each text is the real
+   * card's, chosen because the mechanic is the only thing it needs.
+   */
+  it.each([
+    ['token-unit', 'TWI_237 Droid Deployment', 'Create 2 Battle Droid tokens.'],
+    ['token-unit', 'TWI Clone Trooper', 'When Played: Create a Clone Trooper token.'],
+    ['token-unit', 'SEC Spy', 'When Defeated: Create a Spy token.'],
+    ['token-unit', 'JTL X-Wing', 'When Played: Create an X-Wing token.'],
+    ['token-unit', 'JTL TIE Fighter', 'When Played: Create a TIE Fighter token.'],
+    ['credit-token', 'LAW Credit', 'When Played: Create a Credit token.'],
+    ['disclose', 'SEC_062 Bardottan Ornithopter', 'When Played: You may disclose Vigilance (reveal a card from your hand with this aspect icon). If you do, draw a card.'],
+    ['indirect-damage', 'JTL_234 Torpedo Barrage', 'Deal 5 indirect damage to a player. (They assign 5 unpreventable damage among their base and units.)'],
+  ])('reports %s as the blocker on %s', (name, _card, text) => {
+    const r = triage([card({ FrontText: text })])
+    expect(r.triaged[0].blockers).toEqual([name])
+    expect(r.blockers).toEqual([{ name, sole: 1, touched: 1 }])
+  })
+
+  it.each([
+    ['the Mandalorian token unit', 'When Played: Create a Mandalorian token.'],
+    ['a Shield token', 'When Played: Give a Shield token to a unit.'],
+    ['an Advantage token', 'When Played: Give an Advantage token to a unit.'],
+    ['direct damage', 'Deal 5 damage to a unit.'],
+  ])('does not block a card on %s, which the engine has', (_what, text) => {
+    expect(triage([card({ FrontText: text })]).triaged[0].blockers).toEqual([])
+  })
+
+  it('counts a card needing both a token unit and Disclose as touched by each, sole for neither', () => {
+    // SEC_181 Unauthorized Investigation.
+    const r = triage([card({ FrontText: 'Create a Spy token.\nYou may disclose Aggression (reveal a card from your hand with this aspect icon). If you do, create another Spy token.' })])
+    expect(r.triaged[0].blockers.sort()).toEqual(['disclose', 'token-unit'])
+    expect(r.blockers.every(b => b.sole === 0 && b.touched === 1)).toBe(true)
+  })
+
   it('does not treat an implemented keyword as a blocker', () => {
     const r = triage([card({ Keywords: ['Sentinel'], FrontText: 'Sentinel\nWhen Played: Draw a card.' })])
     expect(r.triaged[0].blockers).toEqual([])
@@ -185,6 +220,12 @@ describe('the ASH anchor', () => {
     // ASH uses none of Bounty, Coordinate, Exploit, Piloting, Plot or Smuggle.
     expect(report.buckets['new-keyword-only']).toBe(0)
     expect(report.blockers.filter(b => b.name.startsWith('kw:'))).toEqual([])
+  })
+
+  it('finds no mechanic ASH plays without, since every ASH card is built', () => {
+    // A blocker firing on the implemented set is a false positive in its pattern.
+    const mechanics = ['token-unit', 'credit-token', 'disclose', 'indirect-damage']
+    expect(report.blockers.filter(b => mechanics.includes(b.name))).toEqual([])
   })
 
   it('finds no card granting an Experience token, which is why ASH reads 3 of 4 tokens', () => {

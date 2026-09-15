@@ -53,6 +53,15 @@ const NEW_MECHANICS: readonly (readonly [string, RegExp])[] = [
   // Shield is implemented. Experience and Force are printed but never granted.
   ['experience-token', /\bExperience token/i],
   ['force-token', /\bthe Force\b|\bForce token/i],
+  // `engine/tokenUnits.ts` has the Mandalorian only. The others share its creation path, so one
+  // blocker: split per type and a card creating two kinds would count as unlocked by neither.
+  ['token-unit', /\b(?:Spy|X-Wing|TIE Fighter|Clone Trooper|Battle Droid) tokens?\b/i],
+  // A token that pays costs, not a unit or an upgrade.
+  ['credit-token', /\bCredit tokens?\b/i],
+  // Revealing cards from hand by aspect icon.
+  ['disclose', /\bdisclosed?\b/i],
+  // Damage the receiving player assigns among their base and units.
+  ['indirect-damage', /\bindirect damage\b/i],
   // `releaseCaptured` exists; capturing does not.
   ['capture', /\bcaptures?\b|\bcaptured\b/i],
   // A card that is both a unit and an upgrade.
