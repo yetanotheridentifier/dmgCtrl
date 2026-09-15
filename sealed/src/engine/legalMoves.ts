@@ -389,15 +389,22 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'mayAdvantageEach':
-      case 'mayLastingBuff':
       case 'mayGiveAdvantage':
       case 'mayExhaustLeaderGiveAdvantage':
       case 'mayExhaustLeaderExhaustUnit':
-      case 'mayExhaustUnit':
       case 'multiPick': {
-        // Optional targeted effects: pick an eligible target, or decline / finish.
+        // Optional targeted effects: pick an eligible target, or decline / finish. Every multiPick card
+        // reads "up to" or "any number", so stopping at zero picks is legal.
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'mayLastingBuff':
+      case 'mayExhaustUnit': {
+        // Shared by "may" cards and cards that print none (Display of Strength, Evasive Maneuver), so
+        // the card says which: a decline only when `optional`.
+        for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'mayDamage':
@@ -628,14 +635,15 @@ function choiceMoves(state: GameState): Action[] {
       case 'selectUnitToSteal':
       case 'selectDistributeSource':
       case 'selectUnitToReturn': {
-        // Pick one of the eligible units, or decline.
+        // Pick one of the eligible units; a decline only where the card prints "may".
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
-        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'selectUpgradeToReturn': {
+        // Jabba may return an upgrade; Full of Surprises must.
         choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
-        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'mayPlayUpgradeFree': {
@@ -694,9 +702,9 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'selectUnitToDefeat': {
-        // Thrawn deployed: pick a non-leader enemy unit to defeat, or decline.
+        // Pick a unit to defeat. Thrawn deployed may; Get Lost and the defeat events must.
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
-        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'opponentGivesAdvantage': {

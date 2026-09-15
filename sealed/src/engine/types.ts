@@ -572,8 +572,9 @@ type ChoiceVariant =
   // first records `chosenFriendly` and re-offers with the enemy targets. Optional.
   // `thenAdvantage` gives that many Advantage tokens to a friendly unit afterwards (Diplomatic Pageantry).
   | { kind: 'selectPair'; id: string; controller: PlayerId; friendlyTargets: string[]; enemyTargets: string[]; chosenFriendly?: string; mode: 'defeat' | 'exhaust'; thenAdvantage?: number }
-  // Jabba the Hutt: return one of `candidates` (card upgrades in play) to its owner's hand.
-  | { kind: 'selectUpgradeToReturn'; id: string; controller: PlayerId; candidates: UpgradeRef[]; thenShield?: boolean }
+  // Return one of `candidates` (upgrades in play) to its owner's hand. Mandatory unless `optional`:
+  // Jabba the Hutt prints "may", Full of Surprises does not.
+  | { kind: 'selectUpgradeToReturn'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional?: boolean; thenShield?: boolean }
   // Jabba the Hutt: having returned `cardId` to your own hand, may attach it free to a unit.
   | { kind: 'mayPlayUpgradeFree'; id: string; controller: PlayerId; cardId: string; targets: string[] }
   // Jod Na Nawood: may pay `cost`, then exhaust every unit in the chosen arena
@@ -590,10 +591,10 @@ type ChoiceVariant =
   // Greef Karga front: on playing a unit, may exhaust the leader to give it an Advantage token.
   // `unitId` is the just-played unit to receive the token.
   | { kind: 'mayExhaustLeaderForAdvantage'; id: string; controller: PlayerId; unitId: string }
-  // Optional "this phase" buff, e.g. Baylan's On Attack: pick a unit among `targets`
-  // and grant it the given power/HP/keywords for the phase, or decline.
+  // "This phase" buff: pick a unit among `targets` and grant it the given power/HP/keywords for the
+  // phase. Mandatory unless `optional`: Baylan's On Attack prints "may", Display of Strength does not.
   // `thenMayAttack` chains "you may attack with that unit" (T-6 Shuttle 1974).
-  | { kind: 'mayLastingBuff'; id: string; controller: PlayerId; targets: string[]; power?: number; hp?: number; keywords?: KeywordInstance[]; thenMayAttack?: boolean
+  | { kind: 'mayLastingBuff'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; power?: number; hp?: number; keywords?: KeywordInstance[]; thenMayAttack?: boolean
       // The Student Guides the Master: power is +1 per friendly unit weaker than the chosen one,
       // so it can only be worked out once a target is picked.
       powerPerWeakerFriendly?: boolean }
@@ -605,9 +606,9 @@ type ChoiceVariant =
   // Shin Hati front: on a friendly attack ending, may exhaust the leader to exhaust one of
   // `targets` (a ready unit cheaper than the base damage dealt), or decline.
   | { kind: 'mayExhaustLeaderExhaustUnit'; id: string; controller: PlayerId; targets: string[] }
-  // Shin Hati deployed: may exhaust one of `targets`, or decline (no leader-exhaust cost).
-  // `markUsed`, when set, marks a once-per-round triggered ability as spent on acceptance.
-  | { kind: 'mayExhaustUnit'; id: string; controller: PlayerId; targets: string[]; markUsed?: { instanceId: string; key: string } }
+  // Exhaust one of `targets`. Mandatory unless `optional`: Shin Hati deployed prints "may", Evasive
+  // Maneuver does not. `markUsed`, when set, marks a once-per-round triggered ability as spent on acceptance.
+  | { kind: 'mayExhaustUnit'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; markUsed?: { instanceId: string; key: string } }
   // Choose-one / modal: pick exactly one of `options` (Sloane). Each option is a small
   // serialisable effect descriptor, resolved by index; mandatory (no decline).
   | { kind: 'chooseOne'; id: string; controller: PlayerId; options: ChooseOption[] }
@@ -678,13 +679,14 @@ type ChoiceVariant =
   // `then` picks the follow-up: 'damageEqualToCost' (Purrgil Ultra) or 'returnEnemyUnit' (Far Far Away).
   | { kind: 'returnFriendlyUnit'; id: string; controller: PlayerId; targets: string[]; then?: 'damageEqualToCost' | 'returnEnemyUnit' }
   // Return one of `targets` to its owner's hand. Distinct from returnFriendlyUnit in that the card
-  // supplies the eligible units, which may be the opponent's.
-  | { kind: 'selectUnitToReturn'; id: string; controller: PlayerId; targets: string[] }
+  // supplies the eligible units, which may be the opponent's. Mandatory unless `optional`, as are the
+  // ready, steal and distribute-source picks below.
+  | { kind: 'selectUnitToReturn'; id: string; controller: PlayerId; targets: string[]; optional?: boolean }
   // Galvanized Leap: ready one of `targets`.
-  | { kind: 'selectUnitToReady'; id: string; controller: PlayerId; targets: string[] }
+  | { kind: 'selectUnitToReady'; id: string; controller: PlayerId; targets: string[]; optional?: boolean }
   // Rehabilitation: take control of one of `targets` until the regroup phase, debuffing it by
   // `power`/`hp` for this phase.
-  | { kind: 'selectUnitToSteal'; id: string; controller: PlayerId; targets: string[]; power?: number; hp?: number }
+  | { kind: 'selectUnitToSteal'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; power?: number; hp?: number }
   // Play a unit from your discard for free (One Must Destroy to Create, Dathomiri Magicks).
   // `candidates` are discard-pile card ids; `acceptChoice`'s `optionIndex` picks one. `remaining`
   // counts how many more may be played after this one, so the offer re-raises until the pool runs out.
@@ -700,7 +702,7 @@ type ChoiceVariant =
   | { kind: 'chooseNumber'; id: string; controller: PlayerId; max: number; then: 'senseThroughTheForce' }
   // Hold Them Off: pick the unit that will deal the damage; its power becomes the pool to spread
   // among units in its own arena.
-  | { kind: 'selectDistributeSource'; id: string; controller: PlayerId; targets: string[] }
+  | { kind: 'selectDistributeSource'; id: string; controller: PlayerId; targets: string[]; optional?: boolean }
   // Reanimated Night Trooper, stage 1 (#388): choose which deck to look at (`acceptChoice`'s
   // `baseTarget` picks one of `decks`), or decline outright. Choosing a deck reveals its top card
   // rather than discarding it — that decision is the follow-up `mayDiscardTop` choice below.
@@ -775,12 +777,13 @@ type ChoiceVariant =
   // `grantCardId` lends the chosen attacker a carrier card's abilities for that attack — how the
   // attack-granting events (Rash Action, Follow Me, Masterstroke, Wipe Them Out) add their rider.
   | { kind: 'mayAttackAnyUnit'; id: string; controller: PlayerId; restore: number; optional?: boolean; grantCardId?: string }
-  // Defeat one of `targets`, or decline. The card supplies the eligible units, so this covers
-  // "a non-leader enemy unit" (Thrawn), "an upgraded non-leader unit" (Get Lost), and so on.
+  // Defeat one of `targets`. The card supplies the eligible units, so this covers "a non-leader enemy
+  // unit" (Thrawn), "an upgraded non-leader unit" (Get Lost), and so on. Mandatory unless `optional`:
+  // Thrawn prints "you may defeat", Get Lost does not.
   // `thenResource` chains "if you do, resource the top card of your deck" (Long Live the Empire).
   // `thenReplayFromDiscard` offers the defeated unit straight back from the discard, free
   // (One Must Destroy to Create).
-  | { kind: 'selectUnitToDefeat'; id: string; controller: PlayerId; targets: string[]; thenResource?: boolean; thenReplayFromDiscard?: boolean }
+  | { kind: 'selectUnitToDefeat'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; thenResource?: boolean; thenReplayFromDiscard?: boolean }
   // Sabine front: the opponent (`controller`) must give `count` Advantage tokens to one of
   // their units (`targets`). Mandatory when able — an opponent-interjected choice (pendingResumeActive).
   | { kind: 'opponentGivesAdvantage'; id: string; controller: PlayerId; count: number; targets: string[] }
