@@ -619,9 +619,12 @@ export function NameCardOverlay({ names, onPick }: { names: string[]; onPick: (n
 }
 
 /**
- * "Search & play for free" overlay (Admiral Ackbar): reveals the searched cards; eligible space
- * units (fitting the remaining cost budget) get a "Play free" button, the rest are dimmed. A Done
- * button (with the remaining budget) stops early. A thin wrapper over `CardGridOverlay`.
+ * "Search & play for free" overlay: reveals the searched cards; eligible ones get a "Play free"
+ * button, the rest are dimmed, and Done stops early. A thin wrapper over `CardGridOverlay`.
+ *
+ * Two searches share it and ask different things, so the prompt reads the choice rather than naming
+ * a card: Admiral Ackbar plays space units within a combined cost budget, and a `playOne` search (Eye
+ * of Sion) plays a single unit of any arena costing no more than the budget.
  */
 export function SearchPlayFreeOverlay({ state, choice, onPick, onDone }: {
   state: GameState
@@ -630,10 +633,13 @@ export function SearchPlayFreeOverlay({ state, choice, onPick, onDone }: {
   onDone: () => void
 }) {
   const eligible = new Set(choice.eligibleIndices)
+  const prompt = choice.playOne
+    ? `Play a unit costing ${choice.budget} or less for free${choice.entersReady ? '. It enters play ready' : ''}`
+    : `Play space units for free: ${choice.budget} cost left`
   return (
     <CardGridOverlay
       idPrefix="search-free"
-      prompt={`Play space units for free: ${choice.budget} cost left`}
+      prompt={prompt}
       cardsById={state.cards}
       items={choice.revealed.map((cardId, i) => eligible.has(i)
         ? { cardId, key: i, testId: `search-free-pick-${i}`, actionLabel: 'Play free', onSelect: () => onPick(i) }
@@ -1386,7 +1392,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     )
     const searchDrawActions = searchDrawChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === searchDrawChoice.id) : []
 
-    // A "search & play space units for free" choice (Admiral Ackbar): picks + Done in the overlay.
+    // A "search & play for free" choice (Admiral Ackbar, Eye of Sion): picks + Done in the overlay.
     const searchFreeChoice = gameState.pendingChoices?.find(
       (c): c is Extract<PendingChoice, { kind: 'searchPlayFree' }> => c.kind === 'searchPlayFree' && c.controller === 'player',
     )
