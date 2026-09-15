@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { SearchRevealOverlay, SearchDrawOverlay, SearchPlayUpgradeOverlay } from '../components/gameScreen'
+import { SearchRevealOverlay, SearchDrawOverlay, SearchPlayUpgradeOverlay, SearchPlayFreeOverlay } from '../components/gameScreen'
 import { state, player, card, CARDS } from './helpers/engineFixtures'
 import type { PendingChoice } from '../engine/types'
 
@@ -109,5 +109,40 @@ describe('SearchPlayUpgradeOverlay', () => {
     render(<SearchPlayUpgradeOverlay state={s} choice={choice} playableIndices={[]} onPick={vi.fn()} onDone={onDone} />)
     fireEvent.click(screen.getByTestId('search-upgrade-done'))
     expect(onDone).toHaveBeenCalledOnce()
+  })
+})
+
+/**
+ * One overlay serves two searches that ask different things. Admiral Ackbar plays any number of space
+ * units within a combined cost of 5; Eye of Sion plays exactly one unit of any arena costing no more
+ * than its power. The prompt has to say which, read off the choice rather than written for one card.
+ */
+describe('SearchPlayFreeOverlay', () => {
+  const s = state({
+    cards: {
+      ...CARDS,
+      GRD: card({ id: 'GRD', name: 'Trooper', type: 'unit', arena: 'ground', cost: 3 }),
+      SPC: card({ id: 'SPC', name: 'Fighter', type: 'unit', arena: 'space', cost: 2 }),
+    },
+    players: { player: player(), opponent: player() },
+  })
+
+  it("prompts Eye of Sion's search for one unit of any arena within its power", () => {
+    const eyeOfSion: Extract<PendingChoice, { kind: 'searchPlayFree' }> = {
+      kind: 'searchPlayFree', id: 'eye', controller: 'player', revealed: ['GRD', 'SPC'], eligibleIndices: [0, 1],
+      budget: 5, playOne: true, entersReady: true,
+    }
+    render(<SearchPlayFreeOverlay state={s} choice={eyeOfSion} onPick={vi.fn()} onDone={vi.fn()} />)
+    const prompt = screen.getByTestId('search-free-prompt')
+    expect(prompt).toHaveTextContent(/a unit costing 5 or less/i)
+    expect(prompt).not.toHaveTextContent(/space/i)
+  })
+
+  it("keeps Admiral Ackbar's prompt: space units, with the budget left", () => {
+    const ackbar: Extract<PendingChoice, { kind: 'searchPlayFree' }> = {
+      kind: 'searchPlayFree', id: 'ackbar', controller: 'player', revealed: ['SPC'], eligibleIndices: [0], budget: 5,
+    }
+    render(<SearchPlayFreeOverlay state={s} choice={ackbar} onPick={vi.fn()} onDone={vi.fn()} />)
+    expect(screen.getByTestId('search-free-prompt')).toHaveTextContent(/space units for free: 5 cost left/i)
   })
 })
