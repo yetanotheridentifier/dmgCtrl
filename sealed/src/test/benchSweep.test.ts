@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { runSweep } from '../bench/sweep'
+import { engineDeck, runSweep, sweepCardDb } from '../bench/sweep'
+import { buildCoverageDecks } from '../bench/coverageDecks'
 import { compareCardIds } from '../bench/playCoverage'
 import { poolFor } from '../bench/setPools'
+import { REPRINTS, reprintCanonicalId } from '../data/reprints'
+import { getCardDefinition } from '../engine/abilities'
+import { CARD_DATA_CORRECTIONS } from '../engine/cardDataCorrections'
 
 /**
  * The coverage sweep (#408) plays across the whole coverage deck set so every card is exercised, and
@@ -144,4 +148,52 @@ describe('runSweep failure reporting', () => {
       expect(f.reason).toBeTruthy()
     }
   })
+})
+
+/**
+ * A card reprinted in another set has a second id, and the engine keys behaviour by id. The app
+ * collapses the printing onto the implemented id when it hydrates a deck; the sweep reads the set
+ * fixtures directly, so it has to do the same, or a printing plays as a blank card while the report
+ * credits it as played.
+ */
+describe('runSweep over cards reprinted in another set', () => {
+  const printings = REPRINTS.flatMap(r => r.printings.map(id => ({ id, canonical: r.canonical, name: r.name })))
+  const pool = poolFor([...new Set(printings.map(p => p.id.split('_')[0]))])
+  const { decks } = buildCoverageDecks(pool, 5)
+  const cardDb = sweepCardDb(pool)
+
+  it('decks every printing in the reprint table, so the checks below are not vacuous', () => {
+    const decked = new Set(decks.flatMap(d => d.cards.map(e => e.id)))
+    for (const { id } of printings) expect(decked.has(id), id).toBe(true)
+  })
+
+  it('plays each printing under the id the engine implements, and nothing else changes', () => {
+    for (const deck of decks) {
+      const game = engineDeck(deck)
+      expect(game.leader).toBe(deck.leader)
+      expect(game.base).toBe(deck.base)
+      expect(game.cards).toEqual(deck.cards.map(e => ({ ...e, id: reprintCanonicalId(e.id) ?? e.id })))
+    }
+  })
+
+  it("gives each printing the implemented card's data, corrections and behaviour", () => {
+    for (const { id, canonical, name } of printings) {
+      const deck = decks.find(d => d.cards.some(e => e.id === id))!
+      const played = engineDeck(deck).cards.find((_, i) => deck.cards[i].id === id)!.id
+      expect(cardDb[played]?.name, id).toBe(name)
+      expect(cardDb[played], id).toMatchObject(CARD_DATA_CORRECTIONS[canonical] ?? {})
+      expect(getCardDefinition(played), id).toBe(getCardDefinition(canonical))
+    }
+    // Most reprints are of cards with registered behaviour, so the comparison above has teeth.
+    expect(printings.filter(p => getCardDefinition(p.canonical)).length).toBeGreaterThan(printings.length / 2)
+  })
+
+  /** Given headroom: three seeds of a whole set's decks, inside a parallel suite. */
+  it('still reports a printing under its printed id, and credits it when played', () => {
+    const twi = runSweep({ gamesPerDeck: 1, seeds: [5, 6, 7], pool: poolFor(['TWI']) })
+    expect(twi.uncovered.every(id => id.startsWith('TWI_'))).toBe(true)
+    // A played printing reported under the engine's id would miss the decked id and read as uncovered.
+    const twiPrintings = printings.map(p => p.id).filter(id => id.startsWith('TWI_'))
+    expect(twiPrintings.filter(id => !twi.uncovered.includes(id)).length).toBeGreaterThan(0)
+  }, 30_000)
 })

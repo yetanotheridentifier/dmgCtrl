@@ -204,7 +204,7 @@ the day it ships. #553 already has to work that way for a different reason.
 - **Token-unit art**, and a permanent set for ASH tokens.
 - **#591 decks across sets**, for Premier (the default format), Eternal and chaos sealed. The sweep and
   the deck generator build one set per deck, because they model sealed. Mixing sets needs copy limits
-  by card rather than by id, reprint collapse in the bench (today a reprint id plays as vanilla there),
+  by card rather than by id, a coverage report that maps one engine id back to several printings,
   per-format set legality, and deck-shape rules of its own.
 - **Unique rule on change of control.** The rule is built for units and upgrades and is per-player, but
   `takeControlOfUnit` never re-checks it. Two cases slip through: stealing a unique unit you already

@@ -1,6 +1,7 @@
 import { db } from './db'
 import { cardId, fromSearchRow, SWU_DB_API } from './cards'
 import type { SwuCard } from './cards'
+import type { ParsedDeck } from '../utils/parseProtectThePod'
 import { logger } from './log'
 import { bundledCanonicalId } from './bundledPrintings'
 import { reprintCanonicalId } from './reprints'
@@ -38,6 +39,30 @@ import { reprintCanonicalId } from './reprints'
 /** Identity of a card across its printings. */
 export function printingKey(card: Pick<SwuCard, 'Type' | 'Name' | 'Subtitle'>): string {
   return [card.Type ?? '', card.Name ?? '', card.Subtitle ?? ''].join('|').toLowerCase()
+}
+
+/**
+ * The deck as the engine should see it: every id replaced by its canonical id, where it has one. The
+ * saved deck keeps the printings you actually own, so the deck list still shows your cards; only the
+ * game works in canonical ids. Two printings of one card collapse to a single id, which is correct for
+ * play (they are the same card) and merely means one of the two arts is shown.
+ *
+ * The app and the bench's coverage sweep both play decks through this, resolving ids their own way.
+ */
+export function canonicalDeck<T extends ParsedDeck>(deck: T, canonicalId: (id: string) => string | undefined): T {
+  const id = (raw: string) => canonicalId(raw) ?? raw
+  return {
+    ...deck,
+    leader: id(deck.leader),
+    base: id(deck.base),
+    cards: deck.cards.map(c => ({ ...c, id: id(c.id) })),
+  }
+}
+
+/** A card's data filed under another id: the printing as the engine sees it once canonicalised. */
+export function asCardId(card: SwuCard, id: string): SwuCard {
+  const [set, number] = id.split('_')
+  return { ...card, Set: set, Number: number }
 }
 
 export type PrintingIndex = Map<string, string>

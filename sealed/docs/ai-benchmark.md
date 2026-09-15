@@ -913,6 +913,14 @@ which is opened from one set, so `buildCoverageDecks` covers a multi-set pool se
 mixes them. Copy limits are per card id, which a card reprinted in another set would slip past, so
 decks that mix sets need rules of their own and are not built here.
 
+**A reprint plays as the card it is.** A card reprinted in another set keeps its own id in the
+fixture, and the engine implements it under one id (`data/reprints.ts`). The sweep plays each deck
+through `engineDeck`, which collapses the other printing onto that id as the app does when it
+hydrates a deck, and files the printing's row in the card database under it (`sweepCardDb`; when the
+pool also holds the implemented card's own row, that row wins). Coverage is still **reported under
+the printed id**, so a printing is decked, drawn and played in its own right. A dropped game's
+fixture holds the engine's ids, so replaying one needs the implemented card's set in `extra`.
+
 Sets are resolved into one canonical order (the setup panel's), so a run depends on which sets were
 named rather than on how they were typed: the order decides which decks play first, and so which
 games open on which seat.
@@ -1037,7 +1045,7 @@ ids for no extra work. Reprints skew vanilla, since they exist mostly to balance
 printing's rarity can differ without affecting any of this: the engine does not read rarity.
 
 What makes the coverage real is `data/reprints.ts`, which collapses the other printings onto the
-implemented id during hydration. Each entry is marked `registered` once it does, so the report doubles
+implemented id during hydration, and in the coverage sweep's decks. Each entry is marked `registered` once it does, so the report doubles
 as the list of lines still to add when a set is brought in.
 
 ## Generalisation diagnostic
