@@ -2127,32 +2127,42 @@ const eligibleIds = (s: GameState, owner: PlayerId, test: UnitTest): string[] =>
 const lastingOnEach = (s: GameState, units: UnitState[], effect: Omit<LastingEffect, 'targetInstanceId'>): GameState =>
   units.reduce((acc, u) => addLastingEffect(acc, { targetInstanceId: u.instanceId, ...effect }), s)
 
-/** "Deal N damage to a unit" (or a base, where `baseTargets` names them). Mandatory. */
-const damageChoice = (s: GameState, ctx: EventCtx, amount: number, units: UnitState[], baseTargets: PlayerId[] = []): GameState =>
+// Each choice below is mandatory unless `optional`, which a card passes only when it prints "may".
+const mayFlag = (optional: boolean) => (optional ? { optional: true } : {})
+
+/** "Deal N damage to a unit" (or a base, where `baseTargets` names them). */
+const damageChoice = (s: GameState, ctx: EventCtx, amount: number, units: UnitState[], baseTargets: PlayerId[] = [], optional = false): GameState =>
   units.length || baseTargets.length
-    ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount, unitTargets: units.map(u => u.instanceId), baseTargets })
+    ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount, unitTargets: units.map(u => u.instanceId), baseTargets, ...mayFlag(optional) })
     : s
 
-const defeatEvent = (description: string, test: UnitTest) => whenPlayed(description, (s, ctx) => {
-  const targets = eligibleIds(s, ctx.owner, test)
-  return targets.length ? pushChoice(s, { kind: 'selectUnitToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
-})
+/** "Heal N damage from a unit" (or a base, where `baseTargets` names them). */
+const healChoice = (s: GameState, ctx: EventCtx, amount: number, unitTargets: string[], baseTargets: PlayerId[], optional = false): GameState =>
+  unitTargets.length || baseTargets.length
+    ? pushChoice(s, { kind: 'selectHealTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount, unitTargets, baseTargets, ...mayFlag(optional) })
+    : s
 
-const readyEvent = (description: string, test: UnitTest) => whenPlayed(description, (s, ctx) => {
-  const targets = eligibleIds(s, ctx.owner, test)
-  return targets.length ? pushChoice(s, { kind: 'selectUnitToReady', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
-})
+/** "Give a Shield token to a unit". `mayGiveTokens` reads a missing flag as optional, so it is always set. */
+const shieldChoice = (s: GameState, ctx: EventCtx, targets: string[], optional: boolean): GameState =>
+  targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_SHIELD, count: 1, targets, optional }) : s
 
-const returnEvent = (description: string, test: UnitTest) => whenPlayed(description, (s, ctx) => {
-  const targets = eligibleIds(s, ctx.owner, test)
-  return targets.length ? pushChoice(s, { kind: 'selectUnitToReturn', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
-})
+type TargetKind = 'selectUnitToDefeat' | 'selectUnitToReady' | 'selectUnitToReturn' | 'mayExhaustUnit'
+/** Defeat, ready, return or exhaust one of `targets`, or nothing when there are none. */
+const targetChoice = (s: GameState, ctx: EventCtx, kind: TargetKind, targets: string[], optional = false): GameState =>
+  targets.length ? pushChoice(s, { kind, id: ctx.sourceInstanceId!, controller: ctx.owner, targets, ...mayFlag(optional) }) : s
 
-/** "Give a unit +X/+Y (and keywords) for this phase", the amounts read as the event resolves. */
-const buffChoice = (s: GameState, ctx: EventCtx, test: UnitTest, buff: Buff): GameState => {
-  const targets = eligibleIds(s, ctx.owner, test)
-  return targets.length ? pushChoice(s, { kind: 'mayLastingBuff', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, ...buff }) : s
-}
+const defeatEvent = (description: string, test: UnitTest) =>
+  whenPlayed(description, (s, ctx) => targetChoice(s, ctx, 'selectUnitToDefeat', eligibleIds(s, ctx.owner, test)))
+const readyEvent = (description: string, test: UnitTest) =>
+  whenPlayed(description, (s, ctx) => targetChoice(s, ctx, 'selectUnitToReady', eligibleIds(s, ctx.owner, test)))
+const returnEvent = (description: string, test: UnitTest) =>
+  whenPlayed(description, (s, ctx) => targetChoice(s, ctx, 'selectUnitToReturn', eligibleIds(s, ctx.owner, test)))
+
+/** "Give a unit +X/+Y (and keywords) for this phase", the amounts read as the ability resolves. */
+const lastingBuffChoice = (s: GameState, ctx: EventCtx, targets: string[], buff: Buff, optional = false): GameState =>
+  targets.length ? pushChoice(s, { kind: 'mayLastingBuff', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, ...buff, ...mayFlag(optional) }) : s
+const buffChoice = (s: GameState, ctx: EventCtx, test: UnitTest, buff: Buff): GameState =>
+  lastingBuffChoice(s, ctx, eligibleIds(s, ctx.owner, test), buff)
 const buffEvent = (description: string, test: UnitTest, buff: (s: GameState, owner: PlayerId) => Buff) =>
   whenPlayed(description, (s, ctx) => buffChoice(s, ctx, test, buff(s, ctx.owner)))
 const anyUnit: UnitTest = () => true
@@ -2187,17 +2197,11 @@ registerCard('SOR_251', whenPlayed('Defeat an upgrade.', (s, ctx) => { // Confis
 
 // Heal, shield, exhaust
 registerCard('SOR_074', whenPlayed('Heal 3 damage from a unit or base.', (s, ctx) => // Repair
-  pushChoice(s, { kind: 'selectHealTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 3, unitTargets: allUnits(s).map(u => u.instanceId), baseTargets: BOTH_BASES })))
-registerCard('SOR_073', whenPlayed('Give a Shield token to a unit.', (s, ctx) => { // Moment of Peace
-  const targets = allUnits(s).map(u => u.instanceId)
-  return targets.length
-    ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_SHIELD, count: 1, targets, optional: false })
-    : s
-}))
-registerCard('JTL_262', whenPlayed('Exhaust a unit.', (s, ctx) => { // Evasive Maneuver
-  const targets = allUnits(s).map(u => u.instanceId)
-  return targets.length ? pushChoice(s, { kind: 'mayExhaustUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
-}))
+  healChoice(s, ctx, 3, allUnits(s).map(u => u.instanceId), BOTH_BASES)))
+registerCard('SOR_073', whenPlayed('Give a Shield token to a unit.', (s, ctx) => // Moment of Peace
+  shieldChoice(s, ctx, allUnits(s).map(u => u.instanceId), false)))
+registerCard('JTL_262', whenPlayed('Exhaust a unit.', (s, ctx) => // Evasive Maneuver
+  targetChoice(s, ctx, 'mayExhaustUnit', allUnits(s).map(u => u.instanceId))))
 
 // Ready
 registerCard('SOR_169', readyEvent('Ready a unit with 3 or less power.', (s, u) => effectivePower(s, u) <= 3)) // Keep Fighting
@@ -2302,3 +2306,182 @@ registerCard(GRANT_SHOOT_FIRST, {
   dealsDamageFirst: () => true,
 })
 registerCard('SOR_217', attackWithRider('Attack with a unit. It gets +1/+0 for this attack and deals its combat damage before the defender.', GRANT_SHOOT_FIRST)) // Shoot First
+
+// ── When Played units and upgrades from the other sealed sets that existing choices already express ──
+// Built on the event helpers above. `ctx.sourceInstanceId` is the unit itself, or for an upgrade the unit
+// it is attached to. "Another" unit leaves the source out; "a unit" and "a friendly unit" count it.
+
+type Pick = (s: GameState, u: UnitState, ctx: EventCtx) => boolean
+type When = (s: GameState, ctx: EventCtx) => boolean
+const picked = (s: GameState, ctx: EventCtx, test: Pick): UnitState[] => allUnits(s).filter(u => test(s, u, ctx))
+const pickedIds = (s: GameState, ctx: EventCtx, test: Pick): string[] => picked(s, ctx, test).map(u => u.instanceId)
+const pickAny: Pick = () => true
+const pickFriendly: Pick = (s, u, ctx) => s.players[ctx.owner].units.includes(u)
+const pickEnemy: Pick = (s, u, ctx) => s.players[opponentOf(ctx.owner)].units.includes(u)
+const pickOther: Pick = (_s, u, ctx) => u.instanceId !== ctx.sourceInstanceId
+const pickArena = (arena: 'ground' | 'space'): Pick => (_s, u) => u.arena === arena
+const pickTrait = (trait: string): Pick => (s, u) => unitHasTrait(s, u, trait)
+const pickAspect = (...aspects: string[]): Pick => (s, u) => (s.cards[u.cardId]?.aspects ?? []).some(a => aspects.includes(a))
+const pickAll = (...tests: Pick[]): Pick => (s, u, ctx) => tests.every(t => t(s, u, ctx))
+const pickGround = pickArena('ground')
+/** "If you control a unit that ...", `pickOther` included for "another". */
+const youControl = (s: GameState, ctx: EventCtx, ...tests: Pick[]): boolean => picked(s, ctx, pickAll(pickFriendly, ...tests)).length > 0
+const friendlyWasDefeated: When = (s, ctx) => defeatedThisPhase(s, ctx.owner).length > 0
+const always: When = () => true
+
+/** "(If ...,) (you may) deal N damage to a unit that ...". Nothing is raised for 0 damage. */
+const damageWp = (description: string, test: Pick, amount: number | ((s: GameState, ctx: EventCtx) => number), optional: boolean, when: When = always) =>
+  whenPlayed(description, (s, ctx) => {
+    const n = typeof amount === 'number' ? amount : amount(s, ctx)
+    return when(s, ctx) && n > 0 ? damageChoice(s, ctx, n, picked(s, ctx, test), [], optional) : s
+  })
+/** "(If ...,) (you may) defeat, ready, return or exhaust a unit that ...". */
+const targetWp = (description: string, kind: TargetKind, test: Pick, optional: boolean, when: When = always) =>
+  whenPlayed(description, (s, ctx) => (when(s, ctx) ? targetChoice(s, ctx, kind, pickedIds(s, ctx, test), optional) : s))
+/** "(If ...,) (you may) give a unit +X/+Y (or a keyword) for this phase". */
+const buffWp = (description: string, test: Pick, buff: (s: GameState, ctx: EventCtx) => Buff, optional: boolean, when: When = always) =>
+  whenPlayed(description, (s, ctx) => (when(s, ctx) ? lastingBuffChoice(s, ctx, pickedIds(s, ctx, test), buff(s, ctx), optional) : s))
+/** "You may defeat an upgrade", tokens included as for Confiscate. */
+const mayDefeatUpgradeWp = (description: string, test: (s: GameState, up: UpgradeRef) => boolean = () => true) => whenPlayed(description, (s, ctx) => {
+  const candidates = upgradeCandidates(s).filter(up => test(s, up))
+  return candidates.length ? pushChoice(s, { kind: 'selectUpgradeToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true }) : s
+})
+/** "(If ...,) deal N damage to this unit", or to the attached unit for an upgrade. */
+const damageSourceWp = (description: string, amount: number, when: When = always) =>
+  whenPlayed(description, (s, ctx) => (when(s, ctx) ? dealDamageToUnit(s, ctx.sourceInstanceId!, amount) : s))
+const readySelfWp = (description: string, when: When) =>
+  whenPlayed(description, (s, ctx) => (when(s, ctx) ? readyUnit(s, ctx.sourceInstanceId!) : s))
+/** The unit an upgrade is attached to, when it passes `test`. */
+const hostPasses = (s: GameState, ctx: EventCtx, test: (s: GameState, host: UnitState) => boolean): UnitState | undefined => {
+  const host = findUnit(s, ctx.sourceInstanceId!)?.unit
+  return host && test(s, host) ? host : undefined
+}
+const namedAs = (name: string) => (s: GameState, u: UnitState): boolean => cardOf(s, u)?.name === name
+
+// Damage to a chosen unit
+registerCard('LAW_213', damageWp('You may deal 2 damage to an exhausted ground unit.', pickAll(pickGround, (_s, u) => u.exhausted), 2, true)) // Cutthroat Podracer
+registerCard('LAW_045', damageWp('You may deal 3 damage to a ground unit. If you control a Command or Cunning unit, you may deal 5 damage to a ground unit instead.', pickGround, // Zeb Orellios
+  (s, ctx) => (youControl(s, ctx, pickAspect('Command', 'Cunning')) ? 5 : 3), true))
+registerCard('LAW_137', damageWp('If you control another Villainy unit, you may deal 2 damage to a ground unit.', pickGround, 2, true, (s, ctx) => youControl(s, ctx, pickOther, pickAspect('Villainy')))) // Ruthless Duo
+registerCard('SEC_241', damageWp('If you control another Official unit, you may deal 2 damage to a ground unit.', pickGround, 2, true, (s, ctx) => youControl(s, ctx, pickOther, pickTrait('Official')))) // Political Bully
+registerCard('SEC_254', damageWp('If you control a damaged unit, you may deal 2 damage to an enemy unit.', pickEnemy, 2, true, (s, ctx) => youControl(s, ctx, (_s, u) => u.damage > 0))) // Heroic ARC-170
+registerCard('LOF_133', damageWp('You may deal 2 damage to a Force unit.', pickTrait('Force'), 2, true)) // Purge Trooper
+registerCard('LOF_158', damageWp('If you control another Aggression unit, you may deal 2 damage to a ground unit.', pickGround, 2, true, (s, ctx) => youControl(s, ctx, pickOther, pickAspect('Aggression')))) // Hyena Bomber
+registerCard('LOF_145', damageWp('If you have the initiative, deal 2 damage to an enemy ground unit.', pickAll(pickEnemy, pickGround), 2, false, (s, ctx) => s.initiative === ctx.owner)) // Jedi Knight
+registerCard('LOF_259', damageWp('Deal 1 damage to a ground unit.', pickGround, 1, false)) // Ravening Gundark
+registerCard('LOF_198', damageWp('You may deal 2 damage to an exhausted unit.', (_s, u) => u.exhausted, 2, true)) // Stinger Mantis
+registerCard('JTL_239', damageWp('You may deal 2 damage to a damaged unit.', (_s, u) => u.damage > 0, 2, true)) // TIE Dagger Vanguard
+registerCard('JTL_153', damageWp('You may deal damage to a unit equal to the number of cards in your hand.', pickAny, (s, ctx) => s.players[ctx.owner].hand.length, true)) // Rebellious Hammerhead
+registerCard('JTL_102', damageWp('You may deal damage to a unit equal to the number of friendly space units.', pickAny, (s, ctx) => unitsIn(s, ctx.owner, 'space').length, true)) // Resistance Blue Squadron
+registerCard('SHD_254', damageWp('If you control another Bounty Hunter unit, you may deal 2 damage to a ground unit.', pickGround, 2, true, (s, ctx) => youControl(s, ctx, pickOther, pickTrait('Bounty Hunter')))) // Bounty Guild Initiate
+registerCard('SHD_235', damageWp('Deal 2 damage to a friendly unit.', pickFriendly, 2, false)) // Ruthless Assassin
+registerCard('SOR_132', damageWp('You may deal 3 damage to a space unit.', pickArena('space'), 3, true)) // Imperial Interceptor
+registerCard('SOR_090', damageWp('You may deal damage to a unit equal to the number of resources you control.', pickAny, (s, ctx) => s.players[ctx.owner].resources.length, true)) // Devastator
+registerCard('TWI_149', damageWp('Choose an enemy unit. Deal 1 damage to it for each friendly Republic unit.', pickEnemy, // Low Altitude Gunship
+  (s, ctx) => picked(s, ctx, pickAll(pickFriendly, pickTrait('Republic'))).length, false))
+registerCard('SHD_158', whenPlayed('Deal 2 damage to each other ground unit.', (s, ctx) => // Wild Rancor
+  pickedIds(s, ctx, pickAll(pickOther, pickGround)).reduce((acc, id) => dealDamageToUnit(acc, id, 2), s)))
+
+// Defeat
+registerCard('LAW_124', targetWp('You may defeat a non-leader unit with 4 or less remaining HP.', 'selectUnitToDefeat', (s, u) => nonLeader(s, u) && remainingHp(s, u) <= 4, true)) // Industrious Team
+registerCard('LOF_071', targetWp('You may defeat a space unit with 6 or less remaining HP.', 'selectUnitToDefeat', (s, u) => u.arena === 'space' && remainingHp(s, u) <= 6, true)) // Grappling Guardian
+registerCard('TWI_036', targetWp('Defeat an enemy unit with 2 or less remaining HP.', 'selectUnitToDefeat', (s, u, ctx) => pickEnemy(s, u, ctx) && remainingHp(s, u) <= 2, false)) // Devastating Gunship
+registerCard('SOR_038', targetWp('You may defeat a unit with 4 or less remaining HP.', 'selectUnitToDefeat', (s, u) => remainingHp(s, u) <= 4, true)) // Count Dooku
+registerCard('SOR_162', mayDefeatUpgradeWp('You may defeat an upgrade.')) // Disabling Fang Fighter
+registerCard('SEC_163', mayDefeatUpgradeWp('You may defeat an upgrade.')) // Outer Rim Constable
+registerCard('LOF_155', mayDefeatUpgradeWp('You may defeat a non-unique upgrade.', (s, up) => !s.cards[up.cardId]?.unique)) // DRK-1 Probe Droid
+
+// Ready
+registerCard('LAW_061', targetWp('You may ready another Bounty Hunter unit.', 'selectUnitToReady', pickAll(pickOther, pickTrait('Bounty Hunter')), true)) // Asajj Ventress
+registerCard('SHD_189', targetWp('You may ready another unit with power equal to or less than the number of upgrades on enemy units.', 'selectUnitToReady', (s, u, ctx) => // Slaver's Freighter
+  pickOther(s, u, ctx) && effectivePower(s, u) <= s.players[opponentOf(ctx.owner)].units.reduce((n, e) => n + e.upgrades.length, 0), true))
+registerCard('JTL_135', readySelfWp('If an opponent controls more space units than you, ready this unit.', (s, ctx) => // Special Forces TIE Fighter
+  unitsIn(s, opponentOf(ctx.owner), 'space').length > unitsIn(s, ctx.owner, 'space').length))
+registerCard('TWI_137', readySelfWp('If you control fewer units than an opponent, ready this unit.', (s, ctx) => // Savage Opress
+  s.players[ctx.owner].units.length < s.players[opponentOf(ctx.owner)].units.length))
+registerCard('SOR_148', readySelfWp('If a base has 15 or more damage on it, ready this unit.', s => BOTH_BASES.some(p => s.players[p].base.damage >= 15))) // Guerilla Attack Pod
+registerCard('LOF_234', targetWp('If you control a Sith leader unit, you may ready this unit.', 'selectUnitToReady', (_s, u, ctx) => u.instanceId === ctx.sourceInstanceId, true, // Darth Malak
+  (s, ctx) => youControl(s, ctx, (s2, u) => isLeaderUnit(s2, u) && unitHasTrait(s2, u, 'Sith'))))
+
+// Return to hand
+registerCard('SOR_202', targetWp("You may return a non-leader unit to its owner's hand.", 'selectUnitToReturn', nonLeader, true)) // Cantina Bouncer
+registerCard('LAW_241', targetWp("You may return a non-leader unit to its owner's hand.", 'selectUnitToReturn', nonLeader, true)) // The Blade Wing
+registerCard('LAW_089', targetWp("You may return a non-leader unit that costs 2 or less to its owner's hand. If you control a Command or Aggression unit, you may return a non-leader unit that costs 4 or less instead.", 'selectUnitToReturn', // Kanan Jarrus
+  (s, u, ctx) => nonLeader(s, u) && printedCost(s, u) <= (youControl(s, ctx, pickAspect('Command', 'Aggression')) ? 4 : 2), true))
+registerCard('LAW_240', targetWp("You may return another friendly non-leader unit to its owner's hand.", 'selectUnitToReturn', (s, u, ctx) => pickFriendly(s, u, ctx) && pickOther(s, u, ctx) && nonLeader(s, u), true)) // Milodon Rider
+registerCard('TWI_191', targetWp("You may return a friendly non-leader, non-Vehicle unit to its owner's hand.", 'selectUnitToReturn', (s, u, ctx) => pickFriendly(s, u, ctx) && nonLeader(s, u) && nonVehicle(s, u), true)) // Wolf Pack Escort
+registerCard('SOR_209', targetWp("Return a friendly non-leader unit to its owner's hand.", 'selectUnitToReturn', (s, u, ctx) => pickFriendly(s, u, ctx) && nonLeader(s, u), false)) // Pirated Starfighter
+
+// Shield tokens, exhausting, healing
+registerCard('LOF_242', whenPlayed('You may give a Shield token to a unit with Sentinel.', (s, ctx) => // Refugee of The Path
+  shieldChoice(s, ctx, pickedIds(s, ctx, (s2, u) => unitHasKeyword(s2, u, 'Sentinel')), true)))
+registerCard('JTL_044', whenPlayed('You may give a Shield token to a damaged Vehicle unit.', (s, ctx) => // Echo Base Engineer
+  shieldChoice(s, ctx, pickedIds(s, ctx, (s2, u) => u.damage > 0 && unitHasTrait(s2, u, 'Vehicle')), true)))
+registerCard('JTL_199', whenPlayed('If another player controls 3 or more exhausted units, give a Shield token to a unit.', (s, ctx) => // Blade Squadron B-Wing
+  (s.players[opponentOf(ctx.owner)].units.filter(u => u.exhausted).length >= 3 ? shieldChoice(s, ctx, pickedIds(s, ctx, pickAny), false) : s)))
+registerCard('JTL_217', targetWp('If you control another space unit, you may exhaust a unit.', 'mayExhaustUnit', pickAny, true, (s, ctx) => youControl(s, ctx, pickOther, pickArena('space')))) // Death Space Skirmisher
+registerCard('SOR_178', targetWp('If you control another Cunning unit, exhaust an enemy unit that costs 4 or less.', 'mayExhaustUnit', (s, u, ctx) => pickEnemy(s, u, ctx) && printedCost(s, u) <= 4, false, // Cartel Spacer
+  (s, ctx) => youControl(s, ctx, pickOther, pickAspect('Cunning'))))
+registerCard('SOR_039', whenPlayed('Exhaust all ground units.', s => groundUnits(s).reduce((acc, u) => exhaustUnit(acc, u.instanceId), s))) // AT-AT Suppressor
+registerCard('TWI_109', whenPlayed('If you control another Republic unit, you may heal 3 damage from a base.', (s, ctx) => // 501st Liberator
+  (youControl(s, ctx, pickOther, pickTrait('Republic')) ? healChoice(s, ctx, 3, [], BOTH_BASES, true) : s)))
+registerCard('LAW_035', whenPlayed('You may heal 2 damage from a unit. If you control an Aggression or Cunning unit, you may heal 4 damage from a unit instead.', (s, ctx) => // Ezra Bridger
+  healChoice(s, ctx, youControl(s, ctx, pickAspect('Aggression', 'Cunning')) ? 4 : 2, pickedIds(s, ctx, pickAny), [], true)))
+
+// For this phase, on one unit
+registerCard('SEC_206', buffWp('You may give a unit -3/-0 for this phase.', pickAny, () => ({ power: -3 }), true)) // Emissaries from Ryloth
+registerCard('LAW_151', buffWp('Another friendly unit gets +1/+1 for this phase.', pickAll(pickFriendly, pickOther), () => ({ power: 1, hp: 1 }), false)) // Profiteering Hunter
+registerCard('LOF_114', buffWp('You may give another friendly unit Overwhelm for this phase.', pickAll(pickFriendly, pickOther), () => ({ keywords: [{ name: 'Overwhelm' }] }), true)) // Kaadu
+registerCard('SOR_086', buffWp('Give a unit Sentinel for this phase.', pickAny, () => ({ keywords: [{ name: 'Sentinel' }] }), false)) // Gladiator Star Destroyer
+registerCard('TWI_031', buffWp('If a friendly unit was defeated this phase, you may give a unit -1/-1 for this phase.', pickAny, () => ({ power: -1, hp: -1 }), true, friendlyWasDefeated)) // Rune Haako
+registerCard('SOR_051', buffWp('Give an enemy unit -3/-3 for this phase. If a friendly unit was defeated this phase, give that enemy unit -6/-6 for this phase instead.', pickEnemy, // Luke Skywalker
+  (s, ctx) => (friendlyWasDefeated(s, ctx) ? { power: -6, hp: -6 } : { power: -3, hp: -3 }), false))
+
+// Draw and bases
+registerCard('SOR_111', whenPlayed('Draw a card.', (s, ctx) => drawCards(s, ctx.owner, 1))) // Patrolling V-Wing
+registerCard('SHD_249', whenPlayed('If you control another Wookiee unit, draw a card.', (s, ctx) => // Wookiee Warrior
+  (youControl(s, ctx, pickOther, pickTrait('Wookiee')) ? drawCards(s, ctx.owner, 1) : s)))
+registerCard('LOF_121', whenPlayed('Draw a card for each friendly unit with 7 or more remaining HP.', (s, ctx) => { // The Purrgil King
+  const n = picked(s, ctx, pickAll(pickFriendly, (s2, u) => remainingHp(s2, u) >= 7)).length
+  return n > 0 ? drawCards(s, ctx.owner, n) : s
+}))
+registerCard('SOR_068', whenPlayed('If you control another Vigilance unit, heal 4 damage from your base.', (s, ctx) => // Cargo Juggernaut
+  (youControl(s, ctx, pickOther, pickAspect('Vigilance')) ? healBase(s, ctx.owner, 4) : s)))
+registerCard('LAW_109', whenPlayed('If a friendly unit was defeated this phase, heal 4 damage from your base.', (s, ctx) => // Tantive IV
+  (friendlyWasDefeated(s, ctx) ? healBase(s, ctx.owner, 4) : s)))
+registerCard('SEC_102', whenPlayed('Heal 2 damage from your base for each friendly Official unit.', (s, ctx) => { // Renowned Dignitaries
+  const n = picked(s, ctx, pickAll(pickFriendly, pickTrait('Official'))).length
+  return n > 0 ? healBase(s, ctx.owner, 2 * n) : s
+}))
+registerCard('TWI_160', whenPlayed('If you control another Separatist unit, deal 2 damage to an enemy base.', (s, ctx) => // Vanguard Droid Bomber
+  (youControl(s, ctx, pickOther, pickTrait('Separatist')) ? dealDamageToBase(s, opponentOf(ctx.owner), 2) : s)))
+
+// This unit
+registerCard('SEC_240', damageSourceWp('Deal 2 damage to this unit.', 2)) // Hutt Cartel Starfighter
+registerCard('JTL_248', damageSourceWp('Deal 3 damage to this unit.', 3)) // Dilapidated Ski Speeder
+registerCard('TWI_059', damageSourceWp('Deal 2 damage to this unit.', 2)) // Royal Guard Attaché
+registerCard('JTL_158', damageSourceWp('If you control no other Fighter units, deal 1 damage to this unit.', 1, (s, ctx) => !youControl(s, ctx, pickOther, pickTrait('Fighter')))) // Crackshot V-Wing
+registerCard('JTL_067', whenPlayed('Give 2 Shield tokens to this unit.', (s, ctx) => giveTokens(s, ctx.sourceInstanceId!, TOKEN_SHIELD, 2))) // Cloaked StarViper
+
+// Upgrades acting on the attached unit
+registerCard('TWI_155', damageSourceWp('Deal 2 damage to attached unit.', 2)) // Twice the Pride
+registerCard('LAW_127', whenPlayed('Exhaust attached unit.', (s, ctx) => exhaustUnit(s, ctx.sourceInstanceId!))) // Kill Switch
+registerCard('TWI_070', whenPlayed('Exhaust attached unit.', (s, ctx) => exhaustUnit(s, ctx.sourceInstanceId!))) // Perilous Position
+registerCard('SOR_053', { // Luke's Lightsaber
+  attachRestriction: nonVehicle,
+  ...whenPlayed('If attached unit is Luke Skywalker, heal all damage from him and give a Shield token to him.', (s, ctx) => {
+    const luke = hostPasses(s, ctx, namedAs('Luke Skywalker'))
+    return luke ? giveToken(healUnit(s, luke.instanceId, luke.damage), luke.instanceId, TOKEN_SHIELD) : s
+  }),
+})
+registerCard('SHD_073', { // Mandalorian Armor
+  attachRestriction: nonVehicle,
+  ...whenPlayed('If attached unit is a Mandalorian, give a Shield token to it.', (s, ctx) =>
+    (hostPasses(s, ctx, (s2, u) => unitHasTrait(s2, u, 'Mandalorian')) ? giveToken(s, ctx.sourceInstanceId!, TOKEN_SHIELD) : s)),
+})
+registerCard('TWI_152', { // Mace Windu's Lightsaber
+  attachRestriction: nonVehicle,
+  ...whenPlayed('If attached unit is Mace Windu, draw 2 cards.', (s, ctx) => (hostPasses(s, ctx, namedAs('Mace Windu')) ? drawCards(s, ctx.owner, 2) : s)),
+})
+registerCard('TWI_168', whenPlayed('If an opponent controls more units than you, draw a card.', (s, ctx) => // Old Access Codes
+  (s.players[opponentOf(ctx.owner)].units.length > s.players[ctx.owner].units.length ? drawCards(s, ctx.owner, 1) : s)))

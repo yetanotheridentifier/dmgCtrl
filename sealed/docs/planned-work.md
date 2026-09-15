@@ -136,7 +136,8 @@ Two phases:
 - **Phase 1 (#453 to #460), 940 cards blocked by nothing.** 57% of the cards with ability text are
   expressible with the primitives already in `engine/effects.ts`. Cut by trigger point. Events are the
   largest batch; the ones that are a single existing choice or primitive play, and the rest are #597,
-  grouped by what each group lacks. The ticket bodies carry the sizes from before token units, Credit
+  grouped by what each group lacks. When Played units and upgrades follow the same pattern: the
+  single-choice ones play, and the rest are split out the same way. The ticket bodies carry the sizes from before token units, Credit
   tokens, Disclose and indirect damage were blockers, so most are smaller than they say (When Defeated
   by a quarter, bases and constant abilities barely); the corrected counts are commented on each.
 - **Phase 2 (#461 to #476, #602 to #605), 581 cards blocked by exactly one thing each**, ordered by how
