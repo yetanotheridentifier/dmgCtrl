@@ -152,10 +152,12 @@ describe('implementation progress', () => {
     expect(ash.total).toEqual({ leaders: 18, bases: 8, units: 179, upgrades: 25, events: 34, tokens: 4 })
     expect(ash.done.leaders).toBe(18)
     expect(ash.done.bases).toBe(8) // all vanilla
-    expect(ash.done.upgrades).toBe(IMPLEMENTED_UPGRADES.length)
-    expect(ash.done.events).toBe(IMPLEMENTED_EVENTS.length)
+    // The manifests hold every set's built cards, so only the ASH ids count here.
+    const inAsh = (cards: { id: string }[]) => cards.filter(c => setOf(c.id) === 'ASH').length
+    expect(ash.done.upgrades).toBe(inAsh(IMPLEMENTED_UPGRADES))
+    expect(ash.done.events).toBe(inAsh(IMPLEMENTED_EVENTS))
     // Keyword-only units + every registered unit ability.
-    expect(ash.done.units).toBe(UNIT_GROUPS.find(g => g.id === 'keyword')!.units.length + IMPLEMENTED_UNITS.length)
+    expect(ash.done.units).toBe(UNIT_GROUPS.find(g => g.id === 'keyword')!.units.length + inAsh(IMPLEMENTED_UNITS))
     expect(ash.done.tokens).toBe(3) // Shield/Advantage/Mandalorian — Experience is printed but ungranted
   })
 

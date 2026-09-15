@@ -31,6 +31,14 @@ export const REPRINTS: Reprint[] = [
   { name: 'Consortium StarViper', canonical: 'ASH_122', printings: ['SOR_112'] },
   { name: 'Inspired Recruit', canonical: 'ASH_152', printings: ['LAW_180'] },
   { name: 'Grassroots Resistance', canonical: 'ASH_258', printings: ['SEC_258'] },
+  { name: 'Open Fire', canonical: 'SOR_172', printings: ['TWI_174'] },
+  { name: 'Daring Raid', canonical: 'SHD_178', printings: ['TWI_170'] },
+  { name: 'Vanquish', canonical: 'SOR_078', printings: ['TWI_077'] },
+  { name: 'Confiscate', canonical: 'SOR_251', printings: ['SHD_262'] },
+  { name: 'Repair', canonical: 'SOR_074', printings: ['JTL_075'] },
+  { name: 'Waylay', canonical: 'SOR_222', printings: ['TWI_226'] },
+  { name: 'Tactical Advantage', canonical: 'SOR_124', printings: ['TWI_124'] },
+  { name: 'Surprise Strike', canonical: 'SOR_220', printings: ['SHD_231'] },
 ]
 
 const BY_PRINTING: Record<string, string> = Object.fromEntries(
