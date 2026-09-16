@@ -871,7 +871,8 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         break
       }
       if (choice.replayFree && upgradeOwner === choice.controller && !wasToken) {
-        const targets = inPlayUnits(next).map(u => u.instanceId)
+        const restriction = getCardDefinition(pick.cardId)?.attachRestriction
+        const targets = inPlayUnits(next).filter(u => !restriction || restriction(next, u, choice.controller)).map(u => u.instanceId)
         if (targets.length > 0) {
           next = pushChoice(next, { kind: 'mayPlayUpgradeFree', id: `${choice.id}-free`, controller: choice.controller, cardId: pick.cardId, targets })
         }
@@ -879,21 +880,12 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       break
     }
     case 'mayPlayUpgradeFree': {
-      // Jabba the Hutt: attach the just-returned upgrade to a chosen unit, paying nothing.
+      // Jabba the Hutt: play the just-returned upgrade on a chosen unit, paying nothing. Playing it free
+      // is still playing it, so it goes through the same door as an ordinary upgrade play.
       if (!targetInstanceId) break
-      const owner = choice.controller
-      const p = next.players[owner]
-      const handIdx = p.hand.indexOf(choice.cardId)
+      const handIdx = next.players[choice.controller].hand.indexOf(choice.cardId)
       if (handIdx === -1) break
-      next = updatePlayer(next, owner, { hand: p.hand.filter((_, i) => i !== handIdx) })
-      const host = findUnit(next, targetInstanceId)
-      if (!host) break
-      next = updatePlayer(next, host.owner, {
-        units: next.players[host.owner].units.map(u =>
-          u.instanceId === targetInstanceId ? { ...u, upgrades: [...u.upgrades, { cardId: choice.cardId, owner }] } : u,
-        ),
-      })
-      next = fireUpgradeAttached(next, targetInstanceId, true) // playing it free still counts as playing it
+      next = playUpgradeOnto(next, choice.controller, handIdx, targetInstanceId)
       break
     }
     case 'mayPayExhaustArena': {

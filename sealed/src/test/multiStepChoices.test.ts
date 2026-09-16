@@ -3,7 +3,8 @@ import { resolve } from '../engine/resolve'
 import { dealDamageToUnit } from '../engine/combat'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
-import type { GameState } from '../engine/types'
+import { cardsPlayedThisPhase } from '../engine/types'
+import type { GameState, PendingChoice } from '../engine/types'
 
 /**
  * Units whose text is a sequence of decisions: pick two things, pay-then-choose,
@@ -22,6 +23,8 @@ const F = {
   COST5: card({ id: 'COST5', type: 'unit', arena: 'ground', cost: 5, power: 2, hp: 9 }),
   DEAR: card({ id: 'DEAR', type: 'unit', arena: 'ground', cost: 9, power: 2, hp: 2 }),
   UPG: card({ id: 'UPG', type: 'upgrade', cost: 2, power: 1, hp: 1 }),
+  SOR_215: card({ id: 'SOR_215', name: 'Snapshot Reflexes', type: 'upgrade', cost: 1, power: 1, hp: 1 }),
+  ASH_230: card({ id: 'ASH_230', name: 'Improvised Identity', type: 'upgrade', cost: 1 }),
 }
 const U = (s: GameState, id: string) => [...s.players.player.units, ...s.players.opponent.units].find(u => u.instanceId === id)!
 const rich = (over: Parameters<typeof player>[0] = {}) => player({ resources: ready(20), ...over })
@@ -102,6 +105,45 @@ describe('Jabba the Hutt (042) — return an upgrade, then replay it free', () =
     const returned = resolve(p, { type: 'acceptChoice', choiceId: choice(p).id, optionIndex: 0 })
     expect(returned.players.opponent.hand).toContain('UPG') // to ITS owner's hand
     expect(returned.pendingChoices ?? []).toHaveLength(0) // not your hand → no free play
+  })
+
+  /** Jabba returns `upgradeId` from friendly unit `g` and the free replay is offered. */
+  const returnOwn = (upgradeId: string, units = [unit('g', 'GRD', { upgrades: [{ cardId: upgradeId, owner: 'player' }] })]) => {
+    const s = state({
+      cards: F,
+      players: {
+        player: rich({ hand: ['ASH_042'], units }),
+        opponent: player({ units: [unit('e', 'GRD')] }),
+      },
+    })
+    const p = resolve(s, { type: 'playUnit', handIndex: 0 })
+    const returned = resolve(p, { type: 'acceptChoice', choiceId: choice(p).id, optionIndex: 0 })
+    expect(choice(returned)).toMatchObject({ kind: 'mayPlayUpgradeFree', cardId: upgradeId })
+    return returned
+  }
+
+  // Playing it for free is still playing it: everything an ordinary upgrade play does, the replay does.
+  it("replaying an upgrade fires that upgrade's own When Played (Snapshot Reflexes)", () => {
+    const returned = returnOwn('SOR_215')
+    const replayed = resolve(returned, { type: 'acceptChoice', choiceId: choice(returned).id, targetInstanceId: 'g' })
+    expect(replayed.pendingChoices?.some(c => c.kind === 'mayAttack' && c.unitId === 'g')).toBe(true)
+  })
+
+  it('records the replayed upgrade as played this phase', () => {
+    const returned = returnOwn('UPG')
+    const replayed = resolve(returned, { type: 'acceptChoice', choiceId: choice(returned).id, targetInstanceId: 'g' })
+    expect(cardsPlayedThisPhase(replayed, 'player')).toContain('UPG')
+    expect(U(replayed, 'g').upgradesPlayedThisRound).toBe(1)
+  })
+
+  it("offers only the units the upgrade's attach restriction allows (Improvised Identity: ground only)", () => {
+    const returned = returnOwn('ASH_230', [
+      unit('g', 'GRD', { upgrades: [{ cardId: 'ASH_230', owner: 'player' }] }),
+      unit('s', 'SPC', { arena: 'space' }),
+    ])
+    const offer = choice(returned) as Extract<PendingChoice, { kind: 'mayPlayUpgradeFree' }>
+    expect(offer.targets).toContain('g')
+    expect(offer.targets).not.toContain('s')
   })
 })
 
