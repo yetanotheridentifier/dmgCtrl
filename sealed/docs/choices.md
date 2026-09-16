@@ -84,7 +84,10 @@ units already picked by an "each of up to N"). `hookOnDecline` runs the hook onc
 ability that goes on after its picks stop (AAT Incinerator).
 
 `selectUpgradeToReturn` offers a free replay only with `replayFree`, which is Jabba the Hutt's own
-text; other cards that return an upgrade print no such thing.
+text; other cards that return an upgrade print no such thing. The replay (`mayPlayUpgradeFree`) offers
+only units the upgrade's `attachRestriction` allows and plays it through `playUpgradeOnto`, like any
+upgrade whose cost is already dealt with: the upgrade's own When Played fires, it counts as played, and
+the unique rule applies.
 
 `distributeDamage` with `enemiesOf` is Emperor Palpatine's "divided among enemy units": it re-offers
 only enemy units and has no Done while one remains. `distributeHealing` heals a point at a time from
