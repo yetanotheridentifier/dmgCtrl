@@ -750,7 +750,8 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'choosePlayerThen':
-        // The opponent, then yourself. "Choose a player" is never optional.
+      case 'chooseArenaThen':
+        // The opponent then yourself, or ground then space. Neither choice is ever optional.
         moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 0 }, { type: 'acceptChoice', choiceId: choice.id, optionIndex: 1 })
         break
       case 'selectHandCardThen': {

@@ -43,6 +43,21 @@ const F = {
   LAW_217: ev('LAW_217', 3), SEC_233: ev('SEC_233', 3), LAW_204: ev('LAW_204'), SHD_244: ev('SHD_244', 3),
   SHD_181: ev('SHD_181', 4), SHD_156: ev('SHD_156', 2), SOR_175: ev('SOR_175', 6), SOR_167: ev('SOR_167'),
   SOR_174: ev('SOR_174', 5), SOR_171: ev('SOR_171', 3),
+
+  SOR_127: ev('SOR_127', 3), SOR_151: ev('SOR_151', 2), LOF_128: ev('LOF_128', 4), SOR_234: ev('SOR_234', 4),
+  JTL_129: ev('JTL_129', 4), JTL_131: ev('JTL_131', 7), TWI_176: ev('TWI_176', 6), JTL_173: ev('JTL_173'),
+  SEC_130: ev('SEC_130', 4), TWI_099: ev('TWI_099', 2), JTL_144: ev('JTL_144', 3), SOR_092: ev('SOR_092', 5),
+  SOR_173: ev('SOR_173', 5), SOR_221: ev('SOR_221', 3),
+
+  // Units for the damage events
+  P3: card({ id: 'P3', arena: 'ground', cost: 2, power: 3, hp: 5 }),
+  P5: card({ id: 'P5', arena: 'ground', cost: 4, power: 5, hp: 8 }),
+  BIG: card({ id: 'BIG', arena: 'ground', cost: 5, power: 1, hp: 20 }),
+  SP4: card({ id: 'SP4', arena: 'space', cost: 3, power: 4, hp: 20 }),
+  IMP2: card({ id: 'IMP2', arena: 'ground', cost: 2, power: 2, hp: 5, traits: ['IMPERIAL'] }),
+  IMP3: card({ id: 'IMP3', arena: 'ground', cost: 3, power: 3, hp: 5, traits: ['IMPERIAL'] }),
+  VEHG: card({ id: 'VEHG', arena: 'ground', cost: 3, power: 2, hp: 5, traits: ['VEHICLE'] }),
+  VEHS: card({ id: 'VEHS', arena: 'space', cost: 3, power: 4, hp: 20, traits: ['VEHICLE'] }),
 }
 
 const unit = (instanceId: string, cardId: string, over: Partial<UnitState> = {}): UnitState =>
@@ -296,5 +311,136 @@ describe('events that choose a player', () => {
     let s = pickPlayer(play(board('SOR_167', { units: [unit('g', 'GRD')] }, { hand: HAND, units: [unit('e', 'GRD')] })), 'opponent')
     s = accept(s, { handIndex: 1 })
     noChoice(s)
+  })
+})
+
+// ── Damage read from a unit, and a chosen arena ─────────────────────────────────────────────────
+
+/** The unit targets the current choice offers, sorted. */
+const unitOffers = (s: GameState) =>
+  [...new Set(moves(s).flatMap(m => (m.type === 'acceptChoice' && m.targetInstanceId ? [m.targetInstanceId] : [])))].sort()
+const dmg = (s: GameState, id: string) => U(s, id)?.damage
+
+describe('events that deal damage read from a unit', () => {
+  it('Strike True (SOR_127): a friendly unit deals its power to an enemy unit', () => {
+    let s = play(board('SOR_127', { units: [unit('a', 'P3'), unit('b', 'P5')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['a', 'b'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'b' })
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    noChoice(s)
+    expect(dmg(s, 'e')).toBe(5)
+  })
+
+  it('Karabast (SOR_151): damage equal to the damage on the friendly unit plus 1', () => {
+    let s = play(board('SOR_151', { units: [unit('a', 'P3', { damage: 2 })] }, { units: [unit('e', 'BIG')] }))
+    s = accept(accept(s, { targetInstanceId: 'a' }), { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(3)
+  })
+
+  it('Protect the Pod (LOF_128): a friendly non-Vehicle unit deals its remaining HP', () => {
+    let s = play(board('LOF_128', { units: [unit('a', 'P5', { damage: 3 }), unit('v', 'VEHG')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['a'])
+    s = accept(accept(s, { targetInstanceId: 'a' }), { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(5)
+  })
+
+  it('Maximum Firepower (SOR_234): two friendly Imperial units deal their power to the same unit', () => {
+    let s = play(board('SOR_234', { units: [unit('i2', 'IMP2'), unit('i3', 'IMP3'), unit('p', 'P5')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['i2', 'i3'])
+    s = accept(s, { targetInstanceId: 'i3' })
+    expect(unitOffers(s)).toEqual(['e', 'i2', 'i3', 'p'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(3)
+    expect(unitOffers(s)).toEqual(['i2'])
+    s = accept(s, { targetInstanceId: 'i2' })
+    noChoice(s)
+    expect(dmg(s, 'e')).toBe(5)
+  })
+
+  it('Focus Fire (JTL_129): each friendly Vehicle in the same arena deals its power to the unit', () => {
+    let s = play(board('JTL_129', { units: [unit('v1', 'VEHG'), unit('v2', 'VEHG'), unit('vs', 'VEHS'), unit('p', 'P5')] }, { units: [unit('e', 'BIG')] }))
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'e' })
+    noChoice(s)
+    expect(dmg(s, 'e')).toBe(4)
+  })
+
+  it('Caught in the Crossfire (TWI_176): two enemy units in one arena deal their power to each other', () => {
+    let s = play(board('TWI_176', { units: [unit('m', 'P5')] }, { units: [unit('x', 'P3'), unit('y', 'P5'), unit('z', 'SP4')] }))
+    // The space unit has no partner in its arena.
+    expect(unitOffers(s)).toEqual(['x', 'y'])
+    s = accept(s, { targetInstanceId: 'x' })
+    expect(unitOffers(s)).toEqual(['y'])
+    s = accept(s, { targetInstanceId: 'y' })
+    noChoice(s)
+    // x (3/5) takes 5 and is defeated; y still takes x's 3, dealt at the same time.
+    expect(U(s, 'x')).toBeUndefined()
+    expect(dmg(s, 'y')).toBe(3)
+  })
+
+  it('Fight Fire With Fire (JTL_173): a friendly and an enemy unit in the same arena take 3 each', () => {
+    let s = play(board('JTL_173', { units: [unit('m', 'BIG'), unit('ms', 'SP4')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['m'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect([dmg(s, 'm'), dmg(s, 'e')]).toEqual([3, 3])
+  })
+
+  it('Ferrix Uprising (SEC_130): twice the units you control in its arena', () => {
+    let s = play(board('SEC_130', { units: [unit('a', 'P3'), unit('b', 'P3'), unit('c', 'SP4')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['a', 'b', 'c', 'e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(4)
+  })
+
+  it('Synchronized Strike (TWI_099): an enemy unit takes the units you control in its arena', () => {
+    let s = play(board('TWI_099', { units: [unit('a', 'P3'), unit('b', 'P3'), unit('c', 'SP4')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(2)
+  })
+
+  it('No Disintegrations (JTL_144): a non-leader unit is left on 1 HP', () => {
+    let s = play(board('JTL_144', {}, { units: [unit('e', 'BIG', { damage: 4 }), unit('L', 'LEAD', { isLeader: true })] }))
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(19)
+  })
+
+  it('Overwhelming Barrage (SOR_092): +2/+2, then its power divided among other units', () => {
+    let s = play(board('SOR_092', { units: [unit('a', 'P3')] }, { units: [unit('e', 'BIG'), unit('f', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['a'])
+    s = accept(s, { targetInstanceId: 'a' })
+    const c = choice(s)
+    expect(c).toMatchObject({ kind: 'distributeDamage', remaining: 5, total: 5 })
+    expect(unitOffers(s)).toEqual(['e', 'f'])
+  })
+})
+
+describe('events that choose an arena', () => {
+  const pickArena = (s: GameState, arena: 'ground' | 'space') => {
+    expect(choice(s).kind).toBe('chooseArenaThen')
+    expect(declinable(s)).toBe(false)
+    return accept(s, { optionIndex: arena === 'ground' ? 0 : 1 })
+  }
+
+  it('Bombing Run (SOR_173) deals 3 to each unit in the chosen arena', () => {
+    const s = pickArena(play(board('SOR_173', { units: [unit('a', 'BIG'), unit('s', 'SP4')] }, { units: [unit('e', 'BIG')] })), 'ground')
+    expect([dmg(s, 'a'), dmg(s, 's'), dmg(s, 'e')]).toEqual([3, 0, 3])
+  })
+
+  it('Outmaneuver (SOR_221) exhausts each unit in the chosen arena', () => {
+    const s = pickArena(play(board('SOR_221', { units: [unit('a', 'BIG'), unit('s', 'SP4')] }, { units: [unit('e', 'SP4')] })), 'space')
+    expect([U(s, 'a')!.exhausted, U(s, 's')!.exhausted, U(s, 'e')!.exhausted]).toEqual([false, true, true])
+  })
+
+  it('Turbolaser Salvo (JTL_131): a friendly space unit deals its power to each enemy unit in the arena', () => {
+    let s = pickArena(play(board('JTL_131', { units: [unit('sp', 'SP4'), unit('g', 'P5')] }, { units: [unit('e', 'BIG'), unit('f', 'BIG'), unit('es', 'SP4')] })), 'ground')
+    expect(unitOffers(s)).toEqual(['sp'])
+    s = accept(s, { targetInstanceId: 'sp' })
+    expect([dmg(s, 'e'), dmg(s, 'f'), dmg(s, 'es'), dmg(s, 'g')]).toEqual([4, 4, 0, 0])
   })
 })

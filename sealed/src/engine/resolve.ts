@@ -1,5 +1,5 @@
 import type { Action, AttackTarget } from './actions'
-import type { GameState, PlayerId, UnitState } from './types'
+import type { Arena, GameState, PlayerId, UnitState } from './types'
 import type { IfYouDo, PendingChoice, PendingTrigger, TriggerContext, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds } from './types'
 import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
@@ -1349,6 +1349,9 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'choosePlayerThen':
       next = runIfYouDo(next, choice.then, { playerChosen: (optionIndex ?? 0) === 1 ? choice.controller : opponentOf(choice.controller) })
       break
+    case 'chooseArenaThen':
+      next = runIfYouDo(next, choice.then, { arenaChosen: (optionIndex ?? 0) === 1 ? 'space' : 'ground' })
+      break
     case 'selectUpgradeThen': {
       const pick = choice.candidates[optionIndex ?? 0]
       if (pick) next = runIfYouDo(next, choice.then, { upgradeChosen: pick })
@@ -2444,10 +2447,10 @@ function finishHealing(state: GameState, damageUnit: string, healed: number): Ga
 }
 
 /** Resume an ability at its card's `ifYouDo` hook, with what the answered choice settled. */
-function runIfYouDo(state: GameState, then: IfYouDo, settled: { targetInstanceId?: string; cardChosen?: string; handIndex?: number; upgradeChosen?: UpgradeRef; playerChosen?: PlayerId } = {}): GameState {
+function runIfYouDo(state: GameState, then: IfYouDo, settled: { targetInstanceId?: string; cardChosen?: string; handIndex?: number; upgradeChosen?: UpgradeRef; playerChosen?: PlayerId; arenaChosen?: Arena } = {}): GameState {
   const hook = getCardDefinition(then.cardId)?.ifYouDo
   if (!hook) return state
-  const next = hook(state, { owner: then.owner, cardId: then.cardId, sourceInstanceId: then.sourceInstanceId, step: then.step, upgradeChosen: then.upgrade, ...settled })
+  const next = hook(state, { owner: then.owner, cardId: then.cardId, sourceInstanceId: then.sourceInstanceId, step: then.step, upgradeChosen: then.upgrade, unitChosen: then.unit, ...settled })
   return checkWin(next)
 }
 

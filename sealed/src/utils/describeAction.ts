@@ -346,6 +346,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         return `Choose ${name ?? 'upgrade'}${host ? ` on ${host}` : ''}`
       }
       if (choice.kind === 'choosePlayerThen') return (action.optionIndex ?? 0) === 1 ? 'Choose yourself' : 'Choose your opponent'
+      if (choice.kind === 'chooseArenaThen') return (action.optionIndex ?? 0) === 1 ? 'Space arena' : 'Ground arena'
       if (choice.kind === 'selectHandCardThen') {
         const cardId = action.handIndex !== undefined ? state.players[by].hand[action.handIndex] : undefined
         return `Choose ${cardId ? state.cards[cardId]?.name ?? cardId : 'a card'}`

@@ -434,6 +434,21 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'SOR_171', name: 'Mission Briefing' },
   { id: 'SHD_181', name: 'Pillage' },
   { id: 'SOR_167', name: 'Force Throw' },
+  // Damage read from a unit, and "choose an arena"
+  { id: 'SOR_127', name: 'Strike True' },
+  { id: 'SOR_151', name: 'Karabast' },
+  { id: 'LOF_128', name: 'Protect the Pod' },
+  { id: 'SOR_234', name: 'Maximum Firepower' },
+  { id: 'JTL_129', name: 'Focus Fire' },
+  { id: 'TWI_176', name: 'Caught in the Crossfire' },
+  { id: 'JTL_173', name: 'Fight Fire With Fire' },
+  { id: 'SEC_130', name: 'Ferrix Uprising' },
+  { id: 'TWI_099', name: 'Synchronized Strike' },
+  { id: 'JTL_144', name: 'No Disintegrations' },
+  { id: 'SOR_092', name: 'Overwhelming Barrage' },
+  { id: 'SOR_173', name: 'Bombing Run' },
+  { id: 'SOR_221', name: 'Outmaneuver' },
+  { id: 'JTL_131', name: 'Turbolaser Salvo' },
   // Printed as an upgrade (see `cardDataCorrections.ts`), but the set data, and so the set totals
   // below, file it as an event. Counted where the totals count it.
   { id: 'SOR_215', name: 'Snapshot Reflexes' },

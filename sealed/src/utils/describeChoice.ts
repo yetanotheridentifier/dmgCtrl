@@ -320,6 +320,8 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       return [choice.optional ? `you may ${choice.text}` : choice.text]
     case 'choosePlayerThen':
       return [`choose a player to ${choice.text}`]
+    case 'chooseArenaThen':
+      return [`choose an arena to ${choice.text}`]
     case 'mayPayThen': {
       const cost = choice.revealEvent ? 'reveal an event from your hand'
         : choice.damageSelf ? `deal ${choice.damageSelf} damage to this unit`

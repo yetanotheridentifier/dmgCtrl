@@ -3620,8 +3620,8 @@ registerCard('LOF_140', { // Darth Maul's Lightsaber
 // "You may pay N. If you do" and two linked steps: the first step is a choice, and the card's
 // `ifYouDo` hook is the rest of the ability, told what that choice settled.
 type Resumable = EventCtx & { cardId: string }
-const resume = (ctx: Resumable, step?: string): IfYouDo =>
-  ({ cardId: ctx.cardId, owner: ctx.owner, sourceInstanceId: ctx.sourceInstanceId, ...(step ? { step } : {}) })
+const resume = (ctx: Resumable, step?: string, unit?: string): IfYouDo =>
+  ({ cardId: ctx.cardId, owner: ctx.owner, sourceInstanceId: ctx.sourceInstanceId, ...(step ? { step } : {}), ...(unit ? { unit } : {}) })
 /** "You may pay `cost`. If you do, <then>". Not offered at all when the cost cannot be paid. */
 const mayPayWp = (description: string, cost: number, text: string, then: NonNullable<CardDefinition['ifYouDo']>): CardDefinition => ({
   ...whenPlayed(description, (s, ctx) =>
@@ -3629,8 +3629,8 @@ const mayPayWp = (description: string, cost: number, text: string, then: NonNull
   ifYouDo: then,
 })
 /** Choose one of `targets` for the card's `ifYouDo` hook, or nothing when there are none. */
-const unitThen = (s: GameState, ctx: Resumable, targets: string[], text: string, optional: boolean, step?: string): GameState =>
-  targets.length ? pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, text, then: resume(ctx, step), ...mayFlag(optional) }) : s
+const unitThen = (s: GameState, ctx: Resumable, targets: string[], text: string, optional: boolean, step?: string, unit?: string): GameState =>
+  targets.length ? pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, text, then: resume(ctx, step, unit), ...mayFlag(optional) }) : s
 /** "(You may) <do things> to a unit that ...": the pick, then `then` with the unit as `targetInstanceId`. */
 const unitThenWp = (description: string, test: Pick, text: string, optional: boolean, then: NonNullable<CardDefinition['ifYouDo']>): CardDefinition => ({
   ...whenPlayed(description, (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, test), text, optional)),
@@ -4243,5 +4243,118 @@ registerCard('SOR_167', { // Force Throw
     if (ctx.step !== 'thrown') return discards(s, ctx.playerChosen!, 1, ctx.sourceInstanceId!, resume(ctx, 'thrown'))
     const amount = (ctx.cardChosen ? s.cards[ctx.cardChosen]?.cost : 0) ?? 0
     return amount > 0 && controlsTrait(s, ctx.owner, 'Force') ? damageChoice(s, ctx, amount, picked(s, ctx, pickAny), [], true) : s
+  },
+})
+
+// Damage read from a unit. A two-unit card picks the first unit (step `dealer`), carries it as
+// `IfYouDo.unit` to the second pick, and reads the amount only when the second pick lands, so a change
+// between the two (a prevention, a defeat) is honoured.
+const sameArenaAs = (s: GameState, id: string | undefined): Pick => (_st, u) => u.instanceId !== id && u.arena === findUnit(s, id ?? '')?.unit.arena
+/** "A <dealer> unit deals <amount> damage to a <target> unit." */
+const unitDealsWp = (description: string, dealer: Pick, target: Pick, amount: (s: GameState, dealer: UnitState) => number): CardDefinition => ({
+  ...whenPlayed(description, (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, dealer), 'choose the unit that deals the damage', false, 'dealer')),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'dealer') return unitThen(s, ctx, pickedIds(s, ctx, target), 'choose the unit to damage', false, 'target', ctx.targetInstanceId)
+    const from = findUnit(s, ctx.unitChosen ?? '')?.unit
+    return from ? dealDamageToUnit(s, ctx.targetInstanceId!, amount(s, from)) : s
+  },
+})
+
+registerCard('SOR_127', unitDealsWp('A friendly unit deals damage equal to its power to an enemy unit.', pickFriendly, pickEnemy, // Strike True
+  (s, u) => effectivePower(s, u)))
+registerCard('SOR_151', unitDealsWp('A friendly unit deals damage to an enemy unit equal to the amount of damage on the friendly unit plus 1.', pickFriendly, pickEnemy, // Karabast
+  (_s, u) => u.damage + 1))
+registerCard('LOF_128', unitDealsWp('A friendly non-Vehicle unit deals damage equal to its remaining HP to an enemy unit.', // Protect the Pod
+  pickAll(pickFriendly, (s, u) => !unitHasTrait(s, u, 'Vehicle')), pickEnemy, remainingHp))
+registerCard('SOR_234', { // Maximum Firepower
+  ...whenPlayed('A friendly IMPERIAL unit deals damage equal to its power to a unit. Then, another friendly IMPERIAL unit deals damage equal to its power to the same unit.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, (st, u) => unitHasTrait(st, u, 'Imperial'))), 'choose the Imperial unit that deals the damage', false, 'dealer')),
+  ifYouDo: (s, ctx) => {
+    const imperials = (exclude?: string) => pickedIds(s, ctx, pickAll(pickFriendly, (st, u) => u.instanceId !== exclude && unitHasTrait(st, u, 'Imperial')))
+    const power = (id: string | undefined) => { const u = findUnit(s, id ?? '')?.unit; return u ? effectivePower(s, u) : 0 }
+    switch (ctx.step) {
+      case 'dealer':
+        return unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'choose the unit to damage', false, `target:${ctx.targetInstanceId}`, ctx.targetInstanceId)
+      case 'second': {
+        const hit = findUnit(s, ctx.unitChosen ?? '')
+        return hit ? dealDamageToUnit(s, hit.unit.instanceId, power(ctx.targetInstanceId)) : s
+      }
+      default: {
+        // `target:<first dealer>`: the first hit, then "another" Imperial unit, which excludes the first.
+        const first = ctx.step?.slice('target:'.length)
+        const hit = dealDamageToUnit(s, ctx.targetInstanceId!, power(first))
+        return findUnit(hit, ctx.targetInstanceId!)
+          ? unitThen(hit, ctx, imperials(first).filter(id => findUnit(hit, id)), 'choose another Imperial unit to deal damage', false, 'second', ctx.targetInstanceId)
+          : hit
+      }
+    }
+  },
+})
+registerCard('JTL_129', unitThenWp('Choose a unit. Each friendly Vehicle unit in the same arena deals damage equal to its power to that unit.', pickAny, 'choose the unit to fire on', false, // Focus Fire
+  (s, ctx) => {
+    const target = findUnit(s, ctx.targetInstanceId!)?.unit
+    if (!target) return s
+    const vehicles = s.players[ctx.owner].units.filter(u => u.instanceId !== target.instanceId && u.arena === target.arena && unitHasTrait(s, u, 'Vehicle'))
+    return vehicles.reduce((acc, v) => (findUnit(acc, target.instanceId) ? dealDamageToUnit(acc, target.instanceId, effectivePower(acc, v)) : acc), s)
+  }))
+registerCard('TWI_176', { // Caught in the Crossfire
+  ...whenPlayed('Choose 2 enemy units in the same arena. Each of those units deals damage equal to its power to the other.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, (st, u, c) => pickEnemy(st, u, c) && picked(st, c, pickEnemy).some(o => o !== u && o.arena === u.arena)), 'choose the first enemy unit', false, 'dealer')),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'dealer') return unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, sameArenaAs(s, ctx.targetInstanceId))), 'choose the second enemy unit', false, 'target', ctx.targetInstanceId)
+    const a = findUnit(s, ctx.unitChosen ?? '')?.unit
+    const b = findUnit(s, ctx.targetInstanceId!)?.unit
+    if (!a || !b) return s
+    // Both amounts are read before either lands: the damage is dealt at the same time.
+    const [toB, toA] = [effectivePower(s, a), effectivePower(s, b)]
+    return dealDamageToUnit(dealDamageToUnit(s, b.instanceId, toB), a.instanceId, toA)
+  },
+})
+registerCard('JTL_173', { // Fight Fire With Fire
+  ...whenPlayed('Choose a friendly unit and an enemy unit in the same arena. If you do, deal 3 damage to each of them.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, (st, u, c) => pickFriendly(st, u, c) && picked(st, c, pickEnemy).some(e => e.arena === u.arena)), 'choose a friendly unit', false, 'dealer')),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'dealer') return unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, sameArenaAs(s, ctx.targetInstanceId))), 'choose an enemy unit in the same arena', false, 'target', ctx.targetInstanceId)
+    return dealDamageToUnit(dealDamageToUnit(s, ctx.targetInstanceId!, 3), ctx.unitChosen!, 3)
+  },
+})
+const unitsYouControlIn = (s: GameState, owner: PlayerId, u: UnitState): number => s.players[owner].units.filter(x => x.arena === u.arena).length
+registerCard('SEC_130', unitThenWp('Deal damage to a unit equal to twice the number of units you control in its arena.', pickAny, 'choose a unit to damage', false, // Ferrix Uprising
+  (s, ctx) => { const u = findUnit(s, ctx.targetInstanceId!)?.unit; return u ? dealDamageToUnit(s, u.instanceId, 2 * unitsYouControlIn(s, ctx.owner, u)) : s }))
+registerCard('TWI_099', unitThenWp('Deal damage to an enemy unit equal to the number of units you control in its arena.', pickEnemy, 'choose an enemy unit to damage', false, // Synchronized Strike
+  (s, ctx) => { const u = findUnit(s, ctx.targetInstanceId!)?.unit; return u ? dealDamageToUnit(s, u.instanceId, unitsYouControlIn(s, ctx.owner, u)) : s }))
+registerCard('JTL_144', unitThenWp('Deal damage to a non-leader unit equal to 1 less than its remaining HP.', nonLeader, 'choose a non-leader unit to damage', false, // No Disintegrations
+  (s, ctx) => { const u = findUnit(s, ctx.targetInstanceId!)?.unit; return u ? dealDamageToUnit(s, u.instanceId, Math.max(0, remainingHp(s, u) - 1)) : s }))
+registerCard('SOR_092', unitThenWp('Give a friendly unit +2/+2 for this phase. Then, it deals damage equal to its power divided as you choose among any number of other units.', pickFriendly, 'choose a friendly unit', false, // Overwhelming Barrage
+  (s, ctx) => {
+    const id = ctx.targetInstanceId!
+    const buffed = addLastingEffect(s, { targetInstanceId: id, power: 2, hp: 2 })
+    const u = findUnit(buffed, id)?.unit
+    const total = u ? effectivePower(buffed, u) : 0
+    const targets = allUnits(buffed).filter(x => x.instanceId !== id).map(x => x.instanceId)
+    return total > 0 && targets.length ? pushChoice(buffed, { kind: 'distributeDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, remaining: total, total, targets }) : buffed
+  }))
+
+// "Choose an arena": the pick, then the card's hook with `arenaChosen`.
+const chooseArena = (s: GameState, ctx: Resumable, text: string): GameState =>
+  pushChoice(s, { kind: 'chooseArenaThen', id: ctx.sourceInstanceId!, controller: ctx.owner, text, then: resume(ctx) })
+registerCard('SOR_173', { // Bombing Run
+  ...whenPlayed('Choose an arena (ground or space). Deal 3 damage to each unit in that arena.', (s, ctx) => chooseArena(s, ctx, 'deal 3 damage to each unit in')),
+  ifYouDo: (s, ctx) => allUnits(s).filter(u => u.arena === ctx.arenaChosen).reduce((acc, u) => dealDamageToUnit(acc, u.instanceId, 3), s),
+})
+registerCard('SOR_221', { // Outmaneuver
+  ...whenPlayed('Choose an arena (ground or space). Exhaust each unit in that arena.', (s, ctx) => chooseArena(s, ctx, 'exhaust each unit in')),
+  ifYouDo: (s, ctx) => allUnits(s).filter(u => u.arena === ctx.arenaChosen).reduce((acc, u) => exhaustUnit(acc, u.instanceId), s),
+})
+registerCard('JTL_131', { // Turbolaser Salvo
+  ...whenPlayed('Choose an arena. A friendly space unit deals damage equal to its power to each enemy unit in that arena.', (s, ctx) => chooseArena(s, ctx, 'fire on')),
+  ifYouDo: (s, ctx) => {
+    // `salvo:<arena>` carries the arena to the second pick.
+    if (ctx.arenaChosen) return unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, pickArena('space'))), 'choose a friendly space unit to fire', false, `salvo:${ctx.arenaChosen}`)
+    const arena = ctx.step?.slice('salvo:'.length)
+    const gun = findUnit(s, ctx.targetInstanceId!)?.unit
+    if (!gun) return s
+    const amount = effectivePower(s, gun)
+    return s.players[opponentOf(ctx.owner)].units.filter(u => u.arena === arena).reduce((acc, u) => dealDamageToUnit(acc, u.instanceId, amount), s)
   },
 })

@@ -387,6 +387,8 @@ export interface IfYouDo {
   step?: string
   /** An upgrade an earlier stage chose, carried to the next (Jocasta Nu's upgrade, then its new unit). */
   upgrade?: UpgradeRef
+  /** A unit an earlier stage chose, carried to the next (Strike True's friendly unit, then its target). */
+  unit?: string
 }
 
 export interface HandCardRef {
@@ -789,6 +791,9 @@ type ChoiceVariant =
   // "Choose a player": option 0 is the controller's opponent, option 1 the controller. Never optional.
   // The chosen player reaches the card's `ifYouDo` hook as `playerChosen`. `text` is the effect.
   | { kind: 'choosePlayerThen'; id: string; controller: PlayerId; text: string; then: IfYouDo }
+  // "Choose an arena": option 0 is ground, option 1 space. Never optional. The arena reaches the card's
+  // `ifYouDo` hook as `arenaChosen`.
+  | { kind: 'chooseArenaThen'; id: string; controller: PlayerId; text: string; then: IfYouDo }
   // Heal 1 at a time from `unitTargets` / `baseTargets` until `remaining` is spent or Done, then deal
   // what was healed to `damageUnit` (Redemption). `oneUnit` keeps every point on the first unit picked
   // (Kashyyyk Defender's "from another unit").
