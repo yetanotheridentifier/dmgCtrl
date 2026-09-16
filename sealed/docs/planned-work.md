@@ -139,9 +139,12 @@ Two phases:
   express, one lasting attack prohibition, and 154 one-offs), grouped by what each group lacks. The
   events blocked by a mechanic are not there: they are recorded on that mechanic's own ticket
   (#602 Credit, #605 token units, #603 Disclose, #604 indirect damage).
-  When Played units and upgrades follow the same pattern: the
-  single-choice ones play, and the rest are split out the same way. Constant abilities too: the ones an
-  existing static hook expresses play, and #613 holds the rest, grouped by the hook each lacks.
+  When Played units and upgrades follow the same pattern, and what is left of them is **#620** (103:
+  the two sets too small to sweep, a second ability outside When Played, several targets or divided
+  amounts, attacks raised from a unit entering play, "you may pay N", two linked steps, upgrades moved
+  or replayed, upgrade attach rules, lasting effects the buff choice cannot carry, and control of
+  other zones). Constant abilities too: the ones an existing static hook expresses play, and #613
+  holds the rest, grouped by the hook each lacks.
   The ticket bodies carry the sizes from before token units, Credit
   tokens, Disclose and indirect damage were blockers, so most are smaller than they say (When Defeated
   by a quarter, bases and constant abilities barely); the corrected counts are commented on each.

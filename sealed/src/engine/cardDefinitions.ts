@@ -1,13 +1,14 @@
 import type { EffectContext } from './abilities'
 import { registerCard } from './abilities'
-import { giveToken, giveTokens, exhaustUnit, drawCards, returnUnitToHand, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
+import { giveToken, giveTokens, exhaustUnit, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
+import { seededUnit, nextSeed } from './rng'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
 import { discardUnitsMatching } from './resolve'
 import { TOKEN_MANDALORIAN, isTokenCard } from './tokenUnits'
 import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, markAbilityUsed, updatePlayer } from './types'
-import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets } from './legalMoves'
+import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets, effectiveCost } from './legalMoves'
 import { canAfford } from './resources'
 import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, unitHasKeyword, unitKeywords } from './keywords'
 import type { EngineCard, GameState, KeywordInstance, LastingEffect, PlayerId, UnitState, UpgradeRef } from './types'
@@ -2855,3 +2856,184 @@ registerCard('TS26_84', attackWithRider('Attack with a unit. It gets +1/+0 for t
 const GRANT_IMPROVISED_DETONATION = 'GRANT_IMPROVISED_DETONATION'
 registerCard(GRANT_IMPROVISED_DETONATION, { sourceCardId: 'IBH_21', statModifier: (_s, _u, ctx) => (ctx.attacking ? { power: 2 } : {}) })
 registerCard('IBH_21', attackWithRider('Attack with a unit. It gets +2/+0 for this attack.', GRANT_IMPROVISED_DETONATION))
+
+// ── The remainder of the other sets' When Played units and upgrades: searches, hands, resources ──
+// Three groups taken whole. The searches reuse `searchDraw` (reveal and draw) and `searchPlayFree`
+// (reveal and play), the latter now carrying the searching card's own filter rather than Ackbar's
+// space units. Four of the search cards also print a constant ability, registered here alongside the
+// search so the card ships whole rather than half-built.
+
+/** A card anywhere (deck, hand, discard) matching a trait or an aspect. Card data is upper case. */
+const printedTrait = (c: EngineCard | undefined, trait: string): boolean =>
+  (c?.traits ?? []).some(t => t.toLowerCase() === trait.toLowerCase())
+const printedAspect = (c: EngineCard | undefined, aspect: string): boolean =>
+  (c?.aspects ?? []).some(a => a.toLowerCase() === aspect.toLowerCase())
+const printedUnit = (c: EngineCard | undefined): boolean => c?.type === 'unit'
+
+type CardTest = (c: EngineCard | undefined, s: GameState, ctx: EventCtx) => boolean
+
+/**
+ * "Search the top N cards of your deck for X, reveal it, and draw it."
+ *
+ * The window is `searchCount`, so Arcana Star Map doubles it. The reveal is raised even when nothing
+ * matches (#413): those cards are about to go to the bottom and the player is entitled to see which.
+ * `count` above 1 is "up to N" (Grand Moff Tarkin), which draws again from what is left of the same
+ * window and may stop at any point (CR 8.30.1).
+ */
+const searchDrawWp = (description: string, depth: number, test: CardTest, count = 1) =>
+  whenPlayed(description, (s: GameState, ctx: EventCtx) => {
+    const revealed = s.players[ctx.owner].deck.slice(0, searchCount(s, ctx.owner, depth))
+    if (revealed.length === 0) return s
+    const eligibleIndices = revealed.flatMap((id, i) => (test(s.cards[id], s, ctx) ? [i] : []))
+    return pushChoice(s, {
+      kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices,
+      ...(count > 1 && { remaining: count, upTo: true }),
+    })
+  })
+
+registerCard('LAW_136', searchDrawWp('Search the top 3 cards of your deck for an Underworld unit, reveal it, and draw it.', 3,
+  c => printedUnit(c) && printedTrait(c, 'Underworld'))) // Syndicate Spice Runner
+registerCard('LAW_138', searchDrawWp('Search the top 5 cards of your deck for a Bounty Hunter unit, reveal it, and draw it.', 5,
+  c => printedUnit(c) && printedTrait(c, 'Bounty Hunter'))) // Undercity Hunting Team
+registerCard('LAW_145', searchDrawWp('Search the top 5 cards of your deck for a unit that shares an aspect with a friendly unit, reveal it, and draw it.', 5,
+  (c, s, ctx) => { // R2-D2
+    const mine = new Set(s.players[ctx.owner].units.flatMap(u => (s.cards[u.cardId]?.aspects ?? []).map(a => a.toLowerCase())))
+    return printedUnit(c) && (c?.aspects ?? []).some(a => mine.has(a.toLowerCase()))
+  }))
+registerCard('SOR_096', searchDrawWp('Search the top 5 cards of your deck for a Rebel card, reveal it, and draw it.', 5,
+  c => printedTrait(c, 'Rebel'))) // Mon Mothma
+registerCard('SHD_245', searchDrawWp('Search the top 5 cards of your deck for an upgrade, reveal it, and draw it.', 5,
+  c => c?.type === 'upgrade')) // Greef Karga
+registerCard('SOR_084', searchDrawWp('Search the top 5 cards of your deck for up to 2 Imperial units, reveal them, and draw them.', 5,
+  c => printedUnit(c) && printedTrait(c, 'Imperial'), 2)) // Grand Moff Tarkin
+registerCard('LOF_122', { // Pillio Star Compass
+  attachRestriction: nonVehicle,
+  ...searchDrawWp('Search the top 3 cards of your deck for a unit, reveal it, and draw it.', 3, printedUnit),
+})
+
+// The four search cards that also carry a constant ability. "Each round" and "each phase" coincide
+// for cards played, because cards are only ever played during the action phase.
+registerCard('LAW_229', { // The Master Codebreaker
+  costDiscount: (s, _source, ctx) =>
+    (printedTrait(ctx.card, 'Gambit') && !cardsPlayedThisPhase(s, ctx.owner).some(id => printedTrait(s.cards[id], 'Gambit')) ? -1 : 0),
+  ...searchDrawWp('The first Gambit card you play each round costs 1 less. Search the top 8 cards of your deck for a Gambit card, reveal it, and draw it.', 8,
+    c => printedTrait(c, 'Gambit')),
+})
+registerCard('SOR_181', { // Jabba the Hutt
+  costDiscount: (_s, _source, ctx) => (ctx.card.type === 'event' && printedTrait(ctx.card, 'Trick') ? -1 : 0),
+  ...searchDrawWp('Each Trick event you play costs 1 less. Search the top 8 cards of your deck for a Trick event, reveal it, and draw it.', 8,
+    c => c?.type === 'event' && printedTrait(c, 'Trick')),
+})
+registerCard('SEC_112', { // Orn Free Taa
+  statModifier: (s, u) => {
+    const o = unitOwner(s, u)
+    return o ? perEach(s.players[o].discard.filter(id => printedTrait(s.cards[id], 'Law')).length, 1) : {}
+  },
+  ...searchDrawWp('This unit gets +1/+0 for each Law card in your discard pile. Search the top 10 cards of your deck for a Law card, reveal it, and draw it.', 10,
+    c => printedTrait(c, 'Law')),
+})
+registerCard('SHD_198', { // Omega
+  waivesAspectPenalty: (s, _source, ctx) =>
+    ctx.card.type === 'unit' && printedTrait(ctx.card, 'Clone')
+      && !cardsPlayedThisPhase(s, ctx.owner).some(id => s.cards[id]?.type === 'unit' && printedTrait(s.cards[id], 'Clone')),
+  ...searchDrawWp('Ignore the aspect penalty on the first Clone unit you play each round. Search the top 5 cards of your deck for a Clone card, reveal it, and draw it.', 5,
+    c => printedTrait(c, 'Clone')),
+})
+
+/**
+ * "Search the top N for any number of <X> units with combined cost C or less and play each free."
+ *
+ * The window is held OUT of the deck while the choice stands, as Admiral Ackbar's is: leaving it in
+ * place duplicated the cards, since the choice bottoms its own leftovers when it ends.
+ */
+const searchPlayFreeWp = (description: string, depth: number, budget: number, filter: { trait?: string; aspect?: string }) =>
+  whenPlayed(description, (s: GameState, ctx: EventCtx) => {
+    const p = s.players[ctx.owner]
+    const revealed = p.deck.slice(0, searchCount(s, ctx.owner, depth))
+    if (revealed.length === 0) return s
+    const eligibleIndices = revealed.flatMap((id, i) => {
+      const c = s.cards[id]
+      if (!printedUnit(c) || (c?.cost ?? 0) > budget) return []
+      if (filter.trait && !printedTrait(c, filter.trait)) return []
+      if (filter.aspect && !printedAspect(c, filter.aspect)) return []
+      return [i]
+    })
+    const pulled = updatePlayer(s, ctx.owner, { deck: p.deck.slice(revealed.length) })
+    return pushChoice(pulled, { kind: 'searchPlayFree', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices, budget, filter })
+  })
+
+registerCard('LAW_063', searchPlayFreeWp('Search the top 10 cards of your deck for any number of Droid units with combined cost 5 or less and play each of them for free.', 10, 5, { trait: 'Droid' })) // L3-37
+registerCard('SOR_087', searchPlayFreeWp('Search the top 10 cards of your deck for any number of Villainy units with combined cost 3 or less and play each of them for free.', 10, 3, { aspect: 'Villainy' })) // Darth Vader
+
+registerCard('LOF_100', whenPlayed('Search the top 7 cards of your deck for a unit, reveal it, and play it. It costs 3 less.', (s, ctx) => { // Kelleran Beq
+  // A discounted purchase, not a free play: only units the player can still pay for are offered,
+  // and the resources are spent when one is taken.
+  const p = s.players[ctx.owner]
+  const revealed = p.deck.slice(0, searchCount(s, ctx.owner, 7))
+  if (revealed.length === 0) return s
+  const ready = p.resources.filter(r => !r.exhausted).length
+  const eligibleIndices = revealed.flatMap((id, i) => {
+    const c = s.cards[id]
+    return printedUnit(c) && c && Math.max(0, effectiveCost(s, ctx.owner, c) - 3) <= ready ? [i] : []
+  })
+  const pulled = updatePlayer(s, ctx.owner, { deck: p.deck.slice(revealed.length) })
+  return pushChoice(pulled, { kind: 'searchPlayFree', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices, budget: 0, playOne: true, costDelta: -3 })
+}))
+
+// Hands and named cards
+registerCard('SEC_239', whenPlayed("Look at an opponent's hand.", (s, ctx) => // Viper Probe Droid
+  pushChoice(s, { kind: 'lookAtHand', id: ctx.sourceInstanceId!, controller: ctx.owner, target: opponentOf(ctx.owner) })))
+
+registerCard('SOR_201', whenPlayed("Look at an opponent's hand and discard a non-unit card from it.", (s, ctx) => // Bodhi Rook
+  pushChoice(s, { kind: 'lookAtHand', id: ctx.sourceInstanceId!, controller: ctx.owner, target: opponentOf(ctx.owner), mayDiscard: true, mustDiscard: true, discardFilter: 'nonUnit' })))
+
+registerCard('SOR_062', whenPlayed("Name a card. While this unit is in play, opponents can't play the named card.", (s, ctx) => // Regional Governor
+  pushChoice(s, { kind: 'nameCard', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId! })))
+
+registerCard('SHD_202', whenPlayed("Look at an opponent's hand, then name a card. While this unit is in play, each card with that name costs 3 more for your opponents to play.", (s, ctx) => // Qi'ra
+  // The look settles first and the naming follows it, so the name is chosen knowing the hand.
+  pushChoice(s, {
+    kind: 'lookAtHand', id: ctx.sourceInstanceId!, controller: ctx.owner, target: opponentOf(ctx.owner),
+    thenNameCard: { unitId: ctx.sourceInstanceId!, surcharge: 3 },
+  })))
+
+registerCard('SOR_190', whenPlayed('If you played another card this phase, each opponent draws a card then discards a random card from their hand.', (s, ctx) => { // Lothal Insurgent
+  // This unit's own play is already recorded by the time its When Played fires, so "another card"
+  // means a second entry in the phase's record.
+  if (cardsPlayedThisPhase(s, ctx.owner).length < 2) return s
+  const enemy = opponentOf(ctx.owner)
+  const drawn = drawCards(s, enemy, 1)
+  const hand = drawn.players[enemy].hand
+  if (hand.length === 0) return drawn
+  // Random, not chosen: the seed on the state keeps it deterministic under replay.
+  const pick = Math.floor(seededUnit(drawn.rngSeed) * hand.length)
+  return { ...discardFromHand(drawn, enemy, pick), rngSeed: nextSeed(drawn.rngSeed) }
+}))
+
+// Resources
+registerCard('LAW_083', whenPlayed('If you have fewer cards in hand than an opponent, draw a card. If you control fewer resources than an opponent, resource the top card of your deck.', (s, ctx) => { // Broken Horn
+  // Both sentences are checked in order, so the draw can change what the second one sees.
+  const enemy = opponentOf(ctx.owner)
+  const drawn = s.players[ctx.owner].hand.length < s.players[enemy].hand.length ? drawCards(s, ctx.owner, 1) : s
+  return drawn.players[ctx.owner].resources.length < drawn.players[enemy].resources.length ? resourceTopOfDeck(drawn, ctx.owner) : drawn
+}))
+
+/** "(If ...,) you may put the top card of your deck into play as a resource." */
+const mayResourceTopWp = (description: string, when: When = always) =>
+  whenPlayed(description, (s: GameState, ctx: EventCtx) =>
+    (when(s, ctx) && s.players[ctx.owner].deck.length > 0
+      ? pushChoice(s, { kind: 'mayResourceTop', id: ctx.sourceInstanceId!, controller: ctx.owner })
+      : s))
+
+registerCard('JTL_119', mayResourceTopWp('You may put the top card of your deck into play as a resource.')) // Resupply Carrier
+registerCard('JTL_164', mayResourceTopWp('If an opponent controls more resources than you, you may put the top card of your deck into play as a resource.',
+  (s, ctx) => s.players[opponentOf(ctx.owner)].resources.length > s.players[ctx.owner].resources.length)) // Cham Syndulla
+
+registerCard('SOR_189', whenPlayed('Either ready a resource or exhaust a unit.', (s, ctx) => { // Leia Organa
+  // Only modes that can actually do something are offered, as Choose Your Path does: picking an
+  // option that would do nothing is not a meaningful choice.
+  const modes: string[] = []
+  if (s.players[ctx.owner].resources.some(r => r.exhausted)) modes.push('readyResource')
+  if (allUnits(s).length > 0) modes.push('exhaustUnit')
+  return modes.length ? pushChoice(s, { kind: 'chooseMode', id: ctx.sourceInstanceId!, controller: ctx.owner, modes }) : s
+}))

@@ -115,6 +115,13 @@ export interface UnitState {
    */
   namedCard?: string
   /**
+   * Set alongside `namedCard` when the naming raises the card's cost for opponents rather than
+   * forbidding it outright (Qi'ra). A named card with a surcharge is still playable, so the
+   * prohibition must skip it: `namedByOpponent` filters these out and `effectiveCost` adds the
+   * amount instead.
+   */
+  namedCardSurcharge?: number
+  /**
    * The player who OWNS this card, when that differs from the player who controls it (Rehabilitation
    * takes control of an enemy unit). Which `players[…].units` array a unit sits in is its
    * *controller*; ownership decides where the card goes when it leaves play — a stolen unit is
@@ -734,7 +741,11 @@ type ChoiceVariant =
   // cards (an `acceptChoice` with its hand index); `thenDraw` then has the target draw a card.
   // `mustDiscard` removes the Done, for a card that says "discards a card" rather than "may discard"
   // (Reveal Intentions). The view-only and "may" forms keep it.
-  | { kind: 'lookAtHand'; id: string; controller: PlayerId; target: PlayerId; mayDiscard?: boolean; thenDraw?: boolean; mustDiscard?: boolean }
+  // `discardFilter` narrows what may be taken — Bodhi Rook discards "a non-unit card", so only
+  // those hand indices are offered. A hand with nothing eligible keeps its Done even under
+  // `mustDiscard`, or the choice would have no legal move.
+  // `thenNameCard` raises a `nameCard` once the look is done (Qi'ra looks, then names).
+  | { kind: 'lookAtHand'; id: string; controller: PlayerId; target: PlayerId; mayDiscard?: boolean; thenDraw?: boolean; mustDiscard?: boolean; discardFilter?: 'nonUnit'; thenNameCard?: { unitId: string; surcharge: number } }
   // Search the revealed top cards (Clan Wren Loyalist): pick one of the `eligibleIndices`
   // (indices into `revealed`) to draw; the rest go to the bottom of the deck. Resolved by an
   // `acceptChoice` carrying the `deckIndex` (0-based within `revealed`). Mandatory when eligible.
@@ -742,7 +753,12 @@ type ChoiceVariant =
   // the follow-up Advantage offer fires.
   // `discardRest` sends the cards not drawn to the discard pile instead of the deck bottom — "draw a
   // unit revealed this way, then discard the other revealed cards" (I've Found Them).
-  | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; guessedCost?: number; discardRest?: boolean }
+  // `remaining` draws more than one from the same window (Grand Moff Tarkin: "up to 2"), re-offering
+  // itself until it runs out or the player stops. `upTo` is what allows stopping (CR 8.30.1); without
+  // it a search is mandatory while anything matches. `held` says the revealed cards have been pulled
+  // OUT of the deck by an earlier pass, so they are bottomed by appending rather than by rotating the
+  // top — getting that wrong either duplicates or deletes them.
+  | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; guessedCost?: number; discardRest?: boolean; remaining?: number; upTo?: boolean; held?: boolean }
   // The Cyborg Mech: deal `undamagedAmount` to a chosen undamaged target, or `damagedAmount`
   // to a damaged one (the amount is decided by the picked unit's damage). Mandatory board-target.
   | { kind: 'variableStrike'; id: string; controller: PlayerId; targets: string[]; undamagedAmount: number; damagedAmount: number }
@@ -755,7 +771,12 @@ type ChoiceVariant =
   // Name a card (Ryder Azadi) — resolved by an `acceptChoice` carrying `cardName`; the name is
   // recorded on `unitId` (a `namedCard`), forbidding the opponent from playing cards with that name
   // while it's in play. Mandatory.
-  | { kind: 'nameCard'; id: string; controller: PlayerId; unitId: string }
+  // `surcharge` names the card for a COST INCREASE instead of a prohibition (Qi'ra: "each card with
+  // that name costs 3 more for your opponents"). The two are mutually exclusive on a unit.
+  | { kind: 'nameCard'; id: string; controller: PlayerId; unitId: string; surcharge?: number }
+  // "You may put the top card of your deck into play as a resource" (Resupply Carrier, Cham
+  // Syndulla) — a yes/no, raised only when there is a card to take.
+  | { kind: 'mayResourceTop'; id: string; controller: PlayerId }
   // "You may defeat this unit. If you do, [search]" (Admiral Ackbar) — a yes/no. Accept defeats
   // `unitId` and starts the search-and-play-free (below); skip leaves the unit in play.
   | { kind: 'mayDefeatSelfSearch'; id: string; controller: PlayerId; unitId: string }
@@ -764,7 +785,12 @@ type ChoiceVariant =
   // via an `acceptChoice`'s `deckIndex`; skip (Done) stops. Leftover revealed cards return to the bottom.
   // `playOne` stops after a single pick rather than spending the whole budget, and `entersReady`
   // brings it in ready — "play it for free. It enters play ready" (Eye of Sion).
-  | { kind: 'searchPlayFree'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; budget: number; playOne?: boolean; entersReady?: boolean }
+  // `filter` says what the card is looking for — Ackbar's space units, L3-37's Droids, Darth Vader's
+  // Villainy units. It is carried on the choice because the re-offer after each play has to apply the
+  // SAME filter; hardcoding one card's made every other search offer the wrong cards.
+  // `costDelta` makes the play a paid one at a discount instead of free (Kelleran Beq: "it costs 3
+  // less"), and then eligibility is what the player can afford rather than what fits `budget`.
+  | { kind: 'searchPlayFree'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; budget: number; playOne?: boolean; entersReady?: boolean; filter?: { trait?: string; aspect?: string; arena?: Arena }; costDelta?: number }
   // Rancor Keeper: "deal 1 damage to any number of bases" — repeatable, each base at most
   // once; `remaining` are the bases not yet picked. Skip finishes.
   | { kind: 'damageAnyBases'; id: string; controller: PlayerId; remaining: PlayerId[]; amount: number; source?: DamageSource }

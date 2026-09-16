@@ -9,7 +9,7 @@ import { collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCar
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
-import { exhaustUnit, findUnit, giveToken, giveTokens, fireUpgradeAttached, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader } from './effects'
+import { exhaustUnit, findUnit, giveToken, giveTokens, fireUpgradeAttached, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait } from './keywords'
@@ -436,10 +436,34 @@ function grantEnochDiscount(state: GameState, controller: PlayerId, dealt: numbe
 }
 
 /** Space units among `revealed` whose cost fits `budget` (Admiral Ackbar). */
-function ackbarEligible(state: GameState, revealed: string[], budget: number): number[] {
+/**
+ * Which revealed cards a search-and-play may take: units matching the searching card's own `filter`
+ * that the combined-cost `budget` still covers, or — where the play is a discounted purchase rather
+ * than a free one (`costDelta`) — the ones the player can currently afford.
+ *
+ * The filter comes from the choice rather than being hardcoded here. It used to be Ackbar's "space
+ * unit", which is wrong for every other card that searches and plays (L3-37 takes Droids, Darth
+ * Vader takes Villainy units), and silently offered nothing rather than failing.
+ */
+function ackbarEligible(
+  state: GameState,
+  revealed: string[],
+  budget: number,
+  filter?: { trait?: string; aspect?: string; arena?: 'ground' | 'space' },
+  costDelta?: number,
+  owner?: PlayerId,
+): number[] {
   return revealed.flatMap((cardId, i) => {
     const c = state.cards[cardId]
-    return c?.type === 'unit' && c.arena === 'space' && (c.cost ?? 0) <= budget ? [i] : []
+    if (c?.type !== 'unit') return []
+    if (filter?.arena && c.arena !== filter.arena) return []
+    if (filter?.trait && !(c.traits ?? []).some(t => t.toLowerCase() === filter.trait!.toLowerCase())) return []
+    if (filter?.aspect && !(c.aspects ?? []).some(a => a.toLowerCase() === filter.aspect!.toLowerCase())) return []
+    if (costDelta !== undefined && owner) {
+      const ready = state.players[owner].resources.filter(r => !r.exhausted).length
+      return Math.max(0, effectiveCost(state, owner, c) + costDelta) <= ready ? [i] : []
+    }
+    return (c.cost ?? 0) <= budget ? [i] : []
   })
 }
 
@@ -454,11 +478,11 @@ function startAckbarSearch(state: GameState, owner: PlayerId, choiceId: string):
   const depth = searchCount(state, owner, 10)
   const revealed = p.deck.slice(0, depth)
   const rest = p.deck.slice(depth)
-  const eligibleIndices = ackbarEligible(state, revealed, 5)
+  const eligibleIndices = ackbarEligible(state, revealed, 5, { arena: 'space' })
   // Pull the searched window out of the deck; leftover cards return to the bottom when the choice
   // ends. Raised even when nothing is playable (#413), so the player sees what they looked at.
   const pulled = updatePlayer(state, owner, { deck: rest })
-  return pushChoice(pulled, { kind: 'searchPlayFree', id: choiceId, controller: owner, revealed, eligibleIndices, budget: 5 })
+  return pushChoice(pulled, { kind: 'searchPlayFree', id: choiceId, controller: owner, revealed, eligibleIndices, budget: 5, filter: { arena: 'space' } })
 }
 
 function playUnit(state: GameState, handIndex: number): GameState {
@@ -667,14 +691,21 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
   // A reveal that matched nothing (#413): the cards were only looked at, never taken out of the
   // deck, so acknowledging moves them from the top to the bottom.
   if (choice.kind === 'searchDraw') {
-    // I've Found Them discards what it revealed rather than bottoming it — the path taken when no
-    // unit was among the three and acknowledging the reveal was the only move.
-    if (choice.discardRest) {
+    // A "up to N" re-offer holds its window OUT of the deck, so stopping appends the leftovers
+    // rather than rotating the top — rotating would bottom cards that are no longer there.
+    if (choice.held) {
+      next = updatePlayer(next, choice.controller, { deck: [...next.players[choice.controller].deck, ...choice.revealed] })
+    } else if (choice.discardRest) {
       const p = next.players[choice.controller]
       next = updatePlayer(next, choice.controller, { deck: p.deck.slice(choice.revealed.length), discard: [...p.discard, ...choice.revealed] })
     } else {
       next = bottomTopCards(next, choice.controller, choice.revealed.length)
     }
+  }
+  // Qi'ra: her look is view-only, so Done is the only way to answer it — and the naming it leads
+  // into still has to follow, exactly as it does when a discard was taken.
+  if (choice.kind === 'lookAtHand' && choice.thenNameCard) {
+    next = pushChoice(next, { kind: 'nameCard', id: `${choice.id}-name`, controller: choice.controller, unitId: choice.thenNameCard.unitId, surcharge: choice.thenNameCard.surcharge })
   }
   // Rhydonium Detonation: declining the save does not call off the wipe.
   if (choice.kind === 'selectUnitToReturn' && choice.thenWipeNonLeaders) {
@@ -1277,7 +1308,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     }
     case 'chooseMode': {
       // "Choose one:" — the card decided which modes were available; run the one picked.
-      next = applyChosenMode(next, choice.controller, choice.modes[optionIndex ?? 0])
+      next = applyChosenMode(next, choice.controller, choice.modes[optionIndex ?? 0], choice.id)
       break
     }
     case 'searchPlayUpgrade': {
@@ -1394,6 +1425,10 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         next = discardFromHand(next, choice.target, handIndex)
         if (choice.thenDraw) next = drawCards(next, choice.target, 1)
       }
+      // Qi'ra looks first and names afterwards, so the naming waits for the look to be answered.
+      if (choice.thenNameCard) {
+        next = pushChoice(next, { kind: 'nameCard', id: `${choice.id}-name`, controller: choice.controller, unitId: choice.thenNameCard.unitId, surcharge: choice.thenNameCard.surcharge })
+      }
       break
     }
     case 'selectFromDiscard': {
@@ -1415,8 +1450,22 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         const owner = choice.controller
         const p = next.players[owner]
         const drawn = choice.revealed[deckIndex]
-        const rest = p.deck.slice(choice.revealed.length)
+        // A re-offer (`held`) already pulled the window out of the deck; a first pass still has it
+        // sitting on top. Reading that wrong either duplicates the window or deletes the cards under it.
+        const rest = choice.held ? p.deck : p.deck.slice(choice.revealed.length)
         const others = choice.revealed.filter((_, i) => i !== deckIndex)
+        const remaining = (choice.remaining ?? 1) - 1
+        // Re-index the surviving eligible positions rather than looking card ids up: a deck holds
+        // duplicates, so an id is not a position.
+        const kept = choice.revealed.map((_, i) => i).filter(i => i !== deckIndex)
+        const stillEligible = kept.flatMap((oldIdx, newIdx) => (choice.eligibleIndices.includes(oldIdx) ? [newIdx] : []))
+        if (remaining > 0 && stillEligible.length > 0) {
+          // Grand Moff Tarkin's "up to 2": draw again from what is left of the same window, which
+          // stays out of the deck until the player stops or runs out.
+          next = updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: rest })
+          next = pushChoice(next, { ...choice, revealed: others, eligibleIndices: stillEligible, remaining, held: true })
+          break
+        }
         // I've Found Them discards what it did not draw; every other search bottoms it.
         next = choice.discardRest
           ? updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: rest, discard: [...p.discard, ...others] })
@@ -1467,11 +1516,18 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       // that name while it's in play (enforced in legalMoves). Naming is mandatory.
       if (cardName) {
         next = updatePlayer(next, choice.controller, {
-          units: next.players[choice.controller].units.map(u => (u.instanceId === choice.unitId ? { ...u, namedCard: cardName } : u)),
+          units: next.players[choice.controller].units.map(u =>
+            (u.instanceId === choice.unitId
+              ? { ...u, namedCard: cardName, ...(choice.surcharge !== undefined && { namedCardSurcharge: choice.surcharge }) }
+              : u)),
         })
       }
       break
     }
+    case 'mayResourceTop':
+      // Resupply Carrier / Cham Syndulla: the top card of the deck goes into play as a resource.
+      next = resourceTopOfDeck(next, choice.controller)
+      break
     case 'mayDefeatSelfSearch': {
       // Admiral Ackbar: defeat this unit, then search the top 10 for space units to play free.
       next = defeatUnit(next, choice.unitId)
@@ -1486,16 +1542,21 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       if (deckIndex !== undefined && choice.eligibleIndices.includes(deckIndex)) {
         const owner = choice.controller
         const cardId = choice.revealed[deckIndex]
-        const cost = next.cards[cardId]?.cost ?? 0
+        const played = next.cards[cardId]
+        const cost = played?.cost ?? 0
+        // Kelleran Beq buys the unit at a discount instead of playing it free, so it is paid for here.
+        if (choice.costDelta !== undefined && played) {
+          next = updatePlayer(next, owner, payCost(next.players[owner], Math.max(0, effectiveCost(next, owner, played) + choice.costDelta)))
+        }
         next = enterUnit(next, owner, cardId, choice.entersReady === true)
         next = checkWin(next)
         if (next.winner !== null) return next
         const revealed = choice.revealed.filter((_, i) => i !== deckIndex)
         const budget = choice.budget - cost
-        const eligibleIndices = ackbarEligible(next, revealed, budget)
+        const eligibleIndices = ackbarEligible(next, revealed, budget, choice.filter, choice.costDelta, owner)
         // Eye of Sion plays exactly one; Ackbar keeps offering until the budget runs out.
         if (!choice.playOne && budget > 0 && eligibleIndices.length > 0) {
-          next = pushChoice(next, { kind: 'searchPlayFree', id: choice.id, controller: owner, revealed, eligibleIndices, budget })
+          next = pushChoice(next, { kind: 'searchPlayFree', id: choice.id, controller: owner, revealed, eligibleIndices, budget, filter: choice.filter, costDelta: choice.costDelta })
         } else {
           next = updatePlayer(next, owner, { deck: [...next.players[owner].deck, ...revealed] }) // bottom the leftovers
         }
@@ -2280,13 +2341,20 @@ export function discardUnitsMatching(state: GameState, owner: PlayerId, maxCost?
  * Run one branch of a "Choose one:" event. Modes are named rather than carrying their own effect,
  * because a pending choice is plain JSON and can't hold a function.
  */
-function applyChosenMode(state: GameState, owner: PlayerId, mode: string | undefined): GameState {
+function applyChosenMode(state: GameState, owner: PlayerId, mode: string | undefined, choiceId = 'mode'): GameState {
   switch (mode) {
     case 'healBase': // Choose Your Path — with a Force unit
       return healBase(state, owner, 5)
     case 'mandoToken': { // Choose Your Path — with a Mandalorian unit
       const tokenId = `u${state.instanceCounter}`
       return giveToken(createTokenUnit(state, owner, TOKEN_MANDALORIAN), tokenId, TOKEN_ADVANTAGE)
+    }
+    case 'readyResource': // Leia Organa — "either ready a resource or exhaust a unit"
+      return readyResource(state, owner)
+    case 'exhaustUnit': {
+      // The other half of Leia's choice. Having picked it, the exhaust is mandatory.
+      const targets = inPlayUnits(state).map(u => u.instanceId)
+      return targets.length ? pushChoice(state, { kind: 'mayExhaustUnit', id: `${choiceId}-exhaust`, controller: owner, targets }) : state
     }
     default:
       return state

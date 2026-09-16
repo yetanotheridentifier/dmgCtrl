@@ -117,7 +117,10 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   if (waivePenalty) penalty = 0
   // "Your next unit …" cost grants that match this card — Mouse Droid's −1 to the next Imperial.
   const grantDelta = (p.nextUnitGrants ?? []).reduce((sum, g) => sum + (nextUnitGrantMatches(card, g) ? (g.costDelta ?? 0) : 0), 0)
-  return Math.max(0, card.cost + penalty + modifier + grantDelta + discount)
+  // A card an OPPONENT's unit has named for a surcharge costs that much more to play (Qi'ra).
+  const surcharge = state.players[opponentOf(playerId)].units.reduce(
+    (sum, u) => sum + (u.namedCard === card.name ? u.namedCardSurcharge ?? 0 : 0), 0)
+  return Math.max(0, card.cost + penalty + modifier + grantDelta + discount + surcharge)
 }
 
 /**
@@ -136,7 +139,10 @@ export function nameableCardNames(state: GameState): string[] {
 
 /** Card names the opponent has forbidden us from playing via a Ryder Azadi they control. */
 export function namedByOpponent(state: GameState, playerId: PlayerId): Set<string> {
-  return new Set(state.players[opponentOf(playerId)].units.flatMap(u => (u.namedCard ? [u.namedCard] : [])))
+  // A name carrying a surcharge (Qi'ra) makes the card dearer rather than unplayable, so it is
+  // deliberately absent from this set — `effectiveCost` charges for it instead.
+  return new Set(state.players[opponentOf(playerId)].units.flatMap(u =>
+    (u.namedCard && u.namedCardSurcharge === undefined ? [u.namedCard] : [])))
 }
 
 export function affordableHandUnits(state: GameState, owner: PlayerId, extraResourceCost: number, costDelta: number): HandCardRef[] {
@@ -546,10 +552,14 @@ function choiceMoves(state: GameState): Action[] {
       case 'lookAtHand': {
         // Imperial Defector / Remnant Lookouts: view the target's hand. With `mayDiscard`,
         // one accept per card in it; a Done to dismiss unless the card compels the discard.
-        if (choice.mayDiscard) state.players[choice.target].hand.forEach((_, handIndex) => moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex }))
+        // Bodhi Rook takes "a non-unit card", so only those hand indices are offered.
+        const discardable = state.players[choice.target].hand.flatMap((cardId, handIndex) =>
+          (choice.discardFilter === 'nonUnit' && state.cards[cardId]?.type === 'unit' ? [] : [handIndex]))
+        if (choice.mayDiscard) for (const handIndex of discardable) moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex })
         // Reveal Intentions prints "discards a card", not "may discard". The Done still has to be
-        // there when the hand is empty, or the choice would have no legal move and deadlock.
-        if (!choice.mustDiscard || state.players[choice.target].hand.length === 0) {
+        // there when nothing is eligible, or the choice would have no legal move and deadlock — a
+        // hand of nothing but units against Bodhi Rook is exactly that.
+        if (!choice.mustDiscard || discardable.length === 0) {
           moves.push({ type: 'skipTrigger', choiceId: choice.id })
         }
         break
@@ -558,8 +568,9 @@ function choiceMoves(state: GameState): Action[] {
         // Clan Wren Loyalist: draw one of the matching revealed cards. Mandatory while a match
         // exists; with none, the reveal is still shown (#413) and the only move is to acknowledge
         // it, which bottoms them. Without this the choice would have NO legal move and deadlock.
+        // "Up to N" (Grand Moff Tarkin) may stop early (CR 8.30.1), so it keeps its Done throughout.
         for (const deckIndex of choice.eligibleIndices) moves.push({ type: 'acceptChoice', choiceId: choice.id, deckIndex })
-        if (choice.eligibleIndices.length === 0) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        if (choice.eligibleIndices.length === 0 || choice.upTo) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'mayDefeatSelfSearch': {
@@ -683,6 +694,7 @@ function choiceMoves(state: GameState): Action[] {
       case 'maySelfDamageShield':
       case 'mayCapture':
       case 'mayPreventDamage':
+      case 'mayResourceTop':
       case 'mayCreateToken': {
         // Grogu: a yes/no to deploy via the triggered epic action.
         moves.push({ type: 'acceptChoice', choiceId: choice.id })
