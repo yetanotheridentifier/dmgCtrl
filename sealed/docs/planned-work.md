@@ -133,19 +133,18 @@ every set.
 
 Two phases:
 
-- **Phase 1 (#453 to #460), 940 cards blocked by nothing.** 57% of the cards with ability text are
+- **Phase 1 (#453 to #460), 926 cards blocked by nothing.** 56% of the cards with ability text are
   expressible with the primitives already in `engine/effects.ts`. Cut by trigger point. Events are the
   largest batch; the ones that are a single existing choice or primitive play, and the rest are #597,
   grouped by what each group lacks. When Played units and upgrades follow the same pattern: the
   single-choice ones play, and the rest are split out the same way. Constant abilities too: the ones an
-  existing static hook expresses play, and #613 holds the rest, grouped by the hook each lacks. The
-  triage reads a trigger head over 48 characters as none (#614), so these counts are a few cards off.
+  existing static hook expresses play, and #613 holds the rest, grouped by the hook each lacks.
   The ticket bodies carry the sizes from before token units, Credit
   tokens, Disclose and indirect damage were blockers, so most are smaller than they say (When Defeated
   by a quarter, bases and constant abilities barely); the corrected counts are commented on each.
-- **Phase 2 (#461 to #476, #602 to #605), 581 cards blocked by exactly one thing each**, ordered by how
-  many cards each unlocks on its own. Token units other than the Mandalorian (#605, 64 cards) are the
-  second largest unlock; Credit tokens (#602, 30), Disclose (#603, 19) and indirect damage (#604, 15)
+- **Phase 2 (#461 to #476, #602 to #605), 584 cards blocked by exactly one thing each**, ordered by how
+  many cards each unlocks on its own. Token units other than the Mandalorian (#605, 62 cards) are the
+  second largest unlock; Credit tokens (#602, 29), Disclose (#603, 19) and indirect damage (#604, 15)
   sit among the existing mechanics.
 
 **Batches shrink, never grow.** A card that turns out not to fit is lifted into #477 and the batch
@@ -154,7 +153,7 @@ familiar nouns in an unfamiliar shape.
 
 Three findings that contradict the assumptions the programme started from:
 
-- **Experience tokens are the largest single unlock at 82 cards, and were unplanned.** Printed in every
+- **Experience tokens are the largest single unlock at 80 cards, and were unplanned.** Printed in every
   set, and with Shield the most common token in the game.
 - **Resource manipulation is near the bottom at 15 cards, not the top.** Most resource prose already
   exists. What matters is *playing a card out of the resource zone* (#468), which gates Smuggle and

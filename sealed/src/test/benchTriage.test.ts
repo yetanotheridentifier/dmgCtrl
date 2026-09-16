@@ -10,6 +10,7 @@ import {
   normalPrintings,
   residualAbility,
   triage,
+  triggerHeads,
 } from '../bench/triage'
 
 /**
@@ -182,6 +183,69 @@ describe('triage blockers', () => {
     const r = triage([card({ Keywords: ['Sentinel'], FrontText: 'Sentinel\nWhen Played: Draw a card.' })])
     expect(r.triaged[0].blockers).toEqual([])
     expect(IMPLEMENTED_KEYWORDS.has('Sentinel')).toBe(true)
+  })
+})
+
+describe('trigger heads', () => {
+  /**
+   * A head is the text before the first colon on a line that starts with a capital, however long.
+   * Each text is the real card's FrontText; a head read as none would put the card in the
+   * constant-abilities batch and never raise the trigger blocker it needs.
+   */
+  it.each([
+    ['SEC_093 C-3P0', "Action [Exhaust, return this unit to its owner's hand]: Give a unit +2/+2 for this phase.", 'Action'],
+    ['SHD_028 Doctor Pershing', 'Action [Exhaust, deal 1 damage to a friendly unit]: Draw a card.', 'Action'],
+    ['JTL_089 The Invisible Hand', 'When Played/When this unit completes an attack (and survives): You may search the top 8 cards of your deck for a Droid unit, reveal it, and draw it.', 'When Played/When this unit completes an attack (and survives)'],
+    ['SEC_041 Populist Advisor', 'When an enemy unit deals combat damage to your base: This unit gains Sentinel for this phase.', 'When an enemy unit deals combat damage to your base'],
+    ['JTL_188 Moff Gideon', "When this unit deals combat damage to an opponent's base: Each unit that opponent plays this phase costs 1 more.", "When this unit deals combat damage to an opponent's base"],
+    ['SHD_250 Tarfful', "Restore 2 \nWhen a friendly Wookiee unit is dealt combat damage and isn't defeated: That unit deals that much damage to an enemy ground unit.", "When a friendly Wookiee unit is dealt combat damage and isn't defeated"],
+    ['SOR_085 Rukh', 'SHIELDED (When you play this unit, give a Shield token to it.)\nWhen this unit deals combat damage to a non-leader unit while attacking: Defeat that unit.', 'When this unit deals combat damage to a non-leader unit while attacking'],
+    ['SOR_133 Seventh Sister', "SABOTEUR (When this unit attacks, ignore Sentinel and defeat the defender's Shields.)\nWhen this unit deals combat damage to an opponent's base: You may deal 3 damage to a ground unit that opponent controls.", "When this unit deals combat damage to an opponent's base"],
+  ])('reads the whole head on %s', (_card, text, head) => {
+    expect(triggerHeads(text)).toEqual([head])
+  })
+
+  it('reads no head from keyword reminder text, which carries no colon', () => {
+    expect(triggerHeads('SHIELDED (When you play this unit, give a Shield token to it.)')).toEqual([])
+  })
+
+  it('batches an Action with a long bracketed cost under Action, not as a constant ability', () => {
+    // SEC_093 C-3P0.
+    const r = triage([card({ FrontText: "Action [Exhaust, return this unit to its owner's hand]: Give a unit +2/+2 for this phase." })])
+    expect(r.triaged[0].blockers).toEqual([])
+    expect(r.batches).toEqual([{ head: 'Action', cards: 1 }])
+  })
+
+  it('reports a long compound head as trigger:compound', () => {
+    // JTL_089 The Invisible Hand, SOR_040 Avenger, SOR_147 Black One. Three cards, because a trigger
+    // blocker carried by fewer than ONE_OFF_THRESHOLD cards folds into trigger:one-off, compound
+    // included. Over the nine sets compound is the sole blocker on 47 cards, so the fold never bites.
+    const r = triage([
+      card({ Number: '1', Name: 'The Invisible Hand', FrontText: 'When Played/When this unit completes an attack (and survives): You may search the top 8 cards of your deck for a Droid unit, reveal it, and draw it. If it costs 2 or less, you may play it for free. (Put the other cards on the bottom of your deck in a random order.)' }),
+      card({ Number: '2', Name: 'Avenger', FrontText: 'When Played/On Attack: An opponent chooses a non-leader unit they control. Defeat that unit.' }),
+      card({ Number: '3', Name: 'Black One', FrontText: 'When Played/When Defeated: You may discard your hand. If you do, draw 3 cards.' }),
+    ])
+    expect(r.triaged.map(c => c.blockers)).toEqual([['trigger:compound'], ['trigger:compound'], ['trigger:compound']])
+  })
+
+  it('does not read a stat notation in a head as two trigger points', () => {
+    // JTL_177 Stay on Target, JTL_156 Trench Run, SOR_150 Heroic Sacrifice. "+2/+0" is a stat line, not
+    // a second trigger point, and reading it as one put these three in trigger:compound, a bucket that
+    // otherwise holds 47 genuine two-trigger cards. Each is a granted-ability lead-in, the shape the
+    // short pattern already read as an ordinary head on LOF_205 and TWI_103, so each folds to one-off.
+    const r = triage([
+      card({ Number: '1', Type: 'Event', Name: 'Stay on Target', FrontText: 'Attack with a Vehicle unit. For this attack, it gets +2/+0 and gains: "When this unit deals damage to a base: Draw a card."' }),
+      card({ Number: '2', Type: 'Event', Name: 'Trench Run', FrontText: "Attack with a Fighter unit. For this attack, it gets +4/+0 and gains: \"On Attack: Discard 2 cards from the defending player's deck. Deal unpreventable damage equal to the difference in the discarded cards' costs to this unit.\"" }),
+      card({ Number: '3', Type: 'Event', Name: 'Heroic Sacrifice', FrontText: 'Draw a card, then attack with a unit. For this attack, it gets +2/+0 and gains: "When this unit deals combat damage: Defeat it."' }),
+    ])
+    expect(r.triaged.map(c => c.blockers)).toEqual([['trigger:one-off'], ['trigger:one-off'], ['trigger:one-off']])
+  })
+
+  it('blocks a card on a long head the framework does not dispatch', () => {
+    // SEC_041 Populist Advisor: alone in the pool, so the head folds into the one-off bucket.
+    const r = triage([card({ FrontText: 'When an enemy unit deals combat damage to your base: This unit gains Sentinel for this phase.' })])
+    expect(r.triaged[0].blockers).toEqual(['trigger:one-off'])
+    expect(r.batches).toEqual([])
   })
 })
 

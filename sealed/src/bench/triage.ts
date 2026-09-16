@@ -197,11 +197,21 @@ export function normalPrintings(pool: SwuCard[]): SwuCard[] {
   return [...seen.values()]
 }
 
-/** Colon-led trigger heads, read from the card rather than from a guessed list. */
-function triggerHeads(text: string): string[] {
+/**
+ * Colon-led trigger heads, read from the card rather than from a guessed list: the text before the
+ * first colon on a line that starts with a capital, however long. A bracketed cost is stripped, so
+ * `Action [Exhaust, deal 1 damage to a friendly unit]` reads as `Action`.
+ *
+ * The length is unbounded on purpose. Printed heads run past seventy characters ("When a friendly
+ * Wookiee unit is dealt combat damage and isn't defeated"), and over the nine unimplemented sets every
+ * colon-led line is either a printed head or a lead-in to a granted ability ("For this attack, it gets
+ * +2/+0 and gains:"), the shape short lead-ins such as "Attached unit gains:" are read as too. Keyword
+ * reminder text carries no colon.
+ */
+export function triggerHeads(text: string): string[] {
   const heads: string[] = []
   for (const line of text.split('\n')) {
-    const m = /^\s*([A-Z][^:\n]{0,48}):/.exec(line)
+    const m = /^\s*([A-Z][^:\n]*):/.exec(line)
     if (m) heads.push(m[1].replace(/\s*\[[^\]]*\]\s*/g, ' ').replace(/\s+/g, ' ').trim())
   }
   return heads
@@ -242,7 +252,10 @@ export function triage(pool: SwuCard[]): TriageReport {
     for (const k of newKeywords) blockers.add(`kw:${k}`)
     for (const h of triggerHeads(text)) {
       const norm = h.toLowerCase()
-      if (norm.includes('/')) blockers.add('trigger:compound')
+      // A slash joins two trigger points ("When Played/On Attack"). A stat notation is not one: a
+      // granted-ability lead-in reads "it gets +2/+0 and gains", and counting that as compound files
+      // the card under a blocker that otherwise holds genuine two-trigger cards.
+      if (norm.replace(/[+-]?\d+\/[+-]?\d+/g, '').includes('/')) blockers.add('trigger:compound')
       else if (!EXISTING_TRIGGERS.has(norm)) blockers.add(`trigger:${h}`)
     }
 
