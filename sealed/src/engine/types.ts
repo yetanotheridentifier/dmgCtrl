@@ -545,7 +545,9 @@ type ChoiceVariant =
   // `thenSearchDraw` chains "if you do, search the top N for a unit and draw it" (8D8).
   | { kind: 'mayDamage'; id: string; controller: PlayerId; unitId: string; targets: string[]; amount: number; optional?: boolean; rewardIfDefeated?: { instanceId: string; count: number } | { chooseAdvantage: number }; thenSearchDraw?: number; source?: DamageSource }
   // Give `count` of a token to a chosen target. `optional` (default true) offers a decline.
-  | { kind: 'mayGiveTokens'; id: string; controller: PlayerId; token: string; count: number; targets: string[]; optional?: boolean }
+  // `thenBuff` is the card's separate second sentence, with a target of its own: Mislead shields one
+  // unit and then debuffs any unit, which is two picks rather than one effect on one unit.
+  | { kind: 'mayGiveTokens'; id: string; controller: PlayerId; token: string; count: number; targets: string[]; optional?: boolean; thenBuff?: { power?: number; hp?: number } }
   | { kind: 'mayAdvantageEach'; id: string; controller: PlayerId; unitId: string; targets: string[] }
   // Vane: defeat a friendly upgrade (chosen from `candidates`, cards or tokens); then the
   // `then` damage-target selection follows. `optional` = the deployed "may" version (a Cancel is
@@ -586,7 +588,13 @@ type ChoiceVariant =
   // (`baseTargets`, by owner). Mandatory. Vane's "deal 2 to a base / the defending unit or a base".
   // `thenHealBase` is the tail of a card that damages and then heals (Grassroots Resistance), so
   // the target is picked in the order the card reads rather than after its own second sentence.
-  | { kind: 'selectDamageTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[]; optional?: boolean; source?: DamageSource; thenHealBase?: number }
+  // `thenReadyIfTrait` readies the unit just hit when it has that trait ("If it's a Clone, ready it",
+  // Remove the Chip). `thenDamage` is a SECOND pick: "and 1 damage to another enemy unit" (I'll Cover
+  // For You), or "you may deal damage equal to the number of damaged enemy units" (Backed by Black
+  // Sun), whose amount can only be counted once the first hit has landed.
+  | { kind: 'selectDamageTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[]; optional?: boolean; source?: DamageSource; thenHealBase?: number
+      thenReadyIfTrait?: string
+      thenDamage?: { amount?: number; perDamagedEnemy?: boolean; scope: 'anotherEnemy' | 'anyUnit'; optional?: boolean } }
   // Greef Karga front: on playing a unit, may exhaust the leader to give it an Advantage token.
   // `unitId` is the just-played unit to receive the token.
   | { kind: 'mayExhaustLeaderForAdvantage'; id: string; controller: PlayerId; unitId: string }
@@ -639,7 +647,9 @@ type ChoiceVariant =
   | { kind: 'selectHealTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[]; optional?: boolean; thenShield?: boolean }
   // Play a unit from hand as part of an ability: pick one of `candidates` (affordable hand
   // units), paying its cost + `costDelta`, entering ready if `entersReady` (Fennec, Moff Gideon).
-  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean }
+  // `thenDamageIt` deals that much to the unit just played — "Play a unit from your hand. It costs 4
+  // less. Deal 4 damage to it" (Reckless Landing), which can only be aimed once it is on the board.
+  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number }
   // Additional cost "exhaust a friendly unit": pick one of `targets` to exhaust, then the
   // `then` play-from-hand step follows (Fennec). Mandatory.
   | { kind: 'selectUnitToExhaust'; id: string; controller: PlayerId; targets: string[]; then: PlayFromHandSpec }
@@ -656,7 +666,10 @@ type ChoiceVariant =
   // Resolved by an `acceptChoice` carrying the hand index. `then` runs after the last discard: Ninth
   // Sister distributes the discarded card's cost as damage (`distributeDamageTo`); Razor Crest gives a
   // unit a "this phase" buff (`buffUnit`).
-  | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean; then?: { distributeDamageTo: PlayerId } | { buffUnit: string; power?: number; hp?: number } | { dealDamage: number; costlierThanDiscard?: boolean } | { exhaustUnit: true } }
+  // `buffFor` is the other half of "an opponent may discard a card. If they do, give a non-Vehicle
+  // unit -8/-8" (Kouhun Assassination): the OPPONENT answers this discard, and the debuff pick then
+  // goes to `buffFor`, who is the player that played the card.
+  | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean; then?: { distributeDamageTo: PlayerId } | { buffUnit: string; power?: number; hp?: number } | { dealDamage: number; costlierThanDiscard?: boolean } | { exhaustUnit: true } | { buffFor: PlayerId; power?: number; hp?: number; nonVehicleOnly?: boolean } }
   // Leia Organa: a yes/no — deal `selfDamage` to `unitId`, then heal `healBase` from your base.
   | { kind: 'maySelfDamageHealBase'; id: string; controller: PlayerId; unitId: string; selfDamage: number; healBase: number }
   // Mando's N-1: a yes/no — exhaust your (ready) leader to give `unitId` a "+power/+hp this phase" buff.
@@ -682,9 +695,14 @@ type ChoiceVariant =
   // Return one of `targets` to its owner's hand. Distinct from returnFriendlyUnit in that the card
   // supplies the eligible units, which may be the opponent's. Mandatory unless `optional`, as are the
   // ready, steal and distribute-source picks below.
-  | { kind: 'selectUnitToReturn'; id: string; controller: PlayerId; targets: string[]; optional?: boolean }
+  // `thenExhaustOtherEnemiesInArena` exhausts every OTHER enemy unit standing in the returned unit's
+  // arena (Watch This) — which arena that is depends on the pick, so it cannot be decided up front.
+  // `thenWipeNonLeaders` is Rhydonium Detonation: both players are offered their save at once, and the
+  // wipe follows once neither offer is still outstanding.
+  | { kind: 'selectUnitToReturn'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; thenExhaustOtherEnemiesInArena?: boolean; thenWipeNonLeaders?: boolean }
   // Galvanized Leap: ready one of `targets`.
-  | { kind: 'selectUnitToReady'; id: string; controller: PlayerId; targets: string[]; optional?: boolean }
+  // `thenDamage` is the card's second sentence, with a target of its own (Fervor).
+  | { kind: 'selectUnitToReady'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; thenDamage?: { amount: number } }
   // Rehabilitation: take control of one of `targets` until the regroup phase, debuffing it by
   // `power`/`hp` for this phase.
   | { kind: 'selectUnitToSteal'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; power?: number; hp?: number }
@@ -714,13 +732,17 @@ type ChoiceVariant =
   // Look at `target`'s hand (Imperial Defector / Remnant Lookouts) — the controller sees it
   // revealed. View-only unless `mayDiscard`, when the controller may discard one of the target's
   // cards (an `acceptChoice` with its hand index); `thenDraw` then has the target draw a card.
-  | { kind: 'lookAtHand'; id: string; controller: PlayerId; target: PlayerId; mayDiscard?: boolean; thenDraw?: boolean }
+  // `mustDiscard` removes the Done, for a card that says "discards a card" rather than "may discard"
+  // (Reveal Intentions). The view-only and "may" forms keep it.
+  | { kind: 'lookAtHand'; id: string; controller: PlayerId; target: PlayerId; mayDiscard?: boolean; thenDraw?: boolean; mustDiscard?: boolean }
   // Search the revealed top cards (Clan Wren Loyalist): pick one of the `eligibleIndices`
   // (indices into `revealed`) to draw; the rest go to the bottom of the deck. Resolved by an
   // `acceptChoice` carrying the `deckIndex` (0-based within `revealed`). Mandatory when eligible.
   // `guessedCost` carries Sense Through the Force's named number: if the drawn card's cost matches,
   // the follow-up Advantage offer fires.
-  | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; guessedCost?: number }
+  // `discardRest` sends the cards not drawn to the discard pile instead of the deck bottom — "draw a
+  // unit revealed this way, then discard the other revealed cards" (I've Found Them).
+  | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; guessedCost?: number; discardRest?: boolean }
   // The Cyborg Mech: deal `undamagedAmount` to a chosen undamaged target, or `damagedAmount`
   // to a damaged one (the amount is decided by the picked unit's damage). Mandatory board-target.
   | { kind: 'variableStrike'; id: string; controller: PlayerId; targets: string[]; undamagedAmount: number; damagedAmount: number }
@@ -784,7 +806,9 @@ type ChoiceVariant =
   // `thenResource` chains "if you do, resource the top card of your deck" (Long Live the Empire).
   // `thenReplayFromDiscard` offers the defeated unit straight back from the discard, free
   // (One Must Destroy to Create).
-  | { kind: 'selectUnitToDefeat'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; thenResource?: boolean; thenReplayFromDiscard?: boolean }
+  // `thenReadyFriendlyMaxPower` chains "if you do, ready a friendly unit with N or less power"
+  // (You Have Failed Me).
+  | { kind: 'selectUnitToDefeat'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; thenResource?: boolean; thenReplayFromDiscard?: boolean; thenReadyFriendlyMaxPower?: number }
   // Sabine front: the opponent (`controller`) must give `count` Advantage tokens to one of
   // their units (`targets`). Mandatory when able — an opponent-interjected choice (pendingResumeActive).
   | { kind: 'opponentGivesAdvantage'; id: string; controller: PlayerId; count: number; targets: string[] }
@@ -793,7 +817,9 @@ type ChoiceVariant =
   // Vizsla (defeat non-leaders within an HP budget, a token each).
   | {
       kind: 'multiPick'; id: string; controller: PlayerId; targets: string[]
-      spec: { mode: 'giveAdvantage'; remaining: number } | { mode: 'defeatForToken'; budget: number; token: string } | { mode: 'dealEach'; amount: number; remaining: number } | { mode: 'exhaust'; remaining: number }
+      // `defeat` is a plain count ("defeat up to 2 enemy units", The Desolation of Hoth), where
+      // `defeatForToken` spends an HP budget and pays a token per kill (Pre Vizsla).
+      spec: { mode: 'giveAdvantage'; remaining: number } | { mode: 'defeatForToken'; budget: number; token: string } | { mode: 'dealEach'; amount: number; remaining: number } | { mode: 'exhaust'; remaining: number } | { mode: 'defeat'; remaining: number }
     }
 
 /** The choice currently awaiting a decision (head of the queue), if any. */

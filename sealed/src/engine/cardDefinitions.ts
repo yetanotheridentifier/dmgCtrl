@@ -1,7 +1,7 @@
 import type { EffectContext } from './abilities'
 import { registerCard } from './abilities'
-import { giveToken, giveTokens, exhaustUnit, drawCards, returnUnitToHand, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust } from './effects'
-import { dealDamageToUnit, defeatUnit } from './combat'
+import { giveToken, giveTokens, exhaustUnit, drawCards, returnUnitToHand, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
+import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
 import { discardUnitsMatching } from './resolve'
@@ -2668,3 +2668,190 @@ registerCard('LAW_129', { costModifier: (s, _p, target) => (target && s.cards[ta
 registerCard('SHD_069', { grantedTraits: () => ['Mandalorian'] }) // Foundling
 registerCard('LAW_150', { attachRestriction: nonVehicle, grantedTraits: () => ['Rebel'], ...friendlyAura(isTrait('Rebel'), { power: 2, hp: 2 }, true) }) // Fulcrum
 registerCard('SOR_072', { cannotAttackBases: () => true }) // Entrenched
+
+// ── The remainder of the other sets' events: wipes, and the two unsweepable sets ──────────────
+// Two groups taken whole. The wipes have to defeat **simultaneously** (`defeatUnits`), because a
+// looped single defeat gives each unit's whenDefeated its own batch. TS26 and IBH are both under the
+// 200-card sealed minimum, so `--sweep` refuses them and `eventsRemainder.test.ts` is the whole of
+// their evidence: every one of those cards asserts its eligible targets as well as its effect.
+
+const enemyUnitsOf = (s: GameState, owner: PlayerId): UnitState[] => s.players[opponentOf(owner)].units
+const nonLeaderUnits = (s: GameState): UnitState[] => allUnits(s).filter(u => !isLeaderUnit(s, u))
+
+/** "Defeat all <matching> units", as one event. */
+const wipeEvent = (description: string, test: (s: GameState, u: UnitState) => boolean) =>
+  whenPlayed(description, s => defeatUnits(s, allUnits(s).filter(u => test(s, u)).map(u => u.instanceId)))
+
+registerCard('SOR_043', wipeEvent('Defeat all units.', () => true)) // Superlaser Blast
+registerCard('SEC_078', wipeEvent('Defeat all space units.', (_s, u) => u.arena === 'space')) // Hyperspace Disaster
+// A Shield token is an upgrade, so a shielded unit counts as upgraded and survives.
+registerCard('JTL_080', wipeEvent("Defeat each unit that isn't upgraded.", (_s, u) => u.upgrades.length === 0)) // Nebula Ignition
+
+registerCard('LAW_044', whenPlayed("Defeat all units. For each enemy unit defeated this way, deal 1 damage to its controller's base.", (s, ctx) => { // Single Reactor Ignition
+  const enemy = opponentOf(ctx.owner)
+  const losses = s.players[enemy].units.length
+  const wiped = defeatUnits(s, allUnits(s).map(u => u.instanceId))
+  return losses > 0 ? dealDamageToBase(wiped, enemy, losses) : wiped
+}))
+
+registerCard('LAW_096', whenPlayed("Each player may return a non-leader unit to its owner's hand. Then, defeat all non-leader units.", (s, ctx) => { // Rhydonium Detonation
+  // "a non-leader unit", not "one you control", and it goes to its OWNER's hand — so either player's
+  // unit is a legal save. Both offers are raised together; the wipe follows the last one answered.
+  const targets = nonLeaderUnits(s).map(u => u.instanceId)
+  if (targets.length === 0) return s
+  const mine = pushChoice(s, { kind: 'selectUnitToReturn', id: `${ctx.sourceInstanceId}-mine`, controller: ctx.owner, targets, optional: true, thenWipeNonLeaders: true })
+  return pushChoice(mine, { kind: 'selectUnitToReturn', id: `${ctx.sourceInstanceId}-theirs`, controller: opponentOf(ctx.owner), targets, optional: true, thenWipeNonLeaders: true })
+}))
+
+// TS26 / IBH: no target
+registerCard('TS26_68', whenPlayed('You and an opponent each draw 2 cards.', (s, ctx) => // Arms Deal
+  drawCards(drawCards(s, ctx.owner, 2), opponentOf(ctx.owner), 2)))
+registerCard('TS26_56', whenPlayed('Each player resources the top card of their deck.', (s, ctx) => // Galactic Escalation
+  resourceTopOfDeck(resourceTopOfDeck(s, ctx.owner), opponentOf(ctx.owner))))
+registerCard('TS26_64', whenPlayed('Deal 2 damage to your base. Draw 2 cards.', (s, ctx) => // Urgent Mission
+  drawCards(dealDamageToBase(s, ctx.owner, 2), ctx.owner, 2)))
+registerCard('TS26_48', whenPlayed('Give each enemy ground unit -2/-2 for this phase.', (s, ctx) => // Vanquish the Legion
+  lastingOnEach(s, unitsIn(s, opponentOf(ctx.owner), 'ground'), { power: -2, hp: -2 })))
+
+// TS26 / IBH: one target
+registerCard('IBH_18', whenPlayed('Exhaust an enemy ground unit.', (s, ctx) => { // Go for the Legs
+  const targets = unitsIn(s, opponentOf(ctx.owner), 'ground').map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayExhaustUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets }) : s
+}))
+
+/** "Heal N damage from a unit" — no base among the targets, unlike Repair. */
+const healUnitEvent = (description: string, amount: number, thenShield = false) =>
+  whenPlayed(description, (s, ctx) => {
+    const unitTargets = allUnits(s).map(u => u.instanceId)
+    return unitTargets.length
+      ? pushChoice(s, { kind: 'selectHealTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount, unitTargets, baseTargets: [], ...(thenShield ? { thenShield: true } : {}) })
+      : s
+  })
+registerCard('IBH_13', healUnitEvent('Heal 5 damage from a unit.', 5)) // Recovery
+registerCard('IBH_66', healUnitEvent('Heal 2 damage from a unit.', 2)) // Too Strong for Blasters
+
+registerCard('IBH_59', whenPlayed('Deal 2 damage to a base.', (s, ctx) => // Target the Main Generator
+  pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 2, unitTargets: [], baseTargets: BOTH_BASES })))
+registerCard('IBH_61', whenPlayed('Deal 3 damage to a unit.', (s, ctx) => damageChoice(s, ctx, 3, allUnits(s)))) // We're In Trouble
+
+registerCard('IBH_74', whenPlayed('Draw 2 cards, then discard a card from your hand.', (s, ctx) => { // I Want Proof, Not Leads
+  const drew = drawCards(s, ctx.owner, 2)
+  return drew.players[ctx.owner].hand.length
+    ? pushChoice(drew, { kind: 'selectDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, count: 1 })
+    : drew
+}))
+
+// TS26 / IBH: a second effect that depends on the first
+registerCard('TS26_72', whenPlayed('Ready a unit. Deal 3 damage to a unit.', (s, ctx) => { // Fervor
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'selectUnitToReady', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, thenDamage: { amount: 3 } }) : s
+}))
+registerCard('TS26_81', whenPlayed('Give a Shield token to a unit. Give a unit -3/-0 for this phase.', (s, ctx) => { // Mislead
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length
+    ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_SHIELD, count: 1, targets, optional: false, thenBuff: { power: -3 } })
+    : s
+}))
+registerCard('TS26_69', whenPlayed("Deal 2 damage to a unit. If it's a Clone, ready it.", (s, ctx) => { // Remove the Chip
+  const unitTargets = allUnits(s).map(u => u.instanceId)
+  return unitTargets.length
+    ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 2, unitTargets, baseTargets: [], thenReadyIfTrait: 'Clone' })
+    : s
+}))
+registerCard('IBH_5', whenPlayed('Deal 1 damage to an enemy unit and 1 damage to another enemy unit.', (s, ctx) => { // I'll Cover For You
+  const unitTargets = enemyUnitsOf(s, ctx.owner).map(u => u.instanceId)
+  return unitTargets.length
+    ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 1, unitTargets, baseTargets: [], thenDamage: { amount: 1, scope: 'anotherEnemy' } })
+    : s
+}))
+registerCard('TS26_70', whenPlayed('Deal 1 damage to an enemy unit. You may deal damage to a unit equal to the number of damaged enemy units.', (s, ctx) => { // Backed by Black Sun
+  const unitTargets = enemyUnitsOf(s, ctx.owner).map(u => u.instanceId)
+  return unitTargets.length
+    ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 1, unitTargets, baseTargets: [], thenDamage: { perDamagedEnemy: true, scope: 'anyUnit', optional: true } })
+    : s
+}))
+registerCard('IBH_95', whenPlayed('Defeat a friendly unit. If you do, ready a friendly unit with 5 or less power.', (s, ctx) => { // You Have Failed Me
+  const targets = s.players[ctx.owner].units.map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'selectUnitToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, thenReadyFriendlyMaxPower: 5 }) : s
+}))
+registerCard('IBH_52', whenPlayed("Return a non-leader unit that costs 6 or less to its owner's hand. Exhaust each other enemy unit in the same arena.", (s, ctx) => { // Watch This
+  const targets = nonLeaderUnits(s).filter(u => printedCost(s, u) <= 6).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'selectUnitToReturn', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, thenExhaustOtherEnemiesInArena: true }) : s
+}))
+registerCard('TS26_33', whenPlayed('An opponent (of your choice) may discard a card from their hand. If they do, give a non-Vehicle unit -8/-8 for this phase.', (s, ctx) => { // Kouhun Assassination
+  // Two players, so "an opponent of your choice" is the opponent. They choose whether to discard;
+  // the debuff that follows is the caster's pick, which is why the follow-up changes hands.
+  const enemy = opponentOf(ctx.owner)
+  return s.players[enemy].hand.length
+    ? pushChoice(s, { kind: 'selectDiscard', id: ctx.sourceInstanceId!, controller: enemy, count: 1, optional: true, then: { buffFor: ctx.owner, power: -8, hp: -8, nonVehicleOnly: true } })
+    : s
+}))
+registerCard('TS26_32', whenPlayed('Play a unit from your hand. It costs 4 less. Deal 4 damage to it.', (s, ctx) => { // Reckless Landing
+  const candidates = affordableHandUnits(s, ctx.owner, 0, -4)
+  return candidates.length
+    ? pushChoice(s, { kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, costDelta: -4, entersReady: false, thenDamageIt: 4 })
+    : s
+}))
+registerCard('TS26_80', whenPlayed('Each player reveals their hand. In player order, each player discards a card from the hand of the player to their right. Then, each player draws a card.', (s, ctx) => { // Reveal Intentions
+  // Two players, so "the player to their right" is the opponent each way, and the two discards are
+  // independent: both offers are raised at once, and each player draws to replace what was taken.
+  const enemy = opponentOf(ctx.owner)
+  const mine = pushChoice(s, { kind: 'lookAtHand', id: `${ctx.sourceInstanceId}-mine`, controller: ctx.owner, target: enemy, mayDiscard: true, thenDraw: true, mustDiscard: true })
+  return pushChoice(mine, { kind: 'lookAtHand', id: `${ctx.sourceInstanceId}-theirs`, controller: enemy, target: ctx.owner, mayDiscard: true, thenDraw: true, mustDiscard: true })
+}))
+
+// TS26 / IBH: several targets at once
+registerCard('TS26_82', whenPlayed('Exhaust any number of non-unique units.', (s, ctx) => { // Evade Arrest
+  const targets = allUnits(s).filter(u => !cardOf(s, u)?.unique).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'multiPick', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, spec: { mode: 'exhaust', remaining: targets.length } }) : s
+}))
+registerCard('IBH_104', whenPlayed('Defeat up to 2 enemy units that each cost 3 or less.', (s, ctx) => { // The Desolation of Hoth
+  const targets = enemyUnitsOf(s, ctx.owner).filter(u => printedCost(s, u) <= 3).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'multiPick', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, spec: { mode: 'defeat', remaining: 2 } }) : s
+}))
+registerCard('IBH_9', whenPlayed('Reveal the top 3 cards of your deck. Draw a unit revealed this way, then discard the other revealed cards.', (s, ctx) => { // I've Found Them
+  const revealed = s.players[ctx.owner].deck.slice(0, searchCount(s, ctx.owner, 3))
+  if (revealed.length === 0) return s
+  const eligibleIndices = revealed.flatMap((id, i) => (s.cards[id]?.type === 'unit' ? [i] : []))
+  return pushChoice(s, { kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices, discardRest: true })
+}))
+
+// TS26: "This event costs 1 less to play for each friendly leader unit."
+const perLeaderUnitDiscount = { costModifier: (s: GameState, p: PlayerId) => -s.players[p].units.filter(u => u.isLeader).length }
+
+registerCard('TS26_71', { // Take Action
+  ...perLeaderUnitDiscount,
+  ...whenPlayed('This event costs 1 less to play for each friendly leader unit. Deal 3 damage to a unit.', (s, ctx) => damageChoice(s, ctx, 3, allUnits(s))),
+})
+registerCard('TS26_47', { // Take Cover
+  ...perLeaderUnitDiscount,
+  ...healUnitEvent('This event costs 1 less to play for each friendly leader unit. Heal up to 3 damage from a unit and give a Shield token to it.', 3, true),
+})
+
+// TS26 / IBH: attack events, each lending the attacker a rider for that attack
+const GRANT_TAKE_AIM = 'GRANT_TAKE_AIM'
+registerCard(GRANT_TAKE_AIM, {
+  sourceCardId: 'TS26_83',
+  statModifier: (_s, _u, ctx) => (ctx.attacking ? { power: 2 } : {}),
+  conditionalKeywords: () => [{ name: 'Saboteur' }],
+})
+registerCard('TS26_83', { // Take Aim
+  ...perLeaderUnitDiscount,
+  ...attackWithRider('This event costs 1 less to play for each friendly leader unit. Attack with a unit. It gets +2/+0 and gains Saboteur for this attack.', GRANT_TAKE_AIM),
+})
+
+const GRANT_FEARLESS_ATTACK = 'GRANT_FEARLESS_ATTACK'
+registerCard(GRANT_FEARLESS_ATTACK, {
+  sourceCardId: 'TS26_84',
+  // Every unit the defending player controls, in either arena — where Masterstroke counts its own.
+  statModifier: (s, u, ctx) => {
+    if (!ctx.attacking) return {}
+    const owner = findUnit(s, u.instanceId)?.owner
+    return owner === undefined ? {} : { power: s.players[opponentOf(owner)].units.length }
+  },
+})
+registerCard('TS26_84', attackWithRider('Attack with a unit. It gets +1/+0 for this attack for each unit controlled by the defending player.', GRANT_FEARLESS_ATTACK))
+
+const GRANT_IMPROVISED_DETONATION = 'GRANT_IMPROVISED_DETONATION'
+registerCard(GRANT_IMPROVISED_DETONATION, { sourceCardId: 'IBH_21', statModifier: (_s, _u, ctx) => (ctx.attacking ? { power: 2 } : {}) })
+registerCard('IBH_21', attackWithRider('Attack with a unit. It gets +2/+0 for this attack.', GRANT_IMPROVISED_DETONATION))
