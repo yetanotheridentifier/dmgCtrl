@@ -546,7 +546,7 @@ export interface TriggerContext {
   defeatedByCombat?: boolean
   /** A unit the event is *about*: the one just played, readied, or chosen. */
   targetInstanceId?: string
-  /** `whenUpgradeAttached`: the upgrade was played from hand rather than created by an ability. */
+  /** `whenUpgradeAttached`: the upgrade was played (from any zone) rather than created or moved by an ability. */
   upgradePlayed?: boolean
 }
 

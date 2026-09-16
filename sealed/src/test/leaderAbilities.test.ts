@@ -7,7 +7,7 @@ import { unitHasKeyword } from '../engine/keywords'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
 import { TOKEN_ADVANTAGE, TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
-import { recordUnitDefeated, recordUnitEntered } from '../engine/types'
+import { cardsPlayedThisPhase, recordUnitDefeated, recordUnitEntered } from '../engine/types'
 import type { LeaderState } from '../engine/types'
 
 /** Undeployed-leader activated abilities. */
@@ -757,6 +757,29 @@ describe('The Armorer (ASH_001) — play an upgrade from your resources', () => 
     // Cost paid: R0 is exhausted; UP left the pool; the deck top joins it EXHAUSTED.
     // The back's rider is the same as the front's ("If you do, resource the top card of your deck")
     // and equally silent on readiness, so CR 1.7.7's default applies to both sides of the card.
+    expect(done.players.player.resources).toEqual([{ cardId: 'R0', exhausted: true }, { cardId: 'TST_U2', exhausted: true }])
+  })
+
+  // Playing a card from resources is still playing it: everything an upgrade played from hand does.
+  it("fires the host's play reaction and records the upgrade as played (Gar Saxon)", () => {
+    const s = state({
+      cards: { ...cards, ASH_047: card({ id: 'ASH_047', type: 'unit', arena: 'ground', cost: 5, power: 3, hp: 5 }) },
+      players: {
+        player: player({
+          leader: deployed('ASH_001'),
+          resources: [{ cardId: 'UP', exhausted: false }, { cardId: 'R0', exhausted: false }],
+          units: [unit('L', 'ASH_001', { isLeader: true }), unit('gar', 'ASH_047')],
+          deck: ['TST_U2'],
+        }),
+        opponent: player(),
+      },
+    })
+    const atk = resolve(s, { type: 'attack', attackerId: 'L', target: { kind: 'base' } })
+    const targeting = resolve(atk, { type: 'acceptChoice', choiceId: atk.pendingChoices![0].id, optionIndex: 0 })
+    const done = resolve(targeting, { type: 'acceptChoice', choiceId: targeting.pendingChoices![0].id, targetInstanceId: 'gar' })
+    expect(done.pendingChoices?.some(c => c.kind === 'mayCreateToken' && c.id === 'gar')).toBe(true)
+    expect(cardsPlayedThisPhase(done, 'player')).toContain('UP')
+    expect(done.players.player.units.find(u => u.instanceId === 'gar')!.upgradesPlayedThisRound).toBe(1)
     expect(done.players.player.resources).toEqual([{ cardId: 'R0', exhausted: true }, { cardId: 'TST_U2', exhausted: true }])
   })
 })

@@ -5,6 +5,7 @@ import { registerCard, unregisterAbility } from '../engine/abilities'
 import { giveToken } from '../engine/effects'
 import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
+import { cardsPlayedThisPhase } from '../engine/types'
 import type { EngineCard } from '../engine/types'
 
 /**
@@ -141,6 +142,23 @@ describe('Camtono (ASH_229) — onAttackEnd may play top card free', () => {
     const played = resolve(next, { type: 'acceptChoice', choiceId: next.pendingChoices![0].id, targetInstanceId: 'u1' })
     expect(played.players.player.units.find(u => u.instanceId === 'u1')!.upgrades.some(a => a.cardId === 'TOPUP')).toBe(true)
     expect(played.players.player.deck).toEqual(['TST_U1'])
+  })
+
+  // Playing the top card for free is still playing it: everything an upgrade played from hand does.
+  it("playing an upgrade free fires the host's play reaction and records it as played (Gar Saxon)", () => {
+    const board = camtonoBoard({ id: 'TOPUP', type: 'upgrade', cost: 1, power: 1, hp: 1 })
+    const s = {
+      ...board,
+      cards: { ...board.cards, ASH_047: card({ id: 'ASH_047', type: 'unit', arena: 'ground', cost: 5, power: 3, hp: 5 }) },
+      players: { ...board.players, opponent: player({ units: [unit('gar', 'ASH_047')] }) },
+    }
+    const next = resolve(s, attackBase)
+    const played = resolve(next, { type: 'acceptChoice', choiceId: next.pendingChoices![0].id, targetInstanceId: 'gar' })
+    // The host is the opponent's: its reaction is theirs, and the played record is the player's.
+    expect(played.players.opponent.units.find(u => u.instanceId === 'gar')!.upgrades).toEqual([{ cardId: 'TOPUP', owner: 'player' }])
+    expect(played.pendingChoices?.some(c => c.kind === 'mayCreateToken' && c.id === 'gar' && c.controller === 'opponent')).toBe(true)
+    expect(cardsPlayedThisPhase(played, 'player')).toContain('TOPUP')
+    expect(played.players.opponent.units.find(u => u.instanceId === 'gar')!.upgradesPlayedThisRound).toBe(1)
   })
 
   it('playing an event free discards it with no effect (temporary rule)', () => {
