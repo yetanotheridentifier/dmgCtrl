@@ -4696,6 +4696,48 @@ registerCard('TWI_188', whenPlayed('Look at cards from the top of your deck equa
   return revealed.length ? pushChoice(s, { kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices: revealed.map((_, i) => i) }) : s
 }))
 
+// Playing a unit from hand. "Play a unit" is not a "may": it is offered whenever one is affordable.
+type PlayFromHandOptions = { costDelta?: number; test?: (c: EngineCard | undefined) => boolean; thenShieldIt?: boolean; thenDamageOwnBase?: boolean }
+const FREE = -99
+const playFromHand = (s: GameState, ctx: EventCtx, o: PlayFromHandOptions): GameState => {
+  const costDelta = o.costDelta ?? 0
+  const candidates = affordableHandUnits(s, ctx.owner, 0, costDelta).filter(ref => !o.test || o.test(s.cards[ref.cardId]))
+  return candidates.length
+    ? pushChoice(s, {
+      kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, costDelta, entersReady: false,
+      ...(o.thenShieldIt ? { thenShieldIt: true } : {}), ...(o.thenDamageOwnBase ? { thenDamageOwnBase: true } : {}),
+    })
+    : s
+}
+registerCard('LOF_076', whenPlayed('Play a Force unit from your hand (paying its cost) and give a Shield token to it.', (s, ctx) => // Soresu Stance
+  playFromHand(s, ctx, { test: c => printedTrait(c, 'Force'), thenShieldIt: true })))
+registerCard('SEC_257', whenPlayed('Play a unit from your hand. It costs 1 less for each Heroism aspect icon among friendly units.', (s, ctx) => { // Restore Freedom
+  const icons = s.players[ctx.owner].units.flatMap(u => cardOf(s, u)?.aspects ?? []).filter(a => a.toLowerCase() === 'heroism').length
+  return playFromHand(s, ctx, { costDelta: -icons })
+}))
+registerCard('SOR_235', whenPlayed('Play a non-Heroism unit from your hand for free. Deal damage to your base equal to its cost.', (s, ctx) => // Galactic Ambition
+  playFromHand(s, ctx, { costDelta: FREE, test: c => !printedAspect(c, 'Heroism'), thenDamageOwnBase: true })))
+registerCard('TWI_225', whenPlayed('If you control exactly one unit, play a non-Vehicle unit from your hand that shares a Trait with the unit you control. It costs 5 less.', (s, ctx) => { // Now There Are Two of Them
+  const units = s.players[ctx.owner].units
+  if (units.length !== 1) return s
+  const traits = unitTraits(s, units[0]).map(t => t.toLowerCase())
+  return playFromHand(s, ctx, { costDelta: -5, test: c => !printedTrait(c, 'Vehicle') && (c?.traits ?? []).some(t => traits.includes(t.toLowerCase())) })
+}))
+
+// Resourcing. The event is already in its owner's discard pile as its When Played resolves.
+const resourceThisEvent = (s: GameState, ctx: { owner: PlayerId; cardId: string }): GameState => {
+  const p = s.players[ctx.owner]
+  const at = p.discard.lastIndexOf(ctx.cardId)
+  if (at === -1) return s
+  // Exhausted, as every resource an ability puts into play is.
+  return updatePlayer(s, ctx.owner, { discard: p.discard.filter((_, i) => i !== at), resources: [...p.resources, { cardId: ctx.cardId, exhausted: true }] })
+}
+const resupply = whenPlayed('Put this event into play as a resource.', (s, ctx) => resourceThisEvent(s, ctx))
+registerCard('TWI_127', resupply) // Resupply
+registerCard('SOR_126', resupply) // Resupply
+registerCard('LAW_171', whenPlayed('Resource this event and the top card of your deck.', (s, ctx) => // Stockpile
+  resourceTopOfDeck(resourceThisEvent(s, ctx), ctx.owner)))
+
 registerCard('LAW_085', unitThenWp('Choose a friendly non-leader unit. An opponent takes control of it. If they do, deal 4 damage to another unit in the same arena.', pickAll(pickFriendly, nonLeader), 'give a friendly non-leader unit to an opponent', false, // You Hold This
   (s, ctx) => {
     const others = otherInArena(s, ctx.targetInstanceId!)

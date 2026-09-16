@@ -505,6 +505,14 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'SEC_144', name: 'Tempest Assault' },
   { id: 'SOR_091', name: "The Emperor's Legion" },
   { id: 'TWI_188', name: 'Wartime Profiteering' },
+  // Playing a unit from hand, and resourcing
+  { id: 'LOF_076', name: 'Soresu Stance' },
+  { id: 'SEC_257', name: 'Restore Freedom' },
+  { id: 'SOR_235', name: 'Galactic Ambition' },
+  { id: 'TWI_225', name: 'Now There Are Two of Them' },
+  { id: 'TWI_127', name: 'Resupply' },
+  { id: 'SOR_126', name: 'Resupply' },
+  { id: 'LAW_171', name: 'Stockpile' },
   // Printed as an upgrade (see `cardDataCorrections.ts`), but the set data, and so the set totals
   // below, file it as an event. Counted where the totals count it.
   { id: 'SOR_215', name: 'Snapshot Reflexes' },

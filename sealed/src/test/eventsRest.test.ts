@@ -76,6 +76,15 @@ const F = {
   SEC_144: ev('SEC_144', 4), SOR_091: ev('SOR_091', 2), TWI_188: ev('TWI_188'),
   C1: card({ id: 'C1', arena: 'ground', cost: 1, power: 1, hp: 3 }),
   UW: card({ id: 'UW', arena: 'ground', cost: 2, power: 2, hp: 3, traits: ['UNDERWORLD'] }),
+  LOF_076: ev('LOF_076'), SEC_257: ev('SEC_257', 2), SOR_235: ev('SOR_235', 7), TWI_225: ev('TWI_225', 3),
+  TWI_127: ev('TWI_127', 3), SOR_126: ev('SOR_126', 3), LAW_171: ev('LAW_171', 6),
+  HERO2: card({ id: 'HERO2', arena: 'ground', cost: 2, power: 2, hp: 3, aspects: ['Heroism', 'Heroism'] }),
+  HERO1: card({ id: 'HERO1', arena: 'ground', cost: 2, power: 2, hp: 3, aspects: ['Heroism', 'Command'] }),
+  H_UNIT5: card({ id: 'H_UNIT5', arena: 'ground', cost: 5, power: 2, hp: 3, aspects: ['Heroism'] }),
+  V_UNIT4: card({ id: 'V_UNIT4', arena: 'ground', cost: 4, power: 2, hp: 3, aspects: ['Villainy'] }),
+  CLONE6: card({ id: 'CLONE6', arena: 'ground', cost: 6, power: 2, hp: 3, traits: ['CLONE'] }),
+  CLONE_VEH: card({ id: 'CLONE_VEH', arena: 'space', cost: 6, power: 2, hp: 3, traits: ['CLONE', 'VEHICLE'] }),
+  FORCE_HAND: card({ id: 'FORCE_HAND', arena: 'ground', cost: 3, power: 2, hp: 3, traits: ['FORCE', 'JEDI'] }),
   SABOTEUR: card({ id: 'SABOTEUR', arena: 'ground', cost: 2, power: 2, hp: 5, keywords: [{ name: 'Saboteur' }] }),
   OFFICIAL: card({ id: 'OFFICIAL', arena: 'ground', cost: 2, power: 1, hp: 4, traits: ['OFFICIAL'] }),
   TWO_ASP: card({ id: 'TWO_ASP', arena: 'ground', cost: 3, power: 2, hp: 5, aspects: ['Cunning', 'Heroism'] }),
@@ -979,5 +988,61 @@ describe("events that read this phase's record", () => {
     expect(revealedOf(c)).toEqual(['U_VIG', 'U_CMD'])
     expect(eligibleCards(c)).toEqual(['U_VIG', 'U_CMD'])
     noChoice(play(board('TWI_188', { deck: ['U_VIG'] })))
+  })
+})
+
+// ── Playing from hand, and resourcing ───────────────────────────────────────────────────────────
+
+const candidatesOf = (c: PendingChoice): string[] => (c.kind === 'playUnitFromHand' ? c.candidates.map(x => x.cardId) : [])
+
+describe('events that play a unit from hand', () => {
+  it('Soresu Stance (LOF_076) plays a Force unit from hand, paying its cost, and shields it', () => {
+    let s = play(board('LOF_076', { hand: ['FORCE_HAND', 'P3'] }))
+    const c = choice(s)
+    expect(candidatesOf(c)).toEqual(['FORCE_HAND'])
+    expect(c).toMatchObject({ costDelta: 0, entersReady: false, thenShieldIt: true })
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { handIndex: 0 })
+    const played = s.players.player.units.find(u => u.cardId === 'FORCE_HAND')!
+    expect(hasToken(played.upgrades, TOKEN_SHIELD)).toBe(true)
+  })
+
+  it('Restore Freedom (SEC_257) plays a unit costing 1 less per Heroism icon among friendly units', () => {
+    const c = choice(play(board('SEC_257', { hand: ['H_UNIT5', 'UPG'], units: [unit('a', 'HERO2'), unit('b', 'HERO1'), unit('c', 'P3')] })))
+    expect(candidatesOf(c)).toEqual(['H_UNIT5'])
+    expect(c).toMatchObject({ costDelta: -3 })
+  })
+
+  it('Galactic Ambition (SOR_235) plays a non-Heroism unit for free and deals its cost to your base', () => {
+    let s = play(board('SOR_235', { hand: ['H_UNIT5', 'V_UNIT4'] }))
+    expect(candidatesOf(choice(s))).toEqual(['V_UNIT4'])
+    const before = s.players.player.resources.filter(r => r.exhausted).length
+    s = accept(s, { handIndex: 1 })
+    expect(s.players.player.units.map(u => u.cardId)).toEqual(['V_UNIT4'])
+    expect(s.players.player.resources.filter(r => r.exhausted).length).toBe(before)
+    expect(s.players.player.base.damage).toBe(4)
+  })
+
+  it('Now There Are Two of Them (TWI_225) plays a non-Vehicle unit sharing a Trait with your only unit, 5 less', () => {
+    const c = choice(play(board('TWI_225', { hand: ['CLONE6', 'CLONE_VEH', 'P5'], units: [unit('r', 'REPUBLIC')] })))
+    expect(candidatesOf(c)).toEqual(['CLONE6'])
+    expect(c).toMatchObject({ costDelta: -5 })
+    noChoice(play(board('TWI_225', { hand: ['CLONE6'], units: [unit('r', 'REPUBLIC'), unit('p', 'P3')] })))
+  })
+})
+
+describe('events that become resources', () => {
+  it.each(['TWI_127', 'SOR_126'])('Resupply (%s) puts itself into play as a resource', id => {
+    const s = play(board(id, { resources: ready(3) }))
+    expect(s.players.player.discard).toEqual([])
+    expect(s.players.player.resources).toHaveLength(4)
+    expect(s.players.player.resources[3]).toEqual({ cardId: id, exhausted: true })
+  })
+
+  it('Stockpile (LAW_171) resources itself and the top card of your deck', () => {
+    const s = play(board('LAW_171', { resources: ready(6), deck: ['U_VIG', 'FILL'] }))
+    expect(s.players.player.discard).toEqual([])
+    expect(s.players.player.resources.slice(6).map(r => r.cardId).sort()).toEqual(['LAW_171', 'U_VIG'])
+    expect(s.players.player.deck).toEqual(['FILL'])
   })
 })

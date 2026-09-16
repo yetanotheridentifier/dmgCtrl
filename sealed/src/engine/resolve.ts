@@ -1814,6 +1814,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         // addressed now that it is on the board.
         if (choice.thenDamageIt) next = dealDamageToUnit(next, enteredId, choice.thenDamageIt)
         if (choice.thenShieldIt) next = giveToken(next, enteredId, TOKEN_SHIELD)
+        if (choice.thenDamageOwnBase) next = dealDamageToBase(next, choice.controller, card.cost)
         next = checkWin(next)
         if (next.winner !== null) return next
       }
