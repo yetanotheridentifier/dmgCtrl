@@ -118,6 +118,10 @@ function suppressedKeywordsOf(state: GameState, unit: UnitState): Set<string> {
   for (const cardId of abilityCardIds(unit)) {
     for (const name of getCardDefinition(cardId)?.suppressedKeywords?.(state, unit) ?? []) names.add(name)
   }
+  // "Loses X for this phase" (SpecForce Soldier).
+  for (const e of state.lastingEffects ?? []) {
+    if (e.targetInstanceId === unit.instanceId) for (const name of e.removeKeywords ?? []) names.add(name)
+  }
   return names
 }
 
@@ -168,6 +172,9 @@ export function unitCannotAttack(state: GameState, unit: UnitState): boolean {
 
 /** True if the unit currently can't be attacked (Tatooine Repulsor Train). */
 export function unitCannotBeAttacked(state: GameState, unit: UnitState): boolean {
+  // A lasting protection aimed at this unit (Dooku; On Top of Things only while it lacks Sentinel).
+  const lasting = (state.lastingEffects ?? []).filter(e => e.cannotBeAttacked && e.targetInstanceId === unit.instanceId)
+  if (lasting.some(e => !e.unlessSentinel) || (lasting.length > 0 && !unitHasKeyword(state, unit, 'Sentinel'))) return true
   return abilityCardIds(unit).some(id => getCardDefinition(id)?.cannotBeAttacked?.(state, unit) ?? false)
 }
 

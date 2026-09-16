@@ -200,6 +200,8 @@ export interface CardDefinition {
   suppressesBaseHealing?: (state: GameState, source: UnitState) => boolean
   /** Whether this unit readies in the regroup phase; absent means it does (Rampart needs 4 power). */
   readiesInRegroup?: (state: GameState, unit: UnitState) => boolean
+  /** "Attached unit can't ready" (Frozen in Carbonite): neither in the regroup phase nor by an ability. */
+  cannotReady?: (state: GameState, unit: UnitState) => boolean
   /**
    * A card that REPLACES a unit's printed power/HP ("printed power is considered to be 7"): Obi-Wan
    * Kenobi for every friendly unit, Size Matters Not for its own host. Folded in by `withUpgrades`

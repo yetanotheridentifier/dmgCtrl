@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
-import { legalMoves } from '../engine/legalMoves'
+import { legalMoves, enemyAttackTargets } from '../engine/legalMoves'
 import { getCardDefinition } from '../engine/abilities'
 import { effectivePower, effectiveHp } from '../engine/stats'
 import { unitHasKeyword, unitHasTrait } from '../engine/keywords'
@@ -80,6 +80,22 @@ const F: Record<string, EngineCard> = {
   CHEAPUP: upg('CHEAPUP', { cost: 3 }), DEARUP: upg('DEARUP', { cost: 4 }), UNIQUP: upg('UNIQUP', { cost: 1, unique: true }),
   COMMAND: card({ id: 'COMMAND', arena: 'ground', cost: 2, power: 2, hp: 6, aspects: ['Command'] }),
   SABER: upg('SABER', { traits: ['LIGHTSABER'] }), SABER2: upg('SABER2', { traits: ['LIGHTSABER'] }),
+
+  // Upgrade attach rules and upgrade-specific text
+  SEC_069: upg('SEC_069'), LOF_091: upg('LOF_091', { cost: 5 }), LOF_201: upg('LOF_201', { unique: true }), SHD_193: upg('SHD_193', { cost: 3 }),
+  LAW_111: upg('LAW_111', { unique: true }), TWI_256: upg('TWI_256', { power: 1 }), SOR_136: upg('SOR_136', { power: 3, hp: 1, unique: true }),
+  TWI_219: upg('TWI_219', { power: 2 }),
+  QUIGON: card({ id: 'QUIGON', name: 'Qui-Gon Jinn', arena: 'ground', cost: 5, power: 4, hp: 6, unique: true }),
+  LEIA: card({ id: 'LEIA', name: 'Leia Organa', arena: 'ground', cost: 3, power: 2, hp: 6, unique: true }),
+  VADER: card({ id: 'VADER', name: 'Darth Vader', arena: 'ground', cost: 7, power: 5, hp: 8, unique: true }),
+  SENT: card({ id: 'SENT', arena: 'ground', cost: 2, power: 2, hp: 6, keywords: [{ name: 'Sentinel' }] }),
+  HIDER: card({ id: 'HIDER', arena: 'ground', cost: 2, power: 2, hp: 6, keywords: [{ name: 'Hidden' }] }),
+  C2: card({ id: 'C2', arena: 'ground', cost: 2, power: 1, hp: 6 }), C4: card({ id: 'C4', arena: 'ground', cost: 4, power: 1, hp: 6 }),
+
+  // Lasting effects
+  LOF_191: src('LOF_191', { cost: 1, power: 1, hp: 3 }), TWI_110: src('TWI_110'), LOF_211: src('LOF_211', { keywords: [{ name: 'Hidden' }] }),
+  LOF_209: src('LOF_209'), SOR_140: src('SOR_140'), TWI_067: src('TWI_067', { cost: 9, power: 10, hp: 10 }), LOF_070: src('LOF_070'),
+  HERO: card({ id: 'HERO', type: 'event', cost: 1, aspects: ['Heroism'] }), VILLAIN: card({ id: 'VILLAIN', type: 'event', cost: 1, aspects: ['Villainy'] }),
 }
 
 const unit = (instanceId: string, cardId: string, over: Partial<UnitState> = {}): UnitState =>
@@ -751,6 +767,172 @@ describe('upgrades returned, moved or played', () => {
     expect(U(after, 'src')!.upgrades).toEqual([{ cardId: 'SABER2', owner: 'player' }])
     expect(after.players.player.hand).toEqual(['CHEAPUP', 'SABER'])
     expect(U(after, 'src')!.exhausted).toBe(false)
+  })
+})
+
+// ── Upgrade attach rules and upgrade-specific text ────────────────────────────────────────────────
+
+/** The unit ids `attackerId` may attack. */
+const targetsOf = (s: GameState, attackerId: string) => {
+  const controller: PlayerId = s.players.player.units.some(u => u.instanceId === attackerId) ? 'player' : 'opponent'
+  return ids(enemyAttackTargets(s, U(s, attackerId)!, controller).targets.map(u => u.instanceId))
+}
+const on = (upgradeId: string, hostCard = 'GRD', theirs: UnitState[] = [unit('e', 'GRD'), unit('esp', 'SPACE')], mine: UnitState[] = []) =>
+  board([unit('src', hostCard, { upgrades: [{ cardId: upgradeId, owner: 'player' }] }), ...mine], theirs)
+
+describe('upgrade attach rules and upgrade-specific text', () => {
+  it('Nimble Prowess (SEC_069): attaches to a friendly unit; may exhaust a unit in its arena', () => {
+    const restriction = getCardDefinition('SEC_069')!.attachRestriction!
+    const s = s0()
+    expect([restriction(s, U(s, 'g')!, 'player'), restriction(s, U(s, 'e')!, 'player')]).toEqual([true, false])
+    const fired = fire(on('SEC_069'), 'SEC_069')
+    expect(choice(fired).kind).toBe('mayExhaustUnit')
+    expect(offered(fired)).toEqual(['e', 'src'])
+    expect(declinable(fired)).toBe(true)
+  })
+
+  it("Craving Power (LOF_091): attaches to a friendly unit; damage to an enemy unit equal to the attached unit's power", () => {
+    const restriction = getCardDefinition('LOF_091')!.attachRestriction!
+    const s = s0()
+    expect(restriction(s, U(s, 'e')!, 'player')).toBe(false)
+    const fired = fire(on('LOF_091', 'GRD2'), 'LOF_091')
+    expect(offered(fired)).toEqual(['e', 'esp'])
+    expect(declinable(fired)).toBe(false)
+    expect(U(accept(fired, { targetInstanceId: 'e' }), 'e')!.damage).toBe(3)
+  })
+
+  it("Qui-Gon Jinn's Lightsaber (LOF_201): on Qui-Gon, may exhaust any number of units costing 6 or less combined", () => {
+    const restriction = getCardDefinition('LOF_201')!.attachRestriction!
+    const s = s0()
+    expect([restriction(s, U(s, 'g')!, 'player'), restriction(s, U(s, 'v')!, 'player'), restriction(s, U(s, 'e')!, 'player')]).toEqual([true, false, false])
+    noChoice(fire(on('LOF_201', 'GRD', [unit('a', 'C2')]), 'LOF_201'))
+    const fired = fire(on('LOF_201', 'QUIGON', [unit('a', 'C2'), unit('b', 'C4'), unit('c', 'C4'), unit('big', 'VADER')]), 'LOF_201')
+    expect(offered(fired), 'ready units that fit the budget').toEqual(['a', 'b', 'c', 'src'])
+    expect(declinable(fired)).toBe(true)
+    const one = accept(fired, { targetInstanceId: 'b' })
+    expect(U(one, 'b')!.exhausted).toBe(true)
+    expect(offered(one), '2 left: only a 2-cost unit').toEqual(['a'])
+    const two = accept(one, { targetInstanceId: 'a' })
+    expect(U(two, 'a')!.exhausted).toBe(true)
+    noChoice(two)
+  })
+
+  it("Frozen in Carbonite (SHD_193): attaches to a non-leader unit, exhausts it, and it can't ready", () => {
+    const restriction = getCardDefinition('SHD_193')!.attachRestriction!
+    const s = board([unit('L', 'LEADERU', { isLeader: true })], [unit('e', 'GRD')])
+    expect([restriction(s, U(s, 'L')!, 'player'), restriction(s, U(s, 'e')!, 'player')]).toEqual([false, true])
+    const frozen = board([], [unit('e', 'GRD', { upgrades: [{ cardId: 'SHD_193', owner: 'player' }] })])
+    const fired = fire(frozen, 'SHD_193', 'e')
+    expect(U(fired, 'e')!.exhausted).toBe(true)
+    expect(U(readyUnitViaGalvanized(fired, 'e'), 'e')!.exhausted, 'an ability cannot ready it').toBe(true)
+    const regroup = resolve(resolve({ ...fired, activePlayer: 'player' }, { type: 'pass' }), { type: 'pass' })
+    expect(U(regroup, 'e')!.exhausted, 'nor the regroup phase').toBe(true)
+  })
+
+  it("Leia's Disguise (LAW_111): grants Underworld; on Leia Organa, a Shield to a friendly unit", () => {
+    const s = on('LAW_111')
+    expect(unitHasTrait(s, U(s, 'src')!, 'Underworld')).toBe(true)
+    expect(getCardDefinition('LAW_111')!.attachRestriction!(s0(), U(s0(), 'v')!, 'player')).toBe(false)
+    noChoice(fire(s, 'LAW_111'))
+    const fired = fire(on('LAW_111', 'LEIA', [unit('e', 'GRD')], [unit('g', 'GRD')]), 'LAW_111')
+    expect(offered(fired)).toEqual(['g', 'src'])
+    expect(declinable(fired)).toBe(false)
+  })
+
+  it('Hold-Out Blaster (TWI_256): the attached unit may deal 1 damage to a ground unit', () => {
+    const fired = fire(on('TWI_256', 'GRD2'), 'TWI_256')
+    expect(offered(fired)).toEqual(['e', 'src'])
+    expect(declinable(fired)).toBe(true)
+    expect(choice(fired).source?.cardId, 'dealt by the attached unit').toBe('GRD2')
+    expect(getCardDefinition('TWI_256')!.attachRestriction!(s0(), U(s0(), 'v')!, 'player')).toBe(false)
+  })
+
+  it("Vader's Lightsaber (SOR_136): on Darth Vader, may deal 4 damage to a ground unit", () => {
+    noChoice(fire(on('SOR_136'), 'SOR_136'))
+    const fired = fire(on('SOR_136', 'VADER'), 'SOR_136')
+    expect(offered(fired)).toEqual(['e', 'src'])
+    expect(declinable(fired)).toBe(true)
+    expect(U(accept(fired, { targetInstanceId: 'e' }), 'e')!.damage).toBe(4)
+  })
+
+  it("On Top of Things (TWI_219): the attached unit can't be attacked this phase, unless it has Sentinel", () => {
+    const s = board([unit('src', 'GRD', { upgrades: [{ cardId: 'TWI_219', owner: 'player' }] }), unit('sent', 'SENT', { upgrades: [{ cardId: 'TWI_219', owner: 'player' }] })], [unit('e', 'GRD')])
+    const after = fire(fire(s, 'TWI_219'), 'TWI_219', 'sent')
+    expect(targetsOf(after, 'e')).toEqual(['sent'])
+    expect(targetsOf(withPlayer(after, 'player', { units: after.players.player.units.filter(u => u.instanceId === 'src') }), 'e')).toEqual([])
+  })
+})
+
+/** Ready a unit through an ability, the way Galvanized Leap does. */
+const readyUnitViaGalvanized = (s: GameState, id: string): GameState =>
+  resolve({ ...s, activePlayer: 'player', pendingChoices: [{ kind: 'selectUnitToReady', id: 'x', controller: 'player', targets: [id] }] }, { type: 'acceptChoice', choiceId: 'x', targetInstanceId: id })
+
+// ── Lasting effects ───────────────────────────────────────────────────────────────────────────────
+
+describe('lasting effects the buff choice cannot carry', () => {
+  it('BD-1 (LOF_191) and Huyang (TWI_110): another friendly unit is buffed while the source stays in play', () => {
+    const s = board([unit('src', 'LOF_191'), unit('g', 'GRD')], [unit('e', 'GRD')])
+    const fired = fire(s, 'LOF_191')
+    expect(offered(fired)).toEqual(['g'])
+    expect(declinable(fired)).toBe(false)
+    const after = accept(fired, { targetInstanceId: 'g' })
+    expect(effectivePower(after, U(after, 'g')!)).toBe(3)
+    expect(keywords(after, 'g')).toContain('Saboteur')
+    const regroup = resolve(resolve({ ...after, activePlayer: 'player' }, { type: 'pass' }), { type: 'pass' })
+    expect(effectivePower(regroup, U(regroup, 'g')!), 'beyond this phase').toBe(3)
+    const gone = withPlayer(after, 'player', { units: after.players.player.units.filter(u => u.instanceId !== 'src') })
+    expect(effectivePower(gone, U(gone, 'g')!), 'only while BD-1 is in play').toBe(2)
+
+    const huyang = accept(fire(board([unit('src', 'TWI_110'), unit('g', 'GRD')]), 'TWI_110'), { targetInstanceId: 'g' })
+    expect([effectivePower(huyang, U(huyang, 'g')!), effectiveHp(huyang, U(huyang, 'g')!)]).toEqual([4, 8])
+  })
+
+  it("Dooku (LOF_211): each friendly unit with Hidden can't be attacked for this phase", () => {
+    const s = board([unit('src', 'LOF_211'), unit('h', 'HIDER'), unit('g', 'GRD')], [unit('e', 'GRD')])
+    const after = fire(s, 'LOF_211')
+    expect(targetsOf(after, 'e')).toEqual(['g'])
+  })
+
+  it('Tusken Tracker (LOF_209): each enemy unit loses Hidden for this phase', () => {
+    const s = board([unit('src', 'LOF_209'), unit('a', 'GRD')], [unit('h', 'HIDER', { hidden: true })])
+    expect(targetsOf(s, 'a')).toEqual([])
+    const after = fire(s, 'LOF_209')
+    expect(keywords(after, 'h')).not.toContain('Hidden')
+    expect(targetsOf(after, 'a')).toEqual(['h'])
+  })
+
+  it('SpecForce Soldier (SOR_140): a unit loses Sentinel for this phase', () => {
+    const s = board([unit('src', 'SOR_140'), unit('a', 'GRD')], [unit('sent', 'SENT'), unit('e', 'GRD')])
+    const fired = fire(s, 'SOR_140')
+    expect(offered(fired)).toEqual(['a', 'e', 'sent', 'src'])
+    expect(declinable(fired)).toBe(false)
+    const after = accept(fired, { targetInstanceId: 'sent' })
+    expect(keywords(after, 'sent')).not.toContain('Sentinel')
+    expect(targetsOf(after, 'a')).toEqual(['e', 'sent'])
+  })
+
+  it('The Zillo Beast (TWI_067): each enemy ground unit gets -5/-0; heals 5 as the regroup phase starts', () => {
+    const s = board([unit('src', 'TWI_067', { damage: 7 }), unit('g', 'GRD2')], [unit('e', 'VEH'), unit('esp', 'SPACE')])
+    const after = fire(s, 'TWI_067')
+    expect(effectivePower(after, U(after, 'e')!)).toBe(0)
+    expect(effectivePower(after, U(after, 'esp')!)).toBe(2)
+    expect(effectivePower(after, U(after, 'g')!)).toBe(3)
+    expect(U(fireAt(after, 'TWI_067', 'whenRegroupStarts'), 'src')!.damage).toBe(2)
+  })
+
+  it('Anakin Skywalker (LOF_070): -3/-3 once for a Heroism card in the discard pile, once for a Villainy card', () => {
+    const s = board([unit('src', 'LOF_070')], [unit('e', 'GRD')])
+    noChoice(fire(s, 'LOF_070', 'src', 0))
+    noChoice(fire(s, 'LOF_070', 'src', 1))
+    const hero = withPlayer(s, 'player', { discard: ['HERO'] })
+    const first = fire(hero, 'LOF_070', 'src', 0)
+    expect(offered(first)).toEqual(['e', 'src'])
+    expect(declinable(first)).toBe(true)
+    noChoice(fire(hero, 'LOF_070', 'src', 1))
+    const both = withPlayer(s, 'player', { discard: ['HERO', 'VILLAIN'] })
+    const debuffed = accept(fire(both, 'LOF_070', 'src', 1), { targetInstanceId: 'e' })
+    expect(effectivePower(debuffed, U(debuffed, 'e')!)).toBe(0)
+    expect(effectiveHp(debuffed, U(debuffed, 'e')!)).toBe(3)
   })
 })
 

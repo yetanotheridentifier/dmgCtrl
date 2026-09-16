@@ -142,6 +142,11 @@ export interface UnitState {
    * the owner takes control" (Grand Moff Tarkin): control goes back once it is no longer in play.
    */
   controlUntil?: 'permanent' | string
+  /**
+   * Another unit this one chose as it was played, for an effect that lasts while this unit is in play
+   * (BD-1, Huyang). Read by the card's own aura, so the effect ends when either unit leaves play.
+   */
+  chosenUnitId?: string
 }
 
 export interface ResourceState {
@@ -447,6 +452,14 @@ export interface LastingEffect {
   abilityCardIds?: string[]
   /** The unit can't attack for the duration (Chaotic Diversion). Read by `unitCannotAttack`. */
   cannotAttack?: boolean
+  /**
+   * The unit can't be attacked for the duration (Dooku), or not while it lacks Sentinel when
+   * `unlessSentinel` is set (On Top of Things). Read by `unitCannotBeAttacked`.
+   */
+  cannotBeAttacked?: boolean
+  unlessSentinel?: boolean
+  /** Keyword names the unit loses for the duration (SpecForce Soldier: Sentinel). Read by `unitKeywords`. */
+  removeKeywords?: string[]
 }
 
 /**

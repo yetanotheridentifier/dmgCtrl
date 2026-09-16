@@ -243,6 +243,15 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'LOF_140', name: "Darth Maul's Lightsaber" },
   // When Played, other sets: two linked steps
   { id: 'LOF_171', name: 'Heavy Blaster Cannon' },
+  // When Played, other sets: upgrade attach rules and upgrade-specific text
+  { id: 'SEC_069', name: 'Nimble Prowess' },
+  { id: 'LOF_091', name: 'Craving Power' },
+  { id: 'LOF_201', name: "Qui-Gon Jinn's Lightsaber" },
+  { id: 'SHD_193', name: 'Frozen in Carbonite' },
+  { id: 'LAW_111', name: "Leia's Disguise" },
+  { id: 'TWI_256', name: 'Hold-Out Blaster' },
+  { id: 'SOR_136', name: "Vader's Lightsaber" },
+  { id: 'TWI_219', name: 'On Top of Things' },
 ]
 
 /**
@@ -846,6 +855,14 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'LAW_078', name: 'Sabine Wren' },
   { id: 'LOF_248', name: 'Jocasta Nu' },
   { id: 'LOF_150', name: 'Cin Drallig' },
+  // When Played, other sets: lasting effects the buff choice cannot carry
+  { id: 'LOF_191', name: 'BD-1' },
+  { id: 'TWI_110', name: 'Huyang' },
+  { id: 'LOF_211', name: 'Dooku' },
+  { id: 'LOF_209', name: 'Tusken Tracker' },
+  { id: 'SOR_140', name: 'SpecForce Soldier' },
+  { id: 'TWI_067', name: 'The Zillo Beast' },
+  { id: 'LOF_070', name: 'Anakin Skywalker' },
 ]
 
 /**

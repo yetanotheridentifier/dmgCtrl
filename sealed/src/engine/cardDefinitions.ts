@@ -3827,3 +3827,109 @@ registerCard('LOF_150', { // Cin Drallig
   ifYouDo: (s, ctx) =>
     (ctx.handIndex === undefined ? s : readyUnit(playUpgradeOnto(s, ctx.owner, ctx.handIndex, ctx.sourceInstanceId!), ctx.sourceInstanceId!)),
 })
+
+// Upgrade attach rules and upgrade-specific text
+/** "Attach to a friendly unit", read against the player playing the upgrade. */
+const friendlyHost = (s: GameState, t: UnitState, player: PlayerId): boolean => s.players[player].units.includes(t)
+/** When Played on an upgrade: its host, when that host is named `name`. */
+const hostIs = (name: string): When => (s, ctx) => hostPasses(s, ctx, namedAs(name)) !== undefined
+
+registerCard('SEC_069', { // Nimble Prowess
+  attachRestriction: friendlyHost,
+  ...whenPlayed("You may exhaust a unit in attached unit's arena.", (s, ctx) => {
+    const host = findUnit(s, ctx.sourceInstanceId!)?.unit
+    return host ? targetChoice(s, ctx, 'mayExhaustUnit', pickedIds(s, ctx, pickArena(host.arena)), true) : s
+  }),
+})
+registerCard('LOF_091', { // Craving Power
+  attachRestriction: friendlyHost,
+  ...whenPlayed("Deal damage to an enemy unit equal to attached unit's power.", (s, ctx) => {
+    const host = findUnit(s, ctx.sourceInstanceId!)?.unit
+    const amount = host ? effectivePower(s, host) : 0
+    return amount > 0 ? damageChoice(s, ctx, amount, picked(s, ctx, pickEnemy)) : s
+  }),
+})
+/** Qui-Gon Jinn's Lightsaber: ready units that still fit what is left of the combined cost of 6. */
+const quiGonTargets = (s: GameState, ctx: EventCtx, budget: number): string[] =>
+  pickedIds(s, ctx, (st, u) => !u.exhausted && (st.cards[u.cardId]?.cost ?? 0) <= budget)
+registerCard('LOF_201', { // Qui-Gon Jinn's Lightsaber
+  attachRestriction: (s, t, player) => friendlyHost(s, t, player) && nonVehicle(s, t),
+  ...whenPlayed('If attached unit is Qui-Gon Jinn, you may exhaust any number of units with combined cost 6 or less.', (s, ctx) =>
+    (hostIs('Qui-Gon Jinn')(s, ctx) ? unitThen(s, ctx, quiGonTargets(s, ctx, 6), 'exhaust a unit (combined cost 6 or less)', true, '6') : s)),
+  // One unit at a time, the step carrying the cost still unspent; stopping is always allowed.
+  ifYouDo: (s, ctx) => {
+    const target = findUnit(s, ctx.targetInstanceId!)?.unit
+    if (!target) return s
+    const left = Number(ctx.step) - (s.cards[target.cardId]?.cost ?? 0)
+    const exhausted = exhaustUnit(s, target.instanceId)
+    return unitThen(exhausted, ctx, quiGonTargets(exhausted, ctx, left), `exhaust another unit (cost ${left} or less)`, true, String(left))
+  },
+})
+registerCard('SHD_193', { // Frozen in Carbonite
+  attachRestriction: nonLeader,
+  cannotReady: () => true,
+  ...whenPlayed('Exhaust attached unit.', (s, ctx) => exhaustUnit(s, ctx.sourceInstanceId!)),
+})
+registerCard('LAW_111', { // Leia's Disguise
+  attachRestriction: nonVehicle,
+  grantedTraits: () => ['Underworld'],
+  ...whenPlayed('If attached unit is Leia Organa, give a Shield token to a friendly unit.', (s, ctx) =>
+    (hostIs('Leia Organa')(s, ctx) ? shieldChoice(s, ctx, pickedIds(s, ctx, pickFriendly), false) : s)),
+})
+registerCard('TWI_256', { // Hold-Out Blaster
+  attachRestriction: nonVehicle,
+  ...whenPlayed('You may have attached unit deal 1 damage to a ground unit.', (s, ctx) => {
+    const host = findUnit(s, ctx.sourceInstanceId!)?.unit
+    const unitTargets = pickedIds(s, ctx, pickGround)
+    // The damage is the attached unit's, so it is its card that deals it.
+    return host && unitTargets.length
+      ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 1, unitTargets, baseTargets: [], optional: true, source: { cardId: host.cardId, controller: ctx.owner } })
+      : s
+  }),
+})
+registerCard('SOR_136', { // Vader's Lightsaber
+  attachRestriction: nonVehicle,
+  ...damageWp('If attached unit is Darth Vader, you may deal 4 damage to a ground unit.', pickGround, 4, true, hostIs('Darth Vader')),
+})
+registerCard('TWI_219', whenPlayed('Attached unit can\'t be attacked this phase (unless it has Sentinel).', (s, ctx) => // On Top of Things
+  addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, cannotBeAttacked: true, unlessSentinel: true })))
+
+// Lasting effects the buff choice cannot carry
+/** "Choose another friendly unit. While this unit is in play, the chosen unit gets ...". */
+const whileInPlayBuff = (description: string, contribution: { power?: number; hp?: number; keywords?: KeywordInstance[] }): CardDefinition => ({
+  ...whenPlayed(description, (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, pickOther)), 'choose another friendly unit to buff while this unit is in play', false)),
+  ifYouDo: (s, ctx) => {
+    const self = findUnit(s, ctx.sourceInstanceId!)
+    if (!self) return s
+    return updatePlayer(s, self.owner, { units: s.players[self.owner].units.map(u => (u.instanceId === self.unit.instanceId ? { ...u, chosenUnitId: ctx.targetInstanceId } : u)) })
+  },
+  aura: (_s, source, target) => (source.chosenUnitId === target.instanceId ? contribution : undefined),
+})
+registerCard('LOF_191', whileInPlayBuff('Choose another friendly unit. While this unit is in play, the chosen unit gets +1/+0 and gains Saboteur.', { power: 1, keywords: [KW.saboteur] })) // BD-1
+registerCard('TWI_110', whileInPlayBuff('Choose another friendly unit. While this unit is in play, the chosen unit gets +2/+2.', { power: 2, hp: 2 })) // Huyang
+registerCard('LOF_211', whenPlayed("Each friendly unit with Hidden can't be attacked for this phase.", (s, ctx) => // Dooku
+  lastingOnEach(s, picked(s, ctx, pickAll(pickFriendly, (st, u) => unitHasKeyword(st, u, 'Hidden'))), { cannotBeAttacked: true })))
+registerCard('LOF_209', whenPlayed('Each enemy unit loses Hidden for this phase.', (s, ctx) => { // Tusken Tracker
+  const enemy = opponentOf(ctx.owner)
+  // Hidden protects through the unit's `hidden` mark as well as the keyword, so both go.
+  const unmasked = updatePlayer(s, enemy, { units: s.players[enemy].units.map(u => (u.hidden ? { ...u, hidden: false } : u)) })
+  return lastingOnEach(unmasked, unmasked.players[enemy].units, { removeKeywords: ['Hidden'] })
+}))
+registerCard('SOR_140', { // SpecForce Soldier
+  ...whenPlayed('A unit loses Sentinel for this phase.', (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'choose a unit to lose Sentinel for this phase', false)),
+  ifYouDo: (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, removeKeywords: ['Sentinel'] }),
+})
+registerCard('TWI_067', { // The Zillo Beast
+  abilities: [
+    ...whenPlayed('Give each enemy ground unit -5/-0 for this phase.', (s, ctx) => lastingOnEach(s, picked(s, ctx, pickAll(pickEnemy, pickGround)), { power: -5 })).abilities,
+    { trigger: 'whenRegroupStarts', description: 'Heal 5 damage from this unit.', effect: (s, ctx) => healUnit(s, ctx.sourceInstanceId!, 5) },
+  ],
+})
+const discardHasAspect = (aspect: string): When => (s, ctx) => s.players[ctx.owner].discard.some(id => s.cards[id]?.aspects.includes(aspect))
+registerCard('LOF_070', { // Anakin Skywalker
+  abilities: [
+    ...buffWp('If there is a Heroism card in your discard pile, you may give a unit -3/-3 for this phase.', pickAny, () => ({ power: -3, hp: -3 }), true, discardHasAspect('Heroism')).abilities,
+    ...buffWp('If there is a Villainy card in your discard pile, you may give a unit -3/-3 for this phase.', pickAny, () => ({ power: -3, hp: -3 }), true, discardHasAspect('Villainy')).abilities,
+  ],
+})
