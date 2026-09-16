@@ -139,13 +139,11 @@ Two phases:
   bar One Way Out, which waits on #477 for "loses all abilities" with four #623 cards that need it too). The
   events blocked by a mechanic are not there: they are recorded on that mechanic's own ticket
   (#602 Credit, #605 token units, #603 Disclose, #604 indirect damage).
-  When Played units and upgrades follow the same pattern, and what is left of them is **#620** (103:
-  the two sets too small to sweep, a second ability outside When Played, several targets or divided
-  amounts, attacks raised from a unit entering play, "you may pay N", two linked steps, upgrades moved
-  or replayed, upgrade attach rules, lasting effects the buff choice cannot carry, and control of
-  other zones). **Constant abilities on units and upgrades are finished**: the ones an existing static
-  hook expressed shipped first, and the hooks the rest needed followed, group by group. The 15 cards
-  lifted out of them are carried by #477, except Director Krennic, which is on #459.
+  **When Played units and upgrades are finished**, and so are **constant abilities on units and
+  upgrades**: the ones existing primitives expressed shipped first, and the hooks and choices the rest
+  needed followed, group by group. Vult Skerris's Defender (needs "discarded a card this phase") and
+  the 15 constant-ability cards lifted out are carried by #477, except Director Krennic, which is on
+  #459.
   The ticket bodies carry the sizes from before token units, Credit
   tokens, Disclose and indirect damage were blockers, so most are smaller than they say (When Defeated
   by a quarter, bases barely); the corrected counts are commented on each.

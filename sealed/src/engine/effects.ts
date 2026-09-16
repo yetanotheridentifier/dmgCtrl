@@ -65,7 +65,7 @@ export function findUnit(state: GameState, instanceId: string): { owner: PlayerI
 
 /**
  * Move a unit from `from` to `to`, unchanged in every other respect. `owner` records where the card
- * came from so it can go home — to that player's discard if it's defeated, or back under their
+ * came from so it can go home: to that player's discard if it's defeated, or back under their
  * control when the change ends. Moving a unit that was already stolen keeps the ORIGINAL owner, and a
  * unit returning to its owner drops both fields entirely.
  *

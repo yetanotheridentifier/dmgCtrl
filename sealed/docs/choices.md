@@ -63,6 +63,34 @@ zero is legal. `chooseMode` has no decline: "choose one" is never optional.
 first, then control passes; round-start choices (`resumeAtInitiative`) begin the action phase with
 the initiative holder, mid-turn choices `advanceTurn`.
 
+### The rest of an ability
+
+A choice is data, so it cannot hold the closure that finishes the ability that raised it. Most kinds
+carry a named tail instead (`thenDraw`, `thenReadyIt`), which suits a follow-up many cards share. For
+one card's own follow-up the choice carries an `IfYouDo` (`cardId`, `owner`, `sourceInstanceId`, an
+optional `step`), and answering it runs that card's `ifYouDo` hook, told what was settled: the chosen
+unit, upgrade or hand card, or the discarded card.
+
+- **`mayPayThen`** is "you may <cost>. If you do, <effect>": resources, damage to the source, or only
+  revealing an event. It is not raised when the resources cannot be paid.
+- **`selectUnitThen`**, **`selectUpgradeThen`** and **`selectHandCardThen`** pick one thing and hand
+  it on, for an ability that does several things to one pick or depends on it.
+- A **`selectDiscard`** with `then.ifYouDo` hands on the card discarded (R2-D2, Ahsoka Tano).
+
+`owner` is the player whose ability it is, not the one answering: Governor's Shuttle's second pick and
+Ahsoka Tano's discard are the opponent's to answer and still the player's ability to finish. `step`
+tells stages apart and carries what a later stage needs (Death Trooper's friendly then enemy pick; the
+units already picked by an "each of up to N"). `hookOnDecline` runs the hook once more on Done, for an
+ability that goes on after its picks stop (AAT Incinerator).
+
+`selectUpgradeToReturn` offers a free replay only with `replayFree`, which is Jabba the Hutt's own
+text; other cards that return an upgrade print no such thing.
+
+`distributeDamage` with `enemiesOf` is Emperor Palpatine's "divided among enemy units": it re-offers
+only enemy units and has no Done while one remains. `distributeHealing` heals a point at a time from
+units or bases until Done, then deals what it healed to `damageUnit` (Redemption), and `oneUnit` keeps
+every point on the first unit picked (Kashyyyk Defender).
+
 ## Ordering triggered abilities
 
 The rules let players order triggered **abilities** (CR 7.6.9 - 7.6.12). That is a different queue from
