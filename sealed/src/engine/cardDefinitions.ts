@@ -12,7 +12,7 @@ import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets, eff
 import type { AttackOffer } from './legalMoves'
 import { canAfford } from './resources'
 import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywords } from './keywords'
-import type { CombatContext, EngineCard, GameState, KeywordInstance, LastingEffect, PlayerId, UnitState, UpgradeRef } from './types'
+import type { CombatContext, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PlayerId, UnitState, UpgradeRef } from './types'
 
 /**
  * Real card definitions. Side-effect module: importing it registers every
@@ -3615,4 +3615,152 @@ registerCard('LOF_140', { // Darth Maul's Lightsaber
     (hostNamed('Darth Maul')(s, ctx)
       ? offerAttack(s, ctx.owner, `${ctx.sourceInstanceId}-attack`, { optional: true, attacker: { only: [ctx.sourceInstanceId!] }, grantCardId: GRANT_DARTH_MAULS_LIGHTSABER })
       : s)),
+})
+
+// "You may pay N. If you do" and two linked steps: the first step is a choice, and the card's
+// `ifYouDo` hook is the rest of the ability, told what that choice settled.
+type Resumable = EventCtx & { cardId: string }
+const resume = (ctx: Resumable, step?: string): IfYouDo =>
+  ({ cardId: ctx.cardId, owner: ctx.owner, sourceInstanceId: ctx.sourceInstanceId, ...(step ? { step } : {}) })
+/** "You may pay `cost`. If you do, <then>". Not offered at all when the cost cannot be paid. */
+const mayPayWp = (description: string, cost: number, text: string, then: NonNullable<CardDefinition['ifYouDo']>): CardDefinition => ({
+  ...whenPlayed(description, (s, ctx) =>
+    (canAfford(s.players[ctx.owner], cost) ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost, text, then: resume(ctx) }) : s)),
+  ifYouDo: then,
+})
+/** Choose one of `targets` for the card's `ifYouDo` hook, or nothing when there are none. */
+const unitThen = (s: GameState, ctx: Resumable, targets: string[], text: string, optional: boolean, step?: string): GameState =>
+  targets.length ? pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, text, then: resume(ctx, step), ...mayFlag(optional) }) : s
+/** "(You may) <do things> to a unit that ...": the pick, then `then` with the unit as `targetInstanceId`. */
+const unitThenWp = (description: string, test: Pick, text: string, optional: boolean, then: NonNullable<CardDefinition['ifYouDo']>): CardDefinition => ({
+  ...whenPlayed(description, (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, test), text, optional)),
+  ifYouDo: then,
+})
+const opponentDiscards = (s: GameState, owner: PlayerId, id: string, then?: IfYouDo): GameState => {
+  const opp = opponentOf(owner)
+  return s.players[opp].hand.length
+    ? pushChoice(s, { kind: 'selectDiscard', id, controller: opp, count: 1, ...(then ? { then: { ifYouDo: then } } : {}) })
+    : s
+}
+
+registerCard('LAW_198', mayPayWp('You may pay 1. If you do, deal 2 damage to a ground unit.', 1, 'deal 2 damage to a ground unit', (s, ctx) => // Dogged Pursuers
+  damageChoice(s, ctx, 2, picked(s, ctx, pickGround))))
+registerCard('LAW_193', mayPayWp('You may pay 1. If you do, an opponent discards a card from their hand.', 1, 'make an opponent discard a card', (s, ctx) => // Mid Rim Sharpshooter
+  opponentDiscards(s, ctx.owner, ctx.sourceInstanceId!)))
+registerCard('LAW_227', mayPayWp('You may pay 1. If you do, give a Shield token to this unit.', 1, 'give this unit a Shield token', (s, ctx) => // Rookie Rocket-jumper
+  giveToken(s, ctx.sourceInstanceId!, TOKEN_SHIELD)))
+registerCard('LAW_113', mayPayWp('You may pay 1. If you do, give a Shield token to a unit.', 1, 'give a unit a Shield token', (s, ctx) => // Shield Drive Outfitter
+  shieldChoice(s, ctx, pickedIds(s, ctx, pickAny), false)))
+registerCard('LAW_148', mayPayWp('You may pay 1. If you do, this unit gets +1/+1 for this phase.', 1, 'give this unit +1/+1 for this phase', (s, ctx) => // Smuggler's YT-2400
+  addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, power: 1, hp: 1 })))
+registerCard('TWI_212', mayPayWp('You may pay 2. If you do, deal 2 damage to a unit.', 2, 'deal 2 damage to a unit', (s, ctx) => // Freelance Assassin
+  damageChoice(s, ctx, 2, picked(s, ctx, pickAny))))
+
+// Two linked steps
+registerCard('SEC_184', { // ISB Agent
+  ...whenPlayed('You may reveal an event from your hand. If you do, deal 1 damage to a unit.', (s, ctx) =>
+    (s.players[ctx.owner].hand.some(id => s.cards[id]?.type === 'event')
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, revealEvent: true, text: 'deal 1 damage to a unit', then: resume(ctx) })
+      : s)),
+  ifYouDo: (s, ctx) => damageChoice(s, ctx, 1, picked(s, ctx, pickAny)),
+})
+registerCard('JTL_051', { // Red Squadron X-Wing
+  ...whenPlayed('You may deal 2 damage to this unit. If you do, draw a card.', (s, ctx) =>
+    pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, damageSelf: 2, text: 'draw a card', then: resume(ctx) })),
+  ifYouDo: (s, ctx) => drawCards(s, ctx.owner, 1),
+})
+registerCard('TWI_193', { // R2-D2
+  ...whenPlayed('You may discard a card from your hand. If you do, search the top 3 cards of your deck for a card and draw it.', (s, ctx) =>
+    (s.players[ctx.owner].hand.length
+      ? pushChoice(s, { kind: 'selectDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, count: 1, optional: true, then: { ifYouDo: resume(ctx) } })
+      : s)),
+  ifYouDo: (s, ctx) => {
+    const revealed = s.players[ctx.owner].deck.slice(0, searchCount(s, ctx.owner, 3))
+    return revealed.length
+      ? pushChoice(s, { kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices: revealed.map((_, i) => i) })
+      : s
+  },
+})
+registerCard('SOR_099', unitThenWp("You may return a friendly non-leader ground unit to its owner's hand. If you do, draw a card.", // Bright Hope
+  pickAll(pickFriendly, pickGround, nonLeader), 'return a friendly ground unit to hand and draw a card', true,
+  (s, ctx) => drawCards(returnUnitToHand(s, ctx.targetInstanceId!), ctx.owner, 1)))
+registerCard('SEC_165', { // Academy Disciplinarian
+  ...whenPlayed('You may deal 1 damage to a friendly unit with 2 or less power and ready it.', (s, ctx) => {
+    const unitTargets = pickedIds(s, ctx, pickAll(pickFriendly, (st, u) => effectivePower(st, u) <= 2))
+    return unitTargets.length
+      ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 1, unitTargets, baseTargets: [], optional: true, thenReadyIt: true })
+      : s
+  }),
+})
+registerCard('LAW_075', unitThenWp('Exhaust an enemy unit. If you do, and that unit costs 3 or less, its controller discards a card from their hand.', // Interrogation Droid
+  pickEnemy, 'exhaust an enemy unit', false, (s, ctx) => {
+    const target = findUnit(s, ctx.targetInstanceId!)
+    // Only a ready unit can be exhausted, so only then has "if you do" happened.
+    if (!target || target.unit.exhausted) return s
+    const exhausted = exhaustUnit(s, target.unit.instanceId)
+    return (cardOf(s, target.unit)?.cost ?? 0) <= 3 ? opponentDiscards(exhausted, ctx.owner, ctx.sourceInstanceId!) : exhausted
+  }))
+registerCard('JTL_201', { // Ahsoka Tano
+  ...whenPlayed("An opponent discards a card from their hand. If it's a unit, you may exhaust a unit.", (s, ctx) =>
+    opponentDiscards(s, ctx.owner, ctx.sourceInstanceId!, resume(ctx))),
+  ifYouDo: (s, ctx) =>
+    (ctx.cardChosen && s.cards[ctx.cardChosen]?.type === 'unit' ? targetChoice(s, ctx, 'mayExhaustUnit', pickedIds(s, ctx, pickAny), true) : s),
+})
+registerCard('SHD_049', unitThenWp('You may heal all damage from a unit that costs 2 or less and give 2 Shield tokens to it.', // The Mandalorian
+  (s, u) => (cardOf(s, u)?.cost ?? 0) <= 2, 'heal a unit that costs 2 or less and give it 2 Shields', true,
+  (s, ctx) => {
+    const target = findUnit(s, ctx.targetInstanceId!)?.unit
+    return target ? giveTokens(healUnit(s, target.instanceId, target.damage), target.instanceId, TOKEN_SHIELD, 2) : s
+  }))
+registerCard('LAW_093', unitThenWp("You may return a non-leader unit that costs 3 or less to its owner's hand. Then, its owner may play it for free. It gains Shielded for this phase.", // Rio Durant
+  pickAll(nonLeader, (s, u) => (cardOf(s, u)?.cost ?? 0) <= 3), 'return a unit that costs 3 or less to hand', true,
+  (s, ctx) => {
+    const target = findUnit(s, ctx.targetInstanceId!)
+    if (!target) return s
+    const cardOwner = target.unit.owner ?? target.owner
+    const returned = returnUnitToHand(s, target.unit.instanceId)
+    const hand = returned.players[cardOwner].hand
+    // A token leaves no card behind, so there is nothing to play.
+    if (hand.length === s.players[cardOwner].hand.length) return returned
+    const handIndex = hand.length - 1
+    return pushChoice(returned, {
+      kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: cardOwner, candidates: [{ handIndex, cardId: hand[handIndex] }],
+      costDelta: -(returned.cards[hand[handIndex]]?.cost ?? 0) - 99, entersReady: false, optional: true, thenShieldIt: true,
+    })
+  }))
+registerCard('LOF_171', { // Heavy Blaster Cannon
+  attachRestriction: nonVehicle,
+  ...unitThenWp('You may deal 1 damage to a ground unit. Then, deal 1 damage to the same unit. Then, deal 1 damage to the same unit.',
+    pickGround, 'deal 1 damage to a ground unit three times', true,
+    (s, ctx) => [1, 2, 3].reduce(acc => (findUnit(acc, ctx.targetInstanceId!) ? dealDamageToUnit(acc, ctx.targetInstanceId!, 1) : acc), s)),
+})
+registerCard('SEC_030', { // Death Trooper
+  ...whenPlayed('Deal 2 damage to a friendly ground unit and 2 damage to an enemy ground unit.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, pickGround)), 'deal 2 damage to a friendly ground unit', false, 'friendly')),
+  ifYouDo: (s, ctx) => {
+    const hit = dealDamageToUnit(s, ctx.targetInstanceId!, 2)
+    return ctx.step === 'friendly' ? unitThen(hit, ctx, pickedIds(hit, ctx, pickAll(pickEnemy, pickGround)), 'deal 2 damage to an enemy ground unit', false, 'enemy') : hit
+  },
+})
+registerCard('SOR_097', unitThenWp('You may deal damage to a unit equal to the number of units you control in its arena.', // Admiral Ackbar
+  pickAny, 'deal damage to a unit equal to the units you control in its arena', true,
+  (s, ctx) => {
+    const target = findUnit(s, ctx.targetInstanceId!)?.unit
+    const amount = target ? unitsIn(s, ctx.owner, target.arena).length : 0
+    return target && amount > 0 ? dealDamageToUnit(s, target.instanceId, amount) : s
+  }))
+registerCard('LOF_037', { // Darth Vader
+  abilities: [
+    ...whenPlayed('Give a Shield token to a friendly unit and to an enemy unit.', (s, ctx) =>
+      unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'give a friendly unit a Shield token', false, 'friendly')).abilities,
+    {
+      trigger: 'onAttack',
+      description: 'Defeat an enemy unit with a Shield token on it.',
+      effect: (s, ctx) => targetChoice(s, ctx, 'selectUnitToDefeat', pickedIds(s, ctx, pickAll(pickEnemy, (_s, u) => hasToken(u.upgrades, TOKEN_SHIELD)))),
+    },
+  ],
+  ifYouDo: (s, ctx) => {
+    const shielded = giveToken(s, ctx.targetInstanceId!, TOKEN_SHIELD)
+    return ctx.step === 'friendly' ? unitThen(shielded, ctx, pickedIds(shielded, ctx, pickEnemy), 'give an enemy unit a Shield token', false, 'enemy') : shielded
+  },
 })

@@ -717,6 +717,13 @@ function choiceMoves(state: GameState): Action[] {
         if (choice.kind === 'mayPlayUnitFromDiscard') moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'mayPayThen': {
+        // A yes/no: accept only while the resources can still be paid.
+        if (readyResourceCount(p) >= choice.cost) moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'selectUnitThen':
       case 'selectUnitToReady':
       case 'selectFriendlyUnit':
       case 'selectUnitToSteal':

@@ -370,6 +370,18 @@ export interface CombatContext {
 }
 
 /** A hand card offered for play by an ability — its hand position + card id. */
+/**
+ * Where the rest of an ability lives once a choice partway through it is answered: the `ifYouDo` hook
+ * of `cardId`, run for `owner` (the player whose ability it is, who need not be the one answering) with
+ * `sourceInstanceId` as its source. `step` tells apart the stages of an ability with more than two.
+ */
+export interface IfYouDo {
+  cardId: string
+  owner: PlayerId
+  sourceInstanceId?: string
+  step?: string
+}
+
 export interface HandCardRef {
   handIndex: number
   cardId: string
@@ -717,7 +729,8 @@ type ChoiceVariant =
   // units), paying its cost + `costDelta`, entering ready if `entersReady` (Fennec, Moff Gideon).
   // `thenDamageIt` deals that much to the unit just played — "Play a unit from your hand. It costs 4
   // less. Deal 4 damage to it" (Reckless Landing), which can only be aimed once it is on the board.
-  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number }
+  // `thenShieldIt` gives the unit just played a Shield token (Rio Durant's "it gains Shielded").
+  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number; thenShieldIt?: boolean }
   // Additional cost "exhaust a friendly unit": pick one of `targets` to exhaust, then the
   // `then` play-from-hand step follows (Fennec). Mandatory.
   | { kind: 'selectUnitToExhaust'; id: string; controller: PlayerId; targets: string[]; then: PlayFromHandSpec }
@@ -737,7 +750,16 @@ type ChoiceVariant =
   // `buffFor` is the other half of "an opponent may discard a card. If they do, give a non-Vehicle
   // unit -8/-8" (Kouhun Assassination): the OPPONENT answers this discard, and the debuff pick then
   // goes to `buffFor`, who is the player that played the card.
-  | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean; then?: { distributeDamageTo: PlayerId } | { buffUnit: string; power?: number; hp?: number } | { dealDamage: number; costlierThanDiscard?: boolean } | { exhaustUnit: true } | { buffFor: PlayerId; power?: number; hp?: number; nonVehicleOnly?: boolean } }
+  // `ifYouDo` hands the discarded card to the card's own `ifYouDo` hook (R2-D2, Ahsoka Tano).
+  | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean; then?: { distributeDamageTo: PlayerId } | { buffUnit: string; power?: number; hp?: number } | { dealDamage: number; costlierThanDiscard?: boolean } | { exhaustUnit: true } | { buffFor: PlayerId; power?: number; hp?: number; nonVehicleOnly?: boolean } | { ifYouDo: IfYouDo } }
+  // "You may <cost>. If you do, <effect>": a yes/no that pays `cost` resources, or deals `damageSelf`
+  // to the source, or only reveals an event (`revealEvent`, which costs nothing and leaves the card in
+  // hand), and then runs the card's `ifYouDo` hook. `text` is the effect, for the prompt.
+  | { kind: 'mayPayThen'; id: string; controller: PlayerId; cost: number; damageSelf?: number; revealEvent?: boolean; text: string; then: IfYouDo }
+  // Choose one of `targets` and hand it to the card's `ifYouDo` hook, for an ability that does more
+  // than one thing to the unit it picks, or whose effect depends on it. Mandatory unless `optional`.
+  // `text` names what the pick is for, for the prompt.
+  | { kind: 'selectUnitThen'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; text: string; then: IfYouDo }
   // Leia Organa: a yes/no — deal `selfDamage` to `unitId`, then heal `healBase` from your base.
   | { kind: 'maySelfDamageHealBase'; id: string; controller: PlayerId; unitId: string; selfDamage: number; healBase: number }
   // Mando's N-1: a yes/no — exhaust your (ready) leader to give `unitId` a "+power/+hp this phase" buff.

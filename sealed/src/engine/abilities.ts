@@ -83,8 +83,21 @@ export interface AbilityDef {
  * A card's full behaviour: its triggered abilities plus static hooks the engine
  * consults. All optional — a card supplies only what it needs.
  */
+/** What an `ifYouDo` hook is told: the ability's context plus what the choice before it settled. */
+export interface IfYouDoContext extends EffectContext {
+  /** The stage of the ability being resumed, when it has more than one (`IfYouDo.step`). */
+  step?: string
+  /** The card a discard just put in the discard pile. The chosen unit is `targetInstanceId`. */
+  cardChosen?: string
+}
+
 export interface CardDefinition {
   abilities?: AbilityDef[]
+  /**
+   * The rest of an ability after a choice partway through it (`mayPayThen`, `selectUnitThen`, a
+   * discard's `ifYouDo`): "you may pay 1. If you do, ...", or several things done to one chosen unit.
+   */
+  ifYouDo?: (state: GameState, ctx: IfYouDoContext) => GameState
   /**
    * For the `GRANT_*` pseudo cards only: the REAL card this ability carrier belongs to. They are
    * internal ability holders with no entry in the card database, so a choice attributed to one

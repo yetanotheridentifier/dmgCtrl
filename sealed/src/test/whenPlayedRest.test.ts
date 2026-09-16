@@ -63,6 +63,16 @@ const F: Record<string, EngineCard> = {
   LAW_065: src('LAW_065'), LAW_157: src('LAW_157'), SEC_103: src('SEC_103', { cost: 7 }), LOF_111: src('LOF_111'),
   TWI_091: src('TWI_091'), SHD_101: src('SHD_101', { arena: 'space' }), SHD_236: src('SHD_236'), SOR_240: src('SOR_240'),
   TWI_248: upg('TWI_248', { power: 2 }), LOF_140: upg('LOF_140'), SOR_215: upg('SOR_215', { power: 1, hp: 1 }),
+
+  // "You may pay N"
+  LAW_198: src('LAW_198'), LAW_193: src('LAW_193'), LAW_227: src('LAW_227'), LAW_113: src('LAW_113'),
+  LAW_148: src('LAW_148', { arena: 'space', power: 4, hp: 5 }), TWI_212: src('TWI_212'),
+
+  // Two linked steps
+  SEC_184: src('SEC_184'), JTL_051: src('JTL_051', { arena: 'space' }), TWI_193: src('TWI_193'), SOR_099: src('SOR_099', { arena: 'space' }),
+  SEC_165: src('SEC_165', { power: 3 }), LAW_075: src('LAW_075'), JTL_201: src('JTL_201'), SHD_049: src('SHD_049'), LAW_093: src('LAW_093'),
+  LOF_171: upg('LOF_171'), SEC_030: src('SEC_030'), SOR_097: src('SOR_097'), LOF_037: src('LOF_037'),
+  PRICEY: card({ id: 'PRICEY', arena: 'ground', cost: 5, power: 2, hp: 6 }),
 }
 
 const unit = (instanceId: string, cardId: string, over: Partial<UnitState> = {}): UnitState =>
@@ -425,6 +435,239 @@ describe('attacks raised by a unit or upgrade entering play', () => {
     expect(restriction(s, U(s, 'g')!, 'player')).toBe(true)
     expect(restriction(s, U(s, 'v')!, 'player')).toBe(false)
     expect(restriction(s, U(s, 'e')!, 'player'), 'not an enemy unit').toBe(false)
+  })
+})
+
+// ── "You may pay N. If you do" ────────────────────────────────────────────────────────────────────
+
+const readyResources = (s: GameState, who: PlayerId = 'player') => s.players[who].resources.filter(r => !r.exhausted).length
+
+describe('"you may pay N. If you do": a paid yes/no, then the effect', () => {
+  it('is not offered when the cost cannot be paid, and costs nothing when declined', () => {
+    const s = board([unit('src', 'LAW_227')], [unit('e', 'GRD')])
+    noChoice(fire(withPlayer(s, 'player', { resources: [] }), 'LAW_227'))
+    const fired = fire(s, 'LAW_227')
+    expect(choice(fired).kind).toBe('mayPayThen')
+    expect(declinable(fired)).toBe(true)
+    const declined = skip(fired)
+    expect(readyResources(declined)).toBe(6)
+    expect(shields(declined, 'src')).toBe(0)
+  })
+
+  it('Rookie Rocket-jumper (LAW_227): pay 1, Shield to this unit', () => {
+    const after = accept(fire(board([unit('src', 'LAW_227')]), 'LAW_227'))
+    expect(readyResources(after)).toBe(5)
+    expect(shields(after, 'src')).toBe(1)
+  })
+
+  it('Dogged Pursuers (LAW_198): pay 1, 2 damage to a ground unit', () => {
+    const paid = accept(fire(board([unit('src', 'LAW_198')], [unit('e', 'GRD'), unit('sp', 'SPACE')]), 'LAW_198'))
+    expect(readyResources(paid)).toBe(5)
+    expect(choice(paid).kind).toBe('selectDamageTarget')
+    expect(offered(paid)).toEqual(['e', 'src'])
+    expect(declinable(paid), 'once paid, the damage is not a may').toBe(false)
+    expect(U(accept(paid, { targetInstanceId: 'e' }), 'e')!.damage).toBe(2)
+  })
+
+  it('Freelance Assassin (TWI_212): pay 2, 2 damage to any unit', () => {
+    const s = board([unit('src', 'TWI_212')], [unit('e', 'GRD'), unit('sp', 'SPACE')])
+    noChoice(fire(withPlayer(s, 'player', { resources: ready(1) }), 'TWI_212'))
+    const paid = accept(fire(s, 'TWI_212'))
+    expect(readyResources(paid)).toBe(4)
+    expect(offered(paid)).toEqual(['e', 'sp', 'src'])
+  })
+
+  it('Mid Rim Sharpshooter (LAW_193): pay 1, an opponent discards a card', () => {
+    const s = withPlayer(board([unit('src', 'LAW_193')]), 'opponent', { hand: ['GRD', 'EV'] })
+    const paid = accept(fire(s, 'LAW_193'))
+    const c = choice(paid)
+    expect(c.kind).toBe('selectDiscard')
+    expect(c.controller, 'the opponent picks').toBe('opponent')
+    expect(accept(paid, { handIndex: 1 }).players.opponent.discard).toEqual(['EV'])
+    // Paying would buy nothing against an empty hand, but the choice is still the player's to make.
+    expect(choice(fire(board([unit('src', 'LAW_193')]), 'LAW_193')).kind).toBe('mayPayThen')
+  })
+
+  it('Shield Drive Outfitter (LAW_113): pay 1, Shield to a unit', () => {
+    const paid = accept(fire(board([unit('src', 'LAW_113')], [unit('e', 'GRD')]), 'LAW_113'))
+    expect(offered(paid)).toEqual(['e', 'src'])
+    expect(shields(accept(paid, { targetInstanceId: 'e' }), 'e')).toBe(1)
+  })
+
+  it("Smuggler's YT-2400 (LAW_148): pay 1, +1/+1 for this phase", () => {
+    const after = accept(fire(board([unit('src', 'LAW_148')]), 'LAW_148'))
+    expect([effectivePower(after, U(after, 'src')!), effectiveHp(after, U(after, 'src')!)]).toEqual([5, 6])
+  })
+})
+
+// ── Two linked steps ──────────────────────────────────────────────────────────────────────────────
+
+describe('two linked steps in one ability', () => {
+  it('ISB Agent (SEC_184, and SOR_176 as its reprint): may reveal an event, then 1 damage to a unit', async () => {
+    const s = board([unit('src', 'SEC_184')], [unit('e', 'GRD')])
+    noChoice(fire(withPlayer(s, 'player', { hand: ['GRD'] }), 'SEC_184'))
+    const fired = fire(withPlayer(s, 'player', { hand: ['GRD', 'EV'] }), 'SEC_184')
+    expect(choice(fired).kind).toBe('mayPayThen')
+    expect(declinable(fired)).toBe(true)
+    const revealed = accept(fired)
+    expect(readyResources(revealed), 'revealing costs no resources').toBe(6)
+    expect(revealed.players.player.hand, 'the event stays in hand').toEqual(['GRD', 'EV'])
+    expect(offered(revealed)).toEqual(['e', 'src'])
+    expect(declinable(revealed)).toBe(false)
+    const { reprintCanonicalId } = await import('../data/reprints')
+    expect(reprintCanonicalId('SOR_176')).toBe('SEC_184')
+  })
+
+  it('Red Squadron X-Wing (JTL_051): may deal 2 damage to itself, then draw', () => {
+    const fired = fire(board([unit('src', 'JTL_051')]), 'JTL_051')
+    expect(declinable(fired)).toBe(true)
+    const after = accept(fired)
+    expect(U(after, 'src')!.damage).toBe(2)
+    expect(after.players.player.hand).toEqual(['D_FILL'])
+  })
+
+  it('R2-D2 (TWI_193): may discard a card, then searches the top 3 and draws one', () => {
+    const s = withPlayer(board([unit('src', 'TWI_193')]), 'player', { hand: ['EV'], deck: ['GRD', 'WEAK', 'SPACE', 'VEH'] })
+    noChoice(fire(withPlayer(s, 'player', { hand: [] }), 'TWI_193'))
+    const fired = fire(s, 'TWI_193')
+    expect(choice(fired).kind).toBe('selectDiscard')
+    expect(declinable(fired)).toBe(true)
+    const discarded = accept(fired, { handIndex: 0 })
+    expect(discarded.players.player.discard).toEqual(['EV'])
+    const c = choice(discarded)
+    expect(c.kind).toBe('searchDraw')
+    expect('revealed' in c && c.revealed).toEqual(['GRD', 'WEAK', 'SPACE'])
+    noChoice(skip(fired))
+  })
+
+  it('Bright Hope (SOR_099): may return a friendly non-leader ground unit, then draw', () => {
+    const s = board([unit('src', 'SOR_099'), unit('g', 'GRD'), unit('sp', 'SPACE'), unit('L', 'LEADERU', { isLeader: true })], [unit('e', 'GRD')])
+    const fired = fire(s, 'SOR_099')
+    expect(offered(fired)).toEqual(['g'])
+    expect(declinable(fired)).toBe(true)
+    const after = accept(fired, { targetInstanceId: 'g' })
+    expect(after.players.player.hand).toEqual(['GRD', 'D_FILL'])
+  })
+
+  it('Academy Disciplinarian (SEC_165): may deal 1 to a friendly unit with 2 or less power and ready it', () => {
+    const s = board([unit('src', 'SEC_165'), unit('g', 'GRD', { exhausted: true }), unit('big', 'GRD2')], [unit('e', 'WEAK')])
+    const fired = fire(s, 'SEC_165')
+    expect(offered(fired)).toEqual(['g'])
+    expect(declinable(fired)).toBe(true)
+    const after = accept(fired, { targetInstanceId: 'g' })
+    expect(U(after, 'g')!.damage).toBe(1)
+    expect(U(after, 'g')!.exhausted).toBe(false)
+  })
+
+  it('Interrogation Droid (LAW_075): exhausts an enemy unit; if it costs 3 or less, its controller discards', () => {
+    const s = withPlayer(board([unit('src', 'LAW_075')], [unit('cheap', 'GRD'), unit('dear', 'PRICEY'), unit('tired', 'WEAK', { exhausted: true })]), 'opponent', { hand: ['EV'] })
+    const fired = fire(s, 'LAW_075')
+    expect(offered(fired)).toEqual(['cheap', 'dear', 'tired'])
+    expect(declinable(fired)).toBe(false)
+    const cheap = accept(fired, { targetInstanceId: 'cheap' })
+    expect(U(cheap, 'cheap')!.exhausted).toBe(true)
+    expect(choice(cheap).controller).toBe('opponent')
+    expect(choice(cheap).kind).toBe('selectDiscard')
+    const dear = accept(fired, { targetInstanceId: 'dear' })
+    expect(U(dear, 'dear')!.exhausted).toBe(true)
+    noChoice(dear)
+    noChoice(accept(fired, { targetInstanceId: 'tired' }))
+  })
+
+  it('Ahsoka Tano (JTL_201): an opponent discards; if it is a unit, you may exhaust a unit', () => {
+    const s = withPlayer(board([unit('src', 'JTL_201')], [unit('e', 'GRD')]), 'opponent', { hand: ['GRD', 'EV'] })
+    const fired = fire(s, 'JTL_201')
+    expect(choice(fired).controller).toBe('opponent')
+    expect(declinable(fired)).toBe(false)
+    noChoice(accept(fired, { handIndex: 1 }))
+    const unitGone = accept(fired, { handIndex: 0 })
+    const c = choice(unitGone)
+    expect(c.controller).toBe('player')
+    expect(offered(unitGone)).toEqual(['e', 'src'])
+    expect(declinable(unitGone)).toBe(true)
+    expect(U(accept(unitGone, { targetInstanceId: 'e' }), 'e')!.exhausted).toBe(true)
+  })
+
+  it('The Mandalorian (SHD_049): may heal all damage from a unit that costs 2 or less and give it 2 Shields', () => {
+    const s = board([unit('src', 'SHD_049'), unit('w', 'WEAK', { damage: 4 })], [unit('g', 'GRD'), unit('big', 'GRD2')])
+    const fired = fire(s, 'SHD_049')
+    expect(offered(fired)).toEqual(['g', 'w'])
+    expect(declinable(fired)).toBe(true)
+    const after = accept(fired, { targetInstanceId: 'w' })
+    expect(U(after, 'w')!.damage).toBe(0)
+    expect(shields(after, 'w')).toBe(2)
+  })
+
+  it('Rio Durant (LAW_093): may return a non-leader unit costing 3 or less; its owner may play it free, Shielded', () => {
+    const s = board([unit('src', 'LAW_093')], [unit('e', 'GRD'), unit('big', 'PRICEY')])
+    const fired = fire(s, 'LAW_093')
+    expect(offered(fired)).toEqual(['e'])
+    expect(declinable(fired)).toBe(true)
+    const returned = accept(fired, { targetInstanceId: 'e' })
+    expect(returned.players.opponent.hand).toEqual(['GRD'])
+    const c = choice(returned)
+    expect(c.kind).toBe('playUnitFromHand')
+    expect(c.controller, 'its owner decides').toBe('opponent')
+    expect(declinable(returned)).toBe(true)
+    const replayed = accept(returned, { handIndex: 0 })
+    const again = replayed.players.opponent.units.find(u => u.cardId === 'GRD')!
+    expect(again).toBeDefined()
+    expect(readyResources(replayed, 'opponent'), 'for free').toBe(3)
+    expect(again.upgrades.filter(up => up.cardId === TOKEN_SHIELD)).toHaveLength(1)
+  })
+
+  it('Heavy Blaster Cannon (LOF_171): may deal 1 damage to a ground unit three times', () => {
+    const s = board([unit('src', 'GRD', { upgrades: [{ cardId: 'LOF_171', owner: 'player' }] })], [unit('e', 'GRD'), unit('sp', 'SPACE')])
+    const fired = fire(s, 'LOF_171')
+    expect(offered(fired)).toEqual(['e', 'src'])
+    expect(declinable(fired)).toBe(true)
+    expect(U(accept(fired, { targetInstanceId: 'e' }), 'e')!.damage).toBe(3)
+    // Three separate hits: a Shield soaks only the first.
+    const shielded = board([unit('src', 'GRD', { upgrades: [{ cardId: 'LOF_171', owner: 'player' }] })], [unit('e', 'GRD', { upgrades: [{ cardId: TOKEN_SHIELD, owner: 'opponent' }] })])
+    expect(U(accept(fire(shielded, 'LOF_171'), { targetInstanceId: 'e' }), 'e')!.damage).toBe(2)
+  })
+
+  it('Death Trooper (SEC_030, with SHD_030 and SOR_033): 2 damage to a friendly ground unit and 2 to an enemy ground unit', async () => {
+    const s = board([unit('src', 'SEC_030'), unit('g', 'GRD'), unit('sp', 'SPACE')], [unit('e', 'GRD'), unit('esp', 'SPACE')])
+    const fired = fire(s, 'SEC_030')
+    expect(offered(fired)).toEqual(['g', 'src'])
+    expect(declinable(fired)).toBe(false)
+    const first = accept(fired, { targetInstanceId: 'g' })
+    expect(U(first, 'g')!.damage).toBe(2)
+    expect(offered(first)).toEqual(['e'])
+    expect(declinable(first)).toBe(false)
+    expect(U(accept(first, { targetInstanceId: 'e' }), 'e')!.damage).toBe(2)
+    // No enemy ground unit: the friendly half still happens.
+    noChoice(accept(fire(board([unit('src', 'SEC_030')]), 'SEC_030'), { targetInstanceId: 'src' }))
+    const { reprintCanonicalId } = await import('../data/reprints')
+    expect([reprintCanonicalId('SHD_030'), reprintCanonicalId('SOR_033')]).toEqual(['SEC_030', 'SEC_030'])
+  })
+
+  it('Admiral Ackbar (SOR_097): may deal damage equal to the units you control in the target\'s arena', () => {
+    const s = board([unit('src', 'SOR_097'), unit('g', 'GRD'), unit('sp', 'SPACE')], [unit('e', 'TOUGH'), unit('esp', 'TOUGH', { arena: 'space' })])
+    const fired = fire(s, 'SOR_097')
+    expect(declinable(fired)).toBe(true)
+    expect(offered(fired)).toEqual(['e', 'esp', 'g', 'sp', 'src'])
+    expect(U(accept(fired, { targetInstanceId: 'e' }), 'e')!.damage).toBe(2)
+    expect(U(accept(fired, { targetInstanceId: 'esp' }), 'esp')!.damage).toBe(1)
+  })
+
+  it('Darth Vader (LOF_037): a Shield to a friendly unit and to an enemy unit; On Attack defeats a shielded enemy', () => {
+    const s = board([unit('src', 'LOF_037'), unit('g', 'GRD')], [unit('e', 'GRD'), unit('e2', 'WEAK')])
+    const fired = fire(s, 'LOF_037')
+    expect(offered(fired)).toEqual(['g', 'src'])
+    expect(declinable(fired)).toBe(false)
+    const first = accept(fired, { targetInstanceId: 'g' })
+    expect(shields(first, 'g')).toBe(1)
+    expect(offered(first)).toEqual(['e', 'e2'])
+    const both = accept(first, { targetInstanceId: 'e' })
+    expect(shields(both, 'e')).toBe(1)
+    // Answering the last choice ended the turn, so the attack is taken on the player's next one.
+    const attack = fireAt({ ...both, activePlayer: 'player' }, 'LOF_037', 'onAttack')
+    expect(choice(attack).kind).toBe('selectUnitToDefeat')
+    expect(offered(attack)).toEqual(['e'])
+    expect(declinable(attack)).toBe(false)
+    noChoice(fireAt(s, 'LOF_037', 'onAttack'))
   })
 })
 

@@ -241,6 +241,8 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   // When Played, other sets: attacks
   { id: 'TWI_248', name: "Ahsoka's Padawan Lightsaber" },
   { id: 'LOF_140', name: "Darth Maul's Lightsaber" },
+  // When Played, other sets: two linked steps
+  { id: 'LOF_171', name: 'Heavy Blaster Cannon' },
 ]
 
 /**
@@ -818,6 +820,26 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SHD_101', name: 'Adelphi Patrol Wing' },
   { id: 'SHD_236', name: 'Snowtrooper Lieutenant' },
   { id: 'SOR_240', name: 'Fleet Lieutenant' },
+  // When Played, other sets: "you may pay N"
+  { id: 'LAW_198', name: 'Dogged Pursuers' },
+  { id: 'LAW_193', name: 'Mid Rim Sharpshooter' },
+  { id: 'LAW_227', name: 'Rookie Rocket-jumper' },
+  { id: 'LAW_113', name: 'Shield Drive Outfitter' },
+  { id: 'LAW_148', name: "Smuggler's YT-2400" },
+  { id: 'TWI_212', name: 'Freelance Assassin' },
+  // When Played, other sets: two linked steps
+  { id: 'SEC_184', name: 'ISB Agent' },
+  { id: 'JTL_051', name: 'Red Squadron X-Wing' },
+  { id: 'TWI_193', name: 'R2-D2' },
+  { id: 'SOR_099', name: 'Bright Hope' },
+  { id: 'SEC_165', name: 'Academy Disciplinarian' },
+  { id: 'LAW_075', name: 'Interrogation Droid' },
+  { id: 'JTL_201', name: 'Ahsoka Tano' },
+  { id: 'SHD_049', name: 'The Mandalorian' },
+  { id: 'LAW_093', name: 'Rio Durant' },
+  { id: 'SEC_030', name: 'Death Trooper' },
+  { id: 'SOR_097', name: 'Admiral Ackbar' },
+  { id: 'LOF_037', name: 'Darth Vader' },
 ]
 
 /**

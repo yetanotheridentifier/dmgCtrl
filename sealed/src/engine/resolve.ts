@@ -1,6 +1,6 @@
 import type { Action, AttackTarget } from './actions'
 import type { GameState, PlayerId, UnitState } from './types'
-import type { PendingChoice, PendingTrigger, TriggerContext, UpgradeRef } from './types'
+import type { IfYouDo, PendingChoice, PendingTrigger, TriggerContext, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds } from './types'
 import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
@@ -1228,6 +1228,8 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
             if (amount > 0 && targets.length > 0) {
               next = pushChoice(next, { kind: 'distributeDamage', id: choice.id, controller: choice.then.distributeDamageTo, remaining: amount, total: amount, targets })
             }
+          } else if ('ifYouDo' in choice.then) {
+            next = runIfYouDo(next, choice.then.ifYouDo, { cardChosen: discardedId })
           } else if ('buffUnit' in choice.then) {
             // Razor Crest: "if you do, this unit gets +power/+hp for this attack".
             next = addLastingEffect(next, { targetInstanceId: choice.then.buffUnit, power: choice.then.power, hp: choice.then.hp, untilEndOfAttack: true })
@@ -1314,6 +1316,16 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     }
     case 'selectFriendlyUnit':
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) next = hotshotManeuver(next, choice.controller, targetInstanceId, choice.id)
+      break
+    case 'mayPayThen':
+      // The cost first, then the rest of the ability. Revealing an event is its own cost: the card
+      // stays in hand.
+      next = updatePlayer(next, choice.controller, payCost(next.players[choice.controller], choice.cost))
+      if (choice.damageSelf && choice.then.sourceInstanceId) next = dealDamageToUnit(next, choice.then.sourceInstanceId, choice.damageSelf)
+      next = runIfYouDo(next, choice.then)
+      break
+    case 'selectUnitThen':
+      if (targetInstanceId && choice.targets.includes(targetInstanceId)) next = runIfYouDo(next, choice.then, { targetInstanceId })
       break
     case 'selectUnitToReady':
       // Galvanized Leap: ready the chosen unit.
@@ -1772,6 +1784,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         // "Deal 4 damage to it" (Reckless Landing) — the unit just played, which can only be
         // addressed now that it is on the board.
         if (choice.thenDamageIt) next = dealDamageToUnit(next, enteredId, choice.thenDamageIt)
+        if (choice.thenShieldIt) next = giveToken(next, enteredId, TOKEN_SHIELD)
         next = checkWin(next)
         if (next.winner !== null) return next
       }
@@ -2395,6 +2408,14 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
  * rather than awarding the win to whichever was checked first.
  */
 /** Every unit in play, both sides. */
+/** Resume an ability at its card's `ifYouDo` hook, with what the answered choice settled. */
+function runIfYouDo(state: GameState, then: IfYouDo, settled: { targetInstanceId?: string; cardChosen?: string } = {}): GameState {
+  const hook = getCardDefinition(then.cardId)?.ifYouDo
+  if (!hook) return state
+  const next = hook(state, { owner: then.owner, cardId: then.cardId, sourceInstanceId: then.sourceInstanceId, step: then.step, ...settled })
+  return checkWin(next)
+}
+
 function inPlayUnits(state: GameState): UnitState[] {
   return [...state.players.player.units, ...state.players.opponent.units]
 }

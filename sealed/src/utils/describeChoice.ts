@@ -308,6 +308,14 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       return ['choose a unit to ready']
     case 'selectFriendlyUnit':
       return ['choose a friendly unit']
+    case 'selectUnitThen':
+      return [choice.optional ? `you may ${choice.text}` : choice.text]
+    case 'mayPayThen': {
+      const cost = choice.revealEvent ? 'reveal an event from your hand'
+        : choice.damageSelf ? `deal ${choice.damageSelf} damage to this unit`
+          : `pay ${choice.cost}`
+      return [`${cost} to ${choice.text}`]
+    }
     case 'selectDistributeSource':
       return ['choose the unit whose power is spread as damage']
     case 'damageAnyBases':

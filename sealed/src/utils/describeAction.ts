@@ -158,7 +158,8 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'selectUpgradeToDefeat' || choice.kind === 'selectResourceUpgrade' || choice.kind === 'selectFromDiscard') return 'Cancel'
       if (choice.kind === 'mayLastingBuff' || choice.kind === 'mayGiveAdvantage' || choice.kind === 'mayExhaustLeaderGiveAdvantage' || choice.kind === 'mayExhaustLeaderExhaustUnit' || choice.kind === 'mayExhaustUnit') return 'Decline'
       if (choice.kind === 'mayExhaustLeaderForAdvantage' || choice.kind === 'mayExhaustLeaderHealUnit' || choice.kind === 'mayPayToDraw' || choice.kind === 'mayDeployLeader') return "Don't"
-      if (choice.kind === 'mayResourceTop') return "Don't"
+      if (choice.kind === 'mayResourceTop' || choice.kind === 'mayPayThen') return "Don't"
+      if (choice.kind === 'selectUnitThen') return 'Decline'
       if (choice.kind === 'maySelfDamageShield' || choice.kind === 'mayCreateToken' || choice.kind === 'mayCapture') return "Don't"
       if (choice.kind === 'damageAnyBases') return 'Done'
       if (choice.kind === 'selectPair' || choice.kind === 'selectUpgradeToReturn' || choice.kind === 'mayPlayUpgradeFree') return 'Decline'
@@ -432,6 +433,14 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'selectUnitToReturn') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Return ${target ?? 'unit'} to hand`
+      }
+      if (choice.kind === 'mayPayThen') {
+        const cost = choice.revealEvent ? 'Reveal an event' : choice.damageSelf ? `Take ${choice.damageSelf} damage` : `Pay ${choice.cost}`
+        return `${cost}, ${choice.text}`
+      }
+      if (choice.kind === 'selectUnitThen') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Choose ${target ?? 'unit'}`
       }
       if (choice.kind === 'selectFriendlyUnit') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
