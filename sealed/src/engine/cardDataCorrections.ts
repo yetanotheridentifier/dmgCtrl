@@ -87,6 +87,23 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   SOR_166: { keywords: [] }, // Infiltrator's Skill: Saboteur
   SOR_057: { keywords: [] }, // Protector: Sentinel
 
+  // The other sealed sets, conditional keywords (continued).
+  SOR_130: { keywords: [] }, // First Legion Snowtrooper: Overwhelm while attacking a damaged unit
+  SHD_212: { keywords: [] }, // Privateer Scyk: Shielded while you control another Cunning unit
+  LOF_085: { keywords: [] }, // Praetorian Guard: Sentinel while you control a unit with 4 or more power
+  JTL_137: { keywords: [] }, // Vonreg's TIE Interceptor: Overwhelm at 4 power, Raid 1 at 6
+
+  // A keyword a unit only ever hands to other units (continued).
+  LOF_186: { keywords: [] }, // Marchion Ro: he doubles each friendly unit's Raid, and has none of his own
+
   // A printed keyword the source omits.
   SHD_188: { keywords: [{ name: 'Ambush' }] }, // 4-LOM
+  JTL_054: { keywords: [{ name: 'Shielded' }] }, // Gold Leader
+
+  // A keyword the source lists that the card does not print, alongside one it omits.
+  LAW_081: { keywords: [{ name: 'Ambush' }, { name: 'Overwhelm' }] }, // Sullustan Sapper: the card prints Ambush and Overwhelm, not Shielded
+
+  // An arena the source gets wrong. "This unit can attack space units" is printed on a GROUND unit;
+  // shipped as Space it could not have been printed at all.
+  JTL_259: { arena: 'ground' }, // Retrofitted Airspeeder
 }

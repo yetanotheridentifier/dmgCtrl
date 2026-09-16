@@ -104,6 +104,12 @@ export interface UnitState {
    */
   usedAbilities?: string[]
   /**
+   * How many upgrades have been played onto this unit this round (Guardian of the Whills discounts
+   * the first). Per unit rather than per player, and per round rather than per phase, because that
+   * is what the card counts. Cleared at the round boundary alongside `usedAbilities`.
+   */
+  upgradesPlayedThisRound?: number
+  /**
    * Cards this unit has captured (Bothan-5) — card ids held face-down under it, out of every
    * other zone. Released to their owner's discard when the captor leaves play.
    */
@@ -348,6 +354,12 @@ export interface UpgradeRef {
 export interface CombatContext {
   attackerInstanceId: string
   defenderInstanceId: string
+  /**
+   * The attack was declared via Ambush. Part of the combat rather than of the attacker's own
+   * context because a card can read it about someone else's attack: Enfys Nest takes 3 power off
+   * the defender while ANY friendly unit attacks using Ambush.
+   */
+  viaAmbush?: boolean
 }
 
 /** A hand card offered for play by an ability — its hand position + card id. */
@@ -433,6 +445,20 @@ export interface PhaseEvents {
   leaderLeftPlay: PlayerId[]
   /** Card ids each player has played this phase, in order — "the first X you play each phase". */
   played: Record<PlayerId, string[]>
+  /**
+   * Instance ids of units that have ATTACKED this phase (Anakin's Podracer strikes first while no
+   * other unit has attacked). Recorded as the attack is declared, so the attacker is already in the
+   * list while its own combat resolves: a card reading it means "no OTHER unit".
+   */
+  attackedUnits?: string[]
+  /** Instance ids of units healed this phase (Barriss Offee). */
+  healedUnits?: string[]
+  /**
+   * Instance ids whose incoming damage a prevention effect has stopped this phase, for the
+   * once-a-phase preventions (Umbaran Mobile Cannon). Recorded for every prevention, since only a
+   * card that limits itself reads it.
+   */
+  damagePrevented?: string[]
 }
 
 /**
@@ -981,6 +1007,42 @@ export function recordUnitDamaged(state: GameState, instanceId: string): GameSta
 /** Instance ids of units dealt damage this phase (Galvanized Leap). */
 export function damagedThisPhase(state: GameState): string[] {
   return state.phaseEvents?.damagedUnits ?? []
+}
+
+/** Note that `instanceId` attacked this phase. Idempotent: a unit that attacks twice counts once. */
+export function recordUnitAttacked(state: GameState, instanceId: string): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  const attacked = events.attackedUnits ?? []
+  return attacked.includes(instanceId) ? state : { ...state, phaseEvents: { ...events, attackedUnits: [...attacked, instanceId] } }
+}
+
+/** Instance ids of units that attacked this phase (Anakin's Podracer). */
+export function attackedThisPhase(state: GameState): string[] {
+  return state.phaseEvents?.attackedUnits ?? []
+}
+
+/** Note that `instanceId` was healed this phase. Idempotent. */
+export function recordUnitHealed(state: GameState, instanceId: string): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  const healed = events.healedUnits ?? []
+  return healed.includes(instanceId) ? state : { ...state, phaseEvents: { ...events, healedUnits: [...healed, instanceId] } }
+}
+
+/** Instance ids of units healed this phase (Barriss Offee). */
+export function healedThisPhase(state: GameState): string[] {
+  return state.phaseEvents?.healedUnits ?? []
+}
+
+/** Note that damage headed for `instanceId` was prevented this phase. Idempotent. */
+export function recordDamagePrevented(state: GameState, instanceId: string): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  const prevented = events.damagePrevented ?? []
+  return prevented.includes(instanceId) ? state : { ...state, phaseEvents: { ...events, damagePrevented: [...prevented, instanceId] } }
+}
+
+/** Whether a prevention has already stopped damage to `instanceId` this phase (Umbaran Mobile Cannon). */
+export function damagePreventedThisPhase(state: GameState, instanceId: string): boolean {
+  return state.phaseEvents?.damagePrevented?.includes(instanceId) ?? false
 }
 
 /** Record that a unit left play under `owner` this phase — defeated, bounced, or otherwise. */

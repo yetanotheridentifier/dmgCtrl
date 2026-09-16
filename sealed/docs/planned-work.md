@@ -143,11 +143,12 @@ Two phases:
   the two sets too small to sweep, a second ability outside When Played, several targets or divided
   amounts, attacks raised from a unit entering play, "you may pay N", two linked steps, upgrades moved
   or replayed, upgrade attach rules, lasting effects the buff choice cannot carry, and control of
-  other zones). Constant abilities too: the ones an existing static hook expresses play, and #613
-  holds the rest, grouped by the hook each lacks.
+  other zones). **Constant abilities on units and upgrades are finished**: the ones an existing static
+  hook expressed shipped first, and the hooks the rest needed followed, group by group. The 15 cards
+  lifted out of them are carried by #477, except Director Krennic, which is on #459.
   The ticket bodies carry the sizes from before token units, Credit
   tokens, Disclose and indirect damage were blockers, so most are smaller than they say (When Defeated
-  by a quarter, bases and constant abilities barely); the corrected counts are commented on each.
+  by a quarter, bases barely); the corrected counts are commented on each.
 - **Phase 2 (#461 to #476, #602 to #605), 584 cards blocked by exactly one thing each**, ordered by how
   many cards each unlocks on its own. Token units other than the Mandalorian (#605, 62 cards) are the
   second largest unlock; Credit tokens (#602, 29), Disclose (#603, 19) and indirect damage (#604, 15)

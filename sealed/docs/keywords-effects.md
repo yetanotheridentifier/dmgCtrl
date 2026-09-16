@@ -8,8 +8,10 @@ are represented. Read this when working on combat, stats, or anything that modif
 `stats.effectivePower` / `effectiveHp` and `keywords.unitKeywords` are the only sanctioned readers.
 Each sums, in order:
 
-1. printed values from the card database;
-2. attached upgrades;
+1. printed values from the card database, or the replacement a card in play declares for them
+   (`printedStats`: Obi-Wan Kenobi makes each friendly unit's printed power and HP 7, Size Matters Not
+   makes its host's 5);
+2. attached upgrades, which add on top of whichever of those two applies;
 3. `statModifier` / `conditionalKeywords` hooks on the unit's card and its upgrades;
 4. **auras** from other units in play (`auraContributions`);
 5. **lasting effects** aimed at the unit (`lastingEffectTotals`).
@@ -45,10 +47,31 @@ Applies while the source unit (or an attached upgrade) is in play, to **other** 
 `auraContributions(state, target)` scans every in-play unit and sums the contributions.
 
 **Constraint:** an aura must not read the target's *computed* keywords or power, because that
-recurses through the aura pass. Inspect card data and traits instead; `unitHasTrait` is safe.
+recurses through the aura pass. Inspect card data and traits instead; `unitHasTrait` is safe, and
+`nonAuraKeywordNames` / `nonAuraKeywordValue` answer "does the target have this keyword, and what is
+its numeral" from every source except auras, which is what a card that reacts to a keyword
+(Kylo Ren's Command Shuttle) or scales one (Marchion Ro doubles Raid) needs.
 
-An aura can be combat-conditional: the combat roles (`attackerInstanceId`, `defenderInstanceId`) are
-threaded into the aura call, so "while attacking" and "while defending" auras work.
+An aura can be combat-conditional: the combat roles are threaded into the aura call, so "while
+attacking" and "while defending" auras work. `CombatContext` carries `attackerInstanceId`,
+`defenderInstanceId` and whether the attack was declared `viaAmbush`, and it reaches **both** sides'
+stat contexts: an aura can therefore debuff the attacker (Lando Calrissian, Electrostaff) as well as
+the defender, and can read a property of someone else's attack (Enfys Nest takes 3 power off the
+defender while any friendly unit attacks using Ambush).
+
+## Reading a computed stat from inside the pass that computes it
+
+Some cards genuinely have to: "while you control a unit with 4 or more power" (Praetorian Guard),
+"while this unit has 4 or more power, it gains Overwhelm" (Vonreg's TIE Interceptor). Power reads
+Raid, Raid is a keyword, and keywords read these hooks, so the two passes can re-enter each other and
+two such units can recurse forever.
+
+Both passes therefore hold a set of the instance ids they are currently computing, and answer a
+**nested request for an id already in flight** from a cheaper source: `unitKeywords` falls back to
+printed keywords alone, and `effectivePower` to printed-and-upgraded power plus "this phase" buffs.
+Neither can change a non-cyclic computation, which never re-enters the same id, and the fallbacks are
+what the recursion is trying to avoid rather than an approximation of it. `statModifier` has held the
+same guard since a pair of Kelleran Beqs blew the stack.
 
 ## Lasting effects
 
@@ -136,6 +159,11 @@ Hidden, "cannot be attacked", Saboteur and Sentinel-lock together. It returns th
 things shut the base off: Sentinel forcing, and "can't attack bases" (Wicket). A site that derived
 base legality from `sentinelLocked` alone would enforce one and drop the other.
 
+**"This unit can't attack" (Loth-Wolf) is answered here too**, and it empties the target list and the
+base together. It is the same rule shape, so it binds all five sources of an attack by being stated
+once. Such a unit can still be given Sentinel, and still forces enemy attacks onto itself: what it
+may attack and what may attack it are different questions.
+
 `attackMoves` is the single enumeration built on that answer, and every source of an attack goes
 through it: the action phase, Ambush, Support and the two "attack with a unit" choices. They differ
 only in which units are candidates, what abilities they lend the attacker, and whether the base is
@@ -164,9 +192,32 @@ lock.
 
 ## Damage prevention
 
-Prevention is settled **after** the powers are known but **before** anything is committed, so first
-strike, Overwhelm and attack-end still see correct values. Each side is asked at most once per
-combat. Nothing has been written at that point, so suspending and re-running the whole combat on
-resume is safe.
+There are two kinds, and the difference is whether anyone is asked.
 
-Unpreventable damage ignores Shields entirely: the token is not even spent.
+**A prevention the controller chooses** (`canPreventDamage` / `payPreventionCost`: The Mandalorian
+defeats one of his own Shields) is settled **after** the powers are known but **before** anything is
+committed, so first strike, Overwhelm and attack-end still see correct values. Each side is asked at
+most once per combat. Nothing has been written at that point, so suspending and re-running the whole
+combat on resume is safe.
+
+**A prevention the card just applies** (`preventUnitDamage`: Cassian Andor, Boba Fett's Armor,
+Malakili, Umbaran Mobile Cannon) has nothing to decide, so it lives in `applyUnitDamage`, where every
+instance of unit damage passes. Each in-play unit on both sides is asked how much of the instance it
+stops, and the total is capped at the damage. It settles **before the Shield token**: damage a card
+prevents is never dealt, so no shield is spent soaking it, and the unit is not "damaged this phase"
+either. What a card stopped is recorded in `phaseEvents.damagePrevented`, which is what a prevention
+limited to once a phase reads, since `damagedUnits` by definition cannot hold it.
+
+Unpreventable damage ignores both kinds, and ignores Shields entirely: the token is not even spent.
+
+## Healing
+
+`healUnit` and `healBase` are the only places damage comes off a unit or a base, Restore included.
+That is what lets one card switch a whole category off: Confederate Tri-Fighter's "bases can't be
+healed" is a `suppressesBaseHealing` hook consulted inside `healBase`, and it covers both players'
+bases, as the card reads. Restore used to subtract from the base inline in `attack`, where no such
+card could ever have reached it.
+
+`healUnit` records the unit in `phaseEvents.healedUnits` when damage actually comes off, so "each
+friendly unit that was healed this phase" (Barriss Offee) counts every source of healing and nothing
+else: healing an undamaged unit heals nothing and is not recorded.

@@ -2,7 +2,7 @@ import type { Action } from './actions'
 import type { EngineCard, GameState, HandCardRef, PlayerId, ResourceUpgradeRef, UnitState } from './types'
 import { opponentOf, hasPendingChoices, nextUnitGrantMatches, abilityCardIds } from './types'
 import { canAfford, readyResourceCount } from './resources'
-import { unitHasKeyword, unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena } from './keywords'
+import { unitHasKeyword, unitCannotAttack, unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena } from './keywords'
 import { getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions } from './abilities'
 import './cardDefinitions' // side effect: registers all real card behaviours
 
@@ -24,6 +24,10 @@ type AttackTarget = Extract<Action, { type: 'attack' }>['target']
  * second copy of it in the AI would drift from the rules the way the ability lookups did in #417.
  */
 export function enemyAttackTargets(state: GameState, attacker: UnitState, owner: PlayerId = state.activePlayer): { targets: UnitState[]; sentinelLocked: boolean; canAttackBase: boolean } {
+  // "This unit can't attack" (Loth-Wolf): no unit and no base, so every source of an attack drops it
+  // together. It is a targeting answer like the others, which is why it lives here and not at the
+  // five call sites.
+  if (unitCannotAttack(state, attacker)) return { targets: [], sentinelLocked: false, canAttackBase: false }
   const enemy = state.players[opponentOf(owner)]
   // Normally same-arena only; Red Leader reaches either arena.
   const inRange = unitAttacksEitherArena(state, attacker) ? enemy.units : enemy.units.filter(e => e.arena === attacker.arena)
@@ -114,13 +118,25 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
       if (def?.waivesAspectPenalty?.(state, u, discountCtx)) waivePenalty = true
     }
   }
+  // Units an OPPONENT controls that change what this player pays (Del Meeko's +1 on each event).
+  // Kept apart from `costDiscount` because that hook is only ever asked about its own controller's
+  // payments, and a card reaching across the table has to say so.
+  for (const u of state.players[opponentOf(playerId)].units) {
+    for (const cid of abilityCardIds(u)) {
+      discount += getCardDefinition(cid)?.enemyCostDelta?.(state, u, discountCtx) ?? 0
+    }
+  }
   if (waivePenalty) penalty = 0
   // "Your next unit …" cost grants that match this card — Mouse Droid's −1 to the next Imperial.
   const grantDelta = (p.nextUnitGrants ?? []).reduce((sum, g) => sum + (nextUnitGrantMatches(card, g) ? (g.costDelta ?? 0) : 0), 0)
   // A card an OPPONENT's unit has named for a surcharge costs that much more to play (Qi'ra).
   const surcharge = state.players[opponentOf(playerId)].units.reduce(
     (sum, u) => sum + (u.namedCard === card.name ? u.namedCardSurcharge ?? 0 : 0), 0)
-  return Math.max(0, card.cost + penalty + modifier + grantDelta + discount + surcharge)
+  const total = Math.max(0, card.cost + penalty + modifier + grantDelta + discount + surcharge)
+  // "While paying costs, you pay half as many resources, rounded up" (The Starhawk) — last, because
+  // it halves what is actually owed rather than the printed cost.
+  const halved = p.units.some(u => abilityCardIds(u).some(cid => getCardDefinition(cid)?.halvesCosts?.(state, u, playerId) ?? false))
+  return halved ? Math.ceil(total / 2) : total
 }
 
 /**

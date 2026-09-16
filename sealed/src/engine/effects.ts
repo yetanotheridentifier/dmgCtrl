@@ -1,5 +1,5 @@
 import type { DamageSource, GameState, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState } from './types'
-import { updatePlayer, pushChoice, recordBaseDamaged, recordUpgradeDefeated, recordUnitLeftPlay, abilityCardIds } from './types'
+import { updatePlayer, pushChoice, recordBaseDamaged, recordUpgradeDefeated, recordUnitHealed, recordUnitLeftPlay, abilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { TriggerPoint } from './abilities'
@@ -211,8 +211,10 @@ export function damageIsUnpreventable(state: GameState, source?: DamageSource): 
 /** Heal `amount` damage from a unit — remove that much damage, never below 0. No-op if absent. */
 export function healUnit(state: GameState, instanceId: string, amount: number): GameState {
   const found = findUnit(state, instanceId)
-  if (!found || found.unit.damage === 0) return state
-  return patchUnit(state, found.owner, instanceId, u => ({ ...u, damage: Math.max(0, u.damage - amount) }))
+  if (!found || found.unit.damage === 0 || amount <= 0) return state
+  // "Each friendly unit that was healed this phase" (Barriss Offee) — recorded here, which is the
+  // one place a unit is healed, so every source of healing counts.
+  return recordUnitHealed(patchUnit(state, found.owner, instanceId, u => ({ ...u, damage: Math.max(0, u.damage - amount) })), instanceId)
 }
 
 /**
@@ -232,11 +234,29 @@ export function resourceTopOfDeck(state: GameState, owner: PlayerId): GameState 
   return { ...state, players: { ...state.players, [owner]: { ...p, resources: [...p.resources, { cardId: p.deck[0], exhausted: true }], deck: p.deck.slice(1) } } }
 }
 
-/** Heal `amount` damage from a player's base — never below 0. */
+/**
+ * Heal `amount` damage from a player's base — never below 0.
+ *
+ * **The only place a base is healed**, Restore included, which is what lets one card shut all of it
+ * off (Confederate Tri-Fighter: "bases can't be healed"). Restore used to subtract from the base
+ * inline in `attack`, where no such card could have reached it.
+ */
 export function healBase(state: GameState, player: PlayerId, amount: number): GameState {
   const p = state.players[player]
-  if (p.base.damage === 0) return state
+  if (p.base.damage === 0 || baseHealingSuppressed(state)) return state
   return { ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: Math.max(0, p.base.damage - amount) } } } }
+}
+
+/** True while a card in play stops bases being healed. Either side's base: the card says "bases". */
+function baseHealingSuppressed(state: GameState): boolean {
+  for (const side of ['player', 'opponent'] as PlayerId[]) {
+    for (const u of state.players[side].units) {
+      for (const cardId of abilityCardIds(u)) {
+        if (getCardDefinition(cardId)?.suppressesBaseHealing?.(state, u) ?? false) return true
+      }
+    }
+  }
+  return false
 }
 
 /** Exhaust a unit (no-op if already exhausted or absent). */

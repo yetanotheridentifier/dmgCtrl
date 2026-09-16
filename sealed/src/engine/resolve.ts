@@ -2,7 +2,7 @@ import type { Action, AttackTarget } from './actions'
 import type { GameState, PlayerId, UnitState } from './types'
 import type { PendingChoice, PendingTrigger, TriggerContext, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds } from './types'
-import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, markAbilityUsed, nextUnitGrantMatches } from './types'
+import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, stampChoiceSource, type TriggerPoint } from './abilities'
@@ -351,10 +351,9 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
     // Units normally enter exhausted (CR 1.5.4b); Ambush — or an ability (Fennec / Neel) — enters ready.
     exhausted: ready === true || grantEntersReady ? false : !ambush,
     isLeader: false,
-    // Shielded: the unit enters play with a shield token.
-    upgrades: entersWith('Shielded') ? [{ cardId: TOKEN_SHIELD, owner }] : [],
-    // Hidden: the unit enters play hidden — unattackable until the next phase.
-    ...(entersWith('Hidden') ? { hidden: true } : {}),
+    // Shielded and Hidden are applied below, from the unit's LIVE keywords once it is in play, so a
+    // conditionally gained one counts exactly as a printed one does.
+    upgrades: [],
   }
 
   let next = updatePlayer(state, owner, { units: [...state.players[owner].units, newUnit] })
@@ -368,6 +367,11 @@ function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: bo
     const remaining = (next.players[owner].nextUnitGrants ?? []).filter(g => !nextUnitGrantMatches(card, g))
     next = updatePlayer(next, owner, { nextUnitGrants: remaining.length > 0 ? remaining : undefined })
   }
+
+  // Shielded and Hidden, from the live keywords, before anything reacts to the unit arriving: the
+  // Shield token is part of entering play, so `collectEntersPlay` below fires "when 1 or more
+  // upgrades attach to this unit" for it exactly as it always did.
+  next = applyEntryKeywords(next, owner, newUnit.instanceId)
 
   // The unit is in play now, so read Ambush/Support from its LIVE keywords — an aura can strip them
   // (Domesticated Loth-Cat → "enemy units lose Ambush and Support"). Ambush: open the pending
@@ -1830,7 +1834,11 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
   let next = updatePlayer(state, playerId, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
   next = updatePlayer(next, targetOwner, {
     units: next.players[targetOwner].units.map(u =>
-      u.instanceId === targetInstanceId ? { ...u, upgrades: [...u.upgrades, { cardId: card.id, owner: playerId }] } : u,
+      // The count is per unit and per round ("the first upgrade you play on this unit each round",
+      // Guardian of the Whills), so it is tracked on the unit and cleared when the round turns over.
+      u.instanceId === targetInstanceId
+        ? { ...u, upgrades: [...u.upgrades, { cardId: card.id, owner: playerId }], upgradesPlayedThisRound: (u.upgradesPlayedThisRound ?? 0) + 1 }
+        : u,
     ),
   })
 
@@ -1969,6 +1977,37 @@ function deployLeader(state: GameState, epicUsed = true): GameState {
 }
 
 /**
+ * Shielded → a Shield token, Hidden → unattackable until the next phase, read from the unit's LIVE
+ * keywords now that it is in play.
+ *
+ * Live rather than printed, because a unit can gain either one only once it is on the board:
+ * Privateer Scyk has Shielded while you control another Cunning unit, and every friendly Inquisitor
+ * gains Hidden from the Grand Inquisitor. Read from the card alone, as it was, both are silently
+ * dropped, since the condition needs a unit to look at.
+ *
+ * Shared by a unit played from hand and a leader deploying, which is the one statement of what
+ * "entering play with a keyword" does.
+ */
+function applyEntryKeywords(state: GameState, owner: PlayerId, instanceId: string): GameState {
+  const unitNow = (s: GameState) => s.players[owner].units.find(u => u.instanceId === instanceId)
+  let next = state
+  const shieldable = unitNow(next)
+  if (!shieldable) return next
+  if (unitHasKeyword(next, shieldable, 'Shielded') && !hasToken(shieldable.upgrades, TOKEN_SHIELD)) {
+    next = updatePlayer(next, owner, {
+      units: next.players[owner].units.map(u => (u.instanceId === instanceId ? { ...u, upgrades: [...u.upgrades, { cardId: TOKEN_SHIELD, owner }] } : u)),
+    })
+  }
+  const hideable = unitNow(next)!
+  if (unitHasKeyword(next, hideable, 'Hidden') && !hideable.hidden) {
+    next = updatePlayer(next, owner, {
+      units: next.players[owner].units.map(u => (u.instanceId === instanceId ? { ...u, hidden: true } : u)),
+    })
+  }
+  return next
+}
+
+/**
  * On-enter keyword effects for a just-DEPLOYED leader unit: Shielded → a Shield token,
  * Hidden → unattackable until the next phase, then Ambush (this unit may attack now) or Support
  * (another ready unit may attack). Reads the unit's LIVE keywords, so keywords granted at deploy
@@ -1977,17 +2016,7 @@ function deployLeader(state: GameState, epicUsed = true): GameState {
  */
 function applyDeployKeywords(state: GameState, owner: PlayerId, instanceId: string): GameState {
   const unitNow = (s: GameState) => s.players[owner].units.find(u => u.instanceId === instanceId)!
-  let next = state
-  if (unitHasKeyword(next, unitNow(next), 'Shielded') && !hasToken(unitNow(next).upgrades, TOKEN_SHIELD)) {
-    next = updatePlayer(next, owner, {
-      units: next.players[owner].units.map(u => (u.instanceId === instanceId ? { ...u, upgrades: [...u.upgrades, { cardId: TOKEN_SHIELD, owner }] } : u)),
-    })
-  }
-  if (unitHasKeyword(next, unitNow(next), 'Hidden') && !unitNow(next).hidden) {
-    next = updatePlayer(next, owner, {
-      units: next.players[owner].units.map(u => (u.instanceId === instanceId ? { ...u, hidden: true } : u)),
-    })
-  }
+  let next = applyEntryKeywords(state, owner, instanceId)
   if (unitHasKeyword(next, unitNow(next), 'Ambush')) {
     if (enemyAttackTargets(next, unitNow(next)).targets.length > 0) {
       next = pushChoice(next, { kind: 'ambush', id: instanceId, controller: owner, unitId: instanceId })
@@ -2098,14 +2127,14 @@ function attack(state: GameState, attackerId: string, target: AttackTarget, viaA
     ),
   })
 
-  // Restore N: heals the attacking player's base when the unit attacks (CR 7.5).
+  // "…if no other units have attacked this phase" (Anakin's Podracer). Recorded as the attack is
+  // declared, so a card reading it during its own combat has to leave itself out.
+  next = recordUnitAttacked(next, attackerId)
+
+  // Restore N: heals the attacking player's base when the unit attacks (CR 7.5). Through `healBase`,
+  // which is the single place a base is healed, so a card that stops base healing stops this too.
   const restore = unitKeywordValue(next, attacker, 'Restore')
-  if (restore > 0) {
-    const own = next.players[playerId]
-    next = updatePlayer(next, playerId, {
-      base: { ...own.base, damage: Math.max(0, own.base.damage - restore) },
-    })
-  }
+  if (restore > 0) next = healBase(next, playerId, restore)
 
   // "On Attack" abilities fire before combat damage; a raised choice suspends
   // the attack with the attacker keeping control, resuming at the On Defense stage.
@@ -2166,7 +2195,17 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
 
   // "While attacking a damaged unit …" (Marrok's Fiend Fighter) reads the defender's pre-combat damage.
   const targetUnit = target.kind === 'unit' ? state.players[enemyId].units.find(u => u.instanceId === target.instanceId) : undefined
-  const attackerPower = effectivePower(state, attacker, { attacking: true, attackingBase: target.kind === 'base', defenderDamaged: (targetUnit?.damage ?? 0) > 0, viaAmbush })
+  // The combat roles go into the ATTACKER's context as well as the defender's, so an aura aimed at
+  // the attacker applies (Lando Calrissian, Electrostaff, Cassian Andor), and the defender's arena
+  // comes with them (Retrofitted Airspeeder gets −1/−0 attacking a space unit).
+  const attackerCtx = {
+    attacking: true,
+    attackingBase: target.kind === 'base',
+    defenderDamaged: (targetUnit?.damage ?? 0) > 0,
+    viaAmbush,
+    ...(targetUnit ? { defenderArena: targetUnit.arena, combat: { attackerInstanceId: attackerId, defenderInstanceId: targetUnit.instanceId, viaAmbush } } : {}),
+  }
+  const attackerPower = effectivePower(state, attacker, attackerCtx)
 
   if (target.kind === 'base') {
     // Through `dealDamageToBase` so base-damage prevention applies (At Attin Safety Droid);
@@ -2197,8 +2236,9 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
     : state
   const defender = preCombat.players[enemyId].units.find(u => u.instanceId === target.instanceId)!
 
-  // Combat-conditional auras (Grogu) apply to the defender during damage resolution.
-  const combat = { attackerInstanceId: attackerId, defenderInstanceId: defender.instanceId }
+  // Combat-conditional auras (Grogu) apply to the defender during damage resolution. `viaAmbush`
+  // travels with the roles, since a card can read it about someone else's attack (Enfys Nest).
+  const combat = { attackerInstanceId: attackerId, defenderInstanceId: defender.instanceId, viaAmbush }
   const defenderCtx = { combat, defending: true } // Palace Chef Droid: "+X while defending"
   const counterPower = effectivePower(preCombat, defender, defenderCtx)
 
@@ -2206,7 +2246,9 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   // defending player's base (CR 1.9.11). A shielded defender takes no damage, so
   // there is no excess to trample.
   const remainingHp = effectiveHp(preCombat, defender, defenderCtx) - defender.damage
-  const overwhelmExcess = unitHasKeyword(preCombat, attacker, 'Overwhelm')
+  // The attacker's context, because Overwhelm can be gained for this combat alone (First Legion
+  // Snowtrooper gains it while attacking a damaged unit).
+  const overwhelmExcess = unitHasKeyword(preCombat, attacker, 'Overwhelm', attackerCtx)
     && !hasToken(defender.upgrades, TOKEN_SHIELD)
     && !unitNegatesOverwhelm(preCombat, defender)
     ? Math.max(0, attackerPower - remainingHp)
@@ -2257,7 +2299,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   // "Deals combat damage before the defender" (Carson Teva): a defender defeated by that
   // damage never strikes back. Without it, damage is simultaneous (CR 1.9.10) and both still land.
   const defenderSurvived = next.players[enemyId].units.some(u => u.instanceId === defender.instanceId)
-  if (defenderSurvived || !unitDealsDamageFirst(preCombat, attacker)) {
+  if (defenderSurvived || !unitDealsDamageFirst(preCombat, attacker, { defender })) {
     next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, damageTo(attacker.instanceId, counterPower)]]), true, { combat, attacking: true, viaAmbush }, counterSource, true)
   }
   // The damage step is complete, so the batch it fired can be ordered and resolved.
@@ -2512,11 +2554,17 @@ function regroupChoice(state: GameState, handIndex: number | null): GameState {
 function readyEverything(state: GameState, id: PlayerId): GameState {
   const p = state.players[id]
   const readied = readyAllResources(p)
-  const justReadied = p.units.filter(u => u.exhausted).map(u => u.instanceId)
+  // "This unit doesn't ready during the regroup phase unless its power is 4 or more" (Rampart): it
+  // stays exhausted, and its "when this unit readies" abilities do not fire, because it did not.
+  const readies = (u: UnitState) => abilityCardIds(u).every(cardId => getCardDefinition(cardId)?.readiesInRegroup?.(state, u) ?? true)
+  const justReadied = p.units.filter(u => u.exhausted && readies(u)).map(u => u.instanceId)
   const next = updatePlayer(state, id, {
     resources: readied.resources,
-    // Ready units and clear their once-per-round action-ability usage.
-    units: p.units.map(u => (u.exhausted || u.usedAbilities ? { ...u, exhausted: false, usedAbilities: undefined } : u)),
+    // Ready units and clear what is tracked per round: once-per-round action abilities, and the
+    // upgrades played onto each unit (Guardian of the Whills).
+    units: p.units.map(u => (u.exhausted || u.usedAbilities || u.upgradesPlayedThisRound
+      ? { ...u, exhausted: u.exhausted && !readies(u), usedAbilities: undefined, upgradesPlayedThisRound: undefined }
+      : u)),
     leader: p.leader.exhausted ? { ...p.leader, exhausted: false } : p.leader,
   })
   // "When this unit readies" abilities: everything readies at once, so one batch.

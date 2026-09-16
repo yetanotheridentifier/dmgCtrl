@@ -7,11 +7,11 @@ import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
 import { discardUnitsMatching } from './resolve'
 import { TOKEN_MANDALORIAN, isTokenCard } from './tokenUnits'
-import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, markAbilityUsed, updatePlayer } from './types'
+import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, markAbilityUsed, updatePlayer } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets, effectiveCost } from './legalMoves'
 import { canAfford } from './resources'
-import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, unitHasKeyword, unitKeywords } from './keywords'
-import type { EngineCard, GameState, KeywordInstance, LastingEffect, PlayerId, UnitState, UpgradeRef } from './types'
+import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywords } from './keywords'
+import type { CombatContext, EngineCard, GameState, KeywordInstance, LastingEffect, PlayerId, UnitState, UpgradeRef } from './types'
 
 /**
  * Real card definitions. Side-effect module: importing it registers every
@@ -3037,3 +3037,136 @@ registerCard('SOR_189', whenPlayed('Either ready a resource or exhaust a unit.',
   if (allUnits(s).length > 0) modes.push('exhaustUnit')
   return modes.length ? pushChoice(s, { kind: 'chooseMode', id: ctx.sourceInstanceId!, controller: ctx.owner, modes }) : s
 }))
+
+// ── Constant abilities the static hooks could not express ────────────────────────────────────────
+// Each block is one group of cards sharing one engine change, named in the comment above it.
+
+// "While this unit is defending, the attacker gets -N/-0": an aura aimed at the ATTACKER, which is
+// why `completeAttack` threads the combat roles into the attacker's stat context as well.
+const debuffsAttackerWhileDefending = (power: number) => ({
+  aura: (_s: GameState, source: UnitState, target: UnitState, _friendly: boolean, combat?: CombatContext) =>
+    (combat?.defenderInstanceId === source.instanceId && combat.attackerInstanceId === target.instanceId ? { power } : undefined),
+})
+registerCard('LAW_108', debuffsAttackerWhileDefending(-1)) // Lando Calrissian
+registerCard('JTL_054', debuffsAttackerWhileDefending(-1)) // Gold Leader
+registerCard('SOR_071', { attachRestriction: nonVehicle, ...debuffsAttackerWhileDefending(-1) }) // Electrostaff
+registerCard('SEC_042', { // Cassian Andor
+  ...debuffsAttackerWhileDefending(-2),
+  // "If an enemy card ability would deal damage to this unit, prevent 2 of that damage": an ability,
+  // so combat damage is not covered.
+  preventUnitDamage: (s, self, target, amount, ctx) =>
+    (target.instanceId === self.instanceId && !ctx.byCombat && ctx.source !== undefined && ctx.source.controller !== unitOwner(s, self)
+      ? Math.min(2, amount) : 0),
+})
+
+// Keywords and attack variants that depend on the combat: the keyword readers and `dealsDamageFirst`
+// take the attacker's context, and a unit that has attacked this phase is recorded.
+registerCard('SOR_130', { // First Legion Snowtrooper
+  statModifier: (_s, _u, ctx) => (ctx.defenderDamaged ? { power: 2 } : {}),
+  conditionalKeywords: (_s, _u, ctx) => (ctx?.defenderDamaged ? [KW.overwhelm] : []),
+})
+registerCard('JTL_185', { // Hound's Tooth
+  dealsDamageFirst: (s, _u, ctx) => {
+    const defender = ctx?.defender
+    if (!defender?.exhausted) return false
+    const owner = unitOwner(s, defender)
+    return owner !== undefined && !enteredPlayThisPhase(s, owner).includes(defender.instanceId)
+  },
+})
+registerCard('LAW_219', { dealsDamageFirst: (s, u) => attackedThisPhase(s).every(id => id === u.instanceId) }) // Anakin's Podracer
+registerCard('SHD_219', { // Enfys Nest
+  // "While a friendly unit (including this one) is attacking using Ambush, the defender gets -3/-0."
+  aura: (s, source, target, _friendly, combat) => {
+    if (!combat?.viaAmbush || combat.defenderInstanceId !== target.instanceId) return undefined
+    const attacker = allUnits(s).find(x => x.instanceId === combat.attackerInstanceId)
+    return attacker && unitOwner(s, attacker) === unitOwner(s, source) ? { power: -3 } : undefined
+  },
+})
+registerCard('JTL_259', { // Retrofitted Airspeeder
+  attacksEitherArena: () => true,
+  statModifier: (_s, _u, ctx) => (ctx.defenderArena === 'space' ? { power: -1 } : {}),
+})
+
+// Keywords that act as a unit ENTERS play, gained rather than printed: `enterUnit` reads them live.
+registerCard('SHD_212', gains(another(isAspect('Cunning')), { name: 'Shielded' })) // Privateer Scyk
+registerCard('LOF_132', friendlyAura(isTrait('Inquisitor'), { keywords: [{ name: 'Hidden' }] }, true)) // Grand Inquisitor
+
+// Conditions on a unit's COMPUTED power or keywords, which the keyword and power passes guard
+// against recursing through.
+registerCard('LOF_085', gains((s, u) => friendliesOf(s, u).some(x => effectivePower(s, x) >= 4), KW.sentinel)) // Praetorian Guard
+registerCard('JTL_137', { // Vonreg's TIE Interceptor
+  conditionalKeywords: (s, u) => {
+    const power = effectivePower(s, u)
+    const out: KeywordInstance[] = []
+    if (power >= 4) out.push(KW.overwhelm)
+    if (power >= 6) out.push(KW.raid(1))
+    return out
+  },
+})
+registerCard('SEC_032', { // Kylo Ren's Command Shuttle
+  aura: (s, _src, tgt, friendly) => (friendly && tgt.arena === 'ground' && nonAuraKeywordNames(s, tgt).has('Sentinel') ? { hp: 2 } : undefined),
+})
+registerCard('LOF_186', { // Marchion Ro — "each friendly unit's Raid is doubled", himself included
+  aura: (s, _src, tgt, friendly) => {
+    const raid = friendly ? nonAuraKeywordValue(s, tgt, 'Raid') : 0
+    return raid > 0 ? { keywords: [KW.raid(raid)] } : undefined
+  },
+})
+
+// "This unit can't attack."
+registerCard('LOF_044', { cannotAttack: () => true }) // Loth-Wolf
+registerCard('JTL_059', { cannotAttack: () => true }) // Corporate Defense Shuttle
+
+// Damage a card stops by itself, with nothing for the controller to decide.
+registerCard('SEC_067', { // Umbaran Mobile Cannon
+  preventUnitDamage: (s, self, target, amount) =>
+    (target.instanceId === self.instanceId && !damagePreventedThisPhase(s, self.instanceId) ? amount : 0),
+})
+registerCard('SHD_224', { // Boba Fett's Armor
+  attachRestriction: nonVehicle,
+  preventUnitDamage: (s, self, target, amount) =>
+    (target.instanceId === self.instanceId && cardOf(s, self)?.name === 'Boba Fett' ? Math.min(2, amount) : 0),
+})
+registerCard('LOF_108', { // Malakili
+  costDiscount: (s, _source, ctx) => {
+    const isCreatureUnit = (c: EngineCard | undefined) => c?.type === 'unit' && printedTrait(c, 'Creature')
+    return isCreatureUnit(ctx.card) && !cardsPlayedThisPhase(s, ctx.owner).some(id => isCreatureUnit(s.cards[id])) ? -1 : 0
+  },
+  preventUnitDamage: (s, self, target, amount, ctx) => {
+    const owner = unitOwner(s, self)
+    const source = ctx.source
+    return source !== undefined && source.controller === owner && unitOwner(s, target) === owner && printedTrait(s.cards[source.cardId], 'Creature')
+      ? amount : 0
+  },
+})
+
+// Cost rules that remember what has been played, or reach across the table.
+registerCard('SEC_064', { // Congress of Malastare
+  costDiscount: (s, _source, ctx) =>
+    (ctx.card.type === 'upgrade' && !cardsPlayedThisPhase(s, ctx.owner).some(id => s.cards[id]?.type === 'upgrade') ? -1 : 0),
+})
+registerCard('LOF_058', { // Guardian of the Whills
+  costDiscount: (_s, source, ctx) =>
+    (ctx.card.type === 'upgrade' && ctx.target?.instanceId === source.instanceId && (source.upgradesPlayedThisRound ?? 0) === 0 ? -1 : 0),
+})
+registerCard('SOR_034', { enemyCostDelta: (_s, _source, ctx) => (ctx.card.type === 'event' ? 1 : 0) }) // Del Meeko
+registerCard('JTL_105', { halvesCosts: () => true }) // The Starhawk
+
+// "Printed power/HP is considered to be N."
+registerCard('LAW_036', { // Obi-Wan Kenobi
+  printedStats: (s, source, _target, friendly) => {
+    const owner = unitOwner(s, source)
+    return friendly && owner !== undefined && s.players[owner].units.length >= 7 ? { power: 7, hp: 7 } : undefined
+  },
+})
+registerCard('LOF_056', { // Size Matters Not
+  costModifier: (s, p) => (s.players[p].units.some(u => unitHasTrait(s, u, 'Force')) ? -1 : 0),
+  printedStats: (_s, source, target) => (target.instanceId === source.instanceId ? { power: 5, hp: 5 } : undefined),
+})
+
+// Rules a card changes for as long as it is in play.
+registerCard('TWI_132', { suppressesBaseHealing: () => true }) // Confederate Tri-Fighter
+registerCard('JTL_182', { readiesInRegroup: (s, u) => effectivePower(s, u) >= 4 }) // Rampart
+registerCard('TWI_042', { // Barriss Offee — "each friendly unit healed this phase", herself included
+  aura: (s, _src, tgt, friendly) => (friendly && healedThisPhase(s).includes(tgt.instanceId) ? { power: 1 } : undefined),
+})

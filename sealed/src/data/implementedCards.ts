@@ -231,6 +231,10 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'LAW_129', name: 'Mastery' },
   // When Played, other sets: deck searches
   { id: 'LOF_122', name: 'Pillio Star Compass' },
+  // Constant abilities, other sets: the remainder
+  { id: 'SOR_071', name: 'Electrostaff' },
+  { id: 'SHD_224', name: "Boba Fett's Armor" },
+  { id: 'LOF_056', name: 'Size Matters Not' },
 ]
 
 /**
@@ -713,6 +717,41 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'JTL_164', name: 'Cham Syndulla' },
   { id: 'JTL_119', name: 'Resupply Carrier' },
   { id: 'SOR_189', name: 'Leia Organa' },
+  // Constant abilities, other sets: the attacker's power while a unit defends
+  { id: 'LAW_108', name: 'Lando Calrissian' },
+  { id: 'JTL_054', name: 'Gold Leader' },
+  { id: 'SEC_042', name: 'Cassian Andor' },
+  // Constant abilities, other sets: combat-conditional keywords and attack variants
+  { id: 'SOR_130', name: 'First Legion Snowtrooper' },
+  { id: 'JTL_185', name: "Hound's Tooth" },
+  { id: 'LAW_219', name: "Anakin's Podracer" },
+  { id: 'SHD_219', name: 'Enfys Nest' },
+  { id: 'JTL_259', name: 'Retrofitted Airspeeder' },
+  // Constant abilities, other sets: keywords granted rather than printed
+  { id: 'SHD_212', name: 'Privateer Scyk' },
+  { id: 'LOF_132', name: 'Grand Inquisitor' },
+  // Constant abilities, other sets: conditions on computed power or keywords
+  { id: 'LOF_085', name: 'Praetorian Guard' },
+  { id: 'JTL_137', name: "Vonreg's TIE Interceptor" },
+  { id: 'SEC_032', name: "Kylo Ren's Command Shuttle" },
+  { id: 'LOF_186', name: 'Marchion Ro' },
+  // Constant abilities, other sets: units that can't attack
+  { id: 'LOF_044', name: 'Loth-Wolf' },
+  { id: 'JTL_059', name: 'Corporate Defense Shuttle' },
+  // Constant abilities, other sets: damage prevention
+  { id: 'SEC_067', name: 'Umbaran Mobile Cannon' },
+  { id: 'LOF_108', name: 'Malakili' },
+  // Constant abilities, other sets: cost rules
+  { id: 'SEC_064', name: 'Congress of Malastare' },
+  { id: 'LOF_058', name: 'Guardian of the Whills' },
+  { id: 'SOR_034', name: 'Del Meeko' },
+  { id: 'JTL_105', name: 'The Starhawk' },
+  // Constant abilities, other sets: printed stats replaced
+  { id: 'LAW_036', name: 'Obi-Wan Kenobi' },
+  // Constant abilities, other sets: rule changes
+  { id: 'TWI_132', name: 'Confederate Tri-Fighter' },
+  { id: 'JTL_182', name: 'Rampart' },
+  { id: 'TWI_042', name: 'Barriss Offee' },
 ]
 
 /**

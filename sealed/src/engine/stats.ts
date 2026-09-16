@@ -1,4 +1,4 @@
-import type { GameState, UnitState, CombatContext, PlayerId } from './types'
+import type { Arena, GameState, UnitState, CombatContext, PlayerId } from './types'
 import { lastingEffectTotals, abilityCardIds } from './types'
 import { unitHasKeyword, unitKeywordValue, auraContributions } from './keywords'
 import { getCardDefinition } from './abilities'
@@ -21,6 +21,8 @@ export interface StatContext {
   defenderDamaged?: boolean
   /** The attack was made via Ambush, on the unit entering play (Heroic Purrgil). */
   viaAmbush?: boolean
+  /** For the attacker: which arena the defending unit stands in (Retrofitted Airspeeder). */
+  defenderArena?: Arena
   /** The current combat's roles, for combat-conditional auras (Grogu). */
   combat?: CombatContext
 }
@@ -44,11 +46,35 @@ export function friendlyAdvantageInert(state: GameState, owner: PlayerId): boole
  * `consumeAdvantage`. Because they are never spent, the +1s accumulate, which is the card's point.
  */
 function withUpgrades(state: GameState, unit: UnitState, stat: 'power' | 'hp'): number {
-  let total = state.cards[unit.cardId]?.[stat] ?? 0
+  // A card may REPLACE the printed value before the upgrades are added (Obi-Wan Kenobi's 7/7, Size
+  // Matters Not's 5/5): the card says "printed power is considered to be N", so an upgrade's +X
+  // still applies on top of N.
+  let total = printedStatOverride(state, unit)?.[stat] ?? state.cards[unit.cardId]?.[stat] ?? 0
   for (const { cardId } of unit.upgrades) {
     total += state.cards[cardId]?.[stat] ?? 0
   }
   return total
+}
+
+/**
+ * The replacement for a unit's printed power/HP, if a card in play declares one. Scanned across both
+ * sides' units and their upgrades, so one pass answers both shapes the pool prints: a replacement
+ * coming from the host's own upgrade, and one another unit hands out. It must not read computed
+ * stats (that is the pass it is part of); both cards inspect counts and card data only.
+ */
+function printedStatOverride(state: GameState, unit: UnitState): { power?: number; hp?: number } | undefined {
+  const targetOwner = (['player', 'opponent'] as PlayerId[]).find(o => state.players[o].units.some(u => u.instanceId === unit.instanceId))
+  if (!targetOwner) return undefined
+  let out: { power?: number; hp?: number } | undefined
+  for (const owner of ['player', 'opponent'] as PlayerId[]) {
+    for (const source of state.players[owner].units) {
+      for (const cardId of abilityCardIds(source)) {
+        const override = getCardDefinition(cardId)?.printedStats?.(state, source, unit, owner === targetOwner)
+        if (override) out = { ...out, ...override }
+      }
+    }
+  }
+  return out
 }
 
 
@@ -82,18 +108,35 @@ function statModifiers(state: GameState, unit: UnitState, ctx: StatContext, stat
   }
 }
 
+/**
+ * Instance ids whose power is currently being computed. A card whose condition reads another unit's
+ * power (Praetorian Guard: "while you control a unit with 4 or more power") is reached from inside
+ * this pass, and that unit's own condition can ask for the first unit's power again. While an id is
+ * in flight a nested request answers with the unit's printed-and-upgraded power plus its "this
+ * phase" buffs: everything except the hooks and auras that form the cycle.
+ */
+const computingPower = new Set<string>()
+
 export function effectivePower(state: GameState, unit: UnitState, ctx: StatContext = {}): number {
-  let power = withUpgrades(state, unit, 'power')
-  if (ctx.attacking) {
-    power += unitKeywordValue(state, unit, 'Raid')
+  if (computingPower.has(unit.instanceId)) {
+    return Math.max(0, withUpgrades(state, unit, 'power') + lastingEffectTotals(state, unit.instanceId).power)
   }
-  if (unitHasKeyword(state, unit, 'Grit')) {
-    power += unit.damage
+  computingPower.add(unit.instanceId)
+  try {
+    let power = withUpgrades(state, unit, 'power')
+    if (ctx.attacking) {
+      power += unitKeywordValue(state, unit, 'Raid', ctx)
+    }
+    if (unitHasKeyword(state, unit, 'Grit', ctx)) {
+      power += unit.damage
+    }
+    power += statModifiers(state, unit, ctx, 'power')
+    power += auraContributions(state, unit, ctx.combat).power // other units' auras
+    power += lastingEffectTotals(state, unit.instanceId).power // "this phase" buffs
+    return Math.max(0, power)
+  } finally {
+    computingPower.delete(unit.instanceId)
   }
-  power += statModifiers(state, unit, ctx, 'power')
-  power += auraContributions(state, unit, ctx.combat).power // other units' auras
-  power += lastingEffectTotals(state, unit.instanceId).power // "this phase" buffs
-  return Math.max(0, power)
 }
 
 export function effectiveHp(state: GameState, unit: UnitState, ctx: StatContext = {}): number {
