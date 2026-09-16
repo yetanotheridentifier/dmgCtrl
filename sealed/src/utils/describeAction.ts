@@ -433,6 +433,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Return ${target ?? 'unit'} to hand`
       }
+      if (choice.kind === 'selectFriendlyUnit') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Choose ${target ?? 'unit'}`
+      }
       if (choice.kind === 'selectDistributeSource') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Take from ${target ?? 'unit'}`

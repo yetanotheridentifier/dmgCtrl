@@ -76,7 +76,7 @@ same guard since a pair of Kelleran Beqs blew the stack.
 ## Lasting effects
 
 ```ts
-GameState.lastingEffects?: LastingEffect[]   // { targetInstanceId, power?, hp?, keywords?, untilEndOfAttack? }
+GameState.lastingEffects?: LastingEffect[]   // { targetInstanceId, power?, hp?, keywords?, untilEndOfAttack?, abilityCardIds?, cannotAttack? }
 ```
 
 `addLastingEffect` appends one; `lastingEffectTotals(state, instanceId)` sums those aimed at a unit.
@@ -91,6 +91,10 @@ Folded into stats and keywords exactly like auras.
 
 A phase-scoped effect is gone before regroup resolves, so a unit defeated *during* regroup uses its
 base stats.
+
+`cannotAttack: true` is a prohibition rather than a stat: "it can't attack your base or units you
+control for this phase" (Chaotic Diversion). `unitCannotAttack` reads it alongside the printed
+`cannotAttack` hook, so it closes every source of an attack at once, exactly as Loth-Wolf's does.
 
 Both expiries run the same **state-based defeat check** immediately afterwards: a unit that only the
 expired +HP buff kept alive, now at damage ≥ HP, is defeated then, routing through the normal discard,
@@ -179,9 +183,12 @@ governs what may be declared, never where damage lands.
 ask the same question of both seats when reading the race. Re-deriving this logic anywhere else
 would let it drift from the rules.
 
-An ability that grants a **mandatory** attack (Thrawn, the four rider events) is gated on
-`canAnyUnitAttack`, since its choice carries no decline and raising it with nothing to attack would
-leave the player no legal move.
+An ability that grants a **mandatory** attack (Thrawn, the rider events) is gated on an attack being
+legal, since its choice carries no decline and raising it with nothing to attack would leave the
+player no legal move. `offerAttack` raises the choice and holds the gate: it asks `eligibleAttacker`
+who may attack ("a Vehicle unit", "a damaged unit", "even if it's exhausted") and then asks the same
+enumeration `choiceMoves` offers from, **with the rider lent**, so a rider that forbids bases cannot
+leave a unit that could only have hit a base counted as able.
 
 **Sentinel forces only from the attacker's own arena.** It reads "enemy units **in this arena** must
 attack a Sentinel when they attack you", so the forcing is scoped by where the attacker stands, not by

@@ -364,6 +364,37 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'IBH_52', name: 'Watch This' },
   { id: 'IBH_61', name: "We're In Trouble" },
   { id: 'IBH_95', name: 'You Have Failed Me' },
+  // Attack events beyond a plain rider
+  { id: 'LOF_224', name: 'Pounce' },
+  { id: 'JTL_231', name: 'Punch It' },
+  { id: 'SHD_179', name: 'Desperate Attack' },
+  { id: 'TWI_172', name: 'Grim Resolve' },
+  { id: 'SOR_103', name: 'Rebel Assault' },
+  { id: 'LOF_124', name: 'Niman Strike' },
+  { id: 'JTL_123', name: 'Dogfight' },
+  { id: 'SEC_229', name: 'Catch Unawares' },
+  { id: 'SHD_230', name: 'Swoop Down' },
+  { id: 'TWI_123', name: 'Outflank' },
+  { id: 'SHD_128', name: 'Outflank' },
+  { id: 'JTL_261', name: 'Attack Run' },
+  { id: 'SHD_145', name: 'Headhunting' },
+  { id: 'JTL_124', name: 'Tandem Assault' },
+  { id: 'TS26_59', name: 'Brothers' },
+  { id: 'SEC_228', name: 'Accelerate Our Plans' },
+  { id: 'LAW_202', name: 'Commence the Festivities' },
+  { id: 'LAW_205', name: 'Flash the Vents' },
+  { id: 'SEC_179', name: 'Aggressive Negotiations' },
+  { id: 'TWI_139', name: 'Corner the Prey' },
+  { id: 'JTL_228', name: 'Barrel Roll' },
+  { id: 'JTL_193', name: 'I Have You Now' },
+  { id: 'JTL_177', name: 'Stay on Target' },
+  { id: 'SOR_150', name: 'Heroic Sacrifice' },
+  { id: 'JTL_156', name: 'Trench Run' },
+  { id: 'JTL_174', name: 'Hotshot Maneuver' },
+  { id: 'TS26_31', name: 'Chaotic Diversion' },
+  // Printed as an upgrade (see `cardDataCorrections.ts`), but the set data, and so the set totals
+  // below, file it as an event. Counted where the totals count it.
+  { id: 'SOR_215', name: 'Snapshot Reflexes' },
 ]
 
 /**

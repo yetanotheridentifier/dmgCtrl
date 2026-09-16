@@ -1,8 +1,8 @@
 import type { Action } from './actions'
-import type { EngineCard, GameState, HandCardRef, PlayerId, ResourceUpgradeRef, UnitState } from './types'
-import { opponentOf, hasPendingChoices, nextUnitGrantMatches, abilityCardIds } from './types'
+import type { AttackerFilter, EngineCard, GameState, HandCardRef, PlayerId, ResourceUpgradeRef, UnitState } from './types'
+import { opponentOf, hasPendingChoices, nextUnitGrantMatches, abilityCardIds, pushChoice } from './types'
 import { canAfford, readyResourceCount } from './resources'
-import { unitHasKeyword, unitCannotAttack, unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena } from './keywords'
+import { unitHasKeyword, unitCannotAttack, unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
 import { getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions } from './abilities'
 import './cardDefinitions' // side effect: registers all real card behaviours
 
@@ -47,6 +47,57 @@ export function enemyAttackTargets(state: GameState, attacker: UnitState, owner:
     sentinelLocked,
     canAttackBase: !sentinelLocked && !unitCannotAttackBases(state, attacker),
   }
+}
+
+/**
+ * Whether `unit` may be the attacker for an "attack with a … unit" (Pounce: a Creature; Desperate
+ * Attack: a damaged unit). Ready, unless `exhausted` lets an exhausted unit attack too. Only who may
+ * attack: what it may hit is `attackMoves`.
+ */
+export function eligibleAttacker(state: GameState, unit: UnitState, filter: AttackerFilter = {}, exhausted = false): boolean {
+  if (unit.exhausted && !exhausted) return false
+  if (filter.only && !filter.only.includes(unit.instanceId)) return false
+  if (filter.exclude?.includes(unit.instanceId)) return false
+  if (filter.trait && !unitHasTrait(state, unit, filter.trait)) return false
+  if (filter.arena && unit.arena !== filter.arena) return false
+  if (filter.damaged && unit.damage === 0) return false
+  if (filter.nonLeader && isLeaderUnit(state, unit)) return false
+  if (filter.unique && !state.cards[unit.cardId]?.unique) return false
+  return true
+}
+
+/**
+ * Whether `unit` could make at least one attack, lent `grantCardId` for it. A card lending "can't
+ * attack bases" closes the base off, so this asks with the grant rather than without.
+ */
+export function canAttackSomething(state: GameState, unit: UnitState, grantCardId?: string): boolean {
+  return attackMoves(state, unit, { grantCardId }).length > 0
+}
+
+/** What an "attack with a … unit" offers: who may attack, what they are lent, and whether it is optional. */
+export interface AttackOffer {
+  attacker?: AttackerFilter
+  exhausted?: boolean
+  grantCardId?: string
+  optional?: boolean
+}
+
+/**
+ * Raise an "attack with a unit" choice for `owner`, or nothing when no eligible unit could attack.
+ * A mandatory choice with no legal attack would leave the player no move at all, so the gate is the
+ * same enumeration `choiceMoves` offers from.
+ */
+export function offerAttack(state: GameState, owner: PlayerId, id: string, offer: AttackOffer = {}): GameState {
+  const able = state.players[owner].units.some(u =>
+    eligibleAttacker(state, u, offer.attacker, offer.exhausted) && canAttackSomething(state, u, offer.grantCardId))
+  if (!able) return state
+  return pushChoice(state, {
+    kind: 'mayAttackAnyUnit', id, controller: owner, restore: 0,
+    ...(offer.optional ? { optional: true } : {}),
+    ...(offer.grantCardId ? { grantCardId: offer.grantCardId } : {}),
+    ...(offer.attacker ? { attacker: offer.attacker } : {}),
+    ...(offer.exhausted ? { exhausted: true } : {}),
+  })
 }
 
 /**
@@ -667,12 +718,13 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'selectUnitToReady':
+      case 'selectFriendlyUnit':
       case 'selectUnitToSteal':
       case 'selectDistributeSource':
       case 'selectUnitToReturn': {
         // Pick one of the eligible units; a decline only where the card prints "may".
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
-        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        if ('optional' in choice && choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
       case 'selectUpgradeToReturn': {
@@ -728,9 +780,12 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'mayAttackAnyUnit': {
-        // Thrawn front: attack with any ready unit (the Restore grant is applied on resolve).
+        // Thrawn front: attack with any ready unit (the Restore grant is applied on resolve). An
+        // attack event may narrow the attacker, or let an exhausted one attack.
         for (const u of p.units) {
-          if (!u.exhausted) moves.push(...attackMoves(state, u, { choiceId: choice.id, grantCardId: choice.grantCardId }))
+          if (eligibleAttacker(state, u, choice.attacker, choice.exhausted)) {
+            moves.push(...attackMoves(state, u, { choiceId: choice.id, grantCardId: choice.grantCardId }))
+          }
         }
         // Only where the card says "may" (Grogu). Enumerating the attacks alone made every one of
         // them compulsory, so taking the initiative forced a swing you might not want (#575).

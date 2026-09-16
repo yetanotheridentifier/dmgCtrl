@@ -1,4 +1,4 @@
-import type { EffectContext } from './abilities'
+import type { AbilityDef, CardDefinition, EffectContext } from './abilities'
 import { registerCard } from './abilities'
 import { giveToken, giveTokens, exhaustUnit, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
@@ -8,7 +8,8 @@ import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
 import { discardUnitsMatching } from './resolve'
 import { TOKEN_MANDALORIAN, isTokenCard } from './tokenUnits'
 import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, markAbilityUsed, updatePlayer } from './types'
-import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets, effectiveCost } from './legalMoves'
+import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
+import type { AttackOffer } from './legalMoves'
 import { canAfford } from './resources'
 import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywords } from './keywords'
 import type { CombatContext, EngineCard, GameState, KeywordInstance, LastingEffect, PlayerId, UnitState, UpgradeRef } from './types'
@@ -550,11 +551,7 @@ registerCard('ASH_010', { // Bo-Katan Kryze — front/back create a Mandalorian 
  * the player no legal move at all.
  */
 const canAnyUnitAttack = (s: GameState, owner: PlayerId): boolean =>
-  s.players[owner].units.some(u => {
-    if (u.exhausted) return false
-    const { targets, canAttackBase } = enemyAttackTargets(s, u)
-    return targets.length > 0 || canAttackBase
-  })
+  s.players[owner].units.some(u => eligibleAttacker(s, u) && canAttackSomething(s, u))
 
 registerCard('ASH_004', { // Grand Admiral Thrawn — front attack + conditional Restore; deployed On Attack conditional defeat
   leaderAbilities: {
@@ -2027,12 +2024,11 @@ registerCard(GRANT_WIPE_THEM_OUT, { sourceCardId: 'ASH_137', spillsExcessToUnit:
 
 /**
  * "Attack with a unit", lending it `grantCardId`'s rider for that attack. Mandatory, so it is gated
- * on an attack being legal rather than merely on a ready unit existing.
+ * on an attack being legal rather than merely on a ready unit existing. `offer` narrows the attacker
+ * ("attack with a Vehicle unit") or lets it be exhausted.
  */
-const attackWithRider = (description: string, grantCardId: string) =>
-  whenPlayed(description, (s, ctx) => (canAnyUnitAttack(s, ctx.owner)
-    ? pushChoice(s, { kind: 'mayAttackAnyUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, restore: 0, grantCardId })
-    : s))
+const attackWithRider = (description: string, grantCardId?: string, offer: AttackOffer = {}) =>
+  whenPlayed(description, (s, ctx) => offerAttack(s, ctx.owner, ctx.sourceInstanceId!, { ...offer, grantCardId }))
 
 registerCard('ASH_162', attackWithRider('Attack with a unit. For this attack, it gets +1/+0 and gains: "When Attack Ends: If this unit dealt combat damage to an opponent\'s base, that opponent discards a card."', GRANT_RASH_ACTION))
 registerCard('ASH_184', attackWithRider('Attack with a unit. After completing the attack, give 3 Advantage tokens to a unit.', GRANT_FOLLOW_ME))
@@ -2307,6 +2303,278 @@ registerCard(GRANT_SHOOT_FIRST, {
   dealsDamageFirst: () => true,
 })
 registerCard('SOR_217', attackWithRider('Attack with a unit. It gets +1/+0 for this attack and deals its combat damage before the defender.', GRANT_SHOOT_FIRST)) // Shoot First
+
+// ── Attack events beyond a plain rider ────────────────────────────────────────────────────────
+// Still one carrier per card, lent for the attack. What the plain rider lacked is carried by the
+// offer (who may attack, and whether exhausted) and by hooks the carrier already has: an `aura` for
+// the defender's -X/-0, `preventUnitDamage` for the attacker's protection, and an "attack ends"
+// ability for anything after. An attack that follows another ("attack with 2 units, one at a time")
+// is raised by the first attack's carrier as that attack ends, so it cannot start while the first is
+// still resolving.
+
+/** "It gets +N/+0 for this attack." */
+const attackBonus = (power: number): CardDefinition => ({ statModifier: (_s, _u, ctx) => (ctx.attacking ? { power } : {}) })
+
+/** The next attack of a sequence, never with the unit that just attacked. */
+const thenAttack = (description: string, offer: AttackOffer = {}): AbilityDef => ({
+  trigger: 'onAttackEnd',
+  description,
+  effect: (s, ctx) => offerAttack(s, ctx.owner, `${ctx.sourceInstanceId}-next`, {
+    ...offer,
+    attacker: { ...offer.attacker, exclude: [...(offer.attacker?.exclude ?? []), ctx.sourceInstanceId!] },
+  }),
+})
+
+/** "The defender gets -N/-0 for this attack", as an aura the attacker holds only while it attacks that defender. */
+const defenderPowerAura = (power: number, when: (target: UnitState) => boolean = () => true): CardDefinition['aura'] =>
+  (_s, source, target, _friendly, combat) =>
+    (combat?.attackerInstanceId === source.instanceId && combat.defenderInstanceId === target.instanceId && when(target) ? { power } : undefined)
+
+const GRANT_POUNCE = 'GRANT_POUNCE'
+registerCard(GRANT_POUNCE, { sourceCardId: 'LOF_224', ...attackBonus(4) })
+registerCard('LOF_224', attackWithRider('Attack with a Creature unit. It gets +4/+0 for this attack.', GRANT_POUNCE, { attacker: { trait: 'Creature' } })) // Pounce
+
+const GRANT_PUNCH_IT = 'GRANT_PUNCH_IT'
+registerCard(GRANT_PUNCH_IT, { sourceCardId: 'JTL_231', ...attackBonus(2) })
+registerCard('JTL_231', attackWithRider('Attack with a Vehicle unit. It gets +2/+0 for this attack.', GRANT_PUNCH_IT, { attacker: { trait: 'Vehicle' } })) // Punch It
+
+const GRANT_DESPERATE_ATTACK = 'GRANT_DESPERATE_ATTACK'
+registerCard(GRANT_DESPERATE_ATTACK, { sourceCardId: 'SHD_179', ...attackBonus(2) })
+registerCard('SHD_179', attackWithRider('Attack with a damaged unit. It gets +2/+0 for this attack.', GRANT_DESPERATE_ATTACK, { attacker: { damaged: true } })) // Desperate Attack
+
+const GRANT_GRIM_RESOLVE = 'GRANT_GRIM_RESOLVE'
+registerCard(GRANT_GRIM_RESOLVE, { sourceCardId: 'TWI_172', conditionalKeywords: () => [{ name: 'Grit' }] })
+registerCard('TWI_172', attackWithRider('Attack with a non-leader unit. It gains Grit for this attack.', GRANT_GRIM_RESOLVE, { attacker: { nonLeader: true } })) // Grim Resolve
+
+const GRANT_REBEL_ASSAULT = 'GRANT_REBEL_ASSAULT'
+const GRANT_REBEL_ASSAULT_SECOND = 'GRANT_REBEL_ASSAULT_SECOND'
+registerCard(GRANT_REBEL_ASSAULT_SECOND, { sourceCardId: 'SOR_103', ...attackBonus(1) })
+registerCard(GRANT_REBEL_ASSAULT, {
+  sourceCardId: 'SOR_103',
+  ...attackBonus(1),
+  abilities: [thenAttack('Then, attack with another Rebel unit. It gets +1/+0 for this attack.', { attacker: { trait: 'Rebel' }, grantCardId: GRANT_REBEL_ASSAULT_SECOND })],
+})
+registerCard('SOR_103', attackWithRider('Attack with a Rebel unit. It gets +1/+0 for this attack. Then, attack with another Rebel unit. It gets +1/+0 for this attack.', GRANT_REBEL_ASSAULT, { attacker: { trait: 'Rebel' } })) // Rebel Assault
+
+const GRANT_NIMAN_STRIKE = 'GRANT_NIMAN_STRIKE'
+registerCard(GRANT_NIMAN_STRIKE, { sourceCardId: 'LOF_124', ...attackBonus(1), cannotAttackBases: () => true })
+registerCard('LOF_124', attackWithRider("Attack with a Force unit, even if it's exhausted. It gets +1/+0 and can't attack bases for this attack.", GRANT_NIMAN_STRIKE, { attacker: { trait: 'Force' }, exhausted: true })) // Niman Strike
+
+const GRANT_DOGFIGHT = 'GRANT_DOGFIGHT'
+registerCard(GRANT_DOGFIGHT, { sourceCardId: 'JTL_123', cannotAttackBases: () => true })
+registerCard('JTL_123', attackWithRider("Attack with a unit, even if it's exhausted. That unit can't attack bases for this attack.", GRANT_DOGFIGHT, { exhausted: true })) // Dogfight
+
+const GRANT_CATCH_UNAWARES = 'GRANT_CATCH_UNAWARES'
+registerCard(GRANT_CATCH_UNAWARES, { sourceCardId: 'SEC_229', aura: defenderPowerAura(-4) })
+registerCard('SEC_229', attackWithRider('Attack with a unit. The defender gets -4/-0 for this attack.', GRANT_CATCH_UNAWARES)) // Catch Unawares
+
+const GRANT_SWOOP_DOWN = 'GRANT_SWOOP_DOWN'
+registerCard(GRANT_SWOOP_DOWN, {
+  sourceCardId: 'SHD_230',
+  conditionalKeywords: () => [{ name: 'Saboteur' }],
+  attacksEitherArena: () => true,
+  statModifier: (_s, _u, ctx) => (ctx.attacking && ctx.defenderArena === 'ground' ? { power: 2 } : {}),
+  aura: defenderPowerAura(-2, target => target.arena === 'ground'),
+})
+registerCard('SHD_230', attackWithRider('Attack with a space unit. It gains Saboteur and can attack ground units for this attack. If it attacks a ground unit, it gets +2/+0 and the defender gets -2/-0 for this attack.', GRANT_SWOOP_DOWN, { attacker: { arena: 'space' } })) // Swoop Down
+
+const GRANT_OUTFLANK = 'GRANT_OUTFLANK'
+registerCard(GRANT_OUTFLANK, { abilities: [thenAttack('Then, attack with a second unit.')] })
+registerCard('TWI_123', attackWithRider('Attack with 2 units (one at a time).', GRANT_OUTFLANK)) // Outflank
+registerCard('SHD_128', attackWithRider('Attack with 2 units (one at a time).', GRANT_OUTFLANK)) // Outflank
+
+const GRANT_ATTACK_RUN = 'GRANT_ATTACK_RUN'
+registerCard(GRANT_ATTACK_RUN, { sourceCardId: 'JTL_261', abilities: [thenAttack('Then, attack with a second space unit.', { attacker: { arena: 'space' } })] })
+registerCard('JTL_261', attackWithRider('Attack with 2 space units (one at a time).', GRANT_ATTACK_RUN, { attacker: { arena: 'space' } })) // Attack Run
+
+/** Headhunting's rider for one of its up to three attacks, offering the next while any remain. */
+const headhunting = (next?: string): CardDefinition => ({
+  sourceCardId: 'SHD_145',
+  cannotAttackBases: () => true,
+  statModifier: (s, u, ctx) => (ctx.attacking && unitHasTrait(s, u, 'Bounty Hunter') ? { power: 2 } : {}),
+  ...(next ? { abilities: [thenAttack('You may attack with another unit.', { grantCardId: next, optional: true })] } : {}),
+})
+const GRANT_HEADHUNTING_THIRD = 'GRANT_HEADHUNTING_THIRD'
+const GRANT_HEADHUNTING_SECOND = 'GRANT_HEADHUNTING_SECOND'
+const GRANT_HEADHUNTING = 'GRANT_HEADHUNTING'
+registerCard(GRANT_HEADHUNTING_THIRD, headhunting())
+registerCard(GRANT_HEADHUNTING_SECOND, headhunting(GRANT_HEADHUNTING_THIRD))
+registerCard(GRANT_HEADHUNTING, headhunting(GRANT_HEADHUNTING_SECOND))
+registerCard('SHD_145', attackWithRider("Attack with up to 3 units (one at a time). They can't attack bases for these attacks. Each Bounty Hunter that attacks this way gets +2/+0 for its attack.", GRANT_HEADHUNTING, { optional: true })) // Headhunting
+
+const GRANT_TANDEM_ASSAULT = 'GRANT_TANDEM_ASSAULT'
+const GRANT_TANDEM_ASSAULT_GROUND = 'GRANT_TANDEM_ASSAULT_GROUND'
+registerCard(GRANT_TANDEM_ASSAULT_GROUND, { sourceCardId: 'JTL_124', ...attackBonus(2) })
+registerCard(GRANT_TANDEM_ASSAULT, {
+  sourceCardId: 'JTL_124',
+  abilities: [thenAttack('If you do, attack with a ground unit, and that ground unit gets +2/+0 for this attack.', { attacker: { arena: 'ground' }, grantCardId: GRANT_TANDEM_ASSAULT_GROUND })],
+})
+registerCard('JTL_124', attackWithRider('Attack with a space unit. If you do, attack with a ground unit, and that ground unit gets +2/+0 for this attack.', GRANT_TANDEM_ASSAULT, { attacker: { arena: 'space' } })) // Tandem Assault
+
+/** Brothers' rider: no combat damage to the attacker, and the second attack offered after the first. */
+const brothers = (next?: string): CardDefinition => ({
+  sourceCardId: 'TS26_59',
+  preventUnitDamage: (_s, self, target, amount, ctx) => (ctx.byCombat && target.instanceId === self.instanceId ? amount : 0),
+  ...(next ? { abilities: [thenAttack('You may attack with another unique unit.', { attacker: { unique: true }, grantCardId: next, optional: true })] } : {}),
+})
+const GRANT_BROTHERS_SECOND = 'GRANT_BROTHERS_SECOND'
+const GRANT_BROTHERS = 'GRANT_BROTHERS'
+registerCard(GRANT_BROTHERS_SECOND, brothers())
+registerCard(GRANT_BROTHERS, brothers(GRANT_BROTHERS_SECOND))
+registerCard('TS26_59', attackWithRider('Attack with up to 2 unique units (one at a time). Prevent all combat damage that would be dealt to each of them for these attacks.', GRANT_BROTHERS, { attacker: { unique: true }, optional: true })) // Brothers
+
+const GRANT_ACCELERATE_OUR_PLANS = 'GRANT_ACCELERATE_OUR_PLANS'
+registerCard(GRANT_ACCELERATE_OUR_PLANS, { sourceCardId: 'SEC_228', ...attackBonus(3) })
+registerCard('SEC_228', whenPlayed('Exhaust a friendly unit. If you do, attack with another unit. It gets +3/+0 for this attack.', (s, ctx) => { // Accelerate Our Plans
+  // A unit already exhausted cannot be exhausted, so "if you do" never holds for one.
+  const targets = s.players[ctx.owner].units.filter(u => !u.exhausted).map(u => u.instanceId)
+  return targets.length
+    ? pushChoice(s, { kind: 'mayExhaustUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, thenAttackWithAnother: { grantCardId: GRANT_ACCELERATE_OUR_PLANS } })
+    : s
+}))
+
+const GRANT_COMMENCE_THE_FESTIVITIES = 'GRANT_COMMENCE_THE_FESTIVITIES'
+registerCard(GRANT_COMMENCE_THE_FESTIVITIES, {
+  sourceCardId: 'LAW_202',
+  conditionalKeywords: () => [{ name: 'Saboteur' }],
+  statModifier: (s, u, ctx) => {
+    const owner = unitOwner(s, u)
+    return ctx.attacking && owner !== undefined && s.players[owner].resources.length < s.players[opponentOf(owner)].resources.length ? { power: 2 } : {}
+  },
+})
+registerCard('LAW_202', attackWithRider('Attack with a unit. It gains Saboteur for this attack. If you control fewer resources than an opponent, it gets +2/+0 for this attack.', GRANT_COMMENCE_THE_FESTIVITIES)) // Commence the Festivities
+
+const GRANT_FLASH_THE_VENTS = 'GRANT_FLASH_THE_VENTS'
+registerCard(GRANT_FLASH_THE_VENTS, {
+  sourceCardId: 'LAW_205',
+  ...attackBonus(2),
+  conditionalKeywords: () => [{ name: 'Overwhelm' }],
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: 'After completing this attack, if that unit damaged a base, defeat that unit.',
+    effect: (s, ctx) => ((ctx.combatDamageToBase ?? 0) > 0 && findUnit(s, ctx.sourceInstanceId!) ? defeatUnit(s, ctx.sourceInstanceId!) : s),
+  }],
+})
+registerCard('LAW_205', attackWithRider('Attack with a unit. It gets +2/+0 and gains Overwhelm for this attack. After completing this attack, if that unit damaged a base, defeat that unit.', GRANT_FLASH_THE_VENTS)) // Flash the Vents
+
+const GRANT_AGGRESSIVE_NEGOTIATIONS = 'GRANT_AGGRESSIVE_NEGOTIATIONS'
+registerCard(GRANT_AGGRESSIVE_NEGOTIATIONS, {
+  sourceCardId: 'SEC_179',
+  statModifier: (s, u, ctx) => {
+    const owner = unitOwner(s, u)
+    return ctx.attacking && owner !== undefined ? { power: s.players[owner].hand.length } : {}
+  },
+})
+registerCard('SEC_179', attackWithRider('Attack with a unit. For this attack, it gets +1/+0 for each card in your hand.', GRANT_AGGRESSIVE_NEGOTIATIONS)) // Aggressive Negotiations
+
+const GRANT_CORNER_THE_PREY = 'GRANT_CORNER_THE_PREY'
+registerCard(GRANT_CORNER_THE_PREY, {
+  sourceCardId: 'TWI_139',
+  // Read as combat damage is calculated. An On Attack or On Defense ability that damages the defender
+  // first is counted too, where the card counts only what was there as the attack began.
+  statModifier: (s, _u, ctx) => {
+    const defenderId = ctx.attacking ? ctx.combat?.defenderInstanceId : undefined
+    return defenderId ? { power: findUnit(s, defenderId)?.unit.damage ?? 0 } : {}
+  },
+})
+registerCard('TWI_139', attackWithRider('Attack with a unit. It gets +1/+0 for this attack for each damage on the defender at the start of this attack.', GRANT_CORNER_THE_PREY)) // Corner the Prey
+
+const GRANT_BARREL_ROLL = 'GRANT_BARREL_ROLL'
+registerCard(GRANT_BARREL_ROLL, {
+  sourceCardId: 'JTL_228',
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: 'After completing this attack, you may exhaust a space unit.',
+    effect: (s, ctx) => {
+      const targets = allUnits(s).filter(u => u.arena === 'space' && !u.exhausted).map(u => u.instanceId)
+      return targets.length ? pushChoice(s, { kind: 'mayExhaustUnit', id: `${ctx.sourceInstanceId}-barrel`, controller: ctx.owner, targets, optional: true }) : s
+    },
+  }],
+})
+registerCard('JTL_228', attackWithRider('Attack with a space unit. After completing this attack, you may exhaust a space unit.', GRANT_BARREL_ROLL, { attacker: { arena: 'space' } })) // Barrel Roll
+
+const GRANT_I_HAVE_YOU_NOW = 'GRANT_I_HAVE_YOU_NOW'
+registerCard(GRANT_I_HAVE_YOU_NOW, {
+  sourceCardId: 'JTL_193',
+  preventUnitDamage: (_s, self, target, amount) => (target.instanceId === self.instanceId ? amount : 0),
+})
+registerCard('JTL_193', attackWithRider('Attack with a Vehicle unit. Prevent all damage that would be dealt to it during this attack.', GRANT_I_HAVE_YOU_NOW, { attacker: { trait: 'Vehicle' } })) // I Have You Now
+
+// The granted "When this unit deals damage to a base" and "When this unit deals combat damage" are
+// read as the attack ends, from what the attack dealt. Nothing else can happen between the damage
+// and the end of the attack that either ability would see differently, apart from the order among
+// other attack-end abilities.
+const GRANT_STAY_ON_TARGET = 'GRANT_STAY_ON_TARGET'
+registerCard(GRANT_STAY_ON_TARGET, {
+  sourceCardId: 'JTL_177',
+  ...attackBonus(2),
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: 'When this unit deals damage to a base: Draw a card.',
+    effect: (s, ctx) => ((ctx.combatDamageToBase ?? 0) > 0 ? drawCards(s, ctx.owner, 1) : s),
+  }],
+})
+registerCard('JTL_177', attackWithRider('Attack with a Vehicle unit. For this attack, it gets +2/+0 and gains: "When this unit deals damage to a base: Draw a card."', GRANT_STAY_ON_TARGET, { attacker: { trait: 'Vehicle' } })) // Stay on Target
+
+const GRANT_HEROIC_SACRIFICE = 'GRANT_HEROIC_SACRIFICE'
+registerCard(GRANT_HEROIC_SACRIFICE, {
+  sourceCardId: 'SOR_150',
+  ...attackBonus(2),
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: 'When this unit deals combat damage: Defeat it.',
+    effect: (s, ctx) => {
+      const dealt = (ctx.combatDamageToBase ?? 0) + (ctx.combatDamageToDefender ?? 0)
+      return dealt > 0 && findUnit(s, ctx.sourceInstanceId!) ? defeatUnit(s, ctx.sourceInstanceId!) : s
+    },
+  }],
+})
+registerCard('SOR_150', whenPlayed('Draw a card, then attack with a unit. For this attack, it gets +2/+0 and gains: "When this unit deals combat damage: Defeat it."', (s, ctx) => // Heroic Sacrifice
+  offerAttack(drawCards(s, ctx.owner, 1), ctx.owner, ctx.sourceInstanceId!, { grantCardId: GRANT_HEROIC_SACRIFICE })))
+
+const GRANT_TRENCH_RUN = 'GRANT_TRENCH_RUN'
+registerCard(GRANT_TRENCH_RUN, {
+  sourceCardId: 'JTL_156',
+  ...attackBonus(4),
+  makesDamageUnpreventable: (_s, _self, source) => source.cardId === GRANT_TRENCH_RUN,
+  abilities: [{
+    trigger: 'onAttack',
+    description: "Discard 2 cards from the defending player's deck. Deal unpreventable damage equal to the difference in the discarded cards' costs to this unit.",
+    effect: (s, ctx) => {
+      const defending = opponentOf(ctx.owner)
+      const p = s.players[defending]
+      const milled = p.deck.slice(0, 2)
+      const next = updatePlayer(s, defending, { deck: p.deck.slice(milled.length), discard: [...p.discard, ...milled] })
+      // With fewer than two cards discarded there is no pair to take a difference of.
+      if (milled.length < 2) return next
+      const [a, b] = milled.map(id => s.cards[id]?.cost ?? 0)
+      return dealDamageToUnit(next, ctx.sourceInstanceId!, Math.abs(a - b), { cardId: GRANT_TRENCH_RUN, controller: ctx.owner })
+    },
+  }],
+})
+registerCard('JTL_156', attackWithRider('Attack with a Fighter unit. For this attack, it gets +4/+0 and gains: "On Attack: Discard 2 cards from the defending player\'s deck. Deal unpreventable damage equal to the difference in the discarded cards\' costs to this unit."', GRANT_TRENCH_RUN, { attacker: { trait: 'Fighter' } })) // Trench Run
+
+registerCard('JTL_174', whenPlayed('Choose a friendly unit. For each of its "On Attack" abilities, deal 2 damage to a different enemy unit. Then, attack with the chosen unit.', (s, ctx) => { // Hotshot Maneuver
+  const targets = s.players[ctx.owner].units.map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'selectFriendlyUnit', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, then: 'hotshotManeuver' }) : s
+}))
+
+registerCard('SOR_215', whenPlayed('You may attack with attached unit.', (s, ctx) => { // Snapshot Reflexes
+  // An upgrade can be played on an enemy unit, and you can never attack with one of those.
+  const host = findUnit(s, ctx.sourceInstanceId!)
+  return host && host.owner === ctx.owner && eligibleAttacker(s, host.unit) && canAttackSomething(s, host.unit)
+    ? pushChoice(s, { kind: 'mayAttack', id: `${ctx.sourceInstanceId}-snapshot`, controller: ctx.owner, unitId: host.unit.instanceId })
+    : s
+}))
+
+registerCard('TS26_31', whenPlayed("Ready an enemy unit. If you do, it can't attack your base or units you control for this phase. Give a Shield token to a friendly unit.", (s, ctx) => { // Chaotic Diversion
+  // Only an exhausted unit can be readied, so only one of those makes "if you do" true.
+  const toReady = s.players[opponentOf(ctx.owner)].units.filter(u => u.exhausted).map(u => u.instanceId)
+  const friendly = s.players[ctx.owner].units.map(u => u.instanceId)
+  let next = toReady.length ? pushChoice(s, { kind: 'selectUnitToReady', id: ctx.sourceInstanceId!, controller: ctx.owner, targets: toReady, thenCannotAttack: true }) : s
+  if (friendly.length) next = pushChoice(next, { kind: 'mayGiveTokens', id: `${ctx.sourceInstanceId}-shield`, controller: ctx.owner, token: TOKEN_SHIELD, count: 1, targets: friendly, optional: false })
+  return next
+}))
 
 // ── When Played units and upgrades from the other sealed sets that existing choices already express ──
 // Built on the event helpers above. `ctx.sourceInstanceId` is the unit itself, or for an upgrade the unit

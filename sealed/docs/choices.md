@@ -273,6 +273,13 @@ action looks like a heal that never happened.
 - **A look that leads somewhere raises the follow-up from both answers.** Qi'ra looks at a hand and
   then names a card, and her look is view-only, so Done is the only way to answer it: a tail hung on
   the accept path alone would never fire. `lookAtHand.thenNameCard` is raised on the skip path too.
+  `multiPick.thenAttackWith` is the same rule: Hotshot Maneuver's attack follows its damage picks
+  whether they ran out or the player pressed Done.
+- **An attack that follows another waits for it to end.** "Attack with 2 units (one at a time)" lends
+  the first attacker a carrier whose attack-end ability raises the second `mayAttackAnyUnit`. Raising
+  both up front would let the second be answered while the first is still suspended on an On Defense
+  or prevention choice, since a player may answer any outstanding choice. The follow-up excludes the
+  unit that just attacked, and each step's `attacker` filter and `optional` flag come from the card.
 - **Naming a card either forbids it or prices it.** `nameCard` without a surcharge records a
   prohibition, enforced in `legalMoves` (Ryder Azadi). With one, the named card stays playable and
   costs the opponent that much more, charged in `effectiveCost` (Qi'ra). The two must not be confused:

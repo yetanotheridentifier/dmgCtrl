@@ -21,6 +21,23 @@ export const BOARD_TARGET_KINDS = [
 
 export type BoardTargetKind = (typeof BOARD_TARGET_KINDS)[number]
 
+/** "a ready unit", narrowed the way the card narrows it: "a damaged non-leader Vehicle unit". */
+function attackerPhrase(choice: PendingChoice & { kind: 'mayAttackAnyUnit' }): string {
+  const f = choice.attacker ?? {}
+  if (f.only) return 'the chosen unit'
+  const words = [
+    choice.exhausted ? undefined : 'ready',
+    f.damaged ? 'damaged' : undefined,
+    f.unique ? 'unique' : undefined,
+    f.nonLeader ? 'non-leader' : undefined,
+    f.arena,
+    f.trait,
+  ].filter((w): w is string => w !== undefined)
+  const phrase = [...words, 'unit'].join(' ')
+  if (f.exclude?.length) return `another ${phrase}`
+  return `${/^[aeiou]/i.test(phrase) ? 'an' : 'a'} ${phrase}`
+}
+
 function cardRef(state: GameState, rawId: string | undefined, controller: PlayerId): DescribePart[] {
   // A `GRANT_*` ability carrier is not a real card and has no database entry, so name the card it
   // belongs to instead. That is the card the player actually played (#374).
@@ -180,7 +197,7 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'mayAttack':
       return ['you may attack with this unit']
     case 'mayAttackAnyUnit':
-      return [`${choice.optional ? 'you may attack with a ready unit' : 'choose a ready unit to attack with'}`
+      return [`${choice.optional ? `you may attack with ${attackerPhrase(choice)}` : `choose ${attackerPhrase(choice)} to attack with`}`
         + (choice.restore > 0 ? `, it gains Restore ${choice.restore}` : '')]
 
     // ── Costs and yes/no offers ───────────────────────────────────────────────────────────────
@@ -287,6 +304,8 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       return ["choose a unit to return to its owner's hand"]
     case 'selectUnitToReady':
       return ['choose a unit to ready']
+    case 'selectFriendlyUnit':
+      return ['choose a friendly unit']
     case 'selectDistributeSource':
       return ['choose the unit whose power is spread as damage']
     case 'damageAnyBases':
