@@ -4622,3 +4622,30 @@ registerCard('SEC_180', unitThenWp("Deal 3 damage to a unit. Then, if you have t
   }))
 registerCard('TWI_171', unitThenWp('Deal 2 damage to a unit. You may deal 1 damage to another unit in the same arena.', pickAny, 'deal 2 damage to a unit', false, // Grenade Strike
   (s, ctx) => { const others = otherInArena(s, ctx.targetInstanceId!); const next = dealDamageToUnit(s, ctx.targetInstanceId!, 2); return damageChoice(next, ctx, 1, others.filter(u => findUnit(next, u.instanceId)), [], true) }))
+
+// Change of control, through `takeControlOfUnit` and its duration.
+const stealTo = (s: GameState, to: PlayerId, id: string | undefined, until?: UnitState['controlUntil']): GameState => {
+  const found = findUnit(s, id ?? '')
+  return found ? takeControlOfUnit(s, found.owner, to, found.unit.instanceId, until) : s
+}
+registerCard('SOR_224', unitThenWp('Take control of a non-leader unit. At the start of the regroup phase, its owner takes control of it.', nonLeader, 'take control of a non-leader unit', false, // Change of Heart
+  (s, ctx) => stealTo(s, ctx.owner, ctx.targetInstanceId)))
+/** A friendly and then an enemy unit (`test` narrows both), then `swap` with the pair. */
+const swapPairWp = (description: string, test: Pick, until: UnitState['controlUntil']): CardDefinition => ({
+  ...whenPlayed(description, (s, ctx) =>
+    (pickedIds(s, ctx, pickAll(pickEnemy, test)).length
+      ? unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, test)), 'choose a friendly unit to exchange', false, 'friendly')
+      : s)),
+  ifYouDo: (s, ctx) => (ctx.step === 'friendly'
+    ? unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, test)), 'choose an enemy unit to exchange', false, 'enemy', ctx.targetInstanceId)
+    : stealTo(stealTo(s, opponentOf(ctx.owner), ctx.unitChosen, until), ctx.owner, ctx.targetInstanceId, until)),
+})
+registerCard('SHD_132', swapPairWp('Choose a friendly non-leader unit and an enemy non-leader unit. Exchange control of those units.', nonLeader, 'permanent')) // Choose Sides
+// "Takes control of each unit they own" at the regroup phase is the default duration.
+registerCard('TWI_204', swapPairWp('Choose a ready non-leader unit controlled by each player. If you do, each player takes control of the chosen unit controlled by the player to their right. At the start of the regroup phase, each player takes control of each unit they own that was chosen for this ability.', // Impropriety Among Thieves
+  pickAll(nonLeader, (_s, u) => !u.exhausted), undefined))
+registerCard('LAW_085', unitThenWp('Choose a friendly non-leader unit. An opponent takes control of it. If they do, deal 4 damage to another unit in the same arena.', pickAll(pickFriendly, nonLeader), 'give a friendly non-leader unit to an opponent', false, // You Hold This
+  (s, ctx) => {
+    const others = otherInArena(s, ctx.targetInstanceId!)
+    return damageChoice(stealTo(s, opponentOf(ctx.owner), ctx.targetInstanceId, 'permanent'), ctx, 4, others)
+  }))

@@ -71,6 +71,7 @@ const F = {
   UPG2: card({ id: 'UPG2', type: 'upgrade', cost: 2, power: 1, hp: 1 }),
   LEADUPG: card({ id: 'LEADUPG', type: 'leader', cost: 3, power: 1, hp: 1 }),
   SP3: card({ id: 'SP3', arena: 'space', cost: 2, power: 2, hp: 3 }),
+  SOR_224: ev('SOR_224', 6), SHD_132: ev('SHD_132', 7), LAW_085: ev('LAW_085'), TWI_204: ev('TWI_204', 4),
   SABOTEUR: card({ id: 'SABOTEUR', arena: 'ground', cost: 2, power: 2, hp: 5, keywords: [{ name: 'Saboteur' }] }),
   OFFICIAL: card({ id: 'OFFICIAL', arena: 'ground', cost: 2, power: 1, hp: 4, traits: ['OFFICIAL'] }),
   TWO_ASP: card({ id: 'TWO_ASP', arena: 'ground', cost: 3, power: 2, hp: 5, aspects: ['Cunning', 'Heroism'] }),
@@ -847,5 +848,57 @@ describe('events that deal damage with a tail', () => {
     expect(declinable(s)).toBe(true)
     s = accept(s, { targetInstanceId: 'f' })
     expect(dmg(s, 'f')).toBe(1)
+  })
+})
+
+// ── Change of control ───────────────────────────────────────────────────────────────────────────
+
+const controllerOf = (s: GameState, id: string): PlayerId | undefined =>
+  (['player', 'opponent'] as PlayerId[]).find(p => s.players[p].units.some(u => u.instanceId === id))
+const controlUntil = (s: GameState, id: string) => U(s, id)?.controlUntil
+
+describe('events that change control', () => {
+  it('Change of Heart (SOR_224) takes control of a non-leader unit until the regroup phase', () => {
+    let s = play(board('SOR_224', {}, { units: [unit('e', 'P3'), unit('L', 'LEAD', { isLeader: true })] }))
+    expect(unitOffers(s)).toEqual(['e'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(controllerOf(s, 'e')).toBe('player')
+    expect(controlUntil(s, 'e')).toBeUndefined()
+    expect(U(s, 'e')!.owner).toBe('opponent')
+  })
+
+  it('Choose Sides (SHD_132) exchanges control of a friendly and an enemy non-leader unit for good', () => {
+    let s = play(board('SHD_132', { units: [unit('m', 'P3')] }, { units: [unit('e', 'P5')] }))
+    expect(unitOffers(s)).toEqual(['m'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect([controllerOf(s, 'm'), controllerOf(s, 'e')]).toEqual(['opponent', 'player'])
+    expect([controlUntil(s, 'm'), controlUntil(s, 'e')]).toEqual(['permanent', 'permanent'])
+  })
+
+  it('You Hold This (LAW_085) gives a friendly non-leader unit away, then deals 4 to another unit in its arena', () => {
+    let s = play(board('LAW_085', { units: [unit('m', 'P3'), unit('ms', 'SP4')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['m', 'ms'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(controllerOf(s, 'm')).toBe('opponent')
+    expect(controlUntil(s, 'm')).toBe('permanent')
+    expect(unitOffers(s)).toEqual(['e'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(4)
+  })
+
+  it('Impropriety Among Thieves (TWI_204) swaps a ready non-leader unit from each side until the regroup phase', () => {
+    let s = play(board('TWI_204', { units: [unit('m', 'P3'), unit('tired', 'P3', { exhausted: true })] }, { units: [unit('e', 'P5'), unit('L', 'LEAD', { isLeader: true })] }))
+    expect(unitOffers(s)).toEqual(['m'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect([controllerOf(s, 'm'), controllerOf(s, 'e')]).toEqual(['opponent', 'player'])
+    expect([controlUntil(s, 'm'), controlUntil(s, 'e')]).toEqual([undefined, undefined])
+    // With no ready enemy non-leader unit, nothing is chosen at all.
+    noChoice(play(board('TWI_204', { units: [unit('m', 'P3')] }, { units: [unit('e', 'P5', { exhausted: true })] })))
   })
 })
