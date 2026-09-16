@@ -354,9 +354,23 @@ Jabba's free plays), from a deck search (Reforge), from the resource zone (The A
 card out of its zone and deals with the cost; the door attaches it, records it as played (for the phase,
 and on the host for the round), fires the upgrade's own When Played in one batch with the host's attach
 reactions (with `upgradePlayed`, so "when you play an upgrade on this unit" fires too), and runs the
-unique rule. An attach that is not a play (a token given by an effect, a Shield on a Shielded unit
-entering, Jocasta Nu moving an upgrade) does not count as played. `upgradeAttachSites.test.ts` counts
-the engine's appends to a unit's upgrades, so a new hand-built attach fails until it is classified.
+unique rule.
+
+**Every attach, played or not, is one write**, `attachUpgrades` in `effects.ts`, which only the door calls
+with `played`. The attaches that are not plays still fire the new host's "when 1 or more upgrades attach
+to this unit" (Sabine Wren), but not "when you play an upgrade on this unit" (Gar Saxon), and never count
+as played:
+
+| attach | why it is not a play | host's attach reaction |
+| --- | --- | --- |
+| a token given by an effect (`giveTokens`) | tokens are created, not played (CR 3.7.2, 3.7.2b) | fired once per grant |
+| the Shield on a Shielded unit entering (`applyEntryKeywords`) | Shielded gives a Shield token (CR 7.5.12a) | fired in the unit's entry batch |
+| Jocasta Nu moving an upgrade to a different unit | the upgrade detaches and attaches simultaneously (CR 3.6.14) | fired on the new host |
+
+Detaching is not being defeated, so a move fires nothing on the old host ("when a friendly upgrade is
+defeated" stays silent). A leader deploying with Shielded gets its Shield without an attach reaction
+firing; no leader has one. `upgradeAttachSites.test.ts` checks that `attachUpgrades` is the only append to
+a unit's upgrades and names every call to it, so a new attach fails until it is classified.
 
 ## Unique rule
 
