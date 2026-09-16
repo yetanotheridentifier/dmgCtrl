@@ -6,8 +6,8 @@ import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helper
 import type { Action } from '../engine/actions'
 import type { EngineCard, GameState, PendingChoice, PlayerId, UnitState } from '../engine/types'
 import { recordBaseDamaged, recordUnitDefeated } from '../engine/types'
-import { unitHasKeyword, unitCannotAttackBases } from '../engine/keywords'
-import { effectivePower } from '../engine/stats'
+import { unitHasKeyword, unitCannotAttackBases, unitCannotBeAttacked } from '../engine/keywords'
+import { effectivePower, effectiveHp } from '../engine/stats'
 import { effectiveCost } from '../engine/legalMoves'
 import { TOKEN_SHIELD, hasToken } from '../engine/tokenUpgrades'
 
@@ -57,6 +57,14 @@ const F = {
   LAW_226: ev('LAW_226', 2), JTL_230: ev('JTL_230'), SHD_227: ev('SHD_227', 0), JTL_194: ev('JTL_194', 2),
   LOF_223: ev('LOF_223', 2), JTL_178: ev('JTL_178', 3), JTL_206: ev('JTL_206'), LAW_043: ev('LAW_043', 5),
   SHD_182: ev('SHD_182', 5),
+
+  SEC_091: ev('SEC_091', 4), SOR_106: ev('SOR_106', 3), JTL_253: ev('JTL_253', 2), JTL_042: ev('JTL_042', 3),
+  TWI_153: ev('TWI_153', 3), TWI_249: ev('TWI_249', 2), JTL_106: ev('JTL_106', 6), TWI_055: ev('TWI_055', 3),
+  LAW_041: ev('LAW_041', 5), LOF_262: ev('LOF_262', 2), JTL_077: ev('JTL_077', 2),
+  REPUBLIC: card({ id: 'REPUBLIC', arena: 'ground', cost: 2, power: 2, hp: 5, traits: ['REPUBLIC', 'CLONE'] }),
+  SEPARATIST: card({ id: 'SEPARATIST', arena: 'ground', cost: 2, power: 2, hp: 5, traits: ['SEPARATIST', 'DROID'] }),
+  CLONE: card({ id: 'CLONE', arena: 'space', cost: 2, power: 2, hp: 5, traits: ['CLONE'] }),
+  SABOTEUR: card({ id: 'SABOTEUR', arena: 'ground', cost: 2, power: 2, hp: 5, keywords: [{ name: 'Saboteur' }] }),
   OFFICIAL: card({ id: 'OFFICIAL', arena: 'ground', cost: 2, power: 1, hp: 4, traits: ['OFFICIAL'] }),
   TWO_ASP: card({ id: 'TWO_ASP', arena: 'ground', cost: 3, power: 2, hp: 5, aspects: ['Cunning', 'Heroism'] }),
   DROID: card({ id: 'DROID', arena: 'ground', cost: 2, power: 2, hp: 5, traits: ['DROID'] }),
@@ -588,5 +596,102 @@ describe('events that exhaust or ready units', () => {
     expect(effectiveCost(recordUnitDefeated(b, 'opponent', 'P3'), 'player', F.SHD_182)).toBe(3)
     const s = accept(play(b), { targetInstanceId: 'm' })
     expect(exhausted(s, 'm')).toEqual([false])
+  })
+})
+
+// ── Phase-long changes to units ─────────────────────────────────────────────────────────────────
+
+const stats = (s: GameState, id: string) => { const u = U(s, id)!; return [effectivePower(s, u), effectiveHp(s, u)] }
+
+describe('events that change units for this phase', () => {
+  it('Corporate Warmongering (SEC_091): +3/+3 to one friendly unit and +1/+1 to each other', () => {
+    let s = play(board('SEC_091', { units: [unit('a', 'P3'), unit('b', 'P2')] }, { units: [unit('e', 'P3')] }))
+    expect(unitOffers(s)).toEqual(['a', 'b'])
+    s = accept(s, { targetInstanceId: 'a' })
+    expect([stats(s, 'a'), stats(s, 'b'), stats(s, 'e')]).toEqual([[6, 8], [3, 6], [3, 5]])
+  })
+
+  it('Attack Pattern Delta (SOR_106): +3/+3, +2/+2 and +1/+1 to three different friendly units', () => {
+    let s = play(board('SOR_106', { units: [unit('a', 'P3'), unit('b', 'P2'), unit('c', 'P5')] }))
+    s = accept(s, { targetInstanceId: 'b' })
+    expect(unitOffers(s)).toEqual(['a', 'c'])
+    s = accept(s, { targetInstanceId: 'c' })
+    expect(unitOffers(s)).toEqual(['a'])
+    s = accept(s, { targetInstanceId: 'a' })
+    noChoice(s)
+    expect([stats(s, 'a'), stats(s, 'b'), stats(s, 'c')]).toEqual([[4, 6], [5, 8], [7, 10]])
+  })
+
+  it('Coordinated Front (JTL_253) may give a ground and a space unit +2/+2', () => {
+    const s = play(board('JTL_253', { units: [unit('g', 'P3'), unit('sp', 'SP4')] }))
+    const kinds = (s.pendingChoices ?? []).map(c => ('targets' in c ? c.targets : []))
+    expect(kinds).toEqual([['g'], ['sp']])
+    expect(declinable(s)).toBe(true)
+    const done = accept(skip(s), { targetInstanceId: 'sp' })
+    expect([stats(done, 'g'), stats(done, 'sp')]).toEqual([[3, 5], [6, 22]])
+  })
+
+  it('Power from Pain (JTL_042): +1/+0 for each damage on the unit', () => {
+    const s = accept(play(board('JTL_042', { units: [unit('a', 'BIG', { damage: 4 })] })), { targetInstanceId: 'a' })
+    expect(stats(s, 'a')).toEqual([5, 20])
+  })
+
+  it('Bold Resistance (TWI_153): up to 3 units sharing a Trait get +2/+0', () => {
+    let s = play(board('TWI_153', { units: [unit('r', 'REPUBLIC'), unit('c', 'CLONE'), unit('x', 'SEPARATIST'), unit('p', 'P3')] }))
+    // P3 has no Trait, so it shares none with anything.
+    expect(unitOffers(s)).toEqual(['c', 'r', 'x'])
+    expect(declinable(s)).toBe(true)
+    s = accept(s, { targetInstanceId: 'r' })
+    expect(unitOffers(s)).toEqual(['c'])
+    s = accept(s, { targetInstanceId: 'c' })
+    noChoice(s)
+    expect([stats(s, 'r'), stats(s, 'c'), stats(s, 'x')]).toEqual([[4, 5], [4, 5], [2, 5]])
+  })
+
+  it('Heroes on Both Sides (TWI_249): up to one Republic and one Separatist unit get +2/+2 and Saboteur', () => {
+    const s = play(board('TWI_249', { units: [unit('r', 'REPUBLIC'), unit('p', 'P3')] }, { units: [unit('x', 'SEPARATIST')] }))
+    expect((s.pendingChoices ?? []).map(c => ('targets' in c ? c.targets : []))).toEqual([['r'], ['x']])
+    const done = accept(s, { targetInstanceId: 'r' })
+    expect(stats(done, 'r')).toEqual([4, 7])
+    expect(unitHasKeyword(done, U(done, 'r')!, 'Saboteur')).toBe(true)
+  })
+
+  it('Unity of Purpose (JTL_106): +1/+1 to each unit you control per differently named friendly unit', () => {
+    const s = play(board('JTL_106', { units: [unit('a', 'P3'), unit('b', 'P3'), unit('c', 'P2')] }, { units: [unit('e', 'P3')] }))
+    noChoice(s)
+    expect([stats(s, 'a'), stats(s, 'c'), stats(s, 'e')]).toEqual([[5, 7], [4, 7], [3, 5]])
+  })
+
+  it('Equalize (TWI_055): -2/-2, then another unit -2/-2 if you control fewer units than its controller', () => {
+    let s = play(board('TWI_055', { units: [unit('m', 'BIG')] }, { units: [unit('e', 'BIG'), unit('f', 'BIG')] }))
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(effectiveHp(s, U(s, 'e')!)).toBe(18)
+    expect(unitOffers(s)).toEqual(['f', 'm'])
+    s = accept(s, { targetInstanceId: 'f' })
+    expect(effectiveHp(s, U(s, 'f')!)).toBe(18)
+    const even = accept(play(board('TWI_055', { units: [unit('m', 'BIG')] }, { units: [unit('e', 'BIG')] })), { targetInstanceId: 'e' })
+    noChoice(even)
+  })
+
+  it('Nothing Left to Fear (LAW_041): +2/+2, then may defeat a non-leader unit with no more power', () => {
+    let s = play(board('LAW_041', { units: [unit('m', 'P2')] }, { units: [unit('weak', 'P3'), unit('strong', 'P5'), unit('L', 'LEAD', { isLeader: true })] }))
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(stats(s, 'm')).toEqual([4, 7])
+    expect(unitOffers(s)).toEqual(['m', 'weak'])
+    expect(declinable(s)).toBe(true)
+    s = accept(s, { targetInstanceId: 'weak' })
+    expect(U(s, 'weak')).toBeUndefined()
+  })
+
+  it("Go Into Hiding (LOF_262): a unit can't be attacked this phase unless it has Sentinel", () => {
+    const s = accept(play(board('LOF_262', { units: [unit('m', 'P3')] })), { targetInstanceId: 'm' })
+    expect(unitCannotBeAttacked(s, U(s, 'm')!)).toBe(true)
+  })
+
+  it('In the Heat of Battle (JTL_077): each unit gains Sentinel and loses Saboteur', () => {
+    const s = play(board('JTL_077', { units: [unit('m', 'SABOTEUR')] }, { units: [unit('e', 'P3')] }))
+    noChoice(s)
+    for (const id of ['m', 'e']) expect(unitHasKeyword(s, U(s, id)!, 'Sentinel')).toBe(true)
+    expect(unitHasKeyword(s, U(s, 'm')!, 'Saboteur')).toBe(false)
   })
 })

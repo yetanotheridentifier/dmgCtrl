@@ -4444,3 +4444,77 @@ registerCard('SHD_182', { // Bravado
   costModifier: (s, playerId) => (defeatedThisPhase(s, opponentOf(playerId)).length > 0 ? -2 : 0),
   ...readyEvent("If you've defeated an enemy unit this phase, this event costs 2 less to play. Ready a unit.", () => true),
 })
+
+// Phase-long changes to units. A card that picks several units in turn carries the picks so far in its
+// step (`picks:<id>,<id>`), so "another" and "share a Trait" can be checked against them.
+const picksOf = (step: string | undefined): string[] => (step?.startsWith('picks:') ? step.slice('picks:'.length).split(',').filter(Boolean) : [])
+const picksStep = (ids: string[]): string => `picks:${ids.join(',')}`
+
+registerCard('SEC_091', unitThenWp('Give a friendly unit +3/+3 for this phase. Give each other friendly unit +1/+1 for this phase.', pickFriendly, 'give a friendly unit +3/+3', false, // Corporate Warmongering
+  (s, ctx) => s.players[ctx.owner].units.reduce((acc, u) =>
+    addLastingEffect(acc, u.instanceId === ctx.targetInstanceId ? { targetInstanceId: u.instanceId, power: 3, hp: 3 } : { targetInstanceId: u.instanceId, power: 1, hp: 1 }), s)))
+const DELTA = [3, 2, 1]
+registerCard('SOR_106', { // Attack Pattern Delta
+  ...whenPlayed('Give a friendly unit +3/+3 for this phase. Give another friendly unit +2/+2 for this phase. Give a third friendly unit +1/+1 for this phase.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'give a friendly unit +3/+3', false, picksStep([]))),
+  ifYouDo: (s, ctx) => {
+    const before = picksOf(ctx.step)
+    const amount = DELTA[before.length]
+    const next = addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, power: amount, hp: amount })
+    const picks = [...before, ctx.targetInstanceId!]
+    const more = DELTA[picks.length]
+    return more ? unitThen(next, ctx, pickedIds(next, ctx, pickFriendly).filter(id => !picks.includes(id)), `give another friendly unit +${more}/+${more}`, false, picksStep(picks)) : next
+  },
+})
+registerCard('JTL_253', whenPlayed('You may give a ground unit +2/+2 for this phase. You may give a space unit +2/+2 for this phase.', (s, ctx) => // Coordinated Front
+  lastingBuffChoice(lastingBuffChoice(s, { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-ground` }, pickedIds(s, ctx, pickGround), { power: 2, hp: 2 }, true),
+    { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-space` }, pickedIds(s, ctx, pickArena('space')), { power: 2, hp: 2 }, true)))
+registerCard('JTL_042', unitThenWp('Give a unit +1/+0 for this phase for each damage on it.', pickAny, 'give a unit +1/+0 for each damage on it', false, // Power from Pain
+  (s, ctx) => { const u = findUnit(s, ctx.targetInstanceId!)?.unit; return u ? addLastingEffect(s, { targetInstanceId: u.instanceId, power: u.damage }) : s }))
+registerCard('TWI_153', { // Bold Resistance
+  ...whenPlayed('Choose up to 3 units that share the same Trait. Each of those units gets +2/+0 for this phase.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, (st, u) => unitTraits(st, u).length > 0), 'give a unit +2/+0', true, picksStep([]))),
+  ifYouDo: (s, ctx) => {
+    const picks = [...picksOf(ctx.step), ctx.targetInstanceId!]
+    const next = addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, power: 2 })
+    if (picks.length >= 3) return next
+    // A Trait every unit picked so far has, so every further pick must have one of them too.
+    const lower = (u: UnitState | undefined) => (u ? unitTraits(next, u).map(t => t.toLowerCase()) : [])
+    const shared = picks.map(id => lower(findUnit(next, id)?.unit)).reduce((acc, ts) => acc.filter(t => ts.includes(t)))
+    const targets = pickedIds(next, ctx, (_st, u) => !picks.includes(u.instanceId) && lower(u).some(t => shared.includes(t)))
+    return unitThen(next, ctx, targets, 'give another unit sharing that Trait +2/+0', true, picksStep(picks))
+  },
+})
+registerCard('TWI_249', whenPlayed('Choose up to 1 Republic unit and up to 1 Separatist unit. Give each chosen unit +2/+2 and Saboteur for this phase.', (s, ctx) => { // Heroes on Both Sides
+  const buff = { power: 2, hp: 2, keywords: [KW.saboteur] }
+  return lastingBuffChoice(lastingBuffChoice(s, { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-republic` }, pickedIds(s, ctx, pickTrait('Republic')), buff, true),
+    { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-separatist` }, pickedIds(s, ctx, pickTrait('Separatist')), buff, true)
+}))
+registerCard('JTL_106', whenPlayed('For each friendly unit with a different name, give each unit you control +1/+1 for this phase.', (s, ctx) => { // Unity of Purpose
+  const units = s.players[ctx.owner].units
+  const n = new Set(units.map(u => cardOf(s, u)?.name ?? u.cardId)).size
+  return n > 0 ? units.reduce((acc, u) => addLastingEffect(acc, { targetInstanceId: u.instanceId, power: n, hp: n }), s) : s
+}))
+registerCard('TWI_055', { // Equalize
+  ...whenPlayed('Give a unit -2/-2 for this phase. Then, if you control fewer units than that unit\'s controller, give another unit -2/-2 for this phase.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'give a unit -2/-2', false, 'first')),
+  ifYouDo: (s, ctx) => {
+    const found = findUnit(s, ctx.targetInstanceId!)
+    if (!found) return s
+    const next = addLastingEffect(s, { targetInstanceId: found.unit.instanceId, power: -2, hp: -2 })
+    if (ctx.step !== 'first' || s.players[ctx.owner].units.length >= s.players[found.owner].units.length) return next
+    return unitThen(next, ctx, pickedIds(next, ctx, pickAny).filter(id => id !== found.unit.instanceId), 'give another unit -2/-2', false, 'second')
+  },
+})
+registerCard('LAW_041', unitThenWp('Choose a friendly unit and give it +2/+2 for this phase. Then, you may defeat a non-leader unit with power equal to or less than the chosen unit.', pickFriendly, 'give a friendly unit +2/+2', false, // Nothing Left to Fear
+  (s, ctx) => {
+    const next = addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, power: 2, hp: 2 })
+    const chosen = findUnit(next, ctx.targetInstanceId!)?.unit
+    if (!chosen) return next
+    const bar = effectivePower(next, chosen)
+    return targetChoice(next, ctx, 'selectUnitToDefeat', pickedIds(next, ctx, pickAll(nonLeader, (st, u) => effectivePower(st, u) <= bar)), true)
+  }))
+registerCard('LOF_262', unitThenWp("Choose a unit. It can't be attacked this phase (unless it has Sentinel).", pickAny, "choose a unit that can't be attacked this phase", false, // Go Into Hiding
+  (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, cannotBeAttacked: true, unlessSentinel: true })))
+registerCard('JTL_077', whenPlayed('Each unit gains Sentinel and loses Saboteur for this phase.', s => // In the Heat of Battle
+  allUnits(s).reduce((acc, u) => addLastingEffect(acc, { targetInstanceId: u.instanceId, keywords: [KW.sentinel], removeKeywords: ['Saboteur'] }), s)))
