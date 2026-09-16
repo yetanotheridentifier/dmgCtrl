@@ -128,7 +128,7 @@ describe('Gar Saxon (047) — a Mandalorian token when an upgrade is played on h
     expect(p.pendingChoices ?? []).toHaveLength(0)
   })
 
-  /** A token given to him attaches but is created, not played (CR 7.2), so it is no play on him. */
+  /** A token given to him attaches but is created, not played (CR 3.7.2), so it is no play on him. */
   it('does not trigger for a token given to him, nor count it as played', () => {
     const given = giveTokens(withGar(), 'gar', TOKEN_SHIELD, 1)
     expect(given.players.player.units[0].upgrades).toEqual([{ cardId: TOKEN_SHIELD, owner: 'player' }])

@@ -363,8 +363,8 @@ as played:
 
 | attach | why it is not a play | host's attach reaction |
 | --- | --- | --- |
-| a token given by an effect (`giveTokens`) | tokens are created, not played (CR 7.2, 7.2b) | fired once per grant |
-| the Shield on a Shielded unit entering (`applyEntryKeywords`) | Shielded gives a Shield token | fired in the unit's entry batch |
+| a token given by an effect (`giveTokens`) | tokens are created, not played (CR 3.7.2, 3.7.2b) | fired once per grant |
+| the Shield on a Shielded unit entering (`applyEntryKeywords`) | Shielded gives a Shield token (CR 7.5.12a) | fired in the unit's entry batch |
 | Jocasta Nu moving an upgrade to a different unit | the upgrade detaches and attaches simultaneously (CR 3.6.14) | fired on the new host |
 
 Detaching is not being defeated, so a move fires nothing on the old host ("when a friendly upgrade is

@@ -19,7 +19,7 @@ import { join } from 'node:path'
  *   instead, and nothing here changes;
  * - **an attach that is not a play** (a token given by an effect, a Shield on entry, an upgrade moved from
  *   one unit to another): add it to the list below, and fire the host's attach reactions without
- *   `upgradePlayed` (tokens are created, CR 7.2; a move detaches and attaches, CR 3.6.14).
+ *   `upgradePlayed` (tokens are created, CR 3.7.2; a move detaches and attaches, CR 3.6.14).
  *
  * Counting text is crude, and deliberately so: it catches the one thing it is for without knowing anything
  * about how an append is written beyond the spread.

@@ -136,7 +136,7 @@ export function giveTokens(state: GameState, instanceId: string, tokenId: string
  *
  * - **played** (`played` true, only from `playUpgradeCardOnto`): also counts toward the unit's
  *   `upgradesPlayedThisRound`;
- * - **created** (a token given by an effect, the Shield from Shielded, CR 7.2 and 7.2b) and **moved** from
+ * - **created** (a token given by an effect, the Shield from Shielded, CR 3.7.2 and 3.7.2b) and **moved** from
  *   another unit (CR 3.6.14: detached and attached simultaneously): attached, never played.
  *
  * It fires nothing, because an attach belongs to whatever batch the event that caused it is building (a
