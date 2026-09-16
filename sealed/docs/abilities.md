@@ -103,6 +103,13 @@ its test counts only ids shaped `<SET>_<number>`, so a pseudo card is left out a
 The unit's ready state is not part of that: entering ready so Ambush can attack is part of entering
 play, and stays in `enterUnit`.
 
+**Shielded and Hidden are read from the unit's LIVE keywords once it is in play** (`applyEntryKeywords`,
+shared by a unit played from hand and a leader deploying), for the same reason Ambush is: a unit can
+gain either one only once there is a unit to look at. Privateer Scyk has Shielded while you control
+another Cunning unit, and every friendly Inquisitor gains Hidden from the Grand Inquisitor; read from
+the card alone, both are silently dropped. The Shield token is attached before anything reacts to the
+unit arriving, so "when 1 or more upgrades attach to this unit" still fires for it.
+
 ### Trigger points
 
 `whenPlayed`, `onAttack`, `onAttackEnd`, `onDefense`, `whenDefeated`, `whenReadies`,
@@ -154,6 +161,13 @@ Card-type-agnostic, all on `CardDefinition`:
 | `attacksEitherArena` | may attack units in either arena, not just its own |
 | `cannotAttackBases` | the enemy base is not a legal attack target |
 | `cannotBeAttacked` | not a legal target, and not a forced Sentinel target either |
+| `cannotAttack` | may not declare an attack at all, on a unit or a base |
+| `preventUnitDamage` | stops some of an instance of damage, with nothing to decide |
+| `suppressesBaseHealing` | bases can't be healed while this card is in play |
+| `readiesInRegroup` | whether this unit readies at regroup; absent means it does |
+| `printedStats` | replaces a unit's printed power/HP, before upgrades are added |
+| `enemyCostDelta` | changes what an **opponent** pays for a card |
+| `halvesCosts` | its controller pays half, rounded up, applied last |
 | `providesAspects` | supplies aspect icons while paying costs |
 | `deployCondition` | replaces the resource gate on deploying a leader |
 | `suppressesFriendlyAdvantage` | Advantage tokens are not spent after combat |

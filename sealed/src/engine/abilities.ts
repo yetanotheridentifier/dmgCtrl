@@ -1,4 +1,4 @@
-import type { EngineCard, GameState, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext } from './types'
+import type { Arena, EngineCard, GameState, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext } from './types'
 import { abilityCardIds } from './types'
 
 /**
@@ -96,8 +96,12 @@ export interface CardDefinition {
   attachRestriction?: (state: GameState, target: UnitState) => boolean
   /** Cost delta when playing this card (upgrades: `target` is the attach target). */
   costModifier?: (state: GameState, playerId: PlayerId, target?: UnitState) => number
-  /** Extra keywords this card grants a unit (e.g. an upgrade granting a conditional keyword). */
-  conditionalKeywords?: (state: GameState, unit: UnitState) => KeywordInstance[]
+  /**
+   * Extra keywords this card grants a unit (e.g. an upgrade granting a conditional keyword). `ctx`
+   * carries the combat situation where there is one, so a keyword gained only while attacking a
+   * particular defender can read it; it is absent for a resting read.
+   */
+  conditionalKeywords?: (state: GameState, unit: UnitState, ctx?: StatModContext) => KeywordInstance[]
   /**
    * Keyword names this card *removes* from its unit while a condition holds — e.g. Marrok
    * loses Sentinel while upgraded. Applied after all keyword sources are gathered, so a keyword
@@ -151,9 +155,43 @@ export interface CardDefinition {
   searchModifier?: (state: GameState, unit: UnitState) => number
   /**
    * "While attacking, this unit deals combat damage before the defender" (Carson Teva).
-   * A defender defeated by that damage never deals its counter damage.
+   * A defender defeated by that damage never deals its counter damage. `ctx` carries the unit being
+   * attacked, for a card that strikes first only against some defenders (Hound's Tooth).
    */
-  dealsDamageFirst?: (state: GameState, unit: UnitState) => boolean
+  dealsDamageFirst?: (state: GameState, unit: UnitState, ctx?: AttackContext) => boolean
+  /**
+   * "This unit can't attack" (Loth-Wolf). Read by `enemyAttackTargets`, so it removes every target
+   * AND the base at once, for each of the five sources of an attack.
+   */
+  cannotAttack?: (state: GameState, unit: UnitState) => boolean
+  /**
+   * Damage this card stops on its way to a unit (Cassian Andor, Boba Fett's Armor, Malakili,
+   * Umbaran Mobile Cannon). `self` is the unit the card is on — itself, or the host for an upgrade —
+   * and `target` the unit about to be damaged. Returns how much of `amount` is prevented; every
+   * in-play unit on both sides is asked, and the total is capped at the damage itself.
+   *
+   * Distinct from `canPreventDamage`, which OFFERS the controller a choice at a cost. This one is
+   * the card doing it by itself, with nothing to decide.
+   */
+  preventUnitDamage?: (state: GameState, self: UnitState, target: UnitState, amount: number, ctx: DamagePreventionContext) => number
+  /** "Bases can't be healed" (Confederate Tri-Fighter) — both players' bases, as the card reads. */
+  suppressesBaseHealing?: (state: GameState, source: UnitState) => boolean
+  /** Whether this unit readies in the regroup phase; absent means it does (Rampart needs 4 power). */
+  readiesInRegroup?: (state: GameState, unit: UnitState) => boolean
+  /**
+   * A card that REPLACES a unit's printed power/HP ("printed power is considered to be 7"): Obi-Wan
+   * Kenobi for every friendly unit, Size Matters Not for its own host. Folded in by `withUpgrades`
+   * BEFORE upgrades are added, since an upgrade's +X still applies on top of the replacement. Must
+   * not read computed stats — it is part of that computation.
+   */
+  printedStats?: (state: GameState, source: UnitState, target: UnitState, sameController: boolean) => { power?: number; hp?: number } | undefined
+  /**
+   * A unit in play changing what an OPPONENT pays (Del Meeko's +1 on each event they play). The
+   * mirror of `costDiscount`, which only ever reads the paying player's own board.
+   */
+  enemyCostDelta?: (state: GameState, source: UnitState, ctx: CostDiscountContext) => number
+  /** "While paying costs, you pay half as many resources, rounded up" (The Starhawk). Applied last. */
+  halvesCosts?: (state: GameState, source: UnitState, owner: PlayerId) => boolean
   /**
    * "You may deal its excess damage to another unit in the same arena" (Wipe Them Out) — Overwhelm
    * aimed at a unit rather than the base. Offered after combat damage, using the same excess figure.
@@ -307,10 +345,26 @@ export interface CostDiscountContext {
   target?: UnitState
 }
 
+/** What a combat hook that depends on the DEFENDER is asked about (Hound's Tooth). */
+export interface AttackContext {
+  /** The unit being attacked; absent when the attack is against a base. */
+  defender?: UnitState
+}
+
+/** What a `preventUnitDamage` hook is told about the damage it may stop. */
+export interface DamagePreventionContext {
+  /** Where the damage came from, when it is attributed — a card ability names its card. */
+  source?: DamageSource
+  /** True for combat damage, which is not a card ability (Cassian Andor prevents only abilities). */
+  byCombat: boolean
+}
+
 /** Combat context passed to `statModifier` (mirrors `stats.StatContext`). */
 export interface StatModContext {
   attacking?: boolean
   attackingBase?: boolean
+  /** Which arena the defending unit stands in (Retrofitted Airspeeder). */
+  defenderArena?: Arena
   /** This unit is the defender in the current combat (Palace Chef Droid). */
   defending?: boolean
   /** For the attacker: the defending unit had damage on it (Marrok's Fiend Fighter). */

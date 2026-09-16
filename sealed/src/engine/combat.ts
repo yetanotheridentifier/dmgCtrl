@@ -1,5 +1,6 @@
 import type { DamageSource, GameState, PendingChoice, PendingTrigger, PlayerId, UnitState } from './types'
-import { opponentOf, updatePlayer, recordUnitDefeated, recordUnitDamaged, recordUnitLeftPlay, pushChoice, abilityCardIds } from './types'
+import { opponentOf, updatePlayer, recordUnitDefeated, recordUnitDamaged, recordDamagePrevented, recordUnitLeftPlay, pushChoice, abilityCardIds } from './types'
+import type { DamagePreventionContext } from './abilities'
 import { enqueueTriggers, drainTriggers } from './triggerQueue'
 import { effectiveHp } from './stats'
 import type { StatContext } from './stats'
@@ -7,6 +8,24 @@ import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import { collectUnitTriggers, getCardDefinition } from './abilities'
 import { fireUpgradesDefeated, fireUnitsTrigger, damageIsUnpreventable, releaseCaptured } from './effects'
+
+/**
+ * How much of an instance of damage the cards in play stop before it lands (Cassian Andor, Boba
+ * Fett's Armor, Malakili, Umbaran Mobile Cannon). Every unit on both sides is asked, since a
+ * preventer can be the target itself, an upgrade on it, or another unit entirely; the total can
+ * never exceed the damage. Unpreventable damage never reaches here.
+ */
+function preventedDamage(state: GameState, target: UnitState, amount: number, ctx: DamagePreventionContext): number {
+  let prevented = 0
+  for (const side of ['player', 'opponent'] as PlayerId[]) {
+    for (const self of state.players[side].units) {
+      for (const cardId of abilityCardIds(self)) {
+        prevented += getCardDefinition(cardId)?.preventUnitDamage?.(state, self, target, amount, ctx) ?? 0
+      }
+    }
+  }
+  return Math.min(amount, Math.max(0, prevented))
+}
 
 /** Product of the damage multipliers the unit's card and upgrades contribute. */
 function damageMultiplier(state: GameState, unit: UnitState): number {
@@ -48,13 +67,24 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
   // upgrade dying. Collected here and settled in `finishDefeats` alongside the upgrades lost to
   // defeats, so the whole damage event resolves its reactions in one pass.
   const spentShieldOwners: PlayerId[] = []
+  // Units whose incoming damage a card stopped, for the preventions that only fire once a phase.
+  const preventedIds: string[] = []
 
   for (const u of p.units) {
     let extra = damaged.get(u.instanceId) ?? 0
     // Damage-taken multipliers (e.g. Deadly Vulnerability ×2) scale the instance.
     if (extra > 0) {
       extra *= damageMultiplier(state, u)
-      damagedIds.push(u.instanceId)
+      // Prevention settles BEFORE the Shield token: damage a card prevents is never dealt, so no
+      // shield is spent soaking it and the unit was not "dealt damage this phase" either.
+      if (!unpreventable) {
+        const stopped = preventedDamage(state, u, extra, { source, byCombat })
+        if (stopped > 0) {
+          extra -= stopped
+          preventedIds.push(u.instanceId)
+        }
+      }
+      if (extra > 0) damagedIds.push(u.instanceId)
     }
     let upgrades = u.upgrades
     // A shield token prevents one instance of incoming damage, then is defeated.
@@ -79,6 +109,9 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
   let result = finishDefeats(state, owner, survivors, defeated, byCombat, spentShieldOwners, defer)
   // "…a unit that was damaged this phase" (Galvanized Leap) — recorded whether or not it survived.
   for (const id of damagedIds) result = recordUnitDamaged(result, id)
+  // "The first time this unit would take damage each phase" (Umbaran Mobile Cannon) counts what was
+  // stopped, which is exactly what `damagedUnits` cannot record.
+  for (const id of preventedIds) result = recordDamagePrevented(result, id)
   if (survivedDamage) result = fireUnitsTrigger(result, 'whenFriendlyDamagedSurvives', owner)
   // Resolve the batch here, which is where it used to resolve. `drainTriggers` stops of its own accord
   // as soon as a player has something to order, so deferral costs nothing when there is no decision:
