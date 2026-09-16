@@ -345,8 +345,18 @@ spent as the card is taken.
 
 `searchPlayUpgrade` (Reforge) offers only upgrades whose `attachRestriction` allows the unit, pays the
 cost less its `discount`, bottoms the leftovers, and then plays the chosen card through the same door as
-an upgrade played from hand (`playUpgradeOnto` shares its attach step): the upgrade's own When Played
-fires with the host's attach reactions, it counts as played, and the unique rule applies.
+an upgrade played from hand.
+
+**Every play of an upgrade goes through one door**, `playUpgradeCardOnto`, whatever zone the card came
+from and whether or not it was paid for: from hand (`playUpgradeOnto`, including Cin Drallig's and
+Jabba's free plays), from a deck search (Reforge), from the resource zone (The Armorer's
+`attachResourceUpgrade`) and from the top of the deck (Camtono's `mayPlayTopFree`). The caller takes the
+card out of its zone and deals with the cost; the door attaches it, records it as played (for the phase,
+and on the host for the round), fires the upgrade's own When Played in one batch with the host's attach
+reactions (with `upgradePlayed`, so "when you play an upgrade on this unit" fires too), and runs the
+unique rule. An attach that is not a play (a token given by an effect, a Shield on a Shielded unit
+entering, Jocasta Nu moving an upgrade) does not count as played. `upgradeAttachSites.test.ts` counts
+the engine's appends to a unit's upgrades, so a new hand-built attach fails until it is classified.
 
 ## Unique rule
 

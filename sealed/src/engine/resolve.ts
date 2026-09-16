@@ -1779,16 +1779,15 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       const p = next.players[owner]
       const resource = p.resources[choice.resourceIndex]
       const card = next.cards[choice.cardId]
-      const targetUnit = targetInstanceId ? [...next.players.player.units, ...next.players.opponent.units].find(u => u.instanceId === targetInstanceId) : undefined
-      if (resource?.cardId === choice.cardId && card?.type === 'upgrade' && targetUnit) {
+      const targetUnit = targetInstanceId ? findUnit(next, targetInstanceId)?.unit : undefined
+      if (resource?.cardId === choice.cardId && card?.type === 'upgrade' && targetInstanceId && targetUnit) {
         let pl = { ...p, resources: p.resources.filter((_, i) => i !== choice.resourceIndex) }
         if (choice.payCost) pl = payCost(pl, effectiveCost(next, owner, card, targetUnit)) // front pays; back is free
-        pl = { ...pl, units: pl.units.map(u => (u.instanceId === targetInstanceId ? { ...u, upgrades: [...u.upgrades, { cardId: choice.cardId, owner }] } : u)) }
         next = updatePlayer(next, owner, pl)
-        next = resourceTopOfDeck(next, owner) // "If you do, resource the top card of your deck."
-        next = fireBatch(next, collectCardTriggers('whenPlayed', choice.cardId, owner, targetInstanceId))
-        next = uniqueUpgradeCheck(next, owner) // unique rule
-        next = checkWin(next)
+        // "If you do, resource the top card of your deck." Resourced before the play's reactions fire,
+        // so they resolve after the ability has finished, as they would for any ability.
+        next = resourceTopOfDeck(next, owner)
+        next = playUpgradeCardOnto(next, owner, choice.cardId, targetInstanceId)
         if (next.winner !== null) return next
       }
       break
@@ -1843,23 +1842,14 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
 function playTopCardFree(state: GameState, owner: PlayerId, cardId: string, targetInstanceId?: string): GameState {
   if (state.players[owner].deck[0] !== cardId) return state // top card changed; abort safely
   const type = state.cards[cardId]?.type
-  let next = updatePlayer(state, owner, { deck: state.players[owner].deck.slice(1) }) // remove from deck
+  const next = updatePlayer(state, owner, { deck: state.players[owner].deck.slice(1) }) // remove from deck
 
   if (type === 'unit') {
     return enterUnit(next, owner, cardId)
   }
   if (type === 'upgrade' && targetInstanceId) {
-    const targetOwner = (['player', 'opponent'] as PlayerId[]).find(id =>
-      next.players[id].units.some(u => u.instanceId === targetInstanceId),
-    )
-    if (!targetOwner) return next // target gone
-    next = updatePlayer(next, targetOwner, {
-      units: next.players[targetOwner].units.map(u =>
-        u.instanceId === targetInstanceId ? { ...u, upgrades: [...u.upgrades, { cardId, owner }] } : u,
-      ),
-    })
-    next = fireBatch(next, collectCardTriggers('whenPlayed', cardId, owner, targetInstanceId))
-    return uniqueUpgradeCheck(next, owner) // unique rule
+    if (!findUnit(next, targetInstanceId)) return next // target gone
+    return playUpgradeCardOnto(next, owner, cardId, targetInstanceId)
   }
   // Event (or an upgrade with no target): temporary stub — discard with no effect.
   return updatePlayer(next, owner, { discard: [...next.players[owner].discard, cardId] })
@@ -1941,7 +1931,9 @@ export function playUpgradeOnto(state: GameState, playerId: PlayerId, handIndex:
 /**
  * The one door for playing an upgrade: attach `cardId`, already taken out of whichever zone it was
  * played from and its cost dealt with, to `targetInstanceId`, record it as played, and fire what it
- * arriving sets off. `playUpgradeOnto` feeds it from hand; Reforge feeds it from a deck search.
+ * arriving sets off. `playUpgradeOnto` feeds it from hand; Reforge feeds it from a deck search, The Armorer
+ * from the resource zone and Camtono from the top of the deck. `upgradeAttachSites.test.ts` fails on a new
+ * hand-built attach, so a further zone comes through here too.
  */
 function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: string, targetInstanceId: string): GameState {
   const card = state.cards[cardId]
@@ -1961,7 +1953,7 @@ function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: strin
   next = recordCardPlayed(next, playerId, card.id) // after the cost ("the first upgrade you play each phase")
 
   // One upgrade arriving is one event: the host reacting to it attaching (Sabine Wren, and since this
-  // is the played-from-hand path, "when you PLAY an upgrade on this unit" too, Gar Saxon) and the
+  // is a play from whatever zone, "when you PLAY an upgrade on this unit" too, Gar Saxon) and the
   // upgrade's own "When Played" (CR 6.2.0f) are simultaneous, so they are one batch.
   next = fireBatch(next, [
     ...collectUpgradeAttached(next, targetInstanceId, true),
