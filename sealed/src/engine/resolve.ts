@@ -9,7 +9,7 @@ import { collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCar
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
-import { exhaustUnit, findUnit, giveToken, giveTokens, fireUpgradeAttached, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady } from './effects'
+import { exhaustUnit, findUnit, giveToken, giveTokens, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait } from './keywords'
@@ -1407,8 +1407,8 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       break
     }
     case 'searchPlayUpgrade': {
-      // Reforge: attach the chosen revealed upgrade, paying its cost less the discount; whatever
-      // wasn't taken goes to the bottom of the deck.
+      // Reforge: play the chosen revealed upgrade on the unit, paying its cost less the discount;
+      // whatever wasn't taken goes to the bottom of the deck first, so its arrival sees a whole deck.
       const owner = choice.controller
       const idx = deckIndex
       const cardId = idx !== undefined ? choice.revealed[idx] : undefined
@@ -1417,13 +1417,8 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       if (card && cardId && host && idx !== undefined && choice.eligibleIndices.includes(idx)) {
         const cost = Math.max(0, effectiveCost(next, owner, card, host.unit) - choice.discount)
         next = updatePlayer(next, owner, payCost(next.players[owner], cost))
-        next = updatePlayer(next, host.owner, {
-          units: next.players[host.owner].units.map(u =>
-            u.instanceId === choice.unitId ? { ...u, upgrades: [...u.upgrades, { cardId, owner }] } : u,
-          ),
-        })
-        next = fireUpgradeAttached(next, choice.unitId, true)
         next = updatePlayer(next, owner, { deck: [...next.players[owner].deck, ...choice.revealed.filter((_, i) => i !== idx)] })
+        next = playUpgradeCardOnto(next, owner, cardId, choice.unitId)
       } else {
         next = updatePlayer(next, owner, { deck: [...next.players[owner].deck, ...choice.revealed] })
       }
@@ -1934,17 +1929,27 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
 
 /**
  * Play the upgrade at `handIndex` of `playerId`'s hand onto `targetInstanceId`, its cost already dealt
- * with: attach it, record it as played, and fire what it arriving sets off. The ordinary play pays
- * first; an ability that plays one for free (Cin Drallig) calls this directly.
+ * with. The ordinary play pays first; an ability that plays one for free (Cin Drallig) calls this directly.
  */
 export function playUpgradeOnto(state: GameState, playerId: PlayerId, handIndex: number, targetInstanceId: string): GameState {
-  const card = state.cards[state.players[playerId].hand[handIndex]]
+  const cardId = state.players[playerId].hand[handIndex]
+  if (state.cards[cardId]?.type !== 'upgrade' || !findUnit(state, targetInstanceId)) return state
+  const next = updatePlayer(state, playerId, { hand: state.players[playerId].hand.filter((_, i) => i !== handIndex) })
+  return playUpgradeCardOnto(next, playerId, cardId, targetInstanceId)
+}
+
+/**
+ * The one door for playing an upgrade: attach `cardId`, already taken out of whichever zone it was
+ * played from and its cost dealt with, to `targetInstanceId`, record it as played, and fire what it
+ * arriving sets off. `playUpgradeOnto` feeds it from hand; Reforge feeds it from a deck search.
+ */
+function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: string, targetInstanceId: string): GameState {
+  const card = state.cards[cardId]
   const target = findUnit(state, targetInstanceId)
   if (!card || card.type !== 'upgrade' || !target) return state
   const targetOwner = target.owner
-  let next = updatePlayer(state, playerId, { hand: state.players[playerId].hand.filter((_, i) => i !== handIndex) })
-  next = updatePlayer(next, targetOwner, {
-    units: next.players[targetOwner].units.map(u =>
+  let next = updatePlayer(state, targetOwner, {
+    units: state.players[targetOwner].units.map(u =>
       // The count is per unit and per round ("the first upgrade you play on this unit each round",
       // Guardian of the Whills), so it is tracked on the unit and cleared when the round turns over.
       u.instanceId === targetInstanceId
