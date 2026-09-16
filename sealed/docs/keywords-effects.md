@@ -57,7 +57,13 @@ attacking" and "while defending" auras work. `CombatContext` carries `attackerIn
 `defenderInstanceId` and whether the attack was declared `viaAmbush`, and it reaches **both** sides'
 stat contexts: an aura can therefore debuff the attacker (Lando Calrissian, Electrostaff) as well as
 the defender, and can read a property of someone else's attack (Enfys Nest takes 3 power off the
-defender while any friendly unit attacks using Ambush).
+defender while any friendly unit attacks using Ambush). The combat reaches the keyword pass too, so an
+aura can grant a keyword for one attack (Miraj Scintel: a friendly attacker gains Overwhelm against a
+damaged defender).
+
+**"While this unit is in play, the chosen unit gets ..."** (BD-1, Huyang) is an aura, not a lasting
+effect: the source records its pick in `UnitState.chosenUnitId` and its aura reads that field. It
+outlives the phase, and it ends the moment either unit leaves play, with nothing to clean up.
 
 ## Reading a computed stat from inside the pass that computes it
 
@@ -76,7 +82,9 @@ same guard since a pair of Kelleran Beqs blew the stack.
 ## Lasting effects
 
 ```ts
-GameState.lastingEffects?: LastingEffect[]   // { targetInstanceId, power?, hp?, keywords?, untilEndOfAttack?, abilityCardIds?, cannotAttack? }
+GameState.lastingEffects?: LastingEffect[]
+// { targetInstanceId, power?, hp?, keywords?, untilEndOfAttack?, abilityCardIds?, cannotAttack?,
+//   cannotBeAttacked?, unlessSentinel?, removeKeywords? }
 ```
 
 `addLastingEffect` appends one; `lastingEffectTotals(state, instanceId)` sums those aimed at a unit.
@@ -95,6 +103,11 @@ base stats.
 `cannotAttack: true` is a prohibition rather than a stat: "it can't attack your base or units you
 control for this phase" (Chaotic Diversion). `unitCannotAttack` reads it alongside the printed
 `cannotAttack` hook, so it closes every source of an attack at once, exactly as Loth-Wolf's does.
+`cannotBeAttacked: true` is the defending half (Dooku), read by `unitCannotBeAttacked`, and
+`unlessSentinel` lifts it while the unit has Sentinel (On Top of Things). `removeKeywords` takes
+keywords away for the duration (SpecForce Soldier's Sentinel, Tusken Tracker's Hidden), applied with
+the other removals after every grant. Hidden also protects through the unit's `hidden` mark, so an
+effect that takes Hidden away clears the mark as well.
 
 Both expiries run the same **state-based defeat check** immediately afterwards: a unit that only the
 expired +HP buff kept alive, now at damage ≥ HP, is defeated then, routing through the normal discard,

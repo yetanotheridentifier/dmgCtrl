@@ -135,6 +135,18 @@ export interface UnitState {
    * which is true of every unit that has never changed hands.
    */
   owner?: PlayerId
+  /**
+   * How long a unit controlled by someone other than its `owner` stays that way. Absent means until the
+   * regroup phase starts (Change of Heart, Rehabilitation), which is the common case. `'permanent'` is a
+   * change of control with no end (C-3P0, Galen Erso). An instance id is "when that unit leaves play,
+   * the owner takes control" (Grand Moff Tarkin): control goes back once it is no longer in play.
+   */
+  controlUntil?: 'permanent' | string
+  /**
+   * Another unit this one chose as it was played, for an effect that lasts while this unit is in play
+   * (BD-1, Huyang). Read by the card's own aura, so the effect ends when either unit leaves play.
+   */
+  chosenUnitId?: string
 }
 
 export interface ResourceState {
@@ -363,6 +375,20 @@ export interface CombatContext {
 }
 
 /** A hand card offered for play by an ability — its hand position + card id. */
+/**
+ * Where the rest of an ability lives once a choice partway through it is answered: the `ifYouDo` hook
+ * of `cardId`, run for `owner` (the player whose ability it is, who need not be the one answering) with
+ * `sourceInstanceId` as its source. `step` tells apart the stages of an ability with more than two.
+ */
+export interface IfYouDo {
+  cardId: string
+  owner: PlayerId
+  sourceInstanceId?: string
+  step?: string
+  /** An upgrade an earlier stage chose, carried to the next (Jocasta Nu's upgrade, then its new unit). */
+  upgrade?: UpgradeRef
+}
+
 export interface HandCardRef {
   handIndex: number
   cardId: string
@@ -426,6 +452,14 @@ export interface LastingEffect {
   abilityCardIds?: string[]
   /** The unit can't attack for the duration (Chaotic Diversion). Read by `unitCannotAttack`. */
   cannotAttack?: boolean
+  /**
+   * The unit can't be attacked for the duration (Dooku), or not while it lacks Sentinel when
+   * `unlessSentinel` is set (On Top of Things). Read by `unitCannotBeAttacked`.
+   */
+  cannotBeAttacked?: boolean
+  unlessSentinel?: boolean
+  /** Keyword names the unit loses for the duration (SpecForce Soldier: Sentinel). Read by `unitKeywords`. */
+  removeKeywords?: string[]
 }
 
 /**
@@ -614,7 +648,9 @@ type ChoiceVariant =
   // eligible discard-pile card ids; `acceptChoice`'s `optionIndex` picks one. Optional.
   // `then: 'discardFate'` chains the bottom-and-heal / return-to-hand modal (Trask Walker)
   // instead of the default return-to-hand.
-  | { kind: 'selectFromDiscard'; id: string; controller: PlayerId; candidates: string[]; optional: boolean; then?: 'discardFate' }
+  // `owners`, index for index with `candidates`, names whose discard pile each card is in when the
+  // choice reaches both (Bounty Hunter Crew); absent, every candidate is the controller's own.
+  | { kind: 'selectFromDiscard'; id: string; controller: PlayerId; candidates: string[]; optional: boolean; then?: 'discardFate'; owners?: PlayerId[] }
   // Trask Walker: optionIndex 0 = bottom the card and heal `heal` from your base,
   // 1 = return it to your hand. Mandatory once a card is chosen.
   | { kind: 'chooseDiscardFate'; id: string; controller: PlayerId; cardId: string; heal: number }
@@ -624,8 +660,15 @@ type ChoiceVariant =
   // `thenAdvantage` gives that many Advantage tokens to a friendly unit afterwards (Diplomatic Pageantry).
   | { kind: 'selectPair'; id: string; controller: PlayerId; friendlyTargets: string[]; enemyTargets: string[]; chosenFriendly?: string; mode: 'defeat' | 'exhaust'; optional?: boolean; thenAdvantage?: number }
   // Return one of `candidates` (upgrades in play) to its owner's hand. Mandatory unless `optional`:
-  // Jabba the Hutt prints "may", Full of Surprises does not.
-  | { kind: 'selectUpgradeToReturn'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional?: boolean; thenShield?: boolean }
+  // Jabba the Hutt prints "may", Full of Surprises does not. `replayFree` is Jabba's own "if it's
+  // returned to your hand, you may play it for free"; Junior Senator and Criminal Muscle print no such
+  // thing.
+  | { kind: 'selectUpgradeToReturn'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional?: boolean; thenShield?: boolean; replayFree?: boolean }
+  // Choose one of `candidates` (upgrades in play) for the card's `ifYouDo` hook (Jocasta Nu).
+  | { kind: 'selectUpgradeThen'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional?: boolean; text: string; then: IfYouDo }
+  // Choose one of your hand cards at `handIndices` for the card's `ifYouDo` hook, which is told the
+  // card and its hand index (Cin Drallig). The card stays in hand until the hook moves it.
+  | { kind: 'selectHandCardThen'; id: string; controller: PlayerId; handIndices: number[]; optional?: boolean; text: string; then: IfYouDo }
   // Jabba the Hutt: having returned `cardId` to your own hand, may attach it free to a unit.
   | { kind: 'mayPlayUpgradeFree'; id: string; controller: PlayerId; cardId: string; targets: string[] }
   // Jod Na Nawood: may pay `cost`, then exhaust every unit in the chosen arena
@@ -644,14 +687,23 @@ type ChoiceVariant =
   // Sun), whose amount can only be counted once the first hit has landed.
   | { kind: 'selectDamageTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[]; optional?: boolean; source?: DamageSource; thenHealBase?: number
       thenReadyIfTrait?: string
-      thenDamage?: { amount?: number; perDamagedEnemy?: boolean; scope: 'anotherEnemy' | 'anyUnit'; optional?: boolean } }
+      thenDamage?: { amount?: number; perDamagedEnemy?: boolean; scope: 'anotherEnemy' | 'anyUnit'; optional?: boolean }
+      // "…and attack with it" (Fiery Alliance): the unit just damaged attacks, if it still can.
+      thenAttackWithIt?: boolean
+      // "If you do, that base's controller draws a card" (R2-D2, Getting His Chance).
+      thenBaseOwnerDraws?: boolean
+      // "…and ready it" (Academy Disciplinarian): the unit just damaged readies, if it survived.
+      thenReadyIt?: boolean }
   // Greef Karga front: on playing a unit, may exhaust the leader to give it an Advantage token.
   // `unitId` is the just-played unit to receive the token.
   | { kind: 'mayExhaustLeaderForAdvantage'; id: string; controller: PlayerId; unitId: string }
   // "This phase" buff: pick a unit among `targets` and grant it the given power/HP/keywords for the
   // phase. Mandatory unless `optional`: Baylan's On Attack prints "may", Display of Strength does not.
   // `thenMayAttack` chains "you may attack with that unit" (T-6 Shuttle 1974).
+  // `thenExhaustWeakerEnemiesInArena` exhausts each enemy unit in the buffed unit's arena with less power
+  // than it has once buffed (Prime Minister Almec).
   | { kind: 'mayLastingBuff'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; power?: number; hp?: number; keywords?: KeywordInstance[]; thenMayAttack?: boolean
+      thenExhaustWeakerEnemiesInArena?: boolean
       // The Student Guides the Master: power is +1 per friendly unit weaker than the chosen one,
       // so it can only be worked out once a target is picked.
       powerPerWeakerFriendly?: boolean }
@@ -701,7 +753,8 @@ type ChoiceVariant =
   // units), paying its cost + `costDelta`, entering ready if `entersReady` (Fennec, Moff Gideon).
   // `thenDamageIt` deals that much to the unit just played — "Play a unit from your hand. It costs 4
   // less. Deal 4 damage to it" (Reckless Landing), which can only be aimed once it is on the board.
-  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number }
+  // `thenShieldIt` gives the unit just played a Shield token (Rio Durant's "it gains Shielded").
+  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number; thenShieldIt?: boolean }
   // Additional cost "exhaust a friendly unit": pick one of `targets` to exhaust, then the
   // `then` play-from-hand step follows (Fennec). Mandatory.
   | { kind: 'selectUnitToExhaust'; id: string; controller: PlayerId; targets: string[]; then: PlayFromHandSpec }
@@ -721,7 +774,22 @@ type ChoiceVariant =
   // `buffFor` is the other half of "an opponent may discard a card. If they do, give a non-Vehicle
   // unit -8/-8" (Kouhun Assassination): the OPPONENT answers this discard, and the debuff pick then
   // goes to `buffFor`, who is the player that played the card.
-  | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean; then?: { distributeDamageTo: PlayerId } | { buffUnit: string; power?: number; hp?: number } | { dealDamage: number; costlierThanDiscard?: boolean } | { exhaustUnit: true } | { buffFor: PlayerId; power?: number; hp?: number; nonVehicleOnly?: boolean } }
+  // `ifYouDo` hands the discarded card to the card's own `ifYouDo` hook (R2-D2, Ahsoka Tano).
+  | { kind: 'selectDiscard'; id: string; controller: PlayerId; count: number; optional?: boolean; then?: { distributeDamageTo: PlayerId } | { buffUnit: string; power?: number; hp?: number } | { dealDamage: number; costlierThanDiscard?: boolean } | { exhaustUnit: true } | { buffFor: PlayerId; power?: number; hp?: number; nonVehicleOnly?: boolean } | { ifYouDo: IfYouDo } }
+  // "You may <cost>. If you do, <effect>": a yes/no that pays `cost` resources, or deals `damageSelf`
+  // to the source, or only reveals an event (`revealEvent`, which costs nothing and leaves the card in
+  // hand), and then runs the card's `ifYouDo` hook. `text` is the effect, for the prompt.
+  | { kind: 'mayPayThen'; id: string; controller: PlayerId; cost: number; damageSelf?: number; revealEvent?: boolean; text: string; then: IfYouDo }
+  // Choose one of `targets` and hand it to the card's `ifYouDo` hook, for an ability that does more
+  // than one thing to the unit it picks, or whose effect depends on it. Mandatory unless `optional`.
+  // `text` names what the pick is for, for the prompt.
+  // `hookOnDecline` runs the hook with no unit when the choice is declined, for an ability that goes on
+  // after its picks stop ("If no friendly units were damaged by this ability", AAT Incinerator).
+  | { kind: 'selectUnitThen'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; text: string; then: IfYouDo; hookOnDecline?: boolean }
+  // Heal 1 at a time from `unitTargets` / `baseTargets` until `remaining` is spent or Done, then deal
+  // what was healed to `damageUnit` (Redemption). `oneUnit` keeps every point on the first unit picked
+  // (Kashyyyk Defender's "from another unit").
+  | { kind: 'distributeHealing'; id: string; controller: PlayerId; remaining: number; healed: number; unitTargets: string[]; baseTargets: PlayerId[]; damageUnit: string; oneUnit?: boolean }
   // Leia Organa: a yes/no — deal `selfDamage` to `unitId`, then heal `healBase` from your base.
   | { kind: 'maySelfDamageHealBase'; id: string; controller: PlayerId; unitId: string; selfDamage: number; healBase: number }
   // Mando's N-1: a yes/no — exhaust your (ready) leader to give `unitId` a "+power/+hp this phase" buff.
@@ -729,7 +797,9 @@ type ChoiceVariant =
   // Deal `total` damage spread among any units (Ninth Sister), one point per pick until
   // `remaining` reaches 0. `targets` are the currently-eligible unit instance ids (both sides,
   // recomputed as units are defeated). Always optional — the controller may stop early (a "may").
-  | { kind: 'distributeDamage'; id: string; controller: PlayerId; remaining: number; total: number; targets: string[] }
+  // `enemiesOf` keeps the re-offers to that player's enemy units, and makes the whole amount mandatory
+  // while any remain (Emperor Palpatine's "deal 6 damage divided as you choose among enemy units").
+  | { kind: 'distributeDamage'; id: string; controller: PlayerId; remaining: number; total: number; targets: string[]; enemiesOf?: PlayerId }
   // Distribute `total` tokens among `targets`, one per pick until `remaining` reaches 0. Unlike
   // `multiPick`'s give-advantage, targets stay eligible so tokens can stack. Every token is placed
   // (Fateful Goodbye) unless `upTo`, which may stop at any point (Elzar Mann), or `optional`, which may
@@ -807,7 +877,9 @@ type ChoiceVariant =
   // it a search is mandatory while anything matches. `held` says the revealed cards have been pulled
   // OUT of the deck by an earlier pass, so they are bottomed by appending rather than by rotating the
   // top — getting that wrong either duplicates or deletes them.
-  | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; guessedCost?: number; discardRest?: boolean; remaining?: number; upTo?: boolean; held?: boolean }
+  // `resourceIt` puts the chosen card into play as a resource, exhausted, instead of drawing it
+  // (Jendirian Valley).
+  | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; guessedCost?: number; discardRest?: boolean; remaining?: number; upTo?: boolean; held?: boolean; resourceIt?: boolean }
   // The Cyborg Mech: deal `undamagedAmount` to a chosen undamaged target, or `damagedAmount`
   // to a damaged one (the amount is decided by the picked unit's damage). Mandatory board-target.
   | { kind: 'variableStrike'; id: string; controller: PlayerId; targets: string[]; undamagedAmount: number; damagedAmount: number }
@@ -841,8 +913,9 @@ type ChoiceVariant =
   // less"), and then eligibility is what the player can afford rather than what fits `budget`.
   | { kind: 'searchPlayFree'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; budget: number; playOne?: boolean; entersReady?: boolean; filter?: { trait?: string; aspect?: string; arena?: Arena }; costDelta?: number }
   // Rancor Keeper: "deal 1 damage to any number of bases" — repeatable, each base at most
-  // once; `remaining` are the bases not yet picked. Skip finishes.
-  | { kind: 'damageAnyBases'; id: string; controller: PlayerId; remaining: PlayerId[]; amount: number; source?: DamageSource }
+  // once; `remaining` are the bases not yet picked. Skip finishes. `heal` heals each picked base
+  // instead ("heal 2 damage from each of any number of bases", Coruscanti Spy).
+  | { kind: 'damageAnyBases'; id: string; controller: PlayerId; remaining: PlayerId[]; amount: number; source?: DamageSource; heal?: boolean }
   /**
    * The Mandalorian: may defeat a Shield on `preventerId` to prevent `amount` damage headed
    * for `targetId`. A yes/no. Raised on two paths:

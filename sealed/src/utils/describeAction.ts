@@ -147,7 +147,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayPlayTopFree') return "Don't play"
       if (choice.kind === 'mayDamageExhaust') return 'Decline'
       if (choice.kind === 'mayAttack' || choice.kind === 'mayAttackAnyUnit') return "Don't attack"
-      if (choice.kind === 'distributeDamage' || choice.kind === 'distributeTokens' || choice.kind === 'lookAtHand' || choice.kind === 'searchPlayFree' || choice.kind === 'dealOwnBaseForDiscount') return 'Done'
+      if (choice.kind === 'distributeDamage' || choice.kind === 'distributeHealing' || choice.kind === 'distributeTokens' || choice.kind === 'lookAtHand' || choice.kind === 'searchPlayFree' || choice.kind === 'dealOwnBaseForDiscount') return 'Done'
       // Acknowledging a reveal that matched nothing (#413), and passing on Reforge's search.
       if (choice.kind === 'searchDraw' || choice.kind === 'search' || choice.kind === 'searchPlayUpgrade') return 'Done'
       if (choice.kind === 'mayDoubleTokens') return "Don't"
@@ -158,7 +158,8 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'selectUpgradeToDefeat' || choice.kind === 'selectResourceUpgrade' || choice.kind === 'selectFromDiscard') return 'Cancel'
       if (choice.kind === 'mayLastingBuff' || choice.kind === 'mayGiveAdvantage' || choice.kind === 'mayExhaustLeaderGiveAdvantage' || choice.kind === 'mayExhaustLeaderExhaustUnit' || choice.kind === 'mayExhaustUnit') return 'Decline'
       if (choice.kind === 'mayExhaustLeaderForAdvantage' || choice.kind === 'mayExhaustLeaderHealUnit' || choice.kind === 'mayPayToDraw' || choice.kind === 'mayDeployLeader') return "Don't"
-      if (choice.kind === 'mayResourceTop') return "Don't"
+      if (choice.kind === 'mayResourceTop' || choice.kind === 'mayPayThen') return "Don't"
+      if (choice.kind === 'selectUnitThen' || choice.kind === 'selectUpgradeThen' || choice.kind === 'selectHandCardThen') return 'Decline'
       if (choice.kind === 'maySelfDamageShield' || choice.kind === 'mayCreateToken' || choice.kind === 'mayCapture') return "Don't"
       if (choice.kind === 'damageAnyBases') return 'Done'
       if (choice.kind === 'selectPair' || choice.kind === 'selectUpgradeToReturn' || choice.kind === 'mayPlayUpgradeFree') return 'Decline'
@@ -199,7 +200,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       }
       if (choice.kind === 'searchDraw' && action.deckIndex !== undefined) {
         const cardId = choice.revealed[action.deckIndex]
-        return `Draw ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
+        return `${choice.resourceIt ? 'Resource' : 'Draw'} ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
       }
       // Reforge: had no label at all, so its buttons read as a bare "Accept".
       if (choice.kind === 'searchPlayUpgrade' && action.deckIndex !== undefined) {
@@ -294,6 +295,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Deal 1${target ? ` to ${target}` : ''}`
       }
+      if (choice.kind === 'distributeHealing') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : action.baseTarget === by ? 'your base' : action.baseTarget ? "opponent's base" : undefined
+        return `Heal 1${target ? ` from ${target}` : ''}`
+      }
       if (choice.kind === 'distributeTokens') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         const tokenName = state.cards[choice.token]?.name ?? 'token'
@@ -315,7 +320,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         return `${choice.amount} damage to ${self ?? 'this unit'} → Shield to ${target ?? 'it'}`
       }
       if (choice.kind === 'damageAnyBases' && action.baseTarget) {
-        return `Deal ${choice.amount} to ${action.baseTarget === by ? 'your base' : "opponent's base"}`
+        return `${choice.heal ? 'Heal' : 'Deal'} ${choice.amount} ${choice.heal ? 'from' : 'to'} ${action.baseTarget === by ? 'your base' : "opponent's base"}`
       }
       if (choice.kind === 'chooseDiscardFate') {
         const name = state.cards[choice.cardId]?.name ?? 'card'
@@ -333,6 +338,16 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const name = pick ? state.cards[pick.cardId]?.name : undefined
         const host = pick ? anyUnitName(state, pick.unitId) : undefined
         return `Return ${name ?? 'upgrade'}${host ? ` from ${host}` : ''}`
+      }
+      if (choice.kind === 'selectUpgradeThen') {
+        const pick = choice.candidates[action.optionIndex ?? 0]
+        const name = pick ? state.cards[pick.cardId]?.name : undefined
+        const host = pick ? anyUnitName(state, pick.unitId) : undefined
+        return `Choose ${name ?? 'upgrade'}${host ? ` on ${host}` : ''}`
+      }
+      if (choice.kind === 'selectHandCardThen') {
+        const cardId = action.handIndex !== undefined ? state.players[by].hand[action.handIndex] : undefined
+        return `Choose ${cardId ? state.cards[cardId]?.name ?? cardId : 'a card'}`
       }
       if (choice.kind === 'mayPlayUpgradeFree') {
         const name = state.cards[choice.cardId]?.name ?? 'upgrade'
@@ -432,6 +447,14 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'selectUnitToReturn') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Return ${target ?? 'unit'} to hand`
+      }
+      if (choice.kind === 'mayPayThen') {
+        const cost = choice.revealEvent ? 'Reveal an event' : choice.damageSelf ? `Take ${choice.damageSelf} damage` : choice.cost > 0 ? `Pay ${choice.cost}` : undefined
+        return cost ? `${cost}, ${choice.text}` : choice.text.charAt(0).toUpperCase() + choice.text.slice(1)
+      }
+      if (choice.kind === 'selectUnitThen') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
+        return `Choose ${target ?? 'unit'}`
       }
       if (choice.kind === 'selectFriendlyUnit') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined

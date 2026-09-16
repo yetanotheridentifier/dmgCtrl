@@ -51,7 +51,8 @@ export function unitKeywords(state: GameState, unit: UnitState, ctx?: StatModCon
   try {
     const out = baseKeywordList(state, unit, ctx)
     // Keywords granted by other units' auras (Sloane → Overwhelm/Sentinel).
-    const aura = auraContributions(state, unit)
+    // With the combat, so an aura can grant a keyword for one attack (Miraj Scintel's Overwhelm).
+    const aura = auraContributions(state, unit, ctx?.combat)
     out.push(...aura.keywords)
     // Removals: the unit's own card/upgrades (Marrok loses Sentinel while upgraded) plus auras
     // ("enemy/all units lose X"). Applied after all grants — a keyword survives unless removed by name.
@@ -118,6 +119,10 @@ function suppressedKeywordsOf(state: GameState, unit: UnitState): Set<string> {
   for (const cardId of abilityCardIds(unit)) {
     for (const name of getCardDefinition(cardId)?.suppressedKeywords?.(state, unit) ?? []) names.add(name)
   }
+  // "Loses X for this phase" (SpecForce Soldier).
+  for (const e of state.lastingEffects ?? []) {
+    if (e.targetInstanceId === unit.instanceId) for (const name of e.removeKeywords ?? []) names.add(name)
+  }
   return names
 }
 
@@ -168,6 +173,9 @@ export function unitCannotAttack(state: GameState, unit: UnitState): boolean {
 
 /** True if the unit currently can't be attacked (Tatooine Repulsor Train). */
 export function unitCannotBeAttacked(state: GameState, unit: UnitState): boolean {
+  // A lasting protection aimed at this unit (Dooku; On Top of Things only while it lacks Sentinel).
+  const lasting = (state.lastingEffects ?? []).filter(e => e.cannotBeAttacked && e.targetInstanceId === unit.instanceId)
+  if (lasting.some(e => !e.unlessSentinel) || (lasting.length > 0 && !unitHasKeyword(state, unit, 'Sentinel'))) return true
   return abilityCardIds(unit).some(id => getCardDefinition(id)?.cannotBeAttacked?.(state, unit) ?? false)
 }
 
@@ -179,10 +187,13 @@ export function unitAttacksEitherArena(state: GameState, unit: UnitState): boole
 /** A unit's traits — its card's plus any granted by an upgrade (The Darksaber → Mandalorian). */
 export function unitTraits(state: GameState, unit: UnitState): string[] {
   const out = [...(state.cards[unit.cardId]?.traits ?? [])]
+  const removed = new Set<string>()
   for (const cardId of abilityCardIds(unit)) {
-    out.push(...(getCardDefinition(cardId)?.grantedTraits?.(state, unit) ?? []))
+    const def = getCardDefinition(cardId)
+    out.push(...(def?.grantedTraits?.(state, unit) ?? []))
+    for (const t of def?.removedTraits?.(state, unit) ?? []) removed.add(t.toLowerCase())
   }
-  return out
+  return removed.size > 0 ? out.filter(t => !removed.has(t.toLowerCase())) : out
 }
 
 /** Case-insensitive trait test that includes granted traits. */

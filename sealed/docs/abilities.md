@@ -147,7 +147,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | `costModifier` | cost delta, applied in `effectiveCost` |
 | `costDiscount` | a unit in play discounting cards its controller plays |
 | `waivesAspectPenalty` | a unit in play zeroing the aspect penalty |
-| `attachRestriction` | may this upgrade attach to that unit |
+| `attachRestriction` | may this upgrade attach to that unit, when this player plays it ("a friendly unit") |
 | `conditionalKeywords` | extra keywords, folded into `unitKeywords` |
 | `suppressedKeywords` | keywords removed while a condition holds |
 | `statModifier` | power/HP deltas, folded into `effectivePower`/`effectiveHp` |
@@ -165,6 +165,8 @@ Card-type-agnostic, all on `CardDefinition`:
 | `preventUnitDamage` | stops some of an instance of damage, with nothing to decide |
 | `suppressesBaseHealing` | bases can't be healed while this card is in play |
 | `readiesInRegroup` | whether this unit readies at regroup; absent means it does |
+| `cannotReady` | the unit readies neither at regroup nor by an ability (Frozen in Carbonite) |
+| `ifYouDo` | the rest of an ability after a choice partway through it (see [choices.md](choices.md)) |
 | `printedStats` | replaces a unit's printed power/HP, before upgrades are added |
 | `enemyCostDelta` | changes what an **opponent** pays for a card |
 | `halvesCosts` | its controller pays half, rounded up, applied last |

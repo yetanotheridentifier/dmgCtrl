@@ -239,7 +239,7 @@ export function validUpgradeTargets(state: GameState, owner: PlayerId, resourceI
   const inPlay = [...state.players.player.units, ...state.players.opponent.units]
   return targetUnits.filter(id => {
     const tu = inPlay.find(u => u.instanceId === id)
-    if (!tu || (restriction && !restriction(state, tu))) return false
+    if (!tu || (restriction && !restriction(state, tu, owner))) return false
     return !payCost || effectiveCost(state, owner, card, tu) <= available
   })
 }
@@ -314,7 +314,7 @@ function actionPhaseMoves(state: GameState): Action[] {
     if (forbiddenNames.has(card.name)) return
     const restriction = getCardDefinition(card.id)?.attachRestriction
     for (const target of allUnits) {
-      if (restriction && !restriction(state, target)) continue
+      if (restriction && !restriction(state, target, playerId)) continue
       if (!canAfford(p, effectiveCost(state, playerId, card, target))) continue
       moves.push({ type: 'playUpgrade', handIndex, targetInstanceId: target.instanceId })
     }
@@ -431,7 +431,7 @@ function choiceMoves(state: GameState): Action[] {
           if (top.type === 'upgrade') {
             const restriction = getCardDefinition(top.id)?.attachRestriction
             for (const t of [...state.players.player.units, ...state.players.opponent.units]) {
-              if (restriction && !restriction(state, t)) continue
+              if (restriction && !restriction(state, t, choice.controller)) continue
               moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: t.instanceId })
             }
           } else {
@@ -571,8 +571,16 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'distributeDamage': {
-        // Ninth Sister: allocate a point to any eligible unit, or stop (Done) — always optional.
+        // Ninth Sister: allocate a point to any eligible unit, or stop (Done). Emperor Palpatine's
+        // enemy-only form must deal all of it.
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        if (!choice.enemiesOf) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'distributeHealing': {
+        // Redemption: one point to a damaged unit or base at a time, or Done.
+        for (const id of choice.unitTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        for (const b of choice.baseTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, baseTarget: b })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
@@ -717,6 +725,13 @@ function choiceMoves(state: GameState): Action[] {
         if (choice.kind === 'mayPlayUnitFromDiscard') moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'mayPayThen': {
+        // A yes/no: accept only while the resources can still be paid.
+        if (readyResourceCount(p) >= choice.cost) moves.push({ type: 'acceptChoice', choiceId: choice.id })
+        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'selectUnitThen':
       case 'selectUnitToReady':
       case 'selectFriendlyUnit':
       case 'selectUnitToSteal':
@@ -727,6 +742,12 @@ function choiceMoves(state: GameState): Action[] {
         if ('optional' in choice && choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'selectHandCardThen': {
+        for (const handIndex of choice.handIndices) moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex })
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'selectUpgradeThen':
       case 'selectUpgradeToReturn': {
         // Jabba may return an upgrade; Full of Surprises must.
         choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))

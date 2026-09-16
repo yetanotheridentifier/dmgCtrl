@@ -343,7 +343,7 @@ describe('upgrades', () => {
     // Costs: the leader 6, CHEAP4 4, the rest 2 or less.
     const s = b('', { mine: [unit('g', 'GRD'), unit('v', 'VEH'), unit('jv', 'JEDIVEH'), unit('f', 'FORCE'), unit('j', 'JEDI'), unit('L', 'PALP', { isLeader: true }), unit('t', TOKEN_MANDALORIAN), unit('c', 'CHEAP4')] })
     const attach = getCardDefinition(id)!.attachRestriction!
-    expect(all(s).filter(u => attach(s, u)).map(u => u.instanceId).sort()).toEqual([...allowed].sort())
+    expect(all(s).filter(u => attach(s, u, 'player')).map(u => u.instanceId).sort()).toEqual([...allowed].sort())
   })
 })
 

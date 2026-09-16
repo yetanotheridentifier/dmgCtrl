@@ -63,6 +63,44 @@ export function findUnit(state: GameState, instanceId: string): { owner: PlayerI
   return undefined
 }
 
+/**
+ * Move a unit from `from` to `to`, unchanged in every other respect. `owner` records where the card
+ * came from so it can go home: to that player's discard if it's defeated, or back under their
+ * control when the change ends. Moving a unit that was already stolen keeps the ORIGINAL owner, and a
+ * unit returning to its owner drops both fields entirely.
+ *
+ * `until` is how long the change lasts (see `UnitState.controlUntil`); omitted, it ends as the regroup
+ * phase starts.
+ */
+export function takeControlOfUnit(state: GameState, from: PlayerId, to: PlayerId, instanceId: string, until?: UnitState['controlUntil']): GameState {
+  const unit = state.players[from].units.find(u => u.instanceId === instanceId)
+  if (!unit || from === to) return state
+  const cardOwner = unit.owner ?? from
+  const moved: UnitState = cardOwner === to
+    ? { ...unit, owner: undefined, controlUntil: undefined }
+    : { ...unit, owner: cardOwner, controlUntil: until }
+  const without = updatePlayer(state, from, { units: state.players[from].units.filter(u => u.instanceId !== instanceId) })
+  return updatePlayer(without, to, { units: [...without.players[to].units, moved] })
+}
+
+/**
+ * Hand back every unit whose change of control has ended. `atRegroup` also ends the plain "until the
+ * regroup phase" ones; otherwise only those tied to a unit that has since left play (Grand Moff
+ * Tarkin) go home. A permanent change never does.
+ */
+export function returnControlledUnits(state: GameState, atRegroup: boolean): GameState {
+  const inPlay = new Set([...state.players.player.units, ...state.players.opponent.units].map(u => u.instanceId))
+  const ended = (u: UnitState): boolean =>
+    u.controlUntil === undefined ? atRegroup : u.controlUntil !== 'permanent' && !inPlay.has(u.controlUntil)
+  let next = state
+  for (const controller of ['player', 'opponent'] as PlayerId[]) {
+    for (const u of next.players[controller].units.filter(x => x.owner !== undefined && x.owner !== controller && ended(x))) {
+      next = takeControlOfUnit(next, controller, u.owner!, u.instanceId)
+    }
+  }
+  return next
+}
+
 function patchUnit(state: GameState, owner: PlayerId, instanceId: string, patch: (u: UnitState) => UnitState): GameState {
   const p = state.players[owner]
   return {
@@ -436,11 +474,18 @@ export function exhaustReadyResource(state: GameState, owner: PlayerId): GameSta
 /** Ready a unit (clear its exhausted flag) wherever it is (Grand Admiral Thrawn). No-op if not in play. */
 export function readyUnit(state: GameState, instanceId: string): GameState {
   for (const owner of ['player', 'opponent'] as PlayerId[]) {
-    if (state.players[owner].units.some(u => u.instanceId === instanceId)) {
+    const unit = state.players[owner].units.find(u => u.instanceId === instanceId)
+    if (unit) {
+      if (unitCannotReady(state, unit)) return state
       return updatePlayer(state, owner, { units: state.players[owner].units.map(u => (u.instanceId === instanceId ? { ...u, exhausted: false } : u)) })
     }
   }
   return state
+}
+
+/** True while something on the unit says it can't ready (Frozen in Carbonite). */
+export function unitCannotReady(state: GameState, unit: UnitState): boolean {
+  return abilityCardIds(unit).some(id => getCardDefinition(id)?.cannotReady?.(state, unit) ?? false)
 }
 
 /** Ready one exhausted resource of `owner` (Emperor's Messenger). No-op if none is exhausted. */

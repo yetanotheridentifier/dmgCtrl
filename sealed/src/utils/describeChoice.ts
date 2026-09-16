@@ -153,6 +153,8 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     }
     case 'distributeDamage':
       return [`deal damage across your targets: ${choice.total - choice.remaining} of ${choice.total} allocated`]
+    case 'distributeHealing':
+      return [`heal up to ${choice.remaining} more damage, one point at a time; this unit then takes ${choice.healed} so far`]
     case 'distributeTokens':
       return [`hand out ${tokenName(state, choice.token)} tokens: ${choice.total - choice.remaining} of ${choice.total} allocated`]
     case 'variableStrike':
@@ -269,7 +271,9 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'searchDraw':
       return [choice.eligibleIndices.length === 0
         ? 'nothing matched; these go to the bottom of your deck'
-        : (choice.remaining ?? 1) > 1
+        : choice.resourceIt
+          ? 'choose a card to resource; the rest go to the bottom of your deck'
+          : (choice.remaining ?? 1) > 1
             ? `choose a card to draw (up to ${choice.remaining} in all); the rest go to the bottom of your deck`
             : 'choose a card to draw; the rest go to the bottom of your deck']
     case 'searchPlayFree':
@@ -306,10 +310,20 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       return ['choose a unit to ready']
     case 'selectFriendlyUnit':
       return ['choose a friendly unit']
+    case 'selectUnitThen':
+    case 'selectUpgradeThen':
+    case 'selectHandCardThen':
+      return [choice.optional ? `you may ${choice.text}` : choice.text]
+    case 'mayPayThen': {
+      const cost = choice.revealEvent ? 'reveal an event from your hand'
+        : choice.damageSelf ? `deal ${choice.damageSelf} damage to this unit`
+          : choice.cost > 0 ? `pay ${choice.cost}` : undefined
+      return [cost ? `${cost} to ${choice.text}` : `you may ${choice.text}`]
+    }
     case 'selectDistributeSource':
       return ['choose the unit whose power is spread as damage']
     case 'damageAnyBases':
-      return [`deal ${choice.amount} damage to a base, or stop`]
+      return [choice.heal ? `heal ${choice.amount} damage from a base, or stop` : `deal ${choice.amount} damage to a base, or stop`]
 
     default: {
       // EXHAUSTIVE. Every choice kind above names what it is asking, so this is unreachable and TS

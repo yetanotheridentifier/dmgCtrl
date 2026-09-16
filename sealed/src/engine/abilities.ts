@@ -1,4 +1,4 @@
-import type { Arena, EngineCard, GameState, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext } from './types'
+import type { Arena, EngineCard, GameState, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext, UpgradeRef } from './types'
 import { abilityCardIds } from './types'
 
 /**
@@ -83,8 +83,27 @@ export interface AbilityDef {
  * A card's full behaviour: its triggered abilities plus static hooks the engine
  * consults. All optional — a card supplies only what it needs.
  */
+/** What an `ifYouDo` hook is told: the ability's context plus what the choice before it settled. */
+export interface IfYouDoContext extends EffectContext {
+  /** The stage of the ability being resumed, when it has more than one (`IfYouDo.step`). */
+  step?: string
+  /**
+   * The card a discard just put in the discard pile, or a hand card just chosen (then `handIndex` is
+   * where it is). The chosen unit is `targetInstanceId`.
+   */
+  cardChosen?: string
+  handIndex?: number
+  /** The upgrade chosen by this stage or carried from an earlier one (`IfYouDo.upgrade`). */
+  upgradeChosen?: UpgradeRef
+}
+
 export interface CardDefinition {
   abilities?: AbilityDef[]
+  /**
+   * The rest of an ability after a choice partway through it (`mayPayThen`, `selectUnitThen`, a
+   * discard's `ifYouDo`): "you may pay 1. If you do, ...", or several things done to one chosen unit.
+   */
+  ifYouDo?: (state: GameState, ctx: IfYouDoContext) => GameState
   /**
    * For the `GRANT_*` pseudo cards only: the REAL card this ability carrier belongs to. They are
    * internal ability holders with no entry in the card database, so a choice attributed to one
@@ -92,8 +111,11 @@ export interface CardDefinition {
    * actually needs to understand why they are being asked.
    */
   sourceCardId?: string
-  /** Upgrades only: may this card attach to `target`? Default (no hook) = any unit. */
-  attachRestriction?: (state: GameState, target: UnitState) => boolean
+  /**
+   * Upgrades only: may this card attach to `target` when `player` plays it? Default (no hook) = any
+   * unit. `player` is what "attach to a friendly unit" is read against (Darth Maul's Lightsaber).
+   */
+  attachRestriction?: (state: GameState, target: UnitState, player: PlayerId) => boolean
   /** Cost delta when playing this card (upgrades: `target` is the attach target). */
   costModifier?: (state: GameState, playerId: PlayerId, target?: UnitState) => number
   /**
@@ -178,6 +200,8 @@ export interface CardDefinition {
   suppressesBaseHealing?: (state: GameState, source: UnitState) => boolean
   /** Whether this unit readies in the regroup phase; absent means it does (Rampart needs 4 power). */
   readiesInRegroup?: (state: GameState, unit: UnitState) => boolean
+  /** "Attached unit can't ready" (Frozen in Carbonite): neither in the regroup phase nor by an ability. */
+  cannotReady?: (state: GameState, unit: UnitState) => boolean
   /**
    * A card that REPLACES a unit's printed power/HP ("printed power is considered to be 7"): Obi-Wan
    * Kenobi for every friendly unit, Size Matters Not for its own host. Folded in by `withUpgrades`
@@ -228,6 +252,8 @@ export interface CardDefinition {
   payPreventionCost?: (state: GameState, self: UnitState) => GameState
   /** Extra traits this card grants a unit — The Darksaber grants Mandalorian. */
   grantedTraits?: (state: GameState, unit: UnitState) => string[]
+  /** Traits this card takes away from its unit, printed or granted (Abandoned the Order: loses Jedi). */
+  removedTraits?: (state: GameState, unit: UnitState) => string[]
   /** True if this card makes its unit a leader unit — The Darksaber. */
   makesLeaderUnit?: (state: GameState, unit: UnitState) => boolean
   /** Aspect icons this unit provides while its controller pays costs — The Darksaber. */
