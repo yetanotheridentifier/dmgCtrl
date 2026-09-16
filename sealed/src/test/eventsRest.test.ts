@@ -72,6 +72,10 @@ const F = {
   LEADUPG: card({ id: 'LEADUPG', type: 'leader', cost: 3, power: 1, hp: 1 }),
   SP3: card({ id: 'SP3', arena: 'space', cost: 2, power: 2, hp: 3 }),
   SOR_224: ev('SOR_224', 6), SHD_132: ev('SHD_132', 7), LAW_085: ev('LAW_085'), TWI_204: ev('TWI_204', 4),
+  TWI_199: ev('TWI_199', 2), JTL_233: ev('JTL_233', 3), SHD_207: ev('SHD_207', 2), SHD_229: ev('SHD_229'),
+  SEC_144: ev('SEC_144', 4), SOR_091: ev('SOR_091', 2), TWI_188: ev('TWI_188'),
+  C1: card({ id: 'C1', arena: 'ground', cost: 1, power: 1, hp: 3 }),
+  UW: card({ id: 'UW', arena: 'ground', cost: 2, power: 2, hp: 3, traits: ['UNDERWORLD'] }),
   SABOTEUR: card({ id: 'SABOTEUR', arena: 'ground', cost: 2, power: 2, hp: 5, keywords: [{ name: 'Saboteur' }] }),
   OFFICIAL: card({ id: 'OFFICIAL', arena: 'ground', cost: 2, power: 1, hp: 4, traits: ['OFFICIAL'] }),
   TWO_ASP: card({ id: 'TWO_ASP', arena: 'ground', cost: 3, power: 2, hp: 5, aspects: ['Cunning', 'Heroism'] }),
@@ -900,5 +904,80 @@ describe('events that change control', () => {
     expect([controlUntil(s, 'm'), controlUntil(s, 'e')]).toEqual([undefined, undefined])
     // With no ready enemy non-leader unit, nothing is chosen at all.
     noChoice(play(board('TWI_204', { units: [unit('m', 'P3')] }, { units: [unit('e', 'P5', { exhausted: true })] })))
+  })
+})
+
+// ── Returns to hand, and effects read from this phase's record ──────────────────────────────────
+
+describe('events that return units to hand', () => {
+  it('Clear the Field (TWI_199) returns a unit costing 3 or less and each enemy non-leader unit with its name', () => {
+    let s = play(board('TWI_199', { units: [unit('mine', 'P3')] }, { units: [unit('e1', 'P3'), unit('e2', 'P3'), unit('big', 'P5')] }))
+    expect(unitOffers(s)).toEqual(['e1', 'e2', 'mine'])
+    s = accept(s, { targetInstanceId: 'mine' })
+    expect([U(s, 'mine'), U(s, 'e1'), U(s, 'e2')]).toEqual([undefined, undefined, undefined])
+    expect(U(s, 'big')).toBeDefined()
+    expect(s.players.player.hand).toEqual(['P3'])
+    expect(s.players.opponent.hand).toEqual(['P3', 'P3'])
+  })
+
+  it('Sweep the Area (JTL_233) returns up to 2 non-leader units in one arena costing 3 or less together', () => {
+    let s = play(board('JTL_233', { units: [unit('m', 'C1')] }, { units: [unit('e', 'P3'), unit('f', 'C1'), unit('sp', 'SP3'), unit('big', 'P5')] }))
+    expect(unitOffers(s)).toEqual(['e', 'f', 'm', 'sp'])
+    expect(declinable(s)).toBe(true)
+    s = accept(s, { targetInstanceId: 'f' })
+    // 2 of the 3 left, in the ground arena: the space unit and the 4-cost unit are out.
+    expect(unitOffers(s)).toEqual(['e', 'm'])
+    expect(U(s, 'f')).toBeDefined()
+    s = accept(s, { targetInstanceId: 'm' })
+    noChoice(s)
+    expect([U(s, 'f'), U(s, 'm')]).toEqual([undefined, undefined])
+    expect(U(s, 'e')).toBeDefined()
+    // Stopping after one still returns the one.
+    const one = skip(accept(play(board('JTL_233', { units: [unit('m', 'C1')] }, { units: [unit('f', 'C1')] })), { targetInstanceId: 'f' }))
+    expect([U(one, 'f'), U(one, 'm')?.instanceId]).toEqual([undefined, 'm'])
+  })
+
+  it('A New Adventure (SHD_207) returns a non-leader unit costing 6 or less, and its owner may play it free', () => {
+    let s = play(board('SHD_207', {}, { units: [unit('e', 'P5'), unit('dear', 'GRD7')] }))
+    expect(unitOffers(s)).toEqual(['e'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(choice(s)).toMatchObject({ kind: 'playUnitFromHand', controller: 'opponent', optional: true })
+    expect('thenShieldIt' in choice(s)).toBe(false)
+  })
+
+  it('Ma Klounkee (SHD_229) returns a friendly non-leader Underworld unit, then deals 3 damage to a unit', () => {
+    let s = play(board('SHD_229', { units: [unit('uw', 'UW'), unit('p', 'P3')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['uw'])
+    s = accept(s, { targetInstanceId: 'uw' })
+    expect(s.players.player.hand).toEqual(['UW'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(3)
+  })
+})
+
+describe("events that read this phase's record", () => {
+  it('Tempest Assault (SEC_144) deals 2 to each enemy space unit once an enemy base was damaged', () => {
+    const b = board('SEC_144', { units: [unit('ms', 'SP4')] }, { units: [unit('es', 'SP4'), unit('eg', 'BIG')] })
+    const hit = play(recordBaseDamaged(b, 'opponent'))
+    expect([dmg(hit, 'ms'), dmg(hit, 'es'), dmg(hit, 'eg')]).toEqual([0, 2, 0])
+    expect(dmg(play(b), 'es')).toBe(0)
+  })
+
+  it("The Emperor's Legion (SOR_091) returns each of your units defeated this phase from the discard pile", () => {
+    const b = board('SOR_091', { discard: ['P3', 'P5', 'UPG'] })
+    const s = play(recordUnitDefeated(b, 'player', 'P3'))
+    expect(s.players.player.hand).toEqual(['P3'])
+    expect(s.players.player.discard).toEqual(['P5', 'UPG', 'SOR_091'])
+  })
+
+  it('Wartime Profiteering (TWI_188) looks at one card per unit defeated this phase and draws one', () => {
+    const b = recordUnitDefeated(recordUnitDefeated(board('TWI_188', { deck: ['U_VIG', 'U_CMD', 'UPG', 'FILL'] }), 'player', 'P3'), 'opponent', 'P5')
+    const c = choice(play(b))
+    expect(c.kind).toBe('searchDraw')
+    expect(revealedOf(c)).toEqual(['U_VIG', 'U_CMD'])
+    expect(eligibleCards(c)).toEqual(['U_VIG', 'U_CMD'])
+    noChoice(play(board('TWI_188', { deck: ['U_VIG'] })))
   })
 })

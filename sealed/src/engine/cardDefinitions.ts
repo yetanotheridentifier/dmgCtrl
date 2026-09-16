@@ -3714,20 +3714,22 @@ registerCard('SHD_049', unitThenWp('You may heal all damage from a unit that cos
   }))
 registerCard('LAW_093', unitThenWp("You may return a non-leader unit that costs 3 or less to its owner's hand. Then, its owner may play it for free. It gains Shielded for this phase.", // Rio Durant
   pickAll(nonLeader, (s, u) => (cardOf(s, u)?.cost ?? 0) <= 3), 'return a unit that costs 3 or less to hand', true,
-  (s, ctx) => {
-    const target = findUnit(s, ctx.targetInstanceId!)
-    if (!target) return s
-    const cardOwner = target.unit.owner ?? target.owner
-    const returned = returnUnitToHand(s, target.unit.instanceId)
-    const hand = returned.players[cardOwner].hand
-    // A token leaves no card behind, so there is nothing to play.
-    if (hand.length === s.players[cardOwner].hand.length) return returned
-    const handIndex = hand.length - 1
-    return pushChoice(returned, {
-      kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: cardOwner, candidates: [{ handIndex, cardId: hand[handIndex] }],
-      costDelta: -(returned.cards[hand[handIndex]]?.cost ?? 0) - 99, entersReady: false, optional: true, thenShieldIt: true,
-    })
-  }))
+  (s, ctx) => returnThenOwnerMayPlayFree(s, ctx, true)))
+/** Return the chosen unit to its owner's hand; its owner may then play it for free (Rio Durant, A New Adventure). */
+function returnThenOwnerMayPlayFree(s: GameState, ctx: IfYouDoContext, thenShieldIt: boolean): GameState {
+  const target = findUnit(s, ctx.targetInstanceId!)
+  if (!target) return s
+  const cardOwner = target.unit.owner ?? target.owner
+  const returned = returnUnitToHand(s, target.unit.instanceId)
+  const hand = returned.players[cardOwner].hand
+  // A token leaves no card behind, so there is nothing to play.
+  if (hand.length === s.players[cardOwner].hand.length) return returned
+  const handIndex = hand.length - 1
+  return pushChoice(returned, {
+    kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: cardOwner, candidates: [{ handIndex, cardId: hand[handIndex] }],
+    costDelta: -(returned.cards[hand[handIndex]]?.cost ?? 0) - 99, entersReady: false, optional: true, ...(thenShieldIt ? { thenShieldIt } : {}),
+  })
+}
 registerCard('LOF_171', { // Heavy Blaster Cannon
   attachRestriction: nonVehicle,
   ...unitThenWp('You may deal 1 damage to a ground unit. Then, deal 1 damage to the same unit. Then, deal 1 damage to the same unit.',
@@ -4644,6 +4646,56 @@ registerCard('SHD_132', swapPairWp('Choose a friendly non-leader unit and an ene
 // "Takes control of each unit they own" at the regroup phase is the default duration.
 registerCard('TWI_204', swapPairWp('Choose a ready non-leader unit controlled by each player. If you do, each player takes control of the chosen unit controlled by the player to their right. At the start of the regroup phase, each player takes control of each unit they own that was chosen for this ability.', // Impropriety Among Thieves
   pickAll(nonLeader, (_s, u) => !u.exhausted), undefined))
+// Returns to hand
+registerCard('TWI_199', unitThenWp("Choose a non-leader unit that costs 3 or less. Return it and each enemy non-leader unit with the same name as it to their owners' hands.", // Clear the Field
+  pickAll(nonLeader, (s, u) => printedCost(s, u) <= 3), 'choose a non-leader unit that costs 3 or less', false,
+  (s, ctx) => {
+    const chosen = findUnit(s, ctx.targetInstanceId!)?.unit
+    if (!chosen) return s
+    const name = cardOf(s, chosen)?.name
+    const same = picked(s, ctx, pickAll(pickEnemy, nonLeader, (st, u) => u.instanceId !== chosen.instanceId && cardOf(st, u)?.name === name))
+    return [chosen, ...same].reduce((acc, u) => returnUnitToHand(acc, u.instanceId), s)
+  }))
+registerCard('JTL_233', { // Sweep the Area
+  ...whenPlayed("Return up to 2 non-leader units in the same arena with a combined cost 3 or less to their owners' hands.", (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAll(nonLeader, (st, u) => printedCost(st, u) <= 3)), "return a non-leader unit that costs 3 or less to its owner's hand", true, 'first')),
+  // The first unit waits for the second pick, or for its decline, so both go back together.
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'second') return [ctx.unitChosen, ctx.targetInstanceId].reduce((acc, id) => (id && findUnit(acc, id) ? returnUnitToHand(acc, id) : acc), s)
+    const first = findUnit(s, ctx.targetInstanceId!)?.unit
+    if (!first) return s
+    const left = 3 - printedCost(s, first)
+    const targets = pickedIds(s, ctx, pickAll(nonLeader, pickArena(first.arena), (st, u) => u.instanceId !== first.instanceId && printedCost(st, u) <= left))
+    return targets.length
+      ? pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true, hookOnDecline: true, text: "return another unit in that arena to its owner's hand", then: resume(ctx, 'second', first.instanceId) })
+      : returnUnitToHand(s, first.instanceId)
+  },
+})
+registerCard('SHD_207', unitThenWp("Return a non-leader unit that costs 6 or less to its owner's hand. Then, its owner may play it for free.", // A New Adventure
+  pickAll(nonLeader, (s, u) => printedCost(s, u) <= 6), "return a non-leader unit that costs 6 or less to its owner's hand", false,
+  (s, ctx) => returnThenOwnerMayPlayFree(s, ctx, false)))
+registerCard('SHD_229', unitThenWp("Return a friendly non-leader Underworld unit to its owner's hand. If you do, deal 3 damage to a unit.", pickAll(pickFriendly, nonLeader, pickTrait('Underworld')), // Ma Klounkee
+  'return a friendly Underworld unit to hand', false,
+  (s, ctx) => { const next = returnUnitToHand(s, ctx.targetInstanceId!); return damageChoice(next, ctx, 3, allUnits(next)) }))
+
+// This phase's record
+registerCard('SEC_144', whenPlayed("If you've dealt damage to an enemy base this phase, deal 2 damage to each enemy space unit.", (s, ctx) => { // Tempest Assault
+  // The phase record says the base took damage, not who dealt it; it is read as dealt by you.
+  const opp = opponentOf(ctx.owner)
+  return baseDamagedThisPhase(s, opp) ? s.players[opp].units.filter(u => u.arena === 'space').reduce((acc, u) => dealDamageToUnit(acc, u.instanceId, 2), s) : s
+}))
+registerCard('SOR_091', whenPlayed('Return each unit in your discard pile that was defeated this phase to your hand.', (s, ctx) => // The Emperor's Legion
+  defeatedThisPhase(s, ctx.owner).reduce((acc, cardId) => {
+    const p = acc.players[ctx.owner]
+    const at = p.discard.lastIndexOf(cardId)
+    return at === -1 || acc.cards[cardId]?.type !== 'unit' ? acc : updatePlayer(acc, ctx.owner, { discard: p.discard.filter((_, i) => i !== at), hand: [...p.hand, cardId] })
+  }, s)))
+registerCard('TWI_188', whenPlayed('Look at cards from the top of your deck equal to the number of units that were defeated this phase. Draw 1 and put the others on the bottom of your deck in a random order.', (s, ctx) => { // Wartime Profiteering
+  const n = defeatedThisPhase(s, ctx.owner).length + defeatedThisPhase(s, opponentOf(ctx.owner)).length
+  const revealed = s.players[ctx.owner].deck.slice(0, n)
+  return revealed.length ? pushChoice(s, { kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices: revealed.map((_, i) => i) }) : s
+}))
+
 registerCard('LAW_085', unitThenWp('Choose a friendly non-leader unit. An opponent takes control of it. If they do, deal 4 damage to another unit in the same arena.', pickAll(pickFriendly, nonLeader), 'give a friendly non-leader unit to an opponent', false, // You Hold This
   (s, ctx) => {
     const others = otherInArena(s, ctx.targetInstanceId!)

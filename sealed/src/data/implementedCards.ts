@@ -497,6 +497,14 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'SHD_132', name: 'Choose Sides' },
   { id: 'TWI_204', name: 'Impropriety Among Thieves' },
   { id: 'LAW_085', name: 'You Hold This' },
+  // Returns to hand, and this phase's record
+  { id: 'TWI_199', name: 'Clear the Field' },
+  { id: 'JTL_233', name: 'Sweep the Area' },
+  { id: 'SHD_207', name: 'A New Adventure' },
+  { id: 'SHD_229', name: 'Ma Klounkee' },
+  { id: 'SEC_144', name: 'Tempest Assault' },
+  { id: 'SOR_091', name: "The Emperor's Legion" },
+  { id: 'TWI_188', name: 'Wartime Profiteering' },
   // Printed as an upgrade (see `cardDataCorrections.ts`), but the set data, and so the set totals
   // below, file it as an event. Counted where the totals count it.
   { id: 'SOR_215', name: 'Snapshot Reflexes' },
