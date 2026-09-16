@@ -734,6 +734,12 @@ function choiceMoves(state: GameState): Action[] {
         if ('optional' in choice && choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'selectHandCardThen': {
+        for (const handIndex of choice.handIndices) moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex })
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'selectUpgradeThen':
       case 'selectUpgradeToReturn': {
         // Jabba may return an upgrade; Full of Surprises must.
         choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))

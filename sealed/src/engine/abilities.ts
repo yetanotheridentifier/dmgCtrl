@@ -1,4 +1,4 @@
-import type { Arena, EngineCard, GameState, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext } from './types'
+import type { Arena, EngineCard, GameState, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext, UpgradeRef } from './types'
 import { abilityCardIds } from './types'
 
 /**
@@ -87,8 +87,14 @@ export interface AbilityDef {
 export interface IfYouDoContext extends EffectContext {
   /** The stage of the ability being resumed, when it has more than one (`IfYouDo.step`). */
   step?: string
-  /** The card a discard just put in the discard pile. The chosen unit is `targetInstanceId`. */
+  /**
+   * The card a discard just put in the discard pile, or a hand card just chosen (then `handIndex` is
+   * where it is). The chosen unit is `targetInstanceId`.
+   */
   cardChosen?: string
+  handIndex?: number
+  /** The upgrade chosen by this stage or carried from an earlier one (`IfYouDo.upgrade`). */
+  upgradeChosen?: UpgradeRef
 }
 
 export interface CardDefinition {

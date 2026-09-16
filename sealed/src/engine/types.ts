@@ -380,6 +380,8 @@ export interface IfYouDo {
   owner: PlayerId
   sourceInstanceId?: string
   step?: string
+  /** An upgrade an earlier stage chose, carried to the next (Jocasta Nu's upgrade, then its new unit). */
+  upgrade?: UpgradeRef
 }
 
 export interface HandCardRef {
@@ -643,8 +645,15 @@ type ChoiceVariant =
   // `thenAdvantage` gives that many Advantage tokens to a friendly unit afterwards (Diplomatic Pageantry).
   | { kind: 'selectPair'; id: string; controller: PlayerId; friendlyTargets: string[]; enemyTargets: string[]; chosenFriendly?: string; mode: 'defeat' | 'exhaust'; optional?: boolean; thenAdvantage?: number }
   // Return one of `candidates` (upgrades in play) to its owner's hand. Mandatory unless `optional`:
-  // Jabba the Hutt prints "may", Full of Surprises does not.
-  | { kind: 'selectUpgradeToReturn'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional?: boolean; thenShield?: boolean }
+  // Jabba the Hutt prints "may", Full of Surprises does not. `replayFree` is Jabba's own "if it's
+  // returned to your hand, you may play it for free"; Junior Senator and Criminal Muscle print no such
+  // thing.
+  | { kind: 'selectUpgradeToReturn'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional?: boolean; thenShield?: boolean; replayFree?: boolean }
+  // Choose one of `candidates` (upgrades in play) for the card's `ifYouDo` hook (Jocasta Nu).
+  | { kind: 'selectUpgradeThen'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional?: boolean; text: string; then: IfYouDo }
+  // Choose one of your hand cards at `handIndices` for the card's `ifYouDo` hook, which is told the
+  // card and its hand index (Cin Drallig). The card stays in hand until the hook moves it.
+  | { kind: 'selectHandCardThen'; id: string; controller: PlayerId; handIndices: number[]; optional?: boolean; text: string; then: IfYouDo }
   // Jabba the Hutt: having returned `cardId` to your own hand, may attach it free to a unit.
   | { kind: 'mayPlayUpgradeFree'; id: string; controller: PlayerId; cardId: string; targets: string[] }
   // Jod Na Nawood: may pay `cost`, then exhaust every unit in the chosen arena

@@ -840,6 +840,12 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SEC_030', name: 'Death Trooper' },
   { id: 'SOR_097', name: 'Admiral Ackbar' },
   { id: 'LOF_037', name: 'Darth Vader' },
+  // When Played, other sets: upgrades returned, moved or played
+  { id: 'SEC_200', name: 'Junior Senator' },
+  { id: 'SHD_209', name: 'Criminal Muscle' },
+  { id: 'LAW_078', name: 'Sabine Wren' },
+  { id: 'LOF_248', name: 'Jocasta Nu' },
+  { id: 'LOF_150', name: 'Cin Drallig' },
 ]
 
 /**

@@ -309,6 +309,8 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'selectFriendlyUnit':
       return ['choose a friendly unit']
     case 'selectUnitThen':
+    case 'selectUpgradeThen':
+    case 'selectHandCardThen':
       return [choice.optional ? `you may ${choice.text}` : choice.text]
     case 'mayPayThen': {
       const cost = choice.revealEvent ? 'reveal an event from your hand'

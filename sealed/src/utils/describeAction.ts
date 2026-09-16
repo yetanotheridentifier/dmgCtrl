@@ -159,7 +159,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayLastingBuff' || choice.kind === 'mayGiveAdvantage' || choice.kind === 'mayExhaustLeaderGiveAdvantage' || choice.kind === 'mayExhaustLeaderExhaustUnit' || choice.kind === 'mayExhaustUnit') return 'Decline'
       if (choice.kind === 'mayExhaustLeaderForAdvantage' || choice.kind === 'mayExhaustLeaderHealUnit' || choice.kind === 'mayPayToDraw' || choice.kind === 'mayDeployLeader') return "Don't"
       if (choice.kind === 'mayResourceTop' || choice.kind === 'mayPayThen') return "Don't"
-      if (choice.kind === 'selectUnitThen') return 'Decline'
+      if (choice.kind === 'selectUnitThen' || choice.kind === 'selectUpgradeThen' || choice.kind === 'selectHandCardThen') return 'Decline'
       if (choice.kind === 'maySelfDamageShield' || choice.kind === 'mayCreateToken' || choice.kind === 'mayCapture') return "Don't"
       if (choice.kind === 'damageAnyBases') return 'Done'
       if (choice.kind === 'selectPair' || choice.kind === 'selectUpgradeToReturn' || choice.kind === 'mayPlayUpgradeFree') return 'Decline'
@@ -334,6 +334,16 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const name = pick ? state.cards[pick.cardId]?.name : undefined
         const host = pick ? anyUnitName(state, pick.unitId) : undefined
         return `Return ${name ?? 'upgrade'}${host ? ` from ${host}` : ''}`
+      }
+      if (choice.kind === 'selectUpgradeThen') {
+        const pick = choice.candidates[action.optionIndex ?? 0]
+        const name = pick ? state.cards[pick.cardId]?.name : undefined
+        const host = pick ? anyUnitName(state, pick.unitId) : undefined
+        return `Choose ${name ?? 'upgrade'}${host ? ` on ${host}` : ''}`
+      }
+      if (choice.kind === 'selectHandCardThen') {
+        const cardId = action.handIndex !== undefined ? state.players[by].hand[action.handIndex] : undefined
+        return `Choose ${cardId ? state.cards[cardId]?.name ?? cardId : 'a card'}`
       }
       if (choice.kind === 'mayPlayUpgradeFree') {
         const name = state.cards[choice.cardId]?.name ?? 'upgrade'

@@ -866,7 +866,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         }
         break
       }
-      if (upgradeOwner === choice.controller && !wasToken) {
+      if (choice.replayFree && upgradeOwner === choice.controller && !wasToken) {
         const targets = inPlayUnits(next).map(u => u.instanceId)
         if (targets.length > 0) {
           next = pushChoice(next, { kind: 'mayPlayUpgradeFree', id: `${choice.id}-free`, controller: choice.controller, cardId: pick.cardId, targets })
@@ -1326,6 +1326,16 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       break
     case 'selectUnitThen':
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) next = runIfYouDo(next, choice.then, { targetInstanceId })
+      break
+    case 'selectUpgradeThen': {
+      const pick = choice.candidates[optionIndex ?? 0]
+      if (pick) next = runIfYouDo(next, choice.then, { upgradeChosen: pick })
+      break
+    }
+    case 'selectHandCardThen':
+      if (handIndex !== undefined && choice.handIndices.includes(handIndex)) {
+        next = runIfYouDo(next, choice.then, { handIndex, cardChosen: next.players[choice.controller].hand[handIndex] })
+      }
       break
     case 'selectUnitToReady':
       // Galvanized Leap: ready the chosen unit.
@@ -1899,8 +1909,21 @@ function playUpgrade(state: GameState, handIndex: number, targetInstanceId: stri
   }
   const targetUnit = state.players[targetOwner].units.find(u => u.instanceId === targetInstanceId)
 
-  const paid = payCost(p, effectiveCost(state, playerId, card, targetUnit))
-  let next = updatePlayer(state, playerId, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
+  const paid = updatePlayer(state, playerId, payCost(p, effectiveCost(state, playerId, card, targetUnit)))
+  return playUpgradeOnto(paid, playerId, handIndex, targetInstanceId)
+}
+
+/**
+ * Play the upgrade at `handIndex` of `playerId`'s hand onto `targetInstanceId`, its cost already dealt
+ * with: attach it, record it as played, and fire what it arriving sets off. The ordinary play pays
+ * first; an ability that plays one for free (Cin Drallig) calls this directly.
+ */
+export function playUpgradeOnto(state: GameState, playerId: PlayerId, handIndex: number, targetInstanceId: string): GameState {
+  const card = state.cards[state.players[playerId].hand[handIndex]]
+  const target = findUnit(state, targetInstanceId)
+  if (!card || card.type !== 'upgrade' || !target) return state
+  const targetOwner = target.owner
+  let next = updatePlayer(state, playerId, { hand: state.players[playerId].hand.filter((_, i) => i !== handIndex) })
   next = updatePlayer(next, targetOwner, {
     units: next.players[targetOwner].units.map(u =>
       // The count is per unit and per round ("the first upgrade you play on this unit each round",
@@ -2409,10 +2432,10 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
  */
 /** Every unit in play, both sides. */
 /** Resume an ability at its card's `ifYouDo` hook, with what the answered choice settled. */
-function runIfYouDo(state: GameState, then: IfYouDo, settled: { targetInstanceId?: string; cardChosen?: string } = {}): GameState {
+function runIfYouDo(state: GameState, then: IfYouDo, settled: { targetInstanceId?: string; cardChosen?: string; handIndex?: number; upgradeChosen?: UpgradeRef } = {}): GameState {
   const hook = getCardDefinition(then.cardId)?.ifYouDo
   if (!hook) return state
-  const next = hook(state, { owner: then.owner, cardId: then.cardId, sourceInstanceId: then.sourceInstanceId, step: then.step, ...settled })
+  const next = hook(state, { owner: then.owner, cardId: then.cardId, sourceInstanceId: then.sourceInstanceId, step: then.step, upgradeChosen: then.upgrade, ...settled })
   return checkWin(next)
 }
 

@@ -1,11 +1,11 @@
 import type { AbilityDef, CardDefinition, EffectContext } from './abilities'
-import { registerCard } from './abilities'
+import { registerCard, getCardDefinition } from './abilities'
 import { takeControlOfUnit, giveToken, giveTokens, exhaustUnit, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { seededUnit, nextSeed } from './rng'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
-import { discardUnitsMatching } from './resolve'
+import { discardUnitsMatching, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, isTokenCard } from './tokenUnits'
 import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, markAbilityUsed, updatePlayer } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
@@ -1591,7 +1591,7 @@ registerCard('ASH_042', { // Jabba the Hutt
     // returning one defeats it instead (see `returnUpgradeToHand`), which is a legal and useful
     // play against an enemy Shield.
     const candidates = upgradeCandidates(s)
-    return candidates.length ? pushChoice(s, { kind: 'selectUpgradeToReturn', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true }) : s
+    return candidates.length ? pushChoice(s, { kind: 'selectUpgradeToReturn', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true, replayFree: true }) : s
   } }],
 })
 
@@ -3763,4 +3763,67 @@ registerCard('LOF_037', { // Darth Vader
     const shielded = giveToken(s, ctx.targetInstanceId!, TOKEN_SHIELD)
     return ctx.step === 'friendly' ? unitThen(shielded, ctx, pickedIds(shielded, ctx, pickEnemy), 'give an enemy unit a Shield token', false, 'enemy') : shielded
   },
+})
+
+// Upgrades returned, moved or played
+const mayReturnUpgradeWp = (description: string, candidates: (s: GameState) => UpgradeRef[]) => whenPlayed(description, (s, ctx) => {
+  const found = candidates(s)
+  return found.length ? pushChoice(s, { kind: 'selectUpgradeToReturn', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates: found, optional: true }) : s
+})
+const nonUniqueUpgrade = (s: GameState, up: UpgradeRef): boolean => !s.cards[up.cardId]?.unique
+registerCard('SEC_200', mayReturnUpgradeWp("You may return an upgrade that costs 3 or less to its owner's hand.", s => upgradeCandidates(s, { maxCost: 3 }))) // Junior Senator
+registerCard('SHD_209', mayReturnUpgradeWp("You may return a non-unique upgrade to its owner's hand.", s => upgradeCandidates(s).filter(up => nonUniqueUpgrade(s, up)))) // Criminal Muscle
+registerCard('LAW_078', whenPlayed('You may defeat a non-unique upgrade. If you control a Vigilance or Command unit, you may defeat an upgrade instead.', (s, ctx) => { // Sabine Wren
+  const any = youControl(s, ctx, pickAspect('Vigilance', 'Command'))
+  const candidates = upgradeCandidates(s).filter(up => any || nonUniqueUpgrade(s, up))
+  return candidates.length ? pushChoice(s, { kind: 'selectUpgradeToDefeat', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true }) : s
+}))
+
+/** The units other than its host that `up` could be attached to by `owner`. */
+const moveTargets = (s: GameState, up: UpgradeRef, owner: PlayerId): string[] => {
+  const restriction = getCardDefinition(up.cardId)?.attachRestriction
+  return allUnits(s).filter(u => u.instanceId !== up.unitId && (!restriction || restriction(s, u, owner))).map(u => u.instanceId)
+}
+registerCard('LOF_248', { // Jocasta Nu
+  ...whenPlayed('You may attach a friendly upgrade on a friendly unit to a different eligible unit.', (s, ctx) => {
+    const candidates = upgradeCandidates(s, { owner: ctx.owner, hostController: ctx.owner }).filter(up => moveTargets(s, up, ctx.owner).length > 0)
+    return candidates.length
+      ? pushChoice(s, { kind: 'selectUpgradeThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true, text: 'move a friendly upgrade to another unit', then: resume(ctx) })
+      : s
+  }),
+  ifYouDo: (s, ctx) => {
+    const up = ctx.upgradeChosen
+    if (!up) return s
+    // First the upgrade, then where it goes.
+    if (!ctx.targetInstanceId) {
+      return pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets: moveTargets(s, up, ctx.owner), text: `attach ${s.cards[up.cardId]?.name ?? 'the upgrade'} to a different unit`, then: { ...resume(ctx), upgrade: up } })
+    }
+    const from = findUnit(s, up.unitId)
+    const moving = from?.unit.upgrades[up.upgradeIndex]
+    if (!from || !moving || moving.cardId !== up.cardId) return s
+    const detached = updatePlayer(s, from.owner, {
+      units: s.players[from.owner].units.map(u => (u.instanceId === up.unitId ? { ...u, upgrades: u.upgrades.filter((_, i) => i !== up.upgradeIndex) } : u)),
+    })
+    const to = findUnit(detached, ctx.targetInstanceId)
+    if (!to) return s
+    return updatePlayer(detached, to.owner, {
+      units: detached.players[to.owner].units.map(u => (u.instanceId === ctx.targetInstanceId ? { ...u, upgrades: [...u.upgrades, moving] } : u)),
+    })
+  },
+})
+registerCard('LOF_150', { // Cin Drallig
+  ...whenPlayed('You may play a Lightsaber upgrade from your hand for free on this unit. If you do, ready him.', (s, ctx) => {
+    const self = findUnit(s, ctx.sourceInstanceId!)?.unit
+    if (!self) return s
+    const handIndices = s.players[ctx.owner].hand.flatMap((id, i) => {
+      const c = s.cards[id]
+      const restriction = getCardDefinition(id)?.attachRestriction
+      return c?.type === 'upgrade' && c.traits.some(t => t.toLowerCase() === 'lightsaber') && (!restriction || restriction(s, self, ctx.owner)) ? [i] : []
+    })
+    return handIndices.length
+      ? pushChoice(s, { kind: 'selectHandCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, handIndices, optional: true, text: 'play a Lightsaber upgrade on this unit for free', then: resume(ctx) })
+      : s
+  }),
+  ifYouDo: (s, ctx) =>
+    (ctx.handIndex === undefined ? s : readyUnit(playUpgradeOnto(s, ctx.owner, ctx.handIndex, ctx.sourceInstanceId!), ctx.sourceInstanceId!)),
 })

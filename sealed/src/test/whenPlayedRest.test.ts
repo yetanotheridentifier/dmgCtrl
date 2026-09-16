@@ -73,6 +73,13 @@ const F: Record<string, EngineCard> = {
   SEC_165: src('SEC_165', { power: 3 }), LAW_075: src('LAW_075'), JTL_201: src('JTL_201'), SHD_049: src('SHD_049'), LAW_093: src('LAW_093'),
   LOF_171: upg('LOF_171'), SEC_030: src('SEC_030'), SOR_097: src('SOR_097'), LOF_037: src('LOF_037'),
   PRICEY: card({ id: 'PRICEY', arena: 'ground', cost: 5, power: 2, hp: 6 }),
+
+  // Upgrades returned, moved or played
+  SEC_200: src('SEC_200'), SHD_209: src('SHD_209'), LAW_078: src('LAW_078', { aspects: ['Aggression', 'Cunning', 'Heroism'] }),
+  LOF_248: src('LOF_248'), LOF_150: src('LOF_150', { cost: 8 }),
+  CHEAPUP: upg('CHEAPUP', { cost: 3 }), DEARUP: upg('DEARUP', { cost: 4 }), UNIQUP: upg('UNIQUP', { cost: 1, unique: true }),
+  COMMAND: card({ id: 'COMMAND', arena: 'ground', cost: 2, power: 2, hp: 6, aspects: ['Command'] }),
+  SABER: upg('SABER', { traits: ['LIGHTSABER'] }), SABER2: upg('SABER2', { traits: ['LIGHTSABER'] }),
 }
 
 const unit = (instanceId: string, cardId: string, over: Partial<UnitState> = {}): UnitState =>
@@ -668,6 +675,82 @@ describe('two linked steps in one ability', () => {
     expect(offered(attack)).toEqual(['e'])
     expect(declinable(attack)).toBe(false)
     noChoice(fireAt(s, 'LOF_037', 'onAttack'))
+  })
+})
+
+// ── Upgrades returned, moved or played ────────────────────────────────────────────────────────────
+
+describe('upgrades returned, moved or played', () => {
+  const upgraded = (hostCard = 'GRD') => board(
+    [unit('src', hostCard), unit('g', 'GRD', { upgrades: [{ cardId: 'CHEAPUP', owner: 'player' }, { cardId: 'UNIQUP', owner: 'player' }] }), unit('v', 'VEH')],
+    [unit('e', 'GRD', { upgrades: [{ cardId: 'DEARUP', owner: 'opponent' }] })],
+  )
+  const offeredUpgrades = (s: GameState) => {
+    const c = choice(s)
+    return 'candidates' in c ? (c.candidates as { cardId: string }[]).map(x => x.cardId).sort() : []
+  }
+
+  it('Junior Senator (SEC_200): may return an upgrade that costs 3 or less, with no free replay', () => {
+    const fired = fire(upgraded(), 'SEC_200')
+    expect(choice(fired).kind).toBe('selectUpgradeToReturn')
+    expect(offeredUpgrades(fired)).toEqual(['CHEAPUP', 'UNIQUP'])
+    expect(declinable(fired)).toBe(true)
+    const after = accept(fired, { optionIndex: offeredUpgrades(fired).indexOf('CHEAPUP') === 0 ? 0 : 1 })
+    expect(after.players.player.hand).toContain('CHEAPUP')
+    noChoice(after)
+  })
+
+  it('Criminal Muscle (SHD_209): may return a non-unique upgrade, with no free replay', () => {
+    const fired = fire(upgraded(), 'SHD_209')
+    expect(offeredUpgrades(fired)).toEqual(['CHEAPUP', 'DEARUP'])
+    expect(declinable(fired)).toBe(true)
+  })
+
+  it('Jabba the Hutt (ASH_042) still offers his free replay', () => {
+    const fired = fire(upgraded(), 'ASH_042')
+    const c = choice(fired)
+    const i = 'candidates' in c ? (c.candidates as { cardId: string }[]).findIndex(x => x.cardId === 'CHEAPUP') : -1
+    expect(choice(accept(fired, { optionIndex: i })).kind).toBe('mayPlayUpgradeFree')
+  })
+
+  it('Sabine Wren (LAW_078): may defeat a non-unique upgrade, or any upgrade with a Vigilance or Command unit', () => {
+    const plain = fire(upgraded(), 'LAW_078')
+    expect(choice(plain).kind).toBe('selectUpgradeToDefeat')
+    expect(offeredUpgrades(plain)).toEqual(['CHEAPUP', 'DEARUP'])
+    expect(declinable(plain)).toBe(true)
+    const commanded = fire(upgraded('COMMAND'), 'LAW_078')
+    expect(offeredUpgrades(commanded)).toEqual(['CHEAPUP', 'DEARUP', 'UNIQUP'])
+  })
+
+  it('Jocasta Nu (LOF_248): may move a friendly upgrade on a friendly unit to a different eligible unit', () => {
+    const s = board(
+      [unit('src', 'LOF_248'), unit('g', 'GRD', { upgrades: [{ cardId: 'LOF_140', owner: 'player' }, { cardId: 'CHEAPUP', owner: 'player' }] }), unit('v', 'VEH')],
+      [unit('e', 'GRD', { upgrades: [{ cardId: 'DEARUP', owner: 'opponent' }] })],
+    )
+    const fired = fire(s, 'LOF_248')
+    expect(offeredUpgrades(fired), 'not an enemy upgrade').toEqual(['CHEAPUP', 'LOF_140'])
+    expect(declinable(fired)).toBe(true)
+    const c = choice(fired)
+    const saber = 'candidates' in c ? (c.candidates as { cardId: string }[]).findIndex(x => x.cardId === 'LOF_140') : -1
+    const picked = accept(fired, { optionIndex: saber })
+    expect(offered(picked), "Darth Maul's Lightsaber: a friendly non-Vehicle unit other than its host").toEqual(['src'])
+    const moved = accept(picked, { targetInstanceId: 'src' })
+    expect(U(moved, 'src')!.upgrades).toEqual([{ cardId: 'LOF_140', owner: 'player' }])
+    expect(U(moved, 'g')!.upgrades).toEqual([{ cardId: 'CHEAPUP', owner: 'player' }])
+    const cheap = accept(fired, { optionIndex: 1 - saber })
+    expect(offered(cheap), 'any other unit').toEqual(['e', 'src', 'v'])
+  })
+
+  it('Cin Drallig (LOF_150): may play a Lightsaber upgrade from hand on him for free, then ready him', () => {
+    const s = withPlayer(board([unit('src', 'LOF_150', { exhausted: true })]), 'player', { hand: ['CHEAPUP', 'SABER', 'SABER2'], resources: [] })
+    noChoice(fire(withPlayer(s, 'player', { hand: ['CHEAPUP'] }), 'LOF_150'))
+    const fired = fire(s, 'LOF_150')
+    expect(declinable(fired)).toBe(true)
+    expect(accepts(fired).map(m => m.handIndex).sort()).toEqual([1, 2])
+    const after = accept(fired, { handIndex: 2 })
+    expect(U(after, 'src')!.upgrades).toEqual([{ cardId: 'SABER2', owner: 'player' }])
+    expect(after.players.player.hand).toEqual(['CHEAPUP', 'SABER'])
+    expect(U(after, 'src')!.exhausted).toBe(false)
   })
 })
 
