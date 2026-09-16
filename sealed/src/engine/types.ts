@@ -454,6 +454,8 @@ export interface LastingEffect {
   abilityCardIds?: string[]
   /** The unit can't attack for the duration (Chaotic Diversion). Read by `unitCannotAttack`. */
   cannotAttack?: boolean
+  /** The unit can't attack bases for the duration (Fly Casual). Read by `unitCannotAttackBases`. */
+  cannotAttackBases?: boolean
   /**
    * The unit can't be attacked for the duration (Dooku), or not while it lacks Sentinel when
    * `unlessSentinel` is set (On Top of Things). Read by `unitCannotBeAttacked`.

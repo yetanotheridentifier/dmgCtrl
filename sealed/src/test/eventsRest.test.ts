@@ -5,7 +5,11 @@ import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helpers/engineFixtures'
 import type { Action } from '../engine/actions'
 import type { EngineCard, GameState, PendingChoice, PlayerId, UnitState } from '../engine/types'
-import { recordBaseDamaged } from '../engine/types'
+import { recordBaseDamaged, recordUnitDefeated } from '../engine/types'
+import { unitHasKeyword, unitCannotAttackBases } from '../engine/keywords'
+import { effectivePower } from '../engine/stats'
+import { effectiveCost } from '../engine/legalMoves'
+import { TOKEN_SHIELD, hasToken } from '../engine/tokenUpgrades'
 
 /**
  * The one-off events, in groups taken whole: deck searches that draw, and events that look at,
@@ -48,6 +52,15 @@ const F = {
   JTL_129: ev('JTL_129', 4), JTL_131: ev('JTL_131', 7), TWI_176: ev('TWI_176', 6), JTL_173: ev('JTL_173'),
   SEC_130: ev('SEC_130', 4), TWI_099: ev('TWI_099', 2), JTL_144: ev('JTL_144', 3), SOR_092: ev('SOR_092', 5),
   SOR_173: ev('SOR_173', 5), SOR_221: ev('SOR_221', 3),
+
+  SOR_218: ev('SOR_218', 2), TWI_221: ev('TWI_221', 0), JTL_195: ev('JTL_195', 3), SEC_196: ev('SEC_196', 2),
+  LAW_226: ev('LAW_226', 2), JTL_230: ev('JTL_230'), SHD_227: ev('SHD_227', 0), JTL_194: ev('JTL_194', 2),
+  LOF_223: ev('LOF_223', 2), JTL_178: ev('JTL_178', 3), JTL_206: ev('JTL_206'), LAW_043: ev('LAW_043', 5),
+  SHD_182: ev('SHD_182', 5),
+  OFFICIAL: card({ id: 'OFFICIAL', arena: 'ground', cost: 2, power: 1, hp: 4, traits: ['OFFICIAL'] }),
+  TWO_ASP: card({ id: 'TWO_ASP', arena: 'ground', cost: 3, power: 2, hp: 5, aspects: ['Cunning', 'Heroism'] }),
+  DROID: card({ id: 'DROID', arena: 'ground', cost: 2, power: 2, hp: 5, traits: ['DROID'] }),
+  P2: card({ id: 'P2', arena: 'ground', cost: 3, power: 2, hp: 5 }),
 
   // Units for the damage events
   P3: card({ id: 'P3', arena: 'ground', cost: 2, power: 3, hp: 5 }),
@@ -316,9 +329,9 @@ describe('events that choose a player', () => {
 
 // ── Damage read from a unit, and a chosen arena ─────────────────────────────────────────────────
 
-/** The unit targets the current choice offers, sorted. */
+/** The unit targets the first pending choice offers, sorted. */
 const unitOffers = (s: GameState) =>
-  [...new Set(moves(s).flatMap(m => (m.type === 'acceptChoice' && m.targetInstanceId ? [m.targetInstanceId] : [])))].sort()
+  [...new Set(moves(s).flatMap(m => (m.type === 'acceptChoice' && m.choiceId === choice(s).id && m.targetInstanceId ? [m.targetInstanceId] : [])))].sort()
 const dmg = (s: GameState, id: string) => U(s, id)?.damage
 
 describe('events that deal damage read from a unit', () => {
@@ -442,5 +455,138 @@ describe('events that choose an arena', () => {
     expect(unitOffers(s)).toEqual(['sp'])
     s = accept(s, { targetInstanceId: 'sp' })
     expect([dmg(s, 'e'), dmg(s, 'f'), dmg(s, 'es'), dmg(s, 'g')]).toEqual([4, 4, 0, 0])
+  })
+})
+
+// ── Exhausting and readying ─────────────────────────────────────────────────────────────────────
+
+const exhausted = (s: GameState, ...ids: string[]) => ids.map(id => U(s, id)?.exhausted)
+
+describe('events that exhaust or ready units', () => {
+  it('Asteroid Sanctuary (SOR_218) exhausts an enemy unit, then shields a friendly unit costing 3 or less', () => {
+    let s = play(board('SOR_218', { units: [unit('cheap', 'P3'), unit('dear', 'P5')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['e'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(exhausted(s, 'e')).toEqual([true])
+    expect(unitOffers(s)).toEqual(['cheap'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'cheap' })
+    expect(hasToken(U(s, 'cheap')!.upgrades, TOKEN_SHIELD)).toBe(true)
+  })
+
+  it('In Pursuit (TWI_221) exhausts an enemy unit only if it exhausted a friendly one', () => {
+    let s = play(board('TWI_221', { units: [unit('m', 'P3'), unit('tired', 'P3', { exhausted: true })] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['m', 'tired'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(exhausted(s, 'm', 'e')).toEqual([true, true])
+    const none = accept(play(board('TWI_221', { units: [unit('tired', 'P3', { exhausted: true })] }, { units: [unit('e', 'BIG')] })), { targetInstanceId: 'tired' })
+    noChoice(none)
+  })
+
+  it('Cat and Mouse (JTL_195) readies a friendly unit in the same arena with no more power', () => {
+    let s = play(board('JTL_195', {
+      units: [unit('weak', 'P2', { exhausted: true }), unit('strong', 'P5', { exhausted: true }), unit('sp', 'SP4', { exhausted: true })],
+    }, { units: [unit('e', 'P3')] }))
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(exhausted(s, 'e')).toEqual([true])
+    expect(unitOffers(s)).toEqual(['weak'])
+    s = accept(s, { targetInstanceId: 'weak' })
+    expect(exhausted(s, 'weak')).toEqual([false])
+  })
+
+  it('No One Ever Knew (SEC_196) exhausts an enemy unit for each friendly Official unit', () => {
+    let s = play(board('SEC_196', { units: [unit('o1', 'OFFICIAL'), unit('o2', 'OFFICIAL'), unit('p', 'P3')] }, { units: [unit('e', 'BIG'), unit('f', 'BIG'), unit('g', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['e', 'f', 'g'])
+    s = accept(s, { targetInstanceId: 'e' })
+    s = accept(s, { targetInstanceId: 'g' })
+    noChoice(s)
+    expect(exhausted(s, 'e', 'f', 'g')).toEqual([true, false, true])
+  })
+
+  it('Secret Battle of Pretend (LAW_226) exhausts an enemy in the same arena per aspect of the friendly unit', () => {
+    let s = play(board('LAW_226', { units: [unit('m', 'TWO_ASP')] }, { units: [unit('e', 'BIG'), unit('f', 'BIG'), unit('g', 'BIG'), unit('sp', 'SP4')] }))
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(unitOffers(s)).toEqual(['e', 'f', 'g'])
+    s = accept(accept(s, { targetInstanceId: 'e' }), { targetInstanceId: 'f' })
+    noChoice(s)
+    expect(exhausted(s, 'm', 'e', 'f', 'g', 'sp')).toEqual([true, true, true, false, false])
+  })
+
+  it('Electromagnetic Pulse (JTL_230) deals 2 to a Droid or Vehicle and exhausts it', () => {
+    let s = play(board('JTL_230', { units: [unit('p', 'P3')] }, { units: [unit('d', 'DROID'), unit('v', 'VEHS')] }))
+    expect(unitOffers(s)).toEqual(['d', 'v'])
+    s = accept(s, { targetInstanceId: 'd' })
+    expect([dmg(s, 'd'), U(s, 'd')!.exhausted]).toEqual([2, true])
+  })
+
+  it("Look the Other Way (SHD_227) exhausts a unit unless its controller pays 2", () => {
+    let s = play(board('SHD_227', {}, { units: [unit('e', 'BIG')], resources: ready(2) }))
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(choice(s)).toMatchObject({ kind: 'payOrExhaust', controller: 'opponent', unitId: 'e', cost: 2 })
+    const paid = accept(s)
+    expect(exhausted(paid, 'e')).toEqual([false])
+    expect(paid.players.opponent.resources.filter(r => r.exhausted)).toHaveLength(2)
+    expect(exhausted(skip(s), 'e')).toEqual([true])
+  })
+
+  it('Heartless Tactics (JTL_194) exhausts, gives -2/-0, and may return a non-leader left on 0 power', () => {
+    let s = play(board('JTL_194', {}, { units: [unit('e', 'P2')] }))
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(exhausted(s, 'e')).toEqual([true])
+    expect(effectivePower(s, U(s, 'e')!)).toBe(0)
+    expect(declinable(s)).toBe(true)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(U(s, 'e')).toBeUndefined()
+    expect(s.players.opponent.hand).toEqual(['P2'])
+    const strong = accept(play(board('JTL_194', {}, { units: [unit('e', 'P3')] })), { targetInstanceId: 'e' })
+    noChoice(strong)
+  })
+
+  it('Force Illusion (LOF_223) exhausts an enemy unit and gives a friendly unit Sentinel', () => {
+    let s = play(board('LOF_223', { units: [unit('m', 'P3')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(unitOffers(s)).toEqual(['m'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(unitHasKeyword(s, U(s, 'm')!, 'Sentinel')).toBe(true)
+  })
+
+  it('Face Off (JTL_178) readies an enemy and then a friendly unit in its arena, only before the initiative is taken', () => {
+    const b = board('JTL_178', { units: [unit('m', 'P3', { exhausted: true }), unit('ms', 'SP4', { exhausted: true })] }, { units: [unit('e', 'BIG', { exhausted: true })] })
+    let s = play(b)
+    expect(declinable(s)).toBe(true)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(exhausted(s, 'e')).toEqual([false])
+    expect(unitOffers(s)).toEqual(['m'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(exhausted(s, 'm')).toEqual([false])
+    noChoice(play({ ...b, initiativeTakenBy: 'opponent' }))
+  })
+
+  it("Fly Casual (JTL_206) readies a Vehicle, which can't attack bases this phase", () => {
+    let s = play(board('JTL_206', { units: [unit('v', 'VEHS', { exhausted: true }), unit('p', 'P3', { exhausted: true })] }))
+    expect(unitOffers(s)).toEqual(['v'])
+    s = accept(s, { targetInstanceId: 'v' })
+    expect(exhausted(s, 'v')).toEqual([false])
+    expect(unitCannotAttackBases(s, U(s, 'v')!)).toBe(true)
+    expect(unitCannotAttackBases(s, U(s, 'p')!)).toBe(false)
+  })
+
+  it('Shadow Cloaking (LAW_043) readies a unit and shields it', () => {
+    let s = play(board('LAW_043', { units: [unit('m', 'P3', { exhausted: true })] }))
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(exhausted(s, 'm')).toEqual([false])
+    expect(hasToken(U(s, 'm')!.upgrades, TOKEN_SHIELD)).toBe(true)
+  })
+
+  it('Bravado (SHD_182) costs 2 less once an enemy unit was defeated this phase, and readies a unit', () => {
+    const b = board('SHD_182', { units: [unit('m', 'P3', { exhausted: true })] })
+    expect(effectiveCost(b, 'player', F.SHD_182)).toBe(5)
+    expect(effectiveCost(recordUnitDefeated(b, 'opponent', 'P3'), 'player', F.SHD_182)).toBe(3)
+    const s = accept(play(b), { targetInstanceId: 'm' })
+    expect(exhausted(s, 'm')).toEqual([false])
   })
 })

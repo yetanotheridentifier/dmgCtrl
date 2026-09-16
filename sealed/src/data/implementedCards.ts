@@ -449,6 +449,20 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'SOR_173', name: 'Bombing Run' },
   { id: 'SOR_221', name: 'Outmaneuver' },
   { id: 'JTL_131', name: 'Turbolaser Salvo' },
+  // Exhausting and readying
+  { id: 'SOR_218', name: 'Asteroid Sanctuary' },
+  { id: 'TWI_221', name: 'In Pursuit' },
+  { id: 'JTL_195', name: 'Cat and Mouse' },
+  { id: 'SEC_196', name: 'No One Ever Knew' },
+  { id: 'LAW_226', name: 'Secret Battle of Pretend' },
+  { id: 'JTL_230', name: 'Electromagnetic Pulse' },
+  { id: 'SHD_227', name: 'Look the Other Way' },
+  { id: 'JTL_194', name: 'Heartless Tactics' },
+  { id: 'LOF_223', name: 'Force Illusion' },
+  { id: 'JTL_178', name: 'Face Off' },
+  { id: 'JTL_206', name: 'Fly Casual' },
+  { id: 'LAW_043', name: 'Shadow Cloaking' },
+  { id: 'SHD_182', name: 'Bravado' },
   // Printed as an upgrade (see `cardDataCorrections.ts`), but the set data, and so the set totals
   // below, file it as an event. Counted where the totals count it.
   { id: 'SOR_215', name: 'Snapshot Reflexes' },

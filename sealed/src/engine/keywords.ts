@@ -158,6 +158,7 @@ export function unitSpillsExcessToUnit(state: GameState, unit: UnitState): boole
 
 /** True if any of the unit's cards forbids it attacking bases (Wicket). */
 export function unitCannotAttackBases(state: GameState, unit: UnitState): boolean {
+  if ((state.lastingEffects ?? []).some(e => e.cannotAttackBases && e.targetInstanceId === unit.instanceId)) return true
   return abilityCardIds(unit).some(id => getCardDefinition(id)?.cannotAttackBases?.(state, unit) ?? false)
 }
 

@@ -4358,3 +4358,89 @@ registerCard('JTL_131', { // Turbolaser Salvo
     return s.players[opponentOf(ctx.owner)].units.filter(u => u.arena === arena).reduce((acc, u) => dealDamageToUnit(acc, u.instanceId, amount), s)
   },
 })
+
+// Exhausting and readying. "Exhaust X. If you do" has happened only when X was ready.
+const readyNow = (s: GameState, id: string | undefined): UnitState | undefined => {
+  const u = findUnit(s, id ?? '')?.unit
+  return u && !u.exhausted ? u : undefined
+}
+/** "Exhaust an enemy unit" `left` more times, one pick at a time (`left:<n>` carries the count). */
+const exhaustEnemiesStep = (s: GameState, ctx: Resumable, left: number, test: Pick = pickEnemy, unit?: string): GameState =>
+  (left > 0 ? unitThen(s, ctx, pickedIds(s, ctx, test), 'exhaust an enemy unit', false, `left:${left}`, unit) : s)
+const stepCount = (step: string | undefined): number => Number(step?.slice('left:'.length) ?? 0)
+
+registerCard('SOR_218', whenPlayed('Exhaust an enemy unit. Give a Shield token to a friendly unit that costs 3 or less.', (s, ctx) => // Asteroid Sanctuary
+  shieldChoice(targetChoice(s, ctx, 'mayExhaustUnit', pickedIds(s, ctx, pickEnemy)), { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-shield` },
+    pickedIds(s, ctx, pickAll(pickFriendly, (st, u) => printedCost(st, u) <= 3)), false)))
+registerCard('TWI_221', unitThenWp('Exhaust a friendly unit. If you do, exhaust an enemy unit.', pickFriendly, 'exhaust a friendly unit', false, // In Pursuit
+  (s, ctx) => (readyNow(s, ctx.targetInstanceId)
+    ? targetChoice(exhaustUnit(s, ctx.targetInstanceId!), ctx, 'mayExhaustUnit', pickedIds(s, ctx, pickEnemy))
+    : s)))
+registerCard('JTL_195', unitThenWp('Exhaust an enemy unit. If you do, ready a friendly unit in the same arena with power equal to or less than that enemy unit.', pickEnemy, 'exhaust an enemy unit', false, // Cat and Mouse
+  (s, ctx) => {
+    const enemy = readyNow(s, ctx.targetInstanceId)
+    if (!enemy) return s
+    const next = exhaustUnit(s, enemy.instanceId)
+    const power = effectivePower(next, enemy)
+    return targetChoice(next, ctx, 'selectUnitToReady', pickedIds(next, ctx, pickAll(pickFriendly, (st, u) => u.arena === enemy.arena && effectivePower(st, u) <= power)))
+  }))
+registerCard('SEC_196', { // No One Ever Knew
+  ...whenPlayed('For each friendly Official unit, exhaust an enemy unit.', (s, ctx) =>
+    exhaustEnemiesStep(s, ctx, picked(s, ctx, pickAll(pickFriendly, pickTrait('Official'))).length)),
+  ifYouDo: (s, ctx) => exhaustEnemiesStep(exhaustUnit(s, ctx.targetInstanceId!), ctx, stepCount(ctx.step) - 1),
+})
+registerCard('LAW_226', { // Secret Battle of Pretend
+  ...whenPlayed('Exhaust a friendly unit. If you do, for each different aspect it has, exhaust an enemy unit in the same arena.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'exhaust a friendly unit', false, 'friendly')),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'friendly') {
+      const friendly = readyNow(s, ctx.targetInstanceId)
+      if (!friendly) return s
+      const aspects = new Set((cardOf(s, friendly)?.aspects ?? []).map(a => a.toLowerCase())).size
+      const next = exhaustUnit(s, friendly.instanceId)
+      return exhaustEnemiesStep(next, ctx, aspects, pickAll(pickEnemy, sameArenaAs(next, friendly.instanceId)), friendly.instanceId)
+    }
+    const next = exhaustUnit(s, ctx.targetInstanceId!)
+    return exhaustEnemiesStep(next, ctx, stepCount(ctx.step) - 1, pickAll(pickEnemy, sameArenaAs(next, ctx.unitChosen)), ctx.unitChosen)
+  },
+})
+registerCard('JTL_230', unitThenWp('Deal 2 damage to a Droid or Vehicle unit and exhaust it.', (s, u) => unitHasTrait(s, u, 'Droid') || unitHasTrait(s, u, 'Vehicle'), // Electromagnetic Pulse
+  'deal 2 damage to a Droid or Vehicle unit and exhaust it', false,
+  (s, ctx) => {
+    const hit = dealDamageToUnit(s, ctx.targetInstanceId!, 2)
+    return findUnit(hit, ctx.targetInstanceId!) ? exhaustUnit(hit, ctx.targetInstanceId!) : hit
+  }))
+registerCard('SHD_227', unitThenWp('Exhaust a unit unless its controller pays 2.', pickAny, 'choose a unit to exhaust unless its controller pays 2', false, // Look the Other Way
+  (s, ctx) => {
+    const found = findUnit(s, ctx.targetInstanceId!)
+    return found ? pushChoice(s, { kind: 'payOrExhaust', id: `${ctx.sourceInstanceId}-pay`, controller: found.owner, unitId: found.unit.instanceId, cost: 2 }) : s
+  }))
+registerCard('JTL_194', unitThenWp('Exhaust a unit and give it -2/-0 for this phase. Then, if it has 0 power and isn\'t a leader, you may return it to its owner\'s hand.', pickAny, 'exhaust a unit and give it -2/-0', false, // Heartless Tactics
+  (s, ctx) => {
+    const id = ctx.targetInstanceId!
+    const next = addLastingEffect(exhaustUnit(s, id), { targetInstanceId: id, power: -2 })
+    const u = findUnit(next, id)?.unit
+    return u && effectivePower(next, u) === 0 && !isLeaderUnit(next, u) ? targetChoice(next, ctx, 'selectUnitToReturn', [id], true) : next
+  }))
+registerCard('LOF_223', whenPlayed('Exhaust an enemy unit. A friendly unit gains Sentinel for this phase.', (s, ctx) => // Force Illusion
+  lastingBuffChoice(targetChoice(s, ctx, 'mayExhaustUnit', pickedIds(s, ctx, pickEnemy)), { ...ctx, sourceInstanceId: `${ctx.sourceInstanceId}-sentinel` },
+    pickedIds(s, ctx, pickFriendly), { keywords: [KW.sentinel] })))
+registerCard('JTL_178', { // Face Off
+  ...whenPlayed('If no player has taken the initiative this phase, you may ready an enemy unit. If you do, ready a friendly unit in the same arena.', (s, ctx) =>
+    (s.initiativeTakenBy === null ? unitThen(s, ctx, pickedIds(s, ctx, pickEnemy), 'ready an enemy unit', true) : s)),
+  ifYouDo: (s, ctx) => {
+    const enemy = findUnit(s, ctx.targetInstanceId!)?.unit
+    if (!enemy || !enemy.exhausted) return s
+    const next = readyUnit(s, enemy.instanceId)
+    return targetChoice(next, ctx, 'selectUnitToReady', pickedIds(next, ctx, pickAll(pickFriendly, pickArena(enemy.arena))))
+  },
+})
+registerCard('JTL_206', unitThenWp("Ready a Vehicle unit. It can't attack bases for this phase.", pickTrait('Vehicle'), 'ready a Vehicle unit', false, // Fly Casual
+  (s, ctx) => addLastingEffect(readyUnit(s, ctx.targetInstanceId!), { targetInstanceId: ctx.targetInstanceId!, cannotAttackBases: true })))
+registerCard('LAW_043', unitThenWp('Ready a unit and give a Shield token to it.', pickAny, 'ready a unit and give it a Shield token', false, // Shadow Cloaking
+  (s, ctx) => giveToken(readyUnit(s, ctx.targetInstanceId!), ctx.targetInstanceId!, TOKEN_SHIELD)))
+registerCard('SHD_182', { // Bravado
+  // The phase record says an enemy unit was defeated, not by whom; it is read as defeated by you.
+  costModifier: (s, playerId) => (defeatedThisPhase(s, opponentOf(playerId)).length > 0 ? -2 : 0),
+  ...readyEvent("If you've defeated an enemy unit this phase, this event costs 2 less to play. Ready a unit.", () => true),
+})
