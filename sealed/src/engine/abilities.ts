@@ -371,6 +371,8 @@ export interface StatModContext {
   defenderDamaged?: boolean
   /** This attack was made via Ambush, as the unit entered play (Heroic Purrgil). */
   viaAmbush?: boolean
+  /** The current combat's roles, where there is one (Corner the Prey reads the defender). */
+  combat?: CombatContext
 }
 
 const registry = new Map<string, CardDefinition>()

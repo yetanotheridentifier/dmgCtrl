@@ -4,7 +4,7 @@ import type { PendingChoice, PendingTrigger, TriggerContext, UpgradeRef } from '
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds } from './types'
 import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
-import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
+import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets, offerAttack } from './legalMoves'
 import { collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, stampChoiceSource, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
@@ -120,7 +120,9 @@ function resolveAction(state: GameState, action: Action): GameState {
         }
         // An Ambush attack is the one resolving the entering unit's ambush choice (Heroic Purrgil).
         const viaAmbush = choice?.kind === 'ambush' && choice.unitId === action.attackerId
-        let attacked = attack(before, action.attackerId, action.target, viaAmbush)
+        // "Even if it's exhausted" (Dogfight): only the choice that says so lets an exhausted unit attack.
+        const mayBeExhausted = choice?.kind === 'mayAttackAnyUnit' && choice.exhausted === true
+        let attacked = attack(before, action.attackerId, action.target, viaAmbush, mayBeExhausted)
         // Consume the choice this attack resolved, by id: `popChoice` drops the head, which is
         // not necessarily the one answered. Support-granted keywords are cleared inside
         // completeAttack (after they're used), so they survive a mid-combat On Defense suspension.
@@ -616,6 +618,28 @@ function resumeAfterChoice(state: GameState, resolved: PendingChoice): GameState
   return advanceTurn(resetPasses(state))
 }
 
+/** A `multiPick`'s closing attack, once its picks are over (Hotshot Maneuver). Nothing when it names none. */
+function multiPickAttack(state: GameState, choice: PendingChoice & { kind: 'multiPick' }): GameState {
+  if (!choice.thenAttackWith) return state
+  return offerAttack(state, choice.controller, `${choice.id}-attack`, { attacker: { only: [choice.thenAttackWith] } })
+}
+
+/**
+ * Hotshot Maneuver, once the friendly unit is chosen: "For each of its On Attack abilities, deal 2
+ * damage to a different enemy unit. Then, attack with the chosen unit." The abilities are counted as
+ * the dispatcher would collect them, so an upgrade's or a granted On Attack counts too.
+ */
+function hotshotManeuver(state: GameState, owner: PlayerId, unitId: string, choiceId: string): GameState {
+  const unit = findUnit(state, unitId)?.unit
+  if (!unit) return state
+  const count = collectUnitTriggers(state, 'onAttack', unit, owner).length
+  const targets = state.players[opponentOf(owner)].units.map(u => u.instanceId)
+  if (count > 0 && targets.length > 0) {
+    return pushChoice(state, { kind: 'multiPick', id: `${choiceId}-damage`, controller: owner, targets, spec: { mode: 'dealEach', amount: 2, remaining: count }, thenAttackWith: unitId })
+  }
+  return offerAttack(state, owner, `${choiceId}-attack`, { attacker: { only: [unitId] } })
+}
+
 /**
  * The "if you do …" tail of a `mayDamage`, run only when the damage actually landed.
  * Split out because a prevention offer defers the damage into its own choice, which runs this on
@@ -706,6 +730,8 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
       next = bottomTopCards(next, choice.controller, choice.revealed.length)
     }
   }
+  // Hotshot Maneuver: the attack follows the damage picks however they ended.
+  if (choice.kind === 'multiPick') next = multiPickAttack(next, choice)
   // Qi'ra: her look is view-only, so Done is the only way to answer it — and the naming it leads
   // into still has to follow, exactly as it does when a discard was taken.
   if (choice.kind === 'lookAtHand' && choice.thenNameCard) {
@@ -1017,6 +1043,10 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       if (targetInstanceId) {
         next = exhaustUnit(next, targetInstanceId)
         if (choice.markUsed) next = markAbilityUsed(next, choice.controller, choice.markUsed.instanceId, choice.markUsed.key)
+        // Accelerate Our Plans: "if you do, attack with another unit".
+        if (choice.thenAttackWithAnother) {
+          next = offerAttack(next, choice.controller, `${choice.id}-attack`, { attacker: { exclude: [targetInstanceId] }, grantCardId: choice.thenAttackWithAnother.grantCardId })
+        }
       }
       break
     case 'chooseTriggerOrder': {
@@ -1267,9 +1297,14 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       else next = grantEnochDiscount(next, choice.controller, dealt)
       break
     }
+    case 'selectFriendlyUnit':
+      if (targetInstanceId && choice.targets.includes(targetInstanceId)) next = hotshotManeuver(next, choice.controller, targetInstanceId, choice.id)
+      break
     case 'selectUnitToReady':
       // Galvanized Leap: ready the chosen unit.
       if (targetInstanceId) next = readyUnit(next, targetInstanceId)
+      // Chaotic Diversion: "if you do, it can't attack your base or units you control for this phase".
+      if (targetInstanceId && choice.thenCannotAttack) next = addLastingEffect(next, { targetInstanceId, cannotAttack: true })
       // "Deal 3 damage to a unit" as the card's own second sentence, with its own target (Fervor).
       if (choice.thenDamage) {
         const targets = inPlayUnits(next).map(u => u.instanceId)
@@ -1600,6 +1635,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
             next = checkWin(next)
             if (next.winner !== null) return next
             if (remaining > 0 && targets.length > 0) next = pushChoice(next, { ...choice, targets, spec: { mode: 'dealEach', amount, remaining } })
+            else next = multiPickAttack(next, choice)
           }
         } else if (choice.spec.mode === 'exhaust') {
           // Keep Them Talking: exhaust up to N of the eligible units.
@@ -2114,11 +2150,11 @@ function fireForAllUnits(state: GameState, point: TriggerPoint): GameState {
  * suspend the combat before damage and hand control to the defender. Combat damage
  * itself is dealt by `completeAttack` (immediately, or on resume after the choice).
  */
-function attack(state: GameState, attackerId: string, target: AttackTarget, viaAmbush = false): GameState {
+function attack(state: GameState, attackerId: string, target: AttackTarget, viaAmbush = false, mayBeExhausted = false): GameState {
   const playerId = state.activePlayer
   const attacker = state.players[playerId].units.find(u => u.instanceId === attackerId)
   if (!attacker) throw new Error(`attack: no friendly unit ${attackerId}`)
-  if (attacker.exhausted) throw new Error(`attack: unit ${attackerId} is exhausted`)
+  if (attacker.exhausted && !mayBeExhausted) throw new Error(`attack: unit ${attackerId} is exhausted`)
 
   // Attacking exhausts the attacker (CR 1.5.4d).
   let next = updatePlayer(state, playerId, {
@@ -2298,7 +2334,11 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   let next = applyUnitDamage(preCombat, enemyId, new Map([[defender.instanceId, damageTo(defender.instanceId, attackerPower)]]), true, defenderCtx, attackerSource, true)
   // "Deals combat damage before the defender" (Carson Teva): a defender defeated by that
   // damage never strikes back. Without it, damage is simultaneous (CR 1.9.10) and both still land.
-  const defenderSurvived = next.players[enemyId].units.some(u => u.instanceId === defender.instanceId)
+  const defenderAfter = next.players[enemyId].units.find(u => u.instanceId === defender.instanceId)
+  const defenderSurvived = defenderAfter !== undefined
+  // What actually landed, for "if this unit dealt combat damage": a Shield or a prevention can soak
+  // the whole hit, and then no damage was dealt at all. A defender the hit defeated took all of it.
+  const dealtToDefender = defenderAfter ? defenderAfter.damage - defender.damage : damageTo(defender.instanceId, attackerPower)
   if (defenderSurvived || !unitDealsDamageFirst(preCombat, attacker, { defender })) {
     next = applyUnitDamage(next, playerId, new Map([[attacker.instanceId, damageTo(attacker.instanceId, counterPower)]]), true, { combat, attacking: true, viaAmbush }, counterSource, true)
   }
@@ -2325,7 +2365,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   next = consumeAdvantage(next, enemyId, defender.instanceId)
   // Pass the pre-combat attacker so its "When Attack Ends" fires even if it was defeated.
   const defenderDefeated = !next.players[enemyId].units.some(u => u.instanceId === defender.instanceId)
-  next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: overwhelmDealt, defenderDefeated, combatDamageToDefender: attackerPower }, attacker)
+  next = fireAttackEnd(next, playerId, attackerId, { attackTarget: target, combatDamageToBase: overwhelmDealt, defenderDefeated, combatDamageToDefender: dealtToDefender }, attacker)
   return clearAttackGrants(checkWin(next))
 }
 

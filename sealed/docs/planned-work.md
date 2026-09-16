@@ -135,8 +135,8 @@ Two phases:
 
 - **Phase 1 (#453 to #460), 926 cards blocked by nothing.** 56% of the cards with ability text are
   expressible with the primitives already in `engine/effects.ts`. Cut by trigger point. Events are the
-  largest batch, and what is left of them is **#618** (183: the attack events the rider path cannot
-  express, one lasting attack prohibition, and 154 one-offs), grouped by what each group lacks. The
+  largest batch, and what is left of them is **#623** (154 one-offs; the attack events are finished,
+  bar One Way Out, which waits on #477 for "loses all abilities" with four #623 cards that need it too). The
   events blocked by a mechanic are not there: they are recorded on that mechanic's own ticket
   (#602 Credit, #605 token units, #603 Disclose, #604 indirect damage).
   When Played units and upgrades follow the same pattern, and what is left of them is **#620** (103:

@@ -424,6 +424,23 @@ export interface LastingEffect {
    * a printed or upgrade-granted ability.
    */
   abilityCardIds?: string[]
+  /** The unit can't attack for the duration (Chaotic Diversion). Read by `unitCannotAttack`. */
+  cannotAttack?: boolean
+}
+
+/**
+ * Which units an "attack with a … unit" may use. Every set field must hold. `exclude` drops units
+ * already used by the same card ("then attack with another unit"), and `only` names the one unit a
+ * card has already chosen (Hotshot Maneuver).
+ */
+export interface AttackerFilter {
+  trait?: string
+  arena?: Arena
+  damaged?: boolean
+  nonLeader?: boolean
+  unique?: boolean
+  exclude?: string[]
+  only?: string[]
 }
 
 /** Per-phase event counters. `enteredPlay` holds instance ids (still-in-play
@@ -648,7 +665,9 @@ type ChoiceVariant =
   | { kind: 'mayExhaustLeaderExhaustUnit'; id: string; controller: PlayerId; targets: string[] }
   // Exhaust one of `targets`. Mandatory unless `optional`: Shin Hati deployed prints "may", Evasive
   // Maneuver does not. `markUsed`, when set, marks a once-per-round triggered ability as spent on acceptance.
-  | { kind: 'mayExhaustUnit'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; markUsed?: { instanceId: string; key: string } }
+  // `thenAttackWithAnother` chains "if you do, attack with another unit", lending that attack the
+  // carrier's rider (Accelerate Our Plans).
+  | { kind: 'mayExhaustUnit'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; markUsed?: { instanceId: string; key: string }; thenAttackWithAnother?: { grantCardId: string } }
   // Choose-one / modal: pick exactly one of `options` (Sloane). Each option is a small
   // serialisable effect descriptor, resolved by index; mandatory (no decline).
   | { kind: 'chooseOne'; id: string; controller: PlayerId; options: ChooseOption[] }
@@ -735,7 +754,11 @@ type ChoiceVariant =
   | { kind: 'selectUnitToReturn'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; thenExhaustOtherEnemiesInArena?: boolean; thenWipeNonLeaders?: boolean }
   // Galvanized Leap: ready one of `targets`.
   // `thenDamage` is the card's second sentence, with a target of its own (Fervor).
-  | { kind: 'selectUnitToReady'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; thenDamage?: { amount: number } }
+  // `thenCannotAttack` is "if you do, it can't attack your base or units you control for this phase"
+  // (Chaotic Diversion). With two players that is every attack the unit could make.
+  | { kind: 'selectUnitToReady'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; thenDamage?: { amount: number }; thenCannotAttack?: boolean }
+  // Choose a friendly unit, for a follow-up named by `then` (Hotshot Maneuver).
+  | { kind: 'selectFriendlyUnit'; id: string; controller: PlayerId; targets: string[]; then: 'hotshotManeuver' }
   // Rehabilitation: take control of one of `targets` until the regroup phase, debuffing it by
   // `power`/`hp` for this phase.
   | { kind: 'selectUnitToSteal'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; power?: number; hp?: number }
@@ -851,7 +874,9 @@ type ChoiceVariant =
   // so once their cost is paid the attack is compulsory, while Grogu prints "You **may** attack".
   // `grantCardId` lends the chosen attacker a carrier card's abilities for that attack — how the
   // attack-granting events (Rash Action, Follow Me, Masterstroke, Wipe Them Out) add their rider.
-  | { kind: 'mayAttackAnyUnit'; id: string; controller: PlayerId; restore: number; optional?: boolean; grantCardId?: string }
+  // `attacker` narrows who may attack ("attack with a Vehicle unit"), and `exhausted` lets an
+  // exhausted unit attack too ("even if it's exhausted", Dogfight).
+  | { kind: 'mayAttackAnyUnit'; id: string; controller: PlayerId; restore: number; optional?: boolean; grantCardId?: string; attacker?: AttackerFilter; exhausted?: boolean }
   // Defeat one of `targets`. The card supplies the eligible units, so this covers "a non-leader enemy
   // unit" (Thrawn), "an upgraded non-leader unit" (Get Lost), and so on. Mandatory unless `optional`:
   // Thrawn prints "you may defeat", Get Lost does not.
@@ -869,6 +894,8 @@ type ChoiceVariant =
   // Vizsla (defeat non-leaders within an HP budget, a token each).
   | {
       kind: 'multiPick'; id: string; controller: PlayerId; targets: string[]
+      // Once the picks are over, however they end, attack with this unit (Hotshot Maneuver).
+      thenAttackWith?: string
       // `defeat` is a plain count ("defeat up to 2 enemy units", The Desolation of Hoth), where
       // `defeatForToken` spends an HP budget and pays a token per kill (Pre Vizsla).
       spec: { mode: 'giveAdvantage'; remaining: number } | { mode: 'defeatForToken'; budget: number; token: string } | { mode: 'dealEach'; amount: number; remaining: number } | { mode: 'exhaust'; remaining: number } | { mode: 'defeat'; remaining: number }

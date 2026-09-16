@@ -161,6 +161,8 @@ export function unitCannotAttackBases(state: GameState, unit: UnitState): boolea
  * is the one answer behind all five sources of an attack, so the restriction binds each of them.
  */
 export function unitCannotAttack(state: GameState, unit: UnitState): boolean {
+  // A lasting prohibition aimed at this unit (Chaotic Diversion) binds exactly like a printed one.
+  if ((state.lastingEffects ?? []).some(e => e.cannotAttack && e.targetInstanceId === unit.instanceId)) return true
   return abilityCardIds(unit).some(id => getCardDefinition(id)?.cannotAttack?.(state, unit) ?? false)
 }
 
