@@ -648,7 +648,9 @@ type ChoiceVariant =
   // eligible discard-pile card ids; `acceptChoice`'s `optionIndex` picks one. Optional.
   // `then: 'discardFate'` chains the bottom-and-heal / return-to-hand modal (Trask Walker)
   // instead of the default return-to-hand.
-  | { kind: 'selectFromDiscard'; id: string; controller: PlayerId; candidates: string[]; optional: boolean; then?: 'discardFate' }
+  // `owners`, index for index with `candidates`, names whose discard pile each card is in when the
+  // choice reaches both (Bounty Hunter Crew); absent, every candidate is the controller's own.
+  | { kind: 'selectFromDiscard'; id: string; controller: PlayerId; candidates: string[]; optional: boolean; then?: 'discardFate'; owners?: PlayerId[] }
   // Trask Walker: optionIndex 0 = bottom the card and heal `heal` from your base,
   // 1 = return it to your hand. Mandatory once a card is chosen.
   | { kind: 'chooseDiscardFate'; id: string; controller: PlayerId; cardId: string; heal: number }

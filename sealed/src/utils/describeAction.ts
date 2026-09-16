@@ -445,8 +445,8 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         return `Return ${target ?? 'unit'} to hand`
       }
       if (choice.kind === 'mayPayThen') {
-        const cost = choice.revealEvent ? 'Reveal an event' : choice.damageSelf ? `Take ${choice.damageSelf} damage` : `Pay ${choice.cost}`
-        return `${cost}, ${choice.text}`
+        const cost = choice.revealEvent ? 'Reveal an event' : choice.damageSelf ? `Take ${choice.damageSelf} damage` : choice.cost > 0 ? `Pay ${choice.cost}` : undefined
+        return cost ? `${cost}, ${choice.text}` : choice.text.charAt(0).toUpperCase() + choice.text.slice(1)
       }
       if (choice.kind === 'selectUnitThen') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined

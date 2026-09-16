@@ -315,8 +315,8 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'mayPayThen': {
       const cost = choice.revealEvent ? 'reveal an event from your hand'
         : choice.damageSelf ? `deal ${choice.damageSelf} damage to this unit`
-          : `pay ${choice.cost}`
-      return [`${cost} to ${choice.text}`]
+          : choice.cost > 0 ? `pay ${choice.cost}` : undefined
+      return [cost ? `${cost} to ${choice.text}` : `you may ${choice.text}`]
     }
     case 'selectDistributeSource':
       return ['choose the unit whose power is spread as damage']

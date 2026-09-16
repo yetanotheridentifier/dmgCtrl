@@ -863,6 +863,22 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SOR_140', name: 'SpecForce Soldier' },
   { id: 'TWI_067', name: 'The Zillo Beast' },
   { id: 'LOF_070', name: 'Anakin Skywalker' },
+  // When Played, other sets: control and other zones
+  { id: 'LAW_233', name: 'Galen Erso' },
+  { id: 'SEC_192', name: 'Grand Moff Tarkin' },
+  { id: 'TWI_211', name: 'Sly Moore' },
+  { id: 'LAW_099', name: "Governor's Shuttle" },
+  { id: 'TWI_252', name: 'Aggrieved Parliamentarian' },
+  { id: 'SOR_183', name: 'Bounty Hunter Crew' },
+  // When Played, other sets: a second ability outside When Played
+  { id: 'LAW_058', name: 'Honor-Bound Partisan' },
+  { id: 'LAW_091', name: 'Val' },
+  { id: 'LOF_194', name: 'J-Type Nubian Starship' },
+  { id: 'TWI_208', name: 'Favorable Delegate' },
+  { id: 'TWI_185', name: 'Ziro the Hutt' },
+  { id: 'SHD_080', name: 'Salacious Crumb' },
+  { id: 'SOR_184', name: "Fett's Firespray" },
+  { id: 'SEC_139', name: 'Miraj Scintel' },
 ]
 
 /**

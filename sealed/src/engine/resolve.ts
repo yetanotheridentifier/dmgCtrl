@@ -1516,7 +1516,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         next = pushChoice(next, { kind: 'chooseDiscardFate', id: `${choice.id}-fate`, controller: choice.controller, cardId, heal: 3 })
         break
       }
-      next = returnUpgradeFromDiscardToHand(next, choice.controller, cardId)
+      next = returnUpgradeFromDiscardToHand(next, choice.owners?.[optionIndex ?? 0] ?? choice.controller, cardId)
       break
     }
     case 'searchDraw': {

@@ -2,7 +2,7 @@ import type { AbilityDef, CardDefinition, EffectContext } from './abilities'
 import { registerCard, getCardDefinition } from './abilities'
 import { takeControlOfUnit, giveToken, giveTokens, exhaustUnit, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
-import { seededUnit, nextSeed } from './rng'
+import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
 import { discardUnitsMatching, playUpgradeOnto } from './resolve'
@@ -3932,4 +3932,122 @@ registerCard('LOF_070', { // Anakin Skywalker
     ...buffWp('If there is a Heroism card in your discard pile, you may give a unit -3/-3 for this phase.', pickAny, () => ({ power: -3, hp: -3 }), true, discardHasAspect('Heroism')).abilities,
     ...buffWp('If there is a Villainy card in your discard pile, you may give a unit -3/-3 for this phase.', pickAny, () => ({ power: -3, hp: -3 }), true, discardHasAspect('Villainy')).abilities,
   ],
+})
+
+// Control and other zones
+registerCard('LAW_233', { // Galen Erso
+  ...whenPlayed('You may have an opponent take control of this unit.', (s, ctx) =>
+    pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'let an opponent take control of this unit', then: resume(ctx) })),
+  ifYouDo: (s, ctx) => takeControlOfUnit(s, ctx.owner, opponentOf(ctx.owner), ctx.sourceInstanceId!, 'permanent'),
+  aura: (_s, _source, _target, friendly) => (friendly ? undefined : { keywords: [KW.raid(1), KW.saboteur] }),
+})
+registerCard('SEC_192', { // Grand Moff Tarkin
+  ...whenPlayed("Take control of an enemy non-leader Vehicle unit. When this unit leaves play, that unit's owner takes control of that unit.", (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, nonLeader, pickTrait('Vehicle'))), 'take control of an enemy Vehicle unit', false)),
+  ifYouDo: (s, ctx) => takeControlOfUnit(s, opponentOf(ctx.owner), ctx.owner, ctx.targetInstanceId!, ctx.sourceInstanceId),
+})
+registerCard('TWI_211', { // Sly Moore
+  ...whenPlayed("Take control of an enemy token unit and ready it. At the start of the regroup phase, that token unit's owner takes control of it.", (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, (_st, u) => isTokenCard(u.cardId))), 'take control of an enemy token unit', false)),
+  ifYouDo: (s, ctx) => readyUnit(takeControlOfUnit(s, opponentOf(ctx.owner), ctx.owner, ctx.targetInstanceId!), ctx.targetInstanceId!),
+})
+/**
+ * Governor's Shuttle: the player picks, then the opponent, and only then are both defeated, as one
+ * event. The first pick rides in the step so the second can finish the ability.
+ */
+const shuttlePick = (s: GameState, ctx: Resumable, chooser: PlayerId, step: string): GameState => {
+  const targets = s.players[chooser].units.map(u => u.instanceId)
+  return pushChoice(s, { kind: 'selectUnitThen', id: `${ctx.sourceInstanceId}-${chooser}`, controller: chooser, targets, text: 'choose a unit you control to defeat', then: resume(ctx, step) })
+}
+registerCard('LAW_099', { // Governor's Shuttle
+  ...whenPlayed('Each player chooses a unit they control. Defeat those units.', (s, ctx) => {
+    if (s.players[ctx.owner].units.length) return shuttlePick(s, ctx, ctx.owner, 'mine')
+    return s.players[opponentOf(ctx.owner)].units.length ? shuttlePick(s, ctx, opponentOf(ctx.owner), 'theirs:') : s
+  }),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'mine') {
+      return s.players[opponentOf(ctx.owner)].units.length
+        ? shuttlePick(s, ctx, opponentOf(ctx.owner), `theirs:${ctx.targetInstanceId}`)
+        : defeatUnits(s, [ctx.targetInstanceId!])
+    }
+    const mine = ctx.step?.slice('theirs:'.length)
+    return defeatUnits(s, [...(mine ? [mine] : []), ctx.targetInstanceId!])
+  },
+})
+registerCard('TWI_252', whenPlayed('Choose an opponent. They shuffle their discard pile and put it on the bottom of their deck.', (s, ctx) => { // Aggrieved Parliamentarian
+  // With two players the opponent is the only choice.
+  const opp = opponentOf(ctx.owner)
+  const p = s.players[opp]
+  if (!p.discard.length) return s
+  return { ...updatePlayer(s, opp, { discard: [], deck: [...p.deck, ...seededShuffle(p.discard, s.rngSeed)] }), rngSeed: nextSeed(s.rngSeed) }
+}))
+registerCard('SOR_183', whenPlayed("You may return an event from a discard pile to its owner's hand.", (s, ctx) => { // Bounty Hunter Crew
+  const piles = [ctx.owner, opponentOf(ctx.owner)].flatMap(p => s.players[p].discard.filter(id => s.cards[id]?.type === 'event').map(id => ({ id, p })))
+  return piles.length
+    ? pushChoice(s, { kind: 'selectFromDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates: piles.map(x => x.id), owners: piles.map(x => x.p), optional: true })
+    : s
+}))
+
+// A second ability outside When Played
+registerCard('LAW_058', { // Honor-Bound Partisan
+  abilities: [
+    ...whenPlayed('Deal 1 damage to a base.', (s, ctx) => damageChoice(s, ctx, 1, [], BOTH_BASES)).abilities,
+    ...whenDefeated('The next unit you play this phase costs 1 less.', (s, ctx) => grantNextUnit(s, ctx.owner, { costDelta: -1 })).abilities,
+  ],
+})
+registerCard('LAW_091', { // Val
+  abilities: [
+    ...whenPlayed('Give a Shield token to another friendly unit.', (s, ctx) => shieldChoice(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, pickOther)), false)).abilities,
+    ...whenDefeated('Give a Shield token to an enemy unit.', (s, ctx) => shieldChoice(s, ctx, pickedIds(s, ctx, pickEnemy), false)).abilities,
+  ],
+})
+const drawThenDiscardOnDefeat: CardDefinition = {
+  abilities: [
+    ...whenPlayed('Draw a card.', (s, ctx) => drawCards(s, ctx.owner, 1)).abilities,
+    ...whenDefeated('Discard a card from your hand.', (s, ctx) =>
+      (s.players[ctx.owner].hand.length ? pushChoice(s, { kind: 'selectDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, count: 1 }) : s)).abilities,
+  ],
+}
+registerCard('LOF_194', drawThenDiscardOnDefeat) // J-Type Nubian Starship
+registerCard('TWI_208', drawThenDiscardOnDefeat) // Favorable Delegate
+registerCard('TWI_185', { // Ziro the Hutt
+  abilities: [
+    ...whenPlayed('For each opponent, you may exhaust a unit that player controls.', (s, ctx) => targetChoice(s, ctx, 'mayExhaustUnit', pickedIds(s, ctx, pickEnemy), true)).abilities,
+    {
+      trigger: 'onAttack',
+      description: 'For each opponent, you may exhaust a resource that player controls.',
+      effect: (s, ctx) => (s.players[opponentOf(ctx.owner)].resources.some(r => !r.exhausted)
+        ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-resource`, controller: ctx.owner, cost: 0, text: "exhaust an opponent's resource", then: resume(ctx) })
+        : s),
+    },
+  ],
+  ifYouDo: (s, ctx) => exhaustReadyResource(s, opponentOf(ctx.owner)),
+})
+registerCard('SHD_080', { // Salacious Crumb
+  ...whenPlayed('Heal 1 damage from your base.', (s, ctx) => healBase(s, ctx.owner, 1)),
+  actionAbilities: [{
+    description: "[Exhaust, return this unit to his owner's hand]: Deal 1 damage to a ground unit.",
+    exhaustCost: true,
+    effect: (s, ctx) => {
+      const returned = returnUnitToHand(s, ctx.sourceInstanceId!)
+      return damageChoice(returned, ctx, 1, picked(returned, ctx, pickGround))
+    },
+  }],
+})
+const controlsFett = (s: GameState, owner: PlayerId): boolean =>
+  [s.cards[s.players[owner].leader.cardId], ...s.players[owner].units.map(u => s.cards[u.cardId])].some(c => c?.name === 'Boba Fett' || c?.name === 'Jango Fett')
+registerCard('SOR_184', { // Fett's Firespray
+  ...readySelfWp('If you control Boba Fett or Jango Fett (as a leader or unit), ready this unit.', (s, ctx) => controlsFett(s, ctx.owner)),
+  actionAbilities: [{
+    description: '[C=2]: Exhaust a non-unique unit.',
+    cost: 2,
+    effect: (s, ctx) => targetChoice(s, ctx, 'mayExhaustUnit', pickedIds(s, ctx, (st, u) => !st.cards[u.cardId]?.unique)),
+  }],
+})
+registerCard('SEC_139', { // Miraj Scintel
+  ...damageWp('You may deal 3 damage to an undamaged unit.', (_s, u) => u.damage === 0, 3, true),
+  aura: (s, _source, target, friendly, combat) => {
+    if (!friendly || combat?.attackerInstanceId !== target.instanceId || !combat.defenderInstanceId) return undefined
+    return (findUnit(s, combat.defenderInstanceId)?.unit.damage ?? 0) > 0 ? { keywords: [KW.overwhelm] } : undefined
+  },
 })

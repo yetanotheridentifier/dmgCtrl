@@ -5,6 +5,7 @@ import { getCardDefinition } from '../engine/abilities'
 import { effectivePower, effectiveHp } from '../engine/stats'
 import { unitHasKeyword, unitHasTrait } from '../engine/keywords'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
+import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helpers/engineFixtures'
 import type { Action } from '../engine/actions'
@@ -96,6 +97,17 @@ const F: Record<string, EngineCard> = {
   LOF_191: src('LOF_191', { cost: 1, power: 1, hp: 3 }), TWI_110: src('TWI_110'), LOF_211: src('LOF_211', { keywords: [{ name: 'Hidden' }] }),
   LOF_209: src('LOF_209'), SOR_140: src('SOR_140'), TWI_067: src('TWI_067', { cost: 9, power: 10, hp: 10 }), LOF_070: src('LOF_070'),
   HERO: card({ id: 'HERO', type: 'event', cost: 1, aspects: ['Heroism'] }), VILLAIN: card({ id: 'VILLAIN', type: 'event', cost: 1, aspects: ['Villainy'] }),
+
+  // Control and other zones
+  LAW_233: src('LAW_233', { power: 0, hp: 5 }), SEC_192: src('SEC_192'), TWI_211: src('TWI_211'), LAW_099: src('LAW_099', { arena: 'space' }),
+  TWI_252: src('TWI_252'), SOR_183: src('SOR_183'),
+  SPACEVEH: card({ id: 'SPACEVEH', arena: 'space', cost: 3, power: 3, hp: 5, traits: ['VEHICLE'] }),
+
+  // A second ability outside When Played
+  LAW_058: src('LAW_058'), LAW_091: src('LAW_091'), LOF_194: src('LOF_194', { arena: 'space' }), TWI_208: src('TWI_208'),
+  TWI_185: src('TWI_185'), SHD_080: src('SHD_080', { cost: 1, power: 1, hp: 3 }), SOR_184: src('SOR_184', { arena: 'space', unique: true }), SEC_139: src('SEC_139'),
+  BOBA: card({ id: 'BOBA', name: 'Boba Fett', arena: 'ground', cost: 5, power: 4, hp: 6, unique: true }),
+  UNIQ2: card({ id: 'UNIQ2', arena: 'ground', cost: 2, power: 2, hp: 6, unique: true }),
 }
 
 const unit = (instanceId: string, cardId: string, over: Partial<UnitState> = {}): UnitState =>
@@ -933,6 +945,159 @@ describe('lasting effects the buff choice cannot carry', () => {
     const debuffed = accept(fire(both, 'LOF_070', 'src', 1), { targetInstanceId: 'e' })
     expect(effectivePower(debuffed, U(debuffed, 'e')!)).toBe(0)
     expect(effectiveHp(debuffed, U(debuffed, 'e')!)).toBe(3)
+  })
+})
+
+// ── Control and other zones ───────────────────────────────────────────────────────────────────────
+
+const controllerOf = (s: GameState, id: string): PlayerId | undefined =>
+  s.players.player.units.some(u => u.instanceId === id) ? 'player' : s.players.opponent.units.some(u => u.instanceId === id) ? 'opponent' : undefined
+const toRegroup = (s: GameState) => resolve(resolve({ ...s, pendingChoices: [], activePlayer: 'player' }, { type: 'pass' }), { type: 'pass' })
+
+describe('control and other zones', () => {
+  it('Galen Erso (LAW_233): may hand himself to an opponent for good; enemy units gain Raid 1 and Saboteur', () => {
+    const s = board([unit('src', 'LAW_233'), unit('g', 'GRD')], [unit('e', 'GRD')])
+    expect(keywords(s, 'e')).toEqual(expect.arrayContaining(['Saboteur', 'Raid']))
+    expect(keywords(s, 'g')).not.toContain('Saboteur')
+    const fired = fire(s, 'LAW_233')
+    expect(declinable(fired)).toBe(true)
+    const given = accept(fired)
+    expect(controllerOf(given, 'src')).toBe('opponent')
+    expect(keywords(given, 'g'), 'now the player\'s units are his enemies').toEqual(expect.arrayContaining(['Saboteur', 'Raid']))
+    expect(controllerOf(toRegroup(given), 'src'), 'a regroup does not hand him back').toBe('opponent')
+  })
+
+  it('Grand Moff Tarkin (SEC_192): takes an enemy non-leader Vehicle until he leaves play', () => {
+    const s = board([unit('src', 'SEC_192')], [unit('v', 'VEH'), unit('sv', 'SPACEVEH'), unit('g', 'GRD'), unit('lv', 'VEH', { isLeader: true })])
+    const fired = fire(s, 'SEC_192')
+    expect(offered(fired)).toEqual(['sv', 'v'])
+    expect(declinable(fired)).toBe(false)
+    const taken = accept(fired, { targetInstanceId: 'v' })
+    expect(controllerOf(taken, 'v')).toBe('player')
+    expect(controllerOf(toRegroup(taken), 'v'), 'the regroup phase does not end it').toBe('player')
+    const tarkinGone = resolve({ ...taken, activePlayer: 'player', pendingChoices: [{ kind: 'selectUnitToDefeat', id: 'x', controller: 'player', targets: ['src'] }] }, { type: 'acceptChoice', choiceId: 'x', targetInstanceId: 'src' })
+    expect(controllerOf(tarkinGone, 'v'), 'his leaving play hands it back').toBe('opponent')
+  })
+
+  it('Sly Moore (TWI_211): takes an enemy token unit and readies it, until the regroup phase starts', () => {
+    const s = board([unit('src', 'TWI_211')], [unit('t', TOKEN_MANDALORIAN, { exhausted: true }), unit('g', 'GRD')])
+    const fired = fire(s, 'TWI_211')
+    expect(offered(fired)).toEqual(['t'])
+    const taken = accept(fired, { targetInstanceId: 't' })
+    expect(controllerOf(taken, 't')).toBe('player')
+    expect(U(taken, 't')!.exhausted).toBe(false)
+    expect(controllerOf(toRegroup(taken), 't')).toBe('opponent')
+  })
+
+  it("Governor's Shuttle (LAW_099): each player chooses a unit they control, and both are defeated", () => {
+    const s = board([unit('src', 'LAW_099'), unit('g', 'GRD')], [unit('e', 'GRD'), unit('e2', 'WEAK')])
+    const fired = fire(s, 'LAW_099')
+    expect(choice(fired).controller).toBe('player')
+    expect(offered(fired)).toEqual(['g', 'src'])
+    expect(declinable(fired)).toBe(false)
+    const mine = accept(fired, { targetInstanceId: 'g' })
+    expect(U(mine, 'g'), 'nothing is defeated until both have chosen').toBeDefined()
+    expect(choice(mine).controller).toBe('opponent')
+    expect(offered(mine)).toEqual(['e', 'e2'])
+    const both = accept(mine, { targetInstanceId: 'e2' })
+    expect([U(both, 'g'), U(both, 'e2')]).toEqual([undefined, undefined])
+    // An opponent with no units: the player's pick is still defeated.
+    const alone = accept(fire(board([unit('src', 'LAW_099'), unit('g', 'GRD')]), 'LAW_099'), { targetInstanceId: 'g' })
+    expect(U(alone, 'g')).toBeUndefined()
+  })
+
+  it('Aggrieved Parliamentarian (TWI_252): the opponent\'s discard pile goes under their deck', () => {
+    const s = withPlayer(board([unit('src', 'TWI_252')]), 'opponent', { discard: ['GRD', 'WEAK', 'EV'], deck: ['D_FILL'] })
+    const after = fire(s, 'TWI_252')
+    expect(after.players.opponent.discard).toEqual([])
+    expect(after.players.opponent.deck[0]).toBe('D_FILL')
+    expect(ids(after.players.opponent.deck.slice(1))).toEqual(['EV', 'GRD', 'WEAK'])
+  })
+
+  it('Bounty Hunter Crew (SOR_183): may return an event from either discard pile to its owner\'s hand', () => {
+    const s = withPlayer(withPlayer(board([unit('src', 'SOR_183')]), 'player', { discard: ['GRD', 'EV'] }), 'opponent', { discard: ['HERO', 'WEAK'] })
+    const fired = fire(s, 'SOR_183')
+    const c = choice(fired)
+    expect(c.kind).toBe('selectFromDiscard')
+    expect('candidates' in c && c.candidates).toEqual(['EV', 'HERO'])
+    expect(declinable(fired)).toBe(true)
+    const theirs = accept(fired, { optionIndex: 1 })
+    expect(theirs.players.opponent.hand).toEqual(['HERO'])
+    expect(theirs.players.opponent.discard).toEqual(['WEAK'])
+    expect(theirs.players.player.hand).toEqual([])
+  })
+})
+
+// ── A second ability outside When Played ──────────────────────────────────────────────────────────
+
+describe('cards with a second ability outside When Played', () => {
+  it('Honor-Bound Partisan (LAW_058): 1 damage to a base; defeated, the next unit this phase costs 1 less', () => {
+    const s = board([unit('src', 'LAW_058')])
+    const fired = fire(s, 'LAW_058')
+    expect(offeredBases(fired)).toEqual(['opponent', 'player'])
+    expect(declinable(fired)).toBe(false)
+    const defeated = fireAt(s, 'LAW_058', 'whenDefeated')
+    expect(defeated.players.player.nextUnitGrants).toEqual([{ costDelta: -1 }])
+  })
+
+  it('Val (LAW_091): a Shield to another friendly unit; defeated, a Shield to an enemy unit', () => {
+    const s = board([unit('src', 'LAW_091'), unit('g', 'GRD')], [unit('e', 'GRD')])
+    const fired = fire(s, 'LAW_091')
+    expect(offered(fired)).toEqual(['g'])
+    expect(declinable(fired)).toBe(false)
+    const defeated = fireAt(s, 'LAW_091', 'whenDefeated')
+    expect(offered(defeated)).toEqual(['e'])
+  })
+
+  it.each(['LOF_194', 'TWI_208'])('%s draws when played, and discards a card when defeated', id => {
+    const s = withPlayer(board([unit('src', id)]), 'player', { hand: ['EV'] })
+    expect(fire(s, id).players.player.hand).toEqual(['EV', 'D_FILL'])
+    const defeated = fireAt(s, id, 'whenDefeated')
+    expect(choice(defeated).kind).toBe('selectDiscard')
+    expect(declinable(defeated)).toBe(false)
+    noChoice(fireAt(withPlayer(s, 'player', { hand: [] }), id, 'whenDefeated'))
+  })
+
+  it('Ziro the Hutt (TWI_185): may exhaust an enemy unit; On Attack, may exhaust an enemy resource', () => {
+    const s = board([unit('src', 'TWI_185')], [unit('e', 'GRD')])
+    const fired = fire(s, 'TWI_185')
+    expect(offered(fired)).toEqual(['e'])
+    expect(declinable(fired)).toBe(true)
+    const attack = fireAt(s, 'TWI_185', 'onAttack')
+    expect(declinable(attack)).toBe(true)
+    expect(readyResources(accept(attack), 'opponent')).toBe(2)
+  })
+
+  it('Salacious Crumb (SHD_080): heals 1 from your base; his action returns him to hand to deal 1 to a ground unit', () => {
+    const s = withPlayer(board([unit('src', 'SHD_080'), unit('g', 'GRD')], [unit('e', 'GRD'), unit('sp', 'SPACE')]), 'player', { base: { cardId: 'TST_B', damage: 3 } })
+    expect(fire(s, 'SHD_080').players.player.base.damage).toBe(2)
+    const uses = moves(s).filter(m => m.type === 'useAbility')
+    expect(uses).toHaveLength(1)
+    const used = resolve(s, uses[0])
+    expect(used.players.player.hand).toEqual(['SHD_080'])
+    expect(offered(used)).toEqual(['e', 'g'])
+  })
+
+  it("Fett's Firespray (SOR_184): readies with Boba or Jango Fett; C=2 action exhausts a non-unique unit", () => {
+    const s = board([unit('src', 'SOR_184', { exhausted: true })], [unit('e', 'GRD'), unit('u', 'UNIQ2')])
+    expect(U(fire(s, 'SOR_184'), 'src')!.exhausted).toBe(true)
+    const withBoba = board([unit('src', 'SOR_184', { exhausted: true }), unit('b', 'BOBA')])
+    expect(U(fire(withBoba, 'SOR_184'), 'src')!.exhausted).toBe(false)
+    const ready = board([unit('src', 'SOR_184')], [unit('e', 'GRD'), unit('u', 'UNIQ2')])
+    const uses = moves(ready).filter(m => m.type === 'useAbility')
+    expect(uses).toHaveLength(1)
+    const used = resolve(ready, uses[0])
+    expect(readyResources(used)).toBe(4)
+    expect(offered(used)).toEqual(['e'])
+  })
+
+  it('Miraj Scintel (SEC_139): may deal 3 to an undamaged unit; a friendly attacker gains Overwhelm against a damaged unit', () => {
+    const s = board([unit('src', 'SEC_139'), unit('a', 'GRD2')], [unit('e', 'FRAIL', { damage: 1 }), unit('f', 'FRAIL')])
+    const fired = fire(s, 'SEC_139')
+    expect(offered(fired)).toEqual(['a', 'f', 'src'])
+    expect(declinable(fired)).toBe(true)
+    expect(hitUnit(s, 'a', 'e').players.opponent.base.damage, '3 power into 2 remaining HP: 1 carries over').toBe(1)
+    expect(hitUnit(s, 'a', 'f').players.opponent.base.damage, 'an undamaged defender: no Overwhelm').toBe(0)
   })
 })
 

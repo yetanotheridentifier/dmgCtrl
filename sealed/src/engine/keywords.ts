@@ -51,7 +51,8 @@ export function unitKeywords(state: GameState, unit: UnitState, ctx?: StatModCon
   try {
     const out = baseKeywordList(state, unit, ctx)
     // Keywords granted by other units' auras (Sloane → Overwhelm/Sentinel).
-    const aura = auraContributions(state, unit)
+    // With the combat, so an aura can grant a keyword for one attack (Miraj Scintel's Overwhelm).
+    const aura = auraContributions(state, unit, ctx?.combat)
     out.push(...aura.keywords)
     // Removals: the unit's own card/upgrades (Marrok loses Sentinel while upgraded) plus auras
     // ("enemy/all units lose X"). Applied after all grants — a keyword survives unless removed by name.
