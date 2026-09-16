@@ -9,7 +9,7 @@ import { collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCar
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
-import { exhaustUnit, findUnit, giveToken, giveTokens, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady } from './effects'
+import { exhaustUnit, findUnit, giveToken, giveTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait } from './keywords'
@@ -1939,17 +1939,7 @@ function playUpgradeCardOnto(state: GameState, playerId: PlayerId, cardId: strin
   const card = state.cards[cardId]
   const target = findUnit(state, targetInstanceId)
   if (!card || card.type !== 'upgrade' || !target) return state
-  const targetOwner = target.owner
-  let next = updatePlayer(state, targetOwner, {
-    units: state.players[targetOwner].units.map(u =>
-      // The count is per unit and per round ("the first upgrade you play on this unit each round",
-      // Guardian of the Whills), so it is tracked on the unit and cleared when the round turns over.
-      u.instanceId === targetInstanceId
-        ? { ...u, upgrades: [...u.upgrades, { cardId: card.id, owner: playerId }], upgradesPlayedThisRound: (u.upgradesPlayedThisRound ?? 0) + 1 }
-        : u,
-    ),
-  })
-
+  let next = attachUpgrades(state, targetInstanceId, [{ cardId: card.id, owner: playerId }], true)
   next = recordCardPlayed(next, playerId, card.id) // after the cost ("the first upgrade you play each phase")
 
   // One upgrade arriving is one event: the host reacting to it attaching (Sabine Wren, and since this
@@ -2102,9 +2092,7 @@ function applyEntryKeywords(state: GameState, owner: PlayerId, instanceId: strin
   const shieldable = unitNow(next)
   if (!shieldable) return next
   if (unitHasKeyword(next, shieldable, 'Shielded') && !hasToken(shieldable.upgrades, TOKEN_SHIELD)) {
-    next = updatePlayer(next, owner, {
-      units: next.players[owner].units.map(u => (u.instanceId === instanceId ? { ...u, upgrades: [...u.upgrades, { cardId: TOKEN_SHIELD, owner }] } : u)),
-    })
+    next = attachUpgrades(next, instanceId, [{ cardId: TOKEN_SHIELD, owner }])
   }
   const hideable = unitNow(next)!
   if (unitHasKeyword(next, hideable, 'Hidden') && !hideable.hidden) {

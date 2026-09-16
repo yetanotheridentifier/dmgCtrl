@@ -127,8 +127,32 @@ export function giveTokens(state: GameState, instanceId: string, tokenId: string
   const found = findUnit(state, instanceId)
   if (!found || count <= 0) return state
   const tokens = Array.from({ length: count }, () => ({ cardId: tokenId, owner: found.owner }))
-  const next = patchUnit(state, found.owner, instanceId, u => ({ ...u, upgrades: [...u.upgrades, ...tokens] }))
-  return fireUpgradeAttached(next, instanceId)
+  return fireUpgradeAttached(attachUpgrades(state, instanceId, tokens), instanceId)
+}
+
+/**
+ * Put `upgrades` on a unit: **the engine's one write that attaches an upgrade.** Every way an upgrade
+ * reaches a unit comes through here, so they cannot disagree about what attaching is:
+ *
+ * - **played** (`played` true, only from `playUpgradeCardOnto`): also counts toward the unit's
+ *   `upgradesPlayedThisRound`;
+ * - **created** (a token given by an effect, the Shield from Shielded, CR 7.2 and 7.2b) and **moved** from
+ *   another unit (CR 3.6.14: detached and attached simultaneously): attached, never played.
+ *
+ * It fires nothing, because an attach belongs to whatever batch the event that caused it is building (a
+ * play's own When Played, a unit entering). The caller fires the host's attach reactions with
+ * {@link collectUpgradeAttached} or {@link fireUpgradeAttached}, passing `upgradePlayed` only for a play.
+ * (A leader deploying with Shielded fires none: no leader has an attach reaction.)
+ */
+export function attachUpgrades(state: GameState, instanceId: string, upgrades: UnitState['upgrades'], played = false): GameState {
+  const found = findUnit(state, instanceId)
+  if (!found || upgrades.length === 0) return state
+  return patchUnit(state, found.owner, instanceId, u => ({
+    ...u,
+    upgrades: [...u.upgrades, ...upgrades],
+    // Per unit and per round ("the first upgrade you play on this unit each round", Guardian of the Whills).
+    ...(played ? { upgradesPlayedThisRound: (u.upgradesPlayedThisRound ?? 0) + 1 } : {}),
+  }))
 }
 
 /** Attach a single token upgrade. See {@link giveTokens} for why the count-many form exists. */
@@ -138,7 +162,7 @@ export function giveToken(state: GameState, instanceId: string, tokenId: string)
 
 /**
  * Fire "when 1 or more upgrades attach to this unit" (Sabine Wren) on the receiving unit.
- * Called from every attach site: token grants (here), `playUpgrade`, and a Shielded entry.
+ * Follows every {@link attachUpgrades}: token grants (here), a play, a Shielded entry, and a move.
  * Batching is {@link giveTokens}' job: this fires once per call, so callers granting several tokens
  * must attach them together rather than in a loop.
  */

@@ -1,6 +1,6 @@
 import type { AbilityDef, CardDefinition, EffectContext, IfYouDoContext } from './abilities'
 import { registerCard, getCardDefinition } from './abilities'
-import { takeControlOfUnit, giveToken, giveTokens, exhaustUnit, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
+import { takeControlOfUnit, giveToken, giveTokens, attachUpgrades, fireUpgradeAttached,exhaustUnit, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
@@ -3804,11 +3804,10 @@ registerCard('LOF_248', { // Jocasta Nu
     const detached = updatePlayer(s, from.owner, {
       units: s.players[from.owner].units.map(u => (u.instanceId === up.unitId ? { ...u, upgrades: u.upgrades.filter((_, i) => i !== up.upgradeIndex) } : u)),
     })
-    const to = findUnit(detached, ctx.targetInstanceId)
-    if (!to) return s
-    return updatePlayer(detached, to.owner, {
-      units: detached.players[to.owner].units.map(u => (u.instanceId === ctx.targetInstanceId ? { ...u, upgrades: [...u.upgrades, moving] } : u)),
-    })
+    if (!findUnit(detached, ctx.targetInstanceId)) return s
+    // A move is an attach, not a play (CR 3.6.14): the new host's "when an upgrade attaches" reacts, and
+    // nothing counts it as played. Detaching is not being defeated, so the old host's side fires nothing.
+    return fireUpgradeAttached(attachUpgrades(detached, ctx.targetInstanceId, [moving]), ctx.targetInstanceId)
   },
 })
 registerCard('LOF_150', { // Cin Drallig

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
 import { effectivePower, effectiveHp } from '../engine/stats'
+import { giveTokens } from '../engine/effects'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
@@ -125,6 +126,14 @@ describe('Gar Saxon (047) — a Mandalorian token when an upgrade is played on h
     const s = state({ cards: F, players: { player: rich({ hand: ['UPG'], units: [unit('gar', 'ASH_047'), unit('g', 'GRD')] }), opponent: player() } })
     const p = resolve(s, { type: 'playUpgrade', handIndex: 0, targetInstanceId: 'g' })
     expect(p.pendingChoices ?? []).toHaveLength(0)
+  })
+
+  /** A token given to him attaches but is created, not played (CR 7.2), so it is no play on him. */
+  it('does not trigger for a token given to him, nor count it as played', () => {
+    const given = giveTokens(withGar(), 'gar', TOKEN_SHIELD, 1)
+    expect(given.players.player.units[0].upgrades).toEqual([{ cardId: TOKEN_SHIELD, owner: 'player' }])
+    expect(given.pendingChoices ?? []).toHaveLength(0)
+    expect(given.players.player.units[0].upgradesPlayedThisRound ?? 0).toBe(0)
   })
 })
 

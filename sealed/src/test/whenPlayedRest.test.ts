@@ -78,6 +78,7 @@ const F: Record<string, EngineCard> = {
   // Upgrades returned, moved or played
   SEC_200: src('SEC_200'), SHD_209: src('SHD_209'), LAW_078: src('LAW_078', { aspects: ['Aggression', 'Cunning', 'Heroism'] }),
   LOF_248: src('LOF_248'), LOF_150: src('LOF_150', { cost: 8 }),
+  ASH_208: src('ASH_208'), ASH_047: src('ASH_047'), ASH_161: src('ASH_161'), // Sabine Wren, Gar Saxon, Zeb Orrelios: hosts that react
   CHEAPUP: upg('CHEAPUP', { cost: 3 }), DEARUP: upg('DEARUP', { cost: 4 }), UNIQUP: upg('UNIQUP', { cost: 1, unique: true }),
   COMMAND: card({ id: 'COMMAND', arena: 'ground', cost: 2, power: 2, hp: 6, aspects: ['Command'] }),
   SABER: upg('SABER', { traits: ['LIGHTSABER'] }), SABER2: upg('SABER2', { traits: ['LIGHTSABER'] }),
@@ -772,6 +773,35 @@ describe('upgrades returned, moved or played', () => {
     expect(U(moved, 'g')!.upgrades).toEqual([{ cardId: 'CHEAPUP', owner: 'player' }])
     const cheap = accept(fired, { optionIndex: 1 - saber })
     expect(offered(cheap), 'any other unit').toEqual(['e', 'src', 'v'])
+  })
+
+  /**
+   * **A move is an attach, not a play.** CR 3.6.14: an upgrade already in play attached to a new unit "is
+   * considered to detach from the first unit and attached to the new unit simultaneously". So the new host's
+   * "when 1 or more upgrades attach to this unit" (Sabine Wren) fires, and its "when you play an upgrade on
+   * this unit" (Gar Saxon) does not; nothing counts it as played. Detaching is not being defeated, so Zeb
+   * Orrelios's "when a friendly upgrade is defeated" stays silent too.
+   */
+  describe("Jocasta Nu (LOF_248): the new host's attach reactions", () => {
+    const moveOnto = (host: string, extra: UnitState[] = []) => {
+      const s = board([unit('src', 'LOF_248'), unit('g', 'GRD', { upgrades: [{ cardId: 'CHEAPUP', owner: 'player' }] }), unit('h', host), ...extra])
+      return accept(accept(fire(s, 'LOF_248'), { optionIndex: 0 }), { targetInstanceId: 'h' })
+    }
+
+    it('fires "when 1 or more upgrades attach to this unit" on the new host (Sabine Wren)', () => {
+      const moved = moveOnto('ASH_208', [unit('e', 'GRD')])
+      expect(U(moved, 'h')!.upgrades).toEqual([{ cardId: 'CHEAPUP', owner: 'player' }])
+      expect(choice(moved).kind).toBe('mayExhaustUnit')
+    })
+
+    it('is not a play: no "when you play an upgrade on this unit" (Gar Saxon), no played record, no defeat reaction (Zeb)', () => {
+      const moved = moveOnto('ASH_047', [unit('z', 'ASH_161')])
+      expect(U(moved, 'h')!.upgrades).toEqual([{ cardId: 'CHEAPUP', owner: 'player' }])
+      noChoice(moved)
+      expect(U(moved, 'h')!.upgradesPlayedThisRound ?? 0).toBe(0)
+      expect(moved.phaseEvents?.played.player ?? []).not.toContain('CHEAPUP')
+      expect(moved.phaseEvents?.upgradesDefeated ?? []).toHaveLength(0)
+    })
   })
 
   it('Cin Drallig (LOF_150): may play a Lightsaber upgrade from hand on him for free, then ready him', () => {
