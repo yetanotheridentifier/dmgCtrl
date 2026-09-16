@@ -9,6 +9,7 @@ import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
 import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
 import { state, player, unit, card, ready, CARDS } from './helpers/engineFixtures'
+import { cardsPlayedThisPhase } from '../engine/types'
 import type { GameState } from '../engine/types'
 
 /** Events whose effects reuse the existing effect primitives and pending choices. */
@@ -711,6 +712,8 @@ const M = {
   ASH_235: card({ id: 'ASH_235', type: 'event', name: 'Sense Through the Force', cost: 2 }),
   GROUNDUPG: card({ id: 'GROUNDUPG', type: 'upgrade', cost: 6, power: 3, hp: 3 }),
   COST4: card({ id: 'COST4', type: 'unit', arena: 'ground', cost: 4, power: 1, hp: 4 }),
+  SOR_215: card({ id: 'SOR_215', name: 'Snapshot Reflexes', type: 'upgrade', cost: 1, power: 1, hp: 1 }),
+  UNQUPG: card({ id: 'UNQUPG', type: 'upgrade', cost: 2, power: 1, hp: 1, unique: true }),
 }
 
 describe('Treacherous Minefield (186) — an arena-wide On Attack for the phase', () => {
@@ -754,6 +757,41 @@ describe('Reforge (090) — swap an upgrade for one dug out of the deck at −4'
     const done = resolve(defeated, { type: 'acceptChoice', choiceId: search.id, deckIndex: 1 })
     expect(U(done, 'g')!.upgrades.map(u => u.cardId)).toEqual(['GROUNDUPG'])
     expect(done.players.player.resources.filter(r => !r.exhausted).length).toBe(before - 2) // 6 − 4
+  })
+
+  /** Reforge defeats UPG on `g` and finds `found` on top of the deck; answers the search with it. */
+  const reforgeInto = (found: string, units = [upgraded('g', 'TOUGH')]) => {
+    const s = state({
+      cards: M,
+      players: { player: rich({ hand: ['ASH_090'], units, deck: [found, 'GRD'] }), opponent: player({ units: [unit('e', 'GRD')] }) },
+    })
+    const played = play(s)
+    const defeated = resolve(played, { type: 'acceptChoice', choiceId: choice(played).id, optionIndex: 0 })
+    const search = choice(defeated)
+    expect(search.kind === 'searchPlayUpgrade' && search.eligibleIndices).toEqual([0])
+    return resolve(defeated, { type: 'acceptChoice', choiceId: search.id, deckIndex: 0 })
+  }
+
+  // "Play it on that unit": everything an ordinary upgrade play does, Reforge's play does.
+  it("fires the found upgrade's own When Played (Snapshot Reflexes)", () => {
+    const done = reforgeInto('SOR_215')
+    expect(done.pendingChoices?.some(c => c.kind === 'mayAttack' && c.unitId === 'g')).toBe(true)
+  })
+
+  it('records the found upgrade as played this phase and on the unit this round', () => {
+    const done = reforgeInto('GROUNDUPG')
+    expect(cardsPlayedThisPhase(done, 'player')).toContain('GROUNDUPG')
+    expect(U(done, 'g')!.upgradesPlayedThisRound).toBe(1)
+  })
+
+  it('runs the unique check when the found upgrade duplicates a unique one already in play', () => {
+    const done = reforgeInto('UNQUPG', [upgraded('g', 'TOUGH'), unit('h', 'TOUGH', { upgrades: [{ cardId: 'UNQUPG', owner: 'player' }] })])
+    expect(done.pendingChoices?.some(c => c.kind === 'selectUniqueToDefeat' && c.cardId === 'UNQUPG')).toBe(true)
+  })
+
+  it('returns the unchosen revealed cards to the bottom of the deck', () => {
+    const done = reforgeInto('GROUNDUPG')
+    expect(done.players.player.deck).toEqual(['GRD'])
   })
 })
 

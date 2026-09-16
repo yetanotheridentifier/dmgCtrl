@@ -343,6 +343,11 @@ A search that **plays** what it finds is normally free, and `budget` is the comb
 eligibility is what the player can still afford rather than what fits the budget, and the resources are
 spent as the card is taken.
 
+`searchPlayUpgrade` (Reforge) offers only upgrades whose `attachRestriction` allows the unit, pays the
+cost less its `discount`, bottoms the leftovers, and then plays the chosen card through the same door as
+an upgrade played from hand (`playUpgradeOnto` shares its attach step): the upgrade's own When Played
+fires with the host's attach reactions, it counts as played, and the unique rule applies.
+
 ## Unique rule
 
 A player cannot control two cards with the same unique title. Both checks are keyed by card id
