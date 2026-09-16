@@ -239,7 +239,7 @@ export function validUpgradeTargets(state: GameState, owner: PlayerId, resourceI
   const inPlay = [...state.players.player.units, ...state.players.opponent.units]
   return targetUnits.filter(id => {
     const tu = inPlay.find(u => u.instanceId === id)
-    if (!tu || (restriction && !restriction(state, tu))) return false
+    if (!tu || (restriction && !restriction(state, tu, owner))) return false
     return !payCost || effectiveCost(state, owner, card, tu) <= available
   })
 }
@@ -314,7 +314,7 @@ function actionPhaseMoves(state: GameState): Action[] {
     if (forbiddenNames.has(card.name)) return
     const restriction = getCardDefinition(card.id)?.attachRestriction
     for (const target of allUnits) {
-      if (restriction && !restriction(state, target)) continue
+      if (restriction && !restriction(state, target, playerId)) continue
       if (!canAfford(p, effectiveCost(state, playerId, card, target))) continue
       moves.push({ type: 'playUpgrade', handIndex, targetInstanceId: target.instanceId })
     }
@@ -431,7 +431,7 @@ function choiceMoves(state: GameState): Action[] {
           if (top.type === 'upgrade') {
             const restriction = getCardDefinition(top.id)?.attachRestriction
             for (const t of [...state.players.player.units, ...state.players.opponent.units]) {
-              if (restriction && !restriction(state, t)) continue
+              if (restriction && !restriction(state, t, choice.controller)) continue
               moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: t.instanceId })
             }
           } else {

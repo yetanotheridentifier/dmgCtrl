@@ -235,6 +235,12 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'SOR_071', name: 'Electrostaff' },
   { id: 'SHD_224', name: "Boba Fett's Armor" },
   { id: 'LOF_056', name: 'Size Matters Not' },
+  // When Played, other sets: TS26 and IBH, the two sets too small to sweep
+  { id: 'TS26_37', name: 'Abandoned the Order' },
+  { id: 'TS26_25', name: 'Fiery Alliance' },
+  // When Played, other sets: attacks
+  { id: 'TWI_248', name: "Ahsoka's Padawan Lightsaber" },
+  { id: 'LOF_140', name: "Darth Maul's Lightsaber" },
 ]
 
 /**
@@ -783,6 +789,35 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'TWI_132', name: 'Confederate Tri-Fighter' },
   { id: 'JTL_182', name: 'Rampart' },
   { id: 'TWI_042', name: 'Barriss Offee' },
+  // When Played, other sets: TS26 and IBH, the two sets too small to sweep
+  { id: 'TS26_15', name: 'C-3P0' },
+  { id: 'TS26_19', name: 'Coleman Trebor' },
+  { id: 'TS26_53', name: 'Coruscanti Spy' },
+  { id: 'TS26_18', name: 'Jendirian Valley' },
+  { id: 'TS26_16', name: 'King Katuunko' },
+  { id: 'TS26_30', name: 'Maul' },
+  { id: 'TS26_28', name: 'Prime Minister Almec' },
+  { id: 'TS26_62', name: 'R2-D2' },
+  { id: 'TS26_42', name: 'Relief Frigate' },
+  { id: 'TS26_67', name: 'Ruping Rider' },
+  { id: 'TS26_36', name: 'Tribunal' },
+  { id: 'TS26_41', name: 'Twilight' },
+  { id: 'IBH_72', name: 'Avenger' },
+  { id: 'IBH_99', name: 'Blizzard One' },
+  { id: 'IBH_19', name: 'C-3P0' },
+  { id: 'IBH_68', name: 'General Veers' },
+  { id: 'IBH_64', name: 'Hoth Lieutenant' },
+  { id: 'IBH_20', name: 'Luke Skywalker' },
+  { id: 'IBH_31', name: 'Millennium Falcon' },
+  // When Played, other sets: attacks
+  { id: 'LAW_065', name: '4-LOM' },
+  { id: 'LAW_157', name: 'Target Tagger' },
+  { id: 'SEC_103', name: 'Mon Mothma' },
+  { id: 'LOF_111', name: 'Maz Kanata' },
+  { id: 'TWI_091', name: 'Republic Tactical Officer' },
+  { id: 'SHD_101', name: 'Adelphi Patrol Wing' },
+  { id: 'SHD_236', name: 'Snowtrooper Lieutenant' },
+  { id: 'SOR_240', name: 'Fleet Lieutenant' },
 ]
 
 /**

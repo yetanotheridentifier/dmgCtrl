@@ -92,8 +92,11 @@ export interface CardDefinition {
    * actually needs to understand why they are being asked.
    */
   sourceCardId?: string
-  /** Upgrades only: may this card attach to `target`? Default (no hook) = any unit. */
-  attachRestriction?: (state: GameState, target: UnitState) => boolean
+  /**
+   * Upgrades only: may this card attach to `target` when `player` plays it? Default (no hook) = any
+   * unit. `player` is what "attach to a friendly unit" is read against (Darth Maul's Lightsaber).
+   */
+  attachRestriction?: (state: GameState, target: UnitState, player: PlayerId) => boolean
   /** Cost delta when playing this card (upgrades: `target` is the attach target). */
   costModifier?: (state: GameState, playerId: PlayerId, target?: UnitState) => number
   /**
@@ -228,6 +231,8 @@ export interface CardDefinition {
   payPreventionCost?: (state: GameState, self: UnitState) => GameState
   /** Extra traits this card grants a unit — The Darksaber grants Mandalorian. */
   grantedTraits?: (state: GameState, unit: UnitState) => string[]
+  /** Traits this card takes away from its unit, printed or granted (Abandoned the Order: loses Jedi). */
+  removedTraits?: (state: GameState, unit: UnitState) => string[]
   /** True if this card makes its unit a leader unit — The Darksaber. */
   makesLeaderUnit?: (state: GameState, unit: UnitState) => boolean
   /** Aspect icons this unit provides while its controller pays costs — The Darksaber. */

@@ -269,7 +269,9 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'searchDraw':
       return [choice.eligibleIndices.length === 0
         ? 'nothing matched; these go to the bottom of your deck'
-        : (choice.remaining ?? 1) > 1
+        : choice.resourceIt
+          ? 'choose a card to resource; the rest go to the bottom of your deck'
+          : (choice.remaining ?? 1) > 1
             ? `choose a card to draw (up to ${choice.remaining} in all); the rest go to the bottom of your deck`
             : 'choose a card to draw; the rest go to the bottom of your deck']
     case 'searchPlayFree':
@@ -309,7 +311,7 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'selectDistributeSource':
       return ['choose the unit whose power is spread as damage']
     case 'damageAnyBases':
-      return [`deal ${choice.amount} damage to a base, or stop`]
+      return [choice.heal ? `heal ${choice.amount} damage from a base, or stop` : `deal ${choice.amount} damage to a base, or stop`]
 
     default: {
       // EXHAUSTIVE. Every choice kind above names what it is asking, so this is unreachable and TS

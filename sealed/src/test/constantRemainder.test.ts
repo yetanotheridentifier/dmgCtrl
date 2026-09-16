@@ -157,8 +157,8 @@ describe("the attacker's power while a unit defends", () => {
     expect(attackerPower(s, 'a', 'other')).toBe(2)
     const attach = getCardDefinition('SOR_071')!.attachRestriction!
     const veh = board([], [unit('v', 'SPACE')])
-    expect(attach(s, U(s, 'd'))).toBe(true)
-    expect(attach(veh, unit('v2', 'GRD2', { cardId: 'GRD2' }))).toBe(true)
+    expect(attach(s, U(s, 'd'), 'player')).toBe(true)
+    expect(attach(veh, unit('v2', 'GRD2', { cardId: 'GRD2' }), 'player')).toBe(true)
   })
 
   it('a real attack into Lando (LAW_108) lands the reduced damage', () => {

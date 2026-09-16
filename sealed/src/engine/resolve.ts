@@ -9,7 +9,7 @@ import { collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCar
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
-import { exhaustUnit, findUnit, giveToken, giveTokens, fireUpgradeAttached, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader } from './effects'
+import { exhaustUnit, findUnit, giveToken, giveTokens, fireUpgradeAttached, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait } from './keywords'
@@ -33,7 +33,9 @@ export function resolve(state: GameState, action: Action): GameState {
   // Keeping the step here — rather than wherever a consumer happens to draw — is what makes a
   // move list replay to an identical state: the seed depends only on the sequence of actions.
   const stepped = { ...next, rngSeed: nextSeed(next.rngSeed) }
-  return stepped.winner !== null ? stepped : settleChoiceControl(checkWin(sweepStateBasedDefeats(stepped)))
+  // "When this unit leaves play, that unit's owner takes control of it" (Grand Moff Tarkin) is settled
+  // here, once per action, rather than at each of the ways a unit can leave play.
+  return stepped.winner !== null ? stepped : settleChoiceControl(checkWin(sweepStateBasedDefeats(returnControlledUnits(stepped, false))))
 }
 
 /**
@@ -915,7 +917,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'damageAnyBases': {
       // Rancor Keeper: 1 damage to a chosen base, then re-offer the bases not yet hit.
       if (baseTarget) {
-        next = dealDamageToBase(next, baseTarget, choice.amount, choice.source)
+        next = choice.heal ? healBase(next, baseTarget, choice.amount) : dealDamageToBase(next, baseTarget, choice.amount, choice.source)
         next = checkWin(next)
         if (next.winner !== null) return next
         const remaining = choice.remaining.filter(b => b !== baseTarget)
@@ -999,6 +1001,14 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
           power = next.players[choice.controller].units.filter(u => u.instanceId !== targetInstanceId && effectivePower(next, u) < mine).length
         }
         next = addLastingEffect(next, { targetInstanceId, power, hp: choice.hp, keywords: choice.keywords })
+        // Prime Minister Almec: the comparison uses the buffed unit's power, so it follows the buff.
+        const strong = choice.thenExhaustWeakerEnemiesInArena ? findUnit(next, targetInstanceId) : undefined
+        if (strong) {
+          const bar = effectivePower(next, strong.unit)
+          for (const e of next.players[opponentOf(choice.controller)].units) {
+            if (e.arena === strong.unit.arena && effectivePower(next, e) < bar) next = exhaustUnit(next, e.instanceId)
+          }
+        }
         // T-6 Shuttle: "you may attack with that unit" — only meaningful for a ready unit
         // we control (the buff itself may target any unit).
         const buffed = findUnit(next, targetInstanceId)
@@ -1100,7 +1110,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
             const c = next.cards[cardId]
             if (c?.type !== 'upgrade') return []
             const restriction = getCardDefinition(cardId)?.attachRestriction
-            return !restriction || restriction(next, host.unit) ? [i] : []
+            return !restriction || restriction(next, host.unit, owner) ? [i] : []
           })
           // Raised even with no attachable upgrade among them (#413), so the player sees the window.
           next = updatePlayer(
@@ -1128,6 +1138,11 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       // Deal the chosen amount to the picked base or unit.
       if (baseTarget) next = dealDamageToBase(next, baseTarget, choice.amount, choice.source)
       else if (targetInstanceId) next = dealDamageToUnit(next, targetInstanceId, choice.amount, choice.source)
+      if (baseTarget && choice.thenBaseOwnerDraws) next = drawCards(next, baseTarget, 1)
+      if (targetInstanceId && choice.thenReadyIt) next = readyUnit(next, targetInstanceId)
+      if (targetInstanceId && choice.thenAttackWithIt && findUnit(next, targetInstanceId)?.owner === choice.controller) {
+        next = offerAttack(next, choice.controller, `${choice.id}-attack`, { attacker: { only: [targetInstanceId] } })
+      }
       // "…Heal N damage from your base": the card's second sentence, held back so the target is
       // chosen first (Grassroots Resistance).
       if (choice.thenHealBase) next = healBase(next, choice.controller, choice.thenHealBase)
@@ -1505,10 +1520,15 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
           next = pushChoice(next, { ...choice, revealed: others, eligibleIndices: stillEligible, remaining, held: true })
           break
         }
-        // I've Found Them discards what it did not draw; every other search bottoms it.
-        next = choice.discardRest
-          ? updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: rest, discard: [...p.discard, ...others] })
-          : updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: [...rest, ...others] })
+        // I've Found Them discards what it did not draw; every other search bottoms it. Jendirian Valley
+        // resources the card it found, exhausted (CR 1.7.7), rather than drawing it.
+        if (choice.resourceIt) {
+          next = updatePlayer(next, owner, { resources: [...p.resources, { cardId: drawn, exhausted: true }], deck: [...rest, ...others] })
+        } else {
+          next = choice.discardRest
+            ? updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: rest, discard: [...p.discard, ...others] })
+            : updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: [...rest, ...others] })
+        }
         // Sense Through the Force: a correct guess at the drawn card's cost pays out.
         if (choice.guessedCost !== undefined && next.cards[drawn]?.cost === choice.guessedCost) {
           const targets = next.players[owner].units.filter(u => unitHasTrait(next, u, 'Force')).map(u => u.instanceId)
@@ -2379,34 +2399,6 @@ function inPlayUnits(state: GameState): UnitState[] {
   return [...state.players.player.units, ...state.players.opponent.units]
 }
 
-/**
- * Move a unit from `from` to `to`, unchanged in every other respect. `owner` records where the card
- * came from so it can go home — to that player's discard if it's defeated, or back under their
- * control at regroup. Moving a unit that was already stolen keeps the ORIGINAL owner, and a unit
- * returning to its owner drops the field entirely.
- */
-function takeControlOfUnit(state: GameState, from: PlayerId, to: PlayerId, instanceId: string): GameState {
-  const unit = state.players[from].units.find(u => u.instanceId === instanceId)
-  if (!unit || from === to) return state
-  const cardOwner = unit.owner ?? from
-  const moved: UnitState = cardOwner === to ? { ...unit, owner: undefined } : { ...unit, owner: cardOwner }
-  const without = updatePlayer(state, from, { units: state.players[from].units.filter(u => u.instanceId !== instanceId) })
-  return updatePlayer(without, to, { units: [...without.players[to].units, moved] })
-}
-
-/**
- * Hand every unit back to its owner. Runs at the START of the regroup phase, before units ready, so
- * the owner gets it back in time to ready it and use it in the next action phase.
- */
-function returnStolenUnits(state: GameState): GameState {
-  let next = state
-  for (const controller of ['player', 'opponent'] as PlayerId[]) {
-    for (const u of next.players[controller].units.filter(x => x.owner !== undefined && x.owner !== controller)) {
-      next = takeControlOfUnit(next, controller, u.owner!, u.instanceId)
-    }
-  }
-  return next
-}
 
 /** Unit cards in `owner`'s discard matching an optional cost cap and excluded trait. */
 export function discardUnitsMatching(state: GameState, owner: PlayerId, maxCost?: number, excludeTrait?: string): string[] {
@@ -2545,7 +2537,7 @@ function enterRegroup(state: GameState): GameState {
   let next: GameState = clearNextUnitGrants(resetPhaseEvents(clearLastingEffects(clearHidden({ ...state, phase: 'regroup', consecutivePasses: 0 }))))
   // "At the start of the regroup phase, its owner takes control of it" (Rehabilitation) — before
   // anything readies, so the owner has it available for the next action phase.
-  next = returnStolenUnits(next)
+  next = returnControlledUnits(next, true)
   next = sweepUnitDefeats(next)
   next = drawForRegroup(next, 'player')
   next = drawForRegroup(next, 'opponent')

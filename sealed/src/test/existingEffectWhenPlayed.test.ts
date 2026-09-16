@@ -492,8 +492,8 @@ describe('upgrades acting on the attached unit', () => {
   it.each(['SOR_053', 'SHD_073', 'TWI_152'])('%s attaches only to a non-Vehicle unit', id => {
     const s = board([unit('v', 'VEH'), unit('g', 'GRD')], [])
     const restriction = getCardDefinition(id)?.attachRestriction
-    expect(restriction?.(s, U(s, 'v')!)).toBe(false)
-    expect(restriction?.(s, U(s, 'g')!)).toBe(true)
+    expect(restriction?.(s, U(s, 'v')!, 'player')).toBe(false)
+    expect(restriction?.(s, U(s, 'g')!, 'player')).toBe(true)
   })
 })
 

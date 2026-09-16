@@ -199,7 +199,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       }
       if (choice.kind === 'searchDraw' && action.deckIndex !== undefined) {
         const cardId = choice.revealed[action.deckIndex]
-        return `Draw ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
+        return `${choice.resourceIt ? 'Resource' : 'Draw'} ${cardId ? state.cards[cardId]?.name ?? cardId : 'card'}`
       }
       // Reforge: had no label at all, so its buttons read as a bare "Accept".
       if (choice.kind === 'searchPlayUpgrade' && action.deckIndex !== undefined) {
@@ -315,7 +315,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         return `${choice.amount} damage to ${self ?? 'this unit'} → Shield to ${target ?? 'it'}`
       }
       if (choice.kind === 'damageAnyBases' && action.baseTarget) {
-        return `Deal ${choice.amount} to ${action.baseTarget === by ? 'your base' : "opponent's base"}`
+        return `${choice.heal ? 'Heal' : 'Deal'} ${choice.amount} ${choice.heal ? 'from' : 'to'} ${action.baseTarget === by ? 'your base' : "opponent's base"}`
       }
       if (choice.kind === 'chooseDiscardFate') {
         const name = state.cards[choice.cardId]?.name ?? 'card'

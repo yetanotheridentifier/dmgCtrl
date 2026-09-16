@@ -1,6 +1,6 @@
 import type { AbilityDef, CardDefinition, EffectContext } from './abilities'
 import { registerCard } from './abilities'
-import { giveToken, giveTokens, exhaustUnit, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
+import { takeControlOfUnit, giveToken, giveTokens, exhaustUnit, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { seededUnit, nextSeed } from './rng'
 import { effectiveHp, effectivePower } from './stats'
@@ -3441,4 +3441,178 @@ registerCard('TWI_132', { suppressesBaseHealing: () => true }) // Confederate Tr
 registerCard('JTL_182', { readiesInRegroup: (s, u) => effectivePower(s, u) >= 4 }) // Rampart
 registerCard('TWI_042', { // Barriss Offee — "each friendly unit healed this phase", herself included
   aura: (s, _src, tgt, friendly) => (friendly && healedThisPhase(s).includes(tgt.instanceId) ? { power: 1 } : undefined),
+})
+
+// ── The last of the other sets' When Played units and upgrades ────────────────────────────────────
+// Built on the When Played helpers above. Each block is one group of the ticket that listed them.
+
+/** "(You may) attack with (another) unit", lending `grantCardId`'s rider for that attack. */
+const attackWp = (description: string, offer: AttackOffer & { another?: boolean }, when: When = always) =>
+  whenPlayed(description, (s, ctx) => {
+    if (!when(s, ctx)) return s
+    const { another, ...rest } = offer
+    const attacker = another ? { ...rest.attacker, exclude: [...(rest.attacker?.exclude ?? []), ctx.sourceInstanceId!] } : rest.attacker
+    return offerAttack(s, ctx.owner, `${ctx.sourceInstanceId}-attack`, { ...rest, ...(attacker ? { attacker } : {}) })
+  })
+/** "+2/+0 for this attack", only for an attacker passing `test`. */
+const attackBonusIf = (power: number, test: (s: GameState, u: UnitState) => boolean): CardDefinition => ({
+  statModifier: (s, u, ctx) => (ctx.attacking && test(s, u) ? { power } : {}),
+})
+const baseDamage = (s: GameState, p: PlayerId): number => s.players[p].base.damage
+
+// TS26 and IBH
+registerCard('TS26_37', { // Abandoned the Order
+  removedTraits: () => ['Jedi'],
+  conditionalKeywords: () => [KW.restore(1)],
+  ...targetWp("Attached unit loses the Jedi trait and gains Restore 1. You may return a non-leader unit to its owner's hand.", 'selectUnitToReturn', nonLeader, true),
+})
+registerCard('TS26_15', { // C-3P0
+  ...whenPlayed('An opponent takes control of this unit.', (s, ctx) =>
+    takeControlOfUnit(s, ctx.owner, opponentOf(ctx.owner), ctx.sourceInstanceId!, 'permanent')),
+  actionAbilities: [{
+    description: "Deal damage equal to this unit's power to another ground unit. Only opponents may use this ability.",
+    exhaustCost: true,
+    // "Only opponents may use this ability": its controller may use it only while they are not its owner.
+    usable: (_s, u) => u.owner !== undefined,
+    effect: (s, ctx) => {
+      const self = findUnit(s, ctx.sourceInstanceId!)
+      if (!self) return s
+      const amount = effectivePower(s, self.unit)
+      const targets = groundUnits(s).filter(u => u.instanceId !== self.unit.instanceId)
+      return amount > 0 ? damageChoice(s, ctx, amount, targets) : s
+    },
+  }],
+})
+registerCard('TS26_19', whenPlayed('Deal 1 damage to each enemy base. Heal 1 damage from your base for each damage dealt this way.', (s, ctx) => { // Coleman Trebor
+  const enemy = opponentOf(ctx.owner)
+  const hit = dealDamageToBase(s, enemy, 1)
+  const dealt = baseDamage(hit, enemy) - baseDamage(s, enemy)
+  return dealt > 0 ? healBase(hit, ctx.owner, dealt) : hit
+}))
+registerCard('TS26_53', whenPlayed('Heal 2 damage from each of any number of bases.', (s, ctx) => { // Coruscanti Spy
+  const remaining = BOTH_BASES.filter(p => baseDamage(s, p) > 0)
+  return remaining.length ? pushChoice(s, { kind: 'damageAnyBases', id: ctx.sourceInstanceId!, controller: ctx.owner, remaining, amount: 2, heal: true }) : s
+}))
+registerCard('TS26_25', whenPlayed('You may deal 1 damage to another friendly unit and attack with it.', (s, ctx) => { // Fiery Alliance
+  const unitTargets = pickedIds(s, ctx, pickAll(pickFriendly, pickOther))
+  return unitTargets.length
+    ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 1, unitTargets, baseTargets: [], optional: true, thenAttackWithIt: true })
+    : s
+}))
+registerCard('TS26_18', whenPlayed('Search the top 8 cards of your deck for a card and resource it.', (s, ctx) => { // Jendirian Valley
+  const revealed = s.players[ctx.owner].deck.slice(0, searchCount(s, ctx.owner, 8))
+  return revealed.length
+    ? pushChoice(s, { kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices: revealed.map((_, i) => i), resourceIt: true })
+    : s
+}))
+registerCard('TS26_16', whenPlayed('All units (including enemy units) gain Restore 1 for this phase.', s => // King Katuunko
+  lastingOnEach(s, allUnits(s), { keywords: [KW.restore(1)] })))
+registerCard('TS26_30', attackWp('You may attack with another unit.', { another: true, optional: true })) // Maul
+registerCard('TS26_28', whenPlayed('Give a friendly unit +2/+2 for this phase. Exhaust each enemy unit in its arena with less power than it.', (s, ctx) => { // Prime Minister Almec
+  const targets = pickedIds(s, ctx, pickFriendly)
+  return targets.length
+    ? pushChoice(s, { kind: 'mayLastingBuff', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, power: 2, hp: 2, thenExhaustWeakerEnemiesInArena: true })
+    : s
+}))
+registerCard('TS26_62', whenPlayed("You may deal 2 damage to a base. If you do, that base's controller draws a card.", (s, ctx) => // R2-D2
+  pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount: 2, unitTargets: [], baseTargets: BOTH_BASES, optional: true, thenBaseOwnerDraws: true })))
+// With two players, choosing one base and healing "each other base" heals exactly the one not chosen,
+// so the choice is offered as the base to heal.
+registerCard('TS26_42', whenPlayed('Choose a base. Heal 3 damage from each other base.', (s, ctx) => healChoice(s, ctx, 3, [], BOTH_BASES))) // Relief Frigate
+registerCard('TS26_67', whenPlayed('If your base has 15 or more damage on it, deal 2 damage to a base.', (s, ctx) => // Ruping Rider
+  (baseDamage(s, ctx.owner) >= 15 ? damageChoice(s, ctx, 2, [], BOTH_BASES) : s)))
+registerCard('TS26_36', { // Tribunal
+  // Its own play is recorded only after its cost is worked out, so every card on the record is "other".
+  costModifier: (s, p) => -2 * cardsPlayedThisPhase(s, p).length,
+  ...whenPlayed('This unit costs 2 less to play for each other card you played this phase. Give each other unit -2/-2 for this phase.', (s, ctx) =>
+    lastingOnEach(s, picked(s, ctx, pickOther), { power: -2, hp: -2 })),
+})
+registerCard('TS26_41', whenPlayed('If there are 5 or more cards in your discard pile, heal 3 damage from your base.', (s, ctx) => // Twilight
+  (s.players[ctx.owner].discard.length >= 5 ? healBase(s, ctx.owner, 3) : s)))
+registerCard('IBH_72', whenPlayed('Deal 1 damage to each other unit (including friendly units).', (s, ctx) => // Avenger
+  pickedIds(s, ctx, pickOther).reduce((acc, id) => dealDamageToUnit(acc, id, 1), s)))
+registerCard('IBH_99', targetWp('You may defeat a non-leader ground unit with 3 or less remaining HP.', 'selectUnitToDefeat', // Blizzard One
+  (s, u) => nonLeader(s, u) && u.arena === 'ground' && remainingHp(s, u) <= 3, true))
+registerCard('IBH_19', whenPlayed('If you control a Cunning unit, draw a card.', (s, ctx) => // C-3P0
+  (youControl(s, ctx, pickAspect('Cunning')) ? drawCards(s, ctx.owner, 1) : s)))
+registerCard('IBH_68', whenPlayed('If you control a Vigilance unit, deal 2 damage to an enemy base and heal 2 damage from your base.', (s, ctx) => // General Veers
+  (youControl(s, ctx, pickAspect('Vigilance')) ? healBase(dealDamageToBase(s, opponentOf(ctx.owner), 2), ctx.owner, 2) : s)))
+const GRANT_HOTH_LIEUTENANT = 'GRANT_HOTH_LIEUTENANT'
+registerCard(GRANT_HOTH_LIEUTENANT, { sourceCardId: 'IBH_64', ...attackBonus(2) })
+registerCard('IBH_64', attackWp('You may attack with another unit. It gets +2/+0 for this attack.', { another: true, optional: true, grantCardId: GRANT_HOTH_LIEUTENANT })) // Hoth Lieutenant
+registerCard('IBH_20', damageWp('You may deal 3 damage to a ground unit.', pickGround, 3, true)) // Luke Skywalker
+registerCard('IBH_31', readySelfWp('If your base has more damage on it than an enemy base, ready this unit.', (s, ctx) => // Millennium Falcon
+  baseDamage(s, ctx.owner) > baseDamage(s, opponentOf(ctx.owner))))
+
+// Attacks raised by a unit or upgrade entering play
+/** "If attached unit is <name>": for an upgrade's When Played, the source is the unit it is attached to. */
+const hostNamed = (name: string): When => (s, ctx) => {
+  const host = findUnit(s, ctx.sourceInstanceId!)?.unit
+  return host !== undefined && cardOf(s, host)?.name === name
+}
+/** A rider that only adds power for this attack when `test` holds. */
+const riderIf = (id: string, sourceCardId: string, test: (s: GameState, u: UnitState) => boolean): string => {
+  registerCard(id, { sourceCardId, ...attackBonusIf(2, test) })
+  return id
+}
+const traitRider = (id: string, sourceCardId: string, trait: string) => riderIf(id, sourceCardId, (s, u) => unitHasTrait(s, u, trait))
+
+registerCard('LOF_111', attackWp('You may attack with a Force unit. It gets +2/+0 for this attack.', // Maz Kanata
+  { optional: true, attacker: { trait: 'Force' }, grantCardId: riderIf('GRANT_MAZ_KANATA', 'LOF_111', () => true) }))
+registerCard('TWI_091', attackWp('You may attack with a Republic unit. It gets +2/+0 for this attack.', // Republic Tactical Officer
+  { optional: true, attacker: { trait: 'Republic' }, grantCardId: riderIf('GRANT_REPUBLIC_TACTICAL_OFFICER', 'TWI_091', () => true) }))
+registerCard('LAW_157', attackWp("You may attack with a unit. If it's a Bounty Hunter, it gets +2/+0 for this attack.", // Target Tagger
+  { optional: true, grantCardId: traitRider('GRANT_TARGET_TAGGER', 'LAW_157', 'Bounty Hunter') }))
+registerCard('SHD_236', attackWp("You may attack with a unit. If it's an Imperial unit, it gets +2/+0 for this attack.", // Snowtrooper Lieutenant
+  { optional: true, grantCardId: traitRider('GRANT_SNOWTROOPER_LIEUTENANT', 'SHD_236', 'Imperial') }))
+registerCard('SOR_240', attackWp("You may attack with a unit. If it's a Rebel unit, it gets +2/+0 for this attack.", // Fleet Lieutenant
+  { optional: true, grantCardId: traitRider('GRANT_FLEET_LIEUTENANT', 'SOR_240', 'Rebel') }))
+registerCard('SHD_101', attackWp('You may attack with a unit. If you have the initiative, it gets +2/+0 for this attack.', { // Adelphi Patrol Wing
+  optional: true,
+  grantCardId: riderIf('GRANT_ADELPHI_PATROL_WING', 'SHD_101', (s, u) => findUnit(s, u.instanceId)?.owner === s.initiative),
+}))
+
+const GRANT_FOUR_LOM = 'GRANT_FOUR_LOM'
+registerCard(GRANT_FOUR_LOM, { sourceCardId: 'LAW_065', cannotAttackBases: () => true })
+registerCard('LAW_065', attackWp("You may attack with a friendly Bounty Hunter unit, even if it's exhausted. It can't attack bases for this attack.", // 4-LOM
+  { optional: true, exhausted: true, attacker: { trait: 'Bounty Hunter' }, grantCardId: GRANT_FOUR_LOM }))
+
+/**
+ * Mon Mothma's "any number of other units (one at a time)": each attack's rider offers the next, and
+ * marks its attacker for the phase so no unit attacks twice in the sequence. The mark carries no
+ * ability; it is only read here. A second Mon Mothma in the same phase would see the first one's
+ * marks, which needs her to leave play and be played again.
+ */
+const GRANT_MON_MOTHMA = 'GRANT_MON_MOTHMA'
+const MON_MOTHMA_ATTACKED = 'GRANT_MON_MOTHMA_ATTACKED'
+registerCard(MON_MOTHMA_ATTACKED, { sourceCardId: 'SEC_103' })
+const monMothmaOffer = (s: GameState, owner: PlayerId, id: string): GameState => {
+  const used = (s.lastingEffects ?? []).filter(e => e.abilityCardIds?.includes(MON_MOTHMA_ATTACKED)).map(e => e.targetInstanceId)
+  const herself = s.players[owner].units.filter(u => u.cardId === 'SEC_103').map(u => u.instanceId)
+  return offerAttack(s, owner, id, { optional: true, exhausted: true, grantCardId: GRANT_MON_MOTHMA, attacker: { exclude: [...herself, ...used] } })
+}
+registerCard(GRANT_MON_MOTHMA, {
+  sourceCardId: 'SEC_103',
+  cannotAttackBases: () => true,
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: 'You may attack with another unit.',
+    effect: (s, ctx) => monMothmaOffer(addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, abilityCardIds: [MON_MOTHMA_ATTACKED] }), ctx.owner, `${ctx.sourceInstanceId}-next`),
+  }],
+})
+registerCard('SEC_103', whenPlayed("You may attack with any number of other units (one at a time), even if those units are exhausted. They can't attack bases for these attacks.", (s, ctx) => // Mon Mothma
+  monMothmaOffer(s, ctx.owner, `${ctx.sourceInstanceId}-attack`)))
+
+registerCard('TWI_248', { // Ahsoka's Padawan Lightsaber
+  attachRestriction: nonVehicle,
+  ...attackWp('If attached unit is Ahsoka Tano, you may attack with a unit.', { optional: true }, hostNamed('Ahsoka Tano')),
+})
+const GRANT_DARTH_MAULS_LIGHTSABER = 'GRANT_DARTH_MAULS_LIGHTSABER'
+registerCard(GRANT_DARTH_MAULS_LIGHTSABER, { sourceCardId: 'LOF_140', conditionalKeywords: () => [KW.overwhelm], cannotAttackBases: () => true })
+registerCard('LOF_140', { // Darth Maul's Lightsaber
+  attachRestriction: (s, t, player) => nonVehicle(s, t) && findUnit(s, t.instanceId)?.owner === player,
+  ...whenPlayed("If attached unit is Darth Maul, you may attack with him. For this attack, he gains Overwhelm and can't attack bases.", (s, ctx) =>
+    (hostNamed('Darth Maul')(s, ctx)
+      ? offerAttack(s, ctx.owner, `${ctx.sourceInstanceId}-attack`, { optional: true, attacker: { only: [ctx.sourceInstanceId!] }, grantCardId: GRANT_DARTH_MAULS_LIGHTSABER })
+      : s)),
 })

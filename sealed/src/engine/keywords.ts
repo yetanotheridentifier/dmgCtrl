@@ -179,10 +179,13 @@ export function unitAttacksEitherArena(state: GameState, unit: UnitState): boole
 /** A unit's traits — its card's plus any granted by an upgrade (The Darksaber → Mandalorian). */
 export function unitTraits(state: GameState, unit: UnitState): string[] {
   const out = [...(state.cards[unit.cardId]?.traits ?? [])]
+  const removed = new Set<string>()
   for (const cardId of abilityCardIds(unit)) {
-    out.push(...(getCardDefinition(cardId)?.grantedTraits?.(state, unit) ?? []))
+    const def = getCardDefinition(cardId)
+    out.push(...(def?.grantedTraits?.(state, unit) ?? []))
+    for (const t of def?.removedTraits?.(state, unit) ?? []) removed.add(t.toLowerCase())
   }
-  return out
+  return removed.size > 0 ? out.filter(t => !removed.has(t.toLowerCase())) : out
 }
 
 /** Case-insensitive trait test that includes granted traits. */

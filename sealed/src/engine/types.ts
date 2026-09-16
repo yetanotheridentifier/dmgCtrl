@@ -135,6 +135,13 @@ export interface UnitState {
    * which is true of every unit that has never changed hands.
    */
   owner?: PlayerId
+  /**
+   * How long a unit controlled by someone other than its `owner` stays that way. Absent means until the
+   * regroup phase starts (Change of Heart, Rehabilitation), which is the common case. `'permanent'` is a
+   * change of control with no end (C-3P0, Galen Erso). An instance id is "when that unit leaves play,
+   * the owner takes control" (Grand Moff Tarkin): control goes back once it is no longer in play.
+   */
+  controlUntil?: 'permanent' | string
 }
 
 export interface ResourceState {
@@ -644,14 +651,23 @@ type ChoiceVariant =
   // Sun), whose amount can only be counted once the first hit has landed.
   | { kind: 'selectDamageTarget'; id: string; controller: PlayerId; amount: number; unitTargets: string[]; baseTargets: PlayerId[]; optional?: boolean; source?: DamageSource; thenHealBase?: number
       thenReadyIfTrait?: string
-      thenDamage?: { amount?: number; perDamagedEnemy?: boolean; scope: 'anotherEnemy' | 'anyUnit'; optional?: boolean } }
+      thenDamage?: { amount?: number; perDamagedEnemy?: boolean; scope: 'anotherEnemy' | 'anyUnit'; optional?: boolean }
+      // "…and attack with it" (Fiery Alliance): the unit just damaged attacks, if it still can.
+      thenAttackWithIt?: boolean
+      // "If you do, that base's controller draws a card" (R2-D2, Getting His Chance).
+      thenBaseOwnerDraws?: boolean
+      // "…and ready it" (Academy Disciplinarian): the unit just damaged readies, if it survived.
+      thenReadyIt?: boolean }
   // Greef Karga front: on playing a unit, may exhaust the leader to give it an Advantage token.
   // `unitId` is the just-played unit to receive the token.
   | { kind: 'mayExhaustLeaderForAdvantage'; id: string; controller: PlayerId; unitId: string }
   // "This phase" buff: pick a unit among `targets` and grant it the given power/HP/keywords for the
   // phase. Mandatory unless `optional`: Baylan's On Attack prints "may", Display of Strength does not.
   // `thenMayAttack` chains "you may attack with that unit" (T-6 Shuttle 1974).
+  // `thenExhaustWeakerEnemiesInArena` exhausts each enemy unit in the buffed unit's arena with less power
+  // than it has once buffed (Prime Minister Almec).
   | { kind: 'mayLastingBuff'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; power?: number; hp?: number; keywords?: KeywordInstance[]; thenMayAttack?: boolean
+      thenExhaustWeakerEnemiesInArena?: boolean
       // The Student Guides the Master: power is +1 per friendly unit weaker than the chosen one,
       // so it can only be worked out once a target is picked.
       powerPerWeakerFriendly?: boolean }
@@ -807,7 +823,9 @@ type ChoiceVariant =
   // it a search is mandatory while anything matches. `held` says the revealed cards have been pulled
   // OUT of the deck by an earlier pass, so they are bottomed by appending rather than by rotating the
   // top — getting that wrong either duplicates or deletes them.
-  | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; guessedCost?: number; discardRest?: boolean; remaining?: number; upTo?: boolean; held?: boolean }
+  // `resourceIt` puts the chosen card into play as a resource, exhausted, instead of drawing it
+  // (Jendirian Valley).
+  | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; guessedCost?: number; discardRest?: boolean; remaining?: number; upTo?: boolean; held?: boolean; resourceIt?: boolean }
   // The Cyborg Mech: deal `undamagedAmount` to a chosen undamaged target, or `damagedAmount`
   // to a damaged one (the amount is decided by the picked unit's damage). Mandatory board-target.
   | { kind: 'variableStrike'; id: string; controller: PlayerId; targets: string[]; undamagedAmount: number; damagedAmount: number }
@@ -841,8 +859,9 @@ type ChoiceVariant =
   // less"), and then eligibility is what the player can afford rather than what fits `budget`.
   | { kind: 'searchPlayFree'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; budget: number; playOne?: boolean; entersReady?: boolean; filter?: { trait?: string; aspect?: string; arena?: Arena }; costDelta?: number }
   // Rancor Keeper: "deal 1 damage to any number of bases" — repeatable, each base at most
-  // once; `remaining` are the bases not yet picked. Skip finishes.
-  | { kind: 'damageAnyBases'; id: string; controller: PlayerId; remaining: PlayerId[]; amount: number; source?: DamageSource }
+  // once; `remaining` are the bases not yet picked. Skip finishes. `heal` heals each picked base
+  // instead ("heal 2 damage from each of any number of bases", Coruscanti Spy).
+  | { kind: 'damageAnyBases'; id: string; controller: PlayerId; remaining: PlayerId[]; amount: number; source?: DamageSource; heal?: boolean }
   /**
    * The Mandalorian: may defeat a Shield on `preventerId` to prevent `amount` damage headed
    * for `targetId`. A yes/no. Raised on two paths:
