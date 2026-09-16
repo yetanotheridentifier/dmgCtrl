@@ -4,12 +4,12 @@ import { legalMoves, enemyAttackTargets } from '../engine/legalMoves'
 import { getCardDefinition } from '../engine/abilities'
 import { effectivePower, effectiveHp } from '../engine/stats'
 import { unitHasKeyword, unitHasTrait } from '../engine/keywords'
-import { TOKEN_SHIELD, TOKEN_ADVANTAGE } from '../engine/tokenUpgrades'
+import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helpers/engineFixtures'
 import type { Action } from '../engine/actions'
-import type { EngineCard, GameState, KeywordInstance, PendingChoice, PhaseEvents, PlayerId, UnitState } from '../engine/types'
+import type { EngineCard, GameState, PendingChoice, PhaseEvents, PlayerId, UnitState } from '../engine/types'
 
 /**
  * The When Played units and upgrades the second batch left out, in the groups the ticket names:
@@ -108,6 +108,14 @@ const F: Record<string, EngineCard> = {
   TWI_185: src('TWI_185'), SHD_080: src('SHD_080', { cost: 1, power: 1, hp: 3 }), SOR_184: src('SOR_184', { arena: 'space', unique: true }), SEC_139: src('SEC_139'),
   BOBA: card({ id: 'BOBA', name: 'Boba Fett', arena: 'ground', cost: 5, power: 4, hp: 6, unique: true }),
   UNIQ2: card({ id: 'UNIQ2', arena: 'ground', cost: 2, power: 2, hp: 6, unique: true }),
+
+  // Several targets
+  LAW_187: upg('LAW_187'), LAW_183: src('LAW_183', { arena: 'space' }), SEC_169: src('SEC_169'), SEC_155: src('SEC_155', { unique: true }),
+  LOF_167: src('LOF_167'), JTL_140: src('JTL_140', { arena: 'space' }), JTL_170: src('JTL_170', { power: 3, hp: 7 }), JTL_072: src('JTL_072'),
+  SHD_047: src('SHD_047'), LOF_147: src('LOF_147', { arena: 'space' }), SOR_135: src('SOR_135'), SOR_052: src('SOR_052', { arena: 'space', hp: 9 }),
+  TWI_044: src('TWI_044', { power: 0, hp: 5 }),
+  FRINGE: card({ id: 'FRINGE', arena: 'ground', cost: 2, power: 2, hp: 6, traits: ['FRINGE'] }),
+  MANDO: card({ id: 'MANDO', arena: 'ground', cost: 2, power: 2, hp: 6, traits: ['MANDALORIAN'] }),
 }
 
 const unit = (instanceId: string, cardId: string, over: Partial<UnitState> = {}): UnitState =>
@@ -174,9 +182,6 @@ const keywords = (s: GameState, id: string): string[] => {
   return u ? (['Sentinel', 'Saboteur', 'Overwhelm', 'Hidden', 'Grit', 'Restore', 'Raid'] as const).filter(k => unitHasKeyword(s, u, k)) : []
 }
 const shields = (s: GameState, id: string) => U(s, id)?.upgrades.filter(up => up.cardId === TOKEN_SHIELD).length ?? 0
-void TOKEN_ADVANTAGE
-void effectiveHp
-void ({} as KeywordInstance)
 
 // ── TS26 and IBH ──────────────────────────────────────────────────────────────────────────────────
 
@@ -1098,6 +1103,137 @@ describe('cards with a second ability outside When Played', () => {
     expect(declinable(fired)).toBe(true)
     expect(hitUnit(s, 'a', 'e').players.opponent.base.damage, '3 power into 2 remaining HP: 1 carries over').toBe(1)
     expect(hitUnit(s, 'a', 'f').players.opponent.base.damage, 'an undamaged defender: no Overwhelm').toBe(0)
+  })
+})
+
+// ── Several targets ───────────────────────────────────────────────────────────────────────────────
+
+describe('several targets: each of up to N, any number, divided amounts', () => {
+  /** Pick `picks` in order from a fired "each of up to N" choice, returning the state after each. */
+  const pickAllOf = (s: GameState, picks: string[]) => picks.reduce((acc, id) => accept(acc, { targetInstanceId: id }), s)
+
+  it('"Staccato Lightning" Repeater (LAW_187): 1 damage to each of up to 3 different ground units', () => {
+    const s = board([unit('src', 'GRD', { upgrades: [{ cardId: 'LAW_187', owner: 'player' }] })], [unit('a', 'GRD'), unit('b', 'GRD'), unit('c', 'GRD'), unit('sp', 'SPACE')])
+    const fired = fire(s, 'LAW_187')
+    expect(offered(fired)).toEqual(['a', 'b', 'c', 'src'])
+    expect(declinable(fired), 'up to: none is allowed').toBe(true)
+    const one = accept(fired, { targetInstanceId: 'a' })
+    expect(offered(one), 'each unit once').toEqual(['b', 'c', 'src'])
+    const three = pickAllOf(fired, ['a', 'b', 'c'])
+    expect([U(three, 'a')!.damage, U(three, 'b')!.damage, U(three, 'c')!.damage]).toEqual([1, 1, 1])
+    noChoice(three)
+    expect(getCardDefinition('LAW_187')!.attachRestriction!(s0(), U(s0(), 'v')!, 'player')).toBe(false)
+  })
+
+  it('B-Wing Skirmisher (LAW_183): up to 2 space units; IG-2000 (JTL_140): up to 3 units', () => {
+    const s = board([unit('src', 'LAW_183')], [unit('a', 'SPACE'), unit('b', 'SPACE'), unit('g', 'GRD')])
+    const fired = fire(s, 'LAW_183')
+    expect(offered(fired)).toEqual(['a', 'b', 'src'])
+    noChoice(pickAllOf(fired, ['a', 'b']))
+    const ig = fire(board([unit('src', 'JTL_140')], [unit('a', 'SPACE'), unit('g', 'GRD'), unit('h', 'GRD')]), 'JTL_140')
+    expect(offered(ig)).toEqual(['a', 'g', 'h', 'src'])
+    noChoice(pickAllOf(ig, ['a', 'g', 'h']))
+  })
+
+  it('AAT Incinerator (SEC_169): up to 4 other ground units; 2 damage to your base if no friendly unit was damaged', () => {
+    const s = board([unit('src', 'SEC_169'), unit('g', 'GRD')], [unit('a', 'GRD'), unit('b', 'GRD')])
+    const fired = fire(s, 'SEC_169')
+    expect(offered(fired)).toEqual(['a', 'b', 'g'])
+    expect(skip(fired).players.player.base.damage, 'no units at all: still no friendly damaged').toBe(2)
+    expect(skip(accept(fired, { targetInstanceId: 'a' })).players.player.base.damage).toBe(2)
+    expect(skip(accept(fired, { targetInstanceId: 'g' })).players.player.base.damage).toBe(0)
+    const shielded = board([unit('src', 'SEC_169'), unit('g', 'GRD', { upgrades: [{ cardId: TOKEN_SHIELD, owner: 'player' }] })], [unit('a', 'GRD')])
+    expect(skip(accept(fire(shielded, 'SEC_169'), { targetInstanceId: 'g' })).players.player.base.damage, 'a Shield soaked it: not damaged').toBe(2)
+  })
+
+  it('Alexsandr Kallus (SEC_155): 2 damage to each of up to 3 ground units; other friendly unique units gain Raid 2 with the initiative', () => {
+    const s = board([unit('src', 'SEC_155'), unit('u', 'UNIQ2'), unit('g', 'GRD')], [unit('e', 'GRD')])
+    const after = accept(fire(s, 'SEC_155'), { targetInstanceId: 'e' })
+    expect(U(after, 'e')!.damage).toBe(2)
+    expect(keywords(s, 'u')).toContain('Raid')
+    expect(keywords(s, 'g')).not.toContain('Raid')
+    expect(keywords(s, 'src'), 'other').not.toContain('Raid')
+    expect(keywords({ ...s, initiative: 'opponent' }, 'u')).not.toContain('Raid')
+  })
+
+  it('Saesee Tiin (LOF_167): up to 3 units only with the initiative', () => {
+    const s = board([unit('src', 'LOF_167')], [unit('e', 'GRD')])
+    noChoice(fire({ ...s, initiative: 'opponent' }, 'LOF_167'))
+    expect(offered(fire(s, 'LOF_167'))).toEqual(['e', 'src'])
+  })
+
+  it('War Juggernaut (JTL_170): 1 damage to each of any number of units; +1/+0 for each damaged unit', () => {
+    const s = board([unit('src', 'JTL_170'), unit('g', 'GRD')], [unit('a', 'GRD'), unit('b', 'GRD'), unit('c', 'GRD'), unit('d', 'GRD')])
+    const all5 = pickAllOf(fire(s, 'JTL_170'), ['a', 'b', 'c', 'd', 'g'])
+    expect(offered(all5)).toEqual(['src'])
+    expect(effectivePower(all5, U(all5, 'src')!)).toBe(3 + 5)
+  })
+
+  it('Wing Guard Security Team (JTL_072) and The Armorer (SHD_047): Shields to up to 2 Fringe / 3 Mandalorian units', () => {
+    const wing = fire(board([unit('src', 'JTL_072'), unit('f', 'FRINGE'), unit('g', 'GRD')], [unit('ef', 'FRINGE')]), 'JTL_072')
+    expect(offered(wing)).toEqual(['ef', 'f'])
+    const two = pickAllOf(wing, ['f', 'ef'])
+    expect([shields(two, 'f'), shields(two, 'ef')]).toEqual([1, 1])
+    const armorer = fire(board([unit('src', 'SHD_047'), unit('m', 'MANDO'), unit('g', 'GRD')]), 'SHD_047')
+    expect(offered(armorer)).toEqual(['m'])
+    expect(declinable(armorer)).toBe(true)
+  })
+
+  it("Kit Fisto's Aethersprite (LOF_147): may defeat any number of upgrades on one unit", () => {
+    const s = board([unit('src', 'LOF_147'), unit('g', 'GRD', { upgrades: [{ cardId: 'CHEAPUP', owner: 'player' }] })],
+      [unit('e', 'GRD', { upgrades: [{ cardId: 'DEARUP', owner: 'opponent' }, { cardId: TOKEN_SHIELD, owner: 'opponent' }] }), unit('bare', 'GRD')])
+    const fired = fire(s, 'LOF_147')
+    expect(offered(fired), 'units with an upgrade').toEqual(['e', 'g'])
+    expect(declinable(fired)).toBe(true)
+    const onE = accept(fired, { targetInstanceId: 'e' })
+    expect(choice(onE).kind).toBe('selectUpgradeThen')
+    expect(declinable(onE)).toBe(true)
+    const first = accept(onE, { optionIndex: 0 })
+    expect(U(first, 'e')!.upgrades.map(u => u.cardId)).toEqual([TOKEN_SHIELD])
+    const second = accept(first, { optionIndex: 0 })
+    expect(U(second, 'e')!.upgrades).toEqual([])
+    noChoice(second)
+  })
+
+  it('Emperor Palpatine (SOR_135): 6 damage divided among enemy units, all of it', () => {
+    const s = board([unit('src', 'SOR_135'), unit('g', 'GRD')], [unit('a', 'TOUGH'), unit('b', 'TOUGH')])
+    const fired = fire(s, 'SOR_135')
+    expect(choice(fired).kind).toBe('distributeDamage')
+    expect(offered(fired)).toEqual(['a', 'b'])
+    expect(declinable(fired), 'the whole 6 must be dealt').toBe(false)
+    const done = ['a', 'a', 'b', 'a', 'b', 'b'].reduce((acc, id) => accept(acc, { targetInstanceId: id }), fired)
+    expect([U(done, 'a')!.damage, U(done, 'b')!.damage]).toEqual([3, 3])
+    noChoice(done)
+    noChoice(fire(board([unit('src', 'SOR_135')]), 'SOR_135'))
+  })
+
+  it('Redemption (SOR_052): heals up to 8 from units and bases, then takes that much damage', () => {
+    const s = withPlayer(board([unit('src', 'SOR_052'), unit('g', 'GRD', { damage: 2 })], [unit('e', 'GRD', { damage: 1 }), unit('ok', 'GRD')]), 'player', { base: { cardId: 'TST_B', damage: 10 } })
+    const fired = fire(s, 'SOR_052')
+    expect(choice(fired).kind).toBe('distributeHealing')
+    expect(offered(fired), 'damaged units only').toEqual(['e', 'g'])
+    expect(offeredBases(fired), 'damaged bases only').toEqual(['player'])
+    expect(declinable(fired)).toBe(true)
+    const healed = accept(accept(accept(fired, { targetInstanceId: 'g' }), { targetInstanceId: 'g' }), { baseTarget: 'player' })
+    expect(offered(healed), 'g is fully healed').toEqual(['e'])
+    const stopped = skip(healed)
+    expect([U(stopped, 'g')!.damage, stopped.players.player.base.damage, U(stopped, 'src')!.damage]).toEqual([0, 9, 3])
+    noChoice(stopped)
+    const eight = Array.from({ length: 8 }).reduce<GameState>(acc => accept(acc, { baseTarget: 'player' }), fired)
+    expect([eight.players.player.base.damage, U(eight, 'src')!.damage]).toEqual([2, 8])
+    noChoice(eight)
+  })
+
+  it('Kashyyyk Defender (TWI_044): heals up to 2 from another unit and takes that much damage', () => {
+    const s = board([unit('src', 'TWI_044', { damage: 1 }), unit('g', 'GRD', { damage: 3 }), unit('h', 'GRD', { damage: 3 })])
+    const fired = fire(s, 'TWI_044')
+    expect(offered(fired)).toEqual(['g', 'h'])
+    expect(offeredBases(fired)).toEqual([])
+    const one = accept(fired, { targetInstanceId: 'g' })
+    expect(offered(one), 'the same unit').toEqual(['g'])
+    const two = accept(one, { targetInstanceId: 'g' })
+    expect([U(two, 'g')!.damage, U(two, 'src')!.damage]).toEqual([1, 3])
+    noChoice(two)
   })
 })
 

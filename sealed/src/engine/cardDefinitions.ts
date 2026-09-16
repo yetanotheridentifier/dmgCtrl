@@ -1,4 +1,4 @@
-import type { AbilityDef, CardDefinition, EffectContext } from './abilities'
+import type { AbilityDef, CardDefinition, EffectContext, IfYouDoContext } from './abilities'
 import { registerCard, getCardDefinition } from './abilities'
 import { takeControlOfUnit, giveToken, giveTokens, exhaustUnit, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
@@ -4051,3 +4051,106 @@ registerCard('SEC_139', { // Miraj Scintel
     return (findUnit(s, combat.defenderInstanceId)?.unit.damage ?? 0) > 0 ? { keywords: [KW.overwhelm] } : undefined
   },
 })
+
+// Several targets: "each of up to N", "any number", divided amounts
+/** Where an "each of up to N units" ability has got to: picks left, the units picked, and a flag for its finish. */
+type UpToStep = { left: number; chosen: string[]; flag?: boolean }
+interface UpToSpec {
+  text: string
+  test: Pick
+  apply: (s: GameState, ctx: IfYouDoContext, id: string) => GameState
+  /** Whether a pick counts toward the finish's flag, judged from the states either side of it. */
+  mark?: (before: GameState, after: GameState, ctx: IfYouDoContext, id: string) => boolean
+  /** What happens once the picks stop, however they stopped. */
+  finish?: (s: GameState, ctx: IfYouDoContext, step: UpToStep) => GameState
+}
+const upToOffer = (s: GameState, ctx: Resumable, spec: UpToSpec, step: UpToStep): GameState => {
+  const targets = step.left > 0 ? pickedIds(s, ctx, spec.test).filter(id => !step.chosen.includes(id)) : []
+  if (!targets.length) return spec.finish ? spec.finish(s, { ...ctx }, step) : s
+  return pushChoice(s, {
+    kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true, text: spec.text,
+    then: resume(ctx, JSON.stringify(step)), ...(spec.finish ? { hookOnDecline: true } : {}),
+  })
+}
+/**
+ * "<Effect> each of up to `n` (different) units that ...": one pick at a time, each unit at most once,
+ * and Done at any point. Each pick applies at once, which is how the rest of the engine resolves a
+ * divided or repeated effect.
+ */
+const eachOfUpTo = (description: string, n: number, spec: UpToSpec, when: When = always): CardDefinition => ({
+  ...whenPlayed(description, (s, ctx) => (when(s, ctx) ? upToOffer(s, ctx, spec, { left: n, chosen: [] }) : s)),
+  ifYouDo: (s, ctx) => {
+    const step = JSON.parse(ctx.step ?? '{}') as UpToStep
+    if (!ctx.targetInstanceId) return spec.finish ? spec.finish(s, ctx, step) : s
+    const id = ctx.targetInstanceId
+    const after = spec.apply(s, ctx, id)
+    const flag = step.flag || (spec.mark?.(s, after, ctx, id) ?? false)
+    return upToOffer(after, ctx, spec, { left: step.left - 1, chosen: [...step.chosen, id], ...(flag ? { flag } : {}) })
+  },
+})
+const damageEach = (amount: number) => (s: GameState, _ctx: IfYouDoContext, id: string) => dealDamageToUnit(s, id, amount)
+const shieldEach = (s: GameState, _ctx: IfYouDoContext, id: string) => giveToken(s, id, TOKEN_SHIELD)
+const haveInitiative: When = (s, ctx) => s.initiative === ctx.owner
+
+registerCard('LAW_187', { // "Staccato Lightning" Repeater
+  attachRestriction: nonVehicle,
+  ...eachOfUpTo('Deal 1 damage to each of up to 3 different ground units.', 3, { text: 'deal 1 damage to a ground unit (up to 3)', test: pickGround, apply: damageEach(1) }),
+})
+registerCard('LAW_183', eachOfUpTo('Deal 1 damage to each of up to 2 space units.', 2, { text: 'deal 1 damage to a space unit (up to 2)', test: pickArena('space'), apply: damageEach(1) })) // B-Wing Skirmisher
+registerCard('SEC_169', eachOfUpTo('Deal 1 damage to each of up to 4 other ground units. If no friendly units were damaged by this ability, deal 2 damage to your base.', 4, { // AAT Incinerator
+  text: 'deal 1 damage to another ground unit (up to 4)',
+  test: pickAll(pickGround, pickOther),
+  apply: damageEach(1),
+  // Damaged means damage landed: a Shield that soaks the hit leaves the unit undamaged.
+  mark: (before, after, ctx, id) => before.players[ctx.owner].units.some(u => u.instanceId === id)
+    && (findUnit(after, id)?.unit.damage ?? Infinity) > (findUnit(before, id)?.unit.damage ?? 0),
+  finish: (s, ctx, step) => (step.flag ? s : dealDamageToBase(s, ctx.owner, 2)),
+}))
+registerCard('SEC_155', { // Alexsandr Kallus
+  ...eachOfUpTo('Deal 2 damage to each of up to 3 ground units.', 3, { text: 'deal 2 damage to a ground unit (up to 3)', test: pickGround, apply: damageEach(2) }),
+  aura: (s, source, target, friendly) =>
+    (friendly && target.instanceId !== source.instanceId && s.cards[target.cardId]?.unique && findUnit(s, source.instanceId)?.owner === s.initiative
+      ? { keywords: [KW.raid(2)] }
+      : undefined),
+})
+registerCard('LOF_167', eachOfUpTo('If you have the initiative, deal 1 damage to each of up to 3 units.', 3, { text: 'deal 1 damage to a unit (up to 3)', test: pickAny, apply: damageEach(1) }, haveInitiative)) // Saesee Tiin
+registerCard('JTL_140', eachOfUpTo('Deal 1 damage to each of up to 3 units.', 3, { text: 'deal 1 damage to a unit (up to 3)', test: pickAny, apply: damageEach(1) })) // IG-2000
+registerCard('JTL_170', { // War Juggernaut
+  ...eachOfUpTo('Deal 1 damage to each of any number of units.', Number.MAX_SAFE_INTEGER, { text: 'deal 1 damage to a unit (any number)', test: pickAny, apply: damageEach(1) }),
+  statModifier: s => ({ power: allUnits(s).filter(u => u.damage > 0).length }),
+})
+registerCard('JTL_072', eachOfUpTo('Give a Shield token to each of up to 2 Fringe units.', 2, { text: 'give a Fringe unit a Shield token (up to 2)', test: pickTrait('Fringe'), apply: shieldEach })) // Wing Guard Security Team
+registerCard('SHD_047', eachOfUpTo('Give a Shield token to each of up to 3 Mandalorian units.', 3, { text: 'give a Mandalorian unit a Shield token (up to 3)', test: pickTrait('Mandalorian'), apply: shieldEach })) // The Armorer
+
+registerCard('LOF_147', { // Kit Fisto's Aethersprite
+  ...whenPlayed('You may defeat any number of upgrades on a unit.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, (_st, u) => u.upgrades.length > 0), 'choose a unit to defeat upgrades on', true, 'unit')),
+  // The unit first, then its upgrades one at a time until Done or none are left.
+  ifYouDo: (s, ctx) => {
+    const up = ctx.upgradeChosen
+    const onUnit = up ? up.unitId : ctx.targetInstanceId
+    if (!onUnit) return s
+    const next = up ? defeatUpgradeAt(s, up.unitId, up.upgradeIndex) : s
+    const candidates = upgradeCandidates(next).filter(c => c.unitId === onUnit)
+    return candidates.length
+      ? pushChoice(next, { kind: 'selectUpgradeThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true, text: 'defeat an upgrade on that unit', then: resume(ctx, 'upgrade') })
+      : next
+  },
+})
+registerCard('SOR_135', whenPlayed('Deal 6 damage divided as you choose among enemy units.', (s, ctx) => { // Emperor Palpatine
+  const targets = s.players[opponentOf(ctx.owner)].units.map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'distributeDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, remaining: 6, total: 6, targets, enemiesOf: ctx.owner }) : s
+}))
+registerCard('SOR_052', whenPlayed('Heal up to 8 total damage from any number of units and/or bases. Deal that much damage to this unit.', (s, ctx) => { // Redemption
+  const unitTargets = allUnits(s).filter(u => u.damage > 0).map(u => u.instanceId)
+  const baseTargets = BOTH_BASES.filter(b => s.players[b].base.damage > 0)
+  return unitTargets.length + baseTargets.length
+    ? pushChoice(s, { kind: 'distributeHealing', id: ctx.sourceInstanceId!, controller: ctx.owner, remaining: 8, healed: 0, unitTargets, baseTargets, damageUnit: ctx.sourceInstanceId! })
+    : s
+}))
+registerCard('TWI_044', whenPlayed('Heal up to 2 damage from another unit and deal that much damage to this unit.', (s, ctx) => { // Kashyyyk Defender
+  const unitTargets = picked(s, ctx, pickOther).filter(u => u.damage > 0).map(u => u.instanceId)
+  return unitTargets.length
+    ? pushChoice(s, { kind: 'distributeHealing', id: ctx.sourceInstanceId!, controller: ctx.owner, remaining: 2, healed: 0, unitTargets, baseTargets: [], damageUnit: ctx.sourceInstanceId!, oneUnit: true })
+    : s
+}))

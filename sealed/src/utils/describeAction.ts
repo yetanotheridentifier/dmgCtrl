@@ -147,7 +147,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayPlayTopFree') return "Don't play"
       if (choice.kind === 'mayDamageExhaust') return 'Decline'
       if (choice.kind === 'mayAttack' || choice.kind === 'mayAttackAnyUnit') return "Don't attack"
-      if (choice.kind === 'distributeDamage' || choice.kind === 'distributeTokens' || choice.kind === 'lookAtHand' || choice.kind === 'searchPlayFree' || choice.kind === 'dealOwnBaseForDiscount') return 'Done'
+      if (choice.kind === 'distributeDamage' || choice.kind === 'distributeHealing' || choice.kind === 'distributeTokens' || choice.kind === 'lookAtHand' || choice.kind === 'searchPlayFree' || choice.kind === 'dealOwnBaseForDiscount') return 'Done'
       // Acknowledging a reveal that matched nothing (#413), and passing on Reforge's search.
       if (choice.kind === 'searchDraw' || choice.kind === 'search' || choice.kind === 'searchPlayUpgrade') return 'Done'
       if (choice.kind === 'mayDoubleTokens') return "Don't"
@@ -294,6 +294,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'distributeDamage') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
         return `Deal 1${target ? ` to ${target}` : ''}`
+      }
+      if (choice.kind === 'distributeHealing') {
+        const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : action.baseTarget === by ? 'your base' : action.baseTarget ? "opponent's base" : undefined
+        return `Heal 1${target ? ` from ${target}` : ''}`
       }
       if (choice.kind === 'distributeTokens') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined

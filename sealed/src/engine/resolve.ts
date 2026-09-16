@@ -752,6 +752,10 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
   if (choice.kind === 'dealOwnBaseForDiscount') {
     next = grantEnochDiscount(next, choice.controller, choice.dealt)
   }
+  // Redemption: stopping deals what was healed so far.
+  if (choice.kind === 'distributeHealing') next = finishHealing(next, choice.damageUnit, choice.healed)
+  // AAT Incinerator: the ability goes on once its picks stop.
+  if (choice.kind === 'selectUnitThen' && choice.hookOnDecline) next = runIfYouDo(next, choice.then)
   // Elzar Mann: stopping early still triggers the follow-up, sized to what was distributed.
   if (choice.kind === 'distributeTokens') {
     next = finishDistribution(next, choice, choice.total - choice.remaining)
@@ -1283,11 +1287,34 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         next = checkWin(next)
         if (next.winner !== null) return next
         const remaining = choice.remaining - 1
-        const targets = [...next.players.player.units, ...next.players.opponent.units].map(u => u.instanceId)
+        const pool = choice.enemiesOf ? next.players[opponentOf(choice.enemiesOf)].units : [...next.players.player.units, ...next.players.opponent.units]
+        const targets = pool.map(u => u.instanceId)
         if (remaining > 0 && targets.length > 0) {
-          next = pushChoice(next, { kind: 'distributeDamage', id: choice.id, controller: choice.controller, remaining, total: choice.total, targets })
+          next = pushChoice(next, { ...choice, remaining, targets })
         }
       }
+      break
+    }
+    case 'distributeHealing': {
+      // Redemption: heal one point, then re-offer against what is still damaged, or finish.
+      let healedNow = 0
+      if (targetInstanceId && choice.unitTargets.includes(targetInstanceId)) {
+        const before = findUnit(next, targetInstanceId)?.unit.damage ?? 0
+        next = healUnit(next, targetInstanceId, 1)
+        healedNow = before - (findUnit(next, targetInstanceId)?.unit.damage ?? 0)
+      } else if (baseTarget && choice.baseTargets.includes(baseTarget)) {
+        const before = next.players[baseTarget].base.damage
+        next = healBase(next, baseTarget, 1)
+        healedNow = before - next.players[baseTarget].base.damage
+      }
+      const healed = choice.healed + healedNow
+      const remaining = choice.remaining - 1
+      const pickedUnit = choice.oneUnit && targetInstanceId ? [targetInstanceId] : choice.unitTargets
+      const unitTargets = pickedUnit.filter(id => (findUnit(next, id)?.unit.damage ?? 0) > 0)
+      const baseTargets = choice.oneUnit ? [] : choice.baseTargets.filter(b => next.players[b].base.damage > 0)
+      next = remaining > 0 && unitTargets.length + baseTargets.length > 0
+        ? pushChoice(next, { ...choice, remaining, healed, unitTargets, baseTargets })
+        : finishHealing(next, choice.damageUnit, healed)
       break
     }
     case 'distributeTokens': {
@@ -2431,6 +2458,11 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
  * rather than awarding the win to whichever was checked first.
  */
 /** Every unit in play, both sides. */
+/** "Deal that much damage to this unit", once a healing distribution ends. */
+function finishHealing(state: GameState, damageUnit: string, healed: number): GameState {
+  return healed > 0 && findUnit(state, damageUnit) ? checkWin(dealDamageToUnit(state, damageUnit, healed)) : state
+}
+
 /** Resume an ability at its card's `ifYouDo` hook, with what the answered choice settled. */
 function runIfYouDo(state: GameState, then: IfYouDo, settled: { targetInstanceId?: string; cardChosen?: string; handIndex?: number; upgradeChosen?: UpgradeRef } = {}): GameState {
   const hook = getCardDefinition(then.cardId)?.ifYouDo

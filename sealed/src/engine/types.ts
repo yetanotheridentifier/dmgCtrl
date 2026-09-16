@@ -783,7 +783,13 @@ type ChoiceVariant =
   // Choose one of `targets` and hand it to the card's `ifYouDo` hook, for an ability that does more
   // than one thing to the unit it picks, or whose effect depends on it. Mandatory unless `optional`.
   // `text` names what the pick is for, for the prompt.
-  | { kind: 'selectUnitThen'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; text: string; then: IfYouDo }
+  // `hookOnDecline` runs the hook with no unit when the choice is declined, for an ability that goes on
+  // after its picks stop ("If no friendly units were damaged by this ability", AAT Incinerator).
+  | { kind: 'selectUnitThen'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; text: string; then: IfYouDo; hookOnDecline?: boolean }
+  // Heal 1 at a time from `unitTargets` / `baseTargets` until `remaining` is spent or Done, then deal
+  // what was healed to `damageUnit` (Redemption). `oneUnit` keeps every point on the first unit picked
+  // (Kashyyyk Defender's "from another unit").
+  | { kind: 'distributeHealing'; id: string; controller: PlayerId; remaining: number; healed: number; unitTargets: string[]; baseTargets: PlayerId[]; damageUnit: string; oneUnit?: boolean }
   // Leia Organa: a yes/no — deal `selfDamage` to `unitId`, then heal `healBase` from your base.
   | { kind: 'maySelfDamageHealBase'; id: string; controller: PlayerId; unitId: string; selfDamage: number; healBase: number }
   // Mando's N-1: a yes/no — exhaust your (ready) leader to give `unitId` a "+power/+hp this phase" buff.
@@ -791,7 +797,9 @@ type ChoiceVariant =
   // Deal `total` damage spread among any units (Ninth Sister), one point per pick until
   // `remaining` reaches 0. `targets` are the currently-eligible unit instance ids (both sides,
   // recomputed as units are defeated). Always optional — the controller may stop early (a "may").
-  | { kind: 'distributeDamage'; id: string; controller: PlayerId; remaining: number; total: number; targets: string[] }
+  // `enemiesOf` keeps the re-offers to that player's enemy units, and makes the whole amount mandatory
+  // while any remain (Emperor Palpatine's "deal 6 damage divided as you choose among enemy units").
+  | { kind: 'distributeDamage'; id: string; controller: PlayerId; remaining: number; total: number; targets: string[]; enemiesOf?: PlayerId }
   // Distribute `total` tokens among `targets`, one per pick until `remaining` reaches 0. Unlike
   // `multiPick`'s give-advantage, targets stay eligible so tokens can stack. Every token is placed
   // (Fateful Goodbye) unless `upTo`, which may stop at any point (Elzar Mann), or `optional`, which may

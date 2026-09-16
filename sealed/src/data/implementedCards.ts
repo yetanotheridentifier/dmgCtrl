@@ -252,6 +252,8 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'TWI_256', name: 'Hold-Out Blaster' },
   { id: 'SOR_136', name: "Vader's Lightsaber" },
   { id: 'TWI_219', name: 'On Top of Things' },
+  // When Played, other sets: several targets
+  { id: 'LAW_187', name: '"Staccato Lightning" Repeater' },
 ]
 
 /**
@@ -879,6 +881,19 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SHD_080', name: 'Salacious Crumb' },
   { id: 'SOR_184', name: "Fett's Firespray" },
   { id: 'SEC_139', name: 'Miraj Scintel' },
+  // When Played, other sets: several targets
+  { id: 'LAW_183', name: 'B-Wing Skirmisher' },
+  { id: 'SEC_169', name: 'AAT Incinerator' },
+  { id: 'SEC_155', name: 'Alexsandr Kallus' },
+  { id: 'LOF_167', name: 'Saesee Tiin' },
+  { id: 'JTL_140', name: 'IG-2000' },
+  { id: 'JTL_170', name: 'War Juggernaut' },
+  { id: 'JTL_072', name: 'Wing Guard Security Team' },
+  { id: 'SHD_047', name: 'The Armorer' },
+  { id: 'LOF_147', name: "Kit Fisto's Aethersprite" },
+  { id: 'SOR_135', name: 'Emperor Palpatine' },
+  { id: 'SOR_052', name: 'Redemption' },
+  { id: 'TWI_044', name: 'Kashyyyk Defender' },
 ]
 
 /**

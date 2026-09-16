@@ -571,8 +571,16 @@ function choiceMoves(state: GameState): Action[] {
         break
       }
       case 'distributeDamage': {
-        // Ninth Sister: allocate a point to any eligible unit, or stop (Done) — always optional.
+        // Ninth Sister: allocate a point to any eligible unit, or stop (Done). Emperor Palpatine's
+        // enemy-only form must deal all of it.
         for (const id of choice.targets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        if (!choice.enemiesOf) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      }
+      case 'distributeHealing': {
+        // Redemption: one point to a damaged unit or base at a time, or Done.
+        for (const id of choice.unitTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, targetInstanceId: id })
+        for (const b of choice.baseTargets) moves.push({ type: 'acceptChoice', choiceId: choice.id, baseTarget: b })
         moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
