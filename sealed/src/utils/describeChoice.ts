@@ -250,9 +250,11 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'search':
       return ['choose a ground unit to discard from the revealed cards']
     case 'searchDraw':
-      return [choice.eligibleIndices.length > 0
-        ? 'choose a card to draw; the rest go to the bottom of your deck'
-        : 'nothing matched; these go to the bottom of your deck']
+      return [choice.eligibleIndices.length === 0
+        ? 'nothing matched; these go to the bottom of your deck'
+        : (choice.remaining ?? 1) > 1
+            ? `choose a card to draw (up to ${choice.remaining} in all); the rest go to the bottom of your deck`
+            : 'choose a card to draw; the rest go to the bottom of your deck']
     case 'searchPlayFree':
       return [choice.eligibleIndices.length > 0
         ? 'choose a card to play for free; the rest go to the bottom of your deck'
@@ -264,7 +266,13 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
 
     // ── Looking at cards ──────────────────────────────────────────────────────────────────────
     case 'lookAtHand':
-      return [choice.mayDiscard ? 'choose a card to discard from their hand' : 'look at their hand']
+      return [choice.mayDiscard
+        ? choice.discardFilter === 'nonUnit'
+          ? 'choose a non-unit card to discard from their hand'
+          : 'choose a card to discard from their hand'
+        : 'look at their hand']
+    case 'mayResourceTop':
+      return ['put the top card of your deck into play as a resource, or decline']
     case 'mayDiscardTop':
       return [`discard ${cardName(state, choice.cardId)} from the top, or leave it there`]
 

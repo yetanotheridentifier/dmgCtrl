@@ -158,6 +158,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'selectUpgradeToDefeat' || choice.kind === 'selectResourceUpgrade' || choice.kind === 'selectFromDiscard') return 'Cancel'
       if (choice.kind === 'mayLastingBuff' || choice.kind === 'mayGiveAdvantage' || choice.kind === 'mayExhaustLeaderGiveAdvantage' || choice.kind === 'mayExhaustLeaderExhaustUnit' || choice.kind === 'mayExhaustUnit') return 'Decline'
       if (choice.kind === 'mayExhaustLeaderForAdvantage' || choice.kind === 'mayExhaustLeaderHealUnit' || choice.kind === 'mayPayToDraw' || choice.kind === 'mayDeployLeader') return "Don't"
+      if (choice.kind === 'mayResourceTop') return "Don't"
       if (choice.kind === 'maySelfDamageShield' || choice.kind === 'mayCreateToken' || choice.kind === 'mayCapture') return "Don't"
       if (choice.kind === 'damageAnyBases') return 'Done'
       if (choice.kind === 'selectPair' || choice.kind === 'selectUpgradeToReturn' || choice.kind === 'mayPlayUpgradeFree') return 'Decline'
@@ -179,6 +180,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       const choice = findChoice(state, action.choiceId)
       if (!choice) return 'Accept'
       if (choice.kind === 'payOrExhaust') return `Pay ${choice.cost}`
+      if (choice.kind === 'mayResourceTop') return 'Resource the top card'
       // "Accept" said nothing about what was being accepted, on a choice the player had no reason
       // to expect at all: it interrupts on the OPPONENT's damage (#422).
       if (choice.kind === 'mayPreventDamage') return `Prevent ${choice.amount}`
@@ -405,6 +407,8 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const mode = choice.modes[action.optionIndex ?? 0]
         if (mode === 'healBase') return 'Heal 5 from your base'
         if (mode === 'mandoToken') return 'Create a Mandalorian token'
+        if (mode === 'readyResource') return 'Ready a resource'
+        if (mode === 'exhaustUnit') return 'Exhaust a unit'
         return 'Choose'
       }
       // Treacherous Minefield: two arenas, two buttons. Unlabelled they were both "Accept", which

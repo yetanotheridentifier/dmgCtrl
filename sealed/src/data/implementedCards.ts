@@ -229,6 +229,8 @@ export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'LAW_150', name: 'Fulcrum' },
   { id: 'SOR_072', name: 'Entrenched' },
   { id: 'LAW_129', name: 'Mastery' },
+  // When Played, other sets: deck searches
+  { id: 'LOF_122', name: 'Pillio Star Compass' },
 ]
 
 /**
@@ -686,6 +688,31 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SEC_135', name: 'Muckraker Crab Droid' },
   { id: 'SOR_198', name: 'Han Solo' },
   { id: 'SHD_234', name: 'Incinerator Trooper' },
+  // When Played, other sets: deck searches
+  { id: 'LAW_145', name: 'R2-D2' },
+  { id: 'LAW_136', name: 'Syndicate Spice Runner' },
+  { id: 'LAW_138', name: 'Undercity Hunting Team' },
+  { id: 'LAW_229', name: 'The Master Codebreaker' },
+  { id: 'SEC_112', name: 'Orn Free Taa' },
+  { id: 'SHD_245', name: 'Greef Karga' },
+  { id: 'SHD_198', name: 'Omega' },
+  { id: 'SOR_084', name: 'Grand Moff Tarkin' },
+  { id: 'SOR_181', name: 'Jabba the Hutt' },
+  { id: 'SOR_096', name: 'Mon Mothma' },
+  { id: 'LOF_100', name: 'Kelleran Beq' },
+  { id: 'LAW_063', name: 'L3-37' },
+  { id: 'SOR_087', name: 'Darth Vader' },
+  // When Played, other sets: hands and named cards
+  { id: 'SEC_239', name: 'Viper Probe Droid' },
+  { id: 'SOR_201', name: 'Bodhi Rook' },
+  { id: 'SOR_190', name: 'Lothal Insurgent' },
+  { id: 'SHD_202', name: "Qi'ra" },
+  { id: 'SOR_062', name: 'Regional Governor' },
+  // When Played, other sets: resources
+  { id: 'LAW_083', name: 'Broken Horn' },
+  { id: 'JTL_164', name: 'Cham Syndulla' },
+  { id: 'JTL_119', name: 'Resupply Carrier' },
+  { id: 'SOR_189', name: 'Leia Organa' },
 ]
 
 /**

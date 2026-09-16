@@ -50,6 +50,9 @@ units are picked, so an optional pair can still be declined at its second pick.
 Elzar Mann) stops at any point (CR 8.30.1). `optional` ("you may", Helgait) declines only before the
 first token: a player who takes a "may" must resolve as much of it as possible (CR 8.32.1).
 
+`searchDraw` reads `upTo` the same way. A plain search is mandatory while anything matches, but "up to
+2" (Grand Moff Tarkin) may draw two, one or none, so it keeps its Done from the first offer onwards.
+
 Under the rules a mandatory effect with a legal target must take one, even when the only legal target
 is the player's own unit. The AI needs nothing extra for that: it scores the legal answers, and a
 choice with one answer is simply that answer. `multiPick` keeps its Done and `mayPlayUnitFromDiscard`
@@ -267,6 +270,14 @@ action looks like a heal that never happened.
 - **"Look at a card" is PRIVATE.** The overlay renders only for the human's own choice, so the AI's
   look-at never surfaces and hidden information is preserved. A future public "reveal" reuses the
   shell with a public prompt and a confirm action.
+- **A look that leads somewhere raises the follow-up from both answers.** Qi'ra looks at a hand and
+  then names a card, and her look is view-only, so Done is the only way to answer it: a tail hung on
+  the accept path alone would never fire. `lookAtHand.thenNameCard` is raised on the skip path too.
+- **Naming a card either forbids it or prices it.** `nameCard` without a surcharge records a
+  prohibition, enforced in `legalMoves` (Ryder Azadi). With one, the named card stays playable and
+  costs the opponent that much more, charged in `effectiveCost` (Qi'ra). The two must not be confused:
+  a surcharge left in the prohibition set would make the card unplayable instead of dear, so
+  `namedByOpponent` filters those units out.
 
 ### Searching always shows what it looked at
 
@@ -276,6 +287,23 @@ the bottom of the deck and knowing which ones is worth having. Pressing **Done**
 The trap is that some search kinds are mandatory and have no decline, so pushing an empty-eligible
 choice would leave zero legal moves and deadlock the game. The rule is therefore: **offer the
 acknowledge move only when nothing is eligible**, which keeps a real pick mandatory.
+
+**What a search is looking for lives on the choice, not in the resolver.** `searchPlayFree` carries a
+`filter` (trait, aspect or arena) and applies it again on every re-offer, because a search that plays
+several cards re-derives its eligible set after each one. Hardcoding one card's filter there made every
+other search-and-play offer the wrong cards, silently: Admiral Ackbar's "space unit" is not L3-37's
+Droid or Darth Vader's Villainy unit.
+
+**Where the cards physically are decides how they are put back**, and getting it wrong either
+duplicates them or deletes them. `searchPlayFree` holds its window *out* of the deck while the choice
+stands, so it bottoms the leftovers by appending. A first-pass `searchDraw` leaves the window on top of
+the deck and bottoms by rotating. A multi-draw re-offer is the mixed case and marks itself `held`, so
+both its accept and its Done treat the window as already removed.
+
+A search that **plays** what it finds is normally free, and `budget` is the combined cost it may spend.
+`costDelta` is the other form: a discounted purchase (Kelleran Beq's "it costs 3 less"), where
+eligibility is what the player can still afford rather than what fits the budget, and the resources are
+spent as the card is taken.
 
 ## Unique rule
 
