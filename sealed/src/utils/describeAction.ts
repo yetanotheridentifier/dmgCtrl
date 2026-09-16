@@ -368,7 +368,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       }
       if (choice.kind === 'multiPick') {
         const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
-        if (choice.spec.mode === 'defeatForToken') return `Defeat ${target ?? 'unit'}`
+        if (choice.spec.mode === 'defeatForToken' || choice.spec.mode === 'defeat') return `Defeat ${target ?? 'unit'}`
         if (choice.spec.mode === 'dealEach') return `Deal ${choice.spec.amount} to ${target ?? 'unit'}`
         return `Advantage to ${target ?? 'unit'}`
       }

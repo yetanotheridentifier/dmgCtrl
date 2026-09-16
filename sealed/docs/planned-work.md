@@ -135,8 +135,11 @@ Two phases:
 
 - **Phase 1 (#453 to #460), 926 cards blocked by nothing.** 56% of the cards with ability text are
   expressible with the primitives already in `engine/effects.ts`. Cut by trigger point. Events are the
-  largest batch; the ones that are a single existing choice or primitive play, and the rest are #597,
-  grouped by what each group lacks. When Played units and upgrades follow the same pattern: the
+  largest batch, and what is left of them is **#618** (183: the attack events the rider path cannot
+  express, one lasting attack prohibition, and 154 one-offs), grouped by what each group lacks. The
+  events blocked by a mechanic are not there: they are recorded on that mechanic's own ticket
+  (#602 Credit, #605 token units, #603 Disclose, #604 indirect damage).
+  When Played units and upgrades follow the same pattern: the
   single-choice ones play, and the rest are split out the same way. Constant abilities too: the ones an
   existing static hook expresses play, and #613 holds the rest, grouped by the hook each lacks.
   The ticket bodies carry the sizes from before token units, Credit

@@ -102,7 +102,9 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       // The heal tail is part of the same effect (Grassroots Resistance), so it belongs in the
       // prompt: a player told only about the damage has no reason to look for the heal (#575).
       return [`choose a ${targetNoun(choice)} to deal ${choice.amount} damage to`
-        + (choice.thenHealBase ? `, then heal ${choice.thenHealBase} from your base` : '')]
+        + (choice.thenHealBase ? `, then heal ${choice.thenHealBase} from your base` : '')
+        + (choice.thenReadyIfTrait ? `, readying it if it is a ${choice.thenReadyIfTrait}` : '')
+        + (choice.thenDamage ? ', then damage another' : '')]
     case 'selectHealTarget':
       return [`choose a ${targetNoun(choice)} to heal ${choice.amount} damage from`]
     case 'mayDamageExhaust':
@@ -164,7 +166,7 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'multiPick': {
       // Optional chaining is deliberate: this is decoration over the board, and a malformed
       // choice must degrade to a vaguer prompt rather than throwing and blanking the screen.
-      if (choice.spec?.mode === 'defeatForToken') return ['choose units to defeat']
+      if (choice.spec?.mode === 'defeatForToken' || choice.spec?.mode === 'defeat') return ['choose units to defeat']
       if (choice.spec?.mode === 'dealEach') return [`choose units to deal ${choice.spec.amount} damage to each`]
       if (choice.spec?.mode === 'exhaust') return ['choose units to exhaust']
       return ['choose units to give Advantage to']

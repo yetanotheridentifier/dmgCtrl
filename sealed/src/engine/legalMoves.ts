@@ -545,9 +545,13 @@ function choiceMoves(state: GameState): Action[] {
       }
       case 'lookAtHand': {
         // Imperial Defector / Remnant Lookouts: view the target's hand. With `mayDiscard`,
-        // one accept per card in it; always a Done to dismiss.
+        // one accept per card in it; a Done to dismiss unless the card compels the discard.
         if (choice.mayDiscard) state.players[choice.target].hand.forEach((_, handIndex) => moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex }))
-        moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        // Reveal Intentions prints "discards a card", not "may discard". The Done still has to be
+        // there when the hand is empty, or the choice would have no legal move and deadlock.
+        if (!choice.mustDiscard || state.players[choice.target].hand.length === 0) {
+          moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        }
         break
       }
       case 'searchDraw': {

@@ -6,7 +6,7 @@ import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseE
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets } from './legalMoves'
 import { collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, stampChoiceSource, type TriggerPoint } from './abilities'
-import { applyUnitDamage, dealDamageToUnit, defeatUnit, sweepStateBasedDefeats, preventionOffer } from './combat'
+import { applyUnitDamage, dealDamageToUnit, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
 import { exhaustUnit, findUnit, giveToken, giveTokens, fireUpgradeAttached, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader } from './effects'
@@ -638,6 +638,17 @@ function resumePendingAttack(state: GameState): GameState {
 
 /** Decline a pending choice. Ambush and pay-or-exhaust leave the unit
  *  exhausted; Support and may-play do nothing. `choiceId` picks one of several. */
+/**
+ * Rhydonium Detonation: "Each player may return a non-leader unit to its owner's hand. Then, defeat
+ * all non-leader units." Both saves are offered at once because they are independent, so the wipe
+ * fires on whichever offer is answered last — accepted or declined.
+ */
+function wipeNonLeadersWhenDone(state: GameState): GameState {
+  if ((state.pendingChoices ?? []).some(c => c.kind === 'selectUnitToReturn' && c.thenWipeNonLeaders)) return state
+  const doomed = [...state.players.player.units, ...state.players.opponent.units].filter(u => !u.isLeader)
+  return doomed.length > 0 ? defeatUnits(state, doomed.map(u => u.instanceId)) : state
+}
+
 function resolveSkip(state: GameState, choiceId?: string): GameState {
   const choice = choiceId ? findChoice(state, choiceId) : activeChoice(state)
   if (!choice) throw new Error('skipTrigger: no pending choice')
@@ -656,7 +667,18 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
   // A reveal that matched nothing (#413): the cards were only looked at, never taken out of the
   // deck, so acknowledging moves them from the top to the bottom.
   if (choice.kind === 'searchDraw') {
-    next = bottomTopCards(next, choice.controller, choice.revealed.length)
+    // I've Found Them discards what it revealed rather than bottoming it — the path taken when no
+    // unit was among the three and acknowledging the reveal was the only move.
+    if (choice.discardRest) {
+      const p = next.players[choice.controller]
+      next = updatePlayer(next, choice.controller, { deck: p.deck.slice(choice.revealed.length), discard: [...p.discard, ...choice.revealed] })
+    } else {
+      next = bottomTopCards(next, choice.controller, choice.revealed.length)
+    }
+  }
+  // Rhydonium Detonation: declining the save does not call off the wipe.
+  if (choice.kind === 'selectUnitToReturn' && choice.thenWipeNonLeaders) {
+    next = wipeNonLeadersWhenDone(next)
   }
   // Improvised Identity revealed no ground unit to discard: its cards stay where they are (the card
   // says nothing about bottoming them), and the optional attack it gates still follows.
@@ -931,6 +953,13 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'mayGiveTokens':
       // Give `count` of a token to the chosen unit — Attendant Navigator, Anakin, Trexler.
       if (targetInstanceId) next = giveTokens(next, targetInstanceId, choice.token, choice.count)
+      // Mislead's second sentence: a separate "give a unit -3/-0", with a target of its own.
+      if (choice.thenBuff) {
+        const targets = inPlayUnits(next).map(u => u.instanceId)
+        if (targets.length > 0) {
+          next = pushChoice(next, { kind: 'mayLastingBuff', id: `${choice.id}-buff`, controller: choice.controller, targets, power: choice.thenBuff.power, hp: choice.thenBuff.hp, optional: false })
+        }
+      }
       break
     case 'mayExhaustLeaderGiveAdvantage': {
       // Ezra front: exhaust the leader to give the chosen unit an Advantage token.
@@ -1037,6 +1066,28 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       // "…Heal N damage from your base": the card's second sentence, held back so the target is
       // chosen first (Grassroots Resistance).
       if (choice.thenHealBase) next = healBase(next, choice.controller, choice.thenHealBase)
+      // "If it's a Clone, ready it" (Remove the Chip) — only if the damage left it standing.
+      if (choice.thenReadyIfTrait && targetInstanceId) {
+        const hit = findUnit(next, targetInstanceId)
+        if (hit && unitHasTrait(next, hit.unit, choice.thenReadyIfTrait)) next = readyUnit(next, targetInstanceId)
+      }
+      // A second damage pick: "and 1 damage to another enemy unit" (I'll Cover For You), or "you may
+      // deal damage equal to the number of damaged enemy units" (Backed by Black Sun) — an amount
+      // that can only be counted once the first hit has landed.
+      if (choice.thenDamage) {
+        const tail = choice.thenDamage
+        const enemy = opponentOf(choice.controller)
+        const amount = tail.perDamagedEnemy ? next.players[enemy].units.filter(u => u.damage > 0).length : tail.amount ?? 0
+        const pool = tail.scope === 'anotherEnemy'
+          ? next.players[enemy].units.filter(u => u.instanceId !== targetInstanceId)
+          : inPlayUnits(next)
+        if (amount > 0 && pool.length > 0) {
+          next = pushChoice(next, {
+            kind: 'selectDamageTarget', id: `${choice.id}-again`, controller: choice.controller,
+            amount, unitTargets: pool.map(u => u.instanceId), baseTargets: [], optional: tail.optional,
+          })
+        }
+      }
       next = checkWin(next)
       if (next.winner !== null) return next
       break
@@ -1104,6 +1155,14 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
             // Mayor's Majordomo: the discard was a COST — now exhaust a unit.
             const targets = inPlayUnits(next).map(u => u.instanceId)
             if (targets.length > 0) next = pushChoice(next, { kind: 'mayExhaustUnit', id: `${choice.id}-exh`, controller: choice.controller, targets })
+          } else if ('buffFor' in choice.then) {
+            // Kouhun Assassination: the OPPONENT answered this discard, and the debuff that follows
+            // is the caster's pick, so the follow-up choice changes hands.
+            const spec = choice.then
+            const targets = inPlayUnits(next).filter(u => !spec.nonVehicleOnly || !unitHasTrait(next, u, 'Vehicle')).map(u => u.instanceId)
+            if (targets.length > 0) {
+              next = pushChoice(next, { kind: 'mayLastingBuff', id: `${choice.id}-buff`, controller: spec.buffFor, targets, power: spec.power, hp: spec.hp, optional: false })
+            }
           } else {
             // Qi'ra: "if you do, deal N damage to a unit". Reckless Sacrifice narrows the targets to
             // units costing more than the card just discarded.
@@ -1176,6 +1235,13 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'selectUnitToReady':
       // Galvanized Leap: ready the chosen unit.
       if (targetInstanceId) next = readyUnit(next, targetInstanceId)
+      // "Deal 3 damage to a unit" as the card's own second sentence, with its own target (Fervor).
+      if (choice.thenDamage) {
+        const targets = inPlayUnits(next).map(u => u.instanceId)
+        if (targets.length > 0) {
+          next = pushChoice(next, { kind: 'selectDamageTarget', id: `${choice.id}-dmg`, controller: choice.controller, amount: choice.thenDamage.amount, unitTargets: targets, baseTargets: [] })
+        }
+      }
       break
     case 'selectUnitToSteal': {
       // Rehabilitation: debuff the unit for the phase, then move it across exactly as it stands —
@@ -1269,10 +1335,23 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       }
       break
     }
-    case 'selectUnitToReturn':
+    case 'selectUnitToReturn': {
       // Far Far Away's second half: return the chosen unit to its owner's hand.
-      if (targetInstanceId && choice.targets.includes(targetInstanceId)) next = returnUnitToHand(next, targetInstanceId)
+      if (targetInstanceId && choice.targets.includes(targetInstanceId)) {
+        // Read the arena BEFORE it leaves play: "each other enemy unit in the same arena" (Watch
+        // This) is scoped by where the returned unit was standing.
+        const arena = findUnit(next, targetInstanceId)?.unit.arena
+        next = returnUnitToHand(next, targetInstanceId)
+        if (choice.thenExhaustOtherEnemiesInArena && arena !== undefined) {
+          for (const u of next.players[opponentOf(choice.controller)].units) {
+            if (u.arena === arena) next = exhaustUnit(next, u.instanceId)
+          }
+        }
+      }
+      // Rhydonium Detonation: the wipe follows once neither player is still being offered a save.
+      if (choice.thenWipeNonLeaders) next = wipeNonLeadersWhenDone(next)
       break
+    }
     case 'returnFriendlyUnit': {
       // Return the chosen unit to hand, then the card's follow-up: Purrgil Ultra deals its cost as
       // damage; Far Far Away bounces an enemy non-leader in turn.
@@ -1338,7 +1417,10 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         const drawn = choice.revealed[deckIndex]
         const rest = p.deck.slice(choice.revealed.length)
         const others = choice.revealed.filter((_, i) => i !== deckIndex)
-        next = updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: [...rest, ...others] })
+        // I've Found Them discards what it did not draw; every other search bottoms it.
+        next = choice.discardRest
+          ? updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: rest, discard: [...p.discard, ...others] })
+          : updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: [...rest, ...others] })
         // Sense Through the Force: a correct guess at the drawn card's cost pays out.
         if (choice.guessedCost !== undefined && next.cards[drawn]?.cost === choice.guessedCost) {
           const targets = next.players[owner].units.filter(u => unitHasTrait(next, u, 'Force')).map(u => u.instanceId)
@@ -1460,6 +1542,15 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
           const targets = choice.targets.filter(id => id !== targetInstanceId)
           const remaining = choice.spec.remaining - 1
           if (remaining > 0 && targets.length > 0) next = pushChoice(next, { ...choice, targets, spec: { mode: 'exhaust', remaining } })
+        } else if (choice.spec.mode === 'defeat') {
+          // The Desolation of Hoth: defeat up to N, one pick at a time. Each is its own defeat, which
+          // is right for a card that names them one after another rather than wiping a board.
+          next = defeatUnit(next, targetInstanceId)
+          next = checkWin(next)
+          if (next.winner !== null) return next
+          const targets = choice.targets.filter(id => id !== targetInstanceId)
+          const remaining = choice.spec.remaining - 1
+          if (remaining > 0 && targets.length > 0) next = pushChoice(next, { ...choice, targets, spec: { mode: 'defeat', remaining } })
         } else {
           const found = findUnit(next, targetInstanceId)
           const remHp = found ? Math.max(0, effectiveHp(next, found.unit) - found.unit.damage) : 0
@@ -1500,6 +1591,12 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         // "Then, you may play that unit from your discard pile for free" (One Must Destroy to Create).
         if (choice.thenReplayFromDiscard && defeatedCardId !== undefined && next.players[choice.controller].discard.includes(defeatedCardId)) {
           next = pushChoice(next, { kind: 'mayPlayUnitFromDiscard', id: `${choice.id}-replay`, controller: choice.controller, candidates: [defeatedCardId], remaining: 1 })
+        }
+        // "If you do, ready a friendly unit with N or less power" (You Have Failed Me).
+        const maxPower = choice.thenReadyFriendlyMaxPower
+        if (maxPower !== undefined) {
+          const targets = next.players[choice.controller].units.filter(u => effectivePower(next, u) <= maxPower).map(u => u.instanceId)
+          if (targets.length > 0) next = pushChoice(next, { kind: 'selectUnitToReady', id: `${choice.id}-ready`, controller: choice.controller, targets })
         }
       }
       break
@@ -1548,7 +1645,12 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         const cost = Math.max(0, effectiveCost(next, choice.controller, card) + choice.costDelta)
         const paid = payCost(p, cost)
         next = updatePlayer(next, choice.controller, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
+        // `enterUnit` names the new unit from the counter it is about to consume, so this is its id.
+        const enteredId = `u${next.instanceCounter}`
         next = enterUnit(next, choice.controller, cardId!, choice.entersReady)
+        // "Deal 4 damage to it" (Reckless Landing) — the unit just played, which can only be
+        // addressed now that it is on the board.
+        if (choice.thenDamageIt) next = dealDamageToUnit(next, enteredId, choice.thenDamageIt)
         next = checkWin(next)
         if (next.winner !== null) return next
       }

@@ -186,6 +186,40 @@ export function sweepStateBasedDefeats(state: GameState): GameState {
   return next
 }
 
+/**
+ * Defeat several units as ONE event (Superlaser Blast and the other wipes).
+ *
+ * Looping `defeatUnit` is not the same thing and is the reason this exists: each call drains its own
+ * batch, so the second unit's whenDefeated would resolve nested under the first's, and the CR 7.6.10
+ * question of which side goes first would never be asked. Collecting both owners' losses with
+ * `sameEvent` and draining once is what makes them simultaneous, exactly as `sweepStateBasedDefeats`
+ * already does for state-based defeats.
+ *
+ * Ids that are not in play are ignored, so a caller may pass a snapshot taken before an earlier
+ * effect in the same ability removed one.
+ *
+ * One nuance, measured rather than assumed: called from inside another ability's batch (an event's
+ * When Played, which is how every wipe reaches here), that batch has already fixed `triggerTurn` for
+ * its layer, so the collected abilities resolve under that decision instead of raising a fresh
+ * CR 7.6.10 "who goes first" question. The result is still legal — the active player's own abilities
+ * go first, which is one of the two answers they would have been offered — so this is a fidelity
+ * nuance rather than a wrong board, and it is not specific to wipes. Called directly the question is
+ * raised as normal, which is what `eventsRemainder.test.ts` pins.
+ */
+export function defeatUnits(state: GameState, instanceIds: string[]): GameState {
+  const doomed = new Set(instanceIds)
+  let next = state
+  let hit = false
+  for (const owner of ['player', 'opponent'] as PlayerId[]) {
+    const units = next.players[owner].units
+    const dead = units.filter(u => doomed.has(u.instanceId))
+    if (dead.length === 0) continue
+    next = finishDefeats(next, owner, units.filter(u => !doomed.has(u.instanceId)), dead, false, [], true)
+    hit = true
+  }
+  return hit ? drainTriggers(next) : state
+}
+
 /** Defeat a unit outright — a targeted "defeat" (Thrawn), which bypasses Shields (those
  *  prevent damage, not defeat). No-op if the unit isn't in play. */
 export function defeatUnit(state: GameState, instanceId: string): GameState {
