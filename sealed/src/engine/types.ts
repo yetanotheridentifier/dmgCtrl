@@ -786,6 +786,9 @@ type ChoiceVariant =
   // `hookOnDecline` runs the hook with no unit when the choice is declined, for an ability that goes on
   // after its picks stop ("If no friendly units were damaged by this ability", AAT Incinerator).
   | { kind: 'selectUnitThen'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; text: string; then: IfYouDo; hookOnDecline?: boolean }
+  // "Choose a player": option 0 is the controller's opponent, option 1 the controller. Never optional.
+  // The chosen player reaches the card's `ifYouDo` hook as `playerChosen`. `text` is the effect.
+  | { kind: 'choosePlayerThen'; id: string; controller: PlayerId; text: string; then: IfYouDo }
   // Heal 1 at a time from `unitTargets` / `baseTargets` until `remaining` is spent or Done, then deal
   // what was healed to `damageUnit` (Redemption). `oneUnit` keeps every point on the first unit picked
   // (Kashyyyk Defender's "from another unit").
@@ -861,10 +864,11 @@ type ChoiceVariant =
   // `mustDiscard` removes the Done, for a card that says "discards a card" rather than "may discard"
   // (Reveal Intentions). The view-only and "may" forms keep it.
   // `discardFilter` narrows what may be taken — Bodhi Rook discards "a non-unit card", so only
-  // those hand indices are offered. A hand with nothing eligible keeps its Done even under
-  // `mustDiscard`, or the choice would have no legal move.
+  // those hand indices are offered; Jam Communications takes only an event. `discardAspects` keeps
+  // the cards sharing one of those aspects (Hold For Questioning). A hand with nothing eligible keeps
+  // its Done even under `mustDiscard`, or the choice would have no legal move.
   // `thenNameCard` raises a `nameCard` once the look is done (Qi'ra looks, then names).
-  | { kind: 'lookAtHand'; id: string; controller: PlayerId; target: PlayerId; mayDiscard?: boolean; thenDraw?: boolean; mustDiscard?: boolean; discardFilter?: 'nonUnit'; thenNameCard?: { unitId: string; surcharge: number } }
+  | { kind: 'lookAtHand'; id: string; controller: PlayerId; target: PlayerId; mayDiscard?: boolean; thenDraw?: boolean; mustDiscard?: boolean; discardFilter?: 'nonUnit' | 'event'; discardAspects?: string[]; thenNameCard?: { unitId: string; surcharge: number } }
   // Search the revealed top cards (Clan Wren Loyalist): pick one of the `eligibleIndices`
   // (indices into `revealed`) to draw; the rest go to the bottom of the deck. Resolved by an
   // `acceptChoice` carrying the `deckIndex` (0-based within `revealed`). Mandatory when eligible.

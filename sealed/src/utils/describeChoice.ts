@@ -290,7 +290,11 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       return [choice.mayDiscard
         ? choice.discardFilter === 'nonUnit'
           ? 'choose a non-unit card to discard from their hand'
-          : 'choose a card to discard from their hand'
+          : choice.discardFilter === 'event'
+            ? 'choose an event to discard from their hand'
+            : choice.discardAspects
+              ? 'choose a card sharing an aspect with that unit to discard from their hand'
+              : 'choose a card to discard from their hand'
         : 'look at their hand']
     case 'mayResourceTop':
       return ['put the top card of your deck into play as a resource, or decline']
@@ -314,6 +318,8 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'selectUpgradeThen':
     case 'selectHandCardThen':
       return [choice.optional ? `you may ${choice.text}` : choice.text]
+    case 'choosePlayerThen':
+      return [`choose a player to ${choice.text}`]
     case 'mayPayThen': {
       const cost = choice.revealEvent ? 'reveal an event from your hand'
         : choice.damageSelf ? `deal ${choice.damageSelf} damage to this unit`

@@ -12,7 +12,7 @@ import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets, eff
 import type { AttackOffer } from './legalMoves'
 import { canAfford } from './resources'
 import { unitHasTrait, unitTraits, isLeaderUnit, nonAuraKeywordNames, nonAuraKeywordValue, unitHasKeyword, unitKeywords } from './keywords'
-import type { CombatContext, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PlayerId, UnitState, UpgradeRef } from './types'
+import type { CombatContext, EngineCard, GameState, IfYouDo, KeywordInstance, LastingEffect, PendingChoice, PlayerId, UnitState, UpgradeRef } from './types'
 
 /**
  * Real card definitions. Side-effect module: importing it registers every
@@ -4153,3 +4153,95 @@ registerCard('TWI_044', whenPlayed('Heal up to 2 damage from another unit and de
     ? pushChoice(s, { kind: 'distributeHealing', id: ctx.sourceInstanceId!, controller: ctx.owner, remaining: 2, healed: 0, unitTargets, baseTargets: [], damageUnit: ctx.sourceInstanceId!, oneUnit: true })
     : s
 }))
+
+// ── The rest of the one-off events: searches that draw, and hands ─────────────────────────────────
+
+// Searches that draw: `searchDrawWp` as the When Played searches use it.
+registerCard('LAW_166', searchDrawWp('Search the top 8 cards of your deck for a Vigilance, Aggression, or Cunning unit, reveal it, and draw it.', 8, // Putting a Team Together
+  c => printedUnit(c) && ['Vigilance', 'Aggression', 'Cunning'].some(a => printedAspect(c, a))))
+registerCard('SEC_072', searchDrawWp('Search the top 8 cards of your deck for an upgrade, reveal it, and draw it.', 8, // Scour the Archives
+  c => c?.type === 'upgrade'))
+registerCard('SOR_123', searchDrawWp('Search the top 5 cards of your deck for a unit, reveal it, and draw it.', 5, printedUnit)) // Recruit
+const prepareForTakeoff = searchDrawWp('Search the top 8 cards of your deck for up to 2 Vehicle units, reveal them, and draw them.', 8,
+  c => printedUnit(c) && printedTrait(c, 'Vehicle'), 2)
+registerCard('JTL_128', prepareForTakeoff) // Prepare for Takeoff
+registerCard('SOR_125', prepareForTakeoff) // Prepare For Takeoff (the same card, printed with a capital F)
+registerCard('SHD_093', searchDrawWp('Search the top 5 cards of your deck for up to 3 units, reveal them, and draw them.', 5, printedUnit, 3)) // Remnant Reserves
+registerCard('SHD_253', searchDrawWp('Search the top 8 cards of your deck for up to 2 Mandalorian and/or upgrade cards, reveal them, and draw them.', 8, // This Is The Way
+  c => c?.type === 'upgrade' || printedTrait(c, 'Mandalorian'), 2))
+
+// Hands. A discard a card prints as compulsory ("discard a card from it") removes the Done.
+const opponentHandDiscard = (s: GameState, ctx: EventCtx, over: Partial<Extract<PendingChoice, { kind: 'lookAtHand' }>> = {}): GameState =>
+  pushChoice(s, { kind: 'lookAtHand', id: ctx.sourceInstanceId!, controller: ctx.owner, target: opponentOf(ctx.owner), mayDiscard: true, mustDiscard: true, ...over })
+/** `who` discards `count` cards of their choice, or as many as they hold. */
+const discards = (s: GameState, who: PlayerId, count: number, id: string, then?: IfYouDo): GameState => {
+  const n = Math.min(count, s.players[who].hand.length)
+  return n > 0 ? pushChoice(s, { kind: 'selectDiscard', id, controller: who, count: n, ...(then ? { then: { ifYouDo: then } } : {}) }) : s
+}
+const choosePlayer = (s: GameState, ctx: Resumable, text: string, step?: string): GameState =>
+  pushChoice(s, { kind: 'choosePlayerThen', id: ctx.sourceInstanceId!, controller: ctx.owner, text, then: resume(ctx, step) })
+
+registerCard('SOR_200', whenPlayed("Look at an opponent's hand and discard a card from it.", (s, ctx) => opponentHandDiscard(s, ctx))) // Spark of Rebellion
+registerCard('LOF_226', whenPlayed("Look at an opponent's hand and discard a non-unit card from it.", (s, ctx) => // Tip the Scale
+  opponentHandDiscard(s, ctx, { discardFilter: 'nonUnit' })))
+registerCard('JTL_207', whenPlayed("Look at an opponent's hand and discard an event from it.", (s, ctx) => // Jam Communications
+  opponentHandDiscard(s, ctx, { discardFilter: 'event' })))
+registerCard('TWI_223', { // Unmasking the Conspiracy
+  ...whenPlayed("Discard a card from your hand. If you do, look at an opponent's hand and discard a card from it.", (s, ctx) =>
+    discards(s, ctx.owner, 1, ctx.sourceInstanceId!, resume(ctx))),
+  ifYouDo: (s, ctx) => opponentHandDiscard(s, ctx),
+})
+registerCard('LAW_217', unitThenWp("Exhaust an enemy unit. If you do, look at its controller's hand and discard a card from it that shares an aspect with that unit.", // Hold For Questioning
+  pickEnemy, 'exhaust an enemy unit', false, (s, ctx) => {
+    const target = findUnit(s, ctx.targetInstanceId!)
+    // Only a ready unit can be exhausted, so only then has "if you do" happened.
+    if (!target || target.unit.exhausted) return s
+    const discardAspects = (cardOf(s, target.unit)?.aspects ?? []).map(a => a.toLowerCase())
+    return pushChoice(exhaustUnit(s, target.unit.instanceId), {
+      kind: 'lookAtHand', id: ctx.sourceInstanceId!, controller: ctx.owner, target: target.owner, mayDiscard: true, mustDiscard: true, discardAspects,
+    })
+  }))
+registerCard('SEC_233', whenPlayed("Look at an opponent's hand. Then, choose a non-leader unit that opponent controls that costs 6 or less and return it to its owner's hand.", (s, ctx) => { // Beguile
+  // The look is answered before the return is offered; looking changes nothing on the board.
+  const looked = pushChoice(s, { kind: 'lookAtHand', id: `${ctx.sourceInstanceId}-look`, controller: ctx.owner, target: opponentOf(ctx.owner) })
+  return targetChoice(looked, ctx, 'selectUnitToReturn', pickedIds(s, ctx, pickAll(pickEnemy, nonLeader, (st, u) => (cardOf(st, u)?.cost ?? 0) <= 6)))
+}))
+registerCard('LAW_204', whenPlayed('Each player discards a card from their hand.', (s, ctx) => // Every Day, More Lies
+  discards(discards(s, ctx.owner, 1, `${ctx.sourceInstanceId}-mine`), opponentOf(ctx.owner), 1, `${ctx.sourceInstanceId}-theirs`)))
+registerCard('SHD_244', whenPlayed('Each opponent discards a card from their hand. Draw a card.', (s, ctx) => // No Bargain
+  drawCards(discards(s, opponentOf(ctx.owner), 1, ctx.sourceInstanceId!), ctx.owner, 1)))
+registerCard('SHD_156', whenPlayed('Draw a card. Each opponent who controls more resources than you discards a card from their hand.', (s, ctx) => { // Cripple Authority
+  const drawn = drawCards(s, ctx.owner, 1)
+  const opp = opponentOf(ctx.owner)
+  return drawn.players[opp].resources.length > drawn.players[ctx.owner].resources.length ? discards(drawn, opp, 1, ctx.sourceInstanceId!) : drawn
+}))
+registerCard('SOR_175', whenPlayed("Draw 2 cards. Each opponent whose base you've damaged this phase discards 2 cards from their hand.", (s, ctx) => { // Forced Surrender
+  // The phase record says the base took damage, not who dealt it; an opponent damaging their own
+  // base is rare enough that it is read as yours.
+  const drawn = drawCards(s, ctx.owner, 2)
+  const opp = opponentOf(ctx.owner)
+  return baseDamagedThisPhase(drawn, opp) ? discards(drawn, opp, 2, ctx.sourceInstanceId!) : drawn
+}))
+registerCard('SOR_174', whenPlayed('Each player discards all but 2 cards (of their choice) from their hand.', (s, ctx) => { // Smoke and Cinders
+  const allBut2 = (st: GameState, who: PlayerId, id: string) => discards(st, who, st.players[who].hand.length - 2, id)
+  return allBut2(allBut2(s, ctx.owner, `${ctx.sourceInstanceId}-mine`), opponentOf(ctx.owner), `${ctx.sourceInstanceId}-theirs`)
+}))
+
+// "Choose a player": the pick, then the card's hook with `playerChosen`.
+registerCard('SOR_171', { // Mission Briefing
+  ...whenPlayed('Choose a player. They draw 2 cards.', (s, ctx) => choosePlayer(s, ctx, 'draw 2 cards')),
+  ifYouDo: (s, ctx) => drawCards(s, ctx.playerChosen!, 2),
+})
+registerCard('SHD_181', { // Pillage
+  ...whenPlayed('Choose a player. They discard 2 cards from their hand.', (s, ctx) => choosePlayer(s, ctx, 'discard 2 cards')),
+  ifYouDo: (s, ctx) => discards(s, ctx.playerChosen!, 2, ctx.sourceInstanceId!),
+})
+registerCard('SOR_167', { // Force Throw
+  ...whenPlayed('Choose a player. That player discards a card from their hand. Then, if you control a FORCE unit, you may deal damage to a unit equal to the cost of the discarded card.', (s, ctx) =>
+    choosePlayer(s, ctx, 'discard a card')),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step !== 'thrown') return discards(s, ctx.playerChosen!, 1, ctx.sourceInstanceId!, resume(ctx, 'thrown'))
+    const amount = (ctx.cardChosen ? s.cards[ctx.cardChosen]?.cost : 0) ?? 0
+    return amount > 0 && controlsTrait(s, ctx.owner, 'Force') ? damageChoice(s, ctx, amount, picked(s, ctx, pickAny), [], true) : s
+  },
+})

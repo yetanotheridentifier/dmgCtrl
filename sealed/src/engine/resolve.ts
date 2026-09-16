@@ -1346,6 +1346,9 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'selectUnitThen':
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) next = runIfYouDo(next, choice.then, { targetInstanceId })
       break
+    case 'choosePlayerThen':
+      next = runIfYouDo(next, choice.then, { playerChosen: (optionIndex ?? 0) === 1 ? choice.controller : opponentOf(choice.controller) })
+      break
     case 'selectUpgradeThen': {
       const pick = choice.candidates[optionIndex ?? 0]
       if (pick) next = runIfYouDo(next, choice.then, { upgradeChosen: pick })
@@ -2441,7 +2444,7 @@ function finishHealing(state: GameState, damageUnit: string, healed: number): Ga
 }
 
 /** Resume an ability at its card's `ifYouDo` hook, with what the answered choice settled. */
-function runIfYouDo(state: GameState, then: IfYouDo, settled: { targetInstanceId?: string; cardChosen?: string; handIndex?: number; upgradeChosen?: UpgradeRef } = {}): GameState {
+function runIfYouDo(state: GameState, then: IfYouDo, settled: { targetInstanceId?: string; cardChosen?: string; handIndex?: number; upgradeChosen?: UpgradeRef; playerChosen?: PlayerId } = {}): GameState {
   const hook = getCardDefinition(then.cardId)?.ifYouDo
   if (!hook) return state
   const next = hook(state, { owner: then.owner, cardId: then.cardId, sourceInstanceId: then.sourceInstanceId, step: then.step, upgradeChosen: then.upgrade, ...settled })

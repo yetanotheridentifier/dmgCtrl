@@ -95,6 +95,8 @@ export interface IfYouDoContext extends EffectContext {
   handIndex?: number
   /** The upgrade chosen by this stage or carried from an earlier one (`IfYouDo.upgrade`). */
   upgradeChosen?: UpgradeRef
+  /** The player a `choosePlayerThen` picked. */
+  playerChosen?: PlayerId
 }
 
 export interface CardDefinition {
