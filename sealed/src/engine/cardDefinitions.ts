@@ -2315,7 +2315,11 @@ registerCard('SOR_217', attackWithRider('Attack with a unit. It gets +1/+0 for t
 /** "It gets +N/+0 for this attack." */
 const attackBonus = (power: number): CardDefinition => ({ statModifier: (_s, _u, ctx) => (ctx.attacking ? { power } : {}) })
 
-/** The next attack of a sequence, never with the unit that just attacked. */
+/**
+ * The next attack of a sequence, never with the unit that just attacked. Raised as the attack ends,
+ * so a sequence stops if its attacker is defeated before combat damage: that attack never reaches its
+ * end, where the card would go on to the next one.
+ */
 const thenAttack = (description: string, offer: AttackOffer = {}): AbilityDef => ({
   trigger: 'onAttackEnd',
   description,
