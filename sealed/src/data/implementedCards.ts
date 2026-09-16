@@ -475,6 +475,23 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'LAW_041', name: 'Nothing Left to Fear' },
   { id: 'LOF_262', name: 'Go Into Hiding' },
   { id: 'JTL_077', name: 'In the Heat of Battle' },
+  // Defeats, and damage with a tail
+  { id: 'LAW_133', name: 'Lost and Forgotten' },
+  { id: 'TWI_140', name: 'Self-Destruct' },
+  { id: 'SHD_108', name: 'Enforced Loyalty' },
+  { id: 'TWI_041', name: 'Lethal Crackdown' },
+  { id: 'SOR_041', name: 'Power of the Dark Side' },
+  { id: 'TWI_238', name: 'Merciless Contest' },
+  { id: 'LAW_103', name: 'Display Piece' },
+  { id: 'JTL_043', name: 'No Glory, Only Results' },
+  { id: 'JTL_175', name: 'System Shock' },
+  { id: 'SOR_170', name: 'Power Failure' },
+  { id: 'JTL_180', name: 'Piercing Shot' },
+  { id: 'SOR_139', name: 'Force Choke' },
+  { id: 'JTL_176', name: 'Shoot Down' },
+  { id: 'LAW_208', name: 'Collateral Damage' },
+  { id: 'SEC_180', name: "Let's Call It War" },
+  { id: 'TWI_171', name: 'Grenade Strike' },
   // Printed as an upgrade (see `cardDataCorrections.ts`), but the set data, and so the set totals
   // below, file it as an event. Counted where the totals count it.
   { id: 'SOR_215', name: 'Snapshot Reflexes' },

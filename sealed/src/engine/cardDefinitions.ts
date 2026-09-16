@@ -4518,3 +4518,107 @@ registerCard('LOF_262', unitThenWp("Choose a unit. It can't be attacked this pha
   (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, cannotBeAttacked: true, unlessSentinel: true })))
 registerCard('JTL_077', whenPlayed('Each unit gains Sentinel and loses Saboteur for this phase.', s => // In the Heat of Battle
   allUnits(s).reduce((acc, u) => addLastingEffect(acc, { targetInstanceId: u.instanceId, keywords: [KW.sentinel], removeKeywords: ['Saboteur'] }), s)))
+
+// Defeats
+registerCard('LAW_133', unitThenWp('Defeat a non-leader unit. If you do, heal 3 damage from your base.', nonLeader, 'defeat a non-leader unit', false, // Lost and Forgotten
+  (s, ctx) => healBase(defeatUnit(s, ctx.targetInstanceId!), ctx.owner, 3)))
+registerCard('TWI_140', unitThenWp('Defeat a friendly unit. If you do, deal 4 damage to a unit.', pickFriendly, 'defeat a friendly unit', false, // Self-Destruct
+  (s, ctx) => { const next = defeatUnit(s, ctx.targetInstanceId!); return damageChoice(next, ctx, 4, allUnits(next)) }))
+registerCard('SHD_108', unitThenWp('Defeat a friendly unit. If you do, draw 2 cards.', pickFriendly, 'defeat a friendly unit', false, // Enforced Loyalty
+  (s, ctx) => drawCards(defeatUnit(s, ctx.targetInstanceId!), ctx.owner, 2)))
+registerCard('TWI_041', unitThenWp('Defeat a non-leader unit. Deal damage to your base equal to that unit\'s power.', nonLeader, 'defeat a non-leader unit', false, // Lethal Crackdown
+  (s, ctx) => {
+    const u = findUnit(s, ctx.targetInstanceId!)?.unit
+    // The power is read while the unit is still in play, with everything that modifies it.
+    const power = u ? effectivePower(s, u) : 0
+    return dealDamageToBase(defeatUnit(s, ctx.targetInstanceId!), ctx.owner, power)
+  }))
+registerCard('SOR_041', whenPlayed('An opponent chooses a unit they control. Defeat that unit.', (s, ctx) => { // Power of the Dark Side
+  const opp = opponentOf(ctx.owner)
+  return targetChoice(s, { ...ctx, owner: opp }, 'selectUnitToDefeat', s.players[opp].units.map(u => u.instanceId))
+}))
+registerCard('TWI_238', { // Merciless Contest
+  ...whenPlayed('Each player chooses a non-leader unit they control. Defeat those units.', (s, ctx) => {
+    const mine = pickedIds(s, ctx, pickAll(pickFriendly, nonLeader))
+    return mine.length ? unitThen(s, ctx, mine, 'choose a non-leader unit you control to defeat', false, 'mine') : mercilessTheirs(s, ctx, undefined)
+  }),
+  // The caster's pick waits for the opponent's, and both units are defeated together.
+  ifYouDo: (s, ctx) => (ctx.step === 'mine'
+    ? mercilessTheirs(s, ctx, ctx.targetInstanceId)
+    : defeatUnits(s, [ctx.unitChosen, ctx.targetInstanceId].filter((id): id is string => id !== undefined))),
+})
+function mercilessTheirs(s: GameState, ctx: Resumable, mine: string | undefined): GameState {
+  const opp = opponentOf(ctx.owner)
+  const theirs = pickedIds(s, ctx, pickAll(pickEnemy, nonLeader))
+  if (theirs.length === 0) return mine ? defeatUnit(s, mine) : s
+  return pushChoice(s, { kind: 'selectUnitThen', id: `${ctx.sourceInstanceId}-theirs`, controller: opp, targets: theirs, text: 'choose a non-leader unit you control to defeat', then: resume(ctx, 'theirs', mine) })
+}
+registerCard('LAW_103', unitThenWp("Defeat an enemy non-leader unit. Its controller resources it from its owner's discard pile.", pickAll(pickEnemy, nonLeader), 'defeat an enemy non-leader unit', false, // Display Piece
+  (s, ctx) => {
+    const found = findUnit(s, ctx.targetInstanceId!)
+    if (!found) return s
+    const cardOwner = found.unit.owner ?? found.owner
+    const next = defeatUnit(s, found.unit.instanceId)
+    const discard = next.players[cardOwner].discard
+    const at = discard.lastIndexOf(found.unit.cardId)
+    if (at === -1) return next // a token leaves no card behind
+    // Resourced exhausted, as every resource an ability puts into play is.
+    const moved = updatePlayer(next, cardOwner, { discard: discard.filter((_, i) => i !== at) })
+    return updatePlayer(moved, found.owner, { resources: [...moved.players[found.owner].resources, { cardId: found.unit.cardId, exhausted: true }] })
+  }))
+registerCard('JTL_043', unitThenWp('Take control of a non-leader unit, then defeat it.', nonLeader, 'take control of a non-leader unit, then defeat it', false, // No Glory, Only Results
+  (s, ctx) => {
+    const found = findUnit(s, ctx.targetInstanceId!)
+    return found ? defeatUnit(takeControlOfUnit(s, found.owner, ctx.owner, found.unit.instanceId, 'permanent'), found.unit.instanceId) : s
+  }))
+registerCard('JTL_175', { // System Shock
+  ...whenPlayed('Defeat a non-leader upgrade attached to a unit. If you do, deal 1 damage to that unit.', (s, ctx) => {
+    const candidates = upgradeCandidates(s).filter(c => s.cards[c.cardId]?.type !== 'leader')
+    return candidates.length ? pushChoice(s, { kind: 'selectUpgradeThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, text: 'defeat a non-leader upgrade', then: resume(ctx) }) : s
+  }),
+  ifYouDo: (s, ctx) => {
+    const up = ctx.upgradeChosen
+    return up ? dealDamageToUnit(defeatUpgradeAt(s, up.unitId, up.upgradeIndex), up.unitId, 1) : s
+  },
+})
+registerCard('SOR_170', { // Power Failure
+  ...whenPlayed('Defeat any number of upgrades on a unit.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, (_st, u) => u.upgrades.length > 0), 'choose a unit to defeat upgrades on', false, 'unit')),
+  // The same unit-then-upgrades loop as Kit Fisto's Aethersprite, only the unit is not optional.
+  ifYouDo: (s, ctx) => getCardDefinition('LOF_147')!.ifYouDo!(s, ctx),
+})
+registerCard('JTL_180', unitThenWp('Defeat all Shield tokens on a unit. Deal 3 damage to that unit.', pickAny, 'defeat the Shields on a unit and deal 3 damage to it', false, // Piercing Shot
+  (s, ctx) => {
+    const id = ctx.targetInstanceId!
+    const shields = (findUnit(s, id)?.unit.upgrades ?? []).flatMap((up, i) => (up.cardId === TOKEN_SHIELD ? [i] : [])).reverse()
+    return dealDamageToUnit(shields.reduce((acc, i) => defeatUpgradeAt(acc, id, i), s), id, 3)
+  }))
+
+// Damage with a tail. "Another unit in the same arena" reads the arena before the first damage lands.
+const otherInArena = (s: GameState, id: string): UnitState[] => {
+  const arena = findUnit(s, id)?.unit.arena
+  return allUnits(s).filter(u => u.instanceId !== id && u.arena === arena)
+}
+registerCard('SOR_139', { // Force Choke
+  costModifier: (s, playerId) => (s.players[playerId].units.some(u => unitHasTrait(s, u, 'Force')) ? -1 : 0),
+  ...unitThenWp("If you control a FORCE unit, this event costs 1 less to play. Deal 5 damage to a non-VEHICLE unit. That unit's controller draws a card.", (s, u) => !unitHasTrait(s, u, 'Vehicle'),
+    'deal 5 damage to a non-Vehicle unit', false,
+    (s, ctx) => { const found = findUnit(s, ctx.targetInstanceId!); return found ? drawCards(dealDamageToUnit(s, found.unit.instanceId, 5), found.owner, 1) : s }),
+})
+registerCard('JTL_176', unitThenWp('Deal 3 damage to a space unit. If that unit is defeated this way, you may deal 2 damage to a base.', pickArena('space'), 'deal 3 damage to a space unit', false, // Shoot Down
+  (s, ctx) => {
+    const next = dealDamageToUnit(s, ctx.targetInstanceId!, 3)
+    // A prevention offer still pending means the damage has not landed yet, so nothing was defeated.
+    const pending = (next.pendingChoices?.length ?? 0) > (s.pendingChoices?.length ?? 0)
+    return !pending && !findUnit(next, ctx.targetInstanceId!) ? damageChoice(next, ctx, 2, [], BOTH_BASES, true) : next
+  }))
+registerCard('LAW_208', unitThenWp('Deal 2 damage to a unit. Then, deal 2 damage to a base or another unit in the same arena.', pickAny, 'deal 2 damage to a unit', false, // Collateral Damage
+  (s, ctx) => { const others = otherInArena(s, ctx.targetInstanceId!); const next = dealDamageToUnit(s, ctx.targetInstanceId!, 2); return damageChoice(next, ctx, 2, others.filter(u => findUnit(next, u.instanceId)), BOTH_BASES) }))
+registerCard('SEC_180', unitThenWp("Deal 3 damage to a unit. Then, if you have the initiative, you may deal 2 damage to another unit in the same arena.", pickAny, 'deal 3 damage to a unit', false, // Let's Call It War
+  (s, ctx) => {
+    const others = otherInArena(s, ctx.targetInstanceId!)
+    const next = dealDamageToUnit(s, ctx.targetInstanceId!, 3)
+    return next.initiative === ctx.owner ? damageChoice(next, ctx, 2, others.filter(u => findUnit(next, u.instanceId)), [], true) : next
+  }))
+registerCard('TWI_171', unitThenWp('Deal 2 damage to a unit. You may deal 1 damage to another unit in the same arena.', pickAny, 'deal 2 damage to a unit', false, // Grenade Strike
+  (s, ctx) => { const others = otherInArena(s, ctx.targetInstanceId!); const next = dealDamageToUnit(s, ctx.targetInstanceId!, 2); return damageChoice(next, ctx, 1, others.filter(u => findUnit(next, u.instanceId)), [], true) }))
