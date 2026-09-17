@@ -326,13 +326,18 @@ function setupResourceChoice(state: GameState, handIndex: number): GameState {
 // ---------------------------------------------------------------------------
 
 /**
- * Bring a unit `cardId` into play under `owner`. Shared by playing a unit from
- * hand and free-play effects (e.g. Camtono). Handles Shielded/Hidden on entry, opens
- * the Ambush/Support pending choice, and fires "When Played". The caller is
- * responsible for spending cost / removing the card from its source zone, and for the
- * win check afterwards.
+ * The one door for playing a unit: put `cardId`, already taken out of whichever zone it was played from
+ * and its cost dealt with, into play under `owner`. Records the card as played, handles Shielded/Hidden on
+ * entry, opens the Ambush/Support pending choice, and fires "When Played". `playUnit` feeds it from hand;
+ * abilities feed it from hand, a search, the discard and the top of the deck, and each of those is a play
+ * too (CR 6.2.0a), so it counts for "if you played ... this phase". The caller does the win check
+ * afterwards. `unitPlaySites.test.ts` fails on a new hand-built unit append, so a further zone comes
+ * through here too.
  */
-function enterUnit(state: GameState, owner: PlayerId, cardId: string, ready?: boolean): GameState {
+function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?: boolean): GameState {
+  // First, after the cost, so "first X each phase" sees this one as the first and nothing below reads
+  // a record that is missing it.
+  state = recordCardPlayed(state, owner, cardId)
   const card = state.cards[cardId]
   // Keywords the played unit gains on entry: its card's, plus any "next unit you play this phase"
   // grant (Sabine → Shielded) — so a granted Ambush/Shielded/Hidden fires just like a printed one.
@@ -503,10 +508,9 @@ function playUnit(state: GameState, handIndex: number): GameState {
   }
 
   const paid = payCost(p, effectiveCost(state, playerId, card))
-  let next = updatePlayer(state, playerId, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
-  next = recordCardPlayed(next, playerId, card.id) // after the cost, so "first X each phase" sees this one as the first
+  const next = updatePlayer(state, playerId, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
   // whenPlayed effects can defeat a base, so the win check runs afterwards.
-  return checkWin(enterUnit(next, playerId, card.id))
+  return checkWin(playUnitCard(next, playerId, card.id))
 }
 
 /**
@@ -1401,7 +1405,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       const idx = cardId === undefined ? -1 : next.players[owner].discard.indexOf(cardId)
       if (idx === -1) break
       next = updatePlayer(next, owner, { discard: next.players[owner].discard.filter((_, i) => i !== idx) })
-      next = enterUnit(next, owner, cardId)
+      next = playUnitCard(next, owner, cardId)
       next = checkWin(next)
       if (next.winner !== null) return next
       // Re-offer while the pool allows it — Dathomiri Magicks plays up to three.
@@ -1666,7 +1670,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
           next = updatePlayer(next, owner, payCost(next.players[owner], Math.max(0, effectiveCost(next, owner, played) + choice.costDelta)))
         }
         const enteredId = `u${next.instanceCounter}`
-        next = enterUnit(next, owner, cardId, choice.entersReady === true)
+        next = playUnitCard(next, owner, cardId, choice.entersReady === true)
         if (choice.thenDelay) next = addDelayedEffect(next, { ...choice.thenDelay, owner, unitId: enteredId })
         next = checkWin(next)
         if (next.winner !== null) return next
@@ -1826,9 +1830,9 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         const cost = Math.max(0, effectiveCost(next, choice.controller, card) + choice.costDelta)
         const paid = payCost(p, cost)
         next = updatePlayer(next, choice.controller, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
-        // `enterUnit` names the new unit from the counter it is about to consume, so this is its id.
+        // `playUnitCard` names the new unit from the counter it is about to consume, so this is its id.
         const enteredId = `u${next.instanceCounter}`
-        next = enterUnit(next, choice.controller, cardId!, choice.entersReady)
+        next = playUnitCard(next, choice.controller, cardId!, choice.entersReady)
         // "Deal 4 damage to it" (Reckless Landing) — the unit just played, which can only be
         // addressed now that it is on the board.
         if (choice.thenDamageIt) next = dealDamageToUnit(next, enteredId, choice.thenDamageIt)
@@ -1874,7 +1878,7 @@ function playTopCardFree(state: GameState, owner: PlayerId, cardId: string, targ
   const next = updatePlayer(state, owner, { deck: state.players[owner].deck.slice(1) }) // remove from deck
 
   if (type === 'unit') {
-    return enterUnit(next, owner, cardId)
+    return playUnitCard(next, owner, cardId)
   }
   if (type === 'upgrade' && targetInstanceId) {
     if (!findUnit(next, targetInstanceId)) return next // target gone
@@ -2139,7 +2143,7 @@ function applyEntryKeywords(state: GameState, owner: PlayerId, instanceId: strin
  * Hidden → unattackable until the next phase, then Ambush (this unit may attack now) or Support
  * (another ready unit may attack). Reads the unit's LIVE keywords, so keywords granted at deploy
  * count (Moff Gideon from a discard Imperial). A leader always enters ready, so an Ambush with no
- * target simply stays ready. (Units played from hand run the equivalent inline in `enterUnit`.)
+ * target simply stays ready. (Units played from hand run the equivalent inline in `playUnitCard`.)
  */
 function applyDeployKeywords(state: GameState, owner: PlayerId, instanceId: string): GameState {
   const unitNow = (s: GameState) => s.players[owner].units.find(u => u.instanceId === instanceId)!

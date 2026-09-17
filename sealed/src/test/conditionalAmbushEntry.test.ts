@@ -6,7 +6,7 @@ import { state, player, unit, card, CARDS, ready } from './helpers/engineFixture
 
 /**
  * AT-ST Raider (ASH_098, #412): "While you control another non-unique unit, this unit gains Ambush."
- * Ambush must enter the unit READY so it can immediately attack, but `enterUnit` decided that at
+ * Ambush must enter the unit READY so it can immediately attack, but `playUnitCard` decided that at
  * construction time from a STATIC keyword check (`hasKeyword`, the card's printed keywords only),
  * before the new unit even exists in play. A CONDITIONAL Ambush grant needs the unit in play to
  * evaluate (`controlsAnother` looks the unit up by instance id), so it is invisible to that early

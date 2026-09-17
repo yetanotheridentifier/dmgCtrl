@@ -276,7 +276,7 @@ export interface CardDefinition {
   leaderAbilities?: LeaderAbilities
   /**
    * "This unit enters play ready" while a condition holds (Elzar Mann — a Force leader).
-   * Consulted by `enterUnit`, alongside Ambush and the `nextUnitGrants` enters-ready grant.
+   * Consulted by `playUnitCard`, alongside Ambush and the `nextUnitGrants` enters-ready grant.
    */
   entersReady?: (state: GameState, owner: PlayerId) => boolean
   /** Custom epic-action deploy gate; default is `resources ≥ leader.cost`. */

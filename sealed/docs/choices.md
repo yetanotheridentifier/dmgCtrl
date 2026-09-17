@@ -396,6 +396,15 @@ defeated" stays silent). A leader deploying with Shielded gets its Shield withou
 firing; no leader has one. `upgradeAttachSites.test.ts` checks that `attachUpgrades` is the only append to
 a unit's upgrades and names every call to it, so a new attach fails until it is classified.
 
+**Every play of a unit goes through one door too**, `playUnitCard`: from hand as an action (`playUnit`),
+and from each ability that plays a unit, whether from hand (`playUnitFromHand`), a deck search
+(`searchPlayFree`), the discard (`mayPlayUnitFromDiscard`) or the top of the deck (Camtono's
+`mayPlayTopFree`). An ability play is still a play (CR 6.2.0a), so the door records it as played this
+phase before anything else, then enters the unit, fires its arrival batch and runs the unique rule. A unit
+that arrives without being played (a token created, control taken, a captured card released, a leader
+deployed) does not record. `unitPlaySites.test.ts` names every append to a player's units and every call
+to `recordCardPlayed`, so a new arrival fails until it is classified.
+
 ## Unique rule
 
 A player cannot control two cards with the same unique title. Both checks are keyed by card id
@@ -406,6 +415,6 @@ resolve down to one.
   upgrades of one card id raises `selectUniqueToDefeat`; you pick one to defeat (mandatory, no
   cancel, centre-screen overlay). Keyed on the upgrade's `owner`, so the opponent's copy does not
   conflict.
-- **Units:** `uniqueUnitCheck(state, owner)` runs at the end of `enterUnit`, covering every
+- **Units:** `uniqueUnitCheck(state, owner)` runs at the end of `playUnitCard`, covering every
   play-a-unit path. It raises `selectUniqueUnitToDefeat` as a **board-target** selection, since the
   copies may differ in damage and upgrades.

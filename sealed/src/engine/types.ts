@@ -181,7 +181,7 @@ export interface PlayerState {
    * Droid → −1 cost to the next Imperial; Neel → the next ≤1-power unit enters ready).
    * Each grant carries an optional filter (`trait` / `maxPower`) and is consumed by the next unit
    * that matches it — `costDelta` folds into `effectiveCost`, `keywords` / `entersReady` apply in
-   * `enterUnit`. Cleared at the start of the regroup phase.
+   * `playUnitCard`. Cleared at the start of the regroup phase.
    */
   nextUnitGrants?: NextUnitGrant[]
 }
