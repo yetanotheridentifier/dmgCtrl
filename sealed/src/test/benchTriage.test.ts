@@ -228,17 +228,51 @@ describe('trigger heads', () => {
     expect(r.triaged.map(c => c.blockers)).toEqual([['trigger:compound'], ['trigger:compound'], ['trigger:compound']])
   })
 
-  it('does not read a stat notation in a head as two trigger points', () => {
+  /**
+   * A head ending in "gains", or in "gains <a keyword or trait> and", hands a quoted ability to a unit.
+   * It is a granted-ability lead-in, not a trigger point, however it is spelled. Read as a trigger
+   * point, each spelling was a head of its own and folded into trigger:one-off, undercounting the
+   * granted-ability work. Each text is the real card's.
+   */
+  it.each([
+    ['SOR_121 Hardpoint Heavy Blaster', "Attach to a VEHICLE unit.\nAttached unit gains: \"On Attack: If this unit isn't attacking a base, you may deal 2 damage to a unit in the defender's arena.\""],
+    ['SOR_105 General Krell', 'Each other friendly unit gains:\n"When Defeated: You may draw a card."'],
+    ['SOR_054 Jedi Lightsaber', 'Attach to a non-VEHICLE unit.\nIf attached unit is a FORCE unit, it gains: "On Attack: Give the defender -2/-2 for this phase."'],
+    ['TWI_121 General\'s Blade', 'Attach to a non-Vehicle unit. \nIf attached unit is a Jedi, it gains: "On Attack: The next unit you play this phase costs 2 less."'],
+    ['TWI_103 Pyrrhic Assault', 'For this phase, each friendly unit gains: "When Defeated: Deal 2 damage to an enemy unit."'],
+    ['TWI_047 Satine Kryze', "Each unit (including enemy units) gains: \"Action [exhaust]: Discard cards from an opponent's deck equal to half this unit's remaining HP, rounded up.\""],
+    ['LOF_205 Force Speed', "Attack with a unit. For this attack, it gains: “On Attack: Return any number of non-unique (non-unique) upgrades attached to the defender to their owners' hands.”"],
+    ['SOR_150 Heroic Sacrifice', 'Draw a card, then attack with a unit. For this attack, it gets +2/+0 and gains: "When this unit deals combat damage: Defeat it."'],
+    ['LAW_077 Shadow of Stygeon Prime', 'Attach to a non-leader unit. \nAttached unit can\'t ready. It gains: "When the regroup phase starts: Deal 2 damage to your base."'],
+    ['SEC_156 Nemik\'s Manifesto', 'Attach to a non-Vehicle unit.\nAttached unit gains the Rebel trait and: “When Defeated: Deal 1 damage to each enemy base for each other friendly Rebel unit.”'],
+  ])('reads the lead-in on %s as granted-ability-block alone', (_card, text) => {
+    expect(triage([card({ FrontText: text })]).triaged[0].blockers).toEqual(['granted-ability-block'])
+  })
+
+  it.each([
+    ['LOF_098 Leia Organa', 'force-token', 'While this unit is in the space arena, she can\'t ready and gains: "Action [use the Force]: Move this unit to the ground arena and give each friendly Heroism unit +2/+2 for this phase."'],
+    ['SEC_231 Implicate', 'token-unit', 'Choose a unit. For this phase, it gains Sentinel and: “When this unit is attacked: Create a Spy token.”'],
+    ['TWI_129 In Defense of Kamino', 'token-unit', 'For this phase, each friendly Republic unit gains Restore 2 and: "When Defeated: Create a Clone Trooper token."'],
+  ])('reads the lead-in on %s as granted-ability-block beside its %s blocker', (_card, other, text) => {
+    expect(triage([card({ FrontText: text })]).triaged[0].blockers.sort()).toEqual([other, 'granted-ability-block'].sort())
+  })
+
+  it('counts three lead-ins sharing a stat notation as granted-ability-block, not as compound or one-off', () => {
     // JTL_177 Stay on Target, JTL_156 Trench Run, SOR_150 Heroic Sacrifice. "+2/+0" is a stat line, not
-    // a second trigger point, and reading it as one put these three in trigger:compound, a bucket that
-    // otherwise holds 47 genuine two-trigger cards. Each is a granted-ability lead-in, the shape the
-    // short pattern already read as an ordinary head on LOF_205 and TWI_103, so each folds to one-off.
+    // a second trigger point.
     const r = triage([
       card({ Number: '1', Type: 'Event', Name: 'Stay on Target', FrontText: 'Attack with a Vehicle unit. For this attack, it gets +2/+0 and gains: "When this unit deals damage to a base: Draw a card."' }),
       card({ Number: '2', Type: 'Event', Name: 'Trench Run', FrontText: "Attack with a Fighter unit. For this attack, it gets +4/+0 and gains: \"On Attack: Discard 2 cards from the defending player's deck. Deal unpreventable damage equal to the difference in the discarded cards' costs to this unit.\"" }),
       card({ Number: '3', Type: 'Event', Name: 'Heroic Sacrifice', FrontText: 'Draw a card, then attack with a unit. For this attack, it gets +2/+0 and gains: "When this unit deals combat damage: Defeat it."' }),
     ])
-    expect(r.triaged.map(c => c.blockers)).toEqual([['trigger:one-off'], ['trigger:one-off'], ['trigger:one-off']])
+    expect(r.triaged.map(c => c.blockers)).toEqual([['granted-ability-block'], ['granted-ability-block'], ['granted-ability-block']])
+    expect(r.blockers).toEqual([{ name: 'granted-ability-block', sole: 3, touched: 3 }])
+  })
+
+  it('keeps a printed trigger head beside a lead-in on the same card', () => {
+    // JTL_260 Death Star Plans: "When attached unit is attacked" is a real trigger point.
+    const r = triage([card({ FrontText: 'When attached unit is attacked: The attacking player takes control of this upgrade and attaches it to a unit they control. \nAttached unit gains: "The first unit you play each round costs 2 less."' })])
+    expect(r.triaged[0].blockers.sort()).toEqual(['granted-ability-block', 'trigger:one-off'])
   })
 
   it('blocks a card on a long head the framework does not dispatch', () => {
