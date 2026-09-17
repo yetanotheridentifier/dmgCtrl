@@ -88,7 +88,7 @@ The rules engine runs the cards, not just the board:
 - **Ambush and Support wait their turn too.** Both are abilities that trigger on playing the unit, so they queue up with everything else that play set off, and you choose where they go in the sequence. A unit whose *when played* clears the way can do that **before** it takes its Ambush attack.
 - **Winning ends everything immediately.** If a base hits 0 while abilities are still waiting, they're discarded unresolved and you go straight to the result. A card that would have been revealed or played simply isn't.
 
-Every upgrade **and every leader** (both sides) in the ASH set is implemented. Still on the roadmap: **event cards**, and ability text on ordinary **unit** cards beyond keywords, which still make fine resources.
+Every upgrade **and every leader** (both sides) in the ASH set is implemented, and so are most leaders from the other sets. A leader whose ability isn't built yet (a pilot that deploys as an upgrade, for one) still plays with its printed stats and keywords. Some leaders say **When Deployed**: that ability fires as the leader unit arrives. Cards whose ability text isn't built still make fine resources.
 
 ## After the game
 

@@ -117,7 +117,8 @@ The other prohibitions follow the same pattern, each read beside the printed hoo
 unit while it still attacks and defends. `attackersPower` sits on a defender and changes the power of any
 unit attacking it (I Have the High Ground's -4/-0), read by `effectivePower` from the attacker's combat
 context. `survivesNoHp` keeps a unit in play at damage ≥ HP (The Tragedy of Plagueis); when it expires,
-the state-based check below defeats the unit. `preventNext` stops that much of the next instance of
+the state-based check below defeats the unit. A card can say the same of itself with the static hook of
+that name (Chirrut Îmwe, during the action phase only), which the regroup sweep then catches. `preventNext` stops that much of the next instance of
 damage to the unit and is then spent (see Damage prevention).
 
 The game carries two phase-long effects that are not about a unit: `bannedNames`, card names nobody may
@@ -271,3 +272,10 @@ subtract from the base inline in `attack`, where no such card could ever have re
 `healUnit` records the unit in `phaseEvents.healedUnits` when damage actually comes off, so "each
 friendly unit that was healed this phase" (Barriss Offee) counts every source of healing and nothing
 else: healing an undamaged unit heals nothing and is not recorded.
+
+Two more phase records are written at the one place each event happens. `dealDamageToBase` adds what a
+base was actually dealt to `phaseEvents.baseDamageTaken` ("if you've dealt 3 or more damage to an enemy
+base this phase", Cassian Andor). `phaseEvents.tokensCreated` holds each player who created a token:
+`createTokenUnit`, `giveTokens` and a Shielded entry all record it, crediting a token upgrade to the
+controller of the unit it lands on, which is who created it for every card that gives one to its own
+side (The Client).
