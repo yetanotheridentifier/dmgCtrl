@@ -554,6 +554,7 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'LOF_043', name: 'The Tragedy of Plagueis' },
   { id: 'SOR_075', name: 'It Binds All Things' },
   { id: 'LAW_102', name: 'Choke on Aspirations' },
+  { id: 'SOR_104', name: 'U-Wing Reinforcement' },
   // Printed as an upgrade (see `cardDataCorrections.ts`), but the set data, and so the set totals
   // below, file it as an event. Counted where the totals count it.
   { id: 'SOR_215', name: 'Snapshot Reflexes' },

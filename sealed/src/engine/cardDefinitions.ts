@@ -5208,6 +5208,14 @@ registerCard('SOR_075', unitThenWp('Heal up to 3 damage from a unit. If you cont
     const next = healed > 0 ? healUnit(s, u!.instanceId, healed) : s
     return healed > 0 && controlsTrait(next, ctx.owner, 'Force') ? damageChoice(next, ctx, healed, picked(next, ctx, pickAny).filter(x => x.instanceId !== u!.instanceId), [], true) : next
   }))
+registerCard('SOR_104', whenPlayed('Search the top 10 cards of your deck for up to 3 units with combined cost 7 or less and play each of them for free.', (s, ctx) => { // U-Wing Reinforcement
+  // Admiral Ackbar's budgeted search, capped at three plays.
+  const p = s.players[ctx.owner]
+  const revealed = p.deck.slice(0, searchCount(s, ctx.owner, 10))
+  if (revealed.length === 0) return s
+  const eligibleIndices = revealed.flatMap((id, i) => (printedUnit(s.cards[id]) && (s.cards[id]?.cost ?? 0) <= 7 ? [i] : []))
+  return pushChoice(updatePlayer(s, ctx.owner, { deck: p.deck.slice(revealed.length) }), { kind: 'searchPlayFree', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices, budget: 7, maxPlays: 3 })
+}))
 registerCard('LAW_102', { // Choke on Aspirations
   ...whenPlayed('Deal up to 5 damage to a friendly non-Vehicle unit. If it survives, heal damage from your base equal to the damage dealt this way.', (s, ctx) =>
     unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, (st, u) => !unitHasTrait(st, u, 'Vehicle'))), 'choose a friendly non-Vehicle unit', false, 'target')),

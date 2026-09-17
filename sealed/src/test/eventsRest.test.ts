@@ -106,6 +106,7 @@ const F = {
   SOR_187: ev('SOR_187', 7), SHD_077: ev('SHD_077', 3), JTL_232: ev('JTL_232', 2), TWI_089: ev('TWI_089', 6),
   LOF_220: ev('LOF_220'), LOF_043: ev('LOF_043', 5), SOR_075: ev('SOR_075', 2), LAW_102: ev('LAW_102'),
   UPG4: card({ id: 'UPG4', type: 'upgrade', cost: 4, power: 1, hp: 1 }),
+  SOR_104: ev('SOR_104', 7),
   OFFICIAL: card({ id: 'OFFICIAL', arena: 'ground', cost: 2, power: 1, hp: 4, traits: ['OFFICIAL'] }),
   TWO_ASP: card({ id: 'TWO_ASP', arena: 'ground', cost: 3, power: 2, hp: 5, aspects: ['Cunning', 'Heroism'] }),
   DROID: card({ id: 'DROID', arena: 'ground', cost: 2, power: 2, hp: 5, traits: ['DROID'] }),
@@ -1507,6 +1508,24 @@ describe('events that move units or upgrades, and the last one-offs', () => {
     const noForce = accept(play(board('SOR_075', { units: [unit('m', 'BIG', { damage: 1 })] }, { units: [unit('e', 'BIG')] })), { targetInstanceId: 'm' })
     noChoice(noForce)
     expect(dmg(noForce, 'm')).toBe(0)
+  })
+
+  it('U-Wing Reinforcement (SOR_104) plays up to 3 units from the top 10 with combined cost 7 or less, free', () => {
+    const deck = ['C1', 'C1', 'P3', 'UPG', 'C1', 'P5', 'FILL']
+    let s = play(board('SOR_104', { deck }))
+    let c = choice(s)
+    expect(c).toMatchObject({ kind: 'searchPlayFree', budget: 7 })
+    expect(eligibleCards(c)).toEqual(['C1', 'C1', 'P3', 'C1', 'P5'])
+    s = accept(s, { deckIndex: 0 })
+    s = accept(s, { deckIndex: 0 })
+    c = choice(s)
+    // 5 of the budget left: the 4-cost unit still fits.
+    expect(eligibleCards(c)).toEqual(['P3', 'C1', 'P5'])
+    s = accept(s, { deckIndex: revealedOf(c).indexOf('C1') })
+    // Three played: the search ends even with budget left.
+    noChoice(s)
+    expect(s.players.player.units.map(u => u.cardId)).toEqual(['C1', 'C1', 'C1'])
+    expect(s.players.player.deck).toHaveLength(deck.length - 3)
   })
 
   it('Choke on Aspirations (LAW_102) deals up to 5 to a friendly non-Vehicle unit and, if it survives, heals your base that much', () => {

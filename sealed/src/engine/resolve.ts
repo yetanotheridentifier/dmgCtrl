@@ -1674,8 +1674,9 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         const budget = choice.budget - cost
         const eligibleIndices = ackbarEligible(next, revealed, budget, choice.filter, choice.costDelta, owner)
         // Eye of Sion plays exactly one; Ackbar keeps offering until the budget runs out.
-        if (!choice.playOne && budget > 0 && eligibleIndices.length > 0) {
-          next = pushChoice(next, { kind: 'searchPlayFree', id: choice.id, controller: owner, revealed, eligibleIndices, budget, filter: choice.filter, costDelta: choice.costDelta })
+        const maxPlays = choice.maxPlays === undefined ? undefined : choice.maxPlays - 1
+        if (!choice.playOne && budget > 0 && eligibleIndices.length > 0 && maxPlays !== 0) {
+          next = pushChoice(next, { kind: 'searchPlayFree', id: choice.id, controller: owner, revealed, eligibleIndices, budget, filter: choice.filter, costDelta: choice.costDelta, ...(maxPlays !== undefined ? { maxPlays } : {}) })
         } else {
           next = updatePlayer(next, owner, { deck: [...next.players[owner].deck, ...revealed] }) // bottom the leftovers
         }

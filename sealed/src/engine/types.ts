@@ -975,7 +975,8 @@ type ChoiceVariant =
   // `costDelta` makes the play a paid one at a discount instead of free (Kelleran Beq: "it costs 3
   // less"), and then eligibility is what the player can afford rather than what fits `budget`.
   // `thenDelay` leaves a delayed effect about the unit played (Triple Dark Raid returns it to hand).
-  | { kind: 'searchPlayFree'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; budget: number; playOne?: boolean; entersReady?: boolean; filter?: { trait?: string; aspect?: string; arena?: Arena }; costDelta?: number; thenDelay?: { cardId: string; when: DelayedEffect['when'] } }
+  // `maxPlays` caps how many units the budget may buy (U-Wing Reinforcement's "up to 3").
+  | { kind: 'searchPlayFree'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; budget: number; playOne?: boolean; entersReady?: boolean; filter?: { trait?: string; aspect?: string; arena?: Arena }; costDelta?: number; thenDelay?: { cardId: string; when: DelayedEffect['when'] }; maxPlays?: number }
   // Rancor Keeper: "deal 1 damage to any number of bases" — repeatable, each base at most
   // once; `remaining` are the bases not yet picked. Skip finishes. `heal` heals each picked base
   // instead ("heal 2 damage from each of any number of bases", Coruscanti Spy).
