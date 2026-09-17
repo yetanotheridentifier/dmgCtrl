@@ -641,6 +641,11 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   // Printed as an upgrade (see `cardDataCorrections.ts`), but the set data, and so the set totals
   // below, file it as an event. Counted where the totals count it.
   { id: 'SOR_215', name: 'Snapshot Reflexes' },
+  // Experience tokens: C, a token on each of several units
+  { id: 'SEC_124', name: 'Budget Scheming' },
+  { id: 'LOF_241', name: 'In the Shadows' },
+  { id: 'SOR_245', name: 'Medal Ceremony' },
+  { id: 'TS26_60', name: 'Take Charge' },
 ]
 
 /**
@@ -1309,6 +1314,13 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SOR_049', name: 'Obi-Wan Kenobi' },
   { id: 'LAW_067', name: 'Jyn Erso' },
   { id: 'TS26_54', name: 'Wartime Mercenaries' },
+  // Experience tokens: C, a token on each of several units
+  { id: 'SEC_252', name: 'Maarva Andor' },
+  { id: 'SOR_037', name: 'Academy Defense Walker' },
+  { id: 'LOF_055', name: 'Dume' },
+  { id: 'SHD_081', name: 'General Tagge' },
+  { id: 'SOR_080', name: 'General Tagge' },
+  { id: 'LOF_099', name: 'Paladin Training Corvette' },
 ]
 
 /**

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
-import { legalMoves } from '../engine/legalMoves'
+import { legalMoves, effectiveCost } from '../engine/legalMoves'
 import { getCardDefinition } from '../engine/abilities'
 import { normaliseCard } from '../engine/cardDb'
 import { defeatUnit } from '../engine/combat'
@@ -31,6 +31,8 @@ const SHIPPED = [
   // B: a fixed number of tokens on a chosen unit
   'SHD_040', 'LAW_249', 'LAW_059', 'SEC_095', 'SHD_082', 'SHD_258', 'SOR_231', 'SOR_241', 'LAW_142', 'SOR_108',
   'LOF_095', 'SEC_027', 'SOR_049', 'LAW_067', 'TS26_54',
+  // C: a token on each of several units
+  'SEC_252', 'SOR_037', 'LOF_055', 'SHD_081', 'SOR_080', 'LOF_099', 'SEC_124', 'LOF_241', 'SOR_245', 'TS26_60',
 ]
 /** Registered elsewhere; used here to play a unit for free, so "no resources were paid" can be reached. */
 const GALACTIC_AMBITION = 'SOR_235'
@@ -71,6 +73,10 @@ const F: Record<string, EngineCard> = {
   PALP_U: card({ id: 'PALP_U', name: 'Chancellor Palpatine', arena: 'ground', cost: 5, power: 3, hp: 5 }),
   PALP_L: card({ id: 'PALP_L', name: 'Chancellor Palpatine', type: 'leader', cost: 6, power: 3, hp: 6 }),
   UPG: card({ id: 'UPG', type: 'upgrade', cost: 1, power: 1, hp: 1 }),
+  VEH: src('VEH', { traits: ['VEHICLE'] }),
+  TROOPER: src('TROOPER', { traits: ['TROOPER'] }),
+  OFFICIAL: src('OFFICIAL', { traits: ['OFFICIAL'] }),
+  L_UNIT: card({ id: 'L_UNIT', type: 'leader', cost: 5, power: 3, hp: 6 }),
   EV: card({ id: 'EV', type: 'event', cost: 1 }),
   FREE_EV: card({ id: 'FREE_EV', type: 'event', cost: 0 }),
 }
@@ -128,6 +134,14 @@ const play = (s: GameState, cardId: string, who: PlayerId = 'player'): GameState
 const last = (s: GameState, who: PlayerId = 'player'): string => s.players[who].units[s.players[who].units.length - 1].instanceId
 /** Defeat the unit `id`, as an ability would. */
 const kill = (s: GameState, id: string): GameState => defeatUnit(s, id)
+/** Play `cardId` as an event from the player's hand, optionally with `attackers` already having attacked. */
+const playEvent = (s: GameState, cardId: string, attackers: string[] = []): GameState => {
+  const p = s.players.player
+  const withAttacks = attackers.length ? { ...s, phaseEvents: { ...(s.phaseEvents ?? phaseEvents({})), attackedUnits: attackers } } : s
+  const withCard = { ...withAttacks, activePlayer: 'player' as PlayerId, players: { ...s.players, player: { ...p, hand: [...p.hand, cardId] } } }
+  return resolve(withCard, { type: 'playEvent', handIndex: p.hand.length })
+}
+const costOf = (s: GameState, cardId: string): number => effectiveCost(s, 'player', F[cardId])
 /** Declare an attack with `attackerId`, on the enemy base or on `target`. */
 const attack = (s: GameState, attackerId: string, target?: string) =>
   resolve(s, { type: 'attack', attackerId, target: target ? { kind: 'unit', instanceId: target } : { kind: 'base' } })
@@ -376,5 +390,80 @@ describe('Experience tokens, B: a fixed number of tokens on a chosen unit', () =
     expect(choice(killed)).toMatchObject({ kind: 'mayGiveTokens', controller: 'opponent', optional: true })
     expect(unitOffers(killed)).toEqual(['e', 'f'])
     expect(exp(accept(killed, { targetInstanceId: 'e' }), 'e')).toBe(1)
+  })
+})
+
+describe('Experience tokens, C: a token on each of several units', () => {
+  it('Maarva Andor (SEC_252) gives a token to each friendly Rebel unit when defeated, and raises no choice', () => {
+    const done = kill(board({ units: [unit('wd', 'SEC_252'), unit('r1', 'REB'), unit('r2', 'REB'), unit('g', 'GRD')] }, { units: [unit('er', 'REB')] }), 'wd')
+    noChoice(done)
+    expect([exp(done, 'r1'), exp(done, 'r2'), exp(done, 'g'), exp(done, 'er')]).toEqual([1, 1, 0, 0])
+  })
+
+  it('Academy Defense Walker (SOR_037) gives a token to each friendly damaged unit', () => {
+    const done = play(board({ units: [unit('hurt', 'GRD', { damage: 2 }), unit('fresh', 'GRD2')] }, { units: [unit('ehurt', 'GRD', { damage: 1 })] }), 'SOR_037')
+    noChoice(done)
+    expect([exp(done, 'hurt'), exp(done, 'fresh'), exp(done, 'ehurt')]).toEqual([1, 0, 0])
+  })
+
+  it('Dume (LOF_055) gives a token to each other friendly non-Vehicle unit when the regroup phase starts', () => {
+    const s = board({ units: [unit('dume', 'LOF_055'), unit('g', 'GRD'), unit('veh', 'VEH')] }, { units: [unit('e', 'GRD')] })
+    const done = resolve({ ...s, consecutivePasses: 1 }, { type: 'pass' })
+    expect([exp(done, 'g'), exp(done, 'veh'), exp(done, 'dume'), exp(done, 'e')]).toEqual([1, 0, 0, 0])
+  })
+
+  it.each(['SHD_081', 'SOR_080'])('General Tagge (%s) gives a token to each of up to 3 Trooper units, one pick at a time', id => {
+    const s = play(board({ units: [unit('t1', 'TROOPER'), unit('t2', 'TROOPER'), unit('g', 'GRD')] }, { units: [unit('et', 'TROOPER')] }), id)
+    expect(choice(s)).toMatchObject({ kind: 'selectUnitThen', optional: true })
+    expect(unitOffers(s)).toEqual(['et', 't1', 't2'])
+    const one = accept(s, { targetInstanceId: 't1' })
+    expect(exp(one, 't1')).toBe(1)
+    // The same unit is not offered twice.
+    expect(unitOffers(one)).toEqual(['et', 't2'])
+    const two = accept(one, { targetInstanceId: 't2' })
+    expect([exp(two, 't1'), exp(two, 't2')]).toEqual([1, 1])
+    noChoice(skip(two))
+  })
+
+  it('Paladin Training Corvette (LOF_099) offers up to 3 Force units and may stop at once', () => {
+    const s = play(board({ units: [unit('f1', 'FORCE_U'), unit('g', 'GRD')] }), 'LOF_099')
+    expect(unitOffers(s)).toEqual(['f1'])
+    expect(declinable(s)).toBe(true)
+    expect(exp(skip(s), 'f1')).toBe(0)
+  })
+
+  it('Budget Scheming (SEC_124) gives a token to each of up to 3 Official units on either side', () => {
+    const s = playEvent(board({ units: [unit('o', 'OFFICIAL'), unit('g', 'GRD')] }, { units: [unit('eo', 'OFFICIAL')] }), 'SEC_124')
+    expect(unitOffers(s)).toEqual(['eo', 'o'])
+    expect(exp(accept(s, { targetInstanceId: 'eo' }), 'eo')).toBe(1)
+  })
+
+  it('In the Shadows (LOF_241) offers only friendly units with Hidden', () => {
+    const s = playEvent(board({ units: [unit('h', 'GRD', { hidden: true }), unit('g', 'GRD2')] }, { units: [unit('eh', 'GRD', { hidden: true })] }), 'LOF_241')
+    expect(unitOffers(s)).toEqual(['h'])
+  })
+
+  it('Medal Ceremony (SOR_245) offers only Rebel units that attacked this phase', () => {
+    const s = playEvent(board(
+      { units: [unit('r1', 'REB'), unit('r2', 'REB'), unit('g', 'GRD')] },
+      { units: [unit('er', 'REB')] },
+      { phaseEvents: phaseEvents({}) },
+    ), 'SOR_245')
+    noChoice(s)
+    const attacked = playEvent(board(
+      { units: [unit('r1', 'REB'), unit('r2', 'REB'), unit('g', 'GRD')] },
+      { units: [unit('er', 'REB')] },
+      { phaseEvents: phaseEvents({}) },
+    ), 'SOR_245', ['r1', 'g', 'er'])
+    expect(unitOffers(attacked)).toEqual(['er', 'r1'])
+  })
+
+  it('Take Charge (TS26_60) costs 1 less per friendly leader unit and offers up to 3 units', () => {
+    const plain = board({ units: [unit('g', 'GRD')] })
+    const withLeader = board({ units: [unit('g', 'GRD'), unit('l', 'L_UNIT', { isLeader: true })] })
+    expect(costOf(withLeader, 'TS26_60')).toBe(costOf(plain, 'TS26_60') - 1)
+    const s = playEvent(plain, 'TS26_60')
+    expect(unitOffers(s)).toEqual(['g'])
+    expect(exp(accept(s, { targetInstanceId: 'g' }), 'g')).toBe(1)
   })
 })

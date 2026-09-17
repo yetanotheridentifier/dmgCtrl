@@ -7120,3 +7120,35 @@ registerCard('TS26_54', defeated(whenPlayed('An opponent may give an Experience 
   const targets = allUnits(s).map(u => u.instanceId)
   return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: opp, token: TOKEN_EXPERIENCE, count: 1, targets, optional: true }) : s
 })))
+
+// C: a token on each of several units. "Each" is applied outright; "each of up to N" is `eachOfUpTo`,
+// one pick at a time with Done available, which is how the engine resolves every repeated effect.
+/** "Give `count` Experience tokens to each unit that ...", no choice: the picking is already settled. */
+const expEach = (s: GameState, ctx: EventCtx, test: Pick, count = 1): GameState =>
+  pickedIds(s, ctx, test).reduce((acc, id) => giveTokens(acc, id, TOKEN_EXPERIENCE, count), s)
+/** One pick of an "each of up to N Experience tokens" offer. */
+const expEachPick = (s: GameState, _ctx: IfYouDoContext, id: string): GameState => giveToken(s, id, TOKEN_EXPERIENCE)
+const expUpTo = (description: string, n: number, text: string, test: Pick, when: When = always): CardDefinition =>
+  eachOfUpTo(description, n, { text, test, apply: expEachPick }, when)
+
+registerCard('SEC_252', defeated(whenPlayed('Give an Experience token to each friendly Rebel unit.', (s, ctx) => // Maarva Andor
+  expEach(s, ctx, pickAll(pickFriendly, pickTrait('Rebel'))))))
+registerCard('SOR_037', whenPlayed('Give an Experience token to each friendly damaged unit.', (s, ctx) => // Academy Defense Walker
+  expEach(s, ctx, pickAll(pickFriendly, damaged))))
+registerCard('LOF_055', { // Dume
+  abilities: [{ trigger: 'whenRegroupStarts', description: 'Give an Experience token to each other friendly non-Vehicle unit.',
+    effect: (s, ctx) => expEach(s, ctx, pickAll(pickOther, pickFriendly, (st, u) => !unitHasTrait(st, u, 'Vehicle'))) }],
+})
+const tagge = expUpTo('Give an Experience token to each of up to 3 Trooper units.', 3, 'give an Experience token to a Trooper unit (up to 3)', pickTrait('Trooper'))
+registerCard('SHD_081', tagge) // General Tagge
+registerCard('SOR_080', tagge) // General Tagge, the SOR printing: same text, a separate card id
+registerCard('LOF_099', expUpTo('You may give an Experience token to each of up to 3 Force units.', 3, 'give an Experience token to a Force unit (up to 3)', pickTrait('Force'))) // Paladin Training Corvette
+registerCard('SEC_124', expUpTo('Give an Experience token to each of up to 3 Official units.', 3, 'give an Experience token to an Official unit (up to 3)', pickTrait('Official'))) // Budget Scheming
+registerCard('LOF_241', expUpTo('Give an Experience token to each of up to 3 friendly units with Hidden.', 3, 'give an Experience token to a friendly unit with Hidden (up to 3)', // In the Shadows
+  pickAll(pickFriendly, (_s, u) => u.hidden === true)))
+registerCard('SOR_245', expUpTo('Give an Experience token to each of up to 3 Rebel units that attacked this phase.', 3, 'give an Experience token to a Rebel unit that attacked this phase (up to 3)', // Medal Ceremony
+  pickAll(pickTrait('Rebel'), (s, u) => attackedThisPhase(s).includes(u.instanceId))))
+registerCard('TS26_60', { // Take Charge
+  ...perLeaderUnitDiscount,
+  ...expUpTo('Give an Experience token to each of up to 3 units.', 3, 'give an Experience token to a unit (up to 3)', pickAny),
+})
