@@ -7,7 +7,7 @@ import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
 import { discardUnitsMatching, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, isTokenCard } from './tokenUnits'
-import { opponentOf, pushChoice, addLastingEffect, addDelayedEffect, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
+import { opponentOf, pushChoice, addLastingEffect, addDelayedEffect, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
 import type { AttackOffer } from './legalMoves'
 import { canAfford } from './resources'
@@ -6622,4 +6622,130 @@ const savageAura: LeaderAura = (s, owner, target, friendly, combat) => {
 registerCard('TS26_5', { // Savage Opress
   leaderAbilities: { aura: savageAura },
   ...friendlyAura(() => true, { keywords: [KW.overwhelm] }, true),
+})
+
+// F: one small engine addition each
+registerCard('SEC_005', { // Satine Kryze (Restore 4 on the deployed side, from the card)
+  ...leaderFront('Heal up to 2 damage from a unit. If you do, deal that much damage to your base.', {
+    usable: anyUnitPasses(damaged),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, damaged), 'heal up to 2 damage from a unit, and deal that much to your base', false),
+  }),
+  ifYouDo: (s, ctx) => {
+    // Healing less than it can never helps, so "up to 2" heals as much as the unit has, to 2.
+    const healed = Math.min(2, findUnit(s, ctx.targetInstanceId!)?.unit.damage ?? 0)
+    return healed > 0 ? dealDamageToBase(healUnit(s, ctx.targetInstanceId!, healed), ctx.owner, healed) : s
+  },
+})
+registerCard('SEC_010', { // Dedra Meero
+  ...leaderFront("Choose an enemy unit. Its controller may deal 2 damage to it. If they don't, draw a card.", {
+    cost: 1,
+    usable: anyUnitPasses(pickEnemy),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickEnemy), 'choose an enemy unit', false, 'unit'),
+  }),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'deal') return dealDamageToUnit(s, ctx.unitChosen!, 2)
+    if (ctx.step === 'draw') return drawCards(s, ctx.owner, 1)
+    const name = s.cards[findUnit(s, ctx.targetInstanceId!)?.unit.cardId ?? '']?.name ?? 'the unit'
+    return pushChoice(s, {
+      kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: opponentOf(ctx.owner), cost: 0, text: `deal 2 damage to your ${name} (otherwise your opponent draws a card)`,
+      then: resume(ctx, 'deal', ctx.targetInstanceId), declineStep: 'draw',
+    })
+  },
+  ...gains((s, u) => { const o = unitOwner(s, u); return o !== undefined && s.players[o].hand.length > s.players[opponentOf(o)].hand.length }, KW.raid(2)),
+})
+/** Darth Vader's "discard any number of cards": one at a time with Done, then damage equal to the count. */
+const vaderDiscards = (s: GameState, ctx: Resumable, n: number): GameState => {
+  const hand = s.players[ctx.owner].hand
+  if (hand.length === 0) return n > 0 ? damageChoice(s, ctx, n, allUnits(s), BOTH_BASES) : s
+  return pushChoice(s, { kind: 'selectCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates: hand, optional: true, hookOnDecline: true, text: `discard a card from your hand (${n} discarded)`, then: resume(ctx, `n:${n}`) })
+}
+registerCard('LAW_011', { // Darth Vader
+  ...leaderFront('[Discard a card from your hand]: Deal 1 damage to a unit or base.', {
+    usable: (s, ctx) => s.players[ctx.owner].hand.length > 0,
+    effect: (s, ctx) => discards(s, ctx.owner, 1, ctx.sourceInstanceId!, resume(ctx, 'front')),
+  }),
+  ...attacks('Discard any number of cards from your hand. Deal damage to a unit or base equal to the number of cards discarded this way.', (s, ctx) => vaderDiscards(s, ctx, 0)),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'front') return damageChoice(s, ctx, 1, allUnits(s), BOTH_BASES)
+    const n = Number(ctx.step!.slice('n:'.length))
+    if (ctx.optionIndex === undefined) return n > 0 ? damageChoice(s, ctx, n, allUnits(s), BOTH_BASES) : s
+    return vaderDiscards(discardFromHand(s, ctx.owner, ctx.optionIndex), ctx, n + 1)
+  },
+})
+const readyEnemy = pickAll(pickEnemy, readyUnitPick)
+const clientExhaust = (s: GameState, ctx: EventCtx): GameState => targetChoice(s, ctx, 'mayExhaustUnit', pickedIds(s, ctx, readyEnemy))
+registerCard('LAW_016', allOf( // The Client
+  leaderFront('If you created a token this phase, exhaust an enemy unit.', {
+    usable: both((s, ctx) => tokenCreatedThisPhase(s, ctx.owner), anyUnitPasses(readyEnemy)),
+    effect: clientExhaust,
+  }),
+  attacks('If you created a token this phase, exhaust an enemy unit.', (s, ctx) => (tokenCreatedThisPhase(s, ctx.owner) ? clientExhaust(s, ctx) : s)),
+))
+const CASSIAN_ROUND_KEY = 'SOR_013#round'
+registerCard('SOR_013', { // Cassian Andor
+  ...leaderFront("If you've dealt 3 or more damage to an enemy base this phase, draw a card.", {
+    cost: 1,
+    usable: (s, ctx) => baseDamageThisPhase(s, opponentOf(ctx.owner)) >= 3,
+    effect: (s, ctx) => drawCards(s, ctx.owner, 1),
+  }),
+  abilities: [{
+    trigger: 'whenEnemyBaseDamaged',
+    description: 'You may draw a card. Use this ability only once each round.',
+    effect: (s, ctx) => (selfOf(s, ctx)?.usedAbilities?.includes(CASSIAN_ROUND_KEY)
+      ? s
+      : pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-draw`, controller: ctx.owner, cost: 0, text: 'draw a card', then: resume(ctx) })),
+  }],
+  ifYouDo: (s, ctx) => drawCards(markAbilityUsed(s, ctx.owner, ctx.sourceInstanceId!, CASSIAN_ROUND_KEY), ctx.owner, 1),
+})
+registerCard('SOR_004', { // Chirrut Îmwe
+  ...leaderFront('Give a unit +0/+2 for this phase.', {
+    usable: anyUnitPasses(pickAny),
+    effect: (s, ctx) => lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickAny), { hp: 2 }),
+  }),
+  // "During the regroup phase, if he has no remaining HP, defeat him": the sweep as the phase changes does it.
+  survivesNoHp: s => s.phase === 'action',
+})
+const exhaustedEnemy = pickAll(pickEnemy, exhaustedPick)
+registerCard('TS26_6', { // Rex
+  ...leaderFront('[Ready an exhausted enemy unit]: The next event you play this phase costs 1 less.', {
+    usable: anyUnitPasses(exhaustedEnemy),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, exhaustedEnemy), 'ready an exhausted enemy unit', false, '1'),
+  }),
+  ...attacks('You may ready an exhausted enemy unit. If you do, the next event you play this phase costs 2 less.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, exhaustedEnemy), 'ready an exhausted enemy unit so the next event costs 2 less', true, '2')),
+  ifYouDo: (s, ctx) => grantNextUnit(readyUnit(s, ctx.targetInstanceId!), ctx.owner, { event: true, costDelta: -Number(ctx.step) }),
+})
+const JABBA_ROUND_KEY = 'SEC_002#round'
+registerCard('SEC_002', { // Jabba the Hutt
+  ...leaderFront('A friendly damaged unit deals 1 damage to an enemy unit. If the friendly unit has 3 or more damage on it, it deals 2 damage instead.', {
+    cost: 1,
+    usable: both(anyUnitPasses(damagedFriendly), anyUnitPasses(pickEnemy)),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, damagedFriendly), 'choose the damaged friendly unit that deals the damage', false, 'dealer'),
+  }),
+  abilities: [{
+    trigger: 'whenFriendlyDamagedSurvives',
+    description: 'You may have that unit deal that much damage to an enemy unit. Use this ability only once each round.',
+    effect: (s, ctx) => {
+      if (selfOf(s, ctx)?.usedAbilities?.includes(JABBA_ROUND_KEY)) return s
+      const hurt = (ctx.damagedSurvivors ?? []).filter(d => d.instanceId !== ctx.sourceInstanceId && findUnit(s, d.instanceId)?.owner === ctx.owner)
+      if (hurt.length === 0 || !pickedIds(s, ctx, pickEnemy).length) return s
+      return hurt.length === 1
+        ? unitThen(s, ctx, pickedIds(s, ctx, pickEnemy), `have it deal ${hurt[0].amount} damage to an enemy unit`, true, `deal:${hurt[0].amount}`, hurt[0].instanceId)
+        : unitThen(s, ctx, hurt.map(d => d.instanceId), 'choose the damaged unit that deals damage to an enemy unit', true, `dealer:${JSON.stringify(hurt)}`)
+    },
+  }],
+  ifYouDo: (s, ctx) => {
+    const step = ctx.step ?? ''
+    if (step === 'dealer') return unitThen(s, ctx, pickedIds(s, ctx, pickEnemy), 'choose the enemy unit to damage', false, 'target', ctx.targetInstanceId)
+    if (step === 'target') {
+      const dealer = findUnit(s, ctx.unitChosen ?? '')?.unit
+      return dealer ? dealDamageToUnit(s, ctx.targetInstanceId!, dealer.damage >= 3 ? 2 : 1) : s
+    }
+    if (step.startsWith('dealer:')) {
+      const amount = (JSON.parse(step.slice('dealer:'.length)) as { instanceId: string; amount: number }[]).find(d => d.instanceId === ctx.targetInstanceId)?.amount ?? 0
+      return unitThen(s, ctx, pickedIds(s, ctx, pickEnemy), `have it deal ${amount} damage to an enemy unit`, true, `deal:${amount}`, ctx.targetInstanceId)
+    }
+    // "deal:N": the once-a-round limit is spent only when the ability is used.
+    return dealDamageToUnit(markAbilityUsed(s, ctx.owner, ctx.sourceInstanceId!, JABBA_ROUND_KEY), ctx.targetInstanceId!, Number(step.slice('deal:'.length)))
+  },
 })

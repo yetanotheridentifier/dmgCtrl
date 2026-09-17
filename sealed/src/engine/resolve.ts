@@ -2,7 +2,7 @@ import type { Action, AttackTarget } from './actions'
 import type { Arena, GameState, PlayerId, UnitState } from './types'
 import type { DelayedEffect, IfYouDo, PendingChoice, PendingTrigger, TriggerContext, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds } from './types'
-import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
+import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets, offerAttack } from './legalMoves'
 import { collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, stampChoiceSource, type TriggerPoint } from './abilities'
@@ -535,10 +535,14 @@ function playEvent(state: GameState, handIndex: number): GameState {
   }
 
   const paid = payCost(p, effectiveCost(state, playerId, card))
+  // "The next event you play this phase costs less" (Rex): paid for above, so spent now.
+  const eventGrants = (p.nextUnitGrants ?? []).filter(g => nextUnitGrantMatches(card, g, state, playerId))
+  const grantsLeft = (p.nextUnitGrants ?? []).filter(g => !eventGrants.includes(g))
   let next = updatePlayer(state, playerId, {
     ...paid,
     hand: paid.hand.filter((_, i) => i !== handIndex),
     discard: [...p.discard, card.id],
+    ...(eventGrants.length ? { nextUnitGrants: grantsLeft.length ? grantsLeft : undefined } : {}),
   })
   // After the cost, so Peli Motto's "first non-unit card each phase" counts this one as the first.
   next = recordCardPlayed(next, playerId, card.id)
@@ -2136,7 +2140,7 @@ function applyEntryKeywords(state: GameState, owner: PlayerId, instanceId: strin
   const shieldable = unitNow(next)
   if (!shieldable) return next
   if (unitHasKeyword(next, shieldable, 'Shielded') && !hasToken(shieldable.upgrades, TOKEN_SHIELD)) {
-    next = attachUpgrades(next, instanceId, [{ cardId: TOKEN_SHIELD, owner }])
+    next = attachUpgrades(recordTokenCreated(next, owner), instanceId, [{ cardId: TOKEN_SHIELD, owner }])
   }
   const hideable = unitNow(next)!
   if (unitHasKeyword(next, hideable, 'Hidden') && !hideable.hidden) {

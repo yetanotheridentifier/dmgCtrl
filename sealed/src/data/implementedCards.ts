@@ -229,6 +229,14 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'SEC_009', name: 'Mon Mothma', front: true, back: true },
   { id: 'TWI_001', name: 'Nala Se', front: true, back: true },
   { id: 'TS26_5', name: 'Savage Opress', front: true, back: true },
+  { id: 'SEC_005', name: 'Satine Kryze', front: true, back: true },
+  { id: 'SEC_010', name: 'Dedra Meero', front: true, back: true },
+  { id: 'LAW_011', name: 'Darth Vader', front: true, back: true },
+  { id: 'LAW_016', name: 'The Client', front: true, back: true },
+  { id: 'SOR_013', name: 'Cassian Andor', front: true, back: true },
+  { id: 'SOR_004', name: 'Chirrut Îmwe', front: true, back: true },
+  { id: 'TS26_6', name: 'Rex', front: true, back: true },
+  { id: 'SEC_002', name: 'Jabba the Hutt', front: true, back: true },
 ]
 
 export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [

@@ -11,8 +11,9 @@ import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helpers/engineFixtures'
 import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
-import { createTokenUnit } from '../engine/effects'
-import { defeatUnit } from '../engine/combat'
+import { createTokenUnit, dealDamageToBase, giveToken } from '../engine/effects'
+import { dealDamageToUnit, defeatUnit } from '../engine/combat'
+import { baseDamageThisPhase, tokenCreatedThisPhase } from '../engine/types'
 import type { Action } from '../engine/actions'
 import type { EngineCard, GameState, LeaderState, PendingChoice, PhaseEvents, PlayerId, UnitState } from '../engine/types'
 
@@ -39,11 +40,13 @@ const SHIPPED = [
   'LAW_004', 'LOF_012', 'TWI_013', 'TWI_004', 'SHD_002', 'SOR_006', 'SHD_015', 'JTL_014',
   // E: constant abilities on the leader side
   'SOR_001', 'SHD_001', 'LAW_009', 'SEC_009', 'TWI_001', 'TS26_5',
+  // F: one small engine addition each
+  'SEC_005', 'SEC_010', 'LAW_011', 'LAW_016', 'SOR_013', 'SOR_004', 'TS26_6', 'SEC_002',
 ]
 /** Scoped by the triage but lifted out to the ticket that owns their blocker. */
 const LIFTED = [
   'JTL_001', 'JTL_003', 'JTL_011', 'JTL_012', 'JTL_015', 'JTL_017', 'JTL_018', 'LAW_010', 'SOR_008', 'SEC_011', 'TWI_017',
-  'SEC_003', 'LOF_001', 'SHD_006', 'SHD_010', 'SEC_001', 'SEC_006', 'LAW_003',
+  'SEC_003', 'LOF_001', 'SHD_006', 'SHD_010', 'SEC_001', 'SEC_006', 'LAW_003', 'LAW_017', 'SEC_012',
 ]
 
 const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])
@@ -97,6 +100,7 @@ const F: Record<string, EngineCard> = {
   OFF_VIL: src('OFF_VIL', { traits: ['OFFICIAL'], aspects: ['Aggression', 'Villainy'] }),
   CLONE: src('CLONE', { traits: ['CLONE'] }),
   CLONE_AGG: src('CLONE_AGG', { traits: ['CLONE'], aspects: ['Aggression'] }),
+  EV3: card({ id: 'EV3', type: 'event', cost: 3 }),
 }
 
 const unit = (instanceId: string, cardId: string, over: Partial<UnitState> = {}): UnitState =>
@@ -907,5 +911,134 @@ describe('leaders E: constant abilities while undeployed', () => {
     const d = back('TS26_5', { units: [unit('g', 'GRD')] })
     expect(unitKeywordValue(d, U(d, 'L')!, 'Raid')).toBe(3)
     expect(['L', 'g'].map(id => unitHasKeyword(d, U(d, id)!, 'Overwhelm'))).toEqual([true, true])
+  })
+})
+
+// ── F: one small engine addition each ─────────────────────────────────────────────────────────────
+
+describe('leaders F: cards that needed a small engine addition', () => {
+  it('Satine Kryze (SEC_005) heals up to 2 from a unit and deals that much to her base; deployed she has Restore 4', () => {
+    const s = front('SEC_005', { units: [unit('g', 'GRD', { damage: 3 }), unit('h', 'GRD', { damage: 1 }), unit('x', 'GRD')] })
+    const used = use(s)
+    expect(unitOffers(used)).toEqual(['g', 'h'])
+    const big = accept(used, { targetInstanceId: 'g' })
+    expect([U(big, 'g')!.damage, baseDamage(big, 'player')]).toEqual([1, 2])
+    const small = accept(use(s), { targetInstanceId: 'h' })
+    expect([U(small, 'h')!.damage, baseDamage(small, 'player')]).toEqual([0, 1])
+    const d = back('SEC_005')
+    expect(unitKeywordValue(d, U(d, 'L')!, 'Restore')).toBe(4)
+  })
+
+  it('Dedra Meero (SEC_010) makes an enemy unit\'s controller take 2 damage on it or let her draw; deployed she has Raid 2 with more cards in hand', () => {
+    const used = use(front('SEC_010', { deck: ['EV'] }, { units: [unit('e', 'GRD')] }))
+    expect(unitOffers(used)).toEqual(['e'])
+    const asked = accept(used, { targetInstanceId: 'e' })
+    expect(choice(asked)).toMatchObject({ kind: 'mayPayThen', controller: 'opponent' })
+    expect(asked.activePlayer).toBe('opponent')
+    expect(U(accept(asked), 'e')!.damage).toBe(2)
+    const refused = skip(asked)
+    expect(refused.players.player.hand).toEqual(['EV'])
+    expect(U(refused, 'e')!.damage).toBe(0)
+    const more = back('SEC_010', { hand: ['EV', 'EV'] }, { hand: ['EV'] })
+    expect(unitKeywordValue(more, U(more, 'L')!, 'Raid')).toBe(2)
+    const level = back('SEC_010', { hand: ['EV'] }, { hand: ['EV'] })
+    expect(unitHasKeyword(level, U(level, 'L')!, 'Raid')).toBe(false)
+  })
+
+  it('Darth Vader (LAW_011) discards a card to deal 1 to a unit or base; attacking he discards any number and deals that much', () => {
+    expect(usable(front('LAW_011', { units: [unit('g', 'GRD')] }))).toBe(false)
+    const used = use(front('LAW_011', { hand: ['EV'] }))
+    const paid = accept(used, { handIndex: 0 })
+    expect(amountOf(choice(paid))).toBe(1)
+    expect(baseOffers(paid)).toEqual(['opponent', 'player'])
+    const a = attack(back('LAW_011', { hand: ['EV', 'GRD'] }, { units: [unit('e', 'TOUGH')] }), 'L', 'e')
+    expect(cardOptions(a)).toEqual(['EV', 'GRD'])
+    expect(declinable(a)).toBe(true)
+    noChoice(skip(a))
+    const one = accept(a, { optionIndex: 0 })
+    expect(cardOptions(one)).toEqual(['GRD'])
+    const oneDone = skip(one)
+    expect(amountOf(choice(oneDone))).toBe(1)
+    const both = accept(one, { optionIndex: 0 })
+    expect(both.players.player.discard).toEqual(['EV', 'GRD'])
+    expect(amountOf(choice(both))).toBe(2)
+    expect(unitOffers(both)).toEqual(['L', 'e'])
+  })
+
+  it('a created token, a given token and a Shielded entry each count as creating a token this phase', () => {
+    const s = board({ units: [unit('g', 'GRD')] })
+    expect(tokenCreatedThisPhase(s, 'player')).toBe(false)
+    expect(tokenCreatedThisPhase(giveToken(s, 'g', TOKEN_SHIELD), 'player')).toBe(true)
+    expect(tokenCreatedThisPhase(createTokenUnit(s, 'opponent', TOKEN_MANDALORIAN), 'opponent')).toBe(true)
+  })
+
+  it('The Client (LAW_016) exhausts an enemy unit once you created a token this phase, from either side', () => {
+    const created = { phaseEvents: phaseEvents({ tokensCreated: ['player'] }) }
+    expect(usable(front('LAW_016', {}, { units: [unit('e', 'GRD')] }))).toBe(false)
+    const used = use(front('LAW_016', {}, { units: [unit('e', 'GRD'), unit('x', 'GRD', { exhausted: true })] }, created))
+    expect(unitOffers(used)).toEqual(['e'])
+    expect(declinable(used)).toBe(false)
+    noChoice(attack(back('LAW_016', {}, { units: [unit('e', 'TOUGH'), unit('e2', 'GRD')] }), 'L', 'e'))
+    const a = attack(back('LAW_016', {}, { units: [unit('e', 'TOUGH'), unit('e2', 'GRD'), unit('x', 'GRD', { exhausted: true })] }, created), 'L', 'e')
+    expect(unitOffers(a)).toEqual(['e', 'e2'])
+    expect(declinable(a)).toBe(false)
+  })
+
+  it("Cassian Andor (SOR_013) draws after 3 damage to an enemy base this phase; deployed, dealing damage to an enemy base he may draw, once each round", () => {
+    expect(usable(front('SOR_013', { deck: ['EV'] }, {}, { phaseEvents: phaseEvents({ baseDamageTaken: { opponent: 2 } }) }))).toBe(false)
+    const used = use(front('SOR_013', { deck: ['EV'] }, {}, { phaseEvents: phaseEvents({ baseDamageTaken: { opponent: 3 } }) }))
+    expect(readyCount(used, 'player')).toBe(9)
+    expect(used.players.player.hand).toEqual(['EV'])
+    const a = attack(back('SOR_013', { deck: ['EV', 'GRD'] }), 'L')
+    expect(choice(a).kind).toBe('mayPayThen')
+    const drew = accept(a)
+    expect(drew.players.player.hand).toEqual(['EV'])
+    noChoice(dealDamageToBase({ ...drew, activePlayer: 'player' }, 'opponent', 1))
+    expect(baseDamageThisPhase(drew, 'opponent')).toBe(F.SOR_013.power)
+  })
+
+  it('Chirrut Îmwe (SOR_004) gives a unit +0/+2 for this phase; deployed he survives no remaining HP until the regroup phase', () => {
+    const used = use(front('SOR_004', { units: [unit('g', 'GRD')] }))
+    expect(buffOf(choice(used))).toMatchObject({ power: 0, hp: 2 })
+    const hurt = dealDamageToUnit(back('SOR_004', {}, {}, { consecutivePasses: 1 }), 'L', 20)
+    expect(U(hurt, 'L')).toBeDefined()
+    const regroup = resolve(hurt, { type: 'pass' })
+    expect(regroup.phase).toBe('regroup')
+    expect(U(regroup, 'L')).toBeUndefined()
+  })
+
+  it('Rex (TS26_6) readies an exhausted enemy unit so the next event costs 1 less; deployed he may do it as he attacks, for 2 less', () => {
+    expect(usable(front('TS26_6', {}, { units: [unit('e', 'GRD')] }))).toBe(false)
+    const used = use(front('TS26_6', { hand: ['EV3', 'GRD'] }, { units: [unit('e', 'GRD', { exhausted: true })] }))
+    expect(unitOffers(used)).toEqual(['e'])
+    const readied = accept(used, { targetInstanceId: 'e' })
+    expect(U(readied, 'e')!.exhausted).toBe(false)
+    expect(effectiveCost(readied, 'player', F.EV3)).toBe(2)
+    expect(effectiveCost(readied, 'player', F.GRD)).toBe(2)
+    const played = resolve({ ...readied, activePlayer: 'player' }, { type: 'playEvent', handIndex: 0 })
+    expect(played.players.player.nextUnitGrants).toBeUndefined()
+    const a = attack(back('TS26_6', {}, { units: [unit('e', 'TOUGH'), unit('x', 'GRD', { exhausted: true })] }), 'L', 'e')
+    expect(unitOffers(a)).toEqual(['x'])
+    expect(declinable(a)).toBe(true)
+    expect(effectiveCost(accept(a, { targetInstanceId: 'x' }), 'player', F.EV3)).toBe(1)
+  })
+
+  it('Jabba the Hutt (SEC_002) has a damaged friendly unit deal 1, or 2 with 3 damage, to an enemy; deployed another friendly unit that survives damage may deal that much, once each round', () => {
+    const s = front('SEC_002', { units: [unit('d3', 'GRD', { damage: 3 }), unit('d1', 'GRD', { damage: 1 }), unit('x', 'GRD')] }, { units: [unit('e', 'TOUGH')] })
+    const used = use(s)
+    expect(unitOffers(used)).toEqual(['d1', 'd3'])
+    const hard = accept(used, { targetInstanceId: 'd3' })
+    expect(unitOffers(hard)).toEqual(['e'])
+    expect(U(accept(hard, { targetInstanceId: 'e' }), 'e')!.damage).toBe(2)
+    expect(U(accept(accept(use(s), { targetInstanceId: 'd1' }), { targetInstanceId: 'e' }), 'e')!.damage).toBe(1)
+    const d = back('SEC_002', { units: [unit('g', 'GRD')] }, { units: [unit('e', 'TOUGH')] })
+    const hit = dealDamageToUnit(d, 'g', 3)
+    expect(unitOffers(hit)).toEqual(['e'])
+    expect(declinable(hit)).toBe(true)
+    const dealt = accept(hit, { targetInstanceId: 'e' })
+    expect(U(dealt, 'e')!.damage).toBe(3)
+    noChoice(dealDamageToUnit(dealt, 'g', 1))
+    noChoice(dealDamageToUnit(d, 'L', 1))
+    expect(choice(dealDamageToUnit(skip(hit), 'g', 1)).kind).toBe('selectUnitThen')
   })
 })
