@@ -237,6 +237,12 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'SOR_004', name: 'Chirrut Îmwe', front: true, back: true },
   { id: 'TS26_6', name: 'Rex', front: true, back: true },
   { id: 'SEC_002', name: 'Jabba the Hutt', front: true, back: true },
+  // Experience tokens: G, both sides grant the token
+  { id: 'LOF_006', name: 'Supreme Leader Snoke', front: true, back: true },
+  { id: 'SHD_004', name: 'Rey', front: true, back: true },
+  { id: 'SOR_007', name: 'Grand Moff Tarkin', front: true, back: true },
+  { id: 'LAW_010', name: 'Leia Organa', front: true, back: true },
+  { id: 'SOR_008', name: 'Hera Syndulla', front: true, back: true },
 ]
 
 /**
@@ -257,6 +263,8 @@ export const IMPLEMENTED_BASES: UpgradeStatus[] = [
   { id: 'JTL_021', name: 'Colossus' },
   { id: 'JTL_024', name: 'Data Vault' },
   { id: 'JTL_025', name: 'Thermal Oscillator' },
+  // Experience tokens: G
+  { id: 'TS26_9', name: 'First Battle Memorial' },
 ]
 
 export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
@@ -641,6 +649,27 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   // Printed as an upgrade (see `cardDataCorrections.ts`), but the set data, and so the set totals
   // below, file it as an event. Counted where the totals count it.
   { id: 'SOR_215', name: 'Snapshot Reflexes' },
+  // Experience tokens: C, a token on each of several units
+  { id: 'SEC_124', name: 'Budget Scheming' },
+  { id: 'LOF_241', name: 'In the Shadows' },
+  { id: 'SOR_245', name: 'Medal Ceremony' },
+  { id: 'TS26_60', name: 'Take Charge' },
+  // Experience tokens: D, the number of tokens is decided as the ability resolves
+  { id: 'SEC_040', name: 'Emergency Powers' },
+  { id: 'SHD_039', name: 'Calculated Lethality' },
+  // Experience tokens: E, a token alongside something else
+  { id: 'LAW_165', name: 'Combat Exercise' },
+  { id: 'LOF_054', name: 'Calm in the Storm' },
+  { id: 'LAW_168', name: 'Haymaker' },
+  { id: 'LOF_239', name: 'Consumed by the Dark Side' },
+  { id: 'LOF_263', name: 'Last Words' },
+  { id: 'LOF_042', name: 'Always Two' },
+  { id: 'SOR_055', name: 'The Force Is With Me' },
+  { id: 'LOF_125', name: 'The Burden of Masters' },
+  { id: 'LOF_225', name: 'Three Lessons' },
+  { id: 'JTL_055', name: "You're All Clear, Kid" },
+  { id: 'JTL_091', name: 'Apology Accepted' },
+  { id: 'TS26_58', name: 'Backed by the Pykes' },
 ]
 
 /**
@@ -1280,6 +1309,68 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'LOF_180', name: 'Deceptive Shade' },
   { id: 'JTL_104', name: 'Raddus' },
   { id: 'JTL_032', name: 'Director Krennic' },
+  // Experience tokens: A, the token goes on the unit itself
+  { id: 'LAW_037', name: 'Han Solo' },
+  { id: 'LAW_055', name: 'Chopper' },
+  { id: 'LOF_092', name: 'Point Rain Reclaimer' },
+  { id: 'SHD_096', name: 'Maz Kanata' },
+  { id: 'LAW_147', name: 'Jaunty Light Freighter' },
+  { id: 'SEC_089', name: 'PreMor Personnel Carrier' },
+  { id: 'SEC_035', name: 'Darth Sion' },
+  { id: 'SOR_191', name: 'Vanguard Ace' },
+  { id: 'LAW_034', name: 'Chewbacca' },
+  { id: 'TS26_77', name: 'Deployed Droideka' },
+  { id: 'LAW_231', name: 'Weequay Pirate' },
+  { id: 'JTL_096', name: 'Blue Leader' },
+  // Experience tokens: B, a fixed number of tokens on a chosen unit
+  { id: 'SHD_040', name: 'Clan Wren Rescuer' },
+  { id: 'LAW_249', name: 'Black Sun Cabalist' },
+  { id: 'LAW_059', name: 'Highsinger' },
+  { id: 'SEC_095', name: 'Theed Security' },
+  { id: 'SHD_082', name: 'Outland TIE Vanguard' },
+  { id: 'SHD_258', name: 'Mandalorian Warrior' },
+  { id: 'SOR_231', name: 'TIE Advanced' },
+  { id: 'SOR_241', name: 'Wing Leader' },
+  { id: 'LAW_142', name: 'Scarif Lieutenant' },
+  { id: 'SOR_108', name: 'Vanguard Infantry' },
+  { id: 'LOF_095', name: 'Lor San Tekka' },
+  { id: 'SEC_027', name: "The Chancellor's Shuttle" },
+  { id: 'SOR_049', name: 'Obi-Wan Kenobi' },
+  { id: 'LAW_067', name: 'Jyn Erso' },
+  { id: 'TS26_54', name: 'Wartime Mercenaries' },
+  // Experience tokens: C, a token on each of several units
+  { id: 'SEC_252', name: 'Maarva Andor' },
+  { id: 'SOR_037', name: 'Academy Defense Walker' },
+  { id: 'LOF_055', name: 'Dume' },
+  { id: 'SHD_081', name: 'General Tagge' },
+  { id: 'SOR_080', name: 'General Tagge' },
+  { id: 'LOF_099', name: 'Paladin Training Corvette' },
+  // Experience tokens: D, the number of tokens is decided as the ability resolves
+  { id: 'LOF_255', name: 'Curious Flock' },
+  { id: 'SOR_035', name: 'Lieutenant Childsen' },
+  { id: 'SEC_260', name: "Inspector's Shuttle" },
+  { id: 'TS26_51', name: 'Lom Pyke' },
+  // Experience tokens: E, a token alongside something else
+  { id: 'LAW_144', name: 'Phantom' },
+  { id: 'LAW_257', name: 'Hidden Hand Supplier' },
+  { id: 'LAW_069', name: 'The Ghost' },
+  { id: 'SHD_099', name: 'Echo' },
+  // Experience tokens: F, attacks, reactions and activated Actions
+  { id: 'JTL_200', name: 'Shuttle Tydirium' },
+  { id: 'JTL_250', name: "Sabine's Masterpiece" },
+  { id: 'LAW_039', name: 'Latts Razzi' },
+  { id: 'LAW_073', name: 'Patient Hunter' },
+  { id: 'LAW_115', name: 'Rickety Quadjumper' },
+  { id: 'SHD_057', name: 'Rickety Quadjumper' },
+  { id: 'LAW_152', name: 'C-3P0' },
+  { id: 'LOF_046', name: 'Ezra Bridger' },
+  { id: 'LOF_065', name: 'Watto' },
+  { id: 'LOF_258', name: 'Peli Motto' },
+  { id: 'SEC_051', name: 'Bo-Katan Kryze' },
+  { id: 'SHD_045', name: 'Rose Tico' },
+  { id: 'SHD_141', name: 'Kylo Ren' },
+  { id: 'SOR_036', name: 'Gideon Hask' },
+  { id: 'SOR_094', name: 'Bail Organa' },
 ]
 
 /**
@@ -1394,10 +1485,11 @@ export const PLAYABLE_AS_PRINTED: Record<string, Partial<TypeCounts>> = {
 }
 
 /**
- * Tokens the engine creates, per set. ASH counts Shield, Advantage and Mandalorian; Experience is
- * printed but no card grants it, so ASH reads 3 of 4.
+ * Tokens the engine creates, per set. ASH counts all four it prints: Shield, Advantage, Mandalorian
+ * and Experience. The other sets are not counted here yet, so they read 0 of the tokens they print
+ * even where the engine creates them.
  */
-const TOKENS_BUILT: Record<string, number> = { ASH: 3 }
+const TOKENS_BUILT: Record<string, number> = { ASH: 4 }
 
 /** The set a card id belongs to: the code before its underscore (`TS26_012` is TS26). */
 export function setOf(id: string): string {

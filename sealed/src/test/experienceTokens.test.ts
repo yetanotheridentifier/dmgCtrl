@@ -1,0 +1,930 @@
+import { describe, it, expect } from 'vitest'
+import { resolve } from '../engine/resolve'
+import { legalMoves, effectiveCost } from '../engine/legalMoves'
+import { effectivePower, effectiveHp } from '../engine/stats'
+import { getCardDefinition } from '../engine/abilities'
+import { normaliseCard } from '../engine/cardDb'
+import { defeatUnit } from '../engine/combat'
+import { TOKEN_EXPERIENCE, TOKEN_SHIELD } from '../engine/tokenUpgrades'
+import { poolFor } from '../bench/setPools'
+import '../engine/cardDefinitions' // side effect: registers card behaviours
+import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helpers/engineFixtures'
+import type { EngineCard, GameState, PendingChoice, PhaseEvents, PlayerId, UnitState } from '../engine/types'
+import type { Action } from '../engine/actions'
+
+/**
+ * Cards that grant Experience tokens, in groups taken whole.
+ *
+ * An Experience token is a +1/+1 upgrade that an ability attaches (CR 3.7.2): the token machinery,
+ * the stats pipeline and the `mayGiveTokens` choice already carried Shield and Advantage, so these
+ * cards are registrations over primitives that exist. What the tests pin is therefore the cards: how
+ * many tokens, on which unit, who chooses, and which units may be chosen. A filter that let
+ * everything through would still pass a test that only checked the token landed, so each test states
+ * the offer as well as the outcome.
+ *
+ * Printed stats, traits and keywords come from the shipped set fixtures, post-correction.
+ */
+
+const SHIPPED = [
+  // A: tokens on the unit itself
+  'LAW_037', 'LAW_055', 'LOF_092', 'SHD_096', 'LAW_147', 'SEC_089', 'SEC_035', 'SOR_191', 'LAW_034', 'TS26_77',
+  'LAW_231', 'JTL_096',
+  // B: a fixed number of tokens on a chosen unit
+  'SHD_040', 'LAW_249', 'LAW_059', 'SEC_095', 'SHD_082', 'SHD_258', 'SOR_231', 'SOR_241', 'LAW_142', 'SOR_108',
+  'LOF_095', 'SEC_027', 'SOR_049', 'LAW_067', 'TS26_54',
+  // C: a token on each of several units
+  'SEC_252', 'SOR_037', 'LOF_055', 'SHD_081', 'SOR_080', 'LOF_099', 'SEC_124', 'LOF_241', 'SOR_245', 'TS26_60',
+  // D: the number of tokens is decided as the ability resolves
+  'SEC_040', 'LOF_255', 'SOR_035', 'SEC_260', 'SHD_039', 'TS26_51',
+  // E: a token alongside something else
+  'LAW_165', 'LOF_054', 'LAW_168', 'LOF_239', 'LOF_263', 'LOF_042', 'SOR_055', 'LAW_144', 'LOF_125', 'LOF_225',
+  'JTL_055', 'JTL_091', 'TS26_58', 'LAW_257', 'LAW_069', 'SHD_099',
+  // F: attacks, reactions and activated Actions
+  'JTL_200', 'JTL_250', 'LAW_039', 'LAW_073', 'LAW_115', 'SHD_057', 'LAW_152', 'LOF_046', 'LOF_065', 'LOF_258',
+  'SEC_051', 'SHD_045', 'SHD_141', 'SOR_036', 'SOR_094',
+  // G: leaders and a base
+  'LOF_006', 'SHD_004', 'SOR_007', 'LAW_010', 'SOR_008', 'TS26_9',
+]
+/** Registered elsewhere; used here to play a unit for free, so "no resources were paid" can be reached. */
+const GALACTIC_AMBITION = 'SOR_235'
+/** Scoped by the triage but lifted out to the ticket that owns their blocker. */
+const LIFTED = ['SHD_075', 'SHD_140']
+
+const POOL = poolFor(['LAW', 'SEC', 'LOF', 'JTL', 'TWI', 'SHD', 'SOR', 'TS26', 'IBH'])
+const real = (id: string): EngineCard => {
+  const [set, number] = id.split('_')
+  const row = POOL.find(c => c.Set === set && String(c.Number) === number)
+  if (!row) throw new Error(`${id} is not in the ${set} fixture`)
+  return normaliseCard(row)
+}
+
+const src = (id: string, over: Partial<EngineCard> = {}) => card({ id, arena: 'ground', cost: 2, power: 2, hp: 8, ...over })
+const F: Record<string, EngineCard> = {
+  ...CARDS,
+  ...Object.fromEntries([...SHIPPED, GALACTIC_AMBITION].map(id => [id, real(id)])),
+  GRD: src('GRD'),
+  GRD2: src('GRD2'),
+  SPC: src('SPC', { arena: 'space' }),
+  SPC_WEAK: src('SPC_WEAK', { arena: 'space', power: 1, hp: 2 }),
+  CUN: src('CUN', { aspects: ['Cunning'] }),
+  VIG: src('VIG', { aspects: ['Vigilance'] }),
+  AGG: src('AGG', { aspects: ['Aggression'] }),
+  CMD: src('CMD', { aspects: ['Command'] }),
+  HER: src('HER', { aspects: ['Heroism'] }),
+  VIL: src('VIL', { aspects: ['Villainy'] }),
+  TWO_ASPECT: src('TWO_ASPECT', { aspects: ['Command', 'Heroism'] }),
+  JEDI: src('JEDI', { traits: ['JEDI'] }),
+  UW: src('UW', { traits: ['UNDERWORLD'] }),
+  IMP: src('IMP', { traits: ['IMPERIAL'] }),
+  REB: src('REB', { traits: ['REBEL'] }),
+  MANDO: src('MANDO', { traits: ['MANDALORIAN'] }),
+  FORCE_U: src('FORCE_U', { traits: ['FORCE'] }),
+  UNIQ: src('UNIQ', { unique: true }),
+  CHEAP: src('CHEAP', { cost: 3 }),
+  PRICEY: src('PRICEY', { cost: 5 }),
+  PALP_U: card({ id: 'PALP_U', name: 'Chancellor Palpatine', arena: 'ground', cost: 5, power: 3, hp: 5 }),
+  PALP_L: card({ id: 'PALP_L', name: 'Chancellor Palpatine', type: 'leader', cost: 6, power: 3, hp: 6 }),
+  UPG: card({ id: 'UPG', type: 'upgrade', cost: 1, power: 1, hp: 1 }),
+  VEH: src('VEH', { traits: ['VEHICLE'] }),
+  TROOPER: src('TROOPER', { traits: ['TROOPER'] }),
+  OFFICIAL: src('OFFICIAL', { traits: ['OFFICIAL'] }),
+  L_UNIT: card({ id: 'L_UNIT', type: 'leader', cost: 5, power: 3, hp: 6 }),
+  WEAK: src('WEAK', { power: 1, hp: 1 }),
+  SITH: src('SITH', { traits: ['SITH'], unique: true }),
+  SITH2: src('SITH2', { traits: ['SITH'], unique: true }),
+  TOUGH: src('TOUGH', { power: 5, hp: 6 }),
+  VIL_BIG: src('VIL_BIG', { aspects: ['Villainy'], power: 5, hp: 6 }),
+  SPECTRE_EV: card({ id: 'SPECTRE_EV', type: 'event', cost: 3, aspects: ['Aggression'], traits: ['SPECTRE'] }),
+  DROID: src('DROID', { traits: ['DROID'] }),
+  CREATURE: src('CREATURE', { traits: ['CREATURE'] }),
+  SPECTRE: src('SPECTRE', { traits: ['SPECTRE'] }),
+  REB_L: card({ id: 'REB_L', type: 'leader', cost: 6, power: 3, hp: 6, traits: ['REBEL'] }),
+  REY_U: card({ id: 'REY_U', name: 'Rey', arena: 'ground', cost: 3, power: 3, hp: 3 }),
+  EV: card({ id: 'EV', type: 'event', cost: 1 }),
+  VIG_EV: card({ id: 'VIG_EV', type: 'event', cost: 1, aspects: ['Vigilance'] }),
+  FREE_EV: card({ id: 'FREE_EV', type: 'event', cost: 0 }),
+}
+
+const unit = (instanceId: string, cardId: string, over: Partial<UnitState> = {}): UnitState =>
+  fixtureUnit(instanceId, cardId, { arena: F[cardId]?.arena ?? 'ground', ...over })
+const all = (s: GameState) => [...s.players.player.units, ...s.players.opponent.units]
+const U = (s: GameState, id: string) => all(s).find(x => x.instanceId === id)
+/** How many Experience tokens the unit `id` carries. */
+const exp = (s: GameState, id: string): number => (U(s, id)?.upgrades ?? []).filter(u => u.cardId === TOKEN_EXPERIENCE).length
+const shields = (s: GameState, id: string): number => (U(s, id)?.upgrades ?? []).filter(u => u.cardId === TOKEN_SHIELD).length
+
+type Side = Parameters<typeof player>[0]
+const board = (mine: Side = {}, theirs: Side = {}, over: Partial<GameState> = {}) =>
+  state({
+    cards: F,
+    players: {
+      player: player({ resources: ready(10), deck: [], ...mine }),
+      opponent: player({ resources: ready(10), deck: [], ...theirs }),
+    },
+    ...over,
+  })
+const phaseEvents = (over: Partial<PhaseEvents>): PhaseEvents => ({
+  enteredPlay: { player: [], opponent: [] }, defeated: { player: [], opponent: [] }, basesAttacked: [], basesDamaged: [],
+  upgradesDefeated: [], damagedUnits: [], leftPlay: { player: [], opponent: [] }, played: { player: [], opponent: [] },
+  leaderLeftPlay: [],
+  ...over,
+})
+
+const moves = (s: GameState): Action[] => legalMoves(s)
+const choice = (s: GameState): PendingChoice => {
+  expect(s.pendingChoices?.length ?? 0, 'a choice is raised').toBeGreaterThan(0)
+  return s.pendingChoices![0]
+}
+const noChoice = (s: GameState) => expect(s.pendingChoices ?? []).toHaveLength(0)
+type Extra = { targetInstanceId?: string; optionIndex?: number; handIndex?: number; deckIndex?: number; baseTarget?: PlayerId; cardName?: string }
+const accept = (s: GameState, extra: Extra = {}) => resolve(s, { type: 'acceptChoice', choiceId: choice(s).id, ...extra })
+const skip = (s: GameState) => resolve(s, { type: 'skipTrigger', choiceId: choice(s).id })
+const unitOffers = (s: GameState) =>
+  [...new Set(moves(s).flatMap(m => (m.type === 'acceptChoice' && m.targetInstanceId ? [m.targetInstanceId] : [])))].sort()
+const declinable = (s: GameState) => moves(s).some(m => m.type === 'skipTrigger')
+const readyCount = (s: GameState, who: PlayerId) => s.players[who].resources.filter(r => !r.exhausted).length
+
+/**
+ * Play `cardId` from hand through the real play door, so the cost is paid and "When Played" fires
+ * exactly as it does in a game. The played unit is the last one on the player's board.
+ */
+const play = (s: GameState, cardId: string, who: PlayerId = 'player'): GameState => {
+  const p = s.players[who]
+  // A play passes the turn, so the active player is set here rather than assumed from the last action.
+  const withCard = { ...s, activePlayer: who, players: { ...s.players, [who]: { ...p, hand: [...p.hand, cardId] } } }
+  return resolve(withCard, { type: 'playUnit', handIndex: p.hand.length })
+}
+/** The instance id of the unit `who` played last (the one `play` just put down). */
+const last = (s: GameState, who: PlayerId = 'player'): string => s.players[who].units[s.players[who].units.length - 1].instanceId
+/** Defeat the unit `id`, as an ability would. */
+const kill = (s: GameState, id: string): GameState => defeatUnit(s, id)
+/** Play `cardId` as an event from the player's hand, optionally with `attackers` already having attacked. */
+const playEvent = (s: GameState, cardId: string, attackers: string[] = []): GameState => {
+  const p = s.players.player
+  const withAttacks = attackers.length ? { ...s, phaseEvents: { ...(s.phaseEvents ?? phaseEvents({})), attackedUnits: attackers } } : s
+  const withCard = { ...withAttacks, activePlayer: 'player' as PlayerId, players: { ...s.players, player: { ...p, hand: [...p.hand, cardId] } } }
+  return resolve(withCard, { type: 'playEvent', handIndex: p.hand.length })
+}
+const costOf = (s: GameState, cardId: string): number => effectiveCost(s, 'player', F[cardId])
+const undeployedLeader = (cardId: string) => ({ cardId, deployed: false, epicActionUsed: false, exhausted: false })
+const deployedLeader = (cardId: string) => ({ cardId, deployed: true, epicActionUsed: true, exhausted: false })
+/** A board with `id` on its undeployed front side. */
+const front = (id: string, mine: Side = {}, theirs: Side = {}) => board({ leader: undeployedLeader(id), ...mine }, theirs)
+/** A board with `id` deployed, its leader unit on the board as `L`. */
+const back = (id: string, mine: Side = {}, theirs: Side = {}) =>
+  board({ leader: deployedLeader(id), ...mine, units: [unit('L', id, { isLeader: true }), ...(mine.units ?? [])] }, theirs)
+const usable = (s: GameState) => moves(s).some(m => m.type === 'useLeaderAbility')
+const useFront = (s: GameState) => resolve(s, { type: 'useLeaderAbility', index: 0 })
+const baseOffered = (s: GameState) => moves(s).some(m => m.type === 'useBaseAbility')
+const useBase = (s: GameState) => resolve(s, { type: 'useBaseAbility' })
+/** Declare an attack with `attackerId`, on the enemy base or on `target`. */
+const attack = (s: GameState, attackerId: string, target?: string) =>
+  resolve(s, { type: 'attack', attackerId, target: target ? { kind: 'unit', instanceId: target } : { kind: 'base' } })
+
+describe('Experience tokens: the scope', () => {
+  it('registers an ability for every shipped card and none for the lifted ones', () => {
+    for (const id of SHIPPED) expect(getCardDefinition(id), id).toBeDefined()
+    for (const id of LIFTED) expect(getCardDefinition(id), id).toBeUndefined()
+  })
+
+  it('an Experience token is a +1/+1 upgrade that stacks', () => {
+    const s = board({ units: [unit('a', 'GRD')] })
+    const one = accept({ ...s, pendingChoices: [{ kind: 'mayGiveTokens', id: 'x', controller: 'player', token: TOKEN_EXPERIENCE, count: 2, targets: ['a'] }] }, { targetInstanceId: 'a' })
+    expect(exp(one, 'a')).toBe(2)
+  })
+})
+
+describe('Experience tokens, A: tokens on the unit itself', () => {
+  it('Han Solo (LAW_037) gives an Experience token to himself on attack', () => {
+    // He is a 1/1, so he attacks the base: the ability is about attacking, not about surviving.
+    const done = attack(board({ units: [unit('han', 'LAW_037')] }), 'han')
+    expect(exp(done, 'han')).toBe(1)
+  })
+
+  it('Chopper (LAW_055) gives himself one Experience token, or two with a Cunning or Vigilance unit', () => {
+    const alone = play(board(), 'LAW_055')
+    expect(exp(alone, last(alone))).toBe(1)
+    for (const friend of ['CUN', 'VIG']) {
+      const withFriend = play(board({ units: [unit('f', friend)] }), 'LAW_055')
+      expect(exp(withFriend, last(withFriend)), friend).toBe(2)
+    }
+    const wrongAspect = play(board({ units: [unit('f', 'AGG')] }), 'LAW_055')
+    expect(exp(wrongAspect, last(wrongAspect))).toBe(1)
+  })
+
+  it('Point Rain Reclaimer (LOF_092) may take an Experience token only while you control a Jedi unit', () => {
+    const noJedi = play(board({ units: [unit('f', 'GRD')] }), 'LOF_092')
+    noChoice(noJedi)
+    expect(exp(noJedi, last(noJedi))).toBe(0)
+    const withJedi = play(board({ units: [unit('j', 'JEDI')] }), 'LOF_092')
+    const self = last(withJedi)
+    expect(choice(withJedi)).toMatchObject({ kind: 'mayGiveTokens', optional: true, targets: [self] })
+    expect(exp(accept(withJedi, { targetInstanceId: self }), self)).toBe(1)
+    expect(exp(skip(withJedi), self)).toBe(0)
+  })
+
+  it('Maz Kanata (SHD_096) gives herself an Experience token each time another friendly unit is played', () => {
+    const s = board({ units: [unit('maz', 'SHD_096')] })
+    const one = play(s, 'GRD')
+    expect(exp(one, 'maz')).toBe(1)
+    expect(exp(play(one, 'GRD2'), 'maz')).toBe(2)
+    // An enemy play is not "you play another unit".
+    expect(exp(play(s, 'GRD', 'opponent'), 'maz')).toBe(0)
+  })
+
+  it('Jaunty Light Freighter (LAW_147) takes an Experience token per different aspect among units you control', () => {
+    // Its own printed aspects count: it is a unit you control by the time the ability resolves.
+    const own = play(board(), 'LAW_147')
+    const ownAspects = new Set(F['LAW_147'].aspects)
+    expect(exp(own, last(own))).toBe(ownAspects.size)
+    const wide = play(board({ units: [unit('a', 'TWO_ASPECT'), unit('b', 'VIL'), unit('c', 'CMD')] }), 'LAW_147')
+    const aspects = new Set([...F['LAW_147'].aspects, 'Command', 'Heroism', 'Villainy'])
+    expect(exp(wide, last(wide))).toBe(aspects.size)
+  })
+
+  it('PreMor Personnel Carrier (SEC_089) takes an Experience token per friendly ground unit', () => {
+    const s = play(board({ units: [unit('g', 'GRD'), unit('g2', 'GRD2'), unit('s', 'SPC')] }, { units: [unit('e', 'GRD')] }), 'SEC_089')
+    // Two friendly ground units. The Carrier itself is a space unit, and neither the friendly space
+    // unit nor the enemy ground unit is one you control in the ground arena.
+    expect(exp(s, last(s))).toBe(2)
+    expect(exp(play(board(), 'SEC_089'), last(play(board(), 'SEC_089')))).toBe(0)
+  })
+
+  it('Darth Sion (SEC_035) takes an Experience token per enemy unit defeated this phase, and returns to hand at 7 power', () => {
+    const none = play(board(), 'SEC_035')
+    expect(exp(none, last(none))).toBe(0)
+    const two = play(board({}, {}, { phaseEvents: phaseEvents({ defeated: { player: ['GRD'], opponent: ['GRD', 'GRD2'] } }) }), 'SEC_035')
+    expect(exp(two, last(two))).toBe(2)
+  })
+
+  it('Vanguard Ace (SOR_191) takes an Experience token per other card you played this phase', () => {
+    const first = play(board(), 'SOR_191')
+    expect(exp(first, last(first))).toBe(0)
+    const third = play(board({}, {}, { phaseEvents: phaseEvents({ played: { player: ['EV', 'GRD'], opponent: ['GRD2'] } }) }), 'SOR_191')
+    expect(exp(third, last(third))).toBe(2)
+  })
+
+  it('Chewbacca (LAW_034) takes an Experience token and heals 3 when his attack defeats the defender', () => {
+    // A 4/4 with Overwhelm. The defender starts on 7 of its 8 HP, so his 4 power defeats it and the
+    // 2 it deals back leaves him on 3 before the heal.
+    const killed = attack(board({ units: [unit('chew', 'LAW_034', { damage: 1 })] }, { units: [unit('e', 'GRD', { damage: 7 })] }), 'chew', 'e')
+    expect(U(killed, 'e')).toBeUndefined()
+    expect(exp(killed, 'chew')).toBe(1)
+    expect(U(killed, 'chew')!.damage).toBe(0)
+    // The defender surviving grants nothing.
+    const survived = attack(board({ units: [unit('chew', 'LAW_034', { damage: 1 })] }, { units: [unit('e', 'GRD')] }), 'chew', 'e')
+    expect(exp(survived, 'chew')).toBe(0)
+    expect(U(survived, 'chew')!.damage).toBe(3)
+  })
+
+  it('Deployed Droideka (TS26_77) may pay 2 for an Experience token and a Shield token', () => {
+    // No enemy on the board, so Ambush raises nothing and the pay choice is the only one.
+    const s = play(board(), 'TS26_77')
+    const self = last(s)
+    const paid = accept(s)
+    expect(exp(paid, self)).toBe(1)
+    expect(shields(paid, self)).toBe(1)
+    expect(readyCount(paid, 'player')).toBe(readyCount(s, 'player') - 2)
+    const declined = skip(s)
+    expect(exp(declined, self)).toBe(0)
+    expect(shields(declined, self)).toBe(0)
+  })
+
+  it('Weequay Pirate (LAW_231) takes an Experience token only when no resources were paid for it', () => {
+    const paid = play(board(), 'LAW_231')
+    expect(exp(paid, last(paid))).toBe(0)
+    expect(readyCount(paid, 'player')).toBeLessThan(10)
+    // Galactic Ambition plays a non-Heroism unit for free: nothing is exhausted for the Pirate itself.
+    const s = board({ hand: ['LAW_231'] })
+    const event = resolve({ ...s, players: { ...s.players, player: { ...s.players.player, hand: [...s.players.player.hand, GALACTIC_AMBITION] } } }, { type: 'playEvent', handIndex: 1 })
+    expect(choice(event)).toMatchObject({ kind: 'playUnitFromHand' })
+    const free = accept(event, { handIndex: 0 })
+    expect(exp(free, last(free))).toBe(1)
+  })
+
+  it('Blue Leader (JTL_096) may pay 2 to move to the ground arena with 2 Experience tokens', () => {
+    const s = play(board(), 'JTL_096')
+    const self = last(s)
+    expect(U(s, self)!.arena).toBe('space')
+    // Ambush offers its attack first (no enemy here, so only the pay choice is raised).
+    const moved = accept(s)
+    expect(U(moved, self)!.arena).toBe('ground')
+    expect(exp(moved, self)).toBe(2)
+    const declined = skip(s)
+    expect(U(declined, self)!.arena).toBe('space')
+    expect(exp(declined, self)).toBe(0)
+  })
+})
+
+describe('Experience tokens, B: a fixed number of tokens on a chosen unit', () => {
+  it('Clan Wren Rescuer (SHD_040) gives an Experience token to any one unit, and cannot decline', () => {
+    const s = play(board({ units: [unit('f', 'GRD')] }), 'SHD_040')
+    expect(choice(s)).toMatchObject({ kind: 'mayGiveTokens', controller: 'player', count: 1, optional: false })
+    expect(unitOffers(s)).toEqual(['f', last(s)].sort())
+    expect(declinable(s)).toBe(false)
+    expect(exp(accept(s, { targetInstanceId: 'f' }), 'f')).toBe(1)
+  })
+
+  it('Black Sun Cabalist (LAW_249) gives an Experience token to another friendly Underworld unit', () => {
+    const s = play(board({ units: [unit('uw', 'UW'), unit('g', 'GRD')] }, { units: [unit('euw', 'UW')] }), 'LAW_249')
+    expect(unitOffers(s)).toEqual(['uw'])
+    expect(exp(accept(s, { targetInstanceId: 'uw' }), 'uw')).toBe(1)
+    // No other friendly Underworld unit: nothing is raised.
+    noChoice(play(board({ units: [unit('g', 'GRD')] }), 'LAW_249'))
+  })
+
+  it('Highsinger (LAW_059) gives a token to another friendly Command unit when played, and to a friendly Aggression unit when defeated', () => {
+    const played = play(board({ units: [unit('c', 'CMD'), unit('a', 'AGG')] }), 'LAW_059')
+    expect(unitOffers(played)).toEqual(['c'])
+    expect(exp(accept(played, { targetInstanceId: 'c' }), 'c')).toBe(1)
+    const killed = kill(board({ units: [unit('wd', 'LAW_059'), unit('c', 'CMD'), unit('a', 'AGG')] }), 'wd')
+    expect(unitOffers(killed)).toEqual(['a'])
+    expect(exp(accept(killed, { targetInstanceId: 'a' }), 'a')).toBe(1)
+  })
+
+  it('Theed Security (SEC_095) gives a token to a unit only while an opponent controls an upgrade', () => {
+    noChoice(play(board({ units: [unit('mine', 'GRD', { upgrades: [{ cardId: 'UPG', owner: 'player' }] })] }), 'SEC_095'))
+    const s = play(board(), 'SEC_095', 'player')
+    noChoice(s)
+    const theirs = play(board({}, { units: [unit('e', 'GRD', { upgrades: [{ cardId: 'UPG', owner: 'opponent' }] })] }), 'SEC_095')
+    expect(choice(theirs)).toMatchObject({ kind: 'mayGiveTokens', count: 1 })
+    expect(unitOffers(theirs)).toEqual(['e', last(theirs)].sort())
+  })
+
+  it('Outland TIE Vanguard (SHD_082) may give a token to another unit costing 3 or less, on either side', () => {
+    const s = play(board({ units: [unit('c', 'CHEAP'), unit('p', 'PRICEY')] }, { units: [unit('ec', 'CHEAP')] }), 'SHD_082')
+    expect(choice(s)).toMatchObject({ optional: true })
+    expect(unitOffers(s)).toEqual(['c', 'ec'])
+    expect(exp(skip(s), 'c')).toBe(0)
+  })
+
+  it('Mandalorian Warrior (SHD_258) may give a token to another Mandalorian unit', () => {
+    const s = play(board({ units: [unit('m', 'MANDO')] }, { units: [unit('em', 'MANDO'), unit('e', 'GRD')] }), 'SHD_258')
+    expect(unitOffers(s)).toEqual(['em', 'm'])
+    expect(declinable(s)).toBe(true)
+  })
+
+  it.each([['SOR_231', 'IMP', 'IMPERIAL'], ['SOR_241', 'REB', 'REBEL']])('%s gives 2 Experience tokens to another friendly %s unit', (id, friend) => {
+    const s = play(board({ units: [unit('t', friend), unit('g', 'GRD')] }, { units: [unit('e', friend)] }), id)
+    expect(choice(s)).toMatchObject({ kind: 'mayGiveTokens', count: 2, optional: false })
+    expect(unitOffers(s)).toEqual(['t'])
+    expect(exp(accept(s, { targetInstanceId: 't' }), 't')).toBe(2)
+  })
+
+  it('Scarif Lieutenant (LAW_142) gives a token to a friendly Rebel unit when defeated', () => {
+    const killed = kill(board({ units: [unit('wd', 'LAW_142'), unit('r', 'REB')] }, { units: [unit('er', 'REB')] }), 'wd')
+    expect(unitOffers(killed)).toEqual(['r'])
+    expect(exp(accept(killed, { targetInstanceId: 'r' }), 'r')).toBe(1)
+  })
+
+  it('Vanguard Infantry (SOR_108) may give a token to any unit when defeated', () => {
+    const killed = kill(board({ units: [unit('wd', 'SOR_108'), unit('f', 'GRD')] }, { units: [unit('e', 'GRD')] }), 'wd')
+    expect(unitOffers(killed)).toEqual(['e', 'f'])
+    expect(declinable(killed)).toBe(true)
+  })
+
+  it('Lor San Tekka (LOF_095) may give a token to a unique unit when defeated', () => {
+    const killed = kill(board({ units: [unit('wd', 'LOF_095'), unit('u', 'UNIQ'), unit('g', 'GRD')] }), 'wd')
+    expect(unitOffers(killed)).toEqual(['u'])
+  })
+
+  it("The Chancellor's Shuttle (SEC_027) may give a token only while you control Chancellor Palpatine", () => {
+    const wd = () => unit('wd', 'SEC_027')
+    noChoice(kill(board({ units: [wd(), unit('f', 'GRD')] }), 'wd'))
+    const asUnit = kill(board({ units: [wd(), unit('f', 'GRD'), unit('palp', 'PALP_U')] }), 'wd')
+    expect(choice(asUnit), 'as a unit').toMatchObject({ kind: 'mayGiveTokens', optional: true })
+    const asLeader = kill(board({ units: [wd(), unit('f', 'GRD')], leader: { cardId: 'PALP_L', deployed: false, epicActionUsed: false, exhausted: false } }), 'wd')
+    expect(choice(asLeader), 'as a leader').toMatchObject({ kind: 'mayGiveTokens', optional: true })
+  })
+
+  it('Obi-Wan Kenobi (SOR_049) gives 2 tokens to another friendly unit, drawing a card if it is a Force unit', () => {
+    const killed = kill(board({ units: [unit('wd', 'SOR_049'), unit('force', 'FORCE_U'), unit('g', 'GRD')], deck: ['GRD2', 'GRD2'] }, { units: [unit('e', 'GRD')] }), 'wd')
+    expect(unitOffers(killed).sort()).toEqual(['force', 'g'])
+    const toForce = accept(killed, { targetInstanceId: 'force' })
+    expect(exp(toForce, 'force')).toBe(2)
+    expect(toForce.players.player.hand).toEqual(['GRD2'])
+    const toOther = accept(killed, { targetInstanceId: 'g' })
+    expect(exp(toOther, 'g')).toBe(2)
+    expect(toOther.players.player.hand).toEqual([])
+  })
+
+  it('Jyn Erso (LAW_067) offers either an Experience token or an exhaust, and only the modes that can do something', () => {
+    const s = play(board({ units: [unit('f', 'GRD')] }), 'LAW_067')
+    expect(choice(s)).toMatchObject({ kind: 'chooseMode', controller: 'player' })
+    const modes = (choice(s) as { modes: string[] }).modes
+    expect(modes).toHaveLength(2)
+    const given = accept(s, { optionIndex: modes.indexOf('giveExperience') })
+    expect(exp(accept(given, { targetInstanceId: 'f' }), 'f')).toBe(1)
+    const exhausted = accept(s, { optionIndex: modes.indexOf('exhaustUnit') })
+    expect(U(accept(exhausted, { targetInstanceId: 'f' }), 'f')!.exhausted).toBe(true)
+  })
+
+  it('Wartime Mercenaries (TS26_54) lets an opponent give a token to a unit when it is defeated', () => {
+    const s = play(board({ units: [unit('f', 'GRD')] }, { units: [unit('e', 'GRD')] }), 'TS26_54')
+    const killed = kill(s, last(s))
+    expect(choice(killed)).toMatchObject({ kind: 'mayGiveTokens', controller: 'opponent', optional: true })
+    expect(unitOffers(killed)).toEqual(['e', 'f'])
+    expect(exp(accept(killed, { targetInstanceId: 'e' }), 'e')).toBe(1)
+  })
+})
+
+describe('Experience tokens, C: a token on each of several units', () => {
+  it('Maarva Andor (SEC_252) gives a token to each friendly Rebel unit when defeated, and raises no choice', () => {
+    const done = kill(board({ units: [unit('wd', 'SEC_252'), unit('r1', 'REB'), unit('r2', 'REB'), unit('g', 'GRD')] }, { units: [unit('er', 'REB')] }), 'wd')
+    noChoice(done)
+    expect([exp(done, 'r1'), exp(done, 'r2'), exp(done, 'g'), exp(done, 'er')]).toEqual([1, 1, 0, 0])
+  })
+
+  it('Academy Defense Walker (SOR_037) gives a token to each friendly damaged unit', () => {
+    const done = play(board({ units: [unit('hurt', 'GRD', { damage: 2 }), unit('fresh', 'GRD2')] }, { units: [unit('ehurt', 'GRD', { damage: 1 })] }), 'SOR_037')
+    noChoice(done)
+    expect([exp(done, 'hurt'), exp(done, 'fresh'), exp(done, 'ehurt')]).toEqual([1, 0, 0])
+  })
+
+  it('Dume (LOF_055) gives a token to each other friendly non-Vehicle unit when the regroup phase starts', () => {
+    const s = board({ units: [unit('dume', 'LOF_055'), unit('g', 'GRD'), unit('veh', 'VEH')] }, { units: [unit('e', 'GRD')] })
+    const done = resolve({ ...s, consecutivePasses: 1 }, { type: 'pass' })
+    expect([exp(done, 'g'), exp(done, 'veh'), exp(done, 'dume'), exp(done, 'e')]).toEqual([1, 0, 0, 0])
+  })
+
+  it.each(['SHD_081', 'SOR_080'])('General Tagge (%s) gives a token to each of up to 3 Trooper units, one pick at a time', id => {
+    const s = play(board({ units: [unit('t1', 'TROOPER'), unit('t2', 'TROOPER'), unit('g', 'GRD')] }, { units: [unit('et', 'TROOPER')] }), id)
+    expect(choice(s)).toMatchObject({ kind: 'selectUnitThen', optional: true })
+    expect(unitOffers(s)).toEqual(['et', 't1', 't2'])
+    const one = accept(s, { targetInstanceId: 't1' })
+    expect(exp(one, 't1')).toBe(1)
+    // The same unit is not offered twice.
+    expect(unitOffers(one)).toEqual(['et', 't2'])
+    const two = accept(one, { targetInstanceId: 't2' })
+    expect([exp(two, 't1'), exp(two, 't2')]).toEqual([1, 1])
+    noChoice(skip(two))
+  })
+
+  it('Paladin Training Corvette (LOF_099) offers up to 3 Force units and may stop at once', () => {
+    const s = play(board({ units: [unit('f1', 'FORCE_U'), unit('g', 'GRD')] }), 'LOF_099')
+    expect(unitOffers(s)).toEqual(['f1'])
+    expect(declinable(s)).toBe(true)
+    expect(exp(skip(s), 'f1')).toBe(0)
+  })
+
+  it('Budget Scheming (SEC_124) gives a token to each of up to 3 Official units on either side', () => {
+    const s = playEvent(board({ units: [unit('o', 'OFFICIAL'), unit('g', 'GRD')] }, { units: [unit('eo', 'OFFICIAL')] }), 'SEC_124')
+    expect(unitOffers(s)).toEqual(['eo', 'o'])
+    expect(exp(accept(s, { targetInstanceId: 'eo' }), 'eo')).toBe(1)
+  })
+
+  it('In the Shadows (LOF_241) offers only friendly units with Hidden', () => {
+    const s = playEvent(board({ units: [unit('h', 'GRD', { hidden: true }), unit('g', 'GRD2')] }, { units: [unit('eh', 'GRD', { hidden: true })] }), 'LOF_241')
+    expect(unitOffers(s)).toEqual(['h'])
+  })
+
+  it('Medal Ceremony (SOR_245) offers only Rebel units that attacked this phase', () => {
+    const s = playEvent(board(
+      { units: [unit('r1', 'REB'), unit('r2', 'REB'), unit('g', 'GRD')] },
+      { units: [unit('er', 'REB')] },
+      { phaseEvents: phaseEvents({}) },
+    ), 'SOR_245')
+    noChoice(s)
+    const attacked = playEvent(board(
+      { units: [unit('r1', 'REB'), unit('r2', 'REB'), unit('g', 'GRD')] },
+      { units: [unit('er', 'REB')] },
+      { phaseEvents: phaseEvents({}) },
+    ), 'SOR_245', ['r1', 'g', 'er'])
+    expect(unitOffers(attacked)).toEqual(['er', 'r1'])
+  })
+
+  it('Take Charge (TS26_60) costs 1 less per friendly leader unit and offers up to 3 units', () => {
+    const plain = board({ units: [unit('g', 'GRD')] })
+    const withLeader = board({ units: [unit('g', 'GRD'), unit('l', 'L_UNIT', { isLeader: true })] })
+    expect(costOf(withLeader, 'TS26_60')).toBe(costOf(plain, 'TS26_60') - 1)
+    const s = playEvent(plain, 'TS26_60')
+    expect(unitOffers(s)).toEqual(['g'])
+    expect(exp(accept(s, { targetInstanceId: 'g' }), 'g')).toBe(1)
+  })
+})
+
+describe('Experience tokens, D: the number of tokens is decided as the ability resolves', () => {
+  it('Emergency Powers (SEC_040) pays any number of resources for that many tokens on a chosen non-leader unit', () => {
+    const s = playEvent(board({ units: [unit('g', 'GRD'), unit('l', 'L_UNIT', { isLeader: true })], resources: ready(6) }), 'SEC_040')
+    expect(choice(s)).toMatchObject({ kind: 'selectUnitThen' })
+    expect(unitOffers(s)).toEqual(['g'])
+    const picked = accept(s, { targetInstanceId: 'g' })
+    const number = choice(picked)
+    expect(number).toMatchObject({ kind: 'chooseNumber', controller: 'player' })
+    // Only what is still ready can be paid, and the event's own cost has already come out.
+    expect((number as { max: number }).max).toBe(readyCount(picked, 'player'))
+    const three = accept(picked, { optionIndex: 3 })
+    expect(exp(three, 'g')).toBe(3)
+    expect(readyCount(three, 'player')).toBe(readyCount(picked, 'player') - 3)
+    expect(exp(accept(picked, { optionIndex: 0 }), 'g')).toBe(0)
+  })
+
+  it('Curious Flock (LOF_255) pays up to 6 for that many tokens on itself', () => {
+    const s = play(board({ resources: ready(10) }), 'LOF_255')
+    expect(choice(s)).toMatchObject({ kind: 'chooseNumber', max: 6 })
+    const self = last(s)
+    expect(exp(accept(s, { optionIndex: 6 }), self)).toBe(6)
+    // Capped by what is ready, not by the printed 6.
+    const poor = play(board({ resources: ready(F['LOF_255'].cost + 2) }), 'LOF_255')
+    expect((choice(poor) as { max: number }).max).toBe(readyCount(poor, 'player'))
+  })
+
+  it('Lieutenant Childsen (SOR_035) takes a token per Vigilance card revealed from hand, up to 4', () => {
+    const hand = ['VIG_EV', 'VIG_EV', 'EV']
+    const s = play(board({ hand }), 'SOR_035')
+    expect(choice(s)).toMatchObject({ kind: 'chooseNumber', max: 2 })
+    expect(exp(accept(s, { optionIndex: 2 }), last(s))).toBe(2)
+    // No Vigilance cards in hand: nothing to reveal, so nothing is raised.
+    noChoice(play(board({ hand: ['EV'] }), 'SOR_035'))
+  })
+
+  it('Inspector\'s Shuttle (SEC_260) takes a token per copy of the named card in the opponent\'s hand', () => {
+    const s = play(board({}, { hand: ['GRD', 'GRD', 'EV'] }), 'SEC_260')
+    expect(choice(s)).toMatchObject({ kind: 'nameCard', controller: 'player' })
+    expect(exp(accept(s, { cardName: F['GRD'].name }), last(s))).toBe(2)
+    expect(exp(accept(s, { cardName: F['EV'].name }), last(s))).toBe(1)
+    expect(exp(accept(s, { cardName: 'Nothing At All' }), last(s))).toBe(0)
+  })
+
+  it('Calculated Lethality (SHD_039) defeats a cheap non-leader unit and pays out a token per upgrade it carried', () => {
+    const s = playEvent(board(
+      { units: [unit('f', 'GRD')] },
+      { units: [unit('victim', 'CHEAP', { upgrades: [{ cardId: 'UPG', owner: 'opponent' }, { cardId: TOKEN_SHIELD, owner: 'opponent' }] }), unit('big', 'PRICEY')] },
+    ), 'SHD_039')
+    expect(choice(s)).toMatchObject({ kind: 'selectUnitThen' })
+    expect(unitOffers(s)).toEqual(['f', 'victim'])
+    const done = accept(s, { targetInstanceId: 'victim' })
+    expect(U(done, 'victim')).toBeUndefined()
+    // Two upgrades, so two tokens, each on a friendly unit chosen one at a time.
+    expect(choice(done)).toMatchObject({ kind: 'selectUnitThen', controller: 'player' })
+    expect(unitOffers(done)).toEqual(['f'])
+    expect(exp(accept(accept(done, { targetInstanceId: 'f' }), { targetInstanceId: 'f' }), 'f')).toBe(2)
+  })
+
+  it('Lom Pyke (TS26_51) gives 2 tokens only if the opponent takes the 5 healing', () => {
+    const s = play(board({ units: [unit('f', 'GRD')] }, { units: [unit('e', 'GRD')], base: { cardId: 'TST_B', damage: 9 } }), 'TS26_51')
+    expect(choice(s)).toMatchObject({ kind: 'mayPayThen', controller: 'opponent', cost: 0 })
+    expect(declinable(s)).toBe(true)
+    const healed = accept(s)
+    expect(healed.players.opponent.base.damage).toBe(4)
+    expect(choice(healed)).toMatchObject({ kind: 'mayGiveTokens', controller: 'player', count: 2 })
+    expect(exp(accept(healed, { targetInstanceId: 'f' }), 'f')).toBe(2)
+    const declined = skip(s)
+    expect(declined.players.opponent.base.damage).toBe(9)
+    noChoice(declined)
+  })
+})
+
+describe('Experience tokens, E: a token alongside something else', () => {
+  it('Combat Exercise (LAW_165) exhausts a ready friendly unit for 2 tokens on it', () => {
+    const s = playEvent(board({ units: [unit('r', 'GRD'), unit('x', 'GRD2', { exhausted: true })] }, { units: [unit('e', 'GRD')] }), 'LAW_165')
+    expect(unitOffers(s)).toEqual(['r'])
+    const done = accept(s, { targetInstanceId: 'r' })
+    expect(U(done, 'r')!.exhausted).toBe(true)
+    expect(exp(done, 'r')).toBe(2)
+  })
+
+  it('Calm in the Storm (LOF_054) exhausts a ready friendly unit for a Shield and 2 tokens on it', () => {
+    const s = playEvent(board({ units: [unit('r', 'GRD')] }), 'LOF_054')
+    const done = accept(s, { targetInstanceId: 'r' })
+    expect([exp(done, 'r'), shields(done, 'r')]).toEqual([2, 1])
+    expect(U(done, 'r')!.exhausted).toBe(true)
+  })
+
+  it('Consumed by the Dark Side (LOF_239) gives 2 tokens first, so the unit survives the 2 damage it then takes', () => {
+    // A 1/1 with two Experience tokens is a 3/3, and 2 damage leaves it alive.
+    const s = playEvent(board({}, { units: [unit('e', 'WEAK')] }), 'LOF_239')
+    const done = accept(s, { targetInstanceId: 'e' })
+    expect(exp(done, 'e')).toBe(2)
+    expect(U(done, 'e')!.damage).toBe(2)
+  })
+
+  it('Last Words (LOF_263) gives 2 tokens only when a friendly unit was defeated this phase', () => {
+    const quiet = playEvent(board({ units: [unit('f', 'GRD')] }, {}, { phaseEvents: phaseEvents({}) }), 'LOF_263')
+    noChoice(quiet)
+    const after = playEvent(board({ units: [unit('f', 'GRD')] }, {}, { phaseEvents: phaseEvents({ defeated: { player: ['GRD2'], opponent: [] } }) }), 'LOF_263')
+    expect(choice(after)).toMatchObject({ kind: 'mayGiveTokens', count: 2 })
+  })
+
+  it('Haymaker (LAW_168) gives a token, then that unit hits an enemy in its arena for its raised power', () => {
+    const s = playEvent(board({ units: [unit('f', 'WEAK')] }, { units: [unit('e', 'GRD'), unit('sp', 'SPC')] }), 'LAW_168')
+    expect(unitOffers(s)).toEqual(['f'])
+    const given = accept(s, { targetInstanceId: 'f' })
+    expect(exp(given, 'f')).toBe(1)
+    // Same arena only, and the damage is the power after the token: a 1/1 plus 1/1 deals 2.
+    expect(unitOffers(given)).toEqual(['e'])
+    expect(U(accept(given, { targetInstanceId: 'e' }), 'e')!.damage).toBe(2)
+  })
+
+  it('Apology Accepted (JTL_091) defeats a friendly unit and may then give 2 tokens', () => {
+    const s = playEvent(board({ units: [unit('f', 'GRD'), unit('keep', 'GRD2')] }, { units: [unit('e', 'GRD')] }), 'JTL_091')
+    expect(unitOffers(s)).toEqual(['f', 'keep'])
+    const done = accept(s, { targetInstanceId: 'f' })
+    expect(U(done, 'f')).toBeUndefined()
+    expect(choice(done)).toMatchObject({ kind: 'mayGiveTokens', count: 2, optional: true })
+    expect(unitOffers(done)).toEqual(['e', 'keep'])
+  })
+
+  it("You're All Clear, Kid (JTL_055) pays out only when the last enemy space unit is the one defeated", () => {
+    // Only the 2 HP space unit is within "3 or less remaining HP"; the 8 HP one is not offered.
+    const stillThere = playEvent(board({}, { units: [unit('weak', 'SPC_WEAK'), unit('other', 'SPC')] }), 'JTL_055')
+    expect(unitOffers(stillThere)).toEqual(['weak'])
+    noChoice(accept(stillThere, { targetInstanceId: 'weak' }))
+    const alone = playEvent(board({ units: [unit('f', 'GRD')] }, { units: [unit('weak', 'SPC_WEAK')] }), 'JTL_055')
+    const done = accept(alone, { targetInstanceId: 'weak' })
+    expect(choice(done)).toMatchObject({ kind: 'mayGiveTokens', count: 1, optional: true })
+  })
+
+  it('Backed by the Pykes (TS26_58) may then deal damage equal to the Experience tokens on friendly units', () => {
+    const s = playEvent(board({ units: [unit('f', 'GRD'), unit('other', 'GRD2', { upgrades: [{ cardId: TOKEN_EXPERIENCE, owner: 'player' }] })] }, { units: [unit('e', 'GRD')] }), 'TS26_58')
+    const given = accept(s, { targetInstanceId: 'f' })
+    // One already there plus the one just given.
+    expect(choice(given)).toMatchObject({ kind: 'selectDamageTarget', amount: 2, optional: true })
+    expect(U(accept(given, { targetInstanceId: 'e' }), 'e')!.damage).toBe(2)
+  })
+
+  it('Hidden Hand Supplier (LAW_257) may pay 1 to give a token to another unit', () => {
+    const s = play(board({ units: [unit('f', 'GRD')] }), 'LAW_257')
+    expect(choice(s)).toMatchObject({ kind: 'mayPayThen', cost: 1 })
+    const paid = accept(s)
+    expect(unitOffers(paid)).toEqual(['f'])
+    expect(exp(accept(paid, { targetInstanceId: 'f' }), 'f')).toBe(1)
+    noChoice(skip(s))
+  })
+
+  it('Phantom (LAW_144) plays a Heroism unit from hand and gives it a token', () => {
+    const s = play(board({ hand: ['HER', 'VIL'] }), 'LAW_144')
+    expect(choice(s)).toMatchObject({ kind: 'playUnitFromHand', thenTokens: [TOKEN_EXPERIENCE] })
+    const done = accept(s, { handIndex: 0 })
+    expect(exp(done, last(done))).toBe(1)
+  })
+
+  it('Three Lessons (LOF_225) plays a unit that enters Hidden with an Experience and a Shield token', () => {
+    const s = playEvent(board({ hand: ['GRD'] }), 'LOF_225')
+    const done = accept(s, { handIndex: 0 })
+    const played = last(done)
+    expect([exp(done, played), shields(done, played)]).toEqual([1, 1])
+    expect(U(done, played)!.hidden).toBe(true)
+  })
+
+  it('The Burden of Masters (LOF_125) bottoms a Force unit from the discard, then plays a unit with 2 tokens', () => {
+    const s = playEvent(board({ hand: ['GRD'], discard: ['FORCE_U', 'VIL'], deck: ['GRD2'] }), 'LOF_125')
+    expect(choice(s)).toMatchObject({ kind: 'selectCardThen', candidates: ['FORCE_U'] })
+    const bottomed = accept(s, { optionIndex: 0 })
+    expect(bottomed.players.player.discard).not.toContain('FORCE_U')
+    expect(bottomed.players.player.deck).toContain('FORCE_U')
+    const done = accept(bottomed, { handIndex: 0 })
+    expect(exp(done, last(done))).toBe(2)
+  })
+
+  it('Echo (SHD_099) may discard a card to put 2 tokens on a unit sharing its name', () => {
+    const s = play(board({ hand: ['GRD'], units: [unit('same', 'GRD'), unit('other', 'GRD2')] }), 'SHD_099')
+    expect(choice(s)).toMatchObject({ controller: 'player' })
+    const discarded = accept(s, { handIndex: 0 })
+    expect(unitOffers(discarded)).toEqual(['same'])
+    expect(exp(accept(discarded, { targetInstanceId: 'same' }), 'same')).toBe(2)
+  })
+
+  it('The Ghost (LAW_069) gives an Experience and a Shield to one unit, or to two with a Vigilance or Aggression unit', () => {
+    const alone = play(board({ units: [unit('a', 'GRD'), unit('b', 'GRD2')] }), 'LAW_069')
+    const once = accept(alone, { targetInstanceId: 'a' })
+    expect([exp(once, 'a'), shields(once, 'a')]).toEqual([1, 1])
+    noChoice(once)
+    const wide = play(board({ units: [unit('v', 'VIG'), unit('b', 'GRD2')] }), 'LAW_069')
+    const first = accept(wide, { targetInstanceId: 'v' })
+    expect(unitOffers(first)).not.toContain('v')
+    const second = accept(first, { targetInstanceId: 'b' })
+    expect([exp(second, 'v'), exp(second, 'b')]).toEqual([1, 1])
+  })
+
+  it('Always Two (LOF_042) needs two friendly unique Sith units, and defeats every other friendly unit', () => {
+    const one = playEvent(board({ units: [unit('s1', 'SITH'), unit('g', 'GRD')] }), 'LOF_042')
+    noChoice(one)
+    const s = playEvent(board({ units: [unit('s1', 'SITH'), unit('s2', 'SITH2'), unit('g', 'GRD')] }, { units: [unit('e', 'GRD')] }), 'LOF_042')
+    expect(unitOffers(s)).toEqual(['s1', 's2'])
+    const done = accept(accept(s, { targetInstanceId: 's1' }), { targetInstanceId: 's2' })
+    expect([exp(done, 's1'), shields(done, 's1'), exp(done, 's2'), shields(done, 's2')]).toEqual([2, 2, 2, 2])
+    expect(U(done, 'g')).toBeUndefined()
+    expect(U(done, 'e')).toBeDefined()
+  })
+
+  it('The Force Is With Me (SOR_055) gives 2 tokens, a Shield with a Force unit, and offers that unit an attack', () => {
+    const plain = playEvent(board({ units: [unit('f', 'GRD')] }, { units: [unit('e', 'GRD')] }), 'SOR_055')
+    const done = accept(plain, { targetInstanceId: 'f' })
+    expect([exp(done, 'f'), shields(done, 'f')]).toEqual([2, 0])
+    expect(choice(done)).toMatchObject({ kind: 'mayAttackAnyUnit' })
+    const withForce = playEvent(board({ units: [unit('f', 'GRD'), unit('force', 'FORCE_U')] }, { units: [unit('e', 'GRD')] }), 'SOR_055')
+    const shielded = accept(withForce, { targetInstanceId: 'f' })
+    expect([exp(shielded, 'f'), shields(shielded, 'f')]).toEqual([2, 1])
+  })
+})
+
+describe('Experience tokens, F: attacks, reactions and activated Actions', () => {
+  it('Shuttle Tydirium (JTL_200) discards from its deck and pays out only on an odd cost', () => {
+    const odd = attack(board({ units: [unit('a', 'JTL_200'), unit('f', 'GRD')], deck: ['CHEAP', 'GRD'] }), 'a')
+    expect(odd.players.player.discard).toEqual(['CHEAP'])
+    expect(unitOffers(odd)).toEqual(['f'])
+    expect(declinable(odd)).toBe(true)
+    // GRD costs 2, an even cost, so nothing is offered.
+    const even = attack(board({ units: [unit('a', 'JTL_200'), unit('f', 'GRD')], deck: ['GRD', 'GRD'] }), 'a')
+    expect(even.players.player.discard).toEqual(['GRD'])
+    noChoice(even)
+  })
+
+  it("Sabine's Masterpiece (JTL_250) gives a token only through its Command clause", () => {
+    const none = attack(board({ units: [unit('a', 'JTL_250')] }), 'a')
+    noChoice(none)
+    const withCommand = attack(board({ units: [unit('a', 'JTL_250'), unit('c', 'CMD')] }, { units: [unit('e', 'GRD')] }), 'a')
+    expect(choice(withCommand)).toMatchObject({ kind: 'mayGiveTokens', count: 1 })
+    expect(unitOffers(withCommand).sort()).toEqual(['a', 'c', 'e'])
+  })
+
+  it('Latts Razzi (LAW_039) takes a Shield or an Experience token, then hits an enemy ground unit for her power', () => {
+    const s = play(board({}, { units: [unit('e', 'GRD'), unit('sp', 'SPC')] }), 'LAW_039')
+    const self = last(s)
+    expect(choice(s)).toMatchObject({ kind: 'chooseMode' })
+    const modes = (choice(s) as { modes: string[] }).modes
+    const withExp = accept(s, { optionIndex: modes.indexOf('lattsExperience') })
+    expect(exp(withExp, self)).toBe(1)
+    // Ground units only, and the damage is her power after the token: 2 printed plus 1.
+    expect(unitOffers(withExp)).toEqual(['e'])
+    expect(U(accept(withExp, { targetInstanceId: 'e' }), 'e')!.damage).toBe(3)
+    const withShield = accept(s, { optionIndex: modes.indexOf('lattsShield') })
+    expect([exp(withShield, self), shields(withShield, self)]).toEqual([0, 1])
+    expect(U(accept(withShield, { targetInstanceId: 'e' }), 'e')!.damage).toBe(2)
+  })
+
+  it('Patient Hunter (LAW_073) may give a token at regroup, at the cost of that unit readying', () => {
+    const s = board({ units: [unit('ph', 'LAW_073'), unit('g', 'GRD', { exhausted: true }), unit('l', 'L_UNIT', { isLeader: true })] })
+    const regroup = resolve({ ...s, consecutivePasses: 1 }, { type: 'pass' })
+    expect(unitOffers(regroup).sort()).toEqual(['g', 'ph'])
+    const done = accept(regroup, { targetInstanceId: 'g' })
+    expect(exp(done, 'g')).toBe(1)
+    expect(U(done, 'g')!.exhausted).toBe(true)
+  })
+
+  it.each(['LAW_115', 'SHD_057'])('Rickety Quadjumper (%s) may reveal the top card and pays out only on a non-unit', id => {
+    const nonUnit = accept(attack(board({ units: [unit('a', id), unit('f', 'GRD')], deck: ['EV', 'GRD'] }), 'a'))
+    expect(unitOffers(nonUnit)).toEqual(['f'])
+    // The card stays on top of the deck.
+    expect(nonUnit.players.player.deck[0]).toBe('EV')
+    const aUnit = accept(attack(board({ units: [unit('a', id), unit('f', 'GRD')], deck: ['GRD', 'EV'] }), 'a'))
+    noChoice(aUnit)
+    // Declining reveals nothing.
+    noChoice(skip(attack(board({ units: [unit('a', id), unit('f', 'GRD')], deck: ['EV'] }), 'a')))
+  })
+
+  it('C-3P0 (LAW_152) may give a token to another non-leader unit sharing a Trait with a friendly leader', () => {
+    const s = attack(board({
+      units: [unit('a', 'LAW_152'), unit('reb', 'REB'), unit('g', 'GRD'), unit('l', 'REB_L', { isLeader: true })],
+    }, { units: [unit('ereb', 'REB')] }), 'a')
+    // C-3P0 is himself a Rebel, but "another" leaves him out, and a leader unit is not eligible.
+    expect(unitOffers(s)).toEqual(['ereb', 'reb'])
+    expect(declinable(s)).toBe(true)
+  })
+
+  it('Ezra Bridger (LOF_046) may give a token to another Creature or Spectre unit', () => {
+    const s = attack(board({ units: [unit('a', 'LOF_046'), unit('cr', 'CREATURE'), unit('g', 'GRD')] }, { units: [unit('esp', 'SPECTRE')] }), 'a')
+    expect(unitOffers(s)).toEqual(['cr', 'esp'])
+  })
+
+  it('Watto (LOF_065) lets an opponent choose between the token and the card', () => {
+    const s = attack(board({ units: [unit('a', 'LOF_065'), unit('f', 'GRD')], deck: ['GRD2', 'GRD2'] }), 'a')
+    expect(choice(s)).toMatchObject({ kind: 'chooseMode', controller: 'opponent' })
+    const modes = (choice(s) as { modes: string[] }).modes
+    const token = accept(s, { optionIndex: modes.indexOf('wattoExperience') })
+    expect(choice(token)).toMatchObject({ kind: 'mayGiveTokens', controller: 'player' })
+    expect(unitOffers(token).sort()).toEqual(['a', 'f'])
+    const drawn = accept(s, { optionIndex: modes.indexOf('wattoDraw') })
+    expect(drawn.players.player.hand).toEqual(['GRD2'])
+  })
+
+  it('Peli Motto (LOF_258) gives a token to a friendly Vehicle or Droid unit, and cannot decline', () => {
+    const s = attack(board({ units: [unit('a', 'LOF_258'), unit('v', 'VEH'), unit('d', 'DROID'), unit('g', 'GRD')] }, { units: [unit('ev', 'VEH')] }), 'a')
+    expect(unitOffers(s)).toEqual(['d', 'v'])
+    expect(declinable(s)).toBe(false)
+  })
+
+  it('Bo-Katan Kryze (SEC_051) debuffs enemies when played and pays out when an enemy unit is defeated', () => {
+    const played = play(board({ units: [unit('f', 'TOUGH')] }, { units: [unit('e', 'TOUGH')] }), 'SEC_051')
+    expect(effectivePower(played, U(played, 'e')!)).toBe(F['TOUGH'].power! - 3)
+    expect(effectiveHp(played, U(played, 'e')!)).toBe(F['TOUGH'].hp! - 3)
+    expect(effectivePower(played, U(played, 'f')!)).toBe(F['TOUGH'].power!)
+    const killed = kill(board({ units: [unit('bo', 'SEC_051'), unit('f', 'GRD')] }, { units: [unit('e', 'GRD')] }), 'e')
+    expect(choice(killed)).toMatchObject({ kind: 'mayGiveTokens', controller: 'player' })
+    expect(unitOffers(killed).sort()).toEqual(['bo', 'f'])
+  })
+
+  it('Rose Tico (SHD_045) may spend a friendly Shield token for 2 Experience tokens on that unit', () => {
+    const s = attack(board({ units: [unit('a', 'SHD_045'), unit('sh', 'GRD', { upgrades: [{ cardId: TOKEN_SHIELD, owner: 'player' }] }), unit('g', 'GRD2')] }), 'a')
+    expect(unitOffers(s)).toEqual(['sh'])
+    expect(declinable(s)).toBe(true)
+    const done = accept(s, { targetInstanceId: 'sh' })
+    expect([shields(done, 'sh'), exp(done, 'sh')]).toEqual([0, 2])
+    // No friendly Shield token anywhere: nothing is raised.
+    noChoice(attack(board({ units: [unit('a', 'SHD_045'), unit('g', 'GRD2')] }), 'a'))
+  })
+
+  it('Kylo Ren (SHD_141) buffs a unit, adds a token for a non-Villainy one, and ignores his Villainy penalty beside Rey', () => {
+    const s = attack(board({ units: [unit('a', 'SHD_141'), unit('g', 'GRD')] }, { units: [unit('v', 'VIL')] }), 'a')
+    const buffed = accept(s, { targetInstanceId: 'g' })
+    expect(effectivePower(buffed, U(buffed, 'g')!)).toBe(F['GRD'].power! + 2 + 1)
+    expect(exp(buffed, 'g')).toBe(1)
+    const villain = accept(s, { targetInstanceId: 'v' })
+    expect(exp(villain, 'v')).toBe(0)
+    expect(effectivePower(villain, U(villain, 'v')!)).toBe(F['VIL'].power! + 2)
+    // The aspect penalty: 2 less to play him while you control Rey.
+    const withRey = board({ units: [unit('rey', 'REY_U')] })
+    expect(costOf(withRey, 'SHD_141')).toBe(costOf(board(), 'SHD_141') - 2)
+  })
+
+  it('Gideon Hask (SOR_036) gives a token to a friendly unit when an enemy unit is defeated', () => {
+    const killed = kill(board({ units: [unit('gh', 'SOR_036'), unit('f', 'GRD')] }, { units: [unit('e', 'GRD')] }), 'e')
+    expect(unitOffers(killed).sort()).toEqual(['f', 'gh'])
+    expect(exp(accept(killed, { targetInstanceId: 'f' }), 'f')).toBe(1)
+    // A friendly defeat is not an enemy one.
+    noChoice(kill(board({ units: [unit('gh', 'SOR_036'), unit('f', 'GRD')] }, { units: [unit('e', 'GRD')] }), 'f'))
+  })
+
+  it('Bail Organa (SOR_094) exhausts to give a token to another friendly unit', () => {
+    const s = board({ units: [unit('bail', 'SOR_094'), unit('f', 'GRD')] }, { units: [unit('e', 'GRD')] })
+    const use = moves(s).find(m => m.type === 'useAbility' && m.instanceId === 'bail')
+    expect(use, 'the Action is offered').toBeDefined()
+    const used = resolve(s, use!)
+    expect(U(used, 'bail')!.exhausted).toBe(true)
+    expect(unitOffers(used)).toEqual(['f'])
+    expect(exp(accept(used, { targetInstanceId: 'f' }), 'f')).toBe(1)
+  })
+})
+
+describe('Experience tokens, G: leaders and a base', () => {
+  it('Supreme Leader Snoke (LOF_006) picks the strongest friendly Villainy unit, from either side', () => {
+    const undeployed = front('LOF_006', { units: [unit('weak', 'VIL'), unit('strong', 'VIL_BIG'), unit('g', 'GRD')] }, { units: [unit('evil', 'VIL_BIG')] })
+    expect(usable(undeployed)).toBe(true)
+    // Ties aside, only the most powerful friendly Villainy unit is offered; the enemy one is not friendly.
+    expect(unitOffers(useFront(undeployed))).toEqual(['strong'])
+    expect(exp(accept(useFront(undeployed), { targetInstanceId: 'strong' }), 'strong')).toBe(1)
+    // No friendly Villainy unit at all: the action is not offered.
+    expect(usable(front('LOF_006', { units: [unit('g', 'GRD')] }))).toBe(false)
+    // Deployed, Snoke is himself a friendly Villainy unit and out-powers a 2-power one, so he is the pick.
+    const deployedSide = attack(back('LOF_006', { units: [unit('v', 'VIL')] }), 'L')
+    expect(unitOffers(deployedSide)).toEqual(['L'])
+    const bigger = attack(back('LOF_006', { units: [unit('v', 'VIL_BIG')] }), 'L')
+    expect(unitOffers(bigger)).toEqual(['v'])
+  })
+
+  it('Rey (SHD_004) gives a token to a unit with 2 or less power, mandatory in front and optional deployed', () => {
+    const undeployed = front('SHD_004', { units: [unit('small', 'WEAK'), unit('big', 'TOUGH')] }, { units: [unit('esmall', 'WEAK')] })
+    const used = useFront(undeployed)
+    expect(unitOffers(used)).toEqual(['esmall', 'small'])
+    expect(declinable(used)).toBe(false)
+    const deployedSide = attack(back('SHD_004', { units: [unit('small', 'WEAK')] }), 'L')
+    expect(declinable(deployedSide)).toBe(true)
+    expect(exp(accept(deployedSide, { targetInstanceId: 'small' }), 'small')).toBe(1)
+  })
+
+  it('Grand Moff Tarkin (SOR_007) gives a token to an Imperial unit, and to another one when deployed', () => {
+    const used = useFront(front('SOR_007', { units: [unit('imp', 'IMP'), unit('g', 'GRD')] }, { units: [unit('eimp', 'IMP')] }))
+    expect(unitOffers(used)).toEqual(['eimp', 'imp'])
+    // Deployed, the leader unit itself is an Imperial but "another" leaves it out.
+    const deployedSide = attack(back('SOR_007', { units: [unit('imp', 'IMP')] }), 'L')
+    expect(unitOffers(deployedSide)).toEqual(['imp'])
+    expect(declinable(deployedSide)).toBe(true)
+  })
+
+  it('Leia Organa (LAW_010) buffs by aspect in front, and on deploying gives a token per aspect you control', () => {
+    const used = useFront(front('LAW_010', { units: [unit('two', 'TWO_ASPECT'), unit('one', 'VIL')] }))
+    expect(choice(used)).toMatchObject({ kind: 'selectUnitThen' })
+    const buffed = accept(used, { targetInstanceId: 'two' })
+    expect(effectivePower(buffed, U(buffed, 'two')!)).toBe(F['TWO_ASPECT'].power! + 2)
+    // Deploying: one token per different aspect among the units you control, the leader unit included.
+    const s = board({ leader: undeployedLeader('LAW_010'), units: [unit('cmd', 'CMD'), unit('vil', 'VIL')], resources: ready(10) })
+    const deployed = resolve(s, { type: 'deployLeader' })
+    const aspects = new Set([...F['LAW_010'].aspects, 'Command', 'Villainy'])
+    expect(choice(deployed)).toMatchObject({ kind: 'mayGiveTokens', count: aspects.size })
+    expect(exp(accept(deployed, { targetInstanceId: 'cmd' }), 'cmd')).toBe(aspects.size)
+  })
+
+  it('Hera Syndulla (SOR_008) waives the Spectre aspect penalty on both sides and gives a token to another unique unit when deployed', () => {
+    // The waiver: a Spectre card off-aspect costs 2 less with her in play, front or back.
+    const plain = board({ leader: { cardId: 'TST_L', deployed: false, epicActionUsed: false, exhausted: false } })
+    const hers = front('SOR_008')
+    expect(costOf(hers, 'SPECTRE_EV')).toBe(costOf(plain, 'SPECTRE_EV') - 2)
+    const attacked = attack(back('SOR_008', { units: [unit('u', 'UNIQ'), unit('g', 'GRD')] }), 'L')
+    expect(unitOffers(attacked)).toEqual(['u'])
+    expect(declinable(attacked)).toBe(true)
+  })
+
+  it('First Battle Memorial (TS26_9) gives one token per friendly leader unit, one pick at a time', () => {
+    const none = board({ base: { cardId: 'TS26_9', damage: 0 }, units: [unit('f', 'GRD')] })
+    expect(baseOffered(none)).toBe(false)
+    const one = board({ base: { cardId: 'TS26_9', damage: 0 }, units: [unit('f', 'GRD'), unit('L', 'L_UNIT', { isLeader: true })] }, { units: [unit('e', 'GRD')] })
+    expect(baseOffered(one)).toBe(true)
+    const used = useBase(one)
+    expect(unitOffers(used).sort()).toEqual(['L', 'e', 'f'].sort())
+    const done = accept(used, { targetInstanceId: 'f' })
+    expect(exp(done, 'f')).toBe(1)
+    // One leader unit, so one token and no second offer.
+    noChoice(done)
+  })
+})

@@ -43,9 +43,12 @@ const SHIPPED = [
   // F: one small engine addition each
   'SEC_005', 'SEC_010', 'LAW_011', 'LAW_016', 'SOR_013', 'SOR_004', 'TS26_6', 'SEC_002',
 ]
-/** Scoped by the triage but lifted out to the ticket that owns their blocker. */
+/**
+ * Scoped by the triage but lifted out to the ticket that owns their blocker. LAW_010 and SOR_008 were
+ * lifted to Experience tokens, which has since shipped, so they are built and covered there instead.
+ */
 const LIFTED = [
-  'JTL_001', 'JTL_003', 'JTL_011', 'JTL_012', 'JTL_015', 'JTL_017', 'JTL_018', 'LAW_010', 'SOR_008', 'SEC_011', 'TWI_017',
+  'JTL_001', 'JTL_003', 'JTL_011', 'JTL_012', 'JTL_015', 'JTL_017', 'JTL_018', 'SEC_011', 'TWI_017',
   'SEC_003', 'LOF_001', 'SHD_006', 'SHD_010', 'SEC_001', 'SEC_006', 'LAW_003', 'LAW_017', 'SEC_012',
 ]
 

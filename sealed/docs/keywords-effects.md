@@ -148,6 +148,28 @@ run by its card's `delayed` hook, so none runs twice; a `takeInitiative` effect 
 the regroup phase starts. "At the end of the phase" (Triple Dark Raid) is read as the start of the regroup
 phase that follows it.
 
+## Experience tokens
+
+An Experience token is a **+1/+1 upgrade** (`TOKEN_EXPERIENCE` in `engine/tokenUpgrades.ts`), so it needs
+nothing of the stats pipeline: attached upgrades already add their printed power and HP, and the token
+card carries 1/1. Unlike a Shield or an Advantage it is never spent, so it lasts as long as its host.
+
+**A card's whole grant is one attach event.** `giveTokens(state, id, token, n)` attaches all `n` and
+fires "when 1 or more upgrades attach" once; `giveMixedTokens(state, id, tokenIds)` does the same for a
+grant of different kinds, which is what "give an Experience token and a Shield token to it" is. Granting
+them in a loop would fire Sabine Wren once per token for something the card states as one giving. Two
+*separate* effects in the same action are still two events.
+
+The choice a card raises to pick a recipient is `mayGiveTokens` (`token`, `count`, `targets`,
+`optional`), the same one Shield and Advantage use. Its `controller` is who chooses, which is not always
+the ability's owner: Wartime Mercenaries and Watto hand the decision to the opponent.
+
+Three related pieces sit elsewhere. `PlayFromHandOptions.thenTokens` lists the tokens a unit played by an
+ability receives, attached together once it is on the board. `UnitState.resourcesPaidToPlay` records what
+was actually exhausted for a play, because payment happens before the unit exists and nothing else
+remembers it (Weequay Pirate: "if no resources were paid to play this unit"). `phaseEvents.tokensCreated`
+credits the grant to the player who made it.
+
 ## Spent tokens are defeated upgrades
 
 A Shield that soaks damage and an Advantage token that finishes a combat are both **defeats**, as

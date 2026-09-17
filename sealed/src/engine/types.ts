@@ -110,6 +110,13 @@ export interface UnitState {
    */
   upgradesPlayedThisRound?: number
   /**
+   * Resources exhausted to play this unit, recorded by `playUnitCard` because payment happens before
+   * the unit exists and nothing on the board remembers it afterwards. Absent means none were paid,
+   * which is what Weequay Pirate reads ("if no resources were paid to play this unit"): a free play,
+   * a full discount, or a cost of zero. It is the amount paid, not the card's cost.
+   */
+  resourcesPaidToPlay?: number
+  /**
    * Cards this unit has captured (Bothan-5) — card ids held face-down under it, out of every
    * other zone. Released to their owner's discard when the captor leaves play.
    */
@@ -820,12 +827,14 @@ type ChoiceVariant =
   // units), paying its cost + `costDelta`, entering ready if `entersReady` (Fennec, Moff Gideon).
   // `thenDamageIt` deals that much to the unit just played — "Play a unit from your hand. It costs 4
   // less. Deal 4 damage to it" (Reckless Landing), which can only be aimed once it is on the board.
-  // `thenShieldIt` gives the unit just played a Shield token (Rio Durant's "it gains Shielded").
+  // `thenTokens` lists the tokens the unit just played receives, attaching together as one grant: a
+  // Shield (Rio Durant's "it gains Shielded", Soresu Stance), Experience tokens (Phantom, The Burden
+  // of Masters), or one of each (Three Lessons).
   // `thenDamageOwnBase` deals the played unit's printed cost to its controller's base (Galactic Ambition).
   // `thenDelay` leaves a delayed effect about the played unit (Sneak Attack defeats it at the regroup phase).
   // `thenLasting` gives the played unit a lasting effect (Shien Flurry's prevention). `thenDefeat` defeats
   // these units once the play is settled, played or declined (Consolidation of Power).
-  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number; thenShieldIt?: boolean; thenDamageOwnBase?: boolean; thenDelay?: { cardId: string; when: DelayedEffect['when'] }; thenLasting?: Omit<LastingEffect, 'targetInstanceId'>; thenDefeat?: string[] }
+  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number; thenTokens?: string[]; thenDamageOwnBase?: boolean; thenDelay?: { cardId: string; when: DelayedEffect['when'] }; thenLasting?: Omit<LastingEffect, 'targetInstanceId'>; thenDefeat?: string[] }
   // Additional cost "exhaust a friendly unit": pick one of `targets` to exhaust, then the
   // `then` play-from-hand step follows (Fennec). Mandatory.
   | { kind: 'selectUnitToExhaust'; id: string; controller: PlayerId; targets: string[]; then: PlayFromHandSpec }

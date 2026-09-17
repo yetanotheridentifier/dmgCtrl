@@ -161,6 +161,30 @@ export function giveToken(state: GameState, instanceId: string, tokenId: string)
 }
 
 /**
+ * Attach tokens of **different kinds** to one unit in a single attach event, for the cards that print
+ * "give an Experience token and a Shield token to it". {@link giveTokens} is one kind at a time, and
+ * calling it twice would be two events, firing Sabine Wren twice for what the card states as one grant.
+ */
+export function giveMixedTokens(state: GameState, instanceId: string, tokenIds: readonly string[]): GameState {
+  const found = findUnit(state, instanceId)
+  if (!found || tokenIds.length === 0) return state
+  const recorded = tokenIds.reduce(acc => recordTokenCreated(acc, found.owner), state)
+  const tokens = tokenIds.map(cardId => ({ cardId, owner: found.owner }))
+  return fireUpgradeAttached(attachUpgrades(recorded, instanceId, tokens), instanceId)
+}
+
+/**
+ * Move a unit to the other arena (Blue Leader: "move this unit to the ground arena"). The unit keeps
+ * its damage, upgrades and ready state: only where it fights changes, and every arena test in the
+ * engine reads `arena`, so nothing else has to be told.
+ */
+export function moveUnitToArena(state: GameState, instanceId: string, arena: UnitState['arena']): GameState {
+  const found = findUnit(state, instanceId)
+  if (!found || found.unit.arena === arena) return state
+  return patchUnit(state, found.owner, instanceId, u => ({ ...u, arena }))
+}
+
+/**
  * Fire "when 1 or more upgrades attach to this unit" (Sabine Wren) on the receiving unit.
  * Follows every {@link attachUpgrades}: token grants (here), a play, a Shielded entry, and a move.
  * Batching is {@link giveTokens}' job: this fires once per call, so callers granting several tokens
@@ -639,10 +663,11 @@ export function returnUpgradeToHand(state: GameState, instanceId: string, index:
 }
 
 /**
- * Move one copy of `cardId` from a player's discard pile to their hand.
- * A no-op if it isn't there. Used by Blade of Talzin's self-return.
+ * Move one copy of `cardId` from a player's discard pile to their hand. A no-op if it isn't there.
+ * Card type does not matter: Blade of Talzin returns itself as an upgrade, Darth Sion as a unit that
+ * was defeated at 7 or more power.
  */
-export function returnUpgradeFromDiscardToHand(state: GameState, owner: PlayerId, cardId: string): GameState {
+export function returnCardFromDiscardToHand(state: GameState, owner: PlayerId, cardId: string): GameState {
   const p = state.players[owner]
   const idx = p.discard.indexOf(cardId)
   if (idx === -1) return state

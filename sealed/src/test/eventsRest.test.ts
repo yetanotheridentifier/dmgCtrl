@@ -973,7 +973,7 @@ describe('events that return units to hand', () => {
     expect(declinable(s)).toBe(false)
     s = accept(s, { targetInstanceId: 'e' })
     expect(choice(s)).toMatchObject({ kind: 'playUnitFromHand', controller: 'opponent', optional: true })
-    expect('thenShieldIt' in choice(s)).toBe(false)
+    expect('thenTokens' in choice(s)).toBe(false)
   })
 
   it('Ma Klounkee (SHD_229) returns a friendly non-leader Underworld unit, then deals 3 damage to a unit', () => {
@@ -1021,7 +1021,7 @@ describe('events that play a unit from hand', () => {
     let s = play(board('LOF_076', { hand: ['FORCE_HAND', 'P3'] }))
     const c = choice(s)
     expect(candidatesOf(c)).toEqual(['FORCE_HAND'])
-    expect(c).toMatchObject({ costDelta: 0, entersReady: false, thenShieldIt: true })
+    expect(c).toMatchObject({ costDelta: 0, entersReady: false, thenTokens: [TOKEN_SHIELD] })
     expect(declinable(s)).toBe(false)
     s = accept(s, { handIndex: 0 })
     const played = s.players.player.units.find(u => u.cardId === 'FORCE_HAND')!

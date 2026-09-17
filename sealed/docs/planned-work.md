@@ -146,7 +146,7 @@ Two phases:
   finished** (#459) where the head stands alone, with Director Krennic built alongside them; a head
   shared with another trigger point ("When Played/When Defeated") waits on #463, and Stolen AT-Hauler
   (an opponent may play it from the discard pile) is on #471. **Leaders are finished** on both sides (#458): the 20 not built are on the ticket of what
-  blocks them, #465 pilots (7), #461 Experience (2), #605 token units (2), #471 play from discard (2),
+  blocks them, #465 pilots (7), #605 token units (2), #471 play from discard (2),
   #466 capture, #467 Bounty, #470 Plot, #474 trigger points, #468 playing any card type, #602 Credit
   (a friendly token of any kind) and #477 (defeat by an enemy card ability).
   **Bases are finished** (#460), which completes Phase 1: the engine gained base abilities (an Epic
@@ -155,9 +155,11 @@ Two phases:
   The ticket bodies carry the sizes from before token units, Credit
   tokens, Disclose and indirect damage were blockers, so most are smaller than they say (bases barely); the corrected counts are commented on each.
 - **Phase 2 (#461 to #476, #602 to #605), 585 cards blocked by exactly one thing each**, ordered by how
-  many cards each unlocks on its own. Token units other than the Mandalorian (#605, 62 cards) are the
-  second largest unlock; Credit tokens (#602, 29), Disclose (#603, 19) and indirect damage (#604, 15)
-  sit among the existing mechanics.
+  many cards each unlocks on its own. **Experience tokens are finished** (#461), the largest single
+  unlock: 78 of the 80 shipped, with Covert Strength on #469 (Smuggle) and Trandoshan Hunters on #467
+  (it reads a Bounty), and the two leaders #458 had lifted out built alongside them. Next is token units
+  other than the Mandalorian (#605, 62 cards), then Credit tokens (#602, 29), Disclose (#603, 19) and
+  indirect damage (#604, 15).
 
 **Batches shrink, never grow.** A card that turns out not to fit is lifted into #477 and the batch
 ships without it. The classification is regex triage over ability prose: it catches new nouns but not
@@ -165,8 +167,10 @@ familiar nouns in an unfamiliar shape.
 
 Three findings that contradict the assumptions the programme started from:
 
-- **Experience tokens are the largest single unlock at 80 cards, and were unplanned.** Printed in every
-  set, and with Shield the most common token in the game.
+- **Experience tokens were the largest single unlock at 80 cards, and were unplanned.** Printed in every
+  set, and with Shield the most common token in the game. They also cost the least of any mechanic in the
+  programme: the token was already a card in the db and the token machinery already attached it, so the
+  work was registrations plus a handful of helpers.
 - **Resource manipulation is near the bottom at 15 cards, not the top.** Most resource prose already
   exists. What matters is *playing a card out of the resource zone* (#468), which gates Smuggle and
   Plot, roughly 50 cards. The gap is that `payCost` exhausts resources in array order with no choice,
