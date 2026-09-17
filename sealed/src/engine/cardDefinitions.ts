@@ -6749,3 +6749,58 @@ registerCard('SEC_002', { // Jabba the Hutt
     return dealDamageToUnit(markAbilityUsed(s, ctx.owner, ctx.sourceInstanceId!, JABBA_ROUND_KEY), ctx.targetInstanceId!, Number(step.slice('deal:'.length)))
   },
 })
+
+// ── When Defeated units from the other sealed sets ─────────────────────────────────────────────────
+// Built on the When Played helpers, as the On Attack units are: `defeated` fires the same definition as
+// its unit is defeated instead. The unit has left play by then, so `ctx.sourceInstanceId` names no unit
+// in play ("another" leaves nothing out) and `ctx.defeatedUnit` is the unit as it last was.
+
+/** A definition built with the When Played helpers, fired as its unit is defeated instead. */
+const defeated = (def: CardDefinition): CardDefinition => ({
+  ...def,
+  abilities: def.abilities?.map(a => (a.trigger === 'whenPlayed' ? { ...a, trigger: 'whenDefeated' as const } : a)),
+})
+const costsAtMost = (n: number): Pick => (s, u) => printedCost(s, u) <= n
+
+// A: targets, draws and base damage
+const twoToABase = defeated(whenPlayed('Deal 2 damage to a base.', (s, ctx) => damageChoice(s, ctx, 2, [], BOTH_BASES)))
+registerCard('LAW_189', twoToABase) // Cavern Angels X-Wing
+registerCard('TWI_131', twoToABase) // OOM-Series Officer
+const healTwoFromYourBase = defeated(whenPlayed('Heal 2 damage from your base.', (s, ctx) => healBase(s, ctx.owner, 2)))
+registerCard('LAW_097', healTwoFromYourBase) // Imperial Door Technician
+registerCard('IBH_15', healTwoFromYourBase) // Tauntaun Mount
+registerCard('JTL_033', defeated(whenPlayed('Heal 2 damage from a base.', (s, ctx) => healChoice(s, ctx, 2, [], BOTH_BASES)))) // Onyx Squadron Brute
+registerCard('LOF_059', defeated(whenPlayed('Draw a card.', (s, ctx) => drawCards(s, ctx.owner, 1)))) // Nightsister Warrior
+registerCard('JTL_063', defeated(mayPayWp('You may draw a card.', 0, 'draw a card', (s, ctx) => drawCards(s, ctx.owner, 1)))) // Landing Shuttle
+registerCard('SHD_164', defeated(whenPlayed('Deal 1 damage to a unit or base.', (s, ctx) => damageChoice(s, ctx, 1, allUnits(s), BOTH_BASES)))) // Rhokai Gunship
+registerCard('SEC_263', defeated(whenPlayed('Deal 1 damage to each exhausted enemy ground unit.', (s, ctx) => // Assassin Probe
+  pickedIds(s, ctx, pickAll(pickEnemy, pickGround, (_s, u) => u.exhausted)).reduce((acc, id) => dealDamageToUnit(acc, id, 1), s))))
+registerCard('LOF_235', defeated(whenPlayed('Deal 2 damage to each ground unit.', (s, ctx) => // HK-87 Assassin Droid
+  pickedIds(s, ctx, pickGround).reduce((acc, id) => dealDamageToUnit(acc, id, 2), s))))
+registerCard('SEC_154', defeated(targetWp('You may ready a unit that costs 5 or less.', 'selectUnitToReady', costsAtMost(5), true))) // Inner Rim Coalition
+registerCard('SOR_226', defeated(targetWp('You may ready a Villainy unit.', 'selectUnitToReady', pickAspect('Villainy'), true))) // Admiral Motti
+registerCard('SEC_221', defeated(targetWp('Exhaust an enemy unit.', 'mayExhaustUnit', pickEnemy, false))) // Unruly Astromech
+registerCard('SOR_060', defeated(whenPlayed('You may give a Shield token to a Vigilance unit.', (s, ctx) => // Distant Patroller
+  shieldChoice(s, ctx, pickedIds(s, ctx, pickAspect('Vigilance')), true))))
+registerCard('LOF_064', defeated(whenPlayed('You may give a Shield token to a damaged non-Vehicle unit.', (s, ctx) => // Tauntaun
+  shieldChoice(s, ctx, pickedIds(s, ctx, pickAll(damaged, (st, u) => !unitHasTrait(st, u, 'Vehicle'))), true))))
+registerCard('JTL_060', defeated(buffWp('You may give a unit -1/-1 for this phase.', pickAny, () => ({ power: -1, hp: -1 }), true))) // Desperate Commando
+registerCard('TWI_104', defeated(buffWp('You may give a Trooper unit +2/+2 for this phase.', pickTrait('Trooper'), () => ({ power: 2, hp: 2 }), true))) // Obedient Vanguard
+registerCard('JTL_040', defeated(targetWp('You may defeat a space unit that costs 3 or less.', 'selectUnitToDefeat', pickAll(pickArena('space'), costsAtMost(3)), true))) // Fleet Interdictor
+registerCard('JTL_220', defeated(targetWp("You may return a non-leader unit with 2 or less power to its owner's hand.", 'selectUnitToReturn', // Skyway Cloud Car
+  pickAll((s, u) => nonLeader(s, u), (s, u) => effectivePower(s, u) <= 2), true)))
+const opponentDiscardsOnDefeat = defeated(whenPlayed('Each opponent discards a card from their hand.', (s, ctx) => opponentDiscards(s, ctx.owner, ctx.sourceInstanceId!)))
+registerCard('TWI_148', opponentDiscardsOnDefeat) // Senatorial Corvette
+registerCard('IBH_82', opponentDiscardsOnDefeat) // Admiral Ozzel
+registerCard('SOR_163', defeated(whenPlayed('If you have the initiative, draw 2 cards.', (s, ctx) => (haveInitiative(s, ctx) ? drawCards(s, ctx.owner, 2) : s)))) // Star Wing Scout
+registerCard('LOF_057', defeated(searchDrawWp('Search the top 5 cards of your deck for a Force unit, reveal it, and draw it.', 5, // Owen Lars
+  c => printedUnit(c) && printedTrait(c, 'Force'))))
+registerCard('SHD_157', defeated(whenPlayed('For each player with 15 or more damage on their base, draw a card.', (s, ctx) => // Bo-Katan Kryze
+  drawCards(s, ctx.owner, BOTH_BASES.filter(p => s.players[p].base.damage >= 15).length))))
+registerCard('LOF_213', defeated(whenPlayed('Deal 6 damage divided as you choose among enemy units.', (s, ctx) => { // The Legacy Run
+  const targets = s.players[opponentOf(ctx.owner)].units.map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'distributeDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, remaining: 6, total: 6, targets, enemiesOf: ctx.owner }) : s
+})))
+// "Up to" heals as much as it can, as It Binds All Things reads it.
+registerCard('JTL_071', defeated(whenPlayed('Heal up to 3 damage from a unit or base.', (s, ctx) => // CR90 Relief Runner
+  healChoice(s, ctx, 3, allUnits(s).map(u => u.instanceId), BOTH_BASES))))
