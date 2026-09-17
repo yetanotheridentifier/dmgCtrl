@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
 import { legalMoves, effectiveCost } from '../engine/legalMoves'
+import { effectivePower, effectiveHp } from '../engine/stats'
 import { getCardDefinition } from '../engine/abilities'
 import { normaliseCard } from '../engine/cardDb'
 import { defeatUnit } from '../engine/combat'
@@ -38,6 +39,9 @@ const SHIPPED = [
   // E: a token alongside something else
   'LAW_165', 'LOF_054', 'LAW_168', 'LOF_239', 'LOF_263', 'LOF_042', 'SOR_055', 'LAW_144', 'LOF_125', 'LOF_225',
   'JTL_055', 'JTL_091', 'TS26_58', 'LAW_257', 'LAW_069', 'SHD_099',
+  // F: attacks, reactions and activated Actions
+  'JTL_200', 'JTL_250', 'LAW_039', 'LAW_073', 'LAW_115', 'SHD_057', 'LAW_152', 'LOF_046', 'LOF_065', 'LOF_258',
+  'SEC_051', 'SHD_045', 'SHD_141', 'SOR_036', 'SOR_094',
 ]
 /** Registered elsewhere; used here to play a unit for free, so "no resources were paid" can be reached. */
 const GALACTIC_AMBITION = 'SOR_235'
@@ -86,6 +90,12 @@ const F: Record<string, EngineCard> = {
   WEAK: src('WEAK', { power: 1, hp: 1 }),
   SITH: src('SITH', { traits: ['SITH'], unique: true }),
   SITH2: src('SITH2', { traits: ['SITH'], unique: true }),
+  TOUGH: src('TOUGH', { power: 5, hp: 6 }),
+  DROID: src('DROID', { traits: ['DROID'] }),
+  CREATURE: src('CREATURE', { traits: ['CREATURE'] }),
+  SPECTRE: src('SPECTRE', { traits: ['SPECTRE'] }),
+  REB_L: card({ id: 'REB_L', type: 'leader', cost: 6, power: 3, hp: 6, traits: ['REBEL'] }),
+  REY_U: card({ id: 'REY_U', name: 'Rey', arena: 'ground', cost: 3, power: 3, hp: 3 }),
   EV: card({ id: 'EV', type: 'event', cost: 1 }),
   VIG_EV: card({ id: 'VIG_EV', type: 'event', cost: 1, aspects: ['Vigilance'] }),
   FREE_EV: card({ id: 'FREE_EV', type: 'event', cost: 0 }),
@@ -691,5 +701,143 @@ describe('Experience tokens, E: a token alongside something else', () => {
     const withForce = playEvent(board({ units: [unit('f', 'GRD'), unit('force', 'FORCE_U')] }, { units: [unit('e', 'GRD')] }), 'SOR_055')
     const shielded = accept(withForce, { targetInstanceId: 'f' })
     expect([exp(shielded, 'f'), shields(shielded, 'f')]).toEqual([2, 1])
+  })
+})
+
+describe('Experience tokens, F: attacks, reactions and activated Actions', () => {
+  it('Shuttle Tydirium (JTL_200) discards from its deck and pays out only on an odd cost', () => {
+    const odd = attack(board({ units: [unit('a', 'JTL_200'), unit('f', 'GRD')], deck: ['CHEAP', 'GRD'] }), 'a')
+    expect(odd.players.player.discard).toEqual(['CHEAP'])
+    expect(unitOffers(odd)).toEqual(['f'])
+    expect(declinable(odd)).toBe(true)
+    // GRD costs 2, an even cost, so nothing is offered.
+    const even = attack(board({ units: [unit('a', 'JTL_200'), unit('f', 'GRD')], deck: ['GRD', 'GRD'] }), 'a')
+    expect(even.players.player.discard).toEqual(['GRD'])
+    noChoice(even)
+  })
+
+  it("Sabine's Masterpiece (JTL_250) gives a token only through its Command clause", () => {
+    const none = attack(board({ units: [unit('a', 'JTL_250')] }), 'a')
+    noChoice(none)
+    const withCommand = attack(board({ units: [unit('a', 'JTL_250'), unit('c', 'CMD')] }, { units: [unit('e', 'GRD')] }), 'a')
+    expect(choice(withCommand)).toMatchObject({ kind: 'mayGiveTokens', count: 1 })
+    expect(unitOffers(withCommand).sort()).toEqual(['a', 'c', 'e'])
+  })
+
+  it('Latts Razzi (LAW_039) takes a Shield or an Experience token, then hits an enemy ground unit for her power', () => {
+    const s = play(board({}, { units: [unit('e', 'GRD'), unit('sp', 'SPC')] }), 'LAW_039')
+    const self = last(s)
+    expect(choice(s)).toMatchObject({ kind: 'chooseMode' })
+    const modes = (choice(s) as { modes: string[] }).modes
+    const withExp = accept(s, { optionIndex: modes.indexOf('lattsExperience') })
+    expect(exp(withExp, self)).toBe(1)
+    // Ground units only, and the damage is her power after the token: 2 printed plus 1.
+    expect(unitOffers(withExp)).toEqual(['e'])
+    expect(U(accept(withExp, { targetInstanceId: 'e' }), 'e')!.damage).toBe(3)
+    const withShield = accept(s, { optionIndex: modes.indexOf('lattsShield') })
+    expect([exp(withShield, self), shields(withShield, self)]).toEqual([0, 1])
+    expect(U(accept(withShield, { targetInstanceId: 'e' }), 'e')!.damage).toBe(2)
+  })
+
+  it('Patient Hunter (LAW_073) may give a token at regroup, at the cost of that unit readying', () => {
+    const s = board({ units: [unit('ph', 'LAW_073'), unit('g', 'GRD', { exhausted: true }), unit('l', 'L_UNIT', { isLeader: true })] })
+    const regroup = resolve({ ...s, consecutivePasses: 1 }, { type: 'pass' })
+    expect(unitOffers(regroup).sort()).toEqual(['g', 'ph'])
+    const done = accept(regroup, { targetInstanceId: 'g' })
+    expect(exp(done, 'g')).toBe(1)
+    expect(U(done, 'g')!.exhausted).toBe(true)
+  })
+
+  it.each(['LAW_115', 'SHD_057'])('Rickety Quadjumper (%s) may reveal the top card and pays out only on a non-unit', id => {
+    const nonUnit = accept(attack(board({ units: [unit('a', id), unit('f', 'GRD')], deck: ['EV', 'GRD'] }), 'a'))
+    expect(unitOffers(nonUnit)).toEqual(['f'])
+    // The card stays on top of the deck.
+    expect(nonUnit.players.player.deck[0]).toBe('EV')
+    const aUnit = accept(attack(board({ units: [unit('a', id), unit('f', 'GRD')], deck: ['GRD', 'EV'] }), 'a'))
+    noChoice(aUnit)
+    // Declining reveals nothing.
+    noChoice(skip(attack(board({ units: [unit('a', id), unit('f', 'GRD')], deck: ['EV'] }), 'a')))
+  })
+
+  it('C-3P0 (LAW_152) may give a token to another non-leader unit sharing a Trait with a friendly leader', () => {
+    const s = attack(board({
+      units: [unit('a', 'LAW_152'), unit('reb', 'REB'), unit('g', 'GRD'), unit('l', 'REB_L', { isLeader: true })],
+    }, { units: [unit('ereb', 'REB')] }), 'a')
+    // C-3P0 is himself a Rebel, but "another" leaves him out, and a leader unit is not eligible.
+    expect(unitOffers(s)).toEqual(['ereb', 'reb'])
+    expect(declinable(s)).toBe(true)
+  })
+
+  it('Ezra Bridger (LOF_046) may give a token to another Creature or Spectre unit', () => {
+    const s = attack(board({ units: [unit('a', 'LOF_046'), unit('cr', 'CREATURE'), unit('g', 'GRD')] }, { units: [unit('esp', 'SPECTRE')] }), 'a')
+    expect(unitOffers(s)).toEqual(['cr', 'esp'])
+  })
+
+  it('Watto (LOF_065) lets an opponent choose between the token and the card', () => {
+    const s = attack(board({ units: [unit('a', 'LOF_065'), unit('f', 'GRD')], deck: ['GRD2', 'GRD2'] }), 'a')
+    expect(choice(s)).toMatchObject({ kind: 'chooseMode', controller: 'opponent' })
+    const modes = (choice(s) as { modes: string[] }).modes
+    const token = accept(s, { optionIndex: modes.indexOf('wattoExperience') })
+    expect(choice(token)).toMatchObject({ kind: 'mayGiveTokens', controller: 'player' })
+    expect(unitOffers(token).sort()).toEqual(['a', 'f'])
+    const drawn = accept(s, { optionIndex: modes.indexOf('wattoDraw') })
+    expect(drawn.players.player.hand).toEqual(['GRD2'])
+  })
+
+  it('Peli Motto (LOF_258) gives a token to a friendly Vehicle or Droid unit, and cannot decline', () => {
+    const s = attack(board({ units: [unit('a', 'LOF_258'), unit('v', 'VEH'), unit('d', 'DROID'), unit('g', 'GRD')] }, { units: [unit('ev', 'VEH')] }), 'a')
+    expect(unitOffers(s)).toEqual(['d', 'v'])
+    expect(declinable(s)).toBe(false)
+  })
+
+  it('Bo-Katan Kryze (SEC_051) debuffs enemies when played and pays out when an enemy unit is defeated', () => {
+    const played = play(board({ units: [unit('f', 'TOUGH')] }, { units: [unit('e', 'TOUGH')] }), 'SEC_051')
+    expect(effectivePower(played, U(played, 'e')!)).toBe(F['TOUGH'].power! - 3)
+    expect(effectiveHp(played, U(played, 'e')!)).toBe(F['TOUGH'].hp! - 3)
+    expect(effectivePower(played, U(played, 'f')!)).toBe(F['TOUGH'].power!)
+    const killed = kill(board({ units: [unit('bo', 'SEC_051'), unit('f', 'GRD')] }, { units: [unit('e', 'GRD')] }), 'e')
+    expect(choice(killed)).toMatchObject({ kind: 'mayGiveTokens', controller: 'player' })
+    expect(unitOffers(killed).sort()).toEqual(['bo', 'f'])
+  })
+
+  it('Rose Tico (SHD_045) may spend a friendly Shield token for 2 Experience tokens on that unit', () => {
+    const s = attack(board({ units: [unit('a', 'SHD_045'), unit('sh', 'GRD', { upgrades: [{ cardId: TOKEN_SHIELD, owner: 'player' }] }), unit('g', 'GRD2')] }), 'a')
+    expect(unitOffers(s)).toEqual(['sh'])
+    expect(declinable(s)).toBe(true)
+    const done = accept(s, { targetInstanceId: 'sh' })
+    expect([shields(done, 'sh'), exp(done, 'sh')]).toEqual([0, 2])
+    // No friendly Shield token anywhere: nothing is raised.
+    noChoice(attack(board({ units: [unit('a', 'SHD_045'), unit('g', 'GRD2')] }), 'a'))
+  })
+
+  it('Kylo Ren (SHD_141) buffs a unit, adds a token for a non-Villainy one, and ignores his Villainy penalty beside Rey', () => {
+    const s = attack(board({ units: [unit('a', 'SHD_141'), unit('g', 'GRD')] }, { units: [unit('v', 'VIL')] }), 'a')
+    const buffed = accept(s, { targetInstanceId: 'g' })
+    expect(effectivePower(buffed, U(buffed, 'g')!)).toBe(F['GRD'].power! + 2 + 1)
+    expect(exp(buffed, 'g')).toBe(1)
+    const villain = accept(s, { targetInstanceId: 'v' })
+    expect(exp(villain, 'v')).toBe(0)
+    expect(effectivePower(villain, U(villain, 'v')!)).toBe(F['VIL'].power! + 2)
+    // The aspect penalty: 2 less to play him while you control Rey.
+    const withRey = board({ units: [unit('rey', 'REY_U')] })
+    expect(costOf(withRey, 'SHD_141')).toBe(costOf(board(), 'SHD_141') - 2)
+  })
+
+  it('Gideon Hask (SOR_036) gives a token to a friendly unit when an enemy unit is defeated', () => {
+    const killed = kill(board({ units: [unit('gh', 'SOR_036'), unit('f', 'GRD')] }, { units: [unit('e', 'GRD')] }), 'e')
+    expect(unitOffers(killed).sort()).toEqual(['f', 'gh'])
+    expect(exp(accept(killed, { targetInstanceId: 'f' }), 'f')).toBe(1)
+    // A friendly defeat is not an enemy one.
+    noChoice(kill(board({ units: [unit('gh', 'SOR_036'), unit('f', 'GRD')] }, { units: [unit('e', 'GRD')] }), 'f'))
+  })
+
+  it('Bail Organa (SOR_094) exhausts to give a token to another friendly unit', () => {
+    const s = board({ units: [unit('bail', 'SOR_094'), unit('f', 'GRD')] }, { units: [unit('e', 'GRD')] })
+    const use = moves(s).find(m => m.type === 'useAbility' && m.instanceId === 'bail')
+    expect(use, 'the Action is offered').toBeDefined()
+    const used = resolve(s, use!)
+    expect(U(used, 'bail')!.exhausted).toBe(true)
+    expect(unitOffers(used)).toEqual(['f'])
+    expect(exp(accept(used, { targetInstanceId: 'f' }), 'f')).toBe(1)
   })
 })

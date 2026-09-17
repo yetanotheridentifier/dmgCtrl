@@ -1347,6 +1347,22 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'LAW_257', name: 'Hidden Hand Supplier' },
   { id: 'LAW_069', name: 'The Ghost' },
   { id: 'SHD_099', name: 'Echo' },
+  // Experience tokens: F, attacks, reactions and activated Actions
+  { id: 'JTL_200', name: 'Shuttle Tydirium' },
+  { id: 'JTL_250', name: "Sabine's Masterpiece" },
+  { id: 'LAW_039', name: 'Latts Razzi' },
+  { id: 'LAW_073', name: 'Patient Hunter' },
+  { id: 'LAW_115', name: 'Rickety Quadjumper' },
+  { id: 'SHD_057', name: 'Rickety Quadjumper' },
+  { id: 'LAW_152', name: 'C-3P0' },
+  { id: 'LOF_046', name: 'Ezra Bridger' },
+  { id: 'LOF_065', name: 'Watto' },
+  { id: 'LOF_258', name: 'Peli Motto' },
+  { id: 'SEC_051', name: 'Bo-Katan Kryze' },
+  { id: 'SHD_045', name: 'Rose Tico' },
+  { id: 'SHD_141', name: 'Kylo Ren' },
+  { id: 'SOR_036', name: 'Gideon Hask' },
+  { id: 'SOR_094', name: 'Bail Organa' },
 ]
 
 /**

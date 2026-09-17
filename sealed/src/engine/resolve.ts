@@ -2576,6 +2576,29 @@ function applyChosenMode(state: GameState, owner: PlayerId, mode: string | undef
       const targets = inPlayUnits(state).map(u => u.instanceId)
       return targets.length ? pushChoice(state, { kind: 'mayGiveTokens', id: `${choiceId}-exp`, controller: owner, token: TOKEN_EXPERIENCE, count: 1, targets, optional: false }) : state
     }
+    // Latts Razzi — "give a Shield token or an Experience token to this unit. Then, she deals damage
+    // equal to her power to an enemy ground unit." The token lands first, so it counts toward her power.
+    case 'lattsShield':
+    case 'lattsExperience': {
+      const self = choiceId
+      const token = mode === 'lattsShield' ? TOKEN_SHIELD : TOKEN_EXPERIENCE
+      const next = giveToken(state, self, token)
+      const her = findUnit(next, self)?.unit
+      if (!her) return next
+      const targets = state.players[opponentOf(owner)].units.filter(u => u.arena === 'ground').map(u => u.instanceId)
+      return targets.length
+        ? pushChoice(next, { kind: 'selectDamageTarget', id: `${choiceId}-hit`, controller: owner, amount: effectivePower(next, her), unitTargets: targets, baseTargets: [] })
+        : next
+    }
+    // Watto — "an opponent chooses one": the chooser is the opponent, so both outcomes land on the
+    // other side of the table, which is why these read `opponentOf(owner)` where the others read `owner`.
+    case 'wattoExperience': {
+      const wattoOwner = opponentOf(owner)
+      const targets = state.players[wattoOwner].units.map(u => u.instanceId)
+      return targets.length ? pushChoice(state, { kind: 'mayGiveTokens', id: `${choiceId}-exp`, controller: wattoOwner, token: TOKEN_EXPERIENCE, count: 1, targets, optional: false }) : state
+    }
+    case 'wattoDraw':
+      return drawCards(state, opponentOf(owner), 1)
     default:
       return state
   }

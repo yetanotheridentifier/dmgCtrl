@@ -7356,3 +7356,95 @@ registerCard('SOR_055', { // The Force Is With Me
     return offerAttack(giveMixedTokens(s, id, tokens), ctx.owner, `${ctx.sourceInstanceId}-attack`, { attacker: { only: [id] } })
   },
 })
+
+// F: attacks, reactions and activated Actions. The trigger changes; the grant is the same one.
+registerCard('JTL_200', { // Shuttle Tydirium
+  ...onAttack(whenPlayed('Discard a card from your deck. If it has an odd cost, you may give an Experience token to another unit.', (s, ctx) => {
+    const [next, milled] = millTop(s, ctx.owner, 1)
+    const cost = milled.length ? next.cards[milled[0]]?.cost ?? 0 : 0
+    return milled.length && cost % 2 === 1 ? expChoice(next, ctx, pickedIds(next, ctx, pickOther), 1, true) : next
+  })),
+})
+registerCard('JTL_250', { // Sabine's Masterpiece
+  // Four independent clauses, each gated on an aspect you control. Only the Command one grants a token;
+  // the rest are the ordinary heal / damage / resource effects, raised in the printed order.
+  ...onAttack(whenPlayed('On Attack: if you control a Vigilance unit, heal 2 damage from a base; a Command unit, give an Experience token to a unit; an Aggression unit, deal 1 damage to a unit or a base; a Cunning unit, exhaust or ready a resource.', (s, ctx) => {
+    let next = s
+    if (youControl(next, ctx, pickAspect('Vigilance'))) next = healChoice(next, ctx, 2, [], BOTH_BASES)
+    if (youControl(next, ctx, pickAspect('Command'))) next = expChoice(next, ctx, allUnits(next).map(u => u.instanceId), 1, false, `${ctx.sourceInstanceId}-exp`)
+    if (youControl(next, ctx, pickAspect('Aggression'))) next = damageChoice(next, ctx, 1, allUnits(next), BOTH_BASES)
+    if (youControl(next, ctx, pickAspect('Cunning'))) next = exhaustReadyResource(next, ctx.owner)
+    return next
+  })),
+})
+registerCard('LAW_039', { // Latts Razzi
+  ...whenPlayed('Give a Shield token or an Experience token to this unit. Then, she deals damage equal to her power to an enemy ground unit.',
+    (s, ctx) => pushChoice(s, { kind: 'chooseMode', id: ctx.sourceInstanceId!, controller: ctx.owner, modes: ['lattsShield', 'lattsExperience'] })),
+})
+registerCard('LAW_073', { // Patient Hunter
+  abilities: [{ trigger: 'whenRegroupStarts', description: "You may give an Experience token to a non-leader unit. If you do, that unit can't ready during this regroup phase.",
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, nonLeader), "give an Experience token to a non-leader unit, which then can't ready this regroup phase", true) }],
+  ifYouDo: (s, ctx) => (ctx.targetInstanceId
+    ? addLastingEffect(giveToken(s, ctx.targetInstanceId, TOKEN_EXPERIENCE), { targetInstanceId: ctx.targetInstanceId, cannotReady: true, untilRoundEnd: true })
+    : s),
+})
+const quadjumper = onAttack(mayPayWp("You may reveal the top card of your deck. If it's not a unit, give an Experience token to another unit.", 0, 'reveal the top card of your deck',
+  // The card stays where it is: revealing is not drawing, and the cost of 0 makes this the plain yes/no.
+  (s, ctx) => {
+    const top = s.players[ctx.owner].deck[0]
+    return top !== undefined && !printedUnit(s.cards[top]) ? expChoice(s, ctx, pickedIds(s, ctx, pickOther), 1, false, `${ctx.sourceInstanceId}-exp`) : s
+  }))
+registerCard('LAW_115', quadjumper) // Rickety Quadjumper
+registerCard('SHD_057', quadjumper) // Rickety Quadjumper, the SHD printing: same text, a separate card id
+registerCard('LAW_152', onAttack(expWp('You may give an Experience token to another non-leader unit that shares a Trait with a friendly leader.', // C-3P0
+  pickAll(pickOther, nonLeader, (s, u, ctx) => {
+    const leaderTraits = leaderTraitsOf(s, ctx.owner).map(t => t.toLowerCase())
+    return unitTraits(s, u).some(t => leaderTraits.includes(t.toLowerCase()))
+  }), 1, true)))
+/** The traits of a player's leader, whether it is deployed as a unit or still on its front side. */
+const leaderTraitsOf = (s: GameState, owner: PlayerId): string[] => {
+  const deployed = s.players[owner].units.find(u => u.isLeader)
+  return deployed ? unitTraits(s, deployed) : s.cards[s.players[owner].leader.cardId]?.traits ?? []
+}
+registerCard('LOF_046', onAttack(expWp('You may give an Experience token to another Creature or Spectre unit.', // Ezra Bridger
+  pickAll(pickOther, (s, u) => unitHasTrait(s, u, 'Creature') || unitHasTrait(s, u, 'Spectre')), 1, true)))
+registerCard('LOF_065', attacks('An opponent chooses one: you give an Experience token to a friendly unit, or you draw a card.', (s, ctx) => // Watto
+  pushChoice(s, { kind: 'chooseMode', id: ctx.sourceInstanceId!, controller: opponentOf(ctx.owner), modes: ['wattoExperience', 'wattoDraw'] })))
+registerCard('LOF_258', onAttack(expWp('Give an Experience token to a friendly Vehicle or Droid unit.', // Peli Motto
+  pickAll(pickFriendly, (s, u) => unitHasTrait(s, u, 'Vehicle') || unitHasTrait(s, u, 'Droid')))))
+registerCard('SEC_051', { // Bo-Katan Kryze
+  abilities: [
+    { trigger: 'whenPlayed', description: 'Give each enemy unit -3/-3 for this phase.',
+      effect: (s, ctx) => lastingOnEach(s, enemyUnitsOf(s, ctx.owner), { power: -3, hp: -3 }) },
+    { trigger: 'whenEnemyUnitDefeated', description: 'Give an Experience token to a friendly unit.',
+      effect: (s, ctx) => expChoice(s, ctx, pickedIds(s, ctx, pickFriendly)) },
+  ],
+})
+registerCard('SHD_045', { // Rose Tico
+  ...onAttack(unitThenWp('You may defeat a Shield token on a friendly unit. If you do, give 2 Experience tokens to that unit.',
+    pickAll(pickFriendly, (_s, u) => hasToken(u.upgrades, TOKEN_SHIELD)), 'defeat a Shield token on a friendly unit', true,
+    (s, ctx) => giveTokens(defeatUpgrade(s, ctx.targetInstanceId!, TOKEN_SHIELD), ctx.targetInstanceId!, TOKEN_EXPERIENCE, 2))),
+})
+registerCard('SHD_141', { // Kylo Ren
+  // "While playing this unit, ignore his Villainy aspect penalty if you control Rey": a hook on the card
+  // being played, unlike the in-play `waivesAspectPenalty` that a unit holds over other cards.
+  ignoresOwnAspectPenalty: (s, owner) => (playerControlsNamed(s, owner, 'Rey') ? ['Villainy'] : []),
+  ...onAttack(unitThenWp("Give a unit +2/+0 for this phase. If it's a non-Villainy unit, also give an Experience token to it.",
+    pickAny, 'give a unit +2/+0 for this phase', false,
+    (s, ctx) => {
+      const id = ctx.targetInstanceId!
+      const buffed = addLastingEffect(s, { targetInstanceId: id, power: 2 })
+      const target = findUnit(buffed, id)
+      return target && !printedAspect(cardOf(buffed, target.unit), 'Villainy') ? giveToken(buffed, id, TOKEN_EXPERIENCE) : buffed
+    })),
+})
+registerCard('SOR_036', { // Gideon Hask
+  abilities: [{ trigger: 'whenEnemyUnitDefeated', description: 'Give an Experience token to a friendly unit.',
+    effect: (s, ctx) => expChoice(s, ctx, pickedIds(s, ctx, pickFriendly)) }],
+})
+registerCard('SOR_094', { actionAbilities: [{ // Bail Organa
+  description: 'Give an Experience token to another friendly unit.',
+  exhaustCost: true,
+  usable: (s, self) => friendliesOf(s, self).some(u => u.instanceId !== self.instanceId),
+  effect: (s, ctx) => expChoice(s, ctx, pickedIds(s, ctx, pickAll(pickOther, pickFriendly))),
+}] })
