@@ -1,7 +1,7 @@
 import type { GameState, KeywordInstance, UnitState, CombatContext } from './types'
 import { lastingEffectTotals, abilityCardIds } from './types'
 import { getCardDefinition } from './abilities'
-import type { AttackContext, StatModContext } from './abilities'
+import type { AttackContext, AuraContribution, StatModContext } from './abilities'
 
 /** Keyword lookups against the static card db. */
 
@@ -219,25 +219,22 @@ export function auraContributions(state: GameState, target: UnitState, combat?: 
   let hp = 0
   const keywords: KeywordInstance[] = []
   const removeKeywords: string[] = []
+  const add = (contrib: AuraContribution | undefined): void => {
+    if (!contrib) return
+    power += contrib.power ?? 0
+    hp += contrib.hp ?? 0
+    if (contrib.keywords) keywords.push(...contrib.keywords)
+    if (contrib.removeKeywords) removeKeywords.push(...contrib.removeKeywords)
+  }
   for (const owner of ['player', 'opponent'] as const) {
     const sameController = owner === targetOwner
     const leader = state.players[owner].leader
-    const fromLeader = leader.deployed ? undefined : getCardDefinition(leader.cardId)?.leaderAbilities?.aura?.(state, owner, target, sameController, combat)
-    if (fromLeader) {
-      power += fromLeader.power ?? 0
-      hp += fromLeader.hp ?? 0
-      if (fromLeader.keywords) keywords.push(...fromLeader.keywords)
-      if (fromLeader.removeKeywords) removeKeywords.push(...fromLeader.removeKeywords)
-    }
+    // An undeployed leader and the base are not units, so each contributes for its controller.
+    if (!leader.deployed) add(getCardDefinition(leader.cardId)?.leaderAbilities?.aura?.(state, owner, target, sameController, combat))
+    add(getCardDefinition(state.players[owner].base.cardId)?.baseAbilities?.aura?.(state, owner, target, sameController, combat))
     for (const source of state.players[owner].units) {
       for (const cardId of abilityCardIds(source)) {
-        const contrib = getCardDefinition(cardId)?.aura?.(state, source, target, sameController, combat)
-        if (contrib) {
-          power += contrib.power ?? 0
-          hp += contrib.hp ?? 0
-          if (contrib.keywords) keywords.push(...contrib.keywords)
-          if (contrib.removeKeywords) removeKeywords.push(...contrib.removeKeywords)
-        }
+        add(getCardDefinition(cardId)?.aura?.(state, source, target, sameController, combat))
       }
     }
   }

@@ -4,6 +4,9 @@ import { legalMoves } from '../engine/legalMoves'
 import { getCardDefinition } from '../engine/abilities'
 import { normaliseCard } from '../engine/cardDb'
 import { unitHasKeyword } from '../engine/keywords'
+import { effectivePower, effectiveHp } from '../engine/stats'
+import { initGame } from '../engine/initGame'
+import { parseProtectThePod, minimumDeckSize } from '../utils/parseProtectThePod'
 import { poolFor } from '../bench/setPools'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helpers/engineFixtures'
@@ -23,6 +26,8 @@ import type { EngineCard, GameState, PendingChoice, PlayerId, UnitState } from '
 const GROUP_A = ['SOR_019', 'SOR_025', 'SOR_028', 'LAW_023', 'LAW_026']
 /** B: Epic Actions that play a unit, or repeat for each friendly leader unit. */
 const GROUP_B = ['SOR_022', 'TS26_10', 'TS26_11']
+/** C: constants — an aura over units in play, and the two that change how the game is set up. */
+const GROUP_C = ['TWI_019', 'TWI_028', 'JTL_021', 'JTL_024', 'JTL_025']
 /** Scoped by the triage but lifted out to the ticket that owns their blocker. */
 const LIFTED = ['LAW_020', 'LAW_021', 'LAW_022', 'LAW_024', 'LAW_025', 'LAW_027', 'LAW_028', 'LAW_030', 'TS26_12']
 
@@ -37,7 +42,7 @@ const real = (id: string): EngineCard => {
 const src = (id: string, over: Partial<EngineCard> = {}) => card({ id, arena: 'ground', cost: 2, power: 2, hp: 8, ...over })
 const F: Record<string, EngineCard> = {
   ...CARDS,
-  ...Object.fromEntries([...GROUP_A, ...GROUP_B].map(id => [id, real(id)])),
+  ...Object.fromEntries([...GROUP_A, ...GROUP_B, ...GROUP_C].map(id => [id, real(id)])),
   LAW_163: real('LAW_163'), // The Sarlacc of Carkoon, the card Great Pit of Carkoon searches for
   GRD: src('GRD'),
   GRD2: src('GRD2'),
@@ -75,7 +80,7 @@ const useBase = (s: GameState) => resolve(s, { type: 'useBaseAbility' })
 
 describe('base abilities: the scope', () => {
   it('registers a base ability for every shipped base and none for the lifted ones', () => {
-    for (const id of [...GROUP_A, ...GROUP_B]) expect(getCardDefinition(id)?.baseAbilities, id).toBeTruthy()
+    for (const id of [...GROUP_A, ...GROUP_B, ...GROUP_C]) expect(getCardDefinition(id)?.baseAbilities, id).toBeTruthy()
     for (const id of LIFTED) expect(getCardDefinition(id), id).toBeUndefined()
   })
 })
@@ -202,6 +207,52 @@ describe('base Epic Actions, B: playing a unit, and once for each friendly leade
 
   it("Executioner's Arena is not offered without a friendly leader unit", () => {
     expect(offered(board('TS26_11', {}, { units: [unit('theirs', 'GRD2')] }))).toBe(false)
+  })
+})
+
+describe('base constants, C: auras and setup', () => {
+  const auraBoard = (baseId: string) => board(baseId,
+    { units: [unit('boss', 'GRD', { isLeader: true }), unit('mine', 'GRD2')] },
+    { units: [unit('theirBoss', 'GRD', { isLeader: true })] })
+
+  it('Pau City (TWI_019) gives each leader unit its controller has +0/+1', () => {
+    const s = auraBoard('TWI_019')
+    const mine = s.players.player.units
+    expect(effectiveHp(s, mine[0])).toBe(F.GRD.hp + 1)
+    expect(effectivePower(s, mine[0])).toBe(F.GRD.power)
+    expect(effectiveHp(s, mine[1])).toBe(F.GRD2.hp) // not a leader unit
+    expect(effectiveHp(s, s.players.opponent.units[0])).toBe(F.GRD.hp) // the enemy leader unit is not "yours"
+  })
+
+  it('Petranaki Arena (TWI_028) gives each leader unit its controller has +1/+0', () => {
+    const s = auraBoard('TWI_028')
+    const mine = s.players.player.units
+    expect(effectivePower(s, mine[0])).toBe(F.GRD.power + 1)
+    expect(effectiveHp(s, mine[0])).toBe(F.GRD.hp)
+    expect(effectivePower(s, mine[1])).toBe(F.GRD2.power)
+    expect(effectivePower(s, s.players.opponent.units[0])).toBe(F.GRD.power)
+  })
+
+  it('Colossus (JTL_021) draws 1 less card in its controller\'s starting hand, and only theirs', () => {
+    const deckOf = (base: string) => ({ name: base, leader: 'TST_L', base, cards: [{ id: 'GRD', count: 30 }] })
+    const s = initGame(deckOf('JTL_021'), deckOf('TST_B'), F, { firstPlayer: 'player', shuffle: (a: unknown[]) => a })
+    expect(s.players.player.hand).toHaveLength(5)
+    expect(s.players.player.deck).toHaveLength(25)
+    expect(s.players.opponent.hand).toHaveLength(6)
+  })
+
+  it('Data Vault (JTL_024) raises its deck minimum by 10, and Thermal Oscillator (JTL_025) lowers it by 5', () => {
+    expect(minimumDeckSize('TST_B')).toBe(30)
+    expect(minimumDeckSize('JTL_024')).toBe(40)
+    expect(minimumDeckSize('JTL_025')).toBe(25)
+  })
+
+  it('a deck is only as short as its base allows', () => {
+    const deckJson = (base: string, count: number) => JSON.stringify({ leader: 'SOR_010', base, deck: [{ id: 'SOR_100', count }] })
+    expect(parseProtectThePod(deckJson('JTL_024', 30))).toEqual({ ok: false, error: 'too-few-cards' })
+    expect(parseProtectThePod(deckJson('JTL_024', 40)).ok).toBe(true)
+    expect(parseProtectThePod(deckJson('JTL_025', 25)).ok).toBe(true)
+    expect(parseProtectThePod(deckJson('JTL_025', 24))).toEqual({ ok: false, error: 'too-few-cards' })
   })
 })
 

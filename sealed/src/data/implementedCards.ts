@@ -252,6 +252,11 @@ export const IMPLEMENTED_BASES: UpgradeStatus[] = [
   { id: 'SOR_022', name: 'Energy Conversion Lab' },
   { id: 'TS26_10', name: "Dooku's Palace" },
   { id: 'TS26_11', name: "Executioner's Arena" },
+  { id: 'TWI_019', name: 'Pau City' },
+  { id: 'TWI_028', name: 'Petranaki Arena' },
+  { id: 'JTL_021', name: 'Colossus' },
+  { id: 'JTL_024', name: 'Data Vault' },
+  { id: 'JTL_025', name: 'Thermal Oscillator' },
 ]
 
 export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [

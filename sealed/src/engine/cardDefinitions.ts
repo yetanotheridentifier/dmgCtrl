@@ -7006,3 +7006,17 @@ registerCard('TS26_11', { // Executioner's Arena
     return executionerOffer(ctx.targetInstanceId ? dealDamageToUnit(s, ctx.targetInstanceId, 2) : s, ctx, i + 1)
   },
 })
+
+// C: constants. An aura from a base reads its controller's leader units; the setup numbers are read
+// where the game is set up (`initGame`) and where a deck list is checked (`parseProtectThePod`).
+/** "Each leader unit you control gets <buff>." */
+const leaderUnitAura = (buff: AuraContribution): CardDefinition => ({
+  baseAbilities: {
+    aura: (s, _owner, target, sameController) => (sameController && isLeaderUnit(s, target) ? buff : undefined),
+  },
+})
+registerCard('TWI_019', leaderUnitAura({ hp: 1 })) // Pau City
+registerCard('TWI_028', leaderUnitAura({ power: 1 })) // Petranaki Arena
+registerCard('JTL_021', { baseAbilities: { startingHandDelta: -1 } }) // Colossus
+registerCard('JTL_024', { baseAbilities: { deckMinimumDelta: 10 } }) // Data Vault
+registerCard('JTL_025', { baseAbilities: { deckMinimumDelta: -5 } }) // Thermal Oscillator

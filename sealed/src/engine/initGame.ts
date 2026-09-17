@@ -1,5 +1,7 @@
 import type { CardDb, GameState, PlayerId, PlayerState } from './types'
 import type { ParsedDeck } from '../utils/parseProtectThePod'
+import { getCardDefinition } from './abilities'
+import './cardDefinitions' // side effect: registers card behaviours, bases included
 
 export interface InitGameOptions {
   firstPlayer: PlayerId
@@ -30,11 +32,13 @@ function expandDeck(deck: ParsedDeck): string[] {
 
 function initPlayer(deck: ParsedDeck, shuffle: <T>(arr: T[]) => T[]): PlayerState {
   const shuffled = shuffle(expandDeck(deck))
+  // A base may change the size of the starting hand (Colossus: one card fewer).
+  const opening = OPENING_HAND + (getCardDefinition(deck.base)?.baseAbilities?.startingHandDelta ?? 0)
   return {
     leader: { cardId: deck.leader, deployed: false, epicActionUsed: false, exhausted: false },
     base: { cardId: deck.base, damage: 0 },
-    hand: shuffled.slice(0, OPENING_HAND),
-    deck: shuffled.slice(OPENING_HAND),
+    hand: shuffled.slice(0, opening),
+    deck: shuffled.slice(opening),
     discard: [],
     resources: [],
     units: [],
