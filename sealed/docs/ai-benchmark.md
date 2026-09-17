@@ -1006,6 +1006,10 @@ The tool's model of the engine lives in three lists in `bench/triage.ts`: implem
 dispatched trigger points, and unexpressible mechanics. **They shrink as mechanics land.** When
 Experience tokens ship, delete that entry and every card it was blocking reclassifies itself.
 
+A colon-led head that is not a trigger point but a lead-in handing a quoted ability to a unit ("Attached
+unit gains:", "For this attack, it gets +2/+0 and gains:", "it gains Sentinel and:") is read by its
+ending, not its spelling, and blocks the card on `granted-ability-block` rather than on a trigger head.
+
 ### Why there are fallout probes
 
 The blocker list catches new *nouns*: a token type, a zone, a card type. It cannot catch a card

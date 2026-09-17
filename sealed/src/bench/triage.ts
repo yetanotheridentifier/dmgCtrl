@@ -66,8 +66,7 @@ const NEW_MECHANICS: readonly (readonly [string, RegExp])[] = [
   ['capture', /\bcaptures?\b|\bcaptured\b/i],
   // A card that is both a unit and an upgrade.
   ['pilot', /\bPilot(ing)?\b|\bpilot\b/i],
-  // An upgrade or aura handing a whole triggered-ability block to its host.
-  ['granted-ability-block', /(?:Attached unit|Each other friendly [^.\n]{0,40}unit|While you control[^.\n]{0,40}) gains:/i],
+  // `granted-ability-block` is read from the trigger heads instead: see GRANTED_ABILITY_LEAD_IN.
   // Zone manipulation beyond resourceTopOfDeck / ready / exhaust, which do exist.
   ['resource-zone', /(?:return|take|move|defeat|discard)[^.\n]{0,40}\bresource\b|\bresource\b[^.\n]{0,30}\bto (?:your|their) hand|put[^.\n]{0,30}into (?:your|their) resource/i],
   ['play-from-discard', /play[^.\n]{0,50}from (?:your|their|the) discard/i],
@@ -77,16 +76,23 @@ const NEW_MECHANICS: readonly (readonly [string, RegExp])[] = [
 ]
 
 /**
+ * A colon-led head that hands a quoted ability to a unit rather than naming a trigger point: it ends
+ * in "gains", or in "gains" plus a keyword or trait and "and" ("it gains Sentinel and:"). The spelling
+ * before "gains" varies without limit ("Attached unit", "If attached unit is a Force unit, it", "For this
+ * attack, it gets +2/+0 and"), so the rule reads only the end. Every such head is the one blocker
+ * `granted-ability-block`; read as a trigger point, each spelling folded into `trigger:one-off`.
+ */
+const GRANTED_ABILITY_LEAD_IN = /\bgains(?:\s[^:]*\sand)?$/i
+
+/**
  * Blockers that are one engine change wearing two hats. The Piloting keyword and the pilot text
- * always co-occur, as do the granted-ability-block shape and its "Attached unit gains:" head. Left
- * separate, every such card counts as multi-blocked and the mechanic's sole-unlock reads zero,
- * which orders the work wrongly.
+ * always co-occur. Left separate, every such card counts as multi-blocked and the mechanic's
+ * sole-unlock reads zero, which orders the work wrongly.
  */
 const CANONICAL_BLOCKERS: ReadonlyMap<string, string> = new Map([
   ['kw:Piloting', 'pilot'],
   ['trigger:When played as an upgrade', 'pilot'],
   ['trigger:When played as a unit', 'pilot'],
-  ['trigger:Attached unit gains', 'granted-ability-block'],
   ['trigger:When a friendly Force unit attacks', 'force-token'],
   ['trigger:When played using Smuggle', 'kw:Smuggle'],
   ['trigger:Coordinate - When Played', 'kw:Coordinate'],
@@ -252,10 +258,9 @@ export function triage(pool: SwuCard[]): TriageReport {
     for (const k of newKeywords) blockers.add(`kw:${k}`)
     for (const h of triggerHeads(text)) {
       const norm = h.toLowerCase()
-      // A slash joins two trigger points ("When Played/On Attack"). A stat notation is not one: a
-      // granted-ability lead-in reads "it gets +2/+0 and gains", and counting that as compound files
-      // the card under a blocker that otherwise holds genuine two-trigger cards.
-      if (norm.replace(/[+-]?\d+\/[+-]?\d+/g, '').includes('/')) blockers.add('trigger:compound')
+      if (GRANTED_ABILITY_LEAD_IN.test(h)) blockers.add('granted-ability-block')
+      // A slash joins two trigger points ("When Played/On Attack").
+      else if (norm.includes('/')) blockers.add('trigger:compound')
       else if (!EXISTING_TRIGGERS.has(norm)) blockers.add(`trigger:${h}`)
     }
 
