@@ -2043,12 +2043,12 @@ registerCard('ASH_137', attackWithRider('Attack with a unit. For this attack, yo
  * other ability. That is what puts them into the ordering question alongside the card's own When
  * Played and everyone else's reactions.
  *
- * Raising their choice directly from `enterUnit` instead is what made a Snub Fighter Squadron unable
+ * Raising their choice directly from `playUnitCard` instead is what made a Snub Fighter Squadron unable
  * to deal its 1 damage until after it had taken its Ambush attack: a choice on the board stops the
  * rest of the batch (CR 7.6.12), and this one was there before the batch began.
  *
  * The unit's ready state is NOT decided here. Ambush enters its unit ready so it can attack, which is
- * part of entering play rather than part of the ability, and stays in `enterUnit`.
+ * part of entering play rather than part of the ability, and stays in `playUnitCard`.
  */
 export const KEYWORD_AMBUSH = 'KEYWORD_AMBUSH'
 registerCard(KEYWORD_AMBUSH, {
@@ -3359,7 +3359,7 @@ registerCard('JTL_259', { // Retrofitted Airspeeder
   statModifier: (_s, _u, ctx) => (ctx.defenderArena === 'space' ? { power: -1 } : {}),
 })
 
-// Keywords that act as a unit ENTERS play, gained rather than printed: `enterUnit` reads them live.
+// Keywords that act as a unit ENTERS play, gained rather than printed: `playUnitCard` reads them live.
 registerCard('SHD_212', gains(another(isAspect('Cunning')), { name: 'Shielded' })) // Privateer Scyk
 registerCard('LOF_132', friendlyAura(isTrait('Inquisitor'), { keywords: [{ name: 'Hidden' }] }, true)) // Grand Inquisitor
 

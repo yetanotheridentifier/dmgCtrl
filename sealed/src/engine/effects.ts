@@ -199,7 +199,7 @@ export function collectUpgradeAttached(state: GameState, instanceId: string, upg
 /**
  * Queue a "your next unit …" grant for `owner` this phase. The grant (keywords, a cost
  * delta, and/or enters-ready, with an optional trait/power filter) is consumed by the next unit that
- * matches its filter — cost in `effectiveCost`, the rest in `enterUnit`; cleared at regroup. Generic:
+ * matches its filter — cost in `effectiveCost`, the rest in `playUnitCard`; cleared at regroup. Generic:
  * Sabine (Shielded), Mouse Droid (−1 to the next Imperial), Neel (next ≤1-power unit enters ready).
  */
 export function grantNextUnit(state: GameState, owner: PlayerId, grant: NextUnitGrant): GameState {

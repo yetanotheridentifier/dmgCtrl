@@ -101,7 +101,7 @@ setup panel's manifest, `data/implementedCards.ts`, must list every registered c
 its test counts only ids shaped `<SET>_<number>`, so a pseudo card is left out and any other shape fails.
 
 The unit's ready state is not part of that: entering ready so Ambush can attack is part of entering
-play, and stays in `enterUnit`.
+play, and stays in `playUnitCard`.
 
 **Shielded and Hidden are read from the unit's LIVE keywords once it is in play** (`applyEntryKeywords`,
 shared by a unit played from hand and a leader deploying), for the same reason Ambush is: a unit can
