@@ -3,6 +3,7 @@ import { resolve } from '../engine/resolve'
 import { legalMoves } from '../engine/legalMoves'
 import { getCardDefinition } from '../engine/abilities'
 import { normaliseCard } from '../engine/cardDb'
+import { defeatUnit } from '../engine/combat'
 import { TOKEN_EXPERIENCE, TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { poolFor } from '../bench/setPools'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
@@ -27,6 +28,9 @@ const SHIPPED = [
   // A: tokens on the unit itself
   'LAW_037', 'LAW_055', 'LOF_092', 'SHD_096', 'LAW_147', 'SEC_089', 'SEC_035', 'SOR_191', 'LAW_034', 'TS26_77',
   'LAW_231', 'JTL_096',
+  // B: a fixed number of tokens on a chosen unit
+  'SHD_040', 'LAW_249', 'LAW_059', 'SEC_095', 'SHD_082', 'SHD_258', 'SOR_231', 'SOR_241', 'LAW_142', 'SOR_108',
+  'LOF_095', 'SEC_027', 'SOR_049', 'LAW_067', 'TS26_54',
 ]
 /** Registered elsewhere; used here to play a unit for free, so "no resources were paid" can be reached. */
 const GALACTIC_AMBITION = 'SOR_235'
@@ -56,6 +60,17 @@ const F: Record<string, EngineCard> = {
   VIL: src('VIL', { aspects: ['Villainy'] }),
   TWO_ASPECT: src('TWO_ASPECT', { aspects: ['Command', 'Heroism'] }),
   JEDI: src('JEDI', { traits: ['JEDI'] }),
+  UW: src('UW', { traits: ['UNDERWORLD'] }),
+  IMP: src('IMP', { traits: ['IMPERIAL'] }),
+  REB: src('REB', { traits: ['REBEL'] }),
+  MANDO: src('MANDO', { traits: ['MANDALORIAN'] }),
+  FORCE_U: src('FORCE_U', { traits: ['FORCE'] }),
+  UNIQ: src('UNIQ', { unique: true }),
+  CHEAP: src('CHEAP', { cost: 3 }),
+  PRICEY: src('PRICEY', { cost: 5 }),
+  PALP_U: card({ id: 'PALP_U', name: 'Chancellor Palpatine', arena: 'ground', cost: 5, power: 3, hp: 5 }),
+  PALP_L: card({ id: 'PALP_L', name: 'Chancellor Palpatine', type: 'leader', cost: 6, power: 3, hp: 6 }),
+  UPG: card({ id: 'UPG', type: 'upgrade', cost: 1, power: 1, hp: 1 }),
   EV: card({ id: 'EV', type: 'event', cost: 1 }),
   FREE_EV: card({ id: 'FREE_EV', type: 'event', cost: 0 }),
 }
@@ -111,6 +126,8 @@ const play = (s: GameState, cardId: string, who: PlayerId = 'player'): GameState
 }
 /** The instance id of the unit `who` played last (the one `play` just put down). */
 const last = (s: GameState, who: PlayerId = 'player'): string => s.players[who].units[s.players[who].units.length - 1].instanceId
+/** Defeat the unit `id`, as an ability would. */
+const kill = (s: GameState, id: string): GameState => defeatUnit(s, id)
 /** Declare an attack with `attackerId`, on the enemy base or on `target`. */
 const attack = (s: GameState, attackerId: string, target?: string) =>
   resolve(s, { type: 'attack', attackerId, target: target ? { kind: 'unit', instanceId: target } : { kind: 'base' } })
@@ -250,6 +267,114 @@ describe('Experience tokens, A: tokens on the unit itself', () => {
   })
 })
 
-/** Kept referenced while groups land one at a time. */
-void unitOffers
-void declinable
+describe('Experience tokens, B: a fixed number of tokens on a chosen unit', () => {
+  it('Clan Wren Rescuer (SHD_040) gives an Experience token to any one unit, and cannot decline', () => {
+    const s = play(board({ units: [unit('f', 'GRD')] }), 'SHD_040')
+    expect(choice(s)).toMatchObject({ kind: 'mayGiveTokens', controller: 'player', count: 1, optional: false })
+    expect(unitOffers(s)).toEqual(['f', last(s)].sort())
+    expect(declinable(s)).toBe(false)
+    expect(exp(accept(s, { targetInstanceId: 'f' }), 'f')).toBe(1)
+  })
+
+  it('Black Sun Cabalist (LAW_249) gives an Experience token to another friendly Underworld unit', () => {
+    const s = play(board({ units: [unit('uw', 'UW'), unit('g', 'GRD')] }, { units: [unit('euw', 'UW')] }), 'LAW_249')
+    expect(unitOffers(s)).toEqual(['uw'])
+    expect(exp(accept(s, { targetInstanceId: 'uw' }), 'uw')).toBe(1)
+    // No other friendly Underworld unit: nothing is raised.
+    noChoice(play(board({ units: [unit('g', 'GRD')] }), 'LAW_249'))
+  })
+
+  it('Highsinger (LAW_059) gives a token to another friendly Command unit when played, and to a friendly Aggression unit when defeated', () => {
+    const played = play(board({ units: [unit('c', 'CMD'), unit('a', 'AGG')] }), 'LAW_059')
+    expect(unitOffers(played)).toEqual(['c'])
+    expect(exp(accept(played, { targetInstanceId: 'c' }), 'c')).toBe(1)
+    const killed = kill(board({ units: [unit('wd', 'LAW_059'), unit('c', 'CMD'), unit('a', 'AGG')] }), 'wd')
+    expect(unitOffers(killed)).toEqual(['a'])
+    expect(exp(accept(killed, { targetInstanceId: 'a' }), 'a')).toBe(1)
+  })
+
+  it('Theed Security (SEC_095) gives a token to a unit only while an opponent controls an upgrade', () => {
+    noChoice(play(board({ units: [unit('mine', 'GRD', { upgrades: [{ cardId: 'UPG', owner: 'player' }] })] }), 'SEC_095'))
+    const s = play(board(), 'SEC_095', 'player')
+    noChoice(s)
+    const theirs = play(board({}, { units: [unit('e', 'GRD', { upgrades: [{ cardId: 'UPG', owner: 'opponent' }] })] }), 'SEC_095')
+    expect(choice(theirs)).toMatchObject({ kind: 'mayGiveTokens', count: 1 })
+    expect(unitOffers(theirs)).toEqual(['e', last(theirs)].sort())
+  })
+
+  it('Outland TIE Vanguard (SHD_082) may give a token to another unit costing 3 or less, on either side', () => {
+    const s = play(board({ units: [unit('c', 'CHEAP'), unit('p', 'PRICEY')] }, { units: [unit('ec', 'CHEAP')] }), 'SHD_082')
+    expect(choice(s)).toMatchObject({ optional: true })
+    expect(unitOffers(s)).toEqual(['c', 'ec'])
+    expect(exp(skip(s), 'c')).toBe(0)
+  })
+
+  it('Mandalorian Warrior (SHD_258) may give a token to another Mandalorian unit', () => {
+    const s = play(board({ units: [unit('m', 'MANDO')] }, { units: [unit('em', 'MANDO'), unit('e', 'GRD')] }), 'SHD_258')
+    expect(unitOffers(s)).toEqual(['em', 'm'])
+    expect(declinable(s)).toBe(true)
+  })
+
+  it.each([['SOR_231', 'IMP', 'IMPERIAL'], ['SOR_241', 'REB', 'REBEL']])('%s gives 2 Experience tokens to another friendly %s unit', (id, friend) => {
+    const s = play(board({ units: [unit('t', friend), unit('g', 'GRD')] }, { units: [unit('e', friend)] }), id)
+    expect(choice(s)).toMatchObject({ kind: 'mayGiveTokens', count: 2, optional: false })
+    expect(unitOffers(s)).toEqual(['t'])
+    expect(exp(accept(s, { targetInstanceId: 't' }), 't')).toBe(2)
+  })
+
+  it('Scarif Lieutenant (LAW_142) gives a token to a friendly Rebel unit when defeated', () => {
+    const killed = kill(board({ units: [unit('wd', 'LAW_142'), unit('r', 'REB')] }, { units: [unit('er', 'REB')] }), 'wd')
+    expect(unitOffers(killed)).toEqual(['r'])
+    expect(exp(accept(killed, { targetInstanceId: 'r' }), 'r')).toBe(1)
+  })
+
+  it('Vanguard Infantry (SOR_108) may give a token to any unit when defeated', () => {
+    const killed = kill(board({ units: [unit('wd', 'SOR_108'), unit('f', 'GRD')] }, { units: [unit('e', 'GRD')] }), 'wd')
+    expect(unitOffers(killed)).toEqual(['e', 'f'])
+    expect(declinable(killed)).toBe(true)
+  })
+
+  it('Lor San Tekka (LOF_095) may give a token to a unique unit when defeated', () => {
+    const killed = kill(board({ units: [unit('wd', 'LOF_095'), unit('u', 'UNIQ'), unit('g', 'GRD')] }), 'wd')
+    expect(unitOffers(killed)).toEqual(['u'])
+  })
+
+  it("The Chancellor's Shuttle (SEC_027) may give a token only while you control Chancellor Palpatine", () => {
+    const wd = () => unit('wd', 'SEC_027')
+    noChoice(kill(board({ units: [wd(), unit('f', 'GRD')] }), 'wd'))
+    const asUnit = kill(board({ units: [wd(), unit('f', 'GRD'), unit('palp', 'PALP_U')] }), 'wd')
+    expect(choice(asUnit), 'as a unit').toMatchObject({ kind: 'mayGiveTokens', optional: true })
+    const asLeader = kill(board({ units: [wd(), unit('f', 'GRD')], leader: { cardId: 'PALP_L', deployed: false, epicActionUsed: false, exhausted: false } }), 'wd')
+    expect(choice(asLeader), 'as a leader').toMatchObject({ kind: 'mayGiveTokens', optional: true })
+  })
+
+  it('Obi-Wan Kenobi (SOR_049) gives 2 tokens to another friendly unit, drawing a card if it is a Force unit', () => {
+    const killed = kill(board({ units: [unit('wd', 'SOR_049'), unit('force', 'FORCE_U'), unit('g', 'GRD')], deck: ['GRD2', 'GRD2'] }, { units: [unit('e', 'GRD')] }), 'wd')
+    expect(unitOffers(killed).sort()).toEqual(['force', 'g'])
+    const toForce = accept(killed, { targetInstanceId: 'force' })
+    expect(exp(toForce, 'force')).toBe(2)
+    expect(toForce.players.player.hand).toEqual(['GRD2'])
+    const toOther = accept(killed, { targetInstanceId: 'g' })
+    expect(exp(toOther, 'g')).toBe(2)
+    expect(toOther.players.player.hand).toEqual([])
+  })
+
+  it('Jyn Erso (LAW_067) offers either an Experience token or an exhaust, and only the modes that can do something', () => {
+    const s = play(board({ units: [unit('f', 'GRD')] }), 'LAW_067')
+    expect(choice(s)).toMatchObject({ kind: 'chooseMode', controller: 'player' })
+    const modes = (choice(s) as { modes: string[] }).modes
+    expect(modes).toHaveLength(2)
+    const given = accept(s, { optionIndex: modes.indexOf('giveExperience') })
+    expect(exp(accept(given, { targetInstanceId: 'f' }), 'f')).toBe(1)
+    const exhausted = accept(s, { optionIndex: modes.indexOf('exhaustUnit') })
+    expect(U(accept(exhausted, { targetInstanceId: 'f' }), 'f')!.exhausted).toBe(true)
+  })
+
+  it('Wartime Mercenaries (TS26_54) lets an opponent give a token to a unit when it is defeated', () => {
+    const s = play(board({ units: [unit('f', 'GRD')] }, { units: [unit('e', 'GRD')] }), 'TS26_54')
+    const killed = kill(s, last(s))
+    expect(choice(killed)).toMatchObject({ kind: 'mayGiveTokens', controller: 'opponent', optional: true })
+    expect(unitOffers(killed)).toEqual(['e', 'f'])
+    expect(exp(accept(killed, { targetInstanceId: 'e' }), 'e')).toBe(1)
+  })
+})

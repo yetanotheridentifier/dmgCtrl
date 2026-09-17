@@ -7038,6 +7038,9 @@ const expSelf = (s: GameState, ctx: EventCtx, count = 1): GameState => giveToken
 /** "(If ...,) give `count` Experience tokens to this unit", the count read as the ability resolves. */
 const expSelfWp = (description: string, count: number | ((s: GameState, ctx: EventCtx) => number) = 1, when: When = always) =>
   whenPlayed(description, (s, ctx) => (when(s, ctx) ? expSelf(s, ctx, typeof count === 'number' ? count : count(s, ctx)) : s))
+/** "(If ...,) (you may) give `count` Experience tokens to a unit that ...". */
+const expWp = (description: string, test: Pick, count = 1, optional = false, when: When = always) =>
+  whenPlayed(description, (s, ctx) => (when(s, ctx) ? expChoice(s, ctx, pickedIds(s, ctx, test), count, optional) : s))
 
 // A: the token goes on the unit itself.
 registerCard('LAW_037', attacks('Give an Experience token to this unit.', (s, ctx) => expSelf(s, ctx))) // Han Solo
@@ -7077,3 +7080,43 @@ registerCard('LAW_231', expSelfWp('If no resources were paid to play this unit, 
   (s, ctx) => (selfOf(s, ctx)?.resourcesPaidToPlay ?? 0) === 0))
 registerCard('JTL_096', mayPayWp('You may pay 2. If you do, move this unit to the ground arena and give 2 Experience tokens to it.', 2, 'move this unit to the ground arena and give it 2 Experience tokens', // Blue Leader
   (s, ctx) => expSelf(moveUnitToArena(s, ctx.sourceInstanceId!, 'ground'), ctx, 2)))
+
+// B: a fixed number of tokens on a chosen unit. "A unit" is either side's; "friendly" and "another"
+// narrow it, exactly as they do for the Shield and Advantage cards above.
+const pickUnique: Pick = (s, u) => s.cards[u.cardId]?.unique === true
+registerCard('SHD_040', expWp('Give an Experience token to a unit.', pickAny)) // Clan Wren Rescuer
+registerCard('LAW_249', expWp('Give an Experience token to another friendly Underworld unit.', pickAll(pickOther, pickFriendly, pickTrait('Underworld')))) // Black Sun Cabalist
+registerCard('LAW_059', allOf( // Highsinger
+  expWp('Give an Experience token to another friendly Command unit.', pickAll(pickOther, pickFriendly, pickAspect('Command'))),
+  defeated(expWp('Give an Experience token to a friendly Aggression unit.', pickAll(pickFriendly, pickAspect('Aggression')))),
+))
+registerCard('SEC_095', expWp('If an opponent controls an upgrade, give an Experience token to a unit.', pickAny, 1, false, // Theed Security
+  // Tokens are upgrades (CR 3.7.2), so a Shield on an enemy unit satisfies this as a card upgrade does.
+  (s, ctx) => s.players[opponentOf(ctx.owner)].units.some(u => u.upgrades.length > 0)))
+registerCard('SHD_082', expWp('You may give an Experience token to another unit that costs 3 or less.', pickAll(pickOther, costsAtMost(3)), 1, true)) // Outland TIE Vanguard
+registerCard('SHD_258', expWp('You may give an Experience token to another Mandalorian unit.', pickAll(pickOther, pickTrait('Mandalorian')), 1, true)) // Mandalorian Warrior
+registerCard('SOR_231', expWp('Give 2 Experience tokens to another friendly Imperial unit.', pickAll(pickOther, pickFriendly, pickTrait('Imperial')), 2)) // TIE Advanced
+registerCard('SOR_241', expWp('Give 2 Experience tokens to another friendly Rebel unit.', pickAll(pickOther, pickFriendly, pickTrait('Rebel')), 2)) // Wing Leader
+registerCard('LAW_142', defeated(expWp('Give an Experience token to a friendly Rebel unit.', pickAll(pickFriendly, pickTrait('Rebel'))))) // Scarif Lieutenant
+registerCard('SOR_108', defeated(expWp('You may give an Experience token to a unit.', pickAny, 1, true))) // Vanguard Infantry
+registerCard('LOF_095', defeated(expWp('You may give an Experience token to a unique unit.', pickUnique, 1, true))) // Lor San Tekka
+registerCard('SEC_027', defeated(expWp('If you control Chancellor Palpatine, you may give an Experience token to a unit.', pickAny, 1, true, // The Chancellor's Shuttle
+  (s, ctx) => playerControlsNamed(s, ctx.owner, 'Chancellor Palpatine'))))
+registerCard('SOR_049', defeated(unitThenWp('Give 2 Experience tokens to another friendly unit. If it\'s a Force unit, draw a card.', // Obi-Wan Kenobi
+  pickAll(pickOther, pickFriendly), 'give it 2 Experience tokens', false,
+  (s, ctx) => {
+    const target = findUnit(s, ctx.targetInstanceId!)
+    if (!target) return s
+    const given = giveTokens(s, ctx.targetInstanceId!, TOKEN_EXPERIENCE, 2)
+    return unitHasTrait(given, target.unit, 'Force') ? drawCards(given, ctx.owner, 1) : given
+  })))
+registerCard('LAW_067', whenPlayed('Either give an Experience token to a unit or exhaust a unit.', (s, ctx) => { // Jyn Erso
+  // Both halves need a unit in play, so either both modes are offered or neither is (as Leia Organa does).
+  const modes = allUnits(s).length ? ['giveExperience', 'exhaustUnit'] : []
+  return modes.length ? pushChoice(s, { kind: 'chooseMode', id: ctx.sourceInstanceId!, controller: ctx.owner, modes }) : s
+}))
+registerCard('TS26_54', defeated(whenPlayed('An opponent may give an Experience token to a unit.', (s, ctx) => { // Wartime Mercenaries
+  const opp = opponentOf(ctx.owner)
+  const targets = allUnits(s).map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'mayGiveTokens', id: ctx.sourceInstanceId!, controller: opp, token: TOKEN_EXPERIENCE, count: 1, targets, optional: true }) : s
+})))

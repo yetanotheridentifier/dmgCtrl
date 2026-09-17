@@ -13,7 +13,7 @@ import { exhaustUnit, findUnit, giveToken, giveTokens, attachUpgrades, collectUp
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage } from './keywords'
-import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
+import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, hasToken } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
 
 /**
@@ -2567,9 +2567,14 @@ function applyChosenMode(state: GameState, owner: PlayerId, mode: string | undef
     case 'readyResource': // Leia Organa — "either ready a resource or exhaust a unit"
       return readyResource(state, owner)
     case 'exhaustUnit': {
-      // The other half of Leia's choice. Having picked it, the exhaust is mandatory.
+      // The other half of Leia's choice, and of Jyn Erso's. Having picked it, the exhaust is mandatory.
       const targets = inPlayUnits(state).map(u => u.instanceId)
       return targets.length ? pushChoice(state, { kind: 'mayExhaustUnit', id: `${choiceId}-exhaust`, controller: owner, targets }) : state
+    }
+    case 'giveExperience': {
+      // Jyn Erso — "either give an Experience token to a unit or exhaust a unit". Mandatory once picked.
+      const targets = inPlayUnits(state).map(u => u.instanceId)
+      return targets.length ? pushChoice(state, { kind: 'mayGiveTokens', id: `${choiceId}-exp`, controller: owner, token: TOKEN_EXPERIENCE, count: 1, targets, optional: false }) : state
     }
     default:
       return state

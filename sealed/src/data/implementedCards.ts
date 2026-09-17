@@ -1293,6 +1293,22 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'TS26_77', name: 'Deployed Droideka' },
   { id: 'LAW_231', name: 'Weequay Pirate' },
   { id: 'JTL_096', name: 'Blue Leader' },
+  // Experience tokens: B, a fixed number of tokens on a chosen unit
+  { id: 'SHD_040', name: 'Clan Wren Rescuer' },
+  { id: 'LAW_249', name: 'Black Sun Cabalist' },
+  { id: 'LAW_059', name: 'Highsinger' },
+  { id: 'SEC_095', name: 'Theed Security' },
+  { id: 'SHD_082', name: 'Outland TIE Vanguard' },
+  { id: 'SHD_258', name: 'Mandalorian Warrior' },
+  { id: 'SOR_231', name: 'TIE Advanced' },
+  { id: 'SOR_241', name: 'Wing Leader' },
+  { id: 'LAW_142', name: 'Scarif Lieutenant' },
+  { id: 'SOR_108', name: 'Vanguard Infantry' },
+  { id: 'LOF_095', name: 'Lor San Tekka' },
+  { id: 'SEC_027', name: "The Chancellor's Shuttle" },
+  { id: 'SOR_049', name: 'Obi-Wan Kenobi' },
+  { id: 'LAW_067', name: 'Jyn Erso' },
+  { id: 'TS26_54', name: 'Wartime Mercenaries' },
 ]
 
 /**
