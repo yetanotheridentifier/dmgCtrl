@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
-import { replayWith, pickTrigger, loadReport } from './helpers/replayReport'
+import { replayWith, pickTrigger, loadReport, missingTurn } from './helpers/replayReport'
 import { dealDamageToUnit, defeatUnit } from '../engine/combat'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { TOKEN_ADVANTAGE, TOKEN_SHIELD } from '../engine/tokenUpgrades'
@@ -211,8 +211,9 @@ describe('Baylan Skoll sees a spent token as a defeated upgrade (#419)', () => {
   it('replays the reported game and offers both halves (#419)', () => {
     // Taking the initiative triggers both their leader's ability and a unit's, so the batch is now
     // ordered first, a question the reporter was never asked. They answered the leader's, so that is
-    // the order injected here; everything after it is their own recorded moves.
-    const played = replayWith(loadReport('baylanExhaust'), { 36: s => pickTrigger(s, 'ASH_014') }, PLAYS_BAYLAN)
+    // the order injected here. The recorded game also gave the opponent two actions in a row before
+    // moves 43 and 65 (`missingTurn`). Everything else is their own recorded moves.
+    const played = replayWith(loadReport('baylanExhaust'), { 36: s => pickTrigger(s, 'ASH_014'), 43: missingTurn, 65: missingTurn }, PLAYS_BAYLAN)
     expect(upgradeDefeatedThisPhase(played, 'player'), 'three Advantage tokens were spent this phase').toBe(true)
     expect(played.players.player.units.some(u => u.cardId === 'ASH_039'), 'Baylan Skoll is in play').toBe(true)
     expect(played.pendingChoices?.map(c => c.kind)).toEqual(['mayGiveTokens', 'mayExhaustUnit'])

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { loadReport, replaySteps } from './helpers/replayReport'
+import { loadReport, replaySteps, missingTurn } from './helpers/replayReport'
 import { legalMoves } from '../engine/legalMoves'
 import { resolve } from '../engine/resolve'
 import { unitHasKeyword } from '../engine/keywords'
@@ -38,7 +38,8 @@ import '../engine/cardDefinitions'
  */
 
 const report = loadReport('shieldedSentinelLockout')
-const states = replaySteps(report)
+// The recorded game gave the bot two actions in a row before move 79 (`missingTurn`).
+const states = replaySteps(report, [], { 79: missingTurn })
 
 const isShielded = (u: UnitState): boolean => u.upgrades.some(up => up.cardId === TOKEN_SHIELD)
 const shieldsOn = (s: GameState, seat: PlayerId): number =>

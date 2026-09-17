@@ -602,6 +602,13 @@ function resumeAfterChoice(state: GameState, resolved: PendingChoice): GameState
     if (hasPendingChoices(drained) || (drained.pendingTriggers ?? []).length > 0) return drained
     state = drained
   }
+  // Everything has drained, so a handed-over choice (Sabine, an opponent's On Attack pick, a
+  // prevention offer) returns control to the player whose action it was. Consumed here, before any
+  // exit below, because a marker that outlives its choices is read by the NEXT choice to drain,
+  // which would restore the wrong player and give the other side two actions in a row.
+  if (state.pendingResumeActive !== undefined) {
+    state = { ...state, activePlayer: state.pendingResumeActive, pendingResumeActive: undefined }
+  }
   // A combat suspended for an On Defense choice resumes once the queue drains.
   if (state.pendingAttack) return resumePendingAttack(state)
   // Regroup choices are resolved before anyone resources, and resourcing starts with the
@@ -615,11 +622,6 @@ function resumeAfterChoice(state: GameState, resolved: PendingChoice): GameState
   }
   if (resolved.kind === 'payOrExhaust' && resolved.resumeAtInitiative) {
     return { ...state, activePlayer: state.initiative }
-  }
-  // An opponent-interjected choice (Sabine) drained: restore the original actor, then advance
-  // the turn as their action normally would (so it becomes the opponent's turn).
-  if (state.pendingResumeActive !== undefined) {
-    return advanceTurn(resetPasses({ ...state, activePlayer: state.pendingResumeActive, pendingResumeActive: undefined }))
   }
   return advanceTurn(resetPasses(state))
 }

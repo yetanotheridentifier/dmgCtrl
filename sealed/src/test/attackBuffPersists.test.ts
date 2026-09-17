@@ -61,7 +61,9 @@ describe('#540: the Mandalorian Scout attack', () => {
     const asPlayed = resolve(interceptor, { ...swing, choiceId: choice(interceptor, 'support')!.id })
     const declined = resolve(interceptor, { type: 'skipTrigger', choiceId: choice(interceptor, 'support')!.id })
     expect(asPlayed.players.opponent.base.damage).toBe(5)
-    expect(resolve(declined, swing).players.opponent.base.damage).toBe(6)
+    // Declining ends the opponent's action, so the player passes before the control swing.
+    expect(declined.activePlayer).toBe('player')
+    expect(resolve(resolve(declined, { type: 'pass' }), swing).players.opponent.base.damage).toBe(6)
   })
 
   /** And the Scout is still at printed power once the phase has run on past its attack. */

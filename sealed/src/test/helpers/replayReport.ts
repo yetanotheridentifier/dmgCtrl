@@ -93,15 +93,20 @@ export function hydrate(report: Report, extra: SwuCard[] = []): GameState {
   return { ...report.initialState, cards } as GameState
 }
 
+/** Actions to apply just before a report's move `i`, as a function of the live board (see `replayWith`). */
+export type ReplayInserts = Record<number, (s: GameState) => Action[]>
+
 /**
  * Every state in order: index 0 is the starting position, index n is the state after move n-1. Use
- * this to step through and find where the game first goes wrong.
+ * this to step through and find where the game first goes wrong. With `inserts`, each inserted action
+ * adds its own state too, so the indices no longer line up with move numbers.
  */
-export function replaySteps(report: Report, extra: SwuCard[] = []): GameState[] {
+export function replaySteps(report: Report, extra: SwuCard[] = [], inserts: ReplayInserts = {}): GameState[] {
   const states = [hydrate(report, extra)]
-  for (const move of report.moves) {
+  report.moves.forEach((move, i) => {
+    for (const action of inserts[i]?.(states[states.length - 1]) ?? []) states.push(resolve(states[states.length - 1], action))
     states.push(resolve(states[states.length - 1], move.action))
-  }
+  })
   return states
 }
 
@@ -134,17 +139,20 @@ export function replayUpTo(report: Report, moveCount: number, extra: SwuCard[] =
  */
 export function replayWith(
   report: Report,
-  inserts: Record<number, (s: GameState) => Action[]>,
+  inserts: ReplayInserts,
   moveCount = report.moves.length,
   extra: SwuCard[] = [],
 ): GameState {
-  let s = hydrate(report, extra)
-  for (let i = 0; i < moveCount; i++) {
-    for (const action of inserts[i]?.(s) ?? []) s = resolve(s, action)
-    s = resolve(s, report.moves[i].action)
-  }
-  return s
+  const states = replaySteps({ ...report, moves: report.moves.slice(0, moveCount) }, extra, inserts)
+  return states[states.length - 1]
 }
+
+/**
+ * An insert for a report recorded while an answered choice could leave a stale resume marker, which
+ * gave one player two actions in a row. The engine now passes the turn there, so the other player's
+ * missing turn is filled with a pass, which leaves the board as the reporter saw it.
+ */
+export const missingTurn = (): Action[] => [{ type: 'pass' }]
 
 /** Answer an outstanding "which of my abilities resolves next" by naming the card it belongs to. */
 export function pickTrigger(state: GameState, cardId: string): Action[] {
