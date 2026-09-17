@@ -341,6 +341,12 @@ export interface GameState {
    * the regroup phase so a unit defeated during regroup uses its base stats.
    */
   lastingEffects?: LastingEffect[]
+  /** Effects cards have left to happen later (`DelayedEffect`). */
+  delayedEffects?: DelayedEffect[]
+  /** Card names nobody can play this phase (Transmission Jamming). Cleared as the regroup phase starts. */
+  bannedNames?: string[]
+  /** Bases whose next damage this phase is prevented (Close the Shield Gate). Cleared as the regroup phase starts. */
+  shieldedBases?: PlayerId[]
   /**
    * Events the engine tracks within a boundary so abilities can query them:
    * which units entered play this phase and which cards were defeated this phase
@@ -464,6 +470,31 @@ export interface LastingEffect {
   unlessSentinel?: boolean
   /** Keyword names the unit loses for the duration (SpecForce Soldier: Sentinel). Read by `unitKeywords`. */
   removeKeywords?: string[]
+  /** The unit deals no combat damage for the duration (Betrayed Trust). */
+  noCombatDamage?: boolean
+  /** Units attacking this unit get this much power for the duration (I Have the High Ground: -4). */
+  attackersPower?: number
+  /** The unit can't ready for the duration (No Good to Me Dead). Read by `unitCannotReady`. */
+  cannotReady?: boolean
+  /**
+   * Lasts to the end of the round, through the regroup phase's ready step, rather than to the start of
+   * the regroup phase ("this round (including during the regroup phase)"). Dropped as the next round starts.
+   */
+  untilRoundEnd?: boolean
+}
+
+/**
+ * An effect a card leaves to happen later: at the start of the regroup phase (Sneak Attack, Final
+ * Showdown), at the start of the next action phase (The Eye of Aldhani), or the next time `owner` takes
+ * the initiative this phase (Premonition of Doom). Run once, by the card's `delayed` hook, then dropped.
+ * A `takeInitiative` effect that never ran is dropped as the regroup phase starts.
+ */
+export interface DelayedEffect {
+  cardId: string
+  owner: PlayerId
+  when: 'regroupStart' | 'actionPhaseStart' | 'takeInitiative'
+  /** The unit the effect is about, when it has one (the unit Sneak Attack played). */
+  unitId?: string
 }
 
 /**
@@ -759,7 +790,8 @@ type ChoiceVariant =
   // less. Deal 4 damage to it" (Reckless Landing), which can only be aimed once it is on the board.
   // `thenShieldIt` gives the unit just played a Shield token (Rio Durant's "it gains Shielded").
   // `thenDamageOwnBase` deals the played unit's printed cost to its controller's base (Galactic Ambition).
-  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number; thenShieldIt?: boolean; thenDamageOwnBase?: boolean }
+  // `thenDelay` leaves a delayed effect about the played unit (Sneak Attack defeats it at the regroup phase).
+  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number; thenShieldIt?: boolean; thenDamageOwnBase?: boolean; thenDelay?: { cardId: string; when: DelayedEffect['when'] } }
   // Additional cost "exhaust a friendly unit": pick one of `targets` to exhaust, then the
   // `then` play-from-hand step follows (Fennec). Mandatory.
   | { kind: 'selectUnitToExhaust'; id: string; controller: PlayerId; targets: string[]; then: PlayFromHandSpec }
@@ -909,7 +941,8 @@ type ChoiceVariant =
   // while it's in play. Mandatory.
   // `surcharge` names the card for a COST INCREASE instead of a prohibition (Qi'ra: "each card with
   // that name costs 3 more for your opponents"). The two are mutually exclusive on a unit.
-  | { kind: 'nameCard'; id: string; controller: PlayerId; unitId: string; surcharge?: number }
+  // `phaseBan` records the name on the game instead, so nobody can play it this phase (Transmission Jamming).
+  | { kind: 'nameCard'; id: string; controller: PlayerId; unitId: string; surcharge?: number; phaseBan?: boolean }
   // "You may put the top card of your deck into play as a resource" (Resupply Carrier, Cham
   // Syndulla) — a yes/no, raised only when there is a card to take.
   | { kind: 'mayResourceTop'; id: string; controller: PlayerId }
@@ -1042,8 +1075,23 @@ export function addLastingEffect(state: GameState, effect: LastingEffect): GameS
   return { ...state, lastingEffects: [...(state.lastingEffects ?? []), effect] }
 }
 
-/** Drop every lasting effect (called at the start of the regroup phase). */
+/**
+ * Drop the "this phase" lasting effects (called at the start of the regroup phase), and the phase's
+ * banned names and shielded bases. A `untilRoundEnd` effect stays until `clearRoundEffects`.
+ */
 export function clearLastingEffects(state: GameState): GameState {
+  if (!state.lastingEffects && !state.bannedNames && !state.shieldedBases) return state
+  const kept = (state.lastingEffects ?? []).filter(e => e.untilRoundEnd)
+  return { ...state, lastingEffects: kept.length > 0 ? kept : undefined, bannedNames: undefined, shieldedBases: undefined }
+}
+
+/** Leave an effect to happen later (`DelayedEffect`). */
+export function addDelayedEffect(state: GameState, effect: DelayedEffect): GameState {
+  return { ...state, delayedEffects: [...(state.delayedEffects ?? []), effect] }
+}
+
+/** Drop the lasting effects that last the round (called as the next round starts). */
+export function clearRoundEffects(state: GameState): GameState {
   return state.lastingEffects ? { ...state, lastingEffects: undefined } : state
 }
 

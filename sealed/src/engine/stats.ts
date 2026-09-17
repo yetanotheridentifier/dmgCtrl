@@ -133,6 +133,11 @@ export function effectivePower(state: GameState, unit: UnitState, ctx: StatConte
     power += statModifiers(state, unit, ctx, 'power')
     power += auraContributions(state, unit, ctx.combat).power // other units' auras
     power += lastingEffectTotals(state, unit.instanceId).power // "this phase" buffs
+    // "Each enemy unit gets -4/-0 while attacking that unit" (I Have the High Ground) sits on the defender.
+    const defenderId = ctx.attacking ? ctx.combat?.defenderInstanceId : undefined
+    if (defenderId) {
+      for (const e of state.lastingEffects ?? []) if (e.targetInstanceId === defenderId) power += e.attackersPower ?? 0
+    }
     return Math.max(0, power)
   } finally {
     computingPower.delete(unit.instanceId)

@@ -255,7 +255,9 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'revealUnitFromHand':
       return ['reveal a unit from your hand; its cost sets the damage']
     case 'nameCard':
-      return ['name a card the opponent may not play while this unit is out']
+      return [choice.phaseBan
+        ? 'name a card nobody may play this phase'
+        : 'name a card the opponent may not play while this unit is out']
     case 'selectResourceUpgrade':
       return ['choose an upgrade to play from your resources']
     case 'chooseOne':

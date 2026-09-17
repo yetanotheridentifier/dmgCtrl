@@ -1,8 +1,8 @@
 import type { Action, AttackTarget } from './actions'
 import type { Arena, GameState, PlayerId, UnitState } from './types'
-import type { IfYouDo, PendingChoice, PendingTrigger, TriggerContext, UpgradeRef } from './types'
+import type { DelayedEffect, IfYouDo, PendingChoice, PendingTrigger, TriggerContext, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds } from './types'
-import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
+import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants,resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets, offerAttack } from './legalMoves'
 import { collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, stampChoiceSource, type TriggerPoint } from './abilities'
@@ -12,7 +12,7 @@ import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
 import { exhaustUnit, findUnit, giveToken, giveTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
-import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait } from './keywords'
+import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage } from './keywords'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
 
@@ -1619,7 +1619,9 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'nameCard': {
       // Ryder Azadi: record the named card on this unit — the opponent can't play cards with
       // that name while it's in play (enforced in legalMoves). Naming is mandatory.
-      if (cardName) {
+      if (cardName && choice.phaseBan) {
+        next = { ...next, bannedNames: [...(next.bannedNames ?? []), cardName] }
+      } else if (cardName) {
         next = updatePlayer(next, choice.controller, {
           units: next.players[choice.controller].units.map(u =>
             (u.instanceId === choice.unitId
@@ -1819,6 +1821,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         if (choice.thenDamageIt) next = dealDamageToUnit(next, enteredId, choice.thenDamageIt)
         if (choice.thenShieldIt) next = giveToken(next, enteredId, TOKEN_SHIELD)
         if (choice.thenDamageOwnBase) next = dealDamageToBase(next, choice.controller, card.cost)
+        if (choice.thenDelay) next = addDelayedEffect(next, { ...choice.thenDelay, owner: choice.controller, unitId: enteredId })
         next = checkWin(next)
         if (next.winner !== null) return next
       }
@@ -2139,6 +2142,8 @@ function takeInitiative(state: GameState): GameState {
   // Taking the initiative immediately after an opponent's pass ends the action phase (CR 1.15.5c).
   const endsPhase = state.consecutivePasses >= 1
   let taken: GameState = { ...state, initiative: playerId, initiativeTakenBy: playerId }
+  // "The next time you take the initiative this phase" (Premonition of Doom).
+  taken = runDelayed(taken, 'takeInitiative', playerId)
   // "When you take the initiative" (Mandalorian): fire before the turn transition. If the batch stops
   // to ask something, hold with the taker and finish the transition once it drains (resumeAfterChoice).
   // The taker's units carry the trigger as well as their leader (Grogu the unit).
@@ -2312,7 +2317,8 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
     viaAmbush,
     ...(targetUnit ? { defenderArena: targetUnit.arena, combat: { attackerInstanceId: attackerId, defenderInstanceId: targetUnit.instanceId, viaAmbush } } : {}),
   }
-  const attackerPower = effectivePower(state, attacker, attackerCtx)
+  // A unit that can't deal combat damage (Betrayed Trust) still attacks, with nothing to deal.
+  const attackerPower = unitDealsNoCombatDamage(state, attacker) ? 0 : effectivePower(state, attacker, attackerCtx)
 
   if (target.kind === 'base') {
     // Through `dealDamageToBase` so base-damage prevention applies (At Attin Safety Droid);
@@ -2347,7 +2353,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   // travels with the roles, since a card can read it about someone else's attack (Enfys Nest).
   const combat = { attackerInstanceId: attackerId, defenderInstanceId: defender.instanceId, viaAmbush }
   const defenderCtx = { combat, defending: true } // Palace Chef Droid: "+X while defending"
-  const counterPower = effectivePower(preCombat, defender, defenderCtx)
+  const counterPower = unitDealsNoCombatDamage(preCombat, defender) ? 0 : effectivePower(preCombat, defender, defenderCtx)
 
   // Overwhelm: excess combat damage beyond the defender's remaining HP hits the
   // defending player's base (CR 1.9.11). A shielded defender takes no damage, so
@@ -2602,6 +2608,11 @@ function enterRegroup(state: GameState): GameState {
   // "At the start of the regroup phase, its owner takes control of it" (Rehabilitation) — before
   // anything readies, so the owner has it available for the next action phase.
   next = returnControlledUnits(next, true)
+  // Cards' own "at the start of the regroup phase" effects (Sneak Attack, Final Showdown). A "next time
+  // you take the initiative this phase" that never came lapses with the phase.
+  next = runDelayed(next, 'regroupStart')
+  if (next.winner !== null) return next
+  next = dropDelayed(next, e => e.when === 'takeInitiative')
   next = sweepUnitDefeats(next)
   next = drawForRegroup(next, 'player')
   next = drawForRegroup(next, 'opponent')
@@ -2678,9 +2689,31 @@ function firstDecider(state: GameState, initiative: PlayerId): PlayerId {
   return choices.some(c => c.controller === initiative) ? initiative : opponentOf(initiative)
 }
 
+/**
+ * Run and drop the delayed effects due `when` (for `owner` only, when given), each by its card's
+ * `delayed` hook. They are dropped before any runs, so an effect can never fire twice.
+ */
+function runDelayed(state: GameState, when: DelayedEffect['when'], owner?: PlayerId): GameState {
+  const due = (e: DelayedEffect) => e.when === when && (owner === undefined || e.owner === owner)
+  const ready = (state.delayedEffects ?? []).filter(due)
+  if (ready.length === 0) return state
+  return checkWin(ready.reduce((acc, e) => getCardDefinition(e.cardId)?.delayed?.(acc, e) ?? acc, dropDelayed(state, due)))
+}
+
+function dropDelayed(state: GameState, drop: (e: DelayedEffect) => boolean): GameState {
+  if (!(state.delayedEffects ?? []).some(drop)) return state
+  const kept = state.delayedEffects!.filter(e => !drop(e))
+  return { ...state, delayedEffects: kept.length > 0 ? kept : undefined }
+}
+
 function startNextRound(state: GameState): GameState {
   let next = readyEverything(readyEverything(state, 'player'), 'opponent')
+  // "This round (including during the regroup phase)" ends once the ready step has passed.
+  next = clearRoundEffects(next)
   next = resetPhaseEvents(next) // a fresh action phase begins
+  // "At the start of the next action phase" (The Eye of Aldhani): its choices, like a whenReadies
+  // choice, are answered before play begins.
+  next = runDelayed(next, 'actionPhaseStart')
   next = {
     ...next,
     phase: 'action',

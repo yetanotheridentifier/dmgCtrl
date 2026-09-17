@@ -95,6 +95,9 @@ const F = {
   ASP_VA: card({ id: 'ASP_VA', arena: 'ground', cost: 2, power: 2, hp: 9, aspects: ['Vigilance', 'Aggression'] }),
   ASP_CH: card({ id: 'ASP_CH', arena: 'ground', cost: 2, power: 2, hp: 9, aspects: ['Command', 'Heroism'] }),
   SABER_EV: card({ id: 'SABER_EV', type: 'event', cost: 1, traits: ['LIGHTSABER'] }),
+  LAW_130: ev('LAW_130', 2), SOR_186: ev('SOR_186', 2), JTL_074: ev('JTL_074'), TWI_072: ev('TWI_072'),
+  LAW_243: ev('LAW_243'), SOR_219: ev('SOR_219', 2), LOF_203: ev('LOF_203', 3), SEC_073: ev('SEC_073'),
+  SHD_208: ev('SHD_208', 6),
   OFFICIAL: card({ id: 'OFFICIAL', arena: 'ground', cost: 2, power: 1, hp: 4, traits: ['OFFICIAL'] }),
   TWO_ASP: card({ id: 'TWO_ASP', arena: 'ground', cost: 3, power: 2, hp: 5, aspects: ['Cunning', 'Heroism'] }),
   DROID: card({ id: 'DROID', arena: 'ground', cost: 2, power: 2, hp: 5, traits: ['DROID'] }),
@@ -1194,5 +1197,105 @@ describe('events with a yes-or-no, an each-player pick, or several picks at once
     expect(dmg(s, 'e')).toBe(4)
     expect(s.players.player.hand).toEqual(['P3', 'FILL'])
     noChoice(play(board('LOF_176', { hand: ['P3'] }, { units: [unit('e', 'BIG')] })))
+  })
+})
+
+// ── Lasting prohibitions and delayed effects ────────────────────────────────────────────────────
+
+/** Both players pass: the action phase ends and the regroup phase starts. */
+const toRegroup = (s: GameState) => resolve(resolve(s, { type: 'pass' }), { type: 'pass' })
+/** Both players skip resourcing: the next action phase starts. */
+const toNextRound = (s: GameState) => resolve(resolve(s, { type: 'skipResource' }), { type: 'skipResource' })
+const attackUnit = (s: GameState, attackerId: string, instanceId: string) => resolve(s, { type: 'attack', attackerId, target: { kind: 'unit', instanceId } })
+const attackBase = (s: GameState, attackerId: string) => resolve(s, { type: 'attack', attackerId, target: { kind: 'base' } })
+
+describe('events with a lasting prohibition or a delayed effect', () => {
+  it("Betrayed Trust (LAW_130): the enemy unit can't deal combat damage this phase", () => {
+    let s = play(board('LAW_130', { units: [unit('m', 'BIG')] }, { units: [unit('e', 'P5')] }))
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(s.activePlayer).toBe('opponent')
+    const hit = attackUnit(s, 'e', 'm')
+    expect([dmg(hit, 'm'), dmg(hit, 'e')]).toEqual([0, 1])
+    expect(attackBase(s, 'e').players.player.base.damage).toBe(0)
+  })
+
+  it("No Good to Me Dead (SOR_186) exhausts a unit that then doesn't ready in the regroup phase", () => {
+    let s = play(board('SOR_186', { units: [unit('tired', 'P3', { exhausted: true })] }, { units: [unit('e', 'P5')] }))
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(exhausted(s, 'e')).toEqual([true])
+    s = toNextRound(toRegroup(s))
+    expect(s.phase).toBe('action')
+    expect(exhausted(s, 'e', 'tired')).toEqual([true, false])
+    // The prohibition ends with the round: the next regroup readies it.
+    expect(exhausted(toNextRound(toRegroup(s)), 'e')).toEqual([false])
+  })
+
+  it('Close the Shield Gate (JTL_074) prevents the next damage to the chosen base this phase', () => {
+    let s = play(board('JTL_074', {}, { units: [unit('e', 'P5'), unit('f', 'P3')] }))
+    expect(choice(s).kind).toBe('choosePlayerThen')
+    s = accept(s, { optionIndex: 1 })
+    s = attackBase(s, 'e')
+    expect(s.players.player.base.damage).toBe(0)
+    s = attackBase(resolve(s, { type: 'pass' }), 'f')
+    expect(s.players.player.base.damage).toBe(3)
+  })
+
+  it('I Have the High Ground (TWI_072): enemy units get -4/-0 while attacking the chosen unit', () => {
+    let s = play(board('TWI_072', { units: [unit('m', 'BIG'), unit('n', 'BIG')] }, { units: [unit('e', 'P5')] }))
+    expect(unitOffers(s)).toEqual(['m', 'n'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(dmg(attackUnit(s, 'e', 'm'), 'm')).toBe(1)
+    expect(dmg(attackUnit(s, 'e', 'n'), 'n')).toBe(5)
+  })
+
+  it("Transmission Jamming (LAW_243): cards with the named name can't be played this phase, by anyone", () => {
+    let s = play(board('LAW_243', { hand: ['P3'] }, { hand: ['P3', 'P5'], resources: ready(10) }))
+    expect(choice(s).kind).toBe('nameCard')
+    s = resolve(s, { type: 'acceptChoice', choiceId: choice(s).id, cardName: 'P3' })
+    const plays = (st: GameState) => legalMoves(st).flatMap(m => (m.type === 'playUnit' ? [st.players[st.activePlayer].hand[m.handIndex]] : []))
+    expect(s.activePlayer).toBe('opponent')
+    expect(plays(s)).toEqual(['P5'])
+    const mine = resolve(s, { type: 'pass' })
+    expect(plays(mine)).toEqual([])
+    expect(toNextRound(toRegroup(s)).bannedNames).toBeUndefined()
+  })
+
+  it('Sneak Attack (SOR_219) plays a unit 3 less and ready, then defeats it as the regroup phase starts', () => {
+    let s = play(board('SOR_219', { hand: ['P5'] }))
+    expect(choice(s)).toMatchObject({ kind: 'playUnitFromHand', costDelta: -3, entersReady: true })
+    s = accept(s, { handIndex: 0 })
+    const id = s.players.player.units.find(u => u.cardId === 'P5')!.instanceId
+    expect(exhausted(s, id)).toEqual([false])
+    const regroup = toRegroup(s)
+    expect(U(regroup, id)).toBeUndefined()
+    expect(regroup.players.player.discard).toContain('P5')
+  })
+
+  it('Premonition of Doom (LOF_203) exhausts every unit the next time you take the initiative this phase', () => {
+    let s = play(board('LOF_203', { units: [unit('m', 'P3')] }, { units: [unit('e', 'P5')] }))
+    noChoice(s)
+    s = resolve(s, { type: 'pass' })
+    expect(exhausted(s, 'm', 'e')).toEqual([false, false])
+    s = resolve(s, { type: 'takeInitiative' })
+    expect(exhausted(s, 'm', 'e')).toEqual([true, true])
+    expect(s.delayedEffects ?? []).toEqual([])
+  })
+
+  it('The Eye of Aldhani (SEC_073): at the next action phase each enemy unit is exhausted unless its controller pays 1', () => {
+    let s = play(board('SEC_073', { units: [unit('m', 'P3')] }, { units: [unit('e', 'P5'), unit('f', 'P3')], resources: ready(3) }))
+    noChoice(s)
+    s = toNextRound(toRegroup(s))
+    expect(s.phase).toBe('action')
+    const asks = (s.pendingChoices ?? []).map(c => [c.kind, c.controller, 'unitId' in c ? c.unitId : ''])
+    expect(asks).toEqual([['payOrExhaust', 'opponent', 'e'], ['payOrExhaust', 'opponent', 'f']])
+    expect(s.activePlayer).toBe('opponent')
+  })
+
+  it('Final Showdown (SHD_208) readies each unit you control, and you lose as the regroup phase starts', () => {
+    let s = play(board('SHD_208', { units: [unit('m', 'P3', { exhausted: true })] }, { units: [unit('e', 'P5', { exhausted: true })] }))
+    expect(exhausted(s, 'm', 'e')).toEqual([false, true])
+    s = toRegroup(s)
+    expect(s.winner).toBe('opponent')
   })
 })

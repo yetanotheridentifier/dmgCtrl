@@ -208,8 +208,9 @@ export function nameableCardNames(state: GameState): string[] {
 export function namedByOpponent(state: GameState, playerId: PlayerId): Set<string> {
   // A name carrying a surcharge (Qi'ra) makes the card dearer rather than unplayable, so it is
   // deliberately absent from this set — `effectiveCost` charges for it instead.
-  return new Set(state.players[opponentOf(playerId)].units.flatMap(u =>
-    (u.namedCard && u.namedCardSurcharge === undefined ? [u.namedCard] : [])))
+  // Transmission Jamming's names bind both players, so they are included whoever asks.
+  return new Set([...state.players[opponentOf(playerId)].units.flatMap(u =>
+    (u.namedCard && u.namedCardSurcharge === undefined ? [u.namedCard] : [])), ...(state.bannedNames ?? [])])
 }
 
 export function affordableHandUnits(state: GameState, owner: PlayerId, extraResourceCost: number, costDelta: number): HandCardRef[] {

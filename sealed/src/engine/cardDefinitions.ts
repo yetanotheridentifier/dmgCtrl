@@ -7,7 +7,7 @@ import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
 import { discardUnitsMatching, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, isTokenCard } from './tokenUnits'
-import { opponentOf, pushChoice, addLastingEffect, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, markAbilityUsed, updatePlayer } from './types'
+import { opponentOf, pushChoice, addLastingEffect, addDelayedEffect, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, markAbilityUsed, updatePlayer } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
 import type { AttackOffer } from './legalMoves'
 import { canAfford } from './resources'
@@ -4867,6 +4867,48 @@ registerCard('LOF_176', { // Lightsaber Throw
     const next = drawCards(discardFromHand(s, ctx.owner, ctx.handIndex!), ctx.owner, 1)
     return damageChoice(next, ctx, 4, picked(next, ctx, pickGround))
   },
+})
+
+// Lasting prohibitions and delayed effects
+registerCard('LAW_130', unitThenWp("Choose an enemy unit. For this phase, that unit can't deal combat damage.", pickEnemy, "choose an enemy unit that can't deal combat damage this phase", false, // Betrayed Trust
+  (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, noCombatDamage: true })))
+registerCard('SOR_186', unitThenWp("Exhaust a unit. That unit can't ready this round (including during the regroup phase).", pickAny, "exhaust a unit that can't ready this round", false, // No Good to Me Dead
+  (s, ctx) => addLastingEffect(exhaustUnit(s, ctx.targetInstanceId!), { targetInstanceId: ctx.targetInstanceId!, cannotReady: true, untilRoundEnd: true })))
+registerCard('JTL_074', { // Close the Shield Gate
+  ...whenPlayed('Choose a base. The next time damage would be dealt to it this phase, prevent that damage.', (s, ctx) => choosePlayer(s, ctx, 'shield the base of')),
+  ifYouDo: (s, ctx) => (s.shieldedBases?.includes(ctx.playerChosen!) ? s : { ...s, shieldedBases: [...(s.shieldedBases ?? []), ctx.playerChosen!] }),
+})
+registerCard('TWI_072', unitThenWp('Choose a friendly unit. Each enemy unit gets -4/-0 while attacking that unit this phase.', pickFriendly, 'choose a friendly unit', false, // I Have the High Ground
+  (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, attackersPower: -4 })))
+registerCard('LAW_243', whenPlayed("Name a card. Cards with that name can't be played this phase.", (s, ctx) => // Transmission Jamming
+  pushChoice(s, { kind: 'nameCard', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, phaseBan: true })))
+registerCard('SOR_219', { // Sneak Attack
+  ...whenPlayed('Play a unit from your hand. It costs 3 less and enters play ready. At the start of the regroup phase, defeat it.', (s, ctx) => {
+    const candidates = affordableHandUnits(s, ctx.owner, 0, -3)
+    return candidates.length
+      ? pushChoice(s, { kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, costDelta: -3, entersReady: true, thenDelay: { cardId: 'SOR_219', when: 'regroupStart' } })
+      : s
+  }),
+  delayed: (s, e) => (e.unitId && findUnit(s, e.unitId) ? defeatUnit(s, e.unitId) : s),
+})
+registerCard('LOF_203', { // Premonition of Doom
+  ...whenPlayed('The next time you take the initiative this phase, exhaust all units.', (s, ctx) =>
+    addDelayedEffect(s, { cardId: 'LOF_203', owner: ctx.owner, when: 'takeInitiative' })),
+  delayed: s => allUnits(s).reduce((acc, u) => exhaustUnit(acc, u.instanceId), s),
+})
+registerCard('SEC_073', { // The Eye of Aldhani
+  ...whenPlayed('At the start of the next action phase, for each enemy unit, its controller must pay 1 or exhaust that unit.', (s, ctx) =>
+    addDelayedEffect(s, { cardId: 'SEC_073', owner: ctx.owner, when: 'actionPhaseStart' })),
+  delayed: (s, e) => {
+    const opp = opponentOf(e.owner)
+    return s.players[opp].units.reduce((acc, u) =>
+      pushChoice(acc, { kind: 'payOrExhaust', id: `eye-${u.instanceId}`, controller: opp, unitId: u.instanceId, cost: 1, resumeAtInitiative: true }), s)
+  },
+})
+registerCard('SHD_208', { // Final Showdown
+  ...whenPlayed('Ready each unit you control. At the start of the regroup phase, you lose the game.', (s, ctx) =>
+    addDelayedEffect(s.players[ctx.owner].units.reduce((acc, u) => readyUnit(acc, u.instanceId), s), { cardId: 'SHD_208', owner: ctx.owner, when: 'regroupStart' })),
+  delayed: (s, e) => (s.winner === null ? { ...s, winner: opponentOf(e.owner) } : s),
 })
 
 registerCard('LAW_085', unitThenWp('Choose a friendly non-leader unit. An opponent takes control of it. If they do, deal 4 damage to another unit in the same arena.', pickAll(pickFriendly, nonLeader), 'give a friendly non-leader unit to an opponent', false, // You Hold This

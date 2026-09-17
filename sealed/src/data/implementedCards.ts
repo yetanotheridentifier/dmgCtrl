@@ -527,6 +527,16 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'TWI_156', name: 'Unlimited Power' },
   { id: 'SHD_054', name: 'Midnight Repairs' },
   { id: 'LOF_176', name: 'Lightsaber Throw' },
+  // Lasting prohibitions and delayed effects
+  { id: 'LAW_130', name: 'Betrayed Trust' },
+  { id: 'SOR_186', name: 'No Good to Me Dead' },
+  { id: 'JTL_074', name: 'Close the Shield Gate' },
+  { id: 'TWI_072', name: 'I Have the High Ground' },
+  { id: 'LAW_243', name: 'Transmission Jamming' },
+  { id: 'SOR_219', name: 'Sneak Attack' },
+  { id: 'LOF_203', name: 'Premonition of Doom' },
+  { id: 'SEC_073', name: 'The Eye of Aldhani' },
+  { id: 'SHD_208', name: 'Final Showdown' },
   // Printed as an upgrade (see `cardDataCorrections.ts`), but the set data, and so the set totals
   // below, file it as an event. Counted where the totals count it.
   { id: 'SOR_215', name: 'Snapshot Reflexes' },

@@ -210,6 +210,11 @@ export function grantNextUnit(state: GameState, owner: PlayerId, grant: NextUnit
 export function dealDamageToBase(state: GameState, player: PlayerId, amount: number, source?: DamageSource): GameState {
   const p = state.players[player]
   const dealt = baseDamageAfterPrevention(state, player, amount, source)
+  // A shielded base used its prevention up on this damage.
+  if (amount > 0 && dealt === 0 && state.shieldedBases?.includes(player) && !damageIsUnpreventable(state, source)) {
+    const left = state.shieldedBases.filter(b => b !== player)
+    return { ...state, shieldedBases: left.length > 0 ? left : undefined }
+  }
   if (dealt <= 0) return state
   let next: GameState = { ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: p.base.damage + dealt } } } }
   next = recordBaseDamaged(next, player) // "an enemy base was damaged this phase" (Baylan Skoll)
@@ -249,6 +254,8 @@ export function fireUpgradesDefeated(state: GameState, upgradeOwners: PlayerId[]
  */
 export function baseDamageAfterPrevention(state: GameState, player: PlayerId, amount: number, source?: DamageSource): number {
   if (damageIsUnpreventable(state, source)) return amount
+  // Close the Shield Gate: the next damage to this base this phase is prevented whole.
+  if (amount > 0 && state.shieldedBases?.includes(player)) return 0
   let out = amount
   for (const u of state.players[player].units) {
     for (const cid of abilityCardIds(u)) {
@@ -509,6 +516,7 @@ export function readyUnit(state: GameState, instanceId: string): GameState {
 
 /** True while something on the unit says it can't ready (Frozen in Carbonite). */
 export function unitCannotReady(state: GameState, unit: UnitState): boolean {
+  if ((state.lastingEffects ?? []).some(e => e.cannotReady && e.targetInstanceId === unit.instanceId)) return true
   return abilityCardIds(unit).some(id => getCardDefinition(id)?.cannotReady?.(state, unit) ?? false)
 }
 
