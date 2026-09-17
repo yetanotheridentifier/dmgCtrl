@@ -3152,16 +3152,17 @@ type CardTest = (c: EngineCard | undefined, s: GameState, ctx: EventCtx) => bool
  * `count` above 1 is "up to N" (Grand Moff Tarkin), which draws again from what is left of the same
  * window and may stop at any point (CR 8.30.1).
  */
-const searchDrawWp = (description: string, depth: number, test: CardTest, count = 1) =>
-  whenPlayed(description, (s: GameState, ctx: EventCtx) => {
-    const revealed = s.players[ctx.owner].deck.slice(0, searchCount(s, ctx.owner, depth))
-    if (revealed.length === 0) return s
-    const eligibleIndices = revealed.flatMap((id, i) => (test(s.cards[id], s, ctx) ? [i] : []))
-    return pushChoice(s, {
-      kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices,
-      ...(count > 1 && { remaining: count, upTo: true }),
-    })
+const searchDrawChoice = (s: GameState, ctx: EventCtx, depth: number, test: CardTest, count = 1): GameState => {
+  const revealed = s.players[ctx.owner].deck.slice(0, searchCount(s, ctx.owner, depth))
+  if (revealed.length === 0) return s
+  const eligibleIndices = revealed.flatMap((id, i) => (test(s.cards[id], s, ctx) ? [i] : []))
+  return pushChoice(s, {
+    kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices,
+    ...(count > 1 && { remaining: count, upTo: true }),
   })
+}
+const searchDrawWp = (description: string, depth: number, test: CardTest, count = 1) =>
+  whenPlayed(description, (s: GameState, ctx: EventCtx) => searchDrawChoice(s, ctx, depth, test, count))
 
 registerCard('LAW_136', searchDrawWp('Search the top 3 cards of your deck for an Underworld unit, reveal it, and draw it.', 3,
   c => printedUnit(c) && printedTrait(c, 'Underworld'))) // Syndicate Spice Runner
@@ -5931,4 +5932,259 @@ registerCard('SOR_185', { // Chimaera
     const at = s.players[opp].hand.findIndex(id => s.cards[id]?.name === ctx.nameChosen)
     return at === -1 ? s : discardFromHand(s, opp, at)
   },
+})
+
+// ── Leaders from the other sealed sets ──────────────────────────────────────────────────────────────
+// Both sides of each leader. The front is an undeployed leader's action (using it exhausts the leader),
+// built on the When Played helpers: it is handed the same context, with a source that names the leader
+// side rather than a unit, so "another unit" excludes nothing and a choice still has a stable id. The
+// back is the deployed leader unit, registered like any other unit. A card whose front and back both
+// resume after a choice tell the two apart by `step`.
+
+/** The source an undeployed leader's action hands its effect: the leader side, not a unit in play. */
+const leaderSide = (cardId: string): string => `${cardId}-leader`
+interface FrontSpec {
+  /** The action's "C=N". */
+  cost?: number
+  /** Offered only while this holds, so the action is never used for nothing. */
+  usable?: When
+  effect: (s: GameState, ctx: Resumable) => GameState
+}
+/** "Action [Exhaust]: <effect>" on an undeployed leader. */
+const leaderFront = (description: string, spec: FrontSpec): CardDefinition => ({
+  leaderAbilities: {
+    actions: [{
+      description,
+      ...(spec.cost ? { cost: spec.cost } : {}),
+      usable: (s, owner) => spec.usable?.(s, { owner }) ?? true,
+      effect: (s, ctx) => spec.effect(s, { owner: ctx.owner, cardId: ctx.cardId, sourceInstanceId: leaderSide(ctx.cardId) }),
+    }],
+  },
+})
+/** Some unit passes `test`, read as the leader's controller would. */
+const anyUnitPasses = (test: Pick): When => (s, ctx) => picked(s, ctx, test).length > 0
+/** "If you played a <card> this phase". */
+const playedCardThisPhase = (test: (c: EngineCard | undefined) => boolean): When => (s, ctx) =>
+  cardsPlayedThisPhase(s, ctx.owner).some(id => test(s.cards[id]))
+/** "If you attacked with a <unit> this phase", read off the units still in play; the source itself is left out ("another"). */
+const attackedWithThisPhase = (test: Pick): When => (s, ctx) =>
+  attackedThisPhase(s).some(id => {
+    const found = findUnit(s, id)
+    return found !== undefined && found.owner === ctx.owner && id !== ctx.sourceInstanceId && test(s, found.unit, ctx)
+  })
+const enemyWasDefeated: When = (s, ctx) => defeatedThisPhase(s, opponentOf(ctx.owner)).length > 0
+const friendlyTraitDefeated = (trait: string): When => (s, ctx) => defeatedThisPhase(s, ctx.owner).some(id => printedTrait(s.cards[id], trait))
+const both = (...tests: When[]): When => (s, ctx) => tests.every(t => t(s, ctx))
+const handOf = (s: GameState, u: UnitState): number => { const o = unitOwner(s, u); return o ? s.players[o].hand.length : 0 }
+const selectUpgradeThen = (s: GameState, ctx: Resumable, candidates: UpgradeRef[], text: string, optional: boolean, step?: string): GameState =>
+  candidates.length ? pushChoice(s, { kind: 'selectUpgradeThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, text, then: resume(ctx, step), ...mayFlag(optional) }) : s
+
+// A: simple fronts, On Attack and constant backs
+registerCard('SOR_014', allOf( // Sabine Wren
+  leaderFront('Deal 1 damage to each base.', { effect: s => BOTH_BASES.reduce((acc, p) => dealDamageToBase(acc, p, 1), s) }),
+  attacks('Deal 1 damage to each enemy base.', (s, ctx) => dealDamageToBase(s, opponentOf(ctx.owner), 1)),
+))
+registerCard('IBH_53', allOf( // Darth Vader
+  leaderFront('Deal 1 damage to a base.', { cost: 1, effect: (s, ctx) => damageChoice(s, ctx, 1, [], BOTH_BASES) }),
+  attacks('Deal 2 damage to a base.', (s, ctx) => damageChoice(s, ctx, 2, [], BOTH_BASES)),
+))
+const damagedFriendly = pickAll(pickFriendly, damaged)
+registerCard('IBH_1', { // Leia Organa
+  ...leaderFront('Heal 1 damage from a friendly unit.', {
+    cost: 1,
+    usable: anyUnitPasses(damagedFriendly),
+    effect: (s, ctx) => healChoice(s, ctx, 1, pickedIds(s, ctx, damagedFriendly), []),
+  }),
+  ...attacks('Heal 1 damage from a friendly unit and 1 damage from another friendly unit.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, damagedFriendly), 'heal 1 damage from a friendly unit', false)),
+  ifYouDo: (s, ctx) => {
+    const healed = healUnit(s, ctx.targetInstanceId!, 1)
+    return healChoice(healed, ctx, 1, pickedIds(healed, ctx, damagedFriendly).filter(id => id !== ctx.targetInstanceId), [])
+  },
+})
+registerCard('SOR_010', allOf( // Darth Vader
+  leaderFront('If you played a Villainy card this phase, deal 1 damage to a unit and 1 damage to a base.', {
+    cost: 1,
+    usable: playedCardThisPhase(c => printedAspect(c, 'Villainy')),
+    effect: (s, ctx) => damageChoice(damageChoice(s, ctx, 1, allUnits(s)), ctx, 1, [], BOTH_BASES),
+  }),
+  onAttack(damageWp('You may deal 2 damage to a unit.', pickAny, 2, true)),
+))
+/** A friendly non-leader, non-token unit that entered play this phase: one "you played". */
+const playedUnitThisPhase: Pick = (s, u, ctx) =>
+  enteredPlayThisPhase(s, ctx.owner).includes(u.instanceId) && !isLeaderUnit(s, u) && !isTokenCard(u.cardId)
+const heroismPlayed = pickAll(pickFriendly, playedUnitThisPhase, pickAspect('Heroism'))
+registerCard('SOR_005', allOf( // Luke Skywalker
+  leaderFront('Give a Shield token to a Heroism unit you played this phase.', {
+    cost: 1,
+    usable: anyUnitPasses(heroismPlayed),
+    effect: (s, ctx) => shieldChoice(s, ctx, pickedIds(s, ctx, heroismPlayed), false),
+  }),
+  attacks('You may give another unit a Shield token.', (s, ctx) => shieldChoice(s, ctx, pickedIds(s, ctx, pickOther), true)),
+))
+const resistanceOrUpgrade: Pick = (s, u) => unitHasTrait(s, u, 'Resistance') || u.upgrades.some(up => printedTrait(s.cards[up.cardId], 'Resistance'))
+registerCard('JTL_007', allOf( // Admiral Holdo
+  leaderFront('Give a Resistance unit or a unit with a Resistance upgrade on it +2/+2 for this phase.', {
+    cost: 1,
+    usable: anyUnitPasses(resistanceOrUpgrade),
+    effect: (s, ctx) => lastingBuffChoice(s, ctx, pickedIds(s, ctx, resistanceOrUpgrade), { power: 2, hp: 2 }),
+  }),
+  onAttack(buffWp('You may give another Resistance unit or a unit with a Resistance upgrade on it +2/+2 for this phase.',
+    pickAll(pickOther, resistanceOrUpgrade), () => ({ power: 2, hp: 2 }), true)),
+))
+const damagedVehicle = pickAll(pickTrait('Vehicle'), damaged)
+const attackedThisPhasePick: Pick = (s, u) => attackedThisPhase(s).includes(u.instanceId)
+registerCard('JTL_004', allOf( // Rose Tico
+  leaderFront('Heal 2 damage from a Vehicle unit that attacked this phase.', {
+    usable: anyUnitPasses(pickAll(damagedVehicle, attackedThisPhasePick)),
+    effect: (s, ctx) => healChoice(s, ctx, 2, pickedIds(s, ctx, pickAll(damagedVehicle, attackedThisPhasePick)), []),
+  }),
+  attacks('You may heal 2 damage from a Vehicle unit.', (s, ctx) => healChoice(s, ctx, 2, pickedIds(s, ctx, damagedVehicle), [], true)),
+))
+registerCard('TWI_015', allOf( // General Grievous
+  leaderFront('Give a Droid unit Sentinel for this phase.', {
+    usable: anyUnitPasses(pickTrait('Droid')),
+    effect: (s, ctx) => lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickTrait('Droid')), { keywords: [KW.sentinel] }),
+  }),
+  onAttack(buffWp('You may give a Droid unit +1/+0 and Sentinel for this phase.', pickTrait('Droid'), () => ({ power: 1, keywords: [KW.sentinel] }), true)),
+))
+registerCard('TWI_006', allOf( // Wat Tambor
+  leaderFront('If a friendly unit was defeated this phase, give a unit +2/+2 for this phase.', {
+    usable: both(friendlyWasDefeated, anyUnitPasses(pickAny)),
+    effect: (s, ctx) => lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickAny), { power: 2, hp: 2 }),
+  }),
+  onAttack(buffWp('If a friendly unit was defeated this phase, you may give another unit +2/+2 for this phase.', pickOther, () => ({ power: 2, hp: 2 }), true, friendlyWasDefeated)),
+))
+registerCard('TWI_003', allOf( // Obi-Wan Kenobi
+  leaderFront('Heal 1 damage from a unit.', {
+    usable: anyUnitPasses(damaged),
+    effect: (s, ctx) => healChoice(s, ctx, 1, pickedIds(s, ctx, damaged), []),
+  }),
+  onAttack(unitThenWp('Heal 1 damage from a unit. If you do, deal 1 damage to a different unit.', damaged, 'heal 1 damage from a unit', false, (s, ctx) => {
+    const healed = healUnit(s, ctx.targetInstanceId!, 1)
+    return damageChoice(healed, ctx, 1, allUnits(healed).filter(u => u.instanceId !== ctx.targetInstanceId))
+  })),
+))
+const readyUnitPick: Pick = (_s, u) => !u.exhausted
+const exhaustedPick: Pick = (_s, u) => u.exhausted
+registerCard('SEC_015', allOf( // C-3PO
+  leaderFront('If you control an exhausted unit, exhaust a unit.', {
+    cost: 1,
+    usable: (s, ctx) => youControl(s, ctx, exhaustedPick) && anyUnitPasses(readyUnitPick)(s, ctx),
+    effect: (s, ctx) => targetChoice(s, ctx, 'mayExhaustUnit', pickedIds(s, ctx, readyUnitPick)),
+  }),
+  onAttack(targetWp('If you control another exhausted unit, you may exhaust a unit.', 'mayExhaustUnit', readyUnitPick, true,
+    (s, ctx) => youControl(s, ctx, pickOther, exhaustedPick))),
+))
+const lowPowerFriendly = pickAll(pickFriendly, (s, u) => effectivePower(s, u) <= 3)
+const damageAndReady = (s: GameState, ctx: EventCtx, amount: number, targets: string[], optional: boolean): GameState =>
+  targets.length
+    ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount, unitTargets: targets, baseTargets: [], thenReadyIt: true, ...mayFlag(optional) })
+    : s
+registerCard('SOR_011', allOf( // Grand Inquisitor
+  leaderFront('Deal 2 damage to a friendly unit with 3 or less power and ready it.', {
+    usable: anyUnitPasses(lowPowerFriendly),
+    effect: (s, ctx) => damageAndReady(s, ctx, 2, pickedIds(s, ctx, lowPowerFriendly), false),
+  }),
+  attacks('You may deal 1 damage to another friendly unit with 3 or less power and ready it.', (s, ctx) =>
+    damageAndReady(s, ctx, 1, pickedIds(s, ctx, pickAll(pickOther, lowPowerFriendly)), true)),
+))
+registerCard('SHD_003', { // Finn
+  ...leaderFront('Defeat a friendly upgrade on a unit. If you do, give a Shield token to that unit.', {
+    usable: (s, ctx) => friendlyUpgradeCandidates(s, ctx.owner).length > 0,
+    effect: (s, ctx) => selectUpgradeThen(s, ctx, friendlyUpgradeCandidates(s, ctx.owner), 'defeat a friendly upgrade and shield its unit', false),
+  }),
+  ...attacks('You may defeat a friendly upgrade on a unit. If you do, give a Shield token to that unit.', (s, ctx) =>
+    selectUpgradeThen(s, ctx, friendlyUpgradeCandidates(s, ctx.owner), 'defeat a friendly upgrade and shield its unit', true)),
+  ifYouDo: (s, ctx) => {
+    const up = ctx.upgradeChosen
+    if (!up) return s
+    const defeated = defeatUpgradeAt(s, up.unitId, up.upgradeIndex)
+    return findUnit(defeated, up.unitId) ? giveToken(defeated, up.unitId, TOKEN_SHIELD) : defeated
+  },
+})
+const mandalorianAttacked = attackedWithThisPhase(pickTrait('Mandalorian'))
+registerCard('SHD_012', { // Bo-Katan Kryze
+  ...leaderFront('If you attacked with a Mandalorian unit this phase, deal 1 damage to a unit.', {
+    usable: both(mandalorianAttacked, anyUnitPasses(pickAny)),
+    effect: (s, ctx) => damageChoice(s, ctx, 1, allUnits(s)),
+  }),
+  // The second damage is offered whether or not the first was taken, so the first resumes on a decline too.
+  ...attacks('You may deal 1 damage to a unit. If you attacked with another Mandalorian unit this phase, you may deal 1 damage to a unit.', (s, ctx) =>
+    (allUnits(s).length ? pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets: pickedIds(s, ctx, pickAny), optional: true, hookOnDecline: true, text: 'deal 1 damage to a unit', then: resume(ctx, 'first') }) : s)),
+  ifYouDo: (s, ctx) => {
+    const hit = ctx.targetInstanceId ? dealDamageToUnit(s, ctx.targetInstanceId, 1) : s
+    return ctx.step === 'first' && mandalorianAttacked(hit, ctx) ? unitThen(hit, ctx, pickedIds(hit, ctx, pickAny), 'deal 1 damage to a unit', true, 'second') : hit
+  },
+})
+const firstOrderPlayed = playedCardThisPhase(c => printedTrait(c, 'First Order'))
+registerCard('JTL_010', { // Captain Phasma
+  ...leaderFront('If you played a First Order card this phase, deal 1 damage to a base.', {
+    usable: firstOrderPlayed,
+    effect: (s, ctx) => damageChoice(s, ctx, 1, [], BOTH_BASES),
+  }),
+  ...attacks('If you played another First Order card this phase, you may deal 1 damage to a unit. If you do, deal 1 damage to a base.', (s, ctx) =>
+    (firstOrderPlayed(s, ctx) ? unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'deal 1 damage to a unit, then 1 damage to a base', true) : s)),
+  ifYouDo: (s, ctx) => damageChoice(dealDamageToUnit(s, ctx.targetInstanceId!, 1), ctx, 1, [], BOTH_BASES),
+})
+registerCard('LOF_011', { // Kit Fisto
+  ...leaderFront('If you attacked with a Jedi unit this phase, deal 2 damage to a unit.', {
+    cost: 1,
+    usable: both(attackedWithThisPhase(pickTrait('Jedi')), anyUnitPasses(pickAny)),
+    effect: (s, ctx) => damageChoice(s, ctx, 2, allUnits(s)),
+  }),
+  statModifier: (s, u) => perEach(friendliesOf(s, u).filter(x => x.instanceId !== u.instanceId && unitHasTrait(s, x, 'Jedi')).length, 1),
+})
+const rebelDefeated = friendlyTraitDefeated('Rebel')
+registerCard('LAW_005', allOf( // Jyn Erso
+  leaderFront('If a friendly Rebel unit was defeated this phase, search the top 3 cards of your deck for a card and draw it.', {
+    cost: 1,
+    usable: both(rebelDefeated, (s, ctx) => s.players[ctx.owner].deck.length > 0),
+    effect: (s, ctx) => searchDrawChoice(s, ctx, 3, () => true),
+  }),
+  attacks('If a friendly Rebel unit was defeated this phase, search the top 3 cards of your deck for a card and draw it.', (s, ctx) =>
+    (rebelDefeated(s, ctx) ? searchDrawChoice(s, ctx, 3, () => true) : s)),
+))
+registerCard('SOR_002', { // Iden Versio
+  ...leaderFront('If an enemy unit was defeated this phase, heal 1 damage from your base.', {
+    usable: enemyWasDefeated,
+    effect: (s, ctx) => healBase(s, ctx.owner, 1),
+  }),
+  abilities: [{ trigger: 'whenEnemyUnitDefeated', description: 'Heal 1 damage from your base.', effect: (s, ctx) => healBase(s, ctx.owner, 1) }],
+})
+registerCard('SHD_011', { // Kylo Ren
+  ...leaderFront('[Discard a card from your hand]: Give a unit +2/+0 for this phase.', {
+    usable: (s, ctx) => s.players[ctx.owner].hand.length > 0 && allUnits(s).length > 0,
+    effect: (s, ctx) => discards(s, ctx.owner, 1, ctx.sourceInstanceId!, resume(ctx)),
+  }),
+  ifYouDo: (s, ctx) => lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickAny), { power: 2 }),
+  statModifier: (s, u) => perEach(handOf(s, u), -1),
+})
+registerCard('LAW_012', allOf( // Sebulba
+  leaderFront('[Discard a card from your deck]: A friendly unit gains Raid 1 for this phase.', {
+    usable: (s, ctx) => s.players[ctx.owner].deck.length > 0 && youControl(s, ctx),
+    effect: (s, ctx) => {
+      const [next] = millTop(s, ctx.owner, 1)
+      return lastingBuffChoice(next, ctx, pickedIds(next, ctx, pickFriendly), { keywords: [KW.raid(1)] })
+    },
+  }),
+  attacks('Discard a card from your deck.', (s, ctx) => millTop(s, ctx.owner, 1)[0]),
+))
+const creatureOrSpectre: Pick = (s, u) => unitHasTrait(s, u, 'Creature') || unitHasTrait(s, u, 'Spectre')
+registerCard('LOF_004', { // Kanan Jarrus
+  ...leaderFront('Give a Shield token to a Creature or Spectre unit.', {
+    cost: 1,
+    usable: anyUnitPasses(creatureOrSpectre),
+    effect: (s, ctx) => shieldChoice(s, ctx, pickedIds(s, ctx, creatureOrSpectre), false),
+  }),
+  statModifier: (s, u) => (controlsAnother(s, u, (st, x) => creatureOrSpectre(st, x, asCtx(st, x))) ? { power: 2, hp: 2 } : {}),
+})
+registerCard('TWI_010', { // Pre Vizsla
+  ...leaderFront("Deal damage to a unit equal to the number of cards you've drawn this phase.", {
+    cost: 1,
+    usable: (s, ctx) => cardsDrawnThisPhase(s, ctx.owner) > 0 && allUnits(s).length > 0,
+    effect: (s, ctx) => damageChoice(s, ctx, cardsDrawnThisPhase(s, ctx.owner), allUnits(s)),
+  }),
+  ...gains((s, u) => handOf(s, u) >= 3, KW.saboteur),
+  statModifier: (s, u) => (handOf(s, u) >= 6 ? { power: 2 } : {}),
 })
