@@ -72,16 +72,31 @@ optional `step`), and answering it runs that card's `ifYouDo` hook, told what wa
 unit, upgrade or hand card, or the discarded card.
 
 - **`mayPayThen`** is "you may <cost>. If you do, <effect>": resources, damage to the source, or only
-  revealing an event. It is not raised when the resources cannot be paid.
+  revealing an event. It is not raised when the resources cannot be paid. With `declineStep` the hook
+  also runs on a decline, at that step, for an ability that goes on either way: "you may deal 5 instead"
+  (Attack From All Sides), or a yes-or-no the opponent answers (I Am Your Father, whose "no" is the
+  accept).
 - **`selectUnitThen`**, **`selectUpgradeThen`** and **`selectHandCardThen`** pick one thing and hand
   it on, for an ability that does several things to one pick or depends on it.
+- **`selectCardThen`** picks a card id, from a discard pile or from cards revealed off a deck, and hands
+  on the card and its option index; the hook decides where the card goes (Psychometry, Restock, For a
+  Cause I Believe In). A deck holds duplicates, so a hook that needs a position reads the index.
+- **`choosePlayerThen`** ("choose a player": the opponent, then yourself) and **`chooseArenaThen`**
+  (ground, then space) are never optional and hand on `playerChosen` or `arenaChosen`.
+- **`chooseNumber`** with an `IfYouDo` hands on the number as `optionIndex` (Choke on Aspirations'
+  "up to 5").
 - A **`selectDiscard`** with `then.ifYouDo` hands on the card discarded (R2-D2, Ahsoka Tano).
 
 `owner` is the player whose ability it is, not the one answering: Governor's Shuttle's second pick and
 Ahsoka Tano's discard are the opponent's to answer and still the player's ability to finish. `step`
 tells stages apart and carries what a later stage needs (Death Trooper's friendly then enemy pick; the
-units already picked by an "each of up to N"). `hookOnDecline` runs the hook once more on Done, for an
-ability that goes on after its picks stop (AAT Incinerator).
+units already picked by an "each of up to N"). `IfYouDo.unit` carries a unit an earlier stage chose to
+the next (Strike True's friendly unit, then the enemy it damages). A card that picks several things in
+turn keeps the picks so far in its step, so "another" and "sharing a Trait" can be checked against
+them (Attack Pattern Delta, Bold Resistance, Unlimited Power, whose damage all lands after the last
+pick). `hookOnDecline` runs the hook once more on Done, on `selectUnitThen`, `selectUpgradeThen` and
+`selectCardThen`, for an ability that goes on after its picks stop (AAT Incinerator, Sweep the Area,
+Jump to Lightspeed).
 
 `selectUpgradeToReturn` offers a free replay only with `replayFree`, which is Jabba the Hutt's own
 text; other cards that return an upgrade print no such thing. The replay (`mayPlayUpgradeFree`) offers
@@ -91,8 +106,17 @@ the unique rule applies.
 
 `distributeDamage` with `enemiesOf` is Emperor Palpatine's "divided among enemy units": it re-offers
 only enemy units and has no Done while one remains. `distributeHealing` heals a point at a time from
-units or bases until Done, then deals what it healed to `damageUnit` (Redemption), and `oneUnit` keeps
-every point on the first unit picked (Kashyyyk Defender).
+units or bases until Done, then deals what it healed to `damageUnit` when there is one (Redemption; Midnight
+Repairs has none), and `oneUnit` keeps every point on the first unit picked (Kashyyyk Defender).
+
+`lookAtHand` narrows a compelled discard with `discardFilter` (a non-unit card, or an event) or
+`discardAspects` (a card sharing an aspect with a unit, Hold For Questioning). `playUnitFromHand` can
+also damage its controller's base by the unit's cost (`thenDamageOwnBase`), give the unit a lasting
+effect (`thenLasting`), leave a delayed effect about it (`thenDelay`), and defeat a set of units once the
+play is settled whether it was played or declined (`thenDefeat`, Consolidation of Power).
+`searchPlayFree` caps its plays with `maxPlays` (U-Wing Reinforcement's "up to 3") and takes `thenDelay`
+too; `searchDraw` with `shuffle` shuffles the deck after a search of all of it (Search Your Feelings).
+`nameCard` with `phaseBan` bans the name for both players until the phase ends (Transmission Jamming).
 
 ## Ordering triggered abilities
 

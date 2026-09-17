@@ -167,6 +167,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | `readiesInRegroup` | whether this unit readies at regroup; absent means it does |
 | `cannotReady` | the unit readies neither at regroup nor by an ability (Frozen in Carbonite) |
 | `ifYouDo` | the rest of an ability after a choice partway through it (see [choices.md](choices.md)) |
+| `delayed` | runs an effect the card left for later, once (see Delayed effects in [keywords-effects.md](keywords-effects.md)) |
 | `printedStats` | replaces a unit's printed power/HP, before upgrades are added |
 | `enemyCostDelta` | changes what an **opponent** pays for a card |
 | `halvesCosts` | its controller pays half, rounded up, applied last |

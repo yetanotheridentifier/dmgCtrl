@@ -156,8 +156,14 @@ export function unitSpillsExcessToUnit(state: GameState, unit: UnitState): boole
     .some(id => getCardDefinition(id)?.spillsExcessToUnit?.(state, unit) ?? false)
 }
 
+/** True if the unit deals no combat damage for now (Betrayed Trust). */
+export function unitDealsNoCombatDamage(state: GameState, unit: UnitState): boolean {
+  return (state.lastingEffects ?? []).some(e => e.noCombatDamage && e.targetInstanceId === unit.instanceId)
+}
+
 /** True if any of the unit's cards forbids it attacking bases (Wicket). */
 export function unitCannotAttackBases(state: GameState, unit: UnitState): boolean {
+  if ((state.lastingEffects ?? []).some(e => e.cannotAttackBases && e.targetInstanceId === unit.instanceId)) return true
   return abilityCardIds(unit).some(id => getCardDefinition(id)?.cannotAttackBases?.(state, unit) ?? false)
 }
 

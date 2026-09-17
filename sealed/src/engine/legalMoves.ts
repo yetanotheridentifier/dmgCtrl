@@ -208,8 +208,9 @@ export function nameableCardNames(state: GameState): string[] {
 export function namedByOpponent(state: GameState, playerId: PlayerId): Set<string> {
   // A name carrying a surcharge (Qi'ra) makes the card dearer rather than unplayable, so it is
   // deliberately absent from this set — `effectiveCost` charges for it instead.
-  return new Set(state.players[opponentOf(playerId)].units.flatMap(u =>
-    (u.namedCard && u.namedCardSurcharge === undefined ? [u.namedCard] : [])))
+  // Transmission Jamming's names bind both players, so they are included whoever asks.
+  return new Set([...state.players[opponentOf(playerId)].units.flatMap(u =>
+    (u.namedCard && u.namedCardSurcharge === undefined ? [u.namedCard] : [])), ...(state.bannedNames ?? [])])
 }
 
 export function affordableHandUnits(state: GameState, owner: PlayerId, extraResourceCost: number, costDelta: number): HandCardRef[] {
@@ -628,8 +629,15 @@ function choiceMoves(state: GameState): Action[] {
         // Imperial Defector / Remnant Lookouts: view the target's hand. With `mayDiscard`,
         // one accept per card in it; a Done to dismiss unless the card compels the discard.
         // Bodhi Rook takes "a non-unit card", so only those hand indices are offered.
-        const discardable = state.players[choice.target].hand.flatMap((cardId, handIndex) =>
-          (choice.discardFilter === 'nonUnit' && state.cards[cardId]?.type === 'unit' ? [] : [handIndex]))
+        // Jam Communications takes only an event; Hold For Questioning a card sharing an aspect.
+        const discardable = state.players[choice.target].hand.flatMap((cardId, handIndex) => {
+          const c = state.cards[cardId]
+          if (choice.discardFilter === 'nonUnit' && c?.type === 'unit') return []
+          if (choice.discardFilter === 'event' && c?.type !== 'event') return []
+          const aspects = choice.discardAspects
+          if (aspects && !(c?.aspects ?? []).some(a => aspects.includes(a.toLowerCase()))) return []
+          return [handIndex]
+        })
         if (choice.mayDiscard) for (const handIndex of discardable) moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex })
         // Reveal Intentions prints "discards a card", not "may discard". The Done still has to be
         // there when nothing is eligible, or the choice would have no legal move and deadlock — a
@@ -742,6 +750,15 @@ function choiceMoves(state: GameState): Action[] {
         if ('optional' in choice && choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'selectCardThen':
+        choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
+      case 'choosePlayerThen':
+      case 'chooseArenaThen':
+        // The opponent then yourself, or ground then space. Neither choice is ever optional.
+        moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: 0 }, { type: 'acceptChoice', choiceId: choice.id, optionIndex: 1 })
+        break
       case 'selectHandCardThen': {
         for (const handIndex of choice.handIndices) moves.push({ type: 'acceptChoice', choiceId: choice.id, handIndex })
         if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })

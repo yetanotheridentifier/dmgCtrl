@@ -167,8 +167,9 @@ token units (`TOKEN_*` ids) live in the card db as built-ins. Transient per-atta
 grants (`grantedKeywords`, `grantedAbilityCardIds`), once-per-round ability usage
 (`usedAbilities`), the **pending-choice queue** (`pendingChoices`), the **triggered-ability queue**
 (`pendingTriggers`, with `triggerTurn` recording whose batch is resolving), a suspended-combat
-record (`pendingAttack`), transient stat/keyword modifiers (`lastingEffects`, scoped to the phase or
-to a single attack) and the
+record (`pendingAttack`), transient stat/keyword modifiers (`lastingEffects`, scoped to the phase, the
+round or a single attack), effects left for later (`delayedEffects`, run at the start of the regroup
+phase, the start of the next action phase, or a player's next take of the initiative) and the
 per-phase event log (`phaseEvents`) all live on the state, JSON-serialisable. Ability *code* can't
 (functions don't serialise), so it sits in the module-level **ability registry**,
 `registerCard(cardId, …)`, consulted by the engine.

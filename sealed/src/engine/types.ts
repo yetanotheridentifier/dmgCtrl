@@ -204,6 +204,7 @@ export interface NextUnitGrant {
   // Filter — the grant only applies to (and is consumed by) a unit matching all set constraints:
   trait?: string // the unit must have this trait
   maxPower?: number // the unit's printed power must be ≤ this
+  cardId?: string // the unit must be a copy of this card (Jump to Lightspeed)
 }
 
 /** True if `card` is a unit satisfying a grant's filter. */
@@ -211,6 +212,7 @@ export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUn
   if (!card || card.type !== 'unit') return false
   if (grant.trait && !card.traits.some(t => t.toLowerCase() === grant.trait!.toLowerCase())) return false
   if (grant.maxPower !== undefined && (card.power ?? 0) > grant.maxPower) return false
+  if (grant.cardId !== undefined && card.id !== grant.cardId) return false
   return true
 }
 
@@ -341,6 +343,12 @@ export interface GameState {
    * the regroup phase so a unit defeated during regroup uses its base stats.
    */
   lastingEffects?: LastingEffect[]
+  /** Effects cards have left to happen later (`DelayedEffect`). */
+  delayedEffects?: DelayedEffect[]
+  /** Card names nobody can play this phase (Transmission Jamming). Cleared as the regroup phase starts. */
+  bannedNames?: string[]
+  /** Bases whose next damage this phase is prevented (Close the Shield Gate). Cleared as the regroup phase starts. */
+  shieldedBases?: PlayerId[]
   /**
    * Events the engine tracks within a boundary so abilities can query them:
    * which units entered play this phase and which cards were defeated this phase
@@ -387,6 +395,8 @@ export interface IfYouDo {
   step?: string
   /** An upgrade an earlier stage chose, carried to the next (Jocasta Nu's upgrade, then its new unit). */
   upgrade?: UpgradeRef
+  /** A unit an earlier stage chose, carried to the next (Strike True's friendly unit, then its target). */
+  unit?: string
 }
 
 export interface HandCardRef {
@@ -452,6 +462,8 @@ export interface LastingEffect {
   abilityCardIds?: string[]
   /** The unit can't attack for the duration (Chaotic Diversion). Read by `unitCannotAttack`. */
   cannotAttack?: boolean
+  /** The unit can't attack bases for the duration (Fly Casual). Read by `unitCannotAttackBases`. */
+  cannotAttackBases?: boolean
   /**
    * The unit can't be attacked for the duration (Dooku), or not while it lacks Sentinel when
    * `unlessSentinel` is set (On Top of Things). Read by `unitCannotBeAttacked`.
@@ -460,6 +472,35 @@ export interface LastingEffect {
   unlessSentinel?: boolean
   /** Keyword names the unit loses for the duration (SpecForce Soldier: Sentinel). Read by `unitKeywords`. */
   removeKeywords?: string[]
+  /** The unit deals no combat damage for the duration (Betrayed Trust). */
+  noCombatDamage?: boolean
+  /** Units attacking this unit get this much power for the duration (I Have the High Ground: -4). */
+  attackersPower?: number
+  /** The next time the unit would be dealt damage, prevent this much of it; then the effect is spent (Shien Flurry). */
+  preventNext?: number
+  /** The unit can't be defeated by having no remaining HP for the duration (The Tragedy of Plagueis). */
+  survivesNoHp?: boolean
+  /** The unit can't ready for the duration (No Good to Me Dead). Read by `unitCannotReady`. */
+  cannotReady?: boolean
+  /**
+   * Lasts to the end of the round, through the regroup phase's ready step, rather than to the start of
+   * the regroup phase ("this round (including during the regroup phase)"). Dropped as the next round starts.
+   */
+  untilRoundEnd?: boolean
+}
+
+/**
+ * An effect a card leaves to happen later: at the start of the regroup phase (Sneak Attack, Final
+ * Showdown), at the start of the next action phase (The Eye of Aldhani), or the next time `owner` takes
+ * the initiative this phase (Premonition of Doom). Run once, by the card's `delayed` hook, then dropped.
+ * A `takeInitiative` effect that never ran is dropped as the regroup phase starts.
+ */
+export interface DelayedEffect {
+  cardId: string
+  owner: PlayerId
+  when: 'regroupStart' | 'actionPhaseStart' | 'takeInitiative'
+  /** The unit the effect is about, when it has one (the unit Sneak Attack played). */
+  unitId?: string
 }
 
 /**
@@ -665,7 +706,8 @@ type ChoiceVariant =
   // thing.
   | { kind: 'selectUpgradeToReturn'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional?: boolean; thenShield?: boolean; replayFree?: boolean }
   // Choose one of `candidates` (upgrades in play) for the card's `ifYouDo` hook (Jocasta Nu).
-  | { kind: 'selectUpgradeThen'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional?: boolean; text: string; then: IfYouDo }
+  // `hookOnDecline` runs the hook with no upgrade on a decline, at the step `then` carries (Jump to Lightspeed).
+  | { kind: 'selectUpgradeThen'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional?: boolean; text: string; then: IfYouDo; hookOnDecline?: boolean }
   // Choose one of your hand cards at `handIndices` for the card's `ifYouDo` hook, which is told the
   // card and its hand index (Cin Drallig). The card stays in hand until the hook moves it.
   | { kind: 'selectHandCardThen'; id: string; controller: PlayerId; handIndices: number[]; optional?: boolean; text: string; then: IfYouDo }
@@ -754,7 +796,11 @@ type ChoiceVariant =
   // `thenDamageIt` deals that much to the unit just played — "Play a unit from your hand. It costs 4
   // less. Deal 4 damage to it" (Reckless Landing), which can only be aimed once it is on the board.
   // `thenShieldIt` gives the unit just played a Shield token (Rio Durant's "it gains Shielded").
-  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number; thenShieldIt?: boolean }
+  // `thenDamageOwnBase` deals the played unit's printed cost to its controller's base (Galactic Ambition).
+  // `thenDelay` leaves a delayed effect about the played unit (Sneak Attack defeats it at the regroup phase).
+  // `thenLasting` gives the played unit a lasting effect (Shien Flurry's prevention). `thenDefeat` defeats
+  // these units once the play is settled, played or declined (Consolidation of Power).
+  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number; thenShieldIt?: boolean; thenDamageOwnBase?: boolean; thenDelay?: { cardId: string; when: DelayedEffect['when'] }; thenLasting?: Omit<LastingEffect, 'targetInstanceId'>; thenDefeat?: string[] }
   // Additional cost "exhaust a friendly unit": pick one of `targets` to exhaust, then the
   // `then` play-from-hand step follows (Fennec). Mandatory.
   | { kind: 'selectUnitToExhaust'; id: string; controller: PlayerId; targets: string[]; then: PlayFromHandSpec }
@@ -779,17 +825,30 @@ type ChoiceVariant =
   // "You may <cost>. If you do, <effect>": a yes/no that pays `cost` resources, or deals `damageSelf`
   // to the source, or only reveals an event (`revealEvent`, which costs nothing and leaves the card in
   // hand), and then runs the card's `ifYouDo` hook. `text` is the effect, for the prompt.
-  | { kind: 'mayPayThen'; id: string; controller: PlayerId; cost: number; damageSelf?: number; revealEvent?: boolean; text: string; then: IfYouDo }
+  // `declineStep` runs the hook on a decline too, at that step, for an ability that goes on either way
+  // ("you may deal 5 instead", "unless its controller says no").
+  | { kind: 'mayPayThen'; id: string; controller: PlayerId; cost: number; damageSelf?: number; revealEvent?: boolean; text: string; then: IfYouDo; declineStep?: string }
   // Choose one of `targets` and hand it to the card's `ifYouDo` hook, for an ability that does more
   // than one thing to the unit it picks, or whose effect depends on it. Mandatory unless `optional`.
   // `text` names what the pick is for, for the prompt.
   // `hookOnDecline` runs the hook with no unit when the choice is declined, for an ability that goes on
   // after its picks stop ("If no friendly units were damaged by this ability", AAT Incinerator).
   | { kind: 'selectUnitThen'; id: string; controller: PlayerId; targets: string[]; optional?: boolean; text: string; then: IfYouDo; hookOnDecline?: boolean }
+  // "Choose a player": option 0 is the controller's opponent, option 1 the controller. Never optional.
+  // The chosen player reaches the card's `ifYouDo` hook as `playerChosen`. `text` is the effect.
+  | { kind: 'choosePlayerThen'; id: string; controller: PlayerId; text: string; then: IfYouDo }
+  // Pick one of `candidates` (card ids: cards in a discard pile, or revealed from a deck) for the card's
+  // `ifYouDo` hook, which is told the card and its option index and decides what happens to it. A deck
+  // holds duplicates, so a hook that needs a position reads the index. `hookOnDecline` runs the hook with
+  // no card when the pick is declined, for an ability that goes on after its picks stop.
+  | { kind: 'selectCardThen'; id: string; controller: PlayerId; candidates: string[]; optional?: boolean; text: string; then: IfYouDo; hookOnDecline?: boolean }
+  // "Choose an arena": option 0 is ground, option 1 space. Never optional. The arena reaches the card's
+  // `ifYouDo` hook as `arenaChosen`.
+  | { kind: 'chooseArenaThen'; id: string; controller: PlayerId; text: string; then: IfYouDo }
   // Heal 1 at a time from `unitTargets` / `baseTargets` until `remaining` is spent or Done, then deal
-  // what was healed to `damageUnit` (Redemption). `oneUnit` keeps every point on the first unit picked
+  // what was healed to `damageUnit`, when there is one (Redemption). `oneUnit` keeps every point on the first unit picked
   // (Kashyyyk Defender's "from another unit").
-  | { kind: 'distributeHealing'; id: string; controller: PlayerId; remaining: number; healed: number; unitTargets: string[]; baseTargets: PlayerId[]; damageUnit: string; oneUnit?: boolean }
+  | { kind: 'distributeHealing'; id: string; controller: PlayerId; remaining: number; healed: number; unitTargets: string[]; baseTargets: PlayerId[]; damageUnit?: string; oneUnit?: boolean }
   // Leia Organa: a yes/no — deal `selfDamage` to `unitId`, then heal `healBase` from your base.
   | { kind: 'maySelfDamageHealBase'; id: string; controller: PlayerId; unitId: string; selfDamage: number; healBase: number }
   // Mando's N-1: a yes/no — exhaust your (ready) leader to give `unitId` a "+power/+hp this phase" buff.
@@ -844,7 +903,8 @@ type ChoiceVariant =
   | { kind: 'selectArenaToGrant'; id: string; controller: PlayerId; grantCardId: string }
   // Sense Through the Force: name a number from 0 to `max`, then search — the guess is checked
   // against the drawn card's cost.
-  | { kind: 'chooseNumber'; id: string; controller: PlayerId; max: number; then: 'senseThroughTheForce' }
+  // `then` is Sense Through the Force's search, or the card's `ifYouDo` hook, told the number as `optionIndex`.
+  | { kind: 'chooseNumber'; id: string; controller: PlayerId; max: number; then: 'senseThroughTheForce' | IfYouDo; text?: string }
   // Hold Them Off: pick the unit that will deal the damage; its power becomes the pool to spread
   // among units in its own arena.
   | { kind: 'selectDistributeSource'; id: string; controller: PlayerId; targets: string[]; optional?: boolean }
@@ -861,10 +921,11 @@ type ChoiceVariant =
   // `mustDiscard` removes the Done, for a card that says "discards a card" rather than "may discard"
   // (Reveal Intentions). The view-only and "may" forms keep it.
   // `discardFilter` narrows what may be taken — Bodhi Rook discards "a non-unit card", so only
-  // those hand indices are offered. A hand with nothing eligible keeps its Done even under
-  // `mustDiscard`, or the choice would have no legal move.
+  // those hand indices are offered; Jam Communications takes only an event. `discardAspects` keeps
+  // the cards sharing one of those aspects (Hold For Questioning). A hand with nothing eligible keeps
+  // its Done even under `mustDiscard`, or the choice would have no legal move.
   // `thenNameCard` raises a `nameCard` once the look is done (Qi'ra looks, then names).
-  | { kind: 'lookAtHand'; id: string; controller: PlayerId; target: PlayerId; mayDiscard?: boolean; thenDraw?: boolean; mustDiscard?: boolean; discardFilter?: 'nonUnit'; thenNameCard?: { unitId: string; surcharge: number } }
+  | { kind: 'lookAtHand'; id: string; controller: PlayerId; target: PlayerId; mayDiscard?: boolean; thenDraw?: boolean; mustDiscard?: boolean; discardFilter?: 'nonUnit' | 'event'; discardAspects?: string[]; thenNameCard?: { unitId: string; surcharge: number } }
   // Search the revealed top cards (Clan Wren Loyalist): pick one of the `eligibleIndices`
   // (indices into `revealed`) to draw; the rest go to the bottom of the deck. Resolved by an
   // `acceptChoice` carrying the `deckIndex` (0-based within `revealed`). Mandatory when eligible.
@@ -879,7 +940,8 @@ type ChoiceVariant =
   // top — getting that wrong either duplicates or deletes them.
   // `resourceIt` puts the chosen card into play as a resource, exhausted, instead of drawing it
   // (Jendirian Valley).
-  | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; guessedCost?: number; discardRest?: boolean; remaining?: number; upTo?: boolean; held?: boolean; resourceIt?: boolean }
+  // `shuffle` shuffles the deck once the card is drawn, for a search of the whole deck (Search Your Feelings).
+  | { kind: 'searchDraw'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; guessedCost?: number; discardRest?: boolean; remaining?: number; upTo?: boolean; held?: boolean; resourceIt?: boolean; shuffle?: boolean }
   // The Cyborg Mech: deal `undamagedAmount` to a chosen undamaged target, or `damagedAmount`
   // to a damaged one (the amount is decided by the picked unit's damage). Mandatory board-target.
   | { kind: 'variableStrike'; id: string; controller: PlayerId; targets: string[]; undamagedAmount: number; damagedAmount: number }
@@ -894,7 +956,8 @@ type ChoiceVariant =
   // while it's in play. Mandatory.
   // `surcharge` names the card for a COST INCREASE instead of a prohibition (Qi'ra: "each card with
   // that name costs 3 more for your opponents"). The two are mutually exclusive on a unit.
-  | { kind: 'nameCard'; id: string; controller: PlayerId; unitId: string; surcharge?: number }
+  // `phaseBan` records the name on the game instead, so nobody can play it this phase (Transmission Jamming).
+  | { kind: 'nameCard'; id: string; controller: PlayerId; unitId: string; surcharge?: number; phaseBan?: boolean }
   // "You may put the top card of your deck into play as a resource" (Resupply Carrier, Cham
   // Syndulla) — a yes/no, raised only when there is a card to take.
   | { kind: 'mayResourceTop'; id: string; controller: PlayerId }
@@ -911,7 +974,9 @@ type ChoiceVariant =
   // SAME filter; hardcoding one card's made every other search offer the wrong cards.
   // `costDelta` makes the play a paid one at a discount instead of free (Kelleran Beq: "it costs 3
   // less"), and then eligibility is what the player can afford rather than what fits `budget`.
-  | { kind: 'searchPlayFree'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; budget: number; playOne?: boolean; entersReady?: boolean; filter?: { trait?: string; aspect?: string; arena?: Arena }; costDelta?: number }
+  // `thenDelay` leaves a delayed effect about the unit played (Triple Dark Raid returns it to hand).
+  // `maxPlays` caps how many units the budget may buy (U-Wing Reinforcement's "up to 3").
+  | { kind: 'searchPlayFree'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; budget: number; playOne?: boolean; entersReady?: boolean; filter?: { trait?: string; aspect?: string; arena?: Arena }; costDelta?: number; thenDelay?: { cardId: string; when: DelayedEffect['when'] }; maxPlays?: number }
   // Rancor Keeper: "deal 1 damage to any number of bases" — repeatable, each base at most
   // once; `remaining` are the bases not yet picked. Skip finishes. `heal` heals each picked base
   // instead ("heal 2 damage from each of any number of bases", Coruscanti Spy).
@@ -1027,8 +1092,23 @@ export function addLastingEffect(state: GameState, effect: LastingEffect): GameS
   return { ...state, lastingEffects: [...(state.lastingEffects ?? []), effect] }
 }
 
-/** Drop every lasting effect (called at the start of the regroup phase). */
+/**
+ * Drop the "this phase" lasting effects (called at the start of the regroup phase), and the phase's
+ * banned names and shielded bases. A `untilRoundEnd` effect stays until `clearRoundEffects`.
+ */
 export function clearLastingEffects(state: GameState): GameState {
+  if (!state.lastingEffects && !state.bannedNames && !state.shieldedBases) return state
+  const kept = (state.lastingEffects ?? []).filter(e => e.untilRoundEnd)
+  return { ...state, lastingEffects: kept.length > 0 ? kept : undefined, bannedNames: undefined, shieldedBases: undefined }
+}
+
+/** Leave an effect to happen later (`DelayedEffect`). */
+export function addDelayedEffect(state: GameState, effect: DelayedEffect): GameState {
+  return { ...state, delayedEffects: [...(state.delayedEffects ?? []), effect] }
+}
+
+/** Drop the lasting effects that last the round (called as the next round starts). */
+export function clearRoundEffects(state: GameState): GameState {
   return state.lastingEffects ? { ...state, lastingEffects: undefined } : state
 }
 

@@ -1,8 +1,8 @@
 import type { Action, AttackTarget } from './actions'
-import type { GameState, PlayerId, UnitState } from './types'
-import type { IfYouDo, PendingChoice, PendingTrigger, TriggerContext, UpgradeRef } from './types'
+import type { Arena, GameState, PlayerId, UnitState } from './types'
+import type { DelayedEffect, IfYouDo, PendingChoice, PendingTrigger, TriggerContext, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds } from './types'
-import { addLastingEffect, clearLastingEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
+import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets, offerAttack } from './legalMoves'
 import { collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, stampChoiceSource, type TriggerPoint } from './abilities'
@@ -12,7 +12,7 @@ import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
 import { exhaustUnit, findUnit, giveToken, giveTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
-import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait } from './keywords'
+import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage } from './keywords'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
 import { TOKEN_MANDALORIAN } from './tokenUnits'
 
@@ -755,7 +755,9 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
   // Redemption: stopping deals what was healed so far.
   if (choice.kind === 'distributeHealing') next = finishHealing(next, choice.damageUnit, choice.healed)
   // AAT Incinerator: the ability goes on once its picks stop.
-  if (choice.kind === 'selectUnitThen' && choice.hookOnDecline) next = runIfYouDo(next, choice.then)
+  if ((choice.kind === 'selectUnitThen' || choice.kind === 'selectCardThen' || choice.kind === 'selectUpgradeThen') && choice.hookOnDecline) next = runIfYouDo(next, choice.then)
+  if (choice.kind === 'playUnitFromHand' && choice.thenDefeat) next = defeatUnits(next, choice.thenDefeat)
+  if (choice.kind === 'mayPayThen' && choice.declineStep !== undefined) next = runIfYouDo(next, { ...choice.then, step: choice.declineStep })
   // Elzar Mann: stopping early still triggers the follow-up, sized to what was distributed.
   if (choice.kind === 'distributeTokens') {
     next = finishDistribution(next, choice, choice.total - choice.remaining)
@@ -1346,6 +1348,17 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'selectUnitThen':
       if (targetInstanceId && choice.targets.includes(targetInstanceId)) next = runIfYouDo(next, choice.then, { targetInstanceId })
       break
+    case 'choosePlayerThen':
+      next = runIfYouDo(next, choice.then, { playerChosen: (optionIndex ?? 0) === 1 ? choice.controller : opponentOf(choice.controller) })
+      break
+    case 'selectCardThen': {
+      const pick = choice.candidates[optionIndex ?? -1]
+      if (pick !== undefined) next = runIfYouDo(next, choice.then, { cardChosen: pick, optionIndex })
+      break
+    }
+    case 'chooseArenaThen':
+      next = runIfYouDo(next, choice.then, { arenaChosen: (optionIndex ?? 0) === 1 ? 'space' : 'ground' })
+      break
     case 'selectUpgradeThen': {
       const pick = choice.candidates[optionIndex ?? 0]
       if (pick) next = runIfYouDo(next, choice.then, { upgradeChosen: pick })
@@ -1434,6 +1447,10 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       break
     }
     case 'chooseNumber': {
+      if (choice.then !== 'senseThroughTheForce') {
+        next = runIfYouDo(next, choice.then, { optionIndex: optionIndex ?? 0 })
+        break
+      }
       // Sense Through the Force: the named number rides along on the search that follows.
       const owner = choice.controller
       const guessedCost = optionIndex ?? 0
@@ -1565,6 +1582,9 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
             ? updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: rest, discard: [...p.discard, ...others] })
             : updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: [...rest, ...others] })
         }
+        if (choice.shuffle) {
+          next = { ...updatePlayer(next, owner, { deck: seededShuffle(next.players[owner].deck, next.rngSeed) }), rngSeed: nextSeed(next.rngSeed) }
+        }
         // Sense Through the Force: a correct guess at the drawn card's cost pays out.
         if (choice.guessedCost !== undefined && next.cards[drawn]?.cost === choice.guessedCost) {
           const targets = next.players[owner].units.filter(u => unitHasTrait(next, u, 'Force')).map(u => u.instanceId)
@@ -1609,7 +1629,9 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'nameCard': {
       // Ryder Azadi: record the named card on this unit — the opponent can't play cards with
       // that name while it's in play (enforced in legalMoves). Naming is mandatory.
-      if (cardName) {
+      if (cardName && choice.phaseBan) {
+        next = { ...next, bannedNames: [...(next.bannedNames ?? []), cardName] }
+      } else if (cardName) {
         next = updatePlayer(next, choice.controller, {
           units: next.players[choice.controller].units.map(u =>
             (u.instanceId === choice.unitId
@@ -1643,15 +1665,18 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         if (choice.costDelta !== undefined && played) {
           next = updatePlayer(next, owner, payCost(next.players[owner], Math.max(0, effectiveCost(next, owner, played) + choice.costDelta)))
         }
+        const enteredId = `u${next.instanceCounter}`
         next = enterUnit(next, owner, cardId, choice.entersReady === true)
+        if (choice.thenDelay) next = addDelayedEffect(next, { ...choice.thenDelay, owner, unitId: enteredId })
         next = checkWin(next)
         if (next.winner !== null) return next
         const revealed = choice.revealed.filter((_, i) => i !== deckIndex)
         const budget = choice.budget - cost
         const eligibleIndices = ackbarEligible(next, revealed, budget, choice.filter, choice.costDelta, owner)
         // Eye of Sion plays exactly one; Ackbar keeps offering until the budget runs out.
-        if (!choice.playOne && budget > 0 && eligibleIndices.length > 0) {
-          next = pushChoice(next, { kind: 'searchPlayFree', id: choice.id, controller: owner, revealed, eligibleIndices, budget, filter: choice.filter, costDelta: choice.costDelta })
+        const maxPlays = choice.maxPlays === undefined ? undefined : choice.maxPlays - 1
+        if (!choice.playOne && budget > 0 && eligibleIndices.length > 0 && maxPlays !== 0) {
+          next = pushChoice(next, { kind: 'searchPlayFree', id: choice.id, controller: owner, revealed, eligibleIndices, budget, filter: choice.filter, costDelta: choice.costDelta, ...(maxPlays !== undefined ? { maxPlays } : {}) })
         } else {
           next = updatePlayer(next, owner, { deck: [...next.players[owner].deck, ...revealed] }) // bottom the leftovers
         }
@@ -1808,6 +1833,10 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         // addressed now that it is on the board.
         if (choice.thenDamageIt) next = dealDamageToUnit(next, enteredId, choice.thenDamageIt)
         if (choice.thenShieldIt) next = giveToken(next, enteredId, TOKEN_SHIELD)
+        if (choice.thenDamageOwnBase) next = dealDamageToBase(next, choice.controller, card.cost)
+        if (choice.thenDelay) next = addDelayedEffect(next, { ...choice.thenDelay, owner: choice.controller, unitId: enteredId })
+        if (choice.thenLasting) next = addLastingEffect(next, { ...choice.thenLasting, targetInstanceId: enteredId })
+        if (choice.thenDefeat) next = defeatUnits(next, choice.thenDefeat)
         next = checkWin(next)
         if (next.winner !== null) return next
       }
@@ -2128,6 +2157,8 @@ function takeInitiative(state: GameState): GameState {
   // Taking the initiative immediately after an opponent's pass ends the action phase (CR 1.15.5c).
   const endsPhase = state.consecutivePasses >= 1
   let taken: GameState = { ...state, initiative: playerId, initiativeTakenBy: playerId }
+  // "The next time you take the initiative this phase" (Premonition of Doom).
+  taken = runDelayed(taken, 'takeInitiative', playerId)
   // "When you take the initiative" (Mandalorian): fire before the turn transition. If the batch stops
   // to ask something, hold with the taker and finish the transition once it drains (resumeAfterChoice).
   // The taker's units carry the trigger as well as their leader (Grogu the unit).
@@ -2301,7 +2332,8 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
     viaAmbush,
     ...(targetUnit ? { defenderArena: targetUnit.arena, combat: { attackerInstanceId: attackerId, defenderInstanceId: targetUnit.instanceId, viaAmbush } } : {}),
   }
-  const attackerPower = effectivePower(state, attacker, attackerCtx)
+  // A unit that can't deal combat damage (Betrayed Trust) still attacks, with nothing to deal.
+  const attackerPower = unitDealsNoCombatDamage(state, attacker) ? 0 : effectivePower(state, attacker, attackerCtx)
 
   if (target.kind === 'base') {
     // Through `dealDamageToBase` so base-damage prevention applies (At Attin Safety Droid);
@@ -2336,7 +2368,7 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
   // travels with the roles, since a card can read it about someone else's attack (Enfys Nest).
   const combat = { attackerInstanceId: attackerId, defenderInstanceId: defender.instanceId, viaAmbush }
   const defenderCtx = { combat, defending: true } // Palace Chef Droid: "+X while defending"
-  const counterPower = effectivePower(preCombat, defender, defenderCtx)
+  const counterPower = unitDealsNoCombatDamage(preCombat, defender) ? 0 : effectivePower(preCombat, defender, defenderCtx)
 
   // Overwhelm: excess combat damage beyond the defender's remaining HP hits the
   // defending player's base (CR 1.9.11). A shielded defender takes no damage, so
@@ -2436,15 +2468,15 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
  */
 /** Every unit in play, both sides. */
 /** "Deal that much damage to this unit", once a healing distribution ends. */
-function finishHealing(state: GameState, damageUnit: string, healed: number): GameState {
-  return healed > 0 && findUnit(state, damageUnit) ? checkWin(dealDamageToUnit(state, damageUnit, healed)) : state
+function finishHealing(state: GameState, damageUnit: string | undefined, healed: number): GameState {
+  return healed > 0 && damageUnit && findUnit(state, damageUnit) ? checkWin(dealDamageToUnit(state, damageUnit, healed)) : state
 }
 
 /** Resume an ability at its card's `ifYouDo` hook, with what the answered choice settled. */
-function runIfYouDo(state: GameState, then: IfYouDo, settled: { targetInstanceId?: string; cardChosen?: string; handIndex?: number; upgradeChosen?: UpgradeRef } = {}): GameState {
+function runIfYouDo(state: GameState, then: IfYouDo, settled: { targetInstanceId?: string; cardChosen?: string; handIndex?: number; upgradeChosen?: UpgradeRef; playerChosen?: PlayerId; arenaChosen?: Arena; optionIndex?: number } = {}): GameState {
   const hook = getCardDefinition(then.cardId)?.ifYouDo
   if (!hook) return state
-  const next = hook(state, { owner: then.owner, cardId: then.cardId, sourceInstanceId: then.sourceInstanceId, step: then.step, upgradeChosen: then.upgrade, ...settled })
+  const next = hook(state, { owner: then.owner, cardId: then.cardId, sourceInstanceId: then.sourceInstanceId, step: then.step, upgradeChosen: then.upgrade, unitChosen: then.unit, ...settled })
   return checkWin(next)
 }
 
@@ -2591,6 +2623,11 @@ function enterRegroup(state: GameState): GameState {
   // "At the start of the regroup phase, its owner takes control of it" (Rehabilitation) — before
   // anything readies, so the owner has it available for the next action phase.
   next = returnControlledUnits(next, true)
+  // Cards' own "at the start of the regroup phase" effects (Sneak Attack, Final Showdown). A "next time
+  // you take the initiative this phase" that never came lapses with the phase.
+  next = runDelayed(next, 'regroupStart')
+  if (next.winner !== null) return next
+  next = dropDelayed(next, e => e.when === 'takeInitiative')
   next = sweepUnitDefeats(next)
   next = drawForRegroup(next, 'player')
   next = drawForRegroup(next, 'opponent')
@@ -2667,9 +2704,31 @@ function firstDecider(state: GameState, initiative: PlayerId): PlayerId {
   return choices.some(c => c.controller === initiative) ? initiative : opponentOf(initiative)
 }
 
+/**
+ * Run and drop the delayed effects due `when` (for `owner` only, when given), each by its card's
+ * `delayed` hook. They are dropped before any runs, so an effect can never fire twice.
+ */
+function runDelayed(state: GameState, when: DelayedEffect['when'], owner?: PlayerId): GameState {
+  const due = (e: DelayedEffect) => e.when === when && (owner === undefined || e.owner === owner)
+  const ready = (state.delayedEffects ?? []).filter(due)
+  if (ready.length === 0) return state
+  return checkWin(ready.reduce((acc, e) => getCardDefinition(e.cardId)?.delayed?.(acc, e) ?? acc, dropDelayed(state, due)))
+}
+
+function dropDelayed(state: GameState, drop: (e: DelayedEffect) => boolean): GameState {
+  if (!(state.delayedEffects ?? []).some(drop)) return state
+  const kept = state.delayedEffects!.filter(e => !drop(e))
+  return { ...state, delayedEffects: kept.length > 0 ? kept : undefined }
+}
+
 function startNextRound(state: GameState): GameState {
   let next = readyEverything(readyEverything(state, 'player'), 'opponent')
+  // "This round (including during the regroup phase)" ends once the ready step has passed.
+  next = clearRoundEffects(next)
   next = resetPhaseEvents(next) // a fresh action phase begins
+  // "At the start of the next action phase" (The Eye of Aldhani): its choices, like a whenReadies
+  // choice, are answered before play begins.
+  next = runDelayed(next, 'actionPhaseStart')
   next = {
     ...next,
     phase: 'action',

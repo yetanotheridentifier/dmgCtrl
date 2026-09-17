@@ -134,11 +134,11 @@ every set.
 Two phases:
 
 - **Phase 1 (#453 to #460), 926 cards blocked by nothing.** 56% of the cards with ability text are
-  expressible with the primitives already in `engine/effects.ts`. Cut by trigger point. Events are the
-  largest batch, and what is left of them is **#623** (154 one-offs; the attack events are finished,
-  bar One Way Out, which waits on #477 for "loses all abilities" with four #623 cards that need it too). The
-  events blocked by a mechanic are not there: they are recorded on that mechanic's own ticket
-  (#602 Credit, #605 token units, #603 Disclose, #604 indirect damage).
+  expressible with the primitives already in `engine/effects.ts`. Cut by trigger point. **Events are finished** as far as the engine's choices express them.
+  The rest are recorded on the ticket of what blocks them: #602 Credit, #605 token units, #603
+  Disclose, #604 indirect damage, #469 Smuggle, #467 Bounty, #468 (playing any card type from a zone
+  other than the hand, or through an ability), #471 play from discard, and #477 for "loses all
+  abilities" (One Way Out and four more), state the engine does not record, and the unique one-offs.
   **When Played units and upgrades are finished**, and so are **constant abilities on units and
   upgrades**: the ones existing primitives expressed shipped first, and the hooks and choices the rest
   needed followed, group by group. Vult Skerris's Defender (needs "discarded a card this phase") and

@@ -1,4 +1,4 @@
-import type { Arena, EngineCard, GameState, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext, UpgradeRef } from './types'
+import type { Arena, DelayedEffect, EngineCard, GameState, KeywordInstance, PendingTrigger, PlayerId, UnitState, CombatContext, DamageSource, TriggerContext, UpgradeRef } from './types'
 import { abilityCardIds } from './types'
 
 /**
@@ -95,6 +95,14 @@ export interface IfYouDoContext extends EffectContext {
   handIndex?: number
   /** The upgrade chosen by this stage or carried from an earlier one (`IfYouDo.upgrade`). */
   upgradeChosen?: UpgradeRef
+  /** The player a `choosePlayerThen` picked. */
+  playerChosen?: PlayerId
+  /** The option a `selectCardThen` picked (`cardChosen` is its card). */
+  optionIndex?: number
+  /** The arena a `chooseArenaThen` picked. */
+  arenaChosen?: Arena
+  /** The unit an earlier stage chose (`IfYouDo.unit`). */
+  unitChosen?: string
 }
 
 export interface CardDefinition {
@@ -202,6 +210,8 @@ export interface CardDefinition {
   readiesInRegroup?: (state: GameState, unit: UnitState) => boolean
   /** "Attached unit can't ready" (Frozen in Carbonite): neither in the regroup phase nor by an ability. */
   cannotReady?: (state: GameState, unit: UnitState) => boolean
+  /** Runs an effect this card left for later (`GameState.delayedEffects`), once, when its moment comes. */
+  delayed?: (state: GameState, effect: DelayedEffect) => GameState
   /**
    * A card that REPLACES a unit's printed power/HP ("printed power is considered to be 7"): Obi-Wan
    * Kenobi for every friendly unit, Size Matters Not for its own host. Folded in by `withUpgrades`

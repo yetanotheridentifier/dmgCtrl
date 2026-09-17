@@ -1,0 +1,1541 @@
+import { describe, it, expect } from 'vitest'
+import { resolve } from '../engine/resolve'
+import { legalMoves } from '../engine/legalMoves'
+import '../engine/cardDefinitions' // side effect: registers card behaviours
+import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helpers/engineFixtures'
+import type { Action } from '../engine/actions'
+import type { EngineCard, GameState, PendingChoice, PlayerId, UnitState } from '../engine/types'
+import { recordBaseDamaged, recordUnitDefeated } from '../engine/types'
+import { unitHasKeyword, unitCannotAttackBases, unitCannotBeAttacked } from '../engine/keywords'
+import { effectivePower, effectiveHp } from '../engine/stats'
+import { effectiveCost } from '../engine/legalMoves'
+import { dealDamageToUnit } from '../engine/combat'
+import { TOKEN_SHIELD, hasToken } from '../engine/tokenUpgrades'
+
+/**
+ * The one-off events, in groups taken whole: deck searches that draw, and events that look at,
+ * discard from or draw into a hand (including "choose a player").
+ *
+ * Each test states what may be chosen as well as what happens, since a filter that lets everything
+ * through would still pass a test that only picks the right card.
+ */
+
+const ev = (id: string, cost = 1) => card({ id, type: 'event', cost })
+const F = {
+  ...CARDS,
+  GRD: card({ id: 'GRD', arena: 'ground', cost: 2, power: 2, hp: 6, aspects: ['Aggression'] }),
+  GRD7: card({ id: 'GRD7', arena: 'ground', cost: 7, power: 2, hp: 6 }),
+  FORCE: card({ id: 'FORCE', arena: 'ground', cost: 2, power: 2, hp: 6, traits: ['FORCE'] }),
+  LEAD: card({ id: 'LEAD', type: 'leader', arena: 'ground', cost: 5, power: 4, hp: 7 }),
+
+  // Deck and hand cards
+  U_VIG: card({ id: 'U_VIG', cost: 2, aspects: ['Vigilance'] }),
+  U_CMD: card({ id: 'U_CMD', cost: 2, aspects: ['Command'] }),
+  U_CUN: card({ id: 'U_CUN', cost: 3, aspects: ['Cunning', 'Villainy'] }),
+  E_AGG: card({ id: 'E_AGG', type: 'event', cost: 4, aspects: ['Aggression'] }),
+  UPG: card({ id: 'UPG', type: 'upgrade', cost: 1 }),
+  VEH1: card({ id: 'VEH1', cost: 3, traits: ['VEHICLE'] }),
+  VEH2: card({ id: 'VEH2', cost: 4, traits: ['VEHICLE', 'FIGHTER'] }),
+  VEH_UPG: card({ id: 'VEH_UPG', type: 'upgrade', cost: 2, traits: ['VEHICLE'] }),
+  MANDO: card({ id: 'MANDO', cost: 2, traits: ['MANDALORIAN'] }),
+  MANDO_EV: card({ id: 'MANDO_EV', type: 'event', cost: 2, traits: ['MANDALORIAN'] }),
+  FILL: card({ id: 'FILL', type: 'event', cost: 0 }),
+
+  LAW_166: ev('LAW_166'), SEC_072: ev('SEC_072'), SOR_123: ev('SOR_123'), JTL_128: ev('JTL_128', 2),
+  SOR_125: ev('SOR_125', 2), SHD_093: ev('SHD_093', 4), SHD_253: ev('SHD_253', 2),
+
+  SOR_200: ev('SOR_200', 2), LOF_226: ev('LOF_226', 2), JTL_207: ev('JTL_207'), TWI_223: ev('TWI_223'),
+  LAW_217: ev('LAW_217', 3), SEC_233: ev('SEC_233', 3), LAW_204: ev('LAW_204'), SHD_244: ev('SHD_244', 3),
+  SHD_181: ev('SHD_181', 4), SHD_156: ev('SHD_156', 2), SOR_175: ev('SOR_175', 6), SOR_167: ev('SOR_167'),
+  SOR_174: ev('SOR_174', 5), SOR_171: ev('SOR_171', 3),
+
+  SOR_127: ev('SOR_127', 3), SOR_151: ev('SOR_151', 2), LOF_128: ev('LOF_128', 4), SOR_234: ev('SOR_234', 4),
+  JTL_129: ev('JTL_129', 4), JTL_131: ev('JTL_131', 7), TWI_176: ev('TWI_176', 6), JTL_173: ev('JTL_173'),
+  SEC_130: ev('SEC_130', 4), TWI_099: ev('TWI_099', 2), JTL_144: ev('JTL_144', 3), SOR_092: ev('SOR_092', 5),
+  SOR_173: ev('SOR_173', 5), SOR_221: ev('SOR_221', 3),
+
+  SOR_218: ev('SOR_218', 2), TWI_221: ev('TWI_221', 0), JTL_195: ev('JTL_195', 3), SEC_196: ev('SEC_196', 2),
+  LAW_226: ev('LAW_226', 2), JTL_230: ev('JTL_230'), SHD_227: ev('SHD_227', 0), JTL_194: ev('JTL_194', 2),
+  LOF_223: ev('LOF_223', 2), JTL_178: ev('JTL_178', 3), JTL_206: ev('JTL_206'), LAW_043: ev('LAW_043', 5),
+  SHD_182: ev('SHD_182', 5),
+
+  SEC_091: ev('SEC_091', 4), SOR_106: ev('SOR_106', 3), JTL_253: ev('JTL_253', 2), JTL_042: ev('JTL_042', 3),
+  TWI_153: ev('TWI_153', 3), TWI_249: ev('TWI_249', 2), JTL_106: ev('JTL_106', 6), TWI_055: ev('TWI_055', 3),
+  LAW_041: ev('LAW_041', 5), LOF_262: ev('LOF_262', 2), JTL_077: ev('JTL_077', 2),
+  REPUBLIC: card({ id: 'REPUBLIC', arena: 'ground', cost: 2, power: 2, hp: 5, traits: ['REPUBLIC', 'CLONE'] }),
+  SEPARATIST: card({ id: 'SEPARATIST', arena: 'ground', cost: 2, power: 2, hp: 5, traits: ['SEPARATIST', 'DROID'] }),
+  CLONE: card({ id: 'CLONE', arena: 'space', cost: 2, power: 2, hp: 5, traits: ['CLONE'] }),
+  LAW_133: ev('LAW_133', 6), TWI_140: ev('TWI_140', 2), SHD_108: ev('SHD_108', 2), TWI_041: ev('TWI_041', 4),
+  SOR_041: ev('SOR_041', 3), TWI_238: ev('TWI_238', 3), LAW_103: ev('LAW_103', 4), JTL_043: ev('JTL_043', 5),
+  JTL_175: ev('JTL_175'), SOR_170: ev('SOR_170', 2), JTL_180: ev('JTL_180', 3), SOR_139: ev('SOR_139', 2),
+  JTL_176: ev('JTL_176', 2), LAW_208: ev('LAW_208', 3), SEC_180: ev('SEC_180', 3), TWI_171: ev('TWI_171', 2),
+  UPG2: card({ id: 'UPG2', type: 'upgrade', cost: 2, power: 1, hp: 1 }),
+  LEADUPG: card({ id: 'LEADUPG', type: 'leader', cost: 3, power: 1, hp: 1 }),
+  SP3: card({ id: 'SP3', arena: 'space', cost: 2, power: 2, hp: 3 }),
+  SOR_224: ev('SOR_224', 6), SHD_132: ev('SHD_132', 7), LAW_085: ev('LAW_085'), TWI_204: ev('TWI_204', 4),
+  TWI_199: ev('TWI_199', 2), JTL_233: ev('JTL_233', 3), SHD_207: ev('SHD_207', 2), SHD_229: ev('SHD_229'),
+  SEC_144: ev('SEC_144', 4), SOR_091: ev('SOR_091', 2), TWI_188: ev('TWI_188'),
+  C1: card({ id: 'C1', arena: 'ground', cost: 1, power: 1, hp: 3 }),
+  UW: card({ id: 'UW', arena: 'ground', cost: 2, power: 2, hp: 3, traits: ['UNDERWORLD'] }),
+  LOF_076: ev('LOF_076'), SEC_257: ev('SEC_257', 2), SOR_235: ev('SOR_235', 7), TWI_225: ev('TWI_225', 3),
+  TWI_127: ev('TWI_127', 3), SOR_126: ev('SOR_126', 3), LAW_171: ev('LAW_171', 6),
+  HERO2: card({ id: 'HERO2', arena: 'ground', cost: 2, power: 2, hp: 3, aspects: ['Heroism', 'Heroism'] }),
+  HERO1: card({ id: 'HERO1', arena: 'ground', cost: 2, power: 2, hp: 3, aspects: ['Heroism', 'Command'] }),
+  H_UNIT5: card({ id: 'H_UNIT5', arena: 'ground', cost: 5, power: 2, hp: 3, aspects: ['Heroism'] }),
+  V_UNIT4: card({ id: 'V_UNIT4', arena: 'ground', cost: 4, power: 2, hp: 3, aspects: ['Villainy'] }),
+  CLONE6: card({ id: 'CLONE6', arena: 'ground', cost: 6, power: 2, hp: 3, traits: ['CLONE'] }),
+  CLONE_VEH: card({ id: 'CLONE_VEH', arena: 'space', cost: 6, power: 2, hp: 3, traits: ['CLONE', 'VEHICLE'] }),
+  FORCE_HAND: card({ id: 'FORCE_HAND', arena: 'ground', cost: 3, power: 2, hp: 3, traits: ['FORCE', 'JEDI'] }),
+  SEC_232: ev('SEC_232', 2), TWI_257: ev('TWI_257', 2), LAW_203: ev('LAW_203'), JTL_208: ev('JTL_208', 3),
+  LOF_240: ev('LOF_240', 2), SOR_042: ev('SOR_042', 4),
+  SABER: card({ id: 'SABER', type: 'upgrade', cost: 2, traits: ['ITEM', 'WEAPON', 'LIGHTSABER'] }),
+  ODD3: card({ id: 'ODD3', type: 'event', cost: 3 }),
+  SABOTEUR: card({ id: 'SABOTEUR', arena: 'ground', cost: 2, power: 2, hp: 5, keywords: [{ name: 'Saboteur' }] }),
+  LAW_207: ev('LAW_207', 3), SOR_233: ev('SOR_233', 3), LOF_177: ev('LOF_177', 4), TWI_156: ev('TWI_156', 6),
+  SHD_054: ev('SHD_054', 2), LOF_176: ev('LOF_176', 2),
+  ASP_VA: card({ id: 'ASP_VA', arena: 'ground', cost: 2, power: 2, hp: 9, aspects: ['Vigilance', 'Aggression'] }),
+  ASP_CH: card({ id: 'ASP_CH', arena: 'ground', cost: 2, power: 2, hp: 9, aspects: ['Command', 'Heroism'] }),
+  SABER_EV: card({ id: 'SABER_EV', type: 'event', cost: 1, traits: ['LIGHTSABER'] }),
+  LAW_130: ev('LAW_130', 2), SOR_186: ev('SOR_186', 2), JTL_074: ev('JTL_074'), TWI_072: ev('TWI_072'),
+  LAW_243: ev('LAW_243'), SOR_219: ev('SOR_219', 2), LOF_203: ev('LOF_203', 3), SEC_073: ev('SEC_073'),
+  SHD_208: ev('SHD_208', 6),
+  LOF_219: ev('LOF_219'), SOR_252: ev('SOR_252'), LOF_104: ev('LOF_104', 6), LOF_103: ev('LOF_103'),
+  SOR_223: ev('SOR_223', 4), SOR_152: ev('SOR_152', 3), SHD_194: ev('SHD_194', 3),
+  H_EV: card({ id: 'H_EV', type: 'event', cost: 2, aspects: ['Heroism'] }),
+  VEH6: card({ id: 'VEH6', arena: 'space', cost: 6, power: 3, hp: 5, traits: ['VEHICLE'] }),
+  SOR_187: ev('SOR_187', 7), SHD_077: ev('SHD_077', 3), JTL_232: ev('JTL_232', 2), TWI_089: ev('TWI_089', 6),
+  LOF_220: ev('LOF_220'), LOF_043: ev('LOF_043', 5), SOR_075: ev('SOR_075', 2), LAW_102: ev('LAW_102'),
+  UPG4: card({ id: 'UPG4', type: 'upgrade', cost: 4, power: 1, hp: 1 }),
+  SOR_104: ev('SOR_104', 7),
+  OFFICIAL: card({ id: 'OFFICIAL', arena: 'ground', cost: 2, power: 1, hp: 4, traits: ['OFFICIAL'] }),
+  TWO_ASP: card({ id: 'TWO_ASP', arena: 'ground', cost: 3, power: 2, hp: 5, aspects: ['Cunning', 'Heroism'] }),
+  DROID: card({ id: 'DROID', arena: 'ground', cost: 2, power: 2, hp: 5, traits: ['DROID'] }),
+  P2: card({ id: 'P2', arena: 'ground', cost: 3, power: 2, hp: 5 }),
+
+  // Units for the damage events
+  P3: card({ id: 'P3', arena: 'ground', cost: 2, power: 3, hp: 5 }),
+  P5: card({ id: 'P5', arena: 'ground', cost: 4, power: 5, hp: 8 }),
+  BIG: card({ id: 'BIG', arena: 'ground', cost: 5, power: 1, hp: 20 }),
+  SP4: card({ id: 'SP4', arena: 'space', cost: 3, power: 4, hp: 20 }),
+  IMP2: card({ id: 'IMP2', arena: 'ground', cost: 2, power: 2, hp: 5, traits: ['IMPERIAL'] }),
+  IMP3: card({ id: 'IMP3', arena: 'ground', cost: 3, power: 3, hp: 5, traits: ['IMPERIAL'] }),
+  VEHG: card({ id: 'VEHG', arena: 'ground', cost: 3, power: 2, hp: 5, traits: ['VEHICLE'] }),
+  VEHS: card({ id: 'VEHS', arena: 'space', cost: 3, power: 4, hp: 20, traits: ['VEHICLE'] }),
+}
+
+const unit = (instanceId: string, cardId: string, over: Partial<UnitState> = {}): UnitState =>
+  fixtureUnit(instanceId, cardId, { arena: (F as Record<string, EngineCard>)[cardId]?.arena ?? 'ground', ...over })
+const all = (s: GameState) => [...s.players.player.units, ...s.players.opponent.units]
+const U = (s: GameState, id: string) => all(s).find(u => u.instanceId === id)
+
+type Side = Parameters<typeof player>[0]
+const board = (eventId: string, mine: Side = {}, theirs: Side = {}) =>
+  state({
+    cards: F,
+    players: {
+      player: player({ resources: ready(20), deck: [], ...mine, hand: [eventId, ...(mine.hand ?? [])] }),
+      opponent: player({ deck: [], ...theirs }),
+    },
+  })
+const play = (s: GameState) => resolve(s, { type: 'playEvent', handIndex: 0 })
+const choice = (s: GameState): PendingChoice => {
+  expect(s.pendingChoices?.length ?? 0, 'a choice is raised').toBeGreaterThan(0)
+  return s.pendingChoices![0]
+}
+const noChoice = (s: GameState) => expect(s.pendingChoices ?? []).toHaveLength(0)
+type Extra = { targetInstanceId?: string; deckIndex?: number; optionIndex?: number; handIndex?: number }
+const accept = (s: GameState, extra: Extra = {}) => resolve(s, { type: 'acceptChoice', choiceId: choice(s).id, ...extra })
+const skip = (s: GameState) => resolve(s, { type: 'skipTrigger', choiceId: choice(s).id })
+const moves = (s: GameState): Action[] => legalMoves(s)
+const declinable = (s: GameState) => moves(s).some(m => m.type === 'skipTrigger')
+/** The hand indices offered by the current choice, sorted. */
+const handOffers = (s: GameState) =>
+  moves(s).flatMap(m => (m.type === 'acceptChoice' && m.handIndex !== undefined ? [m.handIndex] : [])).sort()
+const revealedOf = (c: PendingChoice): string[] => ('revealed' in c ? c.revealed : [])
+const eligibleCards = (c: PendingChoice): string[] => ('eligibleIndices' in c ? c.eligibleIndices.map(i => revealedOf(c)[i]) : [])
+
+// ── Deck searches that draw ─────────────────────────────────────────────────────────────────────
+
+describe('events that search the deck and draw', () => {
+  const DECK = ['U_VIG', 'U_CMD', 'E_AGG', 'UPG', 'VEH1', 'MANDO', 'VEH2', 'VEH_UPG', 'U_CUN', 'MANDO_EV', 'FILL']
+
+  it.each([
+    ['LAW_166', 'Putting a Team Together: top 8 for a Vigilance, Aggression or Cunning unit', 8, ['U_VIG']],
+    ['SEC_072', 'Scour the Archives: top 8 for an upgrade', 8, ['UPG', 'VEH_UPG']],
+    ['SOR_123', 'Recruit: top 5 for a unit', 5, ['U_VIG', 'U_CMD', 'VEH1']],
+    ['JTL_128', 'Prepare for Takeoff: top 8 for up to 2 Vehicle units', 8, ['VEH1', 'VEH2']],
+    ['SOR_125', 'Prepare For Takeoff: top 8 for up to 2 Vehicle units', 8, ['VEH1', 'VEH2']],
+    ['SHD_093', 'Remnant Reserves: top 5 for up to 3 units', 5, ['U_VIG', 'U_CMD', 'VEH1']],
+    ['SHD_253', 'This Is The Way: top 8 for up to 2 Mandalorian and/or upgrade cards', 8, ['UPG', 'MANDO', 'VEH_UPG']],
+  ])('%s %s', (id, _label, depth, eligible) => {
+    const c = choice(play(board(id, { deck: DECK })))
+    expect(c.kind).toBe('searchDraw')
+    expect(revealedOf(c)).toEqual(DECK.slice(0, depth))
+    expect(eligibleCards(c)).toEqual(eligible)
+  })
+
+  it('Recruit (SOR_123) draws the chosen unit and bottoms the rest', () => {
+    const after = accept(play(board('SOR_123', { deck: DECK })), { deckIndex: 1 })
+    noChoice(after)
+    expect(after.players.player.hand).toEqual(['U_CMD'])
+    expect(after.players.player.deck).toEqual([...DECK.slice(5), 'U_VIG', 'E_AGG', 'UPG', 'VEH1'])
+    expect(after.players.player.discard).toEqual(['SOR_123'])
+  })
+
+  it('Remnant Reserves (SHD_093) draws up to 3 and may stop early', () => {
+    let s = play(board('SHD_093', { deck: DECK }))
+    s = accept(s, { deckIndex: 0 })
+    expect(choice(s).kind).toBe('searchDraw')
+    s = accept(s, { deckIndex: 0 })
+    expect(declinable(s)).toBe(true)
+    s = skip(s)
+    noChoice(s)
+    expect(s.players.player.hand).toEqual(['U_VIG', 'U_CMD'])
+    expect(s.players.player.deck).toHaveLength(DECK.length - 2)
+  })
+
+  it('Prepare for Takeoff (JTL_128) stops after two', () => {
+    let s = play(board('JTL_128', { deck: DECK }))
+    s = accept(s, { deckIndex: eligibleIdx(choice(s), 'VEH1') })
+    s = accept(s, { deckIndex: eligibleIdx(choice(s), 'VEH2') })
+    noChoice(s)
+    expect(s.players.player.hand).toEqual(['VEH1', 'VEH2'])
+    expect(s.players.player.deck).toHaveLength(DECK.length - 2)
+  })
+})
+const eligibleIdx = (c: PendingChoice, cardId: string) => revealedOf(c).indexOf(cardId)
+
+// ── Hands ───────────────────────────────────────────────────────────────────────────────────────
+
+describe('events that look at or discard from a hand', () => {
+  const HAND = ['U_VIG', 'E_AGG', 'UPG']
+
+  it("Spark of Rebellion (SOR_200) discards any card from the opponent's hand, and must", () => {
+    const s = play(board('SOR_200', {}, { hand: HAND }))
+    expect(choice(s)).toMatchObject({ kind: 'lookAtHand', controller: 'player', target: 'opponent' })
+    expect(handOffers(s)).toEqual([0, 1, 2])
+    expect(declinable(s)).toBe(false)
+    const after = accept(s, { handIndex: 1 })
+    expect(after.players.opponent.hand).toEqual(['U_VIG', 'UPG'])
+    expect(after.players.opponent.discard).toEqual(['E_AGG'])
+  })
+
+  it('Tip the Scale (LOF_226) discards only a non-unit card', () => {
+    const s = play(board('LOF_226', {}, { hand: HAND }))
+    expect(handOffers(s)).toEqual([1, 2])
+    expect(declinable(s)).toBe(false)
+  })
+
+  it('Jam Communications (JTL_207) discards only an event, and is only a look when there is none', () => {
+    const s = play(board('JTL_207', {}, { hand: HAND }))
+    expect(handOffers(s)).toEqual([1])
+    expect(declinable(s)).toBe(false)
+    const none = play(board('JTL_207', {}, { hand: ['U_VIG', 'UPG'] }))
+    expect(handOffers(none)).toEqual([])
+    expect(declinable(none)).toBe(true)
+  })
+
+  it('Unmasking the Conspiracy (TWI_223) discards your own card first, then one of theirs', () => {
+    let s = play(board('TWI_223', { hand: ['FILL', 'U_CMD'] }, { hand: HAND }))
+    expect(choice(s)).toMatchObject({ kind: 'selectDiscard', controller: 'player' })
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { handIndex: 0 })
+    expect(s.players.player.discard).toContain('FILL')
+    expect(choice(s)).toMatchObject({ kind: 'lookAtHand', target: 'opponent' })
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { handIndex: 0 })
+    expect(s.players.opponent.discard).toEqual(['U_VIG'])
+  })
+
+  it('Unmasking the Conspiracy (TWI_223) does nothing with an empty hand', () => {
+    noChoice(play(board('TWI_223', {}, { hand: HAND })))
+  })
+
+  it('Hold For Questioning (LAW_217) exhausts an enemy unit and discards a card sharing its aspect', () => {
+    let s = play(board('LAW_217', { units: [unit('mine', 'GRD')] }, { units: [unit('e', 'GRD')], hand: HAND }))
+    expect(choice(s)).toMatchObject({ kind: 'selectUnitThen', targets: ['e'] })
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(U(s, 'e')!.exhausted).toBe(true)
+    expect(choice(s)).toMatchObject({ kind: 'lookAtHand', target: 'opponent' })
+    // GRD is Aggression: only E_AGG shares it.
+    expect(handOffers(s)).toEqual([1])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { handIndex: 1 })
+    expect(s.players.opponent.discard).toEqual(['E_AGG'])
+  })
+
+  it('Hold For Questioning (LAW_217) does nothing more when the unit was already exhausted', () => {
+    const s = accept(play(board('LAW_217', {}, { units: [unit('e', 'GRD', { exhausted: true })], hand: HAND })), { targetInstanceId: 'e' })
+    noChoice(s)
+    expect(s.players.opponent.hand).toEqual(HAND)
+  })
+
+  it("Beguile (SEC_233) looks at the hand, then returns an enemy non-leader unit costing 6 or less", () => {
+    let s = play(board('SEC_233', { units: [unit('mine', 'GRD')] }, {
+      hand: HAND, units: [unit('cheap', 'GRD'), unit('dear', 'GRD7'), unit('L', 'LEAD', { isLeader: true })],
+    }))
+    expect(choice(s)).toMatchObject({ kind: 'lookAtHand', target: 'opponent' })
+    expect(handOffers(s)).toEqual([])
+    s = skip(s)
+    expect(choice(s)).toMatchObject({ kind: 'selectUnitToReturn', targets: ['cheap'] })
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'cheap' })
+    expect(U(s, 'cheap')).toBeUndefined()
+    expect(s.players.opponent.hand).toEqual([...HAND, 'GRD'])
+  })
+
+  it('Every Day, More Lies (LAW_204) makes each player discard a card', () => {
+    let s = play(board('LAW_204', { hand: ['FILL'] }, { hand: HAND }))
+    const controllers = (s.pendingChoices ?? []).map(c => [c.kind, c.controller])
+    expect(controllers).toEqual([['selectDiscard', 'player'], ['selectDiscard', 'opponent']])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { handIndex: 0 })
+    s = accept(s, { handIndex: 2 })
+    noChoice(s)
+    expect(s.players.player.discard).toEqual(['LAW_204', 'FILL'])
+    expect(s.players.opponent.discard).toEqual(['UPG'])
+  })
+
+  it('No Bargain (SHD_244) makes the opponent discard and draws you a card', () => {
+    const s = play(board('SHD_244', { deck: ['U_CMD'] }, { hand: HAND }))
+    expect(choice(s)).toMatchObject({ kind: 'selectDiscard', controller: 'opponent', count: 1 })
+    expect(s.players.player.hand).toEqual(['U_CMD'])
+  })
+
+  it('Cripple Authority (SHD_156) draws, and the opponent discards only with more resources', () => {
+    const more = play(board('SHD_156', { deck: ['U_CMD'] }, { hand: HAND, resources: ready(21) }))
+    expect(more.players.player.hand).toEqual(['U_CMD'])
+    expect(choice(more)).toMatchObject({ kind: 'selectDiscard', controller: 'opponent', count: 1 })
+    const equal = play(board('SHD_156', { deck: ['U_CMD'] }, { hand: HAND, resources: ready(20) }))
+    expect(equal.players.player.hand).toEqual(['U_CMD'])
+    noChoice(equal)
+  })
+
+  it("Forced Surrender (SOR_175) draws 2, and the opponent discards 2 only if their base was damaged this phase", () => {
+    const hit = play(recordBaseDamaged(board('SOR_175', { deck: ['U_CMD', 'U_VIG'] }, { hand: HAND }), 'opponent'))
+    expect(hit.players.player.hand).toEqual(['U_CMD', 'U_VIG'])
+    expect(choice(hit)).toMatchObject({ kind: 'selectDiscard', controller: 'opponent', count: 2 })
+    const unhit = play(board('SOR_175', { deck: ['U_CMD', 'U_VIG'] }, { hand: HAND }))
+    expect(unhit.players.player.hand).toEqual(['U_CMD', 'U_VIG'])
+    noChoice(unhit)
+  })
+
+  it('Smoke and Cinders (SOR_174) makes each player discard all but 2', () => {
+    const s = play(board('SOR_174', { hand: ['FILL', 'U_CMD', 'U_VIG', 'UPG'] }, { hand: ['U_VIG', 'E_AGG'] }))
+    // The opponent already holds only 2, so only the player discards (the event has left the hand).
+    expect((s.pendingChoices ?? []).map(c => [c.kind, c.controller, 'count' in c ? c.count : 0]))
+      .toEqual([['selectDiscard', 'player', 2]])
+    const done = accept(accept(s, { handIndex: 0 }), { handIndex: 0 })
+    noChoice(done)
+    expect(done.players.player.hand).toEqual(['U_VIG', 'UPG'])
+  })
+})
+
+describe('events that choose a player', () => {
+  const HAND = ['U_VIG', 'E_AGG', 'UPG']
+  const pickPlayer = (s: GameState, who: PlayerId) => {
+    const c = choice(s)
+    expect(c.kind).toBe('choosePlayerThen')
+    // Option 0 is the opponent, option 1 the player choosing.
+    expect(moves(s).filter(m => m.type === 'acceptChoice').map(m => (m as { optionIndex?: number }).optionIndex)).toEqual([0, 1])
+    expect(declinable(s)).toBe(false)
+    return accept(s, { optionIndex: who === 'opponent' ? 0 : 1 })
+  }
+
+  it('Mission Briefing (SOR_171) makes the chosen player draw 2', () => {
+    const them = pickPlayer(play(board('SOR_171', {}, { deck: ['U_VIG', 'UPG', 'FILL'] })), 'opponent')
+    noChoice(them)
+    expect(them.players.opponent.hand).toEqual(['U_VIG', 'UPG'])
+    const me = pickPlayer(play(board('SOR_171', { deck: ['U_CMD', 'FILL'] })), 'player')
+    expect(me.players.player.hand).toEqual(['U_CMD', 'FILL'])
+  })
+
+  it('Pillage (SHD_181) makes the chosen player discard 2', () => {
+    const them = pickPlayer(play(board('SHD_181', {}, { hand: HAND })), 'opponent')
+    expect(choice(them)).toMatchObject({ kind: 'selectDiscard', controller: 'opponent', count: 2 })
+    // Holding only one card, you discard the one you have.
+    const me = pickPlayer(play(board('SHD_181', { hand: ['FILL'] }, { hand: HAND })), 'player')
+    expect(choice(me)).toMatchObject({ kind: 'selectDiscard', controller: 'player', count: 1 })
+  })
+
+  it('Force Throw (SOR_167) lets you deal the discarded card\'s cost with a Force unit', () => {
+    let s = pickPlayer(play(board('SOR_167', { units: [unit('f', 'FORCE')] }, { hand: HAND, units: [unit('e', 'GRD')] })), 'opponent')
+    expect(choice(s)).toMatchObject({ kind: 'selectDiscard', controller: 'opponent', count: 1 })
+    s = accept(s, { handIndex: 1 }) // E_AGG costs 4
+    const c = choice(s)
+    expect(c.controller).toBe('player')
+    expect(declinable(s)).toBe(true)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(U(s, 'e')!.damage).toBe(4)
+  })
+
+  it('Force Throw (SOR_167) deals nothing without a Force unit', () => {
+    let s = pickPlayer(play(board('SOR_167', { units: [unit('g', 'GRD')] }, { hand: HAND, units: [unit('e', 'GRD')] })), 'opponent')
+    s = accept(s, { handIndex: 1 })
+    noChoice(s)
+  })
+})
+
+// ── Damage read from a unit, and a chosen arena ─────────────────────────────────────────────────
+
+/** The unit targets the first pending choice offers, sorted. */
+const unitOffers = (s: GameState) =>
+  [...new Set(moves(s).flatMap(m => (m.type === 'acceptChoice' && m.choiceId === choice(s).id && m.targetInstanceId ? [m.targetInstanceId] : [])))].sort()
+const dmg = (s: GameState, id: string) => U(s, id)?.damage
+
+describe('events that deal damage read from a unit', () => {
+  it('Strike True (SOR_127): a friendly unit deals its power to an enemy unit', () => {
+    let s = play(board('SOR_127', { units: [unit('a', 'P3'), unit('b', 'P5')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['a', 'b'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'b' })
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    noChoice(s)
+    expect(dmg(s, 'e')).toBe(5)
+  })
+
+  it('Karabast (SOR_151): damage equal to the damage on the friendly unit plus 1', () => {
+    let s = play(board('SOR_151', { units: [unit('a', 'P3', { damage: 2 })] }, { units: [unit('e', 'BIG')] }))
+    s = accept(accept(s, { targetInstanceId: 'a' }), { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(3)
+  })
+
+  it('Protect the Pod (LOF_128): a friendly non-Vehicle unit deals its remaining HP', () => {
+    let s = play(board('LOF_128', { units: [unit('a', 'P5', { damage: 3 }), unit('v', 'VEHG')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['a'])
+    s = accept(accept(s, { targetInstanceId: 'a' }), { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(5)
+  })
+
+  it('Maximum Firepower (SOR_234): two friendly Imperial units deal their power to the same unit', () => {
+    let s = play(board('SOR_234', { units: [unit('i2', 'IMP2'), unit('i3', 'IMP3'), unit('p', 'P5')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['i2', 'i3'])
+    s = accept(s, { targetInstanceId: 'i3' })
+    expect(unitOffers(s)).toEqual(['e', 'i2', 'i3', 'p'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(3)
+    expect(unitOffers(s)).toEqual(['i2'])
+    s = accept(s, { targetInstanceId: 'i2' })
+    noChoice(s)
+    expect(dmg(s, 'e')).toBe(5)
+  })
+
+  it('Focus Fire (JTL_129): each friendly Vehicle in the same arena deals its power to the unit', () => {
+    let s = play(board('JTL_129', { units: [unit('v1', 'VEHG'), unit('v2', 'VEHG'), unit('vs', 'VEHS'), unit('p', 'P5')] }, { units: [unit('e', 'BIG')] }))
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'e' })
+    noChoice(s)
+    expect(dmg(s, 'e')).toBe(4)
+  })
+
+  it('Caught in the Crossfire (TWI_176): two enemy units in one arena deal their power to each other', () => {
+    let s = play(board('TWI_176', { units: [unit('m', 'P5')] }, { units: [unit('x', 'P3'), unit('y', 'P5'), unit('z', 'SP4')] }))
+    // The space unit has no partner in its arena.
+    expect(unitOffers(s)).toEqual(['x', 'y'])
+    s = accept(s, { targetInstanceId: 'x' })
+    expect(unitOffers(s)).toEqual(['y'])
+    s = accept(s, { targetInstanceId: 'y' })
+    noChoice(s)
+    // x (3/5) takes 5 and is defeated; y still takes x's 3, dealt at the same time.
+    expect(U(s, 'x')).toBeUndefined()
+    expect(dmg(s, 'y')).toBe(3)
+  })
+
+  it('Fight Fire With Fire (JTL_173): a friendly and an enemy unit in the same arena take 3 each', () => {
+    let s = play(board('JTL_173', { units: [unit('m', 'BIG'), unit('ms', 'SP4')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['m'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect([dmg(s, 'm'), dmg(s, 'e')]).toEqual([3, 3])
+  })
+
+  it('Ferrix Uprising (SEC_130): twice the units you control in its arena', () => {
+    let s = play(board('SEC_130', { units: [unit('a', 'P3'), unit('b', 'P3'), unit('c', 'SP4')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['a', 'b', 'c', 'e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(4)
+  })
+
+  it('Synchronized Strike (TWI_099): an enemy unit takes the units you control in its arena', () => {
+    let s = play(board('TWI_099', { units: [unit('a', 'P3'), unit('b', 'P3'), unit('c', 'SP4')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(2)
+  })
+
+  it('No Disintegrations (JTL_144): a non-leader unit is left on 1 HP', () => {
+    let s = play(board('JTL_144', {}, { units: [unit('e', 'BIG', { damage: 4 }), unit('L', 'LEAD', { isLeader: true })] }))
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(19)
+  })
+
+  it('Overwhelming Barrage (SOR_092): +2/+2, then its power divided among other units', () => {
+    let s = play(board('SOR_092', { units: [unit('a', 'P3')] }, { units: [unit('e', 'BIG'), unit('f', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['a'])
+    s = accept(s, { targetInstanceId: 'a' })
+    const c = choice(s)
+    expect(c).toMatchObject({ kind: 'distributeDamage', remaining: 5, total: 5 })
+    expect(unitOffers(s)).toEqual(['e', 'f'])
+  })
+})
+
+describe('events that choose an arena', () => {
+  const pickArena = (s: GameState, arena: 'ground' | 'space') => {
+    expect(choice(s).kind).toBe('chooseArenaThen')
+    expect(declinable(s)).toBe(false)
+    return accept(s, { optionIndex: arena === 'ground' ? 0 : 1 })
+  }
+
+  it('Bombing Run (SOR_173) deals 3 to each unit in the chosen arena', () => {
+    const s = pickArena(play(board('SOR_173', { units: [unit('a', 'BIG'), unit('s', 'SP4')] }, { units: [unit('e', 'BIG')] })), 'ground')
+    expect([dmg(s, 'a'), dmg(s, 's'), dmg(s, 'e')]).toEqual([3, 0, 3])
+  })
+
+  it('Outmaneuver (SOR_221) exhausts each unit in the chosen arena', () => {
+    const s = pickArena(play(board('SOR_221', { units: [unit('a', 'BIG'), unit('s', 'SP4')] }, { units: [unit('e', 'SP4')] })), 'space')
+    expect([U(s, 'a')!.exhausted, U(s, 's')!.exhausted, U(s, 'e')!.exhausted]).toEqual([false, true, true])
+  })
+
+  it('Turbolaser Salvo (JTL_131): a friendly space unit deals its power to each enemy unit in the arena', () => {
+    let s = pickArena(play(board('JTL_131', { units: [unit('sp', 'SP4'), unit('g', 'P5')] }, { units: [unit('e', 'BIG'), unit('f', 'BIG'), unit('es', 'SP4')] })), 'ground')
+    expect(unitOffers(s)).toEqual(['sp'])
+    s = accept(s, { targetInstanceId: 'sp' })
+    expect([dmg(s, 'e'), dmg(s, 'f'), dmg(s, 'es'), dmg(s, 'g')]).toEqual([4, 4, 0, 0])
+  })
+})
+
+// ── Exhausting and readying ─────────────────────────────────────────────────────────────────────
+
+const exhausted = (s: GameState, ...ids: string[]) => ids.map(id => U(s, id)?.exhausted)
+
+describe('events that exhaust or ready units', () => {
+  it('Asteroid Sanctuary (SOR_218) exhausts an enemy unit, then shields a friendly unit costing 3 or less', () => {
+    let s = play(board('SOR_218', { units: [unit('cheap', 'P3'), unit('dear', 'P5')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['e'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(exhausted(s, 'e')).toEqual([true])
+    expect(unitOffers(s)).toEqual(['cheap'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'cheap' })
+    expect(hasToken(U(s, 'cheap')!.upgrades, TOKEN_SHIELD)).toBe(true)
+  })
+
+  it('In Pursuit (TWI_221) exhausts an enemy unit only if it exhausted a friendly one', () => {
+    let s = play(board('TWI_221', { units: [unit('m', 'P3'), unit('tired', 'P3', { exhausted: true })] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['m', 'tired'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(exhausted(s, 'm', 'e')).toEqual([true, true])
+    const none = accept(play(board('TWI_221', { units: [unit('tired', 'P3', { exhausted: true })] }, { units: [unit('e', 'BIG')] })), { targetInstanceId: 'tired' })
+    noChoice(none)
+  })
+
+  it('Cat and Mouse (JTL_195) readies a friendly unit in the same arena with no more power', () => {
+    let s = play(board('JTL_195', {
+      units: [unit('weak', 'P2', { exhausted: true }), unit('strong', 'P5', { exhausted: true }), unit('sp', 'SP4', { exhausted: true })],
+    }, { units: [unit('e', 'P3')] }))
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(exhausted(s, 'e')).toEqual([true])
+    expect(unitOffers(s)).toEqual(['weak'])
+    s = accept(s, { targetInstanceId: 'weak' })
+    expect(exhausted(s, 'weak')).toEqual([false])
+  })
+
+  it('No One Ever Knew (SEC_196) exhausts an enemy unit for each friendly Official unit', () => {
+    let s = play(board('SEC_196', { units: [unit('o1', 'OFFICIAL'), unit('o2', 'OFFICIAL'), unit('p', 'P3')] }, { units: [unit('e', 'BIG'), unit('f', 'BIG'), unit('g', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['e', 'f', 'g'])
+    s = accept(s, { targetInstanceId: 'e' })
+    s = accept(s, { targetInstanceId: 'g' })
+    noChoice(s)
+    expect(exhausted(s, 'e', 'f', 'g')).toEqual([true, false, true])
+  })
+
+  it('Secret Battle of Pretend (LAW_226) exhausts an enemy in the same arena per aspect of the friendly unit', () => {
+    let s = play(board('LAW_226', { units: [unit('m', 'TWO_ASP')] }, { units: [unit('e', 'BIG'), unit('f', 'BIG'), unit('g', 'BIG'), unit('sp', 'SP4')] }))
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(unitOffers(s)).toEqual(['e', 'f', 'g'])
+    s = accept(accept(s, { targetInstanceId: 'e' }), { targetInstanceId: 'f' })
+    noChoice(s)
+    expect(exhausted(s, 'm', 'e', 'f', 'g', 'sp')).toEqual([true, true, true, false, false])
+  })
+
+  it('Electromagnetic Pulse (JTL_230) deals 2 to a Droid or Vehicle and exhausts it', () => {
+    let s = play(board('JTL_230', { units: [unit('p', 'P3')] }, { units: [unit('d', 'DROID'), unit('v', 'VEHS')] }))
+    expect(unitOffers(s)).toEqual(['d', 'v'])
+    s = accept(s, { targetInstanceId: 'd' })
+    expect([dmg(s, 'd'), U(s, 'd')!.exhausted]).toEqual([2, true])
+  })
+
+  it("Look the Other Way (SHD_227) exhausts a unit unless its controller pays 2", () => {
+    let s = play(board('SHD_227', {}, { units: [unit('e', 'BIG')], resources: ready(2) }))
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(choice(s)).toMatchObject({ kind: 'payOrExhaust', controller: 'opponent', unitId: 'e', cost: 2 })
+    const paid = accept(s)
+    expect(exhausted(paid, 'e')).toEqual([false])
+    expect(paid.players.opponent.resources.filter(r => r.exhausted)).toHaveLength(2)
+    expect(exhausted(skip(s), 'e')).toEqual([true])
+  })
+
+  it('Heartless Tactics (JTL_194) exhausts, gives -2/-0, and may return a non-leader left on 0 power', () => {
+    let s = play(board('JTL_194', {}, { units: [unit('e', 'P2')] }))
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(exhausted(s, 'e')).toEqual([true])
+    expect(effectivePower(s, U(s, 'e')!)).toBe(0)
+    expect(declinable(s)).toBe(true)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(U(s, 'e')).toBeUndefined()
+    expect(s.players.opponent.hand).toEqual(['P2'])
+    const strong = accept(play(board('JTL_194', {}, { units: [unit('e', 'P3')] })), { targetInstanceId: 'e' })
+    noChoice(strong)
+  })
+
+  it('Force Illusion (LOF_223) exhausts an enemy unit and gives a friendly unit Sentinel', () => {
+    let s = play(board('LOF_223', { units: [unit('m', 'P3')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(unitOffers(s)).toEqual(['m'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(unitHasKeyword(s, U(s, 'm')!, 'Sentinel')).toBe(true)
+  })
+
+  it('Face Off (JTL_178) readies an enemy and then a friendly unit in its arena, only before the initiative is taken', () => {
+    const b = board('JTL_178', { units: [unit('m', 'P3', { exhausted: true }), unit('ms', 'SP4', { exhausted: true })] }, { units: [unit('e', 'BIG', { exhausted: true })] })
+    let s = play(b)
+    expect(declinable(s)).toBe(true)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(exhausted(s, 'e')).toEqual([false])
+    expect(unitOffers(s)).toEqual(['m'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(exhausted(s, 'm')).toEqual([false])
+    noChoice(play({ ...b, initiativeTakenBy: 'opponent' }))
+  })
+
+  it("Fly Casual (JTL_206) readies a Vehicle, which can't attack bases this phase", () => {
+    let s = play(board('JTL_206', { units: [unit('v', 'VEHS', { exhausted: true }), unit('p', 'P3', { exhausted: true })] }))
+    expect(unitOffers(s)).toEqual(['v'])
+    s = accept(s, { targetInstanceId: 'v' })
+    expect(exhausted(s, 'v')).toEqual([false])
+    expect(unitCannotAttackBases(s, U(s, 'v')!)).toBe(true)
+    expect(unitCannotAttackBases(s, U(s, 'p')!)).toBe(false)
+  })
+
+  it('Shadow Cloaking (LAW_043) readies a unit and shields it', () => {
+    let s = play(board('LAW_043', { units: [unit('m', 'P3', { exhausted: true })] }))
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(exhausted(s, 'm')).toEqual([false])
+    expect(hasToken(U(s, 'm')!.upgrades, TOKEN_SHIELD)).toBe(true)
+  })
+
+  it('Bravado (SHD_182) costs 2 less once an enemy unit was defeated this phase, and readies a unit', () => {
+    const b = board('SHD_182', { units: [unit('m', 'P3', { exhausted: true })] })
+    expect(effectiveCost(b, 'player', F.SHD_182)).toBe(5)
+    expect(effectiveCost(recordUnitDefeated(b, 'opponent', 'P3'), 'player', F.SHD_182)).toBe(3)
+    const s = accept(play(b), { targetInstanceId: 'm' })
+    expect(exhausted(s, 'm')).toEqual([false])
+  })
+})
+
+// ── Phase-long changes to units ─────────────────────────────────────────────────────────────────
+
+const stats = (s: GameState, id: string) => { const u = U(s, id)!; return [effectivePower(s, u), effectiveHp(s, u)] }
+
+describe('events that change units for this phase', () => {
+  it('Corporate Warmongering (SEC_091): +3/+3 to one friendly unit and +1/+1 to each other', () => {
+    let s = play(board('SEC_091', { units: [unit('a', 'P3'), unit('b', 'P2')] }, { units: [unit('e', 'P3')] }))
+    expect(unitOffers(s)).toEqual(['a', 'b'])
+    s = accept(s, { targetInstanceId: 'a' })
+    expect([stats(s, 'a'), stats(s, 'b'), stats(s, 'e')]).toEqual([[6, 8], [3, 6], [3, 5]])
+  })
+
+  it('Attack Pattern Delta (SOR_106): +3/+3, +2/+2 and +1/+1 to three different friendly units', () => {
+    let s = play(board('SOR_106', { units: [unit('a', 'P3'), unit('b', 'P2'), unit('c', 'P5')] }))
+    s = accept(s, { targetInstanceId: 'b' })
+    expect(unitOffers(s)).toEqual(['a', 'c'])
+    s = accept(s, { targetInstanceId: 'c' })
+    expect(unitOffers(s)).toEqual(['a'])
+    s = accept(s, { targetInstanceId: 'a' })
+    noChoice(s)
+    expect([stats(s, 'a'), stats(s, 'b'), stats(s, 'c')]).toEqual([[4, 6], [5, 8], [7, 10]])
+  })
+
+  it('Coordinated Front (JTL_253) may give a ground and a space unit +2/+2', () => {
+    const s = play(board('JTL_253', { units: [unit('g', 'P3'), unit('sp', 'SP4')] }))
+    const kinds = (s.pendingChoices ?? []).map(c => ('targets' in c ? c.targets : []))
+    expect(kinds).toEqual([['g'], ['sp']])
+    expect(declinable(s)).toBe(true)
+    const done = accept(skip(s), { targetInstanceId: 'sp' })
+    expect([stats(done, 'g'), stats(done, 'sp')]).toEqual([[3, 5], [6, 22]])
+  })
+
+  it('Power from Pain (JTL_042): +1/+0 for each damage on the unit', () => {
+    const s = accept(play(board('JTL_042', { units: [unit('a', 'BIG', { damage: 4 })] })), { targetInstanceId: 'a' })
+    expect(stats(s, 'a')).toEqual([5, 20])
+  })
+
+  it('Bold Resistance (TWI_153): up to 3 units sharing a Trait get +2/+0', () => {
+    let s = play(board('TWI_153', { units: [unit('r', 'REPUBLIC'), unit('c', 'CLONE'), unit('x', 'SEPARATIST'), unit('p', 'P3')] }))
+    // P3 has no Trait, so it shares none with anything.
+    expect(unitOffers(s)).toEqual(['c', 'r', 'x'])
+    expect(declinable(s)).toBe(true)
+    s = accept(s, { targetInstanceId: 'r' })
+    expect(unitOffers(s)).toEqual(['c'])
+    s = accept(s, { targetInstanceId: 'c' })
+    noChoice(s)
+    expect([stats(s, 'r'), stats(s, 'c'), stats(s, 'x')]).toEqual([[4, 5], [4, 5], [2, 5]])
+  })
+
+  it('Heroes on Both Sides (TWI_249): up to one Republic and one Separatist unit get +2/+2 and Saboteur', () => {
+    const s = play(board('TWI_249', { units: [unit('r', 'REPUBLIC'), unit('p', 'P3')] }, { units: [unit('x', 'SEPARATIST')] }))
+    expect((s.pendingChoices ?? []).map(c => ('targets' in c ? c.targets : []))).toEqual([['r'], ['x']])
+    const done = accept(s, { targetInstanceId: 'r' })
+    expect(stats(done, 'r')).toEqual([4, 7])
+    expect(unitHasKeyword(done, U(done, 'r')!, 'Saboteur')).toBe(true)
+  })
+
+  it('Unity of Purpose (JTL_106): +1/+1 to each unit you control per differently named friendly unit', () => {
+    const s = play(board('JTL_106', { units: [unit('a', 'P3'), unit('b', 'P3'), unit('c', 'P2')] }, { units: [unit('e', 'P3')] }))
+    noChoice(s)
+    expect([stats(s, 'a'), stats(s, 'c'), stats(s, 'e')]).toEqual([[5, 7], [4, 7], [3, 5]])
+  })
+
+  it('Equalize (TWI_055): -2/-2, then another unit -2/-2 if you control fewer units than its controller', () => {
+    let s = play(board('TWI_055', { units: [unit('m', 'BIG')] }, { units: [unit('e', 'BIG'), unit('f', 'BIG')] }))
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(effectiveHp(s, U(s, 'e')!)).toBe(18)
+    expect(unitOffers(s)).toEqual(['f', 'm'])
+    s = accept(s, { targetInstanceId: 'f' })
+    expect(effectiveHp(s, U(s, 'f')!)).toBe(18)
+    const even = accept(play(board('TWI_055', { units: [unit('m', 'BIG')] }, { units: [unit('e', 'BIG')] })), { targetInstanceId: 'e' })
+    noChoice(even)
+  })
+
+  it('Nothing Left to Fear (LAW_041): +2/+2, then may defeat a non-leader unit with no more power', () => {
+    let s = play(board('LAW_041', { units: [unit('m', 'P2')] }, { units: [unit('weak', 'P3'), unit('strong', 'P5'), unit('L', 'LEAD', { isLeader: true })] }))
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(stats(s, 'm')).toEqual([4, 7])
+    expect(unitOffers(s)).toEqual(['m', 'weak'])
+    expect(declinable(s)).toBe(true)
+    s = accept(s, { targetInstanceId: 'weak' })
+    expect(U(s, 'weak')).toBeUndefined()
+  })
+
+  it("Go Into Hiding (LOF_262): a unit can't be attacked this phase unless it has Sentinel", () => {
+    const s = accept(play(board('LOF_262', { units: [unit('m', 'P3')] })), { targetInstanceId: 'm' })
+    expect(unitCannotBeAttacked(s, U(s, 'm')!)).toBe(true)
+  })
+
+  it('In the Heat of Battle (JTL_077): each unit gains Sentinel and loses Saboteur', () => {
+    const s = play(board('JTL_077', { units: [unit('m', 'SABOTEUR')] }, { units: [unit('e', 'P3')] }))
+    noChoice(s)
+    for (const id of ['m', 'e']) expect(unitHasKeyword(s, U(s, id)!, 'Sentinel')).toBe(true)
+    expect(unitHasKeyword(s, U(s, 'm')!, 'Saboteur')).toBe(false)
+  })
+})
+
+// ── Defeats, and damage with a tail ─────────────────────────────────────────────────────────────
+
+describe('events that defeat units or upgrades', () => {
+  it('Lost and Forgotten (LAW_133) defeats a non-leader unit and heals 3 from your base', () => {
+    let s = play(board('LAW_133', { base: { cardId: 'TST_B', damage: 5 } }, { units: [unit('e', 'P3'), unit('L', 'LEAD', { isLeader: true })] }))
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(U(s, 'e')).toBeUndefined()
+    expect(s.players.player.base.damage).toBe(2)
+  })
+
+  it('Self-Destruct (TWI_140) defeats a friendly unit, then deals 4 damage to a unit', () => {
+    let s = play(board('TWI_140', { units: [unit('m', 'P3')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['m'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(U(s, 'm')).toBeUndefined()
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(4)
+  })
+
+  it('Enforced Loyalty (SHD_108) defeats a friendly unit and draws 2', () => {
+    const s = accept(play(board('SHD_108', { units: [unit('m', 'P3')], deck: ['U_CMD', 'U_VIG', 'FILL'] }, { units: [unit('e', 'BIG')] })), { targetInstanceId: 'm' })
+    expect(s.players.player.hand).toEqual(['U_CMD', 'U_VIG'])
+  })
+
+  it("Lethal Crackdown (TWI_041) defeats a non-leader unit and deals its power to your base", () => {
+    const s = accept(play(board('TWI_041', {}, { units: [unit('e', 'P5')] })), { targetInstanceId: 'e' })
+    expect(U(s, 'e')).toBeUndefined()
+    expect(s.players.player.base.damage).toBe(5)
+  })
+
+  it('Power of the Dark Side (SOR_041): the opponent chooses one of their units to defeat', () => {
+    let s = play(board('SOR_041', { units: [unit('m', 'P3')] }, { units: [unit('e', 'P3'), unit('f', 'P5')] }))
+    expect(choice(s).controller).toBe('opponent')
+    expect(unitOffers(s)).toEqual(['e', 'f'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(U(s, 'e')).toBeUndefined()
+  })
+
+  it('Merciless Contest (TWI_238): each player chooses a non-leader unit they control, and both are defeated', () => {
+    let s = play(board('TWI_238', { units: [unit('m', 'P3'), unit('n', 'P5')] }, { units: [unit('e', 'P3'), unit('L', 'LEAD', { isLeader: true })] }))
+    expect([choice(s).controller, unitOffers(s)]).toEqual(['player', ['m', 'n']])
+    s = accept(s, { targetInstanceId: 'n' })
+    expect(U(s, 'n')).toBeDefined()
+    expect([choice(s).controller, unitOffers(s)]).toEqual(['opponent', ['e']])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect([U(s, 'n'), U(s, 'e')]).toEqual([undefined, undefined])
+  })
+
+  it("Display Piece (LAW_103) defeats an enemy non-leader unit, which its controller resources", () => {
+    const s = accept(play(board('LAW_103', {}, { units: [unit('e', 'P3')], resources: ready(2) })), { targetInstanceId: 'e' })
+    expect(U(s, 'e')).toBeUndefined()
+    expect(s.players.opponent.discard).toEqual([])
+    expect(s.players.opponent.resources.map(r => r.cardId)).toContain('P3')
+  })
+
+  it('No Glory, Only Results (JTL_043) takes control of a non-leader unit, then defeats it', () => {
+    const s = accept(play(board('JTL_043', {}, { units: [unit('e', 'P3')] })), { targetInstanceId: 'e' })
+    expect(U(s, 'e')).toBeUndefined()
+    expect(s.players.opponent.discard).toEqual(['P3'])
+  })
+
+  it('System Shock (JTL_175) defeats a non-leader upgrade and deals 1 damage to its unit', () => {
+    let s = play(board('JTL_175', {}, { units: [unit('e', 'BIG', { upgrades: [{ cardId: 'LEADUPG', owner: 'opponent' }, { cardId: 'UPG2', owner: 'opponent' }] })] }))
+    const c = choice(s)
+    expect(c.kind).toBe('selectUpgradeThen')
+    expect(c.kind === 'selectUpgradeThen' ? c.candidates.map(x => x.cardId) : []).toEqual(['UPG2'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { optionIndex: 0 })
+    expect(U(s, 'e')!.upgrades.map(u => u.cardId)).toEqual(['LEADUPG'])
+    expect(dmg(s, 'e')).toBe(1)
+  })
+
+  it('Power Failure (SOR_170) defeats any number of upgrades on a unit', () => {
+    let s = play(board('SOR_170', {}, { units: [unit('e', 'BIG', { upgrades: [{ cardId: 'UPG', owner: 'opponent' }, { cardId: 'UPG2', owner: 'opponent' }] }), unit('f', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    s = accept(s, { optionIndex: 1 })
+    expect(declinable(s)).toBe(true)
+    s = skip(s)
+    noChoice(s)
+    expect(U(s, 'e')!.upgrades.map(u => u.cardId)).toEqual(['UPG'])
+  })
+
+  it('Piercing Shot (JTL_180) defeats every Shield on a unit, then deals 3 damage to it', () => {
+    const shields = [{ cardId: TOKEN_SHIELD, owner: 'opponent' as const }, { cardId: TOKEN_SHIELD, owner: 'opponent' as const }]
+    const s = accept(play(board('JTL_180', {}, { units: [unit('e', 'BIG', { upgrades: shields })] })), { targetInstanceId: 'e' })
+    expect(U(s, 'e')!.upgrades).toEqual([])
+    expect(dmg(s, 'e')).toBe(3)
+  })
+})
+
+describe('events that deal damage with a tail', () => {
+  it("Force Choke (SOR_139) costs 1 less with a Force unit, deals 5 to a non-Vehicle unit, and its controller draws", () => {
+    const b = board('SOR_139', { units: [unit('f', 'FORCE')] }, { units: [unit('e', 'BIG'), unit('v', 'VEHG')], deck: ['FILL'] })
+    expect(effectiveCost(b, 'player', F.SOR_139)).toBe(1)
+    let s = play(b)
+    expect(unitOffers(s)).toEqual(['e', 'f'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(5)
+    expect(s.players.opponent.hand).toEqual(['FILL'])
+  })
+
+  it('Shoot Down (JTL_176) deals 3 to a space unit, and may deal 2 to a base if that defeats it', () => {
+    let s = play(board('JTL_176', {}, { units: [unit('e', 'SP3'), unit('g', 'P3')] }))
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(U(s, 'e')).toBeUndefined()
+    expect(declinable(s)).toBe(true)
+    const c = choice(s)
+    expect('baseTargets' in c ? c.baseTargets : []).toEqual(['player', 'opponent'])
+    const survived = accept(play(board('JTL_176', {}, { units: [unit('e', 'SP4')] })), { targetInstanceId: 'e' })
+    noChoice(survived)
+  })
+
+  it('Collateral Damage (LAW_208) deals 2 to a unit, then 2 to a base or another unit in its arena', () => {
+    let s = play(board('LAW_208', { units: [unit('m', 'BIG')] }, { units: [unit('e', 'BIG'), unit('sp', 'SP4')] }))
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(2)
+    const c = choice(s)
+    expect(c).toMatchObject({ kind: 'selectDamageTarget', amount: 2, unitTargets: ['m'], baseTargets: ['player', 'opponent'] })
+    expect(declinable(s)).toBe(false)
+  })
+
+  it("Let's Call It War (SEC_180) deals 3, then with the initiative may deal 2 to another unit in the arena", () => {
+    const b = board('SEC_180', {}, { units: [unit('e', 'BIG'), unit('f', 'BIG'), unit('sp', 'SP4')] })
+    let s = accept(play({ ...b, initiative: 'player' }), { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(3)
+    expect(unitOffers(s)).toEqual(['f'])
+    expect(declinable(s)).toBe(true)
+    s = accept(s, { targetInstanceId: 'f' })
+    expect(dmg(s, 'f')).toBe(2)
+    noChoice(accept(play({ ...b, initiative: 'opponent' }), { targetInstanceId: 'e' }))
+  })
+
+  it('Grenade Strike (TWI_171) deals 2, then may deal 1 to another unit in the arena', () => {
+    let s = accept(play(board('TWI_171', {}, { units: [unit('e', 'BIG'), unit('f', 'BIG'), unit('sp', 'SP4')] })), { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(2)
+    expect(unitOffers(s)).toEqual(['f'])
+    expect(declinable(s)).toBe(true)
+    s = accept(s, { targetInstanceId: 'f' })
+    expect(dmg(s, 'f')).toBe(1)
+  })
+})
+
+// ── Change of control ───────────────────────────────────────────────────────────────────────────
+
+const controllerOf = (s: GameState, id: string): PlayerId | undefined =>
+  (['player', 'opponent'] as PlayerId[]).find(p => s.players[p].units.some(u => u.instanceId === id))
+const controlUntil = (s: GameState, id: string) => U(s, id)?.controlUntil
+
+describe('events that change control', () => {
+  it('Change of Heart (SOR_224) takes control of a non-leader unit until the regroup phase', () => {
+    let s = play(board('SOR_224', {}, { units: [unit('e', 'P3'), unit('L', 'LEAD', { isLeader: true })] }))
+    expect(unitOffers(s)).toEqual(['e'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(controllerOf(s, 'e')).toBe('player')
+    expect(controlUntil(s, 'e')).toBeUndefined()
+    expect(U(s, 'e')!.owner).toBe('opponent')
+  })
+
+  it('Choose Sides (SHD_132) exchanges control of a friendly and an enemy non-leader unit for good', () => {
+    let s = play(board('SHD_132', { units: [unit('m', 'P3')] }, { units: [unit('e', 'P5')] }))
+    expect(unitOffers(s)).toEqual(['m'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect([controllerOf(s, 'm'), controllerOf(s, 'e')]).toEqual(['opponent', 'player'])
+    expect([controlUntil(s, 'm'), controlUntil(s, 'e')]).toEqual(['permanent', 'permanent'])
+  })
+
+  it('You Hold This (LAW_085) gives a friendly non-leader unit away, then deals 4 to another unit in its arena', () => {
+    let s = play(board('LAW_085', { units: [unit('m', 'P3'), unit('ms', 'SP4')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['m', 'ms'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(controllerOf(s, 'm')).toBe('opponent')
+    expect(controlUntil(s, 'm')).toBe('permanent')
+    expect(unitOffers(s)).toEqual(['e'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(4)
+  })
+
+  it('Impropriety Among Thieves (TWI_204) swaps a ready non-leader unit from each side until the regroup phase', () => {
+    let s = play(board('TWI_204', { units: [unit('m', 'P3'), unit('tired', 'P3', { exhausted: true })] }, { units: [unit('e', 'P5'), unit('L', 'LEAD', { isLeader: true })] }))
+    expect(unitOffers(s)).toEqual(['m'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect([controllerOf(s, 'm'), controllerOf(s, 'e')]).toEqual(['opponent', 'player'])
+    expect([controlUntil(s, 'm'), controlUntil(s, 'e')]).toEqual([undefined, undefined])
+    // With no ready enemy non-leader unit, nothing is chosen at all.
+    noChoice(play(board('TWI_204', { units: [unit('m', 'P3')] }, { units: [unit('e', 'P5', { exhausted: true })] })))
+  })
+})
+
+// ── Returns to hand, and effects read from this phase's record ──────────────────────────────────
+
+describe('events that return units to hand', () => {
+  it('Clear the Field (TWI_199) returns a unit costing 3 or less and each enemy non-leader unit with its name', () => {
+    let s = play(board('TWI_199', { units: [unit('mine', 'P3')] }, { units: [unit('e1', 'P3'), unit('e2', 'P3'), unit('big', 'P5')] }))
+    expect(unitOffers(s)).toEqual(['e1', 'e2', 'mine'])
+    s = accept(s, { targetInstanceId: 'mine' })
+    expect([U(s, 'mine'), U(s, 'e1'), U(s, 'e2')]).toEqual([undefined, undefined, undefined])
+    expect(U(s, 'big')).toBeDefined()
+    expect(s.players.player.hand).toEqual(['P3'])
+    expect(s.players.opponent.hand).toEqual(['P3', 'P3'])
+  })
+
+  it('Sweep the Area (JTL_233) returns up to 2 non-leader units in one arena costing 3 or less together', () => {
+    let s = play(board('JTL_233', { units: [unit('m', 'C1')] }, { units: [unit('e', 'P3'), unit('f', 'C1'), unit('sp', 'SP3'), unit('big', 'P5')] }))
+    expect(unitOffers(s)).toEqual(['e', 'f', 'm', 'sp'])
+    expect(declinable(s)).toBe(true)
+    s = accept(s, { targetInstanceId: 'f' })
+    // 2 of the 3 left, in the ground arena: the space unit and the 4-cost unit are out.
+    expect(unitOffers(s)).toEqual(['e', 'm'])
+    expect(U(s, 'f')).toBeDefined()
+    s = accept(s, { targetInstanceId: 'm' })
+    noChoice(s)
+    expect([U(s, 'f'), U(s, 'm')]).toEqual([undefined, undefined])
+    expect(U(s, 'e')).toBeDefined()
+    // Stopping after one still returns the one.
+    const one = skip(accept(play(board('JTL_233', { units: [unit('m', 'C1')] }, { units: [unit('f', 'C1')] })), { targetInstanceId: 'f' }))
+    expect([U(one, 'f'), U(one, 'm')?.instanceId]).toEqual([undefined, 'm'])
+  })
+
+  it('A New Adventure (SHD_207) returns a non-leader unit costing 6 or less, and its owner may play it free', () => {
+    let s = play(board('SHD_207', {}, { units: [unit('e', 'P5'), unit('dear', 'GRD7')] }))
+    expect(unitOffers(s)).toEqual(['e'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(choice(s)).toMatchObject({ kind: 'playUnitFromHand', controller: 'opponent', optional: true })
+    expect('thenShieldIt' in choice(s)).toBe(false)
+  })
+
+  it('Ma Klounkee (SHD_229) returns a friendly non-leader Underworld unit, then deals 3 damage to a unit', () => {
+    let s = play(board('SHD_229', { units: [unit('uw', 'UW'), unit('p', 'P3')] }, { units: [unit('e', 'BIG')] }))
+    expect(unitOffers(s)).toEqual(['uw'])
+    s = accept(s, { targetInstanceId: 'uw' })
+    expect(s.players.player.hand).toEqual(['UW'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(3)
+  })
+})
+
+describe("events that read this phase's record", () => {
+  it('Tempest Assault (SEC_144) deals 2 to each enemy space unit once an enemy base was damaged', () => {
+    const b = board('SEC_144', { units: [unit('ms', 'SP4')] }, { units: [unit('es', 'SP4'), unit('eg', 'BIG')] })
+    const hit = play(recordBaseDamaged(b, 'opponent'))
+    expect([dmg(hit, 'ms'), dmg(hit, 'es'), dmg(hit, 'eg')]).toEqual([0, 2, 0])
+    expect(dmg(play(b), 'es')).toBe(0)
+  })
+
+  it("The Emperor's Legion (SOR_091) returns each of your units defeated this phase from the discard pile", () => {
+    const b = board('SOR_091', { discard: ['P3', 'P5', 'UPG'] })
+    const s = play(recordUnitDefeated(b, 'player', 'P3'))
+    expect(s.players.player.hand).toEqual(['P3'])
+    expect(s.players.player.discard).toEqual(['P5', 'UPG', 'SOR_091'])
+  })
+
+  it('Wartime Profiteering (TWI_188) looks at one card per unit defeated this phase and draws one', () => {
+    const b = recordUnitDefeated(recordUnitDefeated(board('TWI_188', { deck: ['U_VIG', 'U_CMD', 'UPG', 'FILL'] }), 'player', 'P3'), 'opponent', 'P5')
+    const c = choice(play(b))
+    expect(c.kind).toBe('searchDraw')
+    expect(revealedOf(c)).toEqual(['U_VIG', 'U_CMD'])
+    expect(eligibleCards(c)).toEqual(['U_VIG', 'U_CMD'])
+    noChoice(play(board('TWI_188', { deck: ['U_VIG'] })))
+  })
+})
+
+// ── Playing from hand, and resourcing ───────────────────────────────────────────────────────────
+
+const candidatesOf = (c: PendingChoice): string[] => (c.kind === 'playUnitFromHand' ? c.candidates.map(x => x.cardId) : [])
+
+describe('events that play a unit from hand', () => {
+  it('Soresu Stance (LOF_076) plays a Force unit from hand, paying its cost, and shields it', () => {
+    let s = play(board('LOF_076', { hand: ['FORCE_HAND', 'P3'] }))
+    const c = choice(s)
+    expect(candidatesOf(c)).toEqual(['FORCE_HAND'])
+    expect(c).toMatchObject({ costDelta: 0, entersReady: false, thenShieldIt: true })
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { handIndex: 0 })
+    const played = s.players.player.units.find(u => u.cardId === 'FORCE_HAND')!
+    expect(hasToken(played.upgrades, TOKEN_SHIELD)).toBe(true)
+  })
+
+  it('Restore Freedom (SEC_257) plays a unit costing 1 less per Heroism icon among friendly units', () => {
+    const c = choice(play(board('SEC_257', { hand: ['H_UNIT5', 'UPG'], units: [unit('a', 'HERO2'), unit('b', 'HERO1'), unit('c', 'P3')] })))
+    expect(candidatesOf(c)).toEqual(['H_UNIT5'])
+    expect(c).toMatchObject({ costDelta: -3 })
+  })
+
+  it('Galactic Ambition (SOR_235) plays a non-Heroism unit for free and deals its cost to your base', () => {
+    let s = play(board('SOR_235', { hand: ['H_UNIT5', 'V_UNIT4'] }))
+    expect(candidatesOf(choice(s))).toEqual(['V_UNIT4'])
+    const before = s.players.player.resources.filter(r => r.exhausted).length
+    s = accept(s, { handIndex: 1 })
+    expect(s.players.player.units.map(u => u.cardId)).toEqual(['V_UNIT4'])
+    expect(s.players.player.resources.filter(r => r.exhausted).length).toBe(before)
+    expect(s.players.player.base.damage).toBe(4)
+  })
+
+  it('Now There Are Two of Them (TWI_225) plays a non-Vehicle unit sharing a Trait with your only unit, 5 less', () => {
+    const c = choice(play(board('TWI_225', { hand: ['CLONE6', 'CLONE_VEH', 'P5'], units: [unit('r', 'REPUBLIC')] })))
+    expect(candidatesOf(c)).toEqual(['CLONE6'])
+    expect(c).toMatchObject({ costDelta: -5 })
+    noChoice(play(board('TWI_225', { hand: ['CLONE6'], units: [unit('r', 'REPUBLIC'), unit('p', 'P3')] })))
+  })
+})
+
+describe('events that become resources', () => {
+  it.each(['TWI_127', 'SOR_126'])('Resupply (%s) puts itself into play as a resource', id => {
+    const s = play(board(id, { resources: ready(3) }))
+    expect(s.players.player.discard).toEqual([])
+    expect(s.players.player.resources).toHaveLength(4)
+    expect(s.players.player.resources[3]).toEqual({ cardId: id, exhausted: true })
+  })
+
+  it('Stockpile (LAW_171) resources itself and the top card of your deck', () => {
+    const s = play(board('LAW_171', { resources: ready(6), deck: ['U_VIG', 'FILL'] }))
+    expect(s.players.player.discard).toEqual([])
+    expect(s.players.player.resources.slice(6).map(r => r.cardId).sort()).toEqual(['LAW_171', 'U_VIG'])
+    expect(s.players.player.deck).toEqual(['FILL'])
+  })
+})
+
+// ── Decks, draws and discard piles ──────────────────────────────────────────────────────────────
+
+describe('events that move cards between the deck, hand and discard pile', () => {
+  it("Kreia's Whispers (SEC_232) draws 3, then puts one card on top of the deck and another on the bottom", () => {
+    let s = play(board('SEC_232', { deck: ['U_VIG', 'U_CMD', 'UPG', 'FILL'] }))
+    expect(s.players.player.hand).toEqual(['U_VIG', 'U_CMD', 'UPG'])
+    expect(choice(s).kind).toBe('selectHandCardThen')
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { handIndex: 1 })
+    expect(s.players.player.deck).toEqual(['U_CMD', 'FILL'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { handIndex: 1 })
+    noChoice(s)
+    expect(s.players.player.hand).toEqual(['U_VIG'])
+    expect(s.players.player.deck).toEqual(['U_CMD', 'FILL', 'UPG'])
+  })
+
+  it('Private Manufacturing (TWI_257) draws 2, and puts 2 on the bottom only without a token unit', () => {
+    let s = play(board('TWI_257', { deck: ['U_VIG', 'U_CMD', 'FILL'], hand: ['UPG'] }))
+    expect(s.players.player.hand).toEqual(['UPG', 'U_VIG', 'U_CMD'])
+    s = accept(accept(s, { handIndex: 0 }), { handIndex: 1 })
+    noChoice(s)
+    expect(s.players.player.hand).toEqual(['U_VIG'])
+    expect(s.players.player.deck).toEqual(['FILL', 'UPG', 'U_CMD'])
+    const token = Object.keys(F).find(id => id.startsWith('TOKEN_') && (F as Record<string, EngineCard>)[id].type === 'unit')!
+    noChoice(play(board('TWI_257', { deck: ['U_VIG', 'U_CMD'], units: [unit('t', token)] })))
+  })
+
+  it('Daring Delve (LAW_203) discards 2 from your deck and may return an Aggression card among them', () => {
+    let s = play(board('LAW_203', { deck: ['E_AGG', 'U_VIG', 'FILL'], discard: ['GRD'] }))
+    expect(s.players.player.deck).toEqual(['FILL'])
+    const c = choice(s)
+    expect(c.kind === 'selectFromDiscard' ? c.candidates : []).toEqual(['E_AGG'])
+    expect(declinable(s)).toBe(true)
+    s = accept(s, { optionIndex: 0 })
+    expect(s.players.player.hand).toEqual(['E_AGG'])
+    expect(s.players.player.discard).toEqual(['GRD', 'LAW_203', 'U_VIG'])
+  })
+
+  it('Never Tell Me the Odds (JTL_208) discards 3 from each deck and deals damage per odd-cost card', () => {
+    let s = play(board('JTL_208', { deck: ['ODD3', 'U_CUN', 'UPG', 'FILL'] }, { deck: ['U_VIG', 'ODD3', 'E_AGG'], units: [unit('e', 'BIG')] }))
+    expect(s.players.player.deck).toEqual(['FILL'])
+    expect(s.players.opponent.deck).toEqual([])
+    // ODD3, U_CUN (3), UPG (1) and ODD3 again: 4 odd costs.
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(4)
+  })
+
+  it('Flight of the Inquisitor (LOF_240) may return a Force unit and a Lightsaber upgrade from your discard pile', () => {
+    let s = play(board('LOF_240', { discard: ['FORCE', 'P3', 'SABER', 'UPG'] }))
+    const offers = (s.pendingChoices ?? []).map(c => (c.kind === 'selectFromDiscard' ? c.candidates : []))
+    expect(offers).toEqual([['FORCE'], ['SABER']])
+    expect(declinable(s)).toBe(true)
+    s = accept(accept(s, { optionIndex: 0 }), { optionIndex: 0 })
+    expect(s.players.player.hand).toEqual(['FORCE', 'SABER'])
+  })
+
+  it('Search Your Feelings (SOR_042) draws any card from the deck and shuffles the rest', () => {
+    const deck = ['U_VIG', 'U_CMD', 'UPG', 'FILL', 'E_AGG', 'MANDO']
+    let s = play(board('SOR_042', { deck }))
+    const c = choice(s)
+    expect(revealedOf(c)).toEqual(deck)
+    expect(eligibleCards(c)).toEqual(deck)
+    expect(c).toMatchObject({ shuffle: true })
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { deckIndex: 3 })
+    expect(s.players.player.hand).toEqual(['FILL'])
+    expect([...s.players.player.deck].sort()).toEqual(deck.filter(id => id !== 'FILL').sort())
+  })
+})
+
+// ── Yes-or-no answers, each player's pick, and several picks at once ────────────────────────────
+
+describe('events with a yes-or-no, an each-player pick, or several picks at once', () => {
+  it('Attack From All Sides (LAW_207) deals 3, or may deal 5 with 4 different aspects among friendly units', () => {
+    const wide = { units: [unit('a', 'ASP_VA'), unit('b', 'ASP_CH')] }
+    const s = accept(play(board('LAW_207', wide, { units: [unit('e', 'BIG')] })), { targetInstanceId: 'e' })
+    expect(choice(s).kind).toBe('mayPayThen')
+    expect(dmg(s, 'e')).toBe(0)
+    expect(dmg(accept(s), 'e')).toBe(5)
+    expect(dmg(skip(s), 'e')).toBe(3)
+    const narrow = accept(play(board('LAW_207', { units: [unit('a', 'ASP_VA')] }, { units: [unit('e', 'BIG')] })), { targetInstanceId: 'e' })
+    noChoice(narrow)
+    expect(dmg(narrow, 'e')).toBe(3)
+  })
+
+  it('I Am Your Father (SOR_233): its controller takes 7 damage on the unit, or says no and you draw 3', () => {
+    const s = accept(play(board('SOR_233', { deck: ['U_VIG', 'U_CMD', 'UPG', 'FILL'] }, { units: [unit('e', 'BIG')] })), { targetInstanceId: 'e' })
+    expect(choice(s)).toMatchObject({ kind: 'mayPayThen', controller: 'opponent', cost: 0 })
+    const no = accept(s)
+    expect([dmg(no, 'e'), no.players.player.hand.length]).toEqual([0, 3])
+    const yes = skip(s)
+    expect([dmg(yes, 'e'), yes.players.player.hand.length]).toEqual([7, 0])
+  })
+
+  it('Time of Crisis (LOF_177): each player chooses a unit they control; every other unit takes 3', () => {
+    let s = play(board('LOF_177', { units: [unit('m', 'BIG'), unit('n', 'BIG')] }, { units: [unit('e', 'BIG'), unit('f', 'BIG')] }))
+    expect([choice(s).controller, unitOffers(s)]).toEqual(['player', ['m', 'n']])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect([choice(s).controller, unitOffers(s)]).toEqual(['opponent', ['e', 'f']])
+    s = accept(s, { targetInstanceId: 'f' })
+    noChoice(s)
+    expect([dmg(s, 'm'), dmg(s, 'n'), dmg(s, 'e'), dmg(s, 'f')]).toEqual([0, 3, 3, 0])
+  })
+
+  it('Unlimited Power (TWI_156) deals 4, 3, 2 and 1 to four different units at the same time', () => {
+    let s = play(board('TWI_156', { units: [unit('m', 'BIG')] }, { units: [unit('e', 'BIG'), unit('f', 'BIG'), unit('g', 'C1')] }))
+    expect(unitOffers(s)).toEqual(['e', 'f', 'g', 'm'])
+    s = accept(s, { targetInstanceId: 'g' })
+    expect(dmg(s, 'g')).toBe(0)
+    expect(unitOffers(s)).toEqual(['e', 'f', 'm'])
+    s = accept(accept(accept(s, { targetInstanceId: 'e' }), { targetInstanceId: 'f' }), { targetInstanceId: 'm' })
+    noChoice(s)
+    expect([U(s, 'g'), dmg(s, 'e'), dmg(s, 'f'), dmg(s, 'm')]).toEqual([undefined, 3, 2, 1])
+  })
+
+  it('Midnight Repairs (SHD_054) heals up to 8 damage from any number of units, and damages nothing', () => {
+    let s = play(board('SHD_054', { units: [unit('m', 'BIG', { damage: 5 }), unit('n', 'BIG', { damage: 5 })], base: { cardId: 'TST_B', damage: 5 } }))
+    const c = choice(s)
+    expect(c).toMatchObject({ kind: 'distributeHealing', remaining: 8, baseTargets: [] })
+    for (const id of ['m', 'm', 'm', 'm', 'm', 'n', 'n', 'n']) s = accept(s, { targetInstanceId: id })
+    noChoice(s)
+    expect([dmg(s, 'm'), dmg(s, 'n'), s.players.player.base.damage]).toEqual([0, 2, 5])
+  })
+
+  it('Lightsaber Throw (LOF_176) discards a Lightsaber card, and if it does deals 4 to a ground unit and draws', () => {
+    let s = play(board('LOF_176', { hand: ['SABER_EV', 'P3'], deck: ['FILL'] }, { units: [unit('e', 'BIG'), unit('sp', 'SP4')] }))
+    expect(choice(s).kind).toBe('selectHandCardThen')
+    expect(handOffers(s)).toEqual([0])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { handIndex: 0 })
+    expect(s.players.player.discard).toContain('SABER_EV')
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(4)
+    expect(s.players.player.hand).toEqual(['P3', 'FILL'])
+    noChoice(play(board('LOF_176', { hand: ['P3'] }, { units: [unit('e', 'BIG')] })))
+  })
+})
+
+// ── Lasting prohibitions and delayed effects ────────────────────────────────────────────────────
+
+/** Both players pass: the action phase ends and the regroup phase starts. */
+const toRegroup = (s: GameState) => resolve(resolve(s, { type: 'pass' }), { type: 'pass' })
+/** Both players skip resourcing: the next action phase starts. */
+const toNextRound = (s: GameState) => resolve(resolve(s, { type: 'skipResource' }), { type: 'skipResource' })
+const attackUnit = (s: GameState, attackerId: string, instanceId: string) => resolve(s, { type: 'attack', attackerId, target: { kind: 'unit', instanceId } })
+const attackBase = (s: GameState, attackerId: string) => resolve(s, { type: 'attack', attackerId, target: { kind: 'base' } })
+
+describe('events with a lasting prohibition or a delayed effect', () => {
+  it("Betrayed Trust (LAW_130): the enemy unit can't deal combat damage this phase", () => {
+    let s = play(board('LAW_130', { units: [unit('m', 'BIG')] }, { units: [unit('e', 'P5')] }))
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(s.activePlayer).toBe('opponent')
+    const hit = attackUnit(s, 'e', 'm')
+    expect([dmg(hit, 'm'), dmg(hit, 'e')]).toEqual([0, 1])
+    expect(attackBase(s, 'e').players.player.base.damage).toBe(0)
+  })
+
+  it("No Good to Me Dead (SOR_186) exhausts a unit that then doesn't ready in the regroup phase", () => {
+    let s = play(board('SOR_186', { units: [unit('tired', 'P3', { exhausted: true })] }, { units: [unit('e', 'P5')] }))
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(exhausted(s, 'e')).toEqual([true])
+    s = toNextRound(toRegroup(s))
+    expect(s.phase).toBe('action')
+    expect(exhausted(s, 'e', 'tired')).toEqual([true, false])
+    // The prohibition ends with the round: the next regroup readies it.
+    expect(exhausted(toNextRound(toRegroup(s)), 'e')).toEqual([false])
+  })
+
+  it('Close the Shield Gate (JTL_074) prevents the next damage to the chosen base this phase', () => {
+    let s = play(board('JTL_074', {}, { units: [unit('e', 'P5'), unit('f', 'P3')] }))
+    expect(choice(s).kind).toBe('choosePlayerThen')
+    s = accept(s, { optionIndex: 1 })
+    s = attackBase(s, 'e')
+    expect(s.players.player.base.damage).toBe(0)
+    s = attackBase(resolve(s, { type: 'pass' }), 'f')
+    expect(s.players.player.base.damage).toBe(3)
+  })
+
+  it('I Have the High Ground (TWI_072): enemy units get -4/-0 while attacking the chosen unit', () => {
+    let s = play(board('TWI_072', { units: [unit('m', 'BIG'), unit('n', 'BIG')] }, { units: [unit('e', 'P5')] }))
+    expect(unitOffers(s)).toEqual(['m', 'n'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(dmg(attackUnit(s, 'e', 'm'), 'm')).toBe(1)
+    expect(dmg(attackUnit(s, 'e', 'n'), 'n')).toBe(5)
+  })
+
+  it("Transmission Jamming (LAW_243): cards with the named name can't be played this phase, by anyone", () => {
+    let s = play(board('LAW_243', { hand: ['P3'] }, { hand: ['P3', 'P5'], resources: ready(10) }))
+    expect(choice(s).kind).toBe('nameCard')
+    s = resolve(s, { type: 'acceptChoice', choiceId: choice(s).id, cardName: 'P3' })
+    const plays = (st: GameState) => legalMoves(st).flatMap(m => (m.type === 'playUnit' ? [st.players[st.activePlayer].hand[m.handIndex]] : []))
+    expect(s.activePlayer).toBe('opponent')
+    expect(plays(s)).toEqual(['P5'])
+    const mine = resolve(s, { type: 'pass' })
+    expect(plays(mine)).toEqual([])
+    expect(toNextRound(toRegroup(s)).bannedNames).toBeUndefined()
+  })
+
+  it('Sneak Attack (SOR_219) plays a unit 3 less and ready, then defeats it as the regroup phase starts', () => {
+    let s = play(board('SOR_219', { hand: ['P5'] }))
+    expect(choice(s)).toMatchObject({ kind: 'playUnitFromHand', costDelta: -3, entersReady: true })
+    s = accept(s, { handIndex: 0 })
+    const id = s.players.player.units.find(u => u.cardId === 'P5')!.instanceId
+    expect(exhausted(s, id)).toEqual([false])
+    const regroup = toRegroup(s)
+    expect(U(regroup, id)).toBeUndefined()
+    expect(regroup.players.player.discard).toContain('P5')
+  })
+
+  it('Premonition of Doom (LOF_203) exhausts every unit the next time you take the initiative this phase', () => {
+    let s = play(board('LOF_203', { units: [unit('m', 'P3')] }, { units: [unit('e', 'P5')] }))
+    noChoice(s)
+    s = resolve(s, { type: 'pass' })
+    expect(exhausted(s, 'm', 'e')).toEqual([false, false])
+    s = resolve(s, { type: 'takeInitiative' })
+    expect(exhausted(s, 'm', 'e')).toEqual([true, true])
+    expect(s.delayedEffects ?? []).toEqual([])
+  })
+
+  it('The Eye of Aldhani (SEC_073): at the next action phase each enemy unit is exhausted unless its controller pays 1', () => {
+    let s = play(board('SEC_073', { units: [unit('m', 'P3')] }, { units: [unit('e', 'P5'), unit('f', 'P3')], resources: ready(3) }))
+    noChoice(s)
+    s = toNextRound(toRegroup(s))
+    expect(s.phase).toBe('action')
+    const asks = (s.pendingChoices ?? []).map(c => [c.kind, c.controller, 'unitId' in c ? c.unitId : ''])
+    expect(asks).toEqual([['payOrExhaust', 'opponent', 'e'], ['payOrExhaust', 'opponent', 'f']])
+    expect(s.activePlayer).toBe('opponent')
+  })
+
+  it('Final Showdown (SHD_208) readies each unit you control, and you lose as the regroup phase starts', () => {
+    let s = play(board('SHD_208', { units: [unit('m', 'P3', { exhausted: true })] }, { units: [unit('e', 'P5', { exhausted: true })] }))
+    expect(exhausted(s, 'm', 'e')).toEqual([false, true])
+    s = toRegroup(s)
+    expect(s.winner).toBe('opponent')
+  })
+})
+
+// ── Picking cards out of a discard pile or the top of a deck ────────────────────────────────────
+
+/** The card ids a `selectCardThen` offers, in option order. */
+const cardOffers = (s: GameState): string[] => { const c = choice(s); return c.kind === 'selectCardThen' ? c.candidates : [] }
+const pickCard = (s: GameState, cardId: string) => accept(s, { optionIndex: cardOffers(s).indexOf(cardId) })
+
+describe('events that pick cards from a discard pile or the top of a deck', () => {
+  it('Psychometry (LOF_219) picks another card in your discard pile and searches the top 5 for one sharing a Trait', () => {
+    let s = play(board('LOF_219', { discard: ['CLONE6', 'P3'], deck: ['U_VIG', 'REPUBLIC', 'CLONE', 'P5', 'MANDO', 'FILL'] }))
+    expect(cardOffers(s)).toEqual(['CLONE6', 'P3'])
+    expect(declinable(s)).toBe(false)
+    s = pickCard(s, 'CLONE6')
+    const c = choice(s)
+    expect(revealedOf(c)).toEqual(['U_VIG', 'REPUBLIC', 'CLONE', 'P5', 'MANDO'])
+    expect(eligibleCards(c)).toEqual(['REPUBLIC', 'CLONE'])
+  })
+
+  it("Restock (SOR_252) puts up to 4 cards from one discard pile on the bottom of their owner's deck", () => {
+    let s = play(board('SOR_252', {}, { discard: ['P3', 'P5', 'UPG', 'FILL', 'U_VIG'], deck: ['MANDO'] }))
+    s = accept(s, { optionIndex: 0 }) // the opponent's pile
+    expect(cardOffers(s)).toEqual(['P3', 'P5', 'UPG', 'FILL', 'U_VIG'])
+    expect(declinable(s)).toBe(true)
+    for (const id of ['P3', 'UPG', 'FILL']) s = pickCard(s, id)
+    expect(cardOffers(s)).toEqual(['P5', 'U_VIG'])
+    s = pickCard(s, 'U_VIG')
+    noChoice(s)
+    expect(s.players.opponent.discard).toEqual(['P5'])
+    expect(s.players.opponent.deck[0]).toBe('MANDO')
+    expect([...s.players.opponent.deck.slice(1)].sort()).toEqual(['FILL', 'P3', 'UPG', 'U_VIG'])
+    // Stopping early moves what was picked.
+    const one = skip(pickCard(accept(play(board('SOR_252', { discard: ['P3', 'P5'] })), { optionIndex: 1 }), 'P5'))
+    expect(one.players.player.discard).toEqual(['P3', 'SOR_252'])
+    expect(one.players.player.deck).toEqual(['P5'])
+  })
+
+  it("Luminous Beings (LOF_104) bottoms up to 3 Force units from your discard pile and gives that many units +4/+4", () => {
+    let s = play(board('LOF_104', { discard: ['FORCE', 'P3', 'FORCE_HAND', 'FORCE'], units: [unit('m', 'P3'), unit('n', 'P2')] }, { units: [unit('e', 'P5')] }))
+    expect(cardOffers(s)).toEqual(['FORCE', 'FORCE_HAND', 'FORCE'])
+    s = pickCard(pickCard(s, 'FORCE'), 'FORCE_HAND')
+    expect(cardOffers(s)).toEqual(['FORCE'])
+    s = skip(s)
+    expect(s.players.player.discard).toEqual(['P3', 'FORCE', 'LOF_104'])
+    expect([...s.players.player.deck].sort()).toEqual(['FORCE', 'FORCE_HAND'])
+    expect(unitOffers(s)).toEqual(['e', 'm', 'n'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(unitOffers(s)).toEqual(['e', 'n'])
+    s = accept(s, { targetInstanceId: 'n' })
+    noChoice(s)
+    expect([stats(s, 'm'), stats(s, 'n')]).toEqual([[7, 9], [6, 9]])
+  })
+
+  it('Following the Path (LOF_103) puts up to 2 Force units from the top 8 on top of the deck', () => {
+    let s = play(board('LOF_103', { deck: ['FORCE', 'P3', 'FORCE_HAND', 'U_VIG', 'FILL'] }))
+    expect(cardOffers(s)).toEqual(['FORCE', 'FORCE_HAND'])
+    s = pickCard(pickCard(s, 'FORCE_HAND'), 'FORCE')
+    noChoice(s)
+    expect(s.players.player.deck).toEqual(['FORCE_HAND', 'FORCE', 'P3', 'U_VIG', 'FILL'])
+    expect(s.players.player.hand).toEqual([])
+  })
+
+  it("Don't Get Cocky (SOR_223) reveals until you stop, and deals the combined cost if it is 7 or less", () => {
+    let s = accept(play(board('SOR_223', { deck: ['UPG', 'P3', 'P5', 'FILL'] }, { units: [unit('e', 'BIG')] })), { targetInstanceId: 'e' })
+    expect(choice(s).kind).toBe('mayPayThen')
+    s = skip(accept(s))
+    noChoice(s)
+    expect(dmg(s, 'e')).toBe(3) // UPG 1 + P3 2
+    expect(s.players.player.deck[0]).toBe('P5')
+    expect([...s.players.player.deck.slice(2)].sort()).toEqual(['P3', 'UPG'])
+    const bust = skip(accept(accept(play(board('SOR_223', { deck: ['P5', 'GRD7', 'FILL'] }, { units: [unit('e', 'BIG')] })), { targetInstanceId: 'e' })))
+    expect(dmg(bust, 'e')).toBe(0)
+  })
+
+  it('For a Cause I Believe In (SOR_152) reveals 4, deals 1 to the enemy base per Heroism card, and may discard any of them', () => {
+    let s = play(board('SOR_152', { deck: ['H_EV', 'HERO1', 'P3', 'U_VIG', 'FILL'] }))
+    expect(s.players.opponent.base.damage).toBe(2)
+    expect(cardOffers(s)).toEqual(['H_EV', 'HERO1', 'P3', 'U_VIG'])
+    expect(declinable(s)).toBe(true)
+    s = pickCard(s, 'P3')
+    expect(cardOffers(s)).toEqual(['H_EV', 'HERO1', 'U_VIG'])
+    s = skip(s)
+    expect(s.players.player.deck).toEqual(['H_EV', 'HERO1', 'U_VIG', 'FILL'])
+    expect(s.players.player.discard).toEqual(['SOR_152', 'P3'])
+  })
+
+  it('Triple Dark Raid (SHD_194) plays a Vehicle from the top 7 for 5 less, ready, and returns it to hand at the end of the phase', () => {
+    let s = play(board('SHD_194', { deck: ['P3', 'VEH6', 'U_VIG'], resources: ready(4) }))
+    const c = choice(s)
+    expect(c).toMatchObject({ kind: 'searchPlayFree', costDelta: -5, entersReady: true })
+    expect(eligibleCards(c)).toEqual(['VEH6'])
+    s = accept(s, { deckIndex: 1 })
+    const veh = s.players.player.units.find(u => u.cardId === 'VEH6')!
+    expect(veh.exhausted).toBe(false)
+    const regroup = toRegroup(s)
+    expect(U(regroup, veh.instanceId)).toBeUndefined()
+    expect(regroup.players.player.hand).toContain('VEH6')
+  })
+})
+
+// ── Moving units and upgrades, and the last of the one-offs ─────────────────────────────────────
+
+describe('events that move units or upgrades, and the last one-offs', () => {
+  it("I Had No Choice (SOR_187): of up to 2 non-leader units, an opponent returns one to hand and the other goes under its owner's deck", () => {
+    let s = play(board('SOR_187', {}, { units: [unit('e', 'P3'), unit('f', 'P5'), unit('L', 'LEAD', { isLeader: true })], deck: ['FILL'] }))
+    expect(unitOffers(s)).toEqual(['e', 'f'])
+    expect(declinable(s)).toBe(true)
+    s = accept(accept(s, { targetInstanceId: 'e' }), { targetInstanceId: 'f' })
+    expect([choice(s).controller, unitOffers(s)]).toEqual(['opponent', ['e', 'f']])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'f' })
+    expect([U(s, 'e'), U(s, 'f')]).toEqual([undefined, undefined])
+    expect(s.players.opponent.hand).toEqual(['P5'])
+    expect(s.players.opponent.deck).toEqual(['FILL', 'P3'])
+    // Stopping at one: that unit returns to hand.
+    const one = skip(accept(play(board('SOR_187', {}, { units: [unit('e', 'P3'), unit('f', 'P5')] })), { targetInstanceId: 'e' }))
+    expect(one.players.opponent.hand).toEqual(['P3'])
+    expect(U(one, 'f')).toBeDefined()
+  })
+
+  it('Evidence of the Crime (SHD_077) takes control of an upgrade costing 3 or less and attaches it to an eligible unit', () => {
+    let s = play(board('SHD_077', { units: [unit('m', 'P3')] }, { units: [unit('e', 'BIG', { upgrades: [{ cardId: 'UPG2', owner: 'opponent' }, { cardId: 'UPG4', owner: 'opponent' }] })] }))
+    const c = choice(s)
+    expect(c.kind === 'selectUpgradeThen' ? c.candidates.map(x => x.cardId) : []).toEqual(['UPG2'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { optionIndex: 0 })
+    expect(unitOffers(s)).toEqual(['e', 'm'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(U(s, 'm')!.upgrades).toEqual([{ cardId: 'UPG2', owner: 'player' }])
+    expect(U(s, 'e')!.upgrades.map(u => u.cardId)).toEqual(['UPG4'])
+  })
+
+  it('Jump to Lightspeed (JTL_232) returns a friendly space unit and chosen upgrades on it, and the next copy is free', () => {
+    let s = play(board('JTL_232', { units: [unit('sp', 'SP4', { upgrades: [{ cardId: 'UPG', owner: 'player' }, { cardId: 'UPG2', owner: 'player' }, { cardId: TOKEN_SHIELD, owner: 'player' }] }), unit('g', 'P3')] }))
+    expect(unitOffers(s)).toEqual(['sp'])
+    s = accept(s, { targetInstanceId: 'sp' })
+    const c = choice(s)
+    expect(c.kind === 'selectUpgradeThen' ? c.candidates.map(x => x.cardId) : []).toEqual(['UPG', 'UPG2'])
+    expect(declinable(s)).toBe(true)
+    s = skip(accept(s, { optionIndex: 0 }))
+    noChoice(s)
+    expect(U(s, 'sp')).toBeUndefined()
+    expect(s.players.player.hand).toEqual(['UPG', 'SP4'])
+    expect(s.players.player.discard).toContain('UPG2')
+    expect(effectiveCost(s, 'player', F.SP4)).toBe(0)
+    expect(effectiveCost(s, 'player', F.P3)).toBe(2)
+  })
+
+  it('Consolidation of Power (TWI_089) plays a unit free up to the chosen units\' combined power, then defeats them', () => {
+    let s = play(board('TWI_089', { units: [unit('a', 'P3'), unit('b', 'P2'), unit('c', 'C1')], hand: ['P5', 'GRD7'], resources: ready(6) }))
+    expect(unitOffers(s)).toEqual(['a', 'b', 'c'])
+    expect(declinable(s)).toBe(true)
+    s = skip(accept(accept(s, { targetInstanceId: 'a' }), { targetInstanceId: 'b' }))
+    expect(candidatesOf(choice(s))).toEqual(['P5'])
+    expect(declinable(s)).toBe(true)
+    const readyBefore = s.players.player.resources.filter(r => !r.exhausted).length
+    s = accept(s, { handIndex: 0 })
+    expect(s.players.player.units.map(u => u.cardId)).toEqual(['C1', 'P5'])
+    expect(s.players.player.resources.filter(r => !r.exhausted).length).toBe(readyBefore)
+    // Declining the play still defeats the chosen units.
+    const declined = skip(accept(play(board('TWI_089', { units: [unit('a', 'P3')], hand: ['P2'] })), { targetInstanceId: 'a' }))
+    expect(U(declined, 'a')).toBeUndefined()
+    expect(declined.players.player.hand).toEqual(['P2'])
+  })
+
+  it('Shien Flurry (LOF_220) plays a Force unit that gains Ambush and has the next 2 damage to it prevented', () => {
+    let s = play(board('LOF_220', { hand: ['FORCE_HAND', 'P3'] }, { units: [unit('e', 'BIG')] }))
+    expect(candidatesOf(choice(s))).toEqual(['FORCE_HAND'])
+    s = accept(s, { handIndex: 0 })
+    const id = s.players.player.units.find(u => u.cardId === 'FORCE_HAND')!.instanceId
+    expect(unitHasKeyword(s, U(s, id)!, 'Ambush')).toBe(true)
+    expect(choice(s).kind).toBe('ambush')
+    let hit = dealDamageToUnit(s, id, 2)
+    expect(dmg(hit, id)).toBe(0)
+    hit = dealDamageToUnit(hit, id, 2)
+    expect(dmg(hit, id)).toBe(2)
+  })
+
+  it("The Tragedy of Plagueis (LOF_043): a friendly unit can't be defeated by damage this phase, and an opponent defeats one of theirs", () => {
+    let s = play(board('LOF_043', { units: [unit('m', 'P3')] }, { units: [unit('e', 'P5'), unit('f', 'P2')] }))
+    expect(unitOffers(s)).toEqual(['m'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect([choice(s).controller, unitOffers(s)]).toEqual(['opponent', ['e', 'f']])
+    s = accept(s, { targetInstanceId: 'f' })
+    expect(U(s, 'f')).toBeUndefined()
+    s = dealDamageToUnit(s, 'm', 9)
+    expect(dmg(s, 'm')).toBe(9)
+    expect(U(toRegroup({ ...s, activePlayer: 'opponent', pendingChoices: undefined }), 'm')).toBeUndefined()
+  })
+
+  it('It Binds All Things (SOR_075) heals up to 3 from a unit, and with a Force unit may deal that much to another', () => {
+    let s = play(board('SOR_075', { units: [unit('m', 'BIG', { damage: 5 }), unit('f', 'FORCE')] }, { units: [unit('e', 'BIG')] }))
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(dmg(s, 'm')).toBe(2)
+    expect(unitOffers(s)).toEqual(['e', 'f'])
+    expect(declinable(s)).toBe(true)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(3)
+    const noForce = accept(play(board('SOR_075', { units: [unit('m', 'BIG', { damage: 1 })] }, { units: [unit('e', 'BIG')] })), { targetInstanceId: 'm' })
+    noChoice(noForce)
+    expect(dmg(noForce, 'm')).toBe(0)
+  })
+
+  it('U-Wing Reinforcement (SOR_104) plays up to 3 units from the top 10 with combined cost 7 or less, free', () => {
+    const deck = ['C1', 'C1', 'P3', 'UPG', 'C1', 'P5', 'FILL']
+    let s = play(board('SOR_104', { deck }))
+    let c = choice(s)
+    expect(c).toMatchObject({ kind: 'searchPlayFree', budget: 7 })
+    expect(eligibleCards(c)).toEqual(['C1', 'C1', 'P3', 'C1', 'P5'])
+    s = accept(s, { deckIndex: 0 })
+    s = accept(s, { deckIndex: 0 })
+    c = choice(s)
+    // 5 of the budget left: the 4-cost unit still fits.
+    expect(eligibleCards(c)).toEqual(['P3', 'C1', 'P5'])
+    s = accept(s, { deckIndex: revealedOf(c).indexOf('C1') })
+    // Three played: the search ends even with budget left.
+    noChoice(s)
+    expect(s.players.player.units.map(u => u.cardId)).toEqual(['C1', 'C1', 'C1'])
+    expect(s.players.player.deck).toHaveLength(deck.length - 3)
+  })
+
+  it('Choke on Aspirations (LAW_102) deals up to 5 to a friendly non-Vehicle unit and, if it survives, heals your base that much', () => {
+    let s = play(board('LAW_102', { units: [unit('m', 'BIG'), unit('v', 'VEHG')], base: { cardId: 'TST_B', damage: 10 } }))
+    expect(unitOffers(s)).toEqual(['m'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(choice(s)).toMatchObject({ kind: 'chooseNumber', max: 5 })
+    s = accept(s, { optionIndex: 4 })
+    expect([dmg(s, 'm'), s.players.player.base.damage]).toEqual([4, 6])
+    const dies = accept(accept(play(board('LAW_102', { units: [unit('m', 'P3')], base: { cardId: 'TST_B', damage: 10 } })), { targetInstanceId: 'm' }), { optionIndex: 5 })
+    expect([U(dies, 'm'), dies.players.player.base.damage]).toEqual([undefined, 10])
+  })
+})

@@ -154,7 +154,9 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'distributeDamage':
       return [`deal damage across your targets: ${choice.total - choice.remaining} of ${choice.total} allocated`]
     case 'distributeHealing':
-      return [`heal up to ${choice.remaining} more damage, one point at a time; this unit then takes ${choice.healed} so far`]
+      return [choice.damageUnit
+        ? `heal up to ${choice.remaining} more damage, one point at a time; this unit then takes ${choice.healed} so far`
+        : `heal up to ${choice.remaining} more damage, one point at a time`]
     case 'distributeTokens':
       return [`hand out ${tokenName(state, choice.token)} tokens: ${choice.total - choice.remaining} of ${choice.total} allocated`]
     case 'variableStrike':
@@ -170,7 +172,7 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'mayPlayUnitFromDiscard':
       return ['choose a unit to play from your discard pile']
     case 'chooseNumber':
-      return ['choose a number']
+      return [choice.text ?? 'choose a number']
     case 'selectUnitToSteal':
       return ['choose an enemy unit to take control of']
     case 'peekTopDiscard':
@@ -253,7 +255,9 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'revealUnitFromHand':
       return ['reveal a unit from your hand; its cost sets the damage']
     case 'nameCard':
-      return ['name a card the opponent may not play while this unit is out']
+      return [choice.phaseBan
+        ? 'name a card nobody may play this phase'
+        : 'name a card the opponent may not play while this unit is out']
     case 'selectResourceUpgrade':
       return ['choose an upgrade to play from your resources']
     case 'chooseOne':
@@ -290,7 +294,11 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       return [choice.mayDiscard
         ? choice.discardFilter === 'nonUnit'
           ? 'choose a non-unit card to discard from their hand'
-          : 'choose a card to discard from their hand'
+          : choice.discardFilter === 'event'
+            ? 'choose an event to discard from their hand'
+            : choice.discardAspects
+              ? 'choose a card sharing an aspect with that unit to discard from their hand'
+              : 'choose a card to discard from their hand'
         : 'look at their hand']
     case 'mayResourceTop':
       return ['put the top card of your deck into play as a resource, or decline']
@@ -314,6 +322,12 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'selectUpgradeThen':
     case 'selectHandCardThen':
       return [choice.optional ? `you may ${choice.text}` : choice.text]
+    case 'choosePlayerThen':
+      return [`choose a player to ${choice.text}`]
+    case 'selectCardThen':
+      return [choice.optional ? `you may ${choice.text}` : choice.text]
+    case 'chooseArenaThen':
+      return [`choose an arena to ${choice.text}`]
     case 'mayPayThen': {
       const cost = choice.revealEvent ? 'reveal an event from your hand'
         : choice.damageSelf ? `deal ${choice.damageSelf} damage to this unit`

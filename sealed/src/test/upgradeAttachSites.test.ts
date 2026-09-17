@@ -33,7 +33,7 @@ const ATTACH = /(?<!function )\battachUpgrades\(/g
 const EXPECTED_ATTACHES: Record<string, number> = {
   'effects.ts': 1, // giveTokens: token upgrades given by an effect (fires the attach reaction, not "played")
   'resolve.ts': 2, // playUpgradeCardOnto (the door, the one "played"), and applyEntryKeywords' Shield on a Shielded unit entering
-  'cardDefinitions.ts': 1, // Jocasta Nu moving an upgrade to a different unit (fires the attach reaction, not "played")
+  'cardDefinitions.ts': 1, // moveUpgrade: Jocasta Nu and Evidence of the Crime moving an upgrade (fires the attach reaction, not "played")
 }
 
 const sources = readdirSync(join(process.cwd(), DIR))
