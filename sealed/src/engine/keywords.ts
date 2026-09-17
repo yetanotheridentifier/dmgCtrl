@@ -221,6 +221,14 @@ export function auraContributions(state: GameState, target: UnitState, combat?: 
   const removeKeywords: string[] = []
   for (const owner of ['player', 'opponent'] as const) {
     const sameController = owner === targetOwner
+    const leader = state.players[owner].leader
+    const fromLeader = leader.deployed ? undefined : getCardDefinition(leader.cardId)?.leaderAbilities?.aura?.(state, owner, target, sameController, combat)
+    if (fromLeader) {
+      power += fromLeader.power ?? 0
+      hp += fromLeader.hp ?? 0
+      if (fromLeader.keywords) keywords.push(...fromLeader.keywords)
+      if (fromLeader.removeKeywords) removeKeywords.push(...fromLeader.removeKeywords)
+    }
     for (const source of state.players[owner].units) {
       for (const cardId of abilityCardIds(source)) {
         const contrib = getCardDefinition(cardId)?.aura?.(state, source, target, sameController, combat)

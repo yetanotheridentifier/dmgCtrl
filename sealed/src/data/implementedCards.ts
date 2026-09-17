@@ -223,6 +223,12 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'SOR_006', name: 'Emperor Palpatine', front: true, back: true },
   { id: 'SHD_015', name: 'Doctor Aphra', front: true, back: true },
   { id: 'JTL_014', name: 'Admiral Trench', front: true, back: true },
+  { id: 'SOR_001', name: 'Director Krennic', front: true, back: true },
+  { id: 'SHD_001', name: 'Gar Saxon', front: true, back: true },
+  { id: 'LAW_009', name: 'Hera Syndulla', front: true, back: true },
+  { id: 'SEC_009', name: 'Mon Mothma', front: true, back: true },
+  { id: 'TWI_001', name: 'Nala Se', front: true, back: true },
+  { id: 'TS26_5', name: 'Savage Opress', front: true, back: true },
 ]
 
 export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [

@@ -12,6 +12,7 @@ import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helper
 import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
 import { createTokenUnit } from '../engine/effects'
+import { defeatUnit } from '../engine/combat'
 import type { Action } from '../engine/actions'
 import type { EngineCard, GameState, LeaderState, PendingChoice, PhaseEvents, PlayerId, UnitState } from '../engine/types'
 
@@ -36,6 +37,8 @@ const SHIPPED = [
   'LOF_010', 'JTL_005', 'SHD_016', 'SHD_013', 'SOR_003', 'SEC_007', 'LOF_005',
   // D: When Deployed
   'LAW_004', 'LOF_012', 'TWI_013', 'TWI_004', 'SHD_002', 'SOR_006', 'SHD_015', 'JTL_014',
+  // E: constant abilities on the leader side
+  'SOR_001', 'SHD_001', 'LAW_009', 'SEC_009', 'TWI_001', 'TS26_5',
 ]
 /** Scoped by the triage but lifted out to the ticket that owns their blocker. */
 const LIFTED = [
@@ -87,6 +90,13 @@ const F: Record<string, EngineCard> = {
   SENT2: src('SENT2', { keywords: [{ name: 'Sentinel' }] }),
   FORCE_EV: card({ id: 'FORCE_EV', type: 'event', cost: 1, traits: ['FORCE'] }),
   FORCE_UNIT: src('FORCE_UNIT', { traits: ['FORCE'] }),
+  AGG: src('AGG', { aspects: ['Aggression'] }),
+  HERO_AGG: src('HERO_AGG', { aspects: ['Aggression', 'Heroism'] }),
+  OFF: src('OFF', { traits: ['OFFICIAL'] }),
+  OFF_AGG: src('OFF_AGG', { traits: ['OFFICIAL'], aspects: ['Aggression'] }),
+  OFF_VIL: src('OFF_VIL', { traits: ['OFFICIAL'], aspects: ['Aggression', 'Villainy'] }),
+  CLONE: src('CLONE', { traits: ['CLONE'] }),
+  CLONE_AGG: src('CLONE_AGG', { traits: ['CLONE'], aspects: ['Aggression'] }),
 }
 
 const unit = (instanceId: string, cardId: string, over: Partial<UnitState> = {}): UnitState =>
@@ -828,5 +838,74 @@ describe('leaders D: When Deployed', () => {
     expect(done.players.player.discard).toEqual(['EV', 'GRD', 'SPC'])
     expect(done.players.player.deck).toEqual(['PRICEY'])
     expect(done.activePlayer).toBe('opponent')
+  })
+})
+
+// ── E: constant abilities on the leader side ──────────────────────────────────────────────────────
+
+describe('leaders E: constant abilities while undeployed', () => {
+  it('Director Krennic (SOR_001) gives each friendly damaged unit +1/+0 from either side', () => {
+    const s = front('SOR_001', { units: [unit('d', 'GRD', { damage: 1 }), unit('g', 'GRD')] }, { units: [unit('e', 'GRD', { damage: 1 })] })
+    expect([effectivePower(s, U(s, 'd')!), effectivePower(s, U(s, 'g')!), effectivePower(s, U(s, 'e')!)]).toEqual([3, 2, 2])
+    const d = back('SOR_001', { units: [unit('g', 'GRD', { damage: 1 })] })
+    const hurt = { ...d, players: { ...d.players, player: { ...d.players.player, units: d.players.player.units.map(u => ({ ...u, damage: 1 })) } } }
+    expect(effectivePower(hurt, U(hurt, 'L')!)).toBe((F.SOR_001.power ?? 0) + 1)
+    expect(effectivePower(hurt, U(hurt, 'g')!)).toBe(3)
+    expect(unitKeywordValue(hurt, U(hurt, 'L')!, 'Restore')).toBe(2)
+  })
+
+  it('Gar Saxon (SHD_001) gives each friendly upgraded unit +1/+0; deployed each also gains a When Defeated that may return one of its upgrades', () => {
+    const upgraded = unit('u', 'GRD', { upgrades: [{ cardId: 'UPG', owner: 'player' }] })
+    const s = front('SHD_001', { units: [upgraded, unit('g', 'GRD')] })
+    expect([effectivePower(s, U(s, 'u')!), effectivePower(s, U(s, 'g')!)]).toEqual([4, 2])
+    const d = back('SHD_001', { units: [upgraded] })
+    expect(effectivePower(d, U(d, 'u')!)).toBe(4)
+    const dead = defeatUnit(d, 'u')
+    expect(dead.players.player.discard).toEqual(['GRD', 'UPG'])
+    expect(cardOptions(dead)).toEqual(['UPG'])
+    expect(declinable(dead)).toBe(true)
+    expect(accept(dead, { optionIndex: 0 }).players.player.hand).toEqual(['UPG'])
+    noChoice(defeatUnit(front('SHD_001', { units: [upgraded] }), 'u'))
+  })
+
+  it('Hera Syndulla (LAW_009) waives the aspect penalty on Heroism units while you control 2 or more units, from either side', () => {
+    const one = front('LAW_009', { units: [unit('g', 'GRD')] })
+    expect(effectiveCost(one, 'player', F.HERO_AGG)).toBe(4)
+    const two = front('LAW_009', { units: [unit('g', 'GRD'), unit('g2', 'GRD')] })
+    expect(effectiveCost(two, 'player', F.HERO_AGG)).toBe(2)
+    expect(effectiveCost(two, 'player', F.AGG)).toBe(4)
+    const d = back('LAW_009', { units: [unit('g', 'GRD')] })
+    expect(effectiveCost(d, 'player', F.HERO_AGG)).toBe(2)
+  })
+
+  it('Mon Mothma (SEC_009) waives the penalty on non-Villainy Official units and gives other friendly Officials +0/+1, from either side', () => {
+    const s = front('SEC_009', { units: [unit('o', 'OFF')] }, { units: [unit('eo', 'OFF')] })
+    expect(effectiveCost(s, 'player', F.OFF_AGG)).toBe(2)
+    expect(effectiveCost(s, 'player', F.OFF_VIL)).toBe(6)
+    expect([effectiveHp(s, U(s, 'o')!), effectiveHp(s, U(s, 'eo')!)]).toEqual([9, 8])
+    const d = back('SEC_009', { units: [unit('o', 'OFF')] })
+    expect(effectiveHp(d, U(d, 'o')!)).toBe(9)
+    expect(effectiveHp(d, U(d, 'L')!)).toBe(F.SEC_009.hp)
+    expect(effectiveCost(d, 'player', F.OFF_AGG)).toBe(2)
+  })
+
+  it('Nala Se (TWI_001) waives the penalty on Clone units; deployed each friendly Clone heals 2 from your base when defeated', () => {
+    const s = front('TWI_001')
+    expect(effectiveCost(s, 'player', F.CLONE_AGG)).toBe(2)
+    expect(effectiveCost(s, 'player', F.AGG)).toBe(4)
+    const hurt = { base: { cardId: 'TST_B', damage: 5 } }
+    expect(baseDamage(defeatUnit(back('TWI_001', { ...hurt, units: [unit('c', 'CLONE')] }), 'c'), 'player')).toBe(3)
+    expect(baseDamage(defeatUnit(back('TWI_001', { ...hurt, units: [unit('g', 'GRD')] }), 'g'), 'player')).toBe(5)
+    expect(baseDamage(defeatUnit(front('TWI_001', { ...hurt, units: [unit('c', 'CLONE')] }), 'c'), 'player')).toBe(5)
+    expect(effectiveCost(back('TWI_001'), 'player', F.CLONE_AGG)).toBe(2)
+  })
+
+  it('Savage Opress (TS26_5) gives each friendly unit with the most power Overwhelm; deployed he has Raid 3 and Overwhelm and each other friendly unit gains Overwhelm', () => {
+    const s = front('TS26_5', { units: [unit('big', 'STRONG'), unit('g', 'GRD')] }, { units: [unit('e', 'SMALL'), unit('e2', 'SMALL')] })
+    expect(baseDamage(attack(s, 'big', 'e'), 'opponent')).toBe(3)
+    expect(baseDamage(attack(s, 'g', 'e2'), 'opponent')).toBe(0)
+    const d = back('TS26_5', { units: [unit('g', 'GRD')] })
+    expect(unitKeywordValue(d, U(d, 'L')!, 'Raid')).toBe(3)
+    expect(['L', 'g'].map(id => unitHasKeyword(d, U(d, id)!, 'Overwhelm'))).toEqual([true, true])
   })
 })

@@ -320,8 +320,16 @@ export interface AuraContribution {
 export interface LeaderAbilities {
   /** Activated "Action: [Exhaust] …" abilities usable while undeployed. */
   actions?: LeaderActionAbilityDef[]
-  /** Triggered "When …" abilities that fire while undeployed (wired later). */
+  /** Triggered "When …" abilities that fire while undeployed. */
   abilities?: AbilityDef[]
+  /**
+   * A constant effect on units while the leader is undeployed (Director Krennic: "each friendly damaged
+   * unit gets +1/+0"). Shaped like `CardDefinition.aura`, with the leader's controller in place of a
+   * source unit, since an undeployed leader is not a unit. Folded into the same aura pass.
+   */
+  aura?: (state: GameState, owner: PlayerId, target: UnitState, sameController: boolean, combat?: CombatContext) => AuraContribution | undefined
+  /** "Ignore the aspect penalty on <cards> you play" while undeployed (Hera Syndulla). */
+  waivesAspectPenalty?: (state: GameState, owner: PlayerId, ctx: CostDiscountContext) => boolean
 }
 
 /**

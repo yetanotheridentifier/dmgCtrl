@@ -163,6 +163,8 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   let discount = 0
   let waivePenalty = false
   const discountCtx = { owner: playerId, card, target }
+  // An undeployed leader's own waiver (Hera Syndulla); once deployed, the leader unit's hooks below apply.
+  if (!p.leader.deployed && getCardDefinition(p.leader.cardId)?.leaderAbilities?.waivesAspectPenalty?.(state, playerId, discountCtx)) waivePenalty = true
   for (const u of p.units) {
     for (const cid of abilityCardIds(u)) {
       const def = getCardDefinition(cid)

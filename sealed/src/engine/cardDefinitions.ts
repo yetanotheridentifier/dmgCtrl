@@ -1,4 +1,4 @@
-import type { AbilityDef, CardDefinition, EffectContext, IfYouDoContext } from './abilities'
+import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext } from './abilities'
 import { registerCard, getCardDefinition } from './abilities'
 import { takeControlOfUnit, giveToken, giveTokens, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
@@ -6557,4 +6557,69 @@ registerCard('JTL_014', { // Admiral Trench
     const rest = st.cards.filter((_, i) => i !== chosen)
     return drawCards(updatePlayer(s, ctx.owner, { deck: [st.cards[chosen], ...p.deck], discard: [...p.discard, ...rest] }), ctx.owner, 1)
   },
+})
+
+// E: constant abilities on the leader side. The front's `leaderAbilities.aura` and waiver take the
+// leader's controller where a unit's take the source unit; the deployed side is an ordinary unit hook.
+type LeaderAura = NonNullable<NonNullable<CardDefinition['leaderAbilities']>['aura']>
+/** The same "each friendly unit that ..." contribution from both sides. `self` says whether the deployed leader counts itself. */
+const friendlyBothSides = (test: Holds, contribution: AuraContribution, self: boolean): CardDefinition => ({
+  leaderAbilities: { aura: (s, _owner, target, friendly) => (friendly && test(s, target) ? contribution : undefined) },
+  ...friendlyAura(test, contribution, !self),
+})
+/** The same aspect-penalty waiver from both sides, for the cards `test` accepts. */
+const waiverBothSides = (test: (s: GameState, owner: PlayerId, card: EngineCard) => boolean): CardDefinition => ({
+  leaderAbilities: { waivesAspectPenalty: (s, owner, ctx) => test(s, owner, ctx.card) },
+  waivesAspectPenalty: (s, _source, ctx) => test(s, ctx.owner, ctx.card),
+})
+const mergeLeaderSides = (...defs: CardDefinition[]): CardDefinition => ({
+  ...allOf(...defs),
+  leaderAbilities: Object.assign({}, ...defs.map(d => d.leaderAbilities ?? {})),
+})
+
+registerCard('SOR_001', friendlyBothSides((_s, u) => u.damage > 0, { power: 1 }, true)) // Director Krennic
+registerCard('LAW_009', waiverBothSides((s, owner, c) => // Hera Syndulla
+  c.type === 'unit' && printedAspect(c, 'Heroism') && s.players[owner].units.length >= 2))
+registerCard('SEC_009', mergeLeaderSides( // Mon Mothma
+  waiverBothSides((_s, _owner, c) => c.type === 'unit' && printedTrait(c, 'Official') && !printedAspect(c, 'Villainy')),
+  friendlyBothSides(isTrait('Official'), { hp: 1 }, false),
+))
+
+const GRANT_NALA_SE = 'GRANT_NALA_SE'
+registerCard(GRANT_NALA_SE, { sourceCardId: 'TWI_001', ...whenDefeated('Heal 2 damage from your base.', (s, ctx) => healBase(s, ctx.owner, 2)) })
+registerCard('TWI_001', { // Nala Se
+  ...waiverBothSides((_s, _owner, c) => c.type === 'unit' && printedTrait(c, 'Clone')),
+  grantsAbilities: (s, _source, target, friendly) => (friendly && unitHasTrait(s, target, 'Clone') ? [GRANT_NALA_SE] : []),
+})
+
+const GRANT_GAR_SAXON = 'GRANT_GAR_SAXON'
+registerCard(GRANT_GAR_SAXON, {
+  sourceCardId: 'SHD_001',
+  ...whenDefeated('You may return an upgrade that was attached to this unit to its owner\'s hand.', (s, ctx) => {
+    // The upgrades went to their owners' discard piles as the unit left play; tokens are gone.
+    const cards = (ctx.defeatedUnit?.upgrades ?? []).filter(up => !isTokenCard(up.cardId) && s.players[up.owner].discard.includes(up.cardId))
+    return cards.length
+      ? pushChoice(s, { kind: 'selectCardThen', id: `${ctx.defeatedUnit!.instanceId}-garSaxon`, controller: ctx.owner, candidates: cards.map(up => up.cardId), optional: true, text: "return an upgrade that was on it to its owner's hand", then: { cardId: GRANT_GAR_SAXON, owner: ctx.owner, step: cards.map(up => up.owner).join(',') } })
+      : s
+  }),
+  ifYouDo: (s, ctx) => returnUpgradeFromDiscardToHand(s, (ctx.step ?? '').split(',')[ctx.optionIndex ?? 0] as PlayerId, ctx.cardChosen!),
+})
+registerCard('SHD_001', { // Gar Saxon
+  ...friendlyBothSides((_s, u) => isUpgraded(u), { power: 1 }, true),
+  grantsAbilities: (_s, _source, target, friendly) => (friendly && isUpgraded(target) ? [GRANT_GAR_SAXON] : []),
+})
+
+/**
+ * "Each friendly unit with the most power among friendly units gains Overwhelm." Overwhelm only acts on
+ * an attack against a unit, so it is granted to that attacker alone, which is also what keeps the power
+ * comparison from reading the aura pass it is part of: the other units' power is asked with no combat.
+ */
+const savageAura: LeaderAura = (s, owner, target, friendly, combat) => {
+  if (!friendly || combat?.attackerInstanceId !== target.instanceId) return undefined
+  const mine = effectivePower(s, target)
+  return s.players[owner].units.every(u => u.instanceId === target.instanceId || effectivePower(s, u) <= mine) ? { keywords: [KW.overwhelm] } : undefined
+}
+registerCard('TS26_5', { // Savage Opress
+  leaderAbilities: { aura: savageAura },
+  ...friendlyAura(() => true, { keywords: [KW.overwhelm] }, true),
 })
