@@ -4801,6 +4801,74 @@ registerCard('SOR_042', whenPlayed('Search your deck for a card and draw it. (Th
   return revealed.length ? pushChoice(s, { kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices: revealed.map((_, i) => i), shuffle: true }) : s
 }))
 
+// Yes-or-no answers, each player's pick, and several picks at once
+registerCard('LAW_207', { // Attack From All Sides
+  ...whenPlayed('Deal 3 damage to a unit. If there are 4 or more different aspects among friendly units, you may deal 5 damage to that unit instead.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'choose a unit to damage', false, 'target')),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'five' || ctx.step === 'three') return dealDamageToUnit(s, ctx.unitChosen!, ctx.step === 'five' ? 5 : 3)
+    const aspects = new Set(s.players[ctx.owner].units.flatMap(u => (cardOf(s, u)?.aspects ?? []).map(a => a.toLowerCase()))).size
+    if (aspects < 4) return dealDamageToUnit(s, ctx.targetInstanceId!, 3)
+    return pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'deal 5 damage instead of 3', then: resume(ctx, 'five', ctx.targetInstanceId), declineStep: 'three' })
+  },
+})
+registerCard('SOR_233', { // I Am Your Father
+  ...whenPlayed('Deal 7 Damage to an enemy unit unless its controller says "no." If they do, draw 3 cards.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickEnemy), 'choose an enemy unit', false, 'target')),
+  // The controller answers: accepting is saying "no" (the caster draws 3), declining takes the 7 damage.
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'no') return drawCards(s, ctx.owner, 3)
+    if (ctx.step === 'yes') return dealDamageToUnit(s, ctx.unitChosen!, 7)
+    const found = findUnit(s, ctx.targetInstanceId!)
+    return found
+      ? pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-answer`, controller: found.owner, cost: 0, text: 'say "no" and let your opponent draw 3 cards instead of taking 7 damage', then: resume(ctx, 'no', found.unit.instanceId), declineStep: 'yes' })
+      : s
+  },
+})
+registerCard('LOF_177', { // Time of Crisis
+  ...whenPlayed('Each player chooses a unit they control. Deal 3 damage to each unit not chosen this way.', (s, ctx) => {
+    const mine = pickedIds(s, ctx, pickFriendly)
+    return mine.length ? unitThen(s, ctx, mine, 'choose a unit you control to spare', false, 'mine') : timeOfCrisisTheirs(s, ctx, undefined)
+  }),
+  ifYouDo: (s, ctx) => (ctx.step === 'mine'
+    ? timeOfCrisisTheirs(s, ctx, ctx.targetInstanceId)
+    : timeOfCrisisDamage(s, [ctx.unitChosen, ctx.targetInstanceId])),
+})
+function timeOfCrisisTheirs(s: GameState, ctx: Resumable, mine: string | undefined): GameState {
+  const theirs = pickedIds(s, ctx, pickEnemy)
+  if (theirs.length === 0) return timeOfCrisisDamage(s, [mine])
+  return pushChoice(s, { kind: 'selectUnitThen', id: `${ctx.sourceInstanceId}-theirs`, controller: opponentOf(ctx.owner), targets: theirs, text: 'choose a unit you control to spare', then: resume(ctx, 'theirs', mine) })
+}
+function timeOfCrisisDamage(s: GameState, spared: (string | undefined)[]): GameState {
+  return allUnits(s).filter(u => !spared.includes(u.instanceId)).reduce((acc, u) => dealDamageToUnit(acc, u.instanceId, 3), s)
+}
+const UNLIMITED = [4, 3, 2, 1]
+registerCard('TWI_156', { // Unlimited Power
+  ...whenPlayed('Deal 4 damage to a unit, 3 damage to a second unit, 2 damage to a third unit, and 1 damage to a fourth unit. (All damage is dealt simultaneously.)', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'choose a unit to deal 4 damage to', false, picksStep([]))),
+  // Every pick is made before any damage is dealt, so a unit defeated by it cannot change a later pick.
+  ifYouDo: (s, ctx) => {
+    const picks = [...picksOf(ctx.step), ctx.targetInstanceId!]
+    const left = pickedIds(s, ctx, pickAny).filter(id => !picks.includes(id))
+    if (picks.length < UNLIMITED.length && left.length) return unitThen(s, ctx, left, `choose a unit to deal ${UNLIMITED[picks.length]} damage to`, false, picksStep(picks))
+    return picks.reduce((acc, id, i) => (findUnit(acc, id) ? dealDamageToUnit(acc, id, UNLIMITED[i]) : acc), s)
+  },
+})
+registerCard('SHD_054', whenPlayed('Heal up to 8 total damage from any number of units.', (s, ctx) => { // Midnight Repairs
+  const unitTargets = allUnits(s).filter(u => u.damage > 0).map(u => u.instanceId)
+  return unitTargets.length ? pushChoice(s, { kind: 'distributeHealing', id: ctx.sourceInstanceId!, controller: ctx.owner, remaining: 8, healed: 0, unitTargets, baseTargets: [] }) : s
+}))
+registerCard('LOF_176', { // Lightsaber Throw
+  ...whenPlayed('Discard a Lightsaber card from your hand. If you do, deal 4 damage to a ground unit and draw a card.', (s, ctx) => {
+    const handIndices = s.players[ctx.owner].hand.flatMap((id, i) => (printedTrait(s.cards[id], 'Lightsaber') ? [i] : []))
+    return handIndices.length ? pushChoice(s, { kind: 'selectHandCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, handIndices, text: 'discard a Lightsaber card', then: resume(ctx) }) : s
+  }),
+  ifYouDo: (s, ctx) => {
+    const next = drawCards(discardFromHand(s, ctx.owner, ctx.handIndex!), ctx.owner, 1)
+    return damageChoice(next, ctx, 4, picked(next, ctx, pickGround))
+  },
+})
+
 registerCard('LAW_085', unitThenWp('Choose a friendly non-leader unit. An opponent takes control of it. If they do, deal 4 damage to another unit in the same arena.', pickAll(pickFriendly, nonLeader), 'give a friendly non-leader unit to an opponent', false, // You Hold This
   (s, ctx) => {
     const others = otherInArena(s, ctx.targetInstanceId!)

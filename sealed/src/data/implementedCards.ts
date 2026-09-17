@@ -520,6 +520,13 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'JTL_208', name: 'Never Tell Me the Odds' },
   { id: 'LOF_240', name: 'Flight of the Inquisitor' },
   { id: 'SOR_042', name: 'Search Your Feelings' },
+  // Yes-or-no answers, each player's pick, and several picks at once
+  { id: 'LAW_207', name: 'Attack From All Sides' },
+  { id: 'SOR_233', name: 'I Am Your Father' },
+  { id: 'LOF_177', name: 'Time of Crisis' },
+  { id: 'TWI_156', name: 'Unlimited Power' },
+  { id: 'SHD_054', name: 'Midnight Repairs' },
+  { id: 'LOF_176', name: 'Lightsaber Throw' },
   // Printed as an upgrade (see `cardDataCorrections.ts`), but the set data, and so the set totals
   // below, file it as an event. Counted where the totals count it.
   { id: 'SOR_215', name: 'Snapshot Reflexes' },

@@ -154,7 +154,9 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'distributeDamage':
       return [`deal damage across your targets: ${choice.total - choice.remaining} of ${choice.total} allocated`]
     case 'distributeHealing':
-      return [`heal up to ${choice.remaining} more damage, one point at a time; this unit then takes ${choice.healed} so far`]
+      return [choice.damageUnit
+        ? `heal up to ${choice.remaining} more damage, one point at a time; this unit then takes ${choice.healed} so far`
+        : `heal up to ${choice.remaining} more damage, one point at a time`]
     case 'distributeTokens':
       return [`hand out ${tokenName(state, choice.token)} tokens: ${choice.total - choice.remaining} of ${choice.total} allocated`]
     case 'variableStrike':

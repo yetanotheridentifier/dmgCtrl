@@ -90,6 +90,11 @@ const F = {
   SABER: card({ id: 'SABER', type: 'upgrade', cost: 2, traits: ['ITEM', 'WEAPON', 'LIGHTSABER'] }),
   ODD3: card({ id: 'ODD3', type: 'event', cost: 3 }),
   SABOTEUR: card({ id: 'SABOTEUR', arena: 'ground', cost: 2, power: 2, hp: 5, keywords: [{ name: 'Saboteur' }] }),
+  LAW_207: ev('LAW_207', 3), SOR_233: ev('SOR_233', 3), LOF_177: ev('LOF_177', 4), TWI_156: ev('TWI_156', 6),
+  SHD_054: ev('SHD_054', 2), LOF_176: ev('LOF_176', 2),
+  ASP_VA: card({ id: 'ASP_VA', arena: 'ground', cost: 2, power: 2, hp: 9, aspects: ['Vigilance', 'Aggression'] }),
+  ASP_CH: card({ id: 'ASP_CH', arena: 'ground', cost: 2, power: 2, hp: 9, aspects: ['Command', 'Heroism'] }),
+  SABER_EV: card({ id: 'SABER_EV', type: 'event', cost: 1, traits: ['LIGHTSABER'] }),
   OFFICIAL: card({ id: 'OFFICIAL', arena: 'ground', cost: 2, power: 1, hp: 4, traits: ['OFFICIAL'] }),
   TWO_ASP: card({ id: 'TWO_ASP', arena: 'ground', cost: 3, power: 2, hp: 5, aspects: ['Cunning', 'Heroism'] }),
   DROID: card({ id: 'DROID', arena: 'ground', cost: 2, power: 2, hp: 5, traits: ['DROID'] }),
@@ -1120,5 +1125,74 @@ describe('events that move cards between the deck, hand and discard pile', () =>
     s = accept(s, { deckIndex: 3 })
     expect(s.players.player.hand).toEqual(['FILL'])
     expect([...s.players.player.deck].sort()).toEqual(deck.filter(id => id !== 'FILL').sort())
+  })
+})
+
+// ── Yes-or-no answers, each player's pick, and several picks at once ────────────────────────────
+
+describe('events with a yes-or-no, an each-player pick, or several picks at once', () => {
+  it('Attack From All Sides (LAW_207) deals 3, or may deal 5 with 4 different aspects among friendly units', () => {
+    const wide = { units: [unit('a', 'ASP_VA'), unit('b', 'ASP_CH')] }
+    const s = accept(play(board('LAW_207', wide, { units: [unit('e', 'BIG')] })), { targetInstanceId: 'e' })
+    expect(choice(s).kind).toBe('mayPayThen')
+    expect(dmg(s, 'e')).toBe(0)
+    expect(dmg(accept(s), 'e')).toBe(5)
+    expect(dmg(skip(s), 'e')).toBe(3)
+    const narrow = accept(play(board('LAW_207', { units: [unit('a', 'ASP_VA')] }, { units: [unit('e', 'BIG')] })), { targetInstanceId: 'e' })
+    noChoice(narrow)
+    expect(dmg(narrow, 'e')).toBe(3)
+  })
+
+  it('I Am Your Father (SOR_233): its controller takes 7 damage on the unit, or says no and you draw 3', () => {
+    const s = accept(play(board('SOR_233', { deck: ['U_VIG', 'U_CMD', 'UPG', 'FILL'] }, { units: [unit('e', 'BIG')] })), { targetInstanceId: 'e' })
+    expect(choice(s)).toMatchObject({ kind: 'mayPayThen', controller: 'opponent', cost: 0 })
+    const no = accept(s)
+    expect([dmg(no, 'e'), no.players.player.hand.length]).toEqual([0, 3])
+    const yes = skip(s)
+    expect([dmg(yes, 'e'), yes.players.player.hand.length]).toEqual([7, 0])
+  })
+
+  it('Time of Crisis (LOF_177): each player chooses a unit they control; every other unit takes 3', () => {
+    let s = play(board('LOF_177', { units: [unit('m', 'BIG'), unit('n', 'BIG')] }, { units: [unit('e', 'BIG'), unit('f', 'BIG')] }))
+    expect([choice(s).controller, unitOffers(s)]).toEqual(['player', ['m', 'n']])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect([choice(s).controller, unitOffers(s)]).toEqual(['opponent', ['e', 'f']])
+    s = accept(s, { targetInstanceId: 'f' })
+    noChoice(s)
+    expect([dmg(s, 'm'), dmg(s, 'n'), dmg(s, 'e'), dmg(s, 'f')]).toEqual([0, 3, 3, 0])
+  })
+
+  it('Unlimited Power (TWI_156) deals 4, 3, 2 and 1 to four different units at the same time', () => {
+    let s = play(board('TWI_156', { units: [unit('m', 'BIG')] }, { units: [unit('e', 'BIG'), unit('f', 'BIG'), unit('g', 'C1')] }))
+    expect(unitOffers(s)).toEqual(['e', 'f', 'g', 'm'])
+    s = accept(s, { targetInstanceId: 'g' })
+    expect(dmg(s, 'g')).toBe(0)
+    expect(unitOffers(s)).toEqual(['e', 'f', 'm'])
+    s = accept(accept(accept(s, { targetInstanceId: 'e' }), { targetInstanceId: 'f' }), { targetInstanceId: 'm' })
+    noChoice(s)
+    expect([U(s, 'g'), dmg(s, 'e'), dmg(s, 'f'), dmg(s, 'm')]).toEqual([undefined, 3, 2, 1])
+  })
+
+  it('Midnight Repairs (SHD_054) heals up to 8 damage from any number of units, and damages nothing', () => {
+    let s = play(board('SHD_054', { units: [unit('m', 'BIG', { damage: 5 }), unit('n', 'BIG', { damage: 5 })], base: { cardId: 'TST_B', damage: 5 } }))
+    const c = choice(s)
+    expect(c).toMatchObject({ kind: 'distributeHealing', remaining: 8, baseTargets: [] })
+    for (const id of ['m', 'm', 'm', 'm', 'm', 'n', 'n', 'n']) s = accept(s, { targetInstanceId: id })
+    noChoice(s)
+    expect([dmg(s, 'm'), dmg(s, 'n'), s.players.player.base.damage]).toEqual([0, 2, 5])
+  })
+
+  it('Lightsaber Throw (LOF_176) discards a Lightsaber card, and if it does deals 4 to a ground unit and draws', () => {
+    let s = play(board('LOF_176', { hand: ['SABER_EV', 'P3'], deck: ['FILL'] }, { units: [unit('e', 'BIG'), unit('sp', 'SP4')] }))
+    expect(choice(s).kind).toBe('selectHandCardThen')
+    expect(handOffers(s)).toEqual([0])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { handIndex: 0 })
+    expect(s.players.player.discard).toContain('SABER_EV')
+    expect(unitOffers(s)).toEqual(['e'])
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(4)
+    expect(s.players.player.hand).toEqual(['P3', 'FILL'])
+    noChoice(play(board('LOF_176', { hand: ['P3'] }, { units: [unit('e', 'BIG')] })))
   })
 })

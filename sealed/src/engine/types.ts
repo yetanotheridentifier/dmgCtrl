@@ -784,7 +784,9 @@ type ChoiceVariant =
   // "You may <cost>. If you do, <effect>": a yes/no that pays `cost` resources, or deals `damageSelf`
   // to the source, or only reveals an event (`revealEvent`, which costs nothing and leaves the card in
   // hand), and then runs the card's `ifYouDo` hook. `text` is the effect, for the prompt.
-  | { kind: 'mayPayThen'; id: string; controller: PlayerId; cost: number; damageSelf?: number; revealEvent?: boolean; text: string; then: IfYouDo }
+  // `declineStep` runs the hook on a decline too, at that step, for an ability that goes on either way
+  // ("you may deal 5 instead", "unless its controller says no").
+  | { kind: 'mayPayThen'; id: string; controller: PlayerId; cost: number; damageSelf?: number; revealEvent?: boolean; text: string; then: IfYouDo; declineStep?: string }
   // Choose one of `targets` and hand it to the card's `ifYouDo` hook, for an ability that does more
   // than one thing to the unit it picks, or whose effect depends on it. Mandatory unless `optional`.
   // `text` names what the pick is for, for the prompt.
@@ -798,9 +800,9 @@ type ChoiceVariant =
   // `ifYouDo` hook as `arenaChosen`.
   | { kind: 'chooseArenaThen'; id: string; controller: PlayerId; text: string; then: IfYouDo }
   // Heal 1 at a time from `unitTargets` / `baseTargets` until `remaining` is spent or Done, then deal
-  // what was healed to `damageUnit` (Redemption). `oneUnit` keeps every point on the first unit picked
+  // what was healed to `damageUnit`, when there is one (Redemption). `oneUnit` keeps every point on the first unit picked
   // (Kashyyyk Defender's "from another unit").
-  | { kind: 'distributeHealing'; id: string; controller: PlayerId; remaining: number; healed: number; unitTargets: string[]; baseTargets: PlayerId[]; damageUnit: string; oneUnit?: boolean }
+  | { kind: 'distributeHealing'; id: string; controller: PlayerId; remaining: number; healed: number; unitTargets: string[]; baseTargets: PlayerId[]; damageUnit?: string; oneUnit?: boolean }
   // Leia Organa: a yes/no — deal `selfDamage` to `unitId`, then heal `healBase` from your base.
   | { kind: 'maySelfDamageHealBase'; id: string; controller: PlayerId; unitId: string; selfDamage: number; healBase: number }
   // Mando's N-1: a yes/no — exhaust your (ready) leader to give `unitId` a "+power/+hp this phase" buff.

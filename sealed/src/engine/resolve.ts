@@ -756,6 +756,7 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
   if (choice.kind === 'distributeHealing') next = finishHealing(next, choice.damageUnit, choice.healed)
   // AAT Incinerator: the ability goes on once its picks stop.
   if (choice.kind === 'selectUnitThen' && choice.hookOnDecline) next = runIfYouDo(next, choice.then)
+  if (choice.kind === 'mayPayThen' && choice.declineStep !== undefined) next = runIfYouDo(next, { ...choice.then, step: choice.declineStep })
   // Elzar Mann: stopping early still triggers the follow-up, sized to what was distributed.
   if (choice.kind === 'distributeTokens') {
     next = finishDistribution(next, choice, choice.total - choice.remaining)
@@ -2446,8 +2447,8 @@ function completeAttack(state: GameState, attackerId: string, target: AttackTarg
  */
 /** Every unit in play, both sides. */
 /** "Deal that much damage to this unit", once a healing distribution ends. */
-function finishHealing(state: GameState, damageUnit: string, healed: number): GameState {
-  return healed > 0 && findUnit(state, damageUnit) ? checkWin(dealDamageToUnit(state, damageUnit, healed)) : state
+function finishHealing(state: GameState, damageUnit: string | undefined, healed: number): GameState {
+  return healed > 0 && damageUnit && findUnit(state, damageUnit) ? checkWin(dealDamageToUnit(state, damageUnit, healed)) : state
 }
 
 /** Resume an ability at its card's `ifYouDo` hook, with what the answered choice settled. */
