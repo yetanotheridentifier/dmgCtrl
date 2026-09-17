@@ -101,7 +101,16 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   LAW_104: { keywords: [] }, // Bodhi Rook: gives a friendly Rebel unit Sentinel
   SOR_156: { keywords: [] }, // Benthic "Two Tubes": gives another friendly Aggression unit Raid 2
 
+  // Leaders: a deployed side's conditional keyword, or one it only gives to other units.
+  TWI_010: { keywords: [] }, // Pre Vizsla: Saboteur while you have 3 or more cards in hand
+  SEC_010: { keywords: [] }, // Dedra Meero: Raid 2 while you have more cards in hand than an opponent
+  SOR_012: { keywords: [] }, // IG-88: gives each other friendly unit Raid 1
+  LAW_001: { keywords: [] }, // Saw Gerrera: gives an attacker Overwhelm for that attack
+  SEC_007: { keywords: [{ name: 'Overwhelm' }] }, // Dryden Vos: Overwhelm is his; Ambush goes to the unit he plays
+
   // A printed keyword the source omits.
+  SHD_007: { keywords: [{ name: 'Overwhelm' }] }, // Moff Gideon (leader)
+  SHD_016: { keywords: [{ name: 'Saboteur' }] }, // Fennec Shand (leader)
   SHD_188: { keywords: [{ name: 'Ambush' }] }, // 4-LOM
   JTL_054: { keywords: [{ name: 'Shielded' }] }, // Gold Leader
 

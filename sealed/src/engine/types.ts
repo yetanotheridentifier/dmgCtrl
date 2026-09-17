@@ -205,14 +205,24 @@ export interface NextUnitGrant {
   trait?: string // the unit must have this trait
   maxPower?: number // the unit's printed power must be ≤ this
   cardId?: string // the unit must be a copy of this card (Jump to Lightspeed)
+  // The unit must share a keyword with a unit `owner` controls (Morgan Elsbeth). Read off printed
+  // keywords, since this module sits below the keyword readers.
+  sharesKeywordWithFriendly?: boolean
+  // The grant is for the next EVENT played instead of the next unit (Rex): only `costDelta` applies.
+  event?: boolean
 }
 
-/** True if `card` is a unit satisfying a grant's filter. */
-export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUnitGrant): boolean {
-  if (!card || card.type !== 'unit') return false
+/** True if `card` is a unit satisfying a grant's filter. `state` and `owner` are needed only by a board-reading filter. */
+export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUnitGrant, state?: GameState, owner?: PlayerId): boolean {
+  if (!card || card.type !== (grant.event ? 'event' : 'unit')) return false
   if (grant.trait && !card.traits.some(t => t.toLowerCase() === grant.trait!.toLowerCase())) return false
   if (grant.maxPower !== undefined && (card.power ?? 0) > grant.maxPower) return false
   if (grant.cardId !== undefined && card.id !== grant.cardId) return false
+  if (grant.sharesKeywordWithFriendly) {
+    if (!state || !owner) return false
+    const names = new Set(card.keywords.map(k => k.name))
+    if (!state.players[owner].units.some(u => (state.cards[u.cardId]?.keywords ?? []).some(k => names.has(k.name)))) return false
+  }
   return true
 }
 
@@ -555,6 +565,13 @@ export interface PhaseEvents {
   damagePrevented?: string[]
   /** How many cards each player has drawn this phase (Beilert Valance). */
   cardsDrawn?: Partial<Record<PlayerId, number>>
+  /** How much damage each player's base has been dealt this phase (Cassian Andor). */
+  baseDamageTaken?: Partial<Record<PlayerId, number>>
+  /**
+   * Players who created a token this phase (The Client). A token upgrade is credited to the controller of
+   * the unit it lands on, which is who created it for every card that gives one to its own side.
+   */
+  tokensCreated?: PlayerId[]
 }
 
 /**
@@ -593,6 +610,8 @@ export interface TriggerContext {
   targetInstanceId?: string
   /** `whenUpgradeAttached`: the upgrade was played (from any zone) rather than created or moved by an ability. */
   upgradePlayed?: boolean
+  /** `whenFriendlyDamagedSurvives`: each unit that was dealt damage and survived, with how much (Jabba the Hutt). */
+  damagedSurvivors?: { instanceId: string; amount: number }[]
 }
 
 export interface PendingTrigger {
@@ -1166,10 +1185,29 @@ export function recordBaseAttacked(state: GameState, owner: PlayerId): GameState
   return events.basesAttacked.includes(owner) ? state : { ...state, phaseEvents: { ...events, basesAttacked: [...events.basesAttacked, owner] } }
 }
 
-/** Record that `owner`'s base took damage this phase. Idempotent. */
-export function recordBaseDamaged(state: GameState, owner: PlayerId): GameState {
+/** Record that `owner`'s base took `amount` damage this phase. */
+export function recordBaseDamaged(state: GameState, owner: PlayerId, amount = 0): GameState {
   const events = state.phaseEvents ?? emptyPhaseEvents()
-  return events.basesDamaged.includes(owner) ? state : { ...state, phaseEvents: { ...events, basesDamaged: [...events.basesDamaged, owner] } }
+  const basesDamaged = events.basesDamaged.includes(owner) ? events.basesDamaged : [...events.basesDamaged, owner]
+  const baseDamageTaken = { ...events.baseDamageTaken, [owner]: (events.baseDamageTaken?.[owner] ?? 0) + amount }
+  return { ...state, phaseEvents: { ...events, basesDamaged, baseDamageTaken } }
+}
+
+/** How much damage `owner`'s base has been dealt this phase. */
+export function baseDamageThisPhase(state: GameState, owner: PlayerId): number {
+  return state.phaseEvents?.baseDamageTaken?.[owner] ?? 0
+}
+
+/** Record that `owner` created a token this phase. Idempotent. */
+export function recordTokenCreated(state: GameState, owner: PlayerId): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  const created = events.tokensCreated ?? []
+  return created.includes(owner) ? state : { ...state, phaseEvents: { ...events, tokensCreated: [...created, owner] } }
+}
+
+/** Whether `owner` created a token this phase (The Client). */
+export function tokenCreatedThisPhase(state: GameState, owner: PlayerId): boolean {
+  return state.phaseEvents?.tokensCreated?.includes(owner) ?? false
 }
 
 /** Whether `owner`'s base was dealt damage this phase (Baylan Skoll). */

@@ -163,6 +163,8 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   let discount = 0
   let waivePenalty = false
   const discountCtx = { owner: playerId, card, target }
+  // An undeployed leader's own waiver (Hera Syndulla); once deployed, the leader unit's hooks below apply.
+  if (!p.leader.deployed && getCardDefinition(p.leader.cardId)?.leaderAbilities?.waivesAspectPenalty?.(state, playerId, discountCtx)) waivePenalty = true
   for (const u of p.units) {
     for (const cid of abilityCardIds(u)) {
       const def = getCardDefinition(cid)
@@ -180,7 +182,7 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   }
   if (waivePenalty) penalty = 0
   // "Your next unit …" cost grants that match this card — Mouse Droid's −1 to the next Imperial.
-  const grantDelta = (p.nextUnitGrants ?? []).reduce((sum, g) => sum + (nextUnitGrantMatches(card, g) ? (g.costDelta ?? 0) : 0), 0)
+  const grantDelta = (p.nextUnitGrants ?? []).reduce((sum, g) => sum + (nextUnitGrantMatches(card, g, state, playerId) ? (g.costDelta ?? 0) : 0), 0)
   // A card an OPPONENT's unit has named for a surcharge costs that much more to play (Qi'ra).
   const surcharge = state.players[opponentOf(playerId)].units.reduce(
     (sum, u) => sum + (u.namedCard === card.name ? u.namedCardSurcharge ?? 0 : 0), 0)

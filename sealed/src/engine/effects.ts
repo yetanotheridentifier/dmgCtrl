@@ -1,5 +1,5 @@
 import type { DamageSource, GameState, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState } from './types'
-import { updatePlayer, pushChoice, recordBaseDamaged, recordCardsDrawn, recordUpgradeDefeated, recordUnitHealed, recordUnitLeftPlay, abilityCardIds } from './types'
+import { updatePlayer, pushChoice, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, abilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { TriggerPoint } from './abilities'
@@ -127,7 +127,7 @@ export function giveTokens(state: GameState, instanceId: string, tokenId: string
   const found = findUnit(state, instanceId)
   if (!found || count <= 0) return state
   const tokens = Array.from({ length: count }, () => ({ cardId: tokenId, owner: found.owner }))
-  return fireUpgradeAttached(attachUpgrades(state, instanceId, tokens), instanceId)
+  return fireUpgradeAttached(attachUpgrades(recordTokenCreated(state, found.owner), instanceId, tokens), instanceId)
 }
 
 /**
@@ -217,9 +217,13 @@ export function dealDamageToBase(state: GameState, player: PlayerId, amount: num
   }
   if (dealt <= 0) return state
   let next: GameState = { ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: p.base.damage + dealt } } } }
-  next = recordBaseDamaged(next, player) // "an enemy base was damaged this phase" (Baylan Skoll)
+  next = recordBaseDamaged(next, player, dealt) // "an enemy base was damaged this phase" (Baylan Skoll)
   // "When your base is dealt damage" (Blade Three) — the base owner's units react.
-  return fireUnitsTrigger(next, 'whenOwnBaseDamaged', player)
+  next = fireUnitsTrigger(next, 'whenOwnBaseDamaged', player)
+  // "When you deal damage to an enemy base" (Cassian Andor): the other side's units, unless the base's
+  // own controller's card dealt it.
+  const dealer = player === 'player' ? 'opponent' : 'player'
+  return source?.controller === player ? next : fireUnitsTrigger(next, 'whenEnemyBaseDamaged', dealer)
 }
 
 /**
@@ -408,11 +412,12 @@ export function createTokenUnit(state: GameState, owner: PlayerId, tokenCardId: 
     upgrades: shielded ? [{ cardId: TOKEN_SHIELD, owner }] : [],
   }
   const p = state.players[owner]
-  return {
+  // A created token enters play, so it counts for "units that entered play this phase" (Padmé Amidala).
+  return recordUnitEntered(recordTokenCreated({
     ...state,
     instanceCounter: state.instanceCounter + 1,
     players: { ...state.players, [owner]: { ...p, units: [...p.units, token] } },
-  }
+  }, owner), owner, token.instanceId)
 }
 
 /** Draw `n` cards for a player (takes what's there if the deck is short). */

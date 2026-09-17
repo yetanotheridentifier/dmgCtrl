@@ -51,10 +51,15 @@ export type TriggerPoint =
   // by a Shield/Advantage token being spent as part of combat resolution, which happens inside
   // damage application, where raising a choice would interrupt a half-applied combat.
   | 'whenFriendlyUpgradeDefeated'
-  // "When a friendly unit is dealt damage and survives" (Rancor Keeper).
+  // "When a friendly unit is dealt damage and survives" (Rancor Keeper). `ctx.damagedSurvivors` names them.
   | 'whenFriendlyDamagedSurvives'
+  // "When you deal damage to an enemy base" (Cassian Andor): fires on the units of the player whose
+  // opponent's base was dealt damage, unless that base's own controller's card dealt it.
+  | 'whenEnemyBaseDamaged'
   | 'onDefense'
   | 'whenPlayOrCreateUnit'
+  // "When Deployed": fires on a leader unit as it deploys, after its entry keywords (Shielded, Hidden).
+  | 'whenDeployed'
 
 /**
  * What one ability's effect is handed when it resolves: who owns it and which card it is on, plus the
@@ -215,6 +220,8 @@ export interface CardDefinition {
   suppressesBaseHealing?: (state: GameState, source: UnitState) => boolean
   /** Whether this unit readies in the regroup phase; absent means it does (Rampart needs 4 power). */
   readiesInRegroup?: (state: GameState, unit: UnitState) => boolean
+  /** "This unit isn't defeated by having no remaining HP" while this holds (Chirrut Îmwe, during the action phase). */
+  survivesNoHp?: (state: GameState, unit: UnitState) => boolean
   /** "Attached unit can't ready" (Frozen in Carbonite): neither in the regroup phase nor by an ability. */
   cannotReady?: (state: GameState, unit: UnitState) => boolean
   /** Runs an effect this card left for later (`GameState.delayedEffects`), once, when its moment comes. */
@@ -318,8 +325,16 @@ export interface AuraContribution {
 export interface LeaderAbilities {
   /** Activated "Action: [Exhaust] …" abilities usable while undeployed. */
   actions?: LeaderActionAbilityDef[]
-  /** Triggered "When …" abilities that fire while undeployed (wired later). */
+  /** Triggered "When …" abilities that fire while undeployed. */
   abilities?: AbilityDef[]
+  /**
+   * A constant effect on units while the leader is undeployed (Director Krennic: "each friendly damaged
+   * unit gets +1/+0"). Shaped like `CardDefinition.aura`, with the leader's controller in place of a
+   * source unit, since an undeployed leader is not a unit. Folded into the same aura pass.
+   */
+  aura?: (state: GameState, owner: PlayerId, target: UnitState, sameController: boolean, combat?: CombatContext) => AuraContribution | undefined
+  /** "Ignore the aspect penalty on <cards> you play" while undeployed (Hera Syndulla). */
+  waivesAspectPenalty?: (state: GameState, owner: PlayerId, ctx: CostDiscountContext) => boolean
 }
 
 /**

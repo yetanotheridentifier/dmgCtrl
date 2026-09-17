@@ -1,4 +1,4 @@
-import type { AbilityDef, CardDefinition, EffectContext, IfYouDoContext } from './abilities'
+import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext } from './abilities'
 import { registerCard, getCardDefinition } from './abilities'
 import { takeControlOfUnit, giveToken, giveTokens, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
@@ -7,7 +7,7 @@ import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
 import { discardUnitsMatching, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, isTokenCard } from './tokenUnits'
-import { opponentOf, pushChoice, addLastingEffect, addDelayedEffect, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
+import { opponentOf, pushChoice, addLastingEffect, addDelayedEffect, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
 import type { AttackOffer } from './legalMoves'
 import { canAfford } from './resources'
@@ -3152,16 +3152,17 @@ type CardTest = (c: EngineCard | undefined, s: GameState, ctx: EventCtx) => bool
  * `count` above 1 is "up to N" (Grand Moff Tarkin), which draws again from what is left of the same
  * window and may stop at any point (CR 8.30.1).
  */
-const searchDrawWp = (description: string, depth: number, test: CardTest, count = 1) =>
-  whenPlayed(description, (s: GameState, ctx: EventCtx) => {
-    const revealed = s.players[ctx.owner].deck.slice(0, searchCount(s, ctx.owner, depth))
-    if (revealed.length === 0) return s
-    const eligibleIndices = revealed.flatMap((id, i) => (test(s.cards[id], s, ctx) ? [i] : []))
-    return pushChoice(s, {
-      kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices,
-      ...(count > 1 && { remaining: count, upTo: true }),
-    })
+const searchDrawChoice = (s: GameState, ctx: EventCtx, depth: number, test: CardTest, count = 1): GameState => {
+  const revealed = s.players[ctx.owner].deck.slice(0, searchCount(s, ctx.owner, depth))
+  if (revealed.length === 0) return s
+  const eligibleIndices = revealed.flatMap((id, i) => (test(s.cards[id], s, ctx) ? [i] : []))
+  return pushChoice(s, {
+    kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices,
+    ...(count > 1 && { remaining: count, upTo: true }),
   })
+}
+const searchDrawWp = (description: string, depth: number, test: CardTest, count = 1) =>
+  whenPlayed(description, (s: GameState, ctx: EventCtx) => searchDrawChoice(s, ctx, depth, test, count))
 
 registerCard('LAW_136', searchDrawWp('Search the top 3 cards of your deck for an Underworld unit, reveal it, and draw it.', 3,
   c => printedUnit(c) && printedTrait(c, 'Underworld'))) // Syndicate Spice Runner
@@ -4704,17 +4705,28 @@ registerCard('TWI_188', whenPlayed('Look at cards from the top of your deck equa
 }))
 
 // Playing a unit from hand. "Play a unit" is not a "may": it is offered whenever one is affordable.
-type PlayFromHandOptions = { costDelta?: number; test?: (c: EngineCard | undefined) => boolean; thenShieldIt?: boolean; thenDamageOwnBase?: boolean }
+type PlayFromHandOptions = {
+  costDelta?: number
+  test?: (c: EngineCard | undefined) => boolean
+  thenShieldIt?: boolean
+  thenDamageOwnBase?: boolean
+  thenDamageIt?: number
+  /** "It gains <keywords> for this phase": granted to the next unit played, so an Ambush or Hidden takes effect as it enters. */
+  gains?: KeywordInstance[]
+}
 const FREE = -99
+const playableFromHand = (s: GameState, owner: PlayerId, o: PlayFromHandOptions, extraResourceCost = 0) =>
+  affordableHandUnits(s, owner, extraResourceCost, o.costDelta ?? 0).filter(ref => !o.test || o.test(s.cards[ref.cardId]))
 const playFromHand = (s: GameState, ctx: EventCtx, o: PlayFromHandOptions): GameState => {
   const costDelta = o.costDelta ?? 0
-  const candidates = affordableHandUnits(s, ctx.owner, 0, costDelta).filter(ref => !o.test || o.test(s.cards[ref.cardId]))
-  return candidates.length
-    ? pushChoice(s, {
-      kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, costDelta, entersReady: false,
-      ...(o.thenShieldIt ? { thenShieldIt: true } : {}), ...(o.thenDamageOwnBase ? { thenDamageOwnBase: true } : {}),
-    })
-    : s
+  const candidates = playableFromHand(s, ctx.owner, o)
+  if (!candidates.length) return s
+  const granted = o.gains ? grantNextUnit(s, ctx.owner, { keywords: o.gains }) : s
+  return pushChoice(granted, {
+    kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, costDelta, entersReady: false,
+    ...(o.thenShieldIt ? { thenShieldIt: true } : {}), ...(o.thenDamageOwnBase ? { thenDamageOwnBase: true } : {}),
+    ...(o.thenDamageIt ? { thenDamageIt: o.thenDamageIt } : {}),
+  })
 }
 registerCard('LOF_076', whenPlayed('Play a Force unit from your hand (paying its cost) and give a Shield token to it.', (s, ctx) => // Soresu Stance
   playFromHand(s, ctx, { test: c => printedTrait(c, 'Force'), thenShieldIt: true })))
@@ -5930,5 +5942,810 @@ registerCard('SOR_185', { // Chimaera
     const opp = opponentOf(ctx.owner)
     const at = s.players[opp].hand.findIndex(id => s.cards[id]?.name === ctx.nameChosen)
     return at === -1 ? s : discardFromHand(s, opp, at)
+  },
+})
+
+// ── Leaders from the other sealed sets ──────────────────────────────────────────────────────────────
+// Both sides of each leader. The front is an undeployed leader's action (using it exhausts the leader),
+// built on the When Played helpers: it is handed the same context, with a source that names the leader
+// side rather than a unit, so "another unit" excludes nothing and a choice still has a stable id. The
+// back is the deployed leader unit, registered like any other unit. A card whose front and back both
+// resume after a choice tell the two apart by `step`.
+
+/** The source an undeployed leader's action hands its effect: the leader side, not a unit in play. */
+const leaderSide = (cardId: string): string => `${cardId}-leader`
+interface FrontSpec {
+  /** The action's "C=N". */
+  cost?: number
+  /** Offered only while this holds, so the action is never used for nothing. */
+  usable?: When
+  effect: (s: GameState, ctx: Resumable) => GameState
+}
+/** "Action [Exhaust]: <effect>" on an undeployed leader. */
+const leaderFront = (description: string, spec: FrontSpec): CardDefinition => ({
+  leaderAbilities: {
+    actions: [{
+      description,
+      ...(spec.cost ? { cost: spec.cost } : {}),
+      usable: (s, owner) => spec.usable?.(s, { owner }) ?? true,
+      effect: (s, ctx) => spec.effect(s, { owner: ctx.owner, cardId: ctx.cardId, sourceInstanceId: leaderSide(ctx.cardId) }),
+    }],
+  },
+})
+/** Some unit passes `test`, read as the leader's controller would. */
+const anyUnitPasses = (test: Pick): When => (s, ctx) => picked(s, ctx, test).length > 0
+/** "If you played a <card> this phase". */
+const playedCardThisPhase = (test: (c: EngineCard | undefined) => boolean): When => (s, ctx) =>
+  cardsPlayedThisPhase(s, ctx.owner).some(id => test(s.cards[id]))
+/** "If you attacked with a <unit> this phase", read off the units still in play; the source itself is left out ("another"). */
+const attackedWithThisPhase = (test: Pick): When => (s, ctx) =>
+  attackedThisPhase(s).some(id => {
+    const found = findUnit(s, id)
+    return found !== undefined && found.owner === ctx.owner && id !== ctx.sourceInstanceId && test(s, found.unit, ctx)
+  })
+const enemyWasDefeated: When = (s, ctx) => defeatedThisPhase(s, opponentOf(ctx.owner)).length > 0
+const friendlyTraitDefeated = (trait: string): When => (s, ctx) => defeatedThisPhase(s, ctx.owner).some(id => printedTrait(s.cards[id], trait))
+const both = (...tests: When[]): When => (s, ctx) => tests.every(t => t(s, ctx))
+const handOf = (s: GameState, u: UnitState): number => { const o = unitOwner(s, u); return o ? s.players[o].hand.length : 0 }
+const selectUpgradeThen = (s: GameState, ctx: Resumable, candidates: UpgradeRef[], text: string, optional: boolean, step?: string): GameState =>
+  candidates.length ? pushChoice(s, { kind: 'selectUpgradeThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, text, then: resume(ctx, step), ...mayFlag(optional) }) : s
+
+// A: simple fronts, On Attack and constant backs
+registerCard('SOR_014', allOf( // Sabine Wren
+  leaderFront('Deal 1 damage to each base.', { effect: s => BOTH_BASES.reduce((acc, p) => dealDamageToBase(acc, p, 1), s) }),
+  attacks('Deal 1 damage to each enemy base.', (s, ctx) => dealDamageToBase(s, opponentOf(ctx.owner), 1)),
+))
+registerCard('IBH_53', allOf( // Darth Vader
+  leaderFront('Deal 1 damage to a base.', { cost: 1, effect: (s, ctx) => damageChoice(s, ctx, 1, [], BOTH_BASES) }),
+  attacks('Deal 2 damage to a base.', (s, ctx) => damageChoice(s, ctx, 2, [], BOTH_BASES)),
+))
+const damagedFriendly = pickAll(pickFriendly, damaged)
+registerCard('IBH_1', { // Leia Organa
+  ...leaderFront('Heal 1 damage from a friendly unit.', {
+    cost: 1,
+    usable: anyUnitPasses(damagedFriendly),
+    effect: (s, ctx) => healChoice(s, ctx, 1, pickedIds(s, ctx, damagedFriendly), []),
+  }),
+  ...attacks('Heal 1 damage from a friendly unit and 1 damage from another friendly unit.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, damagedFriendly), 'heal 1 damage from a friendly unit', false)),
+  ifYouDo: (s, ctx) => {
+    const healed = healUnit(s, ctx.targetInstanceId!, 1)
+    return healChoice(healed, ctx, 1, pickedIds(healed, ctx, damagedFriendly).filter(id => id !== ctx.targetInstanceId), [])
+  },
+})
+registerCard('SOR_010', allOf( // Darth Vader
+  leaderFront('If you played a Villainy card this phase, deal 1 damage to a unit and 1 damage to a base.', {
+    cost: 1,
+    usable: playedCardThisPhase(c => printedAspect(c, 'Villainy')),
+    effect: (s, ctx) => damageChoice(damageChoice(s, ctx, 1, allUnits(s)), ctx, 1, [], BOTH_BASES),
+  }),
+  onAttack(damageWp('You may deal 2 damage to a unit.', pickAny, 2, true)),
+))
+/** A friendly non-leader, non-token unit that entered play this phase: one "you played". */
+const playedUnitThisPhase: Pick = (s, u, ctx) =>
+  enteredPlayThisPhase(s, ctx.owner).includes(u.instanceId) && !isLeaderUnit(s, u) && !isTokenCard(u.cardId)
+const heroismPlayed = pickAll(pickFriendly, playedUnitThisPhase, pickAspect('Heroism'))
+registerCard('SOR_005', allOf( // Luke Skywalker
+  leaderFront('Give a Shield token to a Heroism unit you played this phase.', {
+    cost: 1,
+    usable: anyUnitPasses(heroismPlayed),
+    effect: (s, ctx) => shieldChoice(s, ctx, pickedIds(s, ctx, heroismPlayed), false),
+  }),
+  attacks('You may give another unit a Shield token.', (s, ctx) => shieldChoice(s, ctx, pickedIds(s, ctx, pickOther), true)),
+))
+const resistanceOrUpgrade: Pick = (s, u) => unitHasTrait(s, u, 'Resistance') || u.upgrades.some(up => printedTrait(s.cards[up.cardId], 'Resistance'))
+registerCard('JTL_007', allOf( // Admiral Holdo
+  leaderFront('Give a Resistance unit or a unit with a Resistance upgrade on it +2/+2 for this phase.', {
+    cost: 1,
+    usable: anyUnitPasses(resistanceOrUpgrade),
+    effect: (s, ctx) => lastingBuffChoice(s, ctx, pickedIds(s, ctx, resistanceOrUpgrade), { power: 2, hp: 2 }),
+  }),
+  onAttack(buffWp('You may give another Resistance unit or a unit with a Resistance upgrade on it +2/+2 for this phase.',
+    pickAll(pickOther, resistanceOrUpgrade), () => ({ power: 2, hp: 2 }), true)),
+))
+const damagedVehicle = pickAll(pickTrait('Vehicle'), damaged)
+const attackedThisPhasePick: Pick = (s, u) => attackedThisPhase(s).includes(u.instanceId)
+registerCard('JTL_004', allOf( // Rose Tico
+  leaderFront('Heal 2 damage from a Vehicle unit that attacked this phase.', {
+    usable: anyUnitPasses(pickAll(damagedVehicle, attackedThisPhasePick)),
+    effect: (s, ctx) => healChoice(s, ctx, 2, pickedIds(s, ctx, pickAll(damagedVehicle, attackedThisPhasePick)), []),
+  }),
+  attacks('You may heal 2 damage from a Vehicle unit.', (s, ctx) => healChoice(s, ctx, 2, pickedIds(s, ctx, damagedVehicle), [], true)),
+))
+registerCard('TWI_015', allOf( // General Grievous
+  leaderFront('Give a Droid unit Sentinel for this phase.', {
+    usable: anyUnitPasses(pickTrait('Droid')),
+    effect: (s, ctx) => lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickTrait('Droid')), { keywords: [KW.sentinel] }),
+  }),
+  onAttack(buffWp('You may give a Droid unit +1/+0 and Sentinel for this phase.', pickTrait('Droid'), () => ({ power: 1, keywords: [KW.sentinel] }), true)),
+))
+registerCard('TWI_006', allOf( // Wat Tambor
+  leaderFront('If a friendly unit was defeated this phase, give a unit +2/+2 for this phase.', {
+    usable: both(friendlyWasDefeated, anyUnitPasses(pickAny)),
+    effect: (s, ctx) => lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickAny), { power: 2, hp: 2 }),
+  }),
+  onAttack(buffWp('If a friendly unit was defeated this phase, you may give another unit +2/+2 for this phase.', pickOther, () => ({ power: 2, hp: 2 }), true, friendlyWasDefeated)),
+))
+registerCard('TWI_003', allOf( // Obi-Wan Kenobi
+  leaderFront('Heal 1 damage from a unit.', {
+    usable: anyUnitPasses(damaged),
+    effect: (s, ctx) => healChoice(s, ctx, 1, pickedIds(s, ctx, damaged), []),
+  }),
+  onAttack(unitThenWp('Heal 1 damage from a unit. If you do, deal 1 damage to a different unit.', damaged, 'heal 1 damage from a unit', false, (s, ctx) => {
+    const healed = healUnit(s, ctx.targetInstanceId!, 1)
+    return damageChoice(healed, ctx, 1, allUnits(healed).filter(u => u.instanceId !== ctx.targetInstanceId))
+  })),
+))
+const readyUnitPick: Pick = (_s, u) => !u.exhausted
+const exhaustedPick: Pick = (_s, u) => u.exhausted
+registerCard('SEC_015', allOf( // C-3PO
+  leaderFront('If you control an exhausted unit, exhaust a unit.', {
+    cost: 1,
+    usable: (s, ctx) => youControl(s, ctx, exhaustedPick) && anyUnitPasses(readyUnitPick)(s, ctx),
+    effect: (s, ctx) => targetChoice(s, ctx, 'mayExhaustUnit', pickedIds(s, ctx, readyUnitPick)),
+  }),
+  onAttack(targetWp('If you control another exhausted unit, you may exhaust a unit.', 'mayExhaustUnit', readyUnitPick, true,
+    (s, ctx) => youControl(s, ctx, pickOther, exhaustedPick))),
+))
+const lowPowerFriendly = pickAll(pickFriendly, (s, u) => effectivePower(s, u) <= 3)
+const damageAndReady = (s: GameState, ctx: EventCtx, amount: number, targets: string[], optional: boolean): GameState =>
+  targets.length
+    ? pushChoice(s, { kind: 'selectDamageTarget', id: ctx.sourceInstanceId!, controller: ctx.owner, amount, unitTargets: targets, baseTargets: [], thenReadyIt: true, ...mayFlag(optional) })
+    : s
+registerCard('SOR_011', allOf( // Grand Inquisitor
+  leaderFront('Deal 2 damage to a friendly unit with 3 or less power and ready it.', {
+    usable: anyUnitPasses(lowPowerFriendly),
+    effect: (s, ctx) => damageAndReady(s, ctx, 2, pickedIds(s, ctx, lowPowerFriendly), false),
+  }),
+  attacks('You may deal 1 damage to another friendly unit with 3 or less power and ready it.', (s, ctx) =>
+    damageAndReady(s, ctx, 1, pickedIds(s, ctx, pickAll(pickOther, lowPowerFriendly)), true)),
+))
+registerCard('SHD_003', { // Finn
+  ...leaderFront('Defeat a friendly upgrade on a unit. If you do, give a Shield token to that unit.', {
+    usable: (s, ctx) => friendlyUpgradeCandidates(s, ctx.owner).length > 0,
+    effect: (s, ctx) => selectUpgradeThen(s, ctx, friendlyUpgradeCandidates(s, ctx.owner), 'defeat a friendly upgrade and shield its unit', false),
+  }),
+  ...attacks('You may defeat a friendly upgrade on a unit. If you do, give a Shield token to that unit.', (s, ctx) =>
+    selectUpgradeThen(s, ctx, friendlyUpgradeCandidates(s, ctx.owner), 'defeat a friendly upgrade and shield its unit', true)),
+  ifYouDo: (s, ctx) => {
+    const up = ctx.upgradeChosen
+    if (!up) return s
+    const defeated = defeatUpgradeAt(s, up.unitId, up.upgradeIndex)
+    return findUnit(defeated, up.unitId) ? giveToken(defeated, up.unitId, TOKEN_SHIELD) : defeated
+  },
+})
+const mandalorianAttacked = attackedWithThisPhase(pickTrait('Mandalorian'))
+registerCard('SHD_012', { // Bo-Katan Kryze
+  ...leaderFront('If you attacked with a Mandalorian unit this phase, deal 1 damage to a unit.', {
+    usable: both(mandalorianAttacked, anyUnitPasses(pickAny)),
+    effect: (s, ctx) => damageChoice(s, ctx, 1, allUnits(s)),
+  }),
+  // The second damage is offered whether or not the first was taken, so the first resumes on a decline too.
+  ...attacks('You may deal 1 damage to a unit. If you attacked with another Mandalorian unit this phase, you may deal 1 damage to a unit.', (s, ctx) =>
+    (allUnits(s).length ? pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets: pickedIds(s, ctx, pickAny), optional: true, hookOnDecline: true, text: 'deal 1 damage to a unit', then: resume(ctx, 'first') }) : s)),
+  ifYouDo: (s, ctx) => {
+    const hit = ctx.targetInstanceId ? dealDamageToUnit(s, ctx.targetInstanceId, 1) : s
+    return ctx.step === 'first' && mandalorianAttacked(hit, ctx) ? unitThen(hit, ctx, pickedIds(hit, ctx, pickAny), 'deal 1 damage to a unit', true, 'second') : hit
+  },
+})
+const firstOrderPlayed = playedCardThisPhase(c => printedTrait(c, 'First Order'))
+registerCard('JTL_010', { // Captain Phasma
+  ...leaderFront('If you played a First Order card this phase, deal 1 damage to a base.', {
+    usable: firstOrderPlayed,
+    effect: (s, ctx) => damageChoice(s, ctx, 1, [], BOTH_BASES),
+  }),
+  ...attacks('If you played another First Order card this phase, you may deal 1 damage to a unit. If you do, deal 1 damage to a base.', (s, ctx) =>
+    (firstOrderPlayed(s, ctx) ? unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'deal 1 damage to a unit, then 1 damage to a base', true) : s)),
+  ifYouDo: (s, ctx) => damageChoice(dealDamageToUnit(s, ctx.targetInstanceId!, 1), ctx, 1, [], BOTH_BASES),
+})
+registerCard('LOF_011', { // Kit Fisto
+  ...leaderFront('If you attacked with a Jedi unit this phase, deal 2 damage to a unit.', {
+    cost: 1,
+    usable: both(attackedWithThisPhase(pickTrait('Jedi')), anyUnitPasses(pickAny)),
+    effect: (s, ctx) => damageChoice(s, ctx, 2, allUnits(s)),
+  }),
+  statModifier: (s, u) => perEach(friendliesOf(s, u).filter(x => x.instanceId !== u.instanceId && unitHasTrait(s, x, 'Jedi')).length, 1),
+})
+const rebelDefeated = friendlyTraitDefeated('Rebel')
+registerCard('LAW_005', allOf( // Jyn Erso
+  leaderFront('If a friendly Rebel unit was defeated this phase, search the top 3 cards of your deck for a card and draw it.', {
+    cost: 1,
+    usable: both(rebelDefeated, (s, ctx) => s.players[ctx.owner].deck.length > 0),
+    effect: (s, ctx) => searchDrawChoice(s, ctx, 3, () => true),
+  }),
+  attacks('If a friendly Rebel unit was defeated this phase, search the top 3 cards of your deck for a card and draw it.', (s, ctx) =>
+    (rebelDefeated(s, ctx) ? searchDrawChoice(s, ctx, 3, () => true) : s)),
+))
+registerCard('SOR_002', { // Iden Versio
+  ...leaderFront('If an enemy unit was defeated this phase, heal 1 damage from your base.', {
+    usable: enemyWasDefeated,
+    effect: (s, ctx) => healBase(s, ctx.owner, 1),
+  }),
+  abilities: [{ trigger: 'whenEnemyUnitDefeated', description: 'Heal 1 damage from your base.', effect: (s, ctx) => healBase(s, ctx.owner, 1) }],
+})
+registerCard('SHD_011', { // Kylo Ren
+  ...leaderFront('[Discard a card from your hand]: Give a unit +2/+0 for this phase.', {
+    usable: (s, ctx) => s.players[ctx.owner].hand.length > 0 && allUnits(s).length > 0,
+    effect: (s, ctx) => discards(s, ctx.owner, 1, ctx.sourceInstanceId!, resume(ctx)),
+  }),
+  ifYouDo: (s, ctx) => lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickAny), { power: 2 }),
+  statModifier: (s, u) => perEach(handOf(s, u), -1),
+})
+registerCard('LAW_012', allOf( // Sebulba
+  leaderFront('[Discard a card from your deck]: A friendly unit gains Raid 1 for this phase.', {
+    usable: (s, ctx) => s.players[ctx.owner].deck.length > 0 && youControl(s, ctx),
+    effect: (s, ctx) => {
+      const [next] = millTop(s, ctx.owner, 1)
+      return lastingBuffChoice(next, ctx, pickedIds(next, ctx, pickFriendly), { keywords: [KW.raid(1)] })
+    },
+  }),
+  attacks('Discard a card from your deck.', (s, ctx) => millTop(s, ctx.owner, 1)[0]),
+))
+const creatureOrSpectre: Pick = (s, u) => unitHasTrait(s, u, 'Creature') || unitHasTrait(s, u, 'Spectre')
+registerCard('LOF_004', { // Kanan Jarrus
+  ...leaderFront('Give a Shield token to a Creature or Spectre unit.', {
+    cost: 1,
+    usable: anyUnitPasses(creatureOrSpectre),
+    effect: (s, ctx) => shieldChoice(s, ctx, pickedIds(s, ctx, creatureOrSpectre), false),
+  }),
+  statModifier: (s, u) => (controlsAnother(s, u, (st, x) => creatureOrSpectre(st, x, asCtx(st, x))) ? { power: 2, hp: 2 } : {}),
+})
+registerCard('TWI_010', { // Pre Vizsla
+  ...leaderFront("Deal damage to a unit equal to the number of cards you've drawn this phase.", {
+    cost: 1,
+    usable: (s, ctx) => cardsDrawnThisPhase(s, ctx.owner) > 0 && allUnits(s).length > 0,
+    effect: (s, ctx) => damageChoice(s, ctx, cardsDrawnThisPhase(s, ctx.owner), allUnits(s)),
+  }),
+  ...gains((s, u) => handOf(s, u) >= 3, KW.saboteur),
+  statModifier: (s, u) => (handOf(s, u) >= 6 ? { power: 2 } : {}),
+})
+
+// B: attack with a unit, and units entering play
+/** "Attack with a unit" on a leader's front, offered only while that attack can be made. `before` is a cost paid first. */
+const leaderAttack = (description: string, offer: (s: GameState, ctx: EventCtx) => AttackOffer, o: { cost?: number; usable?: When; before?: (s: GameState, ctx: EventCtx) => GameState } = {}): CardDefinition =>
+  leaderFront(description, {
+    ...(o.cost ? { cost: o.cost } : {}),
+    usable: (s, ctx) => (o.usable?.(s, ctx) ?? true) && actionAttack(ctx.owner, s, offer(s, ctx)),
+    effect: (s, ctx) => {
+      const paid = o.before ? o.before(s, ctx) : s
+      return offerAttack(paid, ctx.owner, `${ctx.sourceInstanceId}-attack`, offer(paid, ctx))
+    },
+  })
+/** "If it's attacking a unit, it gets +N/+0 for this attack." */
+const attackingAUnitBonus = (power: number): CardDefinition => ({ statModifier: (_s, _u, ctx) => (ctx.attacking && !ctx.attackingBase ? { power } : {}) })
+const eventPlayed = playedCardThisPhase(c => c?.type === 'event')
+
+const GRANT_ANAKIN_LEADER = 'GRANT_ANAKIN_LEADER'
+registerCard(GRANT_ANAKIN_LEADER, { sourceCardId: 'TWI_012', ...attackingAUnitBonus(2) })
+registerCard('TWI_012', { // Anakin Skywalker
+  ...leaderAttack('[Deal 2 damage to your base]: Attack with a unit. If it’s attacking a unit, it gets +2/+0 for this attack.', () => ({ grantCardId: GRANT_ANAKIN_LEADER }),
+    { before: (s, ctx) => dealDamageToBase(s, ctx.owner, 2) }),
+  statModifier: (s, u) => { const o = unitOwner(s, u); return o ? perEach(Math.floor(s.players[o].base.damage / 5), 1) : {} },
+})
+const GRANT_ASAJJ_LEADER = 'GRANT_ASAJJ_LEADER'
+registerCard(GRANT_ASAJJ_LEADER, { sourceCardId: 'TWI_014', ...attackBonus(1) })
+registerCard('TWI_014', { // Asajj Ventress
+  ...leaderAttack('Attack with a unit. If you played an event this phase, it gets +1/+0 for this attack.', (s, ctx) => (eventPlayed(s, ctx) ? { grantCardId: GRANT_ASAJJ_LEADER } : {})),
+  // "On Attack: if you played an event this phase" cannot change during her own attack, so it reads as a constant while she attacks.
+  statModifier: (s, u, ctx) => (ctx.attacking && eventPlayed(s, asCtx(s, u)) ? { power: 1 } : {}),
+  dealsDamageFirst: (s, u) => eventPlayed(s, asCtx(s, u)),
+})
+const GRANT_MAUL_LEADER = 'GRANT_MAUL_LEADER'
+registerCard(GRANT_MAUL_LEADER, { sourceCardId: 'TWI_009', conditionalKeywords: () => [KW.overwhelm] })
+registerCard('TWI_009', { // Maul
+  ...leaderAttack('Attack with a unit. It gains Overwhelm for this attack.', () => ({ grantCardId: GRANT_MAUL_LEADER })),
+  ...friendlyAura(() => true, { keywords: [KW.overwhelm] }, true),
+})
+const GRANT_MOFF_GIDEON_LEADER = 'GRANT_MOFF_GIDEON_LEADER'
+registerCard(GRANT_MOFF_GIDEON_LEADER, { sourceCardId: 'SHD_007', ...attackingAUnitBonus(1) })
+const costsAtMost3: Pick = (s, u) => printedCost(s, u) <= 3
+registerCard('SHD_007', { // Moff Gideon
+  ...leaderAttack("Attack with a unit that costs 3 or less. If it's attacking a unit, it gets +1/+0 for this attack.", (s, ctx) =>
+    ({ attacker: { only: pickedIds(s, ctx, pickAll(pickFriendly, costsAtMost3)) }, grantCardId: GRANT_MOFF_GIDEON_LEADER })),
+  // "While attacking an enemy unit": the combat roles exist only for an attack on a unit.
+  aura: (s, _src, tgt, friendly, combat) =>
+    (friendly && combat?.attackerInstanceId === tgt.instanceId && printedCost(s, tgt) <= 3 ? { power: 1, keywords: [KW.overwhelm] } : undefined),
+})
+const GRANT_IG88_LEADER = 'GRANT_IG_EIGHTY_EIGHT_LEADER'
+registerCard(GRANT_IG88_LEADER, { sourceCardId: 'SOR_012', statModifier: (s, u, ctx) => (ctx.attacking && friendliesOf(s, u).length > enemiesOf(s, u).length ? { power: 1 } : {}) })
+registerCard('SOR_012', { // IG-88
+  ...leaderAttack('Attack with a unit. If you control more units than the defending player, the attacker gets +1/+0 for this attack.', () => ({ grantCardId: GRANT_IG88_LEADER })),
+  ...friendlyAura(() => true, { keywords: [KW.raid(1)] }, true),
+})
+const GRANT_JYN_LEADER = 'GRANT_JYN_LEADER'
+registerCard(GRANT_JYN_LEADER, { sourceCardId: 'SOR_018', aura: defenderPowerAura(-1) })
+registerCard('SOR_018', { // Jyn Erso
+  ...leaderAttack('Attack with a unit. The defender gets -1/-0 for this attack.', () => ({ grantCardId: GRANT_JYN_LEADER })),
+  aura: (s, src, tgt, _friendly, combat) => {
+    if (combat?.defenderInstanceId !== tgt.instanceId) return undefined
+    const mine = unitOwner(s, src)
+    return mine !== undefined && findUnit(s, combat.attackerInstanceId)?.owner === mine ? { power: -1 } : undefined
+  },
+})
+const GRANT_LEIA_LEADER = 'GRANT_LEIA_LEADER'
+registerCard(GRANT_LEIA_LEADER, { sourceCardId: 'SOR_009', abilities: [thenAttack('Then, you may attack with another Rebel unit.', { attacker: { trait: 'Rebel' }, optional: true })] })
+registerCard('SOR_009', { // Leia Organa
+  ...leaderAttack('Attack with a Rebel unit. Then, you may attack with another Rebel unit.', () => ({ attacker: { trait: 'Rebel' }, grantCardId: GRANT_LEIA_LEADER })),
+  abilities: [thenAttack('When this unit completes an attack: You may attack with another Rebel unit.', { attacker: { trait: 'Rebel' }, optional: true })],
+})
+const GRANT_ASAJJ_TOKEN_ATTACK = 'GRANT_ASAJJ_TOKEN_ATTACK'
+registerCard(GRANT_ASAJJ_TOKEN_ATTACK, { sourceCardId: 'TS26_7', ...attackBonus(1) })
+const friendlyToken: Pick = (s, u, ctx) => pickFriendly(s, u, ctx) && isTokenCard(u.cardId)
+registerCard('TS26_7', { // Asajj Ventress
+  ...leaderAttack('Attack with a token unit. It gets +1/+0 for this attack.', (s, ctx) => ({ attacker: { only: pickedIds(s, ctx, friendlyToken) }, grantCardId: GRANT_ASAJJ_TOKEN_ATTACK })),
+  statModifier: (s, u) => (attackedWithThisPhase((_st, x) => isTokenCard(x.cardId))(s, asCtx(s, u)) ? { power: 2 } : {}),
+})
+const GRANT_PADME_LEADER = 'GRANT_PADME_LEADER'
+registerCard(GRANT_PADME_LEADER, { sourceCardId: 'TS26_4', cannotAttackBases: () => true })
+const enteredFriendly: Pick = (s, u, ctx) => pickFriendly(s, u, ctx) && enteredPlayThisPhase(s, ctx.owner).includes(u.instanceId)
+const twoEntered: When = (s, ctx) => enteredPlayThisPhase(s, ctx.owner).length >= 2
+registerCard('TS26_4', { // Padmé Amidala
+  ...leaderAttack("If 2 or more friendly units entered play this phase, attack with 1 of them, even if it's exhausted. It can't attack bases for this attack.", (s, ctx) =>
+    ({ attacker: { only: pickedIds(s, ctx, enteredFriendly) }, exhausted: true, grantCardId: GRANT_PADME_LEADER }), { usable: twoEntered }),
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: "You may attack with another friendly unit that entered play this phase, even if it's exhausted. It can't attack bases for this attack.",
+    effect: (s, ctx) => offerAttack(s, ctx.owner, `${ctx.sourceInstanceId}-next`, {
+      attacker: { only: pickedIds(s, ctx, pickAll(enteredFriendly, pickOther)) }, exhausted: true, grantCardId: GRANT_PADME_LEADER, optional: true,
+    }),
+  }],
+})
+const GRANT_SAW_LEADER = 'GRANT_SAW_LEADER'
+registerCard(GRANT_SAW_LEADER, {
+  sourceCardId: 'LAW_001',
+  ...attackBonus(2),
+  conditionalKeywords: () => [KW.overwhelm],
+  abilities: [{ trigger: 'onAttackEnd', description: 'Defeat this unit.', effect: (s, ctx) => (findUnit(s, ctx.sourceInstanceId!) ? defeatUnits(s, [ctx.sourceInstanceId!]) : s) }],
+})
+registerCard('LAW_001', { // Saw Gerrera
+  ...leaderAttack('Attack with a unit. It gets +2/+0 and gains Overwhelm for this attack. After completing this attack, defeat it.', () => ({ grantCardId: GRANT_SAW_LEADER })),
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: 'If this unit survived, you may attack with another unit. It gets +2/+0 and gains Overwhelm for this attack. After completing this attack, defeat it.',
+    effect: (s, ctx) => (findUnit(s, ctx.sourceInstanceId!)
+      ? offerAttack(s, ctx.owner, `${ctx.sourceInstanceId}-next`, { attacker: { exclude: [ctx.sourceInstanceId!] }, grantCardId: GRANT_SAW_LEADER, optional: true })
+      : s),
+  }],
+})
+registerCard('TS26_2', allOf( // Anakin Skywalker
+  leaderFront('If 2 or more friendly units entered play this phase (including tokens and leaders), give a Shield token to 1 of them.', {
+    usable: both(twoEntered, anyUnitPasses(enteredFriendly)),
+    effect: (s, ctx) => shieldChoice(s, ctx, pickedIds(s, ctx, enteredFriendly), false),
+  }),
+  attacks('Give a Shield token to another friendly unit that entered play this phase.', (s, ctx) => shieldChoice(s, ctx, pickedIds(s, ctx, pickAll(enteredFriendly, pickOther)), false)),
+))
+
+// C: plays from hand
+/** "Play a unit from your hand ..." on a leader's front, offered only while one can be paid for after the action's own cost. */
+const leaderPlay = (description: string, o: PlayFromHandOptions, cost = 0): CardDefinition =>
+  leaderFront(description, {
+    ...(cost ? { cost } : {}),
+    usable: (s, ctx) => playableFromHand(s, ctx.owner, o, cost).length > 0,
+    effect: (s, ctx) => playFromHand(s, ctx, o),
+  })
+/** The same play as a deployed leader's "Action:", with no exhaust. */
+const unitPlayAction = (description: string, o: PlayFromHandOptions): CardDefinition => ({
+  actionAbilities: [{ description, usable: (s, self) => playableFromHand(s, controllerOf(s, self), o).length > 0, effect: (s, ctx) => playFromHand(s, ctx, o) }],
+})
+const printedCostAtMost = (n: number) => (c: EngineCard | undefined): boolean => (c?.cost ?? 0) <= n
+
+registerCard('LOF_010', allOf( // Third Sister
+  leaderPlay('Play a unit from your hand. It gains Hidden for this phase.', { gains: [{ name: 'Hidden' }] }),
+  attacks('The next unit you play this phase gains Hidden.', (s, ctx) => grantNextUnit(s, ctx.owner, { keywords: [{ name: 'Hidden' }] })),
+))
+const capitalShip = (c: EngineCard | undefined): boolean => printedUnit(c) && printedTrait(c, 'Capital Ship')
+registerCard('JTL_005', { // Admiral Piett
+  ...leaderPlay('Play a Capital Ship unit from your hand. It costs 1 less.', { costDelta: -1, test: capitalShip }),
+  costDiscount: (_s, _source, ctx) => (capitalShip(ctx.card) ? -2 : 0),
+})
+const fennecPlay: PlayFromHandOptions = { test: printedCostAtMost(4), gains: [KW.ambush] }
+registerCard('SHD_016', { // Fennec Shand
+  ...leaderPlay('Play a unit that costs 4 or less from your hand (paying its cost). Give it Ambush for this phase.', fennecPlay, 1),
+  ...unitPlayAction('Play a unit that costs 4 or less from your hand (paying its cost). Give it Ambush for this phase.', fennecPlay),
+})
+const hanPlay: PlayFromHandOptions = { costDelta: -1, thenDamageIt: 2 }
+registerCard('SHD_013', { // Han Solo
+  ...leaderPlay('Play a unit from your hand. It costs 1 less. Deal 2 damage to it.', hanPlay),
+  ...unitPlayAction('Play a unit from your hand. It costs 1 less. Deal 2 damage to it.', hanPlay),
+})
+// The deployed side is Grit and Sentinel, both read from the card.
+registerCard('SOR_003', leaderPlay('Play a unit that costs 3 or less from your hand (paying its cost). It gains Sentinel for this phase.', // Chewbacca
+  { test: printedCostAtMost(3), gains: [KW.sentinel] }))
+const drydenCostly = (s: GameState, owner: PlayerId): number[] =>
+  s.players[owner].hand.flatMap((id, i) => ((s.cards[id]?.cost ?? 0) >= 6 ? [i] : []))
+const drydenFront: PlayFromHandOptions = { test: printedCostAtMost(5), gains: [KW.ambush] }
+const drydenBack: PlayFromHandOptions = { gains: [KW.ambush] }
+registerCard('SEC_007', { // Dryden Vos
+  ...leaderFront('[Discard a card that costs 6 or more from your hand]: Play a unit that costs 5 or less from your hand (paying its cost). It gains Ambush for this phase.', {
+    usable: (s, ctx) => drydenCostly(s, ctx.owner).length > 0 && playableFromHand(s, ctx.owner, drydenFront).length > 0,
+    effect: (s, ctx) => pushChoice(s, { kind: 'selectHandCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, handIndices: drydenCostly(s, ctx.owner), text: 'discard a card that costs 6 or more', then: resume(ctx, 'front') }),
+  }),
+  actionAbilities: [{
+    description: '[Discard a card from your hand]: Play a unit from your hand (paying its cost). It gains Ambush for this phase.',
+    // The discard is a cost, so a unit must still be left to play once it is paid.
+    usable: (s, self) => s.players[controllerOf(s, self)].hand.length >= 2 && playableFromHand(s, controllerOf(s, self), drydenBack).length > 0,
+    effect: (s, ctx) => handCardThen(s, ctx, 'discard a card from your hand', 'back'),
+  }],
+  ifYouDo: (s, ctx) => playFromHand(discardFromHand(s, ctx.owner, ctx.handIndex!), ctx, ctx.step === 'front' ? drydenFront : drydenBack),
+})
+const sharesKeywordWith = (s: GameState, u: UnitState) => {
+  const names = new Set(unitKeywords(s, u).map(k => k.name))
+  return (c: EngineCard | undefined): boolean => (c?.keywords ?? []).some(k => names.has(k.name))
+}
+const morganTargets = (s: GameState, ctx: EventCtx): string[] =>
+  picked(s, ctx, pickAll(pickFriendly, attackedThisPhasePick))
+    .filter(u => playableFromHand(s, ctx.owner, { costDelta: -1, test: sharesKeywordWith(s, u) }).length > 0)
+    .map(u => u.instanceId)
+registerCard('LOF_005', { // Morgan Elsbeth
+  ...leaderFront('Choose a friendly unit that attacked this phase. Play a unit from your hand that shares a Keyword with the chosen unit. It costs 1 less.', {
+    usable: (s, ctx) => morganTargets(s, ctx).length > 0,
+    effect: (s, ctx) => unitThen(s, ctx, morganTargets(s, ctx), 'choose a friendly unit that attacked this phase', false),
+  }),
+  ...attacks('The next unit you play this phase costs 1 less if it shares a Keyword with a friendly unit.', (s, ctx) =>
+    grantNextUnit(s, ctx.owner, { costDelta: -1, sharesKeywordWithFriendly: true })),
+  ifYouDo: (s, ctx) => {
+    const chosen = findUnit(s, ctx.targetInstanceId!)?.unit
+    return chosen ? playFromHand(s, ctx, { costDelta: -1, test: sharesKeywordWith(s, chosen) }) : s
+  },
+})
+
+// D: When Deployed
+const whenDeployed = (description: string, effect: AbilityDef['effect']): CardDefinition => ({ abilities: [{ trigger: 'whenDeployed', description, effect }] })
+const remainingAtMost = (n: number): Pick => (s, u) => nonLeader(s, u) && remainingHp(s, u) <= n
+registerCard('LAW_004', allOf( // Aurra Sing
+  leaderFront('Defeat a non-leader unit with 1 or less remaining HP.', {
+    usable: anyUnitPasses(remainingAtMost(1)),
+    effect: (s, ctx) => targetChoice(s, ctx, 'selectUnitToDefeat', pickedIds(s, ctx, remainingAtMost(1))),
+  }),
+  whenDeployed('You may defeat a non-leader unit with 5 or less remaining HP.', (s, ctx) =>
+    targetChoice(s, ctx, 'selectUnitToDefeat', pickedIds(s, ctx, remainingAtMost(5)), true)),
+))
+registerCard('LOF_012', { // Rey
+  ...leaderFront('If you played a non-unit Force card this phase, deal 1 damage to a unit.', {
+    usable: both(playedCardThisPhase(c => c?.type !== 'unit' && printedTrait(c, 'Force')), anyUnitPasses(pickAny)),
+    effect: (s, ctx) => damageChoice(s, ctx, 1, allUnits(s)),
+  }),
+  ...whenDeployed('You may discard your hand. If you do, draw 2 cards.', (s, ctx) =>
+    (s.players[ctx.owner].hand.length ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'discard your hand and draw 2 cards', then: resume(ctx) }) : s)),
+  ifYouDo: (s, ctx) => {
+    let next = s
+    while (next.players[ctx.owner].hand.length > 0) next = discardFromHand(next, ctx.owner, 0)
+    return drawCards(next, ctx.owner, 2)
+  },
+})
+const damagedEnemy = pickAll(pickEnemy, damaged)
+registerCard('TWI_013', { // Mace Windu
+  ...leaderFront('Deal 1 damage to a damaged enemy unit. Then, if it has 5 or more damage on it, deal 1 damage to it.', {
+    cost: 1,
+    usable: anyUnitPasses(damagedEnemy),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, damagedEnemy), 'deal 1 damage to a damaged enemy unit', false),
+  }),
+  ...whenDeployed('Deal 2 damage to each damaged enemy unit.', (s, ctx) =>
+    pickedIds(s, ctx, damagedEnemy).reduce((acc, id) => dealDamageToUnit(acc, id, 2), s)),
+  ifYouDo: (s, ctx) => {
+    const hit = dealDamageToUnit(s, ctx.targetInstanceId!, 1)
+    return (findUnit(hit, ctx.targetInstanceId!)?.unit.damage ?? 0) >= 5 ? dealDamageToUnit(hit, ctx.targetInstanceId!, 1) : hit
+  },
+})
+const aUnitLeftPlay: When = s => BOTH_BASES.some(p => leftPlayThisPhase(s, p).length > 0)
+registerCard('TWI_004', { // Yoda
+  ...leaderFront('If a unit left play this phase, draw a card, then put a card from your hand on the top or bottom of your deck.', {
+    usable: aUnitLeftPlay,
+    effect: (s, ctx) => handCardThen(drawCards(s, ctx.owner, 1), ctx, 'put a card from your hand on the top or bottom of your deck', 'card'),
+  }),
+  ...whenDeployed('You may discard a card from your deck. If you do, defeat an enemy non-leader unit that costs the same as or less than the discarded card.', (s, ctx) =>
+    (s.players[ctx.owner].deck.length
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'discard the top card of your deck to defeat an enemy non-leader unit that costs as much or less', then: resume(ctx, 'mill') })
+      : s)),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'card') {
+      return pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'put it on the top of your deck (otherwise the bottom)', then: resume(ctx, `top:${ctx.handIndex}`), declineStep: `bottom:${ctx.handIndex}` })
+    }
+    if (ctx.step?.startsWith('top:') || ctx.step?.startsWith('bottom:')) {
+      const [where, index] = ctx.step.split(':')
+      return handToDeck(s, ctx.owner, Number(index), where as 'top' | 'bottom')
+    }
+    const [next, milled] = millTop(s, ctx.owner, 1)
+    const cost = next.cards[milled[0]]?.cost ?? 0
+    return targetChoice(next, ctx, 'selectUnitToDefeat', pickedIds(next, ctx, pickAll(pickEnemy, nonLeader, (st, u) => printedCost(st, u) <= cost)))
+  },
+})
+registerCard('SHD_002', { // Qi'ra
+  ...leaderFront('Deal 2 damage to a friendly unit. Then, give a Shield token to it.', {
+    cost: 1,
+    usable: anyUnitPasses(pickFriendly),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'deal 2 damage to a friendly unit, then give it a Shield token', false),
+  }),
+  ...whenDeployed('Heal all damage from each unit. Then, deal damage to each unit equal to half its remaining HP, rounded down.', s => {
+    const healed = allUnits(s).reduce((acc, u) => (u.damage > 0 ? healUnit(acc, u.instanceId, u.damage) : acc), s)
+    const amounts = allUnits(healed).map(u => [u.instanceId, Math.floor(remainingHp(healed, u) / 2)] as const)
+    return amounts.reduce((acc, [id, n]) => (n > 0 ? dealDamageToUnit(acc, id, n) : acc), healed)
+  }),
+  ifYouDo: (s, ctx) => {
+    const hit = dealDamageToUnit(s, ctx.targetInstanceId!, 2)
+    return findUnit(hit, ctx.targetInstanceId!) ? giveToken(hit, ctx.targetInstanceId!, TOKEN_SHIELD) : hit
+  },
+})
+registerCard('SOR_006', { // Emperor Palpatine
+  ...leaderFront('[Defeat a friendly unit]: Deal 1 damage to a unit and draw a card.', {
+    cost: 1,
+    usable: anyUnitPasses(pickFriendly),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'defeat a friendly unit to deal 1 damage to a unit and draw a card', false),
+  }),
+  abilities: [
+    ...whenDeployed('Take control of a damaged non-leader unit.', (s, ctx) =>
+      unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, nonLeader, damaged)), 'take control of a damaged non-leader unit', false, 'steal')).abilities!,
+    ...attacks('You may defeat another friendly unit. If you do, deal 1 damage to a unit and draw a card.', (s, ctx) =>
+      unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, pickOther)), 'defeat another friendly unit to deal 1 damage to a unit and draw a card', true)).abilities!,
+  ],
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'steal') return stealTo(s, ctx.owner, ctx.targetInstanceId, 'permanent')
+    const drawn = drawCards(defeatUnits(s, [ctx.targetInstanceId!]), ctx.owner, 1)
+    return damageChoice(drawn, ctx, 1, allUnits(drawn))
+  },
+})
+/** One card id per name in `owner`'s discard pile, leaving out names already picked. */
+const namesInDiscard = (s: GameState, owner: PlayerId, pickedIdsSoFar: string[]): string[] => {
+  const taken = new Set(pickedIdsSoFar.map(id => s.cards[id]?.name))
+  const seen = new Set<string | undefined>()
+  return s.players[owner].discard.filter(id => {
+    const name = s.cards[id]?.name
+    if (taken.has(name) || seen.has(name)) return false
+    seen.add(name)
+    return true
+  })
+}
+const aphraPick = (s: GameState, ctx: Resumable, picks: string[]): GameState => {
+  const candidates = namesInDiscard(s, ctx.owner, picks)
+  // "If you do" needs all three, so nothing is offered when fewer names are there to begin with.
+  if (picks.length + candidates.length < 3) return s
+  return pushChoice(s, { kind: 'selectCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, text: `choose a card in your discard pile (${picks.length + 1} of 3, different names)`, then: resume(ctx, picksStep(picks)) })
+}
+registerCard('SHD_015', { // Doctor Aphra
+  leaderAbilities: {
+    abilities: [{ trigger: 'whenRegroupStarts', description: 'Discard a card from your deck.', effect: (s, ctx) => millTop(s, ctx.owner, 1)[0] }],
+  },
+  statModifier: (s, u) => {
+    const o = unitOwner(s, u)
+    return o && new Set(s.players[o].discard.map(id => s.cards[id]?.cost ?? 0)).size >= 5 ? { power: 3 } : {}
+  },
+  ...whenDeployed('Choose 3 cards in your discard pile with different names. If you do, return 1 of them at random to your hand.', (s, ctx) => aphraPick(s, ctx, [])),
+  ifYouDo: (s, ctx) => {
+    const picks = [...picksOf(ctx.step), ctx.cardChosen!]
+    if (picks.length < 3) return aphraPick(s, ctx, picks)
+    // Random, not chosen: the seed on the state keeps it deterministic under replay.
+    const back = picks[Math.floor(seededUnit(s.rngSeed) * picks.length)]
+    const p = s.players[ctx.owner]
+    const at = p.discard.indexOf(back)
+    return { ...updatePlayer(s, ctx.owner, { discard: p.discard.filter((_, i) => i !== at), hand: [...p.hand, back] }), rngSeed: nextSeed(s.rngSeed) }
+  },
+})
+interface TrenchStep { left: number; cards: string[] }
+/** Admiral Trench's reveal: the opponent discards while `left` lasts, then its owner draws 1 of what is left and discards the rest. */
+const trenchOffer = (s: GameState, ctx: Resumable, st: TrenchStep): GameState => {
+  if (st.left > 0 && st.cards.length > 0) {
+    return pushChoice(s, { kind: 'selectCardThen', id: `${ctx.sourceInstanceId}-discard`, controller: opponentOf(ctx.owner), candidates: st.cards, text: "discard one of your opponent's revealed cards", then: resume(ctx, `discard:${JSON.stringify(st)}`) })
+  }
+  if (st.cards.length === 0) return s
+  return pushChoice(s, { kind: 'selectCardThen', id: `${ctx.sourceInstanceId}-draw`, controller: ctx.owner, candidates: st.cards, text: 'draw one of the revealed cards; the others are discarded', then: resume(ctx, `draw:${JSON.stringify(st)}`) })
+}
+registerCard('JTL_014', { // Admiral Trench
+  ...leaderFront('Discard a card that costs 3 or more from your hand. If you do, draw a card.', {
+    usable: (s, ctx) => s.players[ctx.owner].hand.some(id => (s.cards[id]?.cost ?? 0) >= 3),
+    effect: (s, ctx) => pushChoice(s, {
+      kind: 'selectHandCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, text: 'discard a card that costs 3 or more, then draw a card', then: resume(ctx, 'front'),
+      handIndices: s.players[ctx.owner].hand.flatMap((id, i) => ((s.cards[id]?.cost ?? 0) >= 3 ? [i] : [])),
+    }),
+  }),
+  ...whenDeployed('Reveal the top 4 cards of your deck. An opponent discards 2 of them. Draw 1 of the remaining cards and discard the other.', (s, ctx) => {
+    const p = s.players[ctx.owner]
+    const cards = p.deck.slice(0, 4)
+    // Held out of the deck while the picks are made, so nothing else can draw or move them meanwhile.
+    return cards.length ? trenchOffer(updatePlayer(s, ctx.owner, { deck: p.deck.slice(cards.length) }), ctx, { left: 2, cards }) : s
+  }),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'front') return drawCards(discardFromHand(s, ctx.owner, ctx.handIndex!), ctx.owner, 1)
+    const [stage, json] = [ctx.step!.slice(0, ctx.step!.indexOf(':')), ctx.step!.slice(ctx.step!.indexOf(':') + 1)]
+    const st = JSON.parse(json) as TrenchStep
+    const chosen = ctx.optionIndex ?? 0
+    const p = s.players[ctx.owner]
+    if (stage === 'discard') {
+      const next = updatePlayer(s, ctx.owner, { discard: [...p.discard, st.cards[chosen]] })
+      return trenchOffer(next, ctx, { left: st.left - 1, cards: st.cards.filter((_, i) => i !== chosen) })
+    }
+    // The drawn card goes back on top and is drawn from there, so it is a draw like any other.
+    const rest = st.cards.filter((_, i) => i !== chosen)
+    return drawCards(updatePlayer(s, ctx.owner, { deck: [st.cards[chosen], ...p.deck], discard: [...p.discard, ...rest] }), ctx.owner, 1)
+  },
+})
+
+// E: constant abilities on the leader side. The front's `leaderAbilities.aura` and waiver take the
+// leader's controller where a unit's take the source unit; the deployed side is an ordinary unit hook.
+type LeaderAura = NonNullable<NonNullable<CardDefinition['leaderAbilities']>['aura']>
+/** The same "each friendly unit that ..." contribution from both sides. `self` says whether the deployed leader counts itself. */
+const friendlyBothSides = (test: Holds, contribution: AuraContribution, self: boolean): CardDefinition => ({
+  leaderAbilities: { aura: (s, _owner, target, friendly) => (friendly && test(s, target) ? contribution : undefined) },
+  ...friendlyAura(test, contribution, !self),
+})
+/** The same aspect-penalty waiver from both sides, for the cards `test` accepts. */
+const waiverBothSides = (test: (s: GameState, owner: PlayerId, card: EngineCard) => boolean): CardDefinition => ({
+  leaderAbilities: { waivesAspectPenalty: (s, owner, ctx) => test(s, owner, ctx.card) },
+  waivesAspectPenalty: (s, _source, ctx) => test(s, ctx.owner, ctx.card),
+})
+const mergeLeaderSides = (...defs: CardDefinition[]): CardDefinition => ({
+  ...allOf(...defs),
+  leaderAbilities: Object.assign({}, ...defs.map(d => d.leaderAbilities ?? {})),
+})
+
+registerCard('SOR_001', friendlyBothSides((_s, u) => u.damage > 0, { power: 1 }, true)) // Director Krennic
+registerCard('LAW_009', waiverBothSides((s, owner, c) => // Hera Syndulla
+  c.type === 'unit' && printedAspect(c, 'Heroism') && s.players[owner].units.length >= 2))
+registerCard('SEC_009', mergeLeaderSides( // Mon Mothma
+  waiverBothSides((_s, _owner, c) => c.type === 'unit' && printedTrait(c, 'Official') && !printedAspect(c, 'Villainy')),
+  friendlyBothSides(isTrait('Official'), { hp: 1 }, false),
+))
+
+const GRANT_NALA_SE = 'GRANT_NALA_SE'
+registerCard(GRANT_NALA_SE, { sourceCardId: 'TWI_001', ...whenDefeated('Heal 2 damage from your base.', (s, ctx) => healBase(s, ctx.owner, 2)) })
+registerCard('TWI_001', { // Nala Se
+  ...waiverBothSides((_s, _owner, c) => c.type === 'unit' && printedTrait(c, 'Clone')),
+  grantsAbilities: (s, _source, target, friendly) => (friendly && unitHasTrait(s, target, 'Clone') ? [GRANT_NALA_SE] : []),
+})
+
+const GRANT_GAR_SAXON = 'GRANT_GAR_SAXON'
+registerCard(GRANT_GAR_SAXON, {
+  sourceCardId: 'SHD_001',
+  ...whenDefeated('You may return an upgrade that was attached to this unit to its owner\'s hand.', (s, ctx) => {
+    // The upgrades went to their owners' discard piles as the unit left play; tokens are gone.
+    const cards = (ctx.defeatedUnit?.upgrades ?? []).filter(up => !isTokenCard(up.cardId) && s.players[up.owner].discard.includes(up.cardId))
+    return cards.length
+      ? pushChoice(s, { kind: 'selectCardThen', id: `${ctx.defeatedUnit!.instanceId}-garSaxon`, controller: ctx.owner, candidates: cards.map(up => up.cardId), optional: true, text: "return an upgrade that was on it to its owner's hand", then: { cardId: GRANT_GAR_SAXON, owner: ctx.owner, step: cards.map(up => up.owner).join(',') } })
+      : s
+  }),
+  ifYouDo: (s, ctx) => returnUpgradeFromDiscardToHand(s, (ctx.step ?? '').split(',')[ctx.optionIndex ?? 0] as PlayerId, ctx.cardChosen!),
+})
+registerCard('SHD_001', { // Gar Saxon
+  ...friendlyBothSides((_s, u) => isUpgraded(u), { power: 1 }, true),
+  grantsAbilities: (_s, _source, target, friendly) => (friendly && isUpgraded(target) ? [GRANT_GAR_SAXON] : []),
+})
+
+/**
+ * "Each friendly unit with the most power among friendly units gains Overwhelm." Overwhelm only acts on
+ * an attack against a unit, so it is granted to that attacker alone, which is also what keeps the power
+ * comparison from reading the aura pass it is part of: the other units' power is asked with no combat.
+ */
+const savageAura: LeaderAura = (s, owner, target, friendly, combat) => {
+  if (!friendly || combat?.attackerInstanceId !== target.instanceId) return undefined
+  const mine = effectivePower(s, target)
+  return s.players[owner].units.every(u => u.instanceId === target.instanceId || effectivePower(s, u) <= mine) ? { keywords: [KW.overwhelm] } : undefined
+}
+registerCard('TS26_5', { // Savage Opress
+  leaderAbilities: { aura: savageAura },
+  ...friendlyAura(() => true, { keywords: [KW.overwhelm] }, true),
+})
+
+// F: one small engine addition each
+registerCard('SEC_005', { // Satine Kryze (Restore 4 on the deployed side, from the card)
+  ...leaderFront('Heal up to 2 damage from a unit. If you do, deal that much damage to your base.', {
+    usable: anyUnitPasses(damaged),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, damaged), 'heal up to 2 damage from a unit, and deal that much to your base', false),
+  }),
+  ifYouDo: (s, ctx) => {
+    // Healing less than it can never helps, so "up to 2" heals as much as the unit has, to 2.
+    const healed = Math.min(2, findUnit(s, ctx.targetInstanceId!)?.unit.damage ?? 0)
+    return healed > 0 ? dealDamageToBase(healUnit(s, ctx.targetInstanceId!, healed), ctx.owner, healed) : s
+  },
+})
+registerCard('SEC_010', { // Dedra Meero
+  ...leaderFront("Choose an enemy unit. Its controller may deal 2 damage to it. If they don't, draw a card.", {
+    cost: 1,
+    usable: anyUnitPasses(pickEnemy),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickEnemy), 'choose an enemy unit', false, 'unit'),
+  }),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'deal') return dealDamageToUnit(s, ctx.unitChosen!, 2)
+    if (ctx.step === 'draw') return drawCards(s, ctx.owner, 1)
+    const name = s.cards[findUnit(s, ctx.targetInstanceId!)?.unit.cardId ?? '']?.name ?? 'the unit'
+    return pushChoice(s, {
+      kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: opponentOf(ctx.owner), cost: 0, text: `deal 2 damage to your ${name} (otherwise your opponent draws a card)`,
+      then: resume(ctx, 'deal', ctx.targetInstanceId), declineStep: 'draw',
+    })
+  },
+  ...gains((s, u) => { const o = unitOwner(s, u); return o !== undefined && s.players[o].hand.length > s.players[opponentOf(o)].hand.length }, KW.raid(2)),
+})
+/** Darth Vader's "discard any number of cards": one at a time with Done, then damage equal to the count. */
+const vaderDiscards = (s: GameState, ctx: Resumable, n: number): GameState => {
+  const hand = s.players[ctx.owner].hand
+  if (hand.length === 0) return n > 0 ? damageChoice(s, ctx, n, allUnits(s), BOTH_BASES) : s
+  return pushChoice(s, { kind: 'selectCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates: hand, optional: true, hookOnDecline: true, text: `discard a card from your hand (${n} discarded)`, then: resume(ctx, `n:${n}`) })
+}
+registerCard('LAW_011', { // Darth Vader
+  ...leaderFront('[Discard a card from your hand]: Deal 1 damage to a unit or base.', {
+    usable: (s, ctx) => s.players[ctx.owner].hand.length > 0,
+    effect: (s, ctx) => discards(s, ctx.owner, 1, ctx.sourceInstanceId!, resume(ctx, 'front')),
+  }),
+  ...attacks('Discard any number of cards from your hand. Deal damage to a unit or base equal to the number of cards discarded this way.', (s, ctx) => vaderDiscards(s, ctx, 0)),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'front') return damageChoice(s, ctx, 1, allUnits(s), BOTH_BASES)
+    const n = Number(ctx.step!.slice('n:'.length))
+    if (ctx.optionIndex === undefined) return n > 0 ? damageChoice(s, ctx, n, allUnits(s), BOTH_BASES) : s
+    return vaderDiscards(discardFromHand(s, ctx.owner, ctx.optionIndex), ctx, n + 1)
+  },
+})
+const readyEnemy = pickAll(pickEnemy, readyUnitPick)
+const clientExhaust = (s: GameState, ctx: EventCtx): GameState => targetChoice(s, ctx, 'mayExhaustUnit', pickedIds(s, ctx, readyEnemy))
+registerCard('LAW_016', allOf( // The Client
+  leaderFront('If you created a token this phase, exhaust an enemy unit.', {
+    usable: both((s, ctx) => tokenCreatedThisPhase(s, ctx.owner), anyUnitPasses(readyEnemy)),
+    effect: clientExhaust,
+  }),
+  attacks('If you created a token this phase, exhaust an enemy unit.', (s, ctx) => (tokenCreatedThisPhase(s, ctx.owner) ? clientExhaust(s, ctx) : s)),
+))
+const CASSIAN_ROUND_KEY = 'SOR_013#round'
+registerCard('SOR_013', { // Cassian Andor
+  ...leaderFront("If you've dealt 3 or more damage to an enemy base this phase, draw a card.", {
+    cost: 1,
+    usable: (s, ctx) => baseDamageThisPhase(s, opponentOf(ctx.owner)) >= 3,
+    effect: (s, ctx) => drawCards(s, ctx.owner, 1),
+  }),
+  abilities: [{
+    trigger: 'whenEnemyBaseDamaged',
+    description: 'You may draw a card. Use this ability only once each round.',
+    effect: (s, ctx) => (selfOf(s, ctx)?.usedAbilities?.includes(CASSIAN_ROUND_KEY)
+      ? s
+      : pushChoice(s, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-draw`, controller: ctx.owner, cost: 0, text: 'draw a card', then: resume(ctx) })),
+  }],
+  ifYouDo: (s, ctx) => drawCards(markAbilityUsed(s, ctx.owner, ctx.sourceInstanceId!, CASSIAN_ROUND_KEY), ctx.owner, 1),
+})
+registerCard('SOR_004', { // Chirrut Îmwe
+  ...leaderFront('Give a unit +0/+2 for this phase.', {
+    usable: anyUnitPasses(pickAny),
+    effect: (s, ctx) => lastingBuffChoice(s, ctx, pickedIds(s, ctx, pickAny), { hp: 2 }),
+  }),
+  // "During the regroup phase, if he has no remaining HP, defeat him": the sweep as the phase changes does it.
+  survivesNoHp: s => s.phase === 'action',
+})
+const exhaustedEnemy = pickAll(pickEnemy, exhaustedPick)
+registerCard('TS26_6', { // Rex
+  ...leaderFront('[Ready an exhausted enemy unit]: The next event you play this phase costs 1 less.', {
+    usable: anyUnitPasses(exhaustedEnemy),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, exhaustedEnemy), 'ready an exhausted enemy unit', false, '1'),
+  }),
+  ...attacks('You may ready an exhausted enemy unit. If you do, the next event you play this phase costs 2 less.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, exhaustedEnemy), 'ready an exhausted enemy unit so the next event costs 2 less', true, '2')),
+  ifYouDo: (s, ctx) => grantNextUnit(readyUnit(s, ctx.targetInstanceId!), ctx.owner, { event: true, costDelta: -Number(ctx.step) }),
+})
+const JABBA_ROUND_KEY = 'SEC_002#round'
+registerCard('SEC_002', { // Jabba the Hutt
+  ...leaderFront('A friendly damaged unit deals 1 damage to an enemy unit. If the friendly unit has 3 or more damage on it, it deals 2 damage instead.', {
+    cost: 1,
+    usable: both(anyUnitPasses(damagedFriendly), anyUnitPasses(pickEnemy)),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, damagedFriendly), 'choose the damaged friendly unit that deals the damage', false, 'dealer'),
+  }),
+  abilities: [{
+    trigger: 'whenFriendlyDamagedSurvives',
+    description: 'You may have that unit deal that much damage to an enemy unit. Use this ability only once each round.',
+    effect: (s, ctx) => {
+      if (selfOf(s, ctx)?.usedAbilities?.includes(JABBA_ROUND_KEY)) return s
+      const hurt = (ctx.damagedSurvivors ?? []).filter(d => d.instanceId !== ctx.sourceInstanceId && findUnit(s, d.instanceId)?.owner === ctx.owner)
+      if (hurt.length === 0 || !pickedIds(s, ctx, pickEnemy).length) return s
+      return hurt.length === 1
+        ? unitThen(s, ctx, pickedIds(s, ctx, pickEnemy), `have it deal ${hurt[0].amount} damage to an enemy unit`, true, `deal:${hurt[0].amount}`, hurt[0].instanceId)
+        : unitThen(s, ctx, hurt.map(d => d.instanceId), 'choose the damaged unit that deals damage to an enemy unit', true, `dealer:${JSON.stringify(hurt)}`)
+    },
+  }],
+  ifYouDo: (s, ctx) => {
+    const step = ctx.step ?? ''
+    if (step === 'dealer') return unitThen(s, ctx, pickedIds(s, ctx, pickEnemy), 'choose the enemy unit to damage', false, 'target', ctx.targetInstanceId)
+    if (step === 'target') {
+      const dealer = findUnit(s, ctx.unitChosen ?? '')?.unit
+      return dealer ? dealDamageToUnit(s, ctx.targetInstanceId!, dealer.damage >= 3 ? 2 : 1) : s
+    }
+    if (step.startsWith('dealer:')) {
+      const amount = (JSON.parse(step.slice('dealer:'.length)) as { instanceId: string; amount: number }[]).find(d => d.instanceId === ctx.targetInstanceId)?.amount ?? 0
+      return unitThen(s, ctx, pickedIds(s, ctx, pickEnemy), `have it deal ${amount} damage to an enemy unit`, true, `deal:${amount}`, ctx.targetInstanceId)
+    }
+    // "deal:N": the once-a-round limit is spent only when the ability is used.
+    return dealDamageToUnit(markAbilityUsed(s, ctx.owner, ctx.sourceInstanceId!, JABBA_ROUND_KEY), ctx.targetInstanceId!, Number(step.slice('deal:'.length)))
   },
 })

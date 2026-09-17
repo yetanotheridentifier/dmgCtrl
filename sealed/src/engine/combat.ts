@@ -27,9 +27,14 @@ function preventedDamage(state: GameState, target: UnitState, amount: number, ct
   return Math.min(amount, Math.max(0, prevented))
 }
 
-/** True while a lasting effect keeps the unit from being defeated by having no remaining HP (The Tragedy of Plagueis). */
+/**
+ * True while the unit isn't defeated by having no remaining HP: a lasting effect (The Tragedy of Plagueis)
+ * or its own card (Chirrut Îmwe, during the action phase). When the condition lapses, the state-based
+ * sweep defeats it.
+ */
 function survivesNoHp(state: GameState, unit: UnitState): boolean {
   return (state.lastingEffects ?? []).some(e => e.survivesNoHp && e.targetInstanceId === unit.instanceId)
+    || abilityCardIds(unit).some(id => getCardDefinition(id)?.survivesNoHp?.(state, unit) ?? false)
 }
 
 /** Product of the damage multipliers the unit's card and upgrades contribute. */
@@ -66,7 +71,7 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
   const p = state.players[owner]
   const survivors: UnitState[] = []
   const defeated: UnitState[] = []
-  let survivedDamage = false
+  const damagedSurvivors: { instanceId: string; amount: number }[] = []
   const damagedIds: string[] = []
   // Spending a shield DEFEATS the token (#419), so its owner reacts just as they would to a card
   // upgrade dying. Collected here and settled in `finishDefeats` alongside the upgrades lost to
@@ -115,7 +120,7 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
     } else {
       survivors.push(next)
       // "When a friendly unit is dealt damage and survives" (Rancor Keeper).
-      if (extra > 0) survivedDamage = true
+      if (extra > 0) damagedSurvivors.push({ instanceId: u.instanceId, amount: extra })
     }
   }
 
@@ -129,7 +134,7 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
   // "The first time this unit would take damage each phase" (Umbaran Mobile Cannon) counts what was
   // stopped, which is exactly what `damagedUnits` cannot record.
   for (const id of preventedIds) result = recordDamagePrevented(result, id)
-  if (survivedDamage) result = fireUnitsTrigger(result, 'whenFriendlyDamagedSurvives', owner)
+  if (damagedSurvivors.length > 0) result = fireUnitsTrigger(result, 'whenFriendlyDamagedSurvives', owner, { damagedSurvivors })
   // Resolve the batch here, which is where it used to resolve. `drainTriggers` stops of its own accord
   // as soon as a player has something to order, so deferral costs nothing when there is no decision:
   // the overwhelmingly common single-ability defeat behaves exactly as it did.

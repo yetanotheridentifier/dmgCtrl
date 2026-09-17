@@ -115,7 +115,14 @@ unit arriving, so "when 1 or more upgrades attach to this unit" still fires for 
 `whenPlayed`, `onAttack`, `onAttackEnd`, `onDefense`, `whenDefeated`, `whenReadies`,
 `whenRegroupStarts`, `whenTakeInitiative`, `whenPlayOrCreateUnit`, `whenUpgradeAttached`,
 `whenFriendlyUpgradeDefeated`, `whenFriendlyUnitDefeated`, `whenEnemyUnitDefeated`,
-`whenFriendlyDamagedSurvives`, `whenEnemyAttacksBase`, `whenOwnBaseDamaged`, `whenFriendlyAttackEnds`.
+`whenFriendlyDamagedSurvives`, `whenEnemyAttacksBase`, `whenOwnBaseDamaged`, `whenEnemyBaseDamaged`,
+`whenFriendlyAttackEnds`, `whenDeployed`.
+
+`whenFriendlyDamagedSurvives` fires once per damage event and names each unit that survived it, with
+how much it was dealt, in `ctx.damagedSurvivors`. `whenEnemyBaseDamaged` ("when you deal damage to an
+enemy base") fires on the units of the base owner's opponent, unless the damage came from a card the
+base's own controller controls. `whenDeployed` fires on a leader unit as it deploys, after its entry
+keywords.
 
 Two attack-end points read the same on cards but mean different things, and conflating them makes a
 unit fire on other units' attacks:
@@ -166,6 +173,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | `preventUnitDamage` | stops some of an instance of damage, with nothing to decide |
 | `suppressesBaseHealing` | bases can't be healed while this card is in play |
 | `readiesInRegroup` | whether this unit readies at regroup; absent means it does |
+| `survivesNoHp` | the unit isn't defeated by having no remaining HP while this holds; the state-based sweep defeats it once it stops |
 | `cannotReady` | the unit readies neither at regroup nor by an ability (Frozen in Carbonite) |
 | `ifYouDo` | the rest of an ability after a choice partway through it (see [choices.md](choices.md)) |
 | `delayed` | runs an effect the card left for later, once (see Delayed effects in [keywords-effects.md](keywords-effects.md)) |
@@ -210,6 +218,22 @@ A leader has two sides and they register separately on one card id:
   `legalMoves` as `useLeaderAbility` and gated on the leader being ready and affordable; `abilities`
   are triggered, and fire regardless of exhaustion.
 - The top-level `abilities` are the deployed (back) side, registering exactly like a unit's.
+
+The front side also carries two constant hooks, since an undeployed leader is not a unit and the unit
+hooks never see it: `leaderAbilities.aura` (Director Krennic's "each friendly damaged unit gets
++1/+0"), shaped like `aura` with the leader's controller in place of a source unit and folded into the
+same aura pass, and `leaderAbilities.waivesAspectPenalty` (Hera Syndulla), read by `effectiveCost`.
+An undeployed leader's triggered abilities fire at `whenRegroupStarts` as well as at the leader-specific
+points.
+
+A front action is written with the When Played helpers through `leaderFront` in `cardDefinitions.ts`:
+its effect is handed a context whose source is `<cardId>-leader`, so "another unit" excludes nothing
+and every choice it raises still has a stable id. `usable` gates it, so an action is never offered
+when it could do nothing. A card whose front and back both resume after a choice tell the two apart by
+`step`.
+
+A deployed leader and a created token unit both count as entering play (`enteredPlayThisPhase`), as a
+unit played from hand does.
 
 **Exhaustion only blocks abilities whose cost is exhausting.** A triggered front-side ability whose
 cost is resources fires whether the leader is exhausted or not.

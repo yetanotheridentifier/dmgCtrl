@@ -2,7 +2,7 @@ import type { Action, AttackTarget } from './actions'
 import type { Arena, GameState, PlayerId, UnitState } from './types'
 import type { DelayedEffect, IfYouDo, PendingChoice, PendingTrigger, TriggerContext, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds } from './types'
-import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
+import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets, offerAttack } from './legalMoves'
 import { collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, stampChoiceSource, type TriggerPoint } from './abilities'
@@ -95,7 +95,8 @@ function resolveAction(state: GameState, action: Action): GameState {
       return requirePhase(state, 'action', () => {
         // Deploying a Support leader opens a support attack — hold the turn to resolve it.
         const deployed = deployLeader(state)
-        return activeChoice(deployed) ? resetPasses(deployed) : advanceTurn(resetPasses(deployed))
+        // A When Deployed an opponent answers (Admiral Trench) hands control to them first.
+        return activeChoice(deployed) ? resetPasses(handOffOpponentChoice(deployed, deployed.activePlayer)) : advanceTurn(resetPasses(deployed))
       })
     case 'useAbility':
       return requirePhase(state, 'action', () => useAbility(state, action.instanceId, action.cardId, action.index))
@@ -343,7 +344,7 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   // grant (Sabine → Shielded) — so a granted Ambush/Shielded/Hidden fires just like a printed one.
   // "Your next unit …" grants matching this card — their keywords/enters-ready apply here
   // (the cost delta was already folded into `effectiveCost` at play time).
-  const grants = (state.players[owner].nextUnitGrants ?? []).filter(g => nextUnitGrantMatches(card, g))
+  const grants = (state.players[owner].nextUnitGrants ?? []).filter(g => nextUnitGrantMatches(card, g, state, owner))
   const grantKeywords = grants.flatMap(g => g.keywords ?? [])
   // Every "enters play ready" source, in one place: a caller override (`ready`), a Neel-style grant,
   // or the card's own condition (Elzar Mann). Both the construction below AND the revert-to-
@@ -373,7 +374,8 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   // leaves them in place for a later matching unit.
   if (grants.length > 0) {
     if (grantKeywords.length > 0) next = addLastingEffect(next, { targetInstanceId: newUnit.instanceId, keywords: grantKeywords })
-    const remaining = (next.players[owner].nextUnitGrants ?? []).filter(g => !nextUnitGrantMatches(card, g))
+    // By identity, not by matching again: the unit is now on the board, and a filter that reads the board would see it.
+    const remaining = (next.players[owner].nextUnitGrants ?? []).filter(g => !grants.includes(g))
     next = updatePlayer(next, owner, { nextUnitGrants: remaining.length > 0 ? remaining : undefined })
   }
 
@@ -533,10 +535,14 @@ function playEvent(state: GameState, handIndex: number): GameState {
   }
 
   const paid = payCost(p, effectiveCost(state, playerId, card))
+  // "The next event you play this phase costs less" (Rex): paid for above, so spent now.
+  const eventGrants = (p.nextUnitGrants ?? []).filter(g => nextUnitGrantMatches(card, g, state, playerId))
+  const grantsLeft = (p.nextUnitGrants ?? []).filter(g => !eventGrants.includes(g))
   let next = updatePlayer(state, playerId, {
     ...paid,
     hand: paid.hand.filter((_, i) => i !== handIndex),
     discard: [...p.discard, card.id],
+    ...(eventGrants.length ? { nextUnitGrants: grantsLeft.length ? grantsLeft : undefined } : {}),
   })
   // After the cost, so Peli Motto's "first non-unit card each phase" counts this one as the first.
   next = recordCardPlayed(next, playerId, card.id)
@@ -2106,11 +2112,14 @@ function deployLeader(state: GameState, epicUsed = true): GameState {
     leader: { ...p.leader, deployed: true, epicActionUsed: epicUsed ? true : p.leader.epicActionUsed },
     units: [...p.units, leaderUnit],
   })
-  next = { ...next, instanceCounter: state.instanceCounter + 1 }
+  next = recordUnitEntered({ ...next, instanceCounter: state.instanceCounter + 1 }, playerId, leaderUnit.instanceId)
   // A deployed leader enters ready (CR 3.4.4) and runs its on-enter keywords — including any GRANTED
   // at deploy (Moff Gideon gains keywords from an Imperial in your discard): a Shield token,
   // Hidden, and an Ambush or Support attack.
-  return applyDeployKeywords(next, playerId, leaderUnit.instanceId)
+  next = applyDeployKeywords(next, playerId, leaderUnit.instanceId)
+  // Then its own "When Deployed", as one batch.
+  const inPlay = next.players[playerId].units.find(u => u.instanceId === leaderUnit.instanceId)
+  return inPlay ? fireBatch(next, collectUnitTriggers(next, 'whenDeployed', inPlay, playerId)) : next
 }
 
 /**
@@ -2131,7 +2140,7 @@ function applyEntryKeywords(state: GameState, owner: PlayerId, instanceId: strin
   const shieldable = unitNow(next)
   if (!shieldable) return next
   if (unitHasKeyword(next, shieldable, 'Shielded') && !hasToken(shieldable.upgrades, TOKEN_SHIELD)) {
-    next = attachUpgrades(next, instanceId, [{ cardId: TOKEN_SHIELD, owner }])
+    next = attachUpgrades(recordTokenCreated(next, owner), instanceId, [{ cardId: TOKEN_SHIELD, owner }])
   }
   const hideable = unitNow(next)!
   if (unitHasKeyword(next, hideable, 'Hidden') && !hideable.hidden) {
@@ -2241,8 +2250,12 @@ function batchOutstanding(before: GameState, after: GameState): boolean {
 }
 
 /** Fire a trigger for every unit in play, both sides, as one batch. Board-wide events like regroup start. */
+/** `point` on every unit in play and each undeployed leader (Doctor Aphra's "when the regroup phase starts"), as one batch. */
 function fireForAllUnits(state: GameState, point: TriggerPoint): GameState {
-  return fireBatch(state, (['player', 'opponent'] as PlayerId[]).flatMap(owner => collectUnitsTrigger(state, point, owner)))
+  return fireBatch(state, (['player', 'opponent'] as PlayerId[]).flatMap(owner => [
+    ...collectLeaderTriggers(state, point, owner),
+    ...collectUnitsTrigger(state, point, owner),
+  ]))
 }
 
 /**

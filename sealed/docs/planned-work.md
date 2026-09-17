@@ -143,7 +143,10 @@ Two phases:
   upgrades**: the ones existing primitives expressed shipped first, and the hooks and choices the rest
   needed followed, group by group. Vult Skerris's Defender (needs "discarded a card this phase") and
   the 15 constant-ability cards lifted out are carried by #477, except Director Krennic, which is on
-  #459.
+  #459. **Leaders are finished** on both sides (#458): the 20 not built are on the ticket of what
+  blocks them, #465 pilots (7), #461 Experience (2), #605 token units (2), #471 play from discard (2),
+  #466 capture, #467 Bounty, #470 Plot, #474 trigger points, #468 playing any card type, #602 Credit
+  (a friendly token of any kind) and #477 (defeat by an enemy card ability).
   The ticket bodies carry the sizes from before token units, Credit
   tokens, Disclose and indirect damage were blockers, so most are smaller than they say (When Defeated
   by a quarter, bases barely); the corrected counts are commented on each.
