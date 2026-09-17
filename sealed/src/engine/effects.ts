@@ -1,5 +1,5 @@
 import type { DamageSource, GameState, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState } from './types'
-import { updatePlayer, pushChoice, recordBaseDamaged, recordCardsDrawn, recordUpgradeDefeated, recordUnitHealed, recordUnitLeftPlay, abilityCardIds } from './types'
+import { updatePlayer, pushChoice, recordBaseDamaged, recordCardsDrawn, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, abilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { TriggerPoint } from './abilities'
@@ -408,11 +408,12 @@ export function createTokenUnit(state: GameState, owner: PlayerId, tokenCardId: 
     upgrades: shielded ? [{ cardId: TOKEN_SHIELD, owner }] : [],
   }
   const p = state.players[owner]
-  return {
+  // A created token enters play, so it counts for "units that entered play this phase" (Padmé Amidala).
+  return recordUnitEntered({
     ...state,
     instanceCounter: state.instanceCounter + 1,
     players: { ...state.players, [owner]: { ...p, units: [...p.units, token] } },
-  }
+  }, owner, token.instanceId)
 }
 
 /** Draw `n` cards for a player (takes what's there if the deck is short). */

@@ -10,6 +10,8 @@ import { IMPLEMENTED_LEADERS } from '../data/implementedCards'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helpers/engineFixtures'
 import { TOKEN_SHIELD } from '../engine/tokenUpgrades'
+import { TOKEN_MANDALORIAN } from '../engine/tokenUnits'
+import { createTokenUnit } from '../engine/effects'
 import type { Action } from '../engine/actions'
 import type { EngineCard, GameState, LeaderState, PendingChoice, PhaseEvents, PlayerId, UnitState } from '../engine/types'
 
@@ -28,6 +30,8 @@ const SHIPPED = [
   // A: simple fronts, On Attack and constant backs
   'SOR_014', 'IBH_53', 'IBH_1', 'SOR_010', 'SOR_005', 'JTL_007', 'JTL_004', 'TWI_015', 'TWI_006', 'TWI_003', 'SEC_015',
   'SOR_011', 'SHD_003', 'SHD_012', 'JTL_010', 'LOF_011', 'LAW_005', 'SOR_002', 'SHD_011', 'LAW_012', 'LOF_004', 'TWI_010',
+  // B: attacks, and units entering play
+  'TWI_012', 'TWI_014', 'TWI_009', 'SHD_007', 'SOR_012', 'SOR_018', 'SOR_009', 'TS26_7', 'TS26_4', 'LAW_001', 'TS26_2',
 ]
 /** Scoped by the triage but lifted out to the ticket that owns their blocker. */
 const LIFTED = [
@@ -66,6 +70,11 @@ const F: Record<string, EngineCard> = {
   VIL_EV: card({ id: 'VIL_EV', type: 'event', cost: 1, aspects: ['Villainy'] }),
   FO_EV: card({ id: 'FO_EV', type: 'event', cost: 1, traits: ['FIRST ORDER'] }),
   EV: card({ id: 'EV', type: 'event', cost: 1 }),
+  CHEAP: src('CHEAP', { cost: 3 }),
+  PRICEY: src('PRICEY', { cost: 4 }),
+  TOUGH: src('TOUGH', { power: 1, hp: 20 }),
+  SMALL: src('SMALL', { power: 1, hp: 1 }),
+  REB2: src('REB2', { traits: ['REBEL'] }),
 }
 
 const unit = (instanceId: string, cardId: string, over: Partial<UnitState> = {}): UnitState =>
@@ -416,5 +425,157 @@ describe('leaders A: searches', () => {
     expect(choice(used)).toMatchObject({ kind: 'searchDraw', revealed: ['EV', 'GRD', 'SPC'], eligibleIndices: [0, 1, 2] })
     const a = attack(back('LAW_005', { deck }, { units: [unit('e', 'GRD')] }, rebel), 'L', 'e')
     expect(choice(a).kind).toBe('searchDraw')
+  })
+})
+
+// ── B: attacks, and units entering play ───────────────────────────────────────────────────────────
+
+type AttackMove = Extract<Action, { type: 'attack' }>
+const attackMoves = (s: GameState) => moves(s).filter((m): m is AttackMove => m.type === 'attack')
+const attackers = (s: GameState) => [...new Set(attackMoves(s).map(m => m.attackerId))].sort()
+const baseOffered = (s: GameState, attackerId: string) => attackMoves(s).some(m => m.attackerId === attackerId && m.target.kind === 'base')
+
+describe('leaders B: attack with a unit', () => {
+  it('Anakin Skywalker (TWI_012) deals 2 to his own base to attack with a unit, +2/+0 against a unit; deployed he gets +1/+0 per 5 damage on your base', () => {
+    const s = front('TWI_012', { units: [unit('g', 'GRD')] }, { units: [unit('e', 'TOUGH')] })
+    const used = use(s)
+    expect(baseDamage(used, 'player')).toBe(2)
+    expect(attackers(used)).toEqual(['g'])
+    expect(U(attack(used, 'g', 'e'), 'e')!.damage).toBe(4)
+    expect(baseDamage(attack(use(s), 'g'), 'opponent')).toBe(2)
+    const hurt = back('TWI_012', { base: { cardId: 'TST_B', damage: 10 } })
+    expect(effectivePower(hurt, U(hurt, 'L')!)).toBe((F.TWI_012.power ?? 0) + 2)
+    expect(unitHasKeyword(hurt, U(hurt, 'L')!, 'Overwhelm')).toBe(true)
+  })
+
+  it('Asajj Ventress (TWI_014) attacks with a unit, +1/+0 after an event this phase; deployed, after an event she gets +1/+0 and strikes first', () => {
+    const event = { phaseEvents: phaseEvents({ played: { player: ['EV'], opponent: [] } }) }
+    const plain = use(front('TWI_014', { units: [unit('g', 'GRD')] }, { units: [unit('e', 'TOUGH')] }))
+    expect(U(attack(plain, 'g', 'e'), 'e')!.damage).toBe(2)
+    const boosted = use(front('TWI_014', { units: [unit('g', 'GRD')] }, { units: [unit('e', 'TOUGH')] }, event))
+    expect(U(attack(boosted, 'g', 'e'), 'e')!.damage).toBe(3)
+    expect(U(attack(back('TWI_014', {}, { units: [unit('e', 'SMALL')] }), 'L', 'e'), 'L')!.damage).toBe(1)
+    const first = attack(back('TWI_014', {}, { units: [unit('e', 'STRONG', { damage: 7 })] }, event), 'L', 'e')
+    expect(U(first, 'L')!.damage).toBe(0)
+    // Without the event she trades: the defender's 4 power strikes back at her 4 HP.
+    expect(U(attack(back('TWI_014', {}, { units: [unit('e', 'STRONG', { damage: 7 })] }), 'L', 'e'), 'L')).toBeUndefined()
+    const s = back('TWI_014', {}, {}, event)
+    expect(effectivePower(s, U(s, 'L')!, { attacking: true })).toBe((F.TWI_014.power ?? 0) + 1)
+  })
+
+  it('Maul (TWI_009) attacks with a unit that gains Overwhelm; deployed each other friendly unit gains Overwhelm', () => {
+    const used = use(front('TWI_009', { units: [unit('g', 'GRD')] }, { units: [unit('e', 'SMALL')] }))
+    expect(baseDamage(attack(used, 'g', 'e'), 'opponent')).toBe(1)
+    const s = back('TWI_009', { units: [unit('g', 'GRD')] }, { units: [unit('e', 'GRD')] })
+    expect(unitHasKeyword(s, U(s, 'g')!, 'Overwhelm')).toBe(true)
+    expect(unitHasKeyword(s, U(s, 'L')!, 'Overwhelm')).toBe(true)
+    expect(unitHasKeyword(s, U(s, 'e')!, 'Overwhelm')).toBe(false)
+  })
+
+  it('Moff Gideon (SHD_007) attacks with a unit that costs 3 or less, +1/+0 against a unit; deployed those units get +1/+0 and Overwhelm attacking a unit', () => {
+    const s = front('SHD_007', { units: [unit('c', 'CHEAP'), unit('p', 'PRICEY')] }, { units: [unit('e', 'TOUGH')] })
+    const used = use(s)
+    expect(attackers(used)).toEqual(['c'])
+    expect(U(attack(used, 'c', 'e'), 'e')!.damage).toBe(3)
+    expect(baseDamage(attack(use(s), 'c'), 'opponent')).toBe(2)
+    const d = back('SHD_007', { units: [unit('c', 'CHEAP'), unit('p', 'PRICEY')] }, { units: [unit('e', 'TOUGH'), unit('sm', 'SMALL')] })
+    expect(U(attack(d, 'c', 'e'), 'e')!.damage).toBe(3)
+    expect(U(attack(d, 'p', 'e'), 'e')!.damage).toBe(2)
+    expect(baseDamage(attack(d, 'c', 'sm'), 'opponent')).toBe(2)
+    expect(baseDamage(attack(d, 'c'), 'opponent')).toBe(2)
+    expect(unitHasKeyword(d, U(d, 'L')!, 'Overwhelm')).toBe(true)
+  })
+
+  it('IG-88 (SOR_012) attacks with a unit, +1/+0 while you control more units; deployed each other friendly unit gains Raid 1', () => {
+    const more = use(front('SOR_012', { units: [unit('g', 'GRD'), unit('g2', 'GRD')] }, { units: [unit('e', 'TOUGH')] }))
+    expect(U(attack(more, 'g', 'e'), 'e')!.damage).toBe(3)
+    const level = use(front('SOR_012', { units: [unit('g', 'GRD')] }, { units: [unit('e', 'TOUGH')] }))
+    expect(U(attack(level, 'g', 'e'), 'e')!.damage).toBe(2)
+    const s = back('SOR_012', { units: [unit('g', 'GRD')] })
+    expect(unitKeywordValue(s, U(s, 'g')!, 'Raid')).toBe(1)
+    expect(unitHasKeyword(s, U(s, 'L')!, 'Raid')).toBe(false)
+  })
+
+  it('Jyn Erso (SOR_018) attacks with a unit whose defender gets -1/-0; deployed, every friendly attacker\'s defender does', () => {
+    const used = use(front('SOR_018', { units: [unit('g', 'GRD')] }, { units: [unit('e', 'STRONG')] }))
+    expect(U(attack(used, 'g', 'e'), 'g')!.damage).toBe(3)
+    const s = back('SOR_018', { units: [unit('g', 'GRD')] }, { units: [unit('e', 'STRONG'), unit('e2', 'STRONG')] })
+    expect(U(attack(s, 'g', 'e'), 'g')!.damage).toBe(3)
+    const theirs = attack({ ...s, activePlayer: 'opponent' }, 'e2', 'g')
+    expect(U(theirs, 'e2')!.damage).toBe(2)
+  })
+
+  it('Leia Organa (SOR_009) attacks with a Rebel, then may attack with another; deployed, when she completes an attack she may attack with a Rebel', () => {
+    const used = use(front('SOR_009', { units: [unit('r', 'REB'), unit('r2', 'REB2'), unit('g', 'GRD')] }))
+    expect(attackers(used)).toEqual(['r', 'r2'])
+    const first = attack(used, 'r')
+    expect(attackers(first)).toEqual(['r2'])
+    expect(declinable(first)).toBe(true)
+    const a = attack(back('SOR_009', { units: [unit('r', 'REB'), unit('g', 'GRD')] }), 'L')
+    expect(attackers(a)).toEqual(['r'])
+    expect(declinable(a)).toBe(true)
+    expect(unitKeywordValue(a, U(a, 'L')!, 'Raid')).toBe(1)
+  })
+
+  it('Asajj Ventress (TS26_7) attacks with a token unit, +1/+0; deployed she gets +2/+0 once a token unit has attacked this phase', () => {
+    const used = use(front('TS26_7', { units: [unit('t', 'TOKEN_MANDALORIAN'), unit('g', 'GRD')] }))
+    expect(attackers(used)).toEqual(['t'])
+    expect(baseDamage(attack(used, 't'), 'opponent')).toBe(3)
+    const quiet = back('TS26_7', { units: [unit('t', 'TOKEN_MANDALORIAN')] })
+    expect(effectivePower(quiet, U(quiet, 'L')!)).toBe(F.TS26_7.power)
+    const s = back('TS26_7', { units: [unit('t', 'TOKEN_MANDALORIAN')] }, {}, { phaseEvents: phaseEvents({ attackedUnits: ['t'] }) })
+    expect(effectivePower(s, U(s, 'L')!)).toBe((F.TS26_7.power ?? 0) + 2)
+  })
+
+  it('Padmé Amidala (TS26_4) attacks with one of 2 units that entered play, even exhausted, not a base; deployed she may do the same as her attack ends', () => {
+    const units = [unit('a', 'GRD', { exhausted: true }), unit('b', 'GRD', { exhausted: true }), unit('g', 'GRD', { exhausted: true })]
+    const entered = { phaseEvents: phaseEvents({ enteredPlay: { player: ['a', 'b'], opponent: [] } }) }
+    expect(usable(front('TS26_4', { units }, { units: [unit('e', 'TOUGH')] }, { phaseEvents: phaseEvents({ enteredPlay: { player: ['a'], opponent: [] } }) }))).toBe(false)
+    const used = use(front('TS26_4', { units }, { units: [unit('e', 'TOUGH')] }, entered))
+    expect(attackers(used)).toEqual(['a', 'b'])
+    expect(baseOffered(used, 'a')).toBe(false)
+    const a = attack(back('TS26_4', { units }, { units: [unit('e', 'TOUGH')] }, entered), 'L', 'e')
+    expect(attackers(a)).toEqual(['a', 'b'])
+    expect(baseOffered(a, 'a')).toBe(false)
+    expect(declinable(a)).toBe(true)
+  })
+
+  it('Saw Gerrera (LAW_001) attacks with a unit, +2/+0 and Overwhelm, then defeats it; deployed, if he survives he may do the same with another unit', () => {
+    const used = use(front('LAW_001', { units: [unit('g', 'GRD')] }, { units: [unit('e', 'SMALL')] }))
+    const hit = attack(used, 'g', 'e')
+    expect(baseDamage(hit, 'opponent')).toBe(3)
+    expect(U(hit, 'g')).toBeUndefined()
+    const a = attack(back('LAW_001', { units: [unit('g', 'GRD')] }, { units: [unit('e', 'TOUGH')] }), 'L', 'e')
+    expect(attackers(a)).toEqual(['g'])
+    expect(declinable(a)).toBe(true)
+    const second = attack(a, 'g')
+    expect(baseDamage(second, 'opponent')).toBe(4)
+    expect(U(second, 'g')).toBeUndefined()
+    const s = back('LAW_001', { units: [unit('g', 'GRD')] }, { units: [unit('e', 'STRONG')] })
+    const doomed = { ...s, players: { ...s.players, player: { ...s.players.player, units: s.players.player.units.map(u => (u.instanceId === 'L' ? { ...u, damage: 6 } : u)) } } }
+    noChoice(attack(doomed, 'L', 'e'))
+  })
+})
+
+describe('leaders B: units that entered play', () => {
+  it('a deployed leader and a created token count as entering play this phase', () => {
+    const s = board({ resources: ready(10) })
+    const deployedNow = resolve(s, { type: 'deployLeader' })
+    const leaderUnit = deployedNow.players.player.units.find(u => u.isLeader)!
+    expect(deployedNow.phaseEvents?.enteredPlay.player).toContain(leaderUnit.instanceId)
+    const created = createTokenUnit(s, 'opponent', TOKEN_MANDALORIAN)
+    const token = created.players.opponent.units[0]
+    expect(created.phaseEvents?.enteredPlay.opponent).toEqual([token.instanceId])
+  })
+
+  it('Anakin Skywalker (TS26_2) shields one of 2 units that entered play this phase; deployed he shields another friendly unit that did', () => {
+    const units = [unit('a', 'GRD'), unit('b', 'GRD'), unit('g', 'GRD')]
+    expect(usable(front('TS26_2', { units }, {}, { phaseEvents: phaseEvents({ enteredPlay: { player: ['a'], opponent: [] } }) }))).toBe(false)
+    const entered = { phaseEvents: phaseEvents({ enteredPlay: { player: ['a', 'b'], opponent: [] } }) }
+    const used = use(front('TS26_2', { units }, {}, entered))
+    expect(unitOffers(used)).toEqual(['a', 'b'])
+    const a = attack(back('TS26_2', { units }, { units: [unit('e', 'TOUGH')] }, { phaseEvents: phaseEvents({ enteredPlay: { player: ['a', 'L'], opponent: [] } }) }), 'L', 'e')
+    expect(unitOffers(a)).toEqual(['a'])
+    expect(declinable(a)).toBe(false)
   })
 })

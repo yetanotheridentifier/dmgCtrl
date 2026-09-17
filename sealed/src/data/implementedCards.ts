@@ -197,6 +197,17 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'LAW_012', name: 'Sebulba', front: true, back: true },
   { id: 'LOF_004', name: 'Kanan Jarrus', front: true, back: true },
   { id: 'TWI_010', name: 'Pre Vizsla', front: true, back: true },
+  { id: 'TWI_012', name: 'Anakin Skywalker', front: true, back: true },
+  { id: 'TWI_014', name: 'Asajj Ventress', front: true, back: true },
+  { id: 'TWI_009', name: 'Maul', front: true, back: true },
+  { id: 'SHD_007', name: 'Moff Gideon', front: true, back: true },
+  { id: 'SOR_012', name: 'IG-88', front: true, back: true },
+  { id: 'SOR_018', name: 'Jyn Erso', front: true, back: true },
+  { id: 'SOR_009', name: 'Leia Organa', front: true, back: true },
+  { id: 'TS26_7', name: 'Asajj Ventress', front: true, back: true },
+  { id: 'TS26_4', name: 'Padmé Amidala', front: true, back: true },
+  { id: 'LAW_001', name: 'Saw Gerrera', front: true, back: true },
+  { id: 'TS26_2', name: 'Anakin Skywalker', front: true, back: true },
 ]
 
 export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [

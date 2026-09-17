@@ -6188,3 +6188,118 @@ registerCard('TWI_010', { // Pre Vizsla
   ...gains((s, u) => handOf(s, u) >= 3, KW.saboteur),
   statModifier: (s, u) => (handOf(s, u) >= 6 ? { power: 2 } : {}),
 })
+
+// B: attack with a unit, and units entering play
+/** "Attack with a unit" on a leader's front, offered only while that attack can be made. `before` is a cost paid first. */
+const leaderAttack = (description: string, offer: (s: GameState, ctx: EventCtx) => AttackOffer, o: { cost?: number; usable?: When; before?: (s: GameState, ctx: EventCtx) => GameState } = {}): CardDefinition =>
+  leaderFront(description, {
+    ...(o.cost ? { cost: o.cost } : {}),
+    usable: (s, ctx) => (o.usable?.(s, ctx) ?? true) && actionAttack(ctx.owner, s, offer(s, ctx)),
+    effect: (s, ctx) => {
+      const paid = o.before ? o.before(s, ctx) : s
+      return offerAttack(paid, ctx.owner, `${ctx.sourceInstanceId}-attack`, offer(paid, ctx))
+    },
+  })
+/** "If it's attacking a unit, it gets +N/+0 for this attack." */
+const attackingAUnitBonus = (power: number): CardDefinition => ({ statModifier: (_s, _u, ctx) => (ctx.attacking && !ctx.attackingBase ? { power } : {}) })
+const eventPlayed = playedCardThisPhase(c => c?.type === 'event')
+
+const GRANT_ANAKIN_LEADER = 'GRANT_ANAKIN_LEADER'
+registerCard(GRANT_ANAKIN_LEADER, { sourceCardId: 'TWI_012', ...attackingAUnitBonus(2) })
+registerCard('TWI_012', { // Anakin Skywalker
+  ...leaderAttack('[Deal 2 damage to your base]: Attack with a unit. If it’s attacking a unit, it gets +2/+0 for this attack.', () => ({ grantCardId: GRANT_ANAKIN_LEADER }),
+    { before: (s, ctx) => dealDamageToBase(s, ctx.owner, 2) }),
+  statModifier: (s, u) => { const o = unitOwner(s, u); return o ? perEach(Math.floor(s.players[o].base.damage / 5), 1) : {} },
+})
+const GRANT_ASAJJ_LEADER = 'GRANT_ASAJJ_LEADER'
+registerCard(GRANT_ASAJJ_LEADER, { sourceCardId: 'TWI_014', ...attackBonus(1) })
+registerCard('TWI_014', { // Asajj Ventress
+  ...leaderAttack('Attack with a unit. If you played an event this phase, it gets +1/+0 for this attack.', (s, ctx) => (eventPlayed(s, ctx) ? { grantCardId: GRANT_ASAJJ_LEADER } : {})),
+  // "On Attack: if you played an event this phase" cannot change during her own attack, so it reads as a constant while she attacks.
+  statModifier: (s, u, ctx) => (ctx.attacking && eventPlayed(s, asCtx(s, u)) ? { power: 1 } : {}),
+  dealsDamageFirst: (s, u) => eventPlayed(s, asCtx(s, u)),
+})
+const GRANT_MAUL_LEADER = 'GRANT_MAUL_LEADER'
+registerCard(GRANT_MAUL_LEADER, { sourceCardId: 'TWI_009', conditionalKeywords: () => [KW.overwhelm] })
+registerCard('TWI_009', { // Maul
+  ...leaderAttack('Attack with a unit. It gains Overwhelm for this attack.', () => ({ grantCardId: GRANT_MAUL_LEADER })),
+  ...friendlyAura(() => true, { keywords: [KW.overwhelm] }, true),
+})
+const GRANT_MOFF_GIDEON_LEADER = 'GRANT_MOFF_GIDEON_LEADER'
+registerCard(GRANT_MOFF_GIDEON_LEADER, { sourceCardId: 'SHD_007', ...attackingAUnitBonus(1) })
+const costsAtMost3: Pick = (s, u) => printedCost(s, u) <= 3
+registerCard('SHD_007', { // Moff Gideon
+  ...leaderAttack("Attack with a unit that costs 3 or less. If it's attacking a unit, it gets +1/+0 for this attack.", (s, ctx) =>
+    ({ attacker: { only: pickedIds(s, ctx, pickAll(pickFriendly, costsAtMost3)) }, grantCardId: GRANT_MOFF_GIDEON_LEADER })),
+  // "While attacking an enemy unit": the combat roles exist only for an attack on a unit.
+  aura: (s, _src, tgt, friendly, combat) =>
+    (friendly && combat?.attackerInstanceId === tgt.instanceId && printedCost(s, tgt) <= 3 ? { power: 1, keywords: [KW.overwhelm] } : undefined),
+})
+const GRANT_IG88_LEADER = 'GRANT_IG_EIGHTY_EIGHT_LEADER'
+registerCard(GRANT_IG88_LEADER, { sourceCardId: 'SOR_012', statModifier: (s, u, ctx) => (ctx.attacking && friendliesOf(s, u).length > enemiesOf(s, u).length ? { power: 1 } : {}) })
+registerCard('SOR_012', { // IG-88
+  ...leaderAttack('Attack with a unit. If you control more units than the defending player, the attacker gets +1/+0 for this attack.', () => ({ grantCardId: GRANT_IG88_LEADER })),
+  ...friendlyAura(() => true, { keywords: [KW.raid(1)] }, true),
+})
+const GRANT_JYN_LEADER = 'GRANT_JYN_LEADER'
+registerCard(GRANT_JYN_LEADER, { sourceCardId: 'SOR_018', aura: defenderPowerAura(-1) })
+registerCard('SOR_018', { // Jyn Erso
+  ...leaderAttack('Attack with a unit. The defender gets -1/-0 for this attack.', () => ({ grantCardId: GRANT_JYN_LEADER })),
+  aura: (s, src, tgt, _friendly, combat) => {
+    if (combat?.defenderInstanceId !== tgt.instanceId) return undefined
+    const mine = unitOwner(s, src)
+    return mine !== undefined && findUnit(s, combat.attackerInstanceId)?.owner === mine ? { power: -1 } : undefined
+  },
+})
+const GRANT_LEIA_LEADER = 'GRANT_LEIA_LEADER'
+registerCard(GRANT_LEIA_LEADER, { sourceCardId: 'SOR_009', abilities: [thenAttack('Then, you may attack with another Rebel unit.', { attacker: { trait: 'Rebel' }, optional: true })] })
+registerCard('SOR_009', { // Leia Organa
+  ...leaderAttack('Attack with a Rebel unit. Then, you may attack with another Rebel unit.', () => ({ attacker: { trait: 'Rebel' }, grantCardId: GRANT_LEIA_LEADER })),
+  abilities: [thenAttack('When this unit completes an attack: You may attack with another Rebel unit.', { attacker: { trait: 'Rebel' }, optional: true })],
+})
+const GRANT_ASAJJ_TOKEN_ATTACK = 'GRANT_ASAJJ_TOKEN_ATTACK'
+registerCard(GRANT_ASAJJ_TOKEN_ATTACK, { sourceCardId: 'TS26_7', ...attackBonus(1) })
+const friendlyToken: Pick = (s, u, ctx) => pickFriendly(s, u, ctx) && isTokenCard(u.cardId)
+registerCard('TS26_7', { // Asajj Ventress
+  ...leaderAttack('Attack with a token unit. It gets +1/+0 for this attack.', (s, ctx) => ({ attacker: { only: pickedIds(s, ctx, friendlyToken) }, grantCardId: GRANT_ASAJJ_TOKEN_ATTACK })),
+  statModifier: (s, u) => (attackedWithThisPhase((_st, x) => isTokenCard(x.cardId))(s, asCtx(s, u)) ? { power: 2 } : {}),
+})
+const GRANT_PADME_LEADER = 'GRANT_PADME_LEADER'
+registerCard(GRANT_PADME_LEADER, { sourceCardId: 'TS26_4', cannotAttackBases: () => true })
+const enteredFriendly: Pick = (s, u, ctx) => pickFriendly(s, u, ctx) && enteredPlayThisPhase(s, ctx.owner).includes(u.instanceId)
+const twoEntered: When = (s, ctx) => enteredPlayThisPhase(s, ctx.owner).length >= 2
+registerCard('TS26_4', { // Padmé Amidala
+  ...leaderAttack("If 2 or more friendly units entered play this phase, attack with 1 of them, even if it's exhausted. It can't attack bases for this attack.", (s, ctx) =>
+    ({ attacker: { only: pickedIds(s, ctx, enteredFriendly) }, exhausted: true, grantCardId: GRANT_PADME_LEADER }), { usable: twoEntered }),
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: "You may attack with another friendly unit that entered play this phase, even if it's exhausted. It can't attack bases for this attack.",
+    effect: (s, ctx) => offerAttack(s, ctx.owner, `${ctx.sourceInstanceId}-next`, {
+      attacker: { only: pickedIds(s, ctx, pickAll(enteredFriendly, pickOther)) }, exhausted: true, grantCardId: GRANT_PADME_LEADER, optional: true,
+    }),
+  }],
+})
+const GRANT_SAW_LEADER = 'GRANT_SAW_LEADER'
+registerCard(GRANT_SAW_LEADER, {
+  sourceCardId: 'LAW_001',
+  ...attackBonus(2),
+  conditionalKeywords: () => [KW.overwhelm],
+  abilities: [{ trigger: 'onAttackEnd', description: 'Defeat this unit.', effect: (s, ctx) => (findUnit(s, ctx.sourceInstanceId!) ? defeatUnits(s, [ctx.sourceInstanceId!]) : s) }],
+})
+registerCard('LAW_001', { // Saw Gerrera
+  ...leaderAttack('Attack with a unit. It gets +2/+0 and gains Overwhelm for this attack. After completing this attack, defeat it.', () => ({ grantCardId: GRANT_SAW_LEADER })),
+  abilities: [{
+    trigger: 'onAttackEnd',
+    description: 'If this unit survived, you may attack with another unit. It gets +2/+0 and gains Overwhelm for this attack. After completing this attack, defeat it.',
+    effect: (s, ctx) => (findUnit(s, ctx.sourceInstanceId!)
+      ? offerAttack(s, ctx.owner, `${ctx.sourceInstanceId}-next`, { attacker: { exclude: [ctx.sourceInstanceId!] }, grantCardId: GRANT_SAW_LEADER, optional: true })
+      : s),
+  }],
+})
+registerCard('TS26_2', allOf( // Anakin Skywalker
+  leaderFront('If 2 or more friendly units entered play this phase (including tokens and leaders), give a Shield token to 1 of them.', {
+    usable: both(twoEntered, anyUnitPasses(enteredFriendly)),
+    effect: (s, ctx) => shieldChoice(s, ctx, pickedIds(s, ctx, enteredFriendly), false),
+  }),
+  attacks('Give a Shield token to another friendly unit that entered play this phase.', (s, ctx) => shieldChoice(s, ctx, pickedIds(s, ctx, pickAll(enteredFriendly, pickOther)), false)),
+))

@@ -2106,7 +2106,7 @@ function deployLeader(state: GameState, epicUsed = true): GameState {
     leader: { ...p.leader, deployed: true, epicActionUsed: epicUsed ? true : p.leader.epicActionUsed },
     units: [...p.units, leaderUnit],
   })
-  next = { ...next, instanceCounter: state.instanceCounter + 1 }
+  next = recordUnitEntered({ ...next, instanceCounter: state.instanceCounter + 1 }, playerId, leaderUnit.instanceId)
   // A deployed leader enters ready (CR 3.4.4) and runs its on-enter keywords — including any GRANTED
   // at deploy (Moff Gideon gains keywords from an Imperial in your discard): a Shield token,
   // Hidden, and an Ambush or Support attack.
