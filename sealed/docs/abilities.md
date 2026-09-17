@@ -147,6 +147,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | `costModifier` | cost delta, applied in `effectiveCost` |
 | `costDiscount` | a unit in play discounting cards its controller plays |
 | `waivesAspectPenalty` | a unit in play zeroing the aspect penalty |
+| `ignoresOwnAspectPenalty` | the aspect icons whose penalty a card ignores while it is played (Rey with Kylo Ren) |
 | `attachRestriction` | may this upgrade attach to that unit, when this player plays it ("a friendly unit") |
 | `conditionalKeywords` | extra keywords, folded into `unitKeywords` |
 | `suppressedKeywords` | keywords removed while a condition holds |

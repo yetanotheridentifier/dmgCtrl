@@ -116,7 +116,8 @@ effect (`thenLasting`), leave a delayed effect about it (`thenDelay`), and defea
 play is settled whether it was played or declined (`thenDefeat`, Consolidation of Power).
 `searchPlayFree` caps its plays with `maxPlays` (U-Wing Reinforcement's "up to 3") and takes `thenDelay`
 too; `searchDraw` with `shuffle` shuffles the deck after a search of all of it (Search Your Feelings).
-`nameCard` with `phaseBan` bans the name for both players until the phase ends (Transmission Jamming).
+`nameCard` with `phaseBan` bans the name for both players until the phase ends (Transmission Jamming);
+with `then` it records nothing and hands the name to the card's hook as `nameChosen` (Zuckuss, Chimaera).
 
 ## Ordering triggered abilities
 
