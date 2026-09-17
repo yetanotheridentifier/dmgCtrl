@@ -83,19 +83,21 @@ same guard since a pair of Kelleran Beqs blew the stack.
 
 ```ts
 GameState.lastingEffects?: LastingEffect[]
-// { targetInstanceId, power?, hp?, keywords?, untilEndOfAttack?, abilityCardIds?, cannotAttack?,
-//   cannotBeAttacked?, unlessSentinel?, removeKeywords? }
+// { targetInstanceId, power?, hp?, keywords?, untilEndOfAttack?, untilRoundEnd?, abilityCardIds?,
+//   cannotAttack?, cannotAttackBases?, cannotBeAttacked?, unlessSentinel?, removeKeywords?,
+//   noCombatDamage?, attackersPower?, cannotReady?, preventNext?, survivesNoHp? }
 ```
 
 `addLastingEffect` appends one; `lastingEffectTotals(state, instanceId)` sums those aimed at a unit.
 Folded into stats and keywords exactly like auras.
 
-**The card's text decides how long one lasts**, and there are two durations:
+**The card's text decides how long one lasts**, and there are three durations:
 
 | Text | Effect | Expires |
 | --- | --- | --- |
 | "for this phase" | the default | at the start of the regroup phase, in `clearLastingEffects` |
 | "for this attack" | `untilEndOfAttack: true` | when that attack finishes, in `clearAttackGrants` |
+| "this round (including during the regroup phase)" | `untilRoundEnd: true` | as the next round starts, after the ready step, in `clearRoundEffects` |
 
 A phase-scoped effect is gone before regroup resolves, so a unit defeated *during* regroup uses its
 base stats.
@@ -109,7 +111,21 @@ keywords away for the duration (SpecForce Soldier's Sentinel, Tusken Tracker's H
 the other removals after every grant. Hidden also protects through the unit's `hidden` mark, so an
 effect that takes Hidden away clears the mark as well.
 
-Both expiries run the same **state-based defeat check** immediately afterwards: a unit that only the
+The other prohibitions follow the same pattern, each read beside the printed hook it mirrors:
+`cannotAttackBases` (Fly Casual) by `unitCannotAttackBases`, `cannotReady` (No Good to Me Dead) by
+`unitCannotReady`, and `noCombatDamage` (Betrayed Trust) by the combat step, which deals nothing for that
+unit while it still attacks and defends. `attackersPower` sits on a defender and changes the power of any
+unit attacking it (I Have the High Ground's -4/-0), read by `effectivePower` from the attacker's combat
+context. `survivesNoHp` keeps a unit in play at damage ≥ HP (The Tragedy of Plagueis); when it expires,
+the state-based check below defeats the unit. `preventNext` stops that much of the next instance of
+damage to the unit and is then spent (see Damage prevention).
+
+The game carries two phase-long effects that are not about a unit: `bannedNames`, card names nobody may
+play (Transmission Jamming, read by `namedByOpponent` alongside Ryder Azadi's names), and `shieldedBases`,
+bases whose next damage is prevented whole (Close the Shield Gate, read by `baseDamageAfterPrevention`
+and spent by `dealDamageToBase`). Both clear with the phase's lasting effects.
+
+The phase and attack expiries run the same **state-based defeat check** immediately afterwards: a unit that only the
 expired +HP buff kept alive, now at damage ≥ HP, is defeated then, routing through the normal discard,
 leader-return and `whenDefeated` path.
 
@@ -119,6 +135,17 @@ Improvised Identity) — so a duration is declared by the card and cleaned up in
 
 A card whose bonus is conditional on attacking can instead express it as a `statModifier` gated on
 `ctx.attacking` (Masterstroke), which needs no expiry at all.
+
+## Delayed effects
+
+`GameState.delayedEffects` holds what a card leaves to happen later: `{ cardId, owner, when, unitId? }`.
+`when` is `regroupStart` (Sneak Attack defeats the unit it played, Triple Dark Raid returns its Vehicle to
+hand, Final Showdown loses the game), `actionPhaseStart` (The Eye of Aldhani, whose pay-or-exhaust choices
+are answered before play begins, like a whenReadies choice), or `takeInitiative`, the next time `owner`
+takes the initiative this phase (Premonition of Doom). At its moment each due effect is dropped and then
+run by its card's `delayed` hook, so none runs twice; a `takeInitiative` effect that never ran lapses as
+the regroup phase starts. "At the end of the phase" (Triple Dark Raid) is read as the start of the regroup
+phase that follows it.
 
 ## Spent tokens are defeated upgrades
 
@@ -226,7 +253,9 @@ instance of unit damage passes. Each in-play unit on both sides is asked how muc
 stops, and the total is capped at the damage. It settles **before the Shield token**: damage a card
 prevents is never dealt, so no shield is spent soaking it, and the unit is not "damaged this phase"
 either. What a card stopped is recorded in `phaseEvents.damagePrevented`, which is what a prevention
-limited to once a phase reads, since `damagedUnits` by definition cannot hold it.
+limited to once a phase reads, since `damagedUnits` by definition cannot hold it. A `preventNext`
+lasting effect on the unit (Shien Flurry) is applied in the same place, after the cards, and is spent by
+the first instance it meets.
 
 Unpreventable damage ignores both kinds, and ignores Shields entirely: the token is not even spent.
 
