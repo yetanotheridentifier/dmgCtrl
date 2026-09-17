@@ -95,7 +95,8 @@ function resolveAction(state: GameState, action: Action): GameState {
       return requirePhase(state, 'action', () => {
         // Deploying a Support leader opens a support attack — hold the turn to resolve it.
         const deployed = deployLeader(state)
-        return activeChoice(deployed) ? resetPasses(deployed) : advanceTurn(resetPasses(deployed))
+        // A When Deployed an opponent answers (Admiral Trench) hands control to them first.
+        return activeChoice(deployed) ? resetPasses(handOffOpponentChoice(deployed, deployed.activePlayer)) : advanceTurn(resetPasses(deployed))
       })
     case 'useAbility':
       return requirePhase(state, 'action', () => useAbility(state, action.instanceId, action.cardId, action.index))
@@ -2111,7 +2112,10 @@ function deployLeader(state: GameState, epicUsed = true): GameState {
   // A deployed leader enters ready (CR 3.4.4) and runs its on-enter keywords — including any GRANTED
   // at deploy (Moff Gideon gains keywords from an Imperial in your discard): a Shield token,
   // Hidden, and an Ambush or Support attack.
-  return applyDeployKeywords(next, playerId, leaderUnit.instanceId)
+  next = applyDeployKeywords(next, playerId, leaderUnit.instanceId)
+  // Then its own "When Deployed", as one batch.
+  const inPlay = next.players[playerId].units.find(u => u.instanceId === leaderUnit.instanceId)
+  return inPlay ? fireBatch(next, collectUnitTriggers(next, 'whenDeployed', inPlay, playerId)) : next
 }
 
 /**
@@ -2242,8 +2246,12 @@ function batchOutstanding(before: GameState, after: GameState): boolean {
 }
 
 /** Fire a trigger for every unit in play, both sides, as one batch. Board-wide events like regroup start. */
+/** `point` on every unit in play and each undeployed leader (Doctor Aphra's "when the regroup phase starts"), as one batch. */
 function fireForAllUnits(state: GameState, point: TriggerPoint): GameState {
-  return fireBatch(state, (['player', 'opponent'] as PlayerId[]).flatMap(owner => collectUnitsTrigger(state, point, owner)))
+  return fireBatch(state, (['player', 'opponent'] as PlayerId[]).flatMap(owner => [
+    ...collectLeaderTriggers(state, point, owner),
+    ...collectUnitsTrigger(state, point, owner),
+  ]))
 }
 
 /**

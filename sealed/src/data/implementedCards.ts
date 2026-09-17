@@ -215,6 +215,14 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'SOR_003', name: 'Chewbacca', front: true, back: true },
   { id: 'SEC_007', name: 'Dryden Vos', front: true, back: true },
   { id: 'LOF_005', name: 'Morgan Elsbeth', front: true, back: true },
+  { id: 'LAW_004', name: 'Aurra Sing', front: true, back: true },
+  { id: 'LOF_012', name: 'Rey', front: true, back: true },
+  { id: 'TWI_013', name: 'Mace Windu', front: true, back: true },
+  { id: 'TWI_004', name: 'Yoda', front: true, back: true },
+  { id: 'SHD_002', name: "Qi'ra", front: true, back: true },
+  { id: 'SOR_006', name: 'Emperor Palpatine', front: true, back: true },
+  { id: 'SHD_015', name: 'Doctor Aphra', front: true, back: true },
+  { id: 'JTL_014', name: 'Admiral Trench', front: true, back: true },
 ]
 
 export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [

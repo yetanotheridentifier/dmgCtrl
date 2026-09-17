@@ -55,6 +55,8 @@ export type TriggerPoint =
   | 'whenFriendlyDamagedSurvives'
   | 'onDefense'
   | 'whenPlayOrCreateUnit'
+  // "When Deployed": fires on a leader unit as it deploys, after its entry keywords (Shielded, Hidden).
+  | 'whenDeployed'
 
 /**
  * What one ability's effect is handed when it resolves: who owns it and which card it is on, plus the

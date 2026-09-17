@@ -34,6 +34,8 @@ const SHIPPED = [
   'TWI_012', 'TWI_014', 'TWI_009', 'SHD_007', 'SOR_012', 'SOR_018', 'SOR_009', 'TS26_7', 'TS26_4', 'LAW_001', 'TS26_2',
   // C: plays from hand
   'LOF_010', 'JTL_005', 'SHD_016', 'SHD_013', 'SOR_003', 'SEC_007', 'LOF_005',
+  // D: When Deployed
+  'LAW_004', 'LOF_012', 'TWI_013', 'TWI_004', 'SHD_002', 'SOR_006', 'SHD_015', 'JTL_014',
 ]
 /** Scoped by the triage but lifted out to the ticket that owns their blocker. */
 const LIFTED = [
@@ -83,6 +85,8 @@ const F: Record<string, EngineCard> = {
   SIXU: src('SIXU', { cost: 6 }),
   SENT: src('SENT', { keywords: [{ name: 'Sentinel' }] }),
   SENT2: src('SENT2', { keywords: [{ name: 'Sentinel' }] }),
+  FORCE_EV: card({ id: 'FORCE_EV', type: 'event', cost: 1, traits: ['FORCE'] }),
+  FORCE_UNIT: src('FORCE_UNIT', { traits: ['FORCE'] }),
 }
 
 const unit = (instanceId: string, cardId: string, over: Partial<UnitState> = {}): UnitState =>
@@ -684,5 +688,145 @@ describe('leaders C: play a unit from hand', () => {
     expect(effectiveCost(a, 'player', F.GRD)).toBe(2)
     const alone = attack(back('LOF_005', { hand: ['SENT2'] }, { units: [unit('e', 'TOUGH')] }), 'L', 'e')
     expect(effectiveCost(alone, 'player', F.SENT2)).toBe(2)
+  })
+})
+
+// ── D: When Deployed ──────────────────────────────────────────────────────────────────────────────
+
+const deploy = (s: GameState) => resolve(s, { type: 'deployLeader' })
+/** The leader unit a deploy put on the board. */
+const leaderOf = (s: GameState) => s.players.player.units.find(u => u.isLeader)!
+const cardOptions = (s: GameState) => { const c = choice(s); return c.kind === 'selectCardThen' ? c.candidates : undefined }
+
+describe('leaders D: When Deployed', () => {
+  it('Aurra Sing (LAW_004) defeats a non-leader unit with 1 or less remaining HP; deploying, she may defeat one with 5 or less', () => {
+    const theirs = { units: [unit('e1', 'GRD', { damage: 7 }), unit('e3', 'GRD', { damage: 3 }), unit('e6', 'GRD')] }
+    const used = use(front('LAW_004', {}, theirs))
+    expect(unitOffers(used)).toEqual(['e1'])
+    expect(declinable(used)).toBe(false)
+    const d = deploy(front('LAW_004', {}, theirs))
+    expect(choice(d).kind).toBe('selectUnitToDefeat')
+    expect(unitOffers(d)).toEqual(['e1', 'e3'])
+    expect(declinable(d)).toBe(true)
+    expect(d.activePlayer).toBe('player')
+    const done = accept(d, { targetInstanceId: 'e3' })
+    expect(U(done, 'e3')).toBeUndefined()
+    expect(done.activePlayer).toBe('opponent')
+  })
+
+  it('Rey (LOF_012) deals 1 after a non-unit Force card this phase; deploying, she may discard her hand to draw 2', () => {
+    expect(usable(front('LOF_012', { units: [unit('g', 'GRD')] }, {}, { phaseEvents: phaseEvents({ played: { player: ['FORCE_UNIT'], opponent: [] } }) }))).toBe(false)
+    const used = use(front('LOF_012', { units: [unit('g', 'GRD')] }, {}, { phaseEvents: phaseEvents({ played: { player: ['FORCE_EV'], opponent: [] } }) }))
+    expect(amountOf(choice(used))).toBe(1)
+    noChoice(deploy(front('LOF_012', { deck: ['SPC', 'CHEAP'] })))
+    const d = deploy(front('LOF_012', { hand: ['EV', 'GRD'], deck: ['SPC', 'CHEAP', 'PRICEY'] }))
+    expect(choice(d).kind).toBe('mayPayThen')
+    const done = accept(d)
+    expect(done.players.player.discard).toEqual(['EV', 'GRD'])
+    expect(done.players.player.hand).toEqual(['SPC', 'CHEAP'])
+    expect(skip(d).players.player.hand).toEqual(['EV', 'GRD'])
+  })
+
+  it('Mace Windu (TWI_013) deals 1 to a damaged enemy unit and 1 more at 5 damage; deploying, 2 to each damaged enemy unit', () => {
+    const theirs = { units: [unit('e4', 'GRD', { damage: 4 }), unit('e1', 'GRD', { damage: 1 }), unit('clean', 'GRD')] }
+    const used = use(front('TWI_013', { units: [unit('g', 'GRD', { damage: 1 })] }, theirs))
+    expect(unitOffers(used)).toEqual(['e1', 'e4'])
+    expect(U(accept(used, { targetInstanceId: 'e4' }), 'e4')!.damage).toBe(6)
+    expect(U(accept(used, { targetInstanceId: 'e1' }), 'e1')!.damage).toBe(2)
+    const d = deploy(front('TWI_013', { units: [unit('g', 'GRD', { damage: 1 })] }, theirs))
+    expect([U(d, 'e4')!.damage, U(d, 'e1')!.damage, U(d, 'clean')!.damage, U(d, 'g')!.damage]).toEqual([6, 3, 0, 1])
+  })
+
+  it('Yoda (TWI_004) draws after a unit left play this phase, then puts a hand card on the top or bottom; deploying, he may mill a card to defeat a cheaper enemy', () => {
+    expect(usable(front('TWI_004', { deck: ['EV'] }))).toBe(false)
+    const left = { phaseEvents: phaseEvents({ leftPlay: { player: [], opponent: ['GRD'] } }) }
+    const used = use(front('TWI_004', { hand: ['SPC'], deck: ['EV', 'CHEAP'] }, {}, left))
+    expect(used.players.player.hand).toEqual(['SPC', 'EV'])
+    expect(handOffers(used)).toEqual([0, 1])
+    const picked = accept(used, { handIndex: 0 })
+    expect(choice(picked).kind).toBe('mayPayThen')
+    expect(accept(picked).players.player.deck).toEqual(['SPC', 'CHEAP'])
+    expect(skip(picked).players.player.deck).toEqual(['CHEAP', 'SPC'])
+    const theirs = { units: [unit('c', 'CHEAP'), unit('p', 'PRICEY')] }
+    const d = deploy(front('TWI_004', { deck: ['CHEAP', 'EV'] }, theirs))
+    expect(choice(d).kind).toBe('mayPayThen')
+    const milled = accept(d)
+    expect(milled.players.player.discard).toEqual(['CHEAP'])
+    expect(unitOffers(milled)).toEqual(['c'])
+    expect(declinable(milled)).toBe(false)
+    const s = back('TWI_004')
+    expect(unitKeywordValue(s, U(s, 'L')!, 'Restore')).toBe(2)
+  })
+
+  it("Qi'ra (SHD_002) deals 2 to a friendly unit then shields it; deploying, she heals every unit then deals each half its remaining HP", () => {
+    const used = use(front('SHD_002', { units: [unit('g', 'GRD')] }, { units: [unit('e', 'GRD')] }))
+    expect(unitOffers(used)).toEqual(['g'])
+    const done = accept(used, { targetInstanceId: 'g' })
+    expect(U(done, 'g')!.damage).toBe(2)
+    expect(shields(done, 'g')).toBe(1)
+    const d = deploy(front('SHD_002', { units: [unit('g', 'GRD', { damage: 3 })] }, { units: [unit('e', 'SMALL'), unit('t', 'TOUGH', { damage: 5 })] }))
+    expect([U(d, 'g')!.damage, U(d, 't')!.damage, leaderOf(d).damage]).toEqual([4, 10, Math.floor((F.SHD_002.hp ?? 0) / 2)])
+    expect(U(d, 'e')!.damage).toBe(0)
+  })
+
+  it('Emperor Palpatine (SOR_006) defeats a friendly unit to deal 1 and draw; deploying he takes a damaged non-leader unit; attacking he may defeat another to do it again', () => {
+    const used = use(front('SOR_006', { units: [unit('g', 'GRD')], deck: ['EV'] }, { units: [unit('e', 'GRD')] }))
+    expect(unitOffers(used)).toEqual(['g'])
+    const paid = accept(used, { targetInstanceId: 'g' })
+    expect(U(paid, 'g')).toBeUndefined()
+    expect(paid.players.player.hand).toEqual(['EV'])
+    expect(unitOffers(paid)).toEqual(['e'])
+    const d = deploy(front('SOR_006', {}, { units: [unit('e', 'GRD', { damage: 1 }), unit('clean', 'GRD')] }))
+    expect(unitOffers(d)).toEqual(['e'])
+    const taken = accept(d, { targetInstanceId: 'e' })
+    expect(taken.players.player.units.map(u => u.instanceId)).toContain('e')
+    const a = attack(back('SOR_006', { units: [unit('g', 'GRD')], deck: ['EV'] }, { units: [unit('x', 'TOUGH')] }), 'L', 'x')
+    expect(unitOffers(a)).toEqual(['g'])
+    expect(declinable(a)).toBe(true)
+  })
+
+  it('Doctor Aphra (SHD_015) mills a card as the regroup phase starts; deployed she gets +3/+0 with 5 different costs in her discard, and deploying returns 1 of 3 chosen cards at random', () => {
+    const s = front('SHD_015', { deck: ['EV', 'GRD', 'SPC', 'CHEAP'] }, {}, { consecutivePasses: 1 })
+    const regroup = resolve(s, { type: 'pass' })
+    expect(regroup.phase).toBe('regroup')
+    expect(regroup.players.player.discard).toHaveLength(1)
+    expect(regroup.players.opponent.discard).toHaveLength(0)
+    const costs = back('SHD_015', { discard: ['SMALL', 'GRD', 'CHEAP', 'PRICEY', 'HUGE', 'SIXU'] })
+    expect(effectivePower(costs, U(costs, 'L')!)).toBe((F.SHD_015.power ?? 0) + 3)
+    const fewer = back('SHD_015', { discard: ['GRD', 'CHEAP', 'PRICEY', 'HUGE'] })
+    expect(effectivePower(fewer, U(fewer, 'L')!)).toBe(F.SHD_015.power)
+    noChoice(deploy(front('SHD_015', { discard: ['GRD', 'GRD', 'SPC'] })))
+    const d = deploy(front('SHD_015', { discard: ['GRD', 'GRD', 'SPC', 'EV'] }))
+    expect(cardOptions(d)).toEqual(['GRD', 'SPC', 'EV'])
+    const one = accept(d, { optionIndex: 0 })
+    expect(cardOptions(one)).toEqual(['SPC', 'EV'])
+    const two = accept(one, { optionIndex: 0 })
+    const three = accept(two, { optionIndex: 0 })
+    noChoice(three)
+    expect(three.players.player.hand).toHaveLength(1)
+    expect(['GRD', 'SPC', 'EV']).toContain(three.players.player.hand[0])
+    expect(three.players.player.discard).toHaveLength(3)
+  })
+
+  it('Admiral Trench (JTL_014) discards a card that costs 3 or more to draw; deploying, an opponent discards 2 of his top 4 and he draws 1 of the rest', () => {
+    const used = use(front('JTL_014', { hand: ['EV', 'CHEAP'], deck: ['SPC'] }))
+    expect(handOffers(used)).toEqual([1])
+    const drew = accept(used, { handIndex: 1 })
+    expect(drew.players.player.discard).toEqual(['CHEAP'])
+    expect(drew.players.player.hand).toEqual(['EV', 'SPC'])
+    const d = deploy(front('JTL_014', { deck: ['EV', 'GRD', 'SPC', 'CHEAP', 'PRICEY'] }))
+    expect(choice(d).controller).toBe('opponent')
+    expect(d.activePlayer).toBe('opponent')
+    expect(cardOptions(d)).toEqual(['EV', 'GRD', 'SPC', 'CHEAP'])
+    const first = accept(d, { optionIndex: 0 })
+    expect(cardOptions(first)).toEqual(['GRD', 'SPC', 'CHEAP'])
+    const second = accept(first, { optionIndex: 0 })
+    expect(choice(second).controller).toBe('player')
+    expect(cardOptions(second)).toEqual(['SPC', 'CHEAP'])
+    const done = accept(second, { optionIndex: 1 })
+    expect(done.players.player.hand).toEqual(['CHEAP'])
+    expect(done.players.player.discard).toEqual(['EV', 'GRD', 'SPC'])
+    expect(done.players.player.deck).toEqual(['PRICEY'])
+    expect(done.activePlayer).toBe('opponent')
   })
 })

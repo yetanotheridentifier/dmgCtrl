@@ -6388,3 +6388,173 @@ registerCard('LOF_005', { // Morgan Elsbeth
     return chosen ? playFromHand(s, ctx, { costDelta: -1, test: sharesKeywordWith(s, chosen) }) : s
   },
 })
+
+// D: When Deployed
+const whenDeployed = (description: string, effect: AbilityDef['effect']): CardDefinition => ({ abilities: [{ trigger: 'whenDeployed', description, effect }] })
+const remainingAtMost = (n: number): Pick => (s, u) => nonLeader(s, u) && remainingHp(s, u) <= n
+registerCard('LAW_004', allOf( // Aurra Sing
+  leaderFront('Defeat a non-leader unit with 1 or less remaining HP.', {
+    usable: anyUnitPasses(remainingAtMost(1)),
+    effect: (s, ctx) => targetChoice(s, ctx, 'selectUnitToDefeat', pickedIds(s, ctx, remainingAtMost(1))),
+  }),
+  whenDeployed('You may defeat a non-leader unit with 5 or less remaining HP.', (s, ctx) =>
+    targetChoice(s, ctx, 'selectUnitToDefeat', pickedIds(s, ctx, remainingAtMost(5)), true)),
+))
+registerCard('LOF_012', { // Rey
+  ...leaderFront('If you played a non-unit Force card this phase, deal 1 damage to a unit.', {
+    usable: both(playedCardThisPhase(c => c?.type !== 'unit' && printedTrait(c, 'Force')), anyUnitPasses(pickAny)),
+    effect: (s, ctx) => damageChoice(s, ctx, 1, allUnits(s)),
+  }),
+  ...whenDeployed('You may discard your hand. If you do, draw 2 cards.', (s, ctx) =>
+    (s.players[ctx.owner].hand.length ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'discard your hand and draw 2 cards', then: resume(ctx) }) : s)),
+  ifYouDo: (s, ctx) => {
+    let next = s
+    while (next.players[ctx.owner].hand.length > 0) next = discardFromHand(next, ctx.owner, 0)
+    return drawCards(next, ctx.owner, 2)
+  },
+})
+const damagedEnemy = pickAll(pickEnemy, damaged)
+registerCard('TWI_013', { // Mace Windu
+  ...leaderFront('Deal 1 damage to a damaged enemy unit. Then, if it has 5 or more damage on it, deal 1 damage to it.', {
+    cost: 1,
+    usable: anyUnitPasses(damagedEnemy),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, damagedEnemy), 'deal 1 damage to a damaged enemy unit', false),
+  }),
+  ...whenDeployed('Deal 2 damage to each damaged enemy unit.', (s, ctx) =>
+    pickedIds(s, ctx, damagedEnemy).reduce((acc, id) => dealDamageToUnit(acc, id, 2), s)),
+  ifYouDo: (s, ctx) => {
+    const hit = dealDamageToUnit(s, ctx.targetInstanceId!, 1)
+    return (findUnit(hit, ctx.targetInstanceId!)?.unit.damage ?? 0) >= 5 ? dealDamageToUnit(hit, ctx.targetInstanceId!, 1) : hit
+  },
+})
+const aUnitLeftPlay: When = s => BOTH_BASES.some(p => leftPlayThisPhase(s, p).length > 0)
+registerCard('TWI_004', { // Yoda
+  ...leaderFront('If a unit left play this phase, draw a card, then put a card from your hand on the top or bottom of your deck.', {
+    usable: aUnitLeftPlay,
+    effect: (s, ctx) => handCardThen(drawCards(s, ctx.owner, 1), ctx, 'put a card from your hand on the top or bottom of your deck', 'card'),
+  }),
+  ...whenDeployed('You may discard a card from your deck. If you do, defeat an enemy non-leader unit that costs the same as or less than the discarded card.', (s, ctx) =>
+    (s.players[ctx.owner].deck.length
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'discard the top card of your deck to defeat an enemy non-leader unit that costs as much or less', then: resume(ctx, 'mill') })
+      : s)),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'card') {
+      return pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'put it on the top of your deck (otherwise the bottom)', then: resume(ctx, `top:${ctx.handIndex}`), declineStep: `bottom:${ctx.handIndex}` })
+    }
+    if (ctx.step?.startsWith('top:') || ctx.step?.startsWith('bottom:')) {
+      const [where, index] = ctx.step.split(':')
+      return handToDeck(s, ctx.owner, Number(index), where as 'top' | 'bottom')
+    }
+    const [next, milled] = millTop(s, ctx.owner, 1)
+    const cost = next.cards[milled[0]]?.cost ?? 0
+    return targetChoice(next, ctx, 'selectUnitToDefeat', pickedIds(next, ctx, pickAll(pickEnemy, nonLeader, (st, u) => printedCost(st, u) <= cost)))
+  },
+})
+registerCard('SHD_002', { // Qi'ra
+  ...leaderFront('Deal 2 damage to a friendly unit. Then, give a Shield token to it.', {
+    cost: 1,
+    usable: anyUnitPasses(pickFriendly),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'deal 2 damage to a friendly unit, then give it a Shield token', false),
+  }),
+  ...whenDeployed('Heal all damage from each unit. Then, deal damage to each unit equal to half its remaining HP, rounded down.', s => {
+    const healed = allUnits(s).reduce((acc, u) => (u.damage > 0 ? healUnit(acc, u.instanceId, u.damage) : acc), s)
+    const amounts = allUnits(healed).map(u => [u.instanceId, Math.floor(remainingHp(healed, u) / 2)] as const)
+    return amounts.reduce((acc, [id, n]) => (n > 0 ? dealDamageToUnit(acc, id, n) : acc), healed)
+  }),
+  ifYouDo: (s, ctx) => {
+    const hit = dealDamageToUnit(s, ctx.targetInstanceId!, 2)
+    return findUnit(hit, ctx.targetInstanceId!) ? giveToken(hit, ctx.targetInstanceId!, TOKEN_SHIELD) : hit
+  },
+})
+registerCard('SOR_006', { // Emperor Palpatine
+  ...leaderFront('[Defeat a friendly unit]: Deal 1 damage to a unit and draw a card.', {
+    cost: 1,
+    usable: anyUnitPasses(pickFriendly),
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'defeat a friendly unit to deal 1 damage to a unit and draw a card', false),
+  }),
+  abilities: [
+    ...whenDeployed('Take control of a damaged non-leader unit.', (s, ctx) =>
+      unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, nonLeader, damaged)), 'take control of a damaged non-leader unit', false, 'steal')).abilities!,
+    ...attacks('You may defeat another friendly unit. If you do, deal 1 damage to a unit and draw a card.', (s, ctx) =>
+      unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, pickOther)), 'defeat another friendly unit to deal 1 damage to a unit and draw a card', true)).abilities!,
+  ],
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'steal') return stealTo(s, ctx.owner, ctx.targetInstanceId, 'permanent')
+    const drawn = drawCards(defeatUnits(s, [ctx.targetInstanceId!]), ctx.owner, 1)
+    return damageChoice(drawn, ctx, 1, allUnits(drawn))
+  },
+})
+/** One card id per name in `owner`'s discard pile, leaving out names already picked. */
+const namesInDiscard = (s: GameState, owner: PlayerId, pickedIdsSoFar: string[]): string[] => {
+  const taken = new Set(pickedIdsSoFar.map(id => s.cards[id]?.name))
+  const seen = new Set<string | undefined>()
+  return s.players[owner].discard.filter(id => {
+    const name = s.cards[id]?.name
+    if (taken.has(name) || seen.has(name)) return false
+    seen.add(name)
+    return true
+  })
+}
+const aphraPick = (s: GameState, ctx: Resumable, picks: string[]): GameState => {
+  const candidates = namesInDiscard(s, ctx.owner, picks)
+  // "If you do" needs all three, so nothing is offered when fewer names are there to begin with.
+  if (picks.length + candidates.length < 3) return s
+  return pushChoice(s, { kind: 'selectCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, text: `choose a card in your discard pile (${picks.length + 1} of 3, different names)`, then: resume(ctx, picksStep(picks)) })
+}
+registerCard('SHD_015', { // Doctor Aphra
+  leaderAbilities: {
+    abilities: [{ trigger: 'whenRegroupStarts', description: 'Discard a card from your deck.', effect: (s, ctx) => millTop(s, ctx.owner, 1)[0] }],
+  },
+  statModifier: (s, u) => {
+    const o = unitOwner(s, u)
+    return o && new Set(s.players[o].discard.map(id => s.cards[id]?.cost ?? 0)).size >= 5 ? { power: 3 } : {}
+  },
+  ...whenDeployed('Choose 3 cards in your discard pile with different names. If you do, return 1 of them at random to your hand.', (s, ctx) => aphraPick(s, ctx, [])),
+  ifYouDo: (s, ctx) => {
+    const picks = [...picksOf(ctx.step), ctx.cardChosen!]
+    if (picks.length < 3) return aphraPick(s, ctx, picks)
+    // Random, not chosen: the seed on the state keeps it deterministic under replay.
+    const back = picks[Math.floor(seededUnit(s.rngSeed) * picks.length)]
+    const p = s.players[ctx.owner]
+    const at = p.discard.indexOf(back)
+    return { ...updatePlayer(s, ctx.owner, { discard: p.discard.filter((_, i) => i !== at), hand: [...p.hand, back] }), rngSeed: nextSeed(s.rngSeed) }
+  },
+})
+interface TrenchStep { left: number; cards: string[] }
+/** Admiral Trench's reveal: the opponent discards while `left` lasts, then its owner draws 1 of what is left and discards the rest. */
+const trenchOffer = (s: GameState, ctx: Resumable, st: TrenchStep): GameState => {
+  if (st.left > 0 && st.cards.length > 0) {
+    return pushChoice(s, { kind: 'selectCardThen', id: `${ctx.sourceInstanceId}-discard`, controller: opponentOf(ctx.owner), candidates: st.cards, text: "discard one of your opponent's revealed cards", then: resume(ctx, `discard:${JSON.stringify(st)}`) })
+  }
+  if (st.cards.length === 0) return s
+  return pushChoice(s, { kind: 'selectCardThen', id: `${ctx.sourceInstanceId}-draw`, controller: ctx.owner, candidates: st.cards, text: 'draw one of the revealed cards; the others are discarded', then: resume(ctx, `draw:${JSON.stringify(st)}`) })
+}
+registerCard('JTL_014', { // Admiral Trench
+  ...leaderFront('Discard a card that costs 3 or more from your hand. If you do, draw a card.', {
+    usable: (s, ctx) => s.players[ctx.owner].hand.some(id => (s.cards[id]?.cost ?? 0) >= 3),
+    effect: (s, ctx) => pushChoice(s, {
+      kind: 'selectHandCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, text: 'discard a card that costs 3 or more, then draw a card', then: resume(ctx, 'front'),
+      handIndices: s.players[ctx.owner].hand.flatMap((id, i) => ((s.cards[id]?.cost ?? 0) >= 3 ? [i] : [])),
+    }),
+  }),
+  ...whenDeployed('Reveal the top 4 cards of your deck. An opponent discards 2 of them. Draw 1 of the remaining cards and discard the other.', (s, ctx) => {
+    const p = s.players[ctx.owner]
+    const cards = p.deck.slice(0, 4)
+    // Held out of the deck while the picks are made, so nothing else can draw or move them meanwhile.
+    return cards.length ? trenchOffer(updatePlayer(s, ctx.owner, { deck: p.deck.slice(cards.length) }), ctx, { left: 2, cards }) : s
+  }),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'front') return drawCards(discardFromHand(s, ctx.owner, ctx.handIndex!), ctx.owner, 1)
+    const [stage, json] = [ctx.step!.slice(0, ctx.step!.indexOf(':')), ctx.step!.slice(ctx.step!.indexOf(':') + 1)]
+    const st = JSON.parse(json) as TrenchStep
+    const chosen = ctx.optionIndex ?? 0
+    const p = s.players[ctx.owner]
+    if (stage === 'discard') {
+      const next = updatePlayer(s, ctx.owner, { discard: [...p.discard, st.cards[chosen]] })
+      return trenchOffer(next, ctx, { left: st.left - 1, cards: st.cards.filter((_, i) => i !== chosen) })
+    }
+    // The drawn card goes back on top and is drawn from there, so it is a draw like any other.
+    const rest = st.cards.filter((_, i) => i !== chosen)
+    return drawCards(updatePlayer(s, ctx.owner, { deck: [st.cards[chosen], ...p.deck], discard: [...p.discard, ...rest] }), ctx.owner, 1)
+  },
+})
