@@ -180,7 +180,7 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
   }
   if (waivePenalty) penalty = 0
   // "Your next unit …" cost grants that match this card — Mouse Droid's −1 to the next Imperial.
-  const grantDelta = (p.nextUnitGrants ?? []).reduce((sum, g) => sum + (nextUnitGrantMatches(card, g) ? (g.costDelta ?? 0) : 0), 0)
+  const grantDelta = (p.nextUnitGrants ?? []).reduce((sum, g) => sum + (nextUnitGrantMatches(card, g, state, playerId) ? (g.costDelta ?? 0) : 0), 0)
   // A card an OPPONENT's unit has named for a surcharge costs that much more to play (Qi'ra).
   const surcharge = state.players[opponentOf(playerId)].units.reduce(
     (sum, u) => sum + (u.namedCard === card.name ? u.namedCardSurcharge ?? 0 : 0), 0)

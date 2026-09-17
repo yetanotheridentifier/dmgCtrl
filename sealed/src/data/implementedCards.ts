@@ -208,6 +208,13 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'TS26_4', name: 'Padmé Amidala', front: true, back: true },
   { id: 'LAW_001', name: 'Saw Gerrera', front: true, back: true },
   { id: 'TS26_2', name: 'Anakin Skywalker', front: true, back: true },
+  { id: 'LOF_010', name: 'Third Sister', front: true, back: true },
+  { id: 'JTL_005', name: 'Admiral Piett', front: true, back: true },
+  { id: 'SHD_016', name: 'Fennec Shand', front: true, back: true },
+  { id: 'SHD_013', name: 'Han Solo', front: true, back: true },
+  { id: 'SOR_003', name: 'Chewbacca', front: true, back: true },
+  { id: 'SEC_007', name: 'Dryden Vos', front: true, back: true },
+  { id: 'LOF_005', name: 'Morgan Elsbeth', front: true, back: true },
 ]
 
 export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [

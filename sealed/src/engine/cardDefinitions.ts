@@ -4705,17 +4705,28 @@ registerCard('TWI_188', whenPlayed('Look at cards from the top of your deck equa
 }))
 
 // Playing a unit from hand. "Play a unit" is not a "may": it is offered whenever one is affordable.
-type PlayFromHandOptions = { costDelta?: number; test?: (c: EngineCard | undefined) => boolean; thenShieldIt?: boolean; thenDamageOwnBase?: boolean }
+type PlayFromHandOptions = {
+  costDelta?: number
+  test?: (c: EngineCard | undefined) => boolean
+  thenShieldIt?: boolean
+  thenDamageOwnBase?: boolean
+  thenDamageIt?: number
+  /** "It gains <keywords> for this phase": granted to the next unit played, so an Ambush or Hidden takes effect as it enters. */
+  gains?: KeywordInstance[]
+}
 const FREE = -99
+const playableFromHand = (s: GameState, owner: PlayerId, o: PlayFromHandOptions, extraResourceCost = 0) =>
+  affordableHandUnits(s, owner, extraResourceCost, o.costDelta ?? 0).filter(ref => !o.test || o.test(s.cards[ref.cardId]))
 const playFromHand = (s: GameState, ctx: EventCtx, o: PlayFromHandOptions): GameState => {
   const costDelta = o.costDelta ?? 0
-  const candidates = affordableHandUnits(s, ctx.owner, 0, costDelta).filter(ref => !o.test || o.test(s.cards[ref.cardId]))
-  return candidates.length
-    ? pushChoice(s, {
-      kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, costDelta, entersReady: false,
-      ...(o.thenShieldIt ? { thenShieldIt: true } : {}), ...(o.thenDamageOwnBase ? { thenDamageOwnBase: true } : {}),
-    })
-    : s
+  const candidates = playableFromHand(s, ctx.owner, o)
+  if (!candidates.length) return s
+  const granted = o.gains ? grantNextUnit(s, ctx.owner, { keywords: o.gains }) : s
+  return pushChoice(granted, {
+    kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, costDelta, entersReady: false,
+    ...(o.thenShieldIt ? { thenShieldIt: true } : {}), ...(o.thenDamageOwnBase ? { thenDamageOwnBase: true } : {}),
+    ...(o.thenDamageIt ? { thenDamageIt: o.thenDamageIt } : {}),
+  })
 }
 registerCard('LOF_076', whenPlayed('Play a Force unit from your hand (paying its cost) and give a Shield token to it.', (s, ctx) => // Soresu Stance
   playFromHand(s, ctx, { test: c => printedTrait(c, 'Force'), thenShieldIt: true })))
@@ -6303,3 +6314,77 @@ registerCard('TS26_2', allOf( // Anakin Skywalker
   }),
   attacks('Give a Shield token to another friendly unit that entered play this phase.', (s, ctx) => shieldChoice(s, ctx, pickedIds(s, ctx, pickAll(enteredFriendly, pickOther)), false)),
 ))
+
+// C: plays from hand
+/** "Play a unit from your hand ..." on a leader's front, offered only while one can be paid for after the action's own cost. */
+const leaderPlay = (description: string, o: PlayFromHandOptions, cost = 0): CardDefinition =>
+  leaderFront(description, {
+    ...(cost ? { cost } : {}),
+    usable: (s, ctx) => playableFromHand(s, ctx.owner, o, cost).length > 0,
+    effect: (s, ctx) => playFromHand(s, ctx, o),
+  })
+/** The same play as a deployed leader's "Action:", with no exhaust. */
+const unitPlayAction = (description: string, o: PlayFromHandOptions): CardDefinition => ({
+  actionAbilities: [{ description, usable: (s, self) => playableFromHand(s, controllerOf(s, self), o).length > 0, effect: (s, ctx) => playFromHand(s, ctx, o) }],
+})
+const printedCostAtMost = (n: number) => (c: EngineCard | undefined): boolean => (c?.cost ?? 0) <= n
+
+registerCard('LOF_010', allOf( // Third Sister
+  leaderPlay('Play a unit from your hand. It gains Hidden for this phase.', { gains: [{ name: 'Hidden' }] }),
+  attacks('The next unit you play this phase gains Hidden.', (s, ctx) => grantNextUnit(s, ctx.owner, { keywords: [{ name: 'Hidden' }] })),
+))
+const capitalShip = (c: EngineCard | undefined): boolean => printedUnit(c) && printedTrait(c, 'Capital Ship')
+registerCard('JTL_005', { // Admiral Piett
+  ...leaderPlay('Play a Capital Ship unit from your hand. It costs 1 less.', { costDelta: -1, test: capitalShip }),
+  costDiscount: (_s, _source, ctx) => (capitalShip(ctx.card) ? -2 : 0),
+})
+const fennecPlay: PlayFromHandOptions = { test: printedCostAtMost(4), gains: [KW.ambush] }
+registerCard('SHD_016', { // Fennec Shand
+  ...leaderPlay('Play a unit that costs 4 or less from your hand (paying its cost). Give it Ambush for this phase.', fennecPlay, 1),
+  ...unitPlayAction('Play a unit that costs 4 or less from your hand (paying its cost). Give it Ambush for this phase.', fennecPlay),
+})
+const hanPlay: PlayFromHandOptions = { costDelta: -1, thenDamageIt: 2 }
+registerCard('SHD_013', { // Han Solo
+  ...leaderPlay('Play a unit from your hand. It costs 1 less. Deal 2 damage to it.', hanPlay),
+  ...unitPlayAction('Play a unit from your hand. It costs 1 less. Deal 2 damage to it.', hanPlay),
+})
+// The deployed side is Grit and Sentinel, both read from the card.
+registerCard('SOR_003', leaderPlay('Play a unit that costs 3 or less from your hand (paying its cost). It gains Sentinel for this phase.', // Chewbacca
+  { test: printedCostAtMost(3), gains: [KW.sentinel] }))
+const drydenCostly = (s: GameState, owner: PlayerId): number[] =>
+  s.players[owner].hand.flatMap((id, i) => ((s.cards[id]?.cost ?? 0) >= 6 ? [i] : []))
+const drydenFront: PlayFromHandOptions = { test: printedCostAtMost(5), gains: [KW.ambush] }
+const drydenBack: PlayFromHandOptions = { gains: [KW.ambush] }
+registerCard('SEC_007', { // Dryden Vos
+  ...leaderFront('[Discard a card that costs 6 or more from your hand]: Play a unit that costs 5 or less from your hand (paying its cost). It gains Ambush for this phase.', {
+    usable: (s, ctx) => drydenCostly(s, ctx.owner).length > 0 && playableFromHand(s, ctx.owner, drydenFront).length > 0,
+    effect: (s, ctx) => pushChoice(s, { kind: 'selectHandCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, handIndices: drydenCostly(s, ctx.owner), text: 'discard a card that costs 6 or more', then: resume(ctx, 'front') }),
+  }),
+  actionAbilities: [{
+    description: '[Discard a card from your hand]: Play a unit from your hand (paying its cost). It gains Ambush for this phase.',
+    // The discard is a cost, so a unit must still be left to play once it is paid.
+    usable: (s, self) => s.players[controllerOf(s, self)].hand.length >= 2 && playableFromHand(s, controllerOf(s, self), drydenBack).length > 0,
+    effect: (s, ctx) => handCardThen(s, ctx, 'discard a card from your hand', 'back'),
+  }],
+  ifYouDo: (s, ctx) => playFromHand(discardFromHand(s, ctx.owner, ctx.handIndex!), ctx, ctx.step === 'front' ? drydenFront : drydenBack),
+})
+const sharesKeywordWith = (s: GameState, u: UnitState) => {
+  const names = new Set(unitKeywords(s, u).map(k => k.name))
+  return (c: EngineCard | undefined): boolean => (c?.keywords ?? []).some(k => names.has(k.name))
+}
+const morganTargets = (s: GameState, ctx: EventCtx): string[] =>
+  picked(s, ctx, pickAll(pickFriendly, attackedThisPhasePick))
+    .filter(u => playableFromHand(s, ctx.owner, { costDelta: -1, test: sharesKeywordWith(s, u) }).length > 0)
+    .map(u => u.instanceId)
+registerCard('LOF_005', { // Morgan Elsbeth
+  ...leaderFront('Choose a friendly unit that attacked this phase. Play a unit from your hand that shares a Keyword with the chosen unit. It costs 1 less.', {
+    usable: (s, ctx) => morganTargets(s, ctx).length > 0,
+    effect: (s, ctx) => unitThen(s, ctx, morganTargets(s, ctx), 'choose a friendly unit that attacked this phase', false),
+  }),
+  ...attacks('The next unit you play this phase costs 1 less if it shares a Keyword with a friendly unit.', (s, ctx) =>
+    grantNextUnit(s, ctx.owner, { costDelta: -1, sharesKeywordWithFriendly: true })),
+  ifYouDo: (s, ctx) => {
+    const chosen = findUnit(s, ctx.targetInstanceId!)?.unit
+    return chosen ? playFromHand(s, ctx, { costDelta: -1, test: sharesKeywordWith(s, chosen) }) : s
+  },
+})

@@ -205,14 +205,22 @@ export interface NextUnitGrant {
   trait?: string // the unit must have this trait
   maxPower?: number // the unit's printed power must be ≤ this
   cardId?: string // the unit must be a copy of this card (Jump to Lightspeed)
+  // The unit must share a keyword with a unit `owner` controls (Morgan Elsbeth). Read off printed
+  // keywords, since this module sits below the keyword readers.
+  sharesKeywordWithFriendly?: boolean
 }
 
-/** True if `card` is a unit satisfying a grant's filter. */
-export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUnitGrant): boolean {
+/** True if `card` is a unit satisfying a grant's filter. `state` and `owner` are needed only by a board-reading filter. */
+export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUnitGrant, state?: GameState, owner?: PlayerId): boolean {
   if (!card || card.type !== 'unit') return false
   if (grant.trait && !card.traits.some(t => t.toLowerCase() === grant.trait!.toLowerCase())) return false
   if (grant.maxPower !== undefined && (card.power ?? 0) > grant.maxPower) return false
   if (grant.cardId !== undefined && card.id !== grant.cardId) return false
+  if (grant.sharesKeywordWithFriendly) {
+    if (!state || !owner) return false
+    const names = new Set(card.keywords.map(k => k.name))
+    if (!state.players[owner].units.some(u => (state.cards[u.cardId]?.keywords ?? []).some(k => names.has(k.name)))) return false
+  }
   return true
 }
 

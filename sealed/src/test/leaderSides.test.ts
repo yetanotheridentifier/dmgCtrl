@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
-import { legalMoves } from '../engine/legalMoves'
+import { effectiveCost, legalMoves } from '../engine/legalMoves'
 import { getCardDefinition } from '../engine/abilities'
 import { effectivePower, effectiveHp } from '../engine/stats'
 import { unitHasKeyword, unitKeywordValue } from '../engine/keywords'
@@ -32,6 +32,8 @@ const SHIPPED = [
   'SOR_011', 'SHD_003', 'SHD_012', 'JTL_010', 'LOF_011', 'LAW_005', 'SOR_002', 'SHD_011', 'LAW_012', 'LOF_004', 'TWI_010',
   // B: attacks, and units entering play
   'TWI_012', 'TWI_014', 'TWI_009', 'SHD_007', 'SOR_012', 'SOR_018', 'SOR_009', 'TS26_7', 'TS26_4', 'LAW_001', 'TS26_2',
+  // C: plays from hand
+  'LOF_010', 'JTL_005', 'SHD_016', 'SHD_013', 'SOR_003', 'SEC_007', 'LOF_005',
 ]
 /** Scoped by the triage but lifted out to the ticket that owns their blocker. */
 const LIFTED = [
@@ -75,6 +77,12 @@ const F: Record<string, EngineCard> = {
   TOUGH: src('TOUGH', { power: 1, hp: 20 }),
   SMALL: src('SMALL', { power: 1, hp: 1 }),
   REB2: src('REB2', { traits: ['REBEL'] }),
+  CAP: src('CAP', { arena: 'space', cost: 5, traits: ['CAPITAL SHIP'] }),
+  SIX: card({ id: 'SIX', type: 'event', cost: 6 }),
+  HUGE: src('HUGE', { cost: 5 }),
+  SIXU: src('SIXU', { cost: 6 }),
+  SENT: src('SENT', { keywords: [{ name: 'Sentinel' }] }),
+  SENT2: src('SENT2', { keywords: [{ name: 'Sentinel' }] }),
 }
 
 const unit = (instanceId: string, cardId: string, over: Partial<UnitState> = {}): UnitState =>
@@ -577,5 +585,104 @@ describe('leaders B: units that entered play', () => {
     const a = attack(back('TS26_2', { units }, { units: [unit('e', 'TOUGH')] }, { phaseEvents: phaseEvents({ enteredPlay: { player: ['a', 'L'], opponent: [] } }) }), 'L', 'e')
     expect(unitOffers(a)).toEqual(['a'])
     expect(declinable(a)).toBe(false)
+  })
+})
+
+// ── C: plays from hand ────────────────────────────────────────────────────────────────────────────
+
+const handOffers = (s: GameState) => {
+  const c = choice(s)
+  return c.kind === 'playUnitFromHand' ? c.candidates.map(x => x.cardId) : c.kind === 'selectHandCardThen' ? c.handIndices : undefined
+}
+/** Play the hand card at `handIndex` through the raised play choice; returns the state and the new unit. */
+const playFrom = (s: GameState, handIndex: number) => {
+  const next = accept(s, { handIndex })
+  return { next, played: next.players.player.units[next.players.player.units.length - 1] }
+}
+const useBack = (s: GameState, id: string) => resolve(s, { type: 'useAbility', instanceId: 'L', cardId: id, index: 0 })
+
+describe('leaders C: play a unit from hand', () => {
+  it('Third Sister (LOF_010) plays a unit that gains Hidden; deployed, as she attacks, the next unit you play gains Hidden', () => {
+    expect(usable(front('LOF_010', { hand: ['EV'] }))).toBe(false)
+    const used = use(front('LOF_010', { hand: ['GRD', 'EV'] }))
+    expect(handOffers(used)).toEqual(['GRD'])
+    const { next, played } = playFrom(used, 0)
+    expect(unitHasKeyword(next, played, 'Hidden')).toBe(true)
+    expect(readyCount(next, 'player')).toBe(8)
+    const a = attack(back('LOF_010', {}, { units: [unit('e', 'TOUGH')] }), 'L', 'e')
+    expect(a.players.player.nextUnitGrants).toEqual([{ keywords: [{ name: 'Hidden' }] }])
+  })
+
+  it('Admiral Piett (JTL_005) plays a Capital Ship unit for 1 less; deployed each Capital Ship unit you play costs 2 less', () => {
+    const hand = ['CAP', 'GRD']
+    const used = use(front('JTL_005', { hand }))
+    expect(handOffers(used)).toEqual(['CAP'])
+    expect(readyCount(playFrom(used, 0).next, 'player')).toBe(6)
+    const s = back('JTL_005', { hand })
+    expect(effectiveCost(s, 'player', F.CAP)).toBe(3)
+    expect(effectiveCost(s, 'player', F.GRD)).toBe(2)
+  })
+
+  it('Fennec Shand (SHD_016) pays 1 to play a unit that costs 4 or less, which gains Ambush; deployed the same action costs nothing and needs no exhaust', () => {
+    const hand = ['CHEAP', 'CAP']
+    const used = use(front('SHD_016', { hand }, { units: [unit('e', 'TOUGH')] }))
+    expect(readyCount(used, 'player')).toBe(9)
+    expect(handOffers(used)).toEqual(['CHEAP'])
+    const { next } = playFrom(used, 0)
+    expect(choice(next).kind).toBe('ambush')
+    const s = back('SHD_016', { hand, units: [] }, { units: [unit('e', 'TOUGH')] })
+    const exhaustedLeader = { ...s, players: { ...s.players, player: { ...s.players.player, units: s.players.player.units.map(u => ({ ...u, exhausted: true })) } } }
+    const acted = useBack(exhaustedLeader, 'SHD_016')
+    expect(handOffers(acted)).toEqual(['CHEAP'])
+    expect(unitHasKeyword(s, U(s, 'L')!, 'Saboteur')).toBe(true)
+  })
+
+  it('Han Solo (SHD_013) plays a unit for 1 less and deals 2 damage to it; deployed the same with no exhaust', () => {
+    const used = use(front('SHD_013', { hand: ['GRD'] }))
+    const { next, played } = playFrom(used, 0)
+    expect(readyCount(next, 'player')).toBe(9)
+    expect(played.damage).toBe(2)
+    expect(handOffers(useBack(back('SHD_013', { hand: ['GRD'] }), 'SHD_013'))).toEqual(['GRD'])
+  })
+
+  it('Chewbacca (SOR_003) plays a unit that costs 3 or less, which gains Sentinel for this phase; deployed he has Grit and Sentinel', () => {
+    const used = use(front('SOR_003', { hand: ['PRICEY', 'CHEAP'] }))
+    expect(handOffers(used)).toEqual(['CHEAP'])
+    const { next, played } = playFrom(used, 1)
+    expect(unitHasKeyword(next, played, 'Sentinel')).toBe(true)
+    const s = back('SOR_003')
+    expect(['Grit', 'Sentinel'].map(k => unitHasKeyword(s, U(s, 'L')!, k))).toEqual([true, true])
+  })
+
+  it('Dryden Vos (SEC_007) discards a card that costs 6 or more to play a unit that costs 5 or less with Ambush; deployed he discards any card to play any unit with Ambush', () => {
+    expect(usable(front('SEC_007', { hand: ['CHEAP', 'CAP'] }))).toBe(false)
+    const used = use(front('SEC_007', { hand: ['CHEAP', 'SIX', 'HUGE', 'SIXU'] }))
+    expect(handOffers(used)).toEqual([1, 3])
+    const discarded = accept(used, { handIndex: 1 })
+    expect(discarded.players.player.discard).toEqual(['SIX'])
+    expect(handOffers(discarded)).toEqual(['CHEAP', 'HUGE'])
+    const { next, played } = playFrom(discarded, 0)
+    expect(unitHasKeyword(next, played, 'Ambush')).toBe(true)
+    const acted = useBack(back('SEC_007', { hand: ['HUGE', 'EV'] }), 'SEC_007')
+    expect(handOffers(acted)).toEqual([0, 1])
+    const tossed = accept(acted, { handIndex: 1 })
+    expect(handOffers(tossed)).toEqual(['HUGE'])
+    const s = back('SEC_007')
+    expect(['Overwhelm', 'Ambush'].map(k => unitHasKeyword(s, U(s, 'L')!, k))).toEqual([true, false])
+  })
+
+  it('Morgan Elsbeth (LOF_005) plays, for 1 less, a unit sharing a keyword with a friendly unit that attacked; deployed, as she attacks, the next such unit costs 1 less', () => {
+    const attacked = { phaseEvents: phaseEvents({ attackedUnits: ['s', 'g'] }) }
+    expect(usable(front('LOF_005', { hand: ['SENT2'], units: [unit('s', 'SENT')] }))).toBe(false)
+    const used = use(front('LOF_005', { hand: ['GRD', 'SENT2'], units: [unit('s', 'SENT'), unit('g', 'GRD')] }, {}, attacked))
+    expect(unitOffers(used)).toEqual(['s'])
+    const chosen = accept(used, { targetInstanceId: 's' })
+    expect(handOffers(chosen)).toEqual(['SENT2'])
+    expect(choice(chosen)).toMatchObject({ costDelta: -1 })
+    const a = attack(back('LOF_005', { hand: ['GRD', 'SENT2'], units: [unit('s', 'SENT')] }, { units: [unit('e', 'TOUGH')] }), 'L', 'e')
+    expect(effectiveCost(a, 'player', F.SENT2)).toBe(1)
+    expect(effectiveCost(a, 'player', F.GRD)).toBe(2)
+    const alone = attack(back('LOF_005', { hand: ['SENT2'] }, { units: [unit('e', 'TOUGH')] }), 'L', 'e')
+    expect(effectiveCost(alone, 'player', F.SENT2)).toBe(2)
   })
 })

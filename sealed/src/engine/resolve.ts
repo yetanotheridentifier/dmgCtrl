@@ -343,7 +343,7 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   // grant (Sabine → Shielded) — so a granted Ambush/Shielded/Hidden fires just like a printed one.
   // "Your next unit …" grants matching this card — their keywords/enters-ready apply here
   // (the cost delta was already folded into `effectiveCost` at play time).
-  const grants = (state.players[owner].nextUnitGrants ?? []).filter(g => nextUnitGrantMatches(card, g))
+  const grants = (state.players[owner].nextUnitGrants ?? []).filter(g => nextUnitGrantMatches(card, g, state, owner))
   const grantKeywords = grants.flatMap(g => g.keywords ?? [])
   // Every "enters play ready" source, in one place: a caller override (`ready`), a Neel-style grant,
   // or the card's own condition (Elzar Mann). Both the construction below AND the revert-to-
@@ -373,7 +373,8 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
   // leaves them in place for a later matching unit.
   if (grants.length > 0) {
     if (grantKeywords.length > 0) next = addLastingEffect(next, { targetInstanceId: newUnit.instanceId, keywords: grantKeywords })
-    const remaining = (next.players[owner].nextUnitGrants ?? []).filter(g => !nextUnitGrantMatches(card, g))
+    // By identity, not by matching again: the unit is now on the board, and a filter that reads the board would see it.
+    const remaining = (next.players[owner].nextUnitGrants ?? []).filter(g => !grants.includes(g))
     next = updatePlayer(next, owner, { nextUnitGrants: remaining.length > 0 ? remaining : undefined })
   }
 
