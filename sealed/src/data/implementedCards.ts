@@ -249,6 +249,9 @@ export const IMPLEMENTED_BASES: UpgradeStatus[] = [
   { id: 'SOR_028', name: 'Jedha City' },
   { id: 'LAW_023', name: 'Great Pit of Carkoon' },
   { id: 'LAW_026', name: 'Shipbreaking Yard' },
+  { id: 'SOR_022', name: 'Energy Conversion Lab' },
+  { id: 'TS26_10', name: "Dooku's Palace" },
+  { id: 'TS26_11', name: "Executioner's Arena" },
 ]
 
 export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [

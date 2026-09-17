@@ -6971,3 +6971,38 @@ registerCard('LAW_026', { // Shipbreaking Yard
   }),
   ifYouDo: (s, ctx) => discardToTop(s, ctx.owner, ctx.cardChosen!),
 })
+
+// B: Epic Actions that play a unit, or repeat for each friendly leader unit
+/** "Epic Action: Play a unit from your hand …", offered only while there is one to play. */
+const basePlay = (description: string, o: (s: GameState, owner: PlayerId) => PlayFromHandOptions): CardDefinition =>
+  baseEpic(description, {
+    usable: (s, ctx) => playableFromHand(s, ctx.owner, o(s, ctx.owner)).length > 0,
+    effect: (s, ctx) => playFromHand(s, ctx, o(s, ctx.owner)),
+  })
+registerCard('SOR_022', basePlay('Play a unit that costs 6 or less from your hand. Give it Ambush for this phase.', // Energy Conversion Lab
+  () => ({ test: printedCostAtMost(6), gains: [KW.ambush] })))
+/** Friendly leader units, which is what "for each friendly leader unit" counts (The Darksaber makes one). */
+const leaderUnitCount = (s: GameState, owner: PlayerId): number => s.players[owner].units.filter(u => isLeaderUnit(s, u)).length
+registerCard('TS26_10', basePlay('Play a unit from your hand. It costs 1 less for each friendly leader unit.', // Dooku's Palace
+  (s, owner) => { const n = leaderUnitCount(s, owner); return n > 0 ? { costDelta: -n } : {} }))
+/**
+ * "For each friendly leader unit, you may deal 2 damage to a unit": asked one at a time, so each
+ * offer reads the units still in play after the one before it resolved. A decline resumes too
+ * (`hookOnDecline`), so passing on the first leader unit's damage does not swallow the second's.
+ */
+const executionerOffer = (s: GameState, ctx: Resumable, i: number): GameState => {
+  const targets = allUnits(s).map(u => u.instanceId)
+  return i < leaderUnitCount(s, ctx.owner) && targets.length
+    ? pushChoice(s, { kind: 'selectUnitThen', id: `${ctx.sourceInstanceId}-${i}`, controller: ctx.owner, targets, text: 'deal 2 damage to a unit', then: resume(ctx, `dmg:${i}`), optional: true, hookOnDecline: true })
+    : s
+}
+registerCard('TS26_11', { // Executioner's Arena
+  ...baseEpic('For each friendly leader unit, you may deal 2 damage to a unit.', {
+    usable: (s, ctx) => leaderUnitCount(s, ctx.owner) > 0 && allUnits(s).length > 0,
+    effect: (s, ctx) => executionerOffer(s, ctx, 0),
+  }),
+  ifYouDo: (s, ctx) => {
+    const i = Number((ctx.step ?? 'dmg:0').slice('dmg:'.length))
+    return executionerOffer(ctx.targetInstanceId ? dealDamageToUnit(s, ctx.targetInstanceId, 2) : s, ctx, i + 1)
+  },
+})
