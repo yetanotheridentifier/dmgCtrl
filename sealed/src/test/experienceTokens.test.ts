@@ -33,6 +33,8 @@ const SHIPPED = [
   'LOF_095', 'SEC_027', 'SOR_049', 'LAW_067', 'TS26_54',
   // C: a token on each of several units
   'SEC_252', 'SOR_037', 'LOF_055', 'SHD_081', 'SOR_080', 'LOF_099', 'SEC_124', 'LOF_241', 'SOR_245', 'TS26_60',
+  // D: the number of tokens is decided as the ability resolves
+  'SEC_040', 'LOF_255', 'SOR_035', 'SEC_260', 'SHD_039', 'TS26_51',
 ]
 /** Registered elsewhere; used here to play a unit for free, so "no resources were paid" can be reached. */
 const GALACTIC_AMBITION = 'SOR_235'
@@ -78,6 +80,7 @@ const F: Record<string, EngineCard> = {
   OFFICIAL: src('OFFICIAL', { traits: ['OFFICIAL'] }),
   L_UNIT: card({ id: 'L_UNIT', type: 'leader', cost: 5, power: 3, hp: 6 }),
   EV: card({ id: 'EV', type: 'event', cost: 1 }),
+  VIG_EV: card({ id: 'VIG_EV', type: 'event', cost: 1, aspects: ['Vigilance'] }),
   FREE_EV: card({ id: 'FREE_EV', type: 'event', cost: 0 }),
 }
 
@@ -465,5 +468,77 @@ describe('Experience tokens, C: a token on each of several units', () => {
     const s = playEvent(plain, 'TS26_60')
     expect(unitOffers(s)).toEqual(['g'])
     expect(exp(accept(s, { targetInstanceId: 'g' }), 'g')).toBe(1)
+  })
+})
+
+describe('Experience tokens, D: the number of tokens is decided as the ability resolves', () => {
+  it('Emergency Powers (SEC_040) pays any number of resources for that many tokens on a chosen non-leader unit', () => {
+    const s = playEvent(board({ units: [unit('g', 'GRD'), unit('l', 'L_UNIT', { isLeader: true })], resources: ready(6) }), 'SEC_040')
+    expect(choice(s)).toMatchObject({ kind: 'selectUnitThen' })
+    expect(unitOffers(s)).toEqual(['g'])
+    const picked = accept(s, { targetInstanceId: 'g' })
+    const number = choice(picked)
+    expect(number).toMatchObject({ kind: 'chooseNumber', controller: 'player' })
+    // Only what is still ready can be paid, and the event's own cost has already come out.
+    expect((number as { max: number }).max).toBe(readyCount(picked, 'player'))
+    const three = accept(picked, { optionIndex: 3 })
+    expect(exp(three, 'g')).toBe(3)
+    expect(readyCount(three, 'player')).toBe(readyCount(picked, 'player') - 3)
+    expect(exp(accept(picked, { optionIndex: 0 }), 'g')).toBe(0)
+  })
+
+  it('Curious Flock (LOF_255) pays up to 6 for that many tokens on itself', () => {
+    const s = play(board({ resources: ready(10) }), 'LOF_255')
+    expect(choice(s)).toMatchObject({ kind: 'chooseNumber', max: 6 })
+    const self = last(s)
+    expect(exp(accept(s, { optionIndex: 6 }), self)).toBe(6)
+    // Capped by what is ready, not by the printed 6.
+    const poor = play(board({ resources: ready(F['LOF_255'].cost + 2) }), 'LOF_255')
+    expect((choice(poor) as { max: number }).max).toBe(readyCount(poor, 'player'))
+  })
+
+  it('Lieutenant Childsen (SOR_035) takes a token per Vigilance card revealed from hand, up to 4', () => {
+    const hand = ['VIG_EV', 'VIG_EV', 'EV']
+    const s = play(board({ hand }), 'SOR_035')
+    expect(choice(s)).toMatchObject({ kind: 'chooseNumber', max: 2 })
+    expect(exp(accept(s, { optionIndex: 2 }), last(s))).toBe(2)
+    // No Vigilance cards in hand: nothing to reveal, so nothing is raised.
+    noChoice(play(board({ hand: ['EV'] }), 'SOR_035'))
+  })
+
+  it('Inspector\'s Shuttle (SEC_260) takes a token per copy of the named card in the opponent\'s hand', () => {
+    const s = play(board({}, { hand: ['GRD', 'GRD', 'EV'] }), 'SEC_260')
+    expect(choice(s)).toMatchObject({ kind: 'nameCard', controller: 'player' })
+    expect(exp(accept(s, { cardName: F['GRD'].name }), last(s))).toBe(2)
+    expect(exp(accept(s, { cardName: F['EV'].name }), last(s))).toBe(1)
+    expect(exp(accept(s, { cardName: 'Nothing At All' }), last(s))).toBe(0)
+  })
+
+  it('Calculated Lethality (SHD_039) defeats a cheap non-leader unit and pays out a token per upgrade it carried', () => {
+    const s = playEvent(board(
+      { units: [unit('f', 'GRD')] },
+      { units: [unit('victim', 'CHEAP', { upgrades: [{ cardId: 'UPG', owner: 'opponent' }, { cardId: TOKEN_SHIELD, owner: 'opponent' }] }), unit('big', 'PRICEY')] },
+    ), 'SHD_039')
+    expect(choice(s)).toMatchObject({ kind: 'selectUnitThen' })
+    expect(unitOffers(s)).toEqual(['f', 'victim'])
+    const done = accept(s, { targetInstanceId: 'victim' })
+    expect(U(done, 'victim')).toBeUndefined()
+    // Two upgrades, so two tokens, each on a friendly unit chosen one at a time.
+    expect(choice(done)).toMatchObject({ kind: 'selectUnitThen', controller: 'player' })
+    expect(unitOffers(done)).toEqual(['f'])
+    expect(exp(accept(accept(done, { targetInstanceId: 'f' }), { targetInstanceId: 'f' }), 'f')).toBe(2)
+  })
+
+  it('Lom Pyke (TS26_51) gives 2 tokens only if the opponent takes the 5 healing', () => {
+    const s = play(board({ units: [unit('f', 'GRD')] }, { units: [unit('e', 'GRD')], base: { cardId: 'TST_B', damage: 9 } }), 'TS26_51')
+    expect(choice(s)).toMatchObject({ kind: 'mayPayThen', controller: 'opponent', cost: 0 })
+    expect(declinable(s)).toBe(true)
+    const healed = accept(s)
+    expect(healed.players.opponent.base.damage).toBe(4)
+    expect(choice(healed)).toMatchObject({ kind: 'mayGiveTokens', controller: 'player', count: 2 })
+    expect(exp(accept(healed, { targetInstanceId: 'f' }), 'f')).toBe(2)
+    const declined = skip(s)
+    expect(declined.players.opponent.base.damage).toBe(9)
+    noChoice(declined)
   })
 })

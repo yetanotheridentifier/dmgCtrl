@@ -7152,3 +7152,72 @@ registerCard('TS26_60', { // Take Charge
   ...perLeaderUnitDiscount,
   ...expUpTo('Give an Experience token to each of up to 3 units.', 3, 'give an Experience token to a unit (up to 3)', pickAny),
 })
+
+// D: the number of tokens is decided as the ability resolves — by what is paid, revealed, named or
+// carried. `chooseNumber` asks for the count and hands it back as `optionIndex`.
+const readyResources = (s: GameState, owner: PlayerId): number => s.players[owner].resources.filter(r => !r.exhausted).length
+/** Exhaust `n` ready resources, one at a time through the one door that exhausts one. */
+const payResources = (s: GameState, owner: PlayerId, n: number): GameState =>
+  Array.from({ length: n }).reduce<GameState>(acc => exhaustReadyResource(acc, owner), s)
+const chooseNumberUpTo = (s: GameState, ctx: Resumable, max: number, text: string, step?: string, unit?: string): GameState =>
+  (max > 0 ? pushChoice(s, { kind: 'chooseNumber', id: ctx.sourceInstanceId!, controller: ctx.owner, max, text, then: resume(ctx, step, unit) }) : s)
+
+registerCard('SEC_040', { // Emergency Powers
+  ...whenPlayed('Choose a non-leader unit and pay any number of resources. For each resource paid this way, give an Experience token to the chosen unit.',
+    (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, nonLeader), 'choose a non-leader unit', false, 'target')),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'target') return chooseNumberUpTo(s, ctx, readyResources(s, ctx.owner), 'choose how many resources to pay', 'pay', ctx.targetInstanceId)
+    const n = ctx.optionIndex ?? 0
+    return giveTokens(payResources(s, ctx.owner, n), ctx.unitChosen!, TOKEN_EXPERIENCE, n)
+  },
+})
+registerCard('LOF_255', { // Curious Flock
+  ...whenPlayed('Pay up to 6. For each resource paid this way, give an Experience token to this unit.',
+    (s, ctx) => chooseNumberUpTo(s, ctx, Math.min(6, readyResources(s, ctx.owner)), 'choose how many resources to pay (up to 6)')),
+  ifYouDo: (s, ctx) => {
+    const n = ctx.optionIndex ?? 0
+    return expSelf(payResources(s, ctx.owner, n), ctx, n)
+  },
+})
+registerCard('SOR_035', { // Lieutenant Childsen
+  // Revealing is free and public, so the only decision is how many to show; the engine does not model
+  // hidden information beyond the count, and `chooseNumber` is exactly that decision.
+  ...whenPlayed('Reveal up to 4 Vigilance cards from your hand. For each card revealed this way, give an Experience token to this unit.',
+    (s, ctx) => chooseNumberUpTo(s, ctx, Math.min(4, s.players[ctx.owner].hand.filter(id => printedAspect(s.cards[id], 'Vigilance')).length),
+      'choose how many Vigilance cards to reveal (up to 4)')),
+  ifYouDo: (s, ctx) => expSelf(s, ctx, ctx.optionIndex ?? 0),
+})
+registerCard('SEC_260', { // Inspector's Shuttle
+  ...whenPlayed('Name a card, then an opponent reveals their hand. For each copy of the named card in their hand, give an Experience token to this unit.',
+    (s, ctx) => pushChoice(s, { kind: 'nameCard', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, then: resume(ctx) })),
+  ifYouDo: (s, ctx) => expSelf(s, ctx, s.players[opponentOf(ctx.owner)].hand.filter(id => s.cards[id]?.name === ctx.nameChosen).length),
+})
+registerCard('SHD_039', { // Calculated Lethality
+  ...whenPlayed('Defeat a non-leader unit that costs 3 or less. For each upgrade that was on that unit, give an Experience token to a friendly unit.',
+    (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickAll(nonLeader, costsAtMost(3))), 'defeat a non-leader unit that costs 3 or less', false, 'left:0')),
+  ifYouDo: (s, ctx) => {
+    // First pass: the pick is the unit to defeat, and its upgrade count (tokens included, CR 3.7.2)
+    // is read before it leaves play. After that each pass hands out one of those tokens.
+    if (ctx.step === 'left:0') {
+      const victim = findUnit(s, ctx.targetInstanceId!)
+      if (!victim) return s
+      return calculatedPayout(defeatUnit(s, ctx.targetInstanceId!), ctx, victim.unit.upgrades.length)
+    }
+    const left = stepCount(ctx.step) - 1
+    return calculatedPayout(ctx.targetInstanceId ? giveToken(s, ctx.targetInstanceId, TOKEN_EXPERIENCE) : s, ctx, left)
+  },
+})
+/** Hand out the remaining Calculated Lethality tokens, one friendly unit at a time. */
+function calculatedPayout(s: GameState, ctx: Resumable, left: number): GameState {
+  const targets = pickedIds(s, ctx, pickFriendly)
+  return left > 0 && targets.length
+    ? pushChoice(s, { kind: 'selectUnitThen', id: `${ctx.sourceInstanceId}-${left}`, controller: ctx.owner, targets, text: `give an Experience token to a friendly unit (${left} left)`, then: resume(ctx, `left:${left}`) })
+    : s
+}
+registerCard('TS26_51', { // Lom Pyke
+  // Two players, so "in player order, each opponent" is the one opponent, and "for each player that
+  // does" is 2 tokens or none. A cost of 0 makes `mayPayThen` the plain yes/no the card asks for.
+  ...whenPlayed('In player order, each opponent may heal 5 damage from their base. For each player that does, give 2 Experience tokens to a unit.',
+    (s, ctx) => pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: opponentOf(ctx.owner), cost: 0, text: 'heal 5 damage from your base', then: resume(ctx) })),
+  ifYouDo: (s, ctx) => expChoice(healBase(s, opponentOf(ctx.owner), 5), ctx, allUnits(s).map(u => u.instanceId), 2),
+})

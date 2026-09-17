@@ -646,6 +646,9 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'LOF_241', name: 'In the Shadows' },
   { id: 'SOR_245', name: 'Medal Ceremony' },
   { id: 'TS26_60', name: 'Take Charge' },
+  // Experience tokens: D, the number of tokens is decided as the ability resolves
+  { id: 'SEC_040', name: 'Emergency Powers' },
+  { id: 'SHD_039', name: 'Calculated Lethality' },
 ]
 
 /**
@@ -1321,6 +1324,11 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SHD_081', name: 'General Tagge' },
   { id: 'SOR_080', name: 'General Tagge' },
   { id: 'LOF_099', name: 'Paladin Training Corvette' },
+  // Experience tokens: D, the number of tokens is decided as the ability resolves
+  { id: 'LOF_255', name: 'Curious Flock' },
+  { id: 'SOR_035', name: 'Lieutenant Childsen' },
+  { id: 'SEC_260', name: "Inspector's Shuttle" },
+  { id: 'TS26_51', name: 'Lom Pyke' },
 ]
 
 /**
