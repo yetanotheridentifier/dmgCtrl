@@ -3718,7 +3718,7 @@ registerCard('LAW_093', unitThenWp("You may return a non-leader unit that costs 
   pickAll(nonLeader, (s, u) => (cardOf(s, u)?.cost ?? 0) <= 3), 'return a unit that costs 3 or less to hand', true,
   (s, ctx) => returnThenOwnerMayPlayFree(s, ctx, true)))
 /** Return the chosen unit to its owner's hand; its owner may then play it for free (Rio Durant, A New Adventure). */
-function returnThenOwnerMayPlayFree(s: GameState, ctx: IfYouDoContext, thenShieldIt: boolean): GameState {
+function returnThenOwnerMayPlayFree(s: GameState, ctx: IfYouDoContext, thenShield: boolean): GameState {
   const target = findUnit(s, ctx.targetInstanceId!)
   if (!target) return s
   const cardOwner = target.unit.owner ?? target.owner
@@ -3729,7 +3729,8 @@ function returnThenOwnerMayPlayFree(s: GameState, ctx: IfYouDoContext, thenShiel
   const handIndex = hand.length - 1
   return pushChoice(returned, {
     kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: cardOwner, candidates: [{ handIndex, cardId: hand[handIndex] }],
-    costDelta: -(returned.cards[hand[handIndex]]?.cost ?? 0) - 99, entersReady: false, optional: true, ...(thenShieldIt ? { thenShieldIt } : {}),
+    costDelta: -(returned.cards[hand[handIndex]]?.cost ?? 0) - 99, entersReady: false, optional: true,
+    ...(thenShield ? { thenTokens: [TOKEN_SHIELD] } : {}),
   })
 }
 registerCard('LOF_171', { // Heavy Blaster Cannon
@@ -4709,7 +4710,8 @@ registerCard('TWI_188', whenPlayed('Look at cards from the top of your deck equa
 type PlayFromHandOptions = {
   costDelta?: number
   test?: (c: EngineCard | undefined) => boolean
-  thenShieldIt?: boolean
+  /** Tokens the unit just played receives, attached together as one grant. */
+  thenTokens?: string[]
   thenDamageOwnBase?: boolean
   thenDamageIt?: number
   /** "It gains <keywords> for this phase": granted to the next unit played, so an Ambush or Hidden takes effect as it enters. */
@@ -4725,12 +4727,12 @@ const playFromHand = (s: GameState, ctx: EventCtx, o: PlayFromHandOptions): Game
   const granted = o.gains ? grantNextUnit(s, ctx.owner, { keywords: o.gains }) : s
   return pushChoice(granted, {
     kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, costDelta, entersReady: false,
-    ...(o.thenShieldIt ? { thenShieldIt: true } : {}), ...(o.thenDamageOwnBase ? { thenDamageOwnBase: true } : {}),
+    ...(o.thenTokens ? { thenTokens: o.thenTokens } : {}), ...(o.thenDamageOwnBase ? { thenDamageOwnBase: true } : {}),
     ...(o.thenDamageIt ? { thenDamageIt: o.thenDamageIt } : {}),
   })
 }
 registerCard('LOF_076', whenPlayed('Play a Force unit from your hand (paying its cost) and give a Shield token to it.', (s, ctx) => // Soresu Stance
-  playFromHand(s, ctx, { test: c => printedTrait(c, 'Force'), thenShieldIt: true })))
+  playFromHand(s, ctx, { test: c => printedTrait(c, 'Force'), thenTokens: [TOKEN_SHIELD] })))
 registerCard('SEC_257', whenPlayed('Play a unit from your hand. It costs 1 less for each Heroism aspect icon among friendly units.', (s, ctx) => { // Restore Freedom
   const icons = s.players[ctx.owner].units.flatMap(u => cardOf(s, u)?.aspects ?? []).filter(a => a.toLowerCase() === 'heroism').length
   return playFromHand(s, ctx, { costDelta: -icons })
@@ -5795,14 +5797,14 @@ registerCard('LAW_048', { // Chio Fain
 })
 registerCard('SEC_162', unitThenOa("You may deal 1 damage to another friendly unit. If you do, deal 2 damage to the defending player's base.", pickAll(pickFriendly, pickOther), // Crosshair
   'deal 1 damage to another friendly unit', true, (s, ctx) => dealDamageToBase(dealDamageToUnit(s, ctx.targetInstanceId!, 1), opponentOf(ctx.owner), 2)))
-/** "You may discard a card from your hand. If you do, <then>". */
+/** "You may discard a card from your hand. If you do, <then>", as a When Played; `onAttack` retargets it. */
 const mayDiscardThen = (description: string, then: NonNullable<CardDefinition['ifYouDo']>): CardDefinition => ({
-  ...onAttack(whenPlayed(description, (s, ctx) =>
-    (s.players[ctx.owner].hand.length ? pushChoice(s, { kind: 'selectDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, count: 1, optional: true, then: { ifYouDo: resume(ctx) } }) : s))),
+  ...whenPlayed(description, (s, ctx) =>
+    (s.players[ctx.owner].hand.length ? pushChoice(s, { kind: 'selectDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, count: 1, optional: true, then: { ifYouDo: resume(ctx) } }) : s)),
   ifYouDo: then,
 })
-registerCard('SEC_197', mayDiscardThen('You may discard a card from your hand. If you do, draw a card.', (s, ctx) => drawCards(s, ctx.owner, 1))) // Furtive Handmaiden
-registerCard('LOF_160', mayDiscardThen('You may discard a card from your hand. If you do, deal 2 damage to a unit.', (s, ctx) => damageChoice(s, ctx, 2, picked(s, ctx, pickAny)))) // Merrin
+registerCard('SEC_197', onAttack(mayDiscardThen('You may discard a card from your hand. If you do, draw a card.', (s, ctx) => drawCards(s, ctx.owner, 1)))) // Furtive Handmaiden
+registerCard('LOF_160', onAttack(mayDiscardThen('You may discard a card from your hand. If you do, deal 2 damage to a unit.', (s, ctx) => damageChoice(s, ctx, 2, picked(s, ctx, pickAny))))) // Merrin
 registerCard('TWI_035', unitThenOa('You may defeat another friendly unit. If you do, draw a card.', pickAll(pickFriendly, pickOther), 'defeat another friendly unit', true, // Morgan Elsbeth
   (s, ctx) => drawCards(defeatUnit(s, ctx.targetInstanceId!), ctx.owner, 1)))
 registerCard('SHD_118', unitThenOa('You may exhaust another friendly unit. If you do, this unit gets +3/+0 for this attack.', pickAll(pickFriendly, pickOther, (_s, u) => !u.exhausted), // Kihrazx Heavy Fighter
@@ -7220,4 +7222,137 @@ registerCard('TS26_51', { // Lom Pyke
   ...whenPlayed('In player order, each opponent may heal 5 damage from their base. For each player that does, give 2 Experience tokens to a unit.',
     (s, ctx) => pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: opponentOf(ctx.owner), cost: 0, text: 'heal 5 damage from your base', then: resume(ctx) })),
   ifYouDo: (s, ctx) => expChoice(healBase(s, opponentOf(ctx.owner), 5), ctx, allUnits(s).map(u => u.instanceId), 2),
+})
+
+// E: a token alongside something else — an exhaust, a defeat, a play from hand, an attack, damage.
+/** "<Do something> to a unit, then give it `count` Experience tokens": one pick, both halves applied. */
+const expAfter = (description: string, test: Pick, text: string, optional: boolean, first: (s: GameState, id: string, ctx: IfYouDoContext) => GameState, count = 1, mixed: readonly string[] = []): CardDefinition => ({
+  ...whenPlayed(description, (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, test), text, optional)),
+  ifYouDo: (s, ctx) => {
+    const id = ctx.targetInstanceId
+    if (!id) return s
+    const after = first(s, id, ctx)
+    // Still in play? A defeat that removed it leaves nothing to put a token on.
+    if (!findUnit(after, id)) return after
+    return mixed.length ? giveMixedTokens(after, id, mixed) : giveTokens(after, id, TOKEN_EXPERIENCE, count)
+  },
+})
+registerCard('LAW_165', expAfter('Exhaust a friendly unit. If you do, give 2 Experience tokens to it.', // Combat Exercise
+  pickAll(pickFriendly, readyUnitPick), 'exhaust a friendly unit', false, (s, id) => exhaustUnit(s, id), 2))
+registerCard('LOF_054', expAfter('Exhaust a friendly unit. If you do, give a Shield token and 2 Experience tokens to it.', // Calm in the Storm
+  pickAll(pickFriendly, readyUnitPick), 'exhaust a friendly unit', false, (s, id) => exhaustUnit(s, id), 2,
+  [TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_EXPERIENCE]))
+registerCard('LOF_239', { // Consumed by the Dark Side
+  ...whenPlayed('Give 2 Experience tokens to a unit, then deal 2 damage to it.',
+    (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'give 2 Experience tokens to a unit, then deal 2 damage to it', false)),
+  // In the printed order: the tokens land first, so the +2/+2 is what the 2 damage is measured against.
+  ifYouDo: (s, ctx) => (ctx.targetInstanceId ? dealDamageToUnit(giveTokens(s, ctx.targetInstanceId, TOKEN_EXPERIENCE, 2), ctx.targetInstanceId, 2) : s),
+})
+registerCard('LOF_263', expWp('If a friendly unit was defeated this phase, give 2 Experience tokens to a unit.', pickAny, 2, false, friendlyWasDefeated)) // Last Words
+registerCard('LAW_168', { // Haymaker
+  ...whenPlayed('Give an Experience token to a friendly unit. That unit deals damage equal to its power to an enemy unit in the same arena.',
+    (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'give an Experience token to a friendly unit', false, 'give')),
+  ifYouDo: (s, ctx) => {
+    const id = ctx.step === 'give' ? ctx.targetInstanceId! : ctx.unitChosen!
+    if (ctx.step === 'give') {
+      const given = giveToken(s, id, TOKEN_EXPERIENCE)
+      const dealer = findUnit(given, id)?.unit
+      if (!dealer) return given
+      // Power is read after the token, which is the point of giving it first.
+      const targets = pickedIds(given, ctx, pickAll(pickEnemy, (_s, u) => u.arena === dealer.arena))
+      return targets.length ? unitThen(given, ctx, targets, 'deal damage equal to its power to an enemy unit in the same arena', false, 'hit', id) : given
+    }
+    const dealer = findUnit(s, id)?.unit
+    return dealer && ctx.targetInstanceId ? dealDamageToUnit(s, ctx.targetInstanceId, effectivePower(s, dealer)) : s
+  },
+})
+registerCard('JTL_091', { // Apology Accepted
+  ...whenPlayed('Defeat a friendly unit. You may give 2 Experience tokens to a unit.',
+    (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'defeat a friendly unit', false)),
+  ifYouDo: (s, ctx) => (ctx.targetInstanceId ? expChoice(defeatUnit(s, ctx.targetInstanceId), ctx, allUnits(defeatUnit(s, ctx.targetInstanceId)).map(u => u.instanceId), 2, true, `${ctx.sourceInstanceId}-exp`) : s),
+})
+registerCard('JTL_055', { // You're All Clear, Kid
+  ...whenPlayed('Defeat an enemy space unit with 3 or less remaining HP. If you do and an opponent controls no space units, you may give an Experience token to a unit.',
+    (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickEnemy, pickArena('space'), (st, u) => remainingHp(st, u) <= 3)), 'defeat an enemy space unit with 3 or less remaining HP', false)),
+  ifYouDo: (s, ctx) => {
+    if (!ctx.targetInstanceId) return s
+    const after = defeatUnit(s, ctx.targetInstanceId)
+    return unitsIn(after, opponentOf(ctx.owner), 'space').length === 0
+      ? expChoice(after, ctx, allUnits(after).map(u => u.instanceId), 1, true, `${ctx.sourceInstanceId}-exp`)
+      : after
+  },
+})
+registerCard('TS26_58', { // Backed by the Pykes
+  ...whenPlayed('Give an Experience token to a friendly unit. You may deal damage to a unit equal to the number of Experience tokens on friendly units.',
+    (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'give an Experience token to a friendly unit', false)),
+  ifYouDo: (s, ctx) => {
+    if (!ctx.targetInstanceId) return s
+    const given = giveToken(s, ctx.targetInstanceId, TOKEN_EXPERIENCE)
+    // Counted after the grant, so the token just given is included.
+    const n = given.players[ctx.owner].units.reduce((acc, u) => acc + u.upgrades.filter(up => up.cardId === TOKEN_EXPERIENCE).length, 0)
+    return damageChoice(given, ctx, n, allUnits(given), [], true)
+  },
+})
+registerCard('LAW_257', mayPayWp('You may pay 1. If you do, give an Experience token to another unit.', 1, 'give an Experience token to another unit', // Hidden Hand Supplier
+  (s, ctx) => expChoice(s, ctx, pickedIds(s, ctx, pickOther), 1, false, `${ctx.sourceInstanceId}-exp`)))
+registerCard('LAW_144', whenPlayed('You may play a Heroism unit from your hand (paying its cost) and give an Experience token to it.', (s, ctx) => // Phantom
+  playFromHand(s, ctx, { test: c => printedAspect(c, 'Heroism') && printedUnit(c), thenTokens: [TOKEN_EXPERIENCE] })))
+registerCard('LOF_225', whenPlayed('Play a unit from your hand (paying its cost). It gains Hidden for this phase. Give an Experience token and a Shield token to it.', (s, ctx) => // Three Lessons
+  // One `thenTokens` grant, so the two tokens attach together: the card states it as one giving.
+  playFromHand(s, ctx, { gains: [{ name: 'Hidden' }], thenTokens: [TOKEN_EXPERIENCE, TOKEN_SHIELD] })))
+registerCard('LOF_125', { // The Burden of Masters
+  ...whenPlayed('Put a Force unit from your discard pile on the bottom of your deck. If you do, play a unit from your hand and give 2 Experience tokens to it.', (s, ctx) => {
+    const candidates = [...new Set(s.players[ctx.owner].discard.filter(id => printedUnit(s.cards[id]) && printedTrait(s.cards[id], 'Force')))]
+    return candidates.length ? cardThen(s, ctx, candidates, 'put a Force unit from your discard pile on the bottom of your deck', false, 'bottom') : s
+  }),
+  ifYouDo: (s, ctx) =>
+    (ctx.cardChosen ? playFromHand(discardToDeckBottom(s, ctx.owner, [ctx.cardChosen]), ctx, { thenTokens: [TOKEN_EXPERIENCE, TOKEN_EXPERIENCE] }) : s),
+})
+registerCard('SHD_099', mayDiscardThen('You may discard a card from your hand. Give 2 Experience tokens to a unit in play with the same name as the discarded card.', // Echo
+  (s, ctx) => {
+    const name = s.cards[ctx.cardChosen ?? '']?.name
+    return expChoice(s, ctx, pickedIds(s, ctx, (st, u) => cardOf(st, u)?.name === name), 2, false, `${ctx.sourceInstanceId}-exp`)
+  }))
+registerCard('LAW_069', { // The Ghost
+  ...whenPlayed('You may give an Experience token and a Shield token to a unit. If you control a Vigilance or Aggression unit, you may give them to each of up to 2 units instead.',
+    (s, ctx) => ghostOffer(s, ctx, youControl(s, ctx, pickOther, pickAspect('Vigilance', 'Aggression')) ? 2 : 1)),
+  ifYouDo: (s, ctx) => {
+    const left = stepCount(ctx.step) - 1
+    return ghostOffer(ctx.targetInstanceId ? giveMixedTokens(s, ctx.targetInstanceId, [TOKEN_EXPERIENCE, TOKEN_SHIELD]) : s, ctx, left, ctx.targetInstanceId)
+  },
+})
+/** One offer of The Ghost's "give an Experience token and a Shield token to a unit", up to `left` times. */
+function ghostOffer(s: GameState, ctx: Resumable, left: number, exclude?: string): GameState {
+  const targets = allUnits(s).map(u => u.instanceId).filter(id => id !== exclude)
+  return left > 0 && targets.length
+    ? pushChoice(s, { kind: 'selectUnitThen', id: `${ctx.sourceInstanceId}-${left}`, controller: ctx.owner, targets, optional: true, text: 'give an Experience token and a Shield token to a unit', then: resume(ctx, `left:${left}`) })
+    : s
+}
+registerCard('LOF_042', { // Always Two
+  ...whenPlayed('Choose 2 friendly unique Sith units. If you do, give 2 Shield tokens and 2 Experience tokens to each chosen unit. Defeat all other friendly units.',
+    (s, ctx) => (sithPair(s, ctx).length >= 2 ? unitThen(s, ctx, sithPair(s, ctx), 'choose a friendly unique Sith unit (2 of them)', false, 'first') : s)),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'first') {
+      const rest = sithPair(s, ctx).filter(id => id !== ctx.targetInstanceId)
+      return rest.length ? unitThen(s, ctx, rest, 'choose the second friendly unique Sith unit', false, 'second', ctx.targetInstanceId) : s
+    }
+    const chosen = [ctx.unitChosen!, ctx.targetInstanceId!]
+    const tokens = [TOKEN_SHIELD, TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_EXPERIENCE]
+    const given = chosen.reduce((acc, id) => giveMixedTokens(acc, id, tokens), s)
+    return given.players[ctx.owner].units.filter(u => !chosen.includes(u.instanceId)).reduce((acc, u) => defeatUnit(acc, u.instanceId), given)
+  },
+})
+/** The friendly unique Sith units Always Two may choose between. */
+const sithPair = (s: GameState, ctx: EventCtx): string[] => pickedIds(s, ctx, pickAll(pickFriendly, pickUnique, pickTrait('Sith')))
+registerCard('SOR_055', { // The Force Is With Me
+  ...whenPlayed('Choose a friendly unit and give 2 Experience tokens to it. If you control a Force unit, also give a Shield token to the chosen unit. You may attack with the chosen unit.',
+    (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'give 2 Experience tokens to a friendly unit', false)),
+  ifYouDo: (s, ctx) => {
+    const id = ctx.targetInstanceId
+    if (!id) return s
+    const tokens = youControl(s, ctx, pickTrait('Force'))
+      ? [TOKEN_EXPERIENCE, TOKEN_EXPERIENCE, TOKEN_SHIELD]
+      : [TOKEN_EXPERIENCE, TOKEN_EXPERIENCE]
+    return offerAttack(giveMixedTokens(s, id, tokens), ctx.owner, `${ctx.sourceInstanceId}-attack`, { attacker: { only: [id] } })
+  },
 })

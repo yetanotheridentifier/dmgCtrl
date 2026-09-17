@@ -9,7 +9,7 @@ import { collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCar
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
-import { exhaustUnit, findUnit, giveToken, giveTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady } from './effects'
+import { exhaustUnit, findUnit, giveToken, giveTokens, giveMixedTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage } from './keywords'
@@ -1859,7 +1859,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         // "Deal 4 damage to it" (Reckless Landing) — the unit just played, which can only be
         // addressed now that it is on the board.
         if (choice.thenDamageIt) next = dealDamageToUnit(next, enteredId, choice.thenDamageIt)
-        if (choice.thenShieldIt) next = giveToken(next, enteredId, TOKEN_SHIELD)
+        if (choice.thenTokens) next = giveMixedTokens(next, enteredId, choice.thenTokens)
         if (choice.thenDamageOwnBase) next = dealDamageToBase(next, choice.controller, card.cost)
         if (choice.thenDelay) next = addDelayedEffect(next, { ...choice.thenDelay, owner: choice.controller, unitId: enteredId })
         if (choice.thenLasting) next = addLastingEffect(next, { ...choice.thenLasting, targetInstanceId: enteredId })

@@ -827,12 +827,14 @@ type ChoiceVariant =
   // units), paying its cost + `costDelta`, entering ready if `entersReady` (Fennec, Moff Gideon).
   // `thenDamageIt` deals that much to the unit just played — "Play a unit from your hand. It costs 4
   // less. Deal 4 damage to it" (Reckless Landing), which can only be aimed once it is on the board.
-  // `thenShieldIt` gives the unit just played a Shield token (Rio Durant's "it gains Shielded").
+  // `thenTokens` lists the tokens the unit just played receives, attaching together as one grant: a
+  // Shield (Rio Durant's "it gains Shielded", Soresu Stance), Experience tokens (Phantom, The Burden
+  // of Masters), or one of each (Three Lessons).
   // `thenDamageOwnBase` deals the played unit's printed cost to its controller's base (Galactic Ambition).
   // `thenDelay` leaves a delayed effect about the played unit (Sneak Attack defeats it at the regroup phase).
   // `thenLasting` gives the played unit a lasting effect (Shien Flurry's prevention). `thenDefeat` defeats
   // these units once the play is settled, played or declined (Consolidation of Power).
-  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number; thenShieldIt?: boolean; thenDamageOwnBase?: boolean; thenDelay?: { cardId: string; when: DelayedEffect['when'] }; thenLasting?: Omit<LastingEffect, 'targetInstanceId'>; thenDefeat?: string[] }
+  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number; thenTokens?: string[]; thenDamageOwnBase?: boolean; thenDelay?: { cardId: string; when: DelayedEffect['when'] }; thenLasting?: Omit<LastingEffect, 'targetInstanceId'>; thenDefeat?: string[] }
   // Additional cost "exhaust a friendly unit": pick one of `targets` to exhaust, then the
   // `then` play-from-hand step follows (Fennec). Mandatory.
   | { kind: 'selectUnitToExhaust'; id: string; controller: PlayerId; targets: string[]; then: PlayFromHandSpec }

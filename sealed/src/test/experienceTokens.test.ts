@@ -35,6 +35,9 @@ const SHIPPED = [
   'SEC_252', 'SOR_037', 'LOF_055', 'SHD_081', 'SOR_080', 'LOF_099', 'SEC_124', 'LOF_241', 'SOR_245', 'TS26_60',
   // D: the number of tokens is decided as the ability resolves
   'SEC_040', 'LOF_255', 'SOR_035', 'SEC_260', 'SHD_039', 'TS26_51',
+  // E: a token alongside something else
+  'LAW_165', 'LOF_054', 'LAW_168', 'LOF_239', 'LOF_263', 'LOF_042', 'SOR_055', 'LAW_144', 'LOF_125', 'LOF_225',
+  'JTL_055', 'JTL_091', 'TS26_58', 'LAW_257', 'LAW_069', 'SHD_099',
 ]
 /** Registered elsewhere; used here to play a unit for free, so "no resources were paid" can be reached. */
 const GALACTIC_AMBITION = 'SOR_235'
@@ -56,6 +59,7 @@ const F: Record<string, EngineCard> = {
   GRD: src('GRD'),
   GRD2: src('GRD2'),
   SPC: src('SPC', { arena: 'space' }),
+  SPC_WEAK: src('SPC_WEAK', { arena: 'space', power: 1, hp: 2 }),
   CUN: src('CUN', { aspects: ['Cunning'] }),
   VIG: src('VIG', { aspects: ['Vigilance'] }),
   AGG: src('AGG', { aspects: ['Aggression'] }),
@@ -79,6 +83,9 @@ const F: Record<string, EngineCard> = {
   TROOPER: src('TROOPER', { traits: ['TROOPER'] }),
   OFFICIAL: src('OFFICIAL', { traits: ['OFFICIAL'] }),
   L_UNIT: card({ id: 'L_UNIT', type: 'leader', cost: 5, power: 3, hp: 6 }),
+  WEAK: src('WEAK', { power: 1, hp: 1 }),
+  SITH: src('SITH', { traits: ['SITH'], unique: true }),
+  SITH2: src('SITH2', { traits: ['SITH'], unique: true }),
   EV: card({ id: 'EV', type: 'event', cost: 1 }),
   VIG_EV: card({ id: 'VIG_EV', type: 'event', cost: 1, aspects: ['Vigilance'] }),
   FREE_EV: card({ id: 'FREE_EV', type: 'event', cost: 0 }),
@@ -540,5 +547,149 @@ describe('Experience tokens, D: the number of tokens is decided as the ability r
     const declined = skip(s)
     expect(declined.players.opponent.base.damage).toBe(9)
     noChoice(declined)
+  })
+})
+
+describe('Experience tokens, E: a token alongside something else', () => {
+  it('Combat Exercise (LAW_165) exhausts a ready friendly unit for 2 tokens on it', () => {
+    const s = playEvent(board({ units: [unit('r', 'GRD'), unit('x', 'GRD2', { exhausted: true })] }, { units: [unit('e', 'GRD')] }), 'LAW_165')
+    expect(unitOffers(s)).toEqual(['r'])
+    const done = accept(s, { targetInstanceId: 'r' })
+    expect(U(done, 'r')!.exhausted).toBe(true)
+    expect(exp(done, 'r')).toBe(2)
+  })
+
+  it('Calm in the Storm (LOF_054) exhausts a ready friendly unit for a Shield and 2 tokens on it', () => {
+    const s = playEvent(board({ units: [unit('r', 'GRD')] }), 'LOF_054')
+    const done = accept(s, { targetInstanceId: 'r' })
+    expect([exp(done, 'r'), shields(done, 'r')]).toEqual([2, 1])
+    expect(U(done, 'r')!.exhausted).toBe(true)
+  })
+
+  it('Consumed by the Dark Side (LOF_239) gives 2 tokens first, so the unit survives the 2 damage it then takes', () => {
+    // A 1/1 with two Experience tokens is a 3/3, and 2 damage leaves it alive.
+    const s = playEvent(board({}, { units: [unit('e', 'WEAK')] }), 'LOF_239')
+    const done = accept(s, { targetInstanceId: 'e' })
+    expect(exp(done, 'e')).toBe(2)
+    expect(U(done, 'e')!.damage).toBe(2)
+  })
+
+  it('Last Words (LOF_263) gives 2 tokens only when a friendly unit was defeated this phase', () => {
+    const quiet = playEvent(board({ units: [unit('f', 'GRD')] }, {}, { phaseEvents: phaseEvents({}) }), 'LOF_263')
+    noChoice(quiet)
+    const after = playEvent(board({ units: [unit('f', 'GRD')] }, {}, { phaseEvents: phaseEvents({ defeated: { player: ['GRD2'], opponent: [] } }) }), 'LOF_263')
+    expect(choice(after)).toMatchObject({ kind: 'mayGiveTokens', count: 2 })
+  })
+
+  it('Haymaker (LAW_168) gives a token, then that unit hits an enemy in its arena for its raised power', () => {
+    const s = playEvent(board({ units: [unit('f', 'WEAK')] }, { units: [unit('e', 'GRD'), unit('sp', 'SPC')] }), 'LAW_168')
+    expect(unitOffers(s)).toEqual(['f'])
+    const given = accept(s, { targetInstanceId: 'f' })
+    expect(exp(given, 'f')).toBe(1)
+    // Same arena only, and the damage is the power after the token: a 1/1 plus 1/1 deals 2.
+    expect(unitOffers(given)).toEqual(['e'])
+    expect(U(accept(given, { targetInstanceId: 'e' }), 'e')!.damage).toBe(2)
+  })
+
+  it('Apology Accepted (JTL_091) defeats a friendly unit and may then give 2 tokens', () => {
+    const s = playEvent(board({ units: [unit('f', 'GRD'), unit('keep', 'GRD2')] }, { units: [unit('e', 'GRD')] }), 'JTL_091')
+    expect(unitOffers(s)).toEqual(['f', 'keep'])
+    const done = accept(s, { targetInstanceId: 'f' })
+    expect(U(done, 'f')).toBeUndefined()
+    expect(choice(done)).toMatchObject({ kind: 'mayGiveTokens', count: 2, optional: true })
+    expect(unitOffers(done)).toEqual(['e', 'keep'])
+  })
+
+  it("You're All Clear, Kid (JTL_055) pays out only when the last enemy space unit is the one defeated", () => {
+    // Only the 2 HP space unit is within "3 or less remaining HP"; the 8 HP one is not offered.
+    const stillThere = playEvent(board({}, { units: [unit('weak', 'SPC_WEAK'), unit('other', 'SPC')] }), 'JTL_055')
+    expect(unitOffers(stillThere)).toEqual(['weak'])
+    noChoice(accept(stillThere, { targetInstanceId: 'weak' }))
+    const alone = playEvent(board({ units: [unit('f', 'GRD')] }, { units: [unit('weak', 'SPC_WEAK')] }), 'JTL_055')
+    const done = accept(alone, { targetInstanceId: 'weak' })
+    expect(choice(done)).toMatchObject({ kind: 'mayGiveTokens', count: 1, optional: true })
+  })
+
+  it('Backed by the Pykes (TS26_58) may then deal damage equal to the Experience tokens on friendly units', () => {
+    const s = playEvent(board({ units: [unit('f', 'GRD'), unit('other', 'GRD2', { upgrades: [{ cardId: TOKEN_EXPERIENCE, owner: 'player' }] })] }, { units: [unit('e', 'GRD')] }), 'TS26_58')
+    const given = accept(s, { targetInstanceId: 'f' })
+    // One already there plus the one just given.
+    expect(choice(given)).toMatchObject({ kind: 'selectDamageTarget', amount: 2, optional: true })
+    expect(U(accept(given, { targetInstanceId: 'e' }), 'e')!.damage).toBe(2)
+  })
+
+  it('Hidden Hand Supplier (LAW_257) may pay 1 to give a token to another unit', () => {
+    const s = play(board({ units: [unit('f', 'GRD')] }), 'LAW_257')
+    expect(choice(s)).toMatchObject({ kind: 'mayPayThen', cost: 1 })
+    const paid = accept(s)
+    expect(unitOffers(paid)).toEqual(['f'])
+    expect(exp(accept(paid, { targetInstanceId: 'f' }), 'f')).toBe(1)
+    noChoice(skip(s))
+  })
+
+  it('Phantom (LAW_144) plays a Heroism unit from hand and gives it a token', () => {
+    const s = play(board({ hand: ['HER', 'VIL'] }), 'LAW_144')
+    expect(choice(s)).toMatchObject({ kind: 'playUnitFromHand', thenTokens: [TOKEN_EXPERIENCE] })
+    const done = accept(s, { handIndex: 0 })
+    expect(exp(done, last(done))).toBe(1)
+  })
+
+  it('Three Lessons (LOF_225) plays a unit that enters Hidden with an Experience and a Shield token', () => {
+    const s = playEvent(board({ hand: ['GRD'] }), 'LOF_225')
+    const done = accept(s, { handIndex: 0 })
+    const played = last(done)
+    expect([exp(done, played), shields(done, played)]).toEqual([1, 1])
+    expect(U(done, played)!.hidden).toBe(true)
+  })
+
+  it('The Burden of Masters (LOF_125) bottoms a Force unit from the discard, then plays a unit with 2 tokens', () => {
+    const s = playEvent(board({ hand: ['GRD'], discard: ['FORCE_U', 'VIL'], deck: ['GRD2'] }), 'LOF_125')
+    expect(choice(s)).toMatchObject({ kind: 'selectCardThen', candidates: ['FORCE_U'] })
+    const bottomed = accept(s, { optionIndex: 0 })
+    expect(bottomed.players.player.discard).not.toContain('FORCE_U')
+    expect(bottomed.players.player.deck).toContain('FORCE_U')
+    const done = accept(bottomed, { handIndex: 0 })
+    expect(exp(done, last(done))).toBe(2)
+  })
+
+  it('Echo (SHD_099) may discard a card to put 2 tokens on a unit sharing its name', () => {
+    const s = play(board({ hand: ['GRD'], units: [unit('same', 'GRD'), unit('other', 'GRD2')] }), 'SHD_099')
+    expect(choice(s)).toMatchObject({ controller: 'player' })
+    const discarded = accept(s, { handIndex: 0 })
+    expect(unitOffers(discarded)).toEqual(['same'])
+    expect(exp(accept(discarded, { targetInstanceId: 'same' }), 'same')).toBe(2)
+  })
+
+  it('The Ghost (LAW_069) gives an Experience and a Shield to one unit, or to two with a Vigilance or Aggression unit', () => {
+    const alone = play(board({ units: [unit('a', 'GRD'), unit('b', 'GRD2')] }), 'LAW_069')
+    const once = accept(alone, { targetInstanceId: 'a' })
+    expect([exp(once, 'a'), shields(once, 'a')]).toEqual([1, 1])
+    noChoice(once)
+    const wide = play(board({ units: [unit('v', 'VIG'), unit('b', 'GRD2')] }), 'LAW_069')
+    const first = accept(wide, { targetInstanceId: 'v' })
+    expect(unitOffers(first)).not.toContain('v')
+    const second = accept(first, { targetInstanceId: 'b' })
+    expect([exp(second, 'v'), exp(second, 'b')]).toEqual([1, 1])
+  })
+
+  it('Always Two (LOF_042) needs two friendly unique Sith units, and defeats every other friendly unit', () => {
+    const one = playEvent(board({ units: [unit('s1', 'SITH'), unit('g', 'GRD')] }), 'LOF_042')
+    noChoice(one)
+    const s = playEvent(board({ units: [unit('s1', 'SITH'), unit('s2', 'SITH2'), unit('g', 'GRD')] }, { units: [unit('e', 'GRD')] }), 'LOF_042')
+    expect(unitOffers(s)).toEqual(['s1', 's2'])
+    const done = accept(accept(s, { targetInstanceId: 's1' }), { targetInstanceId: 's2' })
+    expect([exp(done, 's1'), shields(done, 's1'), exp(done, 's2'), shields(done, 's2')]).toEqual([2, 2, 2, 2])
+    expect(U(done, 'g')).toBeUndefined()
+    expect(U(done, 'e')).toBeDefined()
+  })
+
+  it('The Force Is With Me (SOR_055) gives 2 tokens, a Shield with a Force unit, and offers that unit an attack', () => {
+    const plain = playEvent(board({ units: [unit('f', 'GRD')] }, { units: [unit('e', 'GRD')] }), 'SOR_055')
+    const done = accept(plain, { targetInstanceId: 'f' })
+    expect([exp(done, 'f'), shields(done, 'f')]).toEqual([2, 0])
+    expect(choice(done)).toMatchObject({ kind: 'mayAttackAnyUnit' })
+    const withForce = playEvent(board({ units: [unit('f', 'GRD'), unit('force', 'FORCE_U')] }, { units: [unit('e', 'GRD')] }), 'SOR_055')
+    const shielded = accept(withForce, { targetInstanceId: 'f' })
+    expect([exp(shielded, 'f'), shields(shielded, 'f')]).toEqual([2, 1])
   })
 })

@@ -649,6 +649,19 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   // Experience tokens: D, the number of tokens is decided as the ability resolves
   { id: 'SEC_040', name: 'Emergency Powers' },
   { id: 'SHD_039', name: 'Calculated Lethality' },
+  // Experience tokens: E, a token alongside something else
+  { id: 'LAW_165', name: 'Combat Exercise' },
+  { id: 'LOF_054', name: 'Calm in the Storm' },
+  { id: 'LAW_168', name: 'Haymaker' },
+  { id: 'LOF_239', name: 'Consumed by the Dark Side' },
+  { id: 'LOF_263', name: 'Last Words' },
+  { id: 'LOF_042', name: 'Always Two' },
+  { id: 'SOR_055', name: 'The Force Is With Me' },
+  { id: 'LOF_125', name: 'The Burden of Masters' },
+  { id: 'LOF_225', name: 'Three Lessons' },
+  { id: 'JTL_055', name: "You're All Clear, Kid" },
+  { id: 'JTL_091', name: 'Apology Accepted' },
+  { id: 'TS26_58', name: 'Backed by the Pykes' },
 ]
 
 /**
@@ -1329,6 +1342,11 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SOR_035', name: 'Lieutenant Childsen' },
   { id: 'SEC_260', name: "Inspector's Shuttle" },
   { id: 'TS26_51', name: 'Lom Pyke' },
+  // Experience tokens: E, a token alongside something else
+  { id: 'LAW_144', name: 'Phantom' },
+  { id: 'LAW_257', name: 'Hidden Hand Supplier' },
+  { id: 'LAW_069', name: 'The Ghost' },
+  { id: 'SHD_099', name: 'Echo' },
 ]
 
 /**
