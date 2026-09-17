@@ -4738,6 +4738,69 @@ registerCard('SOR_126', resupply) // Resupply
 registerCard('LAW_171', whenPlayed('Resource this event and the top card of your deck.', (s, ctx) => // Stockpile
   resourceTopOfDeck(resourceThisEvent(s, ctx), ctx.owner)))
 
+// Decks, draws and discard piles
+/** Choose a card from your own hand for the card's hook (`step`), or nothing with an empty hand. */
+const handCardThen = (s: GameState, ctx: Resumable, text: string, step: string): GameState => {
+  const hand = s.players[ctx.owner].hand
+  return hand.length ? pushChoice(s, { kind: 'selectHandCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, handIndices: hand.map((_, i) => i), text, then: resume(ctx, step) }) : s
+}
+/** Move the hand card at `handIndex` to the top or the bottom of its owner's deck. */
+const handToDeck = (s: GameState, owner: PlayerId, handIndex: number | undefined, where: 'top' | 'bottom'): GameState => {
+  const p = s.players[owner]
+  const cardId = handIndex === undefined ? undefined : p.hand[handIndex]
+  if (cardId === undefined) return s
+  const hand = p.hand.filter((_, i) => i !== handIndex)
+  return updatePlayer(s, owner, { hand, deck: where === 'top' ? [cardId, ...p.deck] : [...p.deck, cardId] })
+}
+registerCard('SEC_232', { // Kreia's Whispers
+  ...whenPlayed('Draw 3 cards, then put a card from your hand on the top of your deck and another card from your hand on the bottom of your deck.', (s, ctx) =>
+    handCardThen(drawCards(s, ctx.owner, 3), ctx, 'put a card from your hand on top of your deck', 'top')),
+  ifYouDo: (s, ctx) => (ctx.step === 'top'
+    ? handCardThen(handToDeck(s, ctx.owner, ctx.handIndex, 'top'), ctx, 'put another card from your hand on the bottom of your deck', 'bottom')
+    : handToDeck(s, ctx.owner, ctx.handIndex, 'bottom')),
+})
+registerCard('TWI_257', { // Private Manufacturing
+  ...whenPlayed('Draw 2 cards. If you control no token units, put 2 cards from your hand on the bottom of your deck in any order.', (s, ctx) => {
+    const drawn = drawCards(s, ctx.owner, 2)
+    // Picked one at a time, so the order they are picked is the order they go under the deck.
+    return drawn.players[ctx.owner].units.some(u => isTokenCard(u.cardId)) ? drawn : handCardThen(drawn, ctx, 'put a card from your hand on the bottom of your deck', 'first')
+  }),
+  ifYouDo: (s, ctx) => {
+    const next = handToDeck(s, ctx.owner, ctx.handIndex, 'bottom')
+    return ctx.step === 'first' ? handCardThen(next, ctx, 'put another card from your hand on the bottom of your deck', 'second') : next
+  },
+})
+/** Discard the top `n` cards of `who`'s deck; returns the state and the cards discarded. */
+const millTop = (s: GameState, who: PlayerId, n: number): [GameState, string[]] => {
+  const p = s.players[who]
+  const milled = p.deck.slice(0, n)
+  return [updatePlayer(s, who, { deck: p.deck.slice(milled.length), discard: [...p.discard, ...milled] }), milled]
+}
+registerCard('LAW_203', whenPlayed('Discard 2 cards from your deck. You may return an Aggression card discarded this way to your hand.', (s, ctx) => { // Daring Delve
+  const [next, milled] = millTop(s, ctx.owner, 2)
+  const candidates = milled.filter(id => printedAspect(next.cards[id], 'Aggression'))
+  return candidates.length ? pushChoice(next, { kind: 'selectFromDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true }) : next
+}))
+registerCard('JTL_208', whenPlayed("Discard 3 cards from an opponent's deck and 3 cards from your deck. Deal damage to a unit equal to the number of cards with an odd cost discarded this way.", (s, ctx) => { // Never Tell Me the Odds
+  const [theirs, fromThem] = millTop(s, opponentOf(ctx.owner), 3)
+  const [next, fromMe] = millTop(theirs, ctx.owner, 3)
+  const odd = [...fromThem, ...fromMe].filter(id => (next.cards[id]?.cost ?? 0) % 2 === 1).length
+  return odd > 0 ? damageChoice(next, ctx, odd, allUnits(next)) : next
+}))
+registerCard('LOF_240', whenPlayed('You may return a Force unit and a Lightsaber upgrade from your discard pile to your hand.', (s, ctx) => { // Flight of the Inquisitor
+  const discard = s.players[ctx.owner].discard
+  const offer = (st: GameState, id: string, test: (c: EngineCard | undefined) => boolean): GameState => {
+    const candidates = [...new Set(discard.filter(cardId => test(st.cards[cardId])))]
+    return candidates.length ? pushChoice(st, { kind: 'selectFromDiscard', id, controller: ctx.owner, candidates, optional: true }) : st
+  }
+  return offer(offer(s, `${ctx.sourceInstanceId}-unit`, c => printedUnit(c) && printedTrait(c, 'Force')), `${ctx.sourceInstanceId}-saber`,
+    c => c?.type === 'upgrade' && printedTrait(c, 'Lightsaber'))
+}))
+registerCard('SOR_042', whenPlayed('Search your deck for a card and draw it. (Then, shuffle your deck.)', (s, ctx) => { // Search Your Feelings
+  const revealed = s.players[ctx.owner].deck
+  return revealed.length ? pushChoice(s, { kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices: revealed.map((_, i) => i), shuffle: true }) : s
+}))
+
 registerCard('LAW_085', unitThenWp('Choose a friendly non-leader unit. An opponent takes control of it. If they do, deal 4 damage to another unit in the same arena.', pickAll(pickFriendly, nonLeader), 'give a friendly non-leader unit to an opponent', false, // You Hold This
   (s, ctx) => {
     const others = otherInArena(s, ctx.targetInstanceId!)

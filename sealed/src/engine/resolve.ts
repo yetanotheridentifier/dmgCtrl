@@ -1571,6 +1571,9 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
             ? updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: rest, discard: [...p.discard, ...others] })
             : updatePlayer(next, owner, { hand: [...p.hand, drawn], deck: [...rest, ...others] })
         }
+        if (choice.shuffle) {
+          next = { ...updatePlayer(next, owner, { deck: seededShuffle(next.players[owner].deck, next.rngSeed) }), rngSeed: nextSeed(next.rngSeed) }
+        }
         // Sense Through the Force: a correct guess at the drawn card's cost pays out.
         if (choice.guessedCost !== undefined && next.cards[drawn]?.cost === choice.guessedCost) {
           const targets = next.players[owner].units.filter(u => unitHasTrait(next, u, 'Force')).map(u => u.instanceId)

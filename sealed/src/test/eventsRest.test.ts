@@ -85,6 +85,10 @@ const F = {
   CLONE6: card({ id: 'CLONE6', arena: 'ground', cost: 6, power: 2, hp: 3, traits: ['CLONE'] }),
   CLONE_VEH: card({ id: 'CLONE_VEH', arena: 'space', cost: 6, power: 2, hp: 3, traits: ['CLONE', 'VEHICLE'] }),
   FORCE_HAND: card({ id: 'FORCE_HAND', arena: 'ground', cost: 3, power: 2, hp: 3, traits: ['FORCE', 'JEDI'] }),
+  SEC_232: ev('SEC_232', 2), TWI_257: ev('TWI_257', 2), LAW_203: ev('LAW_203'), JTL_208: ev('JTL_208', 3),
+  LOF_240: ev('LOF_240', 2), SOR_042: ev('SOR_042', 4),
+  SABER: card({ id: 'SABER', type: 'upgrade', cost: 2, traits: ['ITEM', 'WEAPON', 'LIGHTSABER'] }),
+  ODD3: card({ id: 'ODD3', type: 'event', cost: 3 }),
   SABOTEUR: card({ id: 'SABOTEUR', arena: 'ground', cost: 2, power: 2, hp: 5, keywords: [{ name: 'Saboteur' }] }),
   OFFICIAL: card({ id: 'OFFICIAL', arena: 'ground', cost: 2, power: 1, hp: 4, traits: ['OFFICIAL'] }),
   TWO_ASP: card({ id: 'TWO_ASP', arena: 'ground', cost: 3, power: 2, hp: 5, aspects: ['Cunning', 'Heroism'] }),
@@ -1044,5 +1048,77 @@ describe('events that become resources', () => {
     expect(s.players.player.discard).toEqual([])
     expect(s.players.player.resources.slice(6).map(r => r.cardId).sort()).toEqual(['LAW_171', 'U_VIG'])
     expect(s.players.player.deck).toEqual(['FILL'])
+  })
+})
+
+// ── Decks, draws and discard piles ──────────────────────────────────────────────────────────────
+
+describe('events that move cards between the deck, hand and discard pile', () => {
+  it("Kreia's Whispers (SEC_232) draws 3, then puts one card on top of the deck and another on the bottom", () => {
+    let s = play(board('SEC_232', { deck: ['U_VIG', 'U_CMD', 'UPG', 'FILL'] }))
+    expect(s.players.player.hand).toEqual(['U_VIG', 'U_CMD', 'UPG'])
+    expect(choice(s).kind).toBe('selectHandCardThen')
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { handIndex: 1 })
+    expect(s.players.player.deck).toEqual(['U_CMD', 'FILL'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { handIndex: 1 })
+    noChoice(s)
+    expect(s.players.player.hand).toEqual(['U_VIG'])
+    expect(s.players.player.deck).toEqual(['U_CMD', 'FILL', 'UPG'])
+  })
+
+  it('Private Manufacturing (TWI_257) draws 2, and puts 2 on the bottom only without a token unit', () => {
+    let s = play(board('TWI_257', { deck: ['U_VIG', 'U_CMD', 'FILL'], hand: ['UPG'] }))
+    expect(s.players.player.hand).toEqual(['UPG', 'U_VIG', 'U_CMD'])
+    s = accept(accept(s, { handIndex: 0 }), { handIndex: 1 })
+    noChoice(s)
+    expect(s.players.player.hand).toEqual(['U_VIG'])
+    expect(s.players.player.deck).toEqual(['FILL', 'UPG', 'U_CMD'])
+    const token = Object.keys(F).find(id => id.startsWith('TOKEN_') && (F as Record<string, EngineCard>)[id].type === 'unit')!
+    noChoice(play(board('TWI_257', { deck: ['U_VIG', 'U_CMD'], units: [unit('t', token)] })))
+  })
+
+  it('Daring Delve (LAW_203) discards 2 from your deck and may return an Aggression card among them', () => {
+    let s = play(board('LAW_203', { deck: ['E_AGG', 'U_VIG', 'FILL'], discard: ['GRD'] }))
+    expect(s.players.player.deck).toEqual(['FILL'])
+    const c = choice(s)
+    expect(c.kind === 'selectFromDiscard' ? c.candidates : []).toEqual(['E_AGG'])
+    expect(declinable(s)).toBe(true)
+    s = accept(s, { optionIndex: 0 })
+    expect(s.players.player.hand).toEqual(['E_AGG'])
+    expect(s.players.player.discard).toEqual(['GRD', 'LAW_203', 'U_VIG'])
+  })
+
+  it('Never Tell Me the Odds (JTL_208) discards 3 from each deck and deals damage per odd-cost card', () => {
+    let s = play(board('JTL_208', { deck: ['ODD3', 'U_CUN', 'UPG', 'FILL'] }, { deck: ['U_VIG', 'ODD3', 'E_AGG'], units: [unit('e', 'BIG')] }))
+    expect(s.players.player.deck).toEqual(['FILL'])
+    expect(s.players.opponent.deck).toEqual([])
+    // ODD3, U_CUN (3), UPG (1) and ODD3 again: 4 odd costs.
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(4)
+  })
+
+  it('Flight of the Inquisitor (LOF_240) may return a Force unit and a Lightsaber upgrade from your discard pile', () => {
+    let s = play(board('LOF_240', { discard: ['FORCE', 'P3', 'SABER', 'UPG'] }))
+    const offers = (s.pendingChoices ?? []).map(c => (c.kind === 'selectFromDiscard' ? c.candidates : []))
+    expect(offers).toEqual([['FORCE'], ['SABER']])
+    expect(declinable(s)).toBe(true)
+    s = accept(accept(s, { optionIndex: 0 }), { optionIndex: 0 })
+    expect(s.players.player.hand).toEqual(['FORCE', 'SABER'])
+  })
+
+  it('Search Your Feelings (SOR_042) draws any card from the deck and shuffles the rest', () => {
+    const deck = ['U_VIG', 'U_CMD', 'UPG', 'FILL', 'E_AGG', 'MANDO']
+    let s = play(board('SOR_042', { deck }))
+    const c = choice(s)
+    expect(revealedOf(c)).toEqual(deck)
+    expect(eligibleCards(c)).toEqual(deck)
+    expect(c).toMatchObject({ shuffle: true })
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { deckIndex: 3 })
+    expect(s.players.player.hand).toEqual(['FILL'])
+    expect([...s.players.player.deck].sort()).toEqual(deck.filter(id => id !== 'FILL').sort())
   })
 })
