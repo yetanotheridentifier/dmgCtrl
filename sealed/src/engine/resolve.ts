@@ -1633,7 +1633,9 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'nameCard': {
       // Ryder Azadi: record the named card on this unit — the opponent can't play cards with
       // that name while it's in play (enforced in legalMoves). Naming is mandatory.
-      if (cardName && choice.phaseBan) {
+      if (cardName && choice.then) {
+        next = runIfYouDo(next, choice.then, { nameChosen: cardName })
+      } else if (cardName && choice.phaseBan) {
         next = { ...next, bannedNames: [...(next.bannedNames ?? []), cardName] }
       } else if (cardName) {
         next = updatePlayer(next, choice.controller, {
@@ -2479,7 +2481,7 @@ function finishHealing(state: GameState, damageUnit: string | undefined, healed:
 }
 
 /** Resume an ability at its card's `ifYouDo` hook, with what the answered choice settled. */
-function runIfYouDo(state: GameState, then: IfYouDo, settled: { targetInstanceId?: string; cardChosen?: string; handIndex?: number; upgradeChosen?: UpgradeRef; playerChosen?: PlayerId; arenaChosen?: Arena; optionIndex?: number } = {}): GameState {
+function runIfYouDo(state: GameState, then: IfYouDo, settled: { targetInstanceId?: string; cardChosen?: string; handIndex?: number; upgradeChosen?: UpgradeRef; playerChosen?: PlayerId; arenaChosen?: Arena; optionIndex?: number; nameChosen?: string } = {}): GameState {
   const hook = getCardDefinition(then.cardId)?.ifYouDo
   if (!hook) return state
   const next = hook(state, { owner: then.owner, cardId: then.cardId, sourceInstanceId: then.sourceInstanceId, step: then.step, upgradeChosen: then.upgrade, unitChosen: then.unit, ...settled })

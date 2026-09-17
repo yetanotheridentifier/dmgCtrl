@@ -1,5 +1,5 @@
 import type { DamageSource, GameState, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState } from './types'
-import { updatePlayer, pushChoice, recordBaseDamaged, recordUpgradeDefeated, recordUnitHealed, recordUnitLeftPlay, abilityCardIds } from './types'
+import { updatePlayer, pushChoice, recordBaseDamaged, recordCardsDrawn, recordUpgradeDefeated, recordUnitHealed, recordUnitLeftPlay, abilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { TriggerPoint } from './abilities'
@@ -316,8 +316,12 @@ export function healBase(state: GameState, player: PlayerId, amount: number): Ga
   return { ...state, players: { ...state.players, [player]: { ...p, base: { ...p.base, damage: Math.max(0, p.base.damage - amount) } } } }
 }
 
-/** True while a card in play stops bases being healed. Either side's base: the card says "bases". */
+/**
+ * True while a card in play stops bases being healed, or one did for this phase (Shifty Suspects).
+ * Either side's base: the cards say "bases".
+ */
 function baseHealingSuppressed(state: GameState): boolean {
+  if (state.basesUnhealable) return true
   for (const side of ['player', 'opponent'] as PlayerId[]) {
     for (const u of state.players[side].units) {
       for (const cardId of abilityCardIds(u)) {
@@ -416,10 +420,10 @@ export function drawCards(state: GameState, owner: PlayerId, n: number): GameSta
   const p = state.players[owner]
   const drawn = p.deck.slice(0, n)
   if (drawn.length === 0) return state // nothing drawn → not a draw event
-  const next: GameState = {
+  const next = recordCardsDrawn({
     ...state,
     players: { ...state.players, [owner]: { ...p, hand: [...p.hand, ...drawn], deck: p.deck.slice(drawn.length) } },
-  }
+  }, owner, drawn.length)
   // "When you draw 1 or more cards" (Axe Woves) — once per event, however many cards.
   return fireUnitsTrigger(next, 'whenDrawCards', owner)
 }

@@ -92,9 +92,14 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   SHD_212: { keywords: [] }, // Privateer Scyk: Shielded while you control another Cunning unit
   LOF_085: { keywords: [] }, // Praetorian Guard: Sentinel while you control a unit with 4 or more power
   JTL_137: { keywords: [] }, // Vonreg's TIE Interceptor: Overwhelm at 4 power, Raid 1 at 6
+  SOR_188: { keywords: [] }, // Chopper: Raid 1 while you control another Spectre unit
+  SOR_131: { keywords: [] }, // Fifth Brother: Raid 1 for each damage on him
+  TS26_75: { keywords: [] }, // Jango Fett: Ambush while an enemy unit has attacked your base this phase
 
   // A keyword a unit only ever hands to other units (continued).
   LOF_186: { keywords: [] }, // Marchion Ro: he doubles each friendly unit's Raid, and has none of his own
+  LAW_104: { keywords: [] }, // Bodhi Rook: gives a friendly Rebel unit Sentinel
+  SOR_156: { keywords: [] }, // Benthic "Two Tubes": gives another friendly Aggression unit Raid 2
 
   // A printed keyword the source omits.
   SHD_188: { keywords: [{ name: 'Ambush' }] }, // 4-LOM

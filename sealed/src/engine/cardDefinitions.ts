@@ -7,7 +7,7 @@ import { effectiveHp, effectivePower } from './stats'
 import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
 import { discardUnitsMatching, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, isTokenCard } from './tokenUnits'
-import { opponentOf, pushChoice, addLastingEffect, addDelayedEffect, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, markAbilityUsed, updatePlayer } from './types'
+import { opponentOf, pushChoice, addLastingEffect, addDelayedEffect, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
 import { affordableHandUnits, resourceUpgradeCandidates, enemyAttackTargets, effectiveCost, eligibleAttacker, canAttackSomething, offerAttack } from './legalMoves'
 import type { AttackOffer } from './legalMoves'
 import { canAfford } from './resources'
@@ -5470,3 +5470,465 @@ registerCard('SHD_256', { actionAbilities: [{ // Mercenary Gunship
   usable: (s, self) => controllerOf(s, self) !== s.activePlayer,
   effect: (s, ctx) => stealTo(s, ctx.owner, ctx.sourceInstanceId, 'permanent'),
 }] })
+
+// ── On Attack units from the other sealed sets ─────────────────────────────────────────────────────
+// Built on the When Played helpers above: `onAttack` fires the same definition as the unit attacks. The
+// source is the attacking unit, and the attack's target is on the context, so an ability about "the
+// defender" reads `ctx.attackTarget`. Two steps that must not be answered out of order are chained
+// through the card's `ifYouDo`, so the second is raised only once the first is settled.
+
+/** A definition built with the When Played helpers, fired as its unit attacks instead. */
+const onAttack = (def: CardDefinition): CardDefinition => ({
+  ...def,
+  abilities: def.abilities?.map(a => (a.trigger === 'whenPlayed' ? { ...a, trigger: 'onAttack' as const } : a)),
+})
+/** Several definitions as one card, keeping every ability each of them declares. */
+const allOf = (...defs: CardDefinition[]): CardDefinition => Object.assign({}, ...defs, { abilities: defs.flatMap(d => d.abilities ?? []) })
+const attacks = (description: string, effect: AbilityDef['effect']): CardDefinition => ({ abilities: [{ trigger: 'onAttack', description, effect }] })
+const unitThenOa = (...args: Parameters<typeof unitThenWp>): CardDefinition => onAttack(unitThenWp(...args))
+const selfOf = (s: GameState, ctx: EventCtx): UnitState | undefined => findUnit(s, ctx.sourceInstanceId!)?.unit
+const selfIs = (test: (s: GameState, u: UnitState) => boolean): When => (s, ctx) => { const u = selfOf(s, ctx); return u !== undefined && test(s, u) }
+const defenderOf = (s: GameState, ctx: EffectContext): UnitState | undefined =>
+  (ctx.attackTarget?.kind === 'unit' ? findUnit(s, ctx.attackTarget.instanceId)?.unit : undefined)
+const attackingPower = (s: GameState, ctx: EventCtx): number => { const u = selfOf(s, ctx); return u ? effectivePower(s, u, { attacking: true }) : 0 }
+/** "<Unit> gets +X/+0 for this attack". */
+const forThisAttack = (s: GameState, id: string, power: number): GameState => addLastingEffect(s, { targetInstanceId: id, power, untilEndOfAttack: true })
+const leaderUnitYouControl: When = (s, ctx) => s.players[ctx.owner].units.some(u => isLeaderUnit(s, u))
+const sharesAspectWithBase = (s: GameState, owner: PlayerId, cardId: string): boolean => {
+  const base = s.cards[s.players[owner].base.cardId]?.aspects ?? []
+  return (s.cards[cardId]?.aspects ?? []).some(a => base.includes(a))
+}
+const damaged: Pick = (_s, u) => u.damage > 0
+const enemyGroundUnit = pickAll(pickEnemy, pickGround)
+
+// A: targets, draws and base damage
+registerCard('LAW_057', allOf( // Benthic "Two Tubes"
+  onAttack(damageWp('Deal 1 damage to an enemy ground unit.', enemyGroundUnit, 1, false)),
+  whenDefeated('Deal 1 damage to a base.', (s, ctx) => damageChoice(s, ctx, 1, [], BOTH_BASES)),
+))
+registerCard('LAW_181', onAttack(whenPlayed('Deal 2 damage to a base.', (s, ctx) => damageChoice(s, ctx, 2, [], BOTH_BASES)))) // Cloud-Rider Veteran
+registerCard('IBH_6', onAttack(whenPlayed('Deal 1 damage to a base.', (s, ctx) => damageChoice(s, ctx, 1, [], BOTH_BASES)))) // Rebellion Y-Wing
+registerCard('LAW_079', onAttack(damageWp('You may deal 3 damage to a damaged ground unit.', pickAll(pickGround, damaged), 3, true))) // K-2S0
+registerCard('LAW_064', onAttack(damageWp("If you control another Bounty Hunter unit, you may deal damage equal to this unit's power to a ground unit.", pickGround, // Zuckuss
+  attackingPower, true, (s, ctx) => youControl(s, ctx, pickOther, pickTrait('Bounty Hunter')))))
+registerCard('LOF_144', onAttack(damageWp('You may deal 1 damage to a space unit.', pickArena('space'), 1, true))) // Jedi Starfighter
+registerCard('LOF_163', onAttack(whenPlayed('If this unit has 6 or more power, you may deal 2 damage to an enemy base.', (s, ctx) => // Quinlan Vos
+  (attackingPower(s, ctx) >= 6 ? damageChoice(s, ctx, 2, [], [opponentOf(ctx.owner)], true) : s))))
+registerCard('JTL_151', onAttack(damageWp('You may deal 2 damage to a damaged unit.', damaged, 2, true))) // Red Five
+registerCard('JTL_147', { // Black One
+  statModifier: (_s, u) => (isUpgraded(u) ? { power: 1 } : {}),
+  // An upgrade is controlled by the player who played it, wherever it is attached.
+  ...onAttack(damageWp('If you control Poe Dameron (as a unit, upgrade, or leader), you may deal 1 damage to a unit.', pickAny, 1, true, (s, ctx) =>
+    playerControlsNamed(s, ctx.owner, 'Poe Dameron')
+      || allUnits(s).some(u => u.upgrades.some(up => up.owner === ctx.owner && s.cards[up.cardId]?.name === 'Poe Dameron'))))
+})
+registerCard('JTL_037', onAttack(damageWp('You may deal damage to a unit equal to the amount of damage on this unit.', pickAny, // Banshee
+  (s, ctx) => selfOf(s, ctx)?.damage ?? 0, true)))
+registerCard('TWI_154', onAttack(damageWp('If you have no cards in your hand, you may deal 3 damage to a ground unit.', pickGround, 3, true, // Mister Bones
+  (s, ctx) => s.players[ctx.owner].hand.length === 0)))
+registerCard('TWI_150', onAttack(whenPlayed('If your base has 15 or more damage on it, deal 1 damage to each enemy ground unit.', (s, ctx) => // Saw Gerrera
+  (s.players[ctx.owner].base.damage >= 15 ? pickedIds(s, ctx, enemyGroundUnit).reduce((acc, id) => dealDamageToUnit(acc, id, 1), s) : s))))
+registerCard('SHD_150', onAttack(damageWp('If this unit is upgraded, you may deal 2 damage to a ground unit.', pickGround, 2, true, selfIs((_s, u) => isUpgraded(u))))) // Koska Reeves
+registerCard('SOR_158', onAttack(whenPlayed('If you control a leader unit, deal 2 damage to a ground unit or a base.', (s, ctx) => // Jedha Agitator
+  (leaderUnitYouControl(s, ctx) ? damageChoice(s, ctx, 2, picked(s, ctx, pickGround), BOTH_BASES) : s))))
+registerCard('LAW_184', { // Aerie
+  ...onAttack(whenPlayed('Deal 2 damage to an enemy ground unit and 2 damage to a base.', (s, ctx) => {
+    const targets = pickedIds(s, ctx, enemyGroundUnit)
+    return targets.length ? unitThen(s, ctx, targets, 'deal 2 damage to an enemy ground unit', false, 'unit') : damageChoice(s, ctx, 2, [], BOTH_BASES)
+  })),
+  ifYouDo: (s, ctx) => damageChoice(dealDamageToUnit(s, ctx.targetInstanceId!, 2), ctx, 2, [], BOTH_BASES),
+})
+registerCard('LOF_170', onAttack(whenPlayed('Deal 3 damage to each other unit.', (s, ctx) => // Bendu
+  pickedIds(s, ctx, pickOther).reduce((acc, id) => dealDamageToUnit(acc, id, 3), s))))
+registerCard('TWI_202', onAttack(whenPlayed('Deal 2 damage to a random unit or base.', s => { // Jar Jar Binks
+  // Random, not chosen: the seed on the state keeps it deterministic under replay.
+  const options: (string | PlayerId)[] = [...allUnits(s).map(u => u.instanceId), ...BOTH_BASES]
+  const pick = options[Math.floor(seededUnit(s.rngSeed) * options.length)]
+  const next = { ...s, rngSeed: nextSeed(s.rngSeed) }
+  return pick === 'player' || pick === 'opponent' ? dealDamageToBase(next, pick, 2) : dealDamageToUnit(next, pick, 2)
+})))
+
+// A: heal, shield, exhaust, ready
+const healAnother = (description: string) =>
+  onAttack(whenPlayed(description, (s, ctx) => healChoice(s, ctx, 2, pickedIds(s, ctx, pickOther), [], true)))
+registerCard('LOF_250', healAnother('You may heal 2 damage from another unit.')) // Medical Frigate
+registerCard('SOR_059', healAnother('You may heal 2 damage from another unit.')) // 2-1B Surgical Droid
+registerCard('SHD_048', onAttack(whenPlayed('You may heal damage from another unit equal to the damage on this unit.', (s, ctx) => { // Gentle Giant
+  const amount = selfOf(s, ctx)?.damage ?? 0
+  return amount > 0 ? healChoice(s, ctx, amount, pickedIds(s, ctx, pickOther), [], true) : s
+})))
+registerCard('LAW_095', onAttack(whenPlayed('You may give a Shield token to a non-unique unit.', (s, ctx) => // Finn
+  shieldChoice(s, ctx, pickedIds(s, ctx, (st, u) => !cardOf(st, u)?.unique), true))))
+registerCard('LAW_087', onAttack(targetWp('If this unit is upgraded, exhaust an enemy unit.', 'mayExhaustUnit', pickEnemy, false, selfIs((_s, u) => isUpgraded(u))))) // Jango Fett
+registerCard('SOR_208', onAttack(targetWp('If you control a leader unit, you may exhaust a non-leader unit.', 'mayExhaustUnit', nonLeader, true, leaderUnitYouControl))) // Outer Rim Headhunter
+registerCard('SOR_244', onAttack(targetWp('Exhaust an enemy Vehicle ground unit.', 'mayExhaustUnit', pickAll(enemyGroundUnit, pickTrait('Vehicle')), false))) // Snowspeeder
+registerCard('IBH_11', onAttack(targetWp('If you control a Command unit, exhaust an enemy ground unit that costs 4 or less.', 'mayExhaustUnit', // R2-D2
+  pickAll(enemyGroundUnit, (s, u) => printedCost(s, u) <= 4), false, (s, ctx) => youControl(s, ctx, pickAspect('Command')))))
+registerCard('SEC_204', onAttack(targetWp('Ready an exhausted enemy unit.', 'selectUnitToReady', pickAll(pickEnemy, (_s, u) => u.exhausted), false))) // Blue Ace
+// Readying a resource costs nothing and can only help, so the "may" is always taken.
+registerCard('SHD_199', onAttack(whenPlayed('You may ready a resource.', (s, ctx) => readyResource(s, ctx.owner)))) // Coruscant Dissident
+registerCard('SEC_225', onAttack(whenPlayed('For each friendly unit, ready a friendly resource.', (s, ctx) => // Synara San
+  s.players[ctx.owner].units.reduce(acc => readyResource(acc, ctx.owner), s))))
+registerCard('SEC_188', { // Darth Traya
+  // Either player's leader, while it is not a unit. The step lists whose leader each option is.
+  ...onAttack(whenPlayed('You may ready a non-unit leader.', (s, ctx) => {
+    const tired = (['player', 'opponent'] as PlayerId[]).filter(p =>!s.players[p].leader.deployed && s.players[p].leader.exhausted)
+    return tired.length ? cardThen(s, ctx, tired.map(p => s.players[p].leader.cardId), 'ready a leader', true, tired.join(',')) : s
+  })),
+  ifYouDo: (s, ctx) => {
+    const who = ctx.optionIndex === undefined ? undefined : (ctx.step ?? '').split(',')[ctx.optionIndex] as PlayerId | undefined
+    return who ? updatePlayer(s, who, { leader: { ...s.players[who].leader, exhausted: false } }) : s
+  },
+})
+const FIRESPRAY_KEY = 'JTL_157#ready'
+registerCard('JTL_157', onAttack(whenPlayed('Ready this unit. Use this ability only once each round.', (s, ctx) => { // Relentless Firespray
+  const u = selfOf(s, ctx)
+  return u && !(u.usedAbilities ?? []).includes(FIRESPRAY_KEY) ? markAbilityUsed(readyUnit(s, u.instanceId), ctx.owner, u.instanceId, FIRESPRAY_KEY) : s
+})))
+
+// A: lasting buffs and keywords
+registerCard('LAW_104', onAttack(buffWp('You may give a friendly Rebel unit Sentinel for this phase.', pickAll(pickFriendly, pickTrait('Rebel')), () => ({ keywords: [KW.sentinel] }), true))) // Bodhi Rook
+registerCard('LAW_182', onAttack(buffWp('Another friendly unit gains Raid 2 for this phase.', pickAll(pickFriendly, pickOther), () => ({ keywords: [KW.raid(2)] }), false))) // Weazel
+registerCard('SOR_156', onAttack(buffWp('Another friendly Aggression unit gains Raid 2 for this phase.', pickAll(pickFriendly, pickOther, pickAspect('Aggression')), () => ({ keywords: [KW.raid(2)] }), false))) // Benthic "Two Tubes"
+registerCard('SEC_045', onAttack(buffWp('Give another friendly Official unit Restore 2 for this phase.', pickAll(pickFriendly, pickOther, pickTrait('Official')), () => ({ keywords: [KW.restore(2)] }), false))) // Senator Chuchi
+registerCard('LOF_045', onAttack(whenPlayed('Each other friendly Jedi unit gains Restore 1 for this phase.', (s, ctx) => // Yaddle
+  lastingOnEach(s, picked(s, ctx, pickAll(pickFriendly, pickOther, pickTrait('Jedi'))), { keywords: [KW.restore(1)] }))))
+registerCard('LOF_106', onAttack(buffWp('You may give another unit +5/+5 for this phase.', pickOther, () => ({ power: 5, hp: 5 }), true))) // Acclamator Assault Ship
+registerCard('LOF_135', onAttack(buffWp('You may give another friendly Inquisitor unit +2/+0 for this phase.', pickAll(pickFriendly, pickOther, pickTrait('Inquisitor')), () => ({ power: 2 }), true))) // Scythe
+registerCard('JTL_160', onAttack(buffWp('You may give a ground unit +2/+0 for this phase.', pickGround, () => ({ power: 2 }), true))) // Supporting Eta-2
+registerCard('TWI_063', onAttack(buffWp('Give an enemy unit -1/-1 for this phase.', pickEnemy, () => ({ power: -1, hp: -1 }), false))) // Vulture Interceptor Wing
+registerCard('SOR_116', onAttack(buffWp('If you control a leader unit, give a friendly unit +2/+2 for this phase.', pickFriendly, () => ({ power: 2, hp: 2 }), false, leaderUnitYouControl))) // Steadfast Battalion
+registerCard('TS26_75', { // Jango Fett
+  ...gains((s, u) => { const o = unitOwner(s, u); return o !== undefined && baseAttackedThisPhase(s, o) }, KW.ambush),
+  ...onAttack(buffWp('Give an enemy unit -3/-0 for this phase.', pickEnemy, () => ({ power: -3 }), false)),
+})
+registerCard('LAW_228', onAttack(buffWp('If no other units have attacked this phase (including enemy units), you may give a unit -2/-0 for this phase.', pickAny, // Canyon Frontrunner
+  () => ({ power: -2 }), true, (s, ctx) => attackedThisPhase(s).every(id => id === ctx.sourceInstanceId))))
+registerCard('LAW_031', { // Bossk
+  ...onAttack(whenPlayed('Give a unit +1/+1 for this phase. You may give a unit -1/-1 for this phase.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'give a unit +1/+1 for this phase', false, 'plus'))),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'minus') return addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, power: -1, hp: -1 })
+    const next = addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, power: 1, hp: 1 })
+    return unitThen(next, ctx, pickedIds(next, ctx, pickAny), 'you may give a unit -1/-1 for this phase', true, 'minus')
+  },
+})
+registerCard('LAW_068', { // Millennium Falcon
+  ...onAttack(whenPlayed('You may give a space unit -2/-0 for this phase. You may give a ground unit +2/+0 for this phase.', (s, ctx) =>
+    selectUnitWithDecline(s, ctx, pickedIds(s, ctx, pickArena('space')), 'you may give a space unit -2/-0 for this phase', 'space'))),
+  ifYouDo: (s, ctx) => {
+    const next = ctx.targetInstanceId ? addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId, power: ctx.step === 'space' ? -2 : 2 }) : s
+    return ctx.step === 'space' ? unitThen(next, ctx, pickedIds(next, ctx, pickGround), 'you may give a ground unit +2/+0 for this phase', true, 'ground') : next
+  },
+})
+const kalaniSpec: UpToSpec = { text: 'give another unit +2/+2 for this phase', test: pickOther, apply: (s, _ctx, id) => addLastingEffect(s, { targetInstanceId: id, power: 2, hp: 2 }) }
+const KALANI_TEXT = 'You may choose another unit. If you have the initiative, you may choose up to 2 other units instead. Give each chosen unit +2/+2 for this phase.'
+registerCard('TWI_085', { // Kalani
+  ...onAttack(whenPlayed(KALANI_TEXT, (s, ctx) => upToOffer(s, ctx, kalaniSpec, { left: haveInitiative(s, ctx) ? 2 : 1, chosen: [] }))),
+  ifYouDo: eachOfUpTo(KALANI_TEXT, 2, kalaniSpec).ifYouDo,
+})
+registerCard('SEC_110', onAttack(whenPlayed('The next unit you play this phase costs 1 less.', (s, ctx) => grantNextUnit(s, ctx.owner, { costDelta: -1 })))) // GNK Power Droid
+/** Every keyword a unit can have: "loses its Keywords (and can't gain keywords)" removes each by name. */
+const EVERY_KEYWORD = ['Ambush', 'Bounty', 'Coordinate', 'Exploit', 'Grit', 'Hidden', 'Overwhelm', 'Piloting', 'Plot', 'Raid', 'Restore', 'Saboteur', 'Sentinel', 'Shielded', 'Smuggle', 'Support']
+registerCard('SEC_185', unitThenOa('You may choose a ground unit. If you do, it loses its Keywords (and can\'t gain keywords) for this phase.', pickGround, // Screeching TIE Fighter
+  'choose a ground unit to lose its keywords for this phase', true, (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, removeKeywords: EVERY_KEYWORD })))
+
+// A: draw and search
+registerCard('LAW_107', onAttack(whenPlayed('Draw a card.', (s, ctx) => drawCards(s, ctx.owner, 1)))) // Swoop Bike Marauder
+registerCard('IBH_60', onAttack(whenPlayed('If you control a Aggression unit, draw a card.', (s, ctx) => // Admiral Piett
+  (youControl(s, ctx, pickAspect('Aggression')) ? drawCards(s, ctx.owner, 1) : s))))
+registerCard('SOR_067', onAttack(whenPlayed('If you control a leader unit, you may draw a card.', (s, ctx) => // Rugged Survivors
+  (leaderUnitYouControl(s, ctx) ? pushChoice(s, { kind: 'mayPayToDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, draw: 1 }) : s))))
+registerCard('LOF_068', onAttack(searchDrawWp('Search the top 5 cards of your deck for an Item upgrade, reveal it, and draw it.', 5, // Luthen Rael
+  c => c?.type === 'upgrade' && printedTrait(c, 'Item'))))
+registerCard('JTL_168', onAttack(mayDefeatUpgradeWp('You may defeat an upgrade.'))) // Insurgent Saboteurs
+registerCard('TS26_43', onAttack(whenPlayed("An opponent heals 1 damage from their base.", (s, ctx) => healBase(s, opponentOf(ctx.owner), 1)))) // Wartime Refugee
+
+// A: General Grievous. Up to 4 enemy units are simply all of them; past 4 the picks build up in the step.
+const GRIEVOUS_TEXT = 'If this unit has 4 or more Lightsaber upgrades attached to him, defeat 4 enemy units.'
+const grievousPick = (s: GameState, ctx: Resumable, picks: string[]): GameState => {
+  const enemies = s.players[opponentOf(ctx.owner)].units.map(u => u.instanceId)
+  if (enemies.length <= 4) return defeatUnits(s, enemies)
+  if (picks.length === 4) return defeatUnits(s, picks)
+  return unitThen(s, ctx, enemies.filter(id => !picks.includes(id)), `defeat an enemy unit (${picks.length + 1} of 4)`, false, picksStep(picks))
+}
+registerCard('TWI_034', { // General Grievous
+  waivesAspectPenalty: (_s, source, ctx) => ctx.target?.instanceId === source.instanceId && ctx.card.type === 'upgrade' && printedTrait(ctx.card, 'Lightsaber'),
+  ...onAttack(whenPlayed(GRIEVOUS_TEXT, (s, ctx) => {
+    const lightsabers = selfOf(s, ctx)?.upgrades.filter(up => printedTrait(s.cards[up.cardId], 'Lightsaber')).length ?? 0
+    return lightsabers >= 4 ? grievousPick(s, ctx, []) : s
+  })),
+  ifYouDo: (s, ctx) => grievousPick(s, ctx, [...picksOf(ctx.step), ctx.targetInstanceId!]),
+})
+
+// B: the defender, and this attack
+registerCard('SHD_183', attacks('Exhaust the defender.', (s, ctx) => { const d = defenderOf(s, ctx); return d ? exhaustUnit(s, d.instanceId) : s })) // Kintan Intimidator
+registerCard('SOR_142', { // Sabine Wren
+  cannotBeAttacked: (s, u) => !unitHasKeyword(s, u, 'Sentinel')
+    && new Set(friendliesOf(s, u).filter(x => x.instanceId !== u.instanceId).flatMap(x => cardOf(s, x)?.aspects ?? [])).size >= 3,
+  ...attacks('You may deal 1 damage to the defender or to a base.', (s, ctx) => {
+    const d = defenderOf(s, ctx)
+    return damageChoice(s, ctx, 1, d ? [d] : [], BOTH_BASES, true)
+  }),
+})
+registerCard('SHD_220', attacks("Deal 1 damage to the defender (if it's a unit) for each different cost among cards in your discard pile.", (s, ctx) => { // Fennec Shand
+  const d = defenderOf(s, ctx)
+  const costs = new Set(s.players[ctx.owner].discard.map(id => s.cards[id]?.cost ?? 0)).size
+  return d && costs > 0 ? dealDamageToUnit(s, d.instanceId, costs) : s
+}))
+registerCard('SHD_151', attacks('If the defending player controls more resources than you, this unit gets +2/+0 for this attack.', (s, ctx) => // Valiant Assault Ship
+  (s.players[opponentOf(ctx.owner)].resources.length > s.players[ctx.owner].resources.length ? forThisAttack(s, ctx.sourceInstanceId!, 2) : s)))
+registerCard('SOR_179', attacks("If this unit is attacking an exhausted unit that didn't enter play this round, deal 3 damage to the defender.", (s, ctx) => { // Boba Fett
+  // A unit enters play in the action phase, so "this round" is the phase's own record.
+  const d = defenderOf(s, ctx)
+  return d && d.exhausted && !enteredPlayThisPhase(s, opponentOf(ctx.owner)).includes(d.instanceId) ? dealDamageToUnit(s, d.instanceId, 3) : s
+}))
+registerCard('JTL_238', attacks('This unit gets +1/+0 for this attack for each damaged unit the defending player controls.', (s, ctx) => { // Sith Trooper
+  const n = s.players[opponentOf(ctx.owner)].units.filter(u => u.damage > 0).length
+  return n > 0 ? forThisAttack(s, ctx.sourceInstanceId!, n) : s
+}))
+registerCard('SEC_208', attacks('If the defender is exhausted, it gets -4/-0 for this attack.', (s, ctx) => { // Hunter
+  const d = defenderOf(s, ctx)
+  return d?.exhausted ? forThisAttack(s, d.instanceId, -4) : s
+}))
+registerCard('IBH_10', attacks('The defender gets -2/-0 for this attack.', (s, ctx) => { const d = defenderOf(s, ctx); return d ? forThisAttack(s, d.instanceId, -2) : s })) // Han Solo
+
+// C: decks and discard piles
+registerCard('LAW_192', onAttack(whenPlayed('Discard a card from your deck.', (s, ctx) => millTop(s, ctx.owner, 1)[0]))) // Bracca Shipbreaker
+registerCard('LAW_173', onAttack(whenPlayed("Discard a card from your deck. If it's Aggression, you may deal 1 damage to a ground unit.", (s, ctx) => { // BT-1
+  const [next, milled] = millTop(s, ctx.owner, 1)
+  return milled.some(id => printedAspect(next.cards[id], 'Aggression')) ? damageChoice(next, ctx, 1, picked(next, ctx, pickGround), [], true) : next
+})))
+registerCard('LAW_194', onAttack(whenPlayed('Discard 3 cards from your deck. You may return an Underworld card discarded this way to your hand.', (s, ctx) => { // Doctor Aphra
+  const [next, milled] = millTop(s, ctx.owner, 3)
+  const candidates = milled.filter(id => printedTrait(next.cards[id], 'Underworld'))
+  return candidates.length ? pushChoice(next, { kind: 'selectFromDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true }) : next
+})))
+registerCard('SHD_041', onAttack(whenPlayed('Discard a card from your deck. If it shares an aspect with your base, return it to your hand.', (s, ctx) => { // Kuiil
+  const [next, milled] = millTop(s, ctx.owner, 1)
+  return milled.length && sharesAspectWithBase(next, ctx.owner, milled[0]) ? returnUpgradeFromDiscardToHand(next, ctx.owner, milled[0]) : next
+})))
+registerCard('TWI_195', { // Sabine Wren
+  cannotBeAttacked: (s, u) => u.exhausted && !unitHasKeyword(s, u, 'Sentinel'),
+  ...onAttack(whenPlayed("You may discard a card from your deck. If it doesn't share an aspect with your base, deal 2 damage to a ground unit.", (s, ctx) =>
+    (s.players[ctx.owner].deck.length ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'discard a card from your deck', then: resume(ctx) }) : s))),
+  ifYouDo: (s, ctx) => {
+    const [next, milled] = millTop(s, ctx.owner, 1)
+    return milled.length && !sharesAspectWithBase(next, ctx.owner, milled[0]) ? damageChoice(next, ctx, 2, picked(next, ctx, pickGround)) : next
+  },
+})
+registerCard('LOF_184', { // Second Sister
+  ...onAttack(whenPlayed('You may discard 2 cards from your deck. For each Force card discarded this way, ready a resource.', (s, ctx) =>
+    (s.players[ctx.owner].deck.length ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'discard 2 cards from your deck', then: resume(ctx) }) : s))),
+  ifYouDo: (s, ctx) => {
+    const [next, milled] = millTop(s, ctx.owner, 2)
+    return milled.filter(id => printedTrait(next.cards[id], 'Force')).reduce(acc => readyResource(acc, ctx.owner), next)
+  },
+})
+registerCard('SOR_047', { // Kanan Jarrus
+  ...onAttack(whenPlayed("You may discard 1 card from the defending player's deck for each friendly Spectre unit. Heal 1 damage from your base for each different aspect among the discarded cards.", (s, ctx) => {
+    const n = picked(s, ctx, pickAll(pickFriendly, pickTrait('Spectre'))).length
+    return n > 0 && s.players[opponentOf(ctx.owner)].deck.length
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: `discard ${n} card${n === 1 ? '' : 's'} from the defending player's deck`, then: resume(ctx, String(n)) })
+      : s
+  })),
+  ifYouDo: (s, ctx) => {
+    const [next, milled] = millTop(s, opponentOf(ctx.owner), Number(ctx.step))
+    const aspects = new Set(milled.flatMap(id => next.cards[id]?.aspects ?? [])).size
+    return aspects > 0 ? healBase(next, ctx.owner, aspects) : next
+  },
+})
+registerCard('SOR_188', { // Chopper
+  ...gains(another(isTrait('Spectre')), KW.raid(1)),
+  ...onAttack(whenPlayed("Discard a card from the defending player's deck. If it's an event, exhaust a resource that player controls.", (s, ctx) => {
+    const [next, milled] = millTop(s, opponentOf(ctx.owner), 1)
+    return milled.some(id => next.cards[id]?.type === 'event') ? exhaustReadyResource(next, opponentOf(ctx.owner)) : next
+  })),
+})
+registerCard('LAW_174', { // 0-0-0
+  ...onAttack(whenPlayed('You may put an Aggression card from your discard pile on the bottom of your deck. If you do, deal 1 damage to each enemy base.', (s, ctx) => {
+    const candidates = s.players[ctx.owner].discard.filter(id => printedAspect(s.cards[id], 'Aggression'))
+    return candidates.length ? cardThen(s, ctx, candidates, 'put an Aggression card from your discard pile on the bottom of your deck', true, 'bottom') : s
+  })),
+  ifYouDo: (s, ctx) => (ctx.cardChosen ? dealDamageToBase(discardToDeckBottom(s, ctx.owner, [ctx.cardChosen]), opponentOf(ctx.owner), 1) : s),
+})
+registerCard('LAW_163', { // The Sarlacc of Carkoon
+  ...onAttack(whenPlayed("Put a unit from your discard pile on the bottom of your deck. Deal damage equal to that unit's power to an enemy ground unit.", (s, ctx) => {
+    const candidates = s.players[ctx.owner].discard.filter(id => printedUnit(s.cards[id]))
+    return candidates.length ? cardThen(s, ctx, candidates, 'put a unit from your discard pile on the bottom of your deck', false, 'bottom') : s
+  })),
+  ifYouDo: (s, ctx) => {
+    const next = discardToDeckBottom(s, ctx.owner, [ctx.cardChosen!])
+    const power = s.cards[ctx.cardChosen!]?.power ?? 0
+    return power > 0 ? damageChoice(next, ctx, power, picked(next, ctx, enemyGroundUnit)) : next
+  },
+})
+
+// D: if you do
+registerCard('SOR_131', { // Fifth Brother
+  conditionalKeywords: (_s, u) => (u.damage > 0 ? [KW.raid(u.damage)] : []),
+  ...unitThenOa('You may deal 1 damage to this unit and 1 damage to another ground unit.', pickAll(pickGround, pickOther), 'deal 1 damage to this unit and to another ground unit', true,
+    (s, ctx) => dealDamageToUnit(dealDamageToUnit(s, ctx.sourceInstanceId!, 1), ctx.targetInstanceId!, 1)),
+})
+registerCard('LAW_048', { // Chio Fain
+  // With two players, the only 2 players to choose are both of them.
+  ...onAttack(whenPlayed('You may choose 2 players. If you do, they each draw a card.', (s, ctx) =>
+    pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'have each player draw a card', then: resume(ctx) }))),
+  ifYouDo: (s, ctx) => drawCards(drawCards(s, ctx.owner, 1), opponentOf(ctx.owner), 1),
+})
+registerCard('SEC_162', unitThenOa("You may deal 1 damage to another friendly unit. If you do, deal 2 damage to the defending player's base.", pickAll(pickFriendly, pickOther), // Crosshair
+  'deal 1 damage to another friendly unit', true, (s, ctx) => dealDamageToBase(dealDamageToUnit(s, ctx.targetInstanceId!, 1), opponentOf(ctx.owner), 2)))
+/** "You may discard a card from your hand. If you do, <then>". */
+const mayDiscardThen = (description: string, then: NonNullable<CardDefinition['ifYouDo']>): CardDefinition => ({
+  ...onAttack(whenPlayed(description, (s, ctx) =>
+    (s.players[ctx.owner].hand.length ? pushChoice(s, { kind: 'selectDiscard', id: ctx.sourceInstanceId!, controller: ctx.owner, count: 1, optional: true, then: { ifYouDo: resume(ctx) } }) : s))),
+  ifYouDo: then,
+})
+registerCard('SEC_197', mayDiscardThen('You may discard a card from your hand. If you do, draw a card.', (s, ctx) => drawCards(s, ctx.owner, 1))) // Furtive Handmaiden
+registerCard('LOF_160', mayDiscardThen('You may discard a card from your hand. If you do, deal 2 damage to a unit.', (s, ctx) => damageChoice(s, ctx, 2, picked(s, ctx, pickAny)))) // Merrin
+registerCard('TWI_035', unitThenOa('You may defeat another friendly unit. If you do, draw a card.', pickAll(pickFriendly, pickOther), 'defeat another friendly unit', true, // Morgan Elsbeth
+  (s, ctx) => drawCards(defeatUnit(s, ctx.targetInstanceId!), ctx.owner, 1)))
+registerCard('SHD_118', unitThenOa('You may exhaust another friendly unit. If you do, this unit gets +3/+0 for this attack.', pickAll(pickFriendly, pickOther, (_s, u) => !u.exhausted), // Kihrazx Heavy Fighter
+  'exhaust another friendly unit', true, (s, ctx) => forThisAttack(exhaustUnit(s, ctx.targetInstanceId!), ctx.sourceInstanceId!, 3)))
+registerCard('SOR_206', onAttack(mayPayWp('You may pay 2. If you do, draw a card.', 2, 'pay 2 to draw a card', (s, ctx) => drawCards(s, ctx.owner, 1)))) // Mining Guild TIE Fighter
+registerCard('TWI_179', { // Soulless One
+  // A deployed General Grievous is a unit, so only an undeployed one is offered as the leader.
+  ...onAttack(whenPlayed('You may exhaust a friendly Droid unit or General Grievous (leader or unit). If you do, this unit gets +2/+0 for this attack.', (s, ctx) => {
+    const leader = s.players[ctx.owner].leader
+    const units = pickedIds(s, ctx, soullessUnit)
+    if (!leader.deployed && !leader.exhausted && s.cards[leader.cardId]?.name === 'General Grievous') {
+      return pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'exhaust General Grievous (leader)', then: resume(ctx, 'leader'), ...(units.length ? { declineStep: 'units' } : {}) })
+    }
+    return unitThen(s, ctx, units, 'exhaust a friendly Droid unit or General Grievous', true, 'unit')
+  })),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'units') return unitThen(s, ctx, pickedIds(s, ctx, soullessUnit), 'exhaust a friendly Droid unit or General Grievous', true, 'unit')
+    const paid = ctx.step === 'leader'
+      ? updatePlayer(s, ctx.owner, { leader: { ...s.players[ctx.owner].leader, exhausted: true } })
+      : exhaustUnit(s, ctx.targetInstanceId!)
+    return forThisAttack(paid, ctx.sourceInstanceId!, 2)
+  },
+})
+function soullessUnit(s: GameState, u: UnitState, ctx: EventCtx): boolean {
+  return pickFriendly(s, u, ctx) && !u.exhausted && (unitHasTrait(s, u, 'Droid') || cardOf(s, u)?.name === 'General Grievous')
+}
+registerCard('SEC_220', { // Hired Slicer
+  ...onAttack(whenPlayed('Reveal the top 2 cards of a deck. If you do, you may exhaust a unit that shares a Trait with one of those cards. Put those cards on the bottom of that deck in a random order.', (s, ctx) =>
+    choosePlayer(s, ctx, 'reveal the top 2 cards of the deck of', 'deck'))),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'exhaust') return exhaustUnit(s, ctx.targetInstanceId!)
+    const who = ctx.playerChosen!
+    const deck = s.players[who].deck
+    const revealed = deck.slice(0, 2)
+    if (revealed.length === 0) return s
+    // The cards go under the deck straight away: exhausting a unit cannot change where they end up.
+    const bottomed = { ...updatePlayer(s, who, { deck: [...deck.slice(2), ...seededShuffle(revealed, s.rngSeed)] }), rngSeed: nextSeed(s.rngSeed) }
+    const traits = revealed.flatMap(id => s.cards[id]?.traits ?? [])
+    const names = revealed.map(id => s.cards[id]?.name ?? id).join(', ')
+    return unitThen(bottomed, ctx, pickedIds(bottomed, ctx, (st, u) => traits.some(t => unitHasTrait(st, u, t))), `revealed ${names}: you may exhaust a unit that shares a Trait with one of them`, true, 'exhaust')
+  },
+})
+registerCard('SHD_046', { // Rey
+  ignoresOwnAspectPenalty: (s, p) => (playerControlsNamed(s, p, 'Kylo Ren') ? ['Heroism'] : []),
+  ...unitThenOa("You may heal 2 damage from a unit. If it's a non-Heroism unit, give a Shield token to it.", pickAny, 'heal 2 damage from a unit', true, (s, ctx) => {
+    const healed = healUnit(s, ctx.targetInstanceId!, 2)
+    const u = findUnit(healed, ctx.targetInstanceId!)?.unit
+    return u && !printedAspect(cardOf(healed, u), 'Heroism') ? giveToken(healed, u.instanceId, TOKEN_SHIELD) : healed
+  }),
+})
+const DRYDEN_KEY = 'SEC_137#noReady'
+registerCard('SEC_137', { // Dryden Vos
+  ...onAttack(whenPlayed("You may double this unit's power for this attack. If you do, this unit doesn't ready during the next regroup phase.", (s, ctx) =>
+    pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: "double this unit's power for this attack", then: resume(ctx) }))),
+  ifYouDo: (s, ctx) => markAbilityUsed(forThisAttack(s, ctx.sourceInstanceId!, attackingPower(s, ctx)), ctx.owner, ctx.sourceInstanceId!, DRYDEN_KEY),
+  // The mark is cleared as the regroup phase readies units, so it holds for exactly the next one.
+  readiesInRegroup: (_s, u) => !(u.usedAbilities ?? []).includes(DRYDEN_KEY),
+})
+const GRANT_DEFIANT_HAMMERHEAD = 'GRANT_DEFIANT_HAMMERHEAD'
+registerCard(GRANT_DEFIANT_HAMMERHEAD, {
+  sourceCardId: 'LAW_062',
+  abilities: [{ trigger: 'onAttackEnd', description: 'Defeat this unit after completing this attack.', effect: (s, ctx) => defeatUnit(s, ctx.sourceInstanceId!) }],
+})
+registerCard('LAW_062', { // Defiant Hammerhead
+  ...attacks('If this unit is attacking a unit, you may give this unit +4/+0 for this attack. If you do, defeat this unit after completing this attack.', (s, ctx) =>
+    (ctx.attackTarget?.kind === 'unit'
+      ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'give this unit +4/+0 for this attack, and defeat it after the attack', then: resume(ctx) })
+      : s)),
+  // The defeat rides on the attack as a granted "when this attack ends", so it goes when the attack's other grants do.
+  ifYouDo: (s, ctx) => addLastingEffect(s, { targetInstanceId: ctx.sourceInstanceId!, power: 4, untilEndOfAttack: true, abilityCardIds: [GRANT_DEFIANT_HAMMERHEAD] }),
+})
+
+// E: an opponent chooses, or each player
+registerCard('TS26_66', onAttack(whenPlayed('An opponent deals 1 damage to a unit.', (s, ctx) => // Wartime Pirate
+  damageChoice(s, { ...ctx, owner: opponentOf(ctx.owner) }, 1, allUnits(s)))))
+registerCard('TS26_29', { // Ziton Moj
+  ...onAttack(whenPlayed('For each player, deal 1 damage to a unit that player controls.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickFriendly), 'deal 1 damage to a unit you control', false, 'mine'))),
+  ifYouDo: (s, ctx) => {
+    const next = dealDamageToUnit(s, ctx.targetInstanceId!, 1)
+    return ctx.step === 'mine' ? unitThen(next, ctx, pickedIds(next, ctx, pickEnemy), 'deal 1 damage to a unit an opponent controls', false, 'theirs') : next
+  },
+})
+registerCard('SEC_218', { // Cikatro Vizago
+  ...onAttack(whenPlayed("Reveal the top card of your deck. An opponent may pay 1. If they don't, draw that card.", (s, ctx) => {
+    const top = s.players[ctx.owner].deck[0]
+    if (top === undefined) return s
+    const opp = opponentOf(ctx.owner)
+    if (!canAfford(s.players[opp], 1)) return drawCards(s, ctx.owner, 1)
+    return pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: opp, cost: 1, text: `pay 1 to stop your opponent drawing ${s.cards[top]?.name ?? top}`, then: resume(ctx, 'paid'), declineStep: 'draw' })
+  })),
+  ifYouDo: (s, ctx) => (ctx.step === 'draw' ? drawCards(s, ctx.owner, 1) : s),
+})
+registerCard('LAW_216', { // Jabba's Rancor
+  ...onAttack(whenPlayed('An opponent chooses a ground unit they control. You may deal 7 damage to that unit.', (s, ctx) => {
+    const opp = opponentOf(ctx.owner)
+    const targets = s.players[opp].units.filter(u => u.arena === 'ground').map(u => u.instanceId)
+    return targets.length ? pushChoice(s, { kind: 'selectUnitThen', id: `${ctx.sourceInstanceId}-theirs`, controller: opp, targets, text: 'choose a ground unit you control', then: resume(ctx, 'chosen') }) : s
+  })),
+  ifYouDo: (s, ctx) => (ctx.step === 'chosen'
+    ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'deal 7 damage to the chosen unit', then: resume(ctx, 'deal', ctx.targetInstanceId) })
+    : dealDamageToUnit(s, ctx.unitChosen!, 7)),
+})
+registerCard('SHD_246', { // Grey Squadron Y-Wing
+  // The opponent picks from their units' cards and their base's card; the step lists what each option is.
+  ...onAttack(whenPlayed('An opponent chooses a unit or base they control. You may deal 2 damage to it.', (s, ctx) => {
+    const opp = opponentOf(ctx.owner)
+    const units = s.players[opp].units
+    const options = [...units.map(u => u.instanceId), 'base']
+    return pushChoice(s, {
+      kind: 'selectCardThen', id: `${ctx.sourceInstanceId}-theirs`, controller: opp, candidates: [...units.map(u => u.cardId), s.players[opp].base.cardId],
+      text: 'choose a unit or base you control', then: resume(ctx, `options:${options.join(',')}`),
+    })
+  })),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'hit') return ctx.unitChosen === 'base' ? dealDamageToBase(s, opponentOf(ctx.owner), 2) : dealDamageToUnit(s, ctx.unitChosen!, 2)
+    const chosen = splitStep(ctx.step, 'options:')[ctx.optionIndex ?? -1]
+    return chosen ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'deal 2 damage to the chosen unit or base', then: resume(ctx, 'hit', chosen) }) : s
+  },
+})
+
+// F: needed a small engine addition
+registerCard('LAW_051', onAttack(whenPlayed("Draw a card. You may deal damage to a ground unit equal to the number of cards you've drawn this phase.", (s, ctx) => { // Beilert Valance
+  const next = drawCards(s, ctx.owner, 1)
+  const n = cardsDrawnThisPhase(next, ctx.owner)
+  return n > 0 ? damageChoice(next, ctx, n, picked(next, ctx, pickGround), [], true) : next
+})))
+registerCard('LAW_197', onAttack(whenPlayed("Bases can't be healed for this phase.", s => ({ ...s, basesUnhealable: true })))) // Shifty Suspects
+registerCard('LOF_204', { // Zuckuss
+  ...onAttack(whenPlayed("Name a card, then discard the top card of the defending player's deck. If a card with that name is discarded, this unit gets +4/+0 for this attack.", (s, ctx) =>
+    pushChoice(s, { kind: 'nameCard', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, then: resume(ctx) }))),
+  ifYouDo: (s, ctx) => {
+    const [next, milled] = millTop(s, opponentOf(ctx.owner), 1)
+    return milled.some(id => next.cards[id]?.name === ctx.nameChosen) ? forThisAttack(next, ctx.sourceInstanceId!, 4) : next
+  },
+})
+registerCard('SOR_185', { // Chimaera
+  // The reveal is information only: the discard it leads to is the whole effect.
+  ...onAttack(whenPlayed('Name a card. An opponent reveals their hand and discards a card with that name from it.', (s, ctx) =>
+    pushChoice(s, { kind: 'nameCard', id: ctx.sourceInstanceId!, controller: ctx.owner, unitId: ctx.sourceInstanceId!, then: resume(ctx) }))),
+  ifYouDo: (s, ctx) => {
+    const opp = opponentOf(ctx.owner)
+    const at = s.players[opp].hand.findIndex(id => s.cards[id]?.name === ctx.nameChosen)
+    return at === -1 ? s : discardFromHand(s, opp, at)
+  },
+})
