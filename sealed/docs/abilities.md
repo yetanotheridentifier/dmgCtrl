@@ -180,7 +180,7 @@ Card-type-agnostic, all on `CardDefinition`:
 | `grantsAbilities` | hands an ability block to the host unit |
 | `grantedTraits` | extra traits, e.g. The Darksaber granting Mandalorian |
 | `makesLeaderUnit` | the host counts as a leader unit |
-| `actionAbilities` | activated "Action:" abilities, with `usable`, `oncePerRound`, `exhaustCost` |
+| `actionAbilities` | activated "Action:" abilities, with `usable`, `oncePerRound`, `exhaustCost`, and `anyPlayer` for one offered on an enemy unit too, paid for and owned by whoever uses it |
 | `canPreventDamage` / `payPreventionCost` | offers a prevention, and collects its price if taken |
 
 Three of these are scoped more narrowly than they read.

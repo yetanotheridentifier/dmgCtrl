@@ -1993,15 +1993,17 @@ function useAbility(state: GameState, instanceId: string, cardId: string, index:
   if (!found) throw new Error(`useAbility: no unit ${instanceId}`)
   const ability = getCardDefinition(cardId)?.actionAbilities?.[index]
   if (!ability) throw new Error(`useAbility: no ability ${cardId}#${index}`)
-  const owner = found.owner
+  // The player using it, who pays and owns the effect: the unit's controller, unless any player may
+  // use the ability, when it is whoever is acting.
+  const owner = ability.anyPlayer ? state.activePlayer : found.owner
 
   let next = state
   if (ability.cost) next = updatePlayer(next, owner, payCost(next.players[owner], ability.cost))
   if (ability.exhaustCost) next = exhaustUnit(next, instanceId) // pay the "[Exhaust]" cost
   if (ability.oncePerRound) {
     const key = actionAbilityKey(cardId, index)
-    next = updatePlayer(next, owner, {
-      units: next.players[owner].units.map(u =>
+    next = updatePlayer(next, found.owner, {
+      units: next.players[found.owner].units.map(u =>
         u.instanceId === instanceId ? { ...u, usedAbilities: [...(u.usedAbilities ?? []), key] } : u,
       ),
     })

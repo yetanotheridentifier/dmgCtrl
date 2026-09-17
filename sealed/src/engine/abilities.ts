@@ -350,7 +350,12 @@ export interface ActionAbilityDef {
   exhaustCost?: boolean
   /** May be used only once per round by a given unit (tracked on `UnitState.usedAbilities`). */
   oncePerRound?: boolean
-  /** Extra gate beyond once-per-round (defaults usable). */
+  /**
+   * "Any player may use this ability" (Mercenary Gunship): offered on the opponent's units too. The
+   * player using it pays its cost and is the ability's `owner`, whoever controls the unit.
+   */
+  anyPlayer?: boolean
+  /** Extra gate beyond once-per-round (defaults usable). `state.activePlayer` is the player asking. */
   usable?: (state: GameState, unit: UnitState) => boolean
   effect: (state: GameState, ctx: EffectContext) => GameState
 }

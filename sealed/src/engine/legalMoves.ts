@@ -341,8 +341,11 @@ function actionPhaseMoves(state: GameState): Action[] {
 
   // Use a unit's activated "Action:" ability — e.g. Improvised Identity. Each
   // is addressed by its source card + index; once-per-round ones drop once used.
-  for (const u of p.units) {
+  // An enemy unit's ability is offered only where any player may use it.
+  for (const u of allUnits) {
+    const theirs = enemy.units.includes(u)
     for (const { cardId, index, ability } of unitActionAbilities(u)) {
+      if (theirs && !ability.anyPlayer) continue
       if (ability.oncePerRound && u.usedAbilities?.includes(actionAbilityKey(cardId, index))) continue
       if (ability.exhaustCost && u.exhausted) continue // "[Exhaust]" — the unit must be ready to pay it
       if (!canAfford(p, ability.cost ?? 0)) continue
