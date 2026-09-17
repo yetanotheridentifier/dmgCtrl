@@ -124,7 +124,9 @@ also damage its controller's base by the unit's cost (`thenDamageOwnBase`), give
 effect (`thenLasting`), leave a delayed effect about it (`thenDelay`), and defeat a set of units once the
 play is settled whether it was played or declined (`thenDefeat`, Consolidation of Power).
 `searchPlayFree` caps its plays with `maxPlays` (U-Wing Reinforcement's "up to 3") and takes `thenDelay`
-too; `searchDraw` with `shuffle` shuffles the deck after a search of all of it (Search Your Feelings).
+too; `searchDraw` with `shuffle` shuffles the deck after a search of all of it (Search Your Feelings), and
+with `then` hands on to the card's hook once the search is settled, whether a card was drawn or not
+(Captain Vaughn puts a card from his hand back on the deck, and it can be the one just drawn).
 `nameCard` with `phaseBan` bans the name for both players until the phase ends (Transmission Jamming);
 with `then` it records nothing and hands the name to the card's hook as `nameChosen` (Zuckuss, Chimaera).
 
