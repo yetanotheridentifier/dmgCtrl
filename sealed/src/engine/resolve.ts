@@ -743,6 +743,7 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
     } else {
       next = bottomTopCards(next, choice.controller, choice.revealed.length)
     }
+    if (choice.then) next = runIfYouDo(next, choice.then)
   }
   // Hotshot Maneuver: the attack follows the damage picks however they ended.
   if (choice.kind === 'multiPick') next = multiPickAttack(next, choice)
@@ -1604,6 +1605,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
             next = pushChoice(next, { kind: 'mayGiveTokens', id: `${choice.id}-sense`, controller: owner, token: TOKEN_ADVANTAGE, count: 3, targets })
           }
         }
+        if (choice.then) next = runIfYouDo(next, choice.then)
       }
       break
     }

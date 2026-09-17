@@ -142,14 +142,15 @@ Two phases:
   **When Played units and upgrades are finished**, and so are **constant abilities on units and
   upgrades**: the ones existing primitives expressed shipped first, and the hooks and choices the rest
   needed followed, group by group. Vult Skerris's Defender (needs "discarded a card this phase") and
-  the 15 constant-ability cards lifted out are carried by #477, except Director Krennic, which is on
-  #459. **Leaders are finished** on both sides (#458): the 20 not built are on the ticket of what
+  the 14 other constant-ability cards lifted out are carried by #477. **When Defeated units are
+  finished** (#459) where the head stands alone, with Director Krennic built alongside them; a head
+  shared with another trigger point ("When Played/When Defeated") waits on #463, and Stolen AT-Hauler
+  (an opponent may play it from the discard pile) is on #471. **Leaders are finished** on both sides (#458): the 20 not built are on the ticket of what
   blocks them, #465 pilots (7), #461 Experience (2), #605 token units (2), #471 play from discard (2),
   #466 capture, #467 Bounty, #470 Plot, #474 trigger points, #468 playing any card type, #602 Credit
   (a friendly token of any kind) and #477 (defeat by an enemy card ability).
   The ticket bodies carry the sizes from before token units, Credit
-  tokens, Disclose and indirect damage were blockers, so most are smaller than they say (When Defeated
-  by a quarter, bases barely); the corrected counts are commented on each.
+  tokens, Disclose and indirect damage were blockers, so most are smaller than they say (bases barely); the corrected counts are commented on each.
 - **Phase 2 (#461 to #476, #602 to #605), 585 cards blocked by exactly one thing each**, ordered by how
   many cards each unlocks on its own. Token units other than the Mandalorian (#605, 62 cards) are the
   second largest unlock; Credit tokens (#602, 29), Disclose (#603, 19) and indirect damage (#604, 15)

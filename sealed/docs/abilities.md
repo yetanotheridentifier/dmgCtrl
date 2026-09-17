@@ -67,6 +67,11 @@ upgrade. The `ctx` argument becomes `PendingTrigger.ctx` and is merged back into
 when the ability runs, which is how the attack outcome reaches `onAttackEnd` and the captured unit
 reaches `whenDefeated` (the unit has left play by then).
 
+Most When Defeated abilities are written with the When Played helpers through `defeated` in
+`cardDefinitions.ts`, as On Attack abilities are through `onAttack`. The source instance names no unit in
+play, so "another" leaves nothing out, and an ability that reads the unit itself (Raddus's power) reads
+`ctx.defeatedUnit`, the unit as it last was.
+
 `runPendingTrigger` addresses one ability by `cardId` + `abilityIndex`, indexing the card's **full**
 ability list, with `fromLeader` choosing between a card's unit abilities and an undeployed leader's.
 A card carrying two abilities at the same point is exactly the case the ordering prompt exists for, so

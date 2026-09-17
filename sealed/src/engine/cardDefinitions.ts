@@ -3152,13 +3152,14 @@ type CardTest = (c: EngineCard | undefined, s: GameState, ctx: EventCtx) => bool
  * `count` above 1 is "up to N" (Grand Moff Tarkin), which draws again from what is left of the same
  * window and may stop at any point (CR 8.30.1).
  */
-const searchDrawChoice = (s: GameState, ctx: EventCtx, depth: number, test: CardTest, count = 1): GameState => {
+const searchDrawChoice = (s: GameState, ctx: EventCtx, depth: number, test: CardTest, count = 1, then?: IfYouDo): GameState => {
   const revealed = s.players[ctx.owner].deck.slice(0, searchCount(s, ctx.owner, depth))
   if (revealed.length === 0) return s
   const eligibleIndices = revealed.flatMap((id, i) => (test(s.cards[id], s, ctx) ? [i] : []))
   return pushChoice(s, {
     kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices,
     ...(count > 1 && { remaining: count, upTo: true }),
+    ...(then && { then }),
   })
 }
 const searchDrawWp = (description: string, depth: number, test: CardTest, count = 1) =>
@@ -5106,8 +5107,8 @@ registerCard('SHD_194', { // Triple Dark Raid
 })
 
 // Moving units and upgrades, and the last one-offs
-/** Put a unit on the bottom of its owner's deck: it leaves play as a return to hand does, and the card goes under the deck. */
-const unitToDeckBottom = (s: GameState, id: string): GameState => {
+/** Put a unit on the top or bottom of its owner's deck: it leaves play as a return to hand does, and the card goes on the deck. */
+const unitToDeck = (s: GameState, id: string, where: 'top' | 'bottom'): GameState => {
   const found = findUnit(s, id)
   if (!found) return s
   const cardOwner = found.unit.owner ?? found.owner
@@ -5115,8 +5116,11 @@ const unitToDeckBottom = (s: GameState, id: string): GameState => {
   const returned = returnUnitToHand(s, id)
   const hand = returned.players[cardOwner].hand
   if (hand.length === before) return returned // a token leaves no card
-  return updatePlayer(returned, cardOwner, { hand: hand.slice(0, -1), deck: [...returned.players[cardOwner].deck, hand[hand.length - 1]] })
+  const card = hand[hand.length - 1]
+  const deck = returned.players[cardOwner].deck
+  return updatePlayer(returned, cardOwner, { hand: hand.slice(0, -1), deck: where === 'top' ? [card, ...deck] : [...deck, card] })
 }
+const unitToDeckBottom = (s: GameState, id: string): GameState => unitToDeck(s, id, 'bottom')
 const selectUnitWithDecline = (s: GameState, ctx: Resumable, targets: string[], text: string, step: string, unit?: string): GameState =>
   (targets.length ? pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true, hookOnDecline: true, text, then: resume(ctx, step, unit) }) : resumeNow(s, ctx, step, unit))
 /** Run a card's own hook directly, as a declined pick would, when there was nothing to pick. */
@@ -6748,4 +6752,155 @@ registerCard('SEC_002', { // Jabba the Hutt
     // "deal:N": the once-a-round limit is spent only when the ability is used.
     return dealDamageToUnit(markAbilityUsed(s, ctx.owner, ctx.sourceInstanceId!, JABBA_ROUND_KEY), ctx.targetInstanceId!, Number(step.slice('deal:'.length)))
   },
+})
+
+// ── When Defeated units from the other sealed sets ─────────────────────────────────────────────────
+// Built on the When Played helpers, as the On Attack units are: `defeated` fires the same definition as
+// its unit is defeated instead. The unit has left play by then, so `ctx.sourceInstanceId` names no unit
+// in play ("another" leaves nothing out) and `ctx.defeatedUnit` is the unit as it last was.
+
+/** A definition built with the When Played helpers, fired as its unit is defeated instead. */
+const defeated = (def: CardDefinition): CardDefinition => ({
+  ...def,
+  abilities: def.abilities?.map(a => (a.trigger === 'whenPlayed' ? { ...a, trigger: 'whenDefeated' as const } : a)),
+})
+const costsAtMost = (n: number): Pick => (s, u) => printedCost(s, u) <= n
+
+// A: targets, draws and base damage
+const twoToABase = defeated(whenPlayed('Deal 2 damage to a base.', (s, ctx) => damageChoice(s, ctx, 2, [], BOTH_BASES)))
+registerCard('LAW_189', twoToABase) // Cavern Angels X-Wing
+registerCard('TWI_131', twoToABase) // OOM-Series Officer
+const healTwoFromYourBase = defeated(whenPlayed('Heal 2 damage from your base.', (s, ctx) => healBase(s, ctx.owner, 2)))
+registerCard('LAW_097', healTwoFromYourBase) // Imperial Door Technician
+registerCard('IBH_15', healTwoFromYourBase) // Tauntaun Mount
+registerCard('JTL_033', defeated(whenPlayed('Heal 2 damage from a base.', (s, ctx) => healChoice(s, ctx, 2, [], BOTH_BASES)))) // Onyx Squadron Brute
+registerCard('LOF_059', defeated(whenPlayed('Draw a card.', (s, ctx) => drawCards(s, ctx.owner, 1)))) // Nightsister Warrior
+registerCard('JTL_063', defeated(mayPayWp('You may draw a card.', 0, 'draw a card', (s, ctx) => drawCards(s, ctx.owner, 1)))) // Landing Shuttle
+registerCard('SHD_164', defeated(whenPlayed('Deal 1 damage to a unit or base.', (s, ctx) => damageChoice(s, ctx, 1, allUnits(s), BOTH_BASES)))) // Rhokai Gunship
+registerCard('SEC_263', defeated(whenPlayed('Deal 1 damage to each exhausted enemy ground unit.', (s, ctx) => // Assassin Probe
+  pickedIds(s, ctx, pickAll(pickEnemy, pickGround, (_s, u) => u.exhausted)).reduce((acc, id) => dealDamageToUnit(acc, id, 1), s))))
+registerCard('LOF_235', defeated(whenPlayed('Deal 2 damage to each ground unit.', (s, ctx) => // HK-87 Assassin Droid
+  pickedIds(s, ctx, pickGround).reduce((acc, id) => dealDamageToUnit(acc, id, 2), s))))
+registerCard('SEC_154', defeated(targetWp('You may ready a unit that costs 5 or less.', 'selectUnitToReady', costsAtMost(5), true))) // Inner Rim Coalition
+registerCard('SOR_226', defeated(targetWp('You may ready a Villainy unit.', 'selectUnitToReady', pickAspect('Villainy'), true))) // Admiral Motti
+registerCard('SEC_221', defeated(targetWp('Exhaust an enemy unit.', 'mayExhaustUnit', pickEnemy, false))) // Unruly Astromech
+registerCard('SOR_060', defeated(whenPlayed('You may give a Shield token to a Vigilance unit.', (s, ctx) => // Distant Patroller
+  shieldChoice(s, ctx, pickedIds(s, ctx, pickAspect('Vigilance')), true))))
+registerCard('LOF_064', defeated(whenPlayed('You may give a Shield token to a damaged non-Vehicle unit.', (s, ctx) => // Tauntaun
+  shieldChoice(s, ctx, pickedIds(s, ctx, pickAll(damaged, (st, u) => !unitHasTrait(st, u, 'Vehicle'))), true))))
+registerCard('JTL_060', defeated(buffWp('You may give a unit -1/-1 for this phase.', pickAny, () => ({ power: -1, hp: -1 }), true))) // Desperate Commando
+registerCard('TWI_104', defeated(buffWp('You may give a Trooper unit +2/+2 for this phase.', pickTrait('Trooper'), () => ({ power: 2, hp: 2 }), true))) // Obedient Vanguard
+registerCard('JTL_040', defeated(targetWp('You may defeat a space unit that costs 3 or less.', 'selectUnitToDefeat', pickAll(pickArena('space'), costsAtMost(3)), true))) // Fleet Interdictor
+registerCard('JTL_220', defeated(targetWp("You may return a non-leader unit with 2 or less power to its owner's hand.", 'selectUnitToReturn', // Skyway Cloud Car
+  pickAll((s, u) => nonLeader(s, u), (s, u) => effectivePower(s, u) <= 2), true)))
+const opponentDiscardsOnDefeat = defeated(whenPlayed('Each opponent discards a card from their hand.', (s, ctx) => opponentDiscards(s, ctx.owner, ctx.sourceInstanceId!)))
+registerCard('TWI_148', opponentDiscardsOnDefeat) // Senatorial Corvette
+registerCard('IBH_82', opponentDiscardsOnDefeat) // Admiral Ozzel
+registerCard('SOR_163', defeated(whenPlayed('If you have the initiative, draw 2 cards.', (s, ctx) => (haveInitiative(s, ctx) ? drawCards(s, ctx.owner, 2) : s)))) // Star Wing Scout
+registerCard('LOF_057', defeated(searchDrawWp('Search the top 5 cards of your deck for a Force unit, reveal it, and draw it.', 5, // Owen Lars
+  c => printedUnit(c) && printedTrait(c, 'Force'))))
+registerCard('SHD_157', defeated(whenPlayed('For each player with 15 or more damage on their base, draw a card.', (s, ctx) => // Bo-Katan Kryze
+  drawCards(s, ctx.owner, BOTH_BASES.filter(p => s.players[p].base.damage >= 15).length))))
+registerCard('LOF_213', defeated(whenPlayed('Deal 6 damage divided as you choose among enemy units.', (s, ctx) => { // The Legacy Run
+  const targets = s.players[opponentOf(ctx.owner)].units.map(u => u.instanceId)
+  return targets.length ? pushChoice(s, { kind: 'distributeDamage', id: ctx.sourceInstanceId!, controller: ctx.owner, remaining: 6, total: 6, targets, enemiesOf: ctx.owner }) : s
+})))
+// "Up to" heals as much as it can, as It Binds All Things reads it.
+registerCard('JTL_071', defeated(whenPlayed('Heal up to 3 damage from a unit or base.', (s, ctx) => // CR90 Relief Runner
+  healChoice(s, ctx, 3, allUnits(s).map(u => u.instanceId), BOTH_BASES))))
+
+// B: two steps, or a choice of modes. A yes or no with a `declineStep` is how a card offers two modes.
+registerCard('SEC_136', defeated(unitThenWp('You may defeat another friendly unit. If you do, deal 4 damage to each enemy base.', // Arihnda Pryce
+  pickFriendly, 'defeat another friendly unit', true, (s, ctx) => dealDamageToBase(defeatUnit(s, ctx.targetInstanceId!), opponentOf(ctx.owner), 4))))
+registerCard('SEC_207', { // Lightmaker
+  ...defeated(whenPlayed('Choose an arena. Exhaust each enemy unit in that arena.', (s, ctx) => chooseArena(s, ctx, 'exhaust each enemy unit in'))),
+  ifYouDo: (s, ctx) => s.players[opponentOf(ctx.owner)].units.filter(u => u.arena === ctx.arenaChosen).reduce((acc, u) => exhaustUnit(acc, u.instanceId), s),
+})
+registerCard('SOR_204', { // Greedo
+  ...defeated(whenPlayed("You may discard a card from your deck. If it's not a unit, deal 2 damage to a ground unit.", (s, ctx) =>
+    (s.players[ctx.owner].deck.length ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'discard a card from your deck', then: resume(ctx) }) : s))),
+  ifYouDo: (s, ctx) => {
+    const [next, milled] = millTop(s, ctx.owner, 1)
+    return milled.length && !printedUnit(next.cards[milled[0]]) ? damageChoice(next, ctx, 2, picked(next, ctx, pickGround)) : next
+  },
+})
+registerCard('SOR_045', { // Yoda
+  ...defeated(whenPlayed('Choose any number of players. They each draw a card.', (s, ctx) =>
+    pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'choose yourself to draw a card', then: resume(ctx, 'you'), declineStep: 'notYou' }))),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'them') return drawCards(s, opponentOf(ctx.owner), 1)
+    if (ctx.step === 'notThem') return s
+    const next = ctx.step === 'you' ? drawCards(s, ctx.owner, 1) : s
+    return pushChoice(next, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-them`, controller: ctx.owner, cost: 0, text: 'choose your opponent to draw a card', then: resume(ctx, 'them'), declineStep: 'notThem' })
+  },
+})
+registerCard('SOR_145', { // K-2SO
+  ...defeated(whenPlayed("For each opponent, choose one: either deal 3 damage to that player's base, or that player discards a card from their hand.", (s, ctx) =>
+    pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: "deal 3 damage to your opponent's base (otherwise they discard a card from their hand)", then: resume(ctx, 'base'), declineStep: 'discard' }))),
+  ifYouDo: (s, ctx) => (ctx.step === 'base' ? dealDamageToBase(s, opponentOf(ctx.owner), 3) : opponentDiscards(s, ctx.owner, ctx.sourceInstanceId!)),
+})
+registerCard('LOF_200', { // Qui-Gon Jinn
+  ...defeated(whenPlayed("You may choose a non-leader ground unit. Its owner puts it on the top or bottom of their deck.", (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickGround, (st, u) => nonLeader(st, u))), 'choose a non-leader ground unit for its owner to put on their deck', true))),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'top' || ctx.step === 'bottom') return unitToDeck(s, ctx.unitChosen!, ctx.step)
+    const found = findUnit(s, ctx.targetInstanceId!)
+    if (!found) return s
+    // Its owner decides, which is not always the player resolving the ability.
+    return pushChoice(s, {
+      kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-deck`, controller: found.unit.owner ?? found.owner, cost: 0,
+      text: `put ${s.cards[found.unit.cardId]?.name ?? 'the unit'} on the top of your deck (otherwise the bottom)`, then: resume(ctx, 'top', found.unit.instanceId), declineStep: 'bottom',
+    })
+  },
+})
+registerCard('TS26_39', { // Captain Vaughn
+  // The search settles before the hand card is chosen, so the card it draws can be the one put back.
+  ...defeated(whenPlayed('Search the top 3 cards of your deck for a card and draw it. Then, put a card from your hand on top of your deck.', (s, ctx) =>
+    (s.players[ctx.owner].deck.length
+      ? searchDrawChoice(s, ctx, 3, () => true, 1, resume(ctx, 'hand'))
+      : handCardThen(s, ctx, 'put a card from your hand on top of your deck', 'top')))),
+  ifYouDo: (s, ctx) => (ctx.step === 'hand' ? handCardThen(s, ctx, 'put a card from your hand on top of your deck', 'top') : handToDeck(s, ctx.owner, ctx.handIndex, 'top')),
+})
+/** The defeated card itself, out of whichever discard pile it went to and into play as a ready resource. */
+const resourceDefeatedReady = (s: GameState, ctx: { owner: PlayerId; cardId: string }): GameState => {
+  const pile = [ctx.owner, opponentOf(ctx.owner)].find(p => s.players[p].discard.includes(ctx.cardId))
+  if (!pile) return s
+  const discard = s.players[pile].discard
+  const at = discard.lastIndexOf(ctx.cardId)
+  const removed = updatePlayer(s, pile, { discard: discard.filter((_, i) => i !== at) })
+  return updatePlayer(removed, ctx.owner, { resources: [...removed.players[ctx.owner].resources, { cardId: ctx.cardId, exhausted: false }] })
+}
+const superlaserTechnician = defeated(mayPayWp('You may put this unit into play as a resource and ready it.', 0, 'put this unit into play as a resource and ready it', resourceDefeatedReady))
+registerCard('SHD_085', superlaserTechnician) // Superlaser Technician
+registerCard('SOR_083', superlaserTechnician) // Superlaser Technician (a different card with the same text: 2/1 rather than 2/3)
+
+// C: the next unit played, and a constant ability alongside
+registerCard('SEC_261', defeated(whenPlayed('The next Official unit you play this phase costs 1 less.', (s, ctx) => // Inspiring Senator
+  grantNextUnit(s, ctx.owner, { costDelta: -1, trait: 'Official' }))))
+registerCard('LOF_180', defeated(whenPlayed('The next unit you play this phase gains Ambush for this phase.', (s, ctx) => // Deceptive Shade
+  grantNextUnit(s, ctx.owner, { keywords: [KW.ambush] }))))
+/** "Another Resistance card (unit, upgrade, or leader)" its controller controls. An undeployed leader counts. */
+const controlsAnotherResistanceCard: Holds = (s, u) => {
+  const owner = unitOwner(s, u)
+  if (!owner) return false
+  const resistance = (cardId: string) => printedTrait(s.cards[cardId], 'Resistance')
+  return friendliesOf(s, u).some(x => x.instanceId !== u.instanceId && unitHasTrait(s, x, 'Resistance'))
+    || allUnits(s).some(x => x.upgrades.some(up => up.owner === owner && resistance(up.cardId)))
+    || resistance(s.players[owner].leader.cardId)
+}
+registerCard('JTL_104', { // Raddus
+  ...gains(controlsAnotherResistanceCard, KW.sentinel),
+  // His power as he last was in play.
+  ...whenDefeated("Deal damage equal to this unit's power to an enemy unit.", (s, ctx) => {
+    const power = ctx.defeatedUnit ? effectivePower(s, ctx.defeatedUnit) : 0
+    return power > 0 ? damageChoice(s, ctx, power, s.players[opponentOf(ctx.owner)].units) : s
+  }),
+})
+/** A card whose own printed abilities include a When Defeated. */
+const hasWhenDefeated = (cardId: string): boolean => getCardDefinition(cardId)?.abilities?.some(a => a.trigger === 'whenDefeated') ?? false
+registerCard('JTL_032', { // Director Krennic
+  // Units are played only in the action phase, so this phase's plays are the round's.
+  costDiscount: (s, _source, ctx) =>
+    (ctx.card.type === 'unit' && hasWhenDefeated(ctx.card.id)
+      && !cardsPlayedThisPhase(s, ctx.owner).some(id => s.cards[id]?.type === 'unit' && hasWhenDefeated(id)) ? -1 : 0),
 })
