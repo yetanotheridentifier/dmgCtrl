@@ -160,6 +160,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       if (choice.kind === 'mayExhaustLeaderForAdvantage' || choice.kind === 'mayExhaustLeaderHealUnit' || choice.kind === 'mayPayToDraw' || choice.kind === 'mayDeployLeader') return "Don't"
       if (choice.kind === 'mayResourceTop' || choice.kind === 'mayPayThen') return "Don't"
       if (choice.kind === 'selectUnitThen' || choice.kind === 'selectUpgradeThen' || choice.kind === 'selectHandCardThen') return 'Decline'
+      if (choice.kind === 'selectCardThen') return 'Done'
       if (choice.kind === 'maySelfDamageShield' || choice.kind === 'mayCreateToken' || choice.kind === 'mayCapture') return "Don't"
       if (choice.kind === 'damageAnyBases') return 'Done'
       if (choice.kind === 'selectPair' || choice.kind === 'selectUpgradeToReturn' || choice.kind === 'mayPlayUpgradeFree') return 'Decline'
@@ -344,6 +345,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
         const name = pick ? state.cards[pick.cardId]?.name : undefined
         const host = pick ? anyUnitName(state, pick.unitId) : undefined
         return `Choose ${name ?? 'upgrade'}${host ? ` on ${host}` : ''}`
+      }
+      if (choice.kind === 'selectCardThen') {
+        const cardId = choice.candidates[action.optionIndex ?? 0]
+        return `Choose ${cardId ? state.cards[cardId]?.name ?? cardId : 'a card'}`
       }
       if (choice.kind === 'choosePlayerThen') return (action.optionIndex ?? 0) === 1 ? 'Choose yourself' : 'Choose your opponent'
       if (choice.kind === 'chooseArenaThen') return (action.optionIndex ?? 0) === 1 ? 'Space arena' : 'Ground arena'

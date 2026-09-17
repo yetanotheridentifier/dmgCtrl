@@ -97,6 +97,8 @@ export interface IfYouDoContext extends EffectContext {
   upgradeChosen?: UpgradeRef
   /** The player a `choosePlayerThen` picked. */
   playerChosen?: PlayerId
+  /** The option a `selectCardThen` picked (`cardChosen` is its card). */
+  optionIndex?: number
   /** The arena a `chooseArenaThen` picked. */
   arenaChosen?: Arena
   /** The unit an earlier stage chose (`IfYouDo.unit`). */

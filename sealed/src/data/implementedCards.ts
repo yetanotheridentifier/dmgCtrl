@@ -537,6 +537,14 @@ export const IMPLEMENTED_EVENTS: UpgradeStatus[] = [
   { id: 'LOF_203', name: 'Premonition of Doom' },
   { id: 'SEC_073', name: 'The Eye of Aldhani' },
   { id: 'SHD_208', name: 'Final Showdown' },
+  // Picking cards from a discard pile or the top of a deck
+  { id: 'LOF_219', name: 'Psychometry' },
+  { id: 'SOR_252', name: 'Restock' },
+  { id: 'LOF_104', name: 'Luminous Beings' },
+  { id: 'LOF_103', name: 'Following the Path' },
+  { id: 'SOR_223', name: "Don't Get Cocky" },
+  { id: 'SOR_152', name: 'For a Cause I Believe In' },
+  { id: 'SHD_194', name: 'Triple Dark Raid' },
   // Printed as an upgrade (see `cardDataCorrections.ts`), but the set data, and so the set totals
   // below, file it as an event. Counted where the totals count it.
   { id: 'SOR_215', name: 'Snapshot Reflexes' },

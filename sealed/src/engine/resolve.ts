@@ -755,7 +755,7 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
   // Redemption: stopping deals what was healed so far.
   if (choice.kind === 'distributeHealing') next = finishHealing(next, choice.damageUnit, choice.healed)
   // AAT Incinerator: the ability goes on once its picks stop.
-  if (choice.kind === 'selectUnitThen' && choice.hookOnDecline) next = runIfYouDo(next, choice.then)
+  if ((choice.kind === 'selectUnitThen' || choice.kind === 'selectCardThen') && choice.hookOnDecline) next = runIfYouDo(next, choice.then)
   if (choice.kind === 'mayPayThen' && choice.declineStep !== undefined) next = runIfYouDo(next, { ...choice.then, step: choice.declineStep })
   // Elzar Mann: stopping early still triggers the follow-up, sized to what was distributed.
   if (choice.kind === 'distributeTokens') {
@@ -1350,6 +1350,11 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
     case 'choosePlayerThen':
       next = runIfYouDo(next, choice.then, { playerChosen: (optionIndex ?? 0) === 1 ? choice.controller : opponentOf(choice.controller) })
       break
+    case 'selectCardThen': {
+      const pick = choice.candidates[optionIndex ?? -1]
+      if (pick !== undefined) next = runIfYouDo(next, choice.then, { cardChosen: pick, optionIndex })
+      break
+    }
     case 'chooseArenaThen':
       next = runIfYouDo(next, choice.then, { arenaChosen: (optionIndex ?? 0) === 1 ? 'space' : 'ground' })
       break
@@ -1655,7 +1660,9 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         if (choice.costDelta !== undefined && played) {
           next = updatePlayer(next, owner, payCost(next.players[owner], Math.max(0, effectiveCost(next, owner, played) + choice.costDelta)))
         }
+        const enteredId = `u${next.instanceCounter}`
         next = enterUnit(next, owner, cardId, choice.entersReady === true)
+        if (choice.thenDelay) next = addDelayedEffect(next, { ...choice.thenDelay, owner, unitId: enteredId })
         next = checkWin(next)
         if (next.winner !== null) return next
         const revealed = choice.revealed.filter((_, i) => i !== deckIndex)
@@ -2458,7 +2465,7 @@ function finishHealing(state: GameState, damageUnit: string | undefined, healed:
 }
 
 /** Resume an ability at its card's `ifYouDo` hook, with what the answered choice settled. */
-function runIfYouDo(state: GameState, then: IfYouDo, settled: { targetInstanceId?: string; cardChosen?: string; handIndex?: number; upgradeChosen?: UpgradeRef; playerChosen?: PlayerId; arenaChosen?: Arena } = {}): GameState {
+function runIfYouDo(state: GameState, then: IfYouDo, settled: { targetInstanceId?: string; cardChosen?: string; handIndex?: number; upgradeChosen?: UpgradeRef; playerChosen?: PlayerId; arenaChosen?: Arena; optionIndex?: number } = {}): GameState {
   const hook = getCardDefinition(then.cardId)?.ifYouDo
   if (!hook) return state
   const next = hook(state, { owner: then.owner, cardId: then.cardId, sourceInstanceId: then.sourceInstanceId, step: then.step, upgradeChosen: then.upgrade, unitChosen: then.unit, ...settled })

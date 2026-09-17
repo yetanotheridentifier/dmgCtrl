@@ -324,6 +324,8 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
       return [choice.optional ? `you may ${choice.text}` : choice.text]
     case 'choosePlayerThen':
       return [`choose a player to ${choice.text}`]
+    case 'selectCardThen':
+      return [choice.optional ? `you may ${choice.text}` : choice.text]
     case 'chooseArenaThen':
       return [`choose an arena to ${choice.text}`]
     case 'mayPayThen': {

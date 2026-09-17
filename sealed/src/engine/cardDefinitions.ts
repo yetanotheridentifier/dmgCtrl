@@ -4911,6 +4911,181 @@ registerCard('SHD_208', { // Final Showdown
   delayed: (s, e) => (s.winner === null ? { ...s, winner: opponentOf(e.owner) } : s),
 })
 
+// Picking cards out of a discard pile or off the top of a deck, with `selectCardThen`. A card that picks
+// several carries the picks so far in its step, and finishes when the picks stop.
+const cardThen = (s: GameState, ctx: Resumable, candidates: string[], text: string, optional: boolean, step: string): GameState =>
+  pushChoice(s, { kind: 'selectCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, text, then: resume(ctx, step), ...(optional ? { optional: true, hookOnDecline: true } : {}) })
+/** `list` less one occurrence of each id in `remove`. */
+const withoutEach = (list: string[], remove: string[]): string[] => {
+  const out = [...list]
+  for (const id of remove) { const at = out.indexOf(id); if (at !== -1) out.splice(at, 1) }
+  return out
+}
+/** `owner`'s discard pile without the event now resolving, which is already in it. */
+const discardBesides = (s: GameState, owner: PlayerId, ctx: { owner: PlayerId; cardId: string }): string[] => {
+  const pile = s.players[owner].discard
+  const at = owner === ctx.owner ? pile.lastIndexOf(ctx.cardId) : -1
+  return at === -1 ? pile : pile.filter((_, i) => i !== at)
+}
+/** Move one occurrence of each of `ids` from `owner`'s discard pile to the bottom of their deck, in a random order. */
+const discardToDeckBottom = (s: GameState, owner: PlayerId, ids: string[]): GameState => {
+  if (ids.length === 0) return s
+  const p = s.players[owner]
+  return { ...updatePlayer(s, owner, { discard: withoutEach(p.discard, ids), deck: [...p.deck, ...seededShuffle(ids, s.rngSeed)] }), rngSeed: nextSeed(s.rngSeed) }
+}
+const splitStep = (step: string | undefined, prefix: string): string[] => (step ?? '').slice(prefix.length).split(',').filter(Boolean)
+
+registerCard('LOF_219', { // Psychometry
+  ...whenPlayed('Choose another card in your discard pile. Search the top 5 cards of your deck for a card that shares a Trait with the chosen card, reveal it, and draw it.', (s, ctx) => {
+    const pile = discardBesides(s, ctx.owner, ctx)
+    return pile.length ? cardThen(s, ctx, pile, 'choose another card in your discard pile', false, 'chosen') : s
+  }),
+  ifYouDo: (s, ctx) => {
+    const traits = (s.cards[ctx.cardChosen ?? '']?.traits ?? []).map(t => t.toLowerCase())
+    const revealed = s.players[ctx.owner].deck.slice(0, searchCount(s, ctx.owner, 5))
+    if (revealed.length === 0) return s
+    const eligibleIndices = revealed.flatMap((id, i) => ((s.cards[id]?.traits ?? []).some(t => traits.includes(t.toLowerCase())) ? [i] : []))
+    return pushChoice(s, { kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices })
+  },
+})
+registerCard('SOR_252', { // Restock
+  ...whenPlayed("Choose up to 4 cards in a discard pile. Put them on the bottom of their owner's deck in a random order.", (s, ctx) => choosePlayer(s, ctx, 'restock the discard pile of')),
+  ifYouDo: (s, ctx) => {
+    // `restock:<player>:<picks>`
+    const [, pileOwner, list] = ctx.step?.startsWith('restock:') ? ctx.step.split(':') : ['', ctx.playerChosen!, '']
+    const owner = pileOwner as PlayerId
+    const picks = [...(list ?? '').split(',').filter(Boolean), ...(ctx.step?.startsWith('restock:') && ctx.cardChosen ? [ctx.cardChosen] : [])]
+    const left = withoutEach(discardBesides(s, owner, ctx), picks)
+    const stopped = ctx.step?.startsWith('restock:') && !ctx.cardChosen
+    if (stopped || picks.length >= 4 || left.length === 0) return discardToDeckBottom(s, owner, picks)
+    return cardThen(s, ctx, left, "put a card on the bottom of its owner's deck (up to 4)", true, `restock:${owner}:${picks.join(',')}`)
+  },
+})
+registerCard('LOF_104', { // Luminous Beings
+  ...whenPlayed('Put up to 3 Force units from your discard pile on the bottom of your deck in a random order. Give that many units +4/+4 for this phase.', (s, ctx) =>
+    luminousPick(s, ctx, [])),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step?.startsWith('beings:')) {
+      const picks = splitStep(ctx.step, 'beings:')
+      if (ctx.cardChosen) return luminousPick(s, ctx, [...picks, ctx.cardChosen])
+      return luminousBuff(discardToDeckBottom(s, ctx.owner, picks), ctx, picks.length, [])
+    }
+    // `buff:<n>:<units>`
+    const [, n, list] = ctx.step!.split(':')
+    return luminousBuff(addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, power: 4, hp: 4 }), ctx, Number(n), [...list.split(',').filter(Boolean), ctx.targetInstanceId!])
+  },
+})
+function luminousPick(s: GameState, ctx: Resumable, picks: string[]): GameState {
+  const left = withoutEach(s.players[ctx.owner].discard.filter(id => printedUnit(s.cards[id]) && printedTrait(s.cards[id], 'Force')), picks)
+  if (picks.length >= 3 || left.length === 0) return luminousBuff(discardToDeckBottom(s, ctx.owner, picks), ctx, picks.length, [])
+  return cardThen(s, ctx, left, 'put a Force unit from your discard pile on the bottom of your deck (up to 3)', true, `beings:${picks.join(',')}`)
+}
+function luminousBuff(s: GameState, ctx: Resumable, n: number, buffed: string[]): GameState {
+  if (buffed.length >= n) return s
+  return unitThen(s, ctx, pickedIds(s, ctx, pickAny).filter(id => !buffed.includes(id)), `give a unit +4/+4 (${buffed.length + 1} of ${n})`, false, `buff:${n}:${buffed.join(',')}`)
+}
+registerCard('LOF_103', { // Following the Path
+  ...whenPlayed('Search the top 8 cards of your deck for up to 2 Force units, reveal them, and put them on top of your deck in any order.', (s, ctx) =>
+    followPath(s, ctx, [])),
+  ifYouDo: (s, ctx) => {
+    const picks = splitStep(ctx.step, 'path:').map(Number)
+    const window = s.players[ctx.owner].deck.slice(0, searchCount(s, ctx.owner, 8))
+    const offered = followPathOffers(s, window, picks)
+    return ctx.optionIndex === undefined ? followPathFinish(s, ctx, picks) : followPath(s, ctx, [...picks, offered[ctx.optionIndex]])
+  },
+})
+function followPathOffers(s: GameState, window: string[], picks: number[]): number[] {
+  return window.flatMap((id, i) => (!picks.includes(i) && printedUnit(s.cards[id]) && printedTrait(s.cards[id], 'Force') ? [i] : []))
+}
+function followPath(s: GameState, ctx: Resumable, picks: number[]): GameState {
+  const window = s.players[ctx.owner].deck.slice(0, searchCount(s, ctx.owner, 8))
+  const offered = followPathOffers(s, window, picks)
+  if (picks.length >= 2 || offered.length === 0) return followPathFinish(s, ctx, picks)
+  return cardThen(s, ctx, offered.map(i => window[i]), 'put a Force unit on top of your deck (up to 2); the first you pick goes on top', true, `path:${picks.join(',')}`)
+}
+/** The picks go on top in the order picked; the rest of the window goes to the bottom. */
+function followPathFinish(s: GameState, ctx: Resumable, picks: number[]): GameState {
+  const deck = s.players[ctx.owner].deck
+  const size = Math.min(deck.length, searchCount(s, ctx.owner, 8))
+  const window = deck.slice(0, size)
+  return updatePlayer(s, ctx.owner, { deck: [...picks.map(i => window[i]), ...deck.slice(size), ...window.filter((_, i) => !picks.includes(i))] })
+}
+registerCard('SOR_223', { // Don't Get Cocky
+  ...whenPlayed('Choose a unit. One at a time, reveal cards from your deck until you choose to stop or have revealed 7 cards. If the combined cost of the revealed cards is 7 or less, deal that much damage to the chosen unit. Put the revealed cards on the bottom of your deck in a random order.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'choose a unit', false, 'target')),
+  // The revealed cards stay on top of the deck while the reveal goes on: `more:<n>` and `stop:<n>` count them.
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'target') return cockyReveal(s, ctx, ctx.targetInstanceId!, 1)
+    const n = Number(ctx.step!.split(':')[1])
+    return ctx.step!.startsWith('more:') ? cockyReveal(s, ctx, ctx.unitChosen!, n + 1) : cockyFinish(s, ctx, ctx.unitChosen!, n)
+  },
+})
+function cockyReveal(s: GameState, ctx: Resumable, unitId: string, n: number): GameState {
+  const deck = s.players[ctx.owner].deck
+  const shown = deck.slice(0, n)
+  if (n >= 7 || n >= deck.length) return cockyFinish(s, ctx, unitId, shown.length)
+  const total = shown.reduce((sum, id) => sum + (s.cards[id]?.cost ?? 0), 0)
+  const names = shown.map(id => s.cards[id]?.name ?? id).join(', ')
+  return pushChoice(s, {
+    kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0,
+    text: `reveal another card (revealed: ${names}; combined cost ${total})`, then: resume(ctx, `more:${n}`, unitId), declineStep: `stop:${n}`,
+  })
+}
+function cockyFinish(s: GameState, ctx: Resumable, unitId: string, n: number): GameState {
+  const deck = s.players[ctx.owner].deck
+  const shown = deck.slice(0, n)
+  const total = shown.reduce((sum, id) => sum + (s.cards[id]?.cost ?? 0), 0)
+  const bottomed = { ...updatePlayer(s, ctx.owner, { deck: [...deck.slice(n), ...seededShuffle(shown, s.rngSeed)] }), rngSeed: nextSeed(s.rngSeed) }
+  return total <= 7 && total > 0 && findUnit(bottomed, unitId) ? dealDamageToUnit(bottomed, unitId, total) : bottomed
+}
+registerCard('SOR_152', { // For a Cause I Believe In
+  ...whenPlayed('Reveal the top 4 cards of your deck. For each Heroism card revealed this way, deal 1 damage to an enemy base. You may discard any of the revealed cards and put the rest back on top of your deck in any order.', (s, ctx) => {
+    const revealed = s.players[ctx.owner].deck.slice(0, 4)
+    if (revealed.length === 0) return s
+    const heroism = revealed.filter(id => printedAspect(s.cards[id], 'Heroism')).length
+    return causePick(heroism > 0 ? dealDamageToBase(s, opponentOf(ctx.owner), heroism) : s, ctx, revealed.length, [])
+  }),
+  ifYouDo: (s, ctx) => {
+    const picks = splitStep(ctx.step, 'cause:').map(Number)
+    const size = Math.min(4, s.players[ctx.owner].deck.length)
+    if (ctx.optionIndex === undefined) return causeFinish(s, ctx, picks)
+    const left = [...Array(size).keys()].filter(i => !picks.includes(i))
+    return causePick(s, ctx, size, [...picks, left[ctx.optionIndex]])
+  },
+})
+function causePick(s: GameState, ctx: Resumable, size: number, picks: number[]): GameState {
+  const deck = s.players[ctx.owner].deck
+  const left = [...Array(size).keys()].filter(i => !picks.includes(i))
+  if (left.length === 0) return causeFinish(s, ctx, picks)
+  return cardThen(s, ctx, left.map(i => deck[i]), 'discard a revealed card', true, `cause:${picks.join(',')}`)
+}
+/**
+ * The picked cards are discarded and the rest stay on top in the order they were revealed. The rules let
+ * the player reorder them; keeping the order is an approximation.
+ */
+function causeFinish(s: GameState, ctx: Resumable, picks: number[]): GameState {
+  const p = s.players[ctx.owner]
+  const size = Math.min(4, p.deck.length)
+  const top = p.deck.slice(0, size)
+  return updatePlayer(s, ctx.owner, { deck: [...top.filter((_, i) => !picks.includes(i)), ...p.deck.slice(size)], discard: [...p.discard, ...picks.map(i => top[i])] })
+}
+registerCard('SHD_194', { // Triple Dark Raid
+  ...whenPlayed('Search the top 7 cards of your deck for a Vehicle and play it. It costs 5 less and enters play ready. Return it to its owner\'s hand at the end of the phase.', (s, ctx) => {
+    const p = s.players[ctx.owner]
+    const revealed = p.deck.slice(0, searchCount(s, ctx.owner, 7))
+    if (revealed.length === 0) return s
+    const ready = p.resources.filter(r => !r.exhausted).length
+    const eligibleIndices = revealed.flatMap((id, i) => {
+      const c = s.cards[id]
+      return printedUnit(c) && printedTrait(c, 'Vehicle') && c && Math.max(0, effectiveCost(s, ctx.owner, c) - 5) <= ready ? [i] : []
+    })
+    const pulled = updatePlayer(s, ctx.owner, { deck: p.deck.slice(revealed.length) })
+    return pushChoice(pulled, { kind: 'searchPlayFree', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices, budget: 0, playOne: true, costDelta: -5, entersReady: true, thenDelay: { cardId: 'SHD_194', when: 'regroupStart' } })
+  }),
+  // "At the end of the phase" is read as the start of the regroup phase that follows it.
+  delayed: (s, e) => (e.unitId && findUnit(s, e.unitId) ? returnUnitToHand(s, e.unitId) : s),
+})
+
 registerCard('LAW_085', unitThenWp('Choose a friendly non-leader unit. An opponent takes control of it. If they do, deal 4 damage to another unit in the same arena.', pickAll(pickFriendly, nonLeader), 'give a friendly non-leader unit to an opponent', false, // You Hold This
   (s, ctx) => {
     const others = otherInArena(s, ctx.targetInstanceId!)

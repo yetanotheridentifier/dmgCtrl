@@ -98,6 +98,10 @@ const F = {
   LAW_130: ev('LAW_130', 2), SOR_186: ev('SOR_186', 2), JTL_074: ev('JTL_074'), TWI_072: ev('TWI_072'),
   LAW_243: ev('LAW_243'), SOR_219: ev('SOR_219', 2), LOF_203: ev('LOF_203', 3), SEC_073: ev('SEC_073'),
   SHD_208: ev('SHD_208', 6),
+  LOF_219: ev('LOF_219'), SOR_252: ev('SOR_252'), LOF_104: ev('LOF_104', 6), LOF_103: ev('LOF_103'),
+  SOR_223: ev('SOR_223', 4), SOR_152: ev('SOR_152', 3), SHD_194: ev('SHD_194', 3),
+  H_EV: card({ id: 'H_EV', type: 'event', cost: 2, aspects: ['Heroism'] }),
+  VEH6: card({ id: 'VEH6', arena: 'space', cost: 6, power: 3, hp: 5, traits: ['VEHICLE'] }),
   OFFICIAL: card({ id: 'OFFICIAL', arena: 'ground', cost: 2, power: 1, hp: 4, traits: ['OFFICIAL'] }),
   TWO_ASP: card({ id: 'TWO_ASP', arena: 'ground', cost: 3, power: 2, hp: 5, aspects: ['Cunning', 'Heroism'] }),
   DROID: card({ id: 'DROID', arena: 'ground', cost: 2, power: 2, hp: 5, traits: ['DROID'] }),
@@ -1297,5 +1301,103 @@ describe('events with a lasting prohibition or a delayed effect', () => {
     expect(exhausted(s, 'm', 'e')).toEqual([false, true])
     s = toRegroup(s)
     expect(s.winner).toBe('opponent')
+  })
+})
+
+// ── Picking cards out of a discard pile or the top of a deck ────────────────────────────────────
+
+/** The card ids a `selectCardThen` offers, in option order. */
+const cardOffers = (s: GameState): string[] => { const c = choice(s); return c.kind === 'selectCardThen' ? c.candidates : [] }
+const pickCard = (s: GameState, cardId: string) => accept(s, { optionIndex: cardOffers(s).indexOf(cardId) })
+
+describe('events that pick cards from a discard pile or the top of a deck', () => {
+  it('Psychometry (LOF_219) picks another card in your discard pile and searches the top 5 for one sharing a Trait', () => {
+    let s = play(board('LOF_219', { discard: ['CLONE6', 'P3'], deck: ['U_VIG', 'REPUBLIC', 'CLONE', 'P5', 'MANDO', 'FILL'] }))
+    expect(cardOffers(s)).toEqual(['CLONE6', 'P3'])
+    expect(declinable(s)).toBe(false)
+    s = pickCard(s, 'CLONE6')
+    const c = choice(s)
+    expect(revealedOf(c)).toEqual(['U_VIG', 'REPUBLIC', 'CLONE', 'P5', 'MANDO'])
+    expect(eligibleCards(c)).toEqual(['REPUBLIC', 'CLONE'])
+  })
+
+  it("Restock (SOR_252) puts up to 4 cards from one discard pile on the bottom of their owner's deck", () => {
+    let s = play(board('SOR_252', {}, { discard: ['P3', 'P5', 'UPG', 'FILL', 'U_VIG'], deck: ['MANDO'] }))
+    s = accept(s, { optionIndex: 0 }) // the opponent's pile
+    expect(cardOffers(s)).toEqual(['P3', 'P5', 'UPG', 'FILL', 'U_VIG'])
+    expect(declinable(s)).toBe(true)
+    for (const id of ['P3', 'UPG', 'FILL']) s = pickCard(s, id)
+    expect(cardOffers(s)).toEqual(['P5', 'U_VIG'])
+    s = pickCard(s, 'U_VIG')
+    noChoice(s)
+    expect(s.players.opponent.discard).toEqual(['P5'])
+    expect(s.players.opponent.deck[0]).toBe('MANDO')
+    expect([...s.players.opponent.deck.slice(1)].sort()).toEqual(['FILL', 'P3', 'UPG', 'U_VIG'])
+    // Stopping early moves what was picked.
+    const one = skip(pickCard(accept(play(board('SOR_252', { discard: ['P3', 'P5'] })), { optionIndex: 1 }), 'P5'))
+    expect(one.players.player.discard).toEqual(['P3', 'SOR_252'])
+    expect(one.players.player.deck).toEqual(['P5'])
+  })
+
+  it("Luminous Beings (LOF_104) bottoms up to 3 Force units from your discard pile and gives that many units +4/+4", () => {
+    let s = play(board('LOF_104', { discard: ['FORCE', 'P3', 'FORCE_HAND', 'FORCE'], units: [unit('m', 'P3'), unit('n', 'P2')] }, { units: [unit('e', 'P5')] }))
+    expect(cardOffers(s)).toEqual(['FORCE', 'FORCE_HAND', 'FORCE'])
+    s = pickCard(pickCard(s, 'FORCE'), 'FORCE_HAND')
+    expect(cardOffers(s)).toEqual(['FORCE'])
+    s = skip(s)
+    expect(s.players.player.discard).toEqual(['P3', 'FORCE', 'LOF_104'])
+    expect([...s.players.player.deck].sort()).toEqual(['FORCE', 'FORCE_HAND'])
+    expect(unitOffers(s)).toEqual(['e', 'm', 'n'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(unitOffers(s)).toEqual(['e', 'n'])
+    s = accept(s, { targetInstanceId: 'n' })
+    noChoice(s)
+    expect([stats(s, 'm'), stats(s, 'n')]).toEqual([[7, 9], [6, 9]])
+  })
+
+  it('Following the Path (LOF_103) puts up to 2 Force units from the top 8 on top of the deck', () => {
+    let s = play(board('LOF_103', { deck: ['FORCE', 'P3', 'FORCE_HAND', 'U_VIG', 'FILL'] }))
+    expect(cardOffers(s)).toEqual(['FORCE', 'FORCE_HAND'])
+    s = pickCard(pickCard(s, 'FORCE_HAND'), 'FORCE')
+    noChoice(s)
+    expect(s.players.player.deck).toEqual(['FORCE_HAND', 'FORCE', 'P3', 'U_VIG', 'FILL'])
+    expect(s.players.player.hand).toEqual([])
+  })
+
+  it("Don't Get Cocky (SOR_223) reveals until you stop, and deals the combined cost if it is 7 or less", () => {
+    let s = accept(play(board('SOR_223', { deck: ['UPG', 'P3', 'P5', 'FILL'] }, { units: [unit('e', 'BIG')] })), { targetInstanceId: 'e' })
+    expect(choice(s).kind).toBe('mayPayThen')
+    s = skip(accept(s))
+    noChoice(s)
+    expect(dmg(s, 'e')).toBe(3) // UPG 1 + P3 2
+    expect(s.players.player.deck[0]).toBe('P5')
+    expect([...s.players.player.deck.slice(2)].sort()).toEqual(['P3', 'UPG'])
+    const bust = skip(accept(accept(play(board('SOR_223', { deck: ['P5', 'GRD7', 'FILL'] }, { units: [unit('e', 'BIG')] })), { targetInstanceId: 'e' })))
+    expect(dmg(bust, 'e')).toBe(0)
+  })
+
+  it('For a Cause I Believe In (SOR_152) reveals 4, deals 1 to the enemy base per Heroism card, and may discard any of them', () => {
+    let s = play(board('SOR_152', { deck: ['H_EV', 'HERO1', 'P3', 'U_VIG', 'FILL'] }))
+    expect(s.players.opponent.base.damage).toBe(2)
+    expect(cardOffers(s)).toEqual(['H_EV', 'HERO1', 'P3', 'U_VIG'])
+    expect(declinable(s)).toBe(true)
+    s = pickCard(s, 'P3')
+    expect(cardOffers(s)).toEqual(['H_EV', 'HERO1', 'U_VIG'])
+    s = skip(s)
+    expect(s.players.player.deck).toEqual(['H_EV', 'HERO1', 'U_VIG', 'FILL'])
+    expect(s.players.player.discard).toEqual(['SOR_152', 'P3'])
+  })
+
+  it('Triple Dark Raid (SHD_194) plays a Vehicle from the top 7 for 5 less, ready, and returns it to hand at the end of the phase', () => {
+    let s = play(board('SHD_194', { deck: ['P3', 'VEH6', 'U_VIG'], resources: ready(4) }))
+    const c = choice(s)
+    expect(c).toMatchObject({ kind: 'searchPlayFree', costDelta: -5, entersReady: true })
+    expect(eligibleCards(c)).toEqual(['VEH6'])
+    s = accept(s, { deckIndex: 1 })
+    const veh = s.players.player.units.find(u => u.cardId === 'VEH6')!
+    expect(veh.exhausted).toBe(false)
+    const regroup = toRegroup(s)
+    expect(U(regroup, veh.instanceId)).toBeUndefined()
+    expect(regroup.players.player.hand).toContain('VEH6')
   })
 })

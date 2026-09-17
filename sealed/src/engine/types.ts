@@ -828,6 +828,11 @@ type ChoiceVariant =
   // "Choose a player": option 0 is the controller's opponent, option 1 the controller. Never optional.
   // The chosen player reaches the card's `ifYouDo` hook as `playerChosen`. `text` is the effect.
   | { kind: 'choosePlayerThen'; id: string; controller: PlayerId; text: string; then: IfYouDo }
+  // Pick one of `candidates` (card ids: cards in a discard pile, or revealed from a deck) for the card's
+  // `ifYouDo` hook, which is told the card and its option index and decides what happens to it. A deck
+  // holds duplicates, so a hook that needs a position reads the index. `hookOnDecline` runs the hook with
+  // no card when the pick is declined, for an ability that goes on after its picks stop.
+  | { kind: 'selectCardThen'; id: string; controller: PlayerId; candidates: string[]; optional?: boolean; text: string; then: IfYouDo; hookOnDecline?: boolean }
   // "Choose an arena": option 0 is ground, option 1 space. Never optional. The arena reaches the card's
   // `ifYouDo` hook as `arenaChosen`.
   | { kind: 'chooseArenaThen'; id: string; controller: PlayerId; text: string; then: IfYouDo }
@@ -959,7 +964,8 @@ type ChoiceVariant =
   // SAME filter; hardcoding one card's made every other search offer the wrong cards.
   // `costDelta` makes the play a paid one at a discount instead of free (Kelleran Beq: "it costs 3
   // less"), and then eligibility is what the player can afford rather than what fits `budget`.
-  | { kind: 'searchPlayFree'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; budget: number; playOne?: boolean; entersReady?: boolean; filter?: { trait?: string; aspect?: string; arena?: Arena }; costDelta?: number }
+  // `thenDelay` leaves a delayed effect about the unit played (Triple Dark Raid returns it to hand).
+  | { kind: 'searchPlayFree'; id: string; controller: PlayerId; revealed: string[]; eligibleIndices: number[]; budget: number; playOne?: boolean; entersReady?: boolean; filter?: { trait?: string; aspect?: string; arena?: Arena }; costDelta?: number; thenDelay?: { cardId: string; when: DelayedEffect['when'] } }
   // Rancor Keeper: "deal 1 damage to any number of bases" — repeatable, each base at most
   // once; `remaining` are the bases not yet picked. Skip finishes. `heal` heals each picked base
   // instead ("heal 2 damage from each of any number of bases", Coruscanti Spy).

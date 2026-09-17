@@ -750,6 +750,10 @@ function choiceMoves(state: GameState): Action[] {
         if ('optional' in choice && choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
         break
       }
+      case 'selectCardThen':
+        choice.candidates.forEach((_, i) => moves.push({ type: 'acceptChoice', choiceId: choice.id, optionIndex: i }))
+        if (choice.optional) moves.push({ type: 'skipTrigger', choiceId: choice.id })
+        break
       case 'choosePlayerThen':
       case 'chooseArenaThen':
         // The opponent then yourself, or ground then space. Neither choice is ever optional.
