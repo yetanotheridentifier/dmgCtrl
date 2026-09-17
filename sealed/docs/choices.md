@@ -63,6 +63,15 @@ zero is legal. `chooseMode` has no decline: "choose one" is never optional.
 first, then control passes; round-start choices (`resumeAtInitiative`) begin the action phase with
 the initiative holder, mid-turn choices `advanceTurn`.
 
+**Control returns to the player whose action it was.** A choice another player answers (an opponent's
+On Attack pick, a combat prevention offer, a trigger order that puts the other side first, a reactive
+trigger's "may") hands `activePlayer` to its controller and records the actor in `pendingResumeActive`.
+Once every choice and trigger has drained, `resumeAfterChoice` restores that actor and clears the
+marker **before** any of its exits (a suspended attack, regroup, a deferred initiative), so no marker
+outlives its choices. A leftover one would be read by the next choice to drain and give the other
+player two actions in a row. `resumeMarker.test.ts` plays every set's coverage decks and asserts no
+marker is set in a live position with nothing outstanding.
+
 ### The rest of an ability
 
 A choice is data, so it cannot hold the closure that finishes the ability that raised it. Most kinds

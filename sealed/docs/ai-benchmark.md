@@ -842,6 +842,13 @@ how the bench found and pinned two real hangs during its own construction.
 written and the harness rebuilds it from the ASH snapshot on load; a hand-rolled loader throws on the
 first move, inside `defeated`, for reasons that have nothing to do with the bug being chased.
 
+**A fixed engine can make an older report unreplayable**, because its moves answer the position the
+defect produced. `replayUpTo` stops before that point. `replayWith` and `replaySteps` take inserts,
+actions applied just before a given move, to play past it: `pickTrigger` answers an ordering question
+the reporter was never asked, and `missingTurn` fills in a pass where a stale resume marker once gave
+the other player two actions in a row. Each move carries `by`, so the first move whose `by` differs
+from `activePlayer` is where a replay has drifted.
+
 **A `threw` is not necessarily in `resolve`.** A move is appended to the record *before* it is
 resolved, so a throw inside `resolve` leaves the offending move last. If every recorded move replays
 cleanly, the throw is in the AI **choosing the next move**: replay to the end, then call the AI on the
