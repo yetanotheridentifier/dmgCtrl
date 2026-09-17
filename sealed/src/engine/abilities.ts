@@ -103,6 +103,8 @@ export interface IfYouDoContext extends EffectContext {
   arenaChosen?: Arena
   /** The unit an earlier stage chose (`IfYouDo.unit`). */
   unitChosen?: string
+  /** The card name a `nameCard` with `then` settled. */
+  nameChosen?: string
 }
 
 export interface CardDefinition {
@@ -155,6 +157,11 @@ export interface CardDefinition {
    * Any waiving unit zeroes the whole penalty for that card.
    */
   waivesAspectPenalty?: (state: GameState, source: UnitState, ctx: CostDiscountContext) => boolean
+  /**
+   * Aspect icons whose penalty this card ignores while `player` plays it (Rey: "ignore her Heroism
+   * aspect penalty if you control Kylo Ren"). Only those icons: any other missing icon still costs.
+   */
+  ignoresOwnAspectPenalty?: (state: GameState, player: PlayerId) => string[]
   /**
    * Multiplier applied to each instance of damage this unit takes (the unit's own
    * card, or an upgrade) — e.g. Deadly Vulnerability's ×2. Multipliers from the card

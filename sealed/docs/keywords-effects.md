@@ -264,8 +264,9 @@ Unpreventable damage ignores both kinds, and ignores Shields entirely: the token
 `healUnit` and `healBase` are the only places damage comes off a unit or a base, Restore included.
 That is what lets one card switch a whole category off: Confederate Tri-Fighter's "bases can't be
 healed" is a `suppressesBaseHealing` hook consulted inside `healBase`, and it covers both players'
-bases, as the card reads. Restore used to subtract from the base inline in `attack`, where no such
-card could ever have reached it.
+bases, as the card reads. The same check reads `GameState.basesUnhealable`, set for one phase by
+Shifty Suspects and cleared with the lasting effects as the regroup phase starts. Restore used to
+subtract from the base inline in `attack`, where no such card could ever have reached it.
 
 `healUnit` records the unit in `phaseEvents.healedUnits` when damage actually comes off, so "each
 friendly unit that was healed this phase" (Barriss Offee) counts every source of healing and nothing

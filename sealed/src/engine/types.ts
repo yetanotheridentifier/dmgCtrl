@@ -349,6 +349,8 @@ export interface GameState {
   bannedNames?: string[]
   /** Bases whose next damage this phase is prevented (Close the Shield Gate). Cleared as the regroup phase starts. */
   shieldedBases?: PlayerId[]
+  /** Bases can't be healed for this phase (Shifty Suspects). Cleared as the regroup phase starts. */
+  basesUnhealable?: boolean
   /**
    * Events the engine tracks within a boundary so abilities can query them:
    * which units entered play this phase and which cards were defeated this phase
@@ -551,6 +553,8 @@ export interface PhaseEvents {
    * card that limits itself reads it.
    */
   damagePrevented?: string[]
+  /** How many cards each player has drawn this phase (Beilert Valance). */
+  cardsDrawn?: Partial<Record<PlayerId, number>>
 }
 
 /**
@@ -957,7 +961,8 @@ type ChoiceVariant =
   // `surcharge` names the card for a COST INCREASE instead of a prohibition (Qi'ra: "each card with
   // that name costs 3 more for your opponents"). The two are mutually exclusive on a unit.
   // `phaseBan` records the name on the game instead, so nobody can play it this phase (Transmission Jamming).
-  | { kind: 'nameCard'; id: string; controller: PlayerId; unitId: string; surcharge?: number; phaseBan?: boolean }
+  // `then` hands the name to the card's `ifYouDo` hook as `nameChosen` instead of recording it (Zuckuss, Chimaera).
+  | { kind: 'nameCard'; id: string; controller: PlayerId; unitId: string; surcharge?: number; phaseBan?: boolean; then?: IfYouDo }
   // "You may put the top card of your deck into play as a resource" (Resupply Carrier, Cham
   // Syndulla) — a yes/no, raised only when there is a card to take.
   | { kind: 'mayResourceTop'; id: string; controller: PlayerId }
@@ -1097,9 +1102,9 @@ export function addLastingEffect(state: GameState, effect: LastingEffect): GameS
  * banned names and shielded bases. A `untilRoundEnd` effect stays until `clearRoundEffects`.
  */
 export function clearLastingEffects(state: GameState): GameState {
-  if (!state.lastingEffects && !state.bannedNames && !state.shieldedBases) return state
+  if (!state.lastingEffects && !state.bannedNames && !state.shieldedBases && !state.basesUnhealable) return state
   const kept = (state.lastingEffects ?? []).filter(e => e.untilRoundEnd)
-  return { ...state, lastingEffects: kept.length > 0 ? kept : undefined, bannedNames: undefined, shieldedBases: undefined }
+  return { ...state, lastingEffects: kept.length > 0 ? kept : undefined, bannedNames: undefined, shieldedBases: undefined, basesUnhealable: undefined }
 }
 
 /** Leave an effect to happen later (`DelayedEffect`). */
@@ -1194,6 +1199,17 @@ export function recordUnitAttacked(state: GameState, instanceId: string): GameSt
   const events = state.phaseEvents ?? emptyPhaseEvents()
   const attacked = events.attackedUnits ?? []
   return attacked.includes(instanceId) ? state : { ...state, phaseEvents: { ...events, attackedUnits: [...attacked, instanceId] } }
+}
+
+/** Note that `owner` drew `n` cards this phase. */
+export function recordCardsDrawn(state: GameState, owner: PlayerId, n: number): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  return { ...state, phaseEvents: { ...events, cardsDrawn: { ...events.cardsDrawn, [owner]: (events.cardsDrawn?.[owner] ?? 0) + n } } }
+}
+
+/** How many cards `owner` has drawn this phase (Beilert Valance). */
+export function cardsDrawnThisPhase(state: GameState, owner: PlayerId): number {
+  return state.phaseEvents?.cardsDrawn?.[owner] ?? 0
 }
 
 /** Instance ids of units that attacked this phase (Anakin's Podracer). */

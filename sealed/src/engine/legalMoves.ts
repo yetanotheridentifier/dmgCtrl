@@ -147,10 +147,11 @@ export function effectiveCost(state: GameState, playerId: PlayerId, card: Engine
     }
   }
   let penalty = 0
+  const ignored = getCardDefinition(card.id)?.ignoresOwnAspectPenalty?.(state, playerId) ?? []
   for (const icon of card.aspects) {
     const i = provided.indexOf(icon)
     if (i === -1) {
-      penalty += 2
+      if (!ignored.includes(icon)) penalty += 2
     } else {
       provided.splice(i, 1)
     }
