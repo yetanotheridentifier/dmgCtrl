@@ -1247,6 +1247,15 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'SHD_157', name: 'Bo-Katan Kryze' },
   { id: 'LOF_213', name: 'The Legacy Run' },
   { id: 'JTL_071', name: 'CR90 Relief Runner' },
+  { id: 'SEC_136', name: 'Arihnda Pryce' },
+  { id: 'SEC_207', name: 'Lightmaker' },
+  { id: 'SOR_204', name: 'Greedo' },
+  { id: 'SOR_045', name: 'Yoda' },
+  { id: 'SOR_145', name: 'K-2SO' },
+  { id: 'LOF_200', name: 'Qui-Gon Jinn' },
+  { id: 'TS26_39', name: 'Captain Vaughn' },
+  { id: 'SHD_085', name: 'Superlaser Technician' },
+  { id: 'SOR_083', name: 'Superlaser Technician' },
 ]
 
 /**

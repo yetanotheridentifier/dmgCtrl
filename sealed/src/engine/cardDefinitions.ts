@@ -3152,13 +3152,14 @@ type CardTest = (c: EngineCard | undefined, s: GameState, ctx: EventCtx) => bool
  * `count` above 1 is "up to N" (Grand Moff Tarkin), which draws again from what is left of the same
  * window and may stop at any point (CR 8.30.1).
  */
-const searchDrawChoice = (s: GameState, ctx: EventCtx, depth: number, test: CardTest, count = 1): GameState => {
+const searchDrawChoice = (s: GameState, ctx: EventCtx, depth: number, test: CardTest, count = 1, then?: IfYouDo): GameState => {
   const revealed = s.players[ctx.owner].deck.slice(0, searchCount(s, ctx.owner, depth))
   if (revealed.length === 0) return s
   const eligibleIndices = revealed.flatMap((id, i) => (test(s.cards[id], s, ctx) ? [i] : []))
   return pushChoice(s, {
     kind: 'searchDraw', id: ctx.sourceInstanceId!, controller: ctx.owner, revealed, eligibleIndices,
     ...(count > 1 && { remaining: count, upTo: true }),
+    ...(then && { then }),
   })
 }
 const searchDrawWp = (description: string, depth: number, test: CardTest, count = 1) =>
@@ -5106,8 +5107,8 @@ registerCard('SHD_194', { // Triple Dark Raid
 })
 
 // Moving units and upgrades, and the last one-offs
-/** Put a unit on the bottom of its owner's deck: it leaves play as a return to hand does, and the card goes under the deck. */
-const unitToDeckBottom = (s: GameState, id: string): GameState => {
+/** Put a unit on the top or bottom of its owner's deck: it leaves play as a return to hand does, and the card goes on the deck. */
+const unitToDeck = (s: GameState, id: string, where: 'top' | 'bottom'): GameState => {
   const found = findUnit(s, id)
   if (!found) return s
   const cardOwner = found.unit.owner ?? found.owner
@@ -5115,8 +5116,11 @@ const unitToDeckBottom = (s: GameState, id: string): GameState => {
   const returned = returnUnitToHand(s, id)
   const hand = returned.players[cardOwner].hand
   if (hand.length === before) return returned // a token leaves no card
-  return updatePlayer(returned, cardOwner, { hand: hand.slice(0, -1), deck: [...returned.players[cardOwner].deck, hand[hand.length - 1]] })
+  const card = hand[hand.length - 1]
+  const deck = returned.players[cardOwner].deck
+  return updatePlayer(returned, cardOwner, { hand: hand.slice(0, -1), deck: where === 'top' ? [card, ...deck] : [...deck, card] })
 }
+const unitToDeckBottom = (s: GameState, id: string): GameState => unitToDeck(s, id, 'bottom')
 const selectUnitWithDecline = (s: GameState, ctx: Resumable, targets: string[], text: string, step: string, unit?: string): GameState =>
   (targets.length ? pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true, hookOnDecline: true, text, then: resume(ctx, step, unit) }) : resumeNow(s, ctx, step, unit))
 /** Run a card's own hook directly, as a declined pick would, when there was nothing to pick. */
@@ -6804,3 +6808,68 @@ registerCard('LOF_213', defeated(whenPlayed('Deal 6 damage divided as you choose
 // "Up to" heals as much as it can, as It Binds All Things reads it.
 registerCard('JTL_071', defeated(whenPlayed('Heal up to 3 damage from a unit or base.', (s, ctx) => // CR90 Relief Runner
   healChoice(s, ctx, 3, allUnits(s).map(u => u.instanceId), BOTH_BASES))))
+
+// B: two steps, or a choice of modes. A yes or no with a `declineStep` is how a card offers two modes.
+registerCard('SEC_136', defeated(unitThenWp('You may defeat another friendly unit. If you do, deal 4 damage to each enemy base.', // Arihnda Pryce
+  pickFriendly, 'defeat another friendly unit', true, (s, ctx) => dealDamageToBase(defeatUnit(s, ctx.targetInstanceId!), opponentOf(ctx.owner), 4))))
+registerCard('SEC_207', { // Lightmaker
+  ...defeated(whenPlayed('Choose an arena. Exhaust each enemy unit in that arena.', (s, ctx) => chooseArena(s, ctx, 'exhaust each enemy unit in'))),
+  ifYouDo: (s, ctx) => s.players[opponentOf(ctx.owner)].units.filter(u => u.arena === ctx.arenaChosen).reduce((acc, u) => exhaustUnit(acc, u.instanceId), s),
+})
+registerCard('SOR_204', { // Greedo
+  ...defeated(whenPlayed("You may discard a card from your deck. If it's not a unit, deal 2 damage to a ground unit.", (s, ctx) =>
+    (s.players[ctx.owner].deck.length ? pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'discard a card from your deck', then: resume(ctx) }) : s))),
+  ifYouDo: (s, ctx) => {
+    const [next, milled] = millTop(s, ctx.owner, 1)
+    return milled.length && !printedUnit(next.cards[milled[0]]) ? damageChoice(next, ctx, 2, picked(next, ctx, pickGround)) : next
+  },
+})
+registerCard('SOR_045', { // Yoda
+  ...defeated(whenPlayed('Choose any number of players. They each draw a card.', (s, ctx) =>
+    pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: 'choose yourself to draw a card', then: resume(ctx, 'you'), declineStep: 'notYou' }))),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'them') return drawCards(s, opponentOf(ctx.owner), 1)
+    if (ctx.step === 'notThem') return s
+    const next = ctx.step === 'you' ? drawCards(s, ctx.owner, 1) : s
+    return pushChoice(next, { kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-them`, controller: ctx.owner, cost: 0, text: 'choose your opponent to draw a card', then: resume(ctx, 'them'), declineStep: 'notThem' })
+  },
+})
+registerCard('SOR_145', { // K-2SO
+  ...defeated(whenPlayed("For each opponent, choose one: either deal 3 damage to that player's base, or that player discards a card from their hand.", (s, ctx) =>
+    pushChoice(s, { kind: 'mayPayThen', id: ctx.sourceInstanceId!, controller: ctx.owner, cost: 0, text: "deal 3 damage to your opponent's base (otherwise they discard a card from their hand)", then: resume(ctx, 'base'), declineStep: 'discard' }))),
+  ifYouDo: (s, ctx) => (ctx.step === 'base' ? dealDamageToBase(s, opponentOf(ctx.owner), 3) : opponentDiscards(s, ctx.owner, ctx.sourceInstanceId!)),
+})
+registerCard('LOF_200', { // Qui-Gon Jinn
+  ...defeated(whenPlayed("You may choose a non-leader ground unit. Its owner puts it on the top or bottom of their deck.", (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickGround, (st, u) => nonLeader(st, u))), 'choose a non-leader ground unit for its owner to put on their deck', true))),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'top' || ctx.step === 'bottom') return unitToDeck(s, ctx.unitChosen!, ctx.step)
+    const found = findUnit(s, ctx.targetInstanceId!)
+    if (!found) return s
+    // Its owner decides, which is not always the player resolving the ability.
+    return pushChoice(s, {
+      kind: 'mayPayThen', id: `${ctx.sourceInstanceId}-deck`, controller: found.unit.owner ?? found.owner, cost: 0,
+      text: `put ${s.cards[found.unit.cardId]?.name ?? 'the unit'} on the top of your deck (otherwise the bottom)`, then: resume(ctx, 'top', found.unit.instanceId), declineStep: 'bottom',
+    })
+  },
+})
+registerCard('TS26_39', { // Captain Vaughn
+  // The search settles before the hand card is chosen, so the card it draws can be the one put back.
+  ...defeated(whenPlayed('Search the top 3 cards of your deck for a card and draw it. Then, put a card from your hand on top of your deck.', (s, ctx) =>
+    (s.players[ctx.owner].deck.length
+      ? searchDrawChoice(s, ctx, 3, () => true, 1, resume(ctx, 'hand'))
+      : handCardThen(s, ctx, 'put a card from your hand on top of your deck', 'top')))),
+  ifYouDo: (s, ctx) => (ctx.step === 'hand' ? handCardThen(s, ctx, 'put a card from your hand on top of your deck', 'top') : handToDeck(s, ctx.owner, ctx.handIndex, 'top')),
+})
+/** The defeated card itself, out of whichever discard pile it went to and into play as a ready resource. */
+const resourceDefeatedReady = (s: GameState, ctx: { owner: PlayerId; cardId: string }): GameState => {
+  const pile = [ctx.owner, opponentOf(ctx.owner)].find(p => s.players[p].discard.includes(ctx.cardId))
+  if (!pile) return s
+  const discard = s.players[pile].discard
+  const at = discard.lastIndexOf(ctx.cardId)
+  const removed = updatePlayer(s, pile, { discard: discard.filter((_, i) => i !== at) })
+  return updatePlayer(removed, ctx.owner, { resources: [...removed.players[ctx.owner].resources, { cardId: ctx.cardId, exhausted: false }] })
+}
+const superlaserTechnician = defeated(mayPayWp('You may put this unit into play as a resource and ready it.', 0, 'put this unit into play as a resource and ready it', resourceDefeatedReady))
+registerCard('SHD_085', superlaserTechnician) // Superlaser Technician
+registerCard('SOR_083', superlaserTechnician) // Superlaser Technician (a different card with the same text: 2/1 rather than 2/3)

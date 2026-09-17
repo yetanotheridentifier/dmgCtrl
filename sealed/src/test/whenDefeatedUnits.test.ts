@@ -26,6 +26,8 @@ const SHIPPED = [
   'LAW_189', 'TWI_131', 'LAW_097', 'IBH_15', 'JTL_033', 'LOF_059', 'JTL_063', 'SHD_164', 'SEC_263', 'LOF_235', 'SEC_154',
   'SOR_226', 'SEC_221', 'SOR_060', 'LOF_064', 'JTL_060', 'TWI_104', 'JTL_040', 'JTL_220', 'TWI_148', 'IBH_82', 'SOR_163',
   'LOF_057', 'SHD_157', 'LOF_213', 'JTL_071',
+  // B: two steps, or a choice of modes
+  'SEC_136', 'SEC_207', 'SOR_204', 'SOR_045', 'SOR_145', 'LOF_200', 'TS26_39', 'SHD_085', 'SOR_083',
 ]
 /** Scoped by the triage but lifted out to the ticket that owns their blocker. */
 const LIFTED = ['JTL_221']
@@ -253,5 +255,101 @@ describe('When Defeated units, A: targets, draws and base damage', () => {
     expect(U(done, 'big')!.exhausted).toBe(true)
     noChoice(done)
     expect(done.activePlayer).toBe('opponent') // the attack was the player's action, so the turn passes
+  })
+})
+
+describe('When Defeated units, B: two steps, or a choice of modes', () => {
+  it('Arihnda Pryce (SEC_136) may defeat another friendly unit; if she does, she deals 4 damage to each enemy base', () => {
+    const s = kill(board({ units: [unit('wd', 'SEC_136'), unit('f', 'GRD')] }, { units: [unit('e', 'GRD')] }))
+    expect(choice(s)).toMatchObject({ kind: 'selectUnitThen', optional: true, targets: ['f'] })
+    const done = accept(s, { targetInstanceId: 'f' })
+    expect(U(done, 'f')).toBeUndefined()
+    expect(done.players.opponent.base.damage).toBe(4)
+    expect(skip(s).players.opponent.base.damage).toBe(0)
+  })
+
+  it('Lightmaker (SEC_207) exhausts each enemy unit in the arena chosen', () => {
+    const s = kill(board({ units: [unit('wd', 'SEC_207'), unit('f', 'GRD')] }, { units: [unit('e', 'GRD'), unit('sp', 'SPC')] }))
+    expect(choice(s)).toMatchObject({ kind: 'chooseArenaThen', controller: 'player' })
+    const ground = accept(s, { optionIndex: 0 })
+    expect([U(ground, 'e')!.exhausted, U(ground, 'sp')!.exhausted, U(ground, 'f')!.exhausted]).toEqual([true, false, false])
+    const space = accept(s, { optionIndex: 1 })
+    expect([U(space, 'e')!.exhausted, U(space, 'sp')!.exhausted]).toEqual([false, true])
+  })
+
+  it("Greedo (SOR_204) may discard a card from his deck; if it isn't a unit, he deals 2 damage to a ground unit", () => {
+    const withEvent = kill(board({ units: [unit('wd', 'SOR_204')], deck: ['EV', 'GRD'] }, { units: [unit('e', 'GRD'), unit('sp', 'SPC')] }))
+    expect(choice(withEvent)).toMatchObject({ kind: 'mayPayThen', cost: 0 })
+    const milled = accept(withEvent)
+    expect(milled.players.player.discard).toContain('EV')
+    expect(choice(milled)).toMatchObject({ kind: 'selectDamageTarget', amount: 2, unitTargets: ['e'] })
+    const withUnit = accept(kill(board({ units: [unit('wd', 'SOR_204')], deck: ['GRD', 'EV'] }, { units: [unit('e', 'GRD')] })))
+    expect(withUnit.players.player.discard).toContain('GRD')
+    noChoice(withUnit)
+    expect(skip(withEvent).players.player.deck).toEqual(['EV', 'GRD'])
+  })
+
+  it('Yoda (SOR_045) has any number of players each draw a card', () => {
+    const deckFor = { deck: ['GRD', 'GRD2'] }
+    const s = kill(board({ units: [unit('wd', 'SOR_045')], ...deckFor }, deckFor))
+    expect(choice(s)).toMatchObject({ kind: 'mayPayThen', controller: 'player', cost: 0 })
+    const both = accept(accept(s))
+    expect([both.players.player.hand.length, both.players.opponent.hand.length]).toEqual([1, 1])
+    const onlyThem = accept(skip(s))
+    expect([onlyThem.players.player.hand.length, onlyThem.players.opponent.hand.length]).toEqual([0, 1])
+    const onlyMe = skip(accept(s))
+    expect([onlyMe.players.player.hand.length, onlyMe.players.opponent.hand.length]).toEqual([1, 0])
+    noChoice(onlyMe)
+  })
+
+  it("K-2SO (SOR_145) either deals 3 damage to the opponent's base or makes the opponent discard a card", () => {
+    const s = kill(board({ units: [unit('wd', 'SOR_145')] }, { hand: ['GRD'] }))
+    expect(choice(s)).toMatchObject({ kind: 'mayPayThen', controller: 'player', cost: 0 })
+    const base = accept(s)
+    expect(base.players.opponent.base.damage).toBe(3)
+    noChoice(base)
+    const discard = skip(s)
+    expect(discard.players.opponent.base.damage).toBe(0)
+    expect(choice(discard)).toMatchObject({ kind: 'selectDiscard', controller: 'opponent' })
+  })
+
+  it("Qui-Gon Jinn (LOF_200) may choose a non-leader ground unit, and its owner puts it on the top or bottom of their deck", () => {
+    const s = kill(board(
+      { units: [unit('wd', 'LOF_200'), unit('f', 'GRD')] },
+      { units: [unit('e', 'GRD'), unit('sp', 'SPC'), unit('l', 'L_UNIT', { isLeader: true })], deck: ['GRD2'] },
+    ))
+    expect(choice(s)).toMatchObject({ kind: 'selectUnitThen', optional: true })
+    expect(targetsOf(choice(s)).sort()).toEqual(['e', 'f'])
+    const picked = accept(s, { targetInstanceId: 'e' })
+    expect(U(picked, 'e')).toBeDefined() // not moved until its owner says where
+    expect(choice(picked)).toMatchObject({ kind: 'mayPayThen', controller: 'opponent', cost: 0 })
+    const top = accept(picked)
+    expect(U(top, 'e')).toBeUndefined()
+    expect(top.players.opponent.deck).toEqual(['GRD', 'GRD2'])
+    expect(skip(picked).players.opponent.deck).toEqual(['GRD2', 'GRD'])
+  })
+
+  it('Captain Vaughn (TS26_39) searches the top 3 for any card and draws it, then puts a card from his hand on top of his deck', () => {
+    const s = kill(board({ units: [unit('wd', 'TS26_39')], hand: ['EV'], deck: ['GRD', 'SPC', 'GRD2', 'PRICEY'] }))
+    expect(choice(s)).toMatchObject({ kind: 'searchDraw', revealed: ['GRD', 'SPC', 'GRD2'], eligibleIndices: [0, 1, 2] })
+    const drawn = accept(s, { deckIndex: 1 })
+    expect(drawn.players.player.hand).toEqual(['EV', 'SPC'])
+    expect(choice(drawn)).toMatchObject({ kind: 'selectHandCardThen', controller: 'player', handIndices: [0, 1] })
+    const done = accept(drawn, { handIndex: 1 })
+    expect(done.players.player.hand).toEqual(['EV'])
+    expect(done.players.player.deck[0]).toBe('SPC')
+    // Settled without a draw, the rest of the ability still follows.
+    expect(choice(skip(s))).toMatchObject({ kind: 'selectHandCardThen', handIndices: [0] })
+  })
+
+  it.each(['SHD_085', 'SOR_083'])('Superlaser Technician (%s) may put itself into play as a resource, ready', id => {
+    const s = kill(board({ units: [unit('wd', id)], resources: ready(2) }))
+    expect(s.players.player.discard).toEqual([id])
+    expect(choice(s)).toMatchObject({ kind: 'mayPayThen', controller: 'player', cost: 0 })
+    const done = accept(s)
+    expect(done.players.player.discard).toEqual([])
+    expect(done.players.player.resources).toHaveLength(3)
+    expect(done.players.player.resources[2]).toEqual({ cardId: id, exhausted: false })
+    expect(skip(s).players.player.discard).toEqual([id])
   })
 })
