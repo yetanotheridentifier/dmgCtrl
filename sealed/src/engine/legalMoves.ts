@@ -3,7 +3,7 @@ import type { AttackerFilter, EngineCard, GameState, HandCardRef, PlayerId, Reso
 import { opponentOf, hasPendingChoices, nextUnitGrantMatches, abilityCardIds, pushChoice } from './types'
 import { canAfford, readyResourceCount } from './resources'
 import { unitHasKeyword, unitCannotAttack, unitCannotAttackBases, unitCannotBeAttacked, unitAttacksEitherArena, unitHasTrait, isLeaderUnit } from './keywords'
-import { getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions } from './abilities'
+import { getCardDefinition, unitActionAbilities, actionAbilityKey, leaderActions, baseEpicAction } from './abilities'
 import './cardDefinitions' // side effect: registers all real card behaviours
 
 type AttackTarget = Extract<Action, { type: 'attack' }>['target']
@@ -371,6 +371,13 @@ function actionPhaseMoves(state: GameState): Action[] {
         moves.push({ type: 'useLeaderAbility', index })
       }
     })
+  }
+
+  // Use your base's "Epic Action" — once each game, and only while its own gate holds, so the
+  // one use is never spent on nothing.
+  const baseAction = baseEpicAction(p.base.cardId)
+  if (baseAction && !p.base.epicActionUsed && (baseAction.usable?.(state, playerId) ?? true)) {
+    moves.push({ type: 'useBaseAbility' })
   }
 
   // Take the Initiative — once per round across both players (CR 1.15.5a).

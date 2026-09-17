@@ -4760,9 +4760,10 @@ registerCard('LAW_171', whenPlayed('Resource this event and the top card of your
 
 // Decks, draws and discard piles
 /** Choose a card from your own hand for the card's hook (`step`), or nothing with an empty hand. */
-const handCardThen = (s: GameState, ctx: Resumable, text: string, step: string): GameState => {
+const handCardThen = (s: GameState, ctx: Resumable, text: string, step: string, test?: (c: EngineCard | undefined) => boolean): GameState => {
   const hand = s.players[ctx.owner].hand
-  return hand.length ? pushChoice(s, { kind: 'selectHandCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, handIndices: hand.map((_, i) => i), text, then: resume(ctx, step) }) : s
+  const handIndices = hand.flatMap((id, i) => (!test || test(s.cards[id]) ? [i] : []))
+  return handIndices.length ? pushChoice(s, { kind: 'selectHandCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, handIndices, text, then: resume(ctx, step) }) : s
 }
 /** Move the hand card at `handIndex` to the top or the bottom of its owner's deck. */
 const handToDeck = (s: GameState, owner: PlayerId, handIndex: number | undefined, where: 'top' | 'bottom'): GameState => {
@@ -6903,4 +6904,70 @@ registerCard('JTL_032', { // Director Krennic
   costDiscount: (s, _source, ctx) =>
     (ctx.card.type === 'unit' && hasWhenDefeated(ctx.card.id)
       && !cardsPlayedThisPhase(s, ctx.owner).some(id => s.cards[id]?.type === 'unit' && hasWhenDefeated(id)) ? -1 : 0),
+})
+
+// ── Bases ─────────────────────────────────────────────────────────────────────────────────────────
+// A base is never played, never leaves play and is not a unit, so its ability belongs to the player
+// whose base zone holds it. An "Epic Action" is that player's action, once each game; a constant is
+// an aura over units in play with the controller in place of a source unit.
+
+/** The source a base's ability hands its effect: the base card, which names no unit in play. */
+const baseSide = (cardId: string): string => `${cardId}-base`
+interface EpicSpec {
+  /** Offered only while this holds, so the one use a game is never spent for nothing. */
+  usable?: When
+  effect: (s: GameState, ctx: Resumable) => GameState
+}
+/** "Epic Action: <effect>" on a base. */
+const baseEpic = (description: string, spec: EpicSpec): CardDefinition => ({
+  baseAbilities: {
+    epicAction: {
+      description,
+      usable: (s, owner) => spec.usable?.(s, { owner }) ?? true,
+      effect: (s, ctx) => spec.effect(s, { owner: ctx.owner, cardId: ctx.cardId, sourceInstanceId: baseSide(ctx.cardId) }),
+    },
+  },
+})
+
+// A: Epic Actions that pick a target, a card or a pile
+registerCard('SOR_019', baseEpic('Give a Shield token to a non-leader unit.', { // Security Complex
+  usable: anyUnitPasses(nonLeader),
+  effect: (s, ctx) => shieldChoice(s, ctx, pickedIds(s, ctx, nonLeader), false),
+}))
+const damagedNonLeader = pickAll(nonLeader, damaged)
+registerCard('SOR_025', baseEpic('Deal 3 damage to a damaged non-leader unit.', { // Tarkintown
+  usable: anyUnitPasses(damagedNonLeader),
+  effect: (s, ctx) => damageChoice(s, ctx, 3, picked(s, ctx, damagedNonLeader)),
+}))
+registerCard('SOR_028', baseEpic('Give a non-leader unit -4/-0 for this phase.', { // Jedha City
+  usable: anyUnitPasses(nonLeader),
+  effect: (s, ctx) => lastingBuffChoice(s, ctx, pickedIds(s, ctx, nonLeader), { power: -4 }),
+}))
+const SARLACC = 'The Sarlacc of Carkoon'
+registerCard('LAW_023', { // Great Pit of Carkoon
+  ...baseEpic(`[Discard a unit from your hand]: Search your deck for a card named ${SARLACC}, reveal it, and draw it.`, {
+    usable: (s, ctx) => s.players[ctx.owner].hand.some(id => printedUnit(s.cards[id])),
+    effect: (s, ctx) => handCardThen(s, ctx, 'discard a unit from your hand', 'cost', printedUnit),
+  }),
+  // The whole deck is searched, so the window is its length. The card prints no shuffle.
+  ifYouDo: (s, ctx) => {
+    const discarded = discardFromHand(s, ctx.owner, ctx.handIndex!)
+    return searchDrawChoice(discarded, ctx, discarded.players[ctx.owner].deck.length, c => c?.name === SARLACC)
+  },
+})
+/** Move `cardId` out of its owner's discard pile and onto the top of their deck. */
+const discardToTop = (s: GameState, owner: PlayerId, cardId: string): GameState => {
+  const discard = s.players[owner].discard
+  const at = discard.lastIndexOf(cardId)
+  return at === -1 ? s : updatePlayer(s, owner, { discard: discard.filter((_, i) => i !== at), deck: [cardId, ...s.players[owner].deck] })
+}
+registerCard('LAW_026', { // Shipbreaking Yard
+  ...baseEpic('Discard 3 cards from your deck. You may return a card discarded this way to the top of your deck.', {
+    usable: (s, ctx) => s.players[ctx.owner].deck.length > 0,
+    effect: (s, ctx) => {
+      const [next, milled] = millTop(s, ctx.owner, 3)
+      return milled.length ? pushChoice(next, { kind: 'selectCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates: milled, optional: true, text: 'return a card discarded this way to the top of your deck', then: resume(ctx) }) : next
+    },
+  }),
+  ifYouDo: (s, ctx) => discardToTop(s, ctx.owner, ctx.cardChosen!),
 })

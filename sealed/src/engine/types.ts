@@ -165,6 +165,8 @@ export interface LeaderState {
 export interface BaseState {
   cardId: string
   damage: number
+  /** The base's "Epic Action" has been used: once each game, like a leader's deploy (CR 2.5). */
+  epicActionUsed?: boolean
 }
 
 export interface PlayerState {
