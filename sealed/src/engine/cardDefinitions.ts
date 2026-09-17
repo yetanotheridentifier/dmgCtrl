@@ -1,6 +1,6 @@
 import type { AbilityDef, CardDefinition, EffectContext, IfYouDoContext } from './abilities'
 import { registerCard, getCardDefinition } from './abilities'
-import { takeControlOfUnit, giveToken, giveTokens, attachUpgrades, fireUpgradeAttached,exhaustUnit, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
+import { takeControlOfUnit, giveToken, giveTokens, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
@@ -3800,18 +3800,25 @@ registerCard('LOF_248', { // Jocasta Nu
     if (!ctx.targetInstanceId) {
       return pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets: moveTargets(s, up, ctx.owner), text: `attach ${s.cards[up.cardId]?.name ?? 'the upgrade'} to a different unit`, then: { ...resume(ctx), upgrade: up } })
     }
-    const from = findUnit(s, up.unitId)
-    const moving = from?.unit.upgrades[up.upgradeIndex]
-    if (!from || !moving || moving.cardId !== up.cardId) return s
-    const detached = updatePlayer(s, from.owner, {
-      units: s.players[from.owner].units.map(u => (u.instanceId === up.unitId ? { ...u, upgrades: u.upgrades.filter((_, i) => i !== up.upgradeIndex) } : u)),
-    })
-    if (!findUnit(detached, ctx.targetInstanceId)) return s
-    // A move is an attach, not a play (CR 3.6.14): the new host's "when an upgrade attaches" reacts, and
-    // nothing counts it as played. Detaching is not being defeated, so the old host's side fires nothing.
-    return fireUpgradeAttached(attachUpgrades(detached, ctx.targetInstanceId, [moving]), ctx.targetInstanceId)
+    return moveUpgrade(s, up, ctx.targetInstanceId)
   },
 })
+/**
+ * Detach an upgrade and attach it to `targetId`, handing it to `newOwner` when the move also takes control
+ * of it (Evidence of the Crime). A move is an attach, not a play (CR 3.6.14): the new host's "when an
+ * upgrade attaches" reacts, and nothing counts it as played. Detaching is not being defeated, so the old
+ * host's side fires nothing.
+ */
+function moveUpgrade(s: GameState, up: UpgradeRef, targetId: string, newOwner?: PlayerId): GameState {
+  const from = findUnit(s, up.unitId)
+  const moving = from?.unit.upgrades[up.upgradeIndex]
+  if (!from || !moving || moving.cardId !== up.cardId) return s
+  const detached = updatePlayer(s, from.owner, {
+    units: s.players[from.owner].units.map(u => (u.instanceId === up.unitId ? { ...u, upgrades: u.upgrades.filter((_, i) => i !== up.upgradeIndex) } : u)),
+  })
+  if (!findUnit(detached, targetId)) return s
+  return fireUpgradeAttached(attachUpgrades(detached, targetId, [newOwner ? { ...moving, owner: newOwner } : moving]), targetId)
+}
 registerCard('LOF_150', { // Cin Drallig
   ...whenPlayed('You may play a Lightsaber upgrade from your hand for free on this unit. If you do, ready him.', (s, ctx) => {
     const self = findUnit(s, ctx.sourceInstanceId!)?.unit
@@ -5084,6 +5091,137 @@ registerCard('SHD_194', { // Triple Dark Raid
   }),
   // "At the end of the phase" is read as the start of the regroup phase that follows it.
   delayed: (s, e) => (e.unitId && findUnit(s, e.unitId) ? returnUnitToHand(s, e.unitId) : s),
+})
+
+// Moving units and upgrades, and the last one-offs
+/** Put a unit on the bottom of its owner's deck: it leaves play as a return to hand does, and the card goes under the deck. */
+const unitToDeckBottom = (s: GameState, id: string): GameState => {
+  const found = findUnit(s, id)
+  if (!found) return s
+  const cardOwner = found.unit.owner ?? found.owner
+  const before = s.players[cardOwner].hand.length
+  const returned = returnUnitToHand(s, id)
+  const hand = returned.players[cardOwner].hand
+  if (hand.length === before) return returned // a token leaves no card
+  return updatePlayer(returned, cardOwner, { hand: hand.slice(0, -1), deck: [...returned.players[cardOwner].deck, hand[hand.length - 1]] })
+}
+const selectUnitWithDecline = (s: GameState, ctx: Resumable, targets: string[], text: string, step: string, unit?: string): GameState =>
+  (targets.length ? pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true, hookOnDecline: true, text, then: resume(ctx, step, unit) }) : resumeNow(s, ctx, step, unit))
+/** Run a card's own hook directly, as a declined pick would, when there was nothing to pick. */
+const resumeNow = (s: GameState, ctx: Resumable, step: string, unit?: string): GameState =>
+  getCardDefinition(ctx.cardId)!.ifYouDo!(s, { owner: ctx.owner, cardId: ctx.cardId, sourceInstanceId: ctx.sourceInstanceId, step, unitChosen: unit })
+
+registerCard('SOR_187', { // I Had No Choice
+  ...whenPlayed("Choose up to 2 non-leader units. An opponent chooses 1 of those units. Return that unit to its owner's hand and put the other on the bottom of its owner's deck.", (s, ctx) => {
+    const targets = pickedIds(s, ctx, nonLeader)
+    return targets.length ? pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets, optional: true, text: 'choose a non-leader unit (up to 2)', then: resume(ctx, 'first') }) : s
+  }),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'first') return selectUnitWithDecline(s, ctx, pickedIds(s, ctx, nonLeader).filter(id => id !== ctx.targetInstanceId), 'choose a second non-leader unit', 'second', ctx.targetInstanceId)
+    if (ctx.step === 'second') {
+      const chosen = [ctx.unitChosen, ctx.targetInstanceId].filter((id): id is string => id !== undefined)
+      if (chosen.length < 2) return chosen.length ? returnUnitToHand(s, chosen[0]) : s
+      return pushChoice(s, { kind: 'selectUnitThen', id: `${ctx.sourceInstanceId}-fate`, controller: opponentOf(ctx.owner), targets: chosen, text: "choose the unit that returns to its owner's hand; the other goes under its owner's deck", then: resume(ctx, `fate:${chosen.join(',')}`) })
+    }
+    const other = splitStep(ctx.step, 'fate:').find(id => id !== ctx.targetInstanceId)
+    return returnUnitToHand(other ? unitToDeckBottom(s, other) : s, ctx.targetInstanceId!)
+  },
+})
+registerCard('SHD_077', { // Evidence of the Crime
+  ...whenPlayed('Take control of an upgrade that costs 3 or less and attach it to an eligible unit of your choice.', (s, ctx) => {
+    const candidates = upgradeCandidates(s, { maxCost: 3 }).filter(up => s.cards[up.cardId]?.type !== 'leader' && evidenceTargets(s, up, ctx.owner).length > 0)
+    return candidates.length ? pushChoice(s, { kind: 'selectUpgradeThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, text: 'take control of an upgrade that costs 3 or less', then: resume(ctx) }) : s
+  }),
+  ifYouDo: (s, ctx) => {
+    const up = ctx.upgradeChosen
+    if (!up) return s
+    if (!ctx.targetInstanceId) {
+      return pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets: evidenceTargets(s, up, ctx.owner), text: `attach ${s.cards[up.cardId]?.name ?? 'the upgrade'} to an eligible unit`, then: { ...resume(ctx), upgrade: up } })
+    }
+    // Taken, then attached: the caster controls it now.
+    return moveUpgrade(s, up, ctx.targetInstanceId, ctx.owner)
+  },
+})
+/** Every unit the taken upgrade may attach to, its current host included. */
+function evidenceTargets(s: GameState, up: UpgradeRef, owner: PlayerId): string[] {
+  const restriction = getCardDefinition(up.cardId)?.attachRestriction
+  return allUnits(s).filter(u => !restriction || restriction(s, u, owner)).map(u => u.instanceId)
+}
+registerCard('JTL_232', { // Jump to Lightspeed
+  ...whenPlayed("Return a friendly space unit and any number of non-leader upgrades on it to their owners' hands. The next time you play a copy of that unit this phase, you may play it for free.", (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, pickArena('space'))), 'return a friendly space unit to hand', false, 'unit')),
+  // The unit first, then its upgrades one at a time until Done; the unit goes last, taking the rest with it.
+  ifYouDo: (s, ctx) => {
+    const unitId = ctx.upgradeChosen?.unitId ?? ctx.unitChosen ?? ctx.targetInstanceId
+    if (!unitId) return s
+    const next = ctx.upgradeChosen ? returnUpgradeToHand(s, ctx.upgradeChosen.unitId, ctx.upgradeChosen.upgradeIndex) : s
+    const candidates = upgradeCandidates(next).filter(c => c.unitId === unitId && !['leader', 'token'].includes(next.cards[c.cardId]?.type ?? ''))
+    // A decline arrives at step `done` with no upgrade; a pick or the unit itself offers the next upgrade.
+    if (candidates.length && (ctx.upgradeChosen || ctx.step === 'unit')) {
+      return pushChoice(next, { kind: 'selectUpgradeThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, optional: true, text: "return an upgrade on it to its owner's hand", then: resume(ctx, 'done', unitId), hookOnDecline: true })
+    }
+    const cardId = findUnit(next, unitId)?.unit.cardId
+    const returned = returnUnitToHand(next, unitId)
+    return cardId ? grantNextUnit(returned, ctx.owner, { cardId, costDelta: FREE }) : returned
+  },
+})
+registerCard('TWI_089', { // Consolidation of Power
+  ...whenPlayed('Choose any number of friendly units. You may play a unit from your hand if its cost is less than or equal to the combined power of the chosen units for free. Then, defeat the chosen units.', (s, ctx) =>
+    consolidatePick(s, ctx, [])),
+  ifYouDo: (s, ctx) => {
+    const picks = splitStep(ctx.step, 'consolidate:')
+    return ctx.targetInstanceId ? consolidatePick(s, ctx, [...picks, ctx.targetInstanceId]) : consolidatePlay(s, ctx, picks)
+  },
+})
+function consolidatePick(s: GameState, ctx: Resumable, picks: string[]): GameState {
+  const left = pickedIds(s, ctx, pickFriendly).filter(id => !picks.includes(id))
+  if (left.length === 0) return consolidatePlay(s, ctx, picks)
+  return pushChoice(s, { kind: 'selectUnitThen', id: ctx.sourceInstanceId!, controller: ctx.owner, targets: left, optional: true, hookOnDecline: true, text: 'choose a friendly unit to consolidate (any number)', then: resume(ctx, `consolidate:${picks.join(',')}`) })
+}
+function consolidatePlay(s: GameState, ctx: Resumable, picks: string[]): GameState {
+  const power = picks.reduce((sum, id) => { const u = findUnit(s, id)?.unit; return sum + (u ? effectivePower(s, u) : 0) }, 0)
+  const candidates = s.players[ctx.owner].hand.flatMap((cardId, handIndex) =>
+    (printedUnit(s.cards[cardId]) && (s.cards[cardId]?.cost ?? 0) <= power ? [{ handIndex, cardId }] : []))
+  if (candidates.length === 0) return picks.length ? defeatUnits(s, picks) : s
+  return pushChoice(s, { kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, costDelta: FREE, entersReady: false, optional: true, ...(picks.length ? { thenDefeat: picks } : {}) })
+}
+registerCard('LOF_220', whenPlayed('Play a Force unit from your hand (paying its cost). It gains Ambush for this phase. The next time it would be dealt damage this phase, prevent 2 of that damage.', (s, ctx) => { // Shien Flurry
+  const candidates = affordableHandUnits(s, ctx.owner, 0, 0).filter(ref => printedTrait(s.cards[ref.cardId], 'Force'))
+  if (candidates.length === 0) return s
+  // The Ambush is granted before the play, so the unit enters with it and may attack at once.
+  return pushChoice(grantNextUnit(s, ctx.owner, { keywords: [KW.ambush], trait: 'Force' }), {
+    kind: 'playUnitFromHand', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates, costDelta: 0, entersReady: false, thenLasting: { preventNext: 2 },
+  })
+}))
+registerCard('LOF_043', { // The Tragedy of Plagueis
+  ...unitThenWp('Choose a friendly unit. For this phase, it can\'t be defeated by having no remaining HP. An opponent chooses a unit they control. Defeat that unit.', pickFriendly, 'choose a friendly unit that can\'t be defeated by damage this phase', false,
+    (s, ctx) => {
+      const opp = opponentOf(ctx.owner)
+      return targetChoice(addLastingEffect(s, { targetInstanceId: ctx.targetInstanceId!, survivesNoHp: true }), { ...ctx, owner: opp }, 'selectUnitToDefeat', s.players[opp].units.map(u => u.instanceId))
+    }),
+})
+registerCard('SOR_075', unitThenWp('Heal up to 3 damage from a unit. If you control a FORCE unit, you may deal that much damage to another unit.', pickAny, 'heal up to 3 damage from a unit', false, // It Binds All Things
+  (s, ctx) => {
+    // Healing less than it can never helps, so "up to 3" heals as much as the unit has, to 3.
+    const u = findUnit(s, ctx.targetInstanceId!)?.unit
+    const healed = u ? Math.min(3, u.damage) : 0
+    const next = healed > 0 ? healUnit(s, u!.instanceId, healed) : s
+    return healed > 0 && controlsTrait(next, ctx.owner, 'Force') ? damageChoice(next, ctx, healed, picked(next, ctx, pickAny).filter(x => x.instanceId !== u!.instanceId), [], true) : next
+  }))
+registerCard('LAW_102', { // Choke on Aspirations
+  ...whenPlayed('Deal up to 5 damage to a friendly non-Vehicle unit. If it survives, heal damage from your base equal to the damage dealt this way.', (s, ctx) =>
+    unitThen(s, ctx, pickedIds(s, ctx, pickAll(pickFriendly, (st, u) => !unitHasTrait(st, u, 'Vehicle'))), 'choose a friendly non-Vehicle unit', false, 'target')),
+  ifYouDo: (s, ctx) => {
+    if (ctx.step === 'target') {
+      return pushChoice(s, { kind: 'chooseNumber', id: ctx.sourceInstanceId!, controller: ctx.owner, max: 5, text: 'choose how much damage to deal (up to 5)', then: resume(ctx, 'amount', ctx.targetInstanceId) })
+    }
+    const id = ctx.unitChosen!
+    const before = findUnit(s, id)?.unit.damage ?? 0
+    const next = dealDamageToUnit(s, id, ctx.optionIndex ?? 0)
+    const after = findUnit(next, id)?.unit
+    // A pending prevention offer means nothing has been dealt yet, so nothing is healed.
+    return after && after.damage > before ? healBase(next, ctx.owner, after.damage - before) : next
+  },
 })
 
 registerCard('LAW_085', unitThenWp('Choose a friendly non-leader unit. An opponent takes control of it. If they do, deal 4 damage to another unit in the same arena.', pickAll(pickFriendly, nonLeader), 'give a friendly non-leader unit to an opponent', false, // You Hold This

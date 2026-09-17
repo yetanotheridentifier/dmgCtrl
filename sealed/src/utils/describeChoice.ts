@@ -172,7 +172,7 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'mayPlayUnitFromDiscard':
       return ['choose a unit to play from your discard pile']
     case 'chooseNumber':
-      return ['choose a number']
+      return [choice.text ?? 'choose a number']
     case 'selectUnitToSteal':
       return ['choose an enemy unit to take control of']
     case 'peekTopDiscard':

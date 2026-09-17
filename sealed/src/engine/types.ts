@@ -204,6 +204,7 @@ export interface NextUnitGrant {
   // Filter — the grant only applies to (and is consumed by) a unit matching all set constraints:
   trait?: string // the unit must have this trait
   maxPower?: number // the unit's printed power must be ≤ this
+  cardId?: string // the unit must be a copy of this card (Jump to Lightspeed)
 }
 
 /** True if `card` is a unit satisfying a grant's filter. */
@@ -211,6 +212,7 @@ export function nextUnitGrantMatches(card: EngineCard | undefined, grant: NextUn
   if (!card || card.type !== 'unit') return false
   if (grant.trait && !card.traits.some(t => t.toLowerCase() === grant.trait!.toLowerCase())) return false
   if (grant.maxPower !== undefined && (card.power ?? 0) > grant.maxPower) return false
+  if (grant.cardId !== undefined && card.id !== grant.cardId) return false
   return true
 }
 
@@ -474,6 +476,10 @@ export interface LastingEffect {
   noCombatDamage?: boolean
   /** Units attacking this unit get this much power for the duration (I Have the High Ground: -4). */
   attackersPower?: number
+  /** The next time the unit would be dealt damage, prevent this much of it; then the effect is spent (Shien Flurry). */
+  preventNext?: number
+  /** The unit can't be defeated by having no remaining HP for the duration (The Tragedy of Plagueis). */
+  survivesNoHp?: boolean
   /** The unit can't ready for the duration (No Good to Me Dead). Read by `unitCannotReady`. */
   cannotReady?: boolean
   /**
@@ -700,7 +706,8 @@ type ChoiceVariant =
   // thing.
   | { kind: 'selectUpgradeToReturn'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional?: boolean; thenShield?: boolean; replayFree?: boolean }
   // Choose one of `candidates` (upgrades in play) for the card's `ifYouDo` hook (Jocasta Nu).
-  | { kind: 'selectUpgradeThen'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional?: boolean; text: string; then: IfYouDo }
+  // `hookOnDecline` runs the hook with no upgrade on a decline, at the step `then` carries (Jump to Lightspeed).
+  | { kind: 'selectUpgradeThen'; id: string; controller: PlayerId; candidates: UpgradeRef[]; optional?: boolean; text: string; then: IfYouDo; hookOnDecline?: boolean }
   // Choose one of your hand cards at `handIndices` for the card's `ifYouDo` hook, which is told the
   // card and its hand index (Cin Drallig). The card stays in hand until the hook moves it.
   | { kind: 'selectHandCardThen'; id: string; controller: PlayerId; handIndices: number[]; optional?: boolean; text: string; then: IfYouDo }
@@ -791,7 +798,9 @@ type ChoiceVariant =
   // `thenShieldIt` gives the unit just played a Shield token (Rio Durant's "it gains Shielded").
   // `thenDamageOwnBase` deals the played unit's printed cost to its controller's base (Galactic Ambition).
   // `thenDelay` leaves a delayed effect about the played unit (Sneak Attack defeats it at the regroup phase).
-  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number; thenShieldIt?: boolean; thenDamageOwnBase?: boolean; thenDelay?: { cardId: string; when: DelayedEffect['when'] } }
+  // `thenLasting` gives the played unit a lasting effect (Shien Flurry's prevention). `thenDefeat` defeats
+  // these units once the play is settled, played or declined (Consolidation of Power).
+  | { kind: 'playUnitFromHand'; id: string; controller: PlayerId; candidates: HandCardRef[]; costDelta: number; entersReady: boolean; optional?: boolean; thenDamageIt?: number; thenShieldIt?: boolean; thenDamageOwnBase?: boolean; thenDelay?: { cardId: string; when: DelayedEffect['when'] }; thenLasting?: Omit<LastingEffect, 'targetInstanceId'>; thenDefeat?: string[] }
   // Additional cost "exhaust a friendly unit": pick one of `targets` to exhaust, then the
   // `then` play-from-hand step follows (Fennec). Mandatory.
   | { kind: 'selectUnitToExhaust'; id: string; controller: PlayerId; targets: string[]; then: PlayFromHandSpec }
@@ -894,7 +903,8 @@ type ChoiceVariant =
   | { kind: 'selectArenaToGrant'; id: string; controller: PlayerId; grantCardId: string }
   // Sense Through the Force: name a number from 0 to `max`, then search — the guess is checked
   // against the drawn card's cost.
-  | { kind: 'chooseNumber'; id: string; controller: PlayerId; max: number; then: 'senseThroughTheForce' }
+  // `then` is Sense Through the Force's search, or the card's `ifYouDo` hook, told the number as `optionIndex`.
+  | { kind: 'chooseNumber'; id: string; controller: PlayerId; max: number; then: 'senseThroughTheForce' | IfYouDo; text?: string }
   // Hold Them Off: pick the unit that will deal the damage; its power becomes the pool to spread
   // among units in its own arena.
   | { kind: 'selectDistributeSource'; id: string; controller: PlayerId; targets: string[]; optional?: boolean }

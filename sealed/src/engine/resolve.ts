@@ -2,7 +2,7 @@ import type { Action, AttackTarget } from './actions'
 import type { Arena, GameState, PlayerId, UnitState } from './types'
 import type { DelayedEffect, IfYouDo, PendingChoice, PendingTrigger, TriggerContext, UpgradeRef } from './types'
 import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPendingChoices, pushChoice, abilityCardIds } from './types'
-import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants,resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
+import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets, offerAttack } from './legalMoves'
 import { collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, stampChoiceSource, type TriggerPoint } from './abilities'
@@ -755,7 +755,8 @@ function resolveSkip(state: GameState, choiceId?: string): GameState {
   // Redemption: stopping deals what was healed so far.
   if (choice.kind === 'distributeHealing') next = finishHealing(next, choice.damageUnit, choice.healed)
   // AAT Incinerator: the ability goes on once its picks stop.
-  if ((choice.kind === 'selectUnitThen' || choice.kind === 'selectCardThen') && choice.hookOnDecline) next = runIfYouDo(next, choice.then)
+  if ((choice.kind === 'selectUnitThen' || choice.kind === 'selectCardThen' || choice.kind === 'selectUpgradeThen') && choice.hookOnDecline) next = runIfYouDo(next, choice.then)
+  if (choice.kind === 'playUnitFromHand' && choice.thenDefeat) next = defeatUnits(next, choice.thenDefeat)
   if (choice.kind === 'mayPayThen' && choice.declineStep !== undefined) next = runIfYouDo(next, { ...choice.then, step: choice.declineStep })
   // Elzar Mann: stopping early still triggers the follow-up, sized to what was distributed.
   if (choice.kind === 'distributeTokens') {
@@ -1446,6 +1447,10 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
       break
     }
     case 'chooseNumber': {
+      if (choice.then !== 'senseThroughTheForce') {
+        next = runIfYouDo(next, choice.then, { optionIndex: optionIndex ?? 0 })
+        break
+      }
       // Sense Through the Force: the named number rides along on the search that follows.
       const owner = choice.controller
       const guessedCost = optionIndex ?? 0
@@ -1829,6 +1834,8 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         if (choice.thenShieldIt) next = giveToken(next, enteredId, TOKEN_SHIELD)
         if (choice.thenDamageOwnBase) next = dealDamageToBase(next, choice.controller, card.cost)
         if (choice.thenDelay) next = addDelayedEffect(next, { ...choice.thenDelay, owner: choice.controller, unitId: enteredId })
+        if (choice.thenLasting) next = addLastingEffect(next, { ...choice.thenLasting, targetInstanceId: enteredId })
+        if (choice.thenDefeat) next = defeatUnits(next, choice.thenDefeat)
         next = checkWin(next)
         if (next.winner !== null) return next
       }

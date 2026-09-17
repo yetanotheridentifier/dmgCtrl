@@ -27,6 +27,11 @@ function preventedDamage(state: GameState, target: UnitState, amount: number, ct
   return Math.min(amount, Math.max(0, prevented))
 }
 
+/** True while a lasting effect keeps the unit from being defeated by having no remaining HP (The Tragedy of Plagueis). */
+function survivesNoHp(state: GameState, unit: UnitState): boolean {
+  return (state.lastingEffects ?? []).some(e => e.survivesNoHp && e.targetInstanceId === unit.instanceId)
+}
+
 /** Product of the damage multipliers the unit's card and upgrades contribute. */
 function damageMultiplier(state: GameState, unit: UnitState): number {
   let m = 1
@@ -69,6 +74,8 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
   const spentShieldOwners: PlayerId[] = []
   // Units whose incoming damage a card stopped, for the preventions that only fire once a phase.
   const preventedIds: string[] = []
+  // Units whose "prevent the next N" lasting effect this damage used up.
+  const preventNextSpent: string[] = []
 
   for (const u of p.units) {
     let extra = damaged.get(u.instanceId) ?? 0
@@ -84,6 +91,12 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
           preventedIds.push(u.instanceId)
         }
       }
+      // "The next time it would be dealt damage, prevent N of it" (Shien Flurry), spent on this instance.
+      const preventNext = (state.lastingEffects ?? []).filter(e => e.preventNext && e.targetInstanceId === u.instanceId)
+      if (extra > 0 && !unpreventable && preventNext.length > 0) {
+        extra = Math.max(0, extra - preventNext.reduce((sum, e) => sum + (e.preventNext ?? 0), 0))
+        preventNextSpent.push(u.instanceId)
+      }
       if (extra > 0) damagedIds.push(u.instanceId)
     }
     let upgrades = u.upgrades
@@ -97,7 +110,7 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
     const total = u.damage + extra
     const next = extra > 0 || upgrades !== u.upgrades ? { ...u, damage: total, upgrades } : u
     // `statCtx` lets the combat defeat check see combat-only debuffs (Scion Shuttle's -1-1).
-    if (total >= effectiveHp(state, next, statCtx)) {
+    if (total >= effectiveHp(state, next, statCtx) && !survivesNoHp(state, u)) {
       defeated.push(next)
     } else {
       survivors.push(next)
@@ -107,6 +120,10 @@ export function applyUnitDamage(state: GameState, owner: PlayerId, damaged: Map<
   }
 
   let result = finishDefeats(state, owner, survivors, defeated, byCombat, spentShieldOwners, defer)
+  if (preventNextSpent.length > 0) {
+    const kept = (result.lastingEffects ?? []).filter(e => !(e.preventNext && preventNextSpent.includes(e.targetInstanceId)))
+    result = { ...result, lastingEffects: kept.length > 0 ? kept : undefined }
+  }
   // "…a unit that was damaged this phase" (Galvanized Leap) — recorded whether or not it survived.
   for (const id of damagedIds) result = recordUnitDamaged(result, id)
   // "The first time this unit would take damage each phase" (Umbaran Mobile Cannon) counts what was
@@ -204,7 +221,7 @@ export function sweepStateBasedDefeats(state: GameState): GameState {
     let changed = false
     for (const owner of ['player', 'opponent'] as PlayerId[]) {
       const units = next.players[owner].units
-      const doomed = units.filter(u => u.damage >= effectiveHp(next, u))
+      const doomed = units.filter(u => u.damage >= effectiveHp(next, u) && !survivesNoHp(next, u))
       if (doomed.length === 0) continue
       const doomedIds = new Set(doomed.map(u => u.instanceId))
       // One state-based check defeats both sides at once, so the two owners fill the same batch.

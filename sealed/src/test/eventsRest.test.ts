@@ -9,6 +9,7 @@ import { recordBaseDamaged, recordUnitDefeated } from '../engine/types'
 import { unitHasKeyword, unitCannotAttackBases, unitCannotBeAttacked } from '../engine/keywords'
 import { effectivePower, effectiveHp } from '../engine/stats'
 import { effectiveCost } from '../engine/legalMoves'
+import { dealDamageToUnit } from '../engine/combat'
 import { TOKEN_SHIELD, hasToken } from '../engine/tokenUpgrades'
 
 /**
@@ -102,6 +103,9 @@ const F = {
   SOR_223: ev('SOR_223', 4), SOR_152: ev('SOR_152', 3), SHD_194: ev('SHD_194', 3),
   H_EV: card({ id: 'H_EV', type: 'event', cost: 2, aspects: ['Heroism'] }),
   VEH6: card({ id: 'VEH6', arena: 'space', cost: 6, power: 3, hp: 5, traits: ['VEHICLE'] }),
+  SOR_187: ev('SOR_187', 7), SHD_077: ev('SHD_077', 3), JTL_232: ev('JTL_232', 2), TWI_089: ev('TWI_089', 6),
+  LOF_220: ev('LOF_220'), LOF_043: ev('LOF_043', 5), SOR_075: ev('SOR_075', 2), LAW_102: ev('LAW_102'),
+  UPG4: card({ id: 'UPG4', type: 'upgrade', cost: 4, power: 1, hp: 1 }),
   OFFICIAL: card({ id: 'OFFICIAL', arena: 'ground', cost: 2, power: 1, hp: 4, traits: ['OFFICIAL'] }),
   TWO_ASP: card({ id: 'TWO_ASP', arena: 'ground', cost: 3, power: 2, hp: 5, aspects: ['Cunning', 'Heroism'] }),
   DROID: card({ id: 'DROID', arena: 'ground', cost: 2, power: 2, hp: 5, traits: ['DROID'] }),
@@ -1399,5 +1403,120 @@ describe('events that pick cards from a discard pile or the top of a deck', () =
     const regroup = toRegroup(s)
     expect(U(regroup, veh.instanceId)).toBeUndefined()
     expect(regroup.players.player.hand).toContain('VEH6')
+  })
+})
+
+// ── Moving units and upgrades, and the last of the one-offs ─────────────────────────────────────
+
+describe('events that move units or upgrades, and the last one-offs', () => {
+  it("I Had No Choice (SOR_187): of up to 2 non-leader units, an opponent returns one to hand and the other goes under its owner's deck", () => {
+    let s = play(board('SOR_187', {}, { units: [unit('e', 'P3'), unit('f', 'P5'), unit('L', 'LEAD', { isLeader: true })], deck: ['FILL'] }))
+    expect(unitOffers(s)).toEqual(['e', 'f'])
+    expect(declinable(s)).toBe(true)
+    s = accept(accept(s, { targetInstanceId: 'e' }), { targetInstanceId: 'f' })
+    expect([choice(s).controller, unitOffers(s)]).toEqual(['opponent', ['e', 'f']])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { targetInstanceId: 'f' })
+    expect([U(s, 'e'), U(s, 'f')]).toEqual([undefined, undefined])
+    expect(s.players.opponent.hand).toEqual(['P5'])
+    expect(s.players.opponent.deck).toEqual(['FILL', 'P3'])
+    // Stopping at one: that unit returns to hand.
+    const one = skip(accept(play(board('SOR_187', {}, { units: [unit('e', 'P3'), unit('f', 'P5')] })), { targetInstanceId: 'e' }))
+    expect(one.players.opponent.hand).toEqual(['P3'])
+    expect(U(one, 'f')).toBeDefined()
+  })
+
+  it('Evidence of the Crime (SHD_077) takes control of an upgrade costing 3 or less and attaches it to an eligible unit', () => {
+    let s = play(board('SHD_077', { units: [unit('m', 'P3')] }, { units: [unit('e', 'BIG', { upgrades: [{ cardId: 'UPG2', owner: 'opponent' }, { cardId: 'UPG4', owner: 'opponent' }] })] }))
+    const c = choice(s)
+    expect(c.kind === 'selectUpgradeThen' ? c.candidates.map(x => x.cardId) : []).toEqual(['UPG2'])
+    expect(declinable(s)).toBe(false)
+    s = accept(s, { optionIndex: 0 })
+    expect(unitOffers(s)).toEqual(['e', 'm'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(U(s, 'm')!.upgrades).toEqual([{ cardId: 'UPG2', owner: 'player' }])
+    expect(U(s, 'e')!.upgrades.map(u => u.cardId)).toEqual(['UPG4'])
+  })
+
+  it('Jump to Lightspeed (JTL_232) returns a friendly space unit and chosen upgrades on it, and the next copy is free', () => {
+    let s = play(board('JTL_232', { units: [unit('sp', 'SP4', { upgrades: [{ cardId: 'UPG', owner: 'player' }, { cardId: 'UPG2', owner: 'player' }, { cardId: TOKEN_SHIELD, owner: 'player' }] }), unit('g', 'P3')] }))
+    expect(unitOffers(s)).toEqual(['sp'])
+    s = accept(s, { targetInstanceId: 'sp' })
+    const c = choice(s)
+    expect(c.kind === 'selectUpgradeThen' ? c.candidates.map(x => x.cardId) : []).toEqual(['UPG', 'UPG2'])
+    expect(declinable(s)).toBe(true)
+    s = skip(accept(s, { optionIndex: 0 }))
+    noChoice(s)
+    expect(U(s, 'sp')).toBeUndefined()
+    expect(s.players.player.hand).toEqual(['UPG', 'SP4'])
+    expect(s.players.player.discard).toContain('UPG2')
+    expect(effectiveCost(s, 'player', F.SP4)).toBe(0)
+    expect(effectiveCost(s, 'player', F.P3)).toBe(2)
+  })
+
+  it('Consolidation of Power (TWI_089) plays a unit free up to the chosen units\' combined power, then defeats them', () => {
+    let s = play(board('TWI_089', { units: [unit('a', 'P3'), unit('b', 'P2'), unit('c', 'C1')], hand: ['P5', 'GRD7'], resources: ready(6) }))
+    expect(unitOffers(s)).toEqual(['a', 'b', 'c'])
+    expect(declinable(s)).toBe(true)
+    s = skip(accept(accept(s, { targetInstanceId: 'a' }), { targetInstanceId: 'b' }))
+    expect(candidatesOf(choice(s))).toEqual(['P5'])
+    expect(declinable(s)).toBe(true)
+    const readyBefore = s.players.player.resources.filter(r => !r.exhausted).length
+    s = accept(s, { handIndex: 0 })
+    expect(s.players.player.units.map(u => u.cardId)).toEqual(['C1', 'P5'])
+    expect(s.players.player.resources.filter(r => !r.exhausted).length).toBe(readyBefore)
+    // Declining the play still defeats the chosen units.
+    const declined = skip(accept(play(board('TWI_089', { units: [unit('a', 'P3')], hand: ['P2'] })), { targetInstanceId: 'a' }))
+    expect(U(declined, 'a')).toBeUndefined()
+    expect(declined.players.player.hand).toEqual(['P2'])
+  })
+
+  it('Shien Flurry (LOF_220) plays a Force unit that gains Ambush and has the next 2 damage to it prevented', () => {
+    let s = play(board('LOF_220', { hand: ['FORCE_HAND', 'P3'] }, { units: [unit('e', 'BIG')] }))
+    expect(candidatesOf(choice(s))).toEqual(['FORCE_HAND'])
+    s = accept(s, { handIndex: 0 })
+    const id = s.players.player.units.find(u => u.cardId === 'FORCE_HAND')!.instanceId
+    expect(unitHasKeyword(s, U(s, id)!, 'Ambush')).toBe(true)
+    expect(choice(s).kind).toBe('ambush')
+    let hit = dealDamageToUnit(s, id, 2)
+    expect(dmg(hit, id)).toBe(0)
+    hit = dealDamageToUnit(hit, id, 2)
+    expect(dmg(hit, id)).toBe(2)
+  })
+
+  it("The Tragedy of Plagueis (LOF_043): a friendly unit can't be defeated by damage this phase, and an opponent defeats one of theirs", () => {
+    let s = play(board('LOF_043', { units: [unit('m', 'P3')] }, { units: [unit('e', 'P5'), unit('f', 'P2')] }))
+    expect(unitOffers(s)).toEqual(['m'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect([choice(s).controller, unitOffers(s)]).toEqual(['opponent', ['e', 'f']])
+    s = accept(s, { targetInstanceId: 'f' })
+    expect(U(s, 'f')).toBeUndefined()
+    s = dealDamageToUnit(s, 'm', 9)
+    expect(dmg(s, 'm')).toBe(9)
+    expect(U(toRegroup({ ...s, activePlayer: 'opponent', pendingChoices: undefined }), 'm')).toBeUndefined()
+  })
+
+  it('It Binds All Things (SOR_075) heals up to 3 from a unit, and with a Force unit may deal that much to another', () => {
+    let s = play(board('SOR_075', { units: [unit('m', 'BIG', { damage: 5 }), unit('f', 'FORCE')] }, { units: [unit('e', 'BIG')] }))
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(dmg(s, 'm')).toBe(2)
+    expect(unitOffers(s)).toEqual(['e', 'f'])
+    expect(declinable(s)).toBe(true)
+    s = accept(s, { targetInstanceId: 'e' })
+    expect(dmg(s, 'e')).toBe(3)
+    const noForce = accept(play(board('SOR_075', { units: [unit('m', 'BIG', { damage: 1 })] }, { units: [unit('e', 'BIG')] })), { targetInstanceId: 'm' })
+    noChoice(noForce)
+    expect(dmg(noForce, 'm')).toBe(0)
+  })
+
+  it('Choke on Aspirations (LAW_102) deals up to 5 to a friendly non-Vehicle unit and, if it survives, heals your base that much', () => {
+    let s = play(board('LAW_102', { units: [unit('m', 'BIG'), unit('v', 'VEHG')], base: { cardId: 'TST_B', damage: 10 } }))
+    expect(unitOffers(s)).toEqual(['m'])
+    s = accept(s, { targetInstanceId: 'm' })
+    expect(choice(s)).toMatchObject({ kind: 'chooseNumber', max: 5 })
+    s = accept(s, { optionIndex: 4 })
+    expect([dmg(s, 'm'), s.players.player.base.damage]).toEqual([4, 6])
+    const dies = accept(accept(play(board('LAW_102', { units: [unit('m', 'P3')], base: { cardId: 'TST_B', damage: 10 } })), { targetInstanceId: 'm' }), { optionIndex: 5 })
+    expect([U(dies, 'm'), dies.players.player.base.damage]).toEqual([undefined, 10])
   })
 })
