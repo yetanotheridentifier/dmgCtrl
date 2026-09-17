@@ -239,6 +239,26 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'SEC_002', name: 'Jabba the Hutt', front: true, back: true },
 ]
 
+/**
+ * Base cards with a built ability. A base with no ability plays as printed and is counted by
+ * `PLAYABLE_AS_PRINTED` instead, the way a vanilla unit is.
+ */
+export const IMPLEMENTED_BASES: UpgradeStatus[] = [
+  { id: 'SOR_019', name: 'Security Complex' },
+  { id: 'SOR_025', name: 'Tarkintown' },
+  { id: 'SOR_028', name: 'Jedha City' },
+  { id: 'LAW_023', name: 'Great Pit of Carkoon' },
+  { id: 'LAW_026', name: 'Shipbreaking Yard' },
+  { id: 'SOR_022', name: 'Energy Conversion Lab' },
+  { id: 'TS26_10', name: "Dooku's Palace" },
+  { id: 'TS26_11', name: "Executioner's Arena" },
+  { id: 'TWI_019', name: 'Pau City' },
+  { id: 'TWI_028', name: 'Petranaki Arena' },
+  { id: 'JTL_021', name: 'Colossus' },
+  { id: 'JTL_024', name: 'Data Vault' },
+  { id: 'JTL_025', name: 'Thermal Oscillator' },
+]
+
 export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
   { id: 'ASH_084', name: 'Arcana Star Map' },
   { id: 'ASH_055', name: 'Blade of Talzin' },
@@ -1387,6 +1407,7 @@ export function setOf(id: string): string {
 /** The built cards, by the card type the panel counts them under. */
 export interface Manifest {
   leaders: LeaderStatus[]
+  bases: UpgradeStatus[]
   units: UpgradeStatus[]
   upgrades: UpgradeStatus[]
   events: UpgradeStatus[]
@@ -1394,6 +1415,7 @@ export interface Manifest {
 
 export const IMPLEMENTED: Manifest = {
   leaders: IMPLEMENTED_LEADERS,
+  bases: IMPLEMENTED_BASES,
   units: IMPLEMENTED_UNITS,
   upgrades: IMPLEMENTED_UPGRADES,
   events: IMPLEMENTED_EVENTS,
@@ -1413,7 +1435,7 @@ export function implementedCounts(code: string, manifest: Manifest, reprints: re
   const playable = PLAYABLE_AS_PRINTED[code] ?? {}
   return {
     leaders: (playable.leaders ?? 0) + inSet(manifest.leaders.filter(l => l.front && l.back)),
-    bases: playable.bases ?? 0,
+    bases: (playable.bases ?? 0) + inSet(manifest.bases),
     units: (playable.units ?? 0) + inSet(manifest.units),
     upgrades: (playable.upgrades ?? 0) + inSet(manifest.upgrades),
     events: (playable.events ?? 0) + inSet(manifest.events),

@@ -136,6 +136,10 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       const target = action.targetInstanceId ? anyUnitName(state, action.targetInstanceId) : undefined
       return `${name} ability${target ? ` → ${target}` : ''}`
     }
+    case 'useBaseAbility': {
+      const name = state.cards[state.players[by].base.cardId]?.name ?? 'base'
+      return `${name} epic action`
+    }
     case 'takeInitiative':
       return 'Take the initiative'
     case 'pass':

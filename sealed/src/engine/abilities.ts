@@ -289,6 +289,11 @@ export interface CardDefinition {
    */
   leaderAbilities?: LeaderAbilities
   /**
+   * Base-card behaviour. A base is never played and never leaves play, so nothing about it is a
+   * unit: its ability belongs to the player whose base zone it sits in.
+   */
+  baseAbilities?: BaseAbilities
+  /**
    * "This unit enters play ready" while a condition holds (Elzar Mann — a Force leader).
    * Consulted by `playUnitCard`, alongside Ambush and the `nextUnitGrants` enters-ready grant.
    */
@@ -356,6 +361,41 @@ export interface LeaderActionAbilityDef {
 /** A leader's undeployed action abilities (empty unless registered). */
 export function leaderActions(cardId: string): LeaderActionAbilityDef[] {
   return registry.get(cardId)?.leaderAbilities?.actions ?? []
+}
+
+/**
+ * A base card's abilities. The base belongs to a player rather than to a unit, so every hook is
+ * asked about its controller: there is no source instance in play to hang them off.
+ */
+export interface BaseAbilities {
+  /** "Epic Action: …" — once each game (CR 2.5), taken as that player's action. */
+  epicAction?: BaseActionAbilityDef
+  /**
+   * A constant effect on units in play (Pau City: "each leader unit you control gets +0/+1").
+   * Shaped like `LeaderAbilities.aura`, with the base's controller in place of a source unit, and
+   * folded into the same aura pass.
+   */
+  aura?: (state: GameState, owner: PlayerId, target: UnitState, sameController: boolean, combat?: CombatContext) => AuraContribution | undefined
+  /** Cards drawn in the starting hand, relative to the usual six (Colossus: -1). */
+  startingHandDelta?: number
+  /** Cards the deck must hold, relative to the usual minimum (Data Vault: +10). */
+  deckMinimumDelta?: number
+}
+
+/**
+ * A base's "Epic Action". It has no cost beyond what its own text spells out, and no target: an
+ * ability that picks something raises a choice, as a leader's front-side action does.
+ */
+export interface BaseActionAbilityDef {
+  description: string
+  /** Offered only while this holds, so the once-a-game action is never spent for nothing. */
+  usable?: (state: GameState, owner: PlayerId) => boolean
+  effect: (state: GameState, ctx: EffectContext) => GameState
+}
+
+/** A base's Epic Action, when its card registers one. */
+export function baseEpicAction(cardId: string): BaseActionAbilityDef | undefined {
+  return registry.get(cardId)?.baseAbilities?.epicAction
 }
 
 /** An activated ability a unit may use as its action (CR 2.4); e.g. Improvised Identity. */

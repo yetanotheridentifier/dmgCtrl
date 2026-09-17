@@ -258,6 +258,28 @@ Deploying is an epic action requiring the player to **control** resources equal 
 printed cost, not to spend them. A `deployCondition` hook replaces that gate where a card says
 something else.
 
+## Bases
+
+A base is never played, never leaves play and is not a unit, so `baseAbilities` on the base's card id
+belongs to the player whose base zone holds it:
+
+- **`epicAction`** is an "Epic Action:", offered in `legalMoves` as `useBaseAbility` and usable once
+  each game (`BaseState.epicActionUsed`). Taking it is that player's action for the turn. It picks
+  nothing itself: an ability with a target raises a choice, as a leader's front-side action does.
+  `usable` gates it, so the one use a game is never spent on nothing.
+- **`aura`** is a constant over units in play (Pau City: "each leader unit you control gets +0/+1"),
+  shaped like `leaderAbilities.aura` with the base's controller in place of a source unit, and folded
+  into the same aura pass.
+- **`startingHandDelta`** changes how many cards its controller draws to start (Colossus: one fewer),
+  read by `initGame`.
+- **`deckMinimumDelta`** changes the smallest legal deck (Data Vault: +10), read by `minimumDeckSize`
+  where a decklist is checked. It is a deck-building rule, so the rules engine never consults it, and
+  the bench's deck generator builds 30 cards whatever the base.
+
+Epic Actions are written through `baseEpic` in `cardDefinitions.ts`, with `basePlay` for the ones that
+play a unit from hand. The effect's source is `<cardId>-base`, so every choice it raises has a stable
+id and "another unit" excludes nothing.
+
 ## Once each round
 
 `markAbilityUsed(state, owner, instanceId, key)` sets a key on the unit's `usedAbilities`. A

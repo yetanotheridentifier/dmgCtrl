@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { registeredCardIds, getCardDefinition } from '../engine/abilities'
 import '../engine/cardDefinitions' // side-effect: registers every implemented card
 import {
-  IMPLEMENTED, IMPLEMENTED_LEADERS, IMPLEMENTED_UPGRADES, IMPLEMENTED_UNITS, IMPLEMENTED_EVENTS, PLAYABLE_AS_PRINTED,
+  IMPLEMENTED, IMPLEMENTED_LEADERS, IMPLEMENTED_BASES, IMPLEMENTED_UPGRADES, IMPLEMENTED_UNITS, IMPLEMENTED_EVENTS, PLAYABLE_AS_PRINTED,
   SET_PROGRESS, sumCounts, TOTAL_PROGRESS, UNIT_GROUPS, CARD_TYPES, implementedCounts, setOf,
 } from '../data/implementedCards'
 import type { CardTypeKey, Manifest, TypeCounts } from '../data/implementedCards'
@@ -12,7 +12,7 @@ import { triage } from '../bench/triage'
 
 /** The setup-screen manifest must mirror what's actually registered, or it lies to the player. */
 describe('implemented-cards manifest', () => {
-  const manifestIds = [...IMPLEMENTED_LEADERS, ...IMPLEMENTED_UPGRADES, ...IMPLEMENTED_UNITS, ...IMPLEMENTED_EVENTS].map(c => c.id)
+  const manifestIds = [...IMPLEMENTED_LEADERS, ...IMPLEMENTED_BASES, ...IMPLEMENTED_UPGRADES, ...IMPLEMENTED_UNITS, ...IMPLEMENTED_EVENTS].map(c => c.id)
   // The registry also holds pseudo cards: abilities one card grants to others, and keywords that need
   // a definition (see docs/abilities.md). They are not cards, so the panel does not count them.
   const isCardId = (id: string) => /^[A-Z0-9]+_\d+$/.test(id)
@@ -48,7 +48,7 @@ describe('setOf', () => {
 })
 
 describe('implementedCounts', () => {
-  const EMPTY: Manifest = { leaders: [], units: [], upgrades: [], events: [] }
+  const EMPTY: Manifest = { leaders: [], bases: [], units: [], upgrades: [], events: [] }
   const withPlayable = (code: string, over: Partial<TypeCounts>): TypeCounts => ({
     leaders: 0, bases: 0, units: 0, upgrades: 0, events: 0, tokens: 0, ...PLAYABLE_AS_PRINTED[code], ...over,
   })
@@ -118,7 +118,7 @@ describe('play-as-printed counts', () => {
 
   it.each(codes)('%s never counts a built card twice, as built and as playing as printed', code => {
     const { ids } = playsAsPrinted(code)
-    const built = [...IMPLEMENTED.leaders, ...IMPLEMENTED.units, ...IMPLEMENTED.upgrades, ...IMPLEMENTED.events].map(c => c.id)
+    const built = [...IMPLEMENTED.leaders, ...IMPLEMENTED.bases, ...IMPLEMENTED.units, ...IMPLEMENTED.upgrades, ...IMPLEMENTED.events].map(c => c.id)
     const credited = [...built, ...REPRINTS.filter(r => built.includes(r.canonical)).flatMap(r => r.printings)]
     for (const id of credited.filter(id => setOf(id) === code)) expect(ids.has(id), id).toBe(false)
   })

@@ -4760,9 +4760,10 @@ registerCard('LAW_171', whenPlayed('Resource this event and the top card of your
 
 // Decks, draws and discard piles
 /** Choose a card from your own hand for the card's hook (`step`), or nothing with an empty hand. */
-const handCardThen = (s: GameState, ctx: Resumable, text: string, step: string): GameState => {
+const handCardThen = (s: GameState, ctx: Resumable, text: string, step: string, test?: (c: EngineCard | undefined) => boolean): GameState => {
   const hand = s.players[ctx.owner].hand
-  return hand.length ? pushChoice(s, { kind: 'selectHandCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, handIndices: hand.map((_, i) => i), text, then: resume(ctx, step) }) : s
+  const handIndices = hand.flatMap((id, i) => (!test || test(s.cards[id]) ? [i] : []))
+  return handIndices.length ? pushChoice(s, { kind: 'selectHandCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, handIndices, text, then: resume(ctx, step) }) : s
 }
 /** Move the hand card at `handIndex` to the top or the bottom of its owner's deck. */
 const handToDeck = (s: GameState, owner: PlayerId, handIndex: number | undefined, where: 'top' | 'bottom'): GameState => {
@@ -6904,3 +6905,118 @@ registerCard('JTL_032', { // Director Krennic
     (ctx.card.type === 'unit' && hasWhenDefeated(ctx.card.id)
       && !cardsPlayedThisPhase(s, ctx.owner).some(id => s.cards[id]?.type === 'unit' && hasWhenDefeated(id)) ? -1 : 0),
 })
+
+// ── Bases ─────────────────────────────────────────────────────────────────────────────────────────
+// A base is never played, never leaves play and is not a unit, so its ability belongs to the player
+// whose base zone holds it. An "Epic Action" is that player's action, once each game; a constant is
+// an aura over units in play with the controller in place of a source unit.
+
+/** The source a base's ability hands its effect: the base card, which names no unit in play. */
+const baseSide = (cardId: string): string => `${cardId}-base`
+interface EpicSpec {
+  /** Offered only while this holds, so the one use a game is never spent for nothing. */
+  usable?: When
+  effect: (s: GameState, ctx: Resumable) => GameState
+}
+/** "Epic Action: <effect>" on a base. */
+const baseEpic = (description: string, spec: EpicSpec): CardDefinition => ({
+  baseAbilities: {
+    epicAction: {
+      description,
+      usable: (s, owner) => spec.usable?.(s, { owner }) ?? true,
+      effect: (s, ctx) => spec.effect(s, { owner: ctx.owner, cardId: ctx.cardId, sourceInstanceId: baseSide(ctx.cardId) }),
+    },
+  },
+})
+
+// A: Epic Actions that pick a target, a card or a pile
+registerCard('SOR_019', baseEpic('Give a Shield token to a non-leader unit.', { // Security Complex
+  usable: anyUnitPasses(nonLeader),
+  effect: (s, ctx) => shieldChoice(s, ctx, pickedIds(s, ctx, nonLeader), false),
+}))
+const damagedNonLeader = pickAll(nonLeader, damaged)
+registerCard('SOR_025', baseEpic('Deal 3 damage to a damaged non-leader unit.', { // Tarkintown
+  usable: anyUnitPasses(damagedNonLeader),
+  effect: (s, ctx) => damageChoice(s, ctx, 3, picked(s, ctx, damagedNonLeader)),
+}))
+registerCard('SOR_028', baseEpic('Give a non-leader unit -4/-0 for this phase.', { // Jedha City
+  usable: anyUnitPasses(nonLeader),
+  effect: (s, ctx) => lastingBuffChoice(s, ctx, pickedIds(s, ctx, nonLeader), { power: -4 }),
+}))
+const SARLACC = 'The Sarlacc of Carkoon'
+registerCard('LAW_023', { // Great Pit of Carkoon
+  ...baseEpic(`[Discard a unit from your hand]: Search your deck for a card named ${SARLACC}, reveal it, and draw it.`, {
+    usable: (s, ctx) => s.players[ctx.owner].hand.some(id => printedUnit(s.cards[id])),
+    effect: (s, ctx) => handCardThen(s, ctx, 'discard a unit from your hand', 'cost', printedUnit),
+  }),
+  // The whole deck is searched, so the window is its length. The card prints no shuffle.
+  ifYouDo: (s, ctx) => {
+    const discarded = discardFromHand(s, ctx.owner, ctx.handIndex!)
+    return searchDrawChoice(discarded, ctx, discarded.players[ctx.owner].deck.length, c => c?.name === SARLACC)
+  },
+})
+/** Move `cardId` out of its owner's discard pile and onto the top of their deck. */
+const discardToTop = (s: GameState, owner: PlayerId, cardId: string): GameState => {
+  const discard = s.players[owner].discard
+  const at = discard.lastIndexOf(cardId)
+  return at === -1 ? s : updatePlayer(s, owner, { discard: discard.filter((_, i) => i !== at), deck: [cardId, ...s.players[owner].deck] })
+}
+registerCard('LAW_026', { // Shipbreaking Yard
+  ...baseEpic('Discard 3 cards from your deck. You may return a card discarded this way to the top of your deck.', {
+    usable: (s, ctx) => s.players[ctx.owner].deck.length > 0,
+    effect: (s, ctx) => {
+      const [next, milled] = millTop(s, ctx.owner, 3)
+      return milled.length ? pushChoice(next, { kind: 'selectCardThen', id: ctx.sourceInstanceId!, controller: ctx.owner, candidates: milled, optional: true, text: 'return a card discarded this way to the top of your deck', then: resume(ctx) }) : next
+    },
+  }),
+  ifYouDo: (s, ctx) => discardToTop(s, ctx.owner, ctx.cardChosen!),
+})
+
+// B: Epic Actions that play a unit, or repeat for each friendly leader unit
+/** "Epic Action: Play a unit from your hand …", offered only while there is one to play. */
+const basePlay = (description: string, o: (s: GameState, owner: PlayerId) => PlayFromHandOptions): CardDefinition =>
+  baseEpic(description, {
+    usable: (s, ctx) => playableFromHand(s, ctx.owner, o(s, ctx.owner)).length > 0,
+    effect: (s, ctx) => playFromHand(s, ctx, o(s, ctx.owner)),
+  })
+registerCard('SOR_022', basePlay('Play a unit that costs 6 or less from your hand. Give it Ambush for this phase.', // Energy Conversion Lab
+  () => ({ test: printedCostAtMost(6), gains: [KW.ambush] })))
+/** Friendly leader units, which is what "for each friendly leader unit" counts (The Darksaber makes one). */
+const leaderUnitCount = (s: GameState, owner: PlayerId): number => s.players[owner].units.filter(u => isLeaderUnit(s, u)).length
+registerCard('TS26_10', basePlay('Play a unit from your hand. It costs 1 less for each friendly leader unit.', // Dooku's Palace
+  (s, owner) => { const n = leaderUnitCount(s, owner); return n > 0 ? { costDelta: -n } : {} }))
+/**
+ * "For each friendly leader unit, you may deal 2 damage to a unit": asked one at a time, so each
+ * offer reads the units still in play after the one before it resolved. A decline resumes too
+ * (`hookOnDecline`), so passing on the first leader unit's damage does not swallow the second's.
+ */
+const executionerOffer = (s: GameState, ctx: Resumable, i: number): GameState => {
+  const targets = allUnits(s).map(u => u.instanceId)
+  return i < leaderUnitCount(s, ctx.owner) && targets.length
+    ? pushChoice(s, { kind: 'selectUnitThen', id: `${ctx.sourceInstanceId}-${i}`, controller: ctx.owner, targets, text: 'deal 2 damage to a unit', then: resume(ctx, `dmg:${i}`), optional: true, hookOnDecline: true })
+    : s
+}
+registerCard('TS26_11', { // Executioner's Arena
+  ...baseEpic('For each friendly leader unit, you may deal 2 damage to a unit.', {
+    usable: (s, ctx) => leaderUnitCount(s, ctx.owner) > 0 && allUnits(s).length > 0,
+    effect: (s, ctx) => executionerOffer(s, ctx, 0),
+  }),
+  ifYouDo: (s, ctx) => {
+    const i = Number((ctx.step ?? 'dmg:0').slice('dmg:'.length))
+    return executionerOffer(ctx.targetInstanceId ? dealDamageToUnit(s, ctx.targetInstanceId, 2) : s, ctx, i + 1)
+  },
+})
+
+// C: constants. An aura from a base reads its controller's leader units; the setup numbers are read
+// where the game is set up (`initGame`) and where a deck list is checked (`parseProtectThePod`).
+/** "Each leader unit you control gets <buff>." */
+const leaderUnitAura = (buff: AuraContribution): CardDefinition => ({
+  baseAbilities: {
+    aura: (s, _owner, target, sameController) => (sameController && isLeaderUnit(s, target) ? buff : undefined),
+  },
+})
+registerCard('TWI_019', leaderUnitAura({ hp: 1 })) // Pau City
+registerCard('TWI_028', leaderUnitAura({ power: 1 })) // Petranaki Arena
+registerCard('JTL_021', { baseAbilities: { startingHandDelta: -1 } }) // Colossus
+registerCard('JTL_024', { baseAbilities: { deckMinimumDelta: 10 } }) // Data Vault
+registerCard('JTL_025', { baseAbilities: { deckMinimumDelta: -5 } }) // Thermal Oscillator

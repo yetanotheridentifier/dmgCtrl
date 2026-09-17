@@ -27,6 +27,9 @@ export type Action =
   // Use an undeployed leader's activated "Action:" ability; `index` addresses it,
   // `targetInstanceId` supplies the chosen target unit when the ability needs one.
   | { type: 'useLeaderAbility'; index: number; targetInstanceId?: string }
+  // Use the "Epic Action" printed on your own base: once each game, and it picks nothing
+  // itself — an ability with a target raises a choice.
+  | { type: 'useBaseAbility' }
   | { type: 'takeInitiative' }
   | { type: 'pass' }
   // Decline a pending choice (Ambush/Support/pay-or-exhaust/may-play …). With no

@@ -8,6 +8,9 @@
  * the only place that needs to change.
  */
 
+import { getCardDefinition } from '../engine/abilities'
+import '../engine/cardDefinitions' // side effect: registers card behaviours, bases included
+
 export interface DeckCardEntry {
   id: string
   count: number
@@ -32,6 +35,15 @@ export type ParseDeckResult =
   | { ok: false; error: ParseDeckError }
 
 const MIN_DECK_CARDS = 30
+
+/**
+ * The smallest legal deck for a base: 30 cards, unless the base says otherwise (Data Vault adds 10,
+ * Thermal Oscillator takes 5 off). A deck-building rule, so it is read here where a list is checked
+ * rather than anywhere in the rules engine.
+ */
+export function minimumDeckSize(baseId: string): number {
+  return MIN_DECK_CARDS + (getCardDefinition(baseId)?.baseAbilities?.deckMinimumDelta ?? 0)
+}
 
 const CARD_ID_PATTERN = /^([A-Za-z0-9]+)_([A-Za-z0-9]+)$/
 
@@ -86,7 +98,7 @@ export function parseProtectThePod(text: string): ParseDeckResult {
   }
 
   const totalCards = cards.reduce((n, c) => n + c.count, 0)
-  if (totalCards < MIN_DECK_CARDS) {
+  if (totalCards < minimumDeckSize(base)) {
     return { ok: false, error: 'too-few-cards' }
   }
 

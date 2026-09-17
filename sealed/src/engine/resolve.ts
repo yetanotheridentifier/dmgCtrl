@@ -5,7 +5,7 @@ import { opponentOf, updatePlayer, activeChoice, findChoice, removeChoice, hasPe
 import { addLastingEffect, addDelayedEffect, clearLastingEffects, clearRoundEffects, clearNextUnitGrants, resetPhaseEvents, recordTokenCreated, recordUnitEntered, recordBaseAttacked, recordCardPlayed, recordUnitAttacked, markAbilityUsed, nextUnitGrantMatches } from './types'
 import { addResourceFromHand, payCost, readyAllResources } from './resources'
 import { effectiveCost, enemyAttackTargets, affordableHandUnits, validUpgradeTargets, offerAttack } from './legalMoves'
-import { collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, stampChoiceSource, type TriggerPoint } from './abilities'
+import { collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCardDefinition, actionAbilityKey, leaderActions, baseEpicAction, stampChoiceSource, type TriggerPoint } from './abilities'
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
@@ -102,6 +102,8 @@ function resolveAction(state: GameState, action: Action): GameState {
       return requirePhase(state, 'action', () => useAbility(state, action.instanceId, action.cardId, action.index))
     case 'useLeaderAbility':
       return requirePhase(state, 'action', () => useLeaderAbility(state, action.index, action.targetInstanceId))
+    case 'useBaseAbility':
+      return requirePhase(state, 'action', () => useBaseAbility(state))
     case 'attack':
       return requirePhase(state, 'action', () => {
         // An attack can be how a pending choice is ANSWERED. `choiceId` names which one: the
@@ -2045,6 +2047,26 @@ function useLeaderAbility(state: GameState, index: number, targetInstanceId?: st
   const paid = ability.cost ? payCost(p, ability.cost) : p
   let next = updatePlayer(state, owner, { ...paid, leader: { ...p.leader, exhausted: true } })
   next = stampChoiceSource(next, ability.effect(next, { owner, cardId: p.leader.cardId, targetInstanceId }), { cardId: p.leader.cardId, controller: owner })
+  next = checkWin(next)
+  if (next.winner !== null) return next
+  next = handOffOpponentChoice(next, owner)
+  return hasPendingChoices(next) ? next : advanceTurn(resetPasses(next))
+}
+
+/**
+ * Use the active player's base "Epic Action": mark it used (once each game, CR 2.5), run the
+ * effect, then pass the turn unless it raised a pending choice. The base is not a unit, so the
+ * ability's source is the base side of its card, the way an undeployed leader's action is.
+ */
+function useBaseAbility(state: GameState): GameState {
+  const owner = state.activePlayer
+  const p = state.players[owner]
+  const ability = baseEpicAction(p.base.cardId)
+  if (!ability) throw new Error(`useBaseAbility: ${p.base.cardId} has no Epic Action`)
+  if (p.base.epicActionUsed) throw new Error('useBaseAbility: already used this game')
+
+  let next = updatePlayer(state, owner, { base: { ...p.base, epicActionUsed: true } })
+  next = stampChoiceSource(next, ability.effect(next, { owner, cardId: p.base.cardId }), { cardId: p.base.cardId, controller: owner })
   next = checkWin(next)
   if (next.winner !== null) return next
   next = handOffOpponentChoice(next, owner)
