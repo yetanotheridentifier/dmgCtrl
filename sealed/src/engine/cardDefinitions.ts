@@ -1,10 +1,10 @@
 import type { AbilityDef, AuraContribution, CardDefinition, EffectContext, IfYouDoContext } from './abilities'
 import { registerCard, getCardDefinition } from './abilities'
-import { takeControlOfUnit, giveToken, giveTokens, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnUpgradeFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
+import { takeControlOfUnit, giveToken, giveTokens, giveMixedTokens, moveUnitToArena, attachUpgrades, fireUpgradeAttached, exhaustUnit, returnUpgradeToHand, drawCards, discardFromHand, returnUnitToHand, returnOtherUpgradesToHand, returnCardFromDiscardToHand, defeatUpgrade, defeatUpgradeAt, createTokenUnit, createTokenUnits, findUnit, searchCount, grantNextUnit, healUnit, healBase, dealDamageToBase, exhaustReadyResource, readyResource, readyUnit, openSupportChoice, leaderCanExhaust, resourceTopOfDeck } from './effects'
 import { dealDamageToUnit, defeatUnit, defeatUnits } from './combat'
 import { seededUnit, nextSeed, seededShuffle } from './rng'
 import { effectiveHp, effectivePower } from './stats'
-import { TOKEN_SHIELD, TOKEN_ADVANTAGE, hasToken } from './tokenUpgrades'
+import { TOKEN_SHIELD, TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, hasToken } from './tokenUpgrades'
 import { discardUnitsMatching, playUpgradeOnto } from './resolve'
 import { TOKEN_MANDALORIAN, isTokenCard } from './tokenUnits'
 import { opponentOf, pushChoice, addLastingEffect, addDelayedEffect, baseDamageThisPhase, tokenCreatedThisPhase, defeatedThisPhase, damagedThisPhase, leftPlayThisPhase, leaderLeftPlayThisPhase, enteredPlayThisPhase, baseAttackedThisPhase, baseDamagedThisPhase, upgradeDefeatedThisPhase, cardsPlayedThisPhase, attackedThisPhase, healedThisPhase, damagePreventedThisPhase, cardsDrawnThisPhase, markAbilityUsed, updatePlayer } from './types'
@@ -152,7 +152,7 @@ registerCard('ASH_055', { // Blade of Talzin — return from discard to hand if 
       // "Your" discard = the upgrade's owner; only return if it was friendly (host controlled by that owner).
       const owner = host.upgrades.find(u => u.cardId === ctx.cardId)?.owner ?? ctx.owner
       if (owner !== ctx.owner) return s
-      return returnUpgradeFromDiscardToHand(s, owner, ctx.cardId)
+      return returnCardFromDiscardToHand(s, owner, ctx.cardId)
     },
   }],
 })
@@ -5723,7 +5723,7 @@ registerCard('LAW_194', onAttack(whenPlayed('Discard 3 cards from your deck. You
 })))
 registerCard('SHD_041', onAttack(whenPlayed('Discard a card from your deck. If it shares an aspect with your base, return it to your hand.', (s, ctx) => { // Kuiil
   const [next, milled] = millTop(s, ctx.owner, 1)
-  return milled.length && sharesAspectWithBase(next, ctx.owner, milled[0]) ? returnUpgradeFromDiscardToHand(next, ctx.owner, milled[0]) : next
+  return milled.length && sharesAspectWithBase(next, ctx.owner, milled[0]) ? returnCardFromDiscardToHand(next, ctx.owner, milled[0]) : next
 })))
 registerCard('TWI_195', { // Sabine Wren
   cannotBeAttacked: (s, u) => u.exhausted && !unitHasKeyword(s, u, 'Sentinel'),
@@ -6607,7 +6607,7 @@ registerCard(GRANT_GAR_SAXON, {
       ? pushChoice(s, { kind: 'selectCardThen', id: `${ctx.defeatedUnit!.instanceId}-garSaxon`, controller: ctx.owner, candidates: cards.map(up => up.cardId), optional: true, text: "return an upgrade that was on it to its owner's hand", then: { cardId: GRANT_GAR_SAXON, owner: ctx.owner, step: cards.map(up => up.owner).join(',') } })
       : s
   }),
-  ifYouDo: (s, ctx) => returnUpgradeFromDiscardToHand(s, (ctx.step ?? '').split(',')[ctx.optionIndex ?? 0] as PlayerId, ctx.cardChosen!),
+  ifYouDo: (s, ctx) => returnCardFromDiscardToHand(s, (ctx.step ?? '').split(',')[ctx.optionIndex ?? 0] as PlayerId, ctx.cardChosen!),
 })
 registerCard('SHD_001', { // Gar Saxon
   ...friendlyBothSides((_s, u) => isUpgraded(u), { power: 1 }, true),
@@ -7020,3 +7020,60 @@ registerCard('TWI_028', leaderUnitAura({ power: 1 })) // Petranaki Arena
 registerCard('JTL_021', { baseAbilities: { startingHandDelta: -1 } }) // Colossus
 registerCard('JTL_024', { baseAbilities: { deckMinimumDelta: 10 } }) // Data Vault
 registerCard('JTL_025', { baseAbilities: { deckMinimumDelta: -5 } }) // Thermal Oscillator
+
+// ══ Experience tokens ═════════════════════════════════════════════════
+// An Experience token is a +1/+1 upgrade an ability attaches (CR 3.7.2), so the machinery is the token
+// machinery: `giveTokens` attaches and fires the attach event once, `mayGiveTokens` offers one target,
+// and the stats pipeline reads the +1/+1 off the token card like any other upgrade. These cards are
+// therefore registrations, and the helpers below are the Experience-shaped spellings of `shieldChoice`
+// and friends.
+
+/** "Give `count` Experience tokens to a unit that ...", or nothing when nothing is eligible. */
+const expChoice = (s: GameState, ctx: EventCtx, targets: string[], count = 1, optional = false, id?: string): GameState =>
+  targets.length
+    ? pushChoice(s, { kind: 'mayGiveTokens', id: id ?? ctx.sourceInstanceId!, controller: ctx.owner, token: TOKEN_EXPERIENCE, count, targets, optional })
+    : s
+/** "Give `count` Experience tokens to this unit." */
+const expSelf = (s: GameState, ctx: EventCtx, count = 1): GameState => giveTokens(s, ctx.sourceInstanceId!, TOKEN_EXPERIENCE, count)
+/** "(If ...,) give `count` Experience tokens to this unit", the count read as the ability resolves. */
+const expSelfWp = (description: string, count: number | ((s: GameState, ctx: EventCtx) => number) = 1, when: When = always) =>
+  whenPlayed(description, (s, ctx) => (when(s, ctx) ? expSelf(s, ctx, typeof count === 'number' ? count : count(s, ctx)) : s))
+
+// A: the token goes on the unit itself.
+registerCard('LAW_037', attacks('Give an Experience token to this unit.', (s, ctx) => expSelf(s, ctx))) // Han Solo
+registerCard('LAW_055', expSelfWp('Give an Experience token to this unit. If you control a Cunning or Vigilance unit, give 2 instead.', // Chopper
+  (s, ctx) => (youControl(s, ctx, pickOther, pickAspect('Cunning', 'Vigilance')) ? 2 : 1)))
+registerCard('LOF_092', whenPlayed('If you control a Jedi unit, you may give an Experience token to this unit.', (s, ctx) => // Point Rain Reclaimer
+  (youControl(s, ctx, pickTrait('Jedi')) ? expChoice(s, ctx, [ctx.sourceInstanceId!], 1, true) : s)))
+registerCard('SHD_096', { // Maz Kanata
+  // `whenPlayOrCreateUnit` fires on the controller's OTHER units, which is exactly "another unit".
+  abilities: [{ trigger: 'whenPlayOrCreateUnit', description: 'Give an Experience token to this unit.', effect: (s, ctx) => expSelf(s, ctx) }],
+})
+/** How many different aspects appear among a player's units, counting both icons on a dual-aspect card. */
+const aspectsAmongUnits = (s: GameState, owner: PlayerId): number =>
+  new Set(s.players[owner].units.flatMap(u => cardOf(s, u)?.aspects ?? [])).size
+registerCard('LAW_147', expSelfWp('Give an Experience token to this unit for each different aspect among units you control.', // Jaunty Light Freighter
+  (s, ctx) => aspectsAmongUnits(s, ctx.owner)))
+registerCard('SEC_089', expSelfWp('Give an Experience token to this unit for each ground unit you control.', // PreMor Personnel Carrier
+  (s, ctx) => unitsIn(s, ctx.owner, 'ground').length))
+registerCard('SEC_035', { // Darth Sion
+  abilities: [
+    { trigger: 'whenPlayed', description: 'Give an Experience token to this unit for each enemy unit that was defeated this phase.',
+      effect: (s, ctx) => expSelf(s, ctx, defeatedThisPhase(s, opponentOf(ctx.owner)).length) },
+    // He is already in the discard when this resolves, so the power is read off `defeatedUnit`, the
+    // snapshot taken at the moment of defeat, and the return is a discard-to-hand move.
+    { trigger: 'whenDefeated', description: "If this unit had 7 or more power, return him to his owner's hand.",
+      effect: (s, ctx) => (ctx.defeatedUnit && effectivePower(s, ctx.defeatedUnit) >= 7 ? returnCardFromDiscardToHand(s, ctx.owner, ctx.defeatedUnit.cardId) : s) },
+  ],
+})
+registerCard('SOR_191', expSelfWp('Give an Experience token to this unit for each other card you played this phase.', // Vanguard Ace
+  // This unit's own play is already recorded when its When Played resolves, so it is discounted here.
+  (s, ctx) => Math.max(0, cardsPlayedThisPhase(s, ctx.owner).length - 1)))
+registerCard('LAW_034', { abilities: [{ trigger: 'onAttackEnd', description: 'If the defending unit was defeated, give an Experience token to this unit and heal 3 damage from him.', effect: (s, ctx) => // Chewbacca
+  (ctx.defenderDefeated ? healUnit(expSelf(s, ctx), ctx.sourceInstanceId!, 3) : s) }] })
+registerCard('TS26_77', mayPayWp('You may pay 2. If you do, give an Experience token and a Shield token to this unit.', 2, 'give an Experience token and a Shield token to this unit', // Deployed Droideka
+  (s, ctx) => giveMixedTokens(s, ctx.sourceInstanceId!, [TOKEN_EXPERIENCE, TOKEN_SHIELD])))
+registerCard('LAW_231', expSelfWp('If no resources were paid to play this unit, give an Experience token to it.', 1, // Weequay Pirate
+  (s, ctx) => (selfOf(s, ctx)?.resourcesPaidToPlay ?? 0) === 0))
+registerCard('JTL_096', mayPayWp('You may pay 2. If you do, move this unit to the ground arena and give 2 Experience tokens to it.', 2, 'move this unit to the ground arena and give it 2 Experience tokens', // Blue Leader
+  (s, ctx) => expSelf(moveUnitToArena(s, ctx.sourceInstanceId!, 'ground'), ctx, 2)))

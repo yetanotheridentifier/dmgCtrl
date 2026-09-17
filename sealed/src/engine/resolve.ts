@@ -9,7 +9,7 @@ import { collectCardTriggers, collectLeaderTriggers, collectUnitTriggers, getCar
 import { applyUnitDamage, dealDamageToUnit, defeatUnit, defeatUnits, sweepStateBasedDefeats, preventionOffer } from './combat'
 import { drainTriggers, pickNextTrigger } from './triggerQueue'
 import { KEYWORD_AMBUSH, KEYWORD_SUPPORT } from './cardDefinitions'
-import { exhaustUnit, findUnit, giveToken, giveTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnUpgradeFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady } from './effects'
+import { exhaustUnit, findUnit, giveToken, giveTokens, attachUpgrades, collectUpgradeAttached, fireBatch, collectUnitsTrigger, openSupportChoice, dealDamageToBase, baseDamageAfterPrevention, defeatUpgradeAt, healUnit, healBase, resourceTopOfDeck, drawCards, discardFromHand, createTokenUnit, createTokenUnits, returnCardFromDiscardToHand, returnUnitToHand, grantNextUnit, readyUnit, readyResource, searchCount, bottomTopCards, returnUpgradeToHand, defeatTokensOn, leaderCanExhaust, exhaustLeader, takeControlOfUnit, returnControlledUnits, unitCannotReady } from './effects'
 import { seededShuffle, nextSeed } from './rng'
 import { effectivePower, effectiveHp, friendlyAdvantageInert } from './stats'
 import { hasKeyword, unitHasKeyword, unitKeywordValue, unitNegatesOverwhelm, unitDealsDamageFirst, unitSpillsExcessToUnit, unitHasTrait, unitDealsNoCombatDamage } from './keywords'
@@ -336,8 +336,13 @@ function setupResourceChoice(state: GameState, handIndex: number): GameState {
  * too (CR 6.2.0a), so it counts for "if you played ... this phase". The caller does the win check
  * afterwards. `unitPlaySites.test.ts` fails on a new hand-built unit append, so a further zone comes
  * through here too.
+ *
+ * `resourcesPaid` is how many resources the caller exhausted for this play, recorded on the unit so an
+ * ability can read it (Weequay Pirate: "if no resources were paid to play this unit"). The caller knows
+ * it and the board no longer does, since payment happens before the unit exists. It defaults to 0, which
+ * is what every free-play door pays.
  */
-function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?: boolean): GameState {
+function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?: boolean, resourcesPaid = 0): GameState {
   // First, after the cost, so "first X each phase" sees this one as the first and nothing below reads
   // a record that is missing it.
   state = recordCardPlayed(state, owner, cardId)
@@ -366,6 +371,7 @@ function playUnitCard(state: GameState, owner: PlayerId, cardId: string, ready?:
     // Shielded and Hidden are applied below, from the unit's LIVE keywords once it is in play, so a
     // conditionally gained one counts exactly as a printed one does.
     upgrades: [],
+    ...(resourcesPaid > 0 ? { resourcesPaidToPlay: resourcesPaid } : {}),
   }
 
   let next = updatePlayer(state, owner, { units: [...state.players[owner].units, newUnit] })
@@ -511,10 +517,11 @@ function playUnit(state: GameState, handIndex: number): GameState {
     throw new Error(`playUnit: hand index ${handIndex} is not a playable unit`)
   }
 
-  const paid = payCost(p, effectiveCost(state, playerId, card))
+  const cost = effectiveCost(state, playerId, card)
+  const paid = payCost(p, cost)
   const next = updatePlayer(state, playerId, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
   // whenPlayed effects can defeat a base, so the win check runs afterwards.
-  return checkWin(playUnitCard(next, playerId, card.id))
+  return checkWin(playUnitCard(next, playerId, card.id, undefined, cost))
 }
 
 /**
@@ -1562,7 +1569,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         next = pushChoice(next, { kind: 'chooseDiscardFate', id: `${choice.id}-fate`, controller: choice.controller, cardId, heal: 3 })
         break
       }
-      next = returnUpgradeFromDiscardToHand(next, choice.owners?.[optionIndex ?? 0] ?? choice.controller, cardId)
+      next = returnCardFromDiscardToHand(next, choice.owners?.[optionIndex ?? 0] ?? choice.controller, cardId)
       break
     }
     case 'searchDraw': {
@@ -1680,11 +1687,13 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         const played = next.cards[cardId]
         const cost = played?.cost ?? 0
         // Kelleran Beq buys the unit at a discount instead of playing it free, so it is paid for here.
+        let resourcesPaid = 0
         if (choice.costDelta !== undefined && played) {
-          next = updatePlayer(next, owner, payCost(next.players[owner], Math.max(0, effectiveCost(next, owner, played) + choice.costDelta)))
+          resourcesPaid = Math.max(0, effectiveCost(next, owner, played) + choice.costDelta)
+          next = updatePlayer(next, owner, payCost(next.players[owner], resourcesPaid))
         }
         const enteredId = `u${next.instanceCounter}`
-        next = playUnitCard(next, owner, cardId, choice.entersReady === true)
+        next = playUnitCard(next, owner, cardId, choice.entersReady === true, resourcesPaid)
         if (choice.thenDelay) next = addDelayedEffect(next, { ...choice.thenDelay, owner, unitId: enteredId })
         next = checkWin(next)
         if (next.winner !== null) return next
@@ -1846,7 +1855,7 @@ function resolveAccept(state: GameState, choiceId: string, targetInstanceId?: st
         next = updatePlayer(next, choice.controller, { ...paid, hand: paid.hand.filter((_, i) => i !== handIndex) })
         // `playUnitCard` names the new unit from the counter it is about to consume, so this is its id.
         const enteredId = `u${next.instanceCounter}`
-        next = playUnitCard(next, choice.controller, cardId!, choice.entersReady)
+        next = playUnitCard(next, choice.controller, cardId!, choice.entersReady, cost)
         // "Deal 4 damage to it" (Reckless Landing) — the unit just played, which can only be
         // addressed now that it is on the board.
         if (choice.thenDamageIt) next = dealDamageToUnit(next, enteredId, choice.thenDamageIt)

@@ -31,7 +31,10 @@ const ATTACH = /(?<!function )\battachUpgrades\(/g
 
 /** Every attach, named, so a change of count names what to look at. */
 const EXPECTED_ATTACHES: Record<string, number> = {
-  'effects.ts': 1, // giveTokens: token upgrades given by an effect (fires the attach reaction, not "played")
+  // giveTokens (many of one kind) and giveMixedTokens (one each of several kinds, for "give an
+  // Experience token and a Shield token to it"): token upgrades given by an effect, each attaching its
+  // whole grant in one call so the attach reaction fires once, and neither is a play.
+  'effects.ts': 2,
   'resolve.ts': 2, // playUpgradeCardOnto (the door, the one "played"), and applyEntryKeywords' Shield on a Shielded unit entering
   'cardDefinitions.ts': 1, // moveUpgrade: Jocasta Nu and Evidence of the Crime moving an upgrade (fires the attach reaction, not "played")
 }

@@ -110,6 +110,13 @@ export interface UnitState {
    */
   upgradesPlayedThisRound?: number
   /**
+   * Resources exhausted to play this unit, recorded by `playUnitCard` because payment happens before
+   * the unit exists and nothing on the board remembers it afterwards. Absent means none were paid,
+   * which is what Weequay Pirate reads ("if no resources were paid to play this unit"): a free play,
+   * a full discount, or a cost of zero. It is the amount paid, not the card's cost.
+   */
+  resourcesPaidToPlay?: number
+  /**
    * Cards this unit has captured (Bothan-5) — card ids held face-down under it, out of every
    * other zone. Released to their owner's discard when the captor leaves play.
    */

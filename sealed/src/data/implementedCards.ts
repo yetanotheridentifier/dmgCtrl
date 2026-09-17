@@ -1280,6 +1280,19 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'LOF_180', name: 'Deceptive Shade' },
   { id: 'JTL_104', name: 'Raddus' },
   { id: 'JTL_032', name: 'Director Krennic' },
+  // Experience tokens: A, the token goes on the unit itself
+  { id: 'LAW_037', name: 'Han Solo' },
+  { id: 'LAW_055', name: 'Chopper' },
+  { id: 'LOF_092', name: 'Point Rain Reclaimer' },
+  { id: 'SHD_096', name: 'Maz Kanata' },
+  { id: 'LAW_147', name: 'Jaunty Light Freighter' },
+  { id: 'SEC_089', name: 'PreMor Personnel Carrier' },
+  { id: 'SEC_035', name: 'Darth Sion' },
+  { id: 'SOR_191', name: 'Vanguard Ace' },
+  { id: 'LAW_034', name: 'Chewbacca' },
+  { id: 'TS26_77', name: 'Deployed Droideka' },
+  { id: 'LAW_231', name: 'Weequay Pirate' },
+  { id: 'JTL_096', name: 'Blue Leader' },
 ]
 
 /**
