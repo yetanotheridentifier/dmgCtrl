@@ -211,6 +211,7 @@ describe('base Epic Actions, B: playing a unit, and once for each friendly leade
 })
 
 describe('base constants, C: auras and setup', () => {
+  const printed = (cardId: string) => ({ power: F[cardId].power ?? 0, hp: F[cardId].hp ?? 0 })
   const auraBoard = (baseId: string) => board(baseId,
     { units: [unit('boss', 'GRD', { isLeader: true }), unit('mine', 'GRD2')] },
     { units: [unit('theirBoss', 'GRD', { isLeader: true })] })
@@ -218,24 +219,24 @@ describe('base constants, C: auras and setup', () => {
   it('Pau City (TWI_019) gives each leader unit its controller has +0/+1', () => {
     const s = auraBoard('TWI_019')
     const mine = s.players.player.units
-    expect(effectiveHp(s, mine[0])).toBe(F.GRD.hp + 1)
-    expect(effectivePower(s, mine[0])).toBe(F.GRD.power)
-    expect(effectiveHp(s, mine[1])).toBe(F.GRD2.hp) // not a leader unit
-    expect(effectiveHp(s, s.players.opponent.units[0])).toBe(F.GRD.hp) // the enemy leader unit is not "yours"
+    expect(effectiveHp(s, mine[0])).toBe(printed('GRD').hp + 1)
+    expect(effectivePower(s, mine[0])).toBe(printed('GRD').power)
+    expect(effectiveHp(s, mine[1])).toBe(printed('GRD2').hp) // not a leader unit
+    expect(effectiveHp(s, s.players.opponent.units[0])).toBe(printed('GRD').hp) // the enemy leader unit is not "yours"
   })
 
   it('Petranaki Arena (TWI_028) gives each leader unit its controller has +1/+0', () => {
     const s = auraBoard('TWI_028')
     const mine = s.players.player.units
-    expect(effectivePower(s, mine[0])).toBe(F.GRD.power + 1)
-    expect(effectiveHp(s, mine[0])).toBe(F.GRD.hp)
-    expect(effectivePower(s, mine[1])).toBe(F.GRD2.power)
-    expect(effectivePower(s, s.players.opponent.units[0])).toBe(F.GRD.power)
+    expect(effectivePower(s, mine[0])).toBe(printed('GRD').power + 1)
+    expect(effectiveHp(s, mine[0])).toBe(printed('GRD').hp)
+    expect(effectivePower(s, mine[1])).toBe(printed('GRD2').power)
+    expect(effectivePower(s, s.players.opponent.units[0])).toBe(printed('GRD').power)
   })
 
   it('Colossus (JTL_021) draws 1 less card in its controller\'s starting hand, and only theirs', () => {
     const deckOf = (base: string) => ({ name: base, leader: 'TST_L', base, cards: [{ id: 'GRD', count: 30 }] })
-    const s = initGame(deckOf('JTL_021'), deckOf('TST_B'), F, { firstPlayer: 'player', shuffle: (a: unknown[]) => a })
+    const s = initGame(deckOf('JTL_021'), deckOf('TST_B'), F, { firstPlayer: 'player', shuffle: <T,>(a: T[]) => a })
     expect(s.players.player.hand).toHaveLength(5)
     expect(s.players.player.deck).toHaveLength(25)
     expect(s.players.opponent.hand).toHaveLength(6)

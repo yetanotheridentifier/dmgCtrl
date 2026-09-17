@@ -149,6 +149,9 @@ Two phases:
   blocks them, #465 pilots (7), #461 Experience (2), #605 token units (2), #471 play from discard (2),
   #466 capture, #467 Bounty, #470 Plot, #474 trigger points, #468 playing any card type, #602 Credit
   (a friendly token of any kind) and #477 (defeat by an enemy card ability).
+  **Bases are finished** (#460), which completes Phase 1: the engine gained base abilities (an Epic
+  Action once a game, an aura over units in play, and the two setup numbers a base can change), and
+  the eight LAW bases that play any card type from hand went to #468 with Sundari Palace to #475.
   The ticket bodies carry the sizes from before token units, Credit
   tokens, Disclose and indirect damage were blockers, so most are smaller than they say (bases barely); the corrected counts are commented on each.
 - **Phase 2 (#461 to #476, #602 to #605), 585 cards blocked by exactly one thing each**, ordered by how

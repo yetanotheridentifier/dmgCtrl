@@ -886,6 +886,11 @@ Leaders and bases are counted apart, because both are in play from the first tur
 would credit two free cards per deck. A leader is reported as deployed only when it actually
 deploys, which is the only way its deployed side runs.
 
+**The base count is availability and nothing more, and it is thin.** One base is chosen per deck, so
+the eight-set sweep plays 32 distinct bases out of the 85 the sets print, and it reports no figure
+for a base ability being used. A base ability is therefore evidenced by its unit tests, and by a run
+that substitutes the base into coverage decks, rather than by the sweep.
+
 An uncovered card is **not** a failure and does not affect the exit code. It is a fact about what the
 run reached. Dropped games are the failure signal.
 
