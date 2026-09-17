@@ -237,6 +237,12 @@ export const IMPLEMENTED_LEADERS: LeaderStatus[] = [
   { id: 'SOR_004', name: 'Chirrut Îmwe', front: true, back: true },
   { id: 'TS26_6', name: 'Rex', front: true, back: true },
   { id: 'SEC_002', name: 'Jabba the Hutt', front: true, back: true },
+  // Experience tokens: G, both sides grant the token
+  { id: 'LOF_006', name: 'Supreme Leader Snoke', front: true, back: true },
+  { id: 'SHD_004', name: 'Rey', front: true, back: true },
+  { id: 'SOR_007', name: 'Grand Moff Tarkin', front: true, back: true },
+  { id: 'LAW_010', name: 'Leia Organa', front: true, back: true },
+  { id: 'SOR_008', name: 'Hera Syndulla', front: true, back: true },
 ]
 
 /**
@@ -257,6 +263,8 @@ export const IMPLEMENTED_BASES: UpgradeStatus[] = [
   { id: 'JTL_021', name: 'Colossus' },
   { id: 'JTL_024', name: 'Data Vault' },
   { id: 'JTL_025', name: 'Thermal Oscillator' },
+  // Experience tokens: G
+  { id: 'TS26_9', name: 'First Battle Memorial' },
 ]
 
 export const IMPLEMENTED_UPGRADES: UpgradeStatus[] = [
@@ -1477,10 +1485,11 @@ export const PLAYABLE_AS_PRINTED: Record<string, Partial<TypeCounts>> = {
 }
 
 /**
- * Tokens the engine creates, per set. ASH counts Shield, Advantage and Mandalorian; Experience is
- * printed but no card grants it, so ASH reads 3 of 4.
+ * Tokens the engine creates, per set. ASH counts all four it prints: Shield, Advantage, Mandalorian
+ * and Experience. The other sets are not counted here yet, so they read 0 of the tokens they print
+ * even where the engine creates them.
  */
-const TOKENS_BUILT: Record<string, number> = { ASH: 3 }
+const TOKENS_BUILT: Record<string, number> = { ASH: 4 }
 
 /** The set a card id belongs to: the code before its underscore (`TS26_012` is TS26). */
 export function setOf(id: string): string {

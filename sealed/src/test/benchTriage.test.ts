@@ -123,11 +123,16 @@ describe('triage blockers', () => {
   })
 
   it('counts a sole blocker as unlocking its card on its own', () => {
+    const r = triage([card({ FrontText: 'When Played: Give a Force token to a friendly unit.' })])
+    const force = r.blockers.find(b => b.name === 'force-token')
+    expect(force).toBeDefined()
+    expect(force!.sole).toBe(1)
+    expect(force!.touched).toBe(1)
+  })
+
+  it('stops blocking on a mechanic that has shipped: an Experience token grant is buildable', () => {
     const r = triage([card({ FrontText: 'When Played: Give an Experience token to a friendly unit.' })])
-    const xp = r.blockers.find(b => b.name === 'experience-token')
-    expect(xp).toBeDefined()
-    expect(xp!.sole).toBe(1)
-    expect(xp!.touched).toBe(1)
+    expect(r.triaged[0].blockers).toEqual([])
   })
 
   it('credits neither blocker with a sole unlock when a card needs two', () => {

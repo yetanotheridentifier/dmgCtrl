@@ -42,6 +42,8 @@ const SHIPPED = [
   // F: attacks, reactions and activated Actions
   'JTL_200', 'JTL_250', 'LAW_039', 'LAW_073', 'LAW_115', 'SHD_057', 'LAW_152', 'LOF_046', 'LOF_065', 'LOF_258',
   'SEC_051', 'SHD_045', 'SHD_141', 'SOR_036', 'SOR_094',
+  // G: leaders and a base
+  'LOF_006', 'SHD_004', 'SOR_007', 'LAW_010', 'SOR_008', 'TS26_9',
 ]
 /** Registered elsewhere; used here to play a unit for free, so "no resources were paid" can be reached. */
 const GALACTIC_AMBITION = 'SOR_235'
@@ -91,6 +93,8 @@ const F: Record<string, EngineCard> = {
   SITH: src('SITH', { traits: ['SITH'], unique: true }),
   SITH2: src('SITH2', { traits: ['SITH'], unique: true }),
   TOUGH: src('TOUGH', { power: 5, hp: 6 }),
+  VIL_BIG: src('VIL_BIG', { aspects: ['Villainy'], power: 5, hp: 6 }),
+  SPECTRE_EV: card({ id: 'SPECTRE_EV', type: 'event', cost: 3, aspects: ['Aggression'], traits: ['SPECTRE'] }),
   DROID: src('DROID', { traits: ['DROID'] }),
   CREATURE: src('CREATURE', { traits: ['CREATURE'] }),
   SPECTRE: src('SPECTRE', { traits: ['SPECTRE'] }),
@@ -162,6 +166,17 @@ const playEvent = (s: GameState, cardId: string, attackers: string[] = []): Game
   return resolve(withCard, { type: 'playEvent', handIndex: p.hand.length })
 }
 const costOf = (s: GameState, cardId: string): number => effectiveCost(s, 'player', F[cardId])
+const undeployedLeader = (cardId: string) => ({ cardId, deployed: false, epicActionUsed: false, exhausted: false })
+const deployedLeader = (cardId: string) => ({ cardId, deployed: true, epicActionUsed: true, exhausted: false })
+/** A board with `id` on its undeployed front side. */
+const front = (id: string, mine: Side = {}, theirs: Side = {}) => board({ leader: undeployedLeader(id), ...mine }, theirs)
+/** A board with `id` deployed, its leader unit on the board as `L`. */
+const back = (id: string, mine: Side = {}, theirs: Side = {}) =>
+  board({ leader: deployedLeader(id), ...mine, units: [unit('L', id, { isLeader: true }), ...(mine.units ?? [])] }, theirs)
+const usable = (s: GameState) => moves(s).some(m => m.type === 'useLeaderAbility')
+const useFront = (s: GameState) => resolve(s, { type: 'useLeaderAbility', index: 0 })
+const baseOffered = (s: GameState) => moves(s).some(m => m.type === 'useBaseAbility')
+const useBase = (s: GameState) => resolve(s, { type: 'useBaseAbility' })
 /** Declare an attack with `attackerId`, on the enemy base or on `target`. */
 const attack = (s: GameState, attackerId: string, target?: string) =>
   resolve(s, { type: 'attack', attackerId, target: target ? { kind: 'unit', instanceId: target } : { kind: 'base' } })
@@ -839,5 +854,77 @@ describe('Experience tokens, F: attacks, reactions and activated Actions', () =>
     expect(U(used, 'bail')!.exhausted).toBe(true)
     expect(unitOffers(used)).toEqual(['f'])
     expect(exp(accept(used, { targetInstanceId: 'f' }), 'f')).toBe(1)
+  })
+})
+
+describe('Experience tokens, G: leaders and a base', () => {
+  it('Supreme Leader Snoke (LOF_006) picks the strongest friendly Villainy unit, from either side', () => {
+    const undeployed = front('LOF_006', { units: [unit('weak', 'VIL'), unit('strong', 'VIL_BIG'), unit('g', 'GRD')] }, { units: [unit('evil', 'VIL_BIG')] })
+    expect(usable(undeployed)).toBe(true)
+    // Ties aside, only the most powerful friendly Villainy unit is offered; the enemy one is not friendly.
+    expect(unitOffers(useFront(undeployed))).toEqual(['strong'])
+    expect(exp(accept(useFront(undeployed), { targetInstanceId: 'strong' }), 'strong')).toBe(1)
+    // No friendly Villainy unit at all: the action is not offered.
+    expect(usable(front('LOF_006', { units: [unit('g', 'GRD')] }))).toBe(false)
+    // Deployed, Snoke is himself a friendly Villainy unit and out-powers a 2-power one, so he is the pick.
+    const deployedSide = attack(back('LOF_006', { units: [unit('v', 'VIL')] }), 'L')
+    expect(unitOffers(deployedSide)).toEqual(['L'])
+    const bigger = attack(back('LOF_006', { units: [unit('v', 'VIL_BIG')] }), 'L')
+    expect(unitOffers(bigger)).toEqual(['v'])
+  })
+
+  it('Rey (SHD_004) gives a token to a unit with 2 or less power, mandatory in front and optional deployed', () => {
+    const undeployed = front('SHD_004', { units: [unit('small', 'WEAK'), unit('big', 'TOUGH')] }, { units: [unit('esmall', 'WEAK')] })
+    const used = useFront(undeployed)
+    expect(unitOffers(used)).toEqual(['esmall', 'small'])
+    expect(declinable(used)).toBe(false)
+    const deployedSide = attack(back('SHD_004', { units: [unit('small', 'WEAK')] }), 'L')
+    expect(declinable(deployedSide)).toBe(true)
+    expect(exp(accept(deployedSide, { targetInstanceId: 'small' }), 'small')).toBe(1)
+  })
+
+  it('Grand Moff Tarkin (SOR_007) gives a token to an Imperial unit, and to another one when deployed', () => {
+    const used = useFront(front('SOR_007', { units: [unit('imp', 'IMP'), unit('g', 'GRD')] }, { units: [unit('eimp', 'IMP')] }))
+    expect(unitOffers(used)).toEqual(['eimp', 'imp'])
+    // Deployed, the leader unit itself is an Imperial but "another" leaves it out.
+    const deployedSide = attack(back('SOR_007', { units: [unit('imp', 'IMP')] }), 'L')
+    expect(unitOffers(deployedSide)).toEqual(['imp'])
+    expect(declinable(deployedSide)).toBe(true)
+  })
+
+  it('Leia Organa (LAW_010) buffs by aspect in front, and on deploying gives a token per aspect you control', () => {
+    const used = useFront(front('LAW_010', { units: [unit('two', 'TWO_ASPECT'), unit('one', 'VIL')] }))
+    expect(choice(used)).toMatchObject({ kind: 'selectUnitThen' })
+    const buffed = accept(used, { targetInstanceId: 'two' })
+    expect(effectivePower(buffed, U(buffed, 'two')!)).toBe(F['TWO_ASPECT'].power! + 2)
+    // Deploying: one token per different aspect among the units you control, the leader unit included.
+    const s = board({ leader: undeployedLeader('LAW_010'), units: [unit('cmd', 'CMD'), unit('vil', 'VIL')], resources: ready(10) })
+    const deployed = resolve(s, { type: 'deployLeader' })
+    const aspects = new Set([...F['LAW_010'].aspects, 'Command', 'Villainy'])
+    expect(choice(deployed)).toMatchObject({ kind: 'mayGiveTokens', count: aspects.size })
+    expect(exp(accept(deployed, { targetInstanceId: 'cmd' }), 'cmd')).toBe(aspects.size)
+  })
+
+  it('Hera Syndulla (SOR_008) waives the Spectre aspect penalty on both sides and gives a token to another unique unit when deployed', () => {
+    // The waiver: a Spectre card off-aspect costs 2 less with her in play, front or back.
+    const plain = board({ leader: { cardId: 'TST_L', deployed: false, epicActionUsed: false, exhausted: false } })
+    const hers = front('SOR_008')
+    expect(costOf(hers, 'SPECTRE_EV')).toBe(costOf(plain, 'SPECTRE_EV') - 2)
+    const attacked = attack(back('SOR_008', { units: [unit('u', 'UNIQ'), unit('g', 'GRD')] }), 'L')
+    expect(unitOffers(attacked)).toEqual(['u'])
+    expect(declinable(attacked)).toBe(true)
+  })
+
+  it('First Battle Memorial (TS26_9) gives one token per friendly leader unit, one pick at a time', () => {
+    const none = board({ base: { cardId: 'TS26_9', damage: 0 }, units: [unit('f', 'GRD')] })
+    expect(baseOffered(none)).toBe(false)
+    const one = board({ base: { cardId: 'TS26_9', damage: 0 }, units: [unit('f', 'GRD'), unit('L', 'L_UNIT', { isLeader: true })] }, { units: [unit('e', 'GRD')] })
+    expect(baseOffered(one)).toBe(true)
+    const used = useBase(one)
+    expect(unitOffers(used).sort()).toEqual(['L', 'e', 'f'].sort())
+    const done = accept(used, { targetInstanceId: 'f' })
+    expect(exp(done, 'f')).toBe(1)
+    // One leader unit, so one token and no second offer.
+    noChoice(done)
   })
 })

@@ -20,8 +20,8 @@ import { reprintCanonicalId } from '../data/reprints'
  * card still needs reading before it is built, and the probes exist because this tool knows it is
  * fallible.
  *
- * The lists below are the tool's model of the engine. **They shrink as mechanics land**: when
- * Experience tokens ship, delete that entry and every card it was blocking reclassifies itself.
+ * The lists below are the tool's model of the engine. **They shrink as mechanics land**: deleting an
+ * entry reclassifies every card it was blocking, which is how Experience tokens left this list.
  */
 
 /** Same origin the app uses. Asserted equal to `SWU_DB_API` by test, imported by neither: pulling
@@ -50,8 +50,7 @@ const EXISTING_TRIGGERS: ReadonlySet<string> = new Set([
  * listed is treated as already expressible.
  */
 const NEW_MECHANICS: readonly (readonly [string, RegExp])[] = [
-  // Shield is implemented. Experience and Force are printed but never granted.
-  ['experience-token', /\bExperience token/i],
+  // Shield and Experience are implemented. The Force is printed but never granted.
   ['force-token', /\bthe Force\b|\bForce token/i],
   // `engine/tokenUnits.ts` has the Mandalorian only. The others share its creation path, so one
   // blocker: split per type and a card creating two kinds would count as unlocked by neither.

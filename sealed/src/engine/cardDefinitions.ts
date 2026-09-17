@@ -7448,3 +7448,80 @@ registerCard('SOR_094', { actionAbilities: [{ // Bail Organa
   usable: (s, self) => friendliesOf(s, self).some(u => u.instanceId !== self.instanceId),
   effect: (s, ctx) => expChoice(s, ctx, pickedIds(s, ctx, pickAll(pickOther, pickFriendly))),
 }] })
+
+// G: leaders and a base. Both sides of a leader grant the same token, so each is `leaderFront` for the
+// undeployed action and an `onAttack` (or `whenDeployed`) ability for the deployed unit.
+/** The friendly Villainy units tied for the most power (Supreme Leader Snoke chooses among them). */
+const strongestVillainy = (s: GameState, ctx: EventCtx): string[] => {
+  const villains = picked(s, ctx, pickAll(pickFriendly, pickAspect('Villainy')))
+  if (!villains.length) return []
+  const best = Math.max(...villains.map(u => effectivePower(s, u)))
+  return villains.filter(u => effectivePower(s, u) === best).map(u => u.instanceId)
+}
+registerCard('LOF_006', mergeLeaderSides( // Supreme Leader Snoke
+  leaderFront('Give an Experience token to the unit with the most power among friendly Villainy units.', {
+    cost: 1,
+    usable: (s, ctx) => strongestVillainy(s, ctx).length > 0,
+    effect: (s, ctx) => expChoice(s, ctx, strongestVillainy(s, ctx)),
+  }),
+  attacks('Give an Experience token to the unit with the most power among friendly Villainy units.',
+    (s, ctx) => expChoice(s, ctx, strongestVillainy(s, ctx))),
+))
+const lowPower: Pick = (s, u) => effectivePower(s, u) <= 2
+registerCard('SHD_004', mergeLeaderSides( // Rey
+  leaderFront('Give an Experience token to a unit with 2 or less power.', {
+    cost: 1,
+    usable: anyUnitPasses(lowPower),
+    effect: (s, ctx) => expChoice(s, ctx, pickedIds(s, ctx, lowPower)),
+  }),
+  attacks('You may give an Experience token to a unit with 2 or less power.',
+    (s, ctx) => expChoice(s, ctx, pickedIds(s, ctx, lowPower), 1, true)),
+))
+registerCard('SOR_007', mergeLeaderSides( // Grand Moff Tarkin
+  leaderFront('Give an Experience token to an Imperial unit.', {
+    cost: 1,
+    usable: anyUnitPasses(pickTrait('Imperial')),
+    effect: (s, ctx) => expChoice(s, ctx, pickedIds(s, ctx, pickTrait('Imperial'))),
+  }),
+  attacks('You may give an Experience token to another Imperial unit.',
+    (s, ctx) => expChoice(s, ctx, pickedIds(s, ctx, pickAll(pickOther, pickTrait('Imperial'))), 1, true)),
+))
+registerCard('LAW_010', mergeLeaderSides( // Leia Organa
+  leaderFront('For this phase, give a unit +1/+1 for each different aspect it has.', {
+    cost: 2,
+    usable: anyUnitPasses(pickAny),
+    // The amount is fixed per target, so it is read from the unit the choice will land on: every
+    // eligible unit is offered and the buff is that unit's own aspect count.
+    effect: (s, ctx) => unitThen(s, ctx, pickedIds(s, ctx, pickAny), 'give a unit +1/+1 for each different aspect it has', false),
+  }),
+  { ifYouDo: (s, ctx) => {
+    const target = ctx.targetInstanceId ? findUnit(s, ctx.targetInstanceId)?.unit : undefined
+    if (!target) return s
+    const n = new Set(cardOf(s, target)?.aspects ?? []).size
+    return addLastingEffect(s, { targetInstanceId: target.instanceId, power: n, hp: n })
+  } },
+  whenDeployed('Choose a unit. Give an Experience token to that unit for each different aspect among units you control.',
+    (s, ctx) => expChoice(s, ctx, allUnits(s).map(u => u.instanceId), aspectsAmongUnits(s, ctx.owner))),
+))
+registerCard('SOR_008', mergeLeaderSides( // Hera Syndulla
+  waiverBothSides((_s, _owner, c) => printedTrait(c, 'Spectre')),
+  attacks('You may give an Experience token to another unique unit.',
+    (s, ctx) => expChoice(s, ctx, pickedIds(s, ctx, pickAll(pickOther, pickUnique)), 1, true)),
+))
+registerCard('TS26_9', { // First Battle Memorial
+  ...baseEpic('For each friendly leader unit, give an Experience token to a unit.', {
+    usable: (s, ctx) => leaderUnitCount(s, ctx.owner) > 0 && allUnits(s).length > 0,
+    effect: (s, ctx) => memorialOffer(s, ctx, leaderUnitCount(s, ctx.owner)),
+  }),
+  ifYouDo: (s, ctx) => {
+    const left = stepCount(ctx.step) - 1
+    return memorialOffer(ctx.targetInstanceId ? giveToken(s, ctx.targetInstanceId, TOKEN_EXPERIENCE) : s, ctx, left)
+  },
+})
+/** One of First Battle Memorial's per-leader-unit token grants; each offer re-reads the board. */
+function memorialOffer(s: GameState, ctx: Resumable, left: number): GameState {
+  const targets = allUnits(s).map(u => u.instanceId)
+  return left > 0 && targets.length
+    ? pushChoice(s, { kind: 'selectUnitThen', id: `${ctx.sourceInstanceId}-${left}`, controller: ctx.owner, targets, text: `give an Experience token to a unit (${left} left)`, then: resume(ctx, `left:${left}`), optional: true, hookOnDecline: true })
+    : s
+}

@@ -158,7 +158,7 @@ describe('implementation progress', () => {
     expect(ash.done.events).toBe(inAsh(IMPLEMENTED_EVENTS))
     // Keyword-only units + every registered unit ability.
     expect(ash.done.units).toBe(UNIT_GROUPS.find(g => g.id === 'keyword')!.units.length + inAsh(IMPLEMENTED_UNITS))
-    expect(ash.done.tokens).toBe(3) // Shield/Advantage/Mandalorian — Experience is printed but ungranted
+    expect(ash.done.tokens).toBe(4) // Shield, Advantage, Mandalorian and Experience: all four ASH prints
   })
 
   it('credits every set with the cards that play as printed, and never more than it prints', () => {
