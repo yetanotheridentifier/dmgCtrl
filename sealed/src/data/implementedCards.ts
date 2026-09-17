@@ -1256,6 +1256,10 @@ export const IMPLEMENTED_UNITS: UpgradeStatus[] = [
   { id: 'TS26_39', name: 'Captain Vaughn' },
   { id: 'SHD_085', name: 'Superlaser Technician' },
   { id: 'SOR_083', name: 'Superlaser Technician' },
+  { id: 'SEC_261', name: 'Inspiring Senator' },
+  { id: 'LOF_180', name: 'Deceptive Shade' },
+  { id: 'JTL_104', name: 'Raddus' },
+  { id: 'JTL_032', name: 'Director Krennic' },
 ]
 
 /**

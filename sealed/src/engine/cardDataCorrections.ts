@@ -100,6 +100,10 @@ export const CARD_DATA_CORRECTIONS: Record<string, Partial<EngineCard>> = {
   LOF_186: { keywords: [] }, // Marchion Ro: he doubles each friendly unit's Raid, and has none of his own
   LAW_104: { keywords: [] }, // Bodhi Rook: gives a friendly Rebel unit Sentinel
   SOR_156: { keywords: [] }, // Benthic "Two Tubes": gives another friendly Aggression unit Raid 2
+  LOF_180: { keywords: [] }, // Deceptive Shade: gives the next unit played Ambush
+
+  // The other sealed sets, conditional keywords (continued).
+  JTL_104: { keywords: [] }, // Raddus: Sentinel while you control another Resistance card
 
   // Leaders: a deployed side's conditional keyword, or one it only gives to other units.
   TWI_010: { keywords: [] }, // Pre Vizsla: Saboteur while you have 3 or more cards in hand

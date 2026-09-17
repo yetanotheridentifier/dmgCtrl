@@ -6873,3 +6873,34 @@ const resourceDefeatedReady = (s: GameState, ctx: { owner: PlayerId; cardId: str
 const superlaserTechnician = defeated(mayPayWp('You may put this unit into play as a resource and ready it.', 0, 'put this unit into play as a resource and ready it', resourceDefeatedReady))
 registerCard('SHD_085', superlaserTechnician) // Superlaser Technician
 registerCard('SOR_083', superlaserTechnician) // Superlaser Technician (a different card with the same text: 2/1 rather than 2/3)
+
+// C: the next unit played, and a constant ability alongside
+registerCard('SEC_261', defeated(whenPlayed('The next Official unit you play this phase costs 1 less.', (s, ctx) => // Inspiring Senator
+  grantNextUnit(s, ctx.owner, { costDelta: -1, trait: 'Official' }))))
+registerCard('LOF_180', defeated(whenPlayed('The next unit you play this phase gains Ambush for this phase.', (s, ctx) => // Deceptive Shade
+  grantNextUnit(s, ctx.owner, { keywords: [KW.ambush] }))))
+/** "Another Resistance card (unit, upgrade, or leader)" its controller controls. An undeployed leader counts. */
+const controlsAnotherResistanceCard: Holds = (s, u) => {
+  const owner = unitOwner(s, u)
+  if (!owner) return false
+  const resistance = (cardId: string) => printedTrait(s.cards[cardId], 'Resistance')
+  return friendliesOf(s, u).some(x => x.instanceId !== u.instanceId && unitHasTrait(s, x, 'Resistance'))
+    || allUnits(s).some(x => x.upgrades.some(up => up.owner === owner && resistance(up.cardId)))
+    || resistance(s.players[owner].leader.cardId)
+}
+registerCard('JTL_104', { // Raddus
+  ...gains(controlsAnotherResistanceCard, KW.sentinel),
+  // His power as he last was in play.
+  ...whenDefeated("Deal damage equal to this unit's power to an enemy unit.", (s, ctx) => {
+    const power = ctx.defeatedUnit ? effectivePower(s, ctx.defeatedUnit) : 0
+    return power > 0 ? damageChoice(s, ctx, power, s.players[opponentOf(ctx.owner)].units) : s
+  }),
+})
+/** A card whose own printed abilities include a When Defeated. */
+const hasWhenDefeated = (cardId: string): boolean => getCardDefinition(cardId)?.abilities?.some(a => a.trigger === 'whenDefeated') ?? false
+registerCard('JTL_032', { // Director Krennic
+  // Units are played only in the action phase, so this phase's plays are the round's.
+  costDiscount: (s, _source, ctx) =>
+    (ctx.card.type === 'unit' && hasWhenDefeated(ctx.card.id)
+      && !cardsPlayedThisPhase(s, ctx.owner).some(id => s.cards[id]?.type === 'unit' && hasWhenDefeated(id)) ? -1 : 0),
+})

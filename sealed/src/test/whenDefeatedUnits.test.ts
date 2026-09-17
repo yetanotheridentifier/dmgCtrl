@@ -1,14 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from '../engine/resolve'
+import { effectiveCost } from '../engine/legalMoves'
 import { getCardDefinition } from '../engine/abilities'
 import { effectivePower, effectiveHp } from '../engine/stats'
+import { unitHasKeyword } from '../engine/keywords'
 import { defeatUnit } from '../engine/combat'
 import { normaliseCard } from '../engine/cardDb'
 import { hasToken, TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import { poolFor } from '../bench/setPools'
 import '../engine/cardDefinitions' // side effect: registers card behaviours
 import { state, player, unit as fixtureUnit, card, ready, CARDS } from './helpers/engineFixtures'
-import type { EngineCard, GameState, PendingChoice, PlayerId, UnitState } from '../engine/types'
+import type { EngineCard, GameState, PendingChoice, PhaseEvents, PlayerId, UnitState } from '../engine/types'
 
 /**
  * Units with a "When Defeated" ability, in groups taken whole: simple targets, draws and base damage;
@@ -28,7 +30,11 @@ const SHIPPED = [
   'LOF_057', 'SHD_157', 'LOF_213', 'JTL_071',
   // B: two steps, or a choice of modes
   'SEC_136', 'SEC_207', 'SOR_204', 'SOR_045', 'SOR_145', 'LOF_200', 'TS26_39', 'SHD_085', 'SOR_083',
+  // C: the next unit played, and a constant ability alongside
+  'SEC_261', 'LOF_180', 'JTL_104',
 ]
+/** Not When Defeated itself, but reads it: the first unit played each round that has one costs less. */
+const KRENNIC = 'JTL_032'
 /** Scoped by the triage but lifted out to the ticket that owns their blocker. */
 const LIFTED = ['JTL_221']
 
@@ -43,7 +49,7 @@ const real = (id: string): EngineCard => {
 const src = (id: string, over: Partial<EngineCard> = {}) => card({ id, arena: 'ground', cost: 2, power: 2, hp: 8, ...over })
 const F: Record<string, EngineCard> = {
   ...CARDS,
-  ...Object.fromEntries(SHIPPED.map(id => [id, real(id)])),
+  ...Object.fromEntries([...SHIPPED, KRENNIC].map(id => [id, real(id)])),
   GRD: src('GRD'),
   GRD2: src('GRD2'),
   SPC: src('SPC', { arena: 'space' }),
@@ -58,6 +64,10 @@ const F: Record<string, EngineCard> = {
   TROOPER: src('TROOPER', { traits: ['TROOPER'] }),
   FORCE_U: src('FORCE_U', { traits: ['FORCE'] }),
   EV: card({ id: 'EV', type: 'event', cost: 1, traits: ['FORCE'] }),
+  OFFICIAL: src('OFFICIAL', { traits: ['OFFICIAL'] }),
+  RES: src('RES', { traits: ['RESISTANCE'] }),
+  RES_UPG: card({ id: 'RES_UPG', type: 'upgrade', cost: 1, power: 0, hp: 0, traits: ['RESISTANCE'] }),
+  RES_L: card({ id: 'RES_L', type: 'leader', cost: 6, power: 4, hp: 6, traits: ['RESISTANCE'] }),
   L_UNIT: card({ id: 'L_UNIT', type: 'leader', cost: 5, power: 1, hp: 6 }),
 }
 
@@ -351,5 +361,54 @@ describe('When Defeated units, B: two steps, or a choice of modes', () => {
     expect(done.players.player.resources).toHaveLength(3)
     expect(done.players.player.resources[2]).toEqual({ cardId: id, exhausted: false })
     expect(skip(s).players.player.discard).toEqual([id])
+  })
+})
+
+describe('When Defeated units, C: the next unit played, and a constant ability alongside', () => {
+  const costOf = (s: GameState, id: string) => effectiveCost(s, 'player', s.cards[id])
+  const playedThisPhase = (mine: string[], theirs: string[]): PhaseEvents => ({
+    enteredPlay: { player: [], opponent: [] }, defeated: { player: [], opponent: [] }, basesAttacked: [], basesDamaged: [],
+    upgradesDefeated: [], damagedUnits: [], leftPlay: { player: [], opponent: [] }, played: { player: mine, opponent: theirs },
+    leaderLeftPlay: [],
+  })
+
+  it('Inspiring Senator (SEC_261) makes the next Official unit played this phase cost 1 less', () => {
+    const before = board({ units: [unit('wd', 'SEC_261')] })
+    const after = kill(before)
+    expect(costOf(after, 'OFFICIAL')).toBe(costOf(before, 'OFFICIAL') - 1)
+    expect(costOf(after, 'GRD')).toBe(costOf(before, 'GRD'))
+  })
+
+  it('Deceptive Shade (LOF_180) prints no Ambush, and gives Ambush to the next unit played this phase', () => {
+    expect(F.LOF_180.keywords).toEqual([])
+    const s = kill(board({ units: [unit('wd', 'LOF_180')], hand: ['GRD'] }, { units: [unit('e', 'GRD')] }))
+    const played = resolve(s, { type: 'playUnit', handIndex: 0 })
+    expect(choice(played)).toMatchObject({ kind: 'ambush', controller: 'player' })
+  })
+
+  it('Raddus (JTL_104) has Sentinel only while his controller has another Resistance card: a unit, an upgrade or the leader', () => {
+    const sentinel = (s: GameState) => unitHasKeyword(s, U(s, 'r')!, 'Sentinel')
+    expect(F.JTL_104.keywords).toEqual([])
+    expect(sentinel(board({ units: [unit('r', 'JTL_104')] }, { units: [unit('e', 'RES')] }))).toBe(false)
+    expect(sentinel(board({ units: [unit('r', 'JTL_104'), unit('f', 'RES')] }))).toBe(true)
+    expect(sentinel(board({ units: [unit('r', 'JTL_104'), unit('f', 'GRD', { upgrades: [{ cardId: 'RES_UPG', owner: 'player' }] })] }))).toBe(true)
+    expect(sentinel(board({ units: [unit('r', 'JTL_104')], leader: { cardId: 'RES_L', deployed: false, epicActionUsed: false, exhausted: false } }))).toBe(true)
+  })
+
+  it('Raddus (JTL_104) deals damage equal to his power to an enemy unit when defeated', () => {
+    const s = kill(board({ units: [unit('wd', 'JTL_104'), unit('f', 'GRD')] }, { units: [unit('e', 'GRD')] }), 'wd')
+    expect(choice(s)).toMatchObject({ kind: 'selectDamageTarget', amount: 8, unitTargets: ['e'], baseTargets: [] })
+  })
+
+  it('Director Krennic (JTL_032) makes the first unit with a When Defeated ability played each round cost 1 less', () => {
+    const without = board()
+    const withKrennic = board({ units: [unit('k', KRENNIC)] })
+    expect(costOf(withKrennic, 'LAW_189')).toBe(costOf(without, 'LAW_189') - 1)
+    expect(costOf(withKrennic, 'GRD')).toBe(costOf(without, 'GRD'))
+    // Units are played only in the action phase, so the phase's plays are the round's.
+    const playedOne = board({ units: [unit('k', KRENNIC)] }, {}, { phaseEvents: playedThisPhase(['TWI_131'], []) })
+    expect(costOf(playedOne, 'LAW_189')).toBe(costOf(without, 'LAW_189'))
+    const playedOther = board({ units: [unit('k', KRENNIC)] }, {}, { phaseEvents: playedThisPhase(['GRD'], ['TWI_131']) })
+    expect(costOf(playedOther, 'LAW_189')).toBe(costOf(without, 'LAW_189') - 1)
   })
 })
