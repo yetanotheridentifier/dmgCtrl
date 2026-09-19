@@ -30,7 +30,7 @@ export const TRIAGE_API_BASE = 'https://worker.dmgctrl.app'
 
 /** Keywords the engine dispatches today. */
 export const IMPLEMENTED_KEYWORDS: ReadonlySet<string> = new Set([
-  'Ambush', 'Grit', 'Overwhelm', 'Raid', 'Restore', 'Saboteur', 'Sentinel', 'Shielded', 'Hidden', 'Support',
+  'Ambush', 'Grit', 'Overwhelm', 'Raid', 'Restore', 'Saboteur', 'Sentinel', 'Shielded', 'Hidden', 'Support', 'Fortify',
 ])
 
 /** Trigger points the ability framework dispatches today (see `docs/abilities.md`). */
@@ -55,9 +55,6 @@ const NEW_MECHANICS: readonly (readonly [string, RegExp])[] = [
   ['force-token', /\bthe Force\b|\bForce token/i],
   // A token that pays costs, not a unit or an upgrade.
   ['credit-token', /\bCredit tokens?\b/i],
-  // An upgrade attached to a base rather than a unit: the Fortify keyword (see CANONICAL_BLOCKERS), and
-  // the cards that read a base's upgrades or name the Fortification trait.
-  ['base-upgrade', /\bupgrades? on (?:your|a|this) base\b|\bupgraded base\b|\bbase is upgraded\b|\bwith Fortify\b|\bFortification\b/i],
   // Revealing cards from hand by aspect icon.
   ['disclose', /\bdisclosed?\b/i],
   // Damage the receiving player assigns among their base and units.
@@ -96,7 +93,6 @@ const CANONICAL_BLOCKERS: ReadonlyMap<string, string> = new Map([
   ['trigger:When a friendly Force unit attacks', 'force-token'],
   ['trigger:When played using Smuggle', 'kw:Smuggle'],
   ['trigger:Coordinate - When Played', 'kw:Coordinate'],
-  ['kw:Fortify', 'base-upgrade'],
 ])
 
 /**
@@ -259,9 +255,11 @@ export function triage(pool: SwuCard[]): TriageReport {
     for (const k of newKeywords) blockers.add(`kw:${k}`)
     for (const h of triggerHeads(text)) {
       const norm = h.toLowerCase()
-      // A base upgrade handing its base an ability is the base-upgrade mechanic itself, not a unit's
-      // granted ability block.
-      if (GRANTED_ABILITY_LEAD_IN.test(h)) blockers.add(/^Attached base\b/i.test(h) ? 'base-upgrade' : 'granted-ability-block')
+      // A base upgrade handing its base an ability is how Fortify upgrades work, which the engine does,
+      // not a unit's granted ability block.
+      if (GRANTED_ABILITY_LEAD_IN.test(h)) {
+        if (!/^Attached base\b/i.test(h)) blockers.add('granted-ability-block')
+      }
       // A slash joins two trigger points ("When Played/On Attack").
       else if (norm.includes('/')) blockers.add('trigger:compound')
       else if (!EXISTING_TRIGGERS.has(norm)) blockers.add(`trigger:${h}`)

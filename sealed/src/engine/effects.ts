@@ -1,5 +1,5 @@
 import type { DamageSource, GameState, NextUnitGrant, PendingTrigger, PlayerId, TriggerContext, UnitState } from './types'
-import { updatePlayer, pushChoice, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, abilityCardIds } from './types'
+import { updatePlayer, pushChoice, recordBaseDamaged, recordCardsDrawn, recordTokenCreated, recordUpgradeDefeated, recordUnitEntered, recordUnitHealed, recordUnitLeftPlay, abilityCardIds, baseAbilityCardIds } from './types'
 import { TOKEN_SHIELD } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
 import type { TriggerPoint } from './abilities'
@@ -232,6 +232,13 @@ export function grantNextUnit(state: GameState, owner: PlayerId, grant: NextUnit
 
 /** Deal `amount` damage to a player's base. The caller runs the win check. */
 export function dealDamageToBase(state: GameState, player: PlayerId, amount: number, source?: DamageSource): GameState {
+  // The base's own prevention (Alliance Shield Generator), which settles the damage entirely when it acts.
+  if (amount > 0 && !damageIsUnpreventable(state, source)) {
+    for (const cardId of baseAbilityCardIds(state.players[player].base)) {
+      const intercepted = getCardDefinition(cardId)?.baseAbilities?.interceptDamage?.(state, player, amount)
+      if (intercepted) return intercepted
+    }
+  }
   const p = state.players[player]
   const dealt = baseDamageAfterPrevention(state, player, amount, source)
   // A shielded base used its prevention up on this damage.
@@ -625,6 +632,25 @@ export function defeatUpgrade(state: GameState, instanceId: string, cardId: stri
   if (state.cards[cardId]?.type !== 'token') {
     const op = next.players[removed.owner]
     next = { ...next, players: { ...next.players, [removed.owner]: { ...op, discard: [...op.discard, cardId] } } }
+  }
+  return fireUpgradesDefeated(next, [removed.owner])
+}
+
+/**
+ * Defeat the first upgrade with `cardId` on `baseOwner`'s base: the base-zone form of `defeatUpgrade`.
+ * A card upgrade goes to its OWNER's discard pile, a token ceases to exist, and "when a friendly upgrade
+ * is defeated" fires for its owner. A no-op if the upgrade is no longer there.
+ */
+export function defeatBaseUpgrade(state: GameState, baseOwner: PlayerId, cardId: string): GameState {
+  const base = state.players[baseOwner].base
+  const idx = (base.upgrades ?? []).findIndex(a => a.cardId === cardId)
+  if (idx === -1) return state
+  const removed = base.upgrades![idx]
+  const left = base.upgrades!.filter((_, i) => i !== idx)
+  let next = updatePlayer(state, baseOwner, { base: { ...base, upgrades: left.length > 0 ? left : undefined } })
+  if (state.cards[cardId]?.type !== 'token') {
+    const op = next.players[removed.owner]
+    next = updatePlayer(next, removed.owner, { discard: [...op.discard, cardId] })
   }
   return fireUpgradesDefeated(next, [removed.owner])
 }

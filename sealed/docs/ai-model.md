@@ -463,6 +463,14 @@ precisely so they sit below the public resolution.
 Halve a price to read it against them: what made `blockedReach: 12` wrong was never the digit but that
 it was three times a whole unit, and a unit is now 8.
 
+### Upgrades on a base are priced like upgrades on a unit
+
+No term reads a base's upgrades (Fortify). They reach the evaluation the way an upgrade on a unit does:
+a constant through the units it changes (Landing Pad's +1/+0 is space units' power, which a test pins),
+and a triggered or action ability not at all, exactly as an upgrade that hands its host a triggered
+ability is unpriced. So a base upgrade whose value is all in its ability costs a card from hand and
+shows nothing on the board, and the search plays it only where its When Played or a later line pays.
+
 ### Shields are invisible, and making them visible does not help
 
 A token's **stat line decides whether the evaluation can see it**. Attached upgrades add their printed

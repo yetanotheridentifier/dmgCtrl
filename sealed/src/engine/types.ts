@@ -174,6 +174,25 @@ export interface BaseState {
   damage: number
   /** The base's "Epic Action" has been used: once each game, like a leader's deploy (CR 2.5). */
   epicActionUsed?: boolean
+  /**
+   * Upgrades attached to the base (Fortify: "Attach this to your base, not a unit"). Absent means none.
+   * Each gives the base its ability, which belongs to the base's controller: see `baseAbilityCardIds`.
+   * A card upgrade goes to its owner's discard pile when defeated, as one on a unit does.
+   */
+  upgrades?: UpgradeAttachment[]
+}
+
+/** True if a card is played onto its player's base rather than onto a unit (the Fortify keyword). */
+export function isFortify(card: EngineCard | undefined): boolean {
+  return card?.type === 'upgrade' && card.keywords.some(k => k.name === 'Fortify')
+}
+
+/**
+ * Every card that supplies a base's abilities: the base card itself and each upgrade attached to it.
+ * The base-zone counterpart of `abilityCardIds`, and the one place that set is spelled out.
+ */
+export function baseAbilityCardIds(base: BaseState): string[] {
+  return [base.cardId, ...(base.upgrades ?? []).map(u => u.cardId)]
 }
 
 export interface PlayerState {
@@ -508,6 +527,11 @@ export interface LastingEffect {
    * the regroup phase ("this round (including during the regroup phase)"). Dropped as the next round starts.
    */
   untilRoundEnd?: boolean
+  /**
+   * The unit doesn't ready during the next regroup phase (Carbonite Chamber). Narrower than `cannotReady`:
+   * an ability may still ready it. Set with `untilRoundEnd`, so it lasts through that ready step and no longer.
+   */
+  skipsRegroupReady?: boolean
 }
 
 /**
@@ -581,6 +605,11 @@ export interface PhaseEvents {
    * the unit it lands on, which is who created it for every card that gives one to its own side.
    */
   tokensCreated?: PlayerId[]
+  /**
+   * Base action abilities each player has used this phase, as `${cardId}#${index}` once per use (Heavy
+   * Ion Cannon: "Use this ability only once each phase"). Counted against the copies on the base.
+   */
+  baseActionsUsed?: Partial<Record<PlayerId, string[]>>
 }
 
 /**
@@ -619,6 +648,8 @@ export interface TriggerContext {
   targetInstanceId?: string
   /** `whenUpgradeAttached`: the upgrade was played (from any zone) rather than created or moved by an ability. */
   upgradePlayed?: boolean
+  /** `whenPlayUpgrade`: the upgrade card just played. */
+  playedCardId?: string
   /** `whenFriendlyDamagedSurvives`: each unit that was dealt damage and survived, with how much (Jabba the Hutt). */
   damagedSurvivors?: { instanceId: string; amount: number }[]
 }
@@ -1216,6 +1247,13 @@ export function recordTokenCreated(state: GameState, owner: PlayerId): GameState
   const events = state.phaseEvents ?? emptyPhaseEvents()
   const created = events.tokensCreated ?? []
   return created.includes(owner) ? state : { ...state, phaseEvents: { ...events, tokensCreated: [...created, owner] } }
+}
+
+/** Note one use of a base action this phase, for "use this ability only once each phase" (Heavy Ion Cannon). */
+export function recordBaseActionUsed(state: GameState, owner: PlayerId, key: string): GameState {
+  const events = state.phaseEvents ?? emptyPhaseEvents()
+  const used = events.baseActionsUsed ?? {}
+  return { ...state, phaseEvents: { ...events, baseActionsUsed: { ...used, [owner]: [...(used[owner] ?? []), key] } } }
 }
 
 /** Whether `owner` created a token this phase (The Client). */

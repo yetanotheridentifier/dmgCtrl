@@ -20,6 +20,7 @@ const SWU_CARDS: SwuCard[] = [
   // would go negative without clamping.
   { Set: 'TST', Number: '900', Name: 'Big Test Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '0', Power: '40', HP: '30', FrontArt: 'https://cdn.swu-db.com/images/cards/TST/900.png' },
   { Set: 'TST', Number: '901', Name: 'Pricey Unit', Type: 'Unit', Arenas: ['Ground'], Cost: '9', Power: '1', HP: '1' },
+  { Set: 'TST', Number: '950', Name: 'Test Bunker', Type: 'Upgrade', Keywords: ['Fortify'], Cost: '0' },
 ]
 
 // Deal order (identity shuffle): 901, 901, 901, 900, 900, 900.
@@ -169,6 +170,21 @@ describe('GameScreen', () => {
     expect(zoom.style.visibility).not.toBe('hidden')
     expect(zoom.style.left).toMatch(/px$/) // measured against its anchor, not left centred
     fireEvent.keyUp(window, { key: 'Shift', shiftKey: false })
+  })
+
+  it('plays a Fortify upgrade onto your base with one click, and names it on the base', async () => {
+    // Dealt 901, 901, 950, 900 ...; the two 901s are resourced, leaving the Fortify card first in hand.
+    const deck: SavedDeck = { ...DECK, cards: [{ id: 'TST_901', count: 2 }, { id: 'TST_950', count: 1 }, { id: 'TST_900', count: 27 }] }
+    const user = userEvent.setup()
+    renderGame(<GameScreen deck={deck} opponentDeck={DECK} onExit={vi.fn()} onHelp={vi.fn()} gameOptions={OPTS} />)
+    await waitFor(() => expect(screen.getByTestId('game-board')).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /keep hand/i }))
+    await user.click(screen.getByTestId('hand-card-0'))
+    await user.click(screen.getByTestId('hand-card-0'))
+    expect(screen.queryByTestId('player-base-upgrades')).toBeNull()
+
+    await user.click(screen.getByTestId('hand-card-0'))
+    expect(within(screen.getByTestId('player-base-upgrades')).getByText('Test Bunker')).toBeInTheDocument()
   })
 
   /** #366: undo is hidden rather than disabled when there is nothing to take back. */

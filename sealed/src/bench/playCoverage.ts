@@ -78,6 +78,8 @@ export function observeState(cov: PlayCoverage, state: GameState): void {
       // Upgrades count either way, including those attached to a deployed leader.
       for (const up of u.upgrades) cov.played.add(up.cardId)
     }
+    // And so do those on a base (Fortify).
+    for (const up of p.base.upgrades ?? []) cov.played.add(up.cardId)
   }
 }
 
@@ -96,7 +98,7 @@ export function observeState(cov: PlayCoverage, state: GameState): void {
  * Deliberately narrow. `resourceCard` and `setupResource` carry a `handIndex` of exactly the same
  * shape and are not plays, so anything else is ignored rather than guessed at.
  */
-const PLAYS_FROM_HAND = new Set(['playUnit', 'playUpgrade', 'playEvent'])
+const PLAYS_FROM_HAND = new Set(['playUnit', 'playUpgrade', 'playBaseUpgrade', 'playEvent'])
 
 export function observeAction(cov: PlayCoverage, state: GameState, action: Action): void {
   if (!PLAYS_FROM_HAND.has(action.type)) return

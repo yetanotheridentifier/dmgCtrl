@@ -28,7 +28,7 @@ import { TOKEN_SHIELD, TOKEN_EXPERIENCE, TOKEN_ADVANTAGE, TOKEN_WEAKNESS } from 
 import { unitHasKeyword, auraContributions } from '../engine/keywords'
 import { lastingEffectTotals } from '../engine/types'
 import { useCardZoom } from './useCardZoom'
-import { DescribedParts } from './cardRef'
+import { CardRef, DescribedParts } from './cardRef'
 import { CardZoomPopover } from './cardZoom'
 import { DeckPile, ResourceStack, DiscardPile, OpponentHand, EmptySlot } from './mat'
 
@@ -784,6 +784,18 @@ function BaseCard({ state, side, onAttack }: {
       >
         {shown}
       </span>
+      {/* Upgrades on the base (Fortify), named along its foot rather than stacked behind it as a unit's
+          are: the base is landscape and sits between both boards, so a stack would run into either one.
+          Each name zooms to the card on hover. */}
+      {(p.base.upgrades ?? []).length > 0 && (
+        <ul data-testid={`${side}-base-upgrades`} className="absolute inset-x-1 bottom-1 flex flex-wrap justify-center gap-1 text-[10px] leading-tight">
+          {p.base.upgrades!.map((up, i) => (
+            <li key={`${up.cardId}-${i}`} className="rounded bg-surface-solid/85 px-1">
+              <CardRef state={state} cardId={up.cardId} controller={side} text={state.cards[up.cardId]?.name ?? up.cardId} />
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
   return (
@@ -1184,7 +1196,8 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     const oppHandChoiceId = gameState.pendingChoices?.find(c => c.kind === 'lookAtHand' && c.controller === 'player')?.id
     const handAction = new Map<number, Action>()
     for (const a of legal) {
-      if (a.type === 'playUnit' || a.type === 'playEvent' || a.type === 'resourceCard' || a.type === 'setupResource') handAction.set(a.handIndex, a)
+      // A Fortify upgrade has one place to go, its player's base, so clicking it plays it as a unit is played.
+      if (a.type === 'playUnit' || a.type === 'playEvent' || a.type === 'playBaseUpgrade' || a.type === 'resourceCard' || a.type === 'setupResource') handAction.set(a.handIndex, a)
       // "Play a unit from hand" ability choice: the affordable hand cards become clickable.
       else if (a.type === 'acceptChoice' && a.handIndex !== undefined && a.choiceId !== oppHandChoiceId) handAction.set(a.handIndex, a)
     }
@@ -1470,7 +1483,7 @@ export default function GameScreen({ deck, opponentDeck, onExit, onHelp, gameOpt
     // mulligan, keep hand, take the initiative, pass (and skip/deploy).
     // Leader abilities are driven from the leader card; a board-target choice is driven
     // from the board + a single Decline button — neither belongs in the action menu.
-    const CLICK_HANDLED: Action['type'][] = ['playUnit', 'playEvent', 'playUpgrade', 'attack', 'resourceCard', 'setupResource', 'useLeaderAbility']
+    const CLICK_HANDLED: Action['type'][] = ['playUnit', 'playEvent', 'playUpgrade', 'playBaseUpgrade', 'attack', 'resourceCard', 'setupResource', 'useLeaderAbility']
     const choiceBoardActions = targetChoice ? legal.filter(a => (a.type === 'acceptChoice' || a.type === 'skipTrigger') && a.choiceId === targetChoice.id) : []
     // "Play a unit from hand" accepts are clicked on the hand card, not the menu.
     const isHandPlay = (a: Action) => a.type === 'acceptChoice' && a.handIndex !== undefined

@@ -1022,8 +1022,8 @@ Experience tokens ship, delete that entry and every card it was blocking reclass
 A colon-led head that is not a trigger point but a lead-in handing a quoted ability to a unit ("Attached
 unit gains:", "For this attack, it gets +2/+0 and gains:", "it gains Sentinel and:") is read by its
 ending, not its spelling, and blocks the card on `granted-ability-block` rather than on a trigger head.
-The one exception is "Attached base gains:", which blocks on `base-upgrade`: an upgrade attached to a
-base (the Fortify keyword) handing the base an ability is that mechanic, not a unit's granted block.
+The one exception is "Attached base gains:", which blocks on nothing: an upgrade attached to a base
+(the Fortify keyword) handing the base an ability is how base upgrades work, which the engine does.
 
 ### Why there are fallout probes
 

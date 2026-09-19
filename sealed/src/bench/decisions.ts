@@ -1294,7 +1294,7 @@ function decisionKind(s: GameState, action: Action): string {
   if (hasPendingChoices(s)) return 'answer'
   switch (action.type) {
     case 'attack': return 'attack'
-    case 'playUnit': case 'playEvent': case 'playUpgrade': return 'play'
+    case 'playUnit': case 'playEvent': case 'playUpgrade': case 'playBaseUpgrade': return 'play'
     case 'resourceCard': case 'skipResource': return 'resource'
     case 'takeInitiative': return 'initiative'
     case 'pass': return 'pass'
@@ -1627,7 +1627,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
 
         record(resourcing, withSearch.filter(x => x.m.type === 'resourceCard'))
         record(attacks, withSearch.filter(x => x.m.type === 'attack'))
-        record(plays, withSearch.filter(x => x.m.type === 'playUnit' || x.m.type === 'playEvent' || x.m.type === 'playUpgrade'))
+        record(plays, withSearch.filter(x => x.m.type === 'playUnit' || x.m.type === 'playEvent' || x.m.type === 'playUpgrade' || x.m.type === 'playBaseUpgrade'))
         // With a choice outstanding, `legalMoves` returns nothing BUT its answers, so the whole
         // candidate set is the decision. The one kind where the options were handed to the player by
         // a card rather than chosen, which is why it is measured separately from the plays above.
@@ -1851,7 +1851,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
         // played twenty-five is being held situationally, which is correct play; declined thirty times
         // and never played is a card the bot cannot use. Counted for every play, then merged onto the
         // declined rows at the end, so ordering within a game cannot lose one.
-        if (action.type === 'playUnit' || action.type === 'playUpgrade' || action.type === 'playEvent') {
+        if (action.type === 'playUnit' || action.type === 'playUpgrade' || action.type === 'playBaseUpgrade' || action.type === 'playEvent') {
           const playedId = s.players[me].hand[action.handIndex]
           if (playedId !== undefined) {
             playedByCard.set(playedId, (playedByCard.get(playedId) ?? 0) + 1)
@@ -1902,7 +1902,7 @@ export function runDecisions(config: DecisionConfig): DecisionReport {
               // them is playable, so counting cost would report the bot declining plays that do not
               // exist. The engine's play restrictions already encode every one of those conditions.
               const playable = new Set(
-                moves.filter(m => m.type === 'playUnit' || m.type === 'playUpgrade' || m.type === 'playEvent')
+                moves.filter(m => m.type === 'playUnit' || m.type === 'playUpgrade' || m.type === 'playBaseUpgrade' || m.type === 'playEvent')
                   .map(m => (m as { handIndex: number }).handIndex),
               )
               unspentPasses++

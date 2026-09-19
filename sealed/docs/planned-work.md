@@ -166,17 +166,19 @@ Two phases:
   When Defeated) and the flipping Chancellor Palpatine are on #477. **Weakness tokens are finished**
   (#649), HMW's -1/-1 token: its 18 cards and five more it touched (Beast-token cards, Inferno Squad's
   "When Played/When Defeated" and Nuvo Vindi's one-off trigger), with Tireless Magnaguard on #471 (play
-  from discard). Next are Credit tokens (#602, 29), Disclose (#603, 19), Fortify, an upgrade attached to a
-  base (#650, 18), and indirect damage (#604, 15).
+  from discard). **Fortify is finished** (#650), HMW's upgrades attached to a base: 17 of its 18 cards and
+  Trap Field and Insurgent Camp, with Vice Admiral Rampart on #477 (a replacement for a base upgrade's
+  defeat) and Beast Lair on #653 ("when the action phase starts"). Next are Credit tokens (#602, 29),
+  Disclose (#603, 19), and indirect damage (#604, 15).
 
 **Homeworlds (HMW), 272 cards, is accepted and triaged**, and of its abilities the Beast-token cards
-(with the token units, #605) and the Weakness-token cards (#649) are built. 58 play
+(with the token units, #605), the Weakness-token cards (#649) and the Fortify cards (#650) are built. 58 play
 as printed (all 16 bases are vanilla). Of the 214 with ability text, **128 are blocked by nothing** once
 four the triage passed are lifted to their mechanic's ticket, cut like Phase 1 by trigger point: When
 Played units and upgrades (#651, 50), constant abilities (#652, 39), and events, leaders and the
 remaining trigger points (#653, 39). Each names the cards to read first, and a remainder is likely.
-**70 were blocked by exactly one thing**: Fortify (#650, 18) is new, the 18 Weakness and 14
-Beast-token cards are built, and the rest are on #463 compound triggers (3), #474 a new trigger point (3),
+**70 were blocked by exactly one thing**: the 18 Fortify, 18 Weakness and 14 Beast-token cards are
+built (less two Fortify cards lifted, above), and the rest are on #463 compound triggers (3), #474 a new trigger point (3),
 #471 play from discard (2), #468 (1), #475 (1) and #477's one-offs (10). 16 are multi-blocked, on #477.
 
 **Batches shrink, never grow.** A card that turns out not to fit is lifted into #477 and the batch

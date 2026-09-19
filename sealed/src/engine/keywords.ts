@@ -1,5 +1,5 @@
 import type { GameState, KeywordInstance, UnitState, CombatContext } from './types'
-import { lastingEffectTotals, abilityCardIds } from './types'
+import { lastingEffectTotals, abilityCardIds, baseAbilityCardIds } from './types'
 import { getCardDefinition } from './abilities'
 import type { AttackContext, AuraContribution, StatModContext } from './abilities'
 
@@ -231,7 +231,9 @@ export function auraContributions(state: GameState, target: UnitState, combat?: 
     const leader = state.players[owner].leader
     // An undeployed leader and the base are not units, so each contributes for its controller.
     if (!leader.deployed) add(getCardDefinition(leader.cardId)?.leaderAbilities?.aura?.(state, owner, target, sameController, combat))
-    add(getCardDefinition(state.players[owner].base.cardId)?.baseAbilities?.aura?.(state, owner, target, sameController, combat))
+    for (const cardId of baseAbilityCardIds(state.players[owner].base)) {
+      add(getCardDefinition(cardId)?.baseAbilities?.aura?.(state, owner, target, sameController, combat))
+    }
     for (const source of state.players[owner].units) {
       for (const cardId of abilityCardIds(source)) {
         add(getCardDefinition(cardId)?.aura?.(state, source, target, sameController, combat))

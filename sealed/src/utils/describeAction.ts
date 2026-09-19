@@ -70,6 +70,12 @@ export function describeActionParts(state: GameState, by: PlayerId, action: Acti
       const target = unitRef(state, action.targetInstanceId)
       return ['Play ', ref, ` (${effectiveCost(state, by, card, targetUnit)})`, ...(target ? [' on ', target] : [])]
     }
+    case 'playBaseUpgrade': {
+      const ref = handCardRef(state, by, action.handIndex)
+      const card = state.cards[state.players[by].hand[action.handIndex]]
+      if (!ref || !card) return plain()
+      return ['Play ', ref, ` (${effectiveCost(state, by, card)}) on your base`]
+    }
     case 'attack': {
       const attacker = unitRef(state, action.attackerId)
       if (!attacker) return plain()
@@ -120,6 +126,11 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       const target = anyUnitName(state, action.targetInstanceId)
       return `Play ${card.name} (${effectiveCost(state, by, card, targetUnit)})${target ? ` on ${target}` : ''}`
     }
+    case 'playBaseUpgrade': {
+      const card = state.cards[state.players[by].hand[action.handIndex]]
+      if (!card) return 'Play an upgrade'
+      return `Play ${card.name} (${effectiveCost(state, by, card)}) on your base`
+    }
     case 'attack': {
       const attacker = unitName(state, by, action.attackerId)
       if (action.target.kind === 'base') return `Attack base with ${attacker}`
@@ -137,6 +148,7 @@ export function describeAction(state: GameState, by: PlayerId, action: Action, o
       return `${name} ability${target ? ` → ${target}` : ''}`
     }
     case 'useBaseAbility': {
+      if (action.cardId !== undefined) return `Use ${state.cards[action.cardId]?.name ?? 'base upgrade'}`
       const name = state.cards[state.players[by].base.cardId]?.name ?? 'base'
       return `${name} epic action`
     }

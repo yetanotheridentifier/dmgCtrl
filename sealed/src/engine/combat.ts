@@ -6,7 +6,7 @@ import { effectiveHp } from './stats'
 import type { StatContext } from './stats'
 import { TOKEN_SHIELD, removeFirst, hasToken } from './tokenUpgrades'
 import { isTokenCard } from './tokenUnits'
-import { collectUnitTriggers, getCardDefinition } from './abilities'
+import { collectBaseTriggers, collectUnitTriggers, getCardDefinition } from './abilities'
 import { fireUpgradesDefeated, fireUnitsTrigger, damageIsUnpreventable, releaseCaptured } from './effects'
 
 /**
@@ -211,6 +211,8 @@ function finishDefeats(state: GameState, owner: PlayerId, survivors: UnitState[]
     for (const u of result.players[owner].units) {
       owed.push(...collectUnitTriggers(result, 'whenFriendlyUnitDefeated', u, owner, { defeatedUnit: dead }))
     }
+    // ... and so does their base (Sinister War Memorial).
+    owed.push(...collectBaseTriggers(result, 'whenFriendlyUnitDefeated', owner, { defeatedUnit: dead }))
     // "When an enemy unit is defeated" (Chimaera) — the other side reacts.
     for (const u of result.players[opponentOf(owner)].units) {
       owed.push(...collectUnitTriggers(result, 'whenEnemyUnitDefeated', u, opponentOf(owner), { defeatedUnit: dead }))
