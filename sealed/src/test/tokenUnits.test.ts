@@ -7,7 +7,7 @@ import { normaliseCard } from '../engine/cardDb'
 import { defeatUnit } from '../engine/combat'
 import { fireUnitsTrigger } from '../engine/effects'
 import { unitHasKeyword, unitCannotAttackBases } from '../engine/keywords'
-import { TOKEN_EXPERIENCE, TOKEN_SHIELD } from '../engine/tokenUpgrades'
+import { TOKEN_ADVANTAGE, TOKEN_EXPERIENCE, TOKEN_SHIELD } from '../engine/tokenUpgrades'
 import {
   TOKEN_UNIT_CARDS, TOKEN_SPY, TOKEN_X_WING, TOKEN_TIE_FIGHTER, TOKEN_CLONE_TROOPER, TOKEN_BATTLE_DROID, TOKEN_BEAST, isTokenCard,
 } from '../engine/tokenUnits'
@@ -80,6 +80,10 @@ const F: Record<string, EngineCard> = {
   EV_CHEAP: card({ id: 'EV_CHEAP', type: 'event', cost: 3 }),
   EV_PRICEY: card({ id: 'EV_PRICEY', type: 'event', cost: 4 }),
   WD_UNIT: src('WD_UNIT'),
+  // Listeners for a unit arriving, stubbed: their behaviour is what is under test, not their stats.
+  ASH_017: card({ id: 'ASH_017', name: 'Greef Karga', type: 'leader', cost: 6, power: 3, hp: 6 }),
+  ASH_041: src('ASH_041', { name: 'Outcast' }),
+  SHD_096: src('SHD_096', { name: 'Maz Kanata' }),
 }
 
 const unit = (instanceId: string, cardId: string, over: Partial<UnitState> = {}): UnitState =>
@@ -710,5 +714,50 @@ describe('Token units, D: leaders', () => {
     expect(effectiveHp(deployed, clone)).toBe(3)
     const rex = deployed.players.player.units.find(u => u.isLeader)!
     expect(effectiveHp(deployed, rex)).toBe(F['TWI_007'].hp)
+  })
+})
+
+/**
+ * Creating a token unit is seen by the abilities that read "create" or "enters play", and by no ability
+ * that reads "play". Droid Deployment (TWI_237) creates 2 Battle Droids, which exercises each token
+ * being its own arrival.
+ */
+describe('Token units: who sees one being created', () => {
+  const CREATES_TWO = 'TWI_237'
+  const hasAdvantage = (u: UnitState) => u.upgrades.some(x => x.cardId === TOKEN_ADVANTAGE)
+  const droids = (s: GameState, who: PlayerId = 'player') => made(s, who, TOKEN_BATTLE_DROID)
+
+  it('Greef Karga (ASH_017), deployed: each created token unit gets an Advantage token', () => {
+    const s = playEvent(back('ASH_017'), CREATES_TWO)
+    noChoice(s)
+    expect(droids(s).map(hasAdvantage)).toEqual([true, true])
+  })
+
+  it('Greef Karga (ASH_017), front: creating a token unit offers to exhaust him for an Advantage token on it', () => {
+    const s = playEvent(front('ASH_017'), CREATES_TWO)
+    expect(choice(s).kind).toBe('mayExhaustLeaderForAdvantage')
+    const yes = accept(s)
+    expect(yes.players.player.leader.exhausted).toBe(true)
+    // Exhausted by the first, he has nothing left to pay the second with.
+    noChoice(yes)
+    expect(droids(yes).map(hasAdvantage).sort()).toEqual([false, true])
+  })
+
+  it("Greef Karga (ASH_017) does not see an opponent's token units being created", () => {
+    const s = playEvent(board({}, { leader: deployedLeader('ASH_017'), units: [unit('L', 'ASH_017', { isLeader: true })] }), CREATES_TWO)
+    expect(droids(s).map(hasAdvantage)).toEqual([false, false])
+  })
+
+  it('Outcast (ASH_041): a created token unit enters play, so it gets +1/+0 for the phase', () => {
+    const s = playEvent(board({ units: [unit('o', 'ASH_041')] }), CREATES_TWO)
+    expect(droids(s).map(d => effectivePower(s, d))).toEqual([2, 2])
+  })
+
+  it('an ability that reads "when you play another unit" does not see a token unit being created', () => {
+    // Maz Kanata (SHD_096) and Poggle the Lesser (TWI_080).
+    const s = playEvent(board({ units: [unit('m', 'SHD_096'), unit('p', 'TWI_080')] }), CREATES_TWO)
+    noChoice(s)
+    expect(droids(s)).toHaveLength(2)
+    expect(U(s, 'm')!.upgrades.some(x => x.cardId === TOKEN_EXPERIENCE)).toBe(false)
   })
 })

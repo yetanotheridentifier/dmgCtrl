@@ -216,7 +216,7 @@ function choiceBody(state: GameState, choice: PendingChoice): DescribePart[] {
     case 'mayDeployLeader':
       return ['you may deploy your leader']
     case 'mayExhaustLeaderForAdvantage':
-      return ['give the played unit an Advantage token, this exhausts your leader']
+      return ['give the new unit an Advantage token, this exhausts your leader']
     case 'mayExhaustLeaderHealUnit':
       return [`heal ${choice.amount} damage from the unit, this exhausts your leader`]
     case 'mayExhaustLeaderBuffSelf':
